@@ -5121,8 +5121,10 @@
 
           <div class="group-card">
             <div class="group-card-head">
-              <h3>New-order alert to your phone · 新订单手机提醒</h3>
-              <div class="muted">Get a card in a WeChat Work (企业微信) group the moment a new order is paid — order number, amount, recipient and address. Works even when this backend is closed. · 每当有新订单付款,立即在企业微信群里收到一张卡片(订单号、金额、收货人、地址)。即使后台没开也能收到。</div>
+              <h3>New-order alert to your phone · 新订单手机提醒
+                <span id="wecom-app-chip" style="margin-left:8px;vertical-align:middle"></span>
+              </h3>
+              <div class="muted">Get a card in your WeChat Work (企业微信 / WeCom) app the moment a new order is paid — order number, amount, recipient and address. Works even when this backend is closed, and works on the international WeCom app. · 每当有新订单付款,立即在企业微信 App 收到一张卡片(订单号、金额、收货人、地址)。即使后台没开也能收到,国际版 WeCom 同样适用。</div>
             </div>
             <div class="illus-row">
               <div class="mini-phone">
@@ -5135,22 +5137,49 @@
                 </div>
               </div>
               <div class="ctrl">
+                <div class="field" style="margin: 0 0 8px;">
+                  <label class="stacked">Company ID (CorpID) · 企业 ID</label>
+                  <input type="text" id="wecom-app-corp_id" placeholder="ww… (我的企业 → 企业信息)" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0 0 8px;">
+                  <label class="stacked">App ID (AgentId) · 应用 AgentId</label>
+                  <input type="text" id="wecom-app-agent_id" placeholder="e.g. 1000002" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">App Secret · 应用 Secret</label>
+                  <input type="password" id="wecom-app-secret" autocomplete="off" placeholder="paste app Secret · 粘贴应用 Secret" style="width: 100%; font-family: monospace;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="saveWecomApp()">Save · 保存</button>
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testWecomWebhook()">Send a test · 发送测试</button>
+                  <span id="wecom-test-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  <b>1.</b> In WeCom admin (work.weixin.qq.com) → 应用管理 → create a self-built app (自建应用).<br>
+                  <b>2.</b> Copy its <b>AgentId</b> and <b>Secret</b>; copy your <b>CorpID</b> from 我的企业 → 企业信息.<br>
+                  <b>3.</b> In that app → 企业可信IP (trusted IP), add this server's IP. (Send a test below — if the IP is missing, the result tells you exactly which IP to add.)<br>
+                  <b>4.</b> Make sure the app's 可见范围 (visible range) includes you, then Save and Send a test.<br>
+                  Clear all three fields to turn off. · 清空三项即关闭。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Alternative: group-bot webhook · 备选:群机器人 Webhook</h3>
+              <div class="muted">Only if you use mainland 企业微信 with an internal (company-only) group. Paste the group robot's webhook and the card posts there instead. Leave blank if you're using the app above. · 仅当你使用国内企业微信且有内部群时。填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl">
                 <div class="field" style="margin: 0;">
                   <label class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
                   <input type="text" id="cfg-notifications-wecom_order_webhook"
                          placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
                          style="width: 100%; font-family: monospace;">
                 </div>
-                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center;">
-                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="testWecomWebhook()">Send a test · 发送测试</button>
-                  <span id="wecom-test-status" class="muted" style="font-size: 11px;"></span>
-                </div>
                 <div class="helper" style="margin-top: 10px; line-height: 1.55;">
-                  <b>1.</b> Open WeChat Work (企业微信) → a group chat for your team.<br>
-                  <b>2.</b> Group settings → 群机器人 (Group robots) → 添加 (Add).<br>
-                  <b>3.</b> Copy the bot's Webhook 地址 and paste it here.<br>
-                  <b>4.</b> Save, then "Send a test" to confirm it arrives.<br>
-                  Leave blank to turn off. Only qyapi.weixin.qq.com URLs are accepted. · 留空即关闭。仅接受 qyapi.weixin.qq.com 地址。
+                  Save this with the main "Save settings" button. Only qyapi.weixin.qq.com URLs are accepted. The app above takes priority when both are set. · 用底部"保存设置"按钮保存。仅接受 qyapi.weixin.qq.com 地址。两者都填时优先使用上面的 App。
                 </div>
               </div>
             </div>

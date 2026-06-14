@@ -2813,29 +2813,33 @@ function alipayVerifyNotify(params) {
   }
 }
 
-// ── WeCom (企业微信) group-bot order alert ──────────────────────────────────
-// Option A merchant notification: on every new paid order, POST a card to a
-// WeCom group via its incoming-webhook bot. No WeChat approval, no per-message
-// consent, no openid mapping — the operator just pastes the bot's webhook URL
-// (Settings → Push). Mirrors the OUT1N "新订单通知" the merchant used to get,
-// but lands in a WeCom group instead of personal WeChat.
+// ── WeCom (企业微信) new-order alert ─────────────────────────────────────────
+// Merchant notification: on every new paid order, push a card with the order
+// no, amount, time, recipient and address — the roots-v2 answer to the OUT1N
+// "新订单通知" the owner used to get. No WeChat approval, no per-message consent,
+// no openid mapping. Two delivery channels, app preferred:
 //
-// Webhook URL looks like:
-//   https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxxxxxxx
-// We only accept that host so a misconfigured field can't POST order data
-// (recipient name + address = PII) to an arbitrary URL.
+//   1. Self-built app (自建应用) — corp_id + agent_id + secret in Settings →
+//      Push. Lands in the owner's WeCom app. Works on the international WeCom
+//      build (group robots don't). Needs the server IP in the app's 可信IP.
+//   2. Group-bot webhook — qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…
+//      pasted into Settings → Push. Only works in mainland 企业微信 internal
+//      groups, so kept as a fallback for tenants who have one.
+//
+// PII guard: order cards carry recipient name + address, so the webhook host is
+// allowlisted and the app path only ever talks to qyapi.weixin.qq.com.
+
 function wecomWebhookUrl() {
   try {
     const u = String(loadConfig().notifications?.wecom_order_webhook || '').trim();
     if (!u) return null;
-    const parsed = new URL(u);
-    if (parsed.hostname !== 'qyapi.weixin.qq.com') return null;
+    if (new URL(u).hostname !== 'qyapi.weixin.qq.com') return null;
     return u;
   } catch { return null; }
 }
 
-// POST a markdown message to a WeCom webhook. Best-effort; resolves to a
-// {ok,msg} result and never throws so callers can fire-and-forget.
+// POST a markdown message to a WeCom group-bot webhook. Best-effort; resolves to
+// {ok,msg} and never throws so callers can fire-and-forget.
 async function postWecomMarkdown(url, content) {
   try {
     const resp = await fetch(url, {
@@ -2844,20 +2848,92 @@ async function postWecomMarkdown(url, content) {
       body: JSON.stringify({ msgtype: 'markdown', markdown: { content } }),
     });
     const j = await resp.json().catch(() => ({}));
-    // WeCom returns { errcode: 0, errmsg: 'ok' } on success.
     if (j.errcode === 0) return { ok: true };
     return { ok: false, msg: j.errmsg || ('errcode ' + j.errcode) };
-  } catch (e) {
-    return { ok: false, msg: e.message };
-  }
+  } catch (e) { return { ok: false, msg: e.message }; }
 }
 
-// Build the new-order card. Mirrors the fields OUT1N pushed: order no, amount,
-// time, recipient, address. Pickup orders show the pickup label instead of an
-// address. Fire-and-forget from markOrderPaid.
+// Self-built-app creds for the current tenant ({corpId,agentId,secret}) or null
+// when not fully configured.
+function wecomAppCreds() {
+  const w = integ().wecom_app || {};
+  if (!w.corpId || !w.agentId || !w.secret) return null;
+  return w;
+}
+
+// Per-(corpid+agentid) access_token cache. WeCom tokens live ~2h; re-fetch near
+// expiry. gettoken takes corpid + corpsecret (the app secret).
+const _wecomTokenCache = new Map();   // corpid:agentid -> { token, expiresAt }
+async function getWecomAppToken(creds) {
+  const ck = creds.corpId + ':' + creds.agentId;
+  const hit = _wecomTokenCache.get(ck);
+  if (hit && Date.now() < hit.expiresAt - 60_000) return hit.token;
+  const url = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${encodeURIComponent(creds.corpId)}&corpsecret=${encodeURIComponent(creds.secret)}`;
+  const resp = await fetch(url);
+  const j = await resp.json().catch(() => ({}));
+  if (j.errcode !== 0 || !j.access_token) {
+    throw new Error(j.errmsg ? `gettoken: ${j.errmsg}` : 'gettoken_failed');
+  }
+  _wecomTokenCache.set(ck, { token: j.access_token, expiresAt: Date.now() + (Number(j.expires_in) || 7200) * 1000 });
+  return j.access_token;
+}
+
+// Send a markdown app message to everyone in the app's visible range (@all).
+// Resolves to {ok,msg}; on the common 60020 trusted-IP error, msg surfaces the
+// server IP WeCom reported so the operator knows exactly what to allowlist.
+async function sendWecomAppMessage(content) {
+  const creds = wecomAppCreds();
+  if (!creds) return { ok: false, msg: 'not_configured' };
+  try {
+    const token = await getWecomAppToken(creds);
+    const url = `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${token}`;
+    const body = {
+      touser: '@all',
+      msgtype: 'markdown',
+      agentid: Number(creds.agentId) || creds.agentId,
+      markdown: { content },
+    };
+    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await resp.json().catch(() => ({}));
+    if (j.errcode === 0) return { ok: true };
+    // 60020 = calling IP not in the app's trusted-IP list; surface the IP.
+    if (j.errcode === 60020) {
+      const ip = (String(j.errmsg || '').match(/from ip:\s*([0-9.]+)/i) || [])[1];
+      return { ok: false, msg: ip
+        ? `Add this server IP to the app's 可信IP list: ${ip}`
+        : 'Add this server\'s IP to the app\'s 可信IP (trusted IP) list', code: 60020 };
+    }
+    return { ok: false, msg: j.errmsg || ('errcode ' + j.errcode), code: j.errcode };
+  } catch (e) { return { ok: false, msg: e.message }; }
+}
+
+// Build the bilingual new-order card from an order row.
+function buildWecomOrderCard(o, awaitingRestock) {
+  const time = String(o.paid_at || '').replace('T', ' ').slice(0, 16);
+  const amount = '¥' + Number(o.total || 0).toFixed(2);
+  const lines = [
+    `**🌿 新订单 · New order**${awaitingRestock ? ' (待补货 · awaiting restock)' : ''}`,
+    `> 订单号 Order: \`${o.order_no}\``,
+    `> 金额 Amount: <font color="warning">${amount}</font>`,
+    time ? `> 时间 Time: ${time}` : null,
+  ];
+  if (o.fulfillment_type === 'pickup') {
+    lines.push('> 方式 Method: 自提 Pickup');
+    if (o.delivery_slot_label) lines.push(`> 时间 Slot: ${o.delivery_slot_label}`);
+  } else {
+    if (o.recipient_name) lines.push(`> 收货人 To: ${o.recipient_name}`);
+    if (o.address_full)   lines.push(`> 地址 Address: ${o.address_full}`);
+  }
+  return lines.filter(Boolean).join('\n');
+}
+
+// Fire the merchant new-order alert. App channel preferred; webhook fallback.
+// Fire-and-forget from markOrderPaid: reads the row synchronously (tenant scope
+// is live now) then sends async.
 function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
-  const url = wecomWebhookUrl();
-  if (!url) return;
+  const hasApp = !!wecomAppCreds();
+  const webhook = wecomWebhookUrl();
+  if (!hasApp && !webhook) return;
   try {
     const o = tdb().prepare(
       `SELECT order_no, total, paid_at, fulfillment_type, recipient_name,
@@ -2865,24 +2941,10 @@ function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
          FROM retail_orders WHERE id = ?`
     ).get(orderId);
     if (!o) return;
-    const time = String(o.paid_at || '').replace('T', ' ').slice(0, 16);
-    const amount = '¥' + Number(o.total || 0).toFixed(2);
-    const lines = [
-      `**🌿 新订单 · New order**${awaitingRestock ? ' (待补货 · awaiting restock)' : ''}`,
-      `> 订单号 Order: \`${o.order_no}\``,
-      `> 金额 Amount: <font color="warning">${amount}</font>`,
-      time ? `> 时间 Time: ${time}` : null,
-    ];
-    if (o.fulfillment_type === 'pickup') {
-      lines.push(`> 方式 Method: 自提 Pickup`);
-      if (o.delivery_slot_label) lines.push(`> 时间 Slot: ${o.delivery_slot_label}`);
-    } else {
-      if (o.recipient_name) lines.push(`> 收货人 To: ${o.recipient_name}`);
-      if (o.address_full)   lines.push(`> 地址 Address: ${o.address_full}`);
-    }
-    postWecomMarkdown(url, lines.filter(Boolean).join('\n'))
-      .then(r => { if (!r.ok) console.warn('[wecom alert]', orderId, r.msg); })
-      .catch(e => console.warn('[wecom alert]', orderId, e.message));
+    const content = buildWecomOrderCard(o, awaitingRestock);
+    const send = hasApp ? sendWecomAppMessage(content) : postWecomMarkdown(webhook, content);
+    send.then(r => { if (!r.ok) console.warn('[wecom alert]', orderId, r.msg); })
+        .catch(e => console.warn('[wecom alert]', orderId, e.message));
   } catch (e) { console.warn('[wecom alert setup]', e.message); }
 }
 
@@ -11557,6 +11619,13 @@ const INTEGRATION_KEYS = {
     ukey: { env: 'FEIE_UKEY', secret: true,  cred: CRED_KEYS.FEIE_UKEY, bkey: 'ukey' },  // USERKEY from dev console
     // Printer SNs are per-store — see storefront_config `printer.by_store`.
   },
+  // WeCom (企业微信) self-built app — pushes the new-order card to the owner's
+  // WeCom app. corp_id (我的企业→企业ID), agent_id + secret (自建应用).
+  wecom_app: {
+    corp_id:  { env: 'WECOM_CORP_ID',  secret: false, cred: CRED_KEYS.WECOM_CORP_ID,  bkey: 'corpId'  },
+    agent_id: { env: 'WECOM_AGENT_ID', secret: false, cred: CRED_KEYS.WECOM_AGENT_ID, bkey: 'agentId' },
+    secret:   { env: 'WECOM_SECRET',   secret: true,  cred: CRED_KEYS.WECOM_SECRET,   bkey: 'secret'  },
+  },
 };
 
 function maskSecret(s) {
@@ -11588,21 +11657,15 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   out.kd100.enabled = tracking.kd100Enabled(kd100Creds());
   out.jd.enabled    = jd.jdEnabled(ci.jd);
   out.feie.enabled  = _feie.feieEnabled(ci.feie);
+  out.wecom_app.enabled = !!(ci.wecom_app && ci.wecom_app.corpId && ci.wecom_app.agentId && ci.wecom_app.secret);
   res.json({ success: true, data: out });
 });
 
-// Send a test card to the configured WeCom new-order bot so the operator can
-// confirm the webhook works without waiting for a real order. Uses the URL in
-// the request body if present (lets them test BEFORE saving), else the saved
-// one. Same host-allowlist as the live path.
+// Send a test card so the operator can confirm new-order alerts are wired up
+// without waiting for a real order. Prefers the self-built app (uses saved
+// corp_id/agent_id/secret); else falls back to the group-bot webhook (accepts a
+// URL in the body so it can be tested BEFORE saving). Same host-allowlist.
 router.post('/api/retail-admin/wecom/test', requireRetailAdmin, express.json(), async (req, res) => {
-  let url = String(req.body?.webhook || '').trim();
-  if (url) {
-    try { if (new URL(url).hostname !== 'qyapi.weixin.qq.com') url = ''; }
-    catch { url = ''; }
-  }
-  if (!url) url = wecomWebhookUrl();
-  if (!url) return res.json({ success: false, error: 'no_valid_webhook' });
   const content = [
     '**🌿 测试 · Test message**',
     '> 这是来自 Mini App Backend 的测试提醒。',
@@ -11610,8 +11673,20 @@ router.post('/api/retail-admin/wecom/test', requireRetailAdmin, express.json(), 
     '> 收到本条说明新订单提醒已接通 ✅',
     '> Receiving this means new-order alerts are connected ✅',
   ].join('\n');
+
+  // App channel first when configured.
+  if (wecomAppCreds()) {
+    const r = await sendWecomAppMessage(content);
+    return res.json({ success: r.ok, channel: 'app', error: r.ok ? undefined : r.msg });
+  }
+
+  // Else the webhook (URL from body lets them test before saving).
+  let url = String(req.body?.webhook || '').trim();
+  if (url) { try { if (new URL(url).hostname !== 'qyapi.weixin.qq.com') url = ''; } catch { url = ''; } }
+  if (!url) url = wecomWebhookUrl();
+  if (!url) return res.json({ success: false, error: 'no_valid_webhook' });
   const r = await postWecomMarkdown(url, content);
-  res.json({ success: r.ok, error: r.ok ? undefined : r.msg });
+  res.json({ success: r.ok, channel: 'webhook', error: r.ok ? undefined : r.msg });
 });
 
 router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(), (req, res) => {

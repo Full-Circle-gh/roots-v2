@@ -991,6 +991,8 @@ async function loadConfig() {
     $('#cfg-shop-hideOutOfStock').checked   = !!c.shop?.hideOutOfStock;
     $('#cfg-shop-lockLayout').checked       = !!c.shop?.lockLayout;
     $('#cfg-notifications-order_status_template_id').value = c.notifications?.order_status_template_id || '';
+    $('#cfg-notifications-wecom_order_webhook').value = c.notifications?.wecom_order_webhook || '';
+    loadWecomApp();
     // Customer service
     const cs = c.customer_service || {};
     $('#cfg-cs-mode').value      = cs.mode || 'off';
@@ -1080,6 +1082,63 @@ async function loadConfig() {
   }
 }
 
+// Load the WeCom self-built-app credentials (corp_id/agent_id shown, secret
+// masked) + the LIVE/NOT-CONFIGURED chip. Reads the shared integrations
+// endpoint so the secret stays encrypted server-side.
+async function loadWecomApp() {
+  try {
+    const { data } = await api('/api/retail-admin/integrations');
+    const w = data?.wecom_app || {};
+    const corp = $('#wecom-app-corp_id'), agent = $('#wecom-app-agent_id'), sec = $('#wecom-app-secret');
+    if (corp)  corp.value = w.corp_id || '';
+    if (agent) agent.value = w.agent_id || '';
+    if (sec)   sec.placeholder = w.secret_masked
+      ? (w.secret_masked + ' · leave blank to keep · 留空保持不变')
+      : 'paste app Secret · 粘贴应用 Secret';
+    const chip = $('#wecom-app-chip');
+    if (chip) chip.innerHTML = w.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
+  } catch (e) { console.warn('[wecom app] load failed', e.message); }
+}
+
+// Save the three app fields. Secret is sent only when the operator typed a new
+// one (blank = keep current). Empty corp_id/agent_id clear (turn off).
+async function saveWecomApp() {
+  const status = $('#wecom-test-status');
+  status.textContent = 'Saving… · 保存中…';
+  const corp  = $('#wecom-app-corp_id').value.trim();
+  const agent = $('#wecom-app-agent_id').value.trim();
+  const secret = $('#wecom-app-secret').value;   // not trimmed — secrets can be exact
+  try {
+    await api('/api/retail-admin/integrations', { method: 'PUT', body: {
+      wecom_app: { corp_id: corp || null, agent_id: agent || null, secret: secret ? secret : undefined },
+    } });
+    $('#wecom-app-secret').value = '';   // never keep the plaintext in the field
+    status.textContent = '✅ Saved · 已保存';
+    loadWecomApp();
+  } catch (e) {
+    status.textContent = '⚠ ' + (e.message || 'save failed');
+  }
+}
+
+// Send a test alert. Server prefers the saved app; if no app is configured it
+// falls back to the webhook URL currently in the box (so it can be tested
+// before the main Save).
+async function testWecomWebhook() {
+  const status = $('#wecom-test-status');
+  const url = $('#cfg-notifications-wecom_order_webhook').value.trim();
+  status.textContent = 'Sending… · 发送中…';
+  try {
+    await api('/api/retail-admin/wecom/test', { method: 'POST', body: { webhook: url } });
+    status.textContent = '✅ Sent — check your WeCom · 已发送,请查看企业微信';
+  } catch (e) {
+    status.textContent = '⚠ ' + (e.message === 'no_valid_webhook'
+      ? 'Set up the app above, or paste a qyapi.weixin.qq.com URL · 请先配置上方 App 或填入正确地址'
+      : (e.message || 'failed'));
+  }
+}
+
 async function saveConfig() {
   const status = $('#cfg-status');
   status.textContent = 'Saving…';
@@ -1098,6 +1157,7 @@ async function saveConfig() {
     'shop.hideOutOfStock':         $('#cfg-shop-hideOutOfStock').checked,
     'shop.lockLayout':             $('#cfg-shop-lockLayout').checked,
     'notifications.order_status_template_id': $('#cfg-notifications-order_status_template_id').value.trim(),
+    'notifications.wecom_order_webhook': $('#cfg-notifications-wecom_order_webhook').value.trim(),
     'customer_service.mode':         $('#cfg-cs-mode').value,
     'customer_service.corp_id':      $('#cfg-cs-corp_id').value.trim(),
     'customer_service.url':          $('#cfg-cs-url').value.trim(),

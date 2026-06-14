@@ -2892,6 +2892,9 @@ try {
     'integrations.jd.env':           'JD_API_ENV',
     'integrations.feie.user':        'FEIE_USER',
     'integrations.feie.ukey':        'FEIE_UKEY',
+    'integrations.wecom_app.corp_id':  'WECOM_CORP_ID',
+    'integrations.wecom_app.agent_id': 'WECOM_AGENT_ID',
+    'integrations.wecom_app.secret':   'WECOM_SECRET',
   };
   let hydrated = 0;
   for (const [cfgKey, envKey] of Object.entries(envMap)) {
