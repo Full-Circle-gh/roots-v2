@@ -932,6 +932,7 @@ function routingNote(reason) {
   const r = String(reason || '').toLowerCase().trim();
   if (r === 'fallback_no_stock') return 'rerouted · 改派(缺货)';
   if (r === 'manual')            return 'manually routed · 手动改派';
+  if (r === 'out_of_city')       return 'out-of-city warehouse · 外地仓发货';
   return ''; // only_store / nearest / unknown — nothing worth showing
 }
 // Full-size "Ship by" tile shown in the order-detail card grid. Mirrors the

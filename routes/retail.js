@@ -5444,6 +5444,27 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
                     : fallbackChoice === 'replace_missing' ? 'replace_missing'
                     : routing.reason;
   }
+
+  // Out-of-Guangzhou orders all ship from the single out-of-city warehouse
+  // (e.g. Tianhe), which is also where their receipt prints — printerForOrder()
+  // forces every non-GZ ticket to the configured out_of_city_store_id. The
+  // proximity router above only knows distance/stock, so for a far-away
+  // destination it lands the parcel on whatever store ranks first (e.g.
+  // Yuexiu), leaving "fulfilled by" disagreeing with where the slip actually
+  // printed and the parcel ships from. Pin the fulfilment store to the same
+  // out-of-city store so the two never diverge. Pickup is exempt (the customer
+  // chose the store explicitly).
+  if (!isPickup && !inventory.isGuangzhouAddress(address)) {
+    const oocId = loadPrinterPrefs().out_of_city_store_id;
+    if (oocId != null && oocId !== fulfillingStore.id) {
+      const oocStore = inventory.listStores({ activeOnly: true }).find(s => s.id === oocId);
+      if (oocStore) {
+        fulfillingStore = oocStore;
+        routingReason   = 'out_of_city';
+      }
+    }
+  }
+
   resolved.length = 0; for (const r of mutatedItems) resolved.push(r); // keep `resolved` as the source of truth downstream
 
   const subtotal = resolved.reduce((s, r) => s + r.lineTotal, 0);
