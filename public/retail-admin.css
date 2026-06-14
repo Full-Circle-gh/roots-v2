@@ -3990,8 +3990,14 @@
   }
   .order-head {
     display: flex; align-items: flex-start; justify-content: space-between;
+    gap: var(--s3);
     margin-bottom: var(--s4);
   }
+  .order-head .od-head-main { flex: 1 1 auto; min-width: 0; }
+  /* Primary status actions, pulled up next to the pill (see renderOpenOrder).
+     Sits top-right of the header, just left of the ⋯ View popover; the eyebrow
+     line keeps the order# row from feeling crowded. */
+  .order-head .od-head-tx { padding-top: 0; flex: 0 0 auto; }
   .order-head .title-row { display: flex; align-items: center; gap: var(--s2); margin-bottom: 4px; }
   .order-head .title-row b { font-size: 18px; font-weight: 500; font-family: var(--f-mono); letter-spacing: .02em; }
   /* Mono caps eyebrow under the order number — the design's "ORDER PLACED"
@@ -5503,6 +5509,12 @@
     /* Status pill keeps its full width — only the order# ellipsizes — so the
        pill never bleeds past the right pad into the ⋯ kebab. */
     #order-drawer .order-head .title-row .pill { flex: 0 0 auto; }
+
+    /* Status actions ride a second, full-width line under the order# row so
+       they don't squeeze the (sticky) app-bar title. The ⋯ kebab stays pinned
+       top-right; the buttons sit below it. */
+    #order-drawer .order-head { flex-wrap: wrap; }
+    #order-drawer .order-head .od-head-tx { flex-basis: 100%; margin-top: 8px; }
 
     /* "View" popover trigger → ⋯ kebab pinned top-right of the app-bar. */
     #order-drawer .order-head .ovp-wrap {

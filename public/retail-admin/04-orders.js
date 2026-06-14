@@ -1854,7 +1854,7 @@ function renderOpenOrder(o) {
       <div class="order-card odd-${ODV.density}">
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
-          <div>
+          <div class="od-head-main">
             <div class="title-row">
               <b>${escapeHtml(o.order_no)}</b>
               <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
@@ -1863,6 +1863,10 @@ function renderOpenOrder(o) {
             </div>
             <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
           </div>
+          <!-- Primary status actions (Mark delivered / Refund …) live up here by
+               the status pill — they used to be buried at the bottom of the
+               drawer past the items + reservations. -->
+          ${transitions ? `<div class="transitions od-head-tx">${transitions}</div>` : ''}
           ${renderOrderViewPopover()}
         </div>
 
@@ -1962,9 +1966,7 @@ function renderOpenOrder(o) {
           </div>
         </div>` : ''}
 
-        ${ODV.totalPlacement === 'footer'
-          ? renderOrderTotalFooter(o, transitions)
-          : (transitions ? `<div class="transitions">${transitions}</div>` : '')}
+        ${ODV.totalPlacement === 'footer' ? renderOrderTotalFooter(o) : ''}
       </div>`;
   // Drawer body manages its own scroll position; reset to top on each
   // render so re-renders after a transition don't leave it mid-scroll.
