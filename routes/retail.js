@@ -1559,6 +1559,131 @@ function readFallbackRange(cfg) {
   return { min: Math.max(0, min), max: Math.max(min, max) };
 }
 
+// ── Synthetic-activity engine ──────────────────────────────────────────────
+// The fake side of social proof used to be a FROZEN per-product offset: the
+// "last ordered X ago" line was anchored to `now`, so it read the SAME value
+// forever (a dead giveaway) and surfaced on EVERY product. This engine replaces
+// that with believable activity that (1) AGES as the clock moves, (2) only
+// shows on a rotating SUBSET of products, and (3) BREATHES with the time of day.
+// Everything is deterministic per (product, time-bucket) via hashing — never
+// Math.random() — so values stay stable inside the response caches yet evolve
+// as time passes, and a returning customer never catches a number jumping
+// around mid-glance. All fakes remain opt-in (ranges default to 0); leaving a
+// widget's range alone preserves the original "real data only" behaviour.
+const HK_OFFSET_MS = 8 * 3600 * 1000;   // storefront local time = UTC+8 (matches the +8h day boundary used elsewhere)
+
+// 24 hourly weights for a grocery storefront's order rhythm, indexed by LOCAL
+// hour. Quiet overnight, a late-morning rise, a lunch bump, and the strongest
+// pull in the early evening (people shopping for dinner). Interpolated between
+// neighbouring hours so the curve is smooth, not stepped.
+const DAY_CURVE = [
+  0.22, 0.16, 0.12, 0.10, 0.10, 0.14,   // 0–5   deep night
+  0.30, 0.55, 0.80, 0.95, 1.00, 1.05,   // 6–11  morning ramp
+  1.15, 1.05, 0.90, 0.85, 0.92, 1.10,   // 12–17 lunch bump → afternoon
+  1.30, 1.35, 1.20, 0.85, 0.55, 0.35,   // 18–23 evening peak → wind down
+];
+const PEAK_INTENSITY = 1.4;             // ceiling used to normalise fire-rolls (>= max in DAY_CURVE)
+
+function localHourFloat(nowMs) {
+  return ((((nowMs + HK_OFFSET_MS) / 3600000) % 24) + 24) % 24;
+}
+// Smooth time-of-day multiplier (~0.10 .. 1.35) by linearly interpolating the
+// hourly curve at the current fractional local hour.
+function dayIntensity(nowMs) {
+  const h = localHourFloat(nowMs);
+  const i = Math.floor(h);
+  const f = h - i;
+  const a = DAY_CURVE[i % 24];
+  const b = DAY_CURVE[(i + 1) % 24];
+  return a + (b - a) * f;
+}
+// Intensity-weighted fraction of the LOCAL day elapsed so far (0 at local
+// midnight → 1 at the next). Makes a "today" count climb the way real orders
+// accumulate — slowly overnight, quickly across the busy daytime — and reset
+// cleanly at the day boundary.
+function dayElapsedFraction(nowMs) {
+  const h = localHourFloat(nowMs);
+  let total = 0, soFar = 0;
+  for (let k = 0; k < 24; k++) {
+    total += DAY_CURVE[k];
+    if (k + 1 <= h)      soFar += DAY_CURVE[k];            // whole hour already passed
+    else if (k < h)      soFar += DAY_CURVE[k] * (h - k);  // partial current hour
+  }
+  return total > 0 ? Math.min(1, soFar / total) : 0;
+}
+
+// FNV-style mix of a base seed with a bucket index (+ optional string salt) →
+// unsigned 32-bit int. Lets us derive many independent-looking but STABLE values
+// from one product seed: one per time bucket, per purpose.
+function mixHash(seed, k, salt) {
+  let h = ((seed >>> 0) ^ 0x9e3779b9) >>> 0;
+  h = Math.imul(h ^ (k >>> 0), 16777619) >>> 0;
+  if (salt != null) h = Math.imul(h ^ productHash(String(salt)), 16777619) >>> 0;
+  return h >>> 0;
+}
+// 0..1 float from a (seed, bucket, salt) triple.
+function hash01(seed, k, salt) {
+  return mixHash(seed, k, salt) / 4294967296;
+}
+
+// Maps a product's REAL demand signal to a cadence multiplier. Hot sellers get a
+// SMALLER factor (shorter synthetic gap → fresher, more frequent activity);
+// products with no real sales get up to ~3x (long gaps → their synthetic line is
+// usually stale and therefore hidden). Smooth, monotonic, clamped.
+function popularityFactor(realScore) {
+  const s = Math.max(0, Number(realScore) || 0);
+  const norm = 1 / (1 + s / 6);            // 0→1, 6→0.5, 18→0.25 … (0,1]
+  return 0.4 + norm * 2.6;                  // 0.4 (hot) .. 3.0 (cold)
+}
+
+// Whether a product is "in play" for synthetic freshness right now. Hot
+// real-sellers are almost always in; cold products drift in and out on a slow
+// ~6h rotation — this is what keeps the synthetic nudge off EVERY product at
+// once (the operator's #1 complaint) without ever touching a product that has
+// real recent activity.
+function syntheticallyActive(seed, now, realScore) {
+  const pf = popularityFactor(realScore);                 // 0.4 (hot) .. 3.0 (cold)
+  const propensity = 1 - ((pf - 0.4) / 2.6) * 0.62;       // ~1.0 (hot) .. ~0.38 (cold)
+  const rotationBucket = Math.floor(now / (6 * 3600 * 1000));   // re-roll the active set every ~6h
+  return hash01(seed, rotationBucket, 'active') < propensity;
+}
+
+// Most recent SYNTHETIC order time <= now for a product, or null if none lands
+// inside the freshness window. The timeline is sliced into baseGap-sized buckets;
+// each bucket fires at most one synthetic order, at a jittered offset, and only
+// when a per-bucket roll clears that bucket's time-of-day intensity (so overnight
+// buckets usually stay empty). Because the buckets are pinned to ABSOLUTE time,
+// the returned timestamp recedes as `now` advances and snaps forward when the
+// next bucket fires — i.e. the "X ago" line ages and resets like a real one, and
+// a product whose nearest firing predates maxAge simply shows nothing.
+function lastSyntheticOrderMs(seed, now, baseGapMs, maxAgeMs) {
+  if (!(baseGapMs > 0)) return null;
+  const oldest = now - Math.max(0, maxAgeMs || 0);
+  const startBucket = Math.floor(now / baseGapMs);
+  for (let b = startBucket, guard = 0; guard < 240; b--, guard++) {
+    const bucketStart = b * baseGapMs;
+    if (bucketStart + baseGapMs < oldest) break;          // whole bucket older than the window → stop
+    const fires = hash01(seed, b, 'fire') <= dayIntensity(bucketStart + baseGapMs / 2) / PEAK_INTENSITY;
+    if (!fires) continue;
+    const t = bucketStart + hash01(seed, b, 'off') * baseGapMs;
+    if (t <= now && t >= oldest) return t;                // most recent firing inside the window
+    // t > now → this bucket's order hasn't happened yet; keep scanning back.
+  }
+  return null;
+}
+
+// A masked buyer name ("李**") for synthetic rows, drawn from a pool of common
+// surnames and rotated by the caller's seed (which mixes in a time bucket) so a
+// feed doesn't cycle the same handful of names forever. Output shape matches
+// maskBuyerName() so synthetic and real rows look alike.
+const SYNTH_SURNAMES = [
+  '王', '李', '张', '刘', '陈', '杨', '黄', '赵', '吴', '周', '徐', '孙', '马', '朱', '胡', '郭',
+  '何', '高', '林', '罗', '郑', '梁', '谢', '宋', '唐', '许', '邓', '冯', '韩', '曹', '彭', '董',
+];
+function synthBuyerName(seed) {
+  return SYNTH_SURNAMES[mixHash(seed, 0, 'name') % SYNTH_SURNAMES.length] + '**';
+}
+
 // Catalogue "X SOLD" badge. Attaches all-time paid units per product to the
 // list response so shop + home cards can flaunt popularity. Gated to a minimum
 // so low-sellers stay neutral (no badge) rather than advertising a weak count.
@@ -1584,13 +1709,36 @@ function attachSoldCounts(rows) {
        GROUP BY oi.product_id
     `).all(...ids);
     const map = new Map(counts.map(c => [c.pid, Math.round(Number(c.units) || 0)]));
+    // Per-product launch age (days, capped) for the slow accrual below. One
+    // extra batched query — same pattern as resolveAutoBadges. created_at isn't
+    // in the list columns, so fetch it here; unknown rows just skip accrual.
+    const nowMs = Date.now();
+    let ageDays = new Map();
+    try {
+      const cr = tdb().prepare(
+        `SELECT id, created_at FROM store_products WHERE id IN (${placeholders})`
+      ).all(...ids);
+      ageDays = new Map(cr.map(c => {
+        const ms = c.created_at ? (nowMs - Date.parse(String(c.created_at).replace(' ', 'T') + 'Z')) : NaN;
+        return [c.id, Number.isFinite(ms) ? Math.max(0, Math.min(540, ms / 86400000)) : NaN];
+      }));
+    } catch (_) { /* accrual just stays 0 when created_at is unavailable */ }
     for (const r of rows) {
-      // Real + per-product boost from the configured range. Stable hash =
-      // same product reads the same number across requests, but two products
-      // won't show identical fake counts. Gate by min_units against the
-      // COMBINED number so a non-zero boost can lift zero-real products.
-      const boost = pickInRange(productHash(r.id), boostR.min, boostR.max);
-      const display = (map.get(r.id) || 0) + boost;
+      // Real units + a per-product fake that GROWS over time instead of sitting
+      // frozen. `base` is the stable launch baseline from the configured range;
+      // on top of it we accrue a little each day since the product launched —
+      // faster for real best-sellers, capped so it can't run away. Result: an
+      // "X sold" total that believably ticks up week over week and is larger on
+      // older / more popular items. Gate by min_units against the COMBINED total.
+      const real = map.get(r.id) || 0;
+      const base = pickInRange(productHash(r.id), boostR.min, boostR.max);
+      let accrued = 0;
+      const days = ageDays.get(r.id);
+      if (base > 0 && Number.isFinite(days)) {
+        const velocity = 0.5 + 0.6 / popularityFactor(real);   // ~0.7 (cold) .. ~2.0 (hot)
+        accrued = Math.min(base * 4, base * 0.012 * days * velocity);
+      }
+      const display = real + base + Math.round(accrued);
       r.units_sold = display >= minUnits ? display : 0;
     }
   } catch (e) {
@@ -1710,17 +1858,13 @@ function socialProofForProduct(id) {
     month: Math.max(1, Number(bc.min_month) || 1),
     all:   Math.max(1, Number(bc.min_all)   || 1),
   };
-  // Per-product boost from configured range — same product always shows the
-  // same fake count, but two products won't collide on the same number.
   const seed = productHash(id);
-  const bcRange = readBoostRange(bc);
-  const bcBoost = pickInRange(seed, bcRange.min, bcRange.max);
+  const bcRange = readBoostRange(bc);        // fake-buyers target band (per active day)
+  const loRange = readFallbackRange(lo);     // freshness band (minutes) for an active product
   const maxAgeMs = Math.max(1, Number(lo.max_hours) || 1) * 3600 * 1000;
-  // Last-ordered fallback also picks a per-product time inside the range, so
-  // every product doesn't read "ordered exactly 15 min ago".
-  const loRange = readFallbackRange(lo);
-  const loFallbackMin = pickInRange(seed, loRange.min, loRange.max);
-  const loFallbackMs = loFallbackMin * 60 * 1000;
+  // Stable per-product daily synthetic volume inside the configured band; the
+  // popularity scaling happens below once we know the product's real demand.
+  const dailyVolume = pickInRange(seed, bcRange.min, bcRange.max);
 
   let value = null;
   try {
@@ -1742,15 +1886,51 @@ function socialProofForProduct(id) {
     // We still want to evaluate even when the row is empty (boost / fallback
     // can produce a non-empty payload on a zero-real product).
     const safeRow = row || { c_today: 0, c_week: 0, c_month: 0, c_all: 0, last_order: null };
+    const realScore = Number(safeRow.c_month) || 0;   // recent demand drives the cadence
+    const pf = popularityFactor(realScore);
+
+    // ── Bought count ──────────────────────────────────────────────────────
+    // Real distinct buyers per window + a SYNTHETIC volume that climbs through
+    // the day ("today"), accumulates across the longer windows, and scales with
+    // the product's real popularity — replacing the old flat boost that sat
+    // frozen and identical on every window. Fake stays opt-in: dailyVolume is 0
+    // unless the operator set a range, so by default this is real-only. Counts
+    // are monotonic across widening windows by construction.
     let count = 0, window = null;
     if (bc.enabled) {
+      let synthByWindow = { today: 0, week: 0, month: 0, all: 0 };
+      if (dailyVolume > 0) {
+        const v = dailyVolume * Math.max(0.3, Math.min(1.6, 1 / pf));   // cold ~0.3 .. hot ~1.6
+        const todayFrac = dayElapsedFraction(now);
+        // A young product can't claim a long all-time history, so cap the
+        // accrual by its launch age (days, capped). Cheap point-query; this
+        // whole result is cached 90s.
+        let launchDays = 60;
+        try {
+          const cAt = tdb().prepare('SELECT created_at FROM store_products WHERE id = ?').get(id);
+          if (cAt && cAt.created_at) {
+            const ms = now - Date.parse(String(cAt.created_at).replace(' ', 'T') + 'Z');
+            if (Number.isFinite(ms)) launchDays = Math.max(0, Math.min(540, ms / 86400000));
+          }
+        } catch (_) { /* keep default */ }
+        // Concave accrual (distinct buyers saturate over longer windows), so
+        // week ⊆ month ⊆ all stays monotonic for both old and brand-new products.
+        const priorDays = { today: 0, week: Math.min(6, launchDays), month: Math.min(29, launchDays), all: launchDays };
+        const synth = (w) => Math.round(v * (todayFrac + Math.pow(priorDays[w], 0.8) * 0.9));
+        synthByWindow = { today: synth('today'), week: synth('week'), month: synth('month'), all: synth('all') };
+      }
       for (const [w, col] of SOCIAL_PROOF_WINDOWS) {
-        // Real + boost, then gate by the min for that window. Boost applies
-        // to every window equally, so a high boost lands in "today".
-        const effective = (Number(safeRow[col]) || 0) + bcBoost;
+        const effective = (Number(safeRow[col]) || 0) + synthByWindow[w];
         if (effective >= mins[w]) { count = effective; window = w; break; }
       }
     }
+
+    // ── Last ordered ──────────────────────────────────────────────────────
+    // Real most-recent order wins when it's genuinely fresh. Otherwise a
+    // time-anchored SYNTHETIC "last order" that AGES and resets (never the old
+    // frozen "always N min ago"), and only on a rotating SUBSET of products —
+    // popular ones almost always, quiet ones now and then — instead of on every
+    // product at once. Fake stays opt-in via the configured range.
     let last_order_ms = null;
     if (lo.enabled) {
       if (safeRow.last_order) {
@@ -1759,13 +1939,13 @@ function socialProofForProduct(id) {
         // mini-app's "last ordered X ago" line stays hidden automatically.
         if (parsed && (now - parsed) <= maxAgeMs) last_order_ms = parsed;
       }
-      // Fallback fake freshness: if real is missing or older than the
-      // configured fallback window, show a synthetic "ordered N min ago".
-      // Real wins when it's fresher, so as orders come in the line stays
-      // truthful instead of stalling on the fake value.
-      if (loFallbackMs > 0) {
-        const fake = now - loFallbackMs;
-        if (last_order_ms == null || last_order_ms < fake) last_order_ms = fake;
+      if (loRange.max > 0 && syntheticallyActive(seed, now, realScore)) {
+        // Active products land in the operator's minute band; quieter ones get
+        // longer gaps (× popularity), so their synthetic order is often stale
+        // enough to fall outside the window and show nothing.
+        const baseGapMs = pickInRange(seed, loRange.min, loRange.max) * pf * 60 * 1000;
+        const synth = lastSyntheticOrderMs(seed, now, baseGapMs, maxAgeMs);
+        if (synth != null && (last_order_ms == null || last_order_ms < synth)) last_order_ms = synth;
       }
     }
     if (count > 0 || window || last_order_ms != null) {
@@ -1933,15 +2113,19 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
     return res.json({ success: true, data: [] });
   }
   const windowDays = Math.max(1, Math.min(60, Number(cfg.window_days) || 7));
+  const now = Date.now();
   // Cadence the mini-app ticker uses, served so operators can retune how often
-  // the toast pops without a republish. Clamped to sane bounds (0.5–60s).
+  // the toast pops without a republish. Clamped to sane bounds (0.5–60s), then
+  // STRETCHED at quiet hours so the feed breathes with the clock — the toast
+  // pops noticeably less often overnight and at its normal pace through the
+  // daytime/evening peak. Purely server-side; the component just honours gap_ms.
   const clampSec = (v, d) => Math.max(0.5, Math.min(60, Number(v) || d));
+  const nightStretch = 1 / Math.max(0.28, dayIntensity(now) / PEAK_INTENSITY);   // ~1.0 (peak) .. ~3.6 (deep night)
   const timing = {
     visible_ms: Math.round(clampSec(cfg.visible_secs, 4.5) * 1000),
-    gap_ms:     Math.round(clampSec(cfg.gap_secs, 5) * 1000),
+    gap_ms:     Math.round(clampSec(cfg.gap_secs, 5) * 1000 * nightStretch),
   };
   const manualEntries = Array.isArray(cfg.manual) ? cfg.manual : [];
-  const now = Date.now();
   // Cache key must include the manual list signature so editing fake entries
   // shows up on next reload instead of being shadowed by the cached real-only
   // payload. Cheap fingerprint = count + last-modified-style hash of fields.
@@ -1986,23 +2170,27 @@ router.get('/api/retail/social/recent-buyers', (req, res) => {
 
   // Merge manual fakes. Each entry: { name, product_en, product_cn, minutes_ago }.
   // Names are pre-masked by the operator (they type "李**") so we don't run them
-  // through maskBuyerName. We add a per-entry stable jitter (±4 min) to the
-  // configured minutes_ago so two entries the operator set to "5 min ago" don't
-  // both render at literally "5 min ago" — that's the dead giveaway. Jitter is
-  // seeded by the entry's name+product so a given fake row is consistent
-  // across requests (won't flicker), but unique relative to its siblings.
+  // through maskBuyerName. The configured minutes_ago is the entry's TARGET age;
+  // instead of re-pinning it to `now` on every refresh (which froze every entry
+  // at exactly its configured minutes — the dead giveaway), we anchor each one
+  // to an absolute instant that AGES and RESETS on a ~2×-target sawtooth. The
+  // displayed "X ago" now drifts up and snaps back like a real order, averaging
+  // the operator's target, and entries are phase-offset so they don't tick in
+  // lockstep. ts is an absolute time, so the 60s cache still ages correctly
+  // client-side.
   const fakes = manualEntries
     .filter(m => m && (m.product_en || m.product_cn) && m.name)
     .map(m => {
-      const base    = Math.max(0, Math.min(60 * 24 * 60, Number(m.minutes_ago) || 0));
+      const base    = Math.max(1, Math.min(60 * 24 * 60, Number(m.minutes_ago) || 5));
       const seed    = productHash(String(m.name) + '|' + String(m.product_en || m.product_cn || ''));
-      const jitter  = (seed % 9) - 4;                     // -4 .. +4 minutes
-      const minutes = Math.max(1, base + jitter);
+      const cycleMs = base * 2 * 60 * 1000;               // full age sweep ≈ 2× the target
+      const phase   = mixHash(seed, 0, 'mp') % cycleMs;   // per-entry offset so they desync
+      const ageMs   = Math.max(30 * 1000, (((now - phase) % cycleMs) + cycleMs) % cycleMs);
       return {
         name:       String(m.name).slice(0, 40),
         product_en: String(m.product_en || m.product_cn || '').slice(0, 80),
         product_cn: String(m.product_cn || m.product_en || '').slice(0, 80),
-        ts: now - minutes * 60 * 1000,
+        ts: now - ageMs,
       };
     });
 
@@ -2078,17 +2266,21 @@ router.post('/api/retail/products/:id/viewing', express.json(), (req, res) => {
   if (viewers.size === 0) VIEWING.delete(mk);
 
   // Per-product boost from the configured range — different products land on
-  // different fake counts via productHash(id). On top of that, a slow time
-  // jitter (±20% every ~10s) makes the number drift live-style instead of
-  // staying glued to a single value across heartbeats. Range collapsed to a
-  // single value (min === max) still gets the jitter so it doesn't look static.
+  // different fake counts via productHash(id). Make those fake viewers feel
+  // alive: EBB with the time of day (a busy 3am badge reads as fake), wander on
+  // a SMOOTH slow wave instead of snapping between random values, and add a tiny
+  // step jitter so it never sits perfectly still. The configured number is the
+  // daytime-peak level; nights settle to a small floor. Real present viewers are
+  // added on top below.
   const bRange = readBoostRange(vn);
   let boost = pickInRange(productHash(id), bRange.min, bRange.max);
   if (boost > 0) {
-    const timeBucket = Math.floor(now / 10000);            // 10s buckets
-    const driftSeed  = (productHash(id) ^ timeBucket) >>> 0;
-    const driftPct   = ((driftSeed % 41) - 20) / 100;      // -20% .. +20%
-    boost = Math.max(0, Math.round(boost * (1 + driftPct)));
+    const seed   = productHash(id);
+    const intens = Math.max(0.15, dayIntensity(now) / PEAK_INTENSITY);   // 0.15 (night floor) .. ~0.96
+    const phase  = ((seed % 1000) / 1000) * Math.PI * 2;
+    const wave   = 1 + 0.18 * Math.sin(now / 90000 + phase);             // smooth ±18%, ~9-min period
+    const step   = ((mixHash(seed, Math.floor(now / 15000), 'vj') % 7) - 3) / 100;   // ±3% per 15s
+    boost = Math.max(0, Math.round(boost * intens * (wave + step)));
   }
   res.set('Cache-Control', 'no-store');
   // Track always (so the backend LIVE pane reads the raw VIEWING map), but only

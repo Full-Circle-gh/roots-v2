@@ -5568,7 +5568,7 @@
             <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
               <div class="field" style="margin: 0;">
-                <label class="stacked">Fake boost range · 虚拟加成范围</label>
+                <label class="stacked">Extra buyers per day · 每日额外买家</label>
                 <div class="row" style="gap: 6px; align-items: center;">
                   <input type="number" min="0" id="cfg-social-bc-boost_min" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">to · 至</span>
@@ -5576,7 +5576,11 @@
                 </div>
               </div>
               <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                Each product gets a stable random boost inside this range (same product always lands on the same number). Set both to 0 for real data only. Example: 50–150 makes one product read "real+72", another "real+138", etc. · 每件商品在范围内取一个稳定值;不同商品数字不一样,避免看起来像假数据。
+                Added on top of the real buyer count.<br>
+                The "today" number starts near 0 each morning and climbs through the day, the way real orders trickle in — it never sits frozen.<br>
+                Busy products (with real sales) climb faster; quiet ones slower.<br>
+                Each product picks its own steady value in this range, so no two read alike.<br>
+                Set both to 0 to show real buyers only. Try 8 to 30. · 叠加在真实购买人数之上。"今日"数字每天清晨从接近 0 开始,随当天时段自然增长,不再固定不动;热销品增长更快。设为 0 则只显示真实数据。
               </div>
             </div>
           </div>
@@ -5616,12 +5620,13 @@
             </div>
             <div class="helper" style="margin-top: 10px; line-height: 1.5;">
               Shorter window = feed reads "live" but may be empty on quiet days. Longer = always populated but older entries. Default: 7 days. · 时间越短越"实时",但安静期可能为空;越长越饱满但内容更旧。<br>
-              "On screen" = how long each toast stays up; "Gap between" = quiet pause before the next one pops. Bigger gap = less often. Defaults: 4.5s on screen, 5s gap. · "显示时长"=每条停留时间;"间隔"=下一条弹出前的安静时间,越大弹得越少。
+              "On screen" = how long each toast stays up; "Gap between" = quiet pause before the next one pops. Bigger gap = less often. Defaults: 4.5s on screen, 5s gap. · "显示时长"=每条停留时间;"间隔"=下一条弹出前的安静时间,越大弹得越少。<br>
+              The gap automatically stretches overnight, so the feed pops less often in quiet hours and at its normal pace through the day. · 间隔会在深夜自动拉长,凌晨少弹、白天正常。
             </div>
             <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
             <div style="margin-bottom: 8px;">
               <b style="font-size: 13px;">Manual fake entries · 手动虚拟条目</b>
-              <div class="muted" style="margin-top: 4px;">Mixed into the real feed and sorted by time. Names should be pre-masked (type "W**" or "M***"). Each entry's displayed time gets a small ±4-min jitter so duplicates don't show identical "X min ago". · 与真实订单合并并按时间排序;姓名请预先脱敏;显示时间会有 ±4 分钟微抖动避免重复。</div>
+              <div class="muted" style="margin-top: 4px;">Mixed into the real feed and sorted by time. Names should be pre-masked (type "W**" or "M***"). The minutes you set is the average age — each entry's "X ago" drifts up and resets around it over time (and entries don't tick together), so it reads like a live order instead of a fixed label. · 与真实订单合并并按时间排序;姓名请预先脱敏。所填分钟数为平均时间,实际“X 前”会围绕它自然增减并适时重置(各条不同步),读起来像真实下单而非固定文字。</div>
             </div>
             <div id="cfg-social-rb-manual-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
             <button type="button" class="btn btn-sm" onclick="addManualBuyer()">+ Add fake entry · 添加虚拟条目</button>
@@ -5659,7 +5664,7 @@
             <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
               <div class="field" style="margin: 0;">
-                <label class="stacked">Fake boost range · 虚拟加成范围</label>
+                <label class="stacked">Fake viewers at peak · 高峰虚拟在线</label>
                 <div class="row" style="gap: 6px; align-items: center;">
                   <input type="number" min="0" id="cfg-social-vn-boost_min" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">to · 至</span>
@@ -5667,7 +5672,10 @@
                 </div>
               </div>
               <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                Each product gets a stable random count in this range, plus a ±20% live jitter every ~10 sec so numbers drift naturally instead of looking static. Try 15–40. Set both to 0 for real data only. · 每件商品取范围内一个稳定值,并自动 ±20% 微浮动模拟真实波动。
+                This is the busy-hour level. Each product picks its own steady value in this range.<br>
+                The count drifts up and down on a slow, smooth wave — never jumping around — and quietens overnight, so a 3am page doesn't claim a crowd.<br>
+                Real live viewers are added on top.<br>
+                Set both to 0 for real data only. Try 15 to 40. · 这是高峰时段的人数。数字以平缓的波形自然起伏,深夜自动回落,不会在凌晨显示一堆人;真实在线人数另行叠加。设为 0 则只显示真实数据。
               </div>
             </div>
           </div>
@@ -5676,7 +5684,7 @@
           <div class="group-card">
             <div class="group-card-head">
               <h3>"Last ordered X ago" — product page · "上次订购于 X 前" — 商品页</h3>
-              <div class="muted">Freshness nudge based on the most recent paid order for this product. Hidden when the bought-count widget is already showing "today/this week" (so the lines don't repeat). · 基于最近一次付款的新鲜度提示;与"N 人购买"重复时自动隐藏。</div>
+              <div class="muted">A freshness nudge from the most recent order. It shows the real time when there's been a recent sale; otherwise it fills in believable activity that <b>ages on its own</b> (the "X ago" climbs over time and resets, never stuck on one number) and only appears on <b>some</b> products at a time — popular ones often, quiet ones now and then — so it's never on every product at once. Hidden when the bought-count line is already showing "today/this week" (so the two don't repeat). · 基于最近一次订单的新鲜度提示。有真实近期订单时显示真实时间;否则填充会<b>自动变旧</b>的可信活动(“X 前”随时间增长并适时重置,不再固定),且只在<b>部分</b>商品上出现——热销品常见、冷门品偶尔——不会同时出现在每个商品上。</div>
             </div>
             <label class="ckbox" style="margin-bottom: 12px;">
               <input type="checkbox" id="cfg-social-lo-enabled">
@@ -5697,7 +5705,7 @@
             <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
               <div class="field" style="margin: 0;">
-                <label class="stacked">Fake "ordered X min ago" range · 虚拟"X 分钟前订购"范围</label>
+                <label class="stacked">Freshness for active products · 活跃商品的新鲜度</label>
                 <div class="row" style="gap: 6px; align-items: center;">
                   <input type="number" min="0" max="1440" id="cfg-social-lo-fallback_min_minutes" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">to · 至</span>
@@ -5706,7 +5714,11 @@
                 </div>
               </div>
               <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                Products with no recent real order display "ordered N min ago" — each product gets a stable value inside this range so they don't all read identically. Real wins when fresher. Set both to 0 to disable. Try 5–45. · 无真实订单时显示范围内的虚拟时间;不同商品取不同稳定值。
+                How recently a busy product should look like it was last ordered.<br>
+                A popular product reads near the low end (e.g. "8 min ago"); quieter ones stretch to hours and often show nothing at all.<br>
+                Whatever shows then ages on its own until the next order resets it.<br>
+                Real orders always win when they're fresher.<br>
+                Set both to 0 to turn the fill-in off. Try 5 to 45. · 一件热销品“上次订购”看起来有多近。热销品接近下限(如“8 分钟前”),冷门品拉长到数小时、常常不显示;显示后会自动变旧,直到下一单重置。有更近的真实订单时优先显示真实时间。设为 0 则关闭填充。
               </div>
             </div>
           </div>
@@ -5733,7 +5745,7 @@
             <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
             <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
               <div class="field" style="margin: 0;">
-                <label class="stacked">Fake boost range · 虚拟加成范围</label>
+                <label class="stacked">Starting "sold" baseline · 起始“已售”基数</label>
                 <div class="row" style="gap: 6px; align-items: center;">
                   <input type="number" min="0" id="cfg-social-sb-boost_min" style="width: 90px;">
                   <span class="muted" style="font-size: 12px;">to · 至</span>
@@ -5741,7 +5753,10 @@
                 </div>
               </div>
               <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                Each product gets a stable random boost inside this range — different products show different "sold" totals (e.g. one reads "72 sold", another "138 sold"). Set both to 0 for real data only. Try 50–150. · 每件商品取范围内一个稳定加成,避免相同数字看起来像假数据。
+                The number a product starts life with. Each one picks its own steady value in this range, so totals differ (e.g. "72 sold", "138 sold").<br>
+                From there the count <b>creeps up over time</b> — a little each day since the product launched — so it grows week to week instead of sitting frozen. Best-sellers climb faster, and the growth is capped so it can't balloon.<br>
+                Real units sold are added on top.<br>
+                Set both to 0 for real data only. Try 50 to 150. · 商品的起始数字,各取范围内一个稳定值。之后会<b>随时间缓慢增长</b>(按上架天数,每天少量累加),逐周变大而非固定;热销品增长更快,且有上限。真实销量另行叠加。设为 0 则只显示真实数据。
               </div>
             </div>
           </div>
