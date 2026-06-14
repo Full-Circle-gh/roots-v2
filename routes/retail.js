@@ -6130,6 +6130,34 @@ function annotateShipBy(r) {
   }
   return r;
 }
+// Adds a short shipping destination to an order list row so operators can see
+// WHERE a parcel is headed without opening each order. Pulls city + district
+// from the structured address_json (falling back to the leading tokens of the
+// concatenated address_full for legacy rows that predate the JSON column).
+// Pickup orders have no destination — they're flagged ship_pickup instead.
+function annotateShipTo(r) {
+  if (!r) return r;
+  if (r.fulfillment_type === 'pickup') { r.ship_pickup = true; return r; }
+  let city = '', district = '';
+  if (r.address_json) {
+    try {
+      const a = JSON.parse(r.address_json);
+      if (a && !a.pickup) {
+        city = (a.city || a.province || '').toString().trim();
+        district = (a.district || '').toString().trim();
+      }
+    } catch (_) { /* malformed JSON — fall through to address_full */ }
+  }
+  if (!city && r.address_full) {
+    // address_full = "province city district address detail" joined by spaces.
+    const parts = String(r.address_full).trim().split(/\s+/);
+    city = parts[1] || parts[0] || '';
+    district = parts[2] || '';
+  }
+  if (city) r.ship_city = city;
+  if (district) r.ship_district = district;
+  return r;
+}
 // True when an ISO/SQLite timestamp lands on 00:00 Guangzhou (UTC+8) wall-clock.
 function _gzIsMidnight(ts) {
   if (!ts) return false;
@@ -11151,7 +11179,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
 
   let sql = `SELECT o.id, o.order_no, o.status, o.payment_method, o.total,
-                    o.recipient_name, o.recipient_phone, o.address_full,
+                    o.recipient_name, o.recipient_phone, o.address_full, o.address_json,
                     o.placed_at, o.paid_at, o.dispatched_at, o.delivered_at,
                     o.scheduled_for, o.delivery_slot_label,
                     o.delivery_mode, o.same_day_surcharge_fee,
@@ -11208,6 +11236,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     // off tracking_kd100_subscribed).
     r.jd_live = r.tracking_carrier === 'jd' && !!r.tracking_number && jdLiveOn && !r.tracking_kd100_subscribed;
     annotateShipBy(r);   // adds ship_by_mode + dispatch_deadline for out-of-GZ ASAP orders
+    annotateShipTo(r);   // adds ship_city + ship_district (or ship_pickup) for the list "Ship to" column
   }
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
@@ -11539,6 +11568,263 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
   });
   tx();
   res.json({ success: true });
+});
+
+// Combine a split order's parcels into ONE shipment. The system splits
+// out-of-Guangzhou orders into Air + Land (an "Air only" item forces an air
+// parcel), but the operator sometimes packs everything in a single box. This
+// collapses the shipments to one so the customer tracks ONE parcel, not the
+// system's split. Refuses once any parcel carries a waybill — combining then
+// would orphan a created label (clear the tracking first). Reversible via the
+// /split endpoint below.
+router.post('/api/retail-admin/orders/:id/shipments/combine',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const shipments = tdb().prepare(
+    `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
+  ).all(id);
+  if (shipments.length <= 1) {
+    return res.status(422).json({ success: false, error: 'already_single' });
+  }
+  // Never combine once a waybill exists on any parcel — would strand the label.
+  if (shipments.some(s => s.tracking_number || s.tracking_carrier)) {
+    return res.status(409).json({ success: false, error: 'has_tracking' });
+  }
+  // Pick a mode that still respects an Air-only item: air if any parcel was
+  // air, else land. (local parcels never split, so they never reach here.)
+  const mode  = shipments.some(s => s.mode === 'air') ? 'air' : 'land';
+  const label = 'Combined shipment · 合并发货';
+  const keep  = shipments[0].id;
+  const tx = tdb().transaction(() => {
+    tdb().prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE order_id = ?`).run(keep, id);
+    tdb().prepare(
+      `UPDATE retail_shipments SET mode = ?, label = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(mode, label, keep);
+    for (const s of shipments) {
+      if (s.id !== keep) tdb().prepare(`DELETE FROM retail_shipments WHERE id = ?`).run(s.id);
+    }
+  });
+  tx();
+  logActivity(req.user.id, req.user.username, 'shipments_combine', 'retail_order', id, { mode }, req.ip);
+  res.json({ success: true, combined: true, shipments: 1 });
+});
+
+// Undo a combine: drop the (waybill-free) shipments and re-materialize the
+// planned Air/Land split via the same planner used at order creation. If the
+// destination doesn't actually split (e.g. within Guangdong) this just rebuilds
+// the single planned parcel — harmless. Blocked if a waybill exists.
+router.post('/api/retail-admin/orders/:id/shipments/split',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const shipments = tdb().prepare(
+    `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
+  ).all(id);
+  if (shipments.some(s => s.tracking_number || s.tracking_carrier)) {
+    return res.status(409).json({ success: false, error: 'has_tracking' });
+  }
+  const tx = tdb().transaction(() => {
+    tdb().prepare(`UPDATE retail_order_items SET shipment_id = NULL WHERE order_id = ?`).run(id);
+    tdb().prepare(`DELETE FROM retail_shipments WHERE order_id = ?`).run(id);
+  });
+  tx();
+  const rebuilt = ensureShipments(id);   // re-plan fresh from items + address
+  logActivity(req.user.id, req.user.username, 'shipments_split', 'retail_order', id, { count: rebuilt.length }, req.ip);
+  res.json({ success: true, shipments: rebuilt.length });
+});
+
+// ─── Address → Chinese (for waybills) ───────────────────────────────────
+// An order placed in English ("Gongti North Rd Sanlitun, Chaoyang District")
+// can't print a clean mainland waybill. These two endpoints (1) propose a
+// canonical Chinese address — model-translated street + region-table canonical
+// province/city/district, then geocode-verified — and (2) write the confirmed
+// result back to the order (so the JD label prints Chinese) and, best-effort,
+// to the customer's saved address (so future orders are already Chinese).
+
+// Forced tool: return the address as clean simplified-Chinese components.
+const ADDRESS_CN_TOOL = {
+  name: 'chinese_address',
+  description: 'Return the given Chinese-mainland shipping address as clean, fully simplified-Chinese mailing components. Translate any English or pinyin place and street names to their standard simplified-Chinese form (e.g. "Gongti North Rd" → "工体北路", "Sanlitun" → "三里屯", "Chaoyang District" → "朝阳区"). Use official administrative names. NEVER invent house, building, or unit numbers that are not present; keep any digits exactly as given. Leave a field empty only when it is genuinely absent.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      province: { type: 'string', description: 'Province / municipality in Chinese, e.g. 北京 or 广东省' },
+      city:     { type: 'string', description: 'City in Chinese, e.g. 北京市 or 广州市' },
+      district: { type: 'string', description: 'District / county in Chinese, e.g. 朝阳区' },
+      street:   { type: 'string', description: 'Everything below district level — road, building, apartment — in Chinese' },
+    },
+    required: ['street'],
+  },
+};
+
+// Heuristic: does a string carry Latin letters (worth offering a translation)?
+function addressHasLatin(s) { return /[A-Za-z]/.test(String(s || '')); }
+
+// Build a verified Chinese-address proposal for an order. Does NOT write.
+router.post('/api/retail-admin/orders/:id/address/to-chinese',
+  requireRetailAdmin, express.json(), async (req, res) => {
+  if (!modelGateway.isConfigured()) return res.status(503).json({ success: false, error: 'ai_not_configured' });
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id, recipient_name, address_full, address_json FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  let cur = {};
+  try { cur = JSON.parse(o.address_json || '{}'); } catch {}
+  if (cur.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
+
+  const system = 'You convert a Chinese-mainland shipping address that contains English or pinyin into a clean, fully simplified-Chinese mailing address, split into province / city / district / street. Use official administrative names. Never invent numbers that are not present. Always answer by calling the chinese_address tool.';
+  const userMsg =
+    `Current components:\n` +
+    `province: ${cur.province || '(none)'}\n` +
+    `city: ${cur.city || '(none)'}\n` +
+    `district: ${cur.district || '(none)'}\n` +
+    `street: ${cur.address || '(none)'}\n` +
+    `detail: ${cur.detail || '(none)'}\n\n` +
+    `Full one-line address as entered:\n${o.address_full || ''}`;
+
+  let ai = {};
+  try {
+    const out = await modelGateway.callModel({
+      system,
+      tools: [ADDRESS_CN_TOOL],
+      messages: [{ role: 'user', content: userMsg }],
+      max_tokens: 500,
+    });
+    ai = modelGateway.extractToolUse(out.content_blocks, 'chinese_address') || {};
+  } catch (e) {
+    if (e && e.code === 'not_configured') return res.status(503).json({ success: false, error: 'ai_not_configured' });
+    console.error('[address/to-chinese]', e && (e.message || e));
+    return res.status(502).json({ success: false, error: 'translate_failed' });
+  }
+
+  const pick = (s) => (s == null ? '' : String(s).trim().slice(0, 200));
+  // Canonicalize through the same pipeline the customer address book uses:
+  // normalize suffixes + de-dupe prefix, then resolve the bilingual region.
+  let merged = normalizeChinaAddress({
+    province: pick(ai.province) || cur.province || '',
+    city:     pick(ai.city)     || cur.city     || '',
+    district: pick(ai.district) || cur.district || '',
+    address:  pick(ai.street)   || cur.address  || '',
+    detail:   cur.detail || '',
+  });
+  merged = { ...merged, ...regionI18n.resolveRegion(merged) };
+  const address_full = [merged.province, merged.city, merged.district, merged.address, merged.detail].filter(Boolean).join(' ');
+
+  // Verify the proposal actually resolves on the map (a sanity check the
+  // operator can trust). Soft — a miss just shows an amber "couldn't verify".
+  let geocode_ok = false, lat = null, lng = null;
+  if (geocode.configured()) {
+    try {
+      const coords = await geocode.geocodeAddress({
+        province: merged.province, city: merged.city, district: merged.district, address: merged.address,
+      });
+      if (coords && coords.lat && coords.lng) { geocode_ok = true; lat = coords.lat; lng = coords.lng; }
+    } catch (e) { /* soft — leave geocode_ok false */ }
+  }
+
+  res.json({
+    success: true,
+    data: {
+      chinese: {
+        province: merged.province || '', city: merged.city || '', district: merged.district || '',
+        address: merged.address || '', detail: merged.detail || '',
+      },
+      address_full,
+      original_full: o.address_full || '',
+      still_has_latin: addressHasLatin(address_full),
+      geocode_ok, geocode_configured: geocode.configured(), lat, lng,
+    },
+  });
+});
+
+// Write a confirmed Chinese address back. Body: { province, city, district,
+// address, detail, save_order, save_customer }. Always normalizes. Saving to
+// the customer's address book is best-effort: it matches the saved row by the
+// order's pre-edit freeform street (the order snapshot was taken from it), and
+// falls back to the default address; reports what it did.
+router.post('/api/retail-admin/orders/:id/address/apply-chinese',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id, customer_id, address_full, address_json FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const body = req.body || {};
+  const a = normalizeChinaAddress({
+    province: body.province || '', city: body.city || '', district: body.district || '',
+    address: body.address || '', detail: body.detail || '',
+  });
+  if (!a.address) return res.status(400).json({ success: false, error: 'missing_address' });
+  const region = regionI18n.resolveRegion(a);
+  const merged = { ...a, ...region };
+  const address_full = [merged.province, merged.city, merged.district, merged.address, merged.detail].filter(Boolean).join(' ');
+
+  let curJson = {};
+  try { curJson = JSON.parse(o.address_json || '{}'); } catch {}
+  if (curJson.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
+  const priorStreet = curJson.address || '';
+
+  const saveOrder    = body.save_order    !== false;   // default on
+  const saveCustomer = !!body.save_customer;
+  let saved_order = false, saved_customer = false, customer_reason = null, customer_addr_id = null;
+
+  const newJson = { ...curJson,
+    province: merged.province || null, city: merged.city || null, district: merged.district || null,
+    address: merged.address || '', detail: merged.detail || null,
+  };
+
+  if (saveOrder) {
+    tdb().prepare(
+      `UPDATE retail_orders SET address_full = ?, address_json = ? WHERE id = ?`
+    ).run(address_full, JSON.stringify(newJson), id);
+    saved_order = true;
+  }
+
+  if (saveCustomer) {
+    if (!o.customer_id) {
+      customer_reason = 'no_customer';
+    } else {
+      // Prefer the row the order was placed from (same freeform street), else
+      // the customer's default, else skip rather than guess.
+      let target = null;
+      if (priorStreet) {
+        const matches = tdb().prepare(
+          `SELECT id FROM retail_customer_addresses WHERE customer_id = ? AND address = ?`
+        ).all(o.customer_id, priorStreet);
+        if (matches.length === 1) target = matches[0].id;
+      }
+      if (!target) {
+        const def = tdb().prepare(
+          `SELECT id FROM retail_customer_addresses WHERE customer_id = ? AND is_default = 1`
+        ).get(o.customer_id);
+        if (def) target = def.id;
+      }
+      if (!target) {
+        customer_reason = 'no_match';
+      } else {
+        tdb().prepare(
+          `UPDATE retail_customer_addresses
+              SET province = ?, city = ?, district = ?, address = ?, detail = ?,
+                  province_en = ?, city_en = ?, district_en = ?,
+                  lat = NULL, lng = NULL, geocoded_at = NULL,
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND customer_id = ?`
+        ).run(
+          merged.province || null, merged.city || null, merged.district || null,
+          merged.address || '', merged.detail || null,
+          merged.province_en || null, merged.city_en || null, merged.district_en || null,
+          target, o.customer_id
+        );
+        geocodeAddressAsync(target, merged);   // refresh coordinates in background
+        saved_customer = true;
+        customer_addr_id = target;
+      }
+    }
+  }
+
+  logActivity(req.user.id, req.user.username, 'address_to_chinese', 'retail_order', id,
+    { saved_order, saved_customer, customer_reason }, req.ip);
+  res.json({ success: true, data: { address_full, saved_order, saved_customer, customer_reason, customer_addr_id } });
 });
 
 // ─── Partial / late fulfillment ────────────────────────────────────────

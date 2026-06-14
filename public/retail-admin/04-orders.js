@@ -424,6 +424,7 @@ async function loadOrders(opts = {}) {
           ${o.store_code ? `<div>${escapeHtml(o.store_name_en || o.store_code)}</div>
             ${routingNote(o.routing_reason) ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${routingNote(o.routing_reason)}</div>` : ''}` : '<span class="muted">—</span>'}
         </td>
+        <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
         <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}</div></td>
@@ -1108,6 +1109,24 @@ function renderTrackingCell(o) {
     : `<span class="muted" style="font-size:10px;">${cuT('manual','手动')}</span>`;
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
           <div style="margin-top: 2px;">${sync}</div>`;
+}
+
+// "Ship to" — the parcel's destination city (+ district below) so operators can
+// triage where orders are headed without opening each one. Server fills
+// ship_city / ship_district (or ship_pickup) on the list row. Pickup orders
+// have no destination; everything else shows at least a city.
+function renderShipToCell(o) {
+  if (o.ship_pickup || o.fulfillment_type === 'pickup') {
+    return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('Pickup','自提')}</span>`;
+  }
+  if (!o.ship_city) return '<span class="muted">—</span>';
+  // City + district are raw address data (both Chinese) — wrap in data-no-i18n
+  // so the EN/CN block classifier doesn't mis-pair the two divs and hide the
+  // district in one language. See the parseSchedFor note above for the trap.
+  const district = o.ship_district && o.ship_district !== o.ship_city
+    ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(o.ship_district)}</div>`
+    : '';
+  return `<div data-no-i18n><div>${escapeHtml(o.ship_city)}</div>${district}</div>`;
 }
 
 let ORDERS_STORE_FILTER_LOADED = false;
