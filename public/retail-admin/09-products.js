@@ -1901,7 +1901,7 @@ function vaRender() {
         `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaSelfField('price', this.value)">` +
         `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaSelfField('compare', this.value)">` +
         stkCell +
-        `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaSelfField('published', this.checked ? 1 : 0)"></span>` +
+        `<span class="va-show"><input type="checkbox" ${v.published ? 'checked' : ''} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaSelfField('published', this.checked ? 1 : 0)"></span>` +
         `<span class="va-self" title="${cuT('This is the main product. Its name, photos & details are edited in the form above; the quick fields here stay in sync.', '这是主产品。名称、图片和详情在上方表单中编辑;此处的快捷字段保持同步。')}">●</span></div>`;
     }
     return rowOpen + grip + photo + label +
@@ -1910,7 +1910,7 @@ function vaRender() {
       `<input class="va-num" type="number" min="0" step="0.01" value="${price === '' ? '' : price}" placeholder="0" oninput="vaField(${v.id}, 'price', this.value)">` +
       `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaField(${v.id}, 'compare', this.value)">` +
       stkCell +
-      `<span class="va-show"><input type="checkbox" ${v.published === 0 ? '' : 'checked'} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaField(${v.id}, 'published', this.checked ? 1 : 0)"></span>` +
+      `<span class="va-show"><input type="checkbox" ${v.published ? 'checked' : ''} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaField(${v.id}, 'published', this.checked ? 1 : 0)"></span>` +
       `<button type="button" class="va-x" title="${cuT('Delete this variant', '删除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
   }).join('');
   box.innerHTML =
@@ -4423,7 +4423,7 @@ function pwOpen() {
     step: 'front', source: null,
     name_en: '', name_cn: '', sku: '', top: '', sub: '', photo: '',
     price: '', compare: '', stock: '', weight: '',
-    hasSizes: false, sizes: [{ label: '', price: '', stock: '' }], localOnly: false,
+    hasSizes: false, sizes: [{ name_en: '', name_cn: '', weight: '', price: '', stock: '' }], localOnly: false,
     facts: {}, freeOf: {}, descEn: '', descCn: '',
     options: [], pick: null,
     designed: true, busy: false,
@@ -4576,7 +4576,7 @@ function pwWhatHtml() {
   const prefilled = (_pw.source === 'paste' || _pw.source === 'copy');
   return (prefilled ? '<div class="vw-help" style="margin:-2px 0 4px;">' + cuT('We’ve filled in what we could — just check it’s right.', '已尽量帮你填好 — 核对一下即可。') + '</div>' : '')
     + '<div class="field"><label class="vw-lab">' + nameMain.lab + '</label>'
-    + '<input type="text" value="' + escapeAttr(nameMain.val) + '" placeholder="' + nameMain.ph + '" oninput="' + nameMain.fn + '" onblur="pwSuggestSku()" style="width:100%;box-sizing:border-box;"></div>'
+    + '<input type="text" value="' + escapeAttr(nameMain.val) + '" placeholder="' + nameMain.ph + '" oninput="' + nameMain.fn + '" style="width:100%;box-sizing:border-box;"></div>'
     + '<div class="vw-help" style="margin:-6px 0 4px;">' + cuT('Type one language — you can add the other below.', '填一种语言即可 — 另一种可在下方补充。') + '</div>'
     + '<div class="field"><label class="vw-lab">' + nameAlt.lab + '</label>'
     + '<input type="text" value="' + escapeAttr(nameAlt.val) + '" placeholder="' + nameAlt.ph + '" oninput="' + nameAlt.fn + '" style="width:100%;box-sizing:border-box;"></div>'
@@ -4590,19 +4590,12 @@ function pwWhatHtml() {
     + '</div>'
     + '<div class="field"><label class="vw-lab">' + cuT('Product code', '产品编号') + '</label>'
     + '<input id="pw-sku-input" type="text" value="' + escapeAttr(_pw.sku) + '" placeholder="' + cuT('we’ll make one for you', '系统会自动生成') + '" oninput="pwSet(\'sku\', this.value)" style="width:100%;box-sizing:border-box;"></div>'
-    + '<div class="vw-help" style="margin-top:-6px;">' + cuT('We made this for you — type over it if you already have your own.', '已为你生成 — 若有自己的编号可直接覆盖。') + '</div>';
+    + '<div class="vw-help" style="margin-top:-6px;">' + cuT('Leave it blank and we’ll create one for you, or type your own.', '留空将自动生成,也可填写自己的编号。') + '</div>';
 }
 function pwSet(key, val) { if (_pw) _pw[key] = val; }
 function pwSetCat(v) {
   const parts = String(v || '').split('|||');
   _pw.top = parts[0] || ''; _pw.sub = parts[1] || '';
-}
-function pwSuggestSku() {
-  if (!_pw || (_pw.sku && _pw.sku.trim())) return;
-  const base = (_pw.name_en || _pw.name_cn || '').trim();
-  if (!base) return;
-  const slug = base.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24);
-  if (slug) { _pw.sku = slug; const f = document.getElementById('pw-sku-input'); if (f) f.value = slug; }
 }
 function pwNextWhat() {
   if (!_pw.name_en.trim() && !_pw.name_cn.trim()) { toast(cuT('Add a name first', '请先填写名称'), 'err'); return; }
@@ -4619,11 +4612,11 @@ async function pwPhotoPicked(e) {
 
 // ── Step 2 · Sizes & price ─────────────────────────────────────────────────────
 function pwPriceHtml() {
-  const fork = '<div class="vw-lab">' + cuT('Does it come in different sizes?', '有不同规格吗?') + '</div>'
-    + '<div class="vw-help" style="margin:-2px 0 8px;">' + cuT('Like 250g and 500g, or Small and Large.', '比如 250 克和 500 克,或大杯和小杯。') + '</div>'
+  const fork = '<div class="vw-lab">' + cuT('Does it come in more than one option?', '有多个选项吗?') + '</div>'
+    + '<div class="vw-help" style="margin:-2px 0 8px;">' + cuT('Different sizes (250g / 500g) or flavors (Original / Spicy).', '不同规格(250 克 / 500 克)或口味(原味 / 香辣)。') + '</div>'
     + '<div class="pw-seg">'
     + '<button class="pw-seg-btn' + (!_pw.hasSizes ? ' on' : '') + '" onclick="pwSetSizes(false)">' + cuT('No, just one', '不,只有一种') + '</button>'
-    + '<button class="pw-seg-btn' + (_pw.hasSizes ? ' on' : '') + '" onclick="pwSetSizes(true)">' + cuT('Yes, it has sizes', '有多种规格') + '</button></div>';
+    + '<button class="pw-seg-btn' + (_pw.hasSizes ? ' on' : '') + '" onclick="pwSetSizes(true)">' + cuT('Yes, it has options', '有多个选项') + '</button></div>';
   let core;
   if (!_pw.hasSizes) {
     core = '<div class="pw-row2">'
@@ -4632,16 +4625,23 @@ function pwPriceHtml() {
       + '<label class="pw-check"><input type="checkbox"' + (_pw.compare !== '' ? ' checked' : '') + ' onchange="pwToggleSale(this.checked)"> ' + cuT('It’s on sale', '正在促销') + '</label>'
       + (_pw.compare !== '' ? '<div class="field" style="max-width:240px;"><label class="vw-lab">' + cuT('Was price', '原价') + ' ¥</label><input type="number" min="0" step="0.01" value="' + _pw.compare + '" oninput="pwSet(\'compare\', this.value)" style="width:100%;box-sizing:border-box;"><div class="vw-help">' + cuT('Shoppers see the old price crossed out.', '顾客会看到原价划线。') + '</div></div>' : '');
   } else {
-    core = '<div class="vw-help" style="margin-bottom:6px;">' + cuT('Add each size with its own price and stock.', '为每种规格设置价格与库存。') + '</div>'
-      + '<div class="pw-sizes">'
-      + _pw.sizes.map((s, i) => '<div class="pw-size-row">'
-        + '<input type="text" placeholder="' + cuT('e.g. 250g', '如 250克') + '" value="' + escapeAttr(s.label) + '" oninput="pwSizeField(' + i + ', \'label\', this.value)">'
+    core = '<div class="vw-help" style="margin-bottom:8px;">' + cuT('Give each option a name (a size or a flavor). Weight is optional.', '为每个选项起个名字(规格或口味)。重量可选。') + '</div>'
+      + '<div class="pw-vars">'
+      + _pw.sizes.map((s, i) => '<div class="pw-var">'
+        + '<div class="pw-var-head"><span class="pw-var-n">' + cuT('Option', '选项') + ' ' + (i + 1) + '</span>'
+        + (_pw.sizes.length > 1 ? '<button type="button" class="pw-x" onclick="pwSizeRemove(' + i + ')" title="' + cuT('Remove', '移除') + '">✕</button>' : '') + '</div>'
+        + '<div class="pw-row2">'
+        + '<input type="text" placeholder="' + cuT('Name (English) — e.g. Spicy', '名称(英文)— 如 Spicy') + '" value="' + escapeAttr(s.name_en) + '" oninput="pwSizeField(' + i + ', \'name_en\', this.value)">'
+        + '<input type="text" placeholder="' + cuT('Name (中文) — e.g. 香辣', '名称(中文)— 如 香辣') + '" value="' + escapeAttr(s.name_cn) + '" oninput="pwSizeField(' + i + ', \'name_cn\', this.value)">'
+        + '</div>'
+        + '<div class="pw-var-line">'
+        + '<input type="text" class="pw-var-wt" placeholder="' + cuT('Weight — e.g. 250g', '重量 — 如 250克') + '" value="' + escapeAttr(s.weight) + '" oninput="pwSizeField(' + i + ', \'weight\', this.value)">'
         + '<span class="pw-size-cur">¥<input type="number" min="0" step="0.01" placeholder="' + cuT('price', '价格') + '" value="' + (s.price === '' ? '' : s.price) + '" oninput="pwSizeField(' + i + ', \'price\', this.value)"></span>'
-        + '<input type="number" min="0" step="1" placeholder="' + cuT('stock', '库存') + '" value="' + (s.stock === '' ? '' : s.stock) + '" oninput="pwSizeField(' + i + ', \'stock\', this.value)">'
-        + (_pw.sizes.length > 1 ? '<button type="button" class="pw-x" onclick="pwSizeRemove(' + i + ')" title="' + cuT('Remove', '移除') + '">✕</button>' : '<span class="pw-x-spacer"></span>')
+        + '<input type="number" min="0" step="1" class="pw-var-stk" placeholder="' + cuT('stock', '库存') + '" value="' + (s.stock === '' ? '' : s.stock) + '" oninput="pwSizeField(' + i + ', \'stock\', this.value)">'
+        + '</div>'
         + '</div>').join('')
       + '</div>'
-      + '<button type="button" class="btn btn-sm" onclick="pwSizeAdd()">' + cuT('+ Add a size', '+ 添加规格') + '</button>';
+      + '<button type="button" class="btn btn-sm" onclick="pwSizeAdd()">' + cuT('+ Add an option', '+ 添加选项') + '</button>';
   }
   const ship = '<div class="field" style="margin-top:14px;"><label class="vw-lab">' + cuT('Where can people get it?', '哪里可以买到?') + '</label>'
     + '<label class="pw-check"><input type="checkbox"' + (_pw.localOnly ? ' checked' : '') + ' onchange="pwSet(\'localOnly\', this.checked)"> ' + cuT('Guangzhou delivery only', '仅限广州配送') + '</label>'
@@ -4651,16 +4651,24 @@ function pwPriceHtml() {
 function pwSetSizes(on) { _pw.hasSizes = !!on; pwRender(); }
 function pwToggleSale(on) { _pw.compare = on ? (_pw.compare || '0') : ''; pwRender(); }
 function pwSizeField(i, key, val) { if (_pw.sizes[i]) _pw.sizes[i][key] = val; }
-function pwSizeAdd() { _pw.sizes.push({ label: '', price: '', stock: '' }); pwRender(); }
-function pwSizeRemove(i) { _pw.sizes.splice(i, 1); if (!_pw.sizes.length) _pw.sizes.push({ label: '', price: '', stock: '' }); pwRender(); }
+function pwSizeAdd() { _pw.sizes.push({ name_en: '', name_cn: '', weight: '', price: '', stock: '' }); pwRender(); }
+function pwSizeRemove(i) { _pw.sizes.splice(i, 1); if (!_pw.sizes.length) _pw.sizes.push({ name_en: '', name_cn: '', weight: '', price: '', stock: '' }); pwRender(); }
 
 // ── Step 3 · Details ───────────────────────────────────────────────────────────
 function pwDetailsHtml() {
   const primary = pwPrimaryLang();
-  const desc = primary === 'cn' ? _pw.descCn : _pw.descEn;
+  // Two separate boxes — one per language — so English and 中文 never end up
+  // glued together in one field (the shop shows them apart). Mirrors the
+  // product editor's ENGLISH / 中文 description panes. Fill one or both.
+  const taStyle = 'width:100%;box-sizing:border-box;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:9px;resize:vertical;';
   let html = '<div class="vw-lab">' + cuT('Describe it (or paste anything)', '描述一下(或粘贴任意文字)') + '</div>'
-    + '<div class="vw-help" style="margin:-2px 0 6px;">' + cuT('A sentence is fine. Paste a label or spec sheet and we’ll pull the details below.', '一句话也行。粘贴标签或规格表,我们帮你提取下方详情。') + '</div>'
-    + '<textarea id="pw-desc" rows="3" oninput="pwSetDesc(this.value)" style="width:100%;box-sizing:border-box;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:9px;resize:vertical;">' + escapeHtml(desc) + '</textarea>'
+    + '<div class="vw-help" style="margin:-2px 0 8px;">' + cuT('Keep the languages apart: English in the left box, 中文 in the right. Fill just one if that’s all you have. Then “Pull the details” fills the boxes below.', '请分开填写:左边英文,右边中文。只有一种也行。然后点「从中提取详情」自动填好下方。') + '</div>'
+    + '<div class="pw-row2">'
+    + '<div class="field"><label class="vw-lab">English</label>'
+    + '<textarea id="pw-desc-en" rows="4" oninput="pwSetDescLang(\'en\', this.value)" style="' + taStyle + '">' + escapeHtml(_pw.descEn) + '</textarea></div>'
+    + '<div class="field"><label class="vw-lab">中文</label>'
+    + '<textarea id="pw-desc-cn" rows="4" oninput="pwSetDescLang(\'cn\', this.value)" style="' + taStyle + '">' + escapeHtml(_pw.descCn) + '</textarea></div>'
+    + '</div>'
     + '<div style="margin:8px 0 14px;"><button type="button" class="btn btn-sm" onclick="pwPullFacts()">' + cuT('Pull the details from this', '从中提取详情') + '</button></div>';
   if (!_pw.hasSizes) {
     html += '<div class="field" style="max-width:240px;"><label class="vw-lab">' + cuT('Net weight', '净含量') + '</label><input type="text" placeholder="e.g. 200g" value="' + escapeAttr(_pw.weight) + '" oninput="pwSet(\'weight\', this.value)" style="width:100%;box-sizing:border-box;"></div>';
@@ -4674,18 +4682,21 @@ function pwDetailsHtml() {
     + '<div class="vw-help">' + cuT('This is your promise to shoppers, so make sure it’s true.', '这是对顾客的承诺,请确保属实。') + '</div></div>';
   return html;
 }
-function pwSetDesc(v) { if (pwPrimaryLang() === 'cn') _pw.descCn = v; else _pw.descEn = v; }
+function pwSetDescLang(lang, v) { if (lang === 'cn') _pw.descCn = v; else _pw.descEn = v; }
 function pwSetFact(k, v) { _pw.facts[k] = v; }
 function pwToggleFreeOf(id, on) { _pw.freeOf[id] = !!on; }
 async function pwPullFacts() {
-  const primary = pwPrimaryLang();
-  const text = (primary === 'cn' ? _pw.descCn : _pw.descEn) || '';
-  if (!text.trim()) { toast(cuT('Write or paste some text first', '请先填写或粘贴文字'), 'err'); return; }
+  // Send whichever boxes are filled — the endpoint reads both and fills the
+  // English + Chinese value for every fact it finds (translating when one side
+  // is blank), so a single-language paste still backfills both languages.
+  const textEn = (_pw.descEn || '').trim();
+  const textCn = (_pw.descCn || '').trim();
+  if (!textEn && !textCn) { toast(cuT('Write or paste some text first', '请先填写或粘贴文字'), 'err'); return; }
   toast(cuT('Reading your text…', '正在识别…'));
   try {
     const r = await fetch('/api/retail-admin/ai/extract-facts', {
       method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(primary === 'cn' ? { text_cn: text } : { text_en: text }),
+      body: JSON.stringify({ text_en: textEn, text_cn: textCn }),
     });
     const j = await r.json().catch(() => ({}));
     if (r.status === 503) { toast(cuT('AI is not set up yet — fill the boxes by hand', 'AI 尚未配置,请手动填写'), 'err'); return; }
@@ -4775,7 +4786,10 @@ function pwLinkChoose(id) {
 function pwReviewHtml() {
   const name = cuT(_pw.name_en || _pw.name_cn || '—', _pw.name_cn || _pw.name_en || '—');
   const priceTxt = _pw.hasSizes
-    ? _pw.sizes.filter(s => s.label || s.price !== '').map(s => escapeHtml(s.label || '—') + ' ¥' + (s.price || '?')).join(' · ')
+    ? _pw.sizes.filter(s => s.name_en || s.name_cn || s.price !== '').map(s => {
+      const nm = cuT(s.name_en || s.name_cn || '—', s.name_cn || s.name_en || '—');
+      return escapeHtml(nm + (s.weight ? ' (' + s.weight + ')' : '')) + ' ¥' + (s.price || '?');
+    }).join(' · ')
     : ('¥' + (_pw.price || '?') + (_pw.compare !== '' ? ' <span class="muted" style="text-decoration:line-through;">¥' + _pw.compare + '</span>' : ''));
   const cat = _pw.sub ? (_pw.top + ' › ' + _pw.sub) : (_pw.top || cuT('No category yet', '尚未分类'));
   const factCount = Object.values(_pw.facts).filter(v => (v || '').trim()).length;
@@ -4853,14 +4867,14 @@ async function pwFinish(publish) {
   const firstSize = _pw.hasSizes ? _pw.sizes[0] : null;
   const wantDesign = _pw.designed && !!(_pw.descEn.trim() || _pw.descCn.trim());
   const dEn = _pw.descEn, dCn = _pw.descCn;
-  const extraSizes = _pw.hasSizes ? _pw.sizes.slice(1).filter(s => s.label || s.price !== '') : [];
+  const extraSizes = _pw.hasSizes ? _pw.sizes.slice(1).filter(s => s.name_en || s.name_cn || s.weight || s.price !== '') : [];
   const baseStock = _pw.hasSizes ? (firstSize ? firstSize.stock : '') : _pw.stock;
   try {
     const price = _pw.hasSizes ? (firstSize ? firstSize.price : '') : _pw.price;
     const body = {
       name_en: _pw.name_en.trim(), name_cn: _pw.name_cn.trim(),
       top_category: _pw.top, subcategory: _pw.sub,
-      weight: _pw.hasSizes ? (firstSize ? (firstSize.label || '') : '') : (_pw.weight || ''),
+      weight: _pw.hasSizes ? (firstSize ? (firstSize.weight || '') : '') : (_pw.weight || ''),
       ...(String(price).trim() !== '' ? { sell_price: parseFloat(price) || 0 } : {}),
       compare_at_price: _pw.hasSizes ? 0 : (parseFloat(_pw.compare) || 0),
       free_of: pwFreeOfStr(), product_facts: pwFactsObj(), options: pwOptionsBody(),
@@ -4882,18 +4896,18 @@ async function pwFinish(publish) {
     // Extra sizes → clone as variants, set price/label, group them (best-effort).
     if (extraSizes.length) {
       try {
-        const members = [{ id: newId, label: (firstSize && firstSize.label) || '', label_cn: '' }];
+        const members = [{ id: newId, label: (firstSize && firstSize.name_en) || '', label_cn: (firstSize && firstSize.name_cn) || '' }];
         for (const sz of extraSizes) {
-          const dup = await api('/api/retail-admin/products/' + newId + '/duplicate', { method: 'POST', body: { as_variant: true, label: sz.label || '' } });
+          const dup = await api('/api/retail-admin/products/' + newId + '/duplicate', { method: 'POST', body: { as_variant: true, label: sz.name_en || '' } });
           const vid = dup.data && dup.data.id; if (!vid) continue;
           if (Array.isArray(PA_PRODUCTS)) PA_PRODUCTS.unshift(dup.data);
           // duplicate always lands as a draft (is_published=0) — match the
-          // parent so a published product's other sizes go live too, not just
-          // the first one. Otherwise the extra sizes stay hidden/"unchecked".
-          const vbody = { weight: sz.label || '', compare_at_price: 0, is_published: publish ? 1 : 0 };
+          // parent so a published product's other options go live too, not just
+          // the first one. Otherwise the extra options stay hidden/"unchecked".
+          const vbody = { weight: sz.weight || '', compare_at_price: 0, is_published: publish ? 1 : 0 };
           if (String(sz.price).trim() !== '') vbody.sell_price = parseFloat(sz.price) || 0;
           await api('/api/retail-admin/products/' + vid, { method: 'PATCH', body: vbody });
-          members.push({ id: vid, label: sz.label || '', label_cn: '' });
+          members.push({ id: vid, label: sz.name_en || '', label_cn: sz.name_cn || '' });
           if (storeId != null && String(sz.stock).trim() !== '') await pwWriteStock(storeId, vid, sz.stock);
         }
         await api('/api/retail-admin/products/' + newId + '/variants', { method: 'PUT', body: { members } });

@@ -6274,6 +6274,14 @@
 .pw-size-row input[type="number"] { width: 84px; }
 .pw-size-cur { display: inline-flex; align-items: center; gap: 2px; color: var(--muted, #6b6b63); }
 .pw-size-cur input { width: 84px; }
+.pw-vars { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
+.pw-var { border: 1px solid var(--line, #d9d3c6); border-radius: 11px; padding: 10px 12px; background: var(--bg-elev-1, #faf7f0); }
+.pw-var .pw-row2 input { width: 100%; box-sizing: border-box; }
+.pw-var-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; min-height: 22px; }
+.pw-var-n { font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted, #6b6b63); }
+.pw-var-line { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.pw-var-wt { flex: 1 1 auto; }
+.pw-var-stk { width: 84px; }
 .pw-x { background: none; border: none; color: var(--muted, #6b6b63); cursor: pointer; font-size: 13px; padding: 4px 6px; border-radius: 6px; }
 .pw-x:hover { color: var(--danger, #b65656); background: rgba(182,86,86,.08); }
 .pw-x-spacer, .pw-radio-spacer { width: 26px; flex: none; display: inline-block; }

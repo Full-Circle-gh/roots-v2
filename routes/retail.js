@@ -930,7 +930,7 @@ function loadProductOptions(productId) {
   if (!options.length) return [];
   const placeholders = options.map(() => '?').join(',');
   const choices = tdb().prepare(
-    `SELECT id, option_id, label_en, label_cn, price_delta, is_default, sort_order
+    `SELECT id, option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order
        FROM retail_product_option_choices
       WHERE option_id IN (${placeholders})
       ORDER BY sort_order ASC, id ASC`
@@ -998,6 +998,10 @@ function saveProductOptions(productId, input) {
         label_cn: String((c && c.label_cn) || '').trim().slice(0, 80),
         price_delta: Math.round((Number(c && c.price_delta) || 0) * 100) / 100,
         is_default: c && c.is_default ? 1 : 0,
+        // A paid extra may draw down a real product's stock (the "+ Stock" link).
+        // Carry it through — checkout reads stock_product_id to reserve the add-on
+        // (see expandStockLines); without persisting it the link silently vanishes.
+        stock_product_id: (c && Number.isFinite(parseInt(c.stock_product_id, 10))) ? parseInt(c.stock_product_id, 10) : null,
       }))
       .filter(c => c.label_en || c.label_cn);
     return { question_en, question_cn, type, is_required: o && o.is_required ? 1 : 0, choices };
@@ -1014,12 +1018,12 @@ function saveProductOptions(productId, input) {
        VALUES (?,?,?,?,?,?)`
     );
     const insChoice = tdb().prepare(
-      `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, sort_order)
-       VALUES (?,?,?,?,?,?)`
+      `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order)
+       VALUES (?,?,?,?,?,?,?)`
     );
     clean.forEach((o, oi) => {
       const optId = insOpt.run(productId, o.question_en, o.question_cn || null, o.type, o.is_required, oi).lastInsertRowid;
-      o.choices.forEach((c, ci) => insChoice.run(optId, c.label_en, c.label_cn || null, c.price_delta, c.is_default, ci));
+      o.choices.forEach((c, ci) => insChoice.run(optId, c.label_en, c.label_cn || null, c.price_delta, c.is_default, c.stock_product_id, ci));
     });
   });
   tx();
@@ -9950,6 +9954,10 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
     throw e;
   }
   const id = info.lastInsertRowid;
+  // Customer-choice options (dressing / spice / paid extras). Same replace-all
+  // path the PATCH handler uses — without this the create silently drops every
+  // option the wizard/editor sent (they only landed on a later manual save).
+  if ('options' in b) { try { saveProductOptions(id, b.options); } catch (e) {} }
   logActivity(req.user.id, req.user.username, 'create', 'product_retail', id, { name: name_en || name_cn }, req.ip);
   if (freedOnCreate.length) {
     logActivity(req.user.id, req.user.username, 'sku_release', 'product_retail', id,
@@ -10049,9 +10057,11 @@ router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) =
 });
 
 // Duplicate a product. Copies all commercial fields (name, description, photos,
-// price, compare-at, page design, etc.) into a NEW product. SKU is blanked
-// (unique), stock reset to 0, and it starts hidden (is_published=0) so a
-// half-edited copy never leaks into the shop. body: { as_variant, label }.
+// price, compare-at, page design, etc.) into a NEW product. SKU gets a fresh
+// minted DRAFT-XXXXX (every product — incl. a variant sibling — needs its own
+// unique code; leaving it NULL left wizard/editor variants with a blank SKU),
+// stock reset to 0, and it starts hidden (is_published=0) so a half-edited copy
+// never leaks into the shop. body: { as_variant, label }.
 // as_variant also joins the copy to the source's variant group (creating one,
 // owned by the source, if it doesn't have one yet) with the given label —
 // the smooth path for "same product, different size".
@@ -10090,7 +10100,7 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
           variant_group_id, variant_label, sort_order, is_published, is_active, created_at, updated_at)
        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
-      src.name_en, src.name_cn, null, src.category, src.weight, src.sell_price, src.compare_at_price, 0, src.ship_modes,
+      src.name_en, src.name_cn, generateRetailSku(), src.category, src.weight, src.sell_price, src.compare_at_price, 0, src.ship_modes,
       src.description_en, src.description_cn, src.description_format, src.image_data, src.images, imageAspect(src.image_data),
       src.keywords_en, src.keywords_cn, src.tagline_en, src.tagline_cn, src.free_of, src.tags, src.nutrition,
       src.description_blocks, src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
@@ -14502,7 +14512,7 @@ function priceCart(items, customerId) {
     const qty = Number(it.qty);
     if (!pid || !(qty > 0)) return { error: 'invalid_item', subtotal: 0, totalQty: 0 };
     const p = tdb().prepare(
-      `SELECT id, sell_price AS price,
+      `SELECT id, sell_price AS price, compare_at_price,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold, no_coupon_on_flash
          FROM store_products
@@ -14537,6 +14547,14 @@ function priceCart(items, customerId) {
       unit_price: Math.round(unit * 100) / 100,
       is_flash: !!eff.is_flash,
       regular_price: eff.is_flash ? Math.round((Number(p.price) + optionDelta) * 100) / 100 : null,
+      // Manual "was" markdown (compare_at_price) so the cart + checkout can show
+      // the same struck-through saving the product page does — not just flash.
+      // Flash takes priority client-side; this is the everyday-discount "was".
+      // optionDelta is folded in so the saving stays the base markdown when the
+      // customer adds paid extras (extras lift both the was-price and the unit).
+      compare_at_price: (Number(p.compare_at_price) || 0) > 0
+        ? Math.round((Number(p.compare_at_price) + optionDelta) * 100) / 100
+        : null,
       // Excluded from coupons right now (active flash + product opt-out)? The
       // checkout sums non-blocked lines into couponable_subtotal for the voucher
       // preview; /orders recomputes it authoritatively.
