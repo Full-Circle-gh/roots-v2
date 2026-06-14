@@ -1672,18 +1672,6 @@ function lastSyntheticOrderMs(seed, now, baseGapMs, maxAgeMs) {
   return null;
 }
 
-// A masked buyer name ("李**") for synthetic rows, drawn from a pool of common
-// surnames and rotated by the caller's seed (which mixes in a time bucket) so a
-// feed doesn't cycle the same handful of names forever. Output shape matches
-// maskBuyerName() so synthetic and real rows look alike.
-const SYNTH_SURNAMES = [
-  '王', '李', '张', '刘', '陈', '杨', '黄', '赵', '吴', '周', '徐', '孙', '马', '朱', '胡', '郭',
-  '何', '高', '林', '罗', '郑', '梁', '谢', '宋', '唐', '许', '邓', '冯', '韩', '曹', '彭', '董',
-];
-function synthBuyerName(seed) {
-  return SYNTH_SURNAMES[mixHash(seed, 0, 'name') % SYNTH_SURNAMES.length] + '**';
-}
-
 // Catalogue "X SOLD" badge. Attaches all-time paid units per product to the
 // list response so shop + home cards can flaunt popularity. Gated to a minimum
 // so low-sellers stay neutral (no badge) rather than advertising a weak count.
