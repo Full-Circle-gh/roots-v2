@@ -61,22 +61,31 @@ const NAMES = [
 // Kept varied in length + tone (some short, some with an emoji) so the feed
 // reads like real people, not a template.
 const CN = {
+  // Generic pool — kept NEUTRAL (quality / packaging / delivery / value /
+  // service) so it's safe for ANY product, food or not. Taste/freshness lines
+  // live only in the food-specific pools below.
   g: [
-    '东西很新鲜,包装也很用心,会回购。',
+    '包装很用心,物流也快,会回购。',
     '第二次买了,品质一直稳定,赞👍',
     '物流很快,第二天就到了,东西完好。',
-    '味道很好,家人都喜欢,推荐。',
-    '比超市买的新鲜多了,价格也合理。',
     '客服态度很好,有问题回复很快。',
-    '收到的时候还冰冰的,保鲜做得不错。',
     '一如既往的好,已经推荐给同事了。',
     '包装很严实,一点没压坏,好评。',
     '质量对得起价格,会继续支持。',
     '下单到收货都很顺,体验很好。',
-    '本来有点担心,收到后很惊喜,很新鲜。',
-    '小孩很爱吃,以后常备了。',
     '分量足,很实在,满意。',
     '挺好的,没有踩雷,放心买。',
+    '用着挺好的,会继续回购。',
+    '性价比不错,推荐给大家。',
+  ],
+  // Non-food household / cleaning / homeware — effectiveness + value, no taste.
+  household: [
+    '很好用,用量省,效果不错。',
+    '质量挺好的,比之前用的牌子强。',
+    '物流很快,包装也很稳,没有漏。',
+    '一直回购的牌子,放心。',
+    '性价比高,家里常备,推荐。',
+    '用起来很顺手,效果看得见。',
   ],
   produce: [
     '蔬菜很新鲜,叶子很挺,没有黄叶,洗一洗就能下锅。',
@@ -122,21 +131,29 @@ const CN = {
   ],
 };
 const EN = {
+  // Neutral generic pool — safe for any product (no taste/freshness claims).
   g: [
-    'Super fresh and really well packed — will order again.',
+    'Really well packed and quick delivery — will order again.',
     'Second time buying, quality is consistently great. 👍',
     'Arrived next day, everything in perfect condition.',
-    'Tastes great, the whole family loved it. Recommend.',
-    'Much fresher than the supermarket and fairly priced.',
-    'Still cold when it arrived — packaging keeps it fresh.',
     'Smooth ordering, fast delivery, no complaints at all.',
     'Honestly better than I expected. Lovely quality.',
     'Great value for the price, definitely reordering.',
     'Packed really carefully, nothing was damaged.',
     'Quick reply from customer service when I asked. 5 stars.',
-    'Kids love it, this is a regular order for us now.',
     'Generous portion and good quality. Happy customer.',
     'No surprises, just good stuff. Easy to recommend.',
+    'Reliable as always — a regular order for us now.',
+    'Good price, good service. Can’t fault it.',
+  ],
+  // Non-food household / cleaning / homeware.
+  household: [
+    'Works really well and a little goes a long way.',
+    'Good quality — better than the brand I used before.',
+    'Fast delivery, well packed, nothing leaked.',
+    'A regular reorder for us now. Reliable.',
+    'Great value, keep it stocked at home. Recommend.',
+    'Easy to use and you can see the difference.',
   ],
   produce: [
     'Veg came in crisp and green, no wilting at all.',
@@ -191,6 +208,17 @@ const EN4 = [
   'Happy with it, a little pricey but the freshness makes up for it.',
   'Pretty good, would love a slightly bigger portion next time.',
 ];
+// Neutral 4★ caveats for non-food items (no taste/freshness).
+const CN4_HOUSE = [
+  '挺好用的,就是物流稍微慢了点,会再回购。',
+  '质量不错,价格略高,但效果可以。',
+  '整体满意,希望包装能再环保一点。',
+];
+const EN4_HOUSE = [
+  'Works well — delivery was a touch slow, but happy overall.',
+  'Good quality, a little pricey, but it does the job.',
+  'Pretty good, would love slightly greener packaging.',
+];
 
 const TAGS_BY_CAT = {
   produce: ['fresh', 'value', 'will-buy', 'fast-ship'],
@@ -200,7 +228,8 @@ const TAGS_BY_CAT = {
   meat:    ['fresh', 'packed', 'will-buy'],
   bakery:  ['tasty', 'fresh', 'packed'],
   pantry:  ['value', 'will-buy', 'fast-ship'],
-  g:       ['fresh', 'tasty', 'fast-ship', 'packed', 'value', 'will-buy', 'eco'],
+  household: ['value', 'will-buy', 'fast-ship', 'packed', 'eco'], // no taste/fresh
+  g:       ['fast-ship', 'packed', 'value', 'will-buy', 'eco'],   // neutral, any product
 };
 
 // Guess a loose category from the product name so comments/tags feel on-topic.
@@ -208,6 +237,11 @@ function categoryOf(p) {
   const s = ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' +
              (p.category || '') + ' ' + (p.subcategory || '')).toLowerCase();
   const has = (...words) => words.some(w => s.includes(w));
+  // Non-food first — cleaning / homeware must NOT get taste/freshness copy.
+  // (Checked before produce so "Fruit & Vegetable Wash" reads as household.)
+  if (has('wash', 'cleaner', 'cleaning', 'stain', 'remover', 'detergent', 'soap',
+          'sponge', 'laundry', 'wipe', 'scrub', 'disinfect', 'sanitiz', 'dish ',
+          '清洁', '洗洁', '洗衣', '去渍', '消毒', '清洗', '抹布', '海绵')) return 'household';
   if (has('soup', '汤', 'curry', '咖喱', 'congee', '粥', 'broth', 'stew', '炖')) return 'soup';
   if (has('milk', '奶', 'yogurt', '酸奶', 'cream', 'cheese', '芝士', 'butter', '黄油', 'drink', '饮')) return 'milk';
   if (has('meat', '肉', 'beef', '牛', 'pork', '猪', 'chicken', '鸡', 'fish', '鱼', 'seafood', '海鲜', 'prawn', '虾', 'lamb', '羊')) return 'meat';
@@ -219,7 +253,10 @@ function categoryOf(p) {
 }
 
 function commentFor(cat, lang, rating) {
-  if (rating === 4) return lang === 'cn' ? pick(CN4) : pick(EN4);
+  if (rating === 4) {
+    if (cat === 'household') return lang === 'cn' ? pick(CN4_HOUSE) : pick(EN4_HOUSE);
+    return lang === 'cn' ? pick(CN4) : pick(EN4);
+  }
   const bank = lang === 'cn' ? CN : EN;
   // ~60% category-specific (if available), else generic — keeps variety.
   const useCat = bank[cat] && chance(0.6) ? cat : 'g';
