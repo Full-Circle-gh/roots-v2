@@ -1157,7 +1157,37 @@ async function bentoLoadOps() {
     const j = await api('/api/retail-admin/dashboard/ops');
     DASH_OPS = j.data || null;
     bentoRefresh('ops');
+    deliveryBannerRender();
   } catch (e) { /* silent — next tick retries */ }
+}
+
+// Delivery-alerts banner — full-width strip above the bento that surfaces
+// dispatched orders the carrier flagged as a problem (can't-reach / exception /
+// returning). Hidden entirely when the queue is clear, so it reads as a real
+// alert, not a permanent panel. Each row links straight to the order drawer.
+// deliveryStateInfo() lives in 04-orders.js (one global scope at runtime).
+function deliveryBannerRender() {
+  const el = document.getElementById('db-delivery-alerts');
+  if (!el) return;
+  const d = (DASH_OPS && DASH_OPS.delivery_alerts) || { count: 0, items: [] };
+  if (!d.count) { el.hidden = true; el.innerHTML = ''; return; }
+  const dIcon = (typeof deliveryIcon === 'function') ? deliveryIcon : () => '';
+  const rows = (d.items || []).slice(0, 8).map(it => {
+    const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
+      || { icon: 'alert', en: 'Delivery issue', cn: '配送异常', color: '#c0392b' };
+    return `<button type="button" class="db-da-row" onclick="openOrder(${it.id})">
+        <span class="db-da-ic" style="color:${info.color}" aria-hidden="true">${dIcon(info.icon, 15)}</span>
+        <span class="db-da-no">${escapeHtml(it.order_no || '')}</span>
+        <span class="db-da-who">${escapeHtml(it.buyer || '')}</span>
+        <span class="db-da-state" style="color:${info.color}">${cuT(info.en, info.cn)}</span>
+      </button>`;
+  }).join('');
+  const more = d.count > 8
+    ? `<div class="db-da-more">+${d.count - 8} ${cuT('more','更多')}</div>`
+    : '';
+  el.innerHTML = `<div class="db-da-head"><span class="db-da-bell" style="color:var(--danger)" aria-hidden="true">${dIcon('alert', 15)}</span> ${cuT('Delivery alerts','配送异常提醒')} <b>${d.count}</b></div>
+    <div class="db-da-rows">${rows}${more}</div>`;
+  el.hidden = false;
 }
 
 function bentoRenderAll() {

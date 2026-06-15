@@ -8282,6 +8282,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   const previewLimit = Math.min(Math.max(parseInt(req.query.preview || '8', 10) || 8, 1), 50);
   let low = { count: 0, items: [] };
   let refunds = { count: 0, items: [] };
+  let delivery_alerts = { count: 0, items: [] };
 
   // Real, sellable stock per product (matches the storefront's `stock` column).
   const REAL_STOCK = `COALESCE(
@@ -8336,12 +8337,48 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         buyer:        maskBuyerName(r.buyer),
       })),
     };
+
+    // Delivery alerts — dispatched orders whose carrier reported a PROBLEM that
+    // an operator should chase: courier can't reach the customer (no_contact),
+    // a generic delivery exception, or the parcel returning/returned. These are
+    // the carrier-reported states only (no time-based "stalled" guessing). The
+    // status/scenario codes are written by the kd100 push pipeline + JD poll
+    // (see lib/tracking.js) and mirrored onto retail_orders. Pickup-point /
+    // locker drop-offs are NOT problems, so they're excluded here (they still
+    // show as info in the orders list cell). Only dispatched orders qualify —
+    // a delivered/cancelled order's stale flags are history, not a live alert.
+    const ALERT_WHERE = `o.status = 'dispatched'
+         AND ( o.tracking_status IN ('exception','returning','returned')
+            OR o.tracking_scenario = 'no_contact' )`;
+    const daCount = tdb().prepare(`
+      SELECT COUNT(*) AS n FROM retail_orders o WHERE ${ALERT_WHERE}
+    `).get().n;
+    const daItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.tracking_status, o.tracking_scenario,
+             o.tracking_carrier, o.tracking_number, o.tracking_synced_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${ALERT_WHERE}
+       ORDER BY o.tracking_synced_at DESC LIMIT ?
+    `).all(previewLimit);
+    delivery_alerts = {
+      count: daCount,
+      items: daItems.map(r => ({
+        id:               r.id,
+        order_no:         r.order_no,
+        tracking_status:  r.tracking_status,
+        tracking_scenario: r.tracking_scenario,
+        synced_at:        r.tracking_synced_at,
+        buyer:            maskBuyerName(r.buyer),
+      })),
+    };
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, refunds, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, refunds, delivery_alerts, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
@@ -11459,7 +11496,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     z.day_only AS zone_day_only, z.same_day_surcharge AS zone_same_day_surcharge,
                     o.promised_ship_date, o.promised_delivery_date,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
-                    o.tracking_kd100_subscribed,
+                    o.tracking_kd100_subscribed, o.tracking_scenario,
                     (SELECT sh.local_eta FROM retail_shipments sh
                        WHERE sh.order_id = o.id AND sh.mode = 'local'
                          AND sh.local_eta IS NOT NULL AND sh.local_eta != ''

@@ -1253,6 +1253,57 @@ function renderShipByTile(o) {
   </div>`;
 }
 
+// Map a dispatched order's live carrier state to a one-line "where is it /
+// what's wrong" chip. Reads the normalized `tracking_status` + the richer
+// `tracking_scenario` (both written by the kd100 push pipeline / JD poll — see
+// lib/tracking.js) which the orders + dashboard/ops endpoints now return.
+// Scenario is MORE specific than status, so it wins where it carries meaning
+// (e.g. no_contact / pickup_point). Returns null when there's nothing useful
+// to surface yet. tone: 'urgent' (red, chase it) | 'attn' (amber, waiting on
+// customer) | 'ok' (green) | 'transit' (grey, in flight). Shared with the
+// dashboard delivery-alerts banner (03-dashboard.js) — one global scope.
+function deliveryStateInfo(o) {
+  const st = o.tracking_status || '';
+  const sc = o.tracking_scenario || '';
+  // Problems first — these are what the operator must act on.
+  if (sc === 'no_contact')  return { icon: 'phone_off', en: "Can't reach customer",   cn: '联系不上客户', color: '#c0392b', tone: 'urgent' };
+  if (st === 'exception')   return { icon: 'alert',     en: 'Delivery issue',          cn: '配送异常',     color: '#c0392b', tone: 'urgent' };
+  if (st === 'returning')   return { icon: 'uturn',     en: 'Returning to sender',     cn: '退回中',       color: '#c0392b', tone: 'urgent' };
+  if (st === 'returned')    return { icon: 'uturn',     en: 'Returned',                cn: '已退回',       color: '#c0392b', tone: 'urgent' };
+  // Waiting on the customer to collect — not a failure, but worth seeing.
+  if (sc === 'pickup_point') return { icon: 'store',    en: 'At pickup point',        cn: '已到驿站',     color: '#b9770e', tone: 'attn' };
+  if (sc === 'locker')       return { icon: 'locker',   en: 'In a locker',            cn: '已入快递柜',   color: '#b9770e', tone: 'attn' };
+  // Good / in-flight states.
+  if (st === 'delivered')        return { icon: 'check', en: 'Delivered',             cn: '已签收',       color: '#5a8c2a', tone: 'ok' };
+  if (st === 'out_for_delivery' || sc === 'out_for_delivery')
+                                 return { icon: 'van',    en: 'Out for delivery',      cn: '派送中',       color: '#6b7280', tone: 'transit' };
+  if (st === 'in_transit')       return { icon: 'transit', en: 'In transit',          cn: '运输中',       color: '#9aa0a6', tone: 'transit' };
+  if (st === 'picked_up')        return { icon: 'inbox',  en: 'Picked up',            cn: '已揽收',       color: '#9aa0a6', tone: 'transit' };
+  return null;
+}
+
+// Monochrome line icons for the delivery states, matching the platform set
+// (24×24 viewBox, currentColor stroke, round joins — same recipe as
+// pickupIcon / BENTO_ICONS). Kept stroke-light so they read cleanly at the
+// ~11px the orders-list cell renders them. Inherit color from the parent, so
+// the urgent states pick up their red and the transit states their grey.
+const DELIVERY_ICON_PATHS = {
+  van:       '<path d="M3 7h9v8H3z"/><path d="M12 10h3.5L19 13v2h-7"/><circle cx="7" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/>',
+  transit:   '<rect x="6" y="7" width="11" height="10" rx="1"/><path d="M6 11h11"/><path d="M2 9.5h2.5"/><path d="M1.5 13h3"/>',
+  inbox:     '<path d="M5 12v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/><path d="M5 12h4l1 2h4l1-2h4"/><path d="M12 3v6"/><path d="M9 6l3 3 3-3"/>',
+  check:     '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9"/>',
+  phone_off: '<path d="M5 4h3l1 4-2 1a11 11 0 0 0 6 6l1-2 4 1v3a1 1 0 0 1-1 1A15 15 0 0 1 4 5a1 1 0 0 1 1-1z"/><path d="M3 3l18 18"/>',
+  alert:     '<path d="M12 4 3 19h18L12 4z"/><path d="M12 10v4"/><path d="M12 17h.01"/>',
+  uturn:     '<path d="M9 7H6a4 4 0 1 0 0 8h9"/><path d="M12 4 9 7l3 3"/>',
+  store:     '<path d="M4 9v10h16V9"/><path d="M3 5h18l-1.2 4H4.2L3 5z"/><path d="M9 19v-5h6v5"/>',
+  locker:    '<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M12 3v18"/><path d="M8.5 7.5h.6"/><path d="M14.9 7.5h.6"/>',
+};
+function deliveryIcon(key, size = 12) {
+  const p = DELIVERY_ICON_PATHS[key];
+  if (!p) return '';
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+}
+
 function renderTrackingCell(o) {
   if (o.fulfillment_type === 'pickup') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
@@ -1279,8 +1330,15 @@ function renderTrackingCell(o) {
   const sync = (o.tracking_kd100_subscribed || o.jd_live)
     ? `<span style="color:#5a8c2a; font-size:10px;">● ${cuT('live','实时')}</span>`
     : `<span class="muted" style="font-size:10px;">${cuT('manual','手动')}</span>`;
+  // Live delivery state — only meaningful once the parcel has left (dispatched),
+  // and only when the carrier has actually reported something. Urgent states get
+  // a heavier weight so a stuck/contact-failed parcel stands out in the list.
+  const dl = (o.status === 'dispatched' || o.status === 'delivered') ? deliveryStateInfo(o) : null;
+  const dlLine = dl
+    ? `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:${dl.tone === 'urgent' ? 700 : 600}; color:${dl.color};">${deliveryIcon(dl.icon, 11)}<span>${cuT(dl.en, dl.cn)}</span></div>`
+    : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
-          <div style="margin-top: 2px;">${sync}</div>`;
+          <div style="margin-top: 2px;">${sync}</div>${dlLine}`;
 }
 
 // "Ship to" — the parcel's destination city (+ district below) so operators can

@@ -1107,6 +1107,37 @@
   .db-tile-list-row.is-link:hover, .db-tile-list-row.is-link:focus-visible { background: var(--line-soft); outline: none; }
   .db-tile-list-row.is-link:hover .name { color: var(--accent); }
   .db-tile-empty { font-size: 12px; color: var(--text-3); padding: 8px 0; text-align: center; }
+
+  /* ── Delivery-alerts banner ─────────────────────────────────────────
+     Full-width strip above the bento. Rendered only when a dispatched
+     order's carrier reported a problem (can't-reach / exception /
+     returning), so its mere presence is the alert. Danger-toned rail;
+     calm fade-in to match the platform's motion language. */
+  .db-delivery-alerts {
+    background: var(--bg-pane); border: 1px solid var(--line);
+    border-left: 3px solid var(--danger); border-radius: var(--r-lg);
+    padding: var(--s3) var(--s4); margin: 0 0 var(--s4);
+    box-shadow: var(--sh-1);
+    animation: da-fade var(--t-med) var(--ease-out) both;
+  }
+  @keyframes da-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) { .db-delivery-alerts { animation: none; } }
+  .db-da-head { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s2); font-size: 13px; font-weight: 600; color: var(--text); }
+  .db-da-head b { margin-left: 2px; color: var(--danger); font-variant-numeric: tabular-nums; }
+  .db-da-bell { display: inline-flex; align-items: center; }
+  .db-da-rows { display: flex; flex-direction: column; gap: 2px; }
+  .db-da-row {
+    display: flex; align-items: center; gap: var(--s3); width: 100%;
+    text-align: left; background: none; border: 0; border-radius: var(--r-md);
+    padding: 6px var(--s2); cursor: pointer; color: var(--text); font: inherit;
+    transition: background var(--t-fast) ease;
+  }
+  .db-da-row:hover, .db-da-row:focus-visible { background: var(--line-soft); outline: none; }
+  .db-da-ic   { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; }
+  .db-da-no   { flex: none; font-family: var(--f-mono); font-size: 12px; font-weight: 600; }
+  .db-da-who  { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 12px; }
+  .db-da-state{ flex: none; font-size: 12px; font-weight: 600; }
+  .db-da-more { padding: 4px var(--s2); font-size: 11px; color: var(--text-2); }
   /* Mini heatmap for the bento variant — squished cells, no labels. */
   /* Mini heatmap — day-of-week rows (labelled) × 24 hour cells, with an hour
      axis beneath. The "Busiest …" caption carries the actual takeaway. */

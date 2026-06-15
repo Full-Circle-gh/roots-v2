@@ -426,6 +426,12 @@
          Built to match design bundle: mobile/dashboard-a.html + fc-dash.css. -->
     <div id="rm-dash" aria-live="polite"></div>
 
+    <!-- Delivery alerts — a full-width banner that appears ONLY when a dispatched
+         order's carrier reported a problem (can't reach customer / exception /
+         returning). Populated from /dashboard/ops by deliveryBannerRender() on
+         each ops poll; stays hidden (and empty) when there's nothing to chase. -->
+    <div id="db-delivery-alerts" class="db-delivery-alerts" aria-live="polite" hidden></div>
+
     <!-- Phase 3 bento — hero (live + today + activity) on the left
          spanning 3 cols × 2 rows; 6 swappable tiles fill the rest above
          the fold. Tile picks persist per-operator to localStorage
