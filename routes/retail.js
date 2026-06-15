@@ -2926,11 +2926,17 @@ async function sendWecomAppMessage(content) {
 function buildWecomOrderCard(o, awaitingRestock) {
   const time = String(o.paid_at || '').replace('T', ' ').slice(0, 16);
   const amount = '¥' + Number(o.total || 0).toFixed(2);
+  // fulfillment_short_pids set = the shipping store can't currently cover every
+  // item (out-of-city / scheduled-later order that skipped the stock gate). Warn
+  // the office to restock or transfer into that store before it ships.
+  let shortCount = 0;
+  try { shortCount = (JSON.parse(o.fulfillment_short_pids || '[]') || []).length; } catch {}
   const lines = [
     `**🌿 新订单 · New order**${awaitingRestock ? ' (待补货 · awaiting restock)' : ''}`,
     `> 订单号 Order: \`${o.order_no}\``,
     `> 金额 Amount: <font color="warning">${amount}</font>`,
     time ? `> 时间 Time: ${time}` : null,
+    shortCount ? `> <font color="warning">⚠ 需补货/调货 · needs restock/transfer before shipping (${shortCount})</font>` : null,
   ];
   if (o.fulfillment_type === 'pickup') {
     lines.push('> 方式 Method: 自提 Pickup');
@@ -2952,7 +2958,7 @@ function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
   try {
     const o = tdb().prepare(
       `SELECT order_no, total, paid_at, fulfillment_type, recipient_name,
-              address_full, delivery_slot_label
+              address_full, delivery_slot_label, fulfillment_short_pids
          FROM retail_orders WHERE id = ?`
     ).get(orderId);
     if (!o) return;
@@ -5776,15 +5782,59 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // printed and the parcel ships from. Pin the fulfilment store to the same
   // out-of-city store so the two never diverge. Pickup is exempt (the customer
   // chose the store explicitly).
-  if (!isPickup && !inventory.isGuangzhouAddress(address)) {
+  //
+  // Same rule extends to Guangzhou's outer "ship-districts" (花都/番禺/南沙/从化/
+  // 增城) when the customer did NOT pick same-day. Same-day there is an opt-in
+  // extra; without it the order ships by courier on the batch cadence exactly
+  // like an out-of-city order, so it must print/ship from the out-of-city store
+  // too — otherwise the proximity router fulfils it from the nearest shop and
+  // "fulfilled by" diverges from where it actually ships. Picking same-day keeps
+  // the nearest-store routing the customer paid for. Inner GZ districts are
+  // unaffected (isOptInSameDayDistrict is false for always-same-day zones).
+  const inGz = inventory.isGuangzhouAddress(address);
+  const scheduledShipDistrict =
+        inGz &&
+        inventory.isOptInSameDayDistrict(address) &&
+        !inventory.isSameDayDelivery(deliverySlotId);
+  if (!isPickup && (!inGz || scheduledShipDistrict)) {
     const oocId = loadPrinterPrefs().out_of_city_store_id;
     if (oocId != null && oocId !== fulfillingStore.id) {
       const oocStore = inventory.listStores({ activeOnly: true }).find(s => s.id === oocId);
       if (oocStore) {
         fulfillingStore = oocStore;
-        routingReason   = 'out_of_city';
+        routingReason   = scheduledShipDistrict ? 'scheduled_ship_district' : 'out_of_city';
       }
     }
+  }
+
+  // Stock-shortage warning for orders that skipped the stock gate. When
+  // stockGate is off (out-of-Guangzhou, or scheduled-for-later GZ) we route by
+  // distance with ignoreStock and never reserve — so the order can land on a
+  // store (e.g. the out-of-city warehouse) that doesn't physically hold every
+  // item. We don't block (the kitchen restocks before the fulfilment date), but
+  // we record products the fulfilling store can't cover *yet another active
+  // store can* — i.e. the actionable "restock or transfer in before shipping"
+  // case (a product only stocked at Yuexiu landing on the Tianhe warehouse).
+  // Requiring another store to be able to cover it deliberately skips legacy
+  // products that aren't tracked per-store anywhere (no stock row → not a real
+  // signal) and items everyone is out of (nowhere to transfer from). The office
+  // sees this in the order drawer + the new-order push. Wait-for-restock carries
+  // its own pids, and gated orders (same-day GZ, pickup) hold real reservations.
+  let fulfillmentShortPids = null;
+  if (!isPickup && !isWaitFlow && !stockGate && fulfillingStore) {
+    const otherStores = inventory.listStores({ activeOnly: true })
+      .filter(s => s.id !== fulfillingStore.id);
+    const short = [];
+    for (const ln of expandStockLines(mutatedItems)) {
+      const here = inventory.getAvailable(fulfillingStore.id, ln.product_id, 'wechat');
+      if (here.exists && here.available >= ln.qty) continue;   // shipping store covers it
+      const transferable = otherStores.some(s => {
+        const av = inventory.getAvailable(s.id, ln.product_id, 'wechat');
+        return av.exists && av.available >= ln.qty;
+      });
+      if (transferable) short.push(ln.product_id);
+    }
+    if (short.length) fulfillmentShortPids = [...new Set(short)];
   }
 
   resolved.length = 0; for (const r of mutatedItems) resolved.push(r); // keep `resolved` as the source of truth downstream
@@ -6010,8 +6060,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
          invoice_type, invoice_email,
          store_id, routing_reason, channel,
          fallback_choice, awaiting_restock_pids, idempotency_key,
-         fulfillment_type
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         fulfillment_type, fulfillment_short_pids
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -6037,7 +6087,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       fulfillingStore.id, routingReason, 'wechat',
       fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null,
       idempotencyKey,
-      isPickup ? 'pickup' : 'delivery'
+      isPickup ? 'pickup' : 'delivery',
+      fulfillmentShortPids ? JSON.stringify(fulfillmentShortPids) : null
     );
     const orderId = info.lastInsertRowid;
 
@@ -11377,6 +11428,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
+                    o.fulfillment_short_pids,
                     o.scheduled_for, o.delivery_slot_label, o.delivery_slot_kind,
                     z.zone_type AS zone_type,
                     z.day_only AS zone_day_only, z.same_day_surcharge AS zone_same_day_surcharge,
