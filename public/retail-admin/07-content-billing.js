@@ -1422,8 +1422,14 @@ function renderReviewRow(r) {
   const stars = '★'.repeat(r.rating) + '<span style="color:var(--text-4)">' + '★'.repeat(5 - r.rating) + '</span>';
   const productName = r.product_name_en || r.product_name_cn || ('#' + r.product_id);
   const productSub  = r.product_name_cn && r.product_name_en ? r.product_name_cn : '';
-  const customer = r.customer_name || ('#' + r.customer_id);
+  const synthetic = r.source === 'synthetic';
+  const customer = r.customer_name || (synthetic ? '—' : ('#' + r.customer_id));
   const orderNo = r.order_no ? `<span class="muted" style="font-size: 11px;">${escapeHtml(r.order_no)}</span>` : '';
+  // Admin-only badge so staff can tell seeded reviews apart (customers never
+  // see this — the storefront shows them as ordinary reviews).
+  const seededBadge = synthetic
+    ? `<span class="pill neutral" style="font-size: 9px; margin-left: 4px;" title="${escapeAttr(cuT('Seeded review (not a real purchase)','种子评价(非真实购买)'))}">${escapeHtml(cuT('Seeded','种子'))}</span>`
+    : '';
 
   const tagsHtml = (r.tags || []).map(id => {
     const label = (REVIEW_TAG_LABELS[id] || [id])[0];
@@ -1447,7 +1453,7 @@ function renderReviewRow(r) {
         <div class="muted" style="font-size: 10px;">#${r.product_id}</div>
       </td>
       <td>
-        <div>${escapeHtml(customer)}</div>
+        <div>${escapeHtml(customer)}${seededBadge}</div>
         ${orderNo}
       </td>
       <td>
@@ -1458,20 +1464,35 @@ function renderReviewRow(r) {
       <td class="muted" style="font-size: 11px; white-space: nowrap;">${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
       <td><span class="pill ${r.is_visible ? 'pub' : 'draft'}"><span class="dot"></span>${r.is_visible ? 'Visible · 显示' : 'Hidden · 隐藏'}</span></td>
       <td style="white-space: nowrap;">
-        <button class="btn btn-sm" onclick="toggleReview(${r.id}, ${r.is_visible ? 0 : 1})">
+        <button class="btn btn-sm" onclick="toggleReview(${r.id}, ${r.is_visible ? 0 : 1}, '${synthetic ? 'synthetic' : 'real'}')">
           ${r.is_visible ? 'Hide · 隐藏' : 'Restore · 恢复'}
         </button>
+        ${synthetic ? `<button class="btn btn-sm" style="color: var(--danger, #c0392b);" onclick="deleteReview(${r.id})">Remove · 删除</button>` : ''}
       </td>
     </tr>`;
 }
 
-async function toggleReview(id, visible) {
+async function toggleReview(id, visible, source) {
   try {
     await api('/api/retail-admin/reviews/' + id, {
       method: 'PATCH',
-      body: { is_visible: !!visible },
+      body: { is_visible: !!visible, source: source || 'real' },
     });
     toast(visible ? 'Restored · 已恢复' : 'Hidden · 已隐藏');
+    await loadReviews();
+  } catch (e) {
+    toast('Failed · 失败: ' + e.message, 'err');
+  }
+}
+
+// Hard-remove a seeded (synthetic) review. Real customer reviews aren't
+// deletable from here — they can only be hidden — so this is only wired to
+// synthetic rows.
+async function deleteReview(id) {
+  if (!confirm(cuT('Remove this seeded review for good?', '永久删除这条种子评价?'))) return;
+  try {
+    await api('/api/retail-admin/reviews/' + id + '?source=synthetic', { method: 'DELETE' });
+    toast(cuT('Removed', '已删除'));
     await loadReviews();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');

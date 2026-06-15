@@ -9599,6 +9599,13 @@ const REVIEW_MAX_PHOTOS = 6;
 // rather than throwing on a hot customer path. Synthetic ids are surfaced to
 // the client as NEGATIVE numbers so they never collide with real review ids
 // (the mini-app uses `id` as a wx:key).
+function synthReviewsTableExists() {
+  try {
+    return !!tdb().prepare(
+      "SELECT 1 FROM sqlite_master WHERE type='table' AND name='retail_synthetic_reviews'"
+    ).get();
+  } catch { return false; }
+}
 function synthReviewAgg(productId) {
   try {
     return tdb().prepare(
@@ -9892,34 +9899,58 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
     where.push('r.product_id = ?');
     args.push(productId);
   }
-  const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+  // The is_visible/rating/product_id filters apply identically to both the
+  // real and synthetic review tables. Build the WHERE for each alias.
+  const whereFor = (alias) => where.length
+    ? 'WHERE ' + where.map(c => c.replace(/^r\./, alias + '.')).join(' AND ')
+    : '';
+  // Reviews moderation list blends real customer reviews and synthetic
+  // (seeded) ones into a single feed, tagged by `source` so the UI can show a
+  // "seeded" badge + a hard-remove button on synthetic rows only.
+  const synthOk = synthReviewsTableExists();
+  const realWhere = whereFor('r');
+  const synthWhere = whereFor('s');
+  const unionSql = synthOk
+    ? `UNION ALL
+           SELECT 'synthetic' AS source, s.id, s.rating, s.comment, s.is_visible, s.created_at,
+                  s.tags_json, NULL AS photos_json,
+                  s.product_id, NULL AS order_id, NULL AS customer_id,
+                  p.name_en AS product_name_en, p.name_cn AS product_name_cn,
+                  s.reviewer_name AS customer_name, NULL AS customer_avatar, NULL AS order_no
+             FROM retail_synthetic_reviews s
+        LEFT JOIN store_products p ON p.id = s.product_id
+                  ${synthWhere}`
+    : '';
   const rows = tdb().prepare(
-    `SELECT r.id, r.rating, r.comment, r.is_visible, r.created_at,
-            r.tags_json, r.photos_json,
-            r.product_id, r.order_id, r.customer_id,
-            p.name_en  AS product_name_en,
-            p.name_cn  AS product_name_cn,
-            c.nickname AS customer_name,
-            c.avatar_url AS customer_avatar,
-            o.order_no AS order_no
-       FROM retail_reviews r
-  LEFT JOIN store_products         p ON p.id = r.product_id
-  LEFT JOIN retail_customers c ON c.id = r.customer_id
-  LEFT JOIN retail_orders    o ON o.id = r.order_id
-       ${whereSql}
-   ORDER BY r.created_at DESC
-      LIMIT ? OFFSET ?`
-  ).all(...args, limit, offset).map(r => ({
+    `SELECT * FROM (
+           SELECT 'real' AS source, r.id, r.rating, r.comment, r.is_visible, r.created_at,
+                  r.tags_json, r.photos_json,
+                  r.product_id, r.order_id, r.customer_id,
+                  p.name_en  AS product_name_en, p.name_cn AS product_name_cn,
+                  c.nickname AS customer_name, c.avatar_url AS customer_avatar,
+                  o.order_no AS order_no
+             FROM retail_reviews r
+        LEFT JOIN store_products   p ON p.id = r.product_id
+        LEFT JOIN retail_customers c ON c.id = r.customer_id
+        LEFT JOIN retail_orders    o ON o.id = r.order_id
+                  ${realWhere}
+           ${unionSql}
+         )
+     ORDER BY created_at DESC
+        LIMIT ? OFFSET ?`
+  ).all(...args, ...(synthOk ? args : []), limit, offset).map(r => ({
     ...r,
     tags:   parseJsonArray(r.tags_json),
     photos: parseJsonArray(r.photos_json),
     tags_json: undefined, photos_json: undefined,
   }));
-  const total = tdb().prepare(
-    `SELECT COUNT(*) AS n FROM retail_reviews r ${whereSql}`
-  ).get(...args).n;
+  const realTotal = tdb().prepare(`SELECT COUNT(*) AS n FROM retail_reviews r ${realWhere}`).get(...args).n;
+  const synthTotal = synthOk
+    ? tdb().prepare(`SELECT COUNT(*) AS n FROM retail_synthetic_reviews s ${synthWhere}`).get(...args).n
+    : 0;
+  const total = realTotal + synthTotal;
   // Aggregate counts for the filter chips so staff can see "12 hidden"
-  // without flipping the filter.
+  // without flipping the filter. Includes synthetic reviews.
   const summary = tdb().prepare(
     `SELECT
        SUM(CASE WHEN is_visible = 1 THEN 1 ELSE 0 END) AS visible,
@@ -9927,6 +9958,18 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
        COUNT(*) AS total
        FROM retail_reviews`
   ).get();
+  if (synthOk) {
+    const ss = tdb().prepare(
+      `SELECT
+         SUM(CASE WHEN is_visible = 1 THEN 1 ELSE 0 END) AS visible,
+         SUM(CASE WHEN is_visible = 0 THEN 1 ELSE 0 END) AS hidden,
+         COUNT(*) AS total
+         FROM retail_synthetic_reviews`
+    ).get();
+    summary.visible = (summary.visible || 0) + (ss.visible || 0);
+    summary.hidden  = (summary.hidden  || 0) + (ss.hidden  || 0);
+    summary.total   = (summary.total   || 0) + (ss.total   || 0);
+  }
   res.json({
     success: true,
     data: rows,
@@ -9949,16 +9992,34 @@ router.get('/api/retail-admin/reviews/unseen-count', requireRetailAdmin, (req, r
 
 // Staff moderation toggle — currently just is_visible. Keeping the body
 // shape PATCH-style so we can grow this without an API rename.
+// `source: 'synthetic'` targets a seeded review instead of a real one.
 router.patch('/api/retail-admin/reviews/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const exists = tdb().prepare('SELECT id FROM retail_reviews WHERE id = ?').get(id);
+  const synthetic = (req.body && req.body.source) === 'synthetic';
+  const table = synthetic ? 'retail_synthetic_reviews' : 'retail_reviews';
+  const exists = tdb().prepare(`SELECT id FROM ${table} WHERE id = ?`).get(id);
   if (!exists) return res.status(404).json({ success: false, error: 'not_found' });
   if ('is_visible' in (req.body || {})) {
     const visible = req.body.is_visible ? 1 : 0;
-    tdb().prepare('UPDATE retail_reviews SET is_visible = ? WHERE id = ?')
-      .run(visible, id);
-    logActivity(req.user.id, req.user.username, visible ? 'show' : 'hide', 'retail_review', id, { is_visible: visible }, req.ip);
+    tdb().prepare(`UPDATE ${table} SET is_visible = ? WHERE id = ?`).run(visible, id);
+    logActivity(req.user.id, req.user.username, visible ? 'show' : 'hide',
+      synthetic ? 'retail_synthetic_review' : 'retail_review', id, { is_visible: visible }, req.ip);
   }
+  res.json({ success: true });
+});
+
+// Permanently remove a SYNTHETIC (seeded) review. Real customer reviews are
+// audit-linked to an order and are never hard-deleted from here (they can only
+// be hidden via the PATCH toggle), so this guards source==='synthetic'.
+router.delete('/api/retail-admin/reviews/:id', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (req.query.source !== 'synthetic') {
+    return res.status(400).json({ success: false, error: 'only_synthetic_deletable' });
+  }
+  const exists = tdb().prepare('SELECT id FROM retail_synthetic_reviews WHERE id = ?').get(id);
+  if (!exists) return res.status(404).json({ success: false, error: 'not_found' });
+  tdb().prepare('DELETE FROM retail_synthetic_reviews WHERE id = ?').run(id);
+  logActivity(req.user.id, req.user.username, 'delete', 'retail_synthetic_review', id, null, req.ip);
   res.json({ success: true });
 });
 

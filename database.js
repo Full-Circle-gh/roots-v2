@@ -1312,6 +1312,29 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_reviews_customer ON retail_
 // the wording without a migration.
 addColumn('retail_reviews', 'tags_json', 'TEXT');
 
+// Synthetic ("seeded") product reviews — social-proof copy written by staff,
+// NOT by a real buyer. Kept in their OWN table, fully decoupled from
+// retail_customers / retail_orders (which are FK-enforced), so:
+//   • real customer reviews stay 100% untouched,
+//   • the whole set is reversible (drop rows / DELETE by id),
+//   • they can never be mistaken for a real verified purchase internally.
+// They merge into the PUBLIC rating summary + review lists (so the storefront
+// shows a blended count/avg), but stay clearly tagged as source:'synthetic'
+// in the admin moderation list, where each one can be hidden or hard-removed.
+// `reviewer_name` is a made-up display name (never a real customer's).
+db.exec(`CREATE TABLE IF NOT EXISTS retail_synthetic_reviews (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id    INTEGER NOT NULL,        -- store_products.id (no FK: decoupled)
+  reviewer_name TEXT NOT NULL,           -- fake display name
+  rating        INTEGER NOT NULL,        -- 1..5
+  comment       TEXT,
+  lang          TEXT,                    -- 'en' | 'cn' (informational only)
+  tags_json     TEXT,                    -- JSON array of review-tag ids
+  is_visible    INTEGER DEFAULT 1,       -- admin can hide
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_synth_reviews_product ON retail_synthetic_reviews(product_id, is_visible, created_at)'); } catch {}
+
 // A paid add-on choice (e.g. "Pickles", "Spicy sauce") backed by a real
 // store product so it has its OWN stock + SKU + packing line. When set, the
 // option choice consumes that product's inventory at checkout (qty 1 per unit
