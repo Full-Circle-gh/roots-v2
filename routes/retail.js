@@ -5393,7 +5393,8 @@ function nextOrderNo() {
   return datePrefix + String(lastSeq + 1).padStart(6, '0');
 }
 
-router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) => {
+router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req, res, next) => {
+  try {
   const body = req.body || {};
   const items       = Array.isArray(body.items) ? body.items : [];
   const addressId   = body.address_id;
@@ -5708,6 +5709,36 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
       // the store is checked + deducted by checkAwaitingRestockForRestock.
       awaitingRestockPids = a.missing_items.map(m => m.product_id);
     }
+  }
+
+  // Geocode-on-checkout fallback. Address geocoding is normally a background
+  // (fire-and-forget) job kicked off when the address is saved; a customer who
+  // adds an address and checks out immediately can beat it, leaving lat/lng
+  // NULL on the row at this point. Without coordinates routeOrder() can't rank
+  // stores by real distance and falls back to coarse district-NAME matching —
+  // which once routed a ~1 km order to a ~9 km store purely because the address
+  // string said 天河区. Resolve the coordinates synchronously now (best-effort,
+  // one Amap round-trip, cached) and persist them so routing uses true
+  // proximity. Null result → unchanged district-match behaviour, so this never
+  // regresses, and pickup is exempt (the customer chose the store explicitly).
+  if (!isPickup && (address.lat == null || address.lng == null) && geocode.configured()) {
+    try {
+      const coords = await geocode.geocodeAddress({
+        province: address.province, city: address.city, district: address.district,
+        address: [address.address, address.detail].filter(Boolean).join(' '),
+      });
+      if (coords && coords.lat != null && coords.lng != null) {
+        address.lat = coords.lat;
+        address.lng = coords.lng;
+        if (address.id != null) {
+          try {
+            tdb().prepare(
+              'UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?'
+            ).run(coords.lat, coords.lng, address.id);
+          } catch (_) { /* best-effort persist — routing still uses the in-memory coords */ }
+        }
+      }
+    } catch (e) { console.warn('[checkout geocode]', e.message); }
   }
 
   // Now route the (possibly-mutated) cart.
@@ -6295,6 +6326,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
 
   const order = loadOrderForCustomer(orderId, req.customer.id, `${req.protocol}://${req.get('host')}`);
   res.json({ success: true, data: order });
+  } catch (err) {
+    // Async handler: Express 4 won't catch a rejected promise, so forward to
+    // the error middleware exactly as a synchronous throw used to.
+    console.error('[retail/orders POST]', err);
+    return next(err);
+  }
 });
 
 // SQLite's CURRENT_TIMESTAMP / datetime('now') return UTC as a bare
@@ -6683,6 +6720,14 @@ function _jdApplyTrace(table, rowId, fetchRes) {
     return { delivered: false, scenario: null };
   }
   const scenario = tracking.classifyDeliveryEvent(norm.events[0].description_cn);
+  // JD's trace only tells us delivered-vs-not, so derive a richer live status
+  // from the newest event's text — out_for_delivery / exception / returning /
+  // picked_up — otherwise everything in flight collapses to a flat "In transit"
+  // and the office never sees that a parcel is out with the courier. `delivered`
+  // (from JD's 妥投 op) still wins so a stray later phrase can't un-deliver it.
+  const statusCode = norm.delivered
+    ? 'delivered'
+    : (tracking.statusFromEventText(norm.events[0].description_cn) || 'in_transit');
   tdb().prepare(
     `UPDATE ${table}
         SET tracking_status             = ?,
@@ -6694,7 +6739,7 @@ function _jdApplyTrace(table, rowId, fetchRes) {
             updated_at                  = CURRENT_TIMESTAMP
       WHERE id = ?`
   ).run(
-    norm.delivered ? 'delivered' : 'in_transit',
+    statusCode,
     JSON.stringify(norm.events),
     scenario?.scenario || null,
     scenario ? JSON.stringify(scenario) : null,
