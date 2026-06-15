@@ -4194,6 +4194,197 @@ function tickBroadcastScheduler() {
 const _bcSweep = setInterval(tickBroadcastScheduler, 60 * 1000);
 if (_bcSweep.unref) _bcSweep.unref();
 
+// ─── Auto-deliver local-ETA orders ─────────────────────────────────────────
+// GZ same-city orders never get a courier waybill — instead the operator sets a
+// same-day arrival time (retail_shipments.local_eta = "HH:MM"; see the ETA
+// endpoints + feature_local_delivery_eta). Once that promised arrival time has
+// passed there is no carrier callback to flip the order to "delivered", so it
+// would sit on "dispatched" until someone clicks Mark delivered by hand.
+//
+// This sweep closes that loop: every minute it walks each tenant and auto-flips
+// any not-yet-delivered local-ETA order to 'delivered' once `eta + grace` (def
+// 20 min) has elapsed — exactly what staff would do manually, which also unlocks
+// the customer's review prompt. The grace is configurable via
+// storefront_config `delivery.autoDeliverEtaMinutes` (minutes after the ETA;
+// <0 disables the whole feature).
+//
+// Timezone: same assumption as lib/delivery-reminders — the prod host runs
+// UTC+8 (Beijing), so a local Date built from now's Y/M/D + the "HH:MM" reads
+// the same Beijing wall-clock the operator typed. local_eta is same-day by
+// design, so the delivery day is "today"; we only ever deliver once now has
+// passed today's eta+grace, never on a guessed prior/future day.
+const AUTO_DELIVER_DEFAULT_GRACE_MIN = 20;
+// Orders eligible to be auto-completed — anything still in the store's hands,
+// not already delivered/cancelled/refunded.
+const AUTO_DELIVER_FROM_STATUSES = ['paid', 'preparing', 'dispatched'];
+
+function autoDeliverLocalEtaForTenant() {
+  const graceMin = Number(cfgValue('delivery.autoDeliverEtaMinutes', AUTO_DELIVER_DEFAULT_GRACE_MIN));
+  if (!Number.isFinite(graceMin) || graceMin < 0) return 0;   // disabled
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT o.id AS id, o.order_no AS order_no, o.status AS status,
+              o.scheduled_for AS scheduled_for,
+              (SELECT sh.local_eta FROM retail_shipments sh
+                WHERE sh.order_id = o.id AND sh.mode = 'local'
+                  AND sh.local_eta IS NOT NULL AND sh.local_eta != ''
+                ORDER BY sh.id ASC LIMIT 1) AS local_eta
+         FROM retail_orders o
+        WHERE o.fulfillment_type = 'delivery'
+          AND o.status IN ('paid','preparing','dispatched')`
+    ).all();
+  } catch (e) {
+    if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
+    throw e;
+  }
+  const now = new Date();
+  const graceMs = graceMin * 60_000;
+  let fired = 0;
+  for (const o of rows) {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(o.local_eta || '').trim());
+    if (!m) continue;
+    // Defensive: a same-day local ETA on a future-scheduled order would
+    // otherwise deliver early. local_eta is same-day by design, so skip any
+    // order scheduled for a later calendar day.
+    if (o.scheduled_for) {
+      const sched = new Date(o.scheduled_for);
+      if (!isNaN(sched.getTime()) &&
+          new Date(sched.getFullYear(), sched.getMonth(), sched.getDate()).getTime() >
+          new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) {
+        continue;
+      }
+    }
+    const eta = new Date(now.getFullYear(), now.getMonth(), now.getDate(), +m[1], +m[2], 0, 0);
+    if (now.getTime() < eta.getTime() + graceMs) continue;   // eta+grace not reached yet
+    // Atomic claim: the status guard means only the first tick that catches the
+    // order actually flips + notifies; a concurrent/retry tick sees changes===0.
+    const claim = tdb().prepare(
+      `UPDATE retail_orders
+          SET status = 'delivered',
+              delivered_at  = CURRENT_TIMESTAMP,
+              dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
+              updated_at    = CURRENT_TIMESTAMP
+        WHERE id = ? AND status IN ('paid','preparing','dispatched')`
+    ).run(o.id);
+    if (claim.changes === 0) continue;
+    // Keep per-parcel state in lockstep with the whole-order flip (mirrors the
+    // manual "Mark delivered" transition).
+    try {
+      tdb().prepare(
+        `UPDATE retail_shipments
+            SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
+                delivered_at  = COALESCE(delivered_at,  CURRENT_TIMESTAMP),
+                updated_at    = CURRENT_TIMESTAMP
+          WHERE order_id = ?`
+      ).run(o.id);
+    } catch (e) { console.warn('[auto-deliver] shipment mirror', o.id, e.message); }
+    try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: o.status, to: 'delivered', reason: 'auto_eta' }, null); } catch {}
+    try { notifyOrderStatusChange(o.id, 'delivered'); } catch (e) { console.warn('[auto-deliver] notify', o.id, e.message); }
+    fired++;
+  }
+  return fired;
+}
+
+// Every 60s, walk every active tenant and auto-deliver its due local-ETA
+// orders. Best-effort: a per-tenant failure never aborts the others.
+function tickAutoDeliverLocalEta() {
+  let tenants;
+  try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
+  catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
+  const run = (tid) => {
+    try {
+      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const total = tenantAls.run(tdb_, () => autoDeliverLocalEtaForTenant());
+      if (total > 0) console.log(`[auto-deliver] tenant=${tid ?? 'main'} delivered=${total}`);
+    } catch (e) { console.warn('[auto-deliver]', tid, e.message); }
+  };
+  if (!tenants) run(null);
+  else for (const t of tenants) run(t.id);
+}
+const _autoDeliverSweep = setInterval(tickAutoDeliverLocalEta, 60 * 1000);
+if (_autoDeliverSweep.unref) _autoDeliverSweep.unref();
+
+// ─── Auto-cancel abandoned unpaid orders ───────────────────────────────────
+// An order lives in 'pending_payment' from the moment checkout creates it until
+// a payment callback flips it to 'paid'. When the customer never pays, it lingers
+// indefinitely: it clutters the operator's Orders queue (the "Pending" rows) and,
+// for orders that hard-reserved stock, ties up inventory. The inventory reservation
+// sweeper (lib/inventory.startReservationSweeper) already auto-cancels reserved
+// orders when their ~15-min soft-reservation expires — but out-of-city orders are
+// routed with ignoreStock and never reserve, so nothing ever reaps them.
+//
+// This sweep closes that gap with a flat time rule: any pending_payment order older
+// than orders.autoCancelHours (default 6h) is cancelled, reversing the SAME
+// create-time side effects a manual cancel does (redeemed points, consumed voucher,
+// soft reservations) — see the customer-cancel + admin-cancel paths. No money was
+// ever taken on a pending_payment order, so there is no refund and no referral to
+// reverse. Set the config to 0 (or negative) to disable.
+//
+// Each cancel is guarded by an atomic pending_payment → cancelled transition
+// (changes===1), so the once-only reversals run exactly once and can never race a
+// late-arriving payment callback. placed_at carries a CURRENT_TIMESTAMP default and
+// is stored UTC, matching datetime('now') — the same comparison the rest of this
+// file uses; a row with NULL placed_at simply isn't swept.
+const STALE_ORDER_CANCEL_HOURS_DEFAULT = 6;
+
+function cancelStalePendingOrdersForTenant() {
+  const hours = Number(cfgValue('orders.autoCancelHours', STALE_ORDER_CANCEL_HOURS_DEFAULT));
+  if (!Number.isFinite(hours) || hours <= 0) return 0;   // disabled
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT id, status FROM retail_orders
+        WHERE status = 'pending_payment'
+          AND placed_at <= datetime('now', ?)`
+    ).all(`-${hours} hours`);
+  } catch (e) {
+    if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
+    throw e;
+  }
+  let cancelled = 0;
+  for (const o of rows) {
+    // Atomic claim: only the tick that wins the pending_payment → cancelled flip
+    // runs the once-only reversals below; a concurrent tick or a payment callback
+    // that arrived first leaves changes===0.
+    const flipped = tdb().prepare(
+      "UPDATE retail_orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancelled_reason = 'auto_cancelled_unpaid', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
+    ).run(o.id);
+    if (flipped.changes === 0) continue;
+    // Keep the admin queue consistent — flip the still-open payment row too.
+    tdb().prepare(
+      "UPDATE retail_payments SET status = 'cancelled' WHERE order_id = ? AND status = 'pending'"
+    ).run(o.id);
+    // Same three reversals the manual pending_payment cancel performs.
+    try { reverseOrderRedeem(o.id); } catch (e) { console.error('[auto-cancel.reverseRedeem]', o.id, e.message); }
+    try { reverseOrderVoucher(o.id); } catch (e) { console.error('[auto-cancel.reverseVoucher]', o.id, e.message); }
+    try { inventory.releaseOrderReservations(o.id, { reason: 'auto_cancelled_unpaid' }); }
+    catch (e) { console.error('[auto-cancel.release]', o.id, e.message); }
+    try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: o.status, to: 'cancelled', reason: 'auto_cancelled_unpaid' }, null); } catch {}
+    cancelled++;
+  }
+  return cancelled;
+}
+
+// Every 15 min, walk every active tenant and cancel its stale unpaid orders.
+// Best-effort: a per-tenant failure never aborts the others.
+function tickCancelStalePending() {
+  let tenants;
+  try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
+  catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
+  const run = (tid) => {
+    try {
+      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const total = tenantAls.run(tdb_, () => cancelStalePendingOrdersForTenant());
+      if (total > 0) console.log(`[auto-cancel] tenant=${tid ?? 'main'} cancelled=${total}`);
+    } catch (e) { console.warn('[auto-cancel]', tid, e.message); }
+  };
+  if (!tenants) run(null);
+  else for (const t of tenants) run(t.id);
+}
+const _staleCancelSweep = setInterval(tickCancelStalePending, 15 * 60 * 1000);
+if (_staleCancelSweep.unref) _staleCancelSweep.unref();
+
 // Roots Club tier ladder. Editable in /retail-admin → Points/Loyalty; persisted
 // in storefront_config under `roots_club.tiers`. The mini-app reads the same
 // blob off /api/retail/config, so backend + frontend never drift. These defaults
@@ -13879,12 +14070,21 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
     return res.status(409).json({ success: false, error: 'already_has_waybill', number: shipment.tracking_number });
   }
 
-  // JD 时效产品 follows the parcel's shipping mode: air parcels ship by the
-  // air-capable express product (ed-m-0002 京东特快), land/local stay on standard
-  // ground (ed-m-0001 京东标快). Before this, every parcel defaulted to land, so
-  // air shipments were wrongly booked as 京东标快. Explicit body override wins.
-  const JD_PRODUCT_BY_MODE = { air: 'ed-m-0002', land: 'ed-m-0001', local: 'ed-m-0001' };
-  const product = String(req.body?.product || JD_PRODUCT_BY_MODE[shipment.mode] || 'ed-m-0001');
+  // JD 时效产品 — the operator picks one of three real services in the drawer
+  // and we pass its code here:
+  //   LL-HD-M  冷链航空  fresh by air   (生鲜 · 空运)
+  //   LL-SD-M  冷链陆运  fresh by ground(生鲜 · 陆运)
+  //   ed-m-0001 京东标快 ground, ambient(普通 · 陆运)
+  // (ed-m-0002 京东特快 = ambient express — Roots ships fresh by air, so it's
+  // not offered, but still accepted if explicitly sent.) Fallback when the
+  // caller sends nothing: air → fresh-air, land/local → ambient ground.
+  const JD_ALLOWED = new Set(['LL-HD-M', 'LL-SD-M', 'ed-m-0001', 'ed-m-0002']);
+  const JD_DEFAULT_BY_MODE = { air: 'LL-HD-M', land: 'ed-m-0001', local: 'ed-m-0001' };
+  const reqProduct = req.body?.product != null ? String(req.body.product) : '';
+  if (reqProduct && !JD_ALLOWED.has(reqProduct)) {
+    return res.status(400).json({ success: false, error: 'invalid_jd_product', product: reqProduct });
+  }
+  const product = reqProduct || JD_DEFAULT_BY_MODE[shipment.mode] || 'ed-m-0001';
   const weight  = Number(req.body?.weight) > 0 ? Number(req.body.weight) : 1;    // kg
   const vloumn  = Number(req.body?.vloumn) > 0 ? Number(req.body.vloumn) : 100;  // cm³
 

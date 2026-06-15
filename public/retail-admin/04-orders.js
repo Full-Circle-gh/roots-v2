@@ -2881,7 +2881,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       ${eventsBlock}
       ${!has ? `
         <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
-          <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, event)">📦 Create JD label · 生成京东运单</button>
+          <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)">📦 Create JD label · 生成京东运单</button>
           <span class="muted" style="font-size:11px;">Free live tracking — JD bills the parcel. · 免费物流追踪。</span>
         </div>
         <div class="muted" style="font-size:11px; margin:8px 0 4px;">— or attach an existing waybill manually · 或手动填写已有运单 —</div>` : ''}
@@ -2984,29 +2984,80 @@ async function resubscribeTracking(orderId, shipmentId, ev) {
   } catch {}
 }
 
-// Generate a JD waybill for this parcel through JD's own API. The label is
-// created under our JD account, so JD streams tracking events for free (no
-// 快递100). Server resolves the sender from the fulfilling store's 发货地址 —
-// surface the common "store has no sender phone" gap as a clear instruction.
-async function createJdLabel(orderId, shipmentId, ev) {
-  if (!confirm('Create a JD waybill and ship this parcel now?\n生成京东运单并发货？')) return;
-  const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
-  try {
-    const r = await adminWrite({
-      btn: ev?.currentTarget,
-      url: `/api/retail-admin/orders/${orderId}/jd-waybill${qs}`,
-      method: 'POST', body: { shipment_id: shipmentId },
-      errLabelEn: 'JD label failed', errLabelCn: '生成运单失败',
-    });
-    toast('JD waybill created · 京东运单已生成: ' + (r?.data?.waybill || ''));
-    openOrder(orderId, { instant: true });
-    loadOrders();
-  } catch (e) {
-    // adminWrite already toasts the raw error; add guidance for the usual cause.
-    if (String(e?.message || e).includes('store_sender_phone_missing')) {
-      toast('Set the store’s sender phone first (Settings → Stores) · 请先在门店设置寄件电话', 'err');
+// The three real JD services Roots ships with. The operator picks one when
+// creating a label — a parcel's mode (air/land) and whether it holds a
+// fresh (ice-pack) item only PRE-SELECT the likely choice; staff can override.
+//   LL-HD-M  冷链航空  fresh · air      (生鲜 · 空运)
+//   LL-SD-M  冷链陆运  fresh · ground   (生鲜 · 陆运)
+//   ed-m-0001 京东标快 ambient · ground (普通 · 陆运)
+const JD_SERVICES = [
+  { code: 'LL-HD-M',   en: 'Fresh · Air',     cn: '生鲜 · 空运', sub: '冷链航空 · LL-HD-M' },
+  { code: 'LL-SD-M',   en: 'Fresh · Ground',  cn: '生鲜 · 陆运', sub: '冷链陆运 · LL-SD-M' },
+  { code: 'ed-m-0001', en: 'Ambient · Ground',cn: '普通 · 陆运', sub: '京东标快 · ed-m-0001' },
+];
+function jdSuggestedService(mode, isFresh) {
+  if (mode === 'air') return 'LL-HD-M';          // air is always cold-chain here
+  return isFresh ? 'LL-SD-M' : 'ed-m-0001';      // ground splits by fresh flag
+}
+
+// Pop the service chooser, then create the JD waybill with the picked product.
+// The label is created under our JD account, so JD streams tracking events for
+// free (no 快递100). Server resolves the sender from the fulfilling store's
+// 发货地址 — surface the "store has no sender phone" gap as a clear instruction.
+function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
+  const preset = jdSuggestedService(mode, !!Number(isFresh));
+  const bg = document.createElement('div');
+  bg.className = 'pu-editor-bg';
+  bg.style.display = 'flex';
+  bg.innerHTML = `
+    <div class="pu-editor" style="width: 460px; max-width: 92vw;">
+      <div class="pu-editor-head">
+        <div>
+          <h3 style="margin:0; font-size:14px;">${cuT('Create JD label', '生成京东运单')}</h3>
+          <div class="muted" style="font-size:11px; margin-top:2px;">${cuT('Choose the JD service for this parcel', '选择此包裹的京东时效产品')}</div>
+        </div>
+        <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
+      </div>
+      <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display:block;">
+        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
+          ${JD_SERVICES.map(s => `
+            <label class="jd-svc" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line-soft); border-radius:8px; cursor:pointer;">
+              <input type="radio" name="jd-svc" value="${s.code}" ${s.code === preset ? 'checked' : ''} style="margin:0;">
+              <span style="flex:1;">
+                <span style="font-weight:600;">${cuT(s.en, s.cn)}</span>
+                <span class="muted" style="display:block; font-size:11px; margin-top:1px;">${s.sub}</span>
+              </span>
+            </label>`).join('')}
+        </div>
+        <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Cancel', '取消')}</button>
+          <button class="btn btn-primary" id="jd-svc-submit">${cuT('Create & ship', '生成并发货')}</button>
+        </div>
+      </div>
+    </div>`;
+  mountFloatingPuModal(bg);
+  bg.querySelector('#jd-svc-submit').addEventListener('click', async (e) => {
+    const product = (bg.querySelector('input[name="jd-svc"]:checked') || {}).value;
+    if (!product) return;
+    const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
+    try {
+      const r = await adminWrite({
+        btn: e.currentTarget,
+        url: `/api/retail-admin/orders/${orderId}/jd-waybill${qs}`,
+        method: 'POST', body: { shipment_id: shipmentId, product },
+        errLabelEn: 'JD label failed', errLabelCn: '生成运单失败',
+      });
+      bg.remove();
+      toast(cuT('JD waybill created', '京东运单已生成') + ': ' + (r?.data?.waybill || ''));
+      openOrder(orderId, { instant: true });
+      loadOrders();
+    } catch (err) {
+      // adminWrite already toasts the raw error; add guidance for the usual cause.
+      if (String(err?.message || err).includes('store_sender_phone_missing')) {
+        toast(cuT('Set the store’s sender phone first (Settings → Stores)', '请先在门店设置寄件电话'), 'err');
+      }
     }
-  }
+  });
 }
 
 // Cancel the JD courier for this parcel via JD's own API (pre-pickup cancel,
