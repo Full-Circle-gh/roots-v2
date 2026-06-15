@@ -13879,7 +13879,12 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
     return res.status(409).json({ success: false, error: 'already_has_waybill', number: shipment.tracking_number });
   }
 
-  const product = String(req.body?.product || 'ed-m-0001');
+  // JD 时效产品 follows the parcel's shipping mode: air parcels ship by the
+  // air-capable express product (ed-m-0002 京东特快), land/local stay on standard
+  // ground (ed-m-0001 京东标快). Before this, every parcel defaulted to land, so
+  // air shipments were wrongly booked as 京东标快. Explicit body override wins.
+  const JD_PRODUCT_BY_MODE = { air: 'ed-m-0002', land: 'ed-m-0001', local: 'ed-m-0001' };
+  const product = String(req.body?.product || JD_PRODUCT_BY_MODE[shipment.mode] || 'ed-m-0001');
   const weight  = Number(req.body?.weight) > 0 ? Number(req.body.weight) : 1;    // kg
   const vloumn  = Number(req.body?.vloumn) > 0 ? Number(req.body.vloumn) : 100;  // cm³
 
