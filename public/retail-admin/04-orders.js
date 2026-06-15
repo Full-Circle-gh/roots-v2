@@ -1315,7 +1315,7 @@ function renderTrackingCell(o) {
   // doesn't apply to local delivery.
   if (o.is_local) {
     if (o.local_eta) {
-      return `<div style="font-size:11px; font-weight:600; color:#5a8c2a;">🛵 ${escapeHtml(formatEtaPretty(o.local_eta))}</div>
+      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#5a8c2a;">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaPretty(o.local_eta))}</span></div>
               <div class="muted" style="font-size:10px; margin-top:2px;">${cuT('arrival','预计送达')}</div>`;
     }
     if (o.status === 'dispatched') {
