@@ -1306,6 +1306,13 @@ function deliveryIcon(key, size = 12) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
 }
 
+// Map-pin icon, same recipe as the delivery set (24×24, currentColor stroke,
+// round joins). Replaces the 📍 emoji on the "Make address Chinese" button so
+// it reads as part of the platform line-icon language rather than a system glyph.
+function pinIcon(size = 13) {
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>`;
+}
+
 function renderTrackingCell(o) {
   if (o.fulfillment_type === 'pickup') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
@@ -2313,7 +2320,7 @@ function renderOpenOrder(o) {
             <div class="kicker">Ship to · 收货人 ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
             <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
-            ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" style="margin-top:8px;" onclick="openAddressToChinese(${o.id})">${cuT('📍 Make address Chinese', '📍 转为中文地址')}</button>` : ''}
+            ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" style="margin-top:8px;" onclick="openAddressToChinese(${o.id})">${pinIcon(13)} ${cuT('Make address Chinese', '转为中文地址')}</button>` : ''}
           </div>`}
           <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
             <div class="kicker">Customer · 顾客</div>
