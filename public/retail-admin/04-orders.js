@@ -2907,8 +2907,8 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   const eventsBlock = (has && t.events && t.events.length) ? `
     <div data-no-i18n style="margin-top:14px; border-top: 1px dashed var(--line-soft); padding-top:10px;">
       <div class="muted" style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px;">${cuT('Recent events', '最近事件')}</div>
-      <div style="display:flex; flex-direction:column; gap:6px; max-height: 220px; overflow-y: auto;">
-        ${t.events.slice(0, 8).map(ev => {
+      <div style="display:flex; flex-direction:column; gap:6px; max-height: 320px; overflow-y: auto;">
+        ${t.events.map(ev => {
           const desc = cuT(ev.description_en || ev.description_cn || '', ev.description_cn || ev.description_en || '');
           return `
           <div style="display:flex; gap:10px; font-size:12px; line-height:1.4;">
