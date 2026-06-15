@@ -1005,7 +1005,7 @@ function parseSchedFor(s) {
 function shipByPlan(o) {
   const done = (o.status === 'dispatched' || o.status === 'delivered'
     || o.status === 'cancelled' || o.status === 'refunded');
-  const reqEn = 'Requested timing', reqCn = '要求时间';
+  const reqEn = 'Requested timing', reqCn = '原定时间';
   // 1 — Pickup: show the counter window, never a ship deadline.
   if (o.fulfillment_type === 'pickup') {
     const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
@@ -1020,19 +1020,21 @@ function shipByPlan(o) {
     };
   }
   // 2 — Fresh batch: the kitchen makes a new batch on promised_ship_date and it
-  // arrives ~promised_delivery_date. The ARRIVAL date is the headline; the
-  // make-fresh ship date sits below so a packer can't ship early off the shelf.
+  // arrives ~promised_delivery_date. The SHIP (make-fresh) date is the headline
+  // — that's the date the operator acts on, and surfacing it stops a packer
+  // shipping early off the shelf; the arrival estimate sits below.
   if (o.promised_ship_date) {
-    const arr = o.promised_delivery_date || o.promised_ship_date;
+    const ship = fmtDateShort(parseSchedFor(o.promised_ship_date));
+    const arr = o.promised_delivery_date ? fmtDateShort(parseSchedFor(o.promised_delivery_date)) : '';
     return {
       kind: 'batch',
-      kickerEn: done ? reqEn : 'Est. arrival', kickerCn: done ? reqCn : '预计送达',
-      headlineEn: `~ ${arr}`, headlineCn: `约 ${arr}`,
-      subEn: `🥗 made fresh · ships ${o.promised_ship_date}`,
-      subCn: `🥗 现做 · ${o.promised_ship_date} 发货`,
-      cellSubEn: `made fresh · ships ${o.promised_ship_date}`,
-      cellSubCn: `现做 · ${o.promised_ship_date} 发货`,
-      urgencyDate: arr, urgencyBasis: 'arrival',
+      kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
+      headlineRaw: ship,
+      subEn: `🥗 made fresh${arr ? ` · arrives ~${arr}` : ''}`,
+      subCn: `🥗 现做${arr ? ` · 约${arr}送达` : ''}`,
+      cellSubEn: `made fresh${arr ? ` · arrives ~${arr}` : ''}`,
+      cellSubCn: `现做${arr ? ` · 约${arr}送达` : ''}`,
+      urgencyDate: o.promised_ship_date, urgencyBasis: 'arrival',
     };
   }
   // 4 — Out-of-city express: the server tagged a paid + expressDispatchHours
@@ -1078,7 +1080,7 @@ function shipByPlan(o) {
   const dateLine = valid ? fmtSlotShort(dt) : '';
   return {
     kind: 'scheduled',
-    kickerEn: done ? reqEn : 'Deliver', kickerCn: done ? reqCn : '送达',
+    kickerEn: done ? reqEn : 'Deliver', kickerCn: done ? reqCn : '送达时间',
     headlineRaw: label,
     cellSubRaw: (label !== dateLine && dateLine) ? dateLine : null,
     urgencyDate: o.scheduled_for, urgencyBasis: 'arrival',
