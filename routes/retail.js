@@ -13933,49 +13933,55 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
 });
 
-// Undo an accidental "Mark dispatched". The status machine is otherwise
-// forward-only (STATUS_TRANSITIONS has no dispatched→preparing step), so a
-// misclick on the dispatch button had no in-app reverse. This rolls the order
-// back to 'preparing' — but ONLY when nothing has actually gone out: no parcel
-// carries a waybill (tracking_number) and none is delivered. That guard is the
-// same idea as the waybill-cancel rollback above; here it protects against
-// un-dispatching an order that's genuinely in a courier's hands. The whole-order
-// dispatch stamps dispatched_at on every shipment via COALESCE, so we clear
-// those stamps too (safe: the guard proved none hold a real waybill). Silent by
-// design — no customer notification fires (a quick misclick correction).
+// Undo an accidental "Mark dispatched" OR "Mark delivered". The status machine
+// is otherwise forward-only (STATUS_TRANSITIONS only steps forward), so a
+// misclick that walked an order to dispatched/delivered had no in-app reverse.
+// This rolls it back to 'preparing' — but ONLY when nothing has actually gone
+// out: no parcel carries a waybill (tracking_number). Same idea as the
+// waybill-cancel rollback above; it protects against un-doing an order genuinely
+// in a courier's hands.
+//
+// Why the guard is waybill-only (NOT delivered_at): the whole-order
+// dispatch/deliver flips COALESCE-stamp dispatched_at + delivered_at onto EVERY
+// shipment, so those timestamps are set by the very click we're reversing and
+// can't signal a real delivery. A real courier hand-off is signalled by a
+// tracking_number. Local same-city parcels never carry one, so undo is always
+// available for them — acceptable: there's no external courier state to
+// contradict, and the operator confirms the action. Silent by design — no
+// customer notification fires (a quick misclick correction). Both timestamps are
+// cleared on the order and its parcels so the reversal is clean.
 router.post('/api/retail-admin/orders/:id/undo-dispatch', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  if (o.status !== 'dispatched') {
-    return res.status(409).json({ success: false, error: 'not_dispatched', from: o.status });
+  if (o.status !== 'dispatched' && o.status !== 'delivered') {
+    return res.status(409).json({ success: false, error: 'not_reversible', from: o.status });
   }
-  // A parcel has truly shipped if it has a waybill OR is already delivered.
+  // A parcel has truly shipped only if a courier waybill is attached.
   const shipped = tdb().prepare(
     `SELECT COUNT(*) AS n FROM retail_shipments
-      WHERE order_id = ?
-        AND (TRIM(COALESCE(tracking_number, '')) <> '' OR delivered_at IS NOT NULL)`
+      WHERE order_id = ? AND TRIM(COALESCE(tracking_number, '')) <> ''`
   ).get(id).n;
   if (shipped) {
     return res.status(409).json({ success: false, error: 'already_shipped',
-      message: 'A parcel already has a waybill or is delivered — cancel the waybill first to roll this back.' });
+      message: 'A parcel already has a waybill — cancel the waybill first to roll this back.' });
   }
-  // Atomic flip: only roll back if STILL dispatched (guards a double-click /
-  // a concurrent operator who already advanced it to delivered).
+  // Atomic flip: only roll back if STILL in the same state (guards a double-click
+  // / a concurrent operator who already advanced or refunded it).
   const upd = tdb().prepare(
-    "UPDATE retail_orders SET status = 'preparing', dispatched_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'dispatched'"
-  ).run(id);
+    "UPDATE retail_orders SET status = 'preparing', dispatched_at = NULL, delivered_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = ?"
+  ).run(id, o.status);
   if (upd.changes !== 1) {
     const cur = tdb().prepare('SELECT status FROM retail_orders WHERE id = ?').get(id)?.status;
-    return res.status(409).json({ success: false, error: 'not_dispatched', from: cur });
+    return res.status(409).json({ success: false, error: 'not_reversible', from: cur });
   }
-  // Clear the dispatch timestamps the status flip stamped on the parcels (the
-  // guard proved none carry a real waybill, so there's nothing legitimate to lose).
+  // Clear the dispatch/deliver timestamps the status flip stamped on the parcels
+  // (the guard proved none carry a real waybill, so there's nothing legitimate to lose).
   tdb().prepare(
-    "UPDATE retail_shipments SET dispatched_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?"
+    "UPDATE retail_shipments SET dispatched_at = NULL, delivered_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE order_id = ?"
   ).run(id);
   logActivity(req.user.id, req.user.username, 'status_change', 'retail_order', id,
-    { from: 'dispatched', to: 'preparing', reason: 'undo_dispatch' }, req.ip);
+    { from: o.status, to: 'preparing', reason: 'undo_fulfillment' }, req.ip);
   res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
 });
 

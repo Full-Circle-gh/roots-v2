@@ -2181,9 +2181,12 @@ function renderOpenOrder(o) {
       }
       return `<button class="btn btn-primary btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
     }).join('')
-    // A quiet "Undo dispatch" sits beside the forward actions when the order
-    // was dispatched but nothing has truly gone out — the reverse for a misclick.
-    + (undoDispatchable(o) ? `<button class="btn btn-sm" onclick="undoDispatch(${o.id})">Undo dispatch · 撤销发货</button>` : '')
+    // A quiet "Undo" sits beside the forward actions when the order was
+    // dispatched/delivered but nothing has truly gone out — the reverse for a
+    // misclick. Label tracks which step is being undone.
+    + (undoDispatchable(o)
+        ? `<button class="btn btn-sm" onclick="undoDispatch(${o.id})">${o.status === 'delivered' ? 'Undo delivery · 撤销送达' : 'Undo dispatch · 撤销发货'}</button>`
+        : '')
     + renderRefundMenu(o, dangerTx);
     mount.innerHTML = `
       <div class="order-card odd-${ODV.density}">
@@ -2612,18 +2615,22 @@ async function transition(id, status) {
   }
 }
 
-// Reverse an accidental "Mark dispatched". The status machine is forward-only,
-// so without this a misclick on dispatch was stuck. The server only allows it
-// when no parcel has a waybill or is delivered (see undoDispatchable); on that
-// rare race it returns 'already_shipped' and we surface a plain reason. Silent:
-// the customer is not notified, matching a quick correction.
+// Reverse an accidental "Mark dispatched" / "Mark delivered". The status machine
+// is forward-only, so without this a misclick was stuck on the queue with only
+// Refund as an exit. The server only allows it when no parcel carries a waybill
+// (see undoDispatchable); on that rare race it returns 'already_shipped' and we
+// surface a plain reason. Silent: the customer is not notified, matching a quick
+// correction. Both 'dispatched' and 'delivered' roll back to Preparing.
 async function undoDispatch(id) {
+  const wasDelivered = _OPEN_ORDER && _OPEN_ORDER.id === id && _OPEN_ORDER.status === 'delivered';
   const ok = await askConfirm({
-    titleEn: 'Undo dispatch?', titleCn: '撤销发货?',
-    bodyEn: 'This moves the order back to <b>Preparing</b>. Use it if you marked it dispatched by mistake. The customer is not notified.',
-    bodyCn: '这会把订单退回<b>备货中</b>。如果你是误点了发货,可以用它撤销。不会通知顾客。',
-    confirmEn: 'Undo dispatch', confirmCn: '撤销发货',
-    cancelEn: 'Keep dispatched', cancelCn: '保持已发货',
+    titleEn: wasDelivered ? 'Undo delivery?' : 'Undo dispatch?',
+    titleCn: wasDelivered ? '撤销送达?' : '撤销发货?',
+    bodyEn: `This moves the order back to <b>Preparing</b>. Use it if you marked it ${wasDelivered ? 'delivered' : 'dispatched'} by mistake — it hasn't actually shipped. The customer is not notified.`,
+    bodyCn: `这会把订单退回<b>备货中</b>。如果你是误点了${wasDelivered ? '送达' : '发货'}(实际上还没发出),可以用它撤销。不会通知顾客。`,
+    confirmEn: wasDelivered ? 'Undo delivery' : 'Undo dispatch',
+    confirmCn: wasDelivered ? '撤销送达' : '撤销发货',
+    cancelEn: 'Keep as is', cancelCn: '保持不变',
   });
   if (!ok) return;
   try {
@@ -2633,22 +2640,23 @@ async function undoDispatch(id) {
     loadOrders();
   } catch (e) {
     const msg = e.message === 'already_shipped'
-      ? cuT('A parcel already shipped — cancel its waybill first.', '已有包裹发出 — 请先取消运单。')
+      ? cuT('A parcel already has a waybill — cancel it first.', '已有包裹生成运单 — 请先取消运单。')
       : 'Failed · 失败: ' + e.message;
     toast(msg, 'err');
   }
 }
 
-// Whether the open order can be un-dispatched from the UI: it's dispatched and
-// no parcel carries a waybill or is delivered. Mirrors the server guard so the
-// button only shows when the action will actually succeed.
+// Whether the open order can be rolled back to Preparing from the UI: it's
+// dispatched or delivered, and no parcel carries a real waybill. Mirrors the
+// server guard so the button only shows when the action will actually succeed.
+// (delivered_at is NOT checked — the deliver flip stamps it on every parcel, so
+// it can't tell a real delivery from this misclick; only a waybill can.)
 function undoDispatchable(o) {
-  return o && o.status === 'dispatched'
+  return o && (o.status === 'dispatched' || o.status === 'delivered')
     && o.fulfillment_type !== 'pickup'
     && !(o.shipments || []).some(s =>
       (s.tracking_number && String(s.tracking_number).trim()) ||
-      (s.tracking && s.tracking.number) ||
-      s.state === 'delivered');
+      (s.tracking && s.tracking.number));
 }
 
 let TRACKING_CARRIERS = null;
