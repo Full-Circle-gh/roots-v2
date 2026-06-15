@@ -2898,6 +2898,32 @@ addColumn('retail_referrals', 'referee_reward_amount', 'REAL NOT NULL DEFAULT 0'
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_referrals_referrer ON retail_referrals(referrer_id, status)'); } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_referrals_order ON retail_referrals(first_paid_order_id)'); } catch {}
 
+// Lifetime revenue-share ledger — one row per order that paid the referrer a
+// percentage commission. SEPARATE from retail_referrals (which is the one-shot
+// first-order bounty): a referrer earns the bounty ONCE, then a commission on
+// every SUBSEQUENT paid order their invitee places. UNIQUE(order_id) is the
+// idempotency guard (an order pays a lifetime commission at most once, even if
+// the wechat callback re-fires). ONE LEVEL ONLY by construction — referrer_id is
+// the invitee's DIRECT referrer; we never walk further up a chain (multi-level
+// payout = 三级分销/传销, which WeChat bans). reversed_at is stamped when the
+// triggering order is fully refunded/cancelled and the commission is clawed back.
+db.exec(`CREATE TABLE IF NOT EXISTS retail_lifetime_commissions (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  order_id          INTEGER NOT NULL,
+  referrer_id       INTEGER NOT NULL,                -- the invitee's DIRECT referrer (paid)
+  customer_id       INTEGER NOT NULL,                -- the invitee who placed the order
+  base_amount       REAL NOT NULL DEFAULT 0,         -- order total the commission was computed on
+  rate_percent      REAL NOT NULL DEFAULT 0,         -- snapshot of the % at payout time
+  commission_amount REAL NOT NULL DEFAULT 0,         -- ¥ credited to the referrer's wallet
+  reversed_at       DATETIME,                        -- set on refund/cancel clawback
+  created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (order_id)    REFERENCES retail_orders(id)    ON DELETE CASCADE,
+  FOREIGN KEY (referrer_id) REFERENCES retail_customers(id) ON DELETE CASCADE,
+  FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE,
+  UNIQUE(order_id)
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_lifetime_comm_referrer ON retail_lifetime_commissions(referrer_id)'); } catch {}
+
 // was in the schema since launch but was never written; the new Customers
 // admin tab's "Top spenders" sort needs it populated. Sums subtotal (not
 // total — vouchers/points discounts shouldn't reduce lifetime spend) for

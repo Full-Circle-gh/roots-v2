@@ -3148,6 +3148,10 @@ function markOrderPaid(orderId) {
     // Credit referrer if this is the invitee's first paid order. Guarded
     // inside creditReferralReward by status='joined' so retries are safe.
     try { creditReferralReward(orderId); } catch (e) { console.error('[creditReferralReward]', e); }
+    // Lifetime revenue-share: pay the referrer a % of this order if it's the
+    // invitee's 2nd+ paid order. Self-guarded (off unless a % is set) and
+    // idempotent via UNIQUE(order_id), so re-fires on retry callbacks are safe.
+    try { creditLifetimeCommission(orderId); } catch (e) { console.error('[creditLifetimeCommission]', e); }
     // Notify retail operators of the new order via Web Push — reaches their
     // device even when the backend isn't open. Fires once per genuine
     // transition (r.changes>0 guards against wechat retry callbacks).
@@ -9145,6 +9149,12 @@ function affiliateSettings() {
     // their wallet on their first paid order. Defaults to 0 (off) so enabling
     // the split is an explicit, opt-in spend decision by the operator.
     rewardReferee:  Number(cfgValue('affiliate.rewardReferee', 0)) || 0,
+    // Lifetime revenue-share — a % of EVERY paid order the invitee places AFTER
+    // their first, credited to the referrer's wallet as store credit. 0 = off
+    // (default), so turning it on is an explicit, opt-in spend decision. The
+    // first paid order stays the one-shot bounty's job (no double-pay). ONE LEVEL
+    // only — see creditLifetimeCommission. Capped at 50% by the admin endpoint.
+    lifetimeRatePercent: Number(cfgValue('affiliate.lifetimeRatePercent', 0)) || 0,
     codePrefix:     String(cfgValue('affiliate.codePrefix', REFERRAL_CODE_PREFIX)),
     // Optional custom picture for the WeChat share card (the 5:4 thumbnail a
     // customer sees when they forward their invite into a chat). Empty string
@@ -9355,6 +9365,106 @@ function creditReferralReward(orderId) {
   try { tx(); } catch (e) { console.error('[creditReferralReward]', e); }
 }
 
+// Lifetime revenue-share: pay the referrer a % of EVERY paid order their invitee
+// places AFTER the first. The invitee's FIRST paid order is handled by the
+// one-shot bounty (creditReferralReward) — lifetime commission starts from the
+// SECOND order on, so the referrer is never double-paid on order #1. Credited as
+// wallet store credit through the same retail_topup_transactions ledger
+// (payment_method='lifetime_commission'), so it appears in wallet history.
+//
+// ONE LEVEL ONLY: we credit the invitee's DIRECT referrer and stop. We never walk
+// further up the referral chain — multi-level payout is 三级分销/传销, which
+// Chinese law and WeChat's platform rules ban (and Tencent auto-detects, killing
+// the mini-app). Do not "improve" this by recursing on the referrer's referrer.
+//
+// Idempotent at the DB level: retail_lifetime_commissions has UNIQUE(order_id), so
+// a wechat retry callback (or a re-fire from order promotion) can't double-credit.
+function creditLifetimeCommission(orderId) {
+  const s = affiliateSettings();
+  if (!s.enabled) return;
+  const rate = Number(s.lifetimeRatePercent) || 0;
+  if (!(rate > 0)) return;                          // dormant until a % is set in admin
+  const o = tdb().prepare('SELECT id, customer_id, status, total FROM retail_orders WHERE id = ?').get(orderId);
+  if (!o || o.status !== 'paid') return;
+  // Who referred this customer? Permanent 1:1 link stamped on the customer row.
+  const cust = tdb().prepare('SELECT referred_by_customer_id FROM retail_customers WHERE id = ?').get(o.customer_id);
+  const referrerId = cust && cust.referred_by_customer_id;
+  if (!referrerId) return;                          // not an invited customer
+  if (referrerId === o.customer_id) return;         // defensive: never self-pay
+  // Skip the invitee's FIRST paid order — that one belongs to the bounty. An
+  // earlier paid order existing ⇒ this is order #2+, so lifetime applies. (Same
+  // "earlier paid order" test creditReferralReward uses, kept consistent.)
+  const earlier = tdb().prepare(
+    "SELECT 1 FROM retail_orders WHERE customer_id = ? AND id < ? AND paid_at IS NOT NULL LIMIT 1"
+  ).get(o.customer_id, orderId);
+  if (!earlier) return;                             // first paid order → bounty handles it
+  const base = Number(o.total) || 0;                // net amount actually charged
+  const commission = Math.round(base * (rate / 100) * 100) / 100;
+  if (!(commission > 0)) return;
+  const tx = tdb().transaction(() => {
+    // UNIQUE(order_id) + INSERT OR IGNORE = a real DB-level idempotency guard
+    // (stronger than the referral path's in-process serialization). If a row for
+    // this order already exists, changes===0 and we credit nothing.
+    const ins = tdb().prepare(
+      `INSERT OR IGNORE INTO retail_lifetime_commissions
+         (order_id, referrer_id, customer_id, base_amount, rate_percent, commission_amount)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(orderId, referrerId, o.customer_id, base, rate, commission);
+    if (!ins.changes) return;
+    const cur = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(referrerId);
+    const after = Math.round(((cur?.balance || 0) + commission) * 100) / 100;
+    tdb().prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, referrerId);
+    tdb().prepare(
+      `INSERT INTO retail_topup_transactions
+         (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+       VALUES (?, ?, 0, 'lifetime_commission', 'success', CURRENT_TIMESTAMP, ?, ?)`
+    ).run(
+      referrerId, commission, `lifetime:${orderId}`,
+      JSON.stringify({ order_id: orderId, customer_id: o.customer_id, rate_percent: rate, base })
+    );
+  });
+  try { tx(); } catch (e) { console.error('[creditLifetimeCommission]', e); }
+}
+
+// Claw back a lifetime commission when its triggering order is fully refunded or
+// cancelled. Mirrors reverseOrderReferral: the debit is CLAMPED to the wallet's
+// available balance (never drives a balance negative), logs a negative ledger
+// row, and stamps reversed_at so a re-fire is a no-op. Partial refunds leave the
+// commission intact (the order still counts as a kept order).
+function reverseLifetimeCommission(orderId) {
+  const row = tdb().prepare(
+    "SELECT id, referrer_id, customer_id, commission_amount FROM retail_lifetime_commissions WHERE order_id = ? AND reversed_at IS NULL"
+  ).get(orderId);
+  if (!row) return;
+  const amount = Number(row.commission_amount) || 0;
+  const tx = tdb().transaction(() => {
+    // Win the reversed_at flip first (idempotent: a re-fire finds it already set).
+    const won = tdb().prepare(
+      "UPDATE retail_lifetime_commissions SET reversed_at = CURRENT_TIMESTAMP WHERE id = ? AND reversed_at IS NULL"
+    ).run(row.id);
+    if (!won.changes) return;
+    if (!(amount > 0)) return;
+    const cur = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(row.referrer_id);
+    const bal = cur?.balance || 0;
+    const take = Math.min(amount, bal);
+    if (take < amount) {
+      console.warn(`[reverseLifetimeCommission] shortfall: wanted ¥${amount} back from customer ${row.referrer_id} (order ${orderId}) but only ¥${bal} available — reclaimed ¥${take}, ¥${Math.round((amount - take) * 100) / 100} not recovered`);
+    }
+    if (take <= 0) return;
+    const after = Math.round((bal - take) * 100) / 100;
+    tdb().prepare('UPDATE retail_customers SET balance = ? WHERE id = ?').run(after, row.referrer_id);
+    tdb().prepare(
+      `INSERT INTO retail_topup_transactions
+         (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+       VALUES (?, ?, 0, 'lifetime_commission_clawback', 'success', CURRENT_TIMESTAMP, ?, ?)`
+    ).run(
+      row.referrer_id, -take, `lifetime_clawback:${orderId}`,
+      JSON.stringify({ order_id: orderId, customer_id: row.customer_id, clawback: true })
+    );
+  });
+  try { tx(); } catch (e) { console.error('[reverseLifetimeCommission]', e); }
+}
+
 // Reverse a referral payout when its triggering (first paid) order is fully
 // refunded or cancelled. Without this, the buyer gets their money back AND the
 // referral cash stays in both wallets — a repeatable leak. Idempotent: the
@@ -9423,6 +9533,7 @@ try {
     for (const oid of orderIds) {
       try { awardOrderPoints(oid); }     catch (e) { console.error('[promote.awardOrderPoints]', e); }
       try { creditReferralReward(oid); } catch (e) { console.error('[promote.creditReferralReward]', e); }
+      try { creditLifetimeCommission(oid); } catch (e) { console.error('[promote.creditLifetimeCommission]', e); }
     }
   });
 } catch (e) { console.error('[inventory.setOnOrdersPromoted]', e); }
@@ -9446,6 +9557,13 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
     const n = Number(b.rewardReferee);
     if (!Number.isFinite(n) || n < 0 || n > 10000) return res.status(400).json({ success: false, error: 'bad_reward' });
     writes.push(['affiliate.rewardReferee', Math.round(n * 100) / 100]);
+  }
+  if (b.lifetimeRatePercent !== undefined) {
+    // Percent of each subsequent paid order credited to the referrer. Capped at
+    // 50% — a sane ceiling that also blocks a fat-finger "300" wiping margin.
+    const n = Number(b.lifetimeRatePercent);
+    if (!Number.isFinite(n) || n < 0 || n > 50) return res.status(400).json({ success: false, error: 'bad_lifetime_rate' });
+    writes.push(['affiliate.lifetimeRatePercent', Math.round(n * 100) / 100]);
   }
   if (typeof b.codePrefix === 'string') {
     const p = b.codePrefix.trim().toUpperCase().slice(0, 12);
@@ -14080,6 +14198,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints cancel]', e); }
         try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem cancel]', e); }
         try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral cancel]', e); }
+        try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission cancel]', e); }
       } catch (e) { console.error('[cancel refund bookkeeping]', e); }
     }
   }
@@ -14103,6 +14222,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
+    try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission]', e); }
     try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
     catch (e) { console.error('[inventory.reverse (refund)]', e); }
     // Mirror onto retail_payments for the audit trail.
@@ -14353,6 +14473,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   // A full refund undoes the kept-first-order, so claw back any referral payout.
   if (isFull) {
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
+    try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission]', e); }
   }
   // Full refund flips the order's main status too.
   if (isFull && o.status !== 'refunded' && o.status !== 'cancelled') {
@@ -14612,6 +14733,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
     try { reverseOrderPoints(id); }   catch (e) { console.error('[reverseOrderPoints direct]', e); }
     try { reverseOrderRedeem(id); }   catch (e) { console.error('[reverseOrderRedeem direct]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral direct]', e); }
+    try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission direct]', e); }
     if (o.status !== 'refunded' && o.status !== 'cancelled') {
       tdb().prepare("UPDATE retail_orders SET status = 'refunded' WHERE id = ?").run(id);
     }
