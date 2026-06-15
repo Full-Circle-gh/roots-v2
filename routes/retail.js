@@ -8337,6 +8337,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => {
   const previewLimit = Math.min(Math.max(parseInt(req.query.preview || '8', 10) || 8, 1), 50);
   let low = { count: 0, items: [] };
+  let out_of_stock = { count: 0, items: [] };
   let refunds = { count: 0, items: [] };
   let delivery_alerts = { count: 0, items: [] };
 
@@ -8365,6 +8366,20 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
        ORDER BY stock_qty ASC, p.name_en LIMIT ?
     `).all(lowDefault, previewLimit);
     low = { count: lowCount, items: lowItems };
+
+    const oosCount = tdb().prepare(`
+      SELECT COUNT(*) AS n FROM store_products p
+       WHERE ${REAL_STOCK} = 0
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
+    `).get().n;
+    const oosItems = tdb().prepare(`
+      SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty
+        FROM store_products p
+       WHERE ${REAL_STOCK} = 0
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
+       ORDER BY p.name_en LIMIT ?
+    `).all(previewLimit);
+    out_of_stock = { count: oosCount, items: oosItems };
 
     // Refunds awaiting operator attention. refund_status states:
     //   pending | reviewing | approved | paid | rejected | withdrawn
@@ -8434,7 +8449,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, refunds, delivery_alerts, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.

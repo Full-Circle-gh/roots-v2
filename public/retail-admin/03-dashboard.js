@@ -942,16 +942,34 @@ const BENTO_CATALOGUE = {
   low_stock: {
     title_en: 'Low stock', title_cn: '缺货预警', source: 'ops',
     render: (body, tile) => {
-      const d = (DASH_OPS && DASH_OPS.low_stock) || { count: 0, items: [] };
-      if (!d.count) return body.innerHTML = `<div class="db-tile-num good">0</div><div class="db-tile-sub">All stocked · 库存充足</div>`;
-      if (tile) tile.classList.add('alert');
-      const rows = d.items.slice(0, 6).map(it => `<div class="db-tile-list-row${it.id ? ' is-link' : ''}"${it.id ? ` role="button" tabindex="0" onclick="dashOpenProductFromFeed(${Number(it.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();dashOpenProductFromFeed(${Number(it.id)})}"` : ''}>
-        <span class="name">${escapeHtml(dbProdName(it))}</span>
-        <span class="val">${it.stock_qty}</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-num warn">${d.count}</div>
-        <div class="db-tile-sub">need restock · 件需补货</div>
-        <div class="db-tile-list" style="margin-top:10px">${rows}</div>`;
+      const low = (DASH_OPS && DASH_OPS.low_stock)    || { count: 0, items: [] };
+      const oos = (DASH_OPS && DASH_OPS.out_of_stock) || { count: 0, items: [] };
+      const hasAlert = low.count > 0 || oos.count > 0;
+      if (tile) tile.classList.toggle('alert', hasAlert);
+
+      function renderTab(tab) {
+        const d    = tab === 'oos' ? oos : low;
+        const num  = tab === 'oos' ? oos.count : low.count;
+        const sub  = tab === 'oos' ? 'out of stock · 售罄' : 'need restock · 件需补货';
+        const numCls = num === 0 ? 'good' : 'warn';
+        const rows = d.items.slice(0, 6).map(it => {
+          const link = it.id ? ` role="button" tabindex="0" onclick="dashOpenProductFromFeed(${Number(it.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();dashOpenProductFromFeed(${Number(it.id)})}"` : '';
+          const val  = tab === 'oos' ? '0' : String(it.stock_qty);
+          return `<div class="db-tile-list-row${it.id ? ' is-link' : ''}"${link}><span class="name">${escapeHtml(dbProdName(it))}</span><span class="val">${val}</span></div>`;
+        }).join('');
+        const emptyMsg = tab === 'oos' ? 'All in stock · 无售罄' : 'All stocked · 库存充足';
+        body.innerHTML = `
+          <div class="db-tile-tabs">
+            <button class="db-tile-tab${tab !== 'oos' ? ' active' : ''}" onclick="(function(el){el.closest('.db-tile-body').dataset.tab='low';BENTO_CATALOGUE.low_stock.render(el.closest('.db-tile-body'),el.closest('.db-tile'))})(this)">Low</button>
+            <button class="db-tile-tab${tab === 'oos' ? ' active' : ''}" onclick="(function(el){el.closest('.db-tile-body').dataset.tab='oos';BENTO_CATALOGUE.low_stock.render(el.closest('.db-tile-body'),el.closest('.db-tile'))})(this)">Out of stock</button>
+          </div>
+          <div class="db-tile-num ${numCls}">${num}</div>
+          <div class="db-tile-sub">${num === 0 ? emptyMsg : sub}</div>
+          ${num > 0 ? `<div class="db-tile-list" style="margin-top:10px">${rows}</div>` : ''}`;
+      }
+
+      const currentTab = body.dataset.tab || 'low';
+      renderTab(currentTab);
     },
   },
   refunds: {
