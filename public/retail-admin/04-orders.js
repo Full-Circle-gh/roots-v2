@@ -1276,7 +1276,7 @@ function deliveryStateInfo(o) {
   // Good / in-flight states.
   if (st === 'delivered')        return { icon: 'check', en: 'Delivered',             cn: '已签收',       color: '#5a8c2a', tone: 'ok' };
   if (st === 'out_for_delivery' || sc === 'out_for_delivery')
-                                 return { icon: 'van',    en: 'Out for delivery',      cn: '派送中',       color: '#6b7280', tone: 'transit' };
+                                 return { icon: 'courier', en: 'Out for delivery',     cn: '派送中',       color: '#1d72b8', tone: 'transit' };
   if (st === 'in_transit')       return { icon: 'transit', en: 'In transit',          cn: '运输中',       color: '#9aa0a6', tone: 'transit' };
   if (st === 'picked_up')        return { icon: 'inbox',  en: 'Picked up',            cn: '已揽收',       color: '#9aa0a6', tone: 'transit' };
   return null;
@@ -1289,6 +1289,9 @@ function deliveryStateInfo(o) {
 // the urgent states pick up their red and the transit states their grey.
 const DELIVERY_ICON_PATHS = {
   van:       '<path d="M3 7h9v8H3z"/><path d="M12 10h3.5L19 13v2h-7"/><circle cx="7" cy="16.5" r="1.4"/><circle cx="15.5" cy="16.5" r="1.4"/>',
+  // Out for delivery — a courier walking with a parcel in hand, so the office
+  // reads "it's with the delivery person right now" at a glance (not a truck).
+  courier:   '<circle cx="7" cy="3.8" r="2"/><path d="M7 5.8v6.4"/><path d="M7 12.2l-2.2 5"/><path d="M7 12.2l2.4 4.6"/><path d="M7 8.2l3.4 1.3"/><rect x="10.4" y="8.3" width="6.4" height="6.2" rx="0.7"/><path d="M10.4 11.4h6.4"/><path d="M13.6 8.3v6.2"/>',
   transit:   '<rect x="6" y="7" width="11" height="10" rx="1"/><path d="M6 11h11"/><path d="M2 9.5h2.5"/><path d="M1.5 13h3"/>',
   inbox:     '<path d="M5 12v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/><path d="M5 12h4l1 2h4l1-2h4"/><path d="M12 3v6"/><path d="M9 6l3 3 3-3"/>',
   check:     '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9"/>',
