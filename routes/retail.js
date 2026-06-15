@@ -13869,8 +13869,8 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   const vloumn  = Number(req.body?.vloumn) > 0 ? Number(req.body.vloumn) : 100;  // cm³
 
   // JD deduplicates on orderId — a cancelled+retried label needs a fresh ID.
-  const prevAttempts = tdb().prepare(
-    "SELECT COUNT(*) AS n FROM retail_activity_log WHERE entity_type = 'retail_order' AND entity_id = ? AND action = 'jd_waybill_created'"
+  const prevAttempts = db.prepare(
+    "SELECT COUNT(*) AS n FROM activity_log WHERE entity_type = 'retail_order' AND entity_id = ? AND action = 'jd_waybill_created'"
   ).get(id)?.n || 0;
   const jdOrderId = prevAttempts > 0 ? `${o.order_no}-${prevAttempts + 1}` : o.order_no;
 
