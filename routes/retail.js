@@ -12190,7 +12190,16 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   // partial-fulfillment feature existed: the old whole-order status flip never
   // stamped individual shipments, so without this they'd show "Not shipped"
   // and lose their tracking card. Idempotent (COALESCE keeps existing stamps).
-  if (['dispatched', 'delivered'].includes(o.status) && shipmentRows.some(s => !s.dispatched_at)) {
+  //
+  // FOOTGUN: fire ONLY when NO parcel carries a stamp — the true legacy
+  // signature (whole-order flip that never touched shipments). A dispatched
+  // order with SOME parcels stamped and some not is a deliberate PARTIAL
+  // shipment (one parcel got a waybill / per-parcel dispatch, the rest — e.g. a
+  // fresh-food parcel made later — are still pending). Back-filling those would
+  // clobber the un-shipped parcels to "dispatched", killing the "Partially
+  // shipped" pill + the customer's "rest to follow" banner. Leave them alone.
+  if (['dispatched', 'delivered'].includes(o.status)
+      && shipmentRows.length && shipmentRows.every(s => !s.dispatched_at)) {
     tdb().prepare(
       "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, ?) WHERE order_id = ?"
     ).run(o.dispatched_at || o.updated_at || new Date().toISOString(), id);
