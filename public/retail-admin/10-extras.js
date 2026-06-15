@@ -1697,3 +1697,71 @@ window.onLangChange(function () {
     if (b) b.click();
   } catch (e) {}
 })();
+
+// ════════════════════════════════════════════════════════════════
+// "New version available" banner — versionWatch
+// The backend shell is served no-store and registers no service worker, so a
+// plain reload always pulls fresh JS — but operators keep this tab open for
+// hours and otherwise never know a new build shipped. We poll /api/version
+// (a token that changes on every deploy / restart) and, when it differs from
+// what the page booted with, slide up a Reload banner. Button only: we never
+// auto-reload, so an operator mid-edit in a drawer is never interrupted.
+// ════════════════════════════════════════════════════════════════
+(function versionWatch() {
+  let bootVersion = null;     // token the page loaded with
+  let latestSeen = null;      // most recent token returned by the server
+  let dismissedFor = null;    // token the operator dismissed (suppress until a newer one)
+  let banner = null;
+
+  async function fetchVersion() {
+    try {
+      const r = await fetch('/api/version', { cache: 'no-store' }).then(r => r.json());
+      return r && r.success ? r.version : null;
+    } catch { return null; }
+  }
+
+  function label(en, cn) {
+    return (typeof cuT === 'function') ? cuT(en, cn) : en;
+  }
+
+  function syncText() {
+    if (!banner) return;
+    banner.querySelector('.vb-text').textContent   = label('A new version is available', '有新版本可用');
+    banner.querySelector('.vb-reload').textContent = label('Reload', '刷新');
+  }
+
+  function showBanner() {
+    if (banner) { banner.classList.add('show'); return; }
+    banner = document.createElement('div');
+    banner.id = 'version-banner';
+    banner.setAttribute('role', 'status');
+    banner.innerHTML =
+      '<span class="vb-text"></span>' +
+      '<button class="vb-reload" type="button"></button>' +
+      '<button class="vb-close" type="button" aria-label="Dismiss" data-i18n-skip>✕</button>';
+    document.body.appendChild(banner);
+    syncText();
+    banner.querySelector('.vb-reload').onclick = () => location.reload();
+    banner.querySelector('.vb-close').onclick  = () => {
+      dismissedFor = latestSeen;   // suppress until an even newer version appears
+      banner.classList.remove('show');
+    };
+    // Keep the banner's wording correct if the operator flips EN/中文 while it's up.
+    if (typeof onLangChange === 'function') onLangChange(syncText);
+    requestAnimationFrame(() => banner.classList.add('show'));
+  }
+
+  async function check() {
+    const v = await fetchVersion();
+    if (!v) return;
+    latestSeen = v;
+    if (bootVersion === null) { bootVersion = v; return; }   // first read = baseline
+    if (v !== bootVersion && dismissedFor !== v) showBanner();
+  }
+
+  check();                              // establish baseline on load
+  setInterval(check, 5 * 60 * 1000);    // re-check every 5 minutes
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') check();   // and whenever the tab is refocused
+  });
+})();

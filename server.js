@@ -504,15 +504,21 @@ app.get('/health', (req, res) => {
 // also nudges connected clients to refresh.
 const fsCore = require('fs');
 const APP_HTML_PATH = path.join(__dirname, 'public', 'app.html');
+const RETAIL_ADMIN_HTML_PATH = path.join(__dirname, 'public', 'retail-admin.html');
 const SERVER_BOOT_MS = Date.now();
 app.get('/api/version', (req, res) => {
-  let appMtime = 0;
+  let appMtime = 0, adminMtime = 0;
   try { appMtime = fsCore.statSync(APP_HTML_PATH).mtimeMs | 0; } catch {}
-  // version = appHtmlMtime-bootEpoch — changes on file replace OR pm2 restart.
+  try { adminMtime = fsCore.statSync(RETAIL_ADMIN_HTML_PATH).mtimeMs | 0; } catch {}
+  // version = appHtmlMtime-retailAdminMtime-bootEpoch — changes when either
+  // shell is replaced OR on a pm2 restart. The Mini App Backend (retail-admin)
+  // polls this same token so a backend-only edit still nudges operators to
+  // reload, even if the deploy didn't restart the process.
   res.json({
     success: true,
-    version: `${appMtime}-${SERVER_BOOT_MS|0}`,
+    version: `${appMtime}-${adminMtime}-${SERVER_BOOT_MS|0}`,
     app_mtime: appMtime,
+    retail_admin_mtime: adminMtime,
     server_boot: SERVER_BOOT_MS,
   });
 });

@@ -1297,6 +1297,8 @@ const DELIVERY_ICON_PATHS = {
   uturn:     '<path d="M9 7H6a4 4 0 1 0 0 8h9"/><path d="M12 4 9 7l3 3"/>',
   store:     '<path d="M4 9v10h16V9"/><path d="M3 5h18l-1.2 4H4.2L3 5z"/><path d="M9 19v-5h6v5"/>',
   locker:    '<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M12 3v18"/><path d="M8.5 7.5h.6"/><path d="M14.9 7.5h.6"/>',
+  // Same-city local delivery — a moped/scooter (replaces the 🛵 emoji).
+  scooter:   '<circle cx="6" cy="17" r="2.3"/><circle cx="18" cy="17" r="2.3"/><path d="M8.2 17h7.6l-2.3-7H11"/><path d="M13.5 10l1.3-3H17"/><path d="M4.5 13h3.2l1.6 4"/>',
 };
 function deliveryIcon(key, size = 12) {
   const p = DELIVERY_ICON_PATHS[key];
