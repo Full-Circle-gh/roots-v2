@@ -237,11 +237,18 @@ function categoryOf(p) {
   const s = ((p.name_en || '') + ' ' + (p.name_cn || '') + ' ' +
              (p.category || '') + ' ' + (p.subcategory || '')).toLowerCase();
   const has = (...words) => words.some(w => s.includes(w));
-  // Non-food first — cleaning / homeware must NOT get taste/freshness copy.
-  // (Checked before produce so "Fruit & Vegetable Wash" reads as household.)
+  // Non-food first — cleaning / homeware / personal-care must NOT get
+  // taste/freshness copy. (Checked before produce + pantry so e.g. "Fruit &
+  // Vegetable Wash" and "Tinted Lip Oil" don't read as food.)
   if (has('wash', 'cleaner', 'cleaning', 'stain', 'remover', 'detergent', 'soap',
           'sponge', 'laundry', 'wipe', 'scrub', 'disinfect', 'sanitiz', 'dish ',
-          '清洁', '洗洁', '洗衣', '去渍', '消毒', '清洗', '抹布', '海绵')) return 'household';
+          '清洁', '洗洁', '洗衣', '去渍', '消毒', '清洗', '抹布', '海绵',
+          // personal care / cosmetics (a lip oil isn't "tasty" or "fresh")
+          'lip', 'balm', 'lotion', 'shampoo', 'conditioner', 'serum', 'deodorant',
+          'toothpaste', 'toothbrush', 'sunscreen', 'moistur', 'cosmetic', 'makeup',
+          'tinted', 'perfume', 'fragrance', 'skincare', 'shower gel',
+          '唇', '护肤', '洗发', '护发', '面霜', '精华', '牙膏', '牙刷', '沐浴',
+          '身体乳', '香水', '化妆', '防晒')) return 'household';
   if (has('soup', '汤', 'curry', '咖喱', 'congee', '粥', 'broth', 'stew', '炖')) return 'soup';
   if (has('milk', '奶', 'yogurt', '酸奶', 'cream', 'cheese', '芝士', 'butter', '黄油', 'drink', '饮')) return 'milk';
   if (has('meat', '肉', 'beef', '牛', 'pork', '猪', 'chicken', '鸡', 'fish', '鱼', 'seafood', '海鲜', 'prawn', '虾', 'lamb', '羊')) return 'meat';
