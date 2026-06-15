@@ -990,63 +990,150 @@ function parseSchedFor(s) {
   const v = String(s == null ? '' : s);
   return new Date(/[TZ]/.test(v) ? v : v.replace(' ', 'T') + 'Z');
 }
-function renderShipByCell(o) {
-  const actionable = (o.status === 'paid' || o.status === 'preparing');
+// ── Ship-by: ONE decision shared by the orders-list cell, the drawer tile,
+// AND the printed receipt / packing slip (the print side mirrors this in
+// lib/feie.js shipByPrintLine() — keep the two in sync). Rule: the MOST
+// CONCRETE fact wins, and whenever a real date exists we show that DATE,
+// never a vague "ASAP".
+//   1 pickup     → counter window
+//   2 batch      → arrival date is the headline; made-fresh ship date below
+//   3 scheduled  → customer-chosen delivery slot / date
+//   4 deadline   → out-of-city express: paid + expressDispatchHours, no date
+//   5 ship now   → nothing chosen
+// "Ship by" is a future deadline — once an order ships/closes it reads wrong,
+// so closed orders relabel the kicker as "Requested timing".
+function shipByPlan(o) {
+  const done = (o.status === 'dispatched' || o.status === 'delivered'
+    || o.status === 'cancelled' || o.status === 'refunded');
+  const reqEn = 'Requested timing', reqCn = '要求时间';
+  // 1 — Pickup: show the counter window, never a ship deadline.
   if (o.fulfillment_type === 'pickup') {
-    const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label)) || cuT('ASAP', '尽快');
-    return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-1)'}; line-height: 1.3;">${pickupIcon(12)} ${escapeHtml(label)}</div>
-            <div class="muted" style="font-size: 10px; margin-top: 2px;">${cuT('pickup', '自提')}</div>`;
+    const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
+      || (o.scheduled_for ? localizeSlotLabel(humanizeSlotLabel(o.scheduled_for)) : null);
+    return {
+      kind: 'pickup', icon: 'pickup',
+      kickerEn: 'Pickup time', kickerCn: '取货时间',
+      headlineRaw: label, headlineEn: 'During pickup hours', headlineCn: '营业时间内自取',
+      subEn: 'Have ready at counter', subCn: '备好待取',
+      cellSubEn: 'pickup', cellSubCn: '自提',
+      urgencyDate: o.scheduled_for || null, urgencyBasis: 'arrival',
+    };
   }
-  // Out-of-GZ "as soon as possible" order (Express / no specific date chosen):
-  // the server stripped the misleading earliest-day date and gave us a real
-  // send-by deadline (paid + 48h). Show "ASAP · send by <deadline>" instead.
+  // 2 — Fresh batch: the kitchen makes a new batch on promised_ship_date and it
+  // arrives ~promised_delivery_date. The ARRIVAL date is the headline; the
+  // make-fresh ship date sits below so a packer can't ship early off the shelf.
+  if (o.promised_ship_date) {
+    const arr = o.promised_delivery_date || o.promised_ship_date;
+    return {
+      kind: 'batch',
+      kickerEn: done ? reqEn : 'Est. arrival', kickerCn: done ? reqCn : '预计送达',
+      headlineEn: `~ ${arr}`, headlineCn: `约 ${arr}`,
+      subEn: `🥗 made fresh · ships ${o.promised_ship_date}`,
+      subCn: `🥗 现做 · ${o.promised_ship_date} 发货`,
+      cellSubEn: `made fresh · ships ${o.promised_ship_date}`,
+      cellSubCn: `现做 · ${o.promised_ship_date} 发货`,
+      urgencyDate: arr, urgencyBasis: 'arrival',
+    };
+  }
+  // 4 — Out-of-city express: the server tagged a paid + expressDispatchHours
+  // send-by deadline. Show the deadline DATE (no false-precise minute); if it
+  // couldn't compute one, fall through to "ship now".
   if (o.ship_by_mode === 'asap') {
-    const dl    = o.dispatch_deadline ? parseSchedFor(o.dispatch_deadline) : null;
-    const valid = dl && !isNaN(dl.getTime());
-    const hrs   = valid ? (dl.getTime() - Date.now()) / 3600000 : null;
-    let c = actionable ? 'var(--warn)' : 'var(--text-3)';
-    let tail = '';
-    if (actionable && hrs !== null) {
-      if (hrs < 0)        { c = 'var(--danger)'; tail = ` · <b>${cuT('OVERDUE', '已逾期')}</b>`; }
-      else if (hrs < 12)  { c = 'var(--danger)'; }
-      else if (hrs < 24)  { c = 'var(--warn)'; }
-      else                { c = 'var(--text-1)'; }
+    const dl = o.dispatch_deadline ? parseSchedFor(o.dispatch_deadline) : null;
+    if (dl && !isNaN(dl.getTime())) {
+      return {
+        kind: 'deadline',
+        kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
+        headlineRaw: fmtDateShort(dl),
+        subEn: 'send as soon as ready', subCn: '尽快发出',
+        urgencyDate: o.dispatch_deadline, urgencyBasis: 'deadline',
+      };
     }
-    const sub = valid
-      ? `${cuT('latest', '最迟')} ${fmtSlotShort(dl)}${tail}`
-      : cuT('as soon as possible', '尽快发出');
-    return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${cuT('ASAP', '尽快')}</div>
-            <div style="font-size: 10px; margin-top: 2px; color: ${valid ? c : 'var(--text-3)'};">${sub}</div>`;
+    return {
+      kind: 'ship_now',
+      kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
+      headlineEn: 'Ship now', headlineCn: '立即发货',
+      subEn: 'no fixed date', subCn: '无固定日期',
+      urgencyDate: null, urgencyBasis: null,
+    };
   }
-  const isAsap     = !o.scheduled_for;
-  if (isAsap) {
-    return `<div style="font-size: 12px; font-weight: 600; color: ${actionable ? 'var(--warn)' : 'var(--text-3)'};">${cuT('ASAP', '尽快')}</div>
-            <div class="muted" style="font-size: 10px; margin-top: 2px;">${cuT('no slot picked', '未选时段')}</div>`;
+  // 5 — Nothing scheduled and not tagged → nothing picked, send when ready.
+  if (!o.scheduled_for) {
+    return {
+      kind: 'ship_now',
+      kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
+      headlineEn: 'Ship now', headlineCn: '立即发货',
+      subEn: 'no slot picked', subCn: '未选时段',
+      urgencyDate: null, urgencyBasis: null,
+    };
   }
-  // Parse "YYYY-MM-DD HH:MM:SS" (UTC from SQLite) or a full ISO string → local
+  // 3 — Customer-scheduled delivery date / slot. Some orders saved an ISO
+  // timestamp into delivery_slot_label; humanizeSlotLabel rewrites those so the
+  // operator never sees raw ISO.
   const dt = parseSchedFor(o.scheduled_for);
   const valid = !isNaN(dt.getTime());
-  const now = Date.now();
-  const hrsUntil = valid ? (dt.getTime() - now) / 3600000 : null;
-
-  let color = 'var(--text-1)';
-  let badge = '';
-  if (actionable && hrsUntil !== null) {
-    if (hrsUntil < 0)        { color = 'var(--danger)'; badge = ` · <b>${cuT('OVERDUE','已逾期')}</b>`; }
-    else if (hrsUntil < 6)   { color = 'var(--danger)'; badge = ` · ${cuT('today','今天')}`; }
-    else if (hrsUntil < 24)  { color = 'var(--warn)';   badge = ` · ${cuT('today','今天')}`; }
-    else if (hrsUntil < 48)  { color = 'var(--warn)';   badge = ` · ${cuT('tomorrow','明天')}`; }
-  }
-  // Some orders saved an ISO timestamp into delivery_slot_label (rather
-  // than a human "May 25 11am"). humanizeSlotLabel rewrites those before
-  // they hit the cell so we never show raw ISO to the operator.
-  const rawLabel = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
-    || (valid ? fmtSlotShort(dt) : escapeHtml(String(o.scheduled_for)));
+  const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
+    || (valid ? fmtSlotShort(dt) : String(o.scheduled_for));
+  // If the human label isn't itself the date, surface the date as a sub-line.
   const dateLine = valid ? fmtSlotShort(dt) : '';
+  return {
+    kind: 'scheduled',
+    kickerEn: done ? reqEn : 'Deliver', kickerCn: done ? reqCn : '送达',
+    headlineRaw: label,
+    cellSubRaw: (label !== dateLine && dateLine) ? dateLine : null,
+    urgencyDate: o.scheduled_for, urgencyBasis: 'arrival',
+  };
+}
+
+// Time-relative colour + urgency level for a plan, computed at render time
+// from the operator's clock. level ∈ overdue|urgent|soon|today|tomorrow|later.
+function shipByUrgency(p, actionable) {
+  const r = { color: actionable ? 'var(--warn)' : 'var(--text-1)', level: 'none', hrs: null };
+  if (!p.urgencyDate || !p.urgencyBasis) {
+    r.color = actionable ? 'var(--warn)' : 'var(--text-3)';
+    return r;
+  }
+  const d = parseSchedFor(p.urgencyDate);
+  if (isNaN(d.getTime())) { r.color = actionable ? 'var(--warn)' : 'var(--text-1)'; return r; }
+  const hrs = (d.getTime() - Date.now()) / 3600000;
+  r.hrs = hrs;
+  const danger = 'var(--danger)', warn = 'var(--warn)', plain = 'var(--text-1)';
+  if (p.urgencyBasis === 'deadline') {
+    if (hrs < 0)        { r.level = 'overdue'; if (actionable) r.color = danger; }
+    else if (hrs < 12)  { r.level = 'urgent';  if (actionable) r.color = danger; }
+    else if (hrs < 24)  { r.level = 'soon';    if (actionable) r.color = warn; }
+    else                { r.level = 'later';   r.color = plain; }
+  } else { // arrival
+    if (hrs < 0)        { r.level = 'overdue';  if (actionable) r.color = danger; }
+    else if (hrs < 6)   { r.level = 'today';    if (actionable) r.color = danger; }
+    else if (hrs < 24)  { r.level = 'today';    if (actionable) r.color = warn; }
+    else if (hrs < 48)  { r.level = 'tomorrow'; if (actionable) r.color = warn; }
+    else                { r.level = 'later';    r.color = plain; }
+  }
+  if (!actionable) r.color = plain;
+  return r;
+}
+
+function renderShipByCell(o) {
+  const actionable = (o.status === 'paid' || o.status === 'preparing');
+  const p = shipByPlan(o);
+  const u = shipByUrgency(p, actionable);
+  const headline = (p.headlineRaw != null && p.headlineRaw !== '')
+    ? escapeHtml(p.headlineRaw)
+    : cuT(p.headlineEn, p.headlineCn);
+  // Short urgency tag on the sub-line.
+  let tag = '';
+  if (u.level === 'overdue')       tag = ` · <b>${cuT('OVERDUE', '已逾期')}</b>`;
+  else if (u.level === 'today')    tag = ` · ${cuT('today', '今天')}`;
+  else if (u.level === 'tomorrow') tag = ` · ${cuT('tomorrow', '明天')}`;
+  const subText = (p.cellSubRaw != null && p.cellSubRaw !== '') ? escapeHtml(p.cellSubRaw)
+    : (p.cellSubEn != null) ? cuT(p.cellSubEn, p.cellSubCn)
+    : (p.subEn != null) ? cuT(p.subEn, p.subCn) : '';
+  const icon = p.icon === 'pickup' ? `${pickupIcon(12)} ` : '';
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
     ? ` <span style="font-size: 10px; color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day','当日')}</span>` : '';
-  return `<div style="font-size: 12px; font-weight: 600; color: ${color}; line-height: 1.3;">${escapeHtml(rawLabel)}${badge}</div>
-          ${(rawLabel !== dateLine && dateLine) ? `<div class="muted" style="font-size: 10px; margin-top: 2px; font-family: var(--f-mono);">${dateLine}</div>` : ''}
+  return `<div style="font-size: 12px; font-weight: 600; color: ${u.color}; line-height: 1.3;">${icon}${headline}</div>
+          ${(subText || tag) ? `<div style="font-size: 10px; margin-top: 2px; color: var(--text-3);">${subText}${tag}</div>` : ''}
           ${surcharge}`;
 }
 function fmtSlotShort(dt) {
@@ -1057,6 +1144,15 @@ function fmtSlotShort(dt) {
   }
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
   return `${M} ${pad(dt.getDate())} · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+// Date only — "Jun 17" / "6月17日". A ship-by DEADLINE is a day, not a minute,
+// so we drop the time tail that fmtSlotShort carries.
+function fmtDateShort(dt) {
+  if (typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn') {
+    return `${dt.getMonth() + 1}月${dt.getDate()}日`;
+  }
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
+  return `${M} ${String(dt.getDate()).padStart(2, '0')}`;
 }
 // The customer's delivery_slot_label is stored as free text in WHATEVER language
 // they checked out in (e.g. "Today 10AM–12PM", "Thu Jun 25 2026", "ASAP") — the
@@ -1163,93 +1259,40 @@ function fulfillmentShortNote(o) {
     + `<div style="font-weight:600; color: var(--text-2); margin-top:2px;">${escapeHtml(names.join('、'))}</div>`
     + `</div>`;
 }
-// Full-size "Ship by" tile shown in the order-detail card grid. Mirrors the
-// urgency colour scheme of the list-row cell but with more context (date,
-// mode, surcharge note).
-// "Ship by" is a future deadline — once an order has shipped or closed it
-// reads wrong, so relabel it as the timing the customer originally requested.
-function shipByKicker(o) {
-  const done = (o.status === 'dispatched' || o.status === 'delivered'
-    || o.status === 'cancelled' || o.status === 'refunded');
-  return done ? 'Requested timing · 要求时间' : 'Ship by · 截止发货';
-}
+// Full-size "Ship by" tile shown in the order-detail card grid. Same decision
+// (shipByPlan) and urgency scheme as the list cell, with more context: the
+// kicker, a verbose urgency badge, the made-fresh / no-slot sub-line, and the
+// delivery mode + same-day surcharge note.
 function renderShipByTile(o) {
   const actionable = (o.status === 'paid' || o.status === 'preparing');
-  // Fresh batch-made order (outside-GZ): the kitchen must make a new batch on
-  // this exact day, then ship same-day. Surfaced so the packer doesn't ship
-  // early off the shelf.
-  const batchSub = o.promised_ship_date
-    ? `<div class="sub" style="color: var(--warn); font-weight: 600;">${cuT(`🥗 Make fresh on ${escapeHtml(o.promised_ship_date)} → arrives ~${escapeHtml(o.promised_delivery_date || '')}`, `🥗 ${escapeHtml(o.promised_ship_date)} 当天现做 → 约 ${escapeHtml(o.promised_delivery_date || '')} 送达`)}</div>`
-    : '';
-  // Pickup orders have no "ship by" deadline — show the customer-chosen pickup
-  // window instead so staff know when to have it ready at the counter.
-  if (o.fulfillment_type === 'pickup') {
-    const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
-      || (o.scheduled_for ? localizeSlotLabel(humanizeSlotLabel(o.scheduled_for)) : cuT('During pickup hours', '营业时间内自取'));
-    return `<div>
-      <div class="kicker">Pickup time · 取货时间</div>
-      <div class="val" data-no-i18n><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${escapeHtml(label)}</b></div>
-      <div class="sub">Have ready at counter · 备好待取</div>
-    </div>`;
-  }
-  // Out-of-GZ "as soon as possible" order — show the send-by deadline tile
-  // (paid + 48h) rather than the misleading system earliest-day date.
-  if (o.ship_by_mode === 'asap') {
-    const dl    = o.dispatch_deadline ? parseSchedFor(o.dispatch_deadline) : null;
-    const valid = dl && !isNaN(dl.getTime());
-    const hrs   = valid ? (dl.getTime() - Date.now()) / 3600000 : null;
-    let color = actionable ? 'var(--warn)' : 'var(--text-1)';
-    let urg = '';
-    if (actionable && hrs !== null) {
-      if (hrs < 0)        { color = 'var(--danger)'; urg = cuT('⚠ OVERDUE', '⚠ 已逾期'); }
-      else if (hrs < 12)  { color = 'var(--danger)'; urg = cuT(`⚠ in ${Math.round(hrs)}h`, `⚠ ${Math.round(hrs)}小时内`); }
-      else if (hrs < 24)  { color = 'var(--warn)';   urg = cuT(`${Math.round(hrs)}h left`, `剩 ${Math.round(hrs)}小时`); }
-    }
-    const deadlineLine = valid
-      ? `<div class="sub" style="color: ${color}; font-weight: 600;">${cuT('Latest', '最迟')} ${fmtSlotShort(dl)}${urg ? ' · ' + urg : ''}</div>`
-      : `<div class="sub">${cuT('No fixed date — ship as soon as possible', '无固定日期 — 尽快发货')}</div>`;
-    return `<div>
-      <div class="kicker">${shipByKicker(o)}</div>
-      <div class="val"><b style="color: ${color};">${cuT('As soon as possible', '越快越好')}</b></div>
-      ${deadlineLine}
-      ${batchSub}
-    </div>`;
-  }
-  const isAsap = !o.scheduled_for;
+  const p = shipByPlan(o);
+  const u = shipByUrgency(p, actionable);
+  const usingRaw = (p.headlineRaw != null && p.headlineRaw !== '');
+  const headline = usingRaw ? escapeHtml(p.headlineRaw) : cuT(p.headlineEn, p.headlineCn);
+  // Verbose urgency badge after the headline.
+  const h = u.hrs;
+  let badge = '';
+  if (u.level === 'overdue')       badge = cuT('⚠ OVERDUE', '⚠ 已逾期');
+  else if (u.level === 'urgent')   badge = cuT(`⚠ in ${Math.round(h)}h`, `⚠ ${Math.round(h)}小时内`);
+  else if (u.level === 'soon')     badge = cuT(`${Math.round(h)}h left`, `剩 ${Math.round(h)}小时`);
+  else if (u.level === 'today')    badge = h < 6 ? cuT(`⚠ in ${Math.round(h)}h`, `⚠ ${Math.round(h)}小时内`) : cuT(`today (${Math.round(h)}h)`, `今天 (${Math.round(h)}小时)`);
+  else if (u.level === 'tomorrow') badge = cuT('tomorrow', '明天');
+  else if (u.level === 'later' && h != null && p.urgencyBasis === 'arrival') badge = cuT(`in ${Math.round(h / 24)}d`, `${Math.round(h / 24)}天后`);
+  const badgeHtml = badge ? ` <span style="font-size: 11px; color: ${u.color}; font-weight: 600;">· ${badge}</span>` : '';
+  // Primary sub-line (made-fresh note / no-slot reason). Batch is highlighted.
+  const subMain = p.subEn != null ? cuT(p.subEn, p.subCn) : '';
+  const subLine = subMain
+    ? `<div class="sub"${p.kind === 'batch' ? ' style="color: var(--warn); font-weight: 600;"' : ''}>${subMain}</div>` : '';
+  // Order-level facts: delivery mode + same-day surcharge.
   const mode = deliveryModeNote(o.delivery_mode);
-  if (isAsap) {
-    return `<div>
-      <div class="kicker">${shipByKicker(o)}</div>
-      <div class="val"><b style="color: ${actionable ? 'var(--warn)' : 'var(--text-1)'};">${cuT('ASAP / Right away', '尽快 / 立即')}</b></div>
-      <div class="sub">${cuT('No slot picked', '未选时段')}${mode ? ' · ' + mode : ''}</div>
-      ${batchSub}
-    </div>`;
-  }
-  const dt = parseSchedFor(o.scheduled_for);
-  const valid = !isNaN(dt.getTime());
-  const hrsUntil = valid ? (dt.getTime() - Date.now()) / 3600000 : null;
-  let color = 'var(--text-1)';
-  let urgencyLabel = '';
-  if (actionable && hrsUntil !== null) {
-    if (hrsUntil < 0)        { color = 'var(--danger)'; urgencyLabel = cuT('⚠ OVERDUE', '⚠ 已逾期'); }
-    else if (hrsUntil < 6)   { color = 'var(--danger)'; urgencyLabel = cuT(`⚠ in ${Math.round(hrsUntil)}h`, `⚠ ${Math.round(hrsUntil)}小时内`); }
-    else if (hrsUntil < 24)  { color = 'var(--warn)';   urgencyLabel = cuT(`today (${Math.round(hrsUntil)}h)`, `今天 (${Math.round(hrsUntil)}小时)`); }
-    else if (hrsUntil < 48)  { color = 'var(--warn)';   urgencyLabel = cuT('tomorrow', '明天'); }
-    else                     { urgencyLabel = cuT(`in ${Math.round(hrsUntil / 24)}d`, `${Math.round(hrsUntil / 24)}天后`); }
-  } else if (hrsUntil !== null) {
-    urgencyLabel = hrsUntil < 0 ? cuT('past', '已过期') : (hrsUntil < 24 ? cuT('within 24h', '24小时内') : cuT(`in ${Math.round(hrsUntil / 24)}d`, `${Math.round(hrsUntil / 24)}天后`));
-  }
-  const fullIso = valid ? fmtSlotShort(dt) : escapeHtml(String(o.scheduled_for));
-  // Humanize any ISO-shaped label so the tile never reads as
-  // "2026-05-20T08:00:00.000Z · mode: standard".
-  const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label)) || fullIso;
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
-    ? ` · <span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
+    ? `${mode ? ' · ' : ''}<span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
+  const modeLine = (mode || surcharge) ? `<div class="sub">${mode}${surcharge}</div>` : '';
   return `<div>
-    <div class="kicker">${shipByKicker(o)}</div>
-    <div class="val" data-no-i18n><b style="color: ${color};">${escapeHtml(label)}</b>${urgencyLabel ? ` <span style="font-size: 11px; color: ${color}; font-weight: 600;">· ${urgencyLabel}</span>` : ''}</div>
-    <div class="sub">${mode}${surcharge}</div>
-    ${batchSub}
+    <div class="kicker">${cuT(p.kickerEn, p.kickerCn)}</div>
+    <div class="val"${usingRaw ? ' data-no-i18n' : ''}><b style="color: ${u.color};">${headline}</b>${badgeHtml}</div>
+    ${subLine}
+    ${modeLine}
   </div>`;
 }
 
@@ -2987,17 +3030,18 @@ async function resubscribeTracking(orderId, shipmentId, ev) {
 // The three real JD services Roots ships with. The operator picks one when
 // creating a label — a parcel's mode (air/land) and whether it holds a
 // fresh (ice-pack) item only PRE-SELECT the likely choice; staff can override.
-//   LL-HD-M  冷链航空  fresh · air      (生鲜 · 空运)
-//   LL-SD-M  冷链陆运  fresh · ground   (生鲜 · 陆运)
-//   ed-m-0001 京东标快 ambient · ground (普通 · 陆运)
+// Codes verified against JD's printed 时效产品 (2026-06-15):
+//   LL-SD-M   生鲜特快  fresh · air      (生鲜 · 空运)
+//   LL-HD-M   生鲜标快  fresh · ground   (生鲜 · 陆运)  ← confirmed on JDVC36827541911
+//   ed-m-0001 京东标快  ambient · ground (普通 · 陆运)
 const JD_SERVICES = [
-  { code: 'LL-HD-M',   en: 'Fresh · Air',     cn: '生鲜 · 空运', sub: '冷链航空 · LL-HD-M' },
-  { code: 'LL-SD-M',   en: 'Fresh · Ground',  cn: '生鲜 · 陆运', sub: '冷链陆运 · LL-SD-M' },
+  { code: 'LL-SD-M',   en: 'Fresh · Air',     cn: '生鲜 · 空运', sub: '生鲜特快 · LL-SD-M' },
+  { code: 'LL-HD-M',   en: 'Fresh · Ground',  cn: '生鲜 · 陆运', sub: '生鲜标快 · LL-HD-M' },
   { code: 'ed-m-0001', en: 'Ambient · Ground',cn: '普通 · 陆运', sub: '京东标快 · ed-m-0001' },
 ];
 function jdSuggestedService(mode, isFresh) {
-  if (mode === 'air') return 'LL-HD-M';          // air is always cold-chain here
-  return isFresh ? 'LL-SD-M' : 'ed-m-0001';      // ground splits by fresh flag
+  if (mode === 'air') return 'LL-SD-M';          // air = fresh express (生鲜特快)
+  return isFresh ? 'LL-HD-M' : 'ed-m-0001';      // ground splits by fresh flag
 }
 
 // Pop the service chooser, then create the JD waybill with the picked product.

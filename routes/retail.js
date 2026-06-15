@@ -14071,15 +14071,15 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   }
 
   // JD 时效产品 — the operator picks one of three real services in the drawer
-  // and we pass its code here:
-  //   LL-HD-M  冷链航空  fresh by air   (生鲜 · 空运)
-  //   LL-SD-M  冷链陆运  fresh by ground(生鲜 · 陆运)
-  //   ed-m-0001 京东标快 ground, ambient(普通 · 陆运)
+  // and we pass its code here. Codes verified against JD's printed 时效产品:
+  //   LL-SD-M   生鲜特快  fresh by air    (生鲜 · 空运)
+  //   LL-HD-M   生鲜标快  fresh by ground (生鲜 · 陆运)
+  //   ed-m-0001 京东标快  ground, ambient (普通 · 陆运)
   // (ed-m-0002 京东特快 = ambient express — Roots ships fresh by air, so it's
   // not offered, but still accepted if explicitly sent.) Fallback when the
-  // caller sends nothing: air → fresh-air, land/local → ambient ground.
+  // caller sends nothing: air → fresh-express, land/local → ambient ground.
   const JD_ALLOWED = new Set(['LL-HD-M', 'LL-SD-M', 'ed-m-0001', 'ed-m-0002']);
-  const JD_DEFAULT_BY_MODE = { air: 'LL-HD-M', land: 'ed-m-0001', local: 'ed-m-0001' };
+  const JD_DEFAULT_BY_MODE = { air: 'LL-SD-M', land: 'ed-m-0001', local: 'ed-m-0001' };
   const reqProduct = req.body?.product != null ? String(req.body.product) : '';
   if (reqProduct && !JD_ALLOWED.has(reqProduct)) {
     return res.status(400).json({ success: false, error: 'invalid_jd_product', product: reqProduct });
