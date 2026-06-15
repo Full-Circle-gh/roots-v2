@@ -4342,6 +4342,17 @@
   .shipment-card.mode-air,
   .shipment-card.mode-land,
   .shipment-card.mode-local { border-color: var(--line); }
+  /* Hoisted tracking — once a parcel ships, its carrier tracking card is
+     lifted to the top of the order drawer (under the status actions) so the
+     operator can add a waybill + watch status without scrolling to the items
+     section. One card per shipped parcel; multi-parcel orders get a label. */
+  .od-tracking-top { margin: var(--s3) 0 var(--s4); }
+  .od-trk-parcel {
+    margin: var(--s3) 0 var(--s2);
+    font-size: 10px; font-weight: 600; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--text-3);
+  }
+  .od-trk-parcel:first-child { margin-top: 0; }
   .shipment-head {
     display: flex; align-items: center; gap: var(--s3);
     margin-bottom: var(--s3);

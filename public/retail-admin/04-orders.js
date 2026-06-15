@@ -1846,8 +1846,32 @@ function renderShipmentCard(o, s) {
       ${actions}
       ${mode === 'local'
         ? (['paid', 'preparing', 'dispatched', 'delivered'].includes(o.status) ? renderLocalEtaCard(o, s) : '')
-        : (['dispatched', 'delivered'].includes(state) ? renderShipmentTrackingCard(o, s) : '')}
+        : ''}
     </div>`;
+  // Carrier tracking for a dispatched/delivered parcel is NOT rendered here —
+  // it's hoisted to the top of the drawer (hoistedTracking) so the operator can
+  // add a waybill + watch status the moment the order ships, no scrolling.
+  // Local same-city parcels keep their ETA card in place (above), no waybill.
+}
+
+// Once a parcel is on its way, its tracking is the one thing the operator
+// watches — so for any dispatched/delivered non-local parcel we lift the
+// tracking card out of the buried items section up to the top of the drawer,
+// directly under the status actions. Multi-parcel orders stack one card per
+// shipped parcel, each labelled. Returns '' when nothing is shipped yet.
+function hoistedTracking(o) {
+  const all = o.shipments || [];
+  const multi = all.length > 1;
+  const cards = all.map((s, i) => {
+    if ((s.mode || 'local') === 'local') return '';
+    if (!['dispatched', 'delivered'].includes(s.state || 'pending')) return '';
+    const label = multi
+      ? `<div class="od-trk-parcel">${cuT(`Parcel ${i + 1}`, `包裹 ${i + 1}`)}</div>`
+      : '';
+    return label + renderShipmentTrackingCard(o, s, true);
+  }).filter(Boolean);
+  if (!cards.length) return '';
+  return `<div class="od-tracking-top">${cards.join('')}</div>`;
 }
 
 // Local (Guangzhou same-city) delivery has no waybill, so it gets an ETA card
@@ -2267,6 +2291,8 @@ function renderOpenOrder(o) {
           ${transitions ? `<div class="transitions od-head-tx">${transitions}</div>` : ''}
           ${renderOrderViewPopover()}
         </div>
+
+        ${hoistedTracking(o)}
 
         ${drawerRefundBanner(o)}
         ${renderRefundPanel(o)}
@@ -2732,7 +2758,7 @@ async function ensureTrackingCarriers() {
 // Tracking card for one shipment row inside a shipment-card. Each shipment
 // gets its own carrier + waybill input. The save/clear/retry handlers all
 // pass the shipment_id so the right row in retail_shipments is touched.
-function renderShipmentTrackingCard(o, s) {
+function renderShipmentTrackingCard(o, s, hoisted) {
   const t = s.tracking;
   const has = !!(t && t.number);
   const sid = s.id;
@@ -2813,7 +2839,7 @@ function renderShipmentTrackingCard(o, s) {
     </div>` : '';
 
   return `
-    <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);" id="trk-card-${sid}">
+    <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Tracking · 物流</div>
       ${reuseBanner}
       ${has ? `
