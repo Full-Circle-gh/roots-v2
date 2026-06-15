@@ -3044,11 +3044,43 @@ function jdSuggestedService(mode, isFresh) {
   return isFresh ? 'LL-HD-M' : 'ed-m-0001';      // ground splits by fresh flag
 }
 
-// Pop the service chooser, then create the JD waybill with the picked product.
-// The label is created under our JD account, so JD streams tracking events for
-// free (no 快递100). Server resolves the sender from the fulfilling store's
-// 发货地址 — surface the "store has no sender phone" gap as a clear instruction.
+// POST the JD waybill with a chosen product code. The label is created under
+// our JD account, so JD streams tracking events for free (no 快递100). Server
+// resolves the sender from the fulfilling store's 发货地址 — surface the "store
+// has no sender phone" gap as a clear instruction.
+async function submitJdLabel(orderId, shipmentId, product, btn) {
+  const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
+  try {
+    const r = await adminWrite({
+      btn,
+      url: `/api/retail-admin/orders/${orderId}/jd-waybill${qs}`,
+      method: 'POST', body: { shipment_id: shipmentId, product },
+      errLabelEn: 'JD label failed', errLabelCn: '生成运单失败',
+    });
+    toast(cuT('JD waybill created', '京东运单已生成') + ': ' + (r?.data?.waybill || ''));
+    openOrder(orderId, { instant: true });
+    loadOrders();
+    return true;
+  } catch (err) {
+    // adminWrite already toasts the raw error; add guidance for the usual cause.
+    if (String(err?.message || err).includes('store_sender_phone_missing')) {
+      toast(cuT('Set the store’s sender phone first (Settings → Stores)', '请先在门店设置寄件电话'), 'err');
+    }
+    return false;
+  }
+}
+
+// Create a JD waybill for a parcel. Air parcels always ship fresh-express
+// (生鲜特快 / LL-SD-M) — we know the parcel is air, so skip the chooser and
+// create directly. Ground/local parcels still ask (fresh-ground 生鲜标快 vs
+// ambient-ground 京东标快), since that depends on what's in the box.
 function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
+  if (mode === 'air') {
+    if (!confirm(cuT('Create a JD 生鲜特快 (Fresh · Air) waybill and ship this parcel now?',
+                     '生成京东「生鲜特快」运单并发货？'))) return;
+    submitJdLabel(orderId, shipmentId, 'LL-SD-M', ev?.currentTarget);
+    return;
+  }
   const preset = jdSuggestedService(mode, !!Number(isFresh));
   const bg = document.createElement('div');
   bg.className = 'pu-editor-bg';
@@ -3083,24 +3115,8 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   bg.querySelector('#jd-svc-submit').addEventListener('click', async (e) => {
     const product = (bg.querySelector('input[name="jd-svc"]:checked') || {}).value;
     if (!product) return;
-    const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
-    try {
-      const r = await adminWrite({
-        btn: e.currentTarget,
-        url: `/api/retail-admin/orders/${orderId}/jd-waybill${qs}`,
-        method: 'POST', body: { shipment_id: shipmentId, product },
-        errLabelEn: 'JD label failed', errLabelCn: '生成运单失败',
-      });
-      bg.remove();
-      toast(cuT('JD waybill created', '京东运单已生成') + ': ' + (r?.data?.waybill || ''));
-      openOrder(orderId, { instant: true });
-      loadOrders();
-    } catch (err) {
-      // adminWrite already toasts the raw error; add guidance for the usual cause.
-      if (String(err?.message || err).includes('store_sender_phone_missing')) {
-        toast(cuT('Set the store’s sender phone first (Settings → Stores)', '请先在门店设置寄件电话'), 'err');
-      }
-    }
+    const ok = await submitJdLabel(orderId, shipmentId, product, e.currentTarget);
+    if (ok) bg.remove();
   });
 }
 
