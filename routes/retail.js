@@ -4990,10 +4990,23 @@ function bucketCost(grams, mode, rates, city) {
 //
 // `items` shape: [{ id, ship_modes, needs_ice_pack }, ...]
 // Returns: [{ mode, label, item_ids: [...] }, ...]
-function planShipments(items, destCity, destProvince) {
+function planShipments(items, destCity, destProvince, opts = {}) {
+  const { destDistrict = '', slotKind = null } = opts;
   if (!items.length) return [];
   if (isGuangzhou(destCity)) {
-    return [{ mode: 'local', label: 'Local delivery · 同城配送', item_ids: items.map(i => i.id) }];
+    // Outer GZ "ship-districts" (花都/番禺/南沙/从化/增城) only do same-city local
+    // delivery when the customer opted into same-day (slot_kind 'today'). On the
+    // Express default or a future scheduled date they ship by courier on the
+    // batch cadence like any Guangdong order, so they must get a real waybill —
+    // NOT a same-city 'local' rider drop with an arrival-time picker. Fall
+    // through to the Guangdong land branch for those. Inner GZ districts (and
+    // any genuine same-day pick) stay 'local'.
+    const isShipDistrict = destDistrict &&
+      inventory.isOptInSameDayDistrict({ city: destCity, district: destDistrict });
+    if (!isShipDistrict || slotKind === 'today') {
+      return [{ mode: 'local', label: 'Local delivery · 同城配送', item_ids: items.map(i => i.id) }];
+    }
+    // ship-district, not same-day → courier (fall through to land below)
   }
   // Anywhere else in Guangdong → land only. The province ships by ground
   // regardless of any item's air flag, so a single land shipment carries
@@ -5029,15 +5042,19 @@ function ensureShipments(orderId) {
   if (existing.length) return existing;
 
   const o = tdb().prepare(
-    `SELECT id, address_json, tracking_carrier, tracking_number, tracking_status,
+    `SELECT id, address_json, delivery_slot_kind,
+            tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at, tracking_last_error,
             tracking_kd100_subscribed, tracking_scenario, tracking_scenario_data_json,
             tracking_scenario_notified, dispatched_at, delivered_at
        FROM retail_orders WHERE id = ?`
   ).get(orderId);
   if (!o) return [];
-  let destCity = '', destProvince = '';
-  try { const a = JSON.parse(o.address_json || '{}'); destCity = a.city || ''; destProvince = a.province || ''; } catch {}
+  let destCity = '', destProvince = '', destDistrict = '';
+  try {
+    const a = JSON.parse(o.address_json || '{}');
+    destCity = a.city || ''; destProvince = a.province || ''; destDistrict = a.district || '';
+  } catch {}
 
   const items = tdb().prepare(
     `SELECT id,
@@ -5045,7 +5062,8 @@ function ensureShipments(orderId) {
             COALESCE(needs_ice_pack, 0)      AS needs_ice_pack
        FROM retail_order_items WHERE order_id = ?`
   ).all(orderId);
-  const plan = planShipments(items, destCity, destProvince);
+  const plan = planShipments(items, destCity, destProvince,
+    { destDistrict, slotKind: o.delivery_slot_kind });
 
   const ins = tdb().prepare(
     `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
@@ -5791,11 +5809,18 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), (req, res) 
   // "fulfilled by" diverges from where it actually ships. Picking same-day keeps
   // the nearest-store routing the customer paid for. Inner GZ districts are
   // unaffected (isOptInSameDayDistrict is false for always-same-day zones).
+  // Same-day in a ship-district is the explicit "Today" pick (slot_kind
+  // 'today', the surcharge slot). The Express default ('express') and a future
+  // 'schedule' date are NOT same-day — they ship by courier from the out-of-city
+  // store. isSameDayDelivery(slotId) can't tell these apart (Express's slot date
+  // is often today at midnight, which it reads as same-day), so gate on the
+  // slot_kind the mini-app sends instead.
   const inGz = inventory.isGuangzhouAddress(address);
+  const pickedSameDay = body.delivery_slot_kind === 'today';
   const scheduledShipDistrict =
         inGz &&
         inventory.isOptInSameDayDistrict(address) &&
-        !inventory.isSameDayDelivery(deliverySlotId);
+        !pickedSameDay;
   if (!isPickup && (!inGz || scheduledShipDistrict)) {
     const oocId = loadPrinterPrefs().out_of_city_store_id;
     if (oocId != null && oocId !== fulfillingStore.id) {
