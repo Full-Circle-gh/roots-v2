@@ -14110,9 +14110,19 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
     payload.guaranteeValueAmount = Number(req.body.guarantee_amount) || 0;
   }
 
+  // DIAGNOSTIC: the chosen `product` (e.g. LL-HD-M air) wasn't visibly changing
+  // JD's printed 时效产品 (kept showing 京东标快). Log the exact product +
+  // resolved promiseTimeType/goodsType we send and JD's full reply so we can see
+  // whether JD honours the product or silently falls back. Safe to remove once
+  // the correct air/cold-chain field+value is confirmed with JD.
+  const _jdProd = jd.JD_PRODUCTS ? jd.JD_PRODUCTS[product] : null;
+  console.log('[jd.create] order', o.order_no, 'product', product,
+    'promiseTimeType', _jdProd?.promiseTimeType, 'goodsType', _jdProd?.goodsType);
+
   let cr;
   try { cr = await jd.createWaybill(payload, jc); }
   catch (e) { console.error('[jd.create] threw', e); return res.status(502).json({ success: false, error: 'jd_request_failed' }); }
+  console.log('[jd.create] order', o.order_no, 'JD reply', JSON.stringify(cr.raw || cr));
   if (!cr.ok) return res.status(502).json({ success: false, error: cr.error || 'jd_create_failed' });
 
   const waybill = cr.waybillCode;
