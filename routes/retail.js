@@ -1992,24 +1992,17 @@ router.get('/api/retail/products/:id', (req, res) => {
   product.images = parseJsonArray(imgRow && imgRow.images);
 
   // Review summary — avg rating + count + 3 most recent visible reviews.
-  const summary = tdb().prepare(
-    'SELECT AVG(rating) AS avg, COUNT(*) AS count FROM retail_reviews WHERE product_id = ? AND is_visible = 1'
+  // Real customer reviews and synthetic (seeded) reviews are blended so the
+  // storefront shows one combined count/avg/recent list. SUM+COUNT from each
+  // table are merged in JS to keep the weighted average exact.
+  const realAgg = tdb().prepare(
+    'SELECT COUNT(*) AS n, COALESCE(SUM(rating),0) AS s FROM retail_reviews WHERE product_id = ? AND is_visible = 1'
   ).get(id);
-  product.review_count = summary.count || 0;
-  product.review_avg   = summary.count ? Number((summary.avg || 0).toFixed(2)) : 0;
-  product.reviews_recent = tdb().prepare(
-    `SELECT r.id, r.rating, r.comment, r.created_at, r.tags_json, r.photos_json,
-            c.nickname AS customer_name, c.avatar_url AS customer_avatar
-       FROM retail_reviews r
-  LEFT JOIN retail_customers c ON c.id = r.customer_id
-      WHERE r.product_id = ? AND r.is_visible = 1
-      ORDER BY r.created_at DESC LIMIT 3`
-  ).all(id).map(r => ({
-    ...r,
-    tags:   parseJsonArray(r.tags_json),
-    photos: parseJsonArray(r.photos_json),
-    tags_json: undefined, photos_json: undefined,
-  }));
+  const synAgg = synthReviewAgg(id);
+  const reviewCount = (realAgg.n || 0) + (synAgg.n || 0);
+  product.review_count = reviewCount;
+  product.review_avg   = reviewCount ? Number(((realAgg.s + synAgg.s) / reviewCount).toFixed(2)) : 0;
+  product.reviews_recent = mergedRecentReviews(id, 3);
 
   const options = tdb().prepare(
     `SELECT id, question_en, question_cn, type, is_required, sort_order
@@ -9598,6 +9591,58 @@ const DEFAULT_REVIEW_TAGS = [
 ];
 const REVIEW_MAX_PHOTOS = 6;
 
+// ── Synthetic (seeded) reviews ──────────────────────────────────────────────
+// Staff-written social-proof reviews live in retail_synthetic_reviews, fully
+// decoupled from real customers/orders. These helpers blend them into the
+// public rating summary + recent/paginated lists. Every query is wrapped so a
+// missing table (e.g. a not-yet-migrated DB) degrades to "no synthetic rows"
+// rather than throwing on a hot customer path. Synthetic ids are surfaced to
+// the client as NEGATIVE numbers so they never collide with real review ids
+// (the mini-app uses `id` as a wx:key).
+function synthReviewAgg(productId) {
+  try {
+    return tdb().prepare(
+      'SELECT COUNT(*) AS n, COALESCE(SUM(rating),0) AS s FROM retail_synthetic_reviews WHERE product_id = ? AND is_visible = 1'
+    ).get(productId) || { n: 0, s: 0 };
+  } catch { return { n: 0, s: 0 }; }
+}
+// Merge the N most-recent visible reviews (real + synthetic) for a product,
+// normalised to the public shape the mini-app expects.
+function mergedRecentReviews(productId, limit) {
+  const real = tdb().prepare(
+    `SELECT r.id, r.rating, r.comment, r.created_at, r.tags_json, r.photos_json,
+            c.nickname AS customer_name, c.avatar_url AS customer_avatar
+       FROM retail_reviews r
+  LEFT JOIN retail_customers c ON c.id = r.customer_id
+      WHERE r.product_id = ? AND r.is_visible = 1
+      ORDER BY r.created_at DESC LIMIT ?`
+  ).all(productId, limit);
+  let syn = [];
+  try {
+    syn = tdb().prepare(
+      `SELECT id, rating, comment, created_at, tags_json,
+              reviewer_name AS customer_name
+         FROM retail_synthetic_reviews
+        WHERE product_id = ? AND is_visible = 1
+        ORDER BY created_at DESC LIMIT ?`
+    ).all(productId, limit);
+  } catch { syn = []; }
+  const norm = [
+    ...real.map(r => ({
+      id: r.id, rating: r.rating, comment: r.comment, created_at: r.created_at,
+      customer_name: r.customer_name, customer_avatar: r.customer_avatar,
+      tags: parseJsonArray(r.tags_json), photos: parseJsonArray(r.photos_json),
+    })),
+    ...syn.map(r => ({
+      id: -r.id, rating: r.rating, comment: r.comment, created_at: r.created_at,
+      customer_name: r.customer_name, customer_avatar: null,
+      tags: parseJsonArray(r.tags_json), photos: [],
+    })),
+  ];
+  norm.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  return norm.slice(0, limit);
+}
+
 // Read editable tag list out of storefront_config; fall back to defaults
 // when the key isn't set (fresh install) or fails to parse.
 function getReviewTags() {
@@ -9622,23 +9667,51 @@ router.get('/api/retail/products/:id/reviews', (req, res) => {
   if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
   const limit  = Math.min(parseInt(req.query.limit  || '20', 10) || 20, 50);
   const offset = Math.max(parseInt(req.query.offset || '0',  10) || 0, 0);
-  const rows = tdb().prepare(
-    `SELECT r.id, r.rating, r.comment, r.created_at, r.tags_json, r.photos_json,
-            c.nickname AS customer_name, c.avatar_url AS customer_avatar
-       FROM retail_reviews r
-  LEFT JOIN retail_customers c ON c.id = r.customer_id
-      WHERE r.product_id = ? AND r.is_visible = 1
-      ORDER BY r.created_at DESC
-      LIMIT ? OFFSET ?`
-  ).all(id, limit, offset).map(r => ({
+  // Merge real + synthetic reviews via UNION ALL so offset pagination stays
+  // correct across both tables. Synthetic ids surface negative (collision-free
+  // wx:key); synthetic rows have no photos/avatar.
+  let rows, total;
+  try {
+    rows = tdb().prepare(
+      `SELECT id, rating, comment, created_at, tags_json, photos_json, customer_name, customer_avatar
+         FROM (
+           SELECT r.id AS id, r.rating AS rating, r.comment AS comment, r.created_at AS created_at,
+                  r.tags_json AS tags_json, r.photos_json AS photos_json,
+                  c.nickname AS customer_name, c.avatar_url AS customer_avatar
+             FROM retail_reviews r
+        LEFT JOIN retail_customers c ON c.id = r.customer_id
+            WHERE r.product_id = ? AND r.is_visible = 1
+           UNION ALL
+           SELECT -s.id AS id, s.rating, s.comment, s.created_at,
+                  s.tags_json, NULL AS photos_json,
+                  s.reviewer_name AS customer_name, NULL AS customer_avatar
+             FROM retail_synthetic_reviews s
+            WHERE s.product_id = ? AND s.is_visible = 1
+         )
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?`
+    ).all(id, id, limit, offset);
+    const real = tdb().prepare('SELECT COUNT(*) AS n FROM retail_reviews WHERE product_id = ? AND is_visible = 1').get(id).n;
+    total = real + synthReviewAgg(id).n;
+  } catch {
+    // Synthetic table missing → real reviews only.
+    rows = tdb().prepare(
+      `SELECT r.id, r.rating, r.comment, r.created_at, r.tags_json, r.photos_json,
+              c.nickname AS customer_name, c.avatar_url AS customer_avatar
+         FROM retail_reviews r
+    LEFT JOIN retail_customers c ON c.id = r.customer_id
+        WHERE r.product_id = ? AND r.is_visible = 1
+        ORDER BY r.created_at DESC
+        LIMIT ? OFFSET ?`
+    ).all(id, limit, offset);
+    total = tdb().prepare('SELECT COUNT(*) AS n FROM retail_reviews WHERE product_id = ? AND is_visible = 1').get(id).n;
+  }
+  rows = rows.map(r => ({
     ...r,
     tags:   parseJsonArray(r.tags_json),
     photos: parseJsonArray(r.photos_json),
     tags_json: undefined, photos_json: undefined,
   }));
-  const total = tdb().prepare(
-    'SELECT COUNT(*) AS n FROM retail_reviews WHERE product_id = ? AND is_visible = 1'
-  ).get(id).n;
   res.set('Cache-Control', 'public, max-age=30');
   res.json({ success: true, data: rows, meta: { total, limit, offset } });
 });
@@ -10155,6 +10228,25 @@ router.post('/api/retail/phone', requireRetailAuth, express.json(), async (req, 
   res.json({ success: true, data: publicCustomer(fresh) });
 });
 
+// Find (or create) the canonical "avatars" media folder and return its id.
+// Customer avatar uploads are auto-filed here so they stay out of Unsorted.
+// Case-insensitive match reuses a hand-made "Avatars" folder if one exists.
+function ensureAvatarsFolderId() {
+  try {
+    const existing = tdb().prepare(
+      `SELECT id FROM retail_media_folders WHERE LOWER(name) = 'avatars' ORDER BY id ASC LIMIT 1`
+    ).get();
+    if (existing) return existing.id;
+    const info = tdb().prepare(
+      `INSERT INTO retail_media_folders (name) VALUES ('avatars')`
+    ).run();
+    return info.lastInsertRowid;
+  } catch (e) {
+    console.error('[retail/avatar] ensureAvatarsFolderId failed:', e.message);
+    return null; // fall back to Unsorted rather than blocking the upload
+  }
+}
+
 // Customer-facing avatar upload. Body is JSON: { data: "data:image/...;base64,..." }.
 // Reason: wx.uploadFile has its own AppID whitelist that customers can't
 // control on the legacy preview AppID — sending base64 over wx.request
@@ -10180,10 +10272,13 @@ router.post('/api/retail/customer/avatar', requireRetailAuth, express.json({ lim
     normData = `data:${mime};base64,${m[2]}`;
   } catch { return res.status(400).json({ success: false, error: 'bad_data_uri' }); }
   try {
+    // File customer avatars into a dedicated "avatars" folder so they don't
+    // clutter Unsorted (auto-created on first upload).
+    const folderId = ensureAvatarsFolderId();
     const info = tdb().prepare(
-      `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
-       VALUES (?, ?, ?, ?, NULL)`
-    ).run('avatar', mime, sizeBytes, normData);
+      `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by, folder_id)
+       VALUES (?, ?, ?, ?, NULL, ?)`
+    ).run('avatar', mime, sizeBytes, normData, folderId);
     res.json({ success: true, data: { url: `/api/retail/media/${info.lastInsertRowid}` } });
   } catch (e) {
     console.error('[retail/avatar] insert failed:', e.message);
