@@ -6273,10 +6273,16 @@ function localizeOrderTimes(row) {
 function annotateShipBy(r) {
   if (!r) return r;
   if (r.fulfillment_type === 'pickup') return r;          // pickup window owns the cell
-  // GZ same-city (gz_district) delivers same-day/local — never a 48h ship
-  // deadline. Everything else non-pickup is a shipped parcel: out-of-GZ 'city'
-  // zones AND unmatched (NULL) zones, which still go out by courier.
-  if (r.zone_type === 'gz_district') return r;
+  // INNER GZ same-day districts (gz_district, day_only=0 AND no same-day
+  // surcharge) deliver fresh same/next day — never a 48h ship deadline, leave
+  // them untouched. But "Panyu-style" ship-districts (花都/番禺/南沙/从化/增城 —
+  // gz_district zones flagged day_only=1 or carrying a same-day surcharge) go
+  // out by courier on the batch cadence just like out-of-GZ 'city' zones, so
+  // they need the same ASAP send-by treatment and fall THROUGH this guard.
+  // Everything else non-pickup is a shipped parcel ('city' or unmatched NULL).
+  if (r.zone_type === 'gz_district'
+      && Number(r.zone_day_only) !== 1
+      && !(Number(r.zone_same_day_surcharge) > 0)) return r;
   const kind = r.delivery_slot_kind;
   // A deliberate future date keeps showing that date.
   if (kind === 'schedule' || kind === 'today') return r;
@@ -11373,6 +11379,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
                     o.scheduled_for, o.delivery_slot_label, o.delivery_slot_kind,
                     z.zone_type AS zone_type,
+                    z.day_only AS zone_day_only, z.same_day_surcharge AS zone_same_day_surcharge,
                     o.promised_ship_date, o.promised_delivery_date,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
                     o.tracking_kd100_subscribed,
@@ -11457,7 +11464,8 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   const o = tdb().prepare(
     `SELECT o.*, c.nickname, c.avatar_url, c.phone AS customer_phone,
             s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn,
-            z.zone_type AS zone_type
+            z.zone_type AS zone_type,
+            z.day_only AS zone_day_only, z.same_day_surcharge AS zone_same_day_surcharge
        FROM retail_orders o
        LEFT JOIN retail_customers c ON c.id = o.customer_id
        LEFT JOIN retail_stores    s ON s.id = o.store_id
