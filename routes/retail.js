@@ -5298,7 +5298,9 @@ function buildShipmentTrackingView(s) {
   // courier right now. `delivered` stays authoritative from the stored status
   // so a stray later line can't un-deliver a signed parcel.
   const eventCode = events.length ? tracking.statusFromEventText(events[0].description_cn) : null;
-  const statusCode = (s.tracking_status === 'delivered')
+  // delivered_at is set by "Mark delivered" in the admin drawer; treat it as
+  // authoritative alongside tracking_status so the pill reflects the admin action.
+  const statusCode = (s.tracking_status === 'delivered' || s.delivered_at)
     ? 'delivered'
     : (eventCode || s.tracking_status || null);
   const statusDef = statusCode ? tracking.statusByCode(statusCode) : null;
