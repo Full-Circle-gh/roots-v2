@@ -1089,17 +1089,37 @@ function shipByPlan(o) {
 
 // Time-relative colour + urgency level for a plan, computed at render time
 // from the operator's clock. level ∈ overdue|urgent|soon|today|tomorrow|later.
+// dateOnly=true when urgencyDate is a bare calendar date (a fresh-batch ship
+// date) — then "today/tomorrow" is a CALENDAR-day comparison in local time, not
+// an hours-from-now bucket (a Jun 16 date is "tomorrow" all day on Jun 15, never
+// "today (15h)").
 function shipByUrgency(p, actionable) {
-  const r = { color: actionable ? 'var(--warn)' : 'var(--text-1)', level: 'none', hrs: null };
+  const r = { color: actionable ? 'var(--warn)' : 'var(--text-1)', level: 'none', hrs: null, days: null, dateOnly: false };
   if (!p.urgencyDate || !p.urgencyBasis) {
     r.color = actionable ? 'var(--warn)' : 'var(--text-3)';
+    return r;
+  }
+  const danger = 'var(--danger)', warn = 'var(--warn)', plain = 'var(--text-1)';
+  // Date-only value → compare whole local calendar days, not raw hours.
+  const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(p.urgencyDate));
+  if (dm) {
+    r.dateOnly = true;
+    const target = new Date(+dm[1], +dm[2] - 1, +dm[3]);          // local midnight
+    const n = new Date();
+    const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+    const days = Math.round((target.getTime() - today.getTime()) / 86400000);
+    r.days = days;
+    if (days < 0)       { r.level = 'overdue';  if (actionable) r.color = danger; }
+    else if (days === 0){ r.level = 'today';    if (actionable) r.color = warn; }
+    else if (days === 1){ r.level = 'tomorrow'; if (actionable) r.color = warn; }
+    else                { r.level = 'later';    r.color = plain; }
+    if (!actionable) r.color = plain;
     return r;
   }
   const d = parseSchedFor(p.urgencyDate);
   if (isNaN(d.getTime())) { r.color = actionable ? 'var(--warn)' : 'var(--text-1)'; return r; }
   const hrs = (d.getTime() - Date.now()) / 3600000;
   r.hrs = hrs;
-  const danger = 'var(--danger)', warn = 'var(--warn)', plain = 'var(--text-1)';
   if (p.urgencyBasis === 'deadline') {
     if (hrs < 0)        { r.level = 'overdue'; if (actionable) r.color = danger; }
     else if (hrs < 12)  { r.level = 'urgent';  if (actionable) r.color = danger; }
@@ -1274,7 +1294,13 @@ function renderShipByTile(o) {
   // Verbose urgency badge after the headline.
   const h = u.hrs;
   let badge = '';
-  if (u.level === 'overdue')       badge = cuT('⚠ OVERDUE', '⚠ 已逾期');
+  if (u.dateOnly) {
+    // Calendar-day badge — no hours (a bare date has no meaningful time-of-day).
+    if (u.level === 'overdue')       badge = cuT('⚠ overdue', '⚠ 已逾期');
+    else if (u.level === 'today')    badge = cuT('today', '今天');
+    else if (u.level === 'tomorrow') badge = cuT('tomorrow', '明天');
+    else if (u.level === 'later')    badge = cuT(`in ${u.days}d`, `${u.days}天后`);
+  } else if (u.level === 'overdue') badge = cuT('⚠ OVERDUE', '⚠ 已逾期');
   else if (u.level === 'urgent')   badge = cuT(`⚠ in ${Math.round(h)}h`, `⚠ ${Math.round(h)}小时内`);
   else if (u.level === 'soon')     badge = cuT(`${Math.round(h)}h left`, `剩 ${Math.round(h)}小时`);
   else if (u.level === 'today')    badge = h < 6 ? cuT(`⚠ in ${Math.round(h)}h`, `⚠ ${Math.round(h)}小时内`) : cuT(`today (${Math.round(h)}h)`, `今天 (${Math.round(h)}小时)`);
