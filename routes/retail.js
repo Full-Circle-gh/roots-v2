@@ -13868,12 +13868,18 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   const weight  = Number(req.body?.weight) > 0 ? Number(req.body.weight) : 1;    // kg
   const vloumn  = Number(req.body?.vloumn) > 0 ? Number(req.body.vloumn) : 100;  // cm³
 
+  // JD deduplicates on orderId — a cancelled+retried label needs a fresh ID.
+  const prevAttempts = tdb().prepare(
+    "SELECT COUNT(*) AS n FROM retail_activity_log WHERE entity_type = 'retail_order' AND entity_id = ? AND action = 'jd_waybill_created'"
+  ).get(id)?.n || 0;
+  const jdOrderId = prevAttempts > 0 ? `${o.order_no}-${prevAttempts + 1}` : o.order_no;
+
   const payload = {
-    orderId:        o.order_no,
+    orderId:        jdOrderId,
     product,
     senderName:     'Roots',   // 寄件人 = brand (user-set); the store supplies the pickup address only
     senderAddress,  senderMobile,
-    receiveName:    o.recipient_name,
+    receiveName:    String(o.order_no).slice(-4) + ' ' + o.recipient_name,
     receiveAddress: o.address_full,
     receiveMobile:  String(o.recipient_phone).replace(/\D/g, ''),
     packageCount:   1, weight, vloumn,
@@ -13898,14 +13904,14 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
             tracking_events_json = NULL, tracking_synced_at = NULL,
             tracking_last_error = NULL, tracking_kd100_subscribed = 0,
             dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?`).run(derived, waybill, shipment.id);
+      WHERE id = ?`).run(waybill, derived, shipment.id);
   if (shipment.id === shipments[0].id) {
     tdb().prepare(
       `UPDATE retail_orders
           SET tracking_carrier = 'jd', tracking_number = ?, tracking_status = ?,
               tracking_events_json = NULL, tracking_synced_at = NULL,
               tracking_last_error = NULL, tracking_kd100_subscribed = 0, updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?`).run(derived, waybill, id);
+        WHERE id = ?`).run(waybill, derived, id);
   }
 
   let firstDispatch = false;
@@ -16297,6 +16303,45 @@ function computeDeliverySlots(zone, now) {
   };
 }
 
+// Validate a 'YYYY-MM-DDTHH:MM' pick that lands on a SCHEDULE-FOR-LATER day
+// (i.e. not in today/tomorrow's enumerated `slots`). Time-slot zones now offer
+// 2-hour windows across the whole calendar, so the customer can pick an hour on
+// a future date too — but the server must still confirm the date sits inside the
+// schedule window AND the time aligns to a real kitchen-hours window (so a
+// hand-crafted slot_id can't book an out-of-hours delivery). Returns a
+// synthesized slot object on success, or null to fall through to slot_unavailable.
+function matchScheduledTimeSlot(enumed, mTime) {
+  if (!enumed || enumed.mode !== 'time_slots') return null;
+  const sch = enumed.schedule;
+  if (!sch) return null;
+  const dateIso = `${mTime[1]}-${mTime[2]}-${mTime[3]}`;
+  if (dateIso < sch.min_date || dateIso > sch.max_date) return null;
+  const kh       = enumed.kitchen_hours || {};
+  const dayStart = Number(kh.start) * 60;
+  const dayEnd   = Number(kh.end) * 60;
+  const slotMins = Number(enumed.slot_duration_minutes) || 120;
+  if (!(dayEnd > dayStart) || !(slotMins > 0)) return null;
+  const startCursor = Number(mTime[4]) * 60 + Number(mTime[5]);
+  // Must start on a slot boundary inside opening hours, and fit before close
+  // (mirrors emitTimeSlots' `cursor + slotMins <= endCursor + 1`).
+  if (startCursor < dayStart) return null;
+  if ((startCursor - dayStart) % slotMins !== 0) return null;
+  if (startCursor + slotMins > dayEnd + 1) return null;
+  const endCursor = Math.min(startCursor + slotMins, dayEnd);
+  return {
+    slot_id:    `${dateIso}T${mTime[4]}:${mTime[5]}`,
+    date_iso:   dateIso,
+    start_hour: Math.floor(startCursor / 60), start_minute: startCursor % 60,
+    end_hour:   Math.floor(endCursor / 60),   end_minute:   endCursor % 60,
+    is_same_day: false,
+    is_day_only: false,
+    requires_surcharge: false,
+    surcharge:  0,
+    label_en:   `${dateIso}T${mTime[4]}:${mTime[5]}`,
+    label_cn:   `${dateIso}T${mTime[4]}:${mTime[5]}`,
+  };
+}
+
 // Resolve a slot_id back into a Date + validated metadata. Used by the
 // orders POST to confirm the customer's pick before persisting.
 // Returns { scheduled_for: ISO string, slot, surcharge } or { error }.
@@ -16318,6 +16363,9 @@ function resolveDeliverySlot(zone, slotId, now) {
   const mDay  = /^(\d{4})-(\d{2})-(\d{2})$/.exec(slotId);
   if (mTime) {
     found = enumed.slots.find(s => s.slot_id === slotId);
+    // Not in today/tomorrow's chips → try a scheduled-for-later time window
+    // (time-slot zones offer hour windows across the whole calendar).
+    if (!found) found = matchScheduledTimeSlot(enumed, mTime);
     if (!found) return { error: 'slot_unavailable' };
     dt = new Date(Number(mTime[1]), Number(mTime[2]) - 1, Number(mTime[3]), Number(mTime[4]), Number(mTime[5]));
   } else if (mDay) {
