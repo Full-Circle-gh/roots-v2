@@ -2180,7 +2180,11 @@ function renderOpenOrder(o) {
         label = 'Mark all dispatched · 全部标记已发货';
       }
       return `<button class="btn btn-primary btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
-    }).join('') + renderRefundMenu(o, dangerTx);
+    }).join('')
+    // A quiet "Undo dispatch" sits beside the forward actions when the order
+    // was dispatched but nothing has truly gone out — the reverse for a misclick.
+    + (undoDispatchable(o) ? `<button class="btn btn-sm" onclick="undoDispatch(${o.id})">Undo dispatch · 撤销发货</button>` : '')
+    + renderRefundMenu(o, dangerTx);
     mount.innerHTML = `
       <div class="order-card odd-${ODV.density}">
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
@@ -2606,6 +2610,45 @@ async function transition(id, status) {
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');
   }
+}
+
+// Reverse an accidental "Mark dispatched". The status machine is forward-only,
+// so without this a misclick on dispatch was stuck. The server only allows it
+// when no parcel has a waybill or is delivered (see undoDispatchable); on that
+// rare race it returns 'already_shipped' and we surface a plain reason. Silent:
+// the customer is not notified, matching a quick correction.
+async function undoDispatch(id) {
+  const ok = await askConfirm({
+    titleEn: 'Undo dispatch?', titleCn: '撤销发货?',
+    bodyEn: 'This moves the order back to <b>Preparing</b>. Use it if you marked it dispatched by mistake. The customer is not notified.',
+    bodyCn: '这会把订单退回<b>备货中</b>。如果你是误点了发货,可以用它撤销。不会通知顾客。',
+    confirmEn: 'Undo dispatch', confirmCn: '撤销发货',
+    cancelEn: 'Keep dispatched', cancelCn: '保持已发货',
+  });
+  if (!ok) return;
+  try {
+    await api(`/api/retail-admin/orders/${id}/undo-dispatch`, { method: 'POST', body: {} });
+    toast('Undone · 已撤销 — back to Preparing · 退回备货中');
+    openOrder(id, { instant: true });
+    loadOrders();
+  } catch (e) {
+    const msg = e.message === 'already_shipped'
+      ? cuT('A parcel already shipped — cancel its waybill first.', '已有包裹发出 — 请先取消运单。')
+      : 'Failed · 失败: ' + e.message;
+    toast(msg, 'err');
+  }
+}
+
+// Whether the open order can be un-dispatched from the UI: it's dispatched and
+// no parcel carries a waybill or is delivered. Mirrors the server guard so the
+// button only shows when the action will actually succeed.
+function undoDispatchable(o) {
+  return o && o.status === 'dispatched'
+    && o.fulfillment_type !== 'pickup'
+    && !(o.shipments || []).some(s =>
+      (s.tracking_number && String(s.tracking_number).trim()) ||
+      (s.tracking && s.tracking.number) ||
+      s.state === 'delivered');
 }
 
 let TRACKING_CARRIERS = null;
