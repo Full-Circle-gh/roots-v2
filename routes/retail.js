@@ -5284,8 +5284,6 @@ function buildShipmentSuggestion(orderId) {
 function buildShipmentTrackingView(s) {
   if (!s.tracking_number || !s.tracking_carrier) return null;
   const carrier = tracking.carrierByCode(s.tracking_carrier);
-  const statusCode = s.tracking_status || null;
-  const statusDef = statusCode ? tracking.statusByCode(statusCode) : null;
   let events = [];
   if (s.tracking_events_json) {
     try {
@@ -5293,8 +5291,22 @@ function buildShipmentTrackingView(s) {
       events = raw.map(ev => ({ ...ev, description_en: tracking.translateEventDescription(ev.description_cn) }));
     } catch { events = []; }
   }
-  let scenario = null;
-  if (s.tracking_scenario_data_json) {
+  // Prefer the status implied by the NEWEST carrier event over the carrier's
+  // overall state code, which can lag — e.g. the events already read "out for
+  // delivery" or "intercepted, returning" while the top-level state still says
+  // "in transit". This is what makes the office see a parcel that's with the
+  // courier right now. `delivered` stays authoritative from the stored status
+  // so a stray later line can't un-deliver a signed parcel.
+  const eventCode = events.length ? tracking.statusFromEventText(events[0].description_cn) : null;
+  const statusCode = (s.tracking_status === 'delivered')
+    ? 'delivered'
+    : (eventCode || s.tracking_status || null);
+  const statusDef = statusCode ? tracking.statusByCode(statusCode) : null;
+  // Re-classify the scenario from the live newest event too (the stored
+  // tracking_scenario_data_json can go stale after a waybill change), falling
+  // back to the stored blob when the latest event matches no scenario.
+  let scenario = events.length ? tracking.classifyDeliveryEvent(events[0].description_cn) : null;
+  if (!scenario && s.tracking_scenario_data_json) {
     try { scenario = JSON.parse(s.tracking_scenario_data_json); } catch { scenario = null; }
   }
   // Operator guard: flag when this exact waybill number is ALSO attached to a
@@ -13570,6 +13582,15 @@ function handleKd100Callback(req, res, tid) {
       const scenario = latestEvent ? tracking.classifyDeliveryEvent(latestEvent.description_cn) : null;
       const scenarioCode = scenario?.scenario || null;
       const scenarioJson = scenario ? JSON.stringify(scenario) : null;
+      // kd100's overall numeric state can lag the event stream — the events
+      // read "out for delivery" or "intercepted, returning" before the
+      // top-level state flips. Prefer the newest event's classification so the
+      // office (and customer) see the real state; delivered/returned terminal
+      // states reported by kd100 stay authoritative.
+      const eventStatus = latestEvent ? tracking.statusFromEventText(latestEvent.description_cn) : null;
+      const liveStatus = (parsed.state_code === 'delivered' || parsed.state_code === 'returned')
+        ? parsed.state_code
+        : (eventStatus || parsed.state_code);
 
       // Order-row mirror belongs to the PRIMARY waybill only — writing a
       // secondary leg's events here would overwrite the primary parcel's
@@ -13584,7 +13605,7 @@ function handleKd100Callback(req, res, tid) {
                   tracking_synced_at         = CURRENT_TIMESTAMP,
                   updated_at                 = CURRENT_TIMESTAMP
             WHERE id = ?`
-        ).run(parsed.state_code, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id);
+        ).run(liveStatus, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id);
       }
 
       // Mirror onto the matching shipment row(s). The admin order drawer and the
@@ -13604,7 +13625,7 @@ function handleKd100Callback(req, res, tid) {
                   tracking_synced_at          = CURRENT_TIMESTAMP,
                   updated_at                  = CURRENT_TIMESTAMP
             WHERE order_id = ? AND tracking_number = ?`
-        ).run(parsed.state_code, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id, parsed.number);
+        ).run(liveStatus, JSON.stringify(parsed.events), scenarioCode, scenarioJson, order.id, parsed.number);
       } catch (e) { console.error('[kd100.callback] shipment mirror failed:', e); }
       console.log(`[kd100.callback] tenant=${tid} order=${order.id} number=${parsed.number} state=${parsed.state_code} scenario=${scenarioCode || '-'} events=${parsed.events.length}`);
 

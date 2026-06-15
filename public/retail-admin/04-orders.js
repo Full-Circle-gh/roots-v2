@@ -2858,7 +2858,17 @@ function renderShipmentTrackingCard(o, s, hoisted) {
             <div style="font-size:12px; color:var(--text-3);">${escapeHtml(t.carrier_name_en)} · ${escapeHtml(t.carrier_name_cn)}</div>
             <div style="font-family: var(--f-mono); font-weight:600;">${escapeHtml(t.number)}</div>
           </div>
-          ${t.status_label_en ? `<div><span class="pill st-dispatched"><span class="dot"></span>${escapeHtml(t.status_label_en)} · ${escapeHtml(t.status_label_cn)}</span></div>` : ''}
+          ${(() => {
+            // Live delivery state with its own icon + colour (courier, returning,
+            // exception …) so the operator sees WHERE the parcel is at a glance —
+            // not just a flat brown "In transit" chip. Falls back to the plain
+            // carrier label for states with no dedicated treatment.
+            const dl = deliveryStateInfo({ tracking_status: t.status_code, tracking_scenario: t.scenario && t.scenario.scenario });
+            if (dl) {
+              return `<div><span class="pill" style="display:inline-flex; align-items:center; gap:5px; color:${dl.color}; border-color:${dl.color}55; background:${dl.color}14; font-weight:${dl.tone === 'urgent' ? 700 : 600};">${deliveryIcon(dl.icon, 13)}<span>${cuT(dl.en, dl.cn)}</span></span></div>`;
+            }
+            return t.status_label_en ? `<div><span class="pill st-dispatched"><span class="dot"></span>${escapeHtml(t.status_label_en)} · ${escapeHtml(t.status_label_cn)}</span></div>` : '';
+          })()}
           <div style="flex:1; min-width:160px; text-align:right;">
             <div class="muted" style="font-size:11px;">${synced}</div>
             <div style="margin-top:2px;">${kdBadge}</div>
