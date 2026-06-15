@@ -13465,7 +13465,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   if (!number || number.length > 64 || !/^[A-Za-z0-9\-]+$/.test(number)) {
     return res.status(400).json({ success: false, error: 'invalid_tracking_number' });
   }
-  const o = tdb().prepare('SELECT id, status, recipient_phone FROM retail_orders WHERE id = ?').get(id);
+  const o = tdb().prepare('SELECT id, status, recipient_phone, tracking_number FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['dispatched', 'delivered'].includes(o.status)) {
     return res.status(409).json({ success: false, error: 'not_shipped', status: o.status });
@@ -13481,6 +13481,17 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
     : shipments[0];
   if (!shipment) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
 
+  // Mirror this waybill to the order-level tracking_* fields when it's the
+  // primary parcel OR the order row has no waybill yet. The legacy mirror is
+  // what the orders-list TRACKING cell + customer mini-app order list read; on
+  // a split order whose NON-primary parcel ships first (e.g. land parcel goes
+  // while a fresh-food air parcel is still being made), mirroring only the
+  // primary parcel left the order row empty → the list cried "⚠ missing" even
+  // though a parcel was genuinely shipped + live-syncing. Mirroring the first
+  // parcel to ship, primary or not, fixes the glance; the "Partially shipped"
+  // pill carries the rest of the story.
+  const mirrorToOrder = shipment.id === shipments[0].id || !o.tracking_number;
+
   const derived = tracking.deriveStatusFromOrder(o.status);
   tdb().prepare(
     `UPDATE retail_shipments
@@ -13494,11 +13505,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
       WHERE id = ?`
   ).run(carrier, number, derived, shipment.id);
 
-  // Mirror to retail_orders.tracking_* when this is the primary shipment
-  // so legacy callers (mobile track page, customer mini-app order list)
-  // keep working. When attaching to a non-primary shipment we don't touch
-  // the legacy fields — the new shipments[] array is authoritative.
-  if (shipment.id === shipments[0].id) {
+  if (mirrorToOrder) {
     tdb().prepare(
       `UPDATE retail_orders
           SET tracking_carrier = ?, tracking_number = ?,
@@ -13531,7 +13538,7 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
     }, kc).then(r => {
       if (r.ok) {
         tdb().prepare("UPDATE retail_shipments SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(shipment.id);
-        if (shipment.id === shipments[0].id) {
+        if (mirrorToOrder) {
           tdb().prepare("UPDATE retail_orders SET tracking_kd100_subscribed = 1, tracking_last_error = NULL WHERE id = ?").run(id);
         }
       } else {
@@ -14058,7 +14065,7 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   if (!jd.jdEnabled(jc)) return res.status(409).json({ success: false, error: 'jd_not_configured' });
 
   const o = tdb().prepare(
-    `SELECT id, order_no, status, store_id, recipient_name, recipient_phone, address_full
+    `SELECT id, order_no, status, store_id, recipient_name, recipient_phone, address_full, tracking_number
        FROM retail_orders WHERE id = ?`).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['paid', 'preparing', 'dispatched'].includes(o.status)) {
@@ -14150,7 +14157,11 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
             tracking_last_error = NULL, tracking_kd100_subscribed = 0,
             dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`).run(waybill, derived, shipment.id);
-  if (shipment.id === shipments[0].id) {
+  // Mirror to the order row for the primary parcel OR when no parcel has yet
+  // populated it — so the orders-list TRACKING cell shows this waybill instead
+  // of "⚠ missing" when a non-primary parcel (e.g. the land half of a split
+  // fresh order) is the first to ship. See the matching note in PUT /tracking.
+  if (shipment.id === shipments[0].id || !o.tracking_number) {
     tdb().prepare(
       `UPDATE retail_orders
           SET tracking_carrier = 'jd', tracking_number = ?, tracking_status = ?,
