@@ -2989,6 +2989,65 @@ db.exec(`
 `);
 
 // ─────────────────────────────────────────────────────────────────────────
+// One-time: clone the live "hummus" poll into a fresh poll that INHERITS its
+// vote counts but starts with an EMPTY vote ledger.
+//
+// Why: the mini-app bundle already published to customers reveals tallies only
+// once the viewer has voted (showResults = voted || closed). A brand-new poll
+// has no ledger rows, so every customer is "hasn't voted" → the installed app
+// shows just the options (no tallies/percentages) until they personally vote,
+// then displays the inherited totals (e.g. 17, Roasted Red Pepper leading). This
+// lets us retire the old poll — which already showed numbers to past voters —
+// WITHOUT a WeChat release. We copy only the cached counts (total_votes + each
+// option's votes), never the retail_poll_votes ledger, and draft the old poll so
+// it's hidden but preserved as a backup. Idempotent via the _migrations guard.
+// (scripts/copy_poll_votes.js is the manual equivalent.)
+// ─────────────────────────────────────────────────────────────────────────
+try {
+  db.exec("CREATE TABLE IF NOT EXISTS _migrations (name TEXT PRIMARY KEY, applied_at DATETIME DEFAULT CURRENT_TIMESTAMP)");
+  const alreadyRan = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('dup_hummus_poll_v1');
+  if (!alreadyRan) {
+    const src = db.prepare(
+      "SELECT * FROM retail_polls WHERE LOWER(question_en) LIKE '%hummus%' AND total_votes > 0 ORDER BY total_votes DESC, id LIMIT 1"
+    ).get();
+    if (src) {
+      const srcOpts = db.prepare(
+        'SELECT * FROM retail_poll_options WHERE poll_id = ? ORDER BY sort_order, id'
+      ).all(src.id);
+      const tx = db.transaction(() => {
+        const r = db.prepare(
+          `INSERT INTO retail_polls
+             (question_en, question_cn, explainer_en, explainer_cn, category_en, category_cn,
+              status, closes_at, reward_points, is_featured, sort_order, total_votes, winner_option_id)
+           VALUES (?,?,?,?,?,?, 'open', NULL, ?, 1, ?, ?, NULL)`
+        ).run(
+          src.question_en, src.question_cn, src.explainer_en, src.explainer_cn,
+          src.category_en, src.category_cn,
+          src.reward_points, src.sort_order, src.total_votes
+        );
+        const newId = r.lastInsertRowid;
+        const insOpt = db.prepare(
+          `INSERT INTO retail_poll_options
+             (poll_id, label_en, label_cn, color_hex, image_url, sort_order, votes)
+           VALUES (?,?,?,?,?,?,?)`
+        );
+        for (const o of srcOpts) {
+          insOpt.run(newId, o.label_en, o.label_cn, o.color_hex, o.image_url, o.sort_order, o.votes);
+        }
+        // Hide the old poll from customers; keep it as the backup record.
+        db.prepare("UPDATE retail_polls SET status = 'draft', is_featured = 0 WHERE id = ?").run(src.id);
+        db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('dup_hummus_poll_v1');
+        return newId;
+      });
+      const newId = tx();
+      console.log(`[migration dup_hummus_poll_v1] cloned poll #${src.id} (${src.total_votes} votes) → new open poll #${newId}; old poll drafted`);
+    } else {
+      console.log('[migration dup_hummus_poll_v1] no source hummus poll with votes found; will retry next boot');
+    }
+  }
+} catch (e) { console.error('[migration dup_hummus_poll_v1]', e); }
+
+// ─────────────────────────────────────────────────────────────────────────
 // FAVORITES — saved / wishlisted products per customer.
 // Drives the Mini App Favorites page (NO. 21) and the home-page
 // "favorites" CMS block. One row per (customer_id, product_id); duplicates
