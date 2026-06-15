@@ -1588,7 +1588,7 @@ function renderItemRow(it, opts = {}) {
   const nm = orderItemNames(it);
   const name = `<span class="mf-name">${escapeHtml(nm.primary)}</span>`;
   const nameCell = it.product_id
-    ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
+    ? `<a href="/product-editor?id=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
     : name;
   const zh = (nm.secondary || it.size)
     ? `<span class="mf-zh">${escapeHtml(nm.secondary)}${it.size ? (nm.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
@@ -1743,7 +1743,7 @@ function renderItemsAsGrid(items, showPack = true) {
     const nn = orderItemNames(it);
     const nm = `<span class="oi-name">${escapeHtml(nn.primary)}</span>`;
     const nameCell = it.product_id
-      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
+      ? `<a href="/product-editor?id=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
     const zh = (nn.secondary || it.size)
       ? `<div class="oi-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
@@ -1767,7 +1767,7 @@ function renderItemsAsCards(items, showPack = true) {
     const nn = orderItemNames(it);
     const nm = `<span class="oic-name">${escapeHtml(nn.primary)}</span>`;
     const nameCell = it.product_id
-      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
+      ? `<a href="/product-editor?id=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
     const zh = (nn.secondary || it.size)
       ? `<div class="oic-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
