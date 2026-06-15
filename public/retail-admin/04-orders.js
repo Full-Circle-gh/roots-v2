@@ -1263,6 +1263,9 @@ function renderShipByTile(o) {
 // customer) | 'ok' (green) | 'transit' (grey, in flight). Shared with the
 // dashboard delivery-alerts banner (03-dashboard.js) — one global scope.
 function deliveryStateInfo(o) {
+  // Order-level status wins — admin clicking "Mark delivered" sets status but
+  // not tracking_status, so without this guard delivered orders show "In transit".
+  if (o.status === 'delivered') return { icon: 'check', en: 'Delivered', cn: '已签收', color: '#5a8c2a', tone: 'ok' };
   const st = o.tracking_status || '';
   const sc = o.tracking_scenario || '';
   // Problems first — these are what the operator must act on.
