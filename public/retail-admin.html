@@ -3850,6 +3850,16 @@
           <div class="muted" style="font-size: 11px; margin-top: 4px;">Cashback to the invited friend's wallet on their first paid order. Set 0 to give the friend nothing. · 受邀好友首单付款后返现入其钱包;设为 0 则好友不获奖励。</div>
         </div>
         <div class="field" style="margin: 0;">
+          <label class="stacked">Lifetime share — % of repeat orders (%) · 长期分成 — 复购订单百分比(%)</label>
+          <input type="number" id="af-lifetime-rate" placeholder="0" min="0" max="50" step="0.5" style="width: 160px;">
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">From the friend's SECOND paid order onward, this % of each order is credited to the referrer's wallet — every time they reorder. The first order still pays the one-off reward above. Set 0 to turn lifetime share off. One level only. · 从受邀好友的第二笔付款订单起,每笔订单的该百分比将存入推荐人钱包(每次复购都计)。首单仍发放上方的一次性奖励。设为 0 关闭长期分成。仅一级。</div>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Lifetime share lasts (months) · 长期分成持续(月)</label>
+          <input type="number" id="af-lifetime-months" placeholder="12" min="0" max="120" step="1" style="width: 160px;">
+          <div class="muted" style="font-size: 11px; margin-top: 4px;">How long the referrer keeps earning on a friend, counted from when the friend joined. 12 = one year. Set 0 for no time limit (earn forever). · 推荐人对某位好友的分成可持续多久,从好友加入起算。12 = 一年。设为 0 则无时间限制(永久)。</div>
+        </div>
+        <div class="field" style="margin: 0;">
           <label class="stacked">Code prefix · 邀请码前缀</label>
           <input type="text" id="af-prefix" placeholder="ROOTS-" maxlength="12" style="width: 160px; text-transform: uppercase;">
           <div class="muted" style="font-size: 11px; margin-top: 4px;">Prepended to new codes only — existing codes don't change. · 仅作用于新邀请码;已有邀请码不会改变。</div>

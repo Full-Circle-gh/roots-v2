@@ -27,6 +27,8 @@ async function afLoadSettings() {
     // edits the reward + code prefix.
     $('#af-reward').value         = (Number(d.rewardPerOrder) || 0).toString();
     $('#af-reward-referee').value = (Number(d.rewardReferee) || 0).toString();
+    $('#af-lifetime-rate').value  = (Number(d.lifetimeRatePercent) || 0).toString();
+    $('#af-lifetime-months').value = (d.lifetimeMonths === 0 ? 0 : (Number(d.lifetimeMonths) || 12)).toString();
     $('#af-prefix').value         = String(d.codePrefix || 'ROOTS-').toUpperCase();
     $('#af-share-image').value    = String(d.shareImage || '');
     afRenderSharePreview();
@@ -39,6 +41,8 @@ async function afSaveSettings() {
   const body = {
     rewardPerOrder: Number($('#af-reward').value) || 0,
     rewardReferee:  Number($('#af-reward-referee').value) || 0,
+    lifetimeRatePercent: Number($('#af-lifetime-rate').value) || 0,
+    lifetimeMonths:      Number($('#af-lifetime-months').value) || 0,
     codePrefix:     String($('#af-prefix').value || '').trim().toUpperCase(),
     shareImage:     String($('#af-share-image').value || '').trim(),
   };

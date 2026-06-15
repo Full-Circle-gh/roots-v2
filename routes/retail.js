@@ -9212,6 +9212,11 @@ function affiliateSettings() {
     // first paid order stays the one-shot bounty's job (no double-pay). ONE LEVEL
     // only — see creditLifetimeCommission. Capped at 50% by the admin endpoint.
     lifetimeRatePercent: Number(cfgValue('affiliate.lifetimeRatePercent', 0)) || 0,
+    // How long the lifetime share keeps paying, measured from when the friend
+    // JOINED (referral_applied_at). 12 = one year (default), 0 = forever/no cap.
+    // After the window closes the referrer simply stops earning on that friend's
+    // future orders — nothing is clawed back.
+    lifetimeMonths: Number(cfgValue('affiliate.lifetimeMonths', 12)) || 0,
     codePrefix:     String(cfgValue('affiliate.codePrefix', REFERRAL_CODE_PREFIX)),
     // Optional custom picture for the WeChat share card (the 5:4 thumbnail a
     // customer sees when they forward their invite into a chat). Empty string
@@ -9441,13 +9446,26 @@ function creditLifetimeCommission(orderId) {
   if (!s.enabled) return;
   const rate = Number(s.lifetimeRatePercent) || 0;
   if (!(rate > 0)) return;                          // dormant until a % is set in admin
-  const o = tdb().prepare('SELECT id, customer_id, status, total FROM retail_orders WHERE id = ?').get(orderId);
+  const o = tdb().prepare('SELECT id, customer_id, status, total, paid_at FROM retail_orders WHERE id = ?').get(orderId);
   if (!o || o.status !== 'paid') return;
   // Who referred this customer? Permanent 1:1 link stamped on the customer row.
-  const cust = tdb().prepare('SELECT referred_by_customer_id FROM retail_customers WHERE id = ?').get(o.customer_id);
+  // referral_applied_at is the window anchor (when the friend joined).
+  const cust = tdb().prepare('SELECT referred_by_customer_id, referral_applied_at FROM retail_customers WHERE id = ?').get(o.customer_id);
   const referrerId = cust && cust.referred_by_customer_id;
   if (!referrerId) return;                          // not an invited customer
   if (referrerId === o.customer_id) return;         // defensive: never self-pay
+  // Time-limited share: the referrer only earns on this friend's orders for
+  // `lifetimeMonths` after they joined (12 = one year; 0 = forever). Past the
+  // window we just stop earning — no clawback. Anchored on the order's paid_at
+  // vs the join date so promoted/back-dated orders are judged by when they paid,
+  // not "now". If the join timestamp is missing (legacy bind), we don't block.
+  const months = Number(s.lifetimeMonths) || 0;
+  if (months > 0 && cust.referral_applied_at) {
+    const chk = tdb().prepare(
+      "SELECT julianday(?) <= julianday(?, ?) AS ok"
+    ).get(o.paid_at || new Date().toISOString(), cust.referral_applied_at, '+' + months + ' months');
+    if (!chk || !chk.ok) return;                    // outside the earning window
+  }
   // Skip the invitee's FIRST paid order — that one belongs to the bounty. An
   // earlier paid order existing ⇒ this is order #2+, so lifetime applies. (Same
   // "earlier paid order" test creditReferralReward uses, kept consistent.)
@@ -9621,6 +9639,13 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
     const n = Number(b.lifetimeRatePercent);
     if (!Number.isFinite(n) || n < 0 || n > 50) return res.status(400).json({ success: false, error: 'bad_lifetime_rate' });
     writes.push(['affiliate.lifetimeRatePercent', Math.round(n * 100) / 100]);
+  }
+  if (b.lifetimeMonths !== undefined) {
+    // Earning window in months from join (12 = one year, 0 = forever). Whole
+    // months only; capped at 120 (10y) to block fat-finger values.
+    const n = Math.round(Number(b.lifetimeMonths));
+    if (!Number.isFinite(n) || n < 0 || n > 120) return res.status(400).json({ success: false, error: 'bad_lifetime_months' });
+    writes.push(['affiliate.lifetimeMonths', n]);
   }
   if (typeof b.codePrefix === 'string') {
     const p = b.codePrefix.trim().toUpperCase().slice(0, 12);
