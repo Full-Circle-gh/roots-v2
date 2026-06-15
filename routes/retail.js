@@ -1213,11 +1213,17 @@ router.get('/api/retail/products', (req, res) => {
   const params = [];
   // Tokenise the search: trim + split on whitespace so stray/leading/trailing/
   // doubled spaces never break a match (a raw `LIKE '%bolognese %'` misses
-  // "Bolognese"). Each token must hit name_en/name_cn/sku — word-order agnostic.
+  // "Bolognese"). Each token must hit one of the searchable fields below —
+  // word-order agnostic. Beyond name/sku we also match the authored
+  // keywords_en/cn (the green subtitle "search terms", e.g. "coffee" on a
+  // Chinese-only 咖啡豆) and tagline_en/cn so a product is findable by the
+  // English word even when its name is Chinese-only (and vice-versa).
+  const SEARCH_COLS = ['name_en', 'name_cn', 'sku', 'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn'];
+  const termClauseFor = () => '(' + SEARCH_COLS.map(c => `p.${c} LIKE ?`).join(' OR ') + ')';
   const terms = String(q || '').trim().split(/\s+/).filter(Boolean);
   for (const t of terms) {
-    sql += ' AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)';
-    const s = `%${t}%`; params.push(s, s, s);
+    sql += ' AND ' + termClauseFor();
+    const s = `%${t}%`; for (let i = 0; i < SEARCH_COLS.length; i++) params.push(s);
   }
   // Filter by the storefront top_category (the 2-level tree field the shop +
   // home category_tabs use) — NOT the legacy free-form `category` column, which
@@ -1254,8 +1260,8 @@ router.get('/api/retail/products', (req, res) => {
   for (const r of rows) decorateBundleRow(r, { withComponents: withBundleComps });   // flag bundles + real (component-derived) stock
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
-  const termClause = terms.map(() => 'AND (p.name_en LIKE ? OR p.name_cn LIKE ? OR p.sku LIKE ?)').join(' ');
-  const termParams = terms.flatMap(t => { const s = `%${t}%`; return [s, s, s]; });
+  const termClause = terms.map(() => 'AND ' + termClauseFor()).join(' ');
+  const termParams = terms.flatMap(t => { const s = `%${t}%`; return SEARCH_COLS.map(() => s); });
   const idsClause = idList.length ? `AND p.id IN (${idList.map(() => '?').join(',')})` : '';
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM store_products p
                             WHERE p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
