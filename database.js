@@ -2571,6 +2571,12 @@ db.exec(`
 //                              = 'wait_for_restock')
 addColumn('retail_orders', 'fallback_choice',         'TEXT');
 addColumn('retail_orders', 'awaiting_restock_pids',   'TEXT');
+// JSON array of product_ids the FULFILLING store can't currently cover, set
+// only on orders whose stock was never gated/reserved at checkout (out-of-city,
+// or scheduled-for-later GZ — see routeOrder ignoreStock). Pure warning signal:
+// the order is accepted as normal, but the office is told to restock/transfer
+// into the shipping warehouse before the fulfilment date. NULL = fully covered.
+addColumn('retail_orders', 'fulfillment_short_pids',  'TEXT');
 // Fulfillment path: 'delivery' (default — ship to customer address) or
 // 'pickup' (customer collects from a chosen store, no address/shipping fee).
 // For pickup orders store_id holds the customer-chosen store, scheduled_for +
