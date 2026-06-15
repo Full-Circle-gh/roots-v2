@@ -562,7 +562,8 @@ async function loadOrders(opts = {}) {
         </td>
         <td class="oc-store">
           ${o.store_code ? `<div>${escapeHtml(o.store_name_en || o.store_code)}</div>
-            ${routingNote(o.routing_reason) ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${routingNote(o.routing_reason)}</div>` : ''}` : '<span class="muted">—</span>'}
+            ${routingNote(o.routing_reason) ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${routingNote(o.routing_reason)}</div>` : ''}
+            ${fulfillmentShortBadge(o)}` : '<span class="muted">—</span>'}
         </td>
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
@@ -1130,6 +1131,37 @@ function routingNote(reason) {
   if (r === 'manual')            return 'manually routed · 手动改派';
   if (r === 'out_of_city')       return 'out-of-city warehouse · 外地仓发货';
   return ''; // only_store / nearest / unknown — nothing worth showing
+}
+// Warning line for orders whose shipping store can't currently cover every item
+// (set at checkout on out-of-city / scheduled-later orders that skipped the
+// stock gate — see fulfillment_short_pids). Names the short items so the office
+// knows what to restock or transfer in before the parcel ships. The order was
+// accepted normally; this is purely a heads-up, never a block.
+// Compact list-row counterpart to fulfillmentShortNote — a small amber chip so
+// the office can spot "shipping store is short" orders without opening each one.
+function fulfillmentShortBadge(o) {
+  let pids = [];
+  try { pids = JSON.parse(o.fulfillment_short_pids || '[]') || []; } catch {}
+  if (!pids.length) return '';
+  return `<div style="font-size: 11px; margin-top: 2px; color: var(--st-awaiting_restock); font-weight:700;" `
+    + `title="${cuT('Shipping store is short on ' + pids.length + ' item(s) — restock or transfer before shipping',
+                    '出货门店缺 ' + pids.length + ' 件商品 — 发货前请补货或调货')}">`
+    + `⚠ ${cuT('needs restock', '需补货')}</div>`;
+}
+function fulfillmentShortNote(o) {
+  let pids = [];
+  try { pids = JSON.parse(o.fulfillment_short_pids || '[]') || []; } catch {}
+  if (!pids.length) return '';
+  const byId = new Map((o.items || []).map(it => [it.product_id, it]));
+  const names = pids.map(pid => {
+    const it = byId.get(pid);
+    return it ? orderItemNames(it) : ('#' + pid);
+  });
+  return `<div class="sub" style="margin-top:6px; color: var(--st-awaiting_restock); font-weight:700;">`
+    + `⚠ ${cuT('Not in stock at this store — restock or transfer before shipping',
+                '该门店暂无库存 — 发货前请补货或调货')}`
+    + `<div style="font-weight:600; color: var(--text-2); margin-top:2px;">${escapeHtml(names.join('、'))}</div>`
+    + `</div>`;
 }
 // Full-size "Ship by" tile shown in the order-detail card grid. Mirrors the
 // urgency colour scheme of the list-row cell but with more context (date,
@@ -1823,6 +1855,7 @@ async function openOrder(id, opts = {}) {
   _OPEN_ORDER = null;
   _ORDER_BACK_CUSTOMER = null;
   _ODV_OPEN = false;               // View popover starts closed on a fresh open
+  _ODM_OPEN = false;               // Refund/Cancel menu likewise closed on open
   const mount = $('#order-detail-mount');
   const drawer = document.getElementById('order-drawer');
   // Switching orders in an already-open drawer → cross-fade: hold the old
@@ -2018,6 +2051,53 @@ function odvOutside(e) {
 function odvBtn(key, val, label) {
   return `<button data-v="${val}" class="${ODV[key] === val ? 'active' : ''}" onclick="odvSet('${key}','${val}')">${label}</button>`;
 }
+// Refund / Cancel actions collapse into ONE button that opens a small menu.
+// Before, "Refund" and "Cancel + refund" sat side by side as two red buttons
+// in the drawer header — the operator asked for a single button with the
+// choices one tap deeper. With only one danger action (e.g. a dispatched
+// order can only be refunded, not cancelled) it stays a plain button — a
+// one-item menu would just be friction.
+let _ODM_OPEN = false;
+function renderRefundMenu(o, dangerTx) {
+  if (!dangerTx.length) return '';
+  if (dangerTx.length === 1) {
+    const [next, label] = dangerTx[0];
+    return `<button class="btn btn-danger btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
+  }
+  const items = dangerTx.map(([next, label]) =>
+    `<button class="odm-item" onclick="orderDangerPick(${o.id}, '${next}')">${label}</button>`
+  ).join('');
+  return `
+    <div class="ovp-wrap odm-wrap">
+      <button class="btn btn-danger btn-sm" id="odm-btn" onclick="orderDangerToggle()" aria-haspopup="true">
+        ${cuT('Refund / Cancel', '退款 / 取消')}
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:3px;"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div id="odm-pop" class="ovp odm-pop" hidden>
+        <div class="ovp-head">${cuT('Refund options', '退款选项')}</div>
+        ${items}
+      </div>
+    </div>`;
+}
+function orderDangerToggle() {
+  _ODM_OPEN = !_ODM_OPEN;
+  const pop = document.getElementById('odm-pop'); if (pop) pop.hidden = !_ODM_OPEN;
+  if (_ODM_OPEN) setTimeout(() => document.addEventListener('mousedown', orderDangerOutside), 0);
+  else document.removeEventListener('mousedown', orderDangerOutside);
+}
+function orderDangerOutside(e) {
+  if (e.target.closest && e.target.closest('.odm-wrap')) return;
+  orderDangerClose();
+}
+function orderDangerClose() {
+  _ODM_OPEN = false;
+  const pop = document.getElementById('odm-pop'); if (pop) pop.hidden = true;
+  document.removeEventListener('mousedown', orderDangerOutside);
+}
+function orderDangerPick(id, next) {
+  orderDangerClose();
+  transition(id, next);
+}
 function renderOrderViewPopover() {
   return `
     <div class="ovp-wrap" style="margin-right: 40px; flex-shrink: 0;">
@@ -2087,15 +2167,20 @@ function renderOrderTotalFooter(o, transitionsHtml) {
 function renderOpenOrder(o) {
   const mount = $('#order-detail-mount');
   const multiParcel = (o.shipments?.length || 0) > 1;
-  const transitions = nextStatusFor(o).map(([next, label]) => {
-      const cls = (next === 'cancelled' || next === 'refunded') ? 'btn-danger' : 'btn-primary';
+  // Split the status actions: the green "go forward" ones stay as plain
+  // buttons; the red refund-type ones (Refund / Cancel + refund) collapse
+  // into a single menu button so the header isn't a wall of red.
+  const allTx = nextStatusFor(o);
+  const dangerTx = allTx.filter(([next]) => next === 'cancelled' || next === 'refunded');
+  const transitions = allTx.filter(([next]) => next !== 'cancelled' && next !== 'refunded')
+    .map(([next, label]) => {
       // With multiple parcels the whole-order dispatch acts as "ship all at
       // once" — relabel so it's distinct from each parcel's own button.
       if (next === 'dispatched' && multiParcel && o.fulfillment_type !== 'pickup') {
         label = 'Mark all dispatched · 全部标记已发货';
       }
-      return `<button class="btn ${cls} btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
-    }).join('');
+      return `<button class="btn btn-primary btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
+    }).join('') + renderRefundMenu(o, dangerTx);
     mount.innerHTML = `
       <div class="order-card odd-${ODV.density}">
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
@@ -2153,6 +2238,7 @@ function renderOpenOrder(o) {
             <div class="kicker">Fulfilled by · 出货门店</div>
             <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
             <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
+            ${fulfillmentShortNote(o)}
           </div>` : ''}
           ${printReceiptTile(o)}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}

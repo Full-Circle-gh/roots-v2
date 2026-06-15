@@ -958,6 +958,17 @@
       .ovp-seg button:hover { color: var(--text-1); }
       .ovp-seg button.active { background: var(--accent); color: var(--accent-ink, #16161a); }
 
+      /* Refund / Cancel menu — reuses the .ovp popover, vertical action list */
+      .odm-pop { width: 220px; gap: 6px; }
+      .odm-item {
+        display: block; width: 100%; text-align: left;
+        padding: 9px 12px; border: 1px solid var(--line-soft); border-radius: var(--r-md);
+        background: var(--bg-input, var(--bg-app)); color: var(--danger);
+        font: 600 13px var(--f-sans); cursor: pointer;
+        transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+      }
+      .odm-item:hover { background: var(--danger-soft, rgba(220,60,60,.12)); border-color: var(--danger); }
+
       /* ── Tweak: status signaling (default = pill, the existing look) ── */
       #orders-table.os-bar .pill {
         background: none; border: none; border-left: 2px solid currentColor;
