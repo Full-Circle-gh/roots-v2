@@ -3827,6 +3827,48 @@ function maybeSendDeliveredSms(orderId) {
   } catch (e) { console.error('[sms-delivered] hook', e); }
 }
 
+// Short, customer-facing 温馨提示 line per order status. Kept punctuation-free
+// because WeChat's `thing` field type rejects many symbols ("数据格式错误"); plain
+// Chinese is always accepted. Each ≤20 chars (thing-type cap).
+const ORDER_STATUS_TIP = {
+  paid:       '已付款正在备货',
+  preparing:  '正在备货中请稍候',
+  dispatched: '包裹已发出请注意查收',
+  delivered:  '已送达感谢您的惠顾',
+  cancelled:  '订单已取消',
+  refunded:   '款项已原路退回',
+};
+
+// Build the WeChat subscribe-message `data` payload for the order-status
+// template (物品状态提醒 — fields thing1=商品名称, thing3=温馨提示,
+// character_string4=卡号). WeChat rejects the push if ANY selected field is
+// empty, so every value has a fallback. `tip` is the status sentence shown on
+// the 温馨提示 line. Reused by both the status-change and tracking-scenario
+// pushes so they always agree with the live template field shape.
+function buildOrderStatusData(orderId, orderNo, tip) {
+  // 商品名称: first item name (+ "等N件" when the order holds more). thing type
+  // caps at 20 chars — truncate defensively so a long product name can't make
+  // WeChat reject the whole push.
+  let goods = '您的订单';
+  try {
+    const items = tdb().prepare(
+      'SELECT name_cn, name_en FROM retail_order_items WHERE order_id = ? ORDER BY id ASC'
+    ).all(orderId);
+    if (items.length) {
+      const first = items[0].name_cn || items[0].name_en || '您的订单';
+      goods = items.length > 1 ? `${first} 等${items.length}件` : first;
+    }
+  } catch (e) { /* fall back to 您的订单 */ }
+  if (goods.length > 20) goods = goods.slice(0, 19) + '…';
+  let t = (tip || '订单状态已更新').toString();
+  if (t.length > 20) t = t.slice(0, 20);
+  return {
+    thing1:            { value: goods },
+    thing3:            { value: t },
+    character_string4: { value: orderNo || '' },
+  };
+}
+
 // Helper used by the admin status-transition endpoint — fires the in-app
 // notification (always) and, when configured, the WeChat subscribe-message.
 function notifyOrderStatusChange(orderId, newStatus) {
@@ -3844,7 +3886,7 @@ function notifyOrderStatusChange(orderId, newStatus) {
   });
   // Only known order statuses map to a push. Refund flows call this with
   // newStatus=null (they emit their own 'refund' in-app rows); without this
-  // guard the push branch would build a phrase2:{value:null}, get rejected by
+  // guard the push branch would build a tip:{value:null}, get rejected by
   // WeChat, and STILL burn the customer's one-shot order-status consent.
   if (!ORDER_STATUS_NOTIF[newStatus]) return;
   if (!notifCategoryEnabled('order')) return;   // category muted → no push either
@@ -3854,17 +3896,7 @@ function notifyOrderStatusChange(orderId, newStatus) {
     if (!tplId) return;
     const o = tdb().prepare('SELECT order_no, customer_id, total FROM retail_orders WHERE id = ?').get(orderId);
     if (!o) return;
-    const labels = {
-      paid: '已支付', preparing: '准备中', dispatched: '配送中',
-      delivered: '已送达', cancelled: '已取消', refunded: '已退款',
-    };
-    // WeChat template data shape: { key: { value: '...' } }
-    const data = {
-      thing1:   { value: o.order_no },
-      phrase2:  { value: labels[newStatus] || newStatus },
-      amount3:  { value: '¥' + Number(o.total || 0).toFixed(2) },
-      time4:    { value: new Date().toISOString().slice(0, 16).replace('T', ' ') },
-    };
+    const data = buildOrderStatusData(orderId, o.order_no, ORDER_STATUS_TIP[newStatus]);
     sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
       .catch(e => console.warn('[notify-status]', e));
   } catch (e) { console.error('[notify-status]', e); }
@@ -3874,7 +3906,7 @@ function notifyOrderStatusChange(orderId, newStatus) {
 // the package reaches a pickup point, gets dropped at the door, or the
 // courier can't reach the customer. Reuses the existing order-status
 // template (`order_status_template_id`) but writes the scenario label
-// (e.g. "已送达驿站 · 取件码 1-2-3456") into the phrase2 slot so the
+// (e.g. "已送达驿站取件码1-2-3456") into the 温馨提示 (thing3) slot so the
 // customer sees the actionable info without opening the mini app.
 //
 // Idempotency: caller is responsible for skipping repeats (see
@@ -3887,19 +3919,13 @@ function notifyTrackingScenario(orderId, scenario) {
     if (!tplId) return;
     const o = tdb().prepare('SELECT order_no, customer_id, total FROM retail_orders WHERE id = ?').get(orderId);
     if (!o) return;
-    // Pack the most actionable detail into phrase2. Capped at ~20 CN
-    // chars to fit WeChat's phrase-type length limit; pickup_code wins
-    // because that's the only piece the customer needs to ACT on.
+    // Pack the most actionable detail into the 温馨提示 line. buildOrderStatusData
+    // caps it at 20 chars; pickup_code wins because that's the only piece the
+    // customer needs to ACT on. No punctuation — thing-type rejects many symbols.
     let phrase = scenario.label_cn;
-    if (scenario.pickup_code) phrase = `${scenario.label_cn}·取件码${scenario.pickup_code}`;
-    else if (scenario.signer) phrase = `${scenario.label_cn}·签收人${scenario.signer}`;
-    if (phrase.length > 20) phrase = phrase.slice(0, 20);
-    const data = {
-      thing1:  { value: o.order_no },
-      phrase2: { value: phrase },
-      amount3: { value: '¥' + Number(o.total || 0).toFixed(2) },
-      time4:   { value: new Date().toISOString().slice(0, 16).replace('T', ' ') },
-    };
+    if (scenario.pickup_code) phrase = `${scenario.label_cn}取件码${scenario.pickup_code}`;
+    else if (scenario.signer) phrase = `${scenario.label_cn}签收人${scenario.signer}`;
+    const data = buildOrderStatusData(orderId, o.order_no, phrase);
     sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
       .catch(e => console.warn('[notify-scenario]', e));
   } catch (e) { console.error('[notify-scenario]', e); }
