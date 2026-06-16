@@ -1707,7 +1707,7 @@ function renderItemRow(it, opts = {}) {
   const nm = orderItemNames(it);
   const name = `<span class="mf-name">${escapeHtml(nm.primary)}</span>`;
   const nameCell = it.product_id
-    ? `<a href="/product-editor?id=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
+    ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
     : name;
   const zh = (nm.secondary || it.size)
     ? `<span class="mf-zh">${escapeHtml(nm.secondary)}${it.size ? (nm.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
@@ -1862,7 +1862,7 @@ function renderItemsAsGrid(items, showPack = true) {
     const nn = orderItemNames(it);
     const nm = `<span class="oi-name">${escapeHtml(nn.primary)}</span>`;
     const nameCell = it.product_id
-      ? `<a href="/product-editor?id=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
+      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
     const zh = (nn.secondary || it.size)
       ? `<div class="oi-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
@@ -1886,7 +1886,7 @@ function renderItemsAsCards(items, showPack = true) {
     const nn = orderItemNames(it);
     const nm = `<span class="oic-name">${escapeHtml(nn.primary)}</span>`;
     const nameCell = it.product_id
-      ? `<a href="/product-editor?id=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
+      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
     const zh = (nn.secondary || it.size)
       ? `<div class="oic-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
@@ -3005,6 +3005,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
             <div style="margin-top:2px;">${trackLink}</div>
           </div>
         </div>` : ''}
+      ${eventsBlock}
       ${!has ? `
         <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)">📦 Create JD label · 生成京东运单</button>
@@ -3020,7 +3021,6 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       </div>
       ${has && t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes). · “取消揽收”会向京东取消上门;“清除”仅在本地移除运单号(快递仍会上门)。</div>` : ''}
       ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead. · 手动录入的运单号通过快递100(付费)追踪,含个人的京东 JDV0… 单号;如需免费京东追踪,请改用上方“生成京东运单”。</div>` : ''}
-      ${eventsBlock}
     </div>`;
 }
 
