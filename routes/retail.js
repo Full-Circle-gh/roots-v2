@@ -4768,6 +4768,48 @@ router.post('/api/retail/track', express.json(), (req, res) => {
   res.json({ success: true });
 });
 
+// ─── Article (Kitchen Notes) view tracking ────────────────────────────────
+// The mini-app fires this for each editorial `recipe_story` block: once when
+// the card scrolls into view (kind 'impression') and once when the customer
+// taps READ MORE (kind 'read'). Public + best-effort like /track: never
+// auth-required, never throws, always 200, per-IP rate limited. Deduped per
+// viewer per kind per GZ day by a UNIQUE index, so reloading home all day
+// counts once — an honest "people reached", not inflated reload counts.
+router.post('/api/retail/articles/:blockId/view', express.json(), (req, res) => {
+  if (!trackRateOk(req.ip || 'unknown')) return res.json({ success: true });
+  try {
+    const blockId = String(req.params.blockId || '').slice(0, 64);
+    if (!blockId) return res.json({ success: true });
+    const kind = (req.body && req.body.kind === 'read') ? 'read' : 'impression';
+
+    // Attribute to a known customer when a token is present; otherwise fall
+    // back to the mini-app's per-launch session id so anonymous reach is still
+    // counted (and deduped) without over-counting one person's reloads.
+    let viewerKey = null;
+    const m = /^Bearer\s+([A-Za-z0-9]+)$/.exec(req.headers.authorization || '');
+    if (m) {
+      const row = tdb().prepare(
+        `SELECT customer_id FROM retail_auth_tokens
+          WHERE token = ? AND datetime(expires_at) > CURRENT_TIMESTAMP`
+      ).get(m[1]);
+      if (row) viewerKey = 'c' + row.customer_id;
+    }
+    if (!viewerKey) {
+      const sid = (req.body && req.body.viewer_id) ? String(req.body.viewer_id).slice(0, 64) : '';
+      viewerKey = sid ? ('s' + sid) : ('ip' + String(req.ip || 'unknown').slice(0, 60));
+    }
+
+    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    tdb().prepare(
+      `INSERT OR IGNORE INTO retail_article_views (block_id, kind, viewer_key, day)
+       VALUES (?, ?, ?, ?)`
+    ).run(blockId, kind, viewerKey, day);
+  } catch (e) {
+    // Intentionally silent — tracking must be invisible to the client.
+  }
+  res.json({ success: true });
+});
+
 // ─── Client diagnostics (public, best-effort) ─────────────────────────────
 // The mini app posts here so support can SEE what happened on a customer's
 // device — app version, phone model, OS, and any JS crash / failed request —
@@ -8417,12 +8459,36 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   }
 
   // ── Payment-method split ──
-  const payments = tdb().prepare(`
+  // Base buckets sum order.total by the order's primary tender. But a WeChat
+  // add-on (paid through the gateway) was folded into order.total while the
+  // order keeps its original payment_method — so a cash order with a WeChat
+  // add-on books the whole total to cash. Reassign each order's successful
+  // add-on amount from the order's tender to 'wechat' so the split reflects the
+  // money actually taken on each rail.
+  const payRows = tdb().prepare(`
     SELECT COALESCE(payment_method, 'unknown') AS method,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
      WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
-     GROUP BY method ORDER BY revenue DESC`).all(from, to);
+     GROUP BY method`).all(from, to);
+  const addonByMethod = tdb().prepare(`
+    SELECT COALESCE(o.payment_method, 'unknown') AS method,
+           COALESCE(SUM(ad.amount), 0) AS addon_total
+      FROM retail_orders o
+      JOIN retail_order_addons ad ON ad.order_id = o.id AND ad.status = 'success'
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+     GROUP BY method`).all(from, to);
+  const payMap = Object.fromEntries(payRows.map(r => [r.method, { method: r.method, orders: r.orders, revenue: Number(r.revenue) || 0 }]));
+  for (const r of addonByMethod) {
+    const moved = Number(r.addon_total) || 0;
+    if (moved <= 0 || r.method === 'wechat') continue;       // already on the wechat rail
+    if (payMap[r.method]) payMap[r.method].revenue = +(payMap[r.method].revenue - moved).toFixed(2);
+    if (!payMap.wechat) payMap.wechat = { method: 'wechat', orders: 0, revenue: 0 };
+    payMap.wechat.revenue = +(payMap.wechat.revenue + moved).toFixed(2);
+  }
+  const payments = Object.values(payMap)
+    .filter(r => r.revenue > 0.005 || r.orders > 0)
+    .sort((a, b) => b.revenue - a.revenue);
 
   // ── Delivery-mode split ──
   const delivery = tdb().prepare(`
@@ -8643,6 +8709,50 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     console.error('[dashboard/checkout]', e.message);
   }
 
+  // ── Article views (Kitchen Notes editorial blocks) ──
+  // recipe_story blocks live inside storefront layout JSON (one row per page,
+  // value is a blocks array). Scan every config row, collect recipe_story
+  // headlines keyed by block id, then join the tracked impression/read tallies
+  // for the window onto them. A title may be missing if the block was deleted
+  // after being viewed — kept in the list as "(removed article)".
+  let articleViews = [];
+  try {
+    const titleById = {};
+    const cfgRows = tdb().prepare('SELECT value_json FROM storefront_config').all();
+    for (const r of cfgRows) {
+      let blocks;
+      try { blocks = JSON.parse(r.value_json); } catch { continue; }
+      if (!Array.isArray(blocks)) continue;
+      for (const b of blocks) {
+        if (b && b.type === 'recipe_story' && b.id != null) {
+          titleById[String(b.id)] = {
+            en: b.headline_en || b.headline_cn || '',
+            cn: b.headline_cn || b.headline_en || '',
+          };
+        }
+      }
+    }
+    const avRows = tdb().prepare(`
+      SELECT block_id,
+             SUM(CASE WHEN kind = 'impression' THEN 1 ELSE 0 END) AS impressions,
+             SUM(CASE WHEN kind = 'read'       THEN 1 ELSE 0 END) AS reads
+        FROM retail_article_views
+       WHERE day BETWEEN ? AND ?
+       GROUP BY block_id`).all(from, to);
+    articleViews = avRows.map((r) => {
+      const t = titleById[String(r.block_id)] || {};
+      return {
+        block_id: r.block_id,
+        title_en: t.en || null,
+        title_cn: t.cn || null,
+        impressions: r.impressions || 0,
+        reads: r.reads || 0,
+      };
+    }).sort((a, b) => (b.impressions - a.impressions) || (b.reads - a.reads));
+  } catch (e) {
+    console.error('[dashboard/article-views]', e.message);
+  }
+
   const conversion = vis.sessions > 0 ? (kpi.orders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
@@ -8690,6 +8800,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       traffic: { scenes },
       heat, cohorts, cohortSizes, composition,
       checkout,
+      articleViews,
     },
   });
 });
@@ -15046,6 +15157,112 @@ const STATUS_TRANSITIONS = {
 // of all manual payments collapsing into "unknown".
 const OFFLINE_PAY_METHODS = new Set(['cash', 'bank_transfer', 'wechat_offline', 'alipay_offline', 'other']);
 
+// A settled payment row holds real gateway money we can push back only when it
+// went through the WeChat gateway: a non-offline method AND a real provider
+// out_trade_no (the synthetic 'MANUAL…' refs are off-app bookkeeping).
+function isGatewayPayment(p) {
+  return !!p && p.out_trade_no &&
+    !OFFLINE_PAY_METHODS.has(p.method) &&
+    !String(p.out_trade_no).startsWith('MANUAL');
+}
+
+// Pure planner: decide how much of `amount` (¥) each settled payment row absorbs,
+// GATEWAY rows first so real money goes back before anything is left to a manual
+// (cash) payout. An order can carry more than one settled payment — e.g. a cash
+// original plus a WeChat add-on, or an original WeChat payment plus a later
+// WeChat add-on — so we must walk every row, not just the most recent one.
+// No I/O; returns { plan:[{payment, take, gateway}], unallocated }.
+function planRefundAllocation(rows, amount) {
+  const ordered = [...rows.filter(isGatewayPayment), ...rows.filter((p) => !isGatewayPayment(p))];
+  let left = +Number(amount || 0).toFixed(2);
+  const plan = [];
+  for (const p of ordered) {
+    if (left <= 0.005) break;
+    const remaining = +Math.max(0, (Number(p.amount) || 0) - (Number(p.refunded_amount) || 0)).toFixed(2);
+    const take = +Math.min(remaining, left).toFixed(2);
+    if (take <= 0.005) continue;
+    plan.push({ payment: p, take, gateway: isGatewayPayment(p) });
+    left = +(left - take).toFixed(2);
+  }
+  return { plan, unallocated: +left.toFixed(2) };
+}
+
+// Push `amount` (¥) of refund back across an order's settled payments. Fires a
+// real WeChat refund against EACH gateway payment row (capped to that row's own
+// charge), and records the remainder against offline rows as a manual payout the
+// operator settles by hand. This is what makes a split-tender order whole: the
+// old code refunded only ORDER BY id DESC LIMIT 1, so a WeChat add-on sitting
+// behind a cash original was never returned even though the gateway held it.
+//
+// Updates retail_payments.refunded_amount/status per row as each portion settles.
+// Returns { gatewayAmount, manualAmount, refs, ref, method }. Throws on a gateway
+// error AFTER persisting any refunds that already succeeded — the caller reverts
+// the order-level claim, and the per-row records keep the books honest.
+// opts.manualOnly: record every row as a manual payout (no gateway call) — used
+// when the operator explicitly pays back off-app (cash/bank) or in dev mode.
+async function settleOrderRefundAcrossTenders(orderId, amount, opts = {}) {
+  const payCtx = opts.payCtx || payContext();
+  const rows = tdb().prepare(
+    `SELECT id, method, amount, out_trade_no, COALESCE(refunded_amount, 0) AS refunded_amount
+       FROM retail_payments
+      WHERE order_id = ? AND status IN ('success', 'refunded')
+      ORDER BY id ASC`
+  ).all(orderId);
+  const { plan } = planRefundAllocation(rows, amount);
+
+  const refs = [];
+  let gatewayAmount = 0;
+  let manualAmount = 0;
+  for (const step of plan) {
+    const p = step.payment;
+    if (step.gateway && !payCtx.devMode && !opts.manualOnly) {
+      const totalCents  = Math.round((Number(p.amount) || 0) * 100);
+      const refundCents = Math.round(step.take * 100);
+      // Unique per row even when several rows refund inside the same millisecond.
+      const outRefundNo = ('RF' + p.id + 'X' + p.out_trade_no + Date.now().toString().slice(-5)).slice(0, 63);
+      const r = await wechatPayRefund({
+        outTradeNo: p.out_trade_no, outRefundNo, refundCents, totalCents,
+        reason: opts.reason || ('Refund order ' + orderId),
+      });
+      if (r.status === 'ABNORMAL') {
+        const e = new Error('wechat_refund_abnormal'); e.code = 'wechat_refund_abnormal'; e.abnormal = true; throw e;
+      }
+      refs.push(r.refund_id + (r.status ? ' (' + r.status + ')' : ''));
+      gatewayAmount = +(gatewayAmount + step.take).toFixed(2);
+    } else {
+      manualAmount = +(manualAmount + step.take).toFixed(2);
+    }
+    tdb().prepare(
+      `UPDATE retail_payments
+          SET refunded_amount = MIN(amount, COALESCE(refunded_amount, 0) + ?),
+              status = CASE WHEN amount <= COALESCE(refunded_amount, 0) + ? THEN 'refunded' ELSE status END
+        WHERE id = ?`
+    ).run(step.take, step.take, p.id);
+  }
+  return {
+    gatewayAmount, manualAmount, refs,
+    ref: refs.join('; ') || null,
+    method: gatewayAmount > 0 ? 'wechat' : 'manual',
+  };
+}
+
+// True when the order still holds gateway money we could refund (any settled,
+// not-fully-refunded WeChat payment row). Used to decide whether a refund/cancel
+// must claim + push money back, vs. a pure off-app order the operator settles by
+// hand. Mirrors isGatewayPayment in SQL.
+function orderHasRefundableGatewayMoney(orderId) {
+  const offline = [...OFFLINE_PAY_METHODS];
+  const ph = offline.map(() => '?').join(',');
+  return !!tdb().prepare(
+    `SELECT 1 FROM retail_payments
+      WHERE order_id = ? AND status IN ('success', 'refunded')
+        AND COALESCE(refunded_amount, 0) + 0.005 < amount
+        AND out_trade_no IS NOT NULL AND out_trade_no NOT LIKE 'MANUAL%'
+        AND method NOT IN (${ph})
+      LIMIT 1`
+  ).get(orderId, ...offline);
+}
+
 router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status, reason, staff_note, pay_method } = req.body || {};
@@ -15080,20 +15297,14 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         message: 'This order already has an approved or paid refund — use the refund payout action.',
       });
     }
-    const pay = tdb().prepare(
-      "SELECT out_trade_no, amount, method FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
-    ).get(id);
-    // Only orders actually paid through the WeChat gateway can be refunded
-    // through it. Off-app payments (cash / bank transfer / WeChat or Alipay
-    // off-app / other) hold no money at WeChat and carry a synthetic
-    // `MANUAL…` out_trade_no, so firing wechatPayRefund() against it would
-    // throw and abort the whole transition — leaving the status stuck. For
-    // those the operator returns the money themselves; we just flip the status.
-    const isOnlineWechatPay =
-      pay?.out_trade_no &&
-      !OFFLINE_PAY_METHODS.has(pay.method) &&
-      !String(pay.out_trade_no).startsWith('MANUAL');
-    if (isOnlineWechatPay) {
+    // Only money held at the WeChat gateway can be refunded through it. Off-app
+    // payments (cash / bank transfer / WeChat or Alipay off-app / other) hold no
+    // gateway money and carry a synthetic `MANUAL…` out_trade_no, so we just flip
+    // the status and the operator returns that part by hand. A split-tender order
+    // (e.g. cash original + WeChat add-on) holds gateway money in the add-on
+    // payment row, so we still claim and push that portion back across ALL its
+    // gateway rows — not just the most recent one.
+    if (orderHasRefundableGatewayMoney(id)) {
       // Atomically claim the refund (→ 'paying') so a double-click or a second
       // operator can't each fire a real WeChat refund. Only the request that
       // wins this transition proceeds; on failure we revert to the prior state.
@@ -15103,20 +15314,18 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       if (claim.changes !== 1) {
         return res.status(409).json({ success: false, error: 'refund_already_processing' });
       }
-      const fullTotal   = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
-      const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : fullTotal) * 100);
-      const refundCents = Math.round(fullTotal * 100);
-      const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
+      const fullTotal = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
       try {
-        const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: reason || ((status === 'cancelled' ? 'Cancelled order ' : 'Refund order ') + id) });
-        if (r.status === 'ABNORMAL') {
-          tdb().prepare("UPDATE retail_orders SET refund_status = ? WHERE id = ? AND refund_status = 'paying'").run(already ?? null, id);
-          return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
-        }
-        wechatRefundRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
+        const settled = await settleOrderRefundAcrossTenders(id, fullTotal, {
+          reason: reason || ((status === 'cancelled' ? 'Cancelled order ' : 'Refund order ') + id),
+        });
+        wechatRefundRef = settled.ref;
       } catch (e) {
         console.error('[wechat-refund]', e);
         tdb().prepare("UPDATE retail_orders SET refund_status = ? WHERE id = ? AND refund_status = 'paying'").run(already ?? null, id);
+        if (e.abnormal) {
+          return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
+        }
         return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
       }
     }
@@ -15566,17 +15775,11 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
     : Number(o.refund_amount_approved) || 0;
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
 
-  // For a real WeChat refund we need the original transaction. Check it exists
-  // BEFORE claiming the order so a missing txn never leaves it stuck in the
-  // transient 'paying' state.
-  let pay = null;
-  if (method === 'wechat' && !payContext().devMode) {
-    pay = tdb().prepare(
-      "SELECT out_trade_no, amount FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
-    ).get(id);
-    if (!pay?.out_trade_no) {
-      return res.status(409).json({ success: false, error: 'no_wechat_transaction', message: 'No WeChat transaction on this order to refund against.' });
-    }
+  // For a real WeChat refund we need at least one gateway payment row. Check it
+  // exists BEFORE claiming the order so a missing txn never leaves it stuck in
+  // the transient 'paying' state.
+  if (method === 'wechat' && !payContext().devMode && !orderHasRefundableGatewayMoney(id)) {
+    return res.status(409).json({ success: false, error: 'no_wechat_transaction', message: 'No WeChat transaction on this order to refund against.' });
   }
 
   // Atomically claim the approved → paying transition. THIS is the guard that
@@ -15599,21 +15802,25 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
   // returns to 'approved' and the operator sees it didn't go through.
   let payoutRef = reference;
   if (method === 'wechat' && !payContext().devMode) {
-    const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : o.total) * 100);
-    const refundCents = Math.round(amount * 100);
-    const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
     try {
-      const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: note || ('Refund order ' + id) });
-      if (r.status === 'ABNORMAL') {
-        tdb().prepare("UPDATE retail_orders SET refund_status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND refund_status = 'paying'").run(id);
-        return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
-      }
-      payoutRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
+      // Push the approved amount back across every gateway payment row
+      // (gateway-first), covering a WeChat add-on behind a cash/original payment.
+      const settled = await settleOrderRefundAcrossTenders(id, amount, { reason: note || ('Refund order ' + id) });
+      payoutRef = settled.ref || reference;
     } catch (e) {
       console.error('[wechat-refund]', e);
       tdb().prepare("UPDATE retail_orders SET refund_status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND refund_status = 'paying'").run(id);
+      if (e.abnormal) {
+        return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
+      }
       return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
     }
+  } else {
+    // Non-gateway payout (cash/bank/etc.) — record the per-row refund for
+    // reconciliation; the money is returned off-app by the operator. manualOnly
+    // so a gateway refund is never fired against the operator's chosen method.
+    try { await settleOrderRefundAcrossTenders(id, amount, { reason: note || ('Refund order ' + id), manualOnly: true }); }
+    catch (e) { console.error('[refund-payout manual-mirror]', e); }
   }
 
   tdb().prepare(
@@ -15629,15 +15836,8 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
       WHERE id = ? AND refund_status = 'paying'`
   ).run(amount, method, payoutRef || null, req.user.id, note, id);
 
-  // Mirror onto retail_payments so reconciliation reports see it.
-  try {
-    tdb().prepare(
-      `UPDATE retail_payments
-          SET refunded_amount = MIN(amount, COALESCE(refunded_amount, 0) + ?),
-              status = CASE WHEN amount <= COALESCE(refunded_amount, 0) + ? THEN 'refunded' ELSE status END
-        WHERE order_id = ? AND status IN ('success', 'refunded')`
-    ).run(amount, amount, id);
-  } catch (e) { console.error('[retail_payments refund-mirror]', e); }
+  // (retail_payments rows were already updated per-tender by
+  // settleOrderRefundAcrossTenders above.)
 
   logRefundEvent({
     orderId: id, event: 'paid', amount, note: note || null, userId: req.user.id,
@@ -15706,35 +15906,33 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   // operator returns the money themselves.
   let payoutMethod = 'manual';
   let payoutRef = null;
-  const pay = tdb().prepare(
-    "SELECT out_trade_no, amount, method FROM retail_payments WHERE order_id = ? AND status IN ('success','refunded') ORDER BY id DESC LIMIT 1"
-  ).get(id);
-  const isOnlineWechatPay =
-    pay?.out_trade_no &&
-    !OFFLINE_PAY_METHODS.has(pay.method) &&
-    !String(pay.out_trade_no).startsWith('MANUAL');
-  if (isOnlineWechatPay && !payContext().devMode) {
+  if (orderHasRefundableGatewayMoney(id) && !payContext().devMode) {
     // Atomically claim (→ 'paying') so a double-click can't fire two real refunds.
     const claim = tdb().prepare(
       "UPDATE retail_orders SET refund_status = 'paying', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(refund_status,'') NOT IN ('pending','reviewing','approved','paying','paid')"
     ).run(id);
     if (claim.changes !== 1) return res.status(409).json({ success: false, error: 'refund_already_processing' });
-    const totalCents  = Math.round(Number(pay.amount != null ? pay.amount : o.total) * 100);
-    const refundCents = Math.round(amount * 100);
-    const outRefundNo = ('RF' + pay.out_trade_no + Date.now().toString().slice(-6)).slice(0, 63);
     try {
-      const r = await wechatPayRefund({ outTradeNo: pay.out_trade_no, outRefundNo, refundCents, totalCents, reason: note || ('Refund order ' + id) });
-      if (r.status === 'ABNORMAL') {
-        tdb().prepare("UPDATE retail_orders SET refund_status = NULL WHERE id = ? AND refund_status = 'paying'").run(id);
-        return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
-      }
-      payoutMethod = 'wechat';
-      payoutRef = r.refund_id + (r.status ? ' (' + r.status + ')' : '');
+      // Refund the chosen amount across every gateway payment row (gateway-first),
+      // so a split-tender order returns its WeChat add-on as well as any original
+      // WeChat charge — not just the most recent payment.
+      const settled = await settleOrderRefundAcrossTenders(id, amount, { reason: note || ('Refund order ' + id) });
+      payoutMethod = settled.method;
+      payoutRef = settled.ref;
     } catch (e) {
       console.error('[wechat-refund direct]', e);
       tdb().prepare("UPDATE retail_orders SET refund_status = NULL WHERE id = ? AND refund_status = 'paying'").run(id);
+      if (e.abnormal) {
+        return res.status(502).json({ success: false, error: 'wechat_refund_abnormal', message: 'WeChat returned ABNORMAL (often insufficient merchant balance) — check the merchant platform.' });
+      }
       return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
     }
+  } else {
+    // No gateway money (pure off-app order) or dev mode — still record the
+    // per-row refund so reconciliation sees it; the operator returns the cash by
+    // hand. manualOnly so dev mode never tries to hit the gateway.
+    try { await settleOrderRefundAcrossTenders(id, amount, { reason: note || ('Refund order ' + id), manualOnly: true }); }
+    catch (e) { console.error('[refund-direct manual-mirror]', e); }
   }
 
   // Record the settled refund (approved + paid in one shot).
@@ -15757,15 +15955,8 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
       WHERE id = ?`
   ).run(amount, amount, amount, lines ? JSON.stringify(lines) : null, payoutMethod, payoutRef, note, req.user.id, req.user.id, id);
 
-  // Mirror onto retail_payments so reconciliation reports see it.
-  try {
-    tdb().prepare(
-      `UPDATE retail_payments
-          SET refunded_amount = MIN(amount, COALESCE(refunded_amount, 0) + ?),
-              status = CASE WHEN amount <= COALESCE(refunded_amount, 0) + ? THEN 'refunded' ELSE status END
-        WHERE order_id = ? AND status IN ('success', 'refunded')`
-    ).run(amount, amount, id);
-  } catch (e) { console.error('[retail_payments refund-mirror direct]', e); }
+  // (retail_payments rows were already updated per-tender by
+  // settleOrderRefundAcrossTenders above — no blanket mirror needed.)
 
   // Stock + points side-effects. Points/referral reverse ALL-OR-NOTHING, so only
   // on a full refund (matches /refund/approve).
@@ -18233,6 +18424,20 @@ function finalizeOrderAddon(addonId) {
               updated_at = CURRENT_TIMESTAMP
         WHERE id = ?`
     ).run(a.amount, a.amount, pts, order.id);
+
+    // Record the add-on as a first-class payment so it's refundable and shows up
+    // in tender reconciliation. Without this, the add-on's WeChat money lived
+    // only in retail_order_addons — invisible to every refund path (so a refund
+    // returned the original tender but stranded the add-on) and mis-attributed
+    // in the payment-method report (the whole bumped total was booked to the
+    // original tender). INSERT OR IGNORE: the out_trade_no is UNIQUE, so a retry
+    // callback that re-finalizes never doubles the row. transaction_id is set by
+    // the pay callback just before finalize; null in dev (no real gateway money).
+    tdb().prepare(
+      `INSERT OR IGNORE INTO retail_payments
+         (order_id, method, amount, status, out_trade_no, transaction_id, completed_at)
+       VALUES (?, ?, ?, 'success', ?, ?, CURRENT_TIMESTAMP)`
+    ).run(order.id, a.payment_method || 'wechat', a.amount, a.out_trade_no || null, a.transaction_id || null);
 
     // Earn-points on the add-on spend. Own ledger row + own expiry batch, with
     // a distinct source so awardOrderPoints' idempotency marker is untouched.

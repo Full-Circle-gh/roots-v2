@@ -950,18 +950,18 @@ const BENTO_CATALOGUE = {
       function renderTab(tab) {
         const d    = tab === 'oos' ? oos : low;
         const num  = tab === 'oos' ? oos.count : low.count;
-        const sub  = tab === 'oos' ? 'out of stock · 售罄' : 'need restock · 件需补货';
+        const sub  = tab === 'oos' ? cuT('out of stock','售罄') : cuT('need restock','件需补货');
         const numCls = num === 0 ? 'good' : 'warn';
         const rows = d.items.slice(0, 6).map(it => {
           const link = it.id ? ` role="button" tabindex="0" onclick="dashOpenProductFromFeed(${Number(it.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();dashOpenProductFromFeed(${Number(it.id)})}"` : '';
           const val  = tab === 'oos' ? '0' : String(it.stock_qty);
           return `<div class="db-tile-list-row${it.id ? ' is-link' : ''}"${link}><span class="name">${escapeHtml(dbProdName(it))}</span><span class="val">${val}</span></div>`;
         }).join('');
-        const emptyMsg = tab === 'oos' ? 'All in stock · 无售罄' : 'All stocked · 库存充足';
+        const emptyMsg = tab === 'oos' ? cuT('All in stock','无售罄') : cuT('All stocked','库存充足');
         body.innerHTML = `
           <div class="db-tile-tabs">
-            <button class="db-tile-tab${tab !== 'oos' ? ' active' : ''}" onclick="(function(el){el.closest('.db-tile-body').dataset.tab='low';BENTO_CATALOGUE.low_stock.render(el.closest('.db-tile-body'),el.closest('.db-tile'))})(this)">Low</button>
-            <button class="db-tile-tab${tab === 'oos' ? ' active' : ''}" onclick="(function(el){el.closest('.db-tile-body').dataset.tab='oos';BENTO_CATALOGUE.low_stock.render(el.closest('.db-tile-body'),el.closest('.db-tile'))})(this)">Out of stock</button>
+            <button class="db-tile-tab${tab !== 'oos' ? ' active' : ''}" onclick="(function(el){el.closest('.db-tile-body').dataset.tab='low';BENTO_CATALOGUE.low_stock.render(el.closest('.db-tile-body'),el.closest('.db-tile'))})(this)">${cuT('Low','偏低')}</button>
+            <button class="db-tile-tab${tab === 'oos' ? ' active' : ''}" onclick="(function(el){el.closest('.db-tile-body').dataset.tab='oos';BENTO_CATALOGUE.low_stock.render(el.closest('.db-tile-body'),el.closest('.db-tile'))})(this)">${cuT('Out of stock','售罄')}</button>
           </div>
           <div class="db-tile-num ${numCls}">${num}</div>
           <div class="db-tile-sub">${num === 0 ? emptyMsg : sub}</div>
@@ -1412,6 +1412,7 @@ function dashRenderAll() {
   dashRenderTrend();
   dashRenderHeatmap();
   dashRenderAcqFunnel();
+  dashRenderArticleViews();
   dashRenderFunnel();
   dashRenderSplits();
   dashRenderProducts();
@@ -1708,6 +1709,34 @@ function dashRenderAcqFunnel() {
     + `${cuT('Visitor → order', '访客 → 下单')}: <b style="color:var(--tea)">${conv}</b>`
     + (reached ? ` · ${cuT('checkout → paid', '结算 → 下单')}: <b>${fmtPct(paidStep)}</b>` : '')
     + `</div>`;
+}
+
+// Article views — Kitchen Notes editorial (recipe_story) cards. Each row is
+// one article: bar = how many customers saw it (impressions), value = how many
+// tapped READ MORE (reads), with the read-through % alongside. Deduped per
+// viewer per day server-side, so these are "people reached", not raw reloads.
+function dashRenderArticleViews() {
+  const host = document.getElementById('db-articleviews');
+  if (!host) return;
+  const list = (DASH_DATA.articleViews || []).filter(a => (a.impressions || 0) > 0 || (a.reads || 0) > 0);
+  if (!list.length) {
+    host.innerHTML = '<div class="db-muted">' + cuT('No article views in range', '区间内无文章阅读') + '</div>';
+    return;
+  }
+  const pct = (n, d) => (d > 0 ? Math.round((n / d) * 100) + '%' : '—');
+  const rows = list.map(a => {
+    const seen = a.impressions || 0, reads = a.reads || 0;
+    const title = cuT(a.title_en || a.title_cn || '', a.title_cn || a.title_en || '')
+      || cuT('(removed article)', '(已删除文章)');
+    return {
+      k: title,
+      kSub: cuT(dashNum(seen) + ' seen', dashNum(seen) + ' 次看到'),
+      value: dashNum(reads) + ' ' + cuT('read', '阅读'),
+      valueSub: pct(reads, seen),
+      frac: seen,
+    };
+  });
+  host.innerHTML = dashBarList(rows);
 }
 
 function dashRenderFunnel() {

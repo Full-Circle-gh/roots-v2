@@ -1220,6 +1220,26 @@ db.exec(`
     updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_by      INTEGER                            -- staff user_id (NULL if seed)
   );
+
+  -- Editorial (Kitchen Notes) view tracking. The mini-app fires one row when a
+  -- recipe_story block scrolls into view ('impression') and one when the
+  -- customer taps READ MORE ('read'). viewer_key is 'c<customerId>' when
+  -- logged in, else 's<session>' (per-launch) so anonymous reach still counts.
+  -- The UNIQUE index dedupes per viewer per kind per GZ day, so a customer
+  -- reloading home all day counts once — an honest "people reached", not raw
+  -- reload counts. The dashboard aggregates per block id (headline lives in the
+  -- storefront layout JSON, joined in at read time).
+  CREATE TABLE IF NOT EXISTS retail_article_views (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    block_id    TEXT NOT NULL,
+    kind        TEXT NOT NULL DEFAULT 'impression',   -- 'impression' | 'read'
+    viewer_key  TEXT NOT NULL,                        -- 'c<customerId>' | 's<session>' | 'ip<ip>'
+    day         TEXT NOT NULL,                        -- YYYY-MM-DD (GZ local)
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_article_views_uniq
+    ON retail_article_views(block_id, kind, viewer_key, day);
+  CREATE INDEX IF NOT EXISTS idx_article_views_day ON retail_article_views(day);
 `);
 
 // New `retail` permission — gates the storefront admin surface (publish

@@ -5,6 +5,7 @@
 
 const lang = require('../../utils/lang');
 const api = require('../../utils/api');
+const track = require('../../utils/track');
 const { BASE } = api;
 
 // Block types whose root view paints a full-panel background. When framed,
@@ -1984,7 +1985,45 @@ Component({
             && out.reviews && out.reviews.length > 1) {
           this.measureReviewSwiper();
         }
+        // Editorial card: count an article impression once it scrolls into view.
+        if (out.type === 'recipe_story') this._initArticleTracking();
       });
+    },
+
+    // ── Article (Kitchen Notes) view tracking ──────────────────────────────
+    // recipe_story blocks are the editorial cards on home. Fire an 'impression'
+    // when the card first scrolls into view, and a 'read' when READ MORE is
+    // tapped (see onRecipeCtaTap). Fire-and-forget; once per kind per component
+    // instance is enough (the server also dedupes per viewer per day).
+    _initArticleTracking() {
+      const b = this.properties.block || this.data.block;
+      if (!b || b.type !== 'recipe_story' || b.id == null) return;
+      this._articleBlockId = String(b.id);
+      if (this._articleIOSet) return;       // observer already wired for this instance
+      this._articleIOSet = true;
+      try {
+        this._articleIO = this.createIntersectionObserver({ thresholds: [0] });
+        this._articleIO.relativeToViewport().observe('.recipe-blk', (res) => {
+          if (res.intersectionRatio > 0) {
+            this._trackArticle('impression');
+            if (this._articleIO) { this._articleIO.disconnect(); this._articleIO = null; }
+          }
+        });
+      } catch (e) {
+        // IntersectionObserver unsupported — skip impressions, reads still work.
+      }
+    },
+    _trackArticle(kind) {
+      const id = this._articleBlockId;
+      if (!id) return;
+      if (kind === 'impression') { if (this._impressionSent) return; this._impressionSent = true; }
+      if (kind === 'read')       { if (this._readSent)       return; this._readSent = true; }
+      try {
+        api.post('/api/retail/articles/' + encodeURIComponent(id) + '/view', {
+          kind,
+          viewer_id: track.getSession(),
+        }).catch(() => {});
+      } catch (e) { /* analytics must never break the UI */ }
     },
 
     // Size the review <swiper> to its tallest slide so no byline gets clipped.
@@ -2240,6 +2279,8 @@ Component({
       if (target) this.triggerEvent('cta', { target });
     },
     onRecipeCtaTap() {
+      // READ MORE tapped — count an article 'read' before routing onward.
+      this._trackArticle('read');
       const target = this.data.recipe?.ctaTarget;
       if (target) this.triggerEvent('cta', { target });
     },
