@@ -3827,16 +3827,18 @@ function maybeSendDeliveredSms(orderId) {
   } catch (e) { console.error('[sms-delivered] hook', e); }
 }
 
-// Short, customer-facing 温馨提示 line per order status. Kept punctuation-free
-// because WeChat's `thing` field type rejects many symbols ("数据格式错误"); plain
-// Chinese is always accepted. Each ≤20 chars (thing-type cap).
+// Short, customer-facing 温馨提示 line per order status. Bilingual Chinese-first
+// (the template labels are locked Chinese, so we lead with Chinese and append a
+// one-word English gloss). Kept punctuation-free because WeChat's `thing` field
+// type rejects many symbols ("数据格式错误"); Chinese, letters and spaces are
+// accepted. Each ≤20 chars (thing-type cap).
 const ORDER_STATUS_TIP = {
-  paid:       '已付款正在备货',
-  preparing:  '正在备货中请稍候',
-  dispatched: '包裹已发出请注意查收',
-  delivered:  '已送达感谢您的惠顾',
-  cancelled:  '订单已取消',
-  refunded:   '款项已原路退回',
+  paid:       '已付款 Paid',
+  preparing:  '备货中 Preparing',
+  dispatched: '已发货 Shipped',
+  delivered:  '已送达 Delivered',
+  cancelled:  '已取消 Cancelled',
+  refunded:   '已退款 Refunded',
 };
 
 // Build the WeChat subscribe-message `data` payload for the order-status
