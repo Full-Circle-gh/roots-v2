@@ -317,6 +317,101 @@ function renderCustomerViewPopover() {
     </div>`;
 }
 
+// Diagnostics block — "what's happening on this customer's phone". Built from
+// the retail_client_logs the mini-app posts (device + app-version snapshot per
+// launch, plus any JS crash). This is the fast-triage view for when a customer
+// contacts support saying the app is broken: see their exact app build, phone,
+// OS, and recent errors instead of guessing. Strings use cuT (one live
+// language) per the admin i18n rule — never stacked EN+CN.
+function renderDiagnosticsBlock(diag) {
+  const dev = diag && diag.device_last_seen;
+  const logs = (diag && diag.recent_logs) || [];
+
+  // Device / app-version summary. Empty until the customer opens the build
+  // that carries the reporter (mini-app change needs a WeChat publish).
+  let deviceHtml;
+  if (dev) {
+    const row = (label, val) => val
+      ? `<div class="cu-kv"><span>${label}</span><b class="is-human">${escapeHtml(String(val))}</b></div>` : '';
+    deviceHtml = `
+      ${row(cuT('App version', '小程序版本'), dev.app_version)}
+      ${row(cuT('Phone', '手机'), dev.device_model)}
+      ${row(cuT('System', '系统'), dev.system)}
+      ${row(cuT('WeChat', '微信版本'), dev.wx_version)}
+      ${row(cuT('Base library', '基础库'), dev.lib_version)}
+      ${row(cuT('Last seen', '最近一次'), cuFmtTime(dev.created_at))}`;
+  } else {
+    deviceHtml = `<div class="muted" style="font-size: 12px;">${cuT(
+      'No device data yet. It appears once this customer opens the app build that reports diagnostics (needs a WeChat publish).',
+      '暂无设备数据。顾客打开包含诊断上报的版本后才会出现（需先发布微信版本）。')}</div>`;
+  }
+
+  const errBadge = (diag && diag.error_count_7d > 0)
+    ? `<span class="cu-pill blocked">${diag.error_count_7d} ${cuT('errors in 7 days', '近7天报错')}</span>`
+    : `<span class="cu-pill">${cuT('No errors in 7 days', '近7天无报错')}</span>`;
+
+  const logRows = logs.length
+    ? logs.map(l => {
+        const isErr = l.kind === 'error';
+        const detail = [l.stack, l.extra].filter(Boolean).join('\n');
+        return `
+        <tr${isErr ? ' style="background: color-mix(in srgb, var(--danger) 7%, transparent);"' : ''}>
+          <td class="muted" style="white-space: nowrap;">${cuFmtTime(l.created_at)}</td>
+          <td><span class="cu-pill${isErr ? ' blocked' : ''}">${isErr ? cuT('error', '报错') : cuT('open', '启动')}</span></td>
+          <td class="muted" style="word-break: break-all;">${escapeHtml(l.page || '—')}</td>
+          <td${detail ? ' title="' + escapeHtml(detail) + '"' : ''} style="word-break: break-word;">${escapeHtml(l.message || (isErr ? '—' : (l.app_version || '—')))}</td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="4" class="muted">${cuT('No diagnostics logged yet.', '暂无诊断记录。')}</td></tr>`;
+
+  // Copy-summary button: assembles a plain-text snapshot the operator can
+  // paste into a support chat / hand to engineering. Built from the same data.
+  return `
+    <div style="display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s4);">
+      ${errBadge}
+      <button class="btn btn-sm" onclick="cuCopyDiagnostics()">${cuT('Copy summary', '复制摘要')}</button>
+    </div>
+    <div class="cu-tile" style="margin-bottom: var(--s5);">
+      <div class="cu-tile-head"><span class="cu-tile-title">${cuT('Device & app', '设备与版本')}</span></div>
+      ${deviceHtml}
+    </div>
+    <div class="cu-sec-title" style="margin-bottom: var(--s3);">${cuT('Recent activity & errors (last 25)', '近期活动与报错（最近25条）')}</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>${cuT('When', '时间')}</th>
+          <th>${cuT('Kind', '类型')}</th>
+          <th>${cuT('Page', '页面')}</th>
+          <th>${cuT('Message / version', '信息 / 版本')}</th>
+        </tr></thead>
+        <tbody>${logRows}</tbody>
+      </table>
+    </div>`;
+}
+
+// Copy a plain-text diagnostic snapshot for the current customer to the
+// clipboard — handy to paste into a support thread or send to engineering.
+function cuCopyDiagnostics() {
+  const d = CU_CURRENT; if (!d) return;
+  const c = d.customer || {};
+  const diag = d.diagnostics || {};
+  const dev = diag.device_last_seen || {};
+  const lines = [
+    `Customer #${c.id}${c.phone ? ' · ' + c.phone : ''}${c.nickname ? ' · ' + c.nickname : ''}`,
+    `App: ${dev.app_version || '—'} · Phone: ${dev.device_model || '—'} · System: ${dev.system || '—'} · WeChat: ${dev.wx_version || '—'}`,
+    `Errors (7d): ${diag.error_count_7d || 0} · Active sessions: ${(d.stats && d.stats.active_sessions) || 0}`,
+    '',
+    'Recent log:',
+    ...((diag.recent_logs || []).slice(0, 10).map(l =>
+      `  [${cuFmtTime(l.created_at)}] ${l.kind} ${l.page || ''} — ${l.message || l.app_version || ''}`)),
+  ];
+  const text = lines.join('\n');
+  const done = () => (typeof toast === 'function' ? toast(cuT('Diagnostics copied', '诊断已复制')) : null);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => prompt('Copy:', text));
+  } else { prompt('Copy:', text); }
+}
+
 function cuRenderDetail() {
   const d = CU_CURRENT;
   const c = d.customer;
@@ -438,6 +533,9 @@ function cuRenderDetail() {
           <span class="cu-pill">Joined · 加入 <span>${cuFmtDate(c.created_at) || '—'}</span></span>
           <span class="cu-pill">Last login · 最近登录 <span>${cuFmtTime(c.last_login_at) || 'never · 从未'}</span></span>
           <span class="cu-pill${sessions >= 5 ? ' brass' : ''}">${sessions} active sessions · 活跃会话</span>
+          ${(d.diagnostics && d.diagnostics.device_last_seen && d.diagnostics.device_last_seen.app_version)
+            ? `<span class="cu-pill" title="${cuT('Last-seen app build / phone', '最近一次的版本 / 机型')}">${escapeHtml(d.diagnostics.device_last_seen.app_version)}${d.diagnostics.device_last_seen.device_model ? ' · ' + escapeHtml(d.diagnostics.device_last_seen.device_model) : ''}</span>`
+            : ''}
         </div>
         <div class="cu-openid" style="margin-top: 14px; word-break: break-all;">openid: ${escapeHtml(c.openid || '')}</div>
       </div>
@@ -513,6 +611,11 @@ function cuRenderDetail() {
          accordions, closed by default. Per operator request: recent orders,
          points ledger, top-up ledger, and Affiliate. The chart / top items /
          addresses above DO NOT collapse. -->
+    <details class="cu-fold"${(d.diagnostics && d.diagnostics.error_count_7d > 0) ? ' open' : ''}>
+      <summary>${cuT('Diagnostics (device & app health)', '诊断（设备与运行状况）')}${(d.diagnostics && d.diagnostics.error_count_7d > 0) ? ' ⚠' : ''}</summary>
+      <div class="cu-fold-body">${renderDiagnosticsBlock(d.diagnostics)}</div>
+    </details>
+
     <details class="cu-fold"${CDV.recentOpen ? ' open' : ''}>
       <summary>Recent orders · 近期订单</summary>
       <div class="cu-fold-body">

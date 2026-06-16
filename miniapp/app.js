@@ -12,6 +12,7 @@ const config = require('./utils/config');
 const lang   = require('./utils/lang');
 const cart   = require('./utils/cart');
 const track  = require('./utils/track');
+const diag   = require('./utils/diag');
 
 App({
   globalData: {
@@ -37,6 +38,13 @@ App({
 
     // Capture the WeChat launch-scene code for traffic attribution.
     track.setScene(options.scene);
+    diag.setScene(options.scene);
+
+    // Diagnostics: post one device + app-version snapshot per launch so
+    // support can see what phone / app build a customer is on when they
+    // report a problem — even when nothing crashes. Fire-and-forget; runs
+    // after a tick so it never competes with first-frame work.
+    setTimeout(() => { try { diag.reportSession(); } catch (e) {} }, 0);
 
     // 1. Fonts — fire-and-forget, swap when ready. `fontsReady` (a promise)
     //    resolves once the primary brand fonts have loaded, so pages can fade
@@ -113,6 +121,8 @@ App({
     track.setScene(options.scene);
     track.track(options.path || 'app:show');
 
+    diag.setScene(options.scene);
+
     const before = JSON.stringify(this.globalData.preview);
     this.capturePreviewLaunch(options);
     const after  = JSON.stringify(this.globalData.preview);
@@ -122,6 +132,30 @@ App({
       // lands immediately.
       try { config.load(true); } catch {}
     }
+  },
+
+  // App-level JS error. WeChat calls this for any uncaught error in page /
+  // component lifecycle and event handlers. Forward to diagnostics so a
+  // crash a customer hits shows up in the admin's per-customer log. The
+  // string carries "message\n  at stack…"; split so the message is searchable.
+  onError(err) {
+    try {
+      const s = String(err == null ? '' : err);
+      const nl = s.indexOf('\n');
+      const message = nl === -1 ? s : s.slice(0, nl);
+      const stack   = nl === -1 ? null : s.slice(nl + 1);
+      diag.reportError(message, stack);
+    } catch (e) { /* never let the error reporter throw */ }
+  },
+
+  // Unhandled promise rejection (e.g. an awaited api call that nobody caught).
+  onUnhandledRejection(res) {
+    try {
+      const reason = res && res.reason;
+      const message = reason && reason.message ? reason.message : String(reason);
+      const stack   = reason && reason.stack ? reason.stack : null;
+      diag.reportError('unhandledRejection: ' + message, stack);
+    } catch (e) { /* never let the error reporter throw */ }
   },
 
   // Read launch options + scene query string and stash preview state on

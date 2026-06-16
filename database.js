@@ -2611,6 +2611,42 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_retail_checkout_quotes_created  ON retail_checkout_quotes(created_at);
   CREATE INDEX IF NOT EXISTS idx_retail_checkout_quotes_customer ON retail_checkout_quotes(customer_id);
+
+  -- ── retail_client_logs ────────────────────────────────────────────
+  -- Mini-app self-diagnostics. The customer's phone posts here best-effort
+  -- (POST /api/retail/client-log) so support can see WHAT happened on the
+  -- device when a customer reports a problem — instead of guessing.
+  -- Two kinds (kind column):
+  --   'session' — one per app launch: device model, OS, WeChat + base-lib
+  --               version, app version, launch scene. Answers "what app
+  --               version / phone is this customer on?" even when nothing
+  --               crashed (the most common support question).
+  --   'error'   — a caught JS error / unhandled rejection / failed request,
+  --               with message + stack + the page it happened on.
+  -- customer_id is NULL pre-login (silent auth not yet resolved). Rows are
+  -- pruned to ~30 days by the writer so the table can't grow unbounded.
+  CREATE TABLE IF NOT EXISTS retail_client_logs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id  INTEGER,                 -- NULL = pre-login
+    openid       TEXT,
+    kind         TEXT,                    -- 'session' | 'error'
+    page         TEXT,                    -- route the event happened on
+    message      TEXT,                    -- error message / short label
+    stack        TEXT,                    -- error stack (clipped)
+    app_version  TEXT,                    -- mini-app version (envVersion + version)
+    platform     TEXT,                    -- 'ios' | 'android' | 'devtools' …
+    device_model TEXT,                    -- e.g. 'iPhone 13'
+    system       TEXT,                    -- OS version, e.g. 'iOS 17.4'
+    wx_version   TEXT,                    -- WeChat client version
+    lib_version  TEXT,                    -- base-library (SDK) version
+    scene        INTEGER,                 -- WeChat launch scene code
+    extra        TEXT,                    -- JSON blob for anything else
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE SET NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_client_logs_customer ON retail_client_logs(customer_id, id);
+  CREATE INDEX IF NOT EXISTS idx_retail_client_logs_created  ON retail_client_logs(created_at);
+  CREATE INDEX IF NOT EXISTS idx_retail_client_logs_kind     ON retail_client_logs(kind, created_at);
 `);
 
 // Order-level columns for the 4-option / 5-option fallback flow:

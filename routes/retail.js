@@ -4614,6 +4614,91 @@ router.post('/api/retail/track', express.json(), (req, res) => {
   res.json({ success: true });
 });
 
+// ─── Client diagnostics (public, best-effort) ─────────────────────────────
+// The mini app posts here so support can SEE what happened on a customer's
+// device — app version, phone model, OS, and any JS crash / failed request —
+// instead of guessing when a customer reports "it's broken". Two kinds:
+//   'session' — one per launch (device + version snapshot). Answers the most
+//               common support question ("what app version / phone are they
+//               on?") even when nothing crashed.
+//   'error'   — a caught error / unhandled rejection, with message + stack.
+// Same design rules as /track: never auth-required, never throws, always 200,
+// per-IP rate limited so it can't be used to flood the table. Rows are pruned
+// to ~30 days here (opportunistically, at most hourly) so it self-trims.
+const _CLIENT_LOG_MAX_PER_WINDOW = 40;        // generous: launch + a few errors
+const _clientLogHits = new Map();             // ip → { n, resetAt }
+function clientLogRateOk(ip) {
+  const now = Date.now();
+  let r = _clientLogHits.get(ip);
+  if (!r || r.resetAt <= now) { r = { n: 0, resetAt: now + _TRACK_WINDOW_MS }; _clientLogHits.set(ip, r); }
+  r.n++;
+  return r.n <= _CLIENT_LOG_MAX_PER_WINDOW;
+}
+const _clientLogSweep = setInterval(() => {
+  const now = Date.now();
+  for (const [ip, r] of _clientLogHits) if (r.resetAt <= now) _clientLogHits.delete(ip);
+}, 5 * 60 * 1000);
+if (_clientLogSweep.unref) _clientLogSweep.unref();
+
+// Prune rows older than 30 days, but at most once an hour per process so a
+// burst of inserts doesn't each run a DELETE. Cheap, index-backed.
+let _clientLogPrunedAt = 0;
+function maybePruneClientLogs() {
+  const now = Date.now();
+  if (now - _clientLogPrunedAt < 60 * 60 * 1000) return;
+  _clientLogPrunedAt = now;
+  try {
+    tdb().prepare("DELETE FROM retail_client_logs WHERE created_at < datetime('now','-30 days')").run();
+  } catch { /* best-effort */ }
+}
+
+router.post('/api/retail/client-log', express.json({ limit: '32kb' }), (req, res) => {
+  if (!clientLogRateOk(req.ip || 'unknown')) return res.json({ success: true });
+  try {
+    const b = req.body || {};
+    const clip = (s, n) => (s == null || s === '' ? null : String(s).slice(0, n));
+    const kind = b.kind === 'error' ? 'error' : 'session';
+
+    let customerId = null;
+    let openid = clip(b.openid, 64);
+    const m = /^Bearer\s+([A-Za-z0-9]+)$/.exec(req.headers.authorization || '');
+    if (m) {
+      const row = tdb().prepare(
+        `SELECT c.id AS id, c.openid AS openid FROM retail_auth_tokens t
+           JOIN retail_customers c ON c.id = t.customer_id
+          WHERE t.token = ? AND datetime(t.expires_at) > CURRENT_TIMESTAMP`
+      ).get(m[1]);
+      if (row) { customerId = row.id; openid = openid || row.openid; }
+    }
+
+    const scene = Number.isFinite(+b.scene) ? Math.trunc(+b.scene) : null;
+    // `extra` is whatever the client wants to attach (e.g. failed-request url
+    // + status). Store as a clipped JSON string; tolerate a non-object.
+    let extra = null;
+    if (b.extra != null) {
+      try { extra = clip(typeof b.extra === 'string' ? b.extra : JSON.stringify(b.extra), 2000); }
+      catch { extra = null; }
+    }
+
+    tdb().prepare(
+      `INSERT INTO retail_client_logs
+         (customer_id, openid, kind, page, message, stack, app_version,
+          platform, device_model, system, wx_version, lib_version, scene, extra)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      customerId, openid, kind,
+      clip(b.page, 128), clip(b.message, 500), clip(b.stack, 4000),
+      clip(b.app_version, 40), clip(b.platform, 24), clip(b.device_model, 60),
+      clip(b.system, 40), clip(b.wx_version, 24), clip(b.lib_version, 24),
+      scene, extra
+    );
+    maybePruneClientLogs();
+  } catch (e) {
+    // Intentionally silent — diagnostics must be invisible to the client.
+  }
+  res.json({ success: true });
+});
+
 // ─── Addresses ───────────────────────────────────────────────────────────
 // Each customer has their own address book. is_default is enforced
 // single-row per customer at the route level (we flip all others to 0 in
@@ -8820,12 +8905,13 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   if (q) {
     const like = '%' + q + '%';
     if (/^\d+$/.test(q)) {
-      // numeric → also match as order id
-      where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ? OR id IN (SELECT customer_id FROM retail_orders WHERE id = ?))');
-      params.push(like, like, like, parseInt(q, 10));
+      // numeric → also match as order id or order number
+      where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ? OR id IN (SELECT customer_id FROM retail_orders WHERE id = ? OR order_no LIKE ?))');
+      params.push(like, like, like, parseInt(q, 10), like);
     } else {
-      where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ?)');
-      params.push(like, like, like);
+      // non-numeric → match profile fields, plus order number (e.g. "R26...")
+      where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ? OR id IN (SELECT customer_id FROM retail_orders WHERE order_no LIKE ?))');
+      params.push(like, like, like, like);
     }
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
@@ -9055,6 +9141,35 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
        FROM retail_referrals WHERE referrer_id = ?`
   ).get(id);
 
+  // ── Diagnostics — what's happening on this customer's phone ──────────
+  // device_last_seen: newest log row that carries a device snapshot (every
+  // 'session' log does; an 'error' may too), so support sees the customer's
+  // app version / phone / OS even when nothing crashed. recent_client_logs:
+  // the last events (errors first-class) for "it's broken" triage. error_count
+  // (last 7d) is a quick at-a-glance health signal. Table is self-healing
+  // across tenants but guard anyway so an older tenant DB never 500s here.
+  let deviceLastSeen = null, recentClientLogs = [], clientErrors7d = 0;
+  try {
+    deviceLastSeen = tdb().prepare(
+      `SELECT app_version, platform, device_model, system, wx_version, lib_version, created_at
+         FROM retail_client_logs
+        WHERE customer_id = ? AND (app_version IS NOT NULL OR device_model IS NOT NULL)
+        ORDER BY id DESC LIMIT 1`
+    ).get(id) || null;
+    recentClientLogs = tdb().prepare(
+      `SELECT id, kind, page, message, stack, app_version, platform, device_model,
+              system, wx_version, scene, extra, created_at
+         FROM retail_client_logs
+        WHERE customer_id = ?
+        ORDER BY id DESC LIMIT 25`
+    ).all(id);
+    clientErrors7d = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_client_logs
+        WHERE customer_id = ? AND kind = 'error'
+          AND created_at >= datetime('now','-7 days')`
+    ).get(id).n;
+  } catch (e) { /* table absent on a stale tenant DB — diagnostics just empty */ }
+
   res.json({
     success: true,
     data: {
@@ -9078,6 +9193,11 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
         referred_by:   referrer,
         invites:       referralsByMe,
         summary:       referralsAgg,
+      },
+      diagnostics: {
+        device_last_seen: deviceLastSeen,
+        recent_logs:      recentClientLogs,
+        error_count_7d:   clientErrors7d,
       }
     }
   });
