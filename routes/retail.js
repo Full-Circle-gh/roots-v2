@@ -3906,14 +3906,24 @@ function notifyOrderStatusChange(orderId, newStatus) {
 
 // Fire a subscribe-message when the delivery scenario changes — i.e.
 // the package reaches a pickup point, gets dropped at the door, or the
-// courier can't reach the customer. Reuses the existing order-status
-// template (`order_status_template_id`) but writes the scenario label
-// (e.g. "已送达驿站取件码1-2-3456") into the 温馨提示 (thing3) slot so the
-// customer sees the actionable info without opening the mini app.
+// courier can't reach the customer.
+//
+// DISABLED 2026-06-16 by operator choice: WeChat push is reserved for
+// order-STATUS changes only (paid / preparing / dispatched / delivered /
+// cancelled / refunded). Granular courier milestones live in the in-app
+// order view instead. The 'delivered' milestone is still pushed via the
+// order-status path (kd100 callback auto-flips the order to 'delivered',
+// which calls notifyOrderStatusChange) — so the customer keeps the
+// "已送达 Delivered" push; only the intermediate scenarios (pickup point,
+// delivery failed) stop pushing. Flip PUSH_COURIER_MILESTONES to true to
+// restore them — both call sites (kd100 callback + on-open pull) and their
+// dedup state stay intact regardless.
 //
 // Idempotency: caller is responsible for skipping repeats (see
 // kd100.callback handler — only notifies if scenario != last notified).
+const PUSH_COURIER_MILESTONES = false;
 function notifyTrackingScenario(orderId, scenario) {
+  if (!PUSH_COURIER_MILESTONES) return;          // courier-milestone WeChat push off (see note above)
   if (!notifCategoryEnabled('order')) return;   // shipping updates are part of the 'order' category
   try {
     const cfg = loadConfig();
