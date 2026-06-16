@@ -1362,6 +1362,32 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_feedback (
 )`);
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_feedback_created ON retail_feedback(created_at)'); } catch {}
 
+// Two-way conversation on a feedback report. The retail_feedback row is the
+// thread root (the customer's first message); every later turn — operator
+// reply or customer follow-up — is one row here. `author` is 'admin' or
+// 'customer'; `author_name` snapshots the operator's display name so a reply
+// can be attributed even after staff changes (NULL for customer turns).
+db.exec(`CREATE TABLE IF NOT EXISTS retail_feedback_messages (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  feedback_id INTEGER NOT NULL,
+  author      TEXT NOT NULL,          -- 'admin' | 'customer'
+  author_name TEXT,                   -- operator display name (admin turns only)
+  body        TEXT NOT NULL,
+  created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (feedback_id) REFERENCES retail_feedback(id) ON DELETE CASCADE
+)`);
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_feedback_msg ON retail_feedback_messages(feedback_id, id)'); } catch {}
+
+// Thread bookkeeping on the root row. *_msg_at track the latest turn from each
+// side; *_read_at track when each side last opened the thread. From these we
+// derive "needs reply" (admin) and "new reply" (customer) without per-row
+// scans. last_customer_msg_at seeds from created_at on insert so existing
+// reports sort correctly.
+addColumn('retail_feedback', 'last_customer_msg_at', 'DATETIME');
+addColumn('retail_feedback', 'last_admin_msg_at',    'DATETIME');
+addColumn('retail_feedback', 'admin_read_at',        'DATETIME');
+addColumn('retail_feedback', 'customer_read_at',     'DATETIME');
+
 // Customer-initiated refund requests with multi-step processing workflow.
 // States on retail_orders.refund_status:
 //   null | pending | reviewing | approved | paid | rejected | withdrawn

@@ -22,6 +22,7 @@ const CAT = {
   order:     { en: 'ORDER',        cn: '订单' },
   refund:    { en: 'REFUND',       cn: '退款' },
   invoice:   { en: 'INVOICE',      cn: '发票' },
+  feedback:  { en: 'REPLY',        cn: '回复' },
   broadcast: { en: '📣 ANNOUNCEMENT', cn: '📣 公告' },
 };
 
@@ -94,6 +95,8 @@ Page({
     api.post('/api/retail/notifications/' + id + '/read').catch(() => {});
     if (reftype === 'order' && refid) {
       wx.navigateTo({ url: '/pages/order/order?id=' + refid });
+    } else if (reftype === 'feedback' && refid) {
+      wx.navigateTo({ url: '/pages/feedback-thread/feedback-thread?id=' + refid });
     } else if (reftype === 'invoice') {
       wx.navigateTo({ url: '/pages/invoices/invoices' });
     } else if (reftype === 'deeplink' && refid) {

@@ -10191,12 +10191,93 @@ router.post('/api/retail/feedback', requireRetailAuth, express.json({ limit: '1m
   const name = req.customer?.nickname || ('#' + req.customer.id);
   try {
     const info = tdb().prepare(
-      `INSERT INTO retail_feedback (customer_id, customer_name, message, photos_json, page_context, app_version)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO retail_feedback (customer_id, customer_name, message, photos_json, page_context, app_version, last_customer_msg_at)
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
     ).run(req.customer.id, name, message, photos.length ? JSON.stringify(photos) : null, pageContext, appVersion);
     res.json({ success: true, data: { id: info.lastInsertRowid } });
   } catch (e) {
     console.error('[retail/feedback] insert failed:', e.message);
+    res.status(500).json({ success: false, error: 'db_insert_failed' });
+  }
+});
+
+// Shape one feedback report + its reply turns into a thread the mini app and
+// the backend drawer both render. The root row is presented as the customer's
+// first message; retail_feedback_messages carry every later turn.
+function buildFeedbackThread(row) {
+  const msgs = tdb().prepare(
+    `SELECT id, author, author_name, body, created_at
+       FROM retail_feedback_messages
+      WHERE feedback_id = ? ORDER BY id ASC`
+  ).all(row.id);
+  return {
+    id: row.id,
+    customer_id: row.customer_id,
+    customer_name: row.customer_name,
+    page_context: row.page_context,
+    app_version: row.app_version,
+    created_at: row.created_at,
+    photos: parseJsonArray(row.photos_json),
+    messages: [
+      // The original report, normalised into the same shape as a reply turn.
+      { id: 0, author: 'customer', author_name: null, body: row.message, created_at: row.created_at },
+      ...msgs,
+    ],
+  };
+}
+
+// Customer lists their own reports (newest activity first) so they can find a
+// thread the store replied to without hunting through the notification inbox.
+// `unread` flags a thread with an operator reply newer than their last read.
+router.get('/api/retail/feedback', requireRetailAuth, (req, res) => {
+  const rows = tdb().prepare(
+    `SELECT id, message, photos_json, created_at, last_admin_msg_at,
+            (SELECT COUNT(*) FROM retail_feedback_messages m WHERE m.feedback_id = f.id) AS reply_count,
+            (last_admin_msg_at IS NOT NULL
+               AND (customer_read_at IS NULL
+                    OR datetime(last_admin_msg_at) > datetime(customer_read_at))) AS unread
+       FROM retail_feedback f
+      WHERE customer_id = ?
+   ORDER BY COALESCE(last_admin_msg_at, last_customer_msg_at, created_at) DESC
+      LIMIT 50`
+  ).all(req.customer.id).map(f => ({
+    id: f.id,
+    message: f.message,
+    photos: parseJsonArray(f.photos_json),
+    created_at: f.created_at,
+    reply_count: f.reply_count,
+    last_admin_msg_at: f.last_admin_msg_at,
+    unread: !!f.unread,
+  }));
+  res.json({ success: true, data: rows });
+});
+
+// Customer opens one of their threads. Stamps customer_read_at so the "new
+// reply" dot clears. 404 (not 403) for someone else's report — don't leak
+// that the id exists.
+router.get('/api/retail/feedback/:id', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare('SELECT * FROM retail_feedback WHERE id = ? AND customer_id = ?').get(id, req.customer.id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  tdb().prepare('UPDATE retail_feedback SET customer_read_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  res.json({ success: true, data: buildFeedbackThread(row) });
+});
+
+// Customer adds a follow-up turn to their own thread.
+router.post('/api/retail/feedback/:id/reply', requireRetailAuth, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const body = (req.body?.message || '').toString().trim().slice(0, 4000);
+  if (!body) return res.status(400).json({ success: false, error: 'message_required' });
+  const row = tdb().prepare('SELECT id FROM retail_feedback WHERE id = ? AND customer_id = ?').get(id, req.customer.id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  try {
+    tdb().prepare(
+      `INSERT INTO retail_feedback_messages (feedback_id, author, body) VALUES (?, 'customer', ?)`
+    ).run(id, body);
+    tdb().prepare('UPDATE retail_feedback SET last_customer_msg_at = CURRENT_TIMESTAMP, customer_read_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[retail/feedback reply] insert failed:', e.message);
     res.status(500).json({ success: false, error: 'db_insert_failed' });
   }
 });
@@ -10267,15 +10348,24 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT f.id, f.customer_id, f.customer_name, f.message,
             f.photos_json, f.page_context, f.app_version, f.created_at,
-            c.nickname AS nickname, c.avatar_url AS customer_avatar
+            f.last_customer_msg_at, f.last_admin_msg_at, f.admin_read_at,
+            c.nickname AS nickname, c.avatar_url AS customer_avatar,
+            (SELECT COUNT(*) FROM retail_feedback_messages m WHERE m.feedback_id = f.id) AS reply_count,
+            -- The customer is waiting if their latest turn is newer than the
+            -- last time an operator opened the thread (covers a brand-new
+            -- report — admin_read_at NULL — and a fresh follow-up alike).
+            (f.admin_read_at IS NULL
+               OR datetime(COALESCE(f.last_customer_msg_at, f.created_at)) > datetime(f.admin_read_at)) AS needs_reply
        FROM retail_feedback f
   LEFT JOIN retail_customers c ON c.id = f.customer_id
-   ORDER BY f.created_at DESC
+   ORDER BY COALESCE(f.last_customer_msg_at, f.created_at) DESC
       LIMIT ? OFFSET ?`
   ).all(limit, offset).map(f => ({
     ...f,
     photos: parseJsonArray(f.photos_json),
     photos_json: undefined,
+    replied: !!f.last_admin_msg_at,
+    needs_reply: !!f.needs_reply,
   }));
   const total = tdb().prepare('SELECT COUNT(*) AS n FROM retail_feedback').get().n;
   res.json({ success: true, data: rows, meta: { total, limit, offset } });
@@ -10286,12 +10376,68 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
 router.get('/api/retail-admin/feedback/unseen-count', requireRetailAdmin, (req, res) => {
   const since = String(req.query.since || '').trim();
   const sinceSql = since || '1970-01-01T00:00:00.000Z';
+  // New reports AND customer follow-up replies both count — either is a turn
+  // waiting on the operator.
   const row = tdb().prepare(
-    `SELECT COUNT(*) AS n, MAX(created_at) AS latest
-       FROM retail_feedback
-      WHERE datetime(created_at) > datetime(?)`
-  ).get(sinceSql);
+    `SELECT
+       (SELECT COUNT(*) FROM retail_feedback
+          WHERE datetime(created_at) > datetime(?))
+       + (SELECT COUNT(*) FROM retail_feedback_messages
+          WHERE author = 'customer' AND datetime(created_at) > datetime(?)) AS n,
+       (SELECT MAX(t) FROM (
+          SELECT MAX(created_at) AS t FROM retail_feedback
+          UNION ALL
+          SELECT MAX(created_at) AS t FROM retail_feedback_messages WHERE author = 'customer'
+       )) AS latest`
+  ).get(sinceSql, sinceSql);
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
+});
+
+// Operator opens one report's thread. Stamps admin_read_at so the "needs
+// reply" flag clears once it's been looked at.
+router.get('/api/retail-admin/feedback/:id', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare('SELECT * FROM retail_feedback WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  tdb().prepare('UPDATE retail_feedback SET admin_read_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  res.json({ success: true, data: buildFeedbackThread(row) });
+});
+
+// Operator replies to a report. Writes the turn, stamps the thread, and drops
+// an in-app notification into the customer's inbox (the same channel order /
+// refund updates use) so they see it next time they open the mini app.
+router.post('/api/retail-admin/feedback/:id/reply', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const body = (req.body?.message || '').toString().trim().slice(0, 4000);
+  if (!body) return res.status(400).json({ success: false, error: 'message_required' });
+  const row = tdb().prepare('SELECT id, customer_id FROM retail_feedback WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  const authorName = (req.user && (req.user.display_name || req.user.username)) || null;
+  try {
+    tdb().prepare(
+      `INSERT INTO retail_feedback_messages (feedback_id, author, author_name, body)
+       VALUES (?, 'admin', ?, ?)`
+    ).run(id, authorName, body);
+    tdb().prepare(
+      'UPDATE retail_feedback SET last_admin_msg_at = CURRENT_TIMESTAMP, admin_read_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(id);
+    // Notify the customer (in-app inbox; deep-links to the thread page).
+    const snippet = body.length > 120 ? body.slice(0, 119) + '…' : body;
+    notifyCustomer(row.customer_id, {
+      category: 'feedback',
+      type: 'feedback_reply',
+      title_en: 'We replied to your report',
+      title_cn: '我们回复了你的反馈',
+      body_en: snippet,
+      body_cn: snippet,
+      ref_type: 'feedback',
+      ref_id: id,
+    });
+    res.json({ success: true });
+  } catch (e) {
+    console.error('[retail-admin/feedback reply] insert failed:', e.message);
+    res.status(500).json({ success: false, error: 'db_insert_failed' });
+  }
 });
 
 router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {

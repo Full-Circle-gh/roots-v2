@@ -31,6 +31,7 @@
     "pages/voting/voting",
     "pages/favorites/favorites",
     "pages/feedback/feedback",
+    "pages/feedback-thread/feedback-thread",
     "pages/track/track",
     "pages/track-webview/track-webview"
   ],

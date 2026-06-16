@@ -4015,8 +4015,8 @@
   <section id="tab-feedback" data-feat="feedback">
     <h2>Customer feedback · 顾客反馈</h2>
     <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
-      Bug reports and feedback customers send from the mini app’s “Found a bug?” form. Read-only — newest first.
-      Each entry shows who reported it, which page they were on, any screenshots, and when. · 顾客在小程序“报告问题”表单提交的反馈,只读,最新在前。
+      Bug reports and feedback customers send from the mini app’s “Found a bug?” form. Newest first.
+      Tap a report to read it and reply — the customer is notified and can reply back. · 顾客在小程序“报告问题”表单提交的反馈,最新在前。点击可查看并回复,顾客会收到通知并可继续回复。
     </div>
 
     <div id="fb-summary" class="muted" style="font-size: 12px; margin-bottom: var(--s4);"></div>
@@ -4032,6 +4032,47 @@
         <tbody><tr><td colspan="4" class="muted">Loading…</td></tr></tbody>
       </table>
     </div>
+    <!-- Feedback thread drawer — read the conversation + reply. Reuses the
+         global .side-drawer chrome; bubbles + composer styled below. -->
+    <aside id="fb-drawer" class="side-drawer dw-compact" aria-hidden="true">
+      <button class="drawer-close" onclick="closeDrawer('#fb-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="drawer-head">
+        <h3 style="margin:0 0 4px;font-size:14px">Feedback · 反馈对话</h3>
+        <div id="fb-thread-customer" class="muted" style="font-size:12px"></div>
+      </div>
+      <div class="drawer-body fb-thread" id="fb-thread-body"></div>
+      <div class="drawer-foot" style="flex-direction:column;align-items:stretch;gap:8px">
+        <textarea id="fb-reply-input" class="fb-reply-input" rows="3"
+          placeholder="Write a reply… · 输入回复…" maxlength="4000"></textarea>
+        <div style="display:flex;justify-content:flex-end;gap:8px">
+          <button class="btn" onclick="closeDrawer('#fb-drawer')">Close · 关闭</button>
+          <button class="btn btn-primary" id="fb-reply-send" onclick="sendFeedbackReply()">Send reply · 发送回复</button>
+        </div>
+      </div>
+    </aside>
+    <style>
+      #tab-feedback .pill, #fb-drawer .pill {
+        display: inline-block; padding: 2px 7px; border-radius: 999px;
+        font-size: 10px; line-height: 1.5; border: 1px solid var(--border);
+      }
+      #tab-feedback .pill.neutral, #fb-drawer .pill.neutral { color: var(--text-2); }
+      #tab-feedback .pill.warn { background: rgba(242,202,108,.14); border-color: rgba(242,202,108,.30); color: var(--st-preparing, #d9a441); }
+      #tab-feedback .pill.ok   { background: rgba(128,196,98,.12);  border-color: rgba(128,196,98,.30);  color: #80c462; }
+      .fb-thread { display: flex; flex-direction: column; gap: 10px; }
+      .fb-msg { max-width: 86%; padding: 9px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
+      .fb-msg-meta { font-size: 10px; opacity: .65; margin-bottom: 3px; }
+      .fb-msg-body { white-space: pre-wrap; word-break: break-word; }
+      .fb-msg-cust  { align-self: flex-start; background: var(--bg-elev-2, #f1efe9); border: 1px solid var(--border); }
+      .fb-msg-admin { align-self: flex-end; background: rgba(128,196,98,.14); border: 1px solid rgba(128,196,98,.30); }
+      .fb-photos { margin-top: 4px; }
+      .fb-reply-input {
+        width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px;
+        padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+        font: inherit; font-size: 13px; background: var(--bg-elev-1, #fff); color: var(--text-1);
+      }
+    </style>
   </section>
 
   <!-- ─── LEADERBOARD ─── -->

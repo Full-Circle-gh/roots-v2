@@ -1,0 +1,77 @@
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding: 0 0 200rpx;
+}
+
+.header { padding: 48rpx 44rpx 0; }
+.kicker { font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.25em; color: var(--olive); }
+.title { font-size: calc(64rpx * var(--font-scale)); font-weight: 500; line-height: 0.92; margin-top: 12rpx; color: var(--ink); }
+
+.state {
+  margin: 60rpx 44rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--olive);
+}
+
+/* ── Conversation ─────────────────────────────────────────────────────── */
+.thread {
+  margin: 40rpx 44rpx 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22rpx;
+}
+.msg {
+  max-width: 84%;
+  padding: 18rpx 22rpx;
+  border: 3rpx solid var(--ink);
+}
+.msg-store { align-self: flex-start; background: #FFFCF7; }
+.msg-mine  { align-self: flex-end;   background: var(--lime); }
+.msg-meta {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  color: var(--olive);
+  margin-bottom: 8rpx;
+}
+.msg-body {
+  font-size: calc(26rpx * var(--font-scale));
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Sticky reply composer ────────────────────────────────────────────── */
+.reply-bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: var(--oat);
+  border-top: 3rpx solid var(--ink);
+  padding: 20rpx 44rpx calc(28rpx + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: flex-end;
+  gap: 16rpx;
+}
+.reply-input {
+  flex: 1;
+  box-sizing: border-box;
+  background: #FFFCF7;
+  border: 3rpx solid var(--ink);
+  padding: 16rpx 20rpx;
+  font-size: calc(24rpx * var(--font-scale));
+  color: var(--ink);
+  min-height: 72rpx;
+  max-height: 220rpx;
+  line-height: 1.4;
+}
+.reply-send {
+  flex-shrink: 0;
+  background: var(--ink);
+  color: var(--lime);
+  padding: 24rpx 32rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+}
+.reply-send.disabled { opacity: 0.45; }
+.reply-send:active:not(.disabled) { transform: scale(0.98); }

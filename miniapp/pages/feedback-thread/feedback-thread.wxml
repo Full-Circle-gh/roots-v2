@@ -1,0 +1,25 @@
+<view class="page">
+  <view class="header">
+    <view class="kicker f-toni">{{copy.kicker}}</view>
+    <view class="title f-bear">{{copy.title}}</view>
+  </view>
+
+  <view wx:if="{{loading}}" class="state f-aleo">···</view>
+  <view wx:elif="{{notFound}}" class="state f-aleo">{{copy.notFound}}</view>
+
+  <view wx:else class="thread">
+    <view wx:for="{{messages}}" wx:key="id" class="msg {{item.mine ? 'msg-mine' : 'msg-store'}}">
+      <view class="msg-meta f-toni">{{item.who}}<text wx:if="{{item.time}}"> · {{item.time}}</text></view>
+      <view class="msg-body f-aleo">{{item.body}}</view>
+    </view>
+  </view>
+</view>
+
+<!-- Sticky reply composer -->
+<view wx:if="{{!notFound}}" class="reply-bar">
+  <textarea class="reply-input f-aleo" placeholder="{{copy.placeholder}}" maxlength="4000"
+    value="{{reply}}" bindinput="onReply" auto-height/>
+  <view class="reply-send f-gothic {{(!reply || sending) ? 'disabled' : ''}}" bindtap="send">
+    {{sending ? copy.sending : copy.send}}
+  </view>
+</view>

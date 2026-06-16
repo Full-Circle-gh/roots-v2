@@ -36,6 +36,9 @@ const COPY_EN = {
   thanks: 'Thanks! We’re on it.',
   emptyMsg: 'Please describe the problem',
   tooLarge: 'Photo too large',
+  pastLabel: 'YOUR REPORTS',
+  newReply: 'New reply',
+  replied: 'Replied',
 };
 
 const COPY_CN = {
@@ -50,6 +53,9 @@ const COPY_CN = {
   thanks: '感谢反馈,我们马上处理!',
   emptyMsg: '请描述遇到的问题',
   tooLarge: '图片过大',
+  pastLabel: '你的反馈',
+  newReply: '新回复',
+  replied: '已回复',
 };
 
 Page({
@@ -60,6 +66,7 @@ Page({
     lang: 'en',
     copy: COPY_EN,
     pageContext: '',
+    reports: [],
   },
 
   onLoad() {
@@ -73,6 +80,32 @@ Page({
       if (stack.length > 1) from = stack[stack.length - 2].route || '';
     } catch {}
     this.setData({ lang, copy: lang === 'cn' ? COPY_CN : COPY_EN, pageContext: from });
+  },
+
+  // Refresh the past-reports list each time the page shows (e.g. on return
+  // from a thread) so the "new reply" dots stay current.
+  onShow() { this.loadReports(); },
+
+  async loadReports() {
+    const app = getApp();
+    if (!app.globalData.token) { try { await app.silentLogin(); } catch {} }
+    if (!app.globalData.token) return;
+    try {
+      const res = await api.get('/api/retail/feedback');
+      const list = (res && res.data) || res || [];
+      const reports = list.map(r => ({
+        id: r.id,
+        preview: (r.message || '').slice(0, 60),
+        unread: !!r.unread,
+        hasReply: r.reply_count > 0 || !!r.last_admin_msg_at,
+      }));
+      this.setData({ reports });
+    } catch (e) { /* non-fatal — the compose form still works */ }
+  },
+
+  openThread(e) {
+    const id = e.currentTarget.dataset.id;
+    wx.navigateTo({ url: '/pages/feedback-thread/feedback-thread?id=' + id });
   },
 
   onMessage(e) { this.setData({ message: e.detail.value }); },

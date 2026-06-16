@@ -84,6 +84,38 @@
 .photo-plus { font-family: var(--f-aleo); font-size: calc(36rpx * var(--font-scale)); line-height: 1; }
 .photo-add-label { font-size: calc(16rpx * var(--font-scale)); letter-spacing: 0.12em; }
 
+/* ── Your past reports ────────────────────────────────────────────────── */
+.reports-section { margin-top: 56rpx; }
+.report-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 22rpx 0;
+  border-bottom: 2rpx solid rgba(43, 43, 43, 0.12);
+}
+.report-row:active { opacity: 0.6; }
+.report-preview {
+  flex: 1;
+  font-size: calc(24rpx * var(--font-scale));
+  color: var(--ink);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.report-tag {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  color: var(--olive);
+}
+.report-tag.is-unread { color: var(--ink); font-weight: 600; }
+.report-arrow { font-size: calc(30rpx * var(--font-scale)); line-height: 1; }
+
 /* ── Sticky submit bar ────────────────────────────────────────────────── */
 .submit-bar {
   position: fixed;

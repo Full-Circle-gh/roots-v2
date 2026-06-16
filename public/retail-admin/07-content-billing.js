@@ -1538,17 +1538,31 @@ async function loadFeedback() {
   }
 }
 
+function feedbackStatusPill(f) {
+  // needs_reply covers a brand-new report and an unanswered follow-up alike.
+  if (f.needs_reply) {
+    return `<span class="pill warn" style="font-size: 10px;">${cuT('Needs reply', '待回复')}</span>`;
+  }
+  if (f.replied) {
+    return `<span class="pill ok" style="font-size: 10px;">${cuT('Replied', '已回复')}</span>`;
+  }
+  return '';
+}
+
 function renderFeedbackRow(f) {
   const customer = f.customer_name || f.nickname || ('#' + f.customer_id);
   const photosHtml = (f.photos || []).map(url => (
-    `<img src="${escapeAttr(url)}" onclick="openReviewLightbox(${JSON.stringify(url).replace(/"/g, '&quot;')})" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 4px; cursor: zoom-in; vertical-align: middle;">`
+    `<img src="${escapeAttr(url)}" onclick="event.stopPropagation();openReviewLightbox(${JSON.stringify(url).replace(/"/g, '&quot;')})" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 4px; cursor: zoom-in; vertical-align: middle;">`
   )).join('');
   const ctx = f.page_context
     ? `<span class="pill neutral" style="font-size: 10px;">${escapeHtml(f.page_context)}</span>`
     : '<span class="muted" style="font-size: 11px;">—</span>';
   const ver = f.app_version ? `<div class="muted" style="font-size: 10px; margin-top: 4px;">v${escapeHtml(f.app_version)}</div>` : '';
+  const replyTag = f.reply_count > 0
+    ? `<span class="muted" style="font-size: 10px;">${cuT(f.reply_count + ' repl' + (f.reply_count === 1 ? 'y' : 'ies'), f.reply_count + ' 条往来')}</span>`
+    : '';
   return `
-    <tr data-id="${f.id}">
+    <tr data-id="${f.id}" onclick="openFeedbackThread(${f.id})" style="cursor: pointer;">
       <td>
         <div>${escapeHtml(customer)}</div>
         <div class="muted" style="font-size: 10px;">#${f.customer_id}</div>
@@ -1556,6 +1570,7 @@ function renderFeedbackRow(f) {
       <td>
         <div style="font-size: 12px; line-height: 1.4; max-width: 520px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(f.message || '')}</div>
         ${photosHtml ? `<div style="margin-top: 8px;">${photosHtml}</div>` : ''}
+        <div style="margin-top: 6px; display: flex; gap: 8px; align-items: center;">${feedbackStatusPill(f)}${replyTag}</div>
       </td>
       <td>${ctx}${ver}</td>
       <td class="muted" style="font-size: 11px; white-space: nowrap;">${f.created_at ? f.created_at.slice(0, 16) : ''}</td>
@@ -1568,6 +1583,66 @@ document.querySelector('[data-tab="feedback"]').addEventListener('click', () => 
     loadFeedback();
   }
 });
+
+// ── Feedback thread drawer — read the conversation and reply ───────────────
+let _fbThreadId = null;
+
+function fbBubble(m) {
+  const mine = m.author === 'admin';
+  const who = mine
+    ? (m.author_name ? escapeHtml(m.author_name) : cuT('Store', '商家'))
+    : cuT('Customer', '顾客');
+  const when = m.created_at ? escapeHtml(m.created_at.slice(0, 16)) : '';
+  return `
+    <div class="fb-msg ${mine ? 'fb-msg-admin' : 'fb-msg-cust'}">
+      <div class="fb-msg-meta">${who}${when ? ' · ' + when : ''}</div>
+      <div class="fb-msg-body">${escapeHtml(m.body || '')}</div>
+    </div>`;
+}
+
+async function openFeedbackThread(id) {
+  _fbThreadId = id;
+  openDrawer('#fb-drawer');
+  const body = $('#fb-thread-body');
+  body.innerHTML = `<div class="muted">${cuT('Loading…', '加载中…')}</div>`;
+  $('#fb-reply-input').value = '';
+  try {
+    const { data } = await api('/api/retail-admin/feedback/' + id);
+    const customer = data.customer_name || ('#' + data.customer_id);
+    const ctx = data.page_context
+      ? `<span class="pill neutral" style="font-size: 10px;">${escapeHtml(data.page_context)}</span>` : '';
+    const photos = (data.photos || []).map(url => (
+      `<img src="${escapeAttr(url)}" onclick="openReviewLightbox(${JSON.stringify(url).replace(/"/g, '&quot;')})" style="width: 56px; height: 56px; object-fit: cover; border-radius: 4px; margin: 0 4px 4px 0; cursor: zoom-in;">`
+    )).join('');
+    $('#fb-thread-customer').innerHTML =
+      `${escapeHtml(customer)} <span class="muted" style="font-size:11px;">#${data.customer_id}</span> ${ctx}`;
+    body.innerHTML =
+      data.messages.map(fbBubble).join('') +
+      (photos ? `<div class="fb-photos">${photos}</div>` : '');
+    body.scrollTop = body.scrollHeight;
+  } catch (e) {
+    body.innerHTML = `<div class="err">${cuT('Failed to load', '加载失败')}: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+async function sendFeedbackReply() {
+  if (_fbThreadId == null) return;
+  const input = $('#fb-reply-input');
+  const message = (input.value || '').trim();
+  if (!message) { input.focus(); return; }
+  const btn = $('#fb-reply-send');
+  btn.disabled = true;
+  try {
+    await api('/api/retail-admin/feedback/' + _fbThreadId + '/reply', { method: 'POST', body: { message } });
+    toast(cuT('Reply sent · customer notified', '已回复 · 已通知顾客'), 'ok');
+    await openFeedbackThread(_fbThreadId);   // re-render thread (input cleared inside)
+    loadFeedback();                          // refresh list pills
+  } catch (e) {
+    toast(cuT('Failed to send', '发送失败') + ': ' + e.message, 'err');
+  } finally {
+    btn.disabled = false;
+  }
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // FLASH SALES TAB — schedule per-product flash-sale windows

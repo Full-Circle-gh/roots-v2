@@ -27,6 +27,18 @@
       </view>
     </view>
   </view>
+
+  <!-- Your past reports — tap to read the store's reply and reply back -->
+  <view wx:if="{{reports.length}}" class="section reports-section">
+    <view class="section-label f-toni">{{copy.pastLabel}}</view>
+    <view wx:for="{{reports}}" wx:key="id" class="report-row" data-id="{{item.id}}" bindtap="openThread">
+      <view class="report-preview f-aleo">{{item.preview}}</view>
+      <view class="report-tag f-toni {{item.unread ? 'is-unread' : ''}}">
+        {{item.unread ? copy.newReply : (item.hasReply ? copy.replied : '')}}
+        <text class="report-arrow">›</text>
+      </view>
+    </view>
+  </view>
 </view>
 
 <!-- Sticky submit -->
