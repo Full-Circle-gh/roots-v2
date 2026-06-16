@@ -169,7 +169,7 @@
           <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="thumb-img"/>
         </view>
         <view class="item-info">
-          <view class="item-name f-bear">{{item.display_name}}</view>
+          <view class="item-name f-bear">{{item.display_name}}<text wx:if="{{item.is_addon}}" class="item-addon-tag f-toni">{{lang === 'cn' ? '后加' : 'Added later'}}</text></view>
           <view wx:if="{{item.options_str}}" class="item-options muted">{{item.options_str}}</view>
           <view class="item-meta muted">×{{item.qty}}</view>
           <view wx:if="{{order.status === 'delivered' && item.product_id}}" class="review-link"
@@ -276,6 +276,7 @@
       <button wx:if="{{!order.refund_status || order.refund_status === 'rejected' || order.refund_status === 'withdrawn'}}" class="btn ghost f-toni" bindtap="openRefundSheet">{{copy.refundBtn}}</button>
     </view>
     <view wx:elif="{{order.status === 'paid' || order.status === 'preparing' || order.status === 'dispatched'}}" class="cust-actions">
+      <button wx:if="{{canAddItems}}" class="btn primary f-toni" bindtap="addToOrder">{{copy.addToOrderBtn}}</button>
       <button wx:if="{{!order.refund_status || order.refund_status === 'rejected' || order.refund_status === 'withdrawn'}}" class="btn ghost f-toni" bindtap="openRefundSheet">{{copy.refundBtn}}</button>
     </view>
 

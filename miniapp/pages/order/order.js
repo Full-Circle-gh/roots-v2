@@ -61,6 +61,7 @@ Page({
     lang: 'en',
     loading: true,
     notFound: false,
+    canAddItems: false,          // "Add to this order" shown while still editable
     copy: {
       title: 'Order',
       statusLabel: 'STATUS',
@@ -88,6 +89,7 @@ Page({
       cancelConfirmSub: 'You can place a new one anytime.',
       paying: 'Processing…',
       reorderBtn: 'Reorder',
+      addToOrderBtn: 'Add to this order',
       refundBtn: 'Request refund',
       refundTitle: 'Request a refund',
       refundReasonPlaceholder: 'Tell us what happened (optional)',
@@ -208,6 +210,7 @@ Page({
         cancelConfirmSub: '您可以随时重新下单。',
         paying: '处理中…',
         reorderBtn: '再次购买',
+        addToOrderBtn: '为订单加单',
         refundBtn: '申请退款',
         refundTitle: '申请退款',
         refundReasonPlaceholder: '说明一下情况 (可选)',
@@ -401,6 +404,13 @@ Page({
       // carried in address_json (parsed server-side into data.address), and
       // surface the chosen pickup time. order.wxml uses isPickup to swap the
       // delivery address/tracking blocks for pickup equivalents.
+      // "Add to this order" eligibility — mirrors the server edit window:
+      // status paid|preparing, no parcel shipped, and no refund in flight.
+      const shippedAny = shipments.some(s => s.state === 'dispatched' || s.state === 'delivered');
+      const refundInFlight = data.refund_status &&
+        ['pending', 'reviewing', 'approved', 'paid'].includes(data.refund_status);
+      const canAddItems = ['paid', 'preparing'].includes(data.status) && !shippedAny && !refundInFlight;
+
       const isPickup = data.fulfillment_type === 'pickup';
       const pa = data.address || {};
       const pickupStoreName = isPickup
@@ -423,6 +433,7 @@ Page({
         trackingEvents,
         trackingEventsVisible,
         refundView,
+        canAddItems,
         isPickup,
         pickupStoreName,
         pickupAddress,
@@ -599,6 +610,12 @@ Page({
       'delivered_at=' + encodeURIComponent(deliveredAt),
     ].join('&');
     wx.navigateTo({ url: '/pages/review/review?' + qp });
+  },
+
+  // "Forgot something?" — open the self-contained add-to-order picker. On the
+  // way back, onShow's refresh repulls the order so the new items appear.
+  addToOrder() {
+    wx.navigateTo({ url: '/pages/add-to-order/add-to-order?order_id=' + this.data.id });
   },
 
   reorder() {

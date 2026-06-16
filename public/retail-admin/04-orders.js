@@ -568,7 +568,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}</div></td>
+        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div></td>
         <td>${renderTrackingCell(o)}</td>
         <td>${renderShipByCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
@@ -1265,6 +1265,37 @@ function fulfillmentShortBadge(o) {
     + `title="${cuT('Shipping store is short on ' + pids.length + ' item(s) — restock or transfer before shipping',
                     '出货门店缺 ' + pids.length + ' 件商品 — 发货前请补货或调货')}">`
     + `⚠ ${cuT('needs restock', '需补货')}</div>`;
+}
+// List-row badge for an order the customer added to AFTER paying ("Add to your
+// order"). Staff may already be packing it, so flag it on the list so the
+// add-on isn't missed without opening the drawer. addon_count comes from the
+// orders-list endpoint (success add-ons only).
+function addonBadge(o) {
+  if (!Number(o.addon_count)) return '';
+  return `<span class="pill st-paid" title="${cuT('Items were added after this order was placed','下单后又加购了商品')}">`
+    + `<span class="dot"></span>${cuT('Updated · 加单','加单 · Updated')}</span>`;
+}
+// Drawer audit block: each "Add to your order" event, time-stamped, so the
+// operator sees WHEN items were added (after the slip likely already printed)
+// and WHAT — not just that an add-on exists. Data is o.addons (server attaches
+// it on the order-detail endpoint), each with paid_at, amount, and items.
+function renderAddonTimeline(o) {
+  const addons = (o.addons || []).filter(a => (a.items || []).length || Number(a.amount));
+  if (!addons.length) return '';
+  const rows = addons.map(a => {
+    const names = (a.items || []).map(it => `${escapeHtml(it.name_en || it.name_cn || '')} ×${it.qty}`).join('、');
+    return `<div style="display:flex; justify-content:space-between; gap:12px; padding:8px 0; border-bottom:1px solid var(--line-soft);">
+      <div style="min-width:0;">
+        <div style="font-weight:700; color:var(--text-1);">${names || cuT('Items added','已加单')}</div>
+        <div class="sub" style="color:var(--text-3); margin-top:2px;">${cuT('Added','加单于')} · ${formatDate(a.paid_at)}</div>
+      </div>
+      <div style="font-weight:800; white-space:nowrap; color:var(--text-1);">+¥${Number(a.amount || 0).toFixed(2)}</div>
+    </div>`;
+  }).join('');
+  return `<div class="order-items" style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
+      <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.22em; text-transform:uppercase; color:var(--brass); margin-bottom: var(--s2);">${cuT('Added later · 加单','加单 · Added later')}</div>
+      ${rows}
+    </div>`;
 }
 function fulfillmentShortNote(o) {
   let pids = [];
@@ -2365,6 +2396,7 @@ function renderOpenOrder(o) {
               <b>${escapeHtml(o.order_no)}</b>
               <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
               ${o.fulfillment?.rollup === 'partial' ? `<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>` : ''}
+              ${(o.addons && o.addons.length) ? `<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>` : ''}
               ${refundBadge(o)}
             </div>
             <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
@@ -2438,6 +2470,8 @@ function renderOpenOrder(o) {
             </div>` : ''}
           <div id="odv-items-sortable">${renderSortableItems(o)}</div>
         </div>
+
+        ${renderAddonTimeline(o)}
 
         ${(o.reservations && o.reservations.length) ? `
         <details class="order-items resv-details" style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">

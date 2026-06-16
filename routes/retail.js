@@ -7052,13 +7052,18 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   o.items = tdb().prepare(
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
-            oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id
+            oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id,
+            oi.addon_id
        FROM retail_order_items oi
   LEFT JOIN store_products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
   ).all(orderId).map(it => {
     if (it.options_json) { try { it.options = JSON.parse(it.options_json); } catch {} }
     delete it.options_json;
+    // Tag lines added after checkout (via "Add to your order") so the customer
+    // page can show an "added later" chip. addon_id is the staging row id.
+    it.is_addon = !!it.addon_id;
+    delete it.addon_id;
     // Same fix as the orders-list endpoint: a data: URI here is the raw
     // base64 photo from products.image_data and can be hundreds of KB per
     // item, blowing past the mini-app's 12s response timeout on orders
@@ -12516,6 +12521,8 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
                     o.fulfillment_short_pids,
+                    (SELECT COUNT(*) FROM retail_order_addons ad
+                       WHERE ad.order_id = o.id AND ad.status = 'success') AS addon_count,
                     o.scheduled_for, o.delivery_slot_label, o.delivery_slot_kind,
                     z.zone_type AS zone_type,
                     z.day_only AS zone_day_only, z.same_day_surcharge AS zone_same_day_surcharge,
@@ -13739,6 +13746,43 @@ function autoPrintOrder(orderId) {
         recordPrintResult(db, orderId, { ok: false, msg: e.message });
       });
   } catch (e) { console.warn('[feie print setup]', e.message); }
+}
+
+// Print a focused "add-on" slip for items added to an already-paid order.
+// Mirrors autoPrintOrder/printOrderById but renders ONLY the new lines via the
+// fixed add-on layout (lib/feie renderAddon) so staff add them to the existing
+// parcel. Best-effort + fire-and-forget; never blocks the add-on finalize.
+// We do NOT touch print_status here — that flag tracks the ORIGINAL order slip.
+function autoPrintAddon(orderId, newItemIds, addonPaidAt) {
+  try {
+    const pp = loadPrinterPrefs();
+    if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    if (!Array.isArray(newItemIds) || !newItemIds.length) return;
+    const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
+    if (!order) return;
+    order.addon_paid_at = addonPaidAt || null;
+    const printer = printerForOrder(order, pp);
+    if (!printer || !printer.sn) { console.warn('[feie addon]', orderId, 'no_printer_for_store'); return; }
+    const ph = newItemIds.map(() => '?').join(',');
+    const items = tdb().prepare(
+      `SELECT oi.*, p.bundle_items
+         FROM retail_order_items oi
+    LEFT JOIN store_products p ON p.id = oi.product_id
+        WHERE oi.id IN (${ph}) ORDER BY oi.id`
+    ).all(...newItemIds);
+    for (const it of items) {
+      const comps = resolveBundleComponents(it.bundle_items);
+      if (comps.length) {
+        it.is_bundle = true;
+        it.bundle_components = comps.map(c => ({ ...c, pack_qty: c.qty * (Number(it.qty) || 1) }));
+      }
+      delete it.bundle_items;
+    }
+    const content = _feie.renderAddon(order, items, pp.shop_name);
+    _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
+      .then(r => console.log('[feie addon]', orderId, r.ok ? 'ok' : r.msg))
+      .catch(e => console.warn('[feie addon]', orderId, e.message));
+  } catch (e) { console.warn('[feie addon setup]', e.message); }
 }
 
 router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
@@ -17995,8 +18039,8 @@ function finalizeOrderAddon(addonId) {
   const insItem = tdb().prepare(
     `INSERT INTO retail_order_items
        (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price,
-        line_total, options_json, ship_modes, needs_ice_pack)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        line_total, options_json, ship_modes, needs_ice_pack, addon_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const newItemIds = [];
 
@@ -18013,7 +18057,7 @@ function finalizeOrderAddon(addonId) {
         order.id, it.product_id || null, it.name_en || null, it.name_cn || null,
         it.sku || null, it.size || null, it.qty, it.unit_price, it.line_total,
         it.options && it.options.length ? JSON.stringify(it.options) : null,
-        it.ship_modes || null, it.needs_ice_pack ? 1 : 0
+        it.ship_modes || null, it.needs_ice_pack ? 1 : 0, addonId
       );
       newItemIds.push(info.lastInsertRowid);
     }
@@ -18094,6 +18138,13 @@ function finalizeOrderAddon(addonId) {
   // Nudge the store — they may already be packing this order.
   try { sendWecomOrderAddonAlert(order.id, a.amount, items); }
   catch (e) { console.warn('[finalizeOrderAddon wecom]', e.message); }
+
+  // Print a focused add-on slip so the kitchen folds the new lines into the
+  // existing (likely already-printed) order instead of missing them.
+  try {
+    const paidAt = tdb().prepare('SELECT paid_at FROM retail_order_addons WHERE id = ?').get(addonId)?.paid_at;
+    autoPrintAddon(order.id, newItemIds, paidAt);
+  } catch (e) { console.warn('[finalizeOrderAddon print]', e.message); }
   return true;
 }
 

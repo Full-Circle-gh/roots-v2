@@ -2731,6 +2731,11 @@ addColumn('retail_orders', 'reminder_pickup_sent_at', 'DATETIME');
 // product the customer was trying to buy. Lets us show "replaces X" on
 // receipts and analytics.
 addColumn('retail_order_items', 'replaced_for_product_id', 'INTEGER');
+// Items added AFTER the order was paid, via the "Add to your order" flow.
+// NULL = original line; set to the retail_order_addons.id that injected it, so
+// the customer order page can tag it "added later" and prints/audits can tell
+// the delta from the original ticket.
+addColumn('retail_order_items', 'addon_id', 'INTEGER');
 
 // Seed default GZ-express excluded districts (editable from Admin →
 // Integrations later). Customers in these districts get the simple
