@@ -1958,12 +1958,17 @@ function renderShipmentCard(o, s) {
   const canDispatch = state === 'pending' &&
     ['paid', 'preparing', 'dispatched'].includes(o.status) &&
     o.fulfillment_type !== 'pickup';
+  // With a single parcel the per-parcel dispatch button just duplicates the
+  // header "Mark dispatched" (which dispatches the whole order = this one
+  // parcel). Only show the per-parcel button once the order actually has 2+
+  // parcels, where it's needed to ship them independently.
+  const showParcelDispatch = canDispatch && (o.shipments?.length || 0) > 1;
   // "Ship part later" splits this parcel in two. Only meaningful when the
   // parcel is still pending and holds 2+ lines (must leave one behind).
   const canSplit = state === 'pending' && lines >= 2;
-  const actions = (canDispatch || canSplit) ? `
+  const actions = (showParcelDispatch || canSplit) ? `
       <div class="row" style="gap:8px; flex-wrap:wrap; margin-top: var(--s3);">
-        ${canDispatch ? `<button class="btn btn-primary btn-sm" onclick="dispatchShipment(${o.id}, ${s.id})">Mark this parcel dispatched · 标记此包裹已发货</button>` : ''}
+        ${showParcelDispatch ? `<button class="btn btn-primary btn-sm" onclick="dispatchShipment(${o.id}, ${s.id})">Mark this parcel dispatched · 标记此包裹已发货</button>` : ''}
         ${canSplit ? `<button class="btn btn-sm" onclick="toggleSplitPanel(${s.id})">Ship part later · 分批发货</button>` : ''}
       </div>
       ${canSplit ? renderSplitPanel(o, s) : ''}` : '';
@@ -3000,7 +3005,6 @@ function renderShipmentTrackingCard(o, s, hoisted) {
             <div style="margin-top:2px;">${trackLink}</div>
           </div>
         </div>` : ''}
-      ${eventsBlock}
       ${!has ? `
         <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)">📦 Create JD label · 生成京东运单</button>
@@ -3016,6 +3020,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       </div>
       ${has && t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes). · “取消揽收”会向京东取消上门;“清除”仅在本地移除运单号(快递仍会上门)。</div>` : ''}
       ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead. · 手动录入的运单号通过快递100(付费)追踪,含个人的京东 JDV0… 单号;如需免费京东追踪,请改用上方“生成京东运单”。</div>` : ''}
+      ${eventsBlock}
     </div>`;
 }
 
