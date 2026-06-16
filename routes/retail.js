@@ -7063,7 +7063,12 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
     // base64 photo from products.image_data and can be hundreds of KB per
     // item, blowing past the mini-app's 12s response timeout on orders
     // with several items. Hand back a short URL the client fetches lazily.
-    if (baseUrl && typeof it.image_url === 'string' && /^data:/i.test(it.image_url)) {
+    // Also catch the EMPTY case: a size variant (e.g. "能量棒（小）") keeps its
+    // photo on a sibling row, so p.image_data is null and the COALESCE above
+    // yields nothing. The byte-stream endpoint runs resolveProductImage(),
+    // which walks the variant group — so route imageless lines through it too.
+    if (baseUrl && it.product_id &&
+        (!it.image_url || /^data:/i.test(it.image_url))) {
       it.image_url = `${baseUrl}/api/retail/products/${it.product_id}/image`;
     }
     return it;
@@ -12684,7 +12689,10 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     delete it.options_json;
     // Normalize csv for the front-end (always an array).
     it.ship_modes_arr = parseShipModes(it.ship_modes);
-    if (typeof it.image_url === 'string' && /^data:/i.test(it.image_url)) {
+    // data: URI → keep the drawer payload small; EMPTY → a size variant keeps
+    // its photo on a sibling, so resolve it through the variant-aware
+    // byte-stream endpoint (resolveProductImage) instead of showing a blank.
+    if (it.product_id && (!it.image_url || /^data:/i.test(it.image_url))) {
       it.image_url = `/api/retail/products/${it.product_id}/image`;
     }
     // Bundle line → attach the component pack list so fulfilment knows what to
