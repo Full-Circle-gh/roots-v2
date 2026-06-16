@@ -2181,7 +2181,7 @@ function buField(key, val) {
   if (key === 'price') BU.price = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
   else BU[key] = val;
 }
-function buRemove(id) { BU.ids = BU.ids.filter(x => x !== id); buRender(); }
+function buRemove(id) { BU.ids = BU.ids.filter(x => x !== id); buRender(); pdScheduleAutosave(); }
 function buTogglePicker() { BU_PICKING = !BU_PICKING; buRender(); }
 function buPickerList() {
   const el = document.getElementById('bu-picklist'); if (!el) return;
@@ -2198,6 +2198,7 @@ function buPick(id) {
   if (!BU.ids.includes(id)) BU.ids.push(id);
   const s = document.getElementById('bu-search'); if (s) s.value = '';
   buRender();
+  pdScheduleAutosave();
 }
 // The bundle object for saving (null clears it). Folded into pdSave's body.
 function buBody() {
@@ -2266,7 +2267,7 @@ function bpQty(id, val) {
   const c = BP.find(x => x.id === id); if (!c) return;
   c.qty = Math.max(1, parseInt(val, 10) || 1);
 }
-function bpRemove(id) { BP = BP.filter(x => x.id !== id); bpRender(); }
+function bpRemove(id) { BP = BP.filter(x => x.id !== id); bpRender(); pdScheduleAutosave(); }
 function bpTogglePicker() { BP_PICKING = !BP_PICKING; bpRender(); }
 function bpPickerList() {
   const el = document.getElementById('bp-picklist'); if (!el) return;
@@ -2285,6 +2286,7 @@ function bpPick(id) {
   if (!BP.some(c => c.id === id)) BP.push({ id, qty: 1 });
   const s = document.getElementById('bp-search'); if (s) s.value = '';
   bpRender();
+  pdScheduleAutosave();
 }
 // Recipe to save (null clears → turns it back into a normal product).
 function bpBody() {
