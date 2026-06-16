@@ -19443,7 +19443,42 @@ function loadPollOptions(pollId) {
   ).all(pollId);
 }
 
-// Hydrate a poll row with options + caller's vote (if any).
+// Inflate cached vote counts for CUSTOMER DISPLAY ONLY. The real ledger
+// (retail_poll_votes) and the stored counts (option.votes / poll.total_votes)
+// are never changed — the admin Voting tab keeps showing the true numbers.
+//
+// `display_min_total` is a floor on the vote count customers see. When real
+// turnout is below it, we scale every option by the SAME factor, so the ratio
+// between options (and therefore every percentage + bar width) is identical —
+// only the numbers grow. Once real votes exceed the floor, factor=1 (we never
+// shrink genuine turnout). With 0 real votes there's no ratio to preserve, so
+// we leave it at 0 rather than invent a split. Mutates `poll` in place.
+function applyPollDisplayBoost(poll) {
+  if (!poll) return poll;
+  const floor = Math.max(0, parseInt(poll.display_min_total, 10) || 0);
+  const opts = poll.options || [];
+  const realTotal = opts.reduce((s, o) => s + (o.votes || 0), 0);
+  if (!floor || realTotal <= 0 || floor <= realTotal) {
+    // No boost — expose the true total (cached total_votes can drift; trust the
+    // summed options) and tag the real total for any client that wants it.
+    poll.real_total_votes = realTotal;
+    poll.total_votes = poll.total_votes || realTotal;
+    return poll;
+  }
+  const factor = floor / realTotal;
+  let shown = 0;
+  poll.options = opts.map(o => {
+    const v = Math.round((o.votes || 0) * factor);
+    shown += v;
+    return { ...o, votes: v };
+  });
+  poll.real_total_votes = realTotal;   // backend/debug parity, ignored by UI
+  poll.total_votes = shown;            // "N VOTES SO FAR" + percentage base
+  return poll;
+}
+
+// Hydrate a poll row with options + caller's vote (if any). Customer-facing —
+// applies the display-only vote boost (admin endpoints never call this).
 function hydratePoll(poll, customerId) {
   if (!poll) return null;
   const options = loadPollOptions(poll.id);
@@ -19453,7 +19488,7 @@ function hydratePoll(poll, customerId) {
       .get(poll.id, customerId);
     if (v) myVoteOptionId = v.option_id;
   }
-  return { ...poll, options, my_vote_option_id: myVoteOptionId };
+  return applyPollDisplayBoost({ ...poll, options, my_vote_option_id: myVoteOptionId });
 }
 
 // Customer-facing list — only `open` and `closed` polls (drafts hidden).
@@ -19693,8 +19728,8 @@ router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), (req,
     const r = tdb().prepare(
       `INSERT INTO retail_polls
         (question_en, question_cn, explainer_en, explainer_cn, category_en, category_cn,
-         status, closes_at, reward_points, is_featured, sort_order)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?)`
+         status, closes_at, reward_points, is_featured, sort_order, display_min_total)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       question_en,
       String(b.question_cn || '').trim() || null,
@@ -19707,6 +19742,7 @@ router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), (req,
       Math.max(0, parseInt(b.reward_points, 10) || 5),
       b.is_featured ? 1 : 0,
       parseInt(b.sort_order, 10) || 0,
+      Math.max(0, parseInt(b.display_min_total, 10) || 0),
     );
     const pollId = r.lastInsertRowid;
     const insOpt = tdb().prepare(
@@ -19743,6 +19779,9 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
   if ('reward_points' in b)  updates.reward_points = Math.max(0, parseInt(b.reward_points, 10) || 0);
   if ('is_featured' in b)    updates.is_featured   = b.is_featured ? 1 : 0;
   if ('sort_order' in b)     updates.sort_order    = parseInt(b.sort_order, 10) || 0;
+  // Display-only vote floor: customers see at least this many votes (scaled to
+  // keep the same ratio); the real ledger/counts are untouched. 0 = show real.
+  if ('display_min_total' in b) updates.display_min_total = Math.max(0, parseInt(b.display_min_total, 10) || 0);
   if ('winner_option_id' in b) {
     const wid = parseInt(b.winner_option_id, 10);
     if (wid) {

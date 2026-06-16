@@ -1120,6 +1120,7 @@ function renderPollForm() {
   if (!d) { $('#vot-form-mount').innerHTML = ''; return; }
   const isEdit = !!d.id;
   const hasVotes = (d.options || []).some(o => (o.votes || 0) > 0);
+  const realTotal = (d.options || []).reduce((s, o) => s + (o.votes || 0), 0);
   const optsHtml = (d.options || []).map((o, i) => `
     <div class="vot-opt" data-idx="${i}">
       <div class="vot-opt-letter">${pollLetter(i)}</div>
@@ -1215,6 +1216,15 @@ function renderPollForm() {
         </div>
       </div>
 
+      <div class="field">
+        <label>Show vote count as · 对外显示票数 <span class="muted" style="font-weight: normal; letter-spacing: 0;">(0 = show the real count) · (0 = 显示真实票数)</span></label>
+        <input type="number" id="vot-display-min" min="0" max="100000"
+               value="${d.display_min_total != null ? d.display_min_total : 0}"
+               oninput="pollBoostPreview()"/>
+        <div class="muted" id="vot-display-preview" style="font-size: 11px; margin-top: 4px;"></div>
+        <div class="muted" style="font-size: 11px;">Customers see at least this many votes — every option is scaled up by the same factor, so the percentages and the winner stay identical. The real count (<b>${realTotal}</b>) is unchanged here in the office and in your data. · 顾客至少看到这么多票;所有选项按同一比例放大,百分比与领先项不变。真实票数(<b>${realTotal}</b>)在后台与数据中保持不变。</div>
+      </div>
+
       ${isEdit ? `
       <div class="vot-row-2">
         <div class="field">
@@ -1253,6 +1263,7 @@ function renderPollForm() {
       </div>
     </div>
   `;
+  pollBoostPreview();   // seed the "real → shown" hint for the loaded value
 }
 
 function pollOptEdit(i, field, value) {
@@ -1260,6 +1271,34 @@ function pollOptEdit(i, field, value) {
   if (!_pollDraft.options[i]) return;
   _pollDraft.options[i][field] = value;
   // Don't re-render on every keystroke — only on structural changes.
+}
+
+// Live "real → shown" preview under the display-vote-count input. Mirrors the
+// server's applyPollDisplayBoost exactly: scale every option by the same factor
+// when the floor is above real turnout; never shrink; no ratio to inflate at 0.
+function pollBoostPreview() {
+  const out = $('#vot-display-preview');
+  if (!out || !_pollDraft) return;
+  const opts = _pollDraft.options || [];
+  const realTotal = opts.reduce((s, o) => s + (o.votes || 0), 0);
+  const floor = Math.max(0, parseInt($('#vot-display-min')?.value, 10) || 0);
+  if (!floor || realTotal <= 0 || floor <= realTotal) {
+    out.innerHTML = realTotal > 0
+      ? cuT(`Showing the real ${realTotal} votes.`, `按真实票数 ${realTotal} 显示。`)
+      : cuT('No votes yet — nothing to scale until the first real vote.', '暂无投票 — 在首次真实投票前不会放大。');
+    return;
+  }
+  const factor = floor / realTotal;
+  let shown = 0;
+  const parts = opts.map(o => {
+    const v = Math.round((o.votes || 0) * factor);
+    shown += v;
+    return `${escapeHtml(o.label_en || '?')} ${o.votes || 0}→<b>${v}</b>`;
+  });
+  out.innerHTML = cuT(
+    `Customers will see ~<b>${shown}</b> votes (×${factor.toFixed(1)}): `,
+    `顾客将看到约 <b>${shown}</b> 票(×${factor.toFixed(1)}):`
+  ) + parts.join(' · ');
 }
 
 function pollOptAdd() {
@@ -1296,6 +1335,7 @@ function _collectPollFormState() {
     is_featured:  $('#vot-featured').value === '1' ? 1 : 0,
     closes_at:    $('#vot-closes').value || null,
     sort_order:   parseInt($('#vot-sort').value, 10) || 0,
+    display_min_total: Math.max(0, parseInt($('#vot-display-min')?.value, 10) || 0),
     options:      d.options.map((o, i) => ({
       id:         o.id || null,
       label_en:   String(o.label_en || '').trim(),

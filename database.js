@@ -3162,6 +3162,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_poll_votes_customer ON retail_poll_votes(customer_id, created_at);
 `);
 
+// Display-only vote inflation. `display_min_total` is a floor on how many votes
+// CUSTOMERS see for a poll: when real turnout is below it, the customer API
+// (hydratePoll) scales every option up by the same factor so percentages are
+// unchanged and only the numbers look bigger. The real ledger + cached counts
+// (and the admin Voting tab) are never altered. 0 = off (show real numbers).
+addColumn('retail_polls', 'display_min_total', 'INTEGER NOT NULL DEFAULT 0');
+
 // ─────────────────────────────────────────────────────────────────────────
 // One-time: clone the live "hummus" poll into a fresh poll that INHERITS its
 // vote counts but starts with an EMPTY vote ledger.
