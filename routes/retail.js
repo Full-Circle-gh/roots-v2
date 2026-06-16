@@ -5886,17 +5886,23 @@ function backfillShipmentTrackingFromOrder(orderId) {
 }
 
 function nextOrderNo() {
-  // R{YYMMDD}{6-digit-daily-seq}. Compute next seq by counting today's rows.
+  // R{YYMMDD}{6-digit-random}. A random suffix (not a daily counter) so the
+  // trailing digits are always different — never the repeating 0001/0002/0003
+  // pattern a per-day reset produces. Retry until the full number is unused.
   const now = new Date();
   const yy = String(now.getFullYear()).slice(-2);
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
   const datePrefix = `R${yy}${mm}${dd}`;
-  const last = tdb().prepare(
-    `SELECT order_no FROM retail_orders WHERE order_no LIKE ? ORDER BY id DESC LIMIT 1`
-  ).get(datePrefix + '%');
-  const lastSeq = last ? parseInt(last.order_no.slice(datePrefix.length), 10) || 0 : 0;
-  return datePrefix + String(lastSeq + 1).padStart(6, '0');
+  const exists = tdb().prepare(`SELECT 1 FROM retail_orders WHERE order_no = ? LIMIT 1`);
+  for (let attempt = 0; attempt < 50; attempt++) {
+    // 100000–999999: always 6 digits, never leading-zero padded.
+    const suffix = String(100000 + Math.floor(Math.random() * 900000));
+    const candidate = datePrefix + suffix;
+    if (!exists.get(candidate)) return candidate;
+  }
+  // Extremely unlikely fallback: append more entropy to guarantee uniqueness.
+  return datePrefix + String(100000 + Math.floor(Math.random() * 900000)) + String(Math.floor(Math.random() * 10));
 }
 
 router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req, res, next) => {
