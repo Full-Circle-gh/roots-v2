@@ -993,6 +993,7 @@ async function loadConfig() {
     $('#cfg-notifications-order_status_template_id').value = c.notifications?.order_status_template_id || '';
     $('#cfg-notifications-wecom_order_webhook').value = c.notifications?.wecom_order_webhook || '';
     loadWecomApp();
+    loadAliyunSms();
     // Customer service
     const cs = c.customer_service || {};
     $('#cfg-cs-mode').value      = cs.mode || 'off';
@@ -1137,6 +1138,84 @@ async function testWecomWebhook() {
       ? 'Set up the app above, or paste a qyapi.weixin.qq.com URL · 请先配置上方 App 或填入正确地址'
       : (e.message || 'failed'));
   }
+}
+
+// ── Aliyun SMS (delivered notice for out-of-Guangzhou orders) ──────────────
+async function loadAliyunSms() {
+  try {
+    const { data } = await api('/api/retail-admin/integrations');
+    const a = data?.aliyun_sms || {};
+    const id   = $('#aliyun_sms-ak_id');
+    const sec  = $('#aliyun_sms-ak_secret');
+    const sign = $('#aliyun_sms-sign_name');
+    const tpl  = $('#aliyun_sms-template_delivered');
+    if (id)   id.value = a.ak_id || '';
+    if (sign) sign.value = a.sign_name || '';
+    if (tpl)  tpl.value = a.template_delivered || '';
+    if (sec)  sec.placeholder = a.ak_secret_masked
+      ? (a.ak_secret_masked + ' · leave blank to keep · 留空保持不变')
+      : 'paste AccessKey Secret · 粘贴 AccessKey Secret';
+    const chip = $('#aliyun_sms-chip');
+    if (chip) chip.innerHTML = a.enabled
+      ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
+      : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
+  } catch (e) { console.warn('[aliyun sms] load failed', e.message); }
+}
+
+// Save the four fields. Secret is sent only when newly typed (blank = keep).
+// Empty id/sign/template clear (turn off). Server treats '' as clear, undefined
+// as keep.
+async function saveAliyunSms_() {
+  const id   = $('#aliyun_sms-ak_id').value.trim();
+  const sec  = $('#aliyun_sms-ak_secret').value;   // exact — secrets not trimmed
+  const sign = $('#aliyun_sms-sign_name').value.trim();
+  const tpl  = $('#aliyun_sms-template_delivered').value.trim();
+  await api('/api/retail-admin/integrations', { method: 'PUT', body: {
+    aliyun_sms: {
+      ak_id:              id || null,
+      ak_secret:          sec ? sec : undefined,
+      sign_name:          sign || null,
+      template_delivered: tpl || null,
+    },
+  } });
+  $('#aliyun_sms-ak_secret').value = '';   // never keep plaintext in the field
+}
+
+async function _saveAliyunSms() {
+  const status = $('#aliyun_sms-test-status');
+  status.textContent = 'Saving… · 保存中…';
+  try { await saveAliyunSms_(); status.textContent = '✅ Saved · 已保存'; loadAliyunSms(); }
+  catch (e) { status.textContent = '⚠ ' + (e.message || 'save failed'); }
+}
+
+// Save first, then send a REAL delivered SMS to the typed number so the operator
+// confirms sign + template + key are all approved and wired end-to-end.
+async function _testAliyunSms() {
+  const status = $('#aliyun_sms-test-status');
+  const phone = $('#aliyun_sms-testphone').value.trim();
+  if (!/^1\d{10}$/.test(phone.replace(/\D/g, '').replace(/^86/, ''))) {
+    status.textContent = '⚠ Enter an 11-digit mainland mobile · 请输入 11 位手机号'; return;
+  }
+  status.textContent = 'Sending… · 发送中…';
+  try {
+    await saveAliyunSms_();
+    // Test endpoints return {ok:…}, not {success:…}, so call fetch directly
+    // (the same pattern the kd100/JD test buttons use).
+    const r = await fetch('/api/retail-admin/integrations/aliyun_sms/test', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.ok) {
+      status.textContent = '✅ Sent — check that phone · 已发送,请查看该手机';
+    } else {
+      const m = j.error === 'not_configured' ? 'Fill in all four fields first · 请先填写四项'
+              : j.error === 'bad_phone'      ? 'Bad phone number · 手机号无效'
+              : (j.error || 'failed');
+      status.textContent = '⚠ ' + m;
+    }
+    loadAliyunSms();
+  } catch (e) { status.textContent = '⚠ ' + (e.message || 'failed'); }
 }
 
 async function saveConfig() {

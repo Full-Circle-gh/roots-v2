@@ -5310,6 +5310,60 @@
 
           <div class="group-card">
             <div class="group-card-head">
+              <h3>SMS when delivered (out-of-Guangzhou orders) · 送达短信(广州市外订单)
+                <span id="aliyun_sms-chip" style="margin-left:8px;vertical-align:middle"></span>
+              </h3>
+              <div class="muted">Text the customer the moment an out-of-town courier order is marked delivered — for shoppers who aren't watching the mini app. Same-city Guangzhou deliveries and in-store pickups are skipped (they already get the in-app notice). Uses your Aliyun 短信服务 package. · 当广州市外的快递订单标记为「已送达」时,给顾客发一条短信(适合不盯着小程序的顾客)。广州同城配送与到店自提不发送(已有应用内通知)。使用你的阿里云短信套餐包。</div>
+            </div>
+            <div class="illus-row">
+              <div class="mini-phone">
+                <div class="mp-notch"></div>
+                <div style="position: absolute; left: 4px; right: 4px; top: 10px; bottom: 4px; background: #f0f0ec; border-radius: 4px; padding: 4px;">
+                  <div style="background: #fff; border-radius: 3px; padding: 4px;">
+                    <div style="font-size: 6px; font-weight: 700; color: #2a2a30; margin-bottom: 3px">信息 · SMS</div>
+                    <div style="font-size: 5px; color: #2a2a30; line-height: 1.6">【满圆】您的订单 R260616…<br>已送达,请注意查收,<br>感谢您的惠顾。</div>
+                  </div>
+                </div>
+              </div>
+              <div class="ctrl">
+                <div class="field" style="margin: 0 0 8px;">
+                  <label class="stacked">AccessKey ID · 访问密钥 ID</label>
+                  <input type="text" id="aliyun_sms-ak_id" placeholder="LTAI… (RAM 用户, 仅授权 AliyunDysmsFullAccess)" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0 0 8px;">
+                  <label class="stacked">AccessKey Secret · 访问密钥</label>
+                  <input type="password" id="aliyun_sms-ak_secret" autocomplete="off" placeholder="paste AccessKey Secret · 粘贴 AccessKey Secret" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 0 0 8px;">
+                  <label class="stacked">Signature (签名) · 短信签名</label>
+                  <input type="text" id="aliyun_sms-sign_name" placeholder="e.g. 满圆 (must be approved in 签名管理)" style="width: 100%;">
+                </div>
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Delivered template code (模板CODE) · 送达模板编号</label>
+                  <input type="text" id="aliyun_sms-template_delivered" placeholder="e.g. SMS_123456789" style="width: 100%; font-family: monospace;">
+                </div>
+                <div class="field" style="margin: 10px 0 0;">
+                  <label class="stacked">Test to this phone · 测试发送至此手机号</label>
+                  <input type="text" id="aliyun_sms-testphone" placeholder="11-digit mainland mobile · 11 位手机号" style="width: 100%; font-family: monospace;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_saveAliyunSms()">Save · 保存</button>
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_testAliyunSms()">Send a test SMS · 发送测试短信</button>
+                  <span id="aliyun_sms-test-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  <b>1.</b> Aliyun console → AccessKey 管理 → create a key (ideally a RAM user with only <b>AliyunDysmsFullAccess</b>).<br>
+                  <b>2.</b> 短信服务 → 签名管理 → copy your approved <b>签名</b> text (the one your old app already uses).<br>
+                  <b>3.</b> 短信服务 → 模板管理 → 添加模板 (type 通知短信), submit a delivered notice using the variable <code>${order}</code>, e.g. <i>您的订单${order}已送达,请注意查收,感谢您的惠顾。</i> Once approved, copy its <b>模板CODE</b>.<br>
+                  <b>4.</b> Paste all four above, Save, then Send a test SMS to your own phone.<br>
+                  Clear all four fields to turn off. · 清空四项即关闭。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="group-card">
+            <div class="group-card-head">
               <h3>Alternative: group-bot webhook · 备选:群机器人 Webhook</h3>
               <div class="muted">Only if you use mainland 企业微信 with an internal (company-only) group. Paste the group robot's webhook and the card posts there instead. Leave blank if you're using the app above. · 仅当你使用国内企业微信且有内部群时。填入群机器人的 Webhook,卡片会发到群里。若用上面的 App 方式,请留空。</div>
             </div>
@@ -5701,6 +5755,10 @@
               <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
                 <input type="checkbox" id="feie-auto" style="width:18px;height:18px">
                 <label for="feie-auto" style="font-size:13px;color:var(--text-1)">Auto-print every paid order at its store · 付款后在对应门店自动打印</label>
+              </div>
+              <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
+                <input type="checkbox" id="feie-auto-addon" style="width:18px;height:18px">
+                <label for="feie-auto-addon" style="font-size:13px;color:var(--text-1)">Print an add-on slip when a customer adds to a paid order · 顾客加单后补打加单小票</label>
               </div>
               <div style="grid-column:1/-1">
                 <label class="field-label">Receipt header · 小票抬头</label>

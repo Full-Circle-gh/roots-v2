@@ -229,8 +229,10 @@ async function loadPrinterPrefs() {
     if (!r.ok) return;
     const p = (await r.json()).data || {};
     const auto = document.getElementById('feie-auto');
+    const autoAddon = document.getElementById('feie-auto-addon');
     const shop = document.getElementById('feie-shop');
     if (auto) auto.checked = p.auto_print !== false;
+    if (autoAddon) autoAddon.checked = p.auto_print_addon !== false;
     if (shop) shop.value = p.shop_name || '';
 
     const box = document.getElementById('feie-stores');
@@ -353,6 +355,7 @@ async function _savePrinter() {
   try {
     const body = {
       auto_print: document.getElementById('feie-auto')?.checked,
+      auto_print_addon: document.getElementById('feie-auto-addon')?.checked,
       shop_name:  document.getElementById('feie-shop')?.value || '',
       by_store:   _collectPrinterByStore(),
       out_of_city_store_id: document.getElementById('feie-ooc')?.value || null,

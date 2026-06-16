@@ -13613,6 +13613,9 @@ function loadPrinterPrefs() {
   const ooc = oocRaw != null && /^\d+$/.test(String(oocRaw)) ? parseInt(oocRaw, 10) : null;
   return {
     auto_print: get('printer.auto_print', true),
+    // Independent of auto_print: whether to print the focused "add-on" slip
+    // when a customer adds to an already-paid order. Default on.
+    auto_print_addon: get('printer.auto_print_addon', true),
     shop_name:  get('printer.shop_name', tenantBrandLabel()),
     by_store:   (by_store && typeof by_store === 'object') ? by_store : {},
     // Orders shipping OUTSIDE Guangzhou always print at this store's printer
@@ -13756,7 +13759,10 @@ function autoPrintOrder(orderId) {
 function autoPrintAddon(orderId, newItemIds, addonPaidAt) {
   try {
     const pp = loadPrinterPrefs();
-    if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    // Gated on its OWN toggle (auto_print_addon), independent of the main
+    // order auto-print — a store can want the add-on slip on while the main
+    // slip is off, or vice versa.
+    if (pp.auto_print_addon === false || !_feie.feieEnabled(integ().feie)) return;
     if (!Array.isArray(newItemIds) || !newItemIds.length) return;
     const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
     if (!order) return;
@@ -13808,6 +13814,7 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
   }
   res.json({ success: true, data: {
     auto_print: prefs.auto_print,
+    auto_print_addon: prefs.auto_print_addon,
     shop_name:  prefs.shop_name,
     enabled:    _feie.feieEnabled(integ().feie),
     templates:  _feie.TEMPLATE_IDS,
@@ -13826,6 +13833,7 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
   );
   const tx = tdb().transaction(() => {
     if (b.auto_print !== undefined) upsert.run('printer.auto_print', JSON.stringify(!!b.auto_print), req.user.id);
+    if (b.auto_print_addon !== undefined) upsert.run('printer.auto_print_addon', JSON.stringify(!!b.auto_print_addon), req.user.id);
     if (b.shop_name !== undefined) {
       upsert.run('printer.shop_name', JSON.stringify(String(b.shop_name || '').slice(0, 40)), req.user.id);
     }
