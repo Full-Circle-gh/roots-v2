@@ -1177,12 +1177,16 @@ function renderShipByCell(o) {
 }
 function fmtSlotShort(dt) {
   const pad = n => String(n).padStart(2, '0');
+  // Midnight (00:00) is never a real delivery time — it's how a DATE-ONLY pick
+  // (schedule-for-later day / day-only zone) lands when parsed. Drop the fake
+  // time tail so it reads "Jun 18" / "6月18日", not "Jun 18 · 00:00".
+  const dateOnly = (dt.getHours() === 0 && dt.getMinutes() === 0);
   // In Chinese mode show "6月25日 · 14:30" instead of "Jun 25 · 14:30".
   if (typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn') {
-    return `${dt.getMonth() + 1}月${dt.getDate()}日 · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+    return `${dt.getMonth() + 1}月${dt.getDate()}日${dateOnly ? '' : ` · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`}`;
   }
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
-  return `${M} ${pad(dt.getDate())} · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  return `${M} ${pad(dt.getDate())}${dateOnly ? '' : ` · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`}`;
 }
 // Date only — "Jun 17" / "6月17日". A ship-by DEADLINE is a day, not a minute,
 // so we drop the time tail that fmtSlotShort carries.
