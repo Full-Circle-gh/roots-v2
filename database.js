@@ -2105,6 +2105,35 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_topup_customer ON retail_topup_transactions(customer_id, status);
   CREATE INDEX IF NOT EXISTS idx_retail_topup_outtrade ON retail_topup_transactions(out_trade_no);
 
+  -- "Forgot something?" add-on: stages items a customer adds to an EXISTING
+  -- (already-paid) order and carries the top-up payment for the price
+  -- difference. Mirrors retail_topup_transactions: rides the shared WeChat
+  -- merchant ledger with its own 'FCAO…' out_trade_no so the async pay
+  -- callback can tell it apart from an order ('FCR…') or a wallet top-up
+  -- ('FCTU…'). items_json holds the server-resolved+priced lines; on success
+  -- finalizeOrderAddon() injects them into retail_order_items and merges them
+  -- into the order's un-dispatched parcel. Nothing touches the order until
+  -- WeChat confirms the charge.
+  CREATE TABLE IF NOT EXISTS retail_order_addons (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id        INTEGER NOT NULL,
+    customer_id     INTEGER NOT NULL,
+    items_json      TEXT NOT NULL,                   -- staged resolved lines (server-priced)
+    amount          REAL NOT NULL,                   -- ¥ price difference charged
+    earn_points     INTEGER NOT NULL DEFAULT 0,      -- earn-points granted on success
+    payment_method  TEXT,                            -- wechat
+    status          TEXT DEFAULT 'pending',          -- pending | success | failed
+    out_trade_no    TEXT,
+    transaction_id  TEXT,
+    raw_callback_json TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    paid_at         DATETIME,
+    FOREIGN KEY (order_id)    REFERENCES retail_orders(id)    ON DELETE CASCADE,
+    FOREIGN KEY (customer_id) REFERENCES retail_customers(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_order_addons_order ON retail_order_addons(order_id, status);
+  CREATE INDEX IF NOT EXISTS idx_retail_order_addons_outtrade ON retail_order_addons(out_trade_no);
+
   CREATE TABLE IF NOT EXISTS retail_points_transactions (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     customer_id     INTEGER NOT NULL,
@@ -2478,6 +2507,11 @@ addColumn('retail_orders', 'promised_delivery_date', 'TEXT');
 // (no specific date wanted → show a send-by deadline) apart from a customer
 // who actually booked a calendar day (→ show that date).
 addColumn('retail_orders', 'delivery_slot_kind', 'TEXT');
+
+// Aliyun "package delivered" SMS — idempotency stamp so the every-60s
+// auto-deliver sweep and a manual "Mark delivered" can't double-send. Stamped
+// once when the delivered-notice SMS is dispatched (out-of-GZ orders only).
+addColumn('retail_orders', 'sms_delivered_sent_at', 'DATETIME');
 
 // Cloud-printer (Feie) auto-print outcome, so the backend can show whether a
 // slip actually printed and offer a one-click reprint instead of the operator
@@ -3028,6 +3062,10 @@ try {
     'integrations.wecom_app.corp_id':  'WECOM_CORP_ID',
     'integrations.wecom_app.agent_id': 'WECOM_AGENT_ID',
     'integrations.wecom_app.secret':   'WECOM_SECRET',
+    'integrations.aliyun_sms.ak_id':              'ALIYUN_SMS_AK_ID',
+    'integrations.aliyun_sms.ak_secret':          'ALIYUN_SMS_AK_SECRET',
+    'integrations.aliyun_sms.sign_name':          'ALIYUN_SMS_SIGN',
+    'integrations.aliyun_sms.template_delivered': 'ALIYUN_SMS_TPL_DELIV',
   };
   let hydrated = 0;
   for (const [cfgKey, envKey] of Object.entries(envMap)) {

@@ -31,6 +31,7 @@ let _push = null;
 try { _push = require('./push'); } catch (e) { console.warn('[retail] push module not available:', e.message); }
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
+const _aliyunSms = require('../lib/aliyun-sms'); // 阿里云短信 delivered-notice SMS (dormant until creds)
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
@@ -1258,6 +1259,18 @@ router.get('/api/retail/products', (req, res) => {
   // hundreds of rows and doesn't need the extra per-bundle component query.
   const withBundleComps = req.query.bundle_components === '1' || req.query.bundle_components === 'true';
   for (const r of rows) decorateBundleRow(r, { withComponents: withBundleComps });   // flag bundles + real (component-derived) stock
+  // Flag which rows carry customer-choice options (dressing / paid extras), so a
+  // card grid can show an "Options" cue and the add-to-order picker knows to open
+  // a chooser instead of a bare qty stepper. One cheap set-membership query.
+  if (rows.length) {
+    const ph = rows.map(() => '?').join(',');
+    const optSet = new Set(
+      tdb().prepare(
+        `SELECT DISTINCT product_id FROM retail_product_options WHERE product_id IN (${ph})`
+      ).all(...rows.map(r => r.id)).map(x => x.product_id)
+    );
+    for (const r of rows) r.has_options = optSet.has(r.id);
+  }
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
   const termClause = terms.map(() => 'AND ' + termClauseFor()).join(' ');
@@ -2500,6 +2513,12 @@ const wxOutTradeNo = (orderNo) => WX_OUT_TRADE_PREFIX + orderNo;
 // (→ 'FCR…'), so 'FCTU…' can never collide with an order's out_trade_no.
 const WX_TOPUP_OUT_TRADE_PREFIX = WX_OUT_TRADE_PREFIX + 'TU';
 
+// "Forgot something?" order add-ons ride the SAME shared merchant ledger too,
+// so they carry the FC namespace plus an 'AO' marker. Order numbers start 'R'
+// (→ 'FCR…') and top-ups are 'FCTU…', so 'FCAO…' can never collide with
+// either — the async pay callback routes it to finalizeOrderAddon().
+const WX_ADDON_OUT_TRADE_PREFIX = WX_OUT_TRADE_PREFIX + 'AO';
+
 // User-Agent on outbound WeChat Pay v3 API calls. WeChat only requires a
 // non-empty UA; it's server-to-server (no customer ever sees it), so we send a
 // neutral PLATFORM identifier rather than any one tenant's brand (⑦ de-Roots).
@@ -2873,6 +2892,14 @@ function wecomAppCreds() {
   const w = integ().wecom_app || {};
   if (!w.corpId || !w.agentId || !w.secret) return null;
   return w;
+}
+
+// Aliyun SMS creds for the current tenant, or null when not fully configured.
+// {accessKeyId, accessKeySecret, signName, templateDelivered}. Null keeps the
+// delivered-SMS path dormant — nothing sends until all four are saved.
+function aliyunSmsCreds() {
+  const a = integ().aliyun_sms || {};
+  return _aliyunSms.aliyunSmsEnabled(a) ? a : null;
 }
 
 // Per-(corpid+agentid) access_token cache. WeCom tokens live ~2h; re-fetch near
@@ -3454,6 +3481,30 @@ function handleWechatPayCallback(req, res, tid) {
           }
           return;
         }
+        // Order add-on settlement ('FCAO…'). Lives in retail_order_addons, not
+        // retail_payments, so route it here BEFORE the order lookup — just like
+        // the top-up branch above. finalizeOrderAddon() injects the staged
+        // items into the order and merges them into its un-dispatched parcel
+        // (idempotent, guarded by status). Same amount-parity check.
+        if (txn.out_trade_no.startsWith(WX_ADDON_OUT_TRADE_PREFIX)) {
+          const ad = tdb().prepare(
+            "SELECT id, amount FROM retail_order_addons WHERE out_trade_no = ? AND status = 'pending'"
+          ).get(txn.out_trade_no);
+          if (ad) {
+            const paidCents   = Number(txn.amount && txn.amount.total);
+            const expectCents = Math.round(Number(ad.amount) * 100);
+            if (!Number.isFinite(paidCents) || paidCents !== expectCents) {
+              console.warn('[wechat-pay/callback] addon amount mismatch', txn.out_trade_no, paidCents, expectCents);
+              amountMismatch = true;
+              return;
+            }
+            tdb().prepare(
+              'UPDATE retail_order_addons SET transaction_id = ?, raw_callback_json = ? WHERE id = ?'
+            ).run(txn.transaction_id || null, plain, ad.id);
+            finalizeOrderAddon(ad.id);
+          }
+          return;
+        }
         const pay = tdb().prepare(
           'SELECT order_id, amount FROM retail_payments WHERE out_trade_no = ? AND status = ?'
         ).get(txn.out_trade_no, 'pending');
@@ -3713,9 +3764,74 @@ const ORDER_STATUS_NOTIF = {
   refunded:   { en: 'Your order was refunded',      cn: '订单已退款' },
 };
 
+// Aliyun "package delivered" SMS. Fires ONLY for out-of-Guangzhou courier
+// orders — same-city (local) deliveries and in-store pickups already get the
+// in-app notification + local-ETA banner, so an SMS there is noise. Dormant
+// until Aliyun creds are saved (aliyunSmsCreds() → null). Best-effort: never
+// throws into the caller; skips silently when the customer has no usable phone.
+//
+// Idempotency: the delivered transition is already single-shot per call site
+// (each guards on `WHERE status = 'dispatched'`), and the sms_delivered_sent_at
+// stamp additionally blocks a re-send if a delivery is undone and re-marked.
+function maybeSendDeliveredSms(orderId) {
+  try {
+    const creds = aliyunSmsCreds();
+    if (!creds) return;                              // not configured → dormant
+    if (!notifCategoryEnabled('order')) return;      // operator muted order notifs
+
+    const o = tdb().prepare(
+      `SELECT id, order_no, customer_id, fulfillment_type, address_json, sms_delivered_sent_at
+         FROM retail_orders WHERE id = ?`
+    ).get(orderId);
+    if (!o || o.sms_delivered_sent_at) return;       // unknown or already sent
+    if (o.fulfillment_type === 'pickup') return;     // in-store pickup, nothing shipped
+
+    // Out-of-Guangzhou gate. A same-city order carries a `local` shipment;
+    // courier orders (land/air) to other cities do not. With no shipment rows
+    // (edge), fall back to the destination city on the address.
+    const ships = tdb().prepare('SELECT mode FROM retail_shipments WHERE order_id = ?').all(orderId);
+    if (ships.some(s => s.mode === 'local')) return; // GZ same-city → skip
+    if (!ships.length) {
+      let city = '';
+      try { city = JSON.parse(o.address_json || '{}').city || ''; } catch (e) { /* ignore */ }
+      if (isGuangzhou(city)) return;
+    }
+
+    const c = tdb().prepare('SELECT phone FROM retail_customers WHERE id = ?').get(o.customer_id);
+    const phone = c && c.phone;
+    if (!_aliyunSms.normalizeCnMobile(phone)) return; // no usable CN mobile → skip
+
+    // Claim the send atomically so two delivered paths can't both fire.
+    const claimed = tdb().prepare(
+      "UPDATE retail_orders SET sms_delivered_sent_at = CURRENT_TIMESTAMP WHERE id = ? AND sms_delivered_sent_at IS NULL"
+    ).run(orderId);
+    if (claimed.changes !== 1) return;               // lost the race
+
+    const tid = currentTenantId();
+    _aliyunSms.sendDeliveredSms(phone, { orderNo: o.order_no }, creds)
+      .then((r) => {
+        if (r.ok) { console.log('[sms-delivered] sent', o.order_no, r.bizId || ''); return; }
+        console.warn('[sms-delivered]', orderId, r.error || r.code);
+        // Roll the stamp back so the next delivered tick (or a manual retry) can
+        // try again. Re-establish the tenant ALS — the await unwound it.
+        tenantAls.run(getTenantDb(tid), () => {
+          try { tdb().prepare("UPDATE retail_orders SET sms_delivered_sent_at = NULL WHERE id = ?").run(orderId); } catch (e) { /* ignore */ }
+        });
+      })
+      .catch((e) => {
+        console.warn('[sms-delivered] send failed', orderId, e.message);
+        tenantAls.run(getTenantDb(tid), () => {
+          try { tdb().prepare("UPDATE retail_orders SET sms_delivered_sent_at = NULL WHERE id = ?").run(orderId); } catch (er) { /* ignore */ }
+        });
+      });
+  } catch (e) { console.error('[sms-delivered] hook', e); }
+}
+
 // Helper used by the admin status-transition endpoint — fires the in-app
 // notification (always) and, when configured, the WeChat subscribe-message.
 function notifyOrderStatusChange(orderId, newStatus) {
+  // Out-of-GZ "package delivered" SMS — independent channel, own gating.
+  if (newStatus === 'delivered') maybeSendDeliveredSms(orderId);
   // In-app notification first — independent of WeChat push configuration.
   notifyForOrder(orderId, (o) => {
     const m = ORDER_STATUS_NOTIF[newStatus];
@@ -5386,6 +5502,74 @@ function ensureShipments(orderId) {
   return tdb().prepare(
     `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(orderId);
+}
+
+// Attach freshly-added "forgot something" items (retail_order_items rows whose
+// shipment_id is still NULL) onto the order's EXISTING parcels. Unlike
+// ensureShipments — which only plans on a parcel-less order — this is for an
+// order that already has shipments and is gaining items after the fact.
+//
+// Footgun guard (see feature_partial_shipment_clobber_fix): we only ever merge
+// into a parcel that has NOT shipped and carries NO waybill — i.e.
+// dispatched_at/delivered_at both NULL and tracking_number empty. A new item
+// whose ship-mode has no such open parcel gets its OWN new parcel rather than
+// piggy-backing a sealed one. Same address/slot as the order, so this reuses
+// planShipments for the bucketing.
+function mergeAddonItemsIntoShipments(orderId, newItemIds) {
+  const ids = (newItemIds || []).map(n => parseInt(n, 10)).filter(Boolean);
+  if (!ids.length) return;
+
+  const o = tdb().prepare(
+    'SELECT id, address_json, delivery_slot_kind, fulfillment_type FROM retail_orders WHERE id = ?'
+  ).get(orderId);
+  if (!o) return;
+  // Pickup orders ship nothing (collected at the store), so they never get
+  // parcels — leave the add-on items with shipment_id NULL, same as the order's
+  // own lines. Only delivery orders bucket into shipments.
+  if (o.fulfillment_type === 'pickup') return;
+  let destCity = '', destProvince = '', destDistrict = '';
+  try {
+    const a = JSON.parse(o.address_json || '{}');
+    destCity = a.city || ''; destProvince = a.province || ''; destDistrict = a.district || '';
+  } catch {}
+
+  const placeholders = ids.map(() => '?').join(',');
+  const items = tdb().prepare(
+    `SELECT id,
+            COALESCE(ship_modes, 'air,land') AS ship_modes,
+            COALESCE(needs_ice_pack, 0)      AS needs_ice_pack
+       FROM retail_order_items
+      WHERE order_id = ? AND id IN (${placeholders})`
+  ).all(orderId, ...ids);
+  if (!items.length) return;
+
+  const plan = planShipments(items, destCity, destProvince,
+    { destDistrict, slotKind: o.delivery_slot_kind });
+
+  const ins = tdb().prepare(
+    `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
+     VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+  );
+  const assignItem = tdb().prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE id = ?`);
+  const touchShip  = tdb().prepare(`UPDATE retail_shipments SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
+
+  const tx = tdb().transaction(() => {
+    for (const seg of plan) {
+      // An OPEN parcel of this mode = not shipped, no waybill. Oldest first so
+      // add-ons land in the original parcel when one is still open.
+      const open = tdb().prepare(
+        `SELECT id FROM retail_shipments
+          WHERE order_id = ? AND mode = ?
+            AND dispatched_at IS NULL AND delivered_at IS NULL
+            AND (tracking_number IS NULL OR tracking_number = '')
+          ORDER BY id ASC LIMIT 1`
+      ).get(orderId, seg.mode);
+      const shipmentId = open ? open.id : ins.run(orderId, seg.mode, seg.label).lastInsertRowid;
+      for (const itemId of seg.item_ids) assignItem.run(shipmentId, itemId);
+      if (open) touchShip.run(shipmentId);
+    }
+  });
+  tx();
 }
 
 // Per-shipment fulfillment state, derived purely from the timestamp columns
@@ -12528,6 +12712,29 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
       WHERE r.order_id = ? ORDER BY r.id ASC`
   ).all(id);
 
+  // "Forgot something?" add-ons the customer paid for after placing the order.
+  // The added lines already live in o.items / their parcel; this just lets the
+  // drawer label them ("Items added after order · +¥X") so the operator knows
+  // they came in late and may need slotting into an in-progress pack.
+  o.addons = tdb().prepare(
+    `SELECT id, amount, earn_points, items_json, created_at, paid_at
+       FROM retail_order_addons
+      WHERE order_id = ? AND status = 'success' ORDER BY id ASC`
+  ).all(id).map(a => {
+    let items = [];
+    try { items = JSON.parse(a.items_json || '[]'); } catch {}
+    return {
+      id: a.id,
+      amount: a.amount,
+      paid_at: a.paid_at,
+      items: items.map(it => ({
+        name_en: it.name_en, name_cn: it.name_cn, qty: it.qty,
+        line_total: it.line_total,
+      })),
+    };
+  });
+  o.addon_total = o.addons.reduce((s, a) => s + (Number(a.amount) || 0), 0);
+
   // Destination meta — used by the office UI to decide air/land badges.
   const city = o.address?.city || '';
   o.shipping_city      = city;
@@ -13199,6 +13406,15 @@ const INTEGRATION_KEYS = {
     saler_tax:  { env: 'NUONUO_SALER_TAX',  secret: false, cred: CRED_KEYS.NUONUO_SALER_TAX,  bkey: 'salerTaxNum' },
     env:        { env: 'NUONUO_ENV',        secret: false, cred: CRED_KEYS.NUONUO_ENV,        bkey: 'env'         },
   },
+  // 阿里云短信 (Aliyun SMS) — "package delivered" notice to out-of-GZ customers.
+  // ak_secret is the only true secret; sign_name + template_delivered are the
+  // approved 签名 text and 模板CODE from the Aliyun console.
+  aliyun_sms: {
+    ak_id:              { env: 'ALIYUN_SMS_AK_ID',     secret: false, cred: CRED_KEYS.ALIYUN_SMS_AK_ID,     bkey: 'accessKeyId'       },
+    ak_secret:          { env: 'ALIYUN_SMS_AK_SECRET', secret: true,  cred: CRED_KEYS.ALIYUN_SMS_AK_SECRET, bkey: 'accessKeySecret'   },
+    sign_name:          { env: 'ALIYUN_SMS_SIGN',      secret: false, cred: CRED_KEYS.ALIYUN_SMS_SIGN,      bkey: 'signName'          },
+    template_delivered: { env: 'ALIYUN_SMS_TPL_DELIV', secret: false, cred: CRED_KEYS.ALIYUN_SMS_TPL_DELIV, bkey: 'templateDelivered' },
+  },
 };
 
 function maskSecret(s) {
@@ -13232,6 +13448,7 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   out.feie.enabled  = _feie.feieEnabled(ci.feie);
   out.wecom_app.enabled = !!(ci.wecom_app && ci.wecom_app.corpId && ci.wecom_app.agentId && ci.wecom_app.secret);
   out.nuonuo.enabled = _nuonuo.nuonuoEnabled(ci.nuonuo);
+  out.aliyun_sms.enabled = _aliyunSms.aliyunSmsEnabled(ci.aliyun_sms);
   res.json({ success: true, data: out });
 });
 
@@ -13345,6 +13562,18 @@ router.post('/api/retail-admin/integrations/nuonuo/test', requireRetailAdmin, as
   if (!_nuonuo.nuonuoEnabled(nc)) return res.json({ ok: false, error: 'not_configured' });
   const r = await _nuonuo.pingNuonuo(nc);
   return res.json({ ok: r.ok, error: r.ok ? undefined : r.error });
+});
+
+// Send a REAL delivered-notice SMS to an operator-supplied number. The only way
+// Aliyun confirms the AccessKey + 签名 + 模板 are all approved & wired is an
+// actual send, so this dispatches the live template with a TEST order number.
+router.post('/api/retail-admin/integrations/aliyun_sms/test', requireRetailAdmin, express.json(), async (req, res) => {
+  const ac = aliyunSmsCreds();
+  if (!ac) return res.json({ ok: false, error: 'not_configured' });
+  const phone = String(req.body?.phone || '').trim();
+  if (!_aliyunSms.normalizeCnMobile(phone)) return res.json({ ok: false, error: 'bad_phone' });
+  const r = await _aliyunSms.pingAliyunSms(phone, ac);
+  return res.json({ ok: r.ok, code: r.code, error: r.ok ? undefined : (r.error || r.code) });
 });
 
 // ─── Feie cloud printer (per-store routing) ──────────────────────────────
@@ -17297,12 +17526,19 @@ function reverseOrderPoints(orderId) {
     "SELECT id FROM retail_points_transactions WHERE order_id = ? AND source = 'refund_reverse'"
   ).get(orderId);
   if (already) return 0;
+  // "Add to this order" add-ons earn their own points (source order_addon_earn).
+  // A full refund reverses those too. lifetime_spend already covers them — the
+  // add-on bumped subtotal at finalize, so o.subtotal below is the FULL spend.
+  const addonPts = tdb().prepare(
+    "SELECT COALESCE(SUM(delta), 0) AS pts FROM retail_points_transactions WHERE order_id = ? AND source = 'order_addon_earn'"
+  ).get(orderId).pts || 0;
+  const reverseDelta = (earn.delta || 0) + addonPts;
   const o = tdb().prepare('SELECT subtotal FROM retail_orders WHERE id = ?').get(orderId);
   const spend = Math.max(0, Number(o?.subtotal) || 0);
   const tx = tdb().transaction(() => {
     tdb().prepare(
       'UPDATE retail_customers SET lifetime_spend = MAX(0, COALESCE(lifetime_spend, 0) - ?), points_balance = points_balance - ? WHERE id = ?'
-    ).run(spend, earn.delta, earn.customer_id);
+    ).run(spend, reverseDelta, earn.customer_id);
     const fresh = tdb().prepare('SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?').get(earn.customer_id);
     // Refunds reduce lifetime_spend, so the tier may need to demote in the
     // same transaction. Sticky-upward semantics would skip this — current
@@ -17313,10 +17549,10 @@ function reverseOrderPoints(orderId) {
       `INSERT INTO retail_points_transactions
          (customer_id, delta, balance_after, source, order_id, note)
        VALUES (?, ?, ?, 'refund_reverse', ?, 'Reversed on refund')`
-    ).run(earn.customer_id, -earn.delta, after, orderId);
+    ).run(earn.customer_id, -reverseDelta, after, orderId);
   });
   try { tx(); } catch (e) { console.error('[reverseOrderPoints]', e); }
-  return earn.delta;
+  return reverseDelta;
 }
 
 // POST /api/retail/checkout/quote
@@ -17693,6 +17929,316 @@ function finalizeTopup(topupId) {
   });
   try { tx(); return true; } catch (e) { console.error('[finalizeTopup]', e); return false; }
 }
+
+// ── "Forgot something?" order add-on ────────────────────────────────────────
+// Tell the store an item was added to an order they may already be packing,
+// over the same WeCom channel as the new-order alert (Settings → Push).
+function sendWecomOrderAddonAlert(orderId, amount, items) {
+  const hasApp = !!wecomAppCreds();
+  const webhook = wecomWebhookUrl();
+  if (!hasApp && !webhook) return;
+  try {
+    const o = tdb().prepare('SELECT order_no FROM retail_orders WHERE id = ?').get(orderId);
+    if (!o) return;
+    const lines = (items || [])
+      .map(it => `> ${it.name_cn || it.name_en || 'Item'} ×${it.qty}`).join('\n');
+    const content =
+      `### ➕ 订单加单 · Item added to order\n` +
+      `**${o.order_no}**\n${lines}\n` +
+      `加收 Charged: ¥${Number(amount || 0).toFixed(2)}\n` +
+      `<font color="warning">请在打包前补入此商品 · add this before the parcel ships</font>`;
+    const send = hasApp ? sendWecomAppMessage(content) : postWecomMarkdown(webhook, content);
+    send.then(r => { if (!r.ok) console.warn('[wecom addon]', orderId, r.msg); })
+        .catch(e => console.warn('[wecom addon]', orderId, e.message));
+  } catch (e) { console.warn('[wecom addon setup]', e.message); }
+}
+
+// Settle a paid add-on: inject the staged items into the order, merge them
+// into its open (un-dispatched) parcel, bump the order total, deduct stock,
+// award earn-points, and ping the store. Idempotent (guarded by status), so
+// safe to call from both DEV-mode auto-pay and the async WeChat callback.
+// NOTE: re-prices NOTHING — items_json was server-priced at create time.
+function finalizeOrderAddon(addonId) {
+  const a = tdb().prepare('SELECT * FROM retail_order_addons WHERE id = ?').get(addonId);
+  if (!a || a.status === 'success') return false;
+
+  let items;
+  try { items = JSON.parse(a.items_json || '[]'); } catch { items = []; }
+  const order = tdb().prepare(
+    'SELECT id, customer_id, store_id, subtotal, total FROM retail_orders WHERE id = ?'
+  ).get(a.order_id);
+  if (!order || !items.length) {
+    // Nothing actionable — close the row so the callback doesn't loop.
+    tdb().prepare(
+      "UPDATE retail_order_addons SET status = 'success', paid_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'"
+    ).run(addonId);
+    return false;
+  }
+
+  sweepExpiredPoints(a.customer_id);
+  const c = tdb().prepare('SELECT tier_key FROM retail_customers WHERE id = ?').get(a.customer_id);
+  const tierMult  = tierMultiplierFor(c?.tier_key);
+  // Add-on is charged at plain item price (no voucher/points discount on it),
+  // so subtotal == total == amount for the earn-base.
+  const earnBase  = pointsEarnBaseAmount(a.amount, a.amount);
+  const pts       = pointsEarnedFor(earnBase, tierMult);
+  const expiresAt = pts > 0 ? nextEarnExpiry() : null;
+
+  const insItem = tdb().prepare(
+    `INSERT INTO retail_order_items
+       (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price,
+        line_total, options_json, ship_modes, needs_ice_pack)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+  const newItemIds = [];
+
+  const tx = tdb().transaction(() => {
+    // Claim the row first — if another caller already flipped it, bail so we
+    // never inject the items twice.
+    const claim = tdb().prepare(
+      "UPDATE retail_order_addons SET status = 'success', paid_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending'"
+    ).run(addonId);
+    if (claim.changes === 0) return;
+
+    for (const it of items) {
+      const info = insItem.run(
+        order.id, it.product_id || null, it.name_en || null, it.name_cn || null,
+        it.sku || null, it.size || null, it.qty, it.unit_price, it.line_total,
+        it.options && it.options.length ? JSON.stringify(it.options) : null,
+        it.ship_modes || null, it.needs_ice_pack ? 1 : 0
+      );
+      newItemIds.push(info.lastInsertRowid);
+    }
+
+    // Count flash-priced add-on lines against their flash window, same as
+    // checkout — but WITHOUT the cap-fail: the customer has already paid, so an
+    // over-cap add-on still ships; we just keep flash_sold honest for the
+    // admin counter. Guarded on flash_price so it only touches live-flash rows.
+    const bumpFlash = tdb().prepare(
+      `UPDATE store_products SET flash_sold = COALESCE(flash_sold, 0) + ?
+         WHERE id = ? AND flash_price IS NOT NULL`
+    );
+    for (const it of items) {
+      if (it.is_flash && it.product_id) bumpFlash.run(it.qty, it.product_id);
+    }
+
+    // Land the new items in the order's open parcel (or a fresh one).
+    mergeAddonItemsIntoShipments(order.id, newItemIds);
+
+    // Bump the order money: add-on price only, no extra delivery fee, voucher
+    // untouched. points_earned mirrors the running total for the receipt.
+    tdb().prepare(
+      `UPDATE retail_orders
+          SET subtotal = COALESCE(subtotal, 0) + ?,
+              total    = COALESCE(total, 0) + ?,
+              points_earned = COALESCE(points_earned, 0) + ?,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`
+    ).run(a.amount, a.amount, pts, order.id);
+
+    // Earn-points on the add-on spend. Own ledger row + own expiry batch, with
+    // a distinct source so awardOrderPoints' idempotency marker is untouched.
+    // (Known v1 gap: a later refund of the whole order reverses only the
+    // original order_earn row, not this add-on row — small amounts, rare.)
+    tdb().prepare(
+      'UPDATE retail_customers SET lifetime_spend = COALESCE(lifetime_spend, 0) + ?, points_balance = points_balance + ? WHERE id = ?'
+    ).run(Math.max(0, Number(a.amount) || 0), pts, a.customer_id);
+    const fresh = tdb().prepare(
+      'SELECT lifetime_spend, points_balance, tier_key FROM retail_customers WHERE id = ?'
+    ).get(a.customer_id);
+    reconcileTier(a.customer_id, fresh.lifetime_spend, fresh.tier_key);
+    tdb().prepare(
+      `INSERT INTO retail_points_transactions
+         (customer_id, delta, balance_after, source, order_id, note, expires_at)
+       VALUES (?, ?, ?, 'order_addon_earn', ?, ?, ?)`
+    ).run(a.customer_id, pts, fresh.points_balance, order.id,
+          `Order ${order.id} add-on earned ${pts} pts`, expiresAt);
+
+    tdb().prepare('UPDATE retail_order_addons SET earn_points = ? WHERE id = ?').run(pts, addonId);
+  });
+
+  try { tx(); } catch (e) { console.error('[finalizeOrderAddon]', e); return false; }
+
+  // ── Stock deduction (outside the items tx; best-effort) ──────────────────
+  // Deduct physical stock for the new lines, but ONLY if the order itself
+  // tracks stock (has committed reservations). Far-future / non-GZ orders that
+  // skipped reservation at checkout keep that policy for the add-on too — so
+  // we never strand a half-tracked order.
+  try {
+    const tracks = tdb().prepare(
+      "SELECT COUNT(*) AS n FROM retail_stock_reservations WHERE order_id = ? AND status = 'committed'"
+    ).get(order.id);
+    if (tracks && tracks.n > 0 && order.store_id) {
+      const stockLines = expandStockLines(items.map(it => ({
+        product: { id: it.product_id, bundle_items: it.bundle_items || null },
+        qty: it.qty,
+        options: it.options || [],
+      })));
+      inventory.reserveForOrder({ storeId: order.store_id, orderId: order.id, items: stockLines, channel: 'wechat' });
+      inventory.commitOrderReservations(order.id, { actorLabel: 'order add-on' });
+    }
+  } catch (e) {
+    // Payment is already taken — NEVER fail the add-on on a stock shortfall.
+    // The new line is on the ticket; operators reconcile (fulfillment-short flow).
+    console.warn('[finalizeOrderAddon stock]', e.code || e.message);
+  }
+
+  // Nudge the store — they may already be packing this order.
+  try { sendWecomOrderAddonAlert(order.id, a.amount, items); }
+  catch (e) { console.warn('[finalizeOrderAddon wecom]', e.message); }
+  return true;
+}
+
+// POST /api/retail/orders/:id/addon/create
+// "Forgot something?" — stage items the customer wants to add to an EXISTING
+// order and charge ONLY the price difference. Allowed until the parcel ships
+// (status paid|preparing AND no dispatched/delivered parcel). On WeChat-confirm
+// the async callback runs finalizeOrderAddon(), which injects the items and
+// merges them into the order's open parcel. Mirrors /topup/create.
+router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.json(), async (req, res) => {
+  const orderId  = parseInt(req.params.id, 10);
+  const rawItems = Array.isArray(req.body?.items) ? req.body.items : [];
+  if (!orderId)        return res.status(400).json({ success: false, error: 'order_id_required' });
+  if (!rawItems.length) return res.status(400).json({ success: false, error: 'no_items' });
+
+  const order = tdb().prepare(
+    'SELECT id, order_no, status, customer_id, address_json, fulfillment_type FROM retail_orders WHERE id = ? AND customer_id = ?'
+  ).get(orderId, req.customer.id);
+  if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
+
+  // ── Edit window: until the parcel ships ───────────────────────────────
+  if (!['paid', 'preparing'].includes(order.status)) {
+    return res.status(409).json({ success: false, error: 'order_not_editable', status: order.status });
+  }
+  const shipped = tdb().prepare(
+    "SELECT COUNT(*) AS n FROM retail_shipments WHERE order_id = ? AND (dispatched_at IS NOT NULL OR delivered_at IS NOT NULL)"
+  ).get(orderId);
+  if (shipped && shipped.n > 0) {
+    return res.status(409).json({ success: false, error: 'already_shipped' });
+  }
+
+  // ── Resolve + price each added item server-side (mirror of checkout) ──
+  const isPickup = order.fulfillment_type === 'pickup';
+  let destCity = '';
+  try { destCity = (JSON.parse(order.address_json || '{}').city) || ''; } catch {}
+  const orderNowMs = Date.now();
+  const resolved = [];
+  for (const it of rawItems) {
+    const pid = parseInt(it.product_id, 10);
+    const qty = Number(it.qty);
+    if (!pid || !(qty > 0)) return res.status(400).json({ success: false, error: 'invalid_item' });
+
+    const p = tdb().prepare(
+      `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, stock_qty AS stock,
+              flash_price, flash_starts_at, flash_ends_at, flash_stock_limit, flash_sold, no_coupon_on_flash,
+              ship_modes, needs_ice_pack, variant_group_id, bundle_items
+         FROM store_products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+    ).get(pid);
+    if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
+
+    let optionDelta = 0;
+    const chosenLabels = [];
+    if (Array.isArray(it.choices) && it.choices.length) {
+      const ph = it.choices.map(() => '?').join(',');
+      const choices = tdb().prepare(
+        `SELECT c.id, c.option_id, c.label_en, c.label_cn, c.price_delta, c.stock_product_id,
+                o.product_id, o.question_en, o.question_cn
+           FROM retail_product_option_choices c
+           JOIN retail_product_options o ON o.id = c.option_id
+          WHERE c.id IN (${ph})`
+      ).all(...it.choices);
+      for (const ch of choices) {
+        if (ch.product_id !== pid) return res.status(400).json({ success: false, error: 'choice_wrong_product' });
+        optionDelta += Number(ch.price_delta) || 0;
+        chosenLabels.push({
+          option_id: ch.option_id, choice_id: ch.id, label: ch.label_en, label_cn: ch.label_cn || null,
+          question_en: ch.question_en || null, question_cn: ch.question_cn || null,
+          delta: ch.price_delta, stock_product_id: ch.stock_product_id || null,
+        });
+      }
+    }
+
+    const eff = flashsales.effectivePriceFor(p, p.price, orderNowMs);
+    if (eff.is_flash && p.flash_stock_limit != null) {
+      const remaining = Math.max(0, Number(p.flash_stock_limit) - (Number(p.flash_sold) || 0));
+      if (qty > remaining) return res.status(409).json({ success: false, error: 'flash_stock_exceeded', product_id: pid, available: remaining });
+    }
+    const unitPrice = eff.price + optionDelta;
+    if (!(unitPrice >= 0)) return res.status(400).json({ success: false, error: 'price_resolve_failed' });
+
+    resolved.push({ product: p, qty, unitPrice, lineTotal: unitPrice * qty, options: chosenLabels, isFlash: eff.is_flash });
+  }
+
+  // Local-only gate: a Guangzhou-only item can't ride an out-of-GZ order.
+  if (!isPickup) {
+    const localOnly = filterLocalOnly(resolved.map(r => r.product));
+    if (localOnly.length && !isGuangzhou(destCity)) {
+      return res.status(400).json({ success: false, error: 'local_only_outside_gz' });
+    }
+  }
+
+  const amount = Math.round(resolved.reduce((s, r) => s + r.lineTotal, 0) * 100) / 100;
+  if (!(amount > 0)) return res.status(400).json({ success: false, error: 'zero_amount' });
+
+  // Stage the priced lines — finalize reads these verbatim and never re-prices.
+  const staged = resolved.map(r => ({
+    product_id: r.product.id,
+    name_en: r.product.name_en, name_cn: r.product.name_cn,
+    sku: r.product.sku, size: r.product.size,
+    qty: r.qty, unit_price: r.unitPrice, line_total: r.lineTotal,
+    options: r.options,
+    ship_modes: r.product.ship_modes || null,
+    needs_ice_pack: r.product.needs_ice_pack ? 1 : 0,
+    bundle_items: r.product.bundle_items || null,
+    is_flash: r.isFlash ? 1 : 0,
+  }));
+
+  const outTradeNo = `${WX_ADDON_OUT_TRADE_PREFIX}${Date.now()}${orderId}`;
+  const info = tdb().prepare(
+    `INSERT INTO retail_order_addons (order_id, customer_id, items_json, amount, payment_method, status, out_trade_no)
+     VALUES (?, ?, ?, ?, 'wechat', 'pending', ?)`
+  ).run(orderId, req.customer.id, JSON.stringify(staged), amount, outTradeNo);
+  const addonId = info.lastInsertRowid;
+
+  const payCtx = payContext();
+  if (payCtx.devMode) {
+    // No real merchant — settle immediately so the customer sees the items added.
+    finalizeOrderAddon(addonId);
+    return res.json({ success: true, data: { dev: true, status: 'success', addon_id: addonId, amount, out_trade_no: outTradeNo } });
+  }
+
+  // ── PROD: WeChat Pay v3 JSAPI handoff for the difference ──────────────
+  try {
+    const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(req.customer.id);
+    if (!cust?.openid || cust.openid.startsWith('dev:')) {
+      return res.status(409).json({ success: false, error: 'no_real_openid' });
+    }
+    const prepayId = await wechatJsapiPrepare({
+      outTradeNo,
+      description: `${tenantBrandLabel()} ${order.order_no} add-on`,
+      amountCents: Math.round(amount * 100),
+    }, cust.openid, payCtx);
+    const params = buildWxRequestPaymentParams(prepayId, payCtx);
+    return res.json({
+      success: true,
+      data: { method: 'wechat', status: 'prepay', addon_id: addonId, amount, out_trade_no: outTradeNo, ...params },
+    });
+  } catch (e) {
+    console.error('[order addon/create]', e);
+    return res.status(502).json({ success: false, error: e.code || 'wechat_pay_failed' });
+  }
+});
+
+// GET /api/retail/orders/:id/addon/status/:addonId
+// Poll after wx.requestPayment — the async callback flips status to 'success'.
+router.get('/api/retail/orders/:id/addon/status/:addonId', requireRetailAuth, (req, res) => {
+  const addonId = parseInt(req.params.addonId, 10);
+  const a = tdb().prepare(
+    'SELECT id, order_id, status, amount, earn_points FROM retail_order_addons WHERE id = ? AND customer_id = ?'
+  ).get(addonId, req.customer.id);
+  if (!a) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true, data: { status: a.status, amount: a.amount, earn_points: a.earn_points, order_id: a.order_id } });
+});
 
 // Lightweight ledger read for the customer's points/wallet history screens.
 router.get('/api/retail/points/transactions', requireRetailAuth, (req, res) => {
