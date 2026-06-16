@@ -720,6 +720,21 @@ async function afReissueCode(customerId) {
   } catch (e) { toast('Reissue failed · 重发失败: ' + e.message, 'err'); }
 }
 
+// These customer pop-ups (.pu-editor-bg, z 300) are authored INSIDE
+// <section id="tab-customers">. While that section forms a stacking context
+// (its entrance animation/transform), a z-300 modal can't escape it — so it
+// paints BEHIND the z-200 customer drawer it was launched from. The modal
+// opens, but it's hidden behind the drawer, which reads as "the Edit/Adjust
+// button does nothing." Re-parent the modal to <body> on open so it always
+// lands in the root stacking context, above the drawer. Same escape hatch the
+// body-level chart tooltip (cuBarTip) already uses.
+function cuShowModal(sel) {
+  const el = $(sel);
+  if (!el) return;
+  if (el.parentNode !== document.body) document.body.appendChild(el);
+  el.classList.add('show');
+}
+
 function cuOpenEdit() {
   const c = CU_CURRENT.customer;
   $('#cu-edit-nickname').value = c.nickname || '';
@@ -728,7 +743,7 @@ function cuOpenEdit() {
   $('#cu-edit-gender').value   = c.gender == null ? '' : String(c.gender);
   $('#cu-edit-birthday').value = c.birthday || '';
   // Tier is auto-derived from lifetime_spend — no input here.
-  $('#cu-edit-bg').classList.add('show');
+  cuShowModal('#cu-edit-bg');
 }
 function cuCloseEdit() { $('#cu-edit-bg').classList.remove('show'); }
 
@@ -863,7 +878,7 @@ function cuOpenAdjust(kind) {
     : `Current · 当前: ¥${Number(c.balance || 0).toFixed(2)}`;
   $('#cu-adjust-delta').value  = '';
   $('#cu-adjust-reason').value = '';
-  $('#cu-adjust-bg').classList.add('show');
+  cuShowModal('#cu-adjust-bg');
 }
 function cuCloseAdjust() { $('#cu-adjust-bg').classList.remove('show'); }
 
@@ -977,7 +992,7 @@ async function cuOpenAddrModal(addrId) {
   $('#cu-addr-detail').value           = a ? (a.detail         || '') : '';
   $('#cu-addr-postal').value           = a ? (a.postal_code    || '') : '';
   $('#cu-addr-default').checked        = a ? !!a.is_default            : false;
-  $('#cu-addr-bg').classList.add('show');
+  cuShowModal('#cu-addr-bg');
   // Province→city→district cascade. Derive the province from the saved city
   // when an older address only stored city/district.
   const cityCn = a ? (a.city || '') : '';
