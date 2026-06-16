@@ -1994,7 +1994,7 @@
   }
   .cta-row .cta-row-bottom {
     display: grid;
-    grid-template-columns: 1fr 110px 28px;
+    grid-template-columns: 1fr 28px;
     gap: 6px;
     align-items: center;
   }
@@ -11031,8 +11031,8 @@ function buildAnnouncementForm(m, b) {
   secContent.appendChild(field(T('Text', '正文'), T('Leave one language blank to show only the other one.', '留空一种语言则只显示另一种。'),
     txtPair(b.text_en, b.text_cn, ({ en, cn }) => updateBlockSilent(b.id, { text_en: en, text_cn: cn }))));
   secContent.appendChild(field(T('Link (optional)', '链接(可选)'),
-    T('Makes the whole bar tappable. e.g. promotions · membership · coupons · product:12. Leave empty for a plain bar.', '让整条横幅可点击。例如 promotions · membership · coupons · product:12。留空则只是普通横幅。'),
-    txt(b.link_target, v => updateBlockSilent(b.id, { link_target: v }), 'promotions')));
+    T('Makes the whole bar tappable. Leave empty for a plain bar.', '让整条横幅可点击。留空则只是普通横幅。'),
+    targetPicker({ value: b.link_target, onChange: v => updateBlockSilent(b.id, { link_target: v }), suggest: 'promotions' })));
 
   secColours.appendChild(field(T('Background', '背景颜色'),  '', sel(b.bg_color, COLORS, v => updateBlock(b.id, { bg_color: v }))));
   secColours.appendChild(field(T('Text colour', '文字颜色'), '', sel(b.fg_color, COLORS, v => updateBlock(b.id, { fg_color: v }))));
@@ -11211,8 +11211,8 @@ function buildVideoForm(m, b) {
     T('A picture shown while the video loads. If empty, the first frame of the video is used.', '视频加载时显示的图片。留空则使用视频的第一帧。'),
     imgPicker(b.poster_url, ({ url }) => updateBlock(b.id, { poster_url: url }))));
   secContent.appendChild(field(T('Tap link (optional)', '点击跳转(可选)'),
-    T('Where tapping the banner goes — e.g. shop, promotions, product:12, category:5. Leave empty so it cannot be tapped.', '点击横幅后跳转的位置 — 例如 shop、promotions、product:12、category:5。留空则不可点击。'),
-    txt(b.link_target, v => updateBlock(b.id, { link_target: v }), 'shop, promotions, product:12 …')));
+    T('Where tapping the banner goes. Leave empty so it cannot be tapped.', '点击横幅后跳转的位置。留空则不可点击。'),
+    targetPicker({ value: b.link_target, onChange: v => updateBlockSilent(b.id, { link_target: v }), suggest: 'shop' })));
 }
 
 function buildOrderTrackerForm(m, b) {
@@ -11370,14 +11370,17 @@ function buildCtaRow(b, cta, idx) {
   );
   wrap.appendChild(labelPair);
 
-  const targetInput = document.createElement('input');
-  targetInput.type = 'text'; targetInput.placeholder = 'Target (shop, cart, category:5, product:12)';
-  targetInput.value = cta.target || '';
-  targetInput.addEventListener('input', e => {
-    const ctas = getCtas(b).slice();
-    ctas[idx] = { ...ctas[idx], target: e.target.value };
-    updateBlockSilent(b.id, { ctas, cta_label: undefined, cta_target: undefined });
+  // This button's destination — same searchable picker as every other block,
+  // writing into the CTA's own `target` slot.
+  const targetPick = targetPicker({
+    value: cta.target,
+    onChange: v => {
+      const ctas = getCtas(b).slice();
+      ctas[idx] = { ...ctas[idx], target: v };
+      updateBlockSilent(b.id, { ctas, cta_label: undefined, cta_target: undefined });
+    },
   });
+  wrap.appendChild(targetPick);
 
   const styleSel = document.createElement('select');
   [['primary','Primary'], ['secondary','Secondary'], ['link','Link only']].forEach(([v, l]) => {
@@ -11404,7 +11407,6 @@ function buildCtaRow(b, cta, idx) {
 
   const row2 = document.createElement('div');
   row2.className = 'cta-row-bottom';
-  row2.appendChild(targetInput);
   row2.appendChild(styleSel);
   row2.appendChild(removeBtn);
   wrap.appendChild(row2);
@@ -11563,8 +11565,8 @@ function buildCatTabsForm(m, b) {
   secLayout.appendChild(field(T('Corner radius', '圆角'), T('The corners of the tiles / circles.', '色块 / 圆形的圆角。'),
     sel(b.corner_radius || 'sharp', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
   secContent.appendChild(field(T('SEE ALL link', '「查看全部」跳转'),
-    T('Where the SEE ALL header link goes — e.g. shop, promotions, category:5. Leave empty for the Shop tab.', '「查看全部」链接的跳转位置 — 例如 shop、promotions、category:5。留空则跳转「商品」标签页。'),
-    txt(b.link_target, v => updateBlockSilent(b.id, { link_target: v }), 'shop')));
+    T('Where the SEE ALL header link goes. Leave empty for the Shop tab.', '「查看全部」链接的跳转位置。留空则跳转「商品」标签页。'),
+    targetPicker({ value: b.link_target, onChange: v => updateBlockSilent(b.id, { link_target: v }), suggest: 'shop' })));
   if (catStyle === 'bento') {
     const badgeRow = document.createElement('div');
     badgeRow.className = 'field';
