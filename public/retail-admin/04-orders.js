@@ -990,6 +990,23 @@ function parseSchedFor(s) {
   const v = String(s == null ? '' : s);
   return new Date(/[TZ]/.test(v) ? v : v.replace(' ', 'T') + 'Z');
 }
+// A scheduled time WINDOW (e.g. "16:00–18:00") persists scheduled_for at the
+// window START, but the order isn't late until the window CLOSES — anchoring
+// urgency on the start makes a 16:00–18:00 order read "OVERDUE" at 16:30. The
+// window's END only lives in the free-text label, so parse it out and rebuild
+// the anchor on the scheduled date. Falls back to scheduled_for when the label
+// carries no end time (a bare date, a single-time slot, or an AM/PM label).
+function slotEndAnchor(scheduledForIso, label) {
+  const start = parseSchedFor(scheduledForIso);
+  if (isNaN(start.getTime())) return scheduledForIso;
+  const m = /(\d{1,2}):(\d{2})\s*(?:[-–—~]|to|至)\s*(\d{1,2}):(\d{2})/.exec(String(label == null ? '' : label));
+  if (!m) return scheduledForIso;
+  const endH = Number(m[3]), endM = Number(m[4]);
+  if (endH > 23 || endM > 59) return scheduledForIso;
+  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), endH, endM);
+  if (end.getTime() < start.getTime()) return scheduledForIso; // parse fluke guard
+  return end.toISOString();
+}
 // ── Ship-by: ONE decision shared by the orders-list cell, the drawer tile,
 // AND the printed receipt / packing slip (the print side mirrors this in
 // lib/feie.js shipByPrintLine() — keep the two in sync). Rule: the MOST
@@ -1016,7 +1033,7 @@ function shipByPlan(o) {
       headlineRaw: label, headlineEn: 'During pickup hours', headlineCn: '营业时间内自取',
       subEn: 'Have ready at counter', subCn: '备好待取',
       cellSubEn: 'pickup', cellSubCn: '自提',
-      urgencyDate: o.scheduled_for || null, urgencyBasis: 'arrival',
+      urgencyDate: o.scheduled_for ? slotEndAnchor(o.scheduled_for, o.delivery_slot_label) : null, urgencyBasis: 'arrival',
     };
   }
   // 2 — Fresh batch: the kitchen makes a new batch on promised_ship_date and it
@@ -1083,7 +1100,7 @@ function shipByPlan(o) {
     kickerEn: done ? reqEn : 'Deliver', kickerCn: done ? reqCn : '送达时间',
     headlineRaw: label,
     cellSubRaw: (label !== dateLine && dateLine) ? dateLine : null,
-    urgencyDate: o.scheduled_for, urgencyBasis: 'arrival',
+    urgencyDate: slotEndAnchor(o.scheduled_for, o.delivery_slot_label), urgencyBasis: 'arrival',
   };
 }
 
