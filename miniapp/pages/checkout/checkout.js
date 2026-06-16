@@ -107,6 +107,7 @@ Page({
     deliverySlotLabel: '',       // human-readable label for the picked slot (passed back to server)
     deliverySurcharge: 0,        // ¥ same-day surcharge for the picked slot
     slotsByDay: [],              // [{date_iso, day_label_en, day_label_cn, slots: [...]}] grouped for UI (time-slot mode)
+    scheduledSlots: [],          // time-slot mode: hour windows for the picked schedule-for-later date (empty until a future date is chosen)
     // Day-only mode (Panyu-style) — three radio options below the address.
     selectedSlotKind: '',        // 'express' | 'today' | 'schedule'
     hasTodayOption: false,       // shown only when zone has same-day surcharge AND today is in slots
@@ -240,8 +241,11 @@ Page({
       standardOpt: 'Standard',
       sameDayOpt: 'Same-day',
       maxOpt: 'MAX',
+      regionLabel: 'Delivery area',
       regionPlaceholder: 'Tap to choose your delivery area',
       regionRequired: 'Please choose your delivery area',
+      areaNeededForTimes: 'Choose your delivery area above to see delivery times',
+      loadingTimes: 'Loading delivery times…',
       wechatOpt: 'WeChat Pay',
       alipayOpt: 'Alipay',
       comingSoon: 'Coming soon',
@@ -433,9 +437,11 @@ Page({
     const v = e.detail.value || [];
     let [province, city, district] = v;
     if (city === '市辖区' || city === '县') city = province;
+    this._areaPicked = true;   // explicit pick — _deriveAreaFromTyped must not override
     this.setData({
       regionValue: v,
       areaLabel: v.filter(Boolean).join(' · '),
+      areaError: false,
       'address.province': province || '',
       'address.city': city || '',
       'address.district': district || '',
@@ -533,10 +539,12 @@ Page({
     const provLabel = tree.provLabel[pi];
     const parts = (provLabel === c.label ? [c.label] : [provLabel, c.label])
       .concat(districtCn ? [d.label] : []);
+    this._areaPicked = true;   // explicit pick — _deriveAreaFromTyped must not override
     this.setData({
       areaIndex: [pi, ci, di],
       cityLabel: c.label,
       areaLabel: parts.join(' · '),
+      areaError: false,
       'address.province': provCn,
       'address.city': c.name_cn,
       'address.district': districtCn,
@@ -589,7 +597,9 @@ Page({
         'address.district_en': '',
         cityLabel: p.city || this.data.cityLabel,
         areaLabel: [p.city, p.district].filter(Boolean).join(' · '),
+        areaError: false,
       });
+      this._areaPicked = true;   // explicit pick — _deriveAreaFromTyped must not override
       // Re-quote so the zone-match, delivery fee, and packing fee reflect the
       // picked city/district — same as onRegionChange / onAreaConfirm.
       this.refreshQuote();
@@ -1111,8 +1121,11 @@ Page({
         standardOpt: '标准配送',
         sameDayOpt: '当日达',
         maxOpt: '极速达',
+        regionLabel: '配送区域',
         regionPlaceholder: '点击选择配送区域',
         regionRequired: '请选择配送区域',
+        areaNeededForTimes: '请先在上方选择配送区域,即可查看可配送时间',
+        loadingTimes: '正在加载配送时间…',
         wechatOpt: '微信支付',
         alipayOpt: '支付宝',
         comingSoon: '即将推出',
@@ -1262,9 +1275,15 @@ Page({
         // still-valid when the kind is 'schedule' and it falls inside [min,max].
         const _schWin = sch?.schedule || null;
         const _curId  = this.data.deliverySlotId;
+        // A scheduled pick is either a bare date (out-of-city/day-only zones) OR
+        // a date+hour window (Guangzhou time-slot zones). Both validate on the
+        // DATE part falling inside the calendar window — the hour suffix isn't
+        // enumerated in sch.slots, so without slicing it off the time-slot pick
+        // would read as invalid and silently snap back to Right away.
+        const _curDate = String(_curId || '').slice(0, 10);
         const _isScheduledPick = this.data.selectedSlotKind === 'schedule'
-          && !!_curId && /^\d{4}-\d{2}-\d{2}$/.test(_curId)
-          && !!_schWin && _curId >= _schWin.min_date && _curId <= _schWin.max_date;
+          && !!_curId && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(_curId)
+          && !!_schWin && _curDate >= _schWin.min_date && _curDate <= _schWin.max_date;
         const stillValid = !!_curId && (validSlotIds.has(_curId) || _isScheduledPick);
         let nextSlotId    = stillValid ? this.data.deliverySlotId    : '';
         let nextSlotLabel = stillValid ? this.data.deliverySlotLabel : '';
@@ -1363,7 +1382,19 @@ Page({
           // the <picker mode="date"> can offer "schedule for later".
           const minDate = sch?.schedule?.min_date || '';
           const maxDate = sch?.schedule?.max_date || '';
-          this.setData({ scheduleMinDate: minDate, scheduleMaxDate: maxDate });
+          // If a future date was already scheduled, rebuild that day's hour
+          // windows against the (possibly refreshed) kitchen hours so the chip
+          // strip stays in sync after a re-quote (e.g. address/zone change).
+          let scheduledSlots = [];
+          const picked = this.data.schedulePickedDate;
+          if (picked && minDate && maxDate && picked >= minDate && picked <= maxDate) {
+            const [y, m, d] = picked.split('-').map(Number);
+            const dt = new Date(y, m - 1, d);
+            const labelEn = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+            const labelCn = `${m}月${d}日`;
+            scheduledSlots = this.buildWindowsForDate(picked, labelEn, labelCn, sch);
+          }
+          this.setData({ scheduleMinDate: minDate, scheduleMaxDate: maxDate, scheduledSlots });
         }
       })
       .catch(err => {
@@ -1571,6 +1602,25 @@ Page({
     const dt = new Date(y, m - 1, d);
     const labelEn = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     const labelCn = `${m}月${d}日`;
+
+    // Time-slot zones (Guangzhou same-city): a scheduled future day also gets
+    // hour windows. Build that day's windows and let the customer pick one;
+    // auto-select the first so the page always holds a valid slot. Day-only
+    // zones (out-of-city / Panyu-style) keep the date-only behavior below.
+    const sch = this.data.scheduling;
+    if (sch && sch.mode !== 'day_only') {
+      const windows = this.buildWindowsForDate(picked, labelEn, labelCn, sch);
+      if (windows.length) {
+        this.setData({
+          schedulePickedDate: picked,
+          schedulePickedLabel: L === 'cn' ? labelCn : labelEn,
+          scheduledSlots: windows,
+        });
+        this.applyDayOnlySlot(windows[0], 'schedule');
+        return;
+      }
+    }
+
     const slot = {
       slot_id: picked,
       date_iso: picked,
@@ -1584,8 +1634,68 @@ Page({
     this.setData({
       schedulePickedDate: picked,
       schedulePickedLabel: L === 'cn' ? labelCn : labelEn,
+      scheduledSlots: [],
     });
     this.applyDayOnlySlot(slot, 'schedule');
+  },
+
+  // Build the 2-hour delivery windows for a given future date from the zone's
+  // kitchen hours + slot length — the same windows the server enumerates for
+  // today/tomorrow, but for a scheduled-for-later day (no surcharge, no
+  // elapsed-time filtering since it's a future day). slot_id format and the
+  // boundary math mirror the server's emitTimeSlots / matchScheduledTimeSlot so
+  // every window we render resolves cleanly on the /orders POST.
+  buildWindowsForDate(isoDate, labelEnDate, labelCnDate, sch) {
+    sch = sch || this.data.scheduling;
+    if (!sch || sch.mode === 'day_only') return [];
+    const kh = sch.kitchen_hours || {};
+    const startHour = Number(kh.start);
+    const endHour   = Number(kh.end);
+    const slotMins  = Number(sch.slot_duration_minutes) || 120;
+    if (!(endHour > startHour) || !(slotMins > 0)) return [];
+    const pad = (n) => String(n).padStart(2, '0');
+    const hhmm = (h, mm) => `${h}:${pad(mm)}`;
+    const fmtHour = (h) => {
+      const mer = h < 12 ? 'am' : 'pm';
+      const dh = h % 12 === 0 ? 12 : h % 12;
+      return `${dh}${mer}`;
+    };
+    const out = [];
+    let cursor = startHour * 60;
+    const endCursor = endHour * 60;
+    while (cursor + slotMins <= endCursor + 1) {
+      const sH = Math.floor(cursor / 60), sM = cursor % 60;
+      const eCur = Math.min(cursor + slotMins, endCursor);
+      const eH = Math.floor(eCur / 60), eM = eCur % 60;
+      out.push({
+        // 2-digit hour so it matches the server's resolveDeliverySlot regex.
+        slot_id: `${isoDate}T${pad(sH)}:${pad(sM)}`,
+        date_iso: isoDate,
+        start_hour: sH, start_minute: sM,
+        end_hour: eH, end_minute: eM,
+        is_same_day: false,
+        is_day_only: false,
+        requires_surcharge: false,
+        surcharge: 0,
+        label_en: `${labelEnDate} ${fmtHour(sH)}–${fmtHour(eH)}`,
+        label_cn: `${labelCnDate} ${hhmm(sH, sM)}–${hhmm(eH, eM)}`,
+      });
+      cursor += slotMins;
+    }
+    return out;
+  },
+
+  // Customer tapped one of the scheduled-for-later hour windows. Reuses the
+  // shared finalizer with kind 'schedule' so the "Schedule for later" radio
+  // stays selected and the picked window highlights.
+  pickScheduledSlot(e) {
+    const ds = e.currentTarget.dataset;
+    this.applyDayOnlySlot({
+      slot_id:   ds.id,
+      label_en:  ds.labelEn || '',
+      label_cn:  ds.labelCn || '',
+      surcharge: Number(ds.surcharge) || 0,
+    }, 'schedule');
   },
 
   // Shared finalizer for any day-only pick — sets slot id/label/surcharge
@@ -1677,6 +1787,12 @@ Page({
     this.setData({
       zone: null,
       zoneError: '',
+      // No resolvable address yet → no zone → no real slots. NULL the
+      // scheduling so the When section shows the "choose your area" prompt
+      // instead of falling through to the false "closed / no slots" copy
+      // (stale scheduling from a previously-quoted address would otherwise
+      // linger and mislead).
+      scheduling: null,
       deliveryFee: '0.00',
       packingFee: '0.00',
       freeShipping: false,
@@ -1757,15 +1873,52 @@ Page({
 
   onAddrField(e) {
     const field = e.currentTarget.dataset.field;
-    this.setData({ ['address.' + field]: e.detail.value });
+    const value = e.detail.value;
+    this.setData({ ['address.' + field]: value });
+    // When the customer types the street address themselves (instead of using
+    // the area picker or the map), lift the city/district out of what they
+    // typed — a full Chinese address like "广州市天河区珠江西路5号…" already names
+    // the area. Without this the area stays blank, /quote never runs, and the
+    // When section falsely reads "closed / no slots" (the dual-entry trap a
+    // customer hit on 2026-06-15).
+    if (field === 'address') this._deriveAreaFromTyped(value);
+  },
+
+  // Debounced: parse the typed street blob and, while the area is still ours to
+  // set, backfill city/district + the trigger label, then re-quote. We never
+  // overwrite an area the customer explicitly picked (picker/map/saved set
+  // `_areaPicked`); we DO refine one we derived ourselves (e.g. they only had
+  // "广州市" typed when we first looked, then finished "…天河区").
+  _deriveAreaFromTyped(raw) {
+    if (this._deriveTimer) clearTimeout(this._deriveTimer);
+    this._deriveTimer = setTimeout(() => {
+      const a = this.data.address || {};
+      if ((a.city || a.district) && this._areaPicked) return;  // honour explicit pick
+      const p = this.parseCnAddress(raw);
+      const city = p.city || (/市$/.test(p.province) ? p.province : '');
+      const district = p.district || '';
+      if (!city && !district) return;                          // nothing useful to lift
+      if (a.city === city && a.district === district) return;  // no change → no re-quote
+      this._areaPicked = false;
+      this.setData({
+        'address.province': p.province || a.province || '',
+        'address.city': city,
+        'address.district': district,
+        areaLabel: [city || p.province, district].filter(Boolean).join(' · '),
+        areaError: false,
+      });
+      this.refreshQuote();
+    }, 600);
   },
   selectSaved(e) {
     const id = e.currentTarget.dataset.id;
     const a = this.data.savedAddresses.find(x => x.id === id);
     if (!a) return;
+    this._areaPicked = true;   // explicit pick — _deriveAreaFromTyped must not override
     this.setData({
       showNewForm: false,
       pickerOpen: false,
+      areaError: false,
       address: {
         id: a.id,
         recipient_name: a.recipient_name || '',
@@ -1977,6 +2130,8 @@ Page({
     // "choose your area" toast instead of the confusing downstream "pick a
     // delivery time" error you'd otherwise hit (no zone → no slots).
     if (!a.city) {
+      this.setData({ areaError: true });   // red-frame the picker so it reads as the missing step
+      wx.pageScrollTo({ selector: '#area-field', duration: 300 });
       wx.showToast({ title: this.data.copy.regionRequired, icon: 'none' });
       return;
     }
@@ -2282,23 +2437,18 @@ Page({
             // network can churn (button visibly flickers).
             return this.submitOrder({ ...(extra || {}), _stockRetried: true });
           } else {
-            // Already retried once and still inconsistent — server has a
-            // bug or stock dropped to 0 while we were typing. Stop the
-            // loop, tell the customer plainly, and surface the items the
-            // server thinks are missing so they can decide what to do.
-            console.error('[checkout] /quote ↔ /orders inconsistency on fallback gate; aborting retry loop', e?.body);
-            const isCN = this.data.lang === 'cn';
-            const nearestName = isCN
-              ? (e?.body?.nearest?.store_name_cn || e?.body?.nearest?.store_name_en || '')
-              : (e?.body?.nearest?.store_name_en || e?.body?.nearest?.store_name_cn || '');
-            wx.showModal({
-              title: isCN ? '库存暂时不足' : 'Temporarily out of stock',
-              content: isCN
-                ? `${nearestName || '最近门店'}缺货,请稍后再试或修改购物车。`
-                : `${nearestName || 'The nearest store'} is short of stock — please try again later or update your cart.`,
-              showCancel: false,
-              confirmText: isCN ? '我知道了' : 'OK',
-            });
+            // Already retried once and the re-quote still disagrees with
+            // /orders (classic cause: the synchronous geocode inside /orders
+            // re-ranks stores by true GPS distance, so it sees a shortage the
+            // district-centroid quote doesn't). We must NEVER dead-end the
+            // customer on a blocking "try again later" alert here — the agreed
+            // design is the 5-option modal (ship from the other store /
+            // replace / cancel item / cancel order / wait). The 409 response
+            // itself carries everything that modal needs (nearest + its
+            // shortages + the fallback store), so build it straight from that
+            // instead of trusting the disagreeing re-quote.
+            console.warn('[checkout] /quote ↔ /orders inconsistency on fallback gate; driving modal from 409 payload', e?.body);
+            this.openFallbackModalFromOrderError(e?.body);
           }
           return;
         }
@@ -2451,6 +2601,72 @@ Page({
   },
 
   // ───── 5-option fallback modal ────────────────────────────────────────
+  // Open the 5-option modal directly from a /orders `409
+  // needs_fallback_confirmation` body, bypassing a fresh /quote. Used as the
+  // safety net when /quote and /orders disagree about whether the nearest
+  // store is short (so the re-quote never surfaces the gate and we'd
+  // otherwise dead-end the customer). The 409 body always carries the nearest
+  // store + its shortages + the fallback store (routeOrder only raises this
+  // error when a fallback CAN fulfil), which is exactly what the modal binds.
+  // Item names/images aren't in the 409, so we hydrate them from the live
+  // cart; extra km/min aren't computed server-side here, so the modal renders
+  // without the distance chips (it already guards on null). Option 3 ("ship
+  // from the other store") shows because fallbackStoreName is set.
+  openFallbackModalFromOrderError(body) {
+    const isCN = this.data.lang === 'cn';
+    const nearest  = body && body.nearest  ? body.nearest  : null;
+    const fallback = body && body.fallback ? body.fallback : null;
+    if (!nearest) {
+      // Nothing actionable in the payload — fall back to a plain, honest
+      // message rather than an empty modal. This is the genuine "we can't
+      // tell you anything useful" case, not the routine shortage flow.
+      wx.showToast({
+        title: isCN ? '库存已变化,请稍后重试或修改购物车' : 'Stock changed — try again later or update your cart',
+        icon: 'none',
+        duration: 2800,
+      });
+      this.setData({ placing: false });
+      return;
+    }
+    // Hydrate missing-item names + thumbnails from the live cart, keyed by id.
+    const byId = {};
+    for (const ci of (this.data.items || [])) {
+      if (ci.product_id != null && !byId[ci.product_id]) byId[ci.product_id] = ci;
+    }
+    const missingItems = (nearest.shortages || []).map((s) => {
+      const ci = byId[s.product_id] || {};
+      return {
+        product_id: s.product_id,
+        qty:        s.qty,
+        available:  s.available,
+        name_en:    ci.name_en || '',
+        name_cn:    ci.name_cn || '',
+        image_data: ci.image || ci.image_data || '',
+      };
+    });
+    const nearestStoreName = isCN
+      ? (nearest.store_name_cn || nearest.store_name_en || '')
+      : (nearest.store_name_en || nearest.store_name_cn || '');
+    const fallbackStoreName = fallback
+      ? (isCN ? (fallback.store_name_cn || fallback.store_name_en || '')
+              : (fallback.store_name_en || fallback.store_name_cn || ''))
+      : '';
+    this.setData({
+      placing: false,
+      acceptedFallback: false,
+      routing: { gate: 'options_5', ok: false, nearest, fallback },
+      fallbackGate: 'options_5',
+      needsFallback: true,
+      nearestStoreName,
+      fallbackStoreName,
+      missingItems,
+      // No server-computed delta on this path — hide the +km/+min chips.
+      fallbackExtraKm: null,
+      fallbackExtraMin: null,
+      showFallbackModal: true,
+    });
+  },
+
   // Dismiss without picking anything (taps backdrop or × button).
   closeFallbackModal() {
     this.setData({ showFallbackModal: false, showReplacePicker: false });
@@ -2493,7 +2709,11 @@ Page({
   async fbWaitForRestock() {
     if (this.data.fallbackBusy) return;
     const slotId = this.data.deliverySlotId || '';
-    const isHardSlot = slotId === 'right_away' || /T\d{2}:\d{2}/.test(slotId);
+    // Schedule-for-later stays "flexible" even though it now carries an hour
+    // window (Guangzhou) — it has days of lead time, so it doesn't conflict with
+    // "wait for restock". Only same-day hard picks (right_away / today HH:MM) do.
+    const isScheduled = this.data.selectedSlotKind === 'schedule';
+    const isHardSlot = !isScheduled && (slotId === 'right_away' || /T\d{2}:\d{2}/.test(slotId));
     if (isHardSlot) {
       const ok = await this.askWaitForRestockConfirm();
       if (!ok) return;
