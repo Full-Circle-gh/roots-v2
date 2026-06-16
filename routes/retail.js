@@ -2758,12 +2758,17 @@ function alipayTimestamp() {
   return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 }
 
-// The RSA2 sign base-string for BOTH outbound requests and inbound notify
-// verification: drop `sign` + `sign_type` + empty values, sort keys ascending,
-// join as k=v pairs with & using the RAW (un-encoded) values.
-function alipaySignString(params) {
+// The RSA2 sign base-string. Alipay treats the two directions ASYMMETRICALLY:
+//   • Outbound request signing  → sign over all params except `sign`
+//     (sign_type IS part of the signed string — the gateway includes it).
+//   • Inbound async-notify verify → drop BOTH `sign` and `sign_type`
+//     (matches the official rsaCheckV1 the notify uses).
+// Getting this wrong yields isv.invalid-signature on requests (verified live
+// against the gateway, 2026-06-16). Always drop empty values; sort ascending;
+// join k=v with & using the RAW (un-encoded) values.
+function alipaySignString(params, dropSignType = false) {
   return Object.keys(params)
-    .filter(k => k !== 'sign' && k !== 'sign_type' && params[k] !== '' && params[k] != null)
+    .filter(k => k !== 'sign' && (!dropSignType || k !== 'sign_type') && params[k] !== '' && params[k] != null)
     .sort()
     .map(k => `${k}=${params[k]}`)
     .join('&');
@@ -2838,7 +2843,7 @@ function alipayVerifyNotify(params) {
   if (!ALIPAY_PUBLIC_KEY || !params || !params.sign) return false;
   try {
     return crypto.createVerify('RSA-SHA256')
-                 .update(alipaySignString(params), 'utf8')
+                 .update(alipaySignString(params, true), 'utf8')   // notify: drop sign + sign_type
                  .verify(ALIPAY_PUBLIC_KEY, params.sign, 'base64');
   } catch (e) {
     console.error('[alipay/verify]', e.message);
