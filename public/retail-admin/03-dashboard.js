@@ -1654,7 +1654,7 @@ function dashBarList(rows) {
   const max = Math.max(1, ...rows.map(r => r.frac || 0));
   return `<div class="db-bars">${rows.map(r => `
     <div class="db-bar-row">
-      <div class="k" title="${escapeAttr(r.k)}">${escapeHtml(r.k)}${r.kSub ? ` <span class="sub">${escapeHtml(r.kSub)}</span>` : ''}</div>
+      <div class="k" title="${escapeAttr(r.kTitle || r.k)}">${escapeHtml(r.k)}${r.kSub ? ` <span class="sub">${escapeHtml(r.kSub)}</span>` : ''}</div>
       <div class="db-track"><span class="${r.muted ? 'muted' : ''}" style="width:${(((r.frac || 0) / max) * 100).toFixed(1)}%${r.barColor ? `;background:${r.barColor}` : ''}"></span></div>
       <div class="v">${escapeHtml(r.value)}${r.valueSub ? ` <span class="sub">${escapeHtml(r.valueSub)}</span>` : ''}</div>
     </div>`).join('')}</div>`;
@@ -1826,16 +1826,41 @@ function dashRenderMarketing() {
   $('#db-marketing').innerHTML = html;
 }
 
-// WeChat launch-scene code → human label (common ones; fallback shows code).
+// WeChat launch-scene code → [labelEn, labelCn, explainEn, explainCn].
+// The explain text feeds each row's hover tooltip so the operator can see what
+// the source actually is. Meanings follow WeChat's official scene-value list.
+// KEEP the English label + English explanation free of " · " — the admin's
+// auto-i18n splitter cuts on the first " · " to pick the active language.
 const DASH_SCENES = {
-  1001: 'Mini-program list · 小程序列表', 1005: 'Search · 搜索', 1006: 'Search result · 搜索结果',
-  1007: 'Single chat card · 单聊', 1008: 'Group chat card · 群聊', 1011: 'Scan QR · 扫码',
-  1012: 'Long-press QR · 长按识别', 1013: 'History · 历史', 1014: 'Template msg · 模板消息',
-  1017: 'From mini-program · 小程序跳转', 1019: 'Wallet · 钱包', 1020: 'Card pkg · 卡包',
-  1023: 'Home screen · 桌面', 1035: 'Ad · 广告', 1036: 'App share · 分享',
-  1047: 'Scan QR (Discover) · 扫码(发现)', 1048: 'History · 历史', 1058: 'Official article · 公众号文章',
-  1065: 'URL scheme · 链接跳转', 1074: 'Nearby · 附近', 1089: 'Chat tools · 聊天工具',
-  1107: 'Subscription msg · 订阅消息', 1131: 'Floating window · 浮窗',
+  1001: ['Mini-program list', '小程序列表', 'Opened from WeChat Discover → Mini Programs (and the recents shown there).', '来自微信「发现 → 小程序」列表(含其中的最近使用)。'],
+  1005: ['Search', '搜索', "Tapped your shop in WeChat's top search box.", '在微信顶部搜索框点击进入。'],
+  1006: ['Search result', '搜索结果', 'Tapped your shop in the Mini Programs search results.', '在小程序搜索结果中点击进入。'],
+  1007: ['Single chat card', '单聊卡片', 'A share card someone sent in a one-to-one chat. Usually high intent.', '单人聊天里的分享卡片,意向通常较高。'],
+  1008: ['Group chat card', '群聊卡片', 'A share card forwarded into a group chat.', '群聊里转发的分享卡片。'],
+  1011: ['Scan QR', '扫码', "Scanned a QR code with WeChat's scanner.", '用微信扫一扫扫码进入。'],
+  1012: ['Long-press QR', '长按识别', 'Long-pressed an image and recognised its QR code.', '长按图片识别二维码进入。'],
+  1013: ['Album QR', '相册二维码', 'Picked a QR-code image from the phone photo album.', '从相册选取二维码图片进入。'],
+  1014: ['Template msg', '模板消息', 'Tapped a WeChat template / service notification.', '点击模板/服务通知进入。'],
+  1017: ['Trial version', '体验版', 'Opened the trial (体验版) build — internal testers, not real customers.', '体验版入口,通常是内部测试人员,非真实顾客。'],
+  1019: ['Wallet', '钱包', 'Opened from WeChat Wallet.', '从微信钱包进入。'],
+  1020: ['Card package', '卡包', "Opened from WeChat's card / coupon holder.", '从微信卡包进入。'],
+  1023: ['Home screen', '桌面', 'Tapped the mini-program icon saved to the phone home screen.', '点击保存到手机桌面的图标进入。'],
+  1027: ['Search recents', '搜索·用过的', "WeChat home search box, then the 'mini programs you've used' list.", '微信首页搜索框里「使用过的小程序」列表。'],
+  1035: ['Official-account menu', '公众号菜单', "Tapped a link in an Official Account's bottom menu.", '点击公众号底部自定义菜单进入。'],
+  1036: ['App share', '应用分享', 'Opened from an app share message card.', '通过应用分享卡片进入。'],
+  1037: ['From mini-program', '小程序跳转', 'Jumped in from another mini program.', '由另一个小程序跳转进入。'],
+  1038: ['Back from mini-program', '小程序返回', 'Returned here after leaving for another mini program.', '从另一个小程序返回本店。'],
+  1047: ['Scan code (Discover)', '扫码(发现)', 'Scanned a mini-program code from Discover → Scan.', '在发现→扫一扫扫描小程序码进入。'],
+  1048: ['Long-press code', '长按识别码', 'Long-pressed an image and recognised its mini-program code.', '长按图片识别小程序码进入。'],
+  1058: ['Official article', '公众号文章', 'Tapped a mini-program link inside an Official Account article.', '点击公众号文章里的小程序链接进入。'],
+  1065: ['URL link', '链接跳转', 'Opened from a URL link (URL scheme).', '通过链接(URL scheme)进入。'],
+  1074: ['Official-account card', '公众号卡片', 'A mini-program card sent in an Official Account chat.', '公众号会话里下发的小程序卡片。'],
+  1089: ['Chat tools', '聊天工具', "Pulled down the chat home screen and tapped the 'recently used' bar.", '在聊天主界面下拉,点击「最近使用」栏进入。'],
+  1101: ['Dev preview', '开发预览', 'Developer-tools preview / remote debug — this is you or a developer testing, not a real customer.', '开发者工具预览/远程调试,是你或开发者在测试,非真实顾客。'],
+  1106: ['Chat pull-down search', '下拉搜索', 'Pulled down the chat home screen, then opened from the top search results.', '在聊天主界面下拉,从顶部搜索结果进入。'],
+  1107: ['Subscription msg', '订阅消息', 'Tapped a subscription message you sent.', '点击你发送的订阅消息进入。'],
+  1131: ['Floating window', '浮窗', 'Reopened from the floating window (浮窗).', '从浮窗重新打开。'],
+  1271: ['Chat pull-down favourites', '下拉常用', "Pulled down the chat home screen and tapped the 'my frequent mini programs' bar.", '在聊天主界面下拉,点击「我的常用小程序」栏进入。'],
 };
 function dashRenderTraffic() {
   const k = DASH_DATA.kpis, scenes = (DASH_DATA.traffic && DASH_DATA.traffic.scenes) || [];
@@ -1851,7 +1876,13 @@ function dashRenderTraffic() {
     + `<div class="db-tile"><div class="t-val">${conv}</div><div class="t-lbl">Conversion · 转化</div></div>`
     + '</div>';
   html += '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px;font-weight:500">ENTRY SCENES · 进入场景</div>';
-  html += scenes.length ? dashBarList(scenes.map(s => ({ k: DASH_SCENES[s.scene] || ('Scene ' + s.scene), value: dashNum(s.visits), valueSub: `${dashNum(s.sessions)} sess.`, frac: s.visits }))) : '<div class="db-muted">No scene data · 无场景数据</div>';
+  html += '<div class="db-muted" style="font-size:11px;margin:-2px 0 8px">Hover a source to see what it means · 将鼠标移到来源上查看其含义</div>';
+  html += scenes.length ? dashBarList(scenes.map(s => {
+    const sc = DASH_SCENES[s.scene];
+    const label = sc ? `${sc[0]} · ${sc[1]}` : (`Scene ${s.scene} · 场景 ${s.scene}`);
+    const tip = sc && sc[2] ? `${sc[2]} · ${sc[3]}` : `Unlabelled WeChat scene code ${s.scene}. · 未识别的微信场景值 ${s.scene}。`;
+    return { k: label, kTitle: tip, value: dashNum(s.visits), valueSub: `${dashNum(s.sessions)} sess.`, frac: s.visits };
+  })) : '<div class="db-muted">No scene data · 无场景数据</div>';
   $('#db-traffic').innerHTML = html;
 }
 
