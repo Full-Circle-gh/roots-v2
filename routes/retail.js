@@ -7330,6 +7330,100 @@ async function syncJdTrackingForCustomer(orderId, customerId) {
   }
 }
 
+// ─── Background JD trace sweeper ─────────────────────────────────────────────
+// 快递100 parcels PUSH their events to our callback (and a 30-min re-subscribe
+// sweeper in lib/tracking keeps that subscription alive), so a kd100 order flips
+// itself to "delivered" with no one watching. JD waybills have no push channel —
+// their trace is PULLED from JD's own API, and that pull only ran when a customer
+// opened the order in the mini app or staff opened the drawer. So a JD parcel
+// that JD had actually delivered would sit on "dispatched" / "out for delivery"
+// in the Orders queue — and the customer's "delivered" push never fired — until
+// someone happened to open it.
+//
+// This sweep closes that gap: every `tracking.jdSweepMinutes` (def 12, <=0
+// disables) it walks each tenant's still-dispatched JD orders and runs the exact
+// same on-open pull — syncJdTrackingForCustomer — which persists fresh events,
+// auto-flips the order to 'delivered' once every parcel reads delivered, and
+// fires the customer notification. Per-order freshness is already guarded inside
+// that function (_JD_TRACE_STALE_MS ≈ 8 min), so the timer cadence only paces how
+// quickly a newly-delivered order is noticed, never how hard we hit JD's API.
+const JD_SWEEP_DEFAULT_MINUTES = 12;
+const JD_SWEEP_BATCH = 80;
+
+async function sweepJdTrackingForTenant() {
+  if (!jd.jdEnabled(integ().jd)) return 0;   // JD not configured for this tenant
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT o.id AS id, o.customer_id AS customer_id
+         FROM retail_orders o
+        WHERE o.status = 'dispatched'
+          AND o.customer_id IS NOT NULL
+          AND (
+            (o.tracking_carrier = 'jd' AND o.tracking_number IS NOT NULL
+               AND o.tracking_number != '' AND COALESCE(o.tracking_kd100_subscribed, 0) = 0)
+            OR EXISTS (
+              SELECT 1 FROM retail_shipments s
+               WHERE s.order_id = o.id AND s.tracking_carrier = 'jd'
+                 AND s.tracking_number IS NOT NULL AND s.tracking_number != ''
+                 AND COALESCE(s.tracking_kd100_subscribed, 0) = 0)
+          )
+        ORDER BY o.id DESC
+        LIMIT ?`
+    ).all(JD_SWEEP_BATCH);
+  } catch (e) {
+    if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
+    throw e;
+  }
+  let checked = 0;
+  for (const o of rows) {
+    try { await syncJdTrackingForCustomer(o.id, o.customer_id); checked++; }
+    catch (e) { console.warn('[jd.sweeper] order ' + o.id, e.message); }
+  }
+  return checked;
+}
+
+// Walk every active tenant once. Best-effort: a per-tenant failure (bad creds,
+// JD outage) never aborts the others. Mirrors tickAutoDeliverLocalEta's fan-out.
+async function tickJdTrackingSweep() {
+  let tenants;
+  try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
+  catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
+  const run = async (tid) => {
+    try {
+      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const n = await tenantAls.run(tdb_, () => sweepJdTrackingForTenant());
+      if (n > 0) console.log(`[jd.sweeper] tenant=${tid ?? 'main'} checked=${n}`);
+    } catch (e) { console.warn('[jd.sweeper]', tid, e.message); }
+  };
+  if (!tenants) await run(null);
+  else for (const t of tenants) await run(t.id);
+}
+
+// Self-scheduling so the cadence follows tracking.jdSweepMinutes without a
+// restart, and a 0/negative value cleanly parks the sweeper. The interval is
+// read off the MAIN tenant's config; each tenant still gates on its own JD creds
+// inside sweepJdTrackingForTenant. unref() so the timer never holds the process.
+let _jdSweepTimer = null;
+function scheduleJdSweep() {
+  let mins = JD_SWEEP_DEFAULT_MINUTES;
+  try {
+    const v = Number(tenantAls.run(db, () => cfgValue('tracking.jdSweepMinutes', JD_SWEEP_DEFAULT_MINUTES)));
+    if (Number.isFinite(v)) mins = v;
+  } catch {}
+  // <=0 disables: re-check the knob in 10 min so an operator can switch it back
+  // on without a restart, but never poll JD while parked.
+  const delayMs = mins > 0 ? mins * 60_000 : 10 * 60_000;
+  _jdSweepTimer = setTimeout(async () => {
+    if (mins > 0) { try { await tickJdTrackingSweep(); } catch (e) { console.error('[jd.sweeper] tick threw', e); } }
+    scheduleJdSweep();   // reschedule with the freshly-read cadence
+  }, delayMs);
+  if (_jdSweepTimer.unref) _jdSweepTimer.unref();
+}
+// Kick off after a short delay so startup (migrations, tenant boot) settles first.
+const _jdSweepBoot = setTimeout(scheduleJdSweep, 90_000);
+if (_jdSweepBoot.unref) _jdSweepBoot.unref();
+
 // Decorate a raw retail_orders row with the bits the mini app needs to
 // render the shipment tracking card: carrier name (EN+CN), normalized
 // status label, deep-link to the carrier's own tracking page, parsed
