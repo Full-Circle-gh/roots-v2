@@ -1742,8 +1742,14 @@ function pdClose() {
   _pdGallery = []; _pdGalleryDirty = false;
   const ri = document.getElementById('pd-desc-rich'); if (ri) ri.classList.remove('pd-rte-fs');
   document.body.classList.remove('pd-rte-fs-lock');
-  // Re-expand the list back into the full-width overview table.
+  // Re-expand the list back into the full-width overview table, then re-pull
+  // per-store stock from the server so the Stock column shows the real saved
+  // numbers — not the page-load cache. The in-memory mirror (_paStockMirror)
+  // keeps the same page in sync after a matrix edit, but it can't cover a
+  // second open tab, a variant member saved under a different id, or a cell
+  // that never blurred; a fresh /inventory/grid read is authoritative.
   paRender();
+  paLoadStoreStock();
 }
 // Revert to last save: roll the form back to the snapshot captured when this
 // product was opened, then autosave that restored state so it's the live version
