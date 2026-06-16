@@ -9,6 +9,7 @@
     "pages/alipay-pay/alipay-pay",
     "pages/order-success/order-success",
     "pages/order/order",
+    "pages/add-to-order/add-to-order",
     "pages/orders/orders",
     "pages/invoices/invoices",
     "pages/notifications/notifications",

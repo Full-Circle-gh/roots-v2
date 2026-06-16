@@ -1,0 +1,292 @@
+/* "Add to your order" picker — same editorial language as the rest of the
+   mini-app (oat background, olive kicker, dark sticky footer). */
+
+.page {
+  background: var(--oat);
+  min-height: 100vh;
+  padding-bottom: 220rpx;        /* clear the sticky footer */
+}
+
+/* ── Header ── */
+.header { padding: 36rpx 44rpx 8rpx; }
+.kicker {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.22em;
+  color: var(--olive);
+  text-transform: uppercase;
+}
+.title {
+  margin-top: 8rpx;
+  font-size: calc(56rpx * var(--font-scale));
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+}
+.sub {
+  margin-top: 14rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  line-height: 1.5;
+  color: #6b6358;
+}
+
+/* ── Blocked (already shipped) ── */
+.blocked { padding: 80rpx 44rpx; text-align: center; }
+.blocked-txt {
+  font-size: calc(30rpx * var(--font-scale));
+  line-height: 1.55;
+  color: #6b6358;
+}
+.blocked-back {
+  margin-top: 32rpx;
+  font-size: calc(28rpx * var(--font-scale));
+  color: var(--olive);
+}
+
+/* ── Search ── (matches faq / shop: bordered box + line-icon magnifier) */
+.search {
+  margin: 24rpx 44rpx 4rpx;
+  background: #FFFCF7;
+  border: 4rpx solid var(--ink);
+  padding: 20rpx 28rpx;
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+}
+.search-icon {
+  position: relative;
+  width: 32rpx;
+  height: 32rpx;
+  flex-shrink: 0;
+}
+.search-ring {
+  width: 22rpx;
+  height: 22rpx;
+  border: 4rpx solid var(--ink);
+  border-radius: 50%;
+}
+.search-stem {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 12rpx;
+  height: 4rpx;
+  background: var(--ink);
+  transform: rotate(45deg);
+  transform-origin: right center;
+}
+.search-in {
+  flex: 1;
+  min-width: 0;
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--ink);
+  min-height: 40rpx;
+}
+.search-ph {
+  color: var(--olive);
+  opacity: 0.6;
+}
+.search-clear {
+  font-size: calc(22rpx * var(--font-scale));
+  color: var(--olive);
+  flex-shrink: 0;
+}
+
+/* ── List ── */
+.empty {
+  padding: 80rpx 44rpx;
+  text-align: center;
+  color: #9a9186;
+  font-size: calc(28rpx * var(--font-scale));
+}
+.list { padding: 8rpx 44rpx; }
+.row {
+  display: flex;
+  align-items: center;
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid rgba(0,0,0,0.06);
+}
+.thumb {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 14rpx;
+  background: #efe6dd;
+  flex: 0 0 auto;
+}
+.row-mid { flex: 1 1 auto; padding: 0 24rpx; min-width: 0; }
+.row-name {
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1.3;
+  color: #2c281f;
+}
+.row-price {
+  margin-top: 6rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--olive);
+}
+
+/* ── Qty stepper ── */
+.stepper { display: flex; align-items: center; flex: 0 0 auto; }
+.step {
+  width: 56rpx;
+  height: 56rpx;
+  line-height: 52rpx;
+  text-align: center;
+  border-radius: 50%;
+  border: 1rpx solid var(--olive);
+  color: var(--olive);
+  font-size: calc(34rpx * var(--font-scale));
+}
+.step-off { opacity: 0.3; }
+.step-qty {
+  min-width: 56rpx;
+  text-align: center;
+  font-size: calc(30rpx * var(--font-scale));
+}
+
+/* ── Sticky footer ── */
+.footer {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: #2c281f;
+  padding: 24rpx 44rpx calc(24rpx + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.footer-meta { color: #fff; }
+.footer-count {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  opacity: 0.7;
+  text-transform: uppercase;
+}
+.footer-total {
+  font-size: calc(38rpx * var(--font-scale));
+  line-height: 1.2;
+}
+.footer-btn {
+  background: var(--olive, #7a8450);
+  color: #fff;
+  border-radius: 999rpx;
+  padding: 22rpx 44rpx;
+  font-size: calc(30rpx * var(--font-scale));
+}
+.footer-btn.is-busy { opacity: 0.6; }
+
+/* ── "Choose ›" button (option products) ── */
+.choose-btn {
+  flex: 0 0 auto;
+  border: 1rpx solid var(--olive);
+  color: var(--olive);
+  border-radius: 999rpx;
+  padding: 12rpx 26rpx;
+  font-size: calc(26rpx * var(--font-scale));
+}
+
+/* ── Chosen-with-options review block ── */
+.adds {
+  margin: 8rpx 44rpx 4rpx;
+  padding: 16rpx 0 4rpx;
+  border-bottom: 2rpx solid rgba(0,0,0,0.08);
+}
+.adds-h {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--olive);
+  margin-bottom: 8rpx;
+}
+.add-line {
+  display: flex;
+  align-items: center;
+  padding: 16rpx 0;
+}
+.add-mid { flex: 1 1 auto; min-width: 0; padding-right: 16rpx; }
+.add-name {
+  font-size: calc(28rpx * var(--font-scale));
+  color: #2c281f;
+}
+.add-opts {
+  margin-top: 4rpx;
+  font-size: calc(24rpx * var(--font-scale));
+  color: #9a9186;
+}
+.add-price {
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--olive);
+  padding-right: 16rpx;
+}
+
+/* ── Option sheet ── */
+.op-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+}
+.op-sheet {
+  width: 100%;
+  background: var(--oat, #f2e7df);
+  border-radius: 28rpx 28rpx 0 0;
+  padding: 32rpx 44rpx calc(28rpx + env(safe-area-inset-bottom));
+  max-height: 78vh;
+  display: flex;
+  flex-direction: column;
+}
+.op-loading { padding: 80rpx 0; text-align: center; color: #9a9186; }
+.op-title {
+  font-size: calc(36rpx * var(--font-scale));
+  line-height: 1.2;
+  margin-bottom: 16rpx;
+}
+.op-body { flex: 1 1 auto; max-height: 52vh; }
+.op-group { padding: 12rpx 0; }
+.op-q {
+  font-size: calc(28rpx * var(--font-scale));
+  color: #2c281f;
+  margin-bottom: 10rpx;
+}
+.op-req { color: #c0563f; }
+.op-choice {
+  display: flex;
+  align-items: center;
+  padding: 18rpx 0;
+  border-bottom: 1rpx solid rgba(0,0,0,0.06);
+}
+.op-c-dot {
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 50%;
+  border: 2rpx solid #b9b0a4;
+  flex: 0 0 auto;
+  margin-right: 20rpx;
+}
+.op-c-dot.sq { border-radius: 8rpx; }
+.op-choice.picked .op-c-dot {
+  border-color: var(--olive);
+  background: var(--olive);
+}
+.op-c-label {
+  flex: 1 1 auto;
+  font-size: calc(28rpx * var(--font-scale));
+  color: #2c281f;
+}
+.op-choice.soldout { opacity: 0.4; }
+.op-c-delta {
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--olive);
+}
+.op-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 22rpx;
+}
+.op-add {
+  background: var(--olive, #7a8450);
+  color: #fff;
+  border-radius: 999rpx;
+  padding: 22rpx 44rpx;
+  font-size: calc(30rpx * var(--font-scale));
+}

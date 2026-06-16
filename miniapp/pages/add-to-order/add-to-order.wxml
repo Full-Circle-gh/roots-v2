@@ -1,0 +1,114 @@
+<view class="page">
+
+  <!-- Header -->
+  <view class="header">
+    <view class="kicker f-toni">{{ orderNo }}</view>
+    <view class="title f-bear">{{ copy.title }}</view>
+    <view class="sub f-aleo">{{ copy.sub }}</view>
+  </view>
+
+  <!-- Order already shipped → can't edit -->
+  <view wx:if="{{ notEditable }}" class="blocked">
+    <view class="blocked-txt f-aleo">{{ copy.notEditable }}</view>
+    <view class="blocked-back f-toni" bindtap="back">{{ copy.back }}</view>
+  </view>
+
+  <block wx:else>
+    <!-- Search -->
+    <view class="search">
+      <view class="search-icon">
+        <view class="search-ring"></view>
+        <view class="search-stem"></view>
+      </view>
+      <input class="search-in f-aleo"
+             value="{{ query }}"
+             placeholder="{{ copy.searchPh }}"
+             placeholder-class="search-ph"
+             confirm-type="search"
+             bindinput="onSearchInput" />
+      <view wx:if="{{ query }}" class="search-clear f-toni" bindtap="clearSearch">{{ copy.clear }}</view>
+    </view>
+
+    <!-- Items chosen with options (each a distinct line) -->
+    <view wx:if="{{ optionLines.length }}" class="adds">
+      <view class="adds-h f-toni">{{ copy.yourAdds }}</view>
+      <view wx:for="{{ optionLines }}" wx:key="key" class="add-line">
+        <view class="add-mid">
+          <view class="add-name f-bear">{{ item.name }}</view>
+          <view class="add-opts">{{ item.options_label }}</view>
+        </view>
+        <view class="add-price f-bear">{{ item.line_disp }}</view>
+        <view class="stepper">
+          <view class="step" data-key="{{ item.key }}" data-dir="-1" bindtap="optionLineBump">−</view>
+          <view class="step-qty">{{ item.qty }}</view>
+          <view class="step" data-key="{{ item.key }}" data-dir="1" bindtap="optionLineBump">+</view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Product list -->
+    <view wx:if="{{ loading }}" class="empty">…</view>
+    <view wx:elif="{{ !products.length }}" class="empty">{{ copy.empty }}</view>
+
+    <view wx:else class="list">
+      <view wx:for="{{ products }}" wx:key="id" class="row">
+        <image class="thumb" src="{{ item.image }}" mode="aspectFill" lazy-load="true" />
+        <view class="row-mid">
+          <view class="row-name f-bear">{{ item.name }}</view>
+          <view class="row-price f-bear">{{ item.price_disp }}</view>
+        </view>
+        <!-- Options product → open the chooser; plain product → qty stepper -->
+        <view wx:if="{{ item.has_options }}" class="choose-btn f-toni"
+              data-id="{{ item.id }}" bindtap="openOptions">{{ copy.choose }}</view>
+        <view wx:else class="stepper">
+          <view class="step {{ item.qty > 0 ? '' : 'step-off' }}"
+                data-id="{{ item.id }}" data-dir="-1" bindtap="bump">−</view>
+          <view class="step-qty">{{ item.qty }}</view>
+          <view class="step" data-id="{{ item.id }}" data-dir="1" bindtap="bump">+</view>
+        </view>
+      </view>
+    </view>
+  </block>
+
+  <!-- Sticky pay-the-difference footer -->
+  <view wx:if="{{ !notEditable && addCount > 0 }}" class="footer">
+    <view class="footer-meta">
+      <view class="footer-count f-toni">+{{ addCount }} {{ copy.more }}</view>
+      <view class="footer-total f-bear">{{ addTotalDisp }}</view>
+    </view>
+    <view class="footer-btn f-toni {{ submitting ? 'is-busy' : '' }}" bindtap="confirm">
+      {{ copy.payBtn }} {{ addTotalDisp }}
+    </view>
+  </view>
+
+  <!-- ── Option chooser sheet ── -->
+  <view wx:if="{{ opShow }}" class="op-mask" bindtap="closeOptions">
+    <view class="op-sheet" catchtap="noop">
+      <view wx:if="{{ opLoading }}" class="op-loading">…</view>
+      <block wx:else>
+        <view class="op-title f-bear">{{ opProduct.name }}</view>
+        <scroll-view scroll-y="true" class="op-body">
+          <view wx:for="{{ opGroups }}" wx:for-item="g" wx:for-index="gi" wx:key="id" class="op-group">
+            <view class="op-q f-bear">{{ g.question }}<text wx:if="{{ g.is_required }}" class="op-req"> *</text></view>
+            <view wx:for="{{ g.choices }}" wx:for-item="c" wx:for-index="ci" wx:key="id"
+                  class="op-choice {{ c.picked ? 'picked' : '' }} {{ c.sold_out ? 'soldout' : '' }}"
+                  data-gi="{{ gi }}" data-ci="{{ ci }}" bindtap="onChoiceTap">
+              <view class="op-c-dot {{ g.type === 'multi' ? 'sq' : '' }}"></view>
+              <view class="op-c-label">{{ c.label }}</view>
+              <view wx:if="{{ c.delta_text }}" class="op-c-delta">{{ c.delta_text }}</view>
+            </view>
+          </view>
+        </scroll-view>
+        <view class="op-foot">
+          <view class="stepper">
+            <view class="step" data-dir="-1" bindtap="opBumpQty">−</view>
+            <view class="step-qty">{{ opQty }}</view>
+            <view class="step" data-dir="1" bindtap="opBumpQty">+</view>
+          </view>
+          <view class="op-add f-toni" bindtap="addOptionLine">{{ copy.opAdd }} · {{ opTotalDisp }}</view>
+        </view>
+      </block>
+    </view>
+  </view>
+
+</view>
