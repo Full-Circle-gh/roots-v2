@@ -1325,7 +1325,9 @@ function fulfillmentShortNote(o) {
   const byId = new Map((o.items || []).map(it => [it.product_id, it]));
   const names = pids.map(pid => {
     const it = byId.get(pid);
-    return it ? orderItemNames(it) : ('#' + pid);
+    if (!it) return '#' + pid;
+    const nm = orderItemNames(it);
+    return nm.primary || nm.secondary || ('#' + pid);
   });
   return `<div class="sub" style="margin-top:6px; color: var(--st-awaiting_restock); font-weight:700;">`
     + `⚠ ${cuT('Not in stock at this store — restock or transfer before shipping',
