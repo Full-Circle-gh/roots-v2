@@ -830,6 +830,7 @@ Page({
       image_data: p.image_data,
       price: this.data.priceN + delta,
       bundle_worth: p.bundle_worth,   // a bundle product: its "separately" worth
+      ship_from_supplier: p.ship_from_supplier,
     }, this.data.qty, chosen);
     return true;
   },
@@ -984,6 +985,7 @@ Page({
       price: Number(m.price ?? m.sell_price) || 0,
       effective_price: m.effective_price,
       is_on_flash: m.is_on_flash,
+      ship_from_supplier: m.ship_from_supplier,
     }, this.data.qty, []);
     this.setData({ vpShow: false });
     this._finishAdd();

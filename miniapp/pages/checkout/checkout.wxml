@@ -25,6 +25,9 @@
             <text class="f-bear">{{item.display_name}}</text>
             <text class="line-meta"> ×{{item.qty}}</text>
             <view wx:if="{{item.display_options}}" class="line-opts f-toni">{{item.display_options}}</view>
+            <view wx:if="{{item.ship_from_supplier}}" class="line-supplier f-toni">
+              <text class="line-supplier-glyph">↗</text>{{lang === 'cn' ? '供应商直发 · 单独送达' : 'Ships from supplier · separately'}}
+            </view>
           </view>
         </view>
         <view class="line-total f-bear">
@@ -117,10 +120,15 @@
              current, Chinese). EN → bilingual city → district from our dataset
              so an English-mode user reads the options. Both write canonical
              Chinese province/city/district onto the address. -->
+        <!-- Required-area label + scroll anchor. The picker placeholder alone
+             read as optional (same weight as "Floor/unit (optional)" below), so
+             customers typed a full address but skipped this — leaving the area
+             blank, which made the store falsely look closed. -->
+        <view id="area-field" class="area-label f-toni">{{copy.regionLabel}} <text class="area-req">*</text></view>
         <block wx:if="{{lang === 'cn'}}">
           <view class="field">
             <picker mode="region" value="{{regionValue}}" bindchange="onRegionChange">
-              <view class="region-pick {{areaLabel ? '' : 'placeholder'}}">
+              <view class="region-pick {{areaLabel ? '' : 'placeholder'}} {{areaError ? 'field-error' : ''}}">
                 <text wx:if="{{areaLabel}}">{{areaLabel}}</text>
                 <text wx:else>{{copy.regionPlaceholder}}</text>
                 <text class="region-chevron">›</text>
@@ -131,7 +139,7 @@
         <block wx:else>
           <view class="field">
             <picker mode="multiSelector" range="{{areaArray}}" value="{{areaIndex}}" bindcolumnchange="onAreaColumn" bindchange="onAreaConfirm">
-              <view class="region-pick {{areaLabel ? '' : 'placeholder'}}">
+              <view class="region-pick {{areaLabel ? '' : 'placeholder'}} {{areaError ? 'field-error' : ''}}">
                 <text wx:if="{{areaLabel}}">{{areaLabel}}</text>
                 <text wx:else>{{copy.regionPlaceholder}}</text>
                 <text class="region-chevron">›</text>
@@ -215,6 +223,14 @@
       <view wx:if="{{localOnlyNames.length}}" class="ze-sub muted">{{lang === 'cn' ? '仅广州：' : 'Guangzhou only: '}}{{localOnlyNames}}</view>
       <view class="ze-sub muted">{{lang === 'cn' ? '请移除这些商品，或切换到广州的收货地址。' : 'Remove them, or switch to a Guangzhou address.'}}</view>
     </view>
+    </block>
+
+    <!-- No zone matched yet (area not chosen) → we have no scheduling to show.
+         Prompt for the area instead of falling through to the "closed / no
+         slots" copy below, which is what made an OPEN store look closed when
+         the customer skipped the area picker. -->
+    <block wx:elif="{{!scheduling}}">
+      <view class="muted slot-empty">{{quoting ? copy.loadingTimes : copy.areaNeededForTimes}}</view>
     </block>
 
     <block wx:else>
@@ -328,7 +344,7 @@
                 start="{{scheduleMinDate}}"
                 end="{{scheduleMaxDate}}"
                 bindchange="onScheduleDateChange">
-          <view class="slot-option {{selectedSlotKind === 'schedule' && deliverySlotId === schedulePickedDate ? 'on' : ''}}">
+          <view class="slot-option {{selectedSlotKind === 'schedule' ? 'on' : ''}}">
             <view class="opt-body">
               <view class="opt-label f-bear">{{lang === 'cn' ? '稍后送达' : 'Schedule for later'}}</view>
               <view class="opt-sub muted">{{schedulePickedLabel ? schedulePickedLabel : (lang === 'cn' ? '选择送达日期' : 'pick a delivery date')}}</view>
@@ -336,6 +352,23 @@
             <view class="opt-check"><view class="opt-check-dot"></view></view>
           </view>
         </picker>
+
+        <!-- Hour windows for the scheduled-for-later day — same 2-hour chips as
+             today/tomorrow, shown once the customer picks a future date. -->
+        <view wx:if="{{selectedSlotKind === 'schedule' && scheduledSlots.length}}" class="slot-day">
+          <view class="slot-day-label f-toni">{{schedulePickedLabel}}</view>
+          <view class="slot-chip-row">
+            <view wx:for="{{scheduledSlots}}" wx:key="slot_id" wx:for-item="slot"
+                  class="slot-chip {{deliverySlotId === slot.slot_id ? 'on' : ''}}"
+                  data-id="{{slot.slot_id}}"
+                  data-label-en="{{slot.label_en}}"
+                  data-label-cn="{{slot.label_cn}}"
+                  data-surcharge="{{slot.surcharge}}"
+                  bindtap="pickScheduledSlot">
+              <view class="chip-label">{{lang === 'cn' ? slot.start_minute === 0 ? slot.start_hour + ':00' : slot.start_hour + ':' + slot.start_minute : slot.start_hour}}<text wx:if="{{lang !== 'cn'}}">{{slot.start_hour < 12 ? 'am' : 'pm'}}</text>–{{lang === 'cn' ? slot.end_minute === 0 ? slot.end_hour + ':00' : slot.end_hour + ':' + slot.end_minute : slot.end_hour}}<text wx:if="{{lang !== 'cn'}}">{{slot.end_hour < 12 ? 'am' : 'pm'}}</text></view>
+            </view>
+          </view>
+        </view>
       </block>
 
       <view wx:if="{{!scheduling.right_away_available && (!scheduling.today_slots || !scheduling.today_slots.length) && scheduling.mode !== 'day_only' && !(scheduleMinDate && scheduleMaxDate)}}" class="muted slot-empty">

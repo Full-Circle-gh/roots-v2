@@ -79,6 +79,10 @@ function add(product, qty = 1, options = []) {
       // Server-derived: this line is excluded from coupons while its flash is
       // live (product flagged no_coupon_on_flash). Refreshed by reprice().
       coupon_blocked: !!product.coupon_blocked,
+      // Drop-ship line — supplier ships it straight to the customer. Stored so
+      // the cart/checkout show a "ships from supplier" tag instantly; reprice()
+      // also backfills it from the server for rows added before this existed.
+      ship_from_supplier: !!product.ship_from_supplier,
       qty,
       options,
     });
@@ -134,6 +138,7 @@ function reprice(lines) {
       if (cur !== val) { it[field] = val; changed = true; }
     };
     if (ln.coupon_blocked != null) apply('coupon_blocked', !!ln.coupon_blocked);
+    if (ln.ship_from_supplier != null) apply('ship_from_supplier', !!ln.ship_from_supplier);
     if (ln.unit_price != null)     apply('unit_price', Number(ln.unit_price));
     apply('is_flash', !!ln.is_flash);
     apply('regular_price', numOrNull(ln.regular_price));

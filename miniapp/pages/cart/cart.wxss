@@ -64,6 +64,20 @@
 .info { flex: 1; min-width: 0; }
 .name { font-size: calc(34rpx * var(--font-scale)); line-height: 1.05; }
 .meta { font-size: calc(20rpx * var(--font-scale)); color: var(--olive); margin-top: 4rpx; }
+/* Supplier-direct (drop-ship) tag — forest accent, reads as a delivery note. */
+.supplier-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  margin-top: 6rpx;
+  font-size: calc(19rpx * var(--font-scale));
+  letter-spacing: 0.03em;
+  color: var(--forest);
+  background: rgba(28, 58, 38, 0.08);
+  border-radius: 999rpx;
+  padding: 2rpx 14rpx;
+}
+.supplier-tag-glyph { font-weight: 700; }
 /* Chosen options (e.g. dressing) — darker than the size meta so the pick reads
    as a real choice, not a spec. */
 .opt-meta { font-size: calc(22rpx * var(--font-scale)); color: var(--ink); margin-top: 4rpx; line-height: 1.2; }

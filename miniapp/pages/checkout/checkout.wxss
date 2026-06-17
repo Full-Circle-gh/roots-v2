@@ -77,6 +77,21 @@
 /* Chosen options (e.g. dressing) on their own wrapped line under the name —
    the parent .line-name is nowrap+ellipsis, so reset that here. */
 .line-opts { white-space: normal; color: var(--ink); font-size: calc(22rpx * var(--font-scale)); margin-top: 4rpx; line-height: 1.2; }
+/* Supplier-direct (drop-ship) tag — forest accent; reset the parent's nowrap. */
+.line-supplier {
+  white-space: normal;
+  display: inline-flex;
+  align-items: center;
+  gap: 5rpx;
+  margin-top: 5rpx;
+  font-size: calc(19rpx * var(--font-scale));
+  letter-spacing: 0.03em;
+  color: var(--forest);
+  background: rgba(28, 58, 38, 0.08);
+  border-radius: 999rpx;
+  padding: 2rpx 12rpx;
+}
+.line-supplier-glyph { font-weight: 700; }
 .line-total { font-size: calc(28rpx * var(--font-scale)); display: flex; flex-direction: column; align-items: flex-end; }
 /* Flash-sale line: struck-through original price + a green "save ¥X" tag. */
 .line-was { color: var(--olive); text-decoration: line-through; margin-right: 10rpx; font-size: calc(24rpx * var(--font-scale)); }
@@ -216,6 +231,18 @@
 
 /* Form fields */
 .field { margin-bottom: 12rpx; }
+/* Delivery-area label — marks the picker as a required step so it no longer
+   reads as optional like the "Floor/unit (optional)" field below it. */
+.area-label {
+  margin-bottom: 6rpx;
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  color: rgba(26, 26, 23, 0.6);
+}
+.area-req { color: #c0392b; }
+/* Validation highlight — applied to the area picker when Place Order is hit
+   with no area chosen, so the customer's eye lands on the missing step. */
+.field-error { border-color: #c0392b !important; }
 /* "Choose on map" button — ink-framed (matches the addresses page) so it reads
    as the point-on-a-map shortcut above the manual address fields. */
 .map-pick-wrap { margin-bottom: 12rpx; }

@@ -2058,7 +2058,7 @@ router.get('/api/retail/products/:id', (req, res) => {
     // via /api/retail/products/:id/image, same as the main hero above.
     product.variants = tdb().prepare(
       `SELECT p.id, p.variant_label, p.variant_label_cn, p.name_en, p.name_cn, p.sku, p.weight AS size,
-              p.sell_price AS price, p.compare_at_price,
+              p.sell_price AS price, p.compare_at_price, p.ship_from_supplier,
               p.flash_price, p.flash_starts_at, p.flash_ends_at,
               p.flash_stock_limit, p.flash_sold,
               p.image_url, p.updated_at,
@@ -17792,7 +17792,7 @@ function priceCart(items, customerId) {
     const p = tdb().prepare(
       `SELECT id, sell_price AS price, compare_at_price,
               flash_price, flash_starts_at, flash_ends_at,
-              flash_stock_limit, flash_sold, no_coupon_on_flash
+              flash_stock_limit, flash_sold, no_coupon_on_flash, ship_from_supplier
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
@@ -17837,6 +17837,9 @@ function priceCart(items, customerId) {
       // checkout sums non-blocked lines into couponable_subtotal for the voucher
       // preview; /orders recomputes it authoritatively.
       coupon_blocked: !!(eff.is_flash && p.no_coupon_on_flash),
+      // Drop-ship line — lets the cart + checkout show a "ships from supplier"
+      // tag, and backfills the flag onto cart rows added before it existed.
+      ship_from_supplier: !!p.ship_from_supplier,
     });
   }
   return { subtotal: Math.round(subtotal * 100) / 100, totalQty, lines };

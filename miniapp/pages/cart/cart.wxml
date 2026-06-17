@@ -24,6 +24,9 @@
         <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="thumb thumb-empty"/>
         <view class="info">
           <view class="name f-bear">{{item.display_name}}</view>
+          <view wx:if="{{item.ship_from_supplier}}" class="supplier-tag f-toni">
+            <text class="supplier-tag-glyph">↗</text>{{lang === 'cn' ? '供应商直发 · 单独送达' : 'Ships from supplier · separately'}}
+          </view>
           <view wx:if="{{item.display_options}}" class="opt-meta f-toni">{{item.display_options}}</view>
           <view class="meta">{{item.display_size}}</view>
           <view class="qty">
