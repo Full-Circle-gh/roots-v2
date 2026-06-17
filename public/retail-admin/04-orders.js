@@ -1736,6 +1736,19 @@ function nextStatusFor(o) {
 // in memory; default = 'sku'.
 let _ITEMS_SORT_MODE = 'sku';
 let _OPEN_ORDER = null;
+// The current tenant's customer-facing web storefront origin (e.g.
+// "https://shop.example.com"), sent on the open order. The customer product
+// page lives there (shop.html, hash route #/product/<id>) — NOT on the store.*
+// backend host, so a relative link would just re-open the backend. Null when
+// the tenant has no web storefront domain yet → we skip the link.
+let _STOREFRONT_ORIGIN = null;
+// Build the "open product in a new tab" href for an order line. Returns '' when
+// the line has no product or the tenant has no storefront, so callers render
+// plain text instead of a dead link.
+function productHref(pid) {
+  if (!pid || !_STOREFRONT_ORIGIN) return '';
+  return `${_STOREFRONT_ORIGIN}/#/product/${pid}`;
+}
 // When an order is opened from a customer's Recent-orders row, remember that
 // customer's id so the order drawer can offer a "back to customer" button.
 // Null when the order was opened any other way (orders list, etc).
@@ -1881,8 +1894,9 @@ function renderItemRow(it, opts = {}) {
   const num = opts.index != null ? String(opts.index).padStart(2, '0') : '';
   const nm = orderItemNames(it);
   const name = `<span class="mf-name">${escapeHtml(nm.primary)}</span>`;
-  const nameCell = it.product_id
-    ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
+  const _href = productHref(it.product_id);
+  const nameCell = _href
+    ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
     : name;
   const zh = (nm.secondary || it.size)
     ? `<span class="mf-zh">${escapeHtml(nm.secondary)}${it.size ? (nm.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
@@ -2039,8 +2053,9 @@ function renderItemsAsGrid(items, showPack = true) {
   const rows = items.map(it => {
     const nn = orderItemNames(it);
     const nm = `<span class="oi-name">${escapeHtml(nn.primary)}</span>`;
-    const nameCell = it.product_id
-      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
+    const _href = productHref(it.product_id);
+    const nameCell = _href
+      ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
     const zh = (nn.secondary || it.size)
       ? `<div class="oi-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
@@ -2064,8 +2079,9 @@ function renderItemsAsCards(items, showPack = true) {
   const cards = items.map(it => {
     const nn = orderItemNames(it);
     const nm = `<span class="oic-name">${escapeHtml(nn.primary)}</span>`;
-    const nameCell = it.product_id
-      ? `<a href="/?openProduct=${it.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
+    const _href = productHref(it.product_id);
+    const nameCell = _href
+      ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
     const zh = (nn.secondary || it.size)
       ? `<div class="oic-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
@@ -2620,6 +2636,7 @@ function renderOrderTotalFooter(o, transitionsHtml) {
 }
 
 function renderOpenOrder(o) {
+  _STOREFRONT_ORIGIN = o.storefront_origin || null;
   const mount = $('#order-detail-mount');
   const multiParcel = (o.shipments?.length || 0) > 1;
   // Split the status actions: the green "go forward" ones stay as plain
@@ -2758,8 +2775,9 @@ function renderOpenOrder(o) {
                 const label = rn.primary
                   ? `<div>${escapeHtml(rn.primary)}</div>${rn.secondary ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(rn.secondary)}</div>` : ''}`
                   : `<span class="muted" style="font-family: var(--f-mono); font-size: 11px;">product_id ${r.product_id}</span>`;
-                const cell = r.product_id
-                  ? `<a href="/?openProduct=${r.product_id}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${label}</a>`
+                const _href = productHref(r.product_id);
+                const cell = _href
+                  ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${label}</a>`
                   : label;
                 return `
                 <tr>
