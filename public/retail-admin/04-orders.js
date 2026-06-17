@@ -3011,10 +3011,27 @@ function printReceiptTile(o) {
 }
 
 async function reprintOrder(id) {
+  // Let the operator pick WHICH store's printer to reprint at. Fetch the
+  // configured printers; if two or more stores have one, show a picker so the
+  // slip can be printed at any counter. With 0–1 printers there's no choice —
+  // print straight to the order's resolved store as before.
+  let storeId; // undefined → server resolves the order's own store
+  try {
+    const pr = await api('/api/retail-admin/printer');
+    const stores = (pr && pr.data && pr.data.stores || []).filter(s => s.sn);
+    if (stores.length >= 2) {
+      const picked = await pickReprintStore(stores);
+      if (picked === null) return;          // operator cancelled
+      storeId = picked;
+    }
+  } catch (e) { /* fall back to default routing */ }
+
   const btn = document.getElementById('reprint-' + id);
   if (btn) { btn.disabled = true; btn.style.opacity = '.5'; }
   try {
-    const r = await api(`/api/retail-admin/orders/${id}/print`, { method: 'POST' });
+    const opts = { method: 'POST' };
+    if (storeId != null) opts.body = { store_id: storeId };   // api() stringifies + sets Content-Type
+    const r = await api(`/api/retail-admin/orders/${id}/print`, opts);
     if (r.ok) toast('Receipt sent to printer · 小票已发送');
     else toast('Print failed · 打印失败: ' + (r.error || 'unknown'), 'err');
   } catch (e) {
@@ -3023,6 +3040,49 @@ async function reprintOrder(id) {
     openOrder(id, { instant: true });
     loadOrders();
   }
+}
+
+// Modal: choose which store's printer to reprint a receipt at. Resolves to the
+// chosen store id, or null if the operator closes/cancels.
+function pickReprintStore(stores) {
+  return new Promise((resolve) => {
+    const bg = document.createElement('div');
+    bg.className = 'pu-editor-bg';
+    bg.style.display = 'flex';
+    const rows = stores.map(s => {
+      const name = `${s.name_cn || s.name_en || s.code || ('Store ' + s.id)}`;
+      const sub = s.name_cn && s.name_en ? s.name_en : '';
+      return `<button class="btn" data-store="${s.id}" style="display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; text-align:left; padding:12px 14px;">
+          <span style="font-weight:700; font-size:14px;">${escapeHtml(name)}</span>
+          ${sub ? `<span class="muted" style="font-size:12px;">${escapeHtml(sub)}</span>` : ''}
+        </button>`;
+    }).join('');
+    bg.innerHTML = `
+      <div class="pu-editor" style="width: 420px; max-width: 92vw;" role="dialog" aria-modal="true">
+        <div class="pu-editor-head">
+          <div><h3 style="margin: 0; font-size: 14px;">Print at which store? · 在哪个门店打印？</h3></div>
+          <button class="btn" data-cancel>Close · 关闭</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display: block;">
+          <div style="display:flex; flex-direction:column; gap:8px;">${rows}</div>
+        </div>
+      </div>`;
+    mountFloatingPuModal(bg);
+
+    let done = false;
+    const finish = (val) => {
+      if (done) return; done = true;
+      document.removeEventListener('keydown', onKey);
+      bg.remove();
+      resolve(val);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') finish(null); };
+    bg.addEventListener('mousedown', (e) => { if (e.target === bg) finish(null); });
+    bg.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => finish(null)));
+    bg.querySelectorAll('[data-store]').forEach((b) =>
+      b.addEventListener('click', () => finish(parseInt(b.getAttribute('data-store'), 10))));
+    document.addEventListener('keydown', onKey);
+  });
 }
 
 // Guangzhou (UTC+8) wall-clock date as YYYY-MM-DD — the store's local "today".
