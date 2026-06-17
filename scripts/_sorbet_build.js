@@ -1,9 +1,9 @@
 // Build design blocks for the Raspberry Mango Sorbet group OWNER (#315), then
 // the existing inherit_variant_blocks.js pushes them to the 1-cup / 5-cup
-// siblings (#198, #316). Content is built ONLY from what's certain: it's a
-// raspberry + mango fruit sorbet, vegan (free_of: animal products) and
-// gluten-free. NO invented nutrition/health claims. The ingredient base
-// (water + cane sugar) is the standard sorbet base — VERIFY against the label.
+// siblings (#198, #316). Content is the operator-supplied copy verbatim:
+// a ready-to-eat frozen sorbet of raspberries + mango + lime juice/zest,
+// sweetened with maple syrup; dairy-free + plant-based; 100 g/cup, made in
+// Guangzhou. NO invented nutrition/health claims.
 //   node scripts/_sorbet_build.js            # dry-run
 //   APPLY=1 node scripts/_sorbet_build.js    # write blocks to #315 (backs up first)
 const Database = require('better-sqlite3');
@@ -18,54 +18,54 @@ const TEMPLATE = 'editorial_light';  // same template the other block products u
 
 const blocks = [
   { type: 'spec_strip', cells: [
-      { k_en: 'Type', k_cn: '类型', v_en: 'Fruit sorbet', v_cn: '水果雪葩' },
-      { k_en: 'Diet', k_cn: '饮食', v_en: 'Vegan · Gluten-free', v_cn: '纯素 · 无麸质' },
-      { k_en: 'Serve', k_cn: '食用', v_en: 'Keep frozen', v_cn: '冷冻保存' },
+      { k_en: 'Type', k_cn: '类型', v_en: 'Ready-to-eat frozen sorbet', v_cn: '即食冷冻果味冰沙' },
+      { k_en: 'Net Wt', k_cn: '净含量', v_en: '100 g per cup', v_cn: '每杯 100 克' },
+      { k_en: 'Origin', k_cn: '产地', v_en: 'Guangzhou, China', v_cn: '中国广州' },
     ], id: 'sp315' },
 
   { type: 'hero_intro',
-    kicker_en: 'Real fruit. No dairy. Just cold and bright.',
-    kicker_cn: '真实水果，不含乳，清冽明亮',
-    body_en: 'A fruit sorbet of ripe mango and tart raspberry — smooth, cold, and refreshing without a drop of dairy. The mango brings the mellow sweetness and the raspberry cuts back with a clean, bright tartness. Light on the palate and made to be scooped straight from frozen.',
-    body_cn: '熟芒果与酸树莓打成的水果雪葩——绵密、冰凉、清爽，不含一滴乳制品。芒果带来温润的甜，树莓收回一抹明亮的酸。入口轻盈，冷冻后即可挖取享用。',
-    highlight_en: 'Smooth, cold, and refreshing — without a drop of dairy.',
-    highlight_cn: '绵密、冰凉、清爽——不含一滴乳制品。',
+    kicker_en: 'Cold, bright, and straight to the point.',
+    kicker_cn: '冰爽、明亮、直接',
+    body_en: 'This sorbet blends juicy raspberries with tropical mango, sharpened by fresh lime juice and zest. Sweetened gently with maple syrup — just enough to let the fruit speak. No dairy. No heaviness. Just clean, frozen fruit energy.',
+    body_cn: '覆盆子与芒果融合，加入新鲜青柠汁与青柠皮，风味清晰、有冲击力。以枫糖轻柔调甜，让水果本身成为主角。不含乳制品，不厚重，只有干净的冷冻果味。',
+    highlight_en: 'No dairy. No heaviness. Just clean, frozen fruit energy.',
+    highlight_cn: '不含乳制品，不厚重，只有干净的冷冻果味。',
     id: 'he315' },
 
   { type: 'big_stat', stat: '100%', what_en: 'PLANT-BASED', what_cn: '纯植物',
-    sub_en: 'A dairy-free fruit sorbet.', sub_cn: '不含乳的水果雪葩。', bg: 'lime', id: 'bs315' },
+    sub_en: 'A dairy-free fruit sorbet.', sub_cn: '不含乳的水果冰沙。', bg: 'lime', id: 'bs315' },
 
   { type: 'why', rows: [
-      { claim_en: 'Made with real mango and raspberry — fruit-forward, not artificial.', claim_cn: '以真实芒果与树莓制成——果香主导，非人工调味。' },
-      { claim_en: 'Dairy-free and 100% plant-based — a sorbet, not an ice cream.', claim_cn: '不含乳、纯植物——是雪葩，而非冰淇淋。' },
-      { claim_en: 'Gluten-free.', claim_cn: '无麸质。' },
-      { claim_en: 'Light and refreshing — the raspberry keeps it bright, not heavy.', claim_cn: '轻盈清爽——树莓的酸让它明亮不腻。' },
+      { claim_en: 'Pure fruit flavor, not candy sweetness.', claim_cn: '真实水果风味，不是糖果味。' },
+      { claim_en: 'Light, refreshing, and easy to enjoy year-round.', claim_cn: '清爽轻盈，四季都适合。' },
+      { claim_en: 'A frozen dessert that actually feels good to eat.', claim_cn: '吃完没有负担感的冷冻甜点。' },
     ], id: 'wh315' },
 
   { type: 'ingredients_chips', items: [
+      { name_en: 'Raspberries', name_cn: '覆盆子', pct: '', lead: true },
       { name_en: 'Mango', name_cn: '芒果', pct: '', lead: true },
-      { name_en: 'Raspberry', name_cn: '树莓', pct: '', lead: true },
-      { name_en: 'Water', name_cn: '水', pct: '', lead: false },
-      { name_en: 'Cane Sugar', name_cn: '蔗糖', pct: '', lead: false },
+      { name_en: 'Lime Juice', name_cn: '青柠汁', pct: '', lead: false },
+      { name_en: 'Lime Zest', name_cn: '青柠皮', pct: '', lead: false },
+      { name_en: 'Maple Syrup', name_cn: '枫糖浆', pct: '', lead: false },
     ], id: 'in315' },
 
   { type: 'how_to_use', tiles: [
       { icon: '🥶', label_en: 'Keep Frozen', label_cn: '冷冻保存', sub_en: 'Store in the freezer until ready', sub_cn: '食用前置于冷冻室保存' },
-      { icon: '⏲', label_en: 'Soften Briefly', label_cn: '稍微回温', sub_en: 'Rest 1–2 min for easy scooping', sub_cn: '取出静置1–2分钟更易挖取' },
-      { icon: '🍨', label_en: 'Scoop & Serve', label_cn: '挖取享用', sub_en: 'Eat straight from the cup', sub_cn: '可直接从杯中食用' },
-      { icon: '🍓', label_en: 'Top It', label_cn: '加点配料', sub_en: 'Fresh fruit or a drizzle of syrup', sub_cn: '搭配鲜果或淋一点糖浆' },
+      { icon: '⏲', label_en: 'Soften If Firm', label_cn: '过硬先回温', sub_en: 'If too firm, let it sit a few minutes', sub_cn: '若过硬，可回温几分钟' },
+      { icon: '🍨', label_en: 'Scoop & Serve', label_cn: '挖取享用', sub_en: 'Into a chilled bowl or cone', sub_cn: '盛入冰镇碗或蛋筒' },
+      { icon: '🌿', label_en: 'Straight from Frozen', label_cn: '冷冻即食', sub_en: 'Designed to enjoy right out of the freezer', sub_cn: '专为冷冻状态食用设计' },
     ], id: 'hw315' },
 
   { type: 'storage_box',
-    left:  { icon: '🧊', head_en: 'Keep Frozen', head_cn: '全程冷冻', num: '-18°', unit_en: 'C or below', unit_cn: 'C 以下保存', alt: false },
-    right: { icon: '⏲', head_en: 'Once Softened', head_cn: '回温后', num: '', unit_en: 'Eat soon — avoid refreezing melted sorbet', unit_cn: '请尽快食用——避免化后再次冷冻', alt: true },
-    note_en: 'Keep frozen at -18°C or below. Let it soften for a minute before scooping; avoid refreezing once melted.',
-    note_cn: '请于 -18°C 以下全程冷冻。挖取前稍回温一分钟；化开后请勿再次冷冻。',
+    left:  { icon: '🧊', head_en: 'Keep Frozen', head_cn: '全程冷冻', num: '', unit_en: 'Keep frozen at all times', unit_cn: '需全程冷冻保存', alt: false },
+    right: { icon: '📅', head_en: 'Shelf Life', head_cn: '保质期', num: '', unit_en: 'See packaging', unit_cn: '见包装标注', alt: true },
+    note_en: 'Keep frozen at all times. If too firm, let it sit for a few minutes before scooping.',
+    note_cn: '需全程冷冻保存。若过硬，可回温几分钟后再挖取食用。',
     id: 'st315' },
 
   { type: 'notes_callout',
-    text_en: 'A dairy-free fruit sorbet. Natural colour and texture may vary between batches; this is normal and does not affect quality.',
-    text_cn: '本品为不含乳的水果雪葩。天然色泽与口感可能因批次略有差异，属正常现象，不影响品质。',
+    text_en: 'Plant-based frozen sorbet, made from real fruit and designed to be enjoyed straight from the freezer.',
+    text_cn: '植物性冷冻果味冰沙，由真实水果制成，专为冷冻状态食用设计。',
     id: 'nt315' },
 ];
 
