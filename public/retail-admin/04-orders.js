@@ -2249,7 +2249,7 @@ function renderGzMethodToggle(o, s) {
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">${cuT('Dispatch method', '配送方式')}</div>
       <div class="row" style="gap:6px;">
         ${seg(isLocal, 'local', 'scooter', 'Rider', '骑手配送')}
-        ${seg(!isLocal, 'land', 'transit', 'JD logistics', '京东物流')}
+        ${seg(!isLocal, 'land', 'van', 'JD logistics', '京东物流')}
       </div>
       <div class="muted" style="font-size:11px; margin-top:6px;">${cuT(
         'Choose how this parcel ships — a same-city rider (set an arrival time) or JD logistics (attach a waybill).',
