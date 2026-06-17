@@ -1058,18 +1058,21 @@ async function _pollUnseenInbox() {
 function pickupIcon(size = 12) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px;margin-right:1px"><path d="M4 10.5V20h16v-9.5"/><path d="M3.5 6.5 5 3.5h14l1.5 3a3 3 0 0 1-5.7 1.3A3 3 0 0 1 12 7.5a3 3 0 0 1-2.8.3A3 3 0 0 1 3.5 6.5z"/><path d="M9.5 20v-5h5v5"/></svg>`;
 }
-// `scheduled_for` reaches the client in two shapes: a bare SQLite UTC stamp
-// ("YYYY-MM-DD HH:MM:SS", which needs a 'Z' to parse as UTC) or a full ISO
-// string that already carries 'T'+'Z' (slot resolution stores
-// dt.toISOString(), and localizeOrderTimes deliberately leaves it untouched).
-// Appending 'Z' unconditionally turned the ISO form into "…ZZ" → Invalid Date,
-// which silently blanked the ship-by value: with no valid date the cell/tile
-// drops the urgency badge and collapses to the pure-Chinese slot label, which
-// the EN/CN block classifier then mis-pairs with the English sub-line and hides
-// in English view. Only append 'Z' when the string isn't already ISO/tz-aware.
+// A date string reaches the client in three shapes: a bare SQLite UTC stamp
+// ("YYYY-MM-DD HH:MM:SS", which needs a 'Z' to parse as UTC); a full ISO string
+// that already carries 'T'+'Z' (slot resolution stores dt.toISOString(), and
+// localizeOrderTimes deliberately leaves it untouched); or a DATE-ONLY string
+// ("YYYY-MM-DD", how promised_ship_date / promised_delivery_date are stored via
+// toYmdLocal). Appending 'Z' unconditionally broke two of these: the ISO form
+// became "…ZZ" and the date-only form became "YYYY-MM-DDZ" — both Invalid Date,
+// which silently blanked the ship-by value (the cell collapsed to "NaN月NaN日"
+// for fresh-batch orders, and elsewhere dropped the urgency badge). Only append
+// 'Z' for the bare date+time stamp (the one shape that actually has a space).
 function parseSchedFor(s) {
   const v = String(s == null ? '' : s);
-  return new Date(/[TZ]/.test(v) ? v : v.replace(' ', 'T') + 'Z');
+  if (/[TZ]/.test(v)) return new Date(v);              // already ISO / tz-aware
+  if (v.includes(' ')) return new Date(v.replace(' ', 'T') + 'Z'); // "YYYY-MM-DD HH:MM:SS" UTC
+  return new Date(v);                                  // bare "YYYY-MM-DD" → UTC midnight
 }
 // A scheduled time WINDOW (e.g. "16:00–18:00") persists scheduled_for at the
 // window START, but the order isn't late until the window CLOSES — anchoring
