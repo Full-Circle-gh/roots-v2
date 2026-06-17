@@ -334,9 +334,15 @@ async function openAddressToChinese(orderId) {
 function openEditShipTo(orderId) {
   const o = _OPEN_ORDER;
   if (!o || o.id !== orderId) { toast(cuT('Re-open the order first', '请先重新打开订单'), 'error'); return; }
-  let cur = {};
-  try { cur = JSON.parse(o.address_json || '{}'); } catch {}
+  // The order GET already parses address_json into o.address (and deletes the
+  // raw string), so prefill from there. Fall back to splitting address_full for
+  // any legacy row that has no structured address object.
+  let cur = (o.address && typeof o.address === 'object') ? o.address : {};
   if (cur.pickup) { toast(cuT('Pickup order — no shipping address', '自提订单 — 无收货地址'), 'error'); return; }
+  if (!cur.address && !cur.province && !cur.city && o.address_full) {
+    const parts = String(o.address_full).trim().split(/\s+/);
+    cur = { province: parts[0] || '', city: parts[1] || '', district: parts[2] || '', address: parts.slice(3).join(' ') };
+  }
 
   const field = (id, labelEn, labelCn, val) => `
     <div class="field" style="margin-bottom:10px;">

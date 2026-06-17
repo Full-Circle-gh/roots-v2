@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v148-refund-do-not-ship';
+const CACHE = 'roots-v2-shell-v149-edit-shipto-prefill';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
