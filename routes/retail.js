@@ -16004,6 +16004,42 @@ router.post('/api/retail-admin/orders/:id/undo-dispatch', requireRetailAdmin, ex
   res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
 });
 
+// Reverse an accidental "Mark preparing". The status machine is forward-only, so
+// without this an operator who advanced paid → preparing too early was stuck with
+// only forward moves or Refund as an exit. Same shape as undo-dispatch one step
+// back: only allowed while STILL in 'preparing' and no parcel carries a waybill
+// (a printed-but-shipped guard / concurrency guard). Silent — the customer is not
+// notified, matching a quick correction.
+router.post('/api/retail-admin/orders/:id/undo-preparing', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (o.status !== 'preparing') {
+    return res.status(409).json({ success: false, error: 'not_reversible', from: o.status });
+  }
+  // A parcel has truly shipped only if a courier waybill is attached.
+  const shipped = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_shipments
+      WHERE order_id = ? AND TRIM(COALESCE(tracking_number, '')) <> ''`
+  ).get(id).n;
+  if (shipped) {
+    return res.status(409).json({ success: false, error: 'already_shipped',
+      message: 'A parcel already has a waybill — cancel the waybill first to roll this back.' });
+  }
+  // Atomic flip: only roll back if STILL preparing (guards a double-click / a
+  // concurrent operator who already advanced or refunded it).
+  const upd = tdb().prepare(
+    "UPDATE retail_orders SET status = 'paid', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'preparing'"
+  ).run(id);
+  if (upd.changes !== 1) {
+    const cur = tdb().prepare('SELECT status FROM retail_orders WHERE id = ?').get(id)?.status;
+    return res.status(409).json({ success: false, error: 'not_reversible', from: cur });
+  }
+  logActivity(req.user.id, req.user.username, 'status_change', 'retail_order', id,
+    { from: 'preparing', to: 'paid', reason: 'undo_preparing' }, req.ip);
+  res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
+});
+
 // ─── Refund processing workflow ───────────────────────────────────────
 // Workflow: requested → reviewing → approved → paid (or rejected / withdrawn)
 //
