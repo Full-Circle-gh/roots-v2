@@ -2587,6 +2587,23 @@ function payContext() {
 // its OWN accounts and can never clobber Roots' live env.
 function integ() { return getTenantCreds(currentTenantId()).integrations; }
 
+// Resolve the current tenant's customer-facing web storefront origin
+// ("https://shop.example.com") from the control-plane tenant_domains table.
+// Used by the backend order drawer to link a line item to its public product
+// page, which lives on the storefront host — not the store.* backend host.
+// Returns null when the tenant has no active storefront domain yet.
+function storefrontOriginForTenant() {
+  try {
+    const tid = currentTenantId() || ROOTS_TENANT_ID;
+    const row = db.prepare(
+      `SELECT host FROM tenant_domains
+        WHERE tenant_id = ? AND status = 'active'
+        ORDER BY is_primary DESC, id ASC LIMIT 1`
+    ).get(tid);
+    return row && row.host ? 'https://' + row.host : null;
+  } catch { return null; }
+}
+
 // Public origin for tenant async-notify URLs — the same server/domain as Roots
 // (single-server SaaS), just a tenant-scoped path. Derived from Roots' notify
 // URL so there's no new config to set; WeChat Pay v3 accepts any HTTPS URL.
@@ -13300,6 +13317,11 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   o.tracking = o.shipments[0]?.tracking || buildTrackingView(o);
   // Split-package suggestion — drives the banner above Items in the drawer.
   try { o.shipment_suggestion = buildShipmentSuggestion(id); } catch (e) { o.shipment_suggestion = null; }
+  // The customer-facing web storefront lives on the tenant's own domain (NOT
+  // the store.* backend host), so the drawer's "open product in a new tab"
+  // links must point there — a relative /?openProduct=… would just re-open the
+  // backend. null when the tenant has no web storefront domain yet.
+  o.storefront_origin = storefrontOriginForTenant();
   res.json({ success: true, data: o });
 });
 
