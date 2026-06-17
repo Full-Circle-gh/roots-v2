@@ -2176,34 +2176,40 @@ function renderShipmentCard(o, s) {
       ${renderItemsTable(s.items, false)}
       ${actions}
       ${mode === 'local'
-        ? (['paid', 'preparing', 'dispatched', 'delivered'].includes(o.status) ? renderLocalEtaCard(o, s) : '')
+        ? (!['dispatched', 'delivered'].includes(s.state || 'pending') && ['paid', 'preparing'].includes(o.status) ? renderLocalEtaCard(o, s) : '')
         : ''}
       ${mode === 'supplier' ? renderSupplierTrackingBlock(o, s) : ''}
     </div>`;
   // Carrier tracking for a dispatched/delivered parcel is NOT rendered here —
   // it's hoisted to the top of the drawer (hoistedTracking) so the operator can
   // add a waybill + watch status the moment the order ships, no scrolling.
-  // Local same-city parcels keep their ETA card in place (above), no waybill.
+  // Local same-city parcels do the same once dispatched: their ETA card hoists
+  // to the top (it's the rider's arrival time the operator watches). Before
+  // dispatch (paid/preparing) it stays inline here so the time can be set early.
 }
 
-// Once a parcel is on its way, its tracking is the one thing the operator
-// watches — so for any dispatched/delivered non-local parcel we lift the
-// tracking card out of the buried items section up to the top of the drawer,
-// directly under the status actions. Multi-parcel orders stack one card per
-// shipped parcel, each labelled. Returns '' when nothing is shipped yet.
+// Once a parcel is on its way, the thing the operator watches — its waybill, or
+// for a same-city parcel the rider's arrival time — is lifted out of the buried
+// items section up to the top of the drawer, directly under the status actions.
+// Carrier parcels hoist their tracking card; local (Guangzhou same-city) parcels
+// hoist their ETA card. Multi-parcel orders stack one card per shipped parcel,
+// each labelled. Returns '' when nothing is shipped yet.
 function hoistedTracking(o) {
   const all = o.shipments || [];
   const multi = all.length > 1;
   const cards = all.map((s, i) => {
-    // Local parcels carry an ETA, not a waybill; supplier parcels render their
-    // own tracking card inline (always visible, even before "dispatch") — so
-    // neither is hoisted here.
-    if ((s.mode || 'local') === 'local' || s.mode === 'supplier') return '';
+    const mode = s.mode || 'local';
+    // Supplier parcels render their own tracking card inline (always visible,
+    // even before "dispatch"), so they're never hoisted here.
+    if (mode === 'supplier') return '';
     if (!['dispatched', 'delivered'].includes(s.state || 'pending')) return '';
     const label = multi
       ? `<div class="od-trk-parcel">${cuT(`Parcel ${i + 1}`, `包裹 ${i + 1}`)}</div>`
       : '';
-    return label + renderShipmentTrackingCard(o, s, true);
+    // Local same-city: no waybill — hoist the arrival-time (ETA) card instead.
+    return label + (mode === 'local'
+      ? renderLocalEtaCard(o, s, true)
+      : renderShipmentTrackingCard(o, s, true));
   }).filter(Boolean);
   if (!cards.length) return '';
   return `<div class="od-tracking-top">${cards.join('')}</div>`;
@@ -2214,12 +2220,15 @@ function hoistedTracking(o) {
 // time the customer sees on their order page. Stored on the shipment row as a
 // 24h "HH:MM" string. Editable from 'paid' onward (the rider's arrival window
 // is usually known before the parcel is marked out for delivery).
-function renderLocalEtaCard(o, s) {
+function renderLocalEtaCard(o, s, hoisted) {
   const sid = s.id;
   const eta = s.local_eta || '';            // 'HH:MM' 24h, or '' when unset
   const pretty = eta ? formatEtaPretty(eta) : '';
+  // Inline (under the items) it sits below a dashed divider; hoisted to the top
+  // of the drawer it stands on its own, so drop the divider/top margin there.
+  const wrapStyle = hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);';
   return `
-    <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);" id="eta-card-${sid}">
+    <div style="${wrapStyle}" id="eta-card-${sid}">
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Delivery time · 送达时间</div>
       ${eta ? `
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
