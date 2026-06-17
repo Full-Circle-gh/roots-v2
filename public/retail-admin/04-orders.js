@@ -1736,13 +1736,14 @@ function nextStatusFor(o) {
 // in memory; default = 'sku'.
 let _ITEMS_SORT_MODE = 'sku';
 let _OPEN_ORDER = null;
-// Build the "open product in a new tab" href for an order line — the product
-// editor, on the same backend host, which self-auths with the operator's
-// session and always resolves. Returns '' when the line has no product (e.g. a
-// free gift / ad-hoc line) so callers render plain text instead of a dead link.
+// Build the "open product in a new tab" href for an order line — a deep-link
+// into THIS backend that lands on the Products tab focused on the product (see
+// the /?product=ID handler in the boot IIFE). Same host, so it self-auths with
+// the operator's session. Returns '' when the line has no product (e.g. a free
+// gift / ad-hoc line) so callers render plain text instead of a dead link.
 function productHref(pid) {
   if (!pid) return '';
-  return `/product-editor?id=${encodeURIComponent(pid)}`;
+  return `/?product=${encodeURIComponent(pid)}`;
 }
 // When an order is opened from a customer's Recent-orders row, remember that
 // customer's id so the order drawer can offer a "back to customer" button.

@@ -1140,6 +1140,13 @@ let ENTITLEMENTS = {};
   lbInitNavState();     // seed the Leaderboard nav OFF pill (lazy form loads later)
   votInitNavState();    // seed the Voting nav OPEN pill (lazy list loads later)
   fsInitNavState();     // seed the Flash sales nav LIVE pill (lazy list loads later)
+  // Deep-link: /?product=ID opens the Products tab focused on that product —
+  // used by the order drawer's "open product in a new tab" item links so the
+  // operator lands on the product page (this backend), not a blank dashboard.
+  try {
+    const _dlPid = parseInt(new URLSearchParams(location.search).get('product'), 10);
+    if (_dlPid > 0 && typeof dashOpenProductFromFeed === 'function') dashOpenProductFromFeed(_dlPid);
+  } catch {}
 })();
 
 // ── Account menu — Google-style profile circle + dropdown ────────────────
