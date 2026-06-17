@@ -15758,6 +15758,14 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // Guarded to genuine pending→paid transitions so re-saving a paid order
     // doesn't reprint.
     if (o.status !== 'paid') autoPrintOrder(id);
+    // Fire the merchant WeCom new-order alert, same as the gateway callbacks do
+    // inside markOrderPaid(). This admin "Mark paid" path bypasses
+    // markOrderPaid(), so without this an off-app (cash / bank) order would
+    // never ping the staff group. Guarded to genuine pending→paid transitions
+    // so re-saving a paid order doesn't re-alert.
+    if (o.status !== 'paid') {
+      try { sendWecomOrderAlert(id); } catch (e) { console.warn('[admin mark-paid wecom]', e.message); }
+    }
   }
   // Stock side-effects of cancel / refund. cancelled before payment just
   // releases the active reservation; refund of a paid order reverses
