@@ -1730,18 +1730,13 @@ function nextStatusFor(o) {
 // in memory; default = 'sku'.
 let _ITEMS_SORT_MODE = 'sku';
 let _OPEN_ORDER = null;
-// The current tenant's customer-facing web storefront origin (e.g.
-// "https://shop.example.com"), sent on the open order. The customer product
-// page lives there (shop.html, hash route #/product/<id>) — NOT on the store.*
-// backend host, so a relative link would just re-open the backend. Null when
-// the tenant has no web storefront domain yet → we skip the link.
-let _STOREFRONT_ORIGIN = null;
-// Build the "open product in a new tab" href for an order line. Returns '' when
-// the line has no product or the tenant has no storefront, so callers render
-// plain text instead of a dead link.
+// Build the "open product in a new tab" href for an order line — the product
+// editor, on the same backend host, which self-auths with the operator's
+// session and always resolves. Returns '' when the line has no product (e.g. a
+// free gift / ad-hoc line) so callers render plain text instead of a dead link.
 function productHref(pid) {
-  if (!pid || !_STOREFRONT_ORIGIN) return '';
-  return `${_STOREFRONT_ORIGIN}/#/product/${pid}`;
+  if (!pid) return '';
+  return `/product-editor?id=${encodeURIComponent(pid)}`;
 }
 // When an order is opened from a customer's Recent-orders row, remember that
 // customer's id so the order drawer can offer a "back to customer" button.
@@ -2630,7 +2625,6 @@ function renderOrderTotalFooter(o, transitionsHtml) {
 }
 
 function renderOpenOrder(o) {
-  _STOREFRONT_ORIGIN = o.storefront_origin || null;
   const mount = $('#order-detail-mount');
   const multiParcel = (o.shipments?.length || 0) > 1;
   // Split the status actions: the green "go forward" ones stay as plain
