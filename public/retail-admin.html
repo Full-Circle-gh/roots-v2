@@ -762,22 +762,22 @@
          for fapiao, so this stays deltas/sparkline-free; the oldest-pending
          tile flips to .alert as an SLA nudge. -->
     <div class="fc-kpis" id="inv-kpis">
-      <div class="fc-kpi accent">
+      <div class="fc-kpi accent is-clickable" role="button" tabindex="0" onclick="invKpiJump('requested')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();invKpiJump('requested')}" title="Show pending · 查看待开">
         <div class="lbl">Pending · 待开</div>
         <div class="val" id="inv-kpi-pending">—</div>
         <div class="sub">to issue · 待处理</div>
       </div>
-      <div class="fc-kpi">
+      <div class="fc-kpi is-clickable" role="button" tabindex="0" onclick="invKpiJump('requested')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();invKpiJump('requested')}" title="Show pending · 查看待开">
         <div class="lbl">Awaiting value · 待开金额</div>
         <div class="val" id="inv-kpi-value">—</div>
         <div class="sub" id="inv-kpi-value-sub">&nbsp;</div>
       </div>
-      <div class="fc-kpi">
+      <div class="fc-kpi is-clickable" role="button" tabindex="0" onclick="invKpiJump('issued')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();invKpiJump('issued')}" title="Show issued · 查看已开">
         <div class="lbl">Issued · 已开</div>
         <div class="val" id="inv-kpi-issued">—</div>
         <div class="sub">fapiao done · 已开票</div>
       </div>
-      <div class="fc-kpi" id="inv-kpi-age-tile">
+      <div class="fc-kpi is-clickable" id="inv-kpi-age-tile" role="button" tabindex="0" onclick="invKpiJump('requested')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();invKpiJump('requested')}" title="Show pending · 查看待开">
         <div class="lbl">Oldest pending · 最久待开</div>
         <div class="val" id="inv-kpi-age">—</div>
         <div class="sub" id="inv-kpi-age-sub">&nbsp;</div>

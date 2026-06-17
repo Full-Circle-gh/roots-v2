@@ -749,6 +749,9 @@
   /* Clickable catalogue-health tiles double as quick status filters. The
      cursor + a slightly firmer hover say "press me"; .pa-kpi-on is the
      selected state (accent ring), cleared by clicking the same tile again. */
+  .fc-kpi.is-clickable { cursor: pointer; user-select: none; }
+  .fc-kpi.is-clickable:active { transform: translateY(0); }
+  .fc-kpi.is-clickable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .fc-kpi.pa-kpi-click { cursor: pointer; user-select: none; }
   .fc-kpi.pa-kpi-click:active { transform: translateY(0); }
   .fc-kpi.pa-kpi-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset, 0 2px 4px rgba(18,22,26,.06), 0 12px 28px rgba(18,22,26,.11); }

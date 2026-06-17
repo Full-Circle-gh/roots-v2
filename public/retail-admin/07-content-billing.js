@@ -571,6 +571,12 @@ function invSetFilter(f) {
   document.querySelectorAll('#inv-filter button').forEach(b => b.classList.toggle('active', b.dataset.f === f));
   loadInvoices();
 }
+// ── KPI tile → set the matching list filter and scroll the list into view.
+function invKpiJump(f) {
+  invSetFilter(f);
+  const host = document.getElementById('invoices-list');
+  if (host && host.scrollIntoView) host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 // ── Invoices KPI strip — fapiao queue summary on the shared fc-* layer.
 // Reuses the same /invoices?status=all payload the list already speaks; the
 // ORDER BY puts every un-issued row first, so even if the 200-row cap clips
