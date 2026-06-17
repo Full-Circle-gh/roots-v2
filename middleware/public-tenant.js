@@ -17,15 +17,50 @@
 const db = require('../database');
 const { getTenantDb, tenantAls, ROOTS_TENANT_ID } = require('../lib/tenant-db');
 
+// Normalize a Host header to a bare lowercased hostname (strip any :port).
+function normalizeHost(host) {
+  return String(host || '').trim().toLowerCase().replace(/:\d+$/, '');
+}
+
+// Look up an ACTIVE storefront domain → its owning tenant, regardless of which
+// tenant it is (including Roots #1). Returns { tenantId } or null. Used by the
+// SERVING decision in server.js ("is this host a storefront at all?"), which
+// must fire for Roots' own website too — unlike resolveTenantByHost below,
+// which collapses Roots to the default (global) data scope.
+function lookupStorefrontHost(host) {
+  try {
+    const h = normalizeHost(host);
+    if (!h) return null;
+    const row = db.prepare(
+      `SELECT t.id AS tenant_id, t.status AS tenant_status
+         FROM tenant_domains d JOIN tenants t ON t.id = d.tenant_id
+        WHERE d.host = ? AND d.status = 'active'`
+    ).get(h);
+    if (row && row.tenant_status === 'active') return { tenantId: row.tenant_id };
+  } catch (e) { /* tenant_domains not present yet → not a storefront host */ }
+  return null;
+}
+
+// Resolve a Host to the tenant DATA scope: a non-Roots active tenant id, or
+// null (= default/global db, which IS Roots). Mirrors the AppID semantics.
+function resolveTenantByHost(host) {
+  const m = lookupStorefrontHost(host);
+  if (m && m.tenantId !== ROOTS_TENANT_ID) return m.tenantId;
+  return null;
+}
+
 // Resolve the tenant for a public request, or null for "default (Roots)".
+// Two signals, checked in order: the mini-app's AppID header, then (for the
+// browser website, which sends no such header) the request Host.
 function resolvePublicTenant(req) {
   try {
     const appid = String(req.get('x-wx-appid') || '').trim();
-    if (!appid) return null;
-    const t = db.prepare('SELECT id, status FROM tenants WHERE wx_appid = ?').get(appid);
-    if (t && t.status === 'active' && t.id !== ROOTS_TENANT_ID) return t.id;
-  } catch (e) { /* wx_appid column not present yet → fall through to Roots */ }
-  return null;
+    if (appid) {
+      const t = db.prepare('SELECT id, status FROM tenants WHERE wx_appid = ?').get(appid);
+      if (t && t.status === 'active' && t.id !== ROOTS_TENANT_ID) return t.id;
+    }
+  } catch (e) { /* wx_appid column not present yet → fall through */ }
+  return resolveTenantByHost(req.hostname || req.get('host'));
 }
 
 // Express middleware for the public /api/retail/* surface. Enters the tenant's
@@ -37,4 +72,7 @@ function publicTenantScope(req, res, next) {
   return tenantAls.run(getTenantDb(tid), () => next());
 }
 
-module.exports = { publicTenantScope, resolvePublicTenant };
+module.exports = {
+  publicTenantScope, resolvePublicTenant,
+  resolveTenantByHost, lookupStorefrontHost, normalizeHost,
+};

@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#F2E7DF">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<title>Storefront</title>
+<style>
+  /* ── Brand fonts (served from /assets/fonts, shared with the mini-app) ── */
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); unicode-range:U+0024,U+0025,U+0030-0039,U+00A5; font-display:swap; }
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'League Gothic'; src:url('/assets/fonts/LeagueGothic.ttf') format('truetype'); font-display:swap; }
+  @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW5.ttf') format('truetype'); font-weight:500; font-display:swap; }
+  @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW7.ttf') format('truetype'); font-weight:700; font-display:swap; }
+  @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW9.ttf') format('truetype'); font-weight:900; font-display:swap; }
+
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
+    --berry:#E96174; --carrot:#FF6B0C; --papaya:#FFAF60; --corn:#F2CA6C;
+    --sky:#B2CFED; --pea:#7BBD3B; --lotus:#EEB8E4; --pink:#F4B8CB; --citrus:#E7E74C;
+    --accent:#365329;            /* overridden from tenant config at runtime */
+    --paper:#fff; --line:rgba(0,0,0,.08); --muted:#7c7c72;
+    --bf-bear:'Bear Serif','DF Yuan','New York',Georgia,serif;
+    --bf-toni:'Toni Grotesk','DF Yuan',-apple-system,BlinkMacSystemFont,sans-serif;
+    --bf-gothic:'League Gothic','DF Yuan','Bebas Neue',Impact,sans-serif;
+    --bf-yuan:'DF Yuan','PingFang SC','Hiragino Sans GB',sans-serif;
+    --wrap:1180px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    font-family:var(--bf-toni);
+    background:var(--oat); color:var(--ink);
+    min-height:100dvh; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
+    display:flex; flex-direction:column;
+  }
+  a{color:inherit;text-decoration:none;}
+  img{display:block;max-width:100%;}
+  button{font-family:inherit;cursor:pointer;}
+
+  /* Boot splash */
+  #boot{position:fixed;inset:0;display:grid;place-items:center;background:var(--oat);z-index:90;transition:opacity .35s;}
+  #boot.gone{opacity:0;pointer-events:none;}
+  .spin{width:34px;height:34px;border-radius:50%;border:3px solid rgba(0,0,0,.12);border-top-color:var(--accent);animation:spin 1s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ── Header ── */
+  header.bar{position:sticky;top:0;z-index:40;background:rgba(255,255,255,.92);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--line);}
+  .bar-in{max-width:var(--wrap);margin:0 auto;display:flex;align-items:center;gap:18px;padding:13px 20px;}
+  .wordmark{font-family:var(--bf-bear);font-size:24px;letter-spacing:.3px;color:var(--accent);white-space:nowrap;}
+  nav.links{display:flex;gap:18px;font-size:15px;}
+  nav.links a{padding:4px 0;border-bottom:2px solid transparent;color:#4a4a44;}
+  nav.links a.on,nav.links a:hover{color:var(--ink);border-color:var(--accent);}
+  .search{flex:1;display:flex;align-items:center;gap:8px;background:#fff;border:1.5px solid var(--line);border-radius:999px;padding:9px 16px;max-width:420px;}
+  .search:focus-within{border-color:var(--accent);}
+  .search input{flex:1;border:0;outline:0;font:inherit;font-size:14px;background:transparent;color:var(--ink);}
+  .search svg{width:17px;height:17px;color:var(--muted);flex:none;}
+  .bar .spacer{flex:1;}
+  .iconbtn{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;border:1.5px solid var(--line);background:#fff;color:var(--ink);}
+  .iconbtn svg{width:19px;height:19px;}
+  .lang{display:inline-flex;border:1.5px solid var(--line);border-radius:999px;overflow:hidden;background:#fff;}
+  .lang button{border:0;background:transparent;padding:8px 13px;font-size:13px;color:var(--muted);}
+  .lang button.active{background:var(--accent);color:#fff;}
+
+  main{flex:1;width:100%;}
+  .wrap{max-width:var(--wrap);margin:0 auto;padding:0 20px;}
+  .sec{padding:34px 0;}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:18px;gap:12px;}
+  .kicker{font-family:var(--bf-gothic);letter-spacing:1.5px;text-transform:uppercase;font-size:14px;color:var(--accent);}
+  .ttl{font-family:var(--bf-bear);font-size:clamp(22px,3.4vw,30px);line-height:1.1;}
+  .more{font-size:14px;color:var(--accent);font-weight:600;white-space:nowrap;}
+
+  /* ── Hero ── */
+  .hero{background:var(--accent);color:#fff;border-radius:22px;padding:clamp(30px,6vw,64px);margin-top:26px;position:relative;overflow:hidden;}
+  .hero h1{font-family:var(--bf-bear);font-size:clamp(32px,6vw,58px);line-height:1.02;margin-bottom:14px;}
+  .hero p{font-size:clamp(15px,2.4vw,19px);max-width:46ch;opacity:.92;}
+  .hero .cta{display:inline-block;margin-top:22px;background:#fff;color:var(--accent);font-weight:700;padding:13px 26px;border-radius:999px;font-size:15px;}
+
+  /* ── Product grid + cards ── */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:18px;}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:16px;overflow:hidden;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s;}
+  .card:hover{transform:translateY(-3px);box-shadow:0 12px 30px rgba(0,0,0,.09);}
+  .card .ph{position:relative;aspect-ratio:1/1;background:#f3efe9;}
+  .card .ph img{width:100%;height:100%;object-fit:cover;}
+  .card .ph .none{position:absolute;inset:0;display:grid;place-items:center;color:#c7c0b5;font-size:13px;}
+  .card .body{padding:13px 14px 16px;display:flex;flex-direction:column;gap:5px;flex:1;}
+  .card .nm{font-size:15px;line-height:1.25;font-weight:600;}
+  .card .nm .cn{display:block;font-family:var(--bf-yuan);font-size:13px;color:var(--muted);font-weight:500;margin-top:2px;}
+  .card .tag{font-size:12.5px;color:var(--muted);line-height:1.35;}
+  .card .prices{margin-top:auto;display:flex;align-items:baseline;gap:8px;padding-top:6px;}
+  .card .now{font-family:var(--bf-bear);font-size:19px;color:var(--ink);}
+  .card .was{font-size:13px;color:var(--muted);text-decoration:line-through;}
+  .badge{position:absolute;top:10px;left:10px;background:var(--berry);color:#fff;font-size:12px;font-weight:700;padding:4px 9px;border-radius:999px;}
+  .pill-sold{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:3px 8px;border-radius:999px;}
+  .opt-cue{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 8px;align-self:flex-start;}
+
+  /* ── Category chips ── */
+  .chips{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px;}
+  .chip{border:1.5px solid var(--line);background:#fff;border-radius:999px;padding:9px 16px;font-size:14px;color:#4a4a44;white-space:nowrap;}
+  .chip.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+  .chip .n{opacity:.6;font-size:12px;margin-left:5px;}
+
+  /* category tiles (home) */
+  .cattiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;}
+  .cattile{position:relative;aspect-ratio:4/3;border-radius:16px;overflow:hidden;background:var(--olive);color:#fff;display:flex;align-items:flex-end;padding:14px;}
+  .cattile img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.78;}
+  .cattile .lbl{position:relative;font-family:var(--bf-bear);font-size:18px;text-shadow:0 1px 8px rgba(0,0,0,.5);}
+  .cattile .lbl .n{display:block;font-family:var(--bf-toni);font-size:12px;opacity:.85;font-weight:500;}
+
+  /* ── Toolbar (shop) ── */
+  .toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap;}
+  .toolbar .count{font-size:14px;color:var(--muted);}
+  select.sort{font:inherit;font-size:14px;border:1.5px solid var(--line);border-radius:999px;padding:9px 14px;background:#fff;color:var(--ink);}
+
+  /* ── Product detail ── */
+  .pd{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:40px;padding:30px 0 50px;}
+  .pd-gallery .main{aspect-ratio:1/1;background:#f3efe9;border-radius:20px;overflow:hidden;}
+  .pd-gallery .main img{width:100%;height:100%;object-fit:cover;}
+  .pd-thumbs{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap;}
+  .pd-thumbs button{width:64px;height:64px;border-radius:12px;overflow:hidden;border:2px solid transparent;background:#f3efe9;padding:0;}
+  .pd-thumbs button.on{border-color:var(--accent);}
+  .pd-thumbs img{width:100%;height:100%;object-fit:cover;}
+  .pd h1{font-family:var(--bf-bear);font-size:clamp(26px,4vw,38px);line-height:1.06;}
+  .pd .cn{font-family:var(--bf-yuan);font-size:18px;color:var(--muted);margin-top:4px;}
+  .pd .tagline{font-size:16px;color:#54544c;margin-top:12px;line-height:1.5;}
+  .pd .price-row{display:flex;align-items:baseline;gap:12px;margin:20px 0;}
+  .pd .price-now{font-family:var(--bf-bear);font-size:34px;color:var(--ink);}
+  .pd .price-was{font-size:17px;color:var(--muted);text-decoration:line-through;}
+  .pd .flash-tag{background:var(--berry);color:#fff;font-size:12px;font-weight:700;padding:4px 10px;border-radius:999px;}
+  .pd .rating{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:14px;margin-bottom:18px;}
+  .stars{color:var(--corn);letter-spacing:1px;}
+  .stars .off{color:#dcd6cc;}
+  .buybar{display:flex;gap:12px;margin:22px 0;}
+  .btn-primary{background:var(--accent);color:#fff;border:0;border-radius:999px;padding:15px 30px;font-size:16px;font-weight:700;flex:1;}
+  .btn-ghost{background:#fff;border:1.5px solid var(--line);border-radius:999px;padding:15px 20px;font-size:16px;}
+  .pd-note{font-size:13px;color:var(--muted);margin-top:-8px;}
+  .pd-section{border-top:1px solid var(--line);padding:22px 0;}
+  .pd-section h3{font-family:var(--bf-bear);font-size:18px;margin-bottom:12px;}
+  .opt{border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:10px;}
+  .opt .q{font-weight:600;font-size:14px;margin-bottom:8px;}
+  .opt .choices{display:flex;gap:8px;flex-wrap:wrap;}
+  .opt .choice{border:1.5px solid var(--line);border-radius:999px;padding:7px 13px;font-size:13px;color:#4a4a44;}
+  .opt .choice .delta{color:var(--accent);font-weight:600;margin-left:5px;}
+  .desc{font-size:15px;line-height:1.65;color:#3a3a34;}
+  .desc img{border-radius:12px;margin:12px 0;}
+  .desc h1,.desc h2,.desc h3{font-family:var(--bf-bear);margin:16px 0 8px;}
+  .desc p{margin:10px 0;}
+  .variants{display:flex;gap:10px;flex-wrap:wrap;}
+  .variants a{border:1.5px solid var(--line);border-radius:12px;padding:9px 14px;font-size:14px;background:#fff;}
+  .variants a.on{border-color:var(--accent);color:var(--accent);font-weight:600;}
+  .review{border-top:1px solid var(--line);padding:14px 0;}
+  .review:first-child{border-top:0;}
+  .review .head{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+  .review .who{font-weight:600;font-size:14px;}
+  .review .when{font-size:12px;color:var(--muted);}
+  .review .body{font-size:14px;color:#4a4a44;line-height:1.5;}
+
+  .crumb{font-size:13px;color:var(--muted);padding-top:18px;}
+  .crumb a:hover{color:var(--accent);}
+
+  .empty{padding:60px 20px;text-align:center;color:var(--muted);font-size:15px;}
+  .skel{background:linear-gradient(90deg,#eee,#f6f6f6,#eee);background-size:200% 100%;animation:sk 1.2s infinite;border-radius:16px;aspect-ratio:.78;}
+  @keyframes sk{to{background-position:-200% 0;}}
+
+  footer{margin-top:auto;border-top:1px solid var(--line);background:#fff;}
+  .foot-in{max-width:var(--wrap);margin:0 auto;padding:26px 20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:13px;}
+  .foot-in .fm{font-family:var(--bf-bear);color:var(--accent);font-size:18px;}
+
+  #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(20px);background:rgba(20,20,24,.96);color:#f2f2ec;padding:12px 20px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:80;max-width:90vw;text-align:center;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media(max-width:820px){
+    .pd{grid-template-columns:1fr;gap:24px;}
+    nav.links{display:none;}
+  }
+  @media(max-width:520px){
+    .bar-in{flex-wrap:wrap;gap:10px;}
+    .search{order:3;max-width:none;flex-basis:100%;}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+  }
+</style>
+</head>
+<body>
+  <div id="boot"><div class="spin"></div></div>
+
+  <header class="bar" hidden>
+    <div class="bar-in">
+      <a class="wordmark" id="hdrWordmark" href="#/">Store</a>
+      <nav class="links">
+        <a href="#/" data-nav="home">Home</a>
+        <a href="#/shop" data-nav="shop">Shop</a>
+      </nav>
+      <form class="search" id="searchForm">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input id="searchInput" type="search" placeholder="Search products" autocomplete="off">
+      </form>
+      <span class="spacer"></span>
+      <div class="lang" id="langToggle">
+        <button data-lang="en">EN</button><button data-lang="cn">中</button>
+      </div>
+      <button class="iconbtn" id="cartBtn" title="Cart" aria-label="Cart">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <main id="view" hidden></main>
+
+  <footer hidden id="footer">
+    <div class="foot-in">
+      <span class="fm" id="footBrand">Store</span>
+      <span id="footMeta"></span>
+    </div>
+  </footer>
+
+  <div id="toast"></div>
+
+<script>
+/* ════════════════════════════════════════════════════════════════════════
+   Web storefront — Phase 1a (the shoppable core).
+
+   Tenant is resolved SERVER-SIDE from the request Host (this page sends no
+   x-wx-appid), so every /api/retail/* call returns THIS tenant's catalogue.
+   Pages: home, shop (grid + search + category + sort), product detail.
+   Cart / checkout / accounts arrive in later phases — the "order" CTAs are
+   honest stubs for now. The operator's exact CMS home blocks (Phase 1b) will
+   render via a shared block engine; today the home shows a clean auto-layout.
+   ════════════════════════════════════════════════════════════════════════ */
+const state = { lang:'en', config:{}, brand:'Store', cats:[], productCache:new Map() };
+
+/* ── tiny helpers ── */
+const $ = (s,r=document)=>r.querySelector(s);
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function escAttr(s){return esc(s);}
+function pick(en,cn){const a=(en||'').trim(),b=(cn||'').trim();return state.lang==='cn'?(b||a):(a||b);}
+function altLang(en,cn){return state.lang==='cn'?(en||'').trim():(cn||'').trim();}  /* the OTHER language line */
+function money(n){return '¥'+(Number(n)||0).toFixed(2);}
+function thumb(p){return p&&(p.image_url||p.image_data)||'';}
+function isFlash(p){return p&&p.flash&&p.flash.state==='active';}
+function nowPrice(p){return isFlash(p)?(Number(p.flash.price)||0):(Number(p.price)||0);}
+function wasPrice(p){return isFlash(p)&&Number(p.price)>Number(p.flash.price)?Number(p.price):0;}
+function catLabel(c){return pick(c.name,c.name_cn);}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._h);toast._h=setTimeout(()=>t.classList.remove('show'),2400);}
+
+async function api(path){
+  const r=await fetch(path,{headers:{'Accept':'application/json'}});
+  if(!r.ok) throw new Error(path+' → '+r.status);
+  const j=await r.json();
+  return j&&('data'in j)?j.data:j;
+}
+
+/* ── theming ── */
+const ACCENTS={
+  'forest-kale':'#365329','forest':'#365329','olive-moss':'#6A6E2D','olive':'#6A6E2D',
+  'lime-leaf':'#6A8E2D','lime':'#6A8E2D','berry-punch':'#E96174','berry':'#E96174',
+  'carrot-blaze':'#FF6B0C','carrot':'#FF6B0C','papaya-glow':'#E08A3C','golden-corn':'#C99A2E',
+  'skyberry':'#5B86C4','sky':'#5B86C4','lotus':'#C879B6','pink-guava':'#D4669A',
+  'pea-sprout':'#5DA02E','pea':'#5DA02E','citrus-zest':'#9AAE22',
+};
+function applyTheme(cfg){
+  const hex=ACCENTS[cfg&&cfg.theme&&cfg.theme.accent]||'#365329';
+  document.documentElement.style.setProperty('--accent',hex);
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',hex);
+}
+function brandName(cfg){
+  const w=cfg&&cfg.brand&&cfg.brand.me_footer&&cfg.brand.me_footer.wordmark_text;
+  return (w&&String(w).trim())||document.title||'Store';
+}
+
+/* ════════════ ROUTER ════════════ */
+function parseHash(){
+  const raw=location.hash.replace(/^#/,'')||'/';
+  const [path,qs]=raw.split('?');
+  const params=new URLSearchParams(qs||'');
+  const seg=path.split('/').filter(Boolean);   // ['shop'] | ['product','12']
+  return {seg,params};
+}
+async function route(){
+  const {seg,params}=parseHash();
+  // highlight nav
+  document.querySelectorAll('nav.links a').forEach(a=>{
+    const n=a.dataset.nav;
+    a.classList.toggle('on',(n==='home'&&seg.length===0)||(n==='shop'&&seg[0]==='shop'));
+  });
+  window.scrollTo({top:0,behavior:'instant'});
+  try{
+    if(seg[0]==='product'&&seg[1]) return renderProduct(seg[1]);
+    if(seg[0]==='shop')           return renderShop(params);
+    return renderHome();
+  }catch(e){
+    $('#view').innerHTML=`<div class="wrap"><div class="empty">Something went wrong loading this page.<br>${esc(e.message)}</div></div>`;
+  }
+}
+
+/* ════════════ HOME ════════════ */
+async function renderHome(){
+  // Render the operator's REAL CMS home layout via the SAME engine the mini-app
+  // preview uses, by embedding /storefront?embed=1 (edited in one place). If
+  // nothing is published yet, fall back to a clean auto-layout so a fresh tenant
+  // still has a usable home.
+  const layout = state.config && state.config.home && state.config.home.layout;
+  if (Array.isArray(layout) && layout.length) return renderHomeEmbed();
+  return renderHomeAuto();
+}
+
+function renderHomeEmbed(){
+  const src = '/storefront?embed=1&lang=' + encodeURIComponent(state.lang);
+  $('#view').innerHTML =
+    `<div class="wrap"><iframe id="homeFrame" title="Home" src="${escAttr(src)}" scrolling="no"
+       style="width:100%;border:0;display:block;min-height:70vh;margin:0 auto;"></iframe></div>`;
+}
+
+async function renderHomeAuto(){
+  const view=$('#view');
+  view.innerHTML=`<div class="wrap"><div class="hero" id="hero"><h1>${esc(state.brand)}</h1>
+    <p id="heroTag"></p><a class="cta" href="#/shop">${state.lang==='cn'?'浏览全部商品':'Browse the shop'}</a></div></div>
+    <div class="wrap"><div id="homeCats" class="sec"></div><div id="homeNew" class="sec"></div></div>`;
+  $('#heroTag').textContent = state.lang==='cn'
+    ? '在浏览器里选购 — 无需下载任何应用。' : 'Shop our full range in your browser — no app needed.';
+
+  // categories
+  if(state.cats.length){
+    const tiles=state.cats.slice(0,8).map(c=>{
+      const lbl=catLabel(c), other=altLang(c.name,c.name_cn);
+      return `<a class="cattile" href="#/shop?cat=${encodeURIComponent(c.name)}">
+        ${c.cover?`<img src="${escAttr(c.cover)}" alt="" loading="lazy">`:''}
+        <span class="lbl">${esc(lbl)}${other?`<span class="n">${esc(other)}</span>`:''}</span></a>`;
+    }).join('');
+    $('#homeCats').innerHTML=`<div class="sec-head"><div><div class="kicker">${state.lang==='cn'?'分类':'Shop by category'}</div></div>
+      <a class="more" href="#/shop">${state.lang==='cn'?'查看全部 →':'See all →'}</a></div><div class="cattiles">${tiles}</div>`;
+  }
+
+  // newest products
+  $('#homeNew').innerHTML=`<div class="sec-head"><div><div class="kicker">${state.lang==='cn'?'新品':'Fresh in'}</div>
+    <div class="ttl">${state.lang==='cn'?'最新上架':'New arrivals'}</div></div>
+    <a class="more" href="#/shop">${state.lang==='cn'?'查看全部 →':'See all →'}</a></div>
+    <div class="grid" id="newGrid">${skeletons(8)}</div>`;
+  try{
+    const prods=await api('/api/retail/products?slim=1&sort=newest&limit=12');
+    $('#newGrid').innerHTML=(prods&&prods.length)?prods.map(cardHtml).join(''):`<div class="empty">${state.lang==='cn'?'暂无商品':'No products yet.'}</div>`;
+  }catch(e){ $('#newGrid').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+
+/* ════════════ SHOP ════════════ */
+async function renderShop(params){
+  const view=$('#view');
+  const cat=params.get('cat')||'';
+  const q=params.get('q')||'';
+  const sort=params.get('sort')||'featured';
+  $('#searchInput').value=q;
+
+  const chips=[`<a class="chip ${!cat?'on':''}" href="#/shop${q?`?q=${encodeURIComponent(q)}`:''}">${state.lang==='cn'?'全部':'All'}</a>`]
+    .concat(state.cats.map(c=>{
+      const on=cat===c.name;
+      const qp=new URLSearchParams();qp.set('cat',c.name);if(q)qp.set('q',q);if(sort!=='featured')qp.set('sort',sort);
+      return `<a class="chip ${on?'on':''}" href="#/shop?${qp.toString()}">${esc(catLabel(c))}${c.count?`<span class="n">${c.count}</span>`:''}</a>`;
+    })).join('');
+
+  const heading = q ? `${state.lang==='cn'?'搜索':'Search'} · "${esc(q)}"`
+                    : cat ? esc(catLabelByName(cat))
+                    : (state.lang==='cn'?'全部商品':'All products');
+
+  view.innerHTML=`<div class="wrap sec">
+    <div class="crumb"><a href="#/">${state.lang==='cn'?'首页':'Home'}</a> / ${state.lang==='cn'?'商品':'Shop'}</div>
+    <div class="sec-head"><div class="ttl">${heading}</div></div>
+    <div class="chips">${chips}</div>
+    <div class="toolbar">
+      <span class="count" id="shopCount"></span>
+      <select class="sort" id="sortSel">
+        <option value="featured">${state.lang==='cn'?'推荐排序':'Featured'}</option>
+        <option value="newest">${state.lang==='cn'?'最新':'Newest'}</option>
+        <option value="price_asc">${state.lang==='cn'?'价格 ↑':'Price: low to high'}</option>
+        <option value="price_desc">${state.lang==='cn'?'价格 ↓':'Price: high to low'}</option>
+      </select>
+    </div>
+    <div class="grid" id="shopGrid">${skeletons(10)}</div>
+  </div>`;
+  $('#sortSel').value=sort;
+  $('#sortSel').onchange=e=>{
+    const qp=new URLSearchParams();if(cat)qp.set('cat',cat);if(q)qp.set('q',q);
+    const v=e.target.value;if(v!=='featured')qp.set('sort',v);
+    location.hash='#/shop'+(qp.toString()?`?${qp.toString()}`:'');
+  };
+
+  const qp=new URLSearchParams();qp.set('slim','1');qp.set('limit','120');
+  if(cat)qp.set('category',cat);if(q)qp.set('q',q);if(sort!=='featured')qp.set('sort',sort);
+  try{
+    const r=await fetch('/api/retail/products?'+qp.toString()).then(x=>x.json());
+    const prods=r&&r.data||[];
+    const total=(r&&r.meta&&r.meta.total)||prods.length;
+    $('#shopCount').textContent=total+(state.lang==='cn'?' 件商品':` ${total===1?'product':'products'}`);
+    $('#shopGrid').innerHTML=prods.length?prods.map(cardHtml).join('')
+      :`<div class="empty">${state.lang==='cn'?'没有找到商品':'No products found.'}</div>`;
+  }catch(e){ $('#shopGrid').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+function catLabelByName(name){const c=state.cats.find(x=>x.name===name);return c?catLabel(c):name;}
+
+/* ════════════ PRODUCT CARD ════════════ */
+function cardHtml(p){
+  const src=thumb(p),now=nowPrice(p),was=wasPrice(p);
+  const off=was>0?Math.round((1-now/was)*100):0;
+  const sold=Number(p.sold_count||p.units_sold||0);
+  const other=altLang(p.name_en,p.name_cn);
+  const tag=pick(p.tagline_en,p.tagline_cn);
+  return `<a class="card" href="#/product/${p.id}">
+    <div class="ph">
+      ${src?`<img src="${escAttr(src)}" alt="" loading="lazy">`:'<span class="none">no image</span>'}
+      ${off>0?`<span class="badge">-${off}%</span>`:''}
+      ${sold>0?`<span class="pill-sold">${state.lang==='cn'?'已售 '+sold:sold+' sold'}</span>`:''}
+    </div>
+    <div class="body">
+      <div class="nm">${esc(pick(p.name_en,p.name_cn))}${other?`<span class="cn">${esc(other)}</span>`:''}</div>
+      ${tag?`<div class="tag">${esc(tag.slice(0,60))}</div>`:''}
+      ${p.has_options?`<span class="opt-cue">${state.lang==='cn'?'多规格':'Options'}</span>`:''}
+      <div class="prices"><span class="now">${money(now)}</span>${was>0?`<span class="was">${money(was)}</span>`:''}</div>
+    </div>
+  </a>`;
+}
+function skeletons(n){return Array.from({length:n}).map(()=>'<div class="skel"></div>').join('');}
+
+/* ════════════ PRODUCT DETAIL ════════════ */
+async function renderProduct(id){
+  const view=$('#view');
+  view.innerHTML=`<div class="wrap"><div class="crumb">${state.lang==='cn'?'加载中…':'Loading…'}</div></div>`;
+  let p;
+  try{ p=await api('/api/retail/products/'+encodeURIComponent(id)); }
+  catch(e){ view.innerHTML=`<div class="wrap"><div class="empty">${state.lang==='cn'?'商品不存在或已下架。':'This product is unavailable.'}<br><a class="more" href="#/shop">← ${state.lang==='cn'?'返回商品':'Back to shop'}</a></div></div>`; return; }
+
+  const now=nowPrice(p),was=wasPrice(p);
+  const gallery=[thumb(p),...(Array.isArray(p.images)?p.images:[])].filter(Boolean)
+    .filter((v,i,a)=>a.indexOf(v)===i).slice(0,8);
+  const other=altLang(p.name_en,p.name_cn);
+  const tag=pick(p.tagline_en,p.tagline_cn);
+  const desc=pick(p.description_en,p.description_cn);
+  const avg=Number(p.review_avg)||0, rc=Number(p.review_count)||0;
+
+  const optsHtml=(Array.isArray(p.options)&&p.options.length)?`<div class="pd-section"><h3>${state.lang==='cn'?'选项':'Options'}</h3>${
+    p.options.map(o=>`<div class="opt"><div class="q">${esc(pick(o.question_en,o.question_cn))}${o.is_required?' *':''}</div>
+      <div class="choices">${(o.choices||[]).map(c=>`<span class="choice">${esc(pick(c.label_en,c.label_cn))}${Number(c.price_delta)?`<span class="delta">+${money(c.price_delta)}</span>`:''}</span>`).join('')}</div></div>`).join('')
+  }</div>`:'';
+
+  const variants=Array.isArray(p.variants)?p.variants:[];
+  const varsHtml=variants.length>1?`<div class="pd-section"><h3>${state.lang==='cn'?'规格':'Choose'}</h3><div class="variants">${
+    variants.map(v=>`<a class="${v.id==p.id?'on':''}" href="#/product/${v.id}">${esc(pick(v.variant_label||v.name_en,v.variant_label_cn||v.name_cn))}</a>`).join('')
+  }</div></div>`:'';
+
+  const recent=Array.isArray(p.reviews_recent)?p.reviews_recent:[];
+  const revHtml=rc>0?`<div class="pd-section"><h3>${state.lang==='cn'?'评价':'Reviews'} (${rc})</h3>
+    ${recent.map(r=>{
+      const rt=Math.max(0,Math.min(5,Math.round(Number(r.rating)||0)));
+      const body=r.comment||r.body||r.text||r.content||'';
+      const who=r.author_name||r.nickname||r.name||(state.lang==='cn'?'匿名':'Anonymous');
+      return `<div class="review"><div class="head"><span class="stars">${'★'.repeat(rt)}<span class="off">${'★'.repeat(5-rt)}</span></span>
+        <span class="who">${esc(who)}</span></div>${body?`<div class="body">${esc(body)}</div>`:''}</div>`;
+    }).join('')}</div>`:'';
+
+  view.innerHTML=`<div class="wrap">
+    <div class="crumb"><a href="#/">${state.lang==='cn'?'首页':'Home'}</a> / <a href="#/shop">${state.lang==='cn'?'商品':'Shop'}</a> / ${esc(pick(p.name_en,p.name_cn))}</div>
+    <div class="pd">
+      <div class="pd-gallery">
+        <div class="main">${gallery[0]?`<img id="pdMain" src="${escAttr(gallery[0])}" alt="">`:'<span class="card"></span>'}</div>
+        ${gallery.length>1?`<div class="pd-thumbs" id="pdThumbs">${gallery.map((g,i)=>`<button class="${i===0?'on':''}" data-src="${escAttr(g)}"><img src="${escAttr(g)}" alt=""></button>`).join('')}</div>`:''}
+      </div>
+      <div class="pd-info">
+        <h1>${esc(pick(p.name_en,p.name_cn))}</h1>
+        ${other?`<div class="cn">${esc(other)}</div>`:''}
+        ${tag?`<div class="tagline">${esc(tag)}</div>`:''}
+        <div class="price-row">
+          <span class="price-now">${money(now)}</span>
+          ${was>0?`<span class="price-was">${money(was)}</span><span class="flash-tag">${state.lang==='cn'?'限时':'Flash'}</span>`:''}
+        </div>
+        ${rc>0?`<div class="rating"><span class="stars">${'★'.repeat(Math.round(avg))}<span class="off">${'★'.repeat(5-Math.round(avg))}</span></span>${avg.toFixed(1)} · ${rc} ${state.lang==='cn'?'条评价':'reviews'}</div>`:''}
+        <div class="buybar">
+          <button class="btn-primary" id="buyBtn">${state.lang==='cn'?'登录后下单':'Sign in to order'}</button>
+        </div>
+        <div class="pd-note">${state.lang==='cn'?'网页下单功能即将上线。':'Online checkout is coming soon to the website.'}</div>
+        ${varsHtml}
+        ${optsHtml}
+        ${desc?`<div class="pd-section"><h3>${state.lang==='cn'?'商品详情':'Description'}</h3><div class="desc">${desc}</div></div>`:''}
+        ${revHtml}
+      </div>
+    </div>
+  </div>`;
+
+  document.title=pick(p.name_en,p.name_cn)+' · '+state.brand;
+  const thumbs=$('#pdThumbs');
+  if(thumbs) thumbs.onclick=e=>{const b=e.target.closest('button');if(!b)return;
+    $('#pdMain').src=b.dataset.src;thumbs.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));};
+  $('#buyBtn').onclick=()=>toast(state.lang==='cn'?'账户与下单功能即将上线 🌱':'Accounts & checkout are coming soon 🌱');
+}
+
+/* ════════════ CHROME / INIT ════════════ */
+function applyLangToUI(){
+  document.querySelectorAll('#langToggle button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
+  $('#searchInput').placeholder=state.lang==='cn'?'搜索商品':'Search products';
+  $('#hdrWordmark').textContent=state.brand;
+  document.querySelector('nav.links [data-nav=home]').textContent=state.lang==='cn'?'首页':'Home';
+  document.querySelector('nav.links [data-nav=shop]').textContent=state.lang==='cn'?'商品':'Shop';
+  $('#footBrand').textContent=state.brand;
+}
+
+(async function boot(){
+  // config first (theme + brand), then categories — both tenant-scoped by Host.
+  try{ state.config=await api('/api/retail/config')||{}; }catch(e){ state.config={}; }
+  try{ state.lang=localStorage.getItem('shop_lang')||'en'; }catch{}
+  if(!['en','cn'].includes(state.lang)) state.lang='en';
+  applyTheme(state.config);
+  state.brand=brandName(state.config);
+  document.title=state.brand;
+  try{ state.cats=(await api('/api/retail/category-tree?counts=1'))||[]; }catch(e){ state.cats=[]; }
+  state.cats=state.cats.filter(c=>!c.count||c.count>0);
+
+  $('#footMeta').textContent=location.hostname;
+  applyLangToUI();
+  document.querySelector('header.bar').hidden=false;
+  $('#view').hidden=false;
+  $('#footer').hidden=false;
+
+  // search submit → shop
+  $('#searchForm').addEventListener('submit',e=>{e.preventDefault();
+    const q=$('#searchInput').value.trim();location.hash='#/shop'+(q?`?q=${encodeURIComponent(q)}`:'');});
+  // lang toggle
+  $('#langToggle').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+    state.lang=b.dataset.lang;try{localStorage.setItem('shop_lang',state.lang);}catch{}
+    applyLangToUI();route();});
+  $('#cartBtn').addEventListener('click',()=>toast(state.lang==='cn'?'购物车即将上线 🌱':'Cart is coming soon 🌱'));
+
+  // Messages from the embedded home (/storefront?embed=1): auto-size the iframe
+  // and route CTA taps through our own router.
+  window.addEventListener('message',e=>{
+    const d=e.data;if(!d||typeof d!=='object')return;
+    if(d.type==='sf:height'){const f=document.getElementById('homeFrame');if(f&&d.height)f.style.height=(d.height+2)+'px';return;}
+    if(d.type==='sf:cta'){
+      const t=String(d.target||'');
+      if(t.indexOf('product:')===0) location.hash='#/product/'+t.split(':')[1];
+      else if(t.indexOf('category:')===0) location.hash='#/shop';
+      else if(t==='shop') location.hash='#/shop';
+      else if(t==='cart') toast(state.lang==='cn'?'购物车即将上线 🌱':'Cart is coming soon 🌱');
+    }
+  });
+
+  window.addEventListener('hashchange',route);
+  await route();
+  $('#boot').classList.add('gone');
+})();
+</script>
+</body>
+</html>

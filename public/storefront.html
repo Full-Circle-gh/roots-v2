@@ -1052,6 +1052,27 @@
   body.preview-mode .phone::before { display: none; }
   body.preview-mode .phone-status { display: none; }   /* no fake 9:41 / signal / battery */
 
+  /* ═══════════════ EMBED MODE — the public web storefront (shop.html)
+     iframes this page at `?embed=1` to render the operator's LIVE home
+     layout with the SAME engine the mini-app preview uses (one engine,
+     edited in one place). Strips ALL simulated phone chrome incl. the
+     bottom tab bar, drops the fixed phone height so the frame is the
+     content's natural height (parent auto-sizes via postMessage), and
+     centres at a phone-ish max width so the phone-first design holds.
+     Background is transparent so the host page's surface shows through. */
+  body.embed-mode { background: transparent; }
+  body.embed-mode .topbar { display: none; }
+  body.embed-mode .canvas { padding: 0; min-height: 0; background: transparent; }
+  body.embed-mode .phone {
+    width: 100%; max-width: 500px; min-height: 0;
+    border-radius: 0; box-shadow: none; background: transparent;
+    font-family: var(--bf-toni);
+  }
+  body.embed-mode .phone::before { display: none; }
+  body.embed-mode .phone-status { display: none; }
+  body.embed-mode .phone-tabs  { display: none; }
+  body.embed-mode .phone-content { padding-bottom: 0; }
+
   /* Loading skeleton */
   .skeleton {
     background: linear-gradient(90deg, rgba(0, 0, 0, .06) 0%, rgba(0, 0, 0, .03) 50%, rgba(0, 0, 0, .06) 100%);
@@ -1155,6 +1176,25 @@ try {
   if (p === '1') document.documentElement.classList.add('preview-mode'),
                  document.addEventListener('DOMContentLoaded', () => document.body.classList.add('preview-mode'));
 } catch {}
+
+// `?embed=1` — the public web storefront (shop.html) iframes this page to show
+// the live home layout. Strip all phone chrome (see .embed-mode CSS), report
+// our content height to the parent so it can size the iframe seamlessly, and
+// (below, in routeCtaTarget) forward product/category/shop taps to the parent
+// to drive its own router instead of toasting a stub.
+const EMBED = (() => { try { return new URL(location.href).searchParams.get('embed') === '1'; } catch { return false; } })();
+if (EMBED) {
+  document.documentElement.classList.add('embed-mode');
+  document.addEventListener('DOMContentLoaded', () => {
+    document.body.classList.add('embed-mode');
+    const postHeight = () => {
+      try { parent.postMessage({ type: 'sf:height', height: document.body.scrollHeight }, '*'); } catch {}
+    };
+    try { new ResizeObserver(postHeight).observe(document.body); } catch {}
+    window.addEventListener('load', postHeight);
+    setTimeout(postHeight, 60);
+  });
+}
 
 function $(s) { return document.querySelector(s); }
 function escapeHtml(s) {
@@ -1376,6 +1416,13 @@ function previewToast(msg) {
 
 function routeCtaTarget(target) {
   if (!target) return;
+  // Embedded in the web storefront: hand product/category/shop/cart taps up to
+  // the parent's router. CMS sub-pages (promotions/membership/…) stay in-iframe
+  // (re-render below; the ResizeObserver re-reports height).
+  if (EMBED && !PAGE_TARGETS.has(target)) {
+    try { parent.postMessage({ type: 'sf:cta', target }, '*'); } catch {}
+    return;
+  }
   if (PAGE_TARGETS.has(target)) {
     const url = new URL(location.href);
     url.searchParams.set('page', target);

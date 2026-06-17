@@ -361,6 +361,16 @@ function serveRetailAdmin(req, res) {
   res.sendFile(path.join(__dirname, 'public', 'retail-admin.html'));
 }
 
+// Customer-facing web storefront shell (public). Served for any host registered
+// as an ACTIVE tenant_domains row — the browser-website counterpart of the
+// WeChat mini-app. The page self-scopes: its /api/retail/* calls carry no
+// x-wx-appid, so the public-tenant middleware resolves the tenant by Host.
+const { lookupStorefrontHost } = require('./middleware/public-tenant');
+function serveShop(req, res) {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'shop.html'));
+}
+
 // Main app - serves the SPA shell
 const { requireAuth } = require('./middleware/auth');
 app.get('/', (req, res) => {
@@ -368,6 +378,10 @@ app.get('/', (req, res) => {
   // kitchen SPA. It self-auths, so we skip requireAuth for that host.
   if ((req.hostname || '').toLowerCase() === STORE_HOST) {
     return serveRetailAdmin(req, res);
+  }
+  // A registered storefront domain → the public customer website.
+  if (lookupStorefrontHost(req.hostname)) {
+    return serveShop(req, res);
   }
   // Everything else (food.* / app.* / bare domain) → kitchen app, auth-gated.
   requireAuth(req, res, () => {
@@ -438,6 +452,14 @@ app.get('/storefront', (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'storefront.html'));
 });
+
+// Web storefront PREVIEW path. The customer website normally serves at its own
+// registered host (tenant_domains → serveShop on '/'), which needs DNS + TLS.
+// This path lets the team open the storefront on the EXISTING secure domain
+// before that's set up: shop.html self-scopes by Host, so on a non-storefront
+// host it falls back to the default (Roots) catalogue. Safe + public (the page
+// only reads public /api/retail/* data). Remove once real domains are live.
+app.get('/shop-preview', serveShop);
 
 // Public marketing landing page — the B2B pitch for the Full Circle
 // platform. No auth, shareable link for prospects/investors.
@@ -526,6 +548,12 @@ app.get('/api/version', (req, res) => {
 // 404
 app.use((req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+  // On a storefront host, unknown GET paths are client-side SPA routes
+  // (/product/123, /cart, …) — serve the shell so deep links and refreshes
+  // keep their URL instead of bouncing to '/'.
+  if (req.method === 'GET' && lookupStorefrontHost(req.hostname)) {
+    return serveShop(req, res);
+  }
   res.redirect('/');
 });
 
