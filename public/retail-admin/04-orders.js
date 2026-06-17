@@ -326,6 +326,81 @@ async function openAddressToChinese(orderId) {
   });
 }
 
+// Edit the ship-to ON THE ORDER. The order keeps its own frozen copy of the
+// address (snapshotted at checkout), so editing the customer's saved address
+// book never reaches back to a placed order — this is the control that does.
+// Reuses the language-agnostic /address/apply-chinese endpoint (it just
+// normalizes + writes whatever fields it's given); no translation involved.
+function openEditShipTo(orderId) {
+  const o = _OPEN_ORDER;
+  if (!o || o.id !== orderId) { toast(cuT('Re-open the order first', '请先重新打开订单'), 'error'); return; }
+  let cur = {};
+  try { cur = JSON.parse(o.address_json || '{}'); } catch {}
+  if (cur.pickup) { toast(cuT('Pickup order — no shipping address', '自提订单 — 无收货地址'), 'error'); return; }
+
+  const field = (id, labelEn, labelCn, val) => `
+    <div class="field" style="margin-bottom:10px;">
+      <label class="stacked">${labelEn} · ${labelCn}</label>
+      <input id="${id}" type="text" style="width:100%;" value="${escapeHtml(val || '')}">
+    </div>`;
+
+  const bg = document.createElement('div');
+  bg.className = 'pu-editor-bg';
+  bg.style.display = 'flex';
+  bg.innerHTML = `
+    <div class="pu-editor" style="width: 520px; max-width: 94vw;">
+      <div class="pu-editor-head">
+        <div>
+          <h3 style="margin:0; font-size:14px;">${cuT('Edit ship-to', '修改收货地址')}</h3>
+          <div class="muted" style="font-size:11px; margin-top:2px;">${cuT('This changes the address on this order only.', '仅修改此订单的收货地址。')}</div>
+        </div>
+        <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
+      </div>
+      <div class="pu-editor-body" style="grid-template-columns: 1fr; padding:18px; display:block;">
+        ${field('es-prov', 'Province', '省 / 市', cur.province)}
+        ${field('es-city', 'City', '市', cur.city)}
+        ${field('es-dist', 'District', '区 / 县', cur.district)}
+        ${field('es-addr', 'Street / building', '街道 / 楼栋', cur.address)}
+        ${field('es-detail', 'Unit / floor (optional)', '单元 / 楼层(可选)', cur.detail)}
+        <label style="display:flex; align-items:center; gap:8px; font-size:12px; margin:6px 0; cursor:pointer;"><input type="checkbox" id="es-save-cust"> ${cuT('Also update the customer’s saved address', '同时更新顾客保存的地址')}</label>
+        <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:14px;">
+          <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Cancel', '取消')}</button>
+          <button class="btn btn-primary" id="es-apply">${cuT('Save', '保存')}</button>
+        </div>
+      </div>
+    </div>`;
+  mountFloatingPuModal(bg);
+  bg.querySelector('#es-apply').addEventListener('click', async (ev) => {
+    const body = {
+      province: bg.querySelector('#es-prov').value,
+      city:     bg.querySelector('#es-city').value,
+      district: bg.querySelector('#es-dist').value,
+      address:  bg.querySelector('#es-addr').value,
+      detail:   bg.querySelector('#es-detail').value,
+      save_order:    true,
+      save_customer: bg.querySelector('#es-save-cust').checked,
+    };
+    if (!body.address.trim()) { toast(cuT('Street / building is required', '街道 / 楼栋不能为空'), 'error'); return; }
+    try {
+      const j = await adminWrite({
+        btn: ev.currentTarget, url: `/api/retail-admin/orders/${orderId}/address/apply-chinese`,
+        method: 'POST', body, errLabelEn: 'Save failed', errLabelCn: '保存失败',
+      });
+      const d = (j && j.data) || {};
+      let msg = cuT('Address updated', '地址已更新');
+      if (body.save_customer && !d.saved_customer) {
+        const why = d.customer_reason === 'no_match' ? cuT('couldn’t match the saved address', '未找到对应的保存地址')
+                  : d.customer_reason === 'no_customer' ? cuT('no customer on file', '无顾客记录')
+                  : cuT('saved address not updated', '保存地址未更新');
+        msg = cuT('Order updated · ', '订单已更新 · ') + why;
+      }
+      toast(msg);
+      bg.remove();
+      openOrder(orderId); loadOrders();
+    } catch {}
+  });
+}
+
 // `silent` = called by the poller. Skip the "Loading…" placeholder, skip
 // the rebuild when the fingerprint matches, flash new rows on arrival.
 // ── Orders view options (tweaks) ──────────────────────────────────────
@@ -1160,11 +1235,15 @@ function renderShipByCell(o) {
   const headline = (p.headlineRaw != null && p.headlineRaw !== '')
     ? escapeHtml(p.headlineRaw)
     : cuT(p.headlineEn, p.headlineCn);
-  // Short urgency tag on the sub-line.
+  // Short urgency tag on the sub-line — only meaningful while the operator can
+  // still act (paid/preparing). Once shipped/closed the deadline is in the past
+  // by definition, so suppress it instead of crying "OVERDUE" on a sent parcel.
   let tag = '';
-  if (u.level === 'overdue')       tag = ` · <b>${cuT('OVERDUE', '已逾期')}</b>`;
-  else if (u.level === 'today')    tag = ` · ${cuT('today', '今天')}`;
-  else if (u.level === 'tomorrow') tag = ` · ${cuT('tomorrow', '明天')}`;
+  if (actionable) {
+    if (u.level === 'overdue')       tag = ` · <b>${cuT('OVERDUE', '已逾期')}</b>`;
+    else if (u.level === 'today')    tag = ` · ${cuT('today', '今天')}`;
+    else if (u.level === 'tomorrow') tag = ` · ${cuT('tomorrow', '明天')}`;
+  }
   const subText = (p.cellSubRaw != null && p.cellSubRaw !== '') ? escapeHtml(p.cellSubRaw)
     : (p.cellSubEn != null) ? cuT(p.cellSubEn, p.cellSubCn)
     : (p.subEn != null) ? cuT(p.subEn, p.subCn) : '';
@@ -1359,10 +1438,14 @@ function renderShipByTile(o) {
   const u = shipByUrgency(p, actionable);
   const usingRaw = (p.headlineRaw != null && p.headlineRaw !== '');
   const headline = usingRaw ? escapeHtml(p.headlineRaw) : cuT(p.headlineEn, p.headlineCn);
-  // Verbose urgency badge after the headline.
+  // Verbose urgency badge after the headline — gated on actionable for the same
+  // reason as the list cell: a dispatched/closed order's deadline is always in
+  // the past, so don't badge it OVERDUE.
   const h = u.hrs;
   let badge = '';
-  if (u.dateOnly) {
+  if (!actionable) {
+    // no urgency badge once the order has shipped / closed
+  } else if (u.dateOnly) {
     // Calendar-day badge — no hours (a bare date has no meaningful time-of-day).
     if (u.level === 'overdue')       badge = cuT('⚠ overdue', '⚠ 已逾期');
     else if (u.level === 'today')    badge = cuT('today', '今天');
@@ -2507,7 +2590,10 @@ function renderOpenOrder(o) {
             <div class="kicker">Ship to · 收货人 ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
             <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
-            ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" style="margin-top:8px;" onclick="openAddressToChinese(${o.id})">${pinIcon(13)} ${cuT('Make address Chinese', '转为中文地址')}</button>` : ''}
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button class="btn btn-sm" onclick="openEditShipTo(${o.id})">${pinIcon(13)} ${cuT('Edit ship-to', '修改收货地址')}</button>
+              ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" onclick="openAddressToChinese(${o.id})">${pinIcon(13)} ${cuT('Make address Chinese', '转为中文地址')}</button>` : ''}
+            </div>
           </div>`}
           <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
             <div class="kicker">Customer · 顾客</div>
