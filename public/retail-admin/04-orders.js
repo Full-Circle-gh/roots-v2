@@ -2201,7 +2201,37 @@ function renderSupplierTrackingBlock(o, s) {
   const instr = `<div class="muted" style="font-size:11px; margin-bottom:8px; line-height:1.5;">${cuT(
     'Ships directly from the supplier — no warehouse label is printed for it. Paste the tracking number the supplier sends you so the customer can follow it.',
     '由供应商直接发货 — 此包裹不打印仓库面单。请将供应商提供的快递单号填入下方,顾客即可查询物流。')}</div>`;
-  return `<div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">${instr}${renderShipmentTrackingCard(o, s, true)}</div>`;
+  // When the carrier doesn't live-sync (foreign courier), the operator confirms
+  // arrival by hand — this is what completes the order's supplier leg. Shown
+  // once the parcel is on its way (tracking entered / dispatched) and not yet
+  // delivered; a live-synced carrier flips delivered_at on its own.
+  const canDeliver = (s.state || 'pending') === 'dispatched';
+  const deliverBtn = canDeliver
+    ? `<div class="row" style="gap:8px; margin-top:10px;"><button class="btn btn-sm" onclick="markParcelDelivered(${o.id}, ${s.id})">${cuT('Mark this parcel delivered', '标记此包裹已送达')}</button></div>`
+    : '';
+  return `<div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">${instr}${renderShipmentTrackingCard(o, s, true)}${deliverBtn}</div>`;
+}
+
+// Operator confirms a supplier parcel arrived (used when the carrier can't
+// live-track it). When it makes every parcel delivered, the server flips the
+// whole order to delivered.
+async function markParcelDelivered(id, sid) {
+  const ok = await askConfirm({
+    titleEn: 'Mark parcel delivered?', titleCn: '标记包裹已送达?',
+    bodyEn: 'Confirm the supplier parcel reached the customer. If it was the last parcel, the order is marked delivered.',
+    bodyCn: '确认此供应商包裹已送达顾客。若为最后一个包裹,订单将标记为已送达。',
+    confirmEn: 'Mark delivered', confirmCn: '标记已送达',
+    cancelEn: 'Cancel', cancelCn: '取消',
+  });
+  if (!ok) return;
+  try {
+    await api(`/api/retail-admin/orders/${id}/shipments/${sid}/deliver`, { method: 'POST', body: {} });
+    toast('Parcel delivered · 包裹已送达');
+    openOrder(id, { instant: true });
+    loadOrders();
+  } catch (e) {
+    toast('Failed · 失败: ' + e.message, 'err');
+  }
 }
 
 // Stored ETA is a 24h "HH:MM"; render it on a 12h clock for the office card.

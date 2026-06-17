@@ -65,6 +65,9 @@
           </view>
         </view>
         <view wx:if="{{sh.items_str}}" class="trk-pkg-items muted">{{sh.items_str}}</view>
+        <view wx:if="{{sh.is_supplier}}" class="trk-pkg-supplier f-toni">
+          {{lang === 'cn' ? '此商品由供应商直接发货,可能与其他包裹分开送达。' : 'Ships directly from the supplier — may arrive separately from your other items.'}}
+        </view>
 
         <!-- Waybill attached → carrier + live events. -->
         <block wx:if="{{sh.has_tracking}}">
@@ -96,6 +99,7 @@
 
         <!-- No waybill yet — show parcel status instead of a tracking block. -->
         <view wx:elif="{{sh.state === 'dispatched' || sh.state === 'delivered'}}" class="trk-empty muted">{{copy.trackingAwaitingNo}}</view>
+        <view wx:elif="{{sh.is_supplier}}" class="trk-empty muted">{{lang === 'cn' ? '等待供应商提供物流单号' : 'Waiting for the supplier to provide tracking'}}</view>
         <view wx:else class="trk-empty muted">{{copy.trackingNotShipped}}</view>
       </view>
     </view>

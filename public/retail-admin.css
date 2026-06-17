@@ -4357,6 +4357,12 @@
   .shipment-card.mode-air,
   .shipment-card.mode-land,
   .shipment-card.mode-local { border-color: var(--line); }
+  /* Supplier (drop-ship) parcel — a Tea-Green left rail so staff spot the one
+     parcel they don't ship themselves (they paste the supplier's waybill). */
+  .shipment-card.mode-supplier {
+    border-color: var(--line);
+    border-left: 3px solid var(--accent);
+  }
   /* Hoisted tracking — once a parcel ships, its carrier tracking card is
      lifted to the top of the order drawer (under the status actions) so the
      operator can add a waybill + watch status without scrolling to the items
@@ -4386,6 +4392,13 @@
   .shipment-head .mode-pill.mode-air,
   .shipment-head .mode-pill.mode-land,
   .shipment-head .mode-pill.mode-local { background: var(--bg-elev-1); color: var(--text-1); border-color: var(--line); }
+  /* Supplier-direct pill — Tea-Green accent so the drop-ship parcel stands out
+     from our own (neutral) parcels in the drawer. */
+  .shipment-head .mode-pill.mode-supplier {
+    background: rgba(107, 142, 111, .14);
+    color: var(--accent);
+    border-color: rgba(107, 142, 111, .34);
+  }
   /* Units-to-ship count — pushed to the right edge and given real weight so
      the packer reads the total at a glance ("4 lines · 6 units"). */
   .shipment-head .count {

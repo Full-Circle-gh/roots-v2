@@ -306,15 +306,24 @@ Page({
       const shipments = (data.shipments || []).map(s => {
         const latest = (s.events || [])[0] || null;
         // Per-parcel status — shown even before a waybill is attached, so a
-        // dispatched-but-untracked parcel still reads as "shipped".
-        const stateLabel = L === 'cn'
-          ? { pending: '尚未发货', dispatched: '已发货', delivered: '已送达' }[s.state]
-          : { pending: 'Not shipped yet', dispatched: 'Shipped', delivered: 'Delivered' }[s.state];
+        // dispatched-but-untracked parcel still reads as "shipped". A supplier
+        // (drop-ship) parcel reads "Awaiting supplier tracking" until its number
+        // is entered, since it isn't shipped from our warehouse.
+        const stateLabel = s.is_supplier
+          ? (L === 'cn'
+              ? { pending: '等待供应商发货', dispatched: '已发货', delivered: '已送达' }[s.state]
+              : { pending: 'Awaiting supplier shipment', dispatched: 'Shipped', delivered: 'Delivered' }[s.state])
+          : (L === 'cn'
+              ? { pending: '尚未发货', dispatched: '已发货', delivered: '已送达' }[s.state]
+              : { pending: 'Not shipped yet', dispatched: 'Shipped', delivered: 'Delivered' }[s.state]);
         return {
           shipment_id: s.shipment_id,
-          label: L === 'cn'
-            ? `包裹 ${s.index} / ${s.total}`
-            : `Package ${s.index} of ${s.total}`,
+          is_supplier: !!s.is_supplier,
+          label: s.is_supplier
+            ? (L === 'cn' ? '供应商直发' : 'Shipped by supplier')
+            : (L === 'cn'
+                ? `包裹 ${s.index} / ${s.total}`
+                : `Package ${s.index} of ${s.total}`),
           state: s.state,
           state_label: stateLabel,
           has_tracking: !!s.has_tracking,

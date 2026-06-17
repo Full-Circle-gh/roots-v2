@@ -773,6 +773,16 @@
   line-height: 1.35;
   margin-bottom: 16rpx;
 }
+/* Supplier-direct parcel note — forest accent, reads as a delivery heads-up. */
+.trk-pkg-supplier {
+  font-size: calc(21rpx * var(--font-scale));
+  line-height: 1.4;
+  color: var(--forest);
+  background: rgba(28, 58, 38, 0.07);
+  border-radius: 12rpx;
+  padding: 12rpx 16rpx;
+  margin-bottom: 16rpx;
+}
 .trk-toggle:active { opacity: 0.5; }
 .trk-link {
   margin-top: 20rpx;

@@ -4470,7 +4470,7 @@ function autoDeliverLocalEtaForTenant() {
             SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
                 delivered_at  = COALESCE(delivered_at,  CURRENT_TIMESTAMP),
                 updated_at    = CURRENT_TIMESTAMP
-          WHERE order_id = ?`
+          WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'`
       ).run(o.id);
     } catch (e) { console.warn('[auto-deliver] shipment mirror', o.id, e.message); }
     try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: o.status, to: 'delivered', reason: 'auto_eta' }, null); } catch {}
@@ -13145,11 +13145,11 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   if (['dispatched', 'delivered'].includes(o.status)
       && shipmentRows.length && shipmentRows.every(s => !s.dispatched_at)) {
     tdb().prepare(
-      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, ?) WHERE order_id = ?"
+      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, ?) WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'"
     ).run(o.dispatched_at || o.updated_at || new Date().toISOString(), id);
     if (o.status === 'delivered') {
       tdb().prepare(
-        "UPDATE retail_shipments SET delivered_at = COALESCE(delivered_at, ?) WHERE order_id = ?"
+        "UPDATE retail_shipments SET delivered_at = COALESCE(delivered_at, ?) WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'"
       ).run(o.delivered_at || o.updated_at || new Date().toISOString(), id);
     }
     // Re-read so the serialized state reflects the back-fill.
@@ -13753,6 +13753,11 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   }
   const ship = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
   if (!ship) return res.status(404).json({ success: false, error: 'shipment_not_found' });
+  // A supplier (drop-ship) parcel isn't dispatched from our warehouse — it's
+  // marked shipped by entering the supplier's tracking number instead.
+  if (ship.mode === 'supplier') {
+    return res.status(409).json({ success: false, error: 'supplier_parcel_no_dispatch' });
+  }
   if (ship.dispatched_at) {
     return res.status(409).json({ success: false, error: 'already_dispatched' });
   }
@@ -13779,6 +13784,44 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   }
 
   res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: 'dispatched' } });
+});
+
+// Mark ONE parcel delivered. Built for a supplier (drop-ship) parcel whose
+// carrier we can't live-track (foreign courier, no kd100 sync) — the operator
+// confirms arrival by hand. When this makes EVERY parcel delivered, the whole
+// order flips to 'delivered' (mirrors the kd100 auto-flip) so a mixed order
+// completes only once the supplier leg has also landed. Idempotent.
+router.post('/api/retail-admin/orders/:id/shipments/:sid/deliver',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.params.sid, 10);
+  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const ship = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!ship) return res.status(404).json({ success: false, error: 'shipment_not_found' });
+  if (ship.delivered_at) return res.status(409).json({ success: false, error: 'already_delivered' });
+
+  tdb().prepare(
+    "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), delivered_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
+  ).run(sid);
+
+  // Every parcel landed → complete the order (unlocks the review prompt + the
+  // 'delivered' push), unless it's already there.
+  let orderStatus = o.status;
+  const f = buildOrderFulfillment(id);
+  if (f.rollup === 'all_delivered' && o.status !== 'delivered') {
+    const r = tdb().prepare(
+      "UPDATE retail_orders SET status = 'delivered', delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status NOT IN ('delivered','cancelled','refunded')"
+    ).run(id);
+    if (r.changes > 0) {
+      orderStatus = 'delivered';
+      try { notifyOrderStatusChange(id, 'delivered'); } catch (e) { /* best-effort */ }
+    }
+  }
+
+  logActivity(req.user.id, req.user.username, 'shipment_delivered', 'retail_order', id,
+    { shipment_id: sid, mode: ship.mode }, req.ip);
+  res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: orderStatus } });
 });
 
 // Pull selected line items out into a NEW "to follow" shipment so the rest of
@@ -15142,6 +15185,11 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   const shipmentIdReq = req.body?.shipment_id != null ? parseInt(req.body.shipment_id, 10) : null;
   const shipment = shipmentIdReq ? shipments.find(s => s.id === shipmentIdReq) : shipments[0];
   if (!shipment) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
+  // A supplier (drop-ship) parcel isn't ours to ship — no JD waybill is booked
+  // for it; the operator pastes the supplier's own number instead.
+  if (shipment.mode === 'supplier') {
+    return res.status(409).json({ success: false, error: 'supplier_parcel_no_label' });
+  }
   if (shipment.tracking_number) {
     return res.status(409).json({ success: false, error: 'already_has_waybill', number: shipment.tracking_number });
   }
@@ -15607,13 +15655,17 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   // "mark all dispatched" / "mark all delivered" footer buttons don't leave
   // individual parcels showing "pending" beside a dispatched order. COALESCE
   // preserves any earlier per-shipment timestamp (a parcel shipped first).
+  // Supplier (drop-ship) parcels are EXCLUDED from these whole-order stamps —
+  // they ship on the supplier's clock and are marked shipped/delivered via their
+  // own tracking number (or kd100 events), so a whole-order "delivered" must not
+  // falsely close out a supplier parcel the supplier hasn't actually delivered.
   if (status === 'dispatched') {
     tdb().prepare(
-      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE order_id = ?"
+      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'"
     ).run(id);
   } else if (status === 'delivered') {
     tdb().prepare(
-      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE order_id = ?"
+      "UPDATE retail_shipments SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), delivered_at = COALESCE(delivered_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'"
     ).run(id);
   }
 
