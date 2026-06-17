@@ -1766,6 +1766,38 @@ function pdRevert() {
     pdOpen(_pdSelectedId);
   }
 }
+// Products-page "Revert today's changes": roll EVERY product edited today back
+// to how it looked at the start of the day. Unlike pdRevert (one product, this
+// session), this undoes a whole day's edits across the catalogue from the
+// server's start-of-today baselines. Confirms with a count + product names, and
+// is honest about what it does NOT touch (stock, additions, deletions).
+async function paRevertToday() {
+  let info;
+  try { info = await api('/api/retail-admin/products/revert-today'); }
+  catch (e) { toast(cuT('Could not check today’s changes: ', '无法查询今日修改:') + e.message, 'err'); return; }
+  const n = info.count || 0;
+  if (!n) { toast(cuT('No product changes have been made today — nothing to revert.', '今天没有产品修改 — 无需还原。')); return; }
+  const list = (info.products || []).slice(0, 8).map(p => '• ' + (p.product_name || p.current_name || ('#' + p.id))).join('\n');
+  const more = n > 8 ? cuT('\n…and ', '\n…还有 ') + (n - 8) + cuT(' more', ' 个') : '';
+  const msg = cuT(
+    'Revert today’s changes?\n\nThis rolls ' + n + ' product(s) back to how they looked at the START of today, undoing every edit made today (name, price, description, photos, category, on/off sale…).\n\nIt does NOT change stock counts, and does NOT bring back deleted products or remove products added today.\n\n' + list + more,
+    '还原今日修改?\n\n这会将 ' + n + ' 个产品还原到今天开始时的状态,撤销今天的所有修改(名称、价格、描述、图片、分类、上下架…)。\n\n不会更改库存数量,也不会恢复已删除的产品或移除今天新增的产品。\n\n' + list + more
+  );
+  if (!confirm(msg)) return;
+  try {
+    const j = await api('/api/retail-admin/products/revert-today', { method: 'POST', body: {} });
+    // Drop the editor's in-memory copy first — if it's open on a reverted
+    // product, leaving it would re-autosave the stale form and undo the revert.
+    pdClose();
+    await paLoad();
+    toast(cuT('Reverted ' + j.reverted + ' product(s) to this morning’s version.',
+              '已将 ' + j.reverted + ' 个产品还原到今天开始时的版本。'));
+    if (j.failed && j.failed.length) {
+      toast(cuT(j.failed.length + ' could not be reverted (SKU now used by another product).',
+                j.failed.length + ' 个因货号已被其他产品占用,未能还原。'), 'err');
+    }
+  } catch (e) { toast(cuT('Revert failed: ', '还原失败:') + e.message, 'err'); }
+}
 // Expand mode: hide the left list so the editor fills the page width.
 function pdSyncFullscreenBtn(on) {
   const btn = document.getElementById('pd-expand-btn');

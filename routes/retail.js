@@ -11714,10 +11714,109 @@ function releaseSkuFromHiddenHolders(sku, excludeId) {
   } catch (e) { console.error('[sku release]', e); return []; }
 }
 
+// ── "Revert today's changes" (Products page) ────────────────────────────────
+// The product editor only knows how to undo the OPEN product back to where it
+// was when this tab opened it. This pair of endpoints undoes a whole DAY of
+// edits across EVERY product, back to how each looked at the start of the GZ
+// day — powered by start-of-day baselines captured the first time each product
+// is saved that day (captureProductDayBaseline, below, called from PATCH).
+//
+// Catalog CONTENT columns only. Live inventory (stock_qty) and structural
+// grouping (variant_group_id / variant_label) are deliberately excluded so a
+// revert never rolls back sales/restocks or re-shuffles variant groups. This is
+// also the exact column set restored on revert, so capture and restore agree.
+const DAY_REVERT_COLUMNS = [
+  'name_en', 'name_cn', 'sku', 'category', 'top_category', 'subcategory', 'weight',
+  'sell_price', 'compare_at_price', 'low_stock_threshold', 'ship_modes',
+  'description_en', 'description_cn', 'description_format', 'image_data', 'image_url', 'images', 'image_aspect',
+  'barcode', 'free_of', 'notes', 'product_facts', 'nutrition',
+  'is_market', 'is_restock_only', 'is_batch_made', 'status', 'is_published',
+  'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
+  'description_blocks', 'use_block_design', 'bundle', 'bundle_items', 'tags',
+  'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn', 'page_template',
+];
+// GZ (Beijing, UTC+8) calendar day as YYYY-MM-DD — same helper used by article
+// view dedup, so "today" means the operator's local day, not server UTC.
+function gzDay() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); }
+// Stow a product's pre-edit content as the start-of-today baseline. INSERT OR
+// IGNORE on UNIQUE(product_id, day): only the FIRST edit of the day writes, so
+// the snapshot is always the morning state. Best-effort — a capture failure
+// must never block the actual save.
+function captureProductDayBaseline(db, id, operatorName) {
+  try {
+    const row = db.prepare(`SELECT ${DAY_REVERT_COLUMNS.join(', ')}, name_en AS _nm FROM store_products WHERE id = ?`).get(id);
+    if (!row) return;
+    const snap = {};
+    for (const c of DAY_REVERT_COLUMNS) snap[c] = row[c];
+    db.prepare(
+      `INSERT OR IGNORE INTO retail_product_day_baseline (product_id, day, snapshot_json, product_name, edited_by)
+       VALUES (?, ?, ?, ?, ?)`
+    ).run(id, gzDay(), JSON.stringify(snap), row._nm || null, operatorName || null);
+  } catch (e) { console.error('[product day baseline capture]', e); }
+}
+
+// GET — preview what a revert would undo today (count + the affected products).
+router.get('/api/retail-admin/products/revert-today', requireRetailAdmin, (req, res) => {
+  const day = gzDay();
+  const rows = tdb().prepare(
+    `SELECT b.product_id AS id, b.product_name, b.edited_by, b.created_at, p.name_en AS current_name
+       FROM retail_product_day_baseline b
+       LEFT JOIN store_products p ON p.id = b.product_id
+      WHERE b.day = ?
+      ORDER BY b.created_at DESC`
+  ).all(day);
+  res.json({ success: true, day, count: rows.length, products: rows });
+});
+
+// POST — restore every product to its start-of-today baseline, then clear the
+// reverted rows (a later edit re-captures a fresh baseline). One transaction.
+router.post('/api/retail-admin/products/revert-today', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const day = gzDay();
+  const rows = db.prepare('SELECT product_id, snapshot_json FROM retail_product_day_baseline WHERE day = ?').all(day);
+  const revertedIds = [], failed = [];
+  const restoreOne = (productId, snap) => {
+    // Restore only columns that exist in the snapshot. On a SKU UNIQUE clash
+    // (another product grabbed this code today) retry without sku rather than
+    // failing the whole product's content restore.
+    const run = (cols) => {
+      if (!cols.length) return;
+      const sql = cols.map(c => `${c} = ?`).join(', ');
+      const params = cols.map(c => snap[c]); params.push(productId);
+      db.prepare(`UPDATE store_products SET ${sql}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
+    };
+    const cols = DAY_REVERT_COLUMNS.filter(c => c in snap);
+    try { run(cols); revertedIds.push(productId); }
+    catch (e) {
+      if (String(e.message || '').includes('UNIQUE')) {
+        try { run(cols.filter(c => c !== 'sku')); revertedIds.push(productId); }
+        catch (e2) { failed.push(productId); }
+      } else { failed.push(productId); }
+    }
+  };
+  const tx = db.transaction(() => {
+    for (const r of rows) {
+      let snap; try { snap = JSON.parse(r.snapshot_json); } catch { failed.push(r.product_id); continue; }
+      restoreOne(r.product_id, snap);
+    }
+    if (revertedIds.length) {
+      const placeholders = revertedIds.map(() => '?').join(',');
+      db.prepare(`DELETE FROM retail_product_day_baseline WHERE day = ? AND product_id IN (${placeholders})`).run(day, ...revertedIds);
+    }
+  });
+  tx();
+  logActivity(req.user.id, req.user.username, 'revert_today', 'product_retail', null, { day, reverted: revertedIds.length, failed }, req.ip);
+  res.json({ success: true, day, reverted: revertedIds.length, failed });
+});
+
 router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
+  // Capture the start-of-today baseline BEFORE applying this edit, so "Revert
+  // today's changes" can roll the catalogue back to its morning state. No-ops
+  // after the first edit of the day (INSERT OR IGNORE on product_id+day).
+  captureProductDayBaseline(tdb(), id, req.user && req.user.username);
 
   const sets = [];
   const params = [];

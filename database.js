@@ -1240,6 +1240,31 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_article_views_uniq
     ON retail_article_views(block_id, kind, viewer_key, day);
   CREATE INDEX IF NOT EXISTS idx_article_views_day ON retail_article_views(day);
+
+  -- Product edit "start-of-today" baselines, powering the Products page
+  -- "Revert today's changes" action. On the FIRST edit of a product on a given
+  -- GZ day, the product editor save handler stows the product's pre-edit
+  -- catalog content (name/price/description/photos/category/flags as JSON) here.
+  -- The UNIQUE(product_id, day) index means only that first edit writes a row,
+  -- so snapshot_json is always the state as it stood at the START of the day,
+  -- no matter how many autosaves follow. Reverting today restores every row's
+  -- snapshot and clears the reverted rows; a later edit re-captures a fresh
+  -- baseline. Inventory counts (stock_qty / per-store stock) are deliberately
+  -- NOT captured, so a revert never rolls back sales or restocks. No FK:
+  -- decoupled from store_products like the other retail_* satellite tables.
+  CREATE TABLE IF NOT EXISTS retail_product_day_baseline (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id    INTEGER NOT NULL,                  -- store_products.id (no FK)
+    day           TEXT NOT NULL,                     -- YYYY-MM-DD (GZ local)
+    snapshot_json TEXT NOT NULL,                     -- pre-edit catalog content
+    product_name  TEXT,                              -- name at capture (display)
+    edited_by     TEXT,                              -- operator who first edited
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_product_day_baseline_uniq
+    ON retail_product_day_baseline(product_id, day);
+  CREATE INDEX IF NOT EXISTS idx_product_day_baseline_day
+    ON retail_product_day_baseline(day);
 `);
 
 // New `retail` permission — gates the storefront admin surface (publish
