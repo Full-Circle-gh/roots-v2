@@ -1323,16 +1323,30 @@ function fulfillmentShortNote(o) {
   try { pids = JSON.parse(o.fulfillment_short_pids || '[]') || []; } catch {}
   if (!pids.length) return '';
   const byId = new Map((o.items || []).map(it => [it.product_id, it]));
-  const names = pids.map(pid => {
+  const rows = pids.map(pid => {
     const it = byId.get(pid);
-    if (!it) return '#' + pid;
+    if (!it) {
+      return `<div style="display:flex; align-items:center; gap:8px; margin-top:4px;">`
+        + `<span class="oi-thumb is-empty" aria-hidden="true"></span>`
+        + `<span style="font-weight:600; color: var(--text-2);">#${escapeHtml(String(pid))}</span></div>`;
+    }
     const nm = orderItemNames(it);
-    return nm.primary || nm.secondary || ('#' + pid);
-  });
+    const sub = (nm.secondary || it.size)
+      ? `<div class="sub" style="color: var(--text-3); font-size:11px;">${escapeHtml(nm.secondary || '')}${(nm.secondary && it.size) ? ' · ' : ''}${it.size ? escapeHtml(it.size) : ''}</div>`
+      : '';
+    return `<div style="display:flex; align-items:center; gap:8px; margin-top:4px;">`
+      + itemThumb(it)
+      + `<div style="min-width:0;">`
+      +   `<div style="font-weight:600; color: var(--text-2);">${escapeHtml(nm.primary || ('#' + pid))}</div>`
+      +   sub
+      + `</div>`
+      + itemSkuHtml(it)
+      + `</div>`;
+  }).join('');
   return `<div class="sub" style="margin-top:6px; color: var(--st-awaiting_restock); font-weight:700;">`
     + `⚠ ${cuT('Not in stock at this store — restock or transfer before shipping',
                 '该门店暂无库存 — 发货前请补货或调货')}`
-    + `<div style="font-weight:600; color: var(--text-2); margin-top:2px;">${escapeHtml(names.join('、'))}</div>`
+    + `<div style="margin-top:4px;">${rows}</div>`
     + `</div>`;
 }
 // Full-size "Ship by" tile shown in the order-detail card grid. Same decision
