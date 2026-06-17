@@ -1911,10 +1911,15 @@
      (name · sku · price · stock · show), so the operator never has to open a
      size just to set its stock. The size you opened is read-only here (edit it
      in the form); sibling sizes are editable inline; ✕ deletes the size. */
-  .va-table { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; }
-  /* grip · photo · name · sku · ¥ · stock · show · ✕ · slack — name is capped so
-     it doesn't sprawl; the trailing slack track absorbs leftover width. */
-  .va-row { display: grid; grid-template-columns: 20px 44px minmax(96px,190px) 92px 72px 64px 64px 56px 38px 22px minmax(0,1fr); gap: 8px; align-items: center; }
+  /* The table lives in the narrow 1fr left column (the 360px stock rail sits
+     beside it). overflow-x:auto is a safety net, but the row is sized to FIT the
+     pane so the trailing ✕ delete button is always visible without scrolling. */
+  .va-table { display: flex; flex-direction: column; gap: 5px; margin-top: 10px; overflow-x: auto; }
+  /* grip · photo · NAME(flex) · sku · ¥ · was · stock · show · ✕ — the Name
+     column is the flexible track (minmax 64px→1fr): it shrinks first so every
+     fixed column, including the ✕ delete button at the end, always stays on
+     screen instead of overflowing off the right edge. */
+  .va-row { display: grid; grid-template-columns: 20px 42px minmax(64px,1fr) 80px 64px 58px 54px 48px 34px 26px; gap: 8px; align-items: center; min-width: 0; }
   /* Size/weight column input — narrower text field; feeds the size picker's grey subline. */
   .va-wt { font-size: 13px; }
   /* Was-price (compare-at) column input: dimmed so it reads as the secondary,
