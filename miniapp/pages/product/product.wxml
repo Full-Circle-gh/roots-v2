@@ -95,6 +95,19 @@
         </view>
       </view>
 
+      <!-- Supplier-direct notice — this product ships straight from the
+           supplier, so set the expectation up front that it may travel on its
+           own and take a little longer than the rest of an order. -->
+      <view wx:if="{{shipFromSupplier}}" class="supplier-note">
+        <view class="supplier-note-ico">
+          <view class="supplier-note-glyph">↗</view>
+        </view>
+        <view class="supplier-note-body">
+          <text class="supplier-note-title f-bear">{{lang === 'cn' ? '由供应商直发' : 'Ships directly from our supplier'}}</text>
+          <text class="supplier-note-sub f-toni">{{lang === 'cn' ? '此商品单独发货，可能与订单其他商品分开送达，到货时间略长。' : 'This item ships on its own and may arrive separately from the rest of your order — please allow a little extra time.'}}</text>
+        </view>
+      </view>
+
       <!-- Social proof — live "N people bought this …" nudge. Real sales
            only (narrowest window with data); hidden when there's none. -->
       <view wx:if="{{socialProof}}" class="social-proof">

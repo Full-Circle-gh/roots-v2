@@ -4152,6 +4152,9 @@
   .pack-badge.any   { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pack-badge.air   { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .3); }
   .pack-badge.land  { background: rgba(176, 141, 74, .14); color: var(--brass); border-color: rgba(176, 141, 74, .3); }
+  /* Supplier-direct (drop-ship) — Tea Green, off the brass shipping palette so
+     "the supplier ships this, don't pack it" reads as its own distinct flag. */
+  .pack-badge.supplier { background: rgba(107, 142, 111, .16); color: var(--accent); border-color: rgba(107, 142, 111, .34); }
 
   /* ─── Order total banner — hero strip below the drawer header. Lifted to the
      same elevated card surface as the metadata block beneath it (was a recessed

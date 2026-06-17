@@ -2527,6 +2527,15 @@ db.exec('CREATE INDEX IF NOT EXISTS idx_retail_orders_tracking_number ON retail_
 addColumn('products', 'ship_modes',     "TEXT DEFAULT 'air,land'");
 addColumn('products', 'needs_ice_pack', 'INTEGER DEFAULT 0');
 
+// ── Supplier-direct (drop-ship) flag ────────────────────────────────
+// Marks products the supplier ships STRAIGHT to the customer rather than
+// through our warehouse. When set, the fact is surfaced across the whole
+// chain: the customer sees it on the product page + their order (and gets a
+// one-time "ships separately, may take longer" notice on payment), and the
+// warehouse packing slip + the backend order drawer flag the line so nobody
+// tries to pull it from our own stock.
+addColumn('products', 'ship_from_supplier', 'INTEGER DEFAULT 0');
+
 // ── Batch-made (fresh) flag ─────────────────────────────────────────
 // Marks short-shelf-life items (fresh meals, wraps) the kitchen makes on a
 // fixed every-N-days cadence. Outside-Guangzhou orders containing one must
@@ -2568,6 +2577,9 @@ addColumn('retail_orders', 'print_error',  'TEXT');
 addColumn('retail_order_items', 'ship_modes',     'TEXT');
 addColumn('retail_order_items', 'needs_ice_pack', 'INTEGER DEFAULT 0');
 addColumn('retail_order_items', 'shipment_id',    'INTEGER');
+// Snapshot the product's supplier-direct (drop-ship) flag at order time so a
+// later product edit can't rewrite how a past order was fulfilled/displayed.
+addColumn('retail_order_items', 'ship_from_supplier', 'INTEGER DEFAULT 0');
 
 // ── retail_shipments ───────────────────────────────────────────────
 // Formal split-shipment table. An order can fan out into 1 or 2 (or

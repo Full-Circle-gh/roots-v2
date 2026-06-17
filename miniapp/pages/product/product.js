@@ -139,6 +139,7 @@ Page({
     colophonImg: '',     // resolved IP-character image path
     colophonTagline: '', // resolved tagline text ("From Soil to Soul" or override)
     badges: [],
+    shipFromSupplier: false, // drop-ship product → show "ships separately" notice
     options: [],
     optionsSingle: [],     // 'single'/'text' groups → first (dressing) sheet
     optionsExtra: [],      // 'multi' groups → second (paid extras) sheet
@@ -647,6 +648,9 @@ Page({
       taglineSegments,
       colophonImg,
       colophonTagline,
+      // Drop-ship product — show an up-front "ships directly from supplier,
+      // may arrive separately" notice before the customer adds it to the cart.
+      shipFromSupplier: !!p.ship_from_supplier,
       badges,
       options,
       optionsSingle,

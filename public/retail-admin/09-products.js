@@ -1642,6 +1642,7 @@ function pdOpen(id) {
   pdFreeOfSet(p && p.free_of); set('pd-notes', p && p.notes); pdFactsSet(p && p.product_facts);
   const ck = (el, v) => { const n = document.getElementById(el); if (n) n.checked = !!v; };
   ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
+  ck('pd-ship-from-supplier', p && p.ship_from_supplier === 1);
   pdLoadStoreStocks(p ? p.id : null);
   set('pd-badge', p ? pdBadgeOf(p.tags) : '');
   // Description is always the Classic (rich-text) editor now. A legacy plain
@@ -3422,6 +3423,7 @@ function pdCollectBody() {
     status: g('pd-status') || 'Active',
     free_of: pdFreeOfGet(), notes: g('pd-notes'), product_facts: pdFactsGet(),
     is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),
+    ship_from_supplier: ckd('pd-ship-from-supplier'),
     ship_modes: modes.join(',') || 'air,land',
     description_en: pdRteClean(document.getElementById('pd-rte-en').innerHTML),
     description_cn: pdRteClean(document.getElementById('pd-rte-cn').innerHTML),

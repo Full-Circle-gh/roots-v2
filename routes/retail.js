@@ -713,7 +713,7 @@ const RETAIL_PRODUCT_COLS = `
   ) AS stock,
   p.sort_order AS display_order,
   p.description_en, p.description_cn, p.description_format,
-  p.free_of, p.tags, p.ship_modes, p.image_data, p.image_url,
+  p.free_of, p.tags, p.ship_modes, p.ship_from_supplier, p.image_data, p.image_url,
   p.image_aspect,
   p.nutrition,
   p.keywords_en, p.keywords_cn, p.tagline_en, p.tagline_cn,
@@ -3220,6 +3220,11 @@ function markOrderPaid(orderId) {
     // unless Nuonuo creds are saved AND fapiao.autoIssue is on; on failure it
     // silently falls back to the manual office queue. Fire-and-forget.
     maybeAutoIssueInvoice(orderId).catch((e) => console.warn('[markOrderPaid fapiao]', e.message));
+
+    // Tell the customer up front if any line ships directly from the supplier
+    // (may arrive separately / take longer). One-time in-app notice; no-op when
+    // the order holds no drop-ship item. Best-effort.
+    try { notifySupplierDirectItems(orderId); } catch (e) { console.warn('[markOrderPaid supplier]', e.message); }
   }
 }
 
@@ -3907,6 +3912,30 @@ function notifyOrderStatusChange(orderId, newStatus) {
     sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
       .catch(e => console.warn('[notify-status]', e));
   } catch (e) { console.error('[notify-status]', e); }
+}
+
+// One-time in-app notice, fired on payment, when the order holds any item the
+// supplier drop-ships straight to the customer. Sets the expectation up front
+// that those item(s) travel on their own and may arrive on a different
+// timeline from the rest of the order. Best-effort; never throws into the
+// caller (markOrderPaid). Only the in-app row — no WeChat push, by design.
+function notifySupplierDirectItems(orderId) {
+  try {
+    const o = tdb().prepare('SELECT order_no, customer_id FROM retail_orders WHERE id = ?').get(orderId);
+    if (!o || !o.customer_id) return;
+    const hit = tdb().prepare(
+      'SELECT 1 FROM retail_order_items WHERE order_id = ? AND COALESCE(ship_from_supplier, 0) = 1 LIMIT 1'
+    ).get(orderId);
+    if (!hit) return;
+    notifyCustomer(o.customer_id, {
+      category: 'order', type: 'order_supplier_direct',
+      title_en: 'Part of your order ships from our supplier',
+      title_cn: '您的部分商品由供应商直发',
+      body_en: `Order ${o.order_no} — one or more items ship directly from the supplier, so they may arrive separately and take a little longer.`,
+      body_cn: `订单 ${o.order_no} — 其中一件或多件商品由供应商直接发货，可能单独送达，到货时间略长。`,
+      ref_type: 'order', ref_id: orderId,
+    });
+  } catch (e) { console.warn('[notify-supplier-direct]', e.message); }
 }
 
 // Fire a subscribe-message when the delivery scenario changes — i.e.
@@ -6072,7 +6101,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
               sell_price AS price, stock_qty AS stock, image_data,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold, no_coupon_on_flash,
-              ship_modes, needs_ice_pack, variant_group_id, bundle_items
+              ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
@@ -6231,7 +6260,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         const { subId, qty: subQty } = repMap.get(r.product.id);
         const sub = tdb().prepare(
           `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, image_data,
-                  ship_modes, needs_ice_pack
+                  ship_modes, needs_ice_pack, ship_from_supplier
              FROM store_products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
         ).get(subId);
         if (!sub) return res.status(400).json({ success: false, error: 'substitute_not_available', product_id: subId });
@@ -6747,8 +6776,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       `INSERT INTO retail_order_items
          (order_id, product_id, name_en, name_cn, sku, size, image_url,
           qty, unit_price, line_total, options_json,
-          ship_modes, needs_ice_pack, replaced_for_product_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+          ship_modes, needs_ice_pack, ship_from_supplier, replaced_for_product_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     );
     for (const r of resolved) {
       insertItem.run(
@@ -6758,6 +6787,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         r.options.length ? JSON.stringify(r.options) : null,
         r.product.ship_modes || 'air,land',
         r.product.needs_ice_pack ? 1 : 0,
+        r.product.ship_from_supplier ? 1 : 0,
         r.replacedForProductId || null
       );
     }
@@ -7144,7 +7174,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json, oi.shipment_id,
-            oi.addon_id
+            oi.addon_id, oi.ship_from_supplier
        FROM retail_order_items oi
   LEFT JOIN store_products p ON p.id = oi.product_id
       WHERE oi.order_id = ? ORDER BY oi.id ASC`
@@ -7155,6 +7185,8 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
     // page can show an "added later" chip. addon_id is the staging row id.
     it.is_addon = !!it.addon_id;
     delete it.addon_id;
+    // Drop-ship line — the customer page shows a "ships separately" tag on it.
+    it.ship_from_supplier = !!it.ship_from_supplier;
     // Same fix as the orders-list endpoint: a data: URI here is the raw
     // base64 photo from products.image_data and can be hundreds of KB per
     // item, blowing past the mini-app's 12s response timeout on orders
@@ -11726,7 +11758,7 @@ function releaseSkuFromHiddenHolders(sku, excludeId) {
 // is also the exact column set written on restore, so capture and restore agree.
 const VERSION_COLUMNS = [
   'name_en', 'name_cn', 'sku', 'category', 'top_category', 'subcategory', 'weight',
-  'sell_price', 'compare_at_price', 'low_stock_threshold', 'ship_modes',
+  'sell_price', 'compare_at_price', 'low_stock_threshold', 'ship_modes', 'ship_from_supplier',
   'description_en', 'description_cn', 'description_format', 'image_data', 'image_url', 'images', 'image_aspect',
   'barcode', 'free_of', 'notes', 'product_facts', 'nutrition',
   'is_market', 'is_restock_only', 'is_batch_made', 'status', 'is_published',
@@ -11988,6 +12020,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   if ('bundle_items' in body) { sets.push('bundle_items = ?'); params.push(sanitizeBundleItems(body.bundle_items, id)); }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
+  if ('ship_from_supplier' in body) { sets.push('ship_from_supplier = ?'); params.push(body.ship_from_supplier ? 1 : 0); }
   // Kitchen-parity flags brought over so the store editor is a full superset.
   if ('is_market' in body) { sets.push('is_market = ?'); params.push(body.is_market ? 1 : 0); }
   if ('is_restock_only' in body) { sets.push('is_restock_only = ?'); params.push(body.is_restock_only ? 1 : 0); }
@@ -12055,7 +12088,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
-            is_batch_made, page_template,
+            is_batch_made, ship_from_supplier, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
   ).get(id);
@@ -12101,7 +12134,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
             variant_group_id, variant_label, variant_sort,
-            is_batch_made, page_template,
+            is_batch_made, ship_from_supplier, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
@@ -12655,7 +12688,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     nutrition, bundle, bundle_items, tags,
                     variant_group_id, variant_label, variant_sort,
-                    is_batch_made, use_block_design,
+                    is_batch_made, ship_from_supplier, use_block_design,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
@@ -12915,6 +12948,20 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.promised_ship_date, o.promised_delivery_date,
                     o.tracking_carrier, o.tracking_number, o.tracking_status,
                     o.tracking_kd100_subscribed, o.tracking_scenario,
+                    -- Split-delivery rollup so the list can show "2 parcels · 1
+                    -- delivered, 1 in transit". The order-level tracking_status is
+                    -- just one parcel's state, which misleads on multi-parcel
+                    -- orders (pill stays "dispatched" until ALL are delivered).
+                    (SELECT COUNT(*) FROM retail_shipments shc
+                       WHERE shc.order_id = o.id) AS shipment_count,
+                    (SELECT COUNT(*) FROM retail_shipments shd
+                       WHERE shd.order_id = o.id
+                         AND (shd.delivered_at IS NOT NULL OR shd.tracking_status = 'delivered')) AS shipment_delivered,
+                    (SELECT COUNT(*) FROM retail_shipments shl
+                       WHERE shl.order_id = o.id
+                         AND shl.delivered_at IS NULL AND COALESCE(shl.tracking_status,'') != 'delivered'
+                         AND (shl.dispatched_at IS NOT NULL
+                              OR (shl.tracking_number IS NOT NULL AND shl.tracking_number != ''))) AS shipment_moving,
                     (SELECT sh.local_eta FROM retail_shipments sh
                        WHERE sh.order_id = o.id AND sh.mode = 'local'
                          AND sh.local_eta IS NOT NULL AND sh.local_eta != ''
@@ -13072,7 +13119,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json,
-            oi.ship_modes, oi.needs_ice_pack, oi.shipment_id,
+            oi.ship_modes, oi.needs_ice_pack, oi.ship_from_supplier, oi.shipment_id,
             p.bundle_items
        FROM retail_order_items oi
   LEFT JOIN store_products p ON p.id = oi.product_id
@@ -13082,6 +13129,8 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     delete it.options_json;
     // Normalize csv for the front-end (always an array).
     it.ship_modes_arr = parseShipModes(it.ship_modes);
+    // Drop-ship flag → boolean for the drawer's supplier-direct badge.
+    it.ship_from_supplier = !!it.ship_from_supplier;
     // data: URI → keep the drawer payload small; EMPTY → a size variant keeps
     // its photo on a sibling, so resolve it through the variant-aware
     // byte-stream endpoint (resolveProductImage) instead of showing a blank.
@@ -18513,8 +18562,8 @@ function finalizeOrderAddon(addonId) {
   const insItem = tdb().prepare(
     `INSERT INTO retail_order_items
        (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price,
-        line_total, options_json, ship_modes, needs_ice_pack, addon_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        line_total, options_json, ship_modes, needs_ice_pack, ship_from_supplier, addon_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
   const newItemIds = [];
 
@@ -18531,7 +18580,7 @@ function finalizeOrderAddon(addonId) {
         order.id, it.product_id || null, it.name_en || null, it.name_cn || null,
         it.sku || null, it.size || null, it.qty, it.unit_price, it.line_total,
         it.options && it.options.length ? JSON.stringify(it.options) : null,
-        it.ship_modes || null, it.needs_ice_pack ? 1 : 0, addonId
+        it.ship_modes || null, it.needs_ice_pack ? 1 : 0, it.ship_from_supplier ? 1 : 0, addonId
       );
       newItemIds.push(info.lastInsertRowid);
     }
@@ -18678,7 +18727,7 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     const p = tdb().prepare(
       `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, stock_qty AS stock,
               flash_price, flash_starts_at, flash_ends_at, flash_stock_limit, flash_sold, no_coupon_on_flash,
-              ship_modes, needs_ice_pack, variant_group_id, bundle_items
+              ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items
          FROM store_products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
     if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
@@ -18736,6 +18785,7 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     options: r.options,
     ship_modes: r.product.ship_modes || null,
     needs_ice_pack: r.product.needs_ice_pack ? 1 : 0,
+    ship_from_supplier: r.product.ship_from_supplier ? 1 : 0,
     bundle_items: r.product.bundle_items || null,
     is_flash: r.isFlash ? 1 : 0,
   }));

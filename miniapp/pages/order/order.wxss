@@ -147,6 +147,21 @@
   border-radius: 999rpx;
   padding: 2rpx 14rpx;
 }
+/* Supplier-direct (drop-ship) tag — its own line under the name, forest accent
+   so it reads as a delivery note rather than a warning. */
+.item-supplier-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6rpx;
+  margin-top: 6rpx;
+  font-size: calc(19rpx * var(--font-scale));
+  letter-spacing: 0.03em;
+  color: var(--forest);
+  background: rgba(28, 58, 38, 0.08);
+  border-radius: 999rpx;
+  padding: 3rpx 14rpx;
+}
+.item-supplier-glyph { font-weight: 700; }
 .item-options { font-size: calc(20rpx * var(--font-scale)); margin-top: 4rpx; }
 .item-meta { font-size: calc(22rpx * var(--font-scale)); margin-top: 4rpx; }
 .review-link {

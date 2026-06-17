@@ -1444,6 +1444,8 @@ const DELIVERY_ICON_PATHS = {
   locker:    '<rect x="5" y="3" width="14" height="18" rx="1"/><path d="M12 3v18"/><path d="M8.5 7.5h.6"/><path d="M14.9 7.5h.6"/>',
   // Same-city local delivery — a moped/scooter (replaces the 🛵 emoji).
   scooter:   '<circle cx="6" cy="17" r="2.3"/><circle cx="18" cy="17" r="2.3"/><path d="M8.2 17h7.6l-2.3-7H11"/><path d="M13.5 10l1.3-3H17"/><path d="M4.5 13h3.2l1.6 4"/>',
+  // Two stacked boxes — split delivery (multiple parcels in one order).
+  parcels:   '<path d="M3 8l5-3 5 3-5 3-5-3z"/><path d="M3 8v6l5 3v-6"/><path d="M13 8v6l-5 3"/><path d="M13.5 13l4-2.3 4 2.3-4 2.3-4-2.3z"/><path d="M13.5 13v4l4 2.3v-4"/><path d="M21.5 13v4l-4 2.3"/>',
 };
 function deliveryIcon(key, size = 12) {
   const p = DELIVERY_ICON_PATHS[key];
@@ -1484,15 +1486,42 @@ function renderTrackingCell(o) {
   const sync = (o.tracking_kd100_subscribed || o.jd_live)
     ? `<span style="color:#5a8c2a; font-size:10px;">● ${cuT('live','实时')}</span>`
     : `<span class="muted" style="font-size:10px;">${cuT('manual','手动')}</span>`;
+  // Split delivery: the order-level tracking_status is just ONE parcel's state,
+  // so a single line reads "Delivered" even when another parcel is still moving
+  // (and the pill correctly stays "Dispatched" until ALL parcels arrive). Show a
+  // per-parcel rollup instead so the office sees why the order isn't done yet.
+  const splitLine = renderSplitRollupLine(o);
   // Live delivery state — only meaningful once the parcel has left (dispatched),
   // and only when the carrier has actually reported something. Urgent states get
   // a heavier weight so a stuck/contact-failed parcel stands out in the list.
-  const dl = (o.status === 'dispatched' || o.status === 'delivered') ? deliveryStateInfo(o) : null;
+  // For split orders the rollup above replaces this single (misleading) line.
+  const dl = (!splitLine && (o.status === 'dispatched' || o.status === 'delivered')) ? deliveryStateInfo(o) : null;
   const dlLine = dl
     ? `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:${dl.tone === 'urgent' ? 700 : 600}; color:${dl.color};">${deliveryIcon(dl.icon, 11)}<span>${cuT(dl.en, dl.cn)}</span></div>`
     : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
-          <div style="margin-top: 2px;">${sync}</div>${dlLine}`;
+          <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}`;
+}
+
+// For multi-parcel (split) orders, a two-line summary: "N parcels" + a breakdown
+// like "1 delivered · 1 in transit". Returns '' for single-parcel orders so they
+// render exactly as before. Counts come from the list query's shipment rollup
+// (shipment_count / shipment_delivered / shipment_moving). A fully-delivered
+// order is shown by the status pill, so we still surface the rollup until then.
+function renderSplitRollupLine(o) {
+  const total = Number(o.shipment_count) || 0;
+  if (total < 2) return '';
+  const delivered = Math.min(Number(o.shipment_delivered) || 0, total);
+  const moving    = Math.min(Number(o.shipment_moving)    || 0, total - delivered);
+  const toShip    = Math.max(0, total - delivered - moving);
+  const parts = [];
+  if (delivered) parts.push(`<span style="color:#5a8c2a; font-weight:700;">${delivered} ${cuT('delivered','已签收')}</span>`);
+  if (moving)    parts.push(`<span style="color:#1d72b8;">${moving} ${cuT('in transit','运输中')}</span>`);
+  if (toShip)    parts.push(`<span class="muted">${toShip} ${cuT('to ship','待发货')}</span>`);
+  const breakdown = parts.join(' · ');
+  return `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:600; color:var(--text-2);">`
+       + `${deliveryIcon('parcels', 12)}<span>${total} ${cuT('parcels','个包裹')}</span></div>`
+       + (breakdown ? `<div style="margin-top:1px; font-size:10px;">${breakdown}</div>` : '');
 }
 
 // "Ship to" — the parcel's destination city (+ district below) so operators can
@@ -1639,11 +1668,18 @@ function sortOrderItems(items, mode) {
 }
 
 function renderPackBadges(it) {
+  // Drop-ship line: the supplier ships it straight to the customer, so it's
+  // never pulled from our own stock. Prepended to whatever shipping badge
+  // follows (and shown even when ship modes are unrestricted, where the
+  // air/land logic below returns nothing).
+  const supplier = it.ship_from_supplier
+    ? `<span class="pack-badge supplier" title="Ships directly from the supplier — do not pack · 供应商直发，无需打包">${cuT('Supplier-direct', '供应商直发')}</span>`
+    : '';
   const arr = it.ship_modes_arr || ['air', 'land'];
   // Local only = Guangzhou same-city item (never air/land). Surface it plainly
   // rather than falling through to the air/land restriction logic below.
   if (arr.length === 1 && arr[0] === 'local') {
-    return '<span class="pack-badge land" title="Guangzhou local delivery only · 仅广州同城配送">Local · 仅广州</span>';
+    return supplier + '<span class="pack-badge land" title="Guangzhou local delivery only · 仅广州同城配送">Local · 仅广州</span>';
   }
   const hasAir  = arr.includes('air');
   const hasLand = arr.includes('land');
@@ -1657,12 +1693,12 @@ function renderPackBadges(it) {
   // pure noise — the shipment header already shows the chosen mode. Only
   // surface a badge when the item is RESTRICTED to one mode, which is a real
   // packing warning (e.g. "Land only — airline rejected").
-  if (hasAir && hasLand) return '';
+  if (hasAir && hasLand) return supplier;
   if (hasAir)
     parts.push('<span class="pack-badge air" title="Air shipping only · 仅空运">✈︎ Air only · 仅空运</span>');
   else
     parts.push('<span class="pack-badge land" title="Land shipping only — airline rejected · 仅陆运">Land only · 仅陆运</span>');
-  return parts.join('');
+  return supplier + parts.join('');
 }
 
 // Small product thumbnail for an order line item. Falls back to a neutral

@@ -291,6 +291,47 @@
   70%  { box-shadow: 0 0 0 14rpx rgba(255, 107, 12, 0); }
   100% { box-shadow: 0 0 0 0 rgba(255, 107, 12, 0); }
 }
+/* Supplier-direct (drop-ship) notice — soft oat card with a forest accent so
+   it reads as helpful information, not an error. Sits between the header and
+   the social-proof line. */
+.supplier-note {
+  display: flex;
+  gap: 18rpx;
+  align-items: flex-start;
+  margin-top: 28rpx;
+  padding: 22rpx 24rpx;
+  background: #F2E7DF;
+  border-left: 6rpx solid var(--forest);
+  border-radius: 14rpx;
+}
+.supplier-note-ico {
+  flex-shrink: 0;
+  width: calc(40rpx * var(--font-scale));
+  height: calc(40rpx * var(--font-scale));
+  border-radius: 999rpx;
+  background: var(--forest);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 2rpx;
+}
+.supplier-note-glyph {
+  color: var(--lime);
+  font-size: calc(26rpx * var(--font-scale));
+  font-weight: 700;
+  line-height: 1;
+}
+.supplier-note-body { display: flex; flex-direction: column; gap: 6rpx; min-width: 0; }
+.supplier-note-title {
+  font-size: calc(26rpx * var(--font-scale));
+  color: var(--ink);
+  line-height: 1.25;
+}
+.supplier-note-sub {
+  font-size: calc(23rpx * var(--font-scale));
+  color: var(--olive);
+  line-height: 1.45;
+}
 /* "N viewing now" reuses the social-proof row but with a green "live"
    dot (presence, not a purchase) to read like an online indicator. */
 .sp-dot-view {

@@ -170,6 +170,9 @@
         </view>
         <view class="item-info">
           <view class="item-name f-bear">{{item.display_name}}<text wx:if="{{item.is_addon}}" class="item-addon-tag f-toni">{{lang === 'cn' ? '后加' : 'Added later'}}</text></view>
+          <view wx:if="{{item.ship_from_supplier}}" class="item-supplier-tag f-toni">
+            <text class="item-supplier-glyph">↗</text>{{lang === 'cn' ? '供应商直发 · 单独送达' : 'Ships from supplier · arrives separately'}}
+          </view>
           <view wx:if="{{item.options_str}}" class="item-options muted">{{item.options_str}}</view>
           <view class="item-meta muted">×{{item.qty}}</view>
           <view wx:if="{{order.status === 'delivered' && item.product_id}}" class="review-link"
