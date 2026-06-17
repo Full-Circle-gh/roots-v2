@@ -306,6 +306,7 @@
               <text wx:if="{{opt.priceWas}}" class="vp-opt-was f-aleo">{{opt.priceWas}}</text>
               <text class="vp-opt-price f-bear {{opt.isFlash ? 'is-flash' : ''}}">{{opt.price}}</text>
             </view>
+            <view wx:if="{{opt.linkId}}" class="vp-opt-info" catchtap="onLinkedProduct" data-id="{{opt.linkId}}">›</view>
           </view>
         </view>
       </view>
@@ -332,6 +333,7 @@
                     data-option-id="{{opt.id}}" data-choice-id="{{ch.id}}" bindtap="pickChoice">
                 <text class="op-choice-label f-bear">{{ch.label}}</text>
                 <text wx:if="{{ch.delta_text}}" class="op-choice-delta f-toni">{{ch.delta_text}}</text>
+                <view wx:if="{{ch.stock_product_id}}" class="op-extra-info" catchtap="onLinkedProduct" data-id="{{ch.stock_product_id}}">›</view>
               </view>
             </view>
           </view>
@@ -365,6 +367,7 @@
                 <text class="op-choice-label f-bear">{{ch.label}}</text>
                 <text wx:if="{{ch.sold_out}}" class="op-extra-oos f-toni">{{oosLabel}}</text>
                 <text wx:elif="{{ch.delta_text}}" class="op-choice-delta f-toni">{{ch.delta_text}}</text>
+                <view wx:if="{{ch.stock_product_id}}" class="op-extra-info" catchtap="onLinkedProduct" data-id="{{ch.stock_product_id}}">›</view>
               </view>
             </view>
           </view>

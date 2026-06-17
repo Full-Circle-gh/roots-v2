@@ -2036,7 +2036,7 @@ router.get('/api/retail/products/:id', (req, res) => {
   if (optionIds.length) {
     const placeholders = optionIds.map(() => '?').join(',');
     const choices = tdb().prepare(
-      `SELECT id, option_id, label_en, label_cn, price_delta, is_default, sort_order
+      `SELECT id, option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order
          FROM retail_product_option_choices
         WHERE option_id IN (${placeholders})
         ORDER BY sort_order ASC, id ASC`

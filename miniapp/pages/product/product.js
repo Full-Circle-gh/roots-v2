@@ -942,7 +942,10 @@ Page({
       const soldOut = stock != null && stock <= 0;
       return {
         id: m.id,
-        label: lang.pickLabel(m.variant_label, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
+        // Link to this size's own product page — unless it's the one we're
+        // already viewing (no point linking a row back to the current page).
+        linkId: Number(m.id) === Number(this.data.id) ? 0 : m.id,
+        label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
         weight: (m.size || '').toString().trim(),
         price: eff > 0 ? money(eff) : '',
         priceWas: wasN > 0 ? money(wasN) : '',
@@ -963,6 +966,16 @@ Page({
   },
 
   closeVariantPicker() { this.setData({ vpShow: false }); },
+  // Tap the chevron on any picker row that links a real product (a sibling
+  // size, or a choice/extra backed by a stock product) → close whichever sheet
+  // is open and open that product's page. catchtap keeps the row's own tap
+  // (add-to-cart / select / checkbox) from also firing.
+  onLinkedProduct(e) {
+    const id = e.currentTarget.dataset.id;
+    if (!id) return;
+    this.setData({ vpShow: false, opShow: false, exShow: false });
+    wx.navigateTo({ url: '/pages/product/product?id=' + id });
+  },
   vpStop() { /* catchtap on the sheet body so taps don't dismiss it */ },
 
   vpChoose(e) {
