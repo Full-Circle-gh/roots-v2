@@ -1766,37 +1766,72 @@ function pdRevert() {
     pdOpen(_pdSelectedId);
   }
 }
-// Products-page "Revert today's changes": roll EVERY product edited today back
-// to how it looked at the start of the day. Unlike pdRevert (one product, this
-// session), this undoes a whole day's edits across the catalogue from the
-// server's start-of-today baselines. Confirms with a count + product names, and
-// is honest about what it does NOT touch (stock, additions, deletions).
-async function paRevertToday() {
-  let info;
-  try { info = await api('/api/retail-admin/products/revert-today'); }
-  catch (e) { toast(cuT('Could not check today’s changes: ', '无法查询今日修改:') + e.message, 'err'); return; }
-  const n = info.count || 0;
-  if (!n) { toast(cuT('No product changes have been made today — nothing to revert.', '今天没有产品修改 — 无需还原。')); return; }
-  const list = (info.products || []).slice(0, 8).map(p => '• ' + (p.product_name || p.current_name || ('#' + p.id))).join('\n');
-  const more = n > 8 ? cuT('\n…and ', '\n…还有 ') + (n - 8) + cuT(' more', ' 个') : '';
-  const msg = cuT(
-    'Revert today’s changes?\n\nThis rolls ' + n + ' product(s) back to how they looked at the START of today, undoing every edit made today (name, price, description, photos, category, on/off sale…).\n\nIt does NOT change stock counts, and does NOT bring back deleted products or remove products added today.\n\n' + list + more,
-    '还原今日修改?\n\n这会将 ' + n + ' 个产品还原到今天开始时的状态,撤销今天的所有修改(名称、价格、描述、图片、分类、上下架…)。\n\n不会更改库存数量,也不会恢复已删除的产品或移除今天新增的产品。\n\n' + list + more
-  );
-  if (!confirm(msg)) return;
+// ── Version history (the editor's "Version history" button) ─────────────────
+// The product editor autosaves; the server checkpoints each distinct saved
+// state. This opens a modal listing every saved version of the OPEN product
+// (newest first, "Original" tag on the pre-edit baseline) so the operator can
+// roll back to any of them. Replaces the old single-step "revert to last save".
+// Format a server UTC timestamp ('YYYY-MM-DD HH:MM:SS') as GZ-local "Today
+// 14:32" / "Yesterday 09:10" / "Jun 14, 18:05".
+function pdFmtVersionTime(s) {
+  if (!s) return '';
+  const d = new Date(String(s).replace(' ', 'T') + 'Z');
+  if (isNaN(d.getTime())) return String(s);
+  const gz = new Date(d.getTime() + 8 * 3600 * 1000);
+  const now = new Date(Date.now() + 8 * 3600 * 1000);
+  const key = x => x.toISOString().slice(0, 10);
+  const hh = String(gz.getUTCHours()).padStart(2, '0'), mm = String(gz.getUTCMinutes()).padStart(2, '0');
+  const t = hh + ':' + mm;
+  const k = key(gz);
+  if (k === key(now)) return cuT('Today ', '今天 ') + t;
+  if (k === key(new Date(now.getTime() - 86400000))) return cuT('Yesterday ', '昨天 ') + t;
+  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][gz.getUTCMonth()];
+  return cuT(mon + ' ' + gz.getUTCDate() + ', ' + t, (gz.getUTCMonth() + 1) + '月' + gz.getUTCDate() + '日 ' + t);
+}
+async function pdOpenVersions() {
+  const id = document.getElementById('pd-id').value;
+  if (!id) { toast(cuT('Add a name first — versions are saved as you edit.', '请先填写名称 — 编辑时会自动保存版本。')); return; }
+  let list;
+  try { const j = await api('/api/retail-admin/products/' + id + '/versions'); list = j.versions || []; }
+  catch (e) { toast(cuT('Could not load versions: ', '无法加载版本:') + e.message, 'err'); return; }
+  const rows = list.length ? list.map((v, i) => {
+    const tag = v.is_baseline
+      ? `<span style="font-size:10px;font-weight:600;color:var(--text-3);border:1px solid var(--line,#d9d3c6);border-radius:6px;padding:1px 6px;margin-left:8px;">${cuT('Original', '原始版本')}</span>`
+      : (i === 0 ? `<span style="font-size:10px;font-weight:600;color:var(--accent,#365329);border:1px solid var(--accent,#365329);border-radius:6px;padding:1px 6px;margin-left:8px;">${cuT('Current', '当前')}</span>` : '');
+    const by = v.edited_by ? `<div class="muted" style="font-size:11px;margin-top:2px;">${cuT('by ', '操作人:')}${escapeHtml(v.edited_by)}</div>` : '';
+    const disabled = i === 0 ? ' disabled style="opacity:.5;cursor:default;"' : '';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 18px;border-top:1px solid var(--line,#eee);">
+        <div><div style="font-size:13px;font-weight:500;">${pdFmtVersionTime(v.created_at)}${tag}</div>${by}</div>
+        <button class="btn btn-sm" onclick="pdRestoreVersion(${v.id})"${disabled}>${cuT('Restore', '还原')}</button>
+      </div>`;
+  }).join('') : `<div class="muted" style="padding:20px 18px;">${cuT('No earlier versions yet — they’re saved automatically as you edit.', '暂无历史版本 — 编辑时会自动保存。')}</div>`;
+  const bg = document.createElement('div');
+  bg.className = 'pu-editor-bg'; bg.style.display = 'flex';
+  bg.innerHTML = `
+    <div class="pu-editor" style="width:460px;max-width:92vw;">
+      <div class="pu-editor-head">
+        <div>
+          <h3 style="margin:0;font-size:14px;">${cuT('Version history', '历史版本')}</h3>
+          <div class="muted" style="font-size:11px;margin-top:2px;">${cuT('Roll this product back to any saved version. Stock counts are never changed.', '将此产品还原到任意已保存的版本。库存数量不会被更改。')}</div>
+        </div>
+        <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
+      </div>
+      <div class="pu-editor-body" style="display:block;padding:0 0 8px;max-height:60vh;overflow:auto;">${rows}</div>
+    </div>`;
+  mountFloatingPuModal(bg);
+}
+async function pdRestoreVersion(versionId) {
+  const id = document.getElementById('pd-id').value; if (!id) return;
+  if (!confirm(cuT(
+    'Restore this version?\n\nThe product’s current content (name, price, description, photos, category…) is replaced with this version. A new version is kept first, so you can undo. Stock is not changed.',
+    '还原此版本?\n\n产品当前内容(名称、价格、描述、图片、分类…)将被此版本替换。会先保留一个新版本以便撤销。库存不会更改。'
+  ))) return;
   try {
-    const j = await api('/api/retail-admin/products/revert-today', { method: 'POST', body: {} });
-    // Drop the editor's in-memory copy first — if it's open on a reverted
-    // product, leaving it would re-autosave the stale form and undo the revert.
-    pdClose();
-    await paLoad();
-    toast(cuT('Reverted ' + j.reverted + ' product(s) to this morning’s version.',
-              '已将 ' + j.reverted + ' 个产品还原到今天开始时的版本。'));
-    if (j.failed && j.failed.length) {
-      toast(cuT(j.failed.length + ' could not be reverted (SKU now used by another product).',
-                j.failed.length + ' 个因货号已被其他产品占用,未能还原。'), 'err');
-    }
-  } catch (e) { toast(cuT('Revert failed: ', '还原失败:') + e.message, 'err'); }
+    await api('/api/retail-admin/products/' + id + '/restore-version', { method: 'POST', body: { version_id: versionId } });
+    document.querySelectorAll('body > .pu-editor-bg').forEach(x => x.remove());
+    await pdOpen(Number(id));   // reload the editor with the restored content
+    toast(cuT('Restored to the chosen version.', '已还原到所选版本。'));
+  } catch (e) { toast(cuT('Restore failed: ', '还原失败:') + e.message, 'err'); }
 }
 // Expand mode: hide the left list so the editor fills the page width.
 function pdSyncFullscreenBtn(on) {

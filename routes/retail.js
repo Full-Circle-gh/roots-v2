@@ -11714,18 +11714,17 @@ function releaseSkuFromHiddenHolders(sku, excludeId) {
   } catch (e) { console.error('[sku release]', e); return []; }
 }
 
-// ── "Revert today's changes" (Products page) ────────────────────────────────
-// The product editor only knows how to undo the OPEN product back to where it
-// was when this tab opened it. This pair of endpoints undoes a whole DAY of
-// edits across EVERY product, back to how each looked at the start of the GZ
-// day — powered by start-of-day baselines captured the first time each product
-// is saved that day (captureProductDayBaseline, below, called from PATCH).
+// ── Product VERSION HISTORY ─────────────────────────────────────────────────
+// The editor's "Version history" button lists every saved version of the open
+// product so the operator can roll back to any of them. Versions are captured
+// here on each product save (PATCH): the FIRST save of an editing run stows the
+// pre-edit "Original" baseline, then each distinct saved state is checkpointed.
 //
 // Catalog CONTENT columns only. Live inventory (stock_qty) and structural
 // grouping (variant_group_id / variant_label) are deliberately excluded so a
-// revert never rolls back sales/restocks or re-shuffles variant groups. This is
-// also the exact column set restored on revert, so capture and restore agree.
-const DAY_REVERT_COLUMNS = [
+// restore never rolls back sales/restocks or re-shuffles variant groups. This
+// is also the exact column set written on restore, so capture and restore agree.
+const VERSION_COLUMNS = [
   'name_en', 'name_cn', 'sku', 'category', 'top_category', 'subcategory', 'weight',
   'sell_price', 'compare_at_price', 'low_stock_threshold', 'ship_modes',
   'description_en', 'description_cn', 'description_format', 'image_data', 'image_url', 'images', 'image_aspect',
@@ -11735,88 +11734,119 @@ const DAY_REVERT_COLUMNS = [
   'description_blocks', 'use_block_design', 'bundle', 'bundle_items', 'tags',
   'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn', 'page_template',
 ];
-// GZ (Beijing, UTC+8) calendar day as YYYY-MM-DD — same helper used by article
-// view dedup, so "today" means the operator's local day, not server UTC.
-function gzDay() { return new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10); }
-// Stow a product's pre-edit content as the start-of-today baseline. INSERT OR
-// IGNORE on UNIQUE(product_id, day): only the FIRST edit of the day writes, so
-// the snapshot is always the morning state. Best-effort — a capture failure
-// must never block the actual save.
-function captureProductDayBaseline(db, id, operatorName) {
+const VERSION_COLLAPSE_SECONDS = 120;  // autosaves within this window merge into one checkpoint
+const VERSION_KEEP = 25;               // newest non-baseline versions kept per product
+function productContentSnapshot(db, id) {
+  const row = db.prepare(`SELECT ${VERSION_COLUMNS.join(', ')} FROM store_products WHERE id = ?`).get(id);
+  if (!row) return null;
+  const snap = {};
+  for (const c of VERSION_COLUMNS) snap[c] = row[c];
+  return snap;
+}
+// Stow the "Original" pre-edit state once, before the first save of an editing
+// run touches the row. Best-effort — never blocks the save.
+function ensureProductBaselineVersion(db, id, operatorName) {
   try {
-    const row = db.prepare(`SELECT ${DAY_REVERT_COLUMNS.join(', ')}, name_en AS _nm FROM store_products WHERE id = ?`).get(id);
-    if (!row) return;
-    const snap = {};
-    for (const c of DAY_REVERT_COLUMNS) snap[c] = row[c];
-    db.prepare(
-      `INSERT OR IGNORE INTO retail_product_day_baseline (product_id, day, snapshot_json, product_name, edited_by)
-       VALUES (?, ?, ?, ?, ?)`
-    ).run(id, gzDay(), JSON.stringify(snap), row._nm || null, operatorName || null);
-  } catch (e) { console.error('[product day baseline capture]', e); }
+    if (db.prepare('SELECT 1 FROM retail_product_versions WHERE product_id = ? LIMIT 1').get(id)) return;
+    const snap = productContentSnapshot(db, id);
+    if (!snap) return;
+    db.prepare('INSERT INTO retail_product_versions (product_id, snapshot_json, is_baseline, edited_by) VALUES (?, ?, 1, ?)')
+      .run(id, JSON.stringify(snap), operatorName || null);
+  } catch (e) { console.error('[product version baseline]', e); }
+}
+// Checkpoint the post-save state. Skips no-op saves, collapses a burst of
+// autosaves into one evolving checkpoint, and prunes old versions.
+function recordProductVersion(db, id, operatorName) {
+  try {
+    const snap = productContentSnapshot(db, id);
+    if (!snap) return;
+    const json = JSON.stringify(snap);
+    const latest = db.prepare(
+      `SELECT id, snapshot_json, is_baseline,
+              CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) AS age_s
+         FROM retail_product_versions WHERE product_id = ? ORDER BY id DESC LIMIT 1`
+    ).get(id);
+    if (latest && latest.snapshot_json === json) return;   // nothing changed since last version
+    if (latest && !latest.is_baseline && latest.age_s != null && latest.age_s < VERSION_COLLAPSE_SECONDS) {
+      db.prepare('UPDATE retail_product_versions SET snapshot_json = ?, edited_by = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?')
+        .run(json, operatorName || null, latest.id);
+    } else {
+      db.prepare('INSERT INTO retail_product_versions (product_id, snapshot_json, is_baseline, edited_by) VALUES (?, ?, 0, ?)')
+        .run(id, json, operatorName || null);
+    }
+    const stale = db.prepare(
+      'SELECT id FROM retail_product_versions WHERE product_id = ? AND is_baseline = 0 ORDER BY id DESC LIMIT -1 OFFSET ?'
+    ).all(id, VERSION_KEEP);
+    if (stale.length) {
+      db.prepare(`DELETE FROM retail_product_versions WHERE id IN (${stale.map(() => '?').join(',')})`).run(...stale.map(s => s.id));
+    }
+  } catch (e) { console.error('[product version record]', e); }
 }
 
-// GET — preview what a revert would undo today (count + the affected products).
-router.get('/api/retail-admin/products/revert-today', requireRetailAdmin, (req, res) => {
-  const day = gzDay();
-  const rows = tdb().prepare(
-    `SELECT b.product_id AS id, b.product_name, b.edited_by, b.created_at, p.name_en AS current_name
-       FROM retail_product_day_baseline b
-       LEFT JOIN store_products p ON p.id = b.product_id
-      WHERE b.day = ?
-      ORDER BY b.created_at DESC`
-  ).all(day);
-  res.json({ success: true, day, count: rows.length, products: rows });
+// GET — list saved versions of a product (metadata only; snapshots can be big).
+router.get('/api/retail-admin/products/:id/versions', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const versions = tdb().prepare(
+    'SELECT id, is_baseline, edited_by, created_at FROM retail_product_versions WHERE product_id = ? ORDER BY id DESC'
+  ).all(id);
+  res.json({ success: true, versions });
 });
 
-// POST — restore every product to its start-of-today baseline, then clear the
-// reverted rows (a later edit re-captures a fresh baseline). One transaction.
-router.post('/api/retail-admin/products/revert-today', requireRetailAdmin, express.json(), (req, res) => {
+// POST — restore a product to a saved version. The current state is checkpointed
+// first so the restore itself is undoable. Content columns only (stock untouched).
+router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin, express.json(), (req, res) => {
   const db = tdb();
-  const day = gzDay();
-  const rows = db.prepare('SELECT product_id, snapshot_json FROM retail_product_day_baseline WHERE day = ?').all(day);
-  const revertedIds = [], failed = [];
-  const restoreOne = (productId, snap) => {
-    // Restore only columns that exist in the snapshot. On a SKU UNIQUE clash
-    // (another product grabbed this code today) retry without sku rather than
-    // failing the whole product's content restore.
-    const run = (cols) => {
-      if (!cols.length) return;
-      const sql = cols.map(c => `${c} = ?`).join(', ');
-      const params = cols.map(c => snap[c]); params.push(productId);
-      db.prepare(`UPDATE store_products SET ${sql}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
-    };
-    const cols = DAY_REVERT_COLUMNS.filter(c => c in snap);
-    try { run(cols); revertedIds.push(productId); }
-    catch (e) {
-      if (String(e.message || '').includes('UNIQUE')) {
-        try { run(cols.filter(c => c !== 'sku')); revertedIds.push(productId); }
-        catch (e2) { failed.push(productId); }
-      } else { failed.push(productId); }
-    }
+  const id = parseInt(req.params.id, 10);
+  const versionId = parseInt((req.body || {}).version_id, 10);
+  if (!Number.isFinite(id) || !Number.isFinite(versionId)) return res.status(400).json({ success: false, error: 'bad_request' });
+  const ver = db.prepare('SELECT snapshot_json FROM retail_product_versions WHERE id = ? AND product_id = ?').get(versionId, id);
+  if (!ver) return res.status(404).json({ success: false, error: 'version_not_found' });
+  let snap; try { snap = JSON.parse(ver.snapshot_json); } catch { return res.status(500).json({ success: false, error: 'bad_snapshot' }); }
+  const cols = VERSION_COLUMNS.filter(c => c in snap);
+  if (!cols.length) return res.status(400).json({ success: false, error: 'empty_snapshot' });
+  const operator = req.user && req.user.username;
+  const apply = (useCols) => {
+    const sql = useCols.map(c => `${c} = ?`).join(', ');
+    const params = useCols.map(c => snap[c]); params.push(id);
+    db.prepare(`UPDATE store_products SET ${sql}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...params);
   };
+  const insertVersion = (json) => db.prepare(
+    'INSERT INTO retail_product_versions (product_id, snapshot_json, is_baseline, edited_by) VALUES (?, ?, 0, ?)'
+  ).run(id, json, operator || null);
   const tx = db.transaction(() => {
-    for (const r of rows) {
-      let snap; try { snap = JSON.parse(r.snapshot_json); } catch { failed.push(r.product_id); continue; }
-      restoreOne(r.product_id, snap);
+    // Keep the pre-restore state as an explicit (non-collapsing) undo point.
+    const preJson = JSON.stringify(productContentSnapshot(db, id) || {});
+    const latest = db.prepare('SELECT snapshot_json FROM retail_product_versions WHERE product_id = ? ORDER BY id DESC LIMIT 1').get(id);
+    if (!latest || latest.snapshot_json !== preJson) insertVersion(preJson);
+    // Apply the chosen version (drop sku if it now clashes with another product).
+    try { apply(cols); }
+    catch (e) {
+      if (String(e.message || '').includes('UNIQUE')) apply(cols.filter(c => c !== 'sku'));
+      else throw e;
     }
-    if (revertedIds.length) {
-      const placeholders = revertedIds.map(() => '?').join(',');
-      db.prepare(`DELETE FROM retail_product_day_baseline WHERE day = ? AND product_id IN (${placeholders})`).run(day, ...revertedIds);
-    }
+    // Record the restored state as the newest version so newest === live.
+    const postJson = JSON.stringify(productContentSnapshot(db, id) || {});
+    if (postJson !== preJson) insertVersion(postJson);
+    // Prune old non-baseline versions (keep the newest VERSION_KEEP).
+    const stale = db.prepare(
+      'SELECT id FROM retail_product_versions WHERE product_id = ? AND is_baseline = 0 ORDER BY id DESC LIMIT -1 OFFSET ?'
+    ).all(id, VERSION_KEEP);
+    if (stale.length) db.prepare(`DELETE FROM retail_product_versions WHERE id IN (${stale.map(() => '?').join(',')})`).run(...stale.map(s => s.id));
   });
   tx();
-  logActivity(req.user.id, req.user.username, 'revert_today', 'product_retail', null, { day, reverted: revertedIds.length, failed }, req.ip);
-  res.json({ success: true, day, reverted: revertedIds.length, failed });
+  logActivity(req.user.id, req.user.username, 'restore_version', 'product_retail', id, { version_id: versionId }, req.ip);
+  res.json({ success: true });
 });
 
 router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  // Capture the start-of-today baseline BEFORE applying this edit, so "Revert
-  // today's changes" can roll the catalogue back to its morning state. No-ops
-  // after the first edit of the day (INSERT OR IGNORE on product_id+day).
-  captureProductDayBaseline(tdb(), id, req.user && req.user.username);
+  // Capture the "Original" pre-edit state BEFORE applying this edit, so version
+  // history always offers the state the product had before this run of edits.
+  // No-ops once any version exists for the product.
+  ensureProductBaselineVersion(tdb(), id, req.user && req.user.username);
 
   const sets = [];
   const params = [];
@@ -12011,6 +12041,9 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // Persist customer-choice options (replace-all). Retail-owned like price/photos,
   // so allowed even when core catalog fields are locked.
   if (hasOptions) saveProductOptions(id, body.options);
+
+  // Checkpoint the saved state into version history (best-effort, post-save).
+  recordProductVersion(tdb(), id, req.user && req.user.username);
 
   logActivity(req.user.id, req.user.username, 'update', 'product_retail', id, { fields: Object.keys(body), name: existing.name_en }, req.ip);
 
