@@ -61,11 +61,19 @@ function stripRegionFromStreet(province, city, district, address) {
 // A region token is "repeated" in address_full if any of province/city/district
 // appears at least twice in the concatenated string.
 function fullHasRepeat(province, city, district, full) {
-  const f = String(full || '');
+  // Token equality on the rendered string, NOT substring — otherwise a clean
+  // municipality ('北京 北京市 …') false-flags because '北京' is a substring of
+  // '北京市'. We also fold the freeform tail into its own bucket: only a region
+  // token appearing as its OWN space-delimited token twice counts as doubled.
+  const toks = String(full || '').split(/\s+/).filter(Boolean);
   for (const v of [province, city, district].filter(Boolean)) {
-    let idx = f.indexOf(v), count = 0;
-    while (idx !== -1) { count++; idx = f.indexOf(v, idx + v.length); }
-    if (count >= 2) return v;
+    if (toks.filter(t => t === v).length >= 2) return v;
+  }
+  // Also catch a region glued INSIDE the street tail (no space), e.g.
+  // '… 朝阳区 市朝阳区麦子店…' — the district appears a second time mid-token.
+  const tail = toks.slice(3).join(' ');
+  for (const v of [city, district].filter(Boolean)) {
+    if (tail.indexOf(v) !== -1) return v;
   }
   return null;
 }
