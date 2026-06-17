@@ -363,6 +363,9 @@ function openEditShipTo(orderId) {
         <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
       </div>
       <div class="pu-editor-body" style="grid-template-columns: 1fr; padding:18px; display:block;">
+        ${field('es-name', 'Recipient name', '收货人', o.recipient_name)}
+        ${field('es-phone', 'Phone', '电话', o.recipient_phone)}
+        <div style="height:1px; background:var(--line); margin:4px 0 12px;"></div>
         ${field('es-prov', 'Province', '省 / 市', cur.province)}
         ${field('es-city', 'City', '市', cur.city)}
         ${field('es-dist', 'District', '区 / 县', cur.district)}
@@ -378,6 +381,8 @@ function openEditShipTo(orderId) {
   mountFloatingPuModal(bg);
   bg.querySelector('#es-apply').addEventListener('click', async (ev) => {
     const body = {
+      recipient_name:  bg.querySelector('#es-name').value,
+      recipient_phone: bg.querySelector('#es-phone').value,
       province: bg.querySelector('#es-prov').value,
       city:     bg.querySelector('#es-city').value,
       district: bg.querySelector('#es-dist').value,
@@ -387,6 +392,7 @@ function openEditShipTo(orderId) {
       save_customer: bg.querySelector('#es-save-cust').checked,
     };
     if (!body.address.trim()) { toast(cuT('Street / building is required', '街道 / 楼栋不能为空'), 'error'); return; }
+    if (!body.recipient_name.trim()) { toast(cuT('Recipient name is required', '收货人不能为空'), 'error'); return; }
     try {
       const j = await adminWrite({
         btn: ev.currentTarget, url: `/api/retail-admin/orders/${orderId}/address/apply-chinese`,

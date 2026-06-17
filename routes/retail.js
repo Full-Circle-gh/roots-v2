@@ -13703,6 +13703,15 @@ router.post('/api/retail-admin/orders/:id/address/apply-chinese',
   const saveCustomer = !!body.save_customer;
   let saved_order = false, saved_customer = false, customer_reason = null, customer_addr_id = null;
 
+  // Recipient name/phone are optional — only the Edit-ship-to modal sends them;
+  // the AI "Make address Chinese" flow omits them so they stay untouched. A
+  // present-but-blank name is rejected (a ship-to must have a recipient).
+  const recipientName  = (body.recipient_name  != null) ? String(body.recipient_name).trim()  : null;
+  const recipientPhone = (body.recipient_phone != null) ? String(body.recipient_phone).trim() : null;
+  if (recipientName !== null && !recipientName) {
+    return res.status(400).json({ success: false, error: 'missing_recipient_name' });
+  }
+
   const newJson = { ...curJson,
     province: merged.province || null, city: merged.city || null, district: merged.district || null,
     address: merged.address || '', detail: merged.detail || null,
@@ -13712,6 +13721,8 @@ router.post('/api/retail-admin/orders/:id/address/apply-chinese',
     tdb().prepare(
       `UPDATE retail_orders SET address_full = ?, address_json = ? WHERE id = ?`
     ).run(address_full, JSON.stringify(newJson), id);
+    if (recipientName  !== null) tdb().prepare(`UPDATE retail_orders SET recipient_name = ?  WHERE id = ?`).run(recipientName, id);
+    if (recipientPhone !== null) tdb().prepare(`UPDATE retail_orders SET recipient_phone = ? WHERE id = ?`).run(recipientPhone, id);
     saved_order = true;
   }
 
@@ -13750,6 +13761,8 @@ router.post('/api/retail-admin/orders/:id/address/apply-chinese',
           merged.province_en || null, merged.city_en || null, merged.district_en || null,
           target, o.customer_id
         );
+        if (recipientName  !== null) tdb().prepare(`UPDATE retail_customer_addresses SET recipient_name = ? WHERE id = ? AND customer_id = ?`).run(recipientName, target, o.customer_id);
+        if (recipientPhone !== null) tdb().prepare(`UPDATE retail_customer_addresses SET phone = ?          WHERE id = ? AND customer_id = ?`).run(recipientPhone, target, o.customer_id);
         geocodeAddressAsync(target, merged);   // refresh coordinates in background
         saved_customer = true;
         customer_addr_id = target;
