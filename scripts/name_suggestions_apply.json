@@ -1,0 +1,1602 @@
+[
+ {
+  "sku": "4-545",
+  "external_id": 2130495,
+  "cur_en": "BioCurcumin+ USDA Organic",
+  "new_en": "BioCurcumin+ (Organic)",
+  "new_cn": "姜黄素（60份）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-500",
+  "external_id": 1229946,
+  "cur_en": "Mix Greens Power House Blend USDA Organic",
+  "new_en": "Powerhouse Greens Blend",
+  "new_cn": "超级绿粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-270",
+  "external_id": 1230080,
+  "cur_en": "Dehydrated Pineapple",
+  "new_en": "Dried Pineapple Rings",
+  "new_cn": "菠萝干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-225",
+  "external_id": 2370799,
+  "cur_en": "Green Chili Dip - Zhoug",
+  "new_en": "Zhoug — Green Chilli Dip",
+  "new_cn": "麻辣青辣椒酱（Zhoug）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-99",
+  "external_id": 2106635,
+  "cur_en": "Blue Cheese （Limited Stock）",
+  "new_en": "Blue Cheese Dip (Limited)",
+  "new_cn": "纯素蓝纹芝士酱（限量）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-16",
+  "external_id": 2082864,
+  "cur_en": "Fricassa Fiesta",
+  "new_en": "Fricassé Fiesta",
+  "new_cn": "Fricassé 风味盛宴",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2048052",
+  "external_id": 2048052,
+  "cur_en": "Mozarella Style Shred",
+  "new_en": "Mozzarella-Style Shreds",
+  "new_cn": "马苏里拉风味素奶酪碎",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-230",
+  "external_id": 1260743,
+  "cur_en": "Nachos Dip",
+  "new_en": "Nacho Cheese Dip",
+  "new_cn": "纯素奶酪蘸酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-80",
+  "external_id": 1727085,
+  "cur_en": "OliveN‘Cream",
+  "new_en": "Olive 'n' Cream",
+  "new_cn": "地中海橄榄酸奶酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-70",
+  "external_id": 1710811,
+  "cur_en": "Garlic Dill Sour Cream",
+  "new_en": "Garlic-Dill Sour Cream",
+  "new_cn": "蒜香莳萝酸奶油",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-402",
+  "external_id": 1978661,
+  "cur_en": "Mushroom Soup",
+  "new_en": "Creamy Mushroom Soup",
+  "new_cn": "奶油蘑菇汤",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-15",
+  "external_id": 2405167,
+  "cur_en": "Turkish Salad",
+  "new_en": "Turkish Tomato Salad",
+  "new_cn": "土耳其番茄沙拉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-10",
+  "external_id": 1760007,
+  "cur_en": "Hummus Asli",
+  "new_en": "Hummus Asli — The Original",
+  "new_cn": "中东经典鹰嘴豆泥",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-210",
+  "external_id": 1756074,
+  "cur_en": "Strawberry Coco Parfait",
+  "new_en": "Strawberry Coconut Parfait",
+  "new_cn": "草莓椰椰芭菲",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2047986",
+  "external_id": 2047986,
+  "cur_en": "Colby Jack Style Shreds",
+  "new_en": "Colby Jack-Style Shreds",
+  "new_cn": "双色素奶酪碎",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229703",
+  "external_id": 1229703,
+  "cur_en": "Vanilla Yogurt Coconut Probiotic",
+  "new_en": "Coconut Yogurt — Vanilla",
+  "new_cn": "纯素椰子酸奶 · 香草味",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1259338",
+  "external_id": 1259338,
+  "cur_en": "Peach Yogurt Coconut Probiotic",
+  "new_en": "Coconut Yogurt — Peach",
+  "new_cn": "纯素椰子酸奶 · 桃子味",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-450",
+  "external_id": 1230066,
+  "cur_en": "81° Hazel Chocolate Spread",
+  "new_en": "Hazelnut-Chocolate Spread",
+  "new_cn": "可可榛子酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229548",
+  "external_id": 1229548,
+  "cur_en": "Almond Butter Maple Cinnamon",
+  "new_en": "Maple-Cinnamon Almond Butter",
+  "new_cn": "肉桂枫糖杏仁酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "（4-680）+（4-690）",
+  "external_id": 1230058,
+  "cur_en": "Peanut Butter Bundle",
+  "new_en": "Peanut Butter Duo",
+  "new_cn": "花生酱套装",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229669",
+  "external_id": 1229669,
+  "cur_en": "Peanut Butter （Classic）",
+  "new_en": "Classic Peanut Butter",
+  "new_cn": "原味花生酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229660",
+  "external_id": 1229660,
+  "cur_en": "Almond Butter",
+  "new_en": "Smooth Almond Butter",
+  "new_cn": "杏仁酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-460",
+  "external_id": 1229545,
+  "cur_en": "Turmeric Organic USDA",
+  "new_en": "Organic Turmeric Powder",
+  "new_cn": "姜黄粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-22",
+  "external_id": 1647860,
+  "cur_en": "Carob Powder （Medium Roasted）",
+  "new_en": "Carob Powder (Medium Roast)",
+  "new_cn": "角豆粉（中度烘焙）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "12-13",
+  "external_id": 1230114,
+  "cur_en": "Cloudy Puff Applicator",
+  "new_en": "Cloud Puff Applicator",
+  "new_cn": "迷你美妆蛋",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1541948",
+  "external_id": 1541948,
+  "cur_en": "The Standard Natural Foudation",
+  "new_en": "The Standard Natural Foundation",
+  "new_cn": "光感植物粉底液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-10",
+  "external_id": 1230029,
+  "cur_en": "Puretonique Body Wash",
+  "new_en": "Puretonique Body Wash",
+  "new_cn": "Puretonique 香氛沐浴露",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-20",
+  "external_id": 1230030,
+  "cur_en": "Puretonique Shampoo",
+  "new_en": "Puretonique Shampoo",
+  "new_cn": "Puretonique 香氛洗发露",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-440",
+  "external_id": 1229907,
+  "cur_en": "Moringa Powder USDA Organic",
+  "new_en": "Organic Moringa Powder",
+  "new_cn": "辣木粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-390",
+  "external_id": 1229546,
+  "cur_en": "Kale Powder USDA Organic",
+  "new_en": "Organic Kale Powder",
+  "new_cn": "羽衣甘蓝粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229700",
+  "external_id": 1229700,
+  "cur_en": "Peanut Butter （Crunchy）",
+  "new_en": "Crunchy Peanut Butter",
+  "new_cn": "松脆花生酱（含花生碎）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-420",
+  "external_id": 1229904,
+  "cur_en": "Alfalfa Powder USDA Organic",
+  "new_en": "Organic Alfalfa Powder",
+  "new_cn": "紫花苜蓿粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-30",
+  "external_id": 1310568,
+  "cur_en": "Premium Nutella Bars",
+  "new_en": "Choco-Hazel Bars",
+  "new_cn": "巧克力榛果棒",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-380",
+  "external_id": 1229608,
+  "cur_en": "Maca Powder USDA Organic",
+  "new_en": "Organic Maca Powder",
+  "new_cn": "云南玛卡粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-490",
+  "external_id": 1428150,
+  "cur_en": "Pea Protein Powder USDA Organic",
+  "new_en": "Organic Pea Protein",
+  "new_cn": "豌豆蛋白粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "P-7",
+  "external_id": 1229807,
+  "cur_en": "Essentials Bundle",
+  "new_en": "Essential Oils Starter Set",
+  "new_cn": "天然精油入门套装",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-440",
+  "external_id": 1229637,
+  "cur_en": "Roasted Hazelnut Butter",
+  "new_en": "Roasted Hazelnut Butter",
+  "new_cn": "烘烤榛子酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-90",
+  "external_id": 1229633,
+  "cur_en": "Classic Sour Cream",
+  "new_en": "Classic Cashew Sour Cream",
+  "new_cn": "经典腰果酸奶油",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "P-6",
+  "external_id": 1229842,
+  "cur_en": "Kitchen Bundle",
+  "new_en": "Kitchen Clean Set",
+  "new_cn": "厨房清洁套装",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "P-1",
+  "external_id": 1229745,
+  "cur_en": "Complete Range Bundle",
+  "new_en": "The Whole-Home Set",
+  "new_cn": "全屋清洁套装",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "（7-500）+（7-501）+（7-505）+（7-506）",
+  "external_id": 1229873,
+  "cur_en": "Laundry Bundle",
+  "new_en": "Laundry Care Set",
+  "new_cn": "衣物洗护套装",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "P-3",
+  "external_id": 1229863,
+  "cur_en": "Baby Bundle",
+  "new_en": "Baby-Safe Set",
+  "new_cn": "婴幼儿呵护套装",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "P-5",
+  "external_id": 1229720,
+  "cur_en": "Bathroom Bundle",
+  "new_en": "Bathroom Clean Set",
+  "new_cn": "浴室清洁套装",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-140",
+  "external_id": 1230101,
+  "cur_en": "Masala Tea （Chai Latte）",
+  "new_en": "Masala Chai Latte",
+  "new_cn": "印度香料柴茶拿铁",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-430",
+  "external_id": 1259456,
+  "cur_en": "Wheatgrass Powder USDA Organic",
+  "new_en": "Organic Wheatgrass Powder",
+  "new_cn": "小麦苗粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "12-12",
+  "external_id": 1230113,
+  "cur_en": "Reusable Natural Cleansing Pads",
+  "new_en": "Reusable Cleansing Pads",
+  "new_cn": "环保水洗卸妆巾",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229649",
+  "external_id": 1229649,
+  "cur_en": "Coconut Yogurt Probiotic",
+  "new_en": "Coconut Yogurt — Plain",
+  "new_cn": "纯素椰子酸奶 · 原味",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-220",
+  "external_id": 2495136,
+  "cur_en": "Fire Spice Cake （frozen）",
+  "new_en": "Fire Spice Cake (Frozen)",
+  "new_cn": "火辣香料蛋糕（冷冻）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-270",
+  "external_id": 1231939,
+  "cur_en": "12pc Whole Wheat Wrap（XL - 10 inch）",
+  "new_en": "Whole-Wheat Wraps — XL 10\" (12pc)",
+  "new_cn": "全麦墨西哥卷饼皮（10寸·12片）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-220-d2",
+  "external_id": 1231885,
+  "cur_en": "Corn Bread",
+  "new_en": "Golden Corn Bread",
+  "new_cn": "黄金玉米面包",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-320",
+  "external_id": 1231419,
+  "cur_en": "Thai Buckwheat Noodles",
+  "new_en": "Thai Buckwheat Noodle Salad",
+  "new_cn": "泰式荞麦冷面沙拉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-375",
+  "external_id": 2399484,
+  "cur_en": "Organic Instant Soy Milk Powder",
+  "new_en": "Just-Add-Water Soy Milk",
+  "new_cn": "有机即溶豆奶粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-150",
+  "external_id": 1230116,
+  "cur_en": "Cashew Strawberry Milk",
+  "new_en": "Strawberry Cashew M*lk",
+  "new_cn": "草莓腰果奶",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-240",
+  "external_id": 1230078,
+  "cur_en": "Dehydrated Figs",
+  "new_en": "Dried Figs",
+  "new_cn": "芭劳奈无花果干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-310",
+  "external_id": 1230099,
+  "cur_en": "Beet Salad",
+  "new_en": "Roasted Beet Salad",
+  "new_cn": "烤甜菜根沙拉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-430",
+  "external_id": 1230098,
+  "cur_en": "Shawarma Wrap",
+  "new_en": "Shawarma Wrap",
+  "new_cn": "沙瓦玛素肉卷",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-260",
+  "external_id": 1230083,
+  "cur_en": "Dehydrated Sweet Banana",
+  "new_en": "Dried Sweet Banana",
+  "new_cn": "香蕉干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-230",
+  "external_id": 1230081,
+  "cur_en": "Dehydrated Dragon Fruit",
+  "new_en": "Dried Dragon Fruit",
+  "new_cn": "火龙果干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-610",
+  "external_id": 1230053,
+  "cur_en": "Sumac",
+  "new_en": "Sumac",
+  "new_cn": "苏模粉（漆树果）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-250",
+  "external_id": 1230079,
+  "cur_en": "Dehydrated Chinese Banana",
+  "new_en": "Dried Baby Banana",
+  "new_cn": "芭蕉干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-220",
+  "external_id": 1230018,
+  "cur_en": "Onion Pickles",
+  "new_en": "Pickled Onions",
+  "new_cn": "腌洋葱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-630",
+  "external_id": 1230077,
+  "cur_en": "Za‘atar",
+  "new_en": "Za'atar Spice Blend",
+  "new_cn": "扎塔香料",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-200",
+  "external_id": 1230082,
+  "cur_en": "Dehydrated Yu Mango",
+  "new_en": "Dried Yunnan Mango",
+  "new_cn": "云南玉芒干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-460",
+  "external_id": 2399666,
+  "cur_en": "Red Lentils Soup",
+  "new_en": "Red Lentil Soup",
+  "new_cn": "红扁豆汤",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-450",
+  "external_id": 1230055,
+  "cur_en": "Chickpeas Salad Sandwich",
+  "new_en": "Chickpea Salad Sandwich",
+  "new_cn": "鹰嘴豆沙拉三明治",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-820",
+  "external_id": 1230047,
+  "cur_en": "Yunnan Bundle",
+  "new_en": "Yunnan Coffee Trio",
+  "new_cn": "云南咖啡套装",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-350",
+  "external_id": 1229983,
+  "cur_en": "Soft Dehydrated Apples",
+  "new_en": "Soft Dried Apples",
+  "new_cn": "松软苹果干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1230035",
+  "external_id": 1230035,
+  "cur_en": "Lemongrass Kombucha",
+  "new_en": "Lemongrass Kombucha",
+  "new_cn": "香茅康普茶",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-250",
+  "external_id": 1230025,
+  "cur_en": "Kalamata ＆ Green olives mix",
+  "new_en": "Kalamata & Green Olive Mix",
+  "new_cn": "希腊混合橄榄",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-120",
+  "external_id": 1230023,
+  "cur_en": "Edamame Tempeh",
+  "new_en": "Edamame Tempeh",
+  "new_cn": "毛豆天贝",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-70",
+  "external_id": 1229937,
+  "cur_en": "Cream Cleaner",
+  "new_en": "Citrus Cream Cleaner",
+  "new_cn": "柑橘精油强力清洁乳",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-230",
+  "external_id": 1230017,
+  "cur_en": "Jalapeño Pickles",
+  "new_en": "Pickled Jalapeños",
+  "new_cn": "腌墨西哥辣椒",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-100",
+  "external_id": 1230012,
+  "cur_en": "Black Soy Beans Tempeh",
+  "new_en": "Black Soybean Tempeh",
+  "new_cn": "黑豆天贝",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-270",
+  "external_id": 1229986,
+  "cur_en": "Whole Wheat Crackers",
+  "new_en": "Whole-Wheat Crisp Crackers",
+  "new_cn": "全麦薄脆饼",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-110",
+  "external_id": 1230013,
+  "cur_en": "Trio Bean Tempeh",
+  "new_en": "Three-Bean Tempeh",
+  "new_cn": "三豆天贝",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-320",
+  "external_id": 1229975,
+  "cur_en": "Whole Unsweetened Dry Blueberries",
+  "new_en": "Whole Dried Blueberries (No Sugar)",
+  "new_cn": "无糖蓝莓干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-160",
+  "external_id": 1229875,
+  "cur_en": "Foaming Hand Soap （Lemongrass）",
+  "new_en": "Foaming Hand Soap — Lemongrass",
+  "new_cn": "柠檬草泡沫洗手液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-145",
+  "external_id": 1229813,
+  "cur_en": "Seitan",
+  "new_en": "Seitan",
+  "new_cn": "谷物素肉排",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-300",
+  "external_id": 1229988,
+  "cur_en": "Cacao Mass",
+  "new_en": "Pure Cacao Mass",
+  "new_cn": "可可液块（纯可可）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-51",
+  "external_id": 1229982,
+  "cur_en": "Turkish Figs",
+  "new_en": "Turkish Dried Figs",
+  "new_cn": "土耳其无花果干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-130",
+  "external_id": 1229980,
+  "cur_en": "Whole Wheat Spaghetti",
+  "new_en": "Whole-Wheat Spaghetti",
+  "new_cn": "全麦意面",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-200",
+  "external_id": 1229976,
+  "cur_en": "Lemon Bars",
+  "new_en": "Sunny Lemon Bars",
+  "new_cn": "夏日柠檬棒",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-170",
+  "external_id": 1229804,
+  "cur_en": "Foaming Hand Soap （Mint）",
+  "new_en": "Foaming Hand Soap — Mint",
+  "new_cn": "薄荷泡沫洗手液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-140",
+  "external_id": 1229981,
+  "cur_en": "Whole Wheat Fusilli Pasta",
+  "new_en": "Whole-Wheat Fusilli",
+  "new_cn": "全麦螺旋意面",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "7-516",
+  "external_id": 1229874,
+  "cur_en": "Foaming Hand Soap 5L（Lemongrass）",
+  "new_en": "Foaming Hand Soap 5L — Lemongrass",
+  "new_cn": "柠檬草泡沫洗手液 5L（补充装）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-110",
+  "external_id": 1229855,
+  "cur_en": "Multi Purpose Spray",
+  "new_en": "Multi-Purpose Spray",
+  "new_cn": "多用途清洁喷雾",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "7-520",
+  "external_id": 1229977,
+  "cur_en": "Glass Cleaner 5L",
+  "new_en": "Glass Cleaner 5L (Refill)",
+  "new_cn": "玻璃清洁液 5L（补充装）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "7-515",
+  "external_id": 1229751,
+  "cur_en": "SoapNut Republic Dish Soap 5L",
+  "new_en": "SoapNut Republic Dish Soap 5L — Grapefruit",
+  "new_cn": "西柚精油洗碗液 5L（补充装）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-120",
+  "external_id": 1229942,
+  "cur_en": "Fruit ＆ Vegetable Wash",
+  "new_en": "Fruit & Veggie Wash",
+  "new_cn": "果蔬清洗液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-180",
+  "external_id": 1229966,
+  "cur_en": "Foaming Hand Soap （Lavender）",
+  "new_en": "Foaming Hand Soap — Lavender",
+  "new_cn": "薰衣草泡沫洗手液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-330",
+  "external_id": 1229943,
+  "cur_en": "Tabbouleh Bowl",
+  "new_en": "Tabbouleh Bowl",
+  "new_cn": "塔布勒香草沙拉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "7-518",
+  "external_id": 1229814,
+  "cur_en": "SoapNut Republic Laundry Liquid 5L",
+  "new_en": "SoapNut Republic Laundry Liquid 5L — Lemongrass",
+  "new_cn": "柠檬草精油洗衣液 5L（补充装）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-390",
+  "external_id": 1229934,
+  "cur_en": "Pumpkin Seeds （Raw, Unsalted）",
+  "new_en": "Raw Pumpkin Seeds (Unsalted)",
+  "new_cn": "生南瓜子（无盐）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-540",
+  "external_id": 1229932,
+  "cur_en": "B12 Capsules",
+  "new_en": "Vegan B12 Capsules",
+  "new_cn": "维生素B12 素食胶囊",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-150",
+  "external_id": 1229950,
+  "cur_en": "Sliced Almonds （Raw, Unsalted）",
+  "new_en": "Raw Sliced Almonds (Unsalted)",
+  "new_cn": "生杏仁片（无盐）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-140",
+  "external_id": 1229901,
+  "cur_en": "Bathroom ＆ Shower Spray",
+  "new_en": "Bathroom & Shower Spray — Citrus",
+  "new_cn": "柑橘精油浴室喷雾",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-10",
+  "external_id": 1229945,
+  "cur_en": "Mix Colored Quinoa",
+  "new_en": "Tri-Colour Quinoa",
+  "new_cn": "三色藜麦",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-100",
+  "external_id": 1229739,
+  "cur_en": "Natural Stain Remover",
+  "new_en": "Natural Stain Remover",
+  "new_cn": "天然强效去渍液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-470",
+  "external_id": 1229885,
+  "cur_en": "Spirulina Powder USDA Organic",
+  "new_en": "Organic Spirulina Powder",
+  "new_cn": "螺旋藻粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-410",
+  "external_id": 1229598,
+  "cur_en": "Beetroot Powder USDA Organic",
+  "new_en": "Organic Beetroot Powder",
+  "new_cn": "甜菜根粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "（4-530）",
+  "external_id": 1229616,
+  "cur_en": "Prebiotic Fiber USDA Organic",
+  "new_en": "Organic Prebiotic Fibre",
+  "new_cn": "益生元菊粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-30",
+  "external_id": 1260737,
+  "cur_en": "Iron, Double Strength, NOW Food",
+  "new_en": "NOW Foods Double-Strength Iron",
+  "new_cn": "NOW Foods 双倍铁元素",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-510",
+  "external_id": 1229862,
+  "cur_en": "Acai Powder USDA Organic",
+  "new_en": "Organic Açaí Powder",
+  "new_cn": "巴西莓粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-500",
+  "external_id": 1229927,
+  "cur_en": "Cashews Chocolate M*LK",
+  "new_en": "Chocolate Cashew M*lk",
+  "new_cn": "可可腰果奶",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-90",
+  "external_id": 1229926,
+  "cur_en": "Vital Wheat Gluten Flour",
+  "new_en": "Vital Wheat Gluten (Seitan Flour)",
+  "new_cn": "谷朊粉（面筋粉）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-150-d2",
+  "external_id": 1229919,
+  "cur_en": "Nutty L - GoVegan! Almond M!LK",
+  "new_en": "Nutty Almond M*lk",
+  "new_cn": "清甜杏奶",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229905",
+  "external_id": 1229905,
+  "cur_en": "Medjool Dates （Misfits）",
+  "new_en": "Medjool Dates — The Misfits",
+  "new_cn": "丑丑帝王椰枣",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-381",
+  "external_id": 2370230,
+  "cur_en": "Pure Creatine Monohydrate, Unflavored",
+  "new_en": "Pure Creatine Monohydrate (Unflavoured)",
+  "new_cn": "无味肌酸一水合物",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-370",
+  "external_id": 1229897,
+  "cur_en": "Organic Cacao Powder",
+  "new_en": "Raw Cacao Powder",
+  "new_cn": "生可可粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-250",
+  "external_id": 1229893,
+  "cur_en": "Tortilla Chips",
+  "new_en": "Tortilla Chips",
+  "new_cn": "墨西哥玉米片",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-130",
+  "external_id": 1229965,
+  "cur_en": "Dish Soap",
+  "new_en": "Dish Soap — Grapefruit",
+  "new_cn": "西柚精油洗碗液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-450",
+  "external_id": 1229778,
+  "cur_en": "Chlorella Powder USDA Organic",
+  "new_en": "Organic Chlorella Powder",
+  "new_cn": "小球藻粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-190",
+  "external_id": 1229900,
+  "cur_en": "Sunflower Seeds （Raw, Unsalted）",
+  "new_en": "Raw Sunflower Kernels (Unsalted)",
+  "new_cn": "生葵花籽仁（无盐）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-290",
+  "external_id": 1229886,
+  "cur_en": "Medjool Dates （Jumbo Size）",
+  "new_en": "Jumbo Medjool Dates",
+  "new_cn": "以色列帝王椰枣（大果）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-30",
+  "external_id": 1229869,
+  "cur_en": "Organic Quick Cooking Oats",
+  "new_en": "Organic Quick Oats",
+  "new_cn": "即食燕麦",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-400",
+  "external_id": 1229825,
+  "cur_en": "Matcha Powder USDA Organic",
+  "new_en": "Organic Matcha Powder",
+  "new_cn": "抹茶粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-382",
+  "external_id": 2370228,
+  "cur_en": "Reishi Powder USDA Organic",
+  "new_en": "Organic Reishi Powder",
+  "new_cn": "灵芝粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "7-517",
+  "external_id": 1229774,
+  "cur_en": "SoapNut Republic Floor Cleaner 5L",
+  "new_en": "SoapNut Republic Floor Cleaner 5L — Eucalyptus",
+  "new_cn": "桉树精油地板清洁液 5L（补充装）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-180",
+  "external_id": 1229854,
+  "cur_en": "Hemp Seeds",
+  "new_en": "Hulled Hemp Seeds",
+  "new_cn": "脱壳火麻仁",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-20",
+  "external_id": 1229816,
+  "cur_en": "Chocolate Hemp Protein Bites",
+  "new_en": "Choco Hemp Protein Bites",
+  "new_cn": "巧克力火麻蛋白球",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-550",
+  "external_id": 1229848,
+  "cur_en": "Nutritional Yeast",
+  "new_en": "Nutritional Yeast (Nooch)",
+  "new_cn": "营养酵母（芝士风味）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-230",
+  "external_id": 1229846,
+  "cur_en": "Dry Raisins （Unsweetened）",
+  "new_en": "California Raisins (No Sugar)",
+  "new_cn": "加州大葡萄干（无糖）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-80",
+  "external_id": 1229845,
+  "cur_en": "Black Beans",
+  "new_en": "Black Beans",
+  "new_cn": "黑豆",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-190",
+  "external_id": 1229831,
+  "cur_en": "Snickers",
+  "new_en": "Snackers (Peanut-Caramel Bar)",
+  "new_cn": "花生焦糖棒",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-290",
+  "external_id": 1229834,
+  "cur_en": "Cooked Mix Color Quinoa",
+  "new_en": "Ready-to-Eat Tri-Colour Quinoa",
+  "new_cn": "即食三色藜麦",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-220",
+  "external_id": 1229810,
+  "cur_en": "Whole Unsweetened Dry Cranberries",
+  "new_en": "Whole Cranberries (No Sugar)",
+  "new_cn": "无糖蔓越莓干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-100",
+  "external_id": 1229827,
+  "cur_en": "Blueberries Chia Jam",
+  "new_en": "Blueberry Chia Jam",
+  "new_cn": "蓝莓奇亚籽果酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-730",
+  "external_id": 1229811,
+  "cur_en": "Coconut Milk （ No Xanthan Gum, No Guar Gum）",
+  "new_en": "Clean Coconut Milk (No Gums)",
+  "new_cn": "丽尔泰椰浆 1L（无胶）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-330",
+  "external_id": 1229770,
+  "cur_en": "Black Salt （ Kala namak ）",
+  "new_en": "Black Salt (Kala Namak)",
+  "new_cn": "印度黑盐（喜马拉雅）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-210",
+  "external_id": 1229839,
+  "cur_en": "Dehydrated Sweet Mango",
+  "new_en": "Dried Kent Mango",
+  "new_cn": "凯特芒果干",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-80",
+  "external_id": 1229769,
+  "cur_en": "White Beans Tempeh",
+  "new_en": "White Bean Tempeh",
+  "new_cn": "白芸豆天贝",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-140",
+  "external_id": 1230097,
+  "cur_en": "Shawarma Mix",
+  "new_en": "Shawarma-Spiced Strips",
+  "new_cn": "沙瓦玛风味素肉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-70",
+  "external_id": 1229909,
+  "cur_en": "Marinaded Tempeh",
+  "new_en": "Marinated Tempeh",
+  "new_cn": "酱香天贝",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-120",
+  "external_id": 1229798,
+  "cur_en": "TVP （ Texture Vegetable Protein ）",
+  "new_en": "Soy Protein Crumbles (TVP)",
+  "new_cn": "大豆组织蛋白（素肉碎）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-360",
+  "external_id": 1229790,
+  "cur_en": "Anti Inflammatory Granola",
+  "new_en": "Calm Buckwheat Granola (No Sugar)",
+  "new_cn": "无糖荞麦格兰诺拉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-2",
+  "external_id": 1229785,
+  "cur_en": "Quinoa Patties",
+  "new_en": "Savoury Quinoa Patties",
+  "new_cn": "酱香藜麦排",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229602",
+  "external_id": 1229602,
+  "cur_en": "Walnuts （unsalted ,raw）",
+  "new_en": "Raw Walnuts (Unsalted)",
+  "new_cn": "生核桃（无盐）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-280",
+  "external_id": 1229783,
+  "cur_en": "Cooked Brown Rice",
+  "new_en": "Ready-to-Eat Brown Rice",
+  "new_cn": "即食糙米饭",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-40",
+  "external_id": 1229742,
+  "cur_en": "Laundry Soaker",
+  "new_en": "Laundry Soaker",
+  "new_cn": "衣物浸泡粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-200",
+  "external_id": 1229768,
+  "cur_en": "USDA Organic Goji Berries",
+  "new_en": "Organic Goji Berries",
+  "new_cn": "枸杞",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-20",
+  "external_id": 1229758,
+  "cur_en": "Brown Rice  （Long Grain）",
+  "new_en": "Long-Grain Brown Rice",
+  "new_cn": "长粒糙米",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-40",
+  "external_id": 1229755,
+  "cur_en": "Old Fashioned Oats",
+  "new_en": "Old-Fashioned Rolled Oats",
+  "new_cn": "传统压片燕麦",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-80",
+  "external_id": 1229836,
+  "cur_en": "Toilet Cleaner",
+  "new_en": "Toilet Cleaner",
+  "new_cn": "马桶清洁液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-240",
+  "external_id": 1229743,
+  "cur_en": "GF Nuts＆Seeds Bread （Frozen）",
+  "new_en": "Nut & Seed Bread (GF, Frozen)",
+  "new_cn": "无麸 坚果种子面包（冷冻）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2140073",
+  "external_id": 2140073,
+  "cur_en": "Balmy Stick",
+  "new_en": "Balmy Lip Stick",
+  "new_cn": "润唇棒",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "5-90",
+  "external_id": 1229727,
+  "cur_en": "Laundry Liquid",
+  "new_en": "Laundry Liquid — Lemongrass",
+  "new_cn": "柠檬草精油洗衣液",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-180",
+  "external_id": 1229735,
+  "cur_en": "Frozen Mix Berries, Antioxidant Bomb !",
+  "new_en": "Frozen Mixed Berries — Antioxidant Bomb!",
+  "new_cn": "冷冻混合莓果",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-640",
+  "external_id": 1229596,
+  "cur_en": "Unhulled Sesame Tahini",
+  "new_en": "Whole Sesame Tahini (Unhulled)",
+  "new_cn": "中东芝麻酱（带皮）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-810",
+  "external_id": 1229723,
+  "cur_en": "Sweat N Sour",
+  "new_en": "Sweet 'n' Sour (Yunnan Beans)",
+  "new_cn": "云南炮仗山 · 咖啡豆",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-40",
+  "external_id": 1229658,
+  "cur_en": "Labneh Za‘atar",
+  "new_en": "Za'atar Labneh",
+  "new_cn": "扎塔香料酸奶酪",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-650",
+  "external_id": 1229618,
+  "cur_en": "Hulled Sesame Tahini",
+  "new_en": "Smooth Sesame Tahini (Hulled)",
+  "new_cn": "中东芝麻酱（去皮）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-390",
+  "external_id": 1229712,
+  "cur_en": "Tom Yum",
+  "new_en": "Tom Yum Soup",
+  "new_cn": "泰式冬阴功汤",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-210",
+  "external_id": 1229711,
+  "cur_en": "Raspberry Mango Sorbet",
+  "new_en": "Raspberry-Mango Sorbet",
+  "new_cn": "树莓芒果雪葩",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-470",
+  "external_id": 1229709,
+  "cur_en": "Cashew Butter",
+  "new_en": "Creamy Cashew Butter",
+  "new_cn": "腰果酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-120",
+  "external_id": 1229705,
+  "cur_en": "Apple Pie Overnight Oats",
+  "new_en": "Apple Pie Overnight Oats",
+  "new_cn": "苹果派隔夜燕麦",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-50",
+  "external_id": 1229687,
+  "cur_en": "Chickpeas Salad",
+  "new_en": "Chickpea Salad",
+  "new_cn": "美式鹰嘴豆沙拉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-360",
+  "external_id": 1230115,
+  "cur_en": "Chinese Herbal Soup",
+  "new_en": "Herbal Nourish Soup",
+  "new_cn": "养生药膳汤",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-560",
+  "external_id": 1229677,
+  "cur_en": "Hibiscus Flower Herbal Tea USDA Organic",
+  "new_en": "Hibiscus Bloom Tea (Organic)",
+  "new_cn": "洛神花茶",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229673",
+  "external_id": 1229673,
+  "cur_en": "Energy Cubes",
+  "new_en": "Pocket Rocket Energy Cubes",
+  "new_cn": "花生奇亚小火箭",
+  "decision": "Use fun"
+ },
+ {
+  "sku": "4-620",
+  "external_id": 1229634,
+  "cur_en": "Soy Protein Powder USDA Organic",
+  "new_en": "Organic Soy Protein",
+  "new_cn": "大豆蛋白粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-150",
+  "external_id": 1229652,
+  "cur_en": "Chick EN Strips",
+  "new_en": "Chick'EN Strips",
+  "new_cn": "素鸡柳",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-570",
+  "external_id": 1229646,
+  "cur_en": "Mint Leaves （Herbal Tea）",
+  "new_en": "Pure Mint Leaf Tea",
+  "new_cn": "纯薄荷叶茶",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-210",
+  "external_id": 1229639,
+  "cur_en": "Crunchy Jujubes （Chinese Dates）",
+  "new_en": "Crunchy Jujube Crisps",
+  "new_cn": "脆红枣片",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-110",
+  "external_id": 1229635,
+  "cur_en": "Strawberry Lemon Jam",
+  "new_en": "Strawberry-Lemon Chia Jam",
+  "new_cn": "草莓柠檬奇亚籽果酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-600",
+  "external_id": 1229623,
+  "cur_en": "Onion Powder Organic USDA",
+  "new_en": "Organic Onion Powder",
+  "new_cn": "洋葱粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-700",
+  "external_id": 1229628,
+  "cur_en": "Refined Coconut Oil （Cooking Oil）",
+  "new_en": "Refined Coconut Oil (for Cooking)",
+  "new_cn": "精制椰子油（适合烹饪）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-440",
+  "external_id": 1229627,
+  "cur_en": "Pesto Wrap",
+  "new_en": "Pesto 'Chicken' Wrap",
+  "new_cn": "纯素罗勒鸡肉卷",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-75",
+  "external_id": 1229895,
+  "cur_en": "DIY Kombucha Scooby + Starter Liquid",
+  "new_en": "Brew-Your-Own Kombucha Kit",
+  "new_cn": "康普茶自酿套装（菌母+菌液）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-590",
+  "external_id": 1229622,
+  "cur_en": "Garlic Powder Organic USDA",
+  "new_en": "Organic Garlic Powder",
+  "new_cn": "大蒜粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-160",
+  "external_id": 1229621,
+  "cur_en": "Mushroom Burger Pattie",
+  "new_en": "Mushroom Patties",
+  "new_cn": "香菇汉堡饼",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-480",
+  "external_id": 1229610,
+  "cur_en": "Hemp Protein Powder USDA Organic",
+  "new_en": "Organic Hemp Protein",
+  "new_cn": "火麻仁蛋白粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-250",
+  "external_id": 1229603,
+  "cur_en": "Whole Wheat Rye Bread",
+  "new_en": "Hearty Rye & Wheat Bread",
+  "new_cn": "全麦黑麦面包",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-130",
+  "external_id": 1229653,
+  "cur_en": "Bolognese",
+  "new_en": "Plant Bolognese",
+  "new_cn": "意式番茄素肉酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-60",
+  "external_id": 1229609,
+  "cur_en": "Ground Meat",
+  "new_en": "Plant Mince",
+  "new_cn": "素肉碎",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-240",
+  "external_id": 1229607,
+  "cur_en": "Harissa Paste",
+  "new_en": "Harissa Chilli Paste",
+  "new_cn": "哈里萨辣椒酱（北非）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2398096",
+  "external_id": 2398096,
+  "cur_en": "The Last Batch – GoVegan Stickers",
+  "new_en": "GoVegan Stickers — Last Batch",
+  "new_cn": "GoVegan 贴纸（最后一批）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229601",
+  "external_id": 1229601,
+  "cur_en": "Cashews （Unsalted, Raw）",
+  "new_en": "Raw Cashews (Unsalted)",
+  "new_cn": "生腰果（无盐）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-20",
+  "external_id": 1229600,
+  "cur_en": "Arugula Basil Pesto",
+  "new_en": "Arugula-Basil Pesto",
+  "new_cn": "芝麻菜罗勒青酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "2-170",
+  "external_id": 1229595,
+  "cur_en": "Carrot Ginger Juice",
+  "new_en": "Carrot-Ginger Juice",
+  "new_cn": "胡萝卜生姜汁",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-300",
+  "external_id": 1229567,
+  "cur_en": "Smokey Parmesan",
+  "new_en": "Smoky Parmesnuts!",
+  "new_cn": "烟熏纯素帕玛森粉",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229565",
+  "external_id": 1229565,
+  "cur_en": "Mix Berries Kombucha",
+  "new_en": "Mixed Berry Kombucha",
+  "new_cn": "莓果康普茶",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-290",
+  "external_id": 1229560,
+  "cur_en": "Dehydrated Coconut Flakes",
+  "new_en": "Toasted Coconut Flakes",
+  "new_cn": "椰子脆片",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-1229551",
+  "external_id": 1229551,
+  "cur_en": "Almonds （unsalted, raw）",
+  "new_en": "Raw Almonds (Unsalted)",
+  "new_cn": "生巴旦木大杏仁（无盐）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488822",
+  "external_id": 2488822,
+  "cur_en": "Cherry Ginger Jam",
+  "new_en": "Cherry-Ginger Jam",
+  "new_cn": "樱桃生姜果酱",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488576",
+  "external_id": 2488576,
+  "cur_en": "Upper Galilee Cabernet - 2020",
+  "new_en": "Upper Galilee Cabernet 2020",
+  "new_cn": "上加利利 赤霞珠 2020",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488521",
+  "external_id": 2488521,
+  "cur_en": "Upper Galilee Merlot - 2020",
+  "new_en": "Upper Galilee Merlot 2020",
+  "new_cn": "上加利利 梅洛 2020",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488515",
+  "external_id": 2488515,
+  "cur_en": "Upper Galilee Syrah -  2020",
+  "new_en": "Upper Galilee Syrah 2020",
+  "new_cn": "上加利利 西拉 2020",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488463",
+  "external_id": 2488463,
+  "cur_en": "Special Reserve Red - 2020",
+  "new_en": "Special Reserve Red 2020",
+  "new_cn": "特别珍藏 红葡萄酒 2020",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488458",
+  "external_id": 2488458,
+  "cur_en": "Reserve Carignan Wild Old Vines - 2021",
+  "new_en": "Reserve Carignan — Wild Old Vines 2021",
+  "new_cn": "珍藏 佳丽酿 老藤 2021",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488449",
+  "external_id": 2488449,
+  "cur_en": "Reserve Cabernet Sauvignon 2018",
+  "new_en": "Reserve Cabernet Sauvignon 2018",
+  "new_cn": "珍藏 赤霞珠 2018",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488448",
+  "external_id": 2488448,
+  "cur_en": "Petit Sirah Reserve  Jezreel Valley - 2021",
+  "new_en": "Petite Sirah Reserve — Jezreel Valley 2021",
+  "new_cn": "耶斯列谷 珍藏 小西拉 2021",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488445",
+  "external_id": 2488445,
+  "cur_en": "Galilee Sauvignon Blanc - 2023",
+  "new_en": "Galilee Sauvignon Blanc 2023",
+  "new_cn": "加利利 长相思 2023",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488433",
+  "external_id": 2488433,
+  "cur_en": "Fresh ＆ Young French Blend - 2023",
+  "new_en": "Fresh & Young French Blend 2023",
+  "new_cn": "清新 法式混酿 2023",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2488428",
+  "external_id": 2488428,
+  "cur_en": "Upper Galilee Chardonnay - 2022",
+  "new_en": "Upper Galilee Chardonnay 2022",
+  "new_cn": "上加利利 霞多丽 2022",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "EXT-2487842",
+  "external_id": 2487842,
+  "cur_en": "Yasmin White - 2023",
+  "new_en": "Yasmin White 2023",
+  "new_cn": "蕾卡纳缇 茉莉白葡萄酒 2023",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-252",
+  "external_id": 2405170,
+  "cur_en": "GF Buckwheat Bread （Sliced＆Frozen）",
+  "new_en": "Buckwheat Bread (GF, Sliced & Frozen)",
+  "new_cn": "无麸 荞麦面包（切片·冷冻）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "3-251",
+  "external_id": 2391250,
+  "cur_en": "Whole Wheat Pita Bread （Frozen）",
+  "new_en": "Whole-Wheat Pita (Frozen)",
+  "new_cn": "全麦皮塔饼（冷冻）",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "4-271",
+  "external_id": 2380932,
+  "cur_en": "SuperSeed Crackers",
+  "new_en": "Super-Seed Crackers",
+  "new_cn": "超级种子薄脆",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-370",
+  "external_id": 1230056,
+  "cur_en": "Pumpkin Soup",
+  "new_en": "Roasted Pumpkin Soup",
+  "new_cn": "香烤南瓜汤",
+  "decision": "Use suggested"
+ },
+ {
+  "sku": "1-380",
+  "external_id": 1229678,
+  "cur_en": "Sweet Potato Cauliflower Curry",
+  "new_en": "Sweet Potato & Cauliflower Curry",
+  "new_cn": "红薯花菜咖喱",
+  "decision": "Use suggested"
+ }
+]
