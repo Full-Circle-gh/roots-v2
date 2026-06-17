@@ -4222,6 +4222,21 @@
   .manifest .prod-link { text-decoration: none; color: inherit; min-width: 0; }
   .manifest .prod-link:hover .mf-name { text-decoration: underline; }
   .manifest .mf-total { font-size: 14px; font-weight: 600; color: var(--text-1); white-space: nowrap; }
+  /* Refunded line: a refund pill (warm red) + a struck, dimmed row so a fully
+     refunded item reads "do not ship" at a glance. Partial refunds keep the row
+     normal and lean on the "n of q refunded" pill instead. */
+  .pack-badge.refunded {
+    background: rgba(176, 64, 56, .12); color: #b04038; border-color: rgba(176, 64, 56, .30);
+    display: inline-flex; align-items: center; gap: 4px;
+  }
+  .pack-badge.refunded .rf-ic { flex: none; }
+  .refunded-row { opacity: .6; }
+  .refunded-row .mf-name, .refunded-row .mf-total,
+  .refunded-row .oi-name, .refunded-row .oi-total,
+  .refunded-row .oic-name, .refunded-row .oic-total {
+    text-decoration: line-through; text-decoration-color: rgba(176, 64, 56, .7);
+  }
+  .refunded-row .oi-thumb { filter: grayscale(1); }
   .manifest .mf-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .manifest .mf-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); }
   /* SKU + quantity are the packer's two critical fields — shared mono chips

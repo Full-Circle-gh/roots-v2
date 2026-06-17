@@ -2790,6 +2790,13 @@ addColumn('retail_order_items', 'replaced_for_product_id', 'INTEGER');
 // the customer order page can tag it "added later" and prints/audits can tell
 // the delta from the original ticket.
 addColumn('retail_order_items', 'addon_id', 'INTEGER');
+// How many units of this line have been refunded (0 = none). When it reaches
+// `qty` the line is fully refunded → struck "do not ship" in the drawer, dropped
+// from the packing slip, stamped 已退款 on the receipt. A partial value (0<n<qty)
+// reduces the packing qty and shows "n of qty refunded". Written by the refund
+// settlement paths (direct + approve) from refund_lines_json; mirrors the
+// order-level ledger so prints/drawer read one field instead of parsing JSON.
+addColumn('retail_order_items', 'refunded_qty', 'INTEGER DEFAULT 0');
 
 // Seed default GZ-express excluded districts (editable from Admin →
 // Integrations later). Customers in these districts get the simple

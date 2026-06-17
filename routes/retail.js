@@ -11278,6 +11278,34 @@ function normalizeRefundLines(orderId, lines) {
   return { lines: out.length ? out : null, amount: +total.toFixed(2) };
 }
 
+// Stamp retail_order_items.refunded_qty so the drawer, packing slip and receipt
+// can read one field instead of re-parsing refund_lines_json. Called alongside
+// the inventory reversal in every refund-settlement path. Accumulates (capped at
+// the line qty) so repeated partial refunds add up rather than clobber.
+// isFull → every line on the order is marked fully refunded.
+function applyRefundedQty(orderId, lines, isFull) {
+  try {
+    if (isFull) {
+      tdb().prepare(
+        'UPDATE retail_order_items SET refunded_qty = qty WHERE order_id = ?'
+      ).run(orderId);
+      return;
+    }
+    if (!Array.isArray(lines) || !lines.length) return;
+    const stmt = tdb().prepare(
+      `UPDATE retail_order_items
+          SET refunded_qty = MIN(qty, COALESCE(refunded_qty, 0) + ?)
+        WHERE id = ? AND order_id = ?`
+    );
+    for (const l of lines) {
+      const itemId = parseInt(l.item_id, 10);
+      const q = Math.max(0, Number(l.qty) || 0);
+      if (!itemId || !(q > 0)) continue;
+      stmt.run(q, itemId, orderId);
+    }
+  } catch (e) { console.error('[applyRefundedQty]', e); }
+}
+
 router.post('/api/retail/orders/:id/refund-request', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
@@ -13169,6 +13197,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json,
             oi.ship_modes, oi.needs_ice_pack, oi.ship_from_supplier, oi.shipment_id,
+            COALESCE(oi.refunded_qty, 0) AS refunded_qty,
             p.bundle_items
        FROM retail_order_items oi
   LEFT JOIN store_products p ON p.id = oi.product_id
@@ -16025,6 +16054,9 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
       inventory.reverseCommittedLines(id, lines, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (partial lines)' });
     }
   } catch (e) { console.error('[inventory.reverse (approve)]', e); }
+  // Mark refunded units (see direct path) — at approval, where stock is released
+  // and the operational "don't ship" decision is made.
+  applyRefundedQty(id, lines, isFull);
   if (reversePoints) {
     try { reverseOrderPoints(id); }  catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); }  catch (e) { console.error('[reverseOrderRedeem]', e); }
@@ -16270,6 +16302,9 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
       inventory.reverseCommittedLines(id, lines, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct partial lines)' });
     }
   } catch (e) { console.error('[inventory.reverse (direct)]', e); }
+  // Mark the refunded units on each line so the drawer strikes them, the packing
+  // slip drops/reduces them, and the receipt stamps 已退款.
+  applyRefundedQty(id, lines, isFull);
   if (isFull) {
     try { reverseOrderPoints(id); }   catch (e) { console.error('[reverseOrderPoints direct]', e); }
     try { reverseOrderRedeem(id); }   catch (e) { console.error('[reverseOrderRedeem direct]', e); }

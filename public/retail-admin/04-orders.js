@@ -1800,6 +1800,30 @@ function itemQtyHtml(it) {
   return `<span class="item-qty${Number(it.qty) > 1 ? ' qty-multi' : ''}">×${it.qty}</span>`;
 }
 
+// Refunded units on a line (clamped). Mirrors the server's refunded_qty so the
+// drawer can strike fully-refunded lines and flag partials as "don't ship".
+function itemRefundedQty(it) {
+  const q = Math.max(0, Number(it.qty) || 0);
+  return Math.min(q, Math.max(0, Number(it.refunded_qty) || 0));
+}
+function itemFullyRefunded(it) {
+  const q = Math.max(0, Number(it.qty) || 0);
+  return q > 0 && itemRefundedQty(it) >= q;
+}
+// Refund pill for the manifest row: "退款 · do not ship" when fully refunded,
+// "n of q refunded" on a partial. Monochrome inline SVG (no emoji, per house style).
+function itemRefundHtml(it) {
+  const rq = itemRefundedQty(it);
+  if (!(rq > 0)) return '';
+  const q = Number(it.qty) || 0;
+  const full = itemFullyRefunded(it);
+  const ic = `<svg class="rf-ic" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 2.6-6.3"/><path d="M3 4v4h4"/></svg>`;
+  const label = full
+    ? cuT('Refunded · do not ship', '已退款 · 勿发货')
+    : cuT(`${rq} of ${q} refunded`, `已退 ${rq}/${q}`);
+  return `<span class="pack-badge refunded" title="${escapeHtml(full ? 'Refunded — do not ship this item · 已退款，请勿发货' : 'Partly refunded · 部分退款')}">${ic}${label}</span>`;
+}
+
 // SKU chip — shared across all item layouts (manifest / table / cards) so the
 // packer's scan code reads identically in every view.
 function itemSkuHtml(it) {
@@ -1851,8 +1875,10 @@ function renderItemRow(it, opts = {}) {
   const zh = (nm.secondary || it.size)
     ? `<span class="mf-zh">${escapeHtml(nm.secondary)}${it.size ? (nm.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
     : '';
+  const refundPill = itemRefundHtml(it);
+  const rowCls = `mf-row${itemFullyRefunded(it) ? ' refunded-row' : ''}`;
   return `
-    <div class="mf-row" data-fk="${it.id}">
+    <div class="${rowCls}" data-fk="${it.id}">
       <span class="mf-num">${num}</span>
       ${itemThumb(it)}
       <div class="mf-body">
@@ -1865,6 +1891,7 @@ function renderItemRow(it, opts = {}) {
           ${itemSkuHtml(it)}
           ${itemQtyHtml(it)}
           <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
+          ${refundPill ? `<span class="mf-packs">${refundPill}</span>` : ''}
           ${showPack ? `<span class="mf-packs">${renderPackBadges(it)}</span>` : ''}
         </div>
         ${itemOptionsHtml(it)}
@@ -2005,7 +2032,8 @@ function renderItemsAsGrid(items, showPack = true) {
       : nm;
     const zh = (nn.secondary || it.size)
       ? `<div class="oi-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
-    return `<div class="oi-row" data-fk="${it.id}">
+    const refundPill = itemRefundHtml(it);
+    return `<div class="oi-row${itemFullyRefunded(it) ? ' refunded-row' : ''}" data-fk="${it.id}">
       <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
         ${itemThumb(it)}
         <div style="min-width:0">${nameCell}${zh}<div style="margin-top:4px">${itemSkuHtml(it)}</div>${itemOptionsHtml(it)}${renderBundleInside(it)}</div>
@@ -2013,7 +2041,7 @@ function renderItemsAsGrid(items, showPack = true) {
       <span class="oi-c">${itemQtyHtml(it)}</span>
       <span class="oi-r">¥${fmt(it.unit_price)}</span>
       <span class="oi-total">¥${fmt(it.line_total)}</span>
-      <span class="oi-packs">${showPack ? renderPackBadges(it) : ''}</span>
+      <span class="oi-packs">${refundPill}${showPack ? renderPackBadges(it) : ''}</span>
     </div>`;
   }).join('');
   return `<div class="oi-grid">${head}${rows}</div>`;
@@ -2029,7 +2057,8 @@ function renderItemsAsCards(items, showPack = true) {
       : nm;
     const zh = (nn.secondary || it.size)
       ? `<div class="oic-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
-    return `<div class="oic" data-fk="${it.id}">
+    const refundPill = itemRefundHtml(it);
+    return `<div class="oic${itemFullyRefunded(it) ? ' refunded-row' : ''}" data-fk="${it.id}">
       <div class="oic-top">
         <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
           ${itemThumb(it)}
@@ -2041,6 +2070,7 @@ function renderItemsAsCards(items, showPack = true) {
         ${itemSkuHtml(it)}
         ${itemQtyHtml(it)}
         <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
+        ${refundPill ? `<span class="oic-packs">${refundPill}</span>` : ''}
         ${showPack ? `<span class="oic-packs">${renderPackBadges(it)}</span>` : ''}
       </div>
       ${itemOptionsHtml(it)}
