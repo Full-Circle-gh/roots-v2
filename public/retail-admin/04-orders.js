@@ -2700,6 +2700,9 @@ function renderOpenOrder(o) {
     + (undoDispatchable(o)
         ? `<button class="btn btn-sm" onclick="undoDispatch(${o.id})">${o.status === 'delivered' ? 'Undo delivery · 撤销送达' : 'Undo dispatch · 撤销发货'}</button>`
         : '')
+    + (undoPreparable(o)
+        ? `<button class="btn btn-sm" onclick="undoPreparing(${o.id})">Undo preparing · 撤销备货</button>`
+        : '')
     + renderRefundMenu(o, dangerTx);
     mount.innerHTML = `
       <div class="order-card odd-${ODV.density}">
@@ -3236,6 +3239,43 @@ async function undoDispatch(id) {
 function undoDispatchable(o) {
   return o && (o.status === 'dispatched' || o.status === 'delivered')
     && o.fulfillment_type !== 'pickup'
+    && !(o.shipments || []).some(s =>
+      (s.tracking_number && String(s.tracking_number).trim()) ||
+      (s.tracking && s.tracking.number));
+}
+
+// Reverse an accidental "Mark preparing" — one step earlier than undoDispatch.
+// The status machine is forward-only, so a too-early paid → preparing left the
+// operator with no way back. Rolls preparing → paid. Server only allows it while
+// still preparing with no waybill attached (returns 'already_shipped' otherwise).
+// Silent: the customer is not notified, matching a quick correction.
+async function undoPreparing(id) {
+  const ok = await askConfirm({
+    titleEn: 'Undo preparing?', titleCn: '撤销备货?',
+    bodyEn: 'This moves the order back to <b>Paid</b>. Use it if you marked it preparing by mistake. The customer is not notified.',
+    bodyCn: '这会把订单退回<b>已支付</b>。如果你是误点了备货,可以用它撤销。不会通知顾客。',
+    confirmEn: 'Undo preparing', confirmCn: '撤销备货',
+    cancelEn: 'Keep as is', cancelCn: '保持不变',
+  });
+  if (!ok) return;
+  try {
+    await api(`/api/retail-admin/orders/${id}/undo-preparing`, { method: 'POST', body: {} });
+    toast('Undone · 已撤销 — back to Paid · 退回已支付');
+    openOrder(id, { instant: true });
+    loadOrders();
+  } catch (e) {
+    const msg = e.message === 'already_shipped'
+      ? cuT('A parcel already has a waybill — cancel it first.', '已有包裹生成运单 — 请先取消运单。')
+      : 'Failed · 失败: ' + e.message;
+    toast(msg, 'err');
+  }
+}
+
+// Whether the open order can be rolled back to Paid: it's preparing and no parcel
+// carries a real waybill. Mirrors the server guard so the button only shows when
+// the action will actually succeed.
+function undoPreparable(o) {
+  return o && o.status === 'preparing'
     && !(o.shipments || []).some(s =>
       (s.tracking_number && String(s.tracking_number).trim()) ||
       (s.tracking && s.tracking.number));
