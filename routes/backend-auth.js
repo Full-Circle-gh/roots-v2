@@ -48,6 +48,26 @@ db.exec(`
     FOREIGN KEY (tenant_id) REFERENCES tenants(id)
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_users_login ON tenant_users(tenant_id, username);
+
+  -- Web storefront hostnames. Each tenant can serve a browser website (alongside
+  -- or instead of its WeChat mini-app); a request's Host maps to the tenant the
+  -- same way x-wx-appid does for the mini-app (see middleware/public-tenant.js).
+  -- Defined here (not saas-admin) so the table exists before the public-tenant
+  -- middleware that reads it is mounted in server.js.
+  --   kind   : 'subdomain' (free <slug>.<platform-base>) | 'custom' (BYO domain)
+  --   status : 'active' (serve it) | 'pending' (DNS/SSL/ICP not ready) | 'disabled'
+  CREATE TABLE IF NOT EXISTS tenant_domains (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id   INTEGER NOT NULL,
+    host        TEXT NOT NULL,                     -- lowercased, no port
+    kind        TEXT NOT NULL DEFAULT 'subdomain',
+    status      TEXT NOT NULL DEFAULT 'active',
+    is_primary  INTEGER NOT NULL DEFAULT 0,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (tenant_id) REFERENCES tenants(id)
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_domains_host ON tenant_domains(host);
+  CREATE INDEX IF NOT EXISTS idx_tenant_domains_tenant ON tenant_domains(tenant_id);
 `);
 
 // Existing DBs predating product_catalog_mode get the column via ALTER. New
