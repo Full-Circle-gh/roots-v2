@@ -1505,8 +1505,14 @@ Component({
             // No secondary cross-language greeting line — each language stays
             // single-language (no EN+CN mix).
             g.cnLine    = '';
-            const ink   = color(b.ink_color) || '#1a1a17';
-            g.band     = color(b.band_color)   || mp.band;
+            // Band defaults to oat-milk cream (on-brand, matches the rest of
+            // the home page) unless an explicit band colour is chosen. The
+            // mood now only drives the accent / kicker / badge story. Ink
+            // auto-contrasts against the band — dark on a light band, cream
+            // on a dark one — so the greeting stays legible either way.
+            g.band     = color(b.band_color)   || '#F2E7DF';
+            const ink   = color(b.ink_color)
+              || (btnText(g.band) === '#1a1a17' ? '#1a1a17' : '#F2E7DF');
             g.accentC  = color(b.accent_color) || mp.accent;
             g.kickerC  = color(b.kicker_color) || mp.kicker;
             g.badgeC   = color(b.badge_color)  || mp.badge;

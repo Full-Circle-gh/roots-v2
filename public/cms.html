@@ -9822,11 +9822,16 @@ function renderBlockBody(b) {
                       balanced: { head: 1,    border: 2,   radius: 16, coin: 4, halftone: .12 },
                       playful:  { head: 1.14, border: 2.5, radius: 20, coin: 7, halftone: .2  } })[b.energy]
                    || { head: 1, border: 2, radius: 16, coin: 4, halftone: .12 };
-        const band   = brandColorVar(b.band_color)   || mp.band;
+        // Band defaults to oat-milk cream (matches the rest of the home page)
+        // unless an explicit band colour is set; the mood drives only the
+        // accent / kicker / badge. Ink auto-contrasts so the greeting stays
+        // legible on either a light or dark band.
+        const band   = brandColorVar(b.band_color)   || '#F2E7DF';
         const accentC= brandColorVar(b.accent_color) || mp.accent;
         const kickerC= brandColorVar(b.kicker_color) || mp.kicker;
         const badgeC = brandColorVar(b.badge_color)  || mp.badge;
-        const inkC   = brandColorVar(b.ink_color)    || '#1a1a17';
+        const inkC   = brandColorVar(b.ink_color)
+                       || (btnTextHex(band) === '#1a1a17' ? '#1a1a17' : '#F2E7DF');
         d.style.background = band;
         d.style.color = inkC;
         d.style.setProperty('--gr-accent', accentC);
@@ -12414,11 +12419,11 @@ function buildGreetingForm(m, b) {
         { value: 'balanced', label: T('Balanced — the design default', '平衡 — 设计默认') },
         { value: 'playful',  label: T('Playful — bigger, chunkier', '活泼 — 更大更粗') },
       ], v => updateBlock(b.id, { energy: v }))));
-    secLayout.appendChild(field(T('Mood', '色彩故事'), T('Colour story for the band + accents. Forest = green band, lime accent. Dusk = warm brown, amber accent. Berry = plum band, pink accent. Each per-element colour below overrides its mood default.', '条幅与强调色的色彩故事。森林 = 绿色条幅、青柠强调。黄昏 = 暖棕、琥珀强调。莓果 = 李紫条幅、粉色强调。下方每个单项颜色可覆盖其色彩故事默认值。'),
+    secLayout.appendChild(field(T('Mood', '色彩故事'), T('Accent colour story for the points / links / coin. Forest = lime, Dusk = amber, Berry = pink. The band stays oat cream unless you set a Band colour below.', '积分 / 链接 / 金币的强调色彩故事。森林 = 青柠,黄昏 = 琥珀,莓果 = 粉。条幅保持燕麦白,除非你在下方设置条幅底色。'),
       sel(b.mood || 'forest', [
-        { value: 'forest', label: T('Forest — green + lime', '森林 — 绿 + 青柠') },
-        { value: 'dusk',   label: T('Dusk — warm brown + amber', '黄昏 — 暖棕 + 琥珀') },
-        { value: 'berry',  label: T('Berry — plum + pink', '莓果 — 李紫 + 粉') },
+        { value: 'forest', label: T('Forest — lime accent', '森林 — 青柠强调') },
+        { value: 'dusk',   label: T('Dusk — amber accent', '黄昏 — 琥珀强调') },
+        { value: 'berry',  label: T('Berry — pink accent', '莓果 — 粉色强调') },
       ], v => updateBlock(b.id, { mood: v }))));
   }
 
@@ -12456,7 +12461,7 @@ function buildGreetingForm(m, b) {
   if (isDesign) {
     // Per-element colours — every coloured piece is overridable; blank keeps
     // the mood's colour-story default.
-    secColours.appendChild(field(T('Band colour', '条幅底色'), T('The block background band. Blank = mood band (forest green / dusk brown / berry plum).', '模块背景条幅。留空 = 色彩故事条幅(森绿 / 暖棕 / 李紫)。'),
+    secColours.appendChild(field(T('Band colour', '条幅底色'), T('The block background band. Blank = oat cream (the home-page default). Text auto-darkens on a light band and turns cream on a dark one.', '模块背景条幅。留空 = 燕麦白(主页默认)。浅色条幅文字自动转深,深色条幅文字自动转米色。'),
       sel(b.band_color || '', [{ value: '', label: T('— default (mood) —', '— 默认(色彩故事)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { band_color: v }))));
     secColours.appendChild(field(T('Accent colour', '强调色'), T('Points number, links/CTA, the Coin face & Wallet bar. Blank = mood accent (lime / amber / pink).', '积分数字、链接/按钮、金币面与钱包条。留空 = 色彩故事强调色(青柠 / 琥珀 / 粉)。'),
       sel(b.accent_color || '', [{ value: '', label: T('— default (mood) —', '— 默认(色彩故事)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { accent_color: v }))));
