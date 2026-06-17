@@ -2368,6 +2368,61 @@ function bpBody() {
 // them. Stored in retail_product_options + _choices, saved via body.options on
 // the main Save (replace-all). OPT mirrors the server shape (minus ids).
 let OPT_ID = null, OPT = [], OPT_OPEN = false, OPT_PICK = null;   // OPT_PICK = {oi,ci} choosing a stock product
+// Drag-to-reorder. OPT_DRAG = { kind:'choice'|'block', oi, ci } for the row being
+// dragged. Choices reorder within their own option only; whole option blocks
+// reorder against each other. Monochrome grip glyph (no emoji, per UI rule).
+let OPT_DRAG = null;
+const OPT_GRIP = '<svg class="opt-grip-svg" width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">' +
+  '<circle cx="2.5" cy="3" r="1.3"/><circle cx="7.5" cy="3" r="1.3"/>' +
+  '<circle cx="2.5" cy="8" r="1.3"/><circle cx="7.5" cy="8" r="1.3"/>' +
+  '<circle cx="2.5" cy="13" r="1.3"/><circle cx="7.5" cy="13" r="1.3"/></svg>';
+function optDragStart(ev, kind, oi, ci) {
+  OPT_DRAG = { kind, oi, ci };
+  try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', kind); } catch {}
+  const row = ev.target.closest(kind === 'block' ? '.opt-block' : '.opt-choice');
+  if (row) {
+    row.classList.add('opt-dragging');
+    if (ev.dataTransfer.setDragImage) ev.dataTransfer.setDragImage(row, 14, 14);
+  }
+}
+function optDragEnd() {
+  document.querySelectorAll('.opt-dragging, .opt-dragover')
+    .forEach(n => n.classList.remove('opt-dragging', 'opt-dragover'));
+  OPT_DRAG = null;
+}
+function optDragOver(ev, kind, oi) {
+  if (!OPT_DRAG || OPT_DRAG.kind !== kind) return;
+  if (kind === 'choice' && OPT_DRAG.oi !== oi) return;   // choices stay inside their option
+  ev.preventDefault();
+  ev.dataTransfer.dropEffect = 'move';
+  const row = ev.target.closest(kind === 'block' ? '.opt-block' : '.opt-choice');
+  if (row) row.classList.add('opt-dragover');
+}
+function optDragLeave(ev) {
+  const row = ev.currentTarget;
+  if (row && !row.contains(ev.relatedTarget)) row.classList.remove('opt-dragover');
+}
+function optDrop(ev, kind, oi, ci) {
+  if (!OPT_DRAG || OPT_DRAG.kind !== kind) { optDragEnd(); return; }
+  ev.preventDefault();
+  if (kind === 'block') {
+    const from = OPT_DRAG.oi, to = oi;
+    optDragEnd();
+    if (from === to || from == null) return;
+    const [m] = OPT.splice(from, 1);
+    OPT.splice(to, 0, m);
+    OPT_PICK = null; optRender(); pdScheduleAutosave();
+  } else {
+    if (OPT_DRAG.oi !== oi) { optDragEnd(); return; }
+    const from = OPT_DRAG.ci, to = ci;
+    optDragEnd();
+    if (from === to) return;
+    const arr = OPT[oi].choices;
+    const [m] = arr.splice(from, 1);
+    arr.splice(to, 0, m);
+    OPT_PICK = null; optRender(); pdScheduleAutosave();
+  }
+}
 function optLoad(id) {
   const box = document.getElementById('pd-options'); if (!box) return;
   OPT_ID = id; OPT = []; OPT_OPEN = false; OPT_PICK = null;
@@ -2422,8 +2477,9 @@ function optRender() {
     const choices = o.type === 'text' ? '' : (o.choices.length
       ? o.choices.map((c, ci) => _optChoiceRow(o, oi, c, ci)).join('')
       : `<span class="helper" style="font-size:11px">${cuT('Add at least one choice.', '请至少添加一个选项。')}</span>`);
-    return `<div class="opt-block">` +
+    return `<div class="opt-block" data-oi="${oi}" ondragover="optDragOver(event,'block',${oi})" ondrop="optDrop(event,'block',${oi})" ondragleave="optDragLeave(event)">` +
       `<div class="opt-qrow">` +
+        `<span class="opt-drag opt-drag-block" draggable="true" title="${cuT('Drag to reorder', '拖动排序')}" ondragstart="optDragStart(event,'block',${oi})" ondragend="optDragEnd()">${OPT_GRIP}</span>` +
         `<input type="text" class="opt-q" value="${escapeAttr(o.question_en)}" placeholder="${cuT('Question EN (e.g. Choose your dressing)', '问题(英文,如:选择酱料)')}" oninput="optQ(${oi}, 'question_en', this.value)">` +
         `<input type="text" class="opt-q" value="${escapeAttr(o.question_cn)}" placeholder="${cuT('Question 中文', '问题(中文)')}" oninput="optQ(${oi}, 'question_cn', this.value)">` +
         typeSel(oi, o.type) +
@@ -2466,7 +2522,9 @@ function _optChoiceRow(o, oi, c, ci) {
   const picker = picking ? `<div class="opt-picker">` +
     `<input id="opt-search" class="bu-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to use for stock…', '搜索作为库存来源的商品…')}" oninput="optPickerList()">` +
     `<div id="opt-picklist" class="bu-picklist"></div></div>` : '';
-  return `<div class="opt-choice">` + def +
+  return `<div class="opt-choice" data-oi="${oi}" data-ci="${ci}" ondragover="optDragOver(event,'choice',${oi})" ondrop="optDrop(event,'choice',${oi},${ci})" ondragleave="optDragLeave(event)">` +
+    `<span class="opt-drag" draggable="true" title="${cuT('Drag to reorder', '拖动排序')}" ondragstart="optDragStart(event,'choice',${oi},${ci})" ondragend="optDragEnd()">${OPT_GRIP}</span>` +
+    def +
     `<input type="text" class="opt-clab" value="${escapeAttr(c.label_en)}" placeholder="${cuT('Choice EN', '选项(英文)')}" oninput="optC(${oi}, ${ci}, 'label_en', this.value)">` +
     `<input type="text" class="opt-clab" value="${escapeAttr(c.label_cn)}" placeholder="${cuT('Choice 中文', '选项(中文)')}" oninput="optC(${oi}, ${ci}, 'label_cn', this.value)">` +
     (paid ? `<span class="opt-cdelta" title="${cuT('Extra charge for this choice (0 = free)', '此选项加价(0 = 免费)')}">+¥<input type="number" step="0.01" value="${c.price_delta || 0}" oninput="optC(${oi}, ${ci}, 'price_delta', this.value)"></span>` : '') +
