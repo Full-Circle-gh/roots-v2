@@ -2181,6 +2181,9 @@ function renderShipmentCard(o, s) {
       ${mode === 'local'
         ? (!['dispatched', 'delivered'].includes(s.state || 'pending') && ['paid', 'preparing'].includes(o.status) ? renderLocalEtaCard(o, s) : '')
         : ''}
+      ${(mode === 'land' && o.gz_method_toggle)
+        ? (!['dispatched', 'delivered'].includes(s.state || 'pending') && ['paid', 'preparing'].includes(o.status) ? renderShipmentTrackingCard(o, s) : '')
+        : ''}
       ${mode === 'supplier' ? renderSupplierTrackingBlock(o, s) : ''}
     </div>`;
   // Carrier tracking for a dispatched/delivered parcel is NOT rendered here —
@@ -2218,6 +2221,36 @@ function hoistedTracking(o) {
   return `<div class="od-tracking-top">${cards.join('')}</div>`;
 }
 
+// GZ outer-district orders (花都/番禺/南沙/从化/增城/白云) can go out by either a
+// same-city rider (local ETA) or JD logistics (waybill). Server flags this on
+// o.gz_method_toggle. The toggle sits at the top of whichever card is showing
+// and flips the parcel's mode, swapping the card underneath it. Hidden for
+// central districts (rider-only), other modes (air/supplier), and delivered
+// parcels (too late to re-route).
+function renderGzMethodToggle(o, s) {
+  if (!o.gz_method_toggle) return '';
+  const mode = s.mode || 'local';
+  if (!['local', 'land'].includes(mode)) return '';
+  if ((s.state || 'pending') === 'delivered') return '';
+  const isLocal = mode === 'local';
+  const seg = (active, target, icon, en, cn) =>
+    `<button type="button" class="btn btn-sm ${active ? 'btn-primary' : ''}"
+       ${active ? 'disabled' : `onclick="setShipmentMethod(${o.id}, ${s.id}, '${target}', event)"`}
+       style="flex:1; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
+       ${deliveryIcon(icon, 14)}<span>${cuT(en, cn)}</span></button>`;
+  return `
+    <div style="margin-bottom: var(--s3);">
+      <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">${cuT('Dispatch method', '配送方式')}</div>
+      <div class="row" style="gap:6px;">
+        ${seg(isLocal, 'local', 'scooter', 'Rider', '骑手配送')}
+        ${seg(!isLocal, 'land', 'transit', 'JD logistics', '京东物流')}
+      </div>
+      <div class="muted" style="font-size:11px; margin-top:6px;">${cuT(
+        'Choose how this parcel ships — a same-city rider (set an arrival time) or JD logistics (attach a waybill).',
+        '选择此包裹的配送方式 — 同城骑手(设置送达时间)或京东物流(填写运单号)。')}</div>
+    </div>`;
+}
+
 // Local (Guangzhou same-city) delivery has no waybill, so it gets an ETA card
 // instead of the carrier tracking card: the operator picks a same-day arrival
 // time the customer sees on their order page. Stored on the shipment row as a
@@ -2232,6 +2265,7 @@ function renderLocalEtaCard(o, s, hoisted) {
   const wrapStyle = hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);';
   return `
     <div style="${wrapStyle}" id="eta-card-${sid}">
+      ${renderGzMethodToggle(o, s)}
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Delivery time · 送达时间</div>
       ${eta ? `
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
@@ -3236,6 +3270,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
 
   return `
     <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
+      ${renderGzMethodToggle(o, s)}
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Tracking · 物流</div>
       ${reuseBanner}
       ${has ? `
@@ -3621,6 +3656,30 @@ async function clearLocalEta(orderId, shipmentId, ev) {
     await openOrder(orderId);
     if (_mount) _mount.scrollTop = _scrollTop;
     loadOrders();   // refresh the list so the tracking cell drops the ETA
+  } catch {}
+}
+
+// Switch a GZ outer-district parcel between rider (local ETA) and JD logistics
+// (waybill). Flips the shipment mode server-side, then reloads the drawer so the
+// matching card renders in place. Carriers are pre-loaded so the JD waybill
+// card's carrier dropdown is populated the instant it appears.
+async function setShipmentMethod(orderId, shipmentId, method, ev) {
+  if (method === 'land') { try { await ensureTrackingCarriers(); } catch {} }
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/shipments/${shipmentId}/method`,
+      method: 'POST', body: { method },
+      errLabelEn: 'Switch failed', errLabelCn: '切换失败',
+    });
+    toast(method === 'local'
+      ? 'Switched to rider · 已改为骑手配送'
+      : 'Switched to JD logistics · 已改为京东物流');
+    const _mount = document.getElementById('order-detail-mount');
+    const _scrollTop = _mount ? _mount.scrollTop : 0;
+    await openOrder(orderId);
+    if (_mount) _mount.scrollTop = _scrollTop;
+    loadOrders();   // refresh the list so the tracking/ETA cell reflects the new method
   } catch {}
 }
 

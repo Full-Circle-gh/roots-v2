@@ -13115,6 +13115,20 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   res.json({ success: true, data: out });
 });
 
+// Guangzhou districts where the operator may CHOOSE the dispatch method at
+// dispatch time — send by a same-city rider (arrival time) OR by JD logistics
+// (waybill) — rather than the method being locked by the routing at checkout.
+// These are the outer five opt-in same-day districts (花都/番禺/南沙/从化/增城)
+// plus 白云, where both a rider and a courier are realistic. Central districts
+// (越秀/天河/海珠/荔湾/黄埔…) stay rider-only. District names are matched with
+// the trailing 区 stripped so "白云区"/"白云" both hit.
+const GZ_METHOD_TOGGLE_DISTRICTS = new Set(['白云', '花都', '番禺', '南沙', '从化', '增城']);
+function gzMethodToggleAllowed(address) {
+  if (!address || !isGuangzhou(address.city || '')) return false;
+  const d = String(address.district || '').replace(/区$/, '').trim();
+  return GZ_METHOD_TOGGLE_DISTRICTS.has(d);
+}
+
 router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
@@ -13267,6 +13281,9 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   const city = o.address?.city || '';
   o.shipping_city      = city;
   o.outside_guangzhou  = !!city && !isGuangzhou(city);
+  // GZ outer-district orders let the operator switch between rider (local ETA)
+  // and JD logistics (waybill) at dispatch — see gzMethodToggleAllowed.
+  o.gz_method_toggle   = gzMethodToggleAllowed(o.address);
 
   // JD waybills don't use kd100 — they pull events from JD's own trace API
   // (syncJdTrackingForCustomer), which only runs when JD creds are configured.
@@ -13813,6 +13830,65 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   }
 
   res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: 'dispatched' } });
+});
+
+// Switch a Guangzhou outer-district parcel between same-city RIDER ('local',
+// arrival-time card) and JD LOGISTICS ('land', waybill card). The method is
+// normally locked by the checkout routing; this lets the operator pick how the
+// parcel actually goes out for the eligible districts (花都/番禺/南沙/从化/增城/白云).
+// Only these two modes flip — air/supplier parcels are untouched. Switching to
+// rider drops any attached waybill (it no longer applies); switching to JD drops
+// the rider ETA. A delivered parcel can't be re-routed.
+router.post('/api/retail-admin/orders/:id/shipments/:sid/method',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id  = parseInt(req.params.id, 10);
+  const sid = parseInt(req.params.sid, 10);
+  const method = String(req.body?.method || '').trim();
+  if (!['local', 'land'].includes(method)) {
+    return res.status(400).json({ success: false, error: 'invalid_method' });
+  }
+  const o = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  let address = null;
+  if (o.address_json) { try { address = JSON.parse(o.address_json); } catch {} }
+  if (!gzMethodToggleAllowed(address)) {
+    return res.status(409).json({ success: false, error: 'method_toggle_not_allowed' });
+  }
+  const ship = tdb().prepare('SELECT * FROM retail_shipments WHERE id = ? AND order_id = ?').get(sid, id);
+  if (!ship) return res.status(404).json({ success: false, error: 'shipment_not_found' });
+  if (!['local', 'land'].includes(ship.mode)) {
+    return res.status(409).json({ success: false, error: 'mode_not_switchable', mode: ship.mode });
+  }
+  if (ship.delivered_at) {
+    return res.status(409).json({ success: false, error: 'already_delivered' });
+  }
+  if (ship.mode === method) {
+    return res.json({ success: true, data: { mode: method, unchanged: true } });
+  }
+
+  if (method === 'local') {
+    // Going to a rider: the courier waybill no longer applies — drop it so the
+    // ETA card shows clean and no stale tracking lingers on the order/list.
+    tdb().prepare(
+      `UPDATE retail_shipments
+          SET mode = 'local',
+              tracking_carrier = NULL, tracking_number = NULL,
+              tracking_status = NULL, tracking_kd100_subscribed = 0,
+              tracking_last_error = NULL,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`
+    ).run(sid);
+  } else {
+    // Going to JD: clear the rider arrival time; the waybill drives delivery now.
+    tdb().prepare(
+      `UPDATE retail_shipments
+          SET mode = 'land', local_eta = NULL, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?`
+    ).run(sid);
+  }
+  logActivity(req.user.id, req.user.username, 'shipment_method_switch', 'retail_order', id,
+    { shipment_id: sid, from: ship.mode, to: method }, req.ip);
+  res.json({ success: true, data: { mode: method } });
 });
 
 // Mark ONE parcel delivered. Built for a supplier (drop-ship) parcel whose
@@ -15745,6 +15821,14 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // Guarded to genuine pending→paid transitions so re-saving a paid order
     // doesn't reprint.
     if (o.status !== 'paid') autoPrintOrder(id);
+    // Fire the merchant WeCom new-order alert, same as the gateway callbacks do
+    // inside markOrderPaid(). This admin "Mark paid" path bypasses
+    // markOrderPaid(), so without this an off-app (cash / bank) order would
+    // never ping the staff group. Guarded to genuine pending→paid transitions
+    // so re-saving a paid order doesn't re-alert.
+    if (o.status !== 'paid') {
+      try { sendWecomOrderAlert(id); } catch (e) { console.warn('[admin mark-paid wecom]', e.message); }
+    }
   }
   // Stock side-effects of cancel / refund. cancelled before payment just
   // releases the active reservation; refund of a paid order reverses
