@@ -5072,13 +5072,33 @@ function normalizeChinaAddress(a) {
 
   // Strip a leading "province city district" prefix from the freeform
   // address field when it duplicates the structured fields. People paste
-  // full addresses into the street field; this de-duplicates them.
+  // full addresses into the street field (and the mini-app's type-to-derive
+  // lifts the region into its own slots but leaves the blob in the street),
+  // so without this the order's address_full doubles the region.
+  //
+  // Two subtleties the naive single-pass version got wrong:
+  //   • LONGEST-FIRST. For municipalities the province normalizes to the bare
+  //     stem ('北京') while the street carries the full form ('北京市…'). If we
+  //     strip '北京' first it leaves a dangling '市' the later passes can't
+  //     match, and the whole region survives ('…市朝阳区麦子店街道…'). Trying the
+  //     longest value ('北京市') first avoids the orphan.
+  //   • LOOPED. A street like '广东省广州市天河区珠江西路' needs each region token
+  //     peeled in turn; one pass in fixed order can't, because stripping the
+  //     province shifts what's now at the head.
+  // We only ever match the FULL structured values (never their stems), so a
+  // real street like '天河路100号' under district '天河区' is left untouched.
   if (out.address) {
-    const prefixes = [out.province, out.city, out.district].filter(Boolean);
-    let stripped = out.address;
-    for (const p of prefixes) {
-      const re = new RegExp('^\\s*' + p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i');
-      stripped = stripped.replace(re, '');
+    const variants = [out.province, out.city, out.district]
+      .filter(Boolean)
+      .sort((a, b) => b.length - a.length);
+    let stripped = out.address.trim();
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const v of variants) {
+        const re = new RegExp('^\\s*' + v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*', 'i');
+        if (re.test(stripped)) { stripped = stripped.replace(re, ''); changed = true; }
+      }
     }
     out.address = stripped.trim();
   }
@@ -5489,6 +5509,11 @@ function bucketCost(grams, mode, rates, city) {
   return Math.round((r.base + r.per_kg * (grams / 1000)) * 100) / 100;
 }
 
+// Stored label for a supplier-direct (drop-ship) parcel. Bilingual, stored on
+// the shipment row; the admin + mini-app re-localise off the 'supplier' mode,
+// but a literal label keeps legacy/plain consumers readable too.
+function supplierShipmentLabel() { return 'Supplier-direct · 供应商直发'; }
+
 // Given a list of order items + destination city, return a plan of
 // shipments to create and which items go into each.
 //
@@ -5567,12 +5592,22 @@ function ensureShipments(orderId) {
 
   const items = tdb().prepare(
     `SELECT id,
-            COALESCE(ship_modes, 'air,land') AS ship_modes,
-            COALESCE(needs_ice_pack, 0)      AS needs_ice_pack
+            COALESCE(ship_modes, 'air,land')    AS ship_modes,
+            COALESCE(needs_ice_pack, 0)         AS needs_ice_pack,
+            COALESCE(ship_from_supplier, 0)     AS ship_from_supplier
        FROM retail_order_items WHERE order_id = ?`
   ).all(orderId);
-  const plan = planShipments(items, destCity, destProvince,
+  // Drop-ship items never ride our own air/land/local parcels — the supplier
+  // ships each one straight to the customer with its own (manually-entered)
+  // waybill. One 'supplier' parcel PER supplier line, since different supplier
+  // products usually come from different suppliers with different tracking.
+  const regularItems  = items.filter(i => !i.ship_from_supplier);
+  const supplierItems = items.filter(i =>  i.ship_from_supplier);
+  const plan = planShipments(regularItems, destCity, destProvince,
     { destDistrict, slotKind: o.delivery_slot_kind });
+  for (const it of supplierItems) {
+    plan.push({ mode: 'supplier', label: supplierShipmentLabel(), item_ids: [it.id] });
+  }
 
   const ins = tdb().prepare(
     `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
@@ -5580,16 +5615,19 @@ function ensureShipments(orderId) {
   );
   const assignItem = tdb().prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE id = ?`);
   const created = [];
+  let firstRegularId = null;   // legacy tracking mirrors here, never onto a supplier parcel
   const tx = tdb().transaction(() => {
     for (const seg of plan) {
       const r = ins.run(orderId, seg.mode, seg.label);
       const shipmentId = r.lastInsertRowid;
       for (const itemId of seg.item_ids) assignItem.run(shipmentId, itemId);
       created.push(shipmentId);
+      if (firstRegularId == null && seg.mode !== 'supplier') firstRegularId = shipmentId;
     }
-    // Carry legacy tracking_* across — attach to the first shipment so
-    // existing waybills don't appear lost in the new UI. Only if the
-    // legacy fields have data.
+    // Carry legacy tracking_* across — attach to the first REGULAR shipment (a
+    // supplier parcel carries the supplier's own waybill, never our legacy one).
+    // Only if the legacy fields have data; falls back to created[0] if the order
+    // is somehow supplier-only.
     if (o.tracking_number && o.tracking_carrier && created.length) {
       tdb().prepare(
         `UPDATE retail_shipments
@@ -5608,7 +5646,7 @@ function ensureShipments(orderId) {
         o.tracking_scenario, o.tracking_scenario_data_json,
         o.tracking_scenario_notified,
         o.dispatched_at, o.delivered_at,
-        created[0]
+        firstRegularId || created[0]
       );
     }
   });
@@ -5650,14 +5688,19 @@ function mergeAddonItemsIntoShipments(orderId, newItemIds) {
   const placeholders = ids.map(() => '?').join(',');
   const items = tdb().prepare(
     `SELECT id,
-            COALESCE(ship_modes, 'air,land') AS ship_modes,
-            COALESCE(needs_ice_pack, 0)      AS needs_ice_pack
+            COALESCE(ship_modes, 'air,land')    AS ship_modes,
+            COALESCE(needs_ice_pack, 0)         AS needs_ice_pack,
+            COALESCE(ship_from_supplier, 0)     AS ship_from_supplier
        FROM retail_order_items
       WHERE order_id = ? AND id IN (${placeholders})`
   ).all(orderId, ...ids);
   if (!items.length) return;
 
-  const plan = planShipments(items, destCity, destProvince,
+  // Drop-ship add-ons never merge into an open parcel — each is its own supplier
+  // shipment (own waybill), exactly like at checkout.
+  const regularItems  = items.filter(i => !i.ship_from_supplier);
+  const supplierItems = items.filter(i =>  i.ship_from_supplier);
+  const plan = planShipments(regularItems, destCity, destProvince,
     { destDistrict, slotKind: o.delivery_slot_kind });
 
   const ins = tdb().prepare(
@@ -5668,6 +5711,11 @@ function mergeAddonItemsIntoShipments(orderId, newItemIds) {
   const touchShip  = tdb().prepare(`UPDATE retail_shipments SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
 
   const tx = tdb().transaction(() => {
+    // Each supplier add-on → its own fresh supplier parcel.
+    for (const it of supplierItems) {
+      const sid = ins.run(orderId, 'supplier', supplierShipmentLabel()).lastInsertRowid;
+      assignItem.run(sid, it.id);
+    }
     for (const seg of plan) {
       // An OPEN parcel of this mode = not shipped, no waybill. Oldest first so
       // add-ons land in the original parcel when one is still open.
@@ -7132,6 +7180,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
         return {
           shipment_id:     s.id,
           mode:            s.mode,
+          is_supplier:     s.mode === 'supplier',
           index:           i + 1,
           total:           parcels.length,
           state,
@@ -14457,9 +14506,6 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   }
   const o = tdb().prepare('SELECT id, status, recipient_phone, tracking_number FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-  if (!['dispatched', 'delivered'].includes(o.status)) {
-    return res.status(409).json({ success: false, error: 'not_shipped', status: o.status });
-  }
 
   // Resolve the shipment row this waybill should attach to. If the
   // caller didn't pass shipment_id, default to the order's primary (first)
@@ -14471,6 +14517,16 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
     : shipments[0];
   if (!shipment) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
 
+  // A SUPPLIER (drop-ship) parcel ships on the supplier's own clock — the office
+  // pastes its waybill whenever the supplier sends it, often while OUR items are
+  // still being prepared. So skip the "order must be dispatched" gate for it (and
+  // stamp the parcel's own dispatched_at below). Our own parcels still require
+  // the order to be dispatched/delivered first.
+  const isSupplier = shipment.mode === 'supplier';
+  if (!isSupplier && !['dispatched', 'delivered'].includes(o.status)) {
+    return res.status(409).json({ success: false, error: 'not_shipped', status: o.status });
+  }
+
   // Mirror this waybill to the order-level tracking_* fields when it's the
   // primary parcel OR the order row has no waybill yet. The legacy mirror is
   // what the orders-list TRACKING cell + customer mini-app order list read; on
@@ -14480,9 +14536,16 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
   // though a parcel was genuinely shipped + live-syncing. Mirroring the first
   // parcel to ship, primary or not, fixes the glance; the "Partially shipped"
   // pill carries the rest of the story.
-  const mirrorToOrder = shipment.id === shipments[0].id || !o.tracking_number;
+  // EXCEPTION: a supplier parcel only owns the order-level mirror when it's the
+  // SOLE parcel (supplier-only order). In a mixed order our own parcel keeps the
+  // order row's tracking — the supplier waybill lives only on its own shipment.
+  const mirrorToOrder = isSupplier
+    ? shipments.length === 1
+    : (shipment.id === shipments[0].id || !o.tracking_number);
 
-  const derived = tracking.deriveStatusFromOrder(o.status);
+  // Supplier parcels aren't tied to the order's status — treat a freshly-entered
+  // supplier waybill as "dispatched" so it reads as shipped, not pending.
+  const derived = tracking.deriveStatusFromOrder(isSupplier ? 'dispatched' : o.status);
   tdb().prepare(
     `UPDATE retail_shipments
         SET tracking_carrier = ?, tracking_number = ?,
@@ -14491,9 +14554,10 @@ router.put('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, express.
             tracking_synced_at = CURRENT_TIMESTAMP,
             tracking_last_error = NULL,
             tracking_kd100_subscribed = 0,
+            dispatched_at = COALESCE(dispatched_at, CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE dispatched_at END),
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`
-  ).run(carrier, number, derived, shipment.id);
+  ).run(carrier, number, derived, isSupplier ? 1 : 0, shipment.id);
 
   if (mirrorToOrder) {
     tdb().prepare(

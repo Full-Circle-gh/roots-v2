@@ -2058,6 +2058,9 @@ function shipGlyph(mode) {
     return open + '<path d="M21 15.5 13 13V6a1 1 0 0 0-2 0v7l-8 2.5V17l8-1.5V20l-2.5 1.5V23L12 22l3.5 1.5V21.5L13 20v-4.5l8 1.5z"/></svg>';
   if (mode === 'local')
     return open + '<path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/></svg>';
+  if (mode === 'supplier')
+    // A parcel cube with an arrow leaving it — "ships from elsewhere, straight out".
+    return open + '<path d="M4 9l8-4 8 4v6l-8 4-8-4z"/><path d="M9 12l6-6"/><path d="M11 5.5h4.5V10"/></svg>';
   return open + '<path d="M2.5 6.5h11v8h-11z"/><path d="M13.5 9h4l4 3.5v2h-8z"/><circle cx="6.5" cy="16.5" r="1.6"/><circle cx="17.5" cy="16.5" r="1.6"/></svg>';
 }
 
@@ -2078,9 +2081,10 @@ function shipmentStatePill(s) {
 function renderShipmentCard(o, s) {
   const mode = s.mode || 'local';
   const labelMap = {
-    air:   shipGlyph('air')   + ' Air shipment · 空运',
-    land:  shipGlyph('land')  + ' Land shipment · 陆运',
-    local: shipGlyph('local') + ' Local delivery · 同城配送',
+    air:      shipGlyph('air')      + ' Air shipment · 空运',
+    land:     shipGlyph('land')     + ' Land shipment · 陆运',
+    local:    shipGlyph('local')    + ' Local delivery · 同城配送',
+    supplier: shipGlyph('supplier') + ' Supplier-direct · 供应商直发',
   };
   // Line count vs. unit count: warehouse cross-checks the physical pick
   // against total units, so surface units whenever a multi-qty line makes
@@ -2094,7 +2098,10 @@ function renderShipmentCard(o, s) {
   // Per-shipment dispatch is offered once the order is paid (or later) and this
   // parcel hasn't shipped. The order being 'dispatched' doesn't block it — a
   // partially-shipped order keeps un-shipped parcels actionable.
+  // A supplier parcel is never "dispatched" from our warehouse — it ships from
+  // the supplier and is marked shipped by entering its tracking number instead.
   const canDispatch = state === 'pending' &&
+    mode !== 'supplier' &&
     ['paid', 'preparing', 'dispatched'].includes(o.status) &&
     o.fulfillment_type !== 'pickup';
   // With a single parcel the per-parcel dispatch button just duplicates the
@@ -2123,6 +2130,7 @@ function renderShipmentCard(o, s) {
       ${mode === 'local'
         ? (['paid', 'preparing', 'dispatched', 'delivered'].includes(o.status) ? renderLocalEtaCard(o, s) : '')
         : ''}
+      ${mode === 'supplier' ? renderSupplierTrackingBlock(o, s) : ''}
     </div>`;
   // Carrier tracking for a dispatched/delivered parcel is NOT rendered here —
   // it's hoisted to the top of the drawer (hoistedTracking) so the operator can
@@ -2139,7 +2147,10 @@ function hoistedTracking(o) {
   const all = o.shipments || [];
   const multi = all.length > 1;
   const cards = all.map((s, i) => {
-    if ((s.mode || 'local') === 'local') return '';
+    // Local parcels carry an ETA, not a waybill; supplier parcels render their
+    // own tracking card inline (always visible, even before "dispatch") — so
+    // neither is hoisted here.
+    if ((s.mode || 'local') === 'local' || s.mode === 'supplier') return '';
     if (!['dispatched', 'delivered'].includes(s.state || 'pending')) return '';
     const label = multi
       ? `<div class="od-trk-parcel">${cuT(`Parcel ${i + 1}`, `包裹 ${i + 1}`)}</div>`
@@ -2179,6 +2190,18 @@ function renderLocalEtaCard(o, s) {
       </div>
       <div class="muted" style="font-size:11px; margin-top:6px;">Same-city delivery — set when the rider should arrive; the customer sees this on their order. · 同城配送 — 设置骑手预计送达时间,顾客可在订单中查看。</div>
     </div>`;
+}
+
+// Supplier (drop-ship) parcel: no warehouse label, no courier booking — the
+// supplier ships it and sends a tracking number the operator pastes in. We
+// reuse the standard tracking card (carrier picker + number + Save + live
+// events), with the "Create JD label" path suppressed (see renderShipmentTrackingCard),
+// and lead with a plain instruction so staff know this parcel isn't ours to ship.
+function renderSupplierTrackingBlock(o, s) {
+  const instr = `<div class="muted" style="font-size:11px; margin-bottom:8px; line-height:1.5;">${cuT(
+    'Ships directly from the supplier — no warehouse label is printed for it. Paste the tracking number the supplier sends you so the customer can follow it.',
+    '由供应商直接发货 — 此包裹不打印仓库面单。请将供应商提供的快递单号填入下方,顾客即可查询物流。')}</div>`;
+  return `<div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">${instr}${renderShipmentTrackingCard(o, s, true)}</div>`;
 }
 
 // Stored ETA is a 24h "HH:MM"; render it on a 12h clock for the office card.
@@ -3148,7 +3171,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
           </div>
         </div>` : ''}
       ${eventsBlock}
-      ${!has ? `
+      ${(!has && s.mode !== 'supplier') ? `
         <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
           <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)">📦 Create JD label · 生成京东运单</button>
           <span class="muted" style="font-size:11px;">Free live tracking — JD bills the parcel. · 免费物流追踪。</span>
@@ -3162,7 +3185,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
         ${has ? `<button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">Clear · 清除</button>` : ''}
       </div>
       ${has && t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes). · “取消揽收”会向京东取消上门;“清除”仅在本地移除运单号(快递仍会上门)。</div>` : ''}
-      ${!has ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead. · 手动录入的运单号通过快递100(付费)追踪,含个人的京东 JDV0… 单号;如需免费京东追踪,请改用上方“生成京东运单”。</div>` : ''}
+      ${(!has && s.mode !== 'supplier') ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead. · 手动录入的运单号通过快递100(付费)追踪,含个人的京东 JDV0… 单号;如需免费京东追踪,请改用上方“生成京东运单”。</div>` : ''}
     </div>`;
 }
 

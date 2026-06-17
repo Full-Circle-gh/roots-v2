@@ -12,7 +12,9 @@ const path = require('path');
 const APPLY = !!process.env.APPLY;
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));
 
-const OWNER_ID = 315;
+// The Raspberry Mango Sorbet group OWNER is #316 (the 5-cup); #315/#198 are
+// children. Override with OWNER_ID=<id> to write the same blocks to any row.
+const OWNER_ID = Number(process.env.OWNER_ID) || 316;
 const COLOPHON = 'hula';            // tropical-ish mascot; matches a mango sorbet
 const TEMPLATE = 'editorial_light';  // same template the other block products use
 
