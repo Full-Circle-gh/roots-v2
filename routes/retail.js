@@ -12350,7 +12350,7 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
     `SELECT name_en, name_cn, category, weight, sell_price, compare_at_price,
             ship_modes, description_en, description_cn, description_format, image_data, images,
             keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
-            description_blocks, colophon_character, colophon_tagline_en, colophon_tagline_cn,
+            description_blocks, use_block_design, colophon_character, colophon_tagline_en, colophon_tagline_cn,
             variant_group_id, sort_order
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
@@ -12373,14 +12373,14 @@ router.post('/api/retail-admin/products/:id/duplicate', requireRetailAdmin, expr
          (name_en, name_cn, sku, category, weight, sell_price, compare_at_price, stock_qty, ship_modes,
           description_en, description_cn, description_format, image_data, images, image_aspect,
           keywords_en, keywords_cn, tagline_en, tagline_cn, free_of, tags, nutrition,
-          description_blocks, colophon_character, colophon_tagline_en, colophon_tagline_cn,
+          description_blocks, use_block_design, colophon_character, colophon_tagline_en, colophon_tagline_cn,
           variant_group_id, variant_label, sort_order, is_published, is_active, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,1,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`
     ).run(
       src.name_en, src.name_cn, generateRetailSku(), src.category, src.weight, src.sell_price, src.compare_at_price, 0, src.ship_modes,
       src.description_en, src.description_cn, src.description_format, src.image_data, src.images, imageAspect(src.image_data),
       src.keywords_en, src.keywords_cn, src.tagline_en, src.tagline_cn, src.free_of, src.tags, src.nutrition,
-      src.description_blocks, src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
+      src.description_blocks, src.use_block_design, src.colophon_character, src.colophon_tagline_en, src.colophon_tagline_cn,
       asVariant ? groupId : null, asVariant ? label : null, src.sort_order
     );
     return info.lastInsertRowid;
