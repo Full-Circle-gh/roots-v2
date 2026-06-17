@@ -63,7 +63,14 @@ function peelFront(street, variants) {
       if (re.test(s)) { s = s.replace(re, ''); changed = true; break; }
     }
     if (changed) continue;
-    // b) an orphan lone admin suffix char left dangling ('市 …', '区，…'),
+    // b) a lone leading admin char GLUED to a region ('市徐汇区…' → strip '市'
+    //    so '徐汇区' can peel next). Only when the remainder actually starts with
+    //    a known region variant, so a real street like '市场街1号' is left alone.
+    const glued = s.match(/^\s*([省市区县])(.+)/u);
+    if (glued && variants.some(v => glued[2].startsWith(v))) {
+      s = glued[2]; changed = true; continue;
+    }
+    // c) an orphan lone admin suffix char left dangling ('市 …', '区，…'),
     //    only when it's a SINGLE char followed by space/punct (not part of a
     //    real word like '海淀区').
     const orphan = s.match(/^\s*[省市区县][\s,，、]+/u);
@@ -113,14 +120,32 @@ function tidy(s) {
   return s.replace(/\s{2,}/g, ' ').replace(/^[\s,，、。.]+|[\s,，、。.]+$/gu, '').trim();
 }
 
+// Pull overflow out of a region column that holds more than its admin name:
+// '余杭区中泰街道星未来云邸…' → ['余杭区', '中泰街道星未来云邸…']. Lazy match to
+// the FIRST admin suffix so multi-char names ('浦东新区') stay whole.
+function splitCanonicalRegion(value, suffixRe) {
+  if (!value) return [value, ''];
+  const v = value.trim();
+  const m = v.match(suffixRe);
+  if (m && m[1].length < v.length) return [m[1].trim(), v.slice(m[1].length).trim()];
+  return [v, ''];
+}
+
 // Returns { province, city, district, address } cleaned. detail is left as-is.
 function cleanParts(province, city, district, address) {
   const p0 = (province || '').trim() || null;
-  const c0 = (city || '').trim() || null;
-  const d0 = (district || '').trim() || null;
+  let c0 = (city || '').trim() || null;
+  let d0 = (district || '').trim() || null;
   const province2 = collapseProvince(p0);
 
-  let street = (address || '').trim();
+  // Some rows crammed the whole street into the city/district COLUMN (e.g.
+  // district = '余杭区中泰街道星未来云邸…'). Lift that overflow into the street
+  // blob and keep only the canonical admin name in the column.
+  let cityExtra = '', distExtra = '';
+  if (c0) { const [c, ex] = splitCanonicalRegion(c0, /^(.*?(?:市|自治州|地区|盟))/u); c0 = c; cityExtra = ex; }
+  if (d0) { const [d, ex] = splitCanonicalRegion(d0, /^(.*?(?:区|县|旗))/u); d0 = d; distExtra = ex; }
+
+  let street = [cityExtra, distExtra, (address || '').trim()].filter(Boolean).join(' ').trim();
   if (street) {
     // Variants to peel from the front: full administrative forms only. We drop
     // a bare municipality stem ('北京'/'上海'/…) — it's only 2 chars and would
@@ -144,14 +169,28 @@ function fullOf(p, c, d, a, det) {
   return [p, c, d, a, det].filter(Boolean).join(' ');
 }
 
-// A row needs writing iff cleaning changes province or address, AND the result
-// is non-degenerate (street didn't get wiped to empty when it had content).
+// A row needs writing iff any cleaned column differs from its (trimmed)
+// original. Guard against a degenerate result that emptied a street which had
+// real content.
 function planRow(province, city, district, address, detail) {
   const cleaned = cleanParts(province, city, district, address);
   const before = fullOf(province, city, district, address, detail);
   const after = fullOf(cleaned.province, cleaned.city, cleaned.district, cleaned.address, detail);
-  const changed = (cleaned.province !== (province || null) || cleaned.address !== (address || '').trim());
-  const wiped = !!(address && address.trim()) && !cleaned.address;
+  const origP = (province || '').trim() || null;
+  const origC = (city || '').trim() || null;
+  const origD = (district || '').trim() || null;
+  const origA = (address || '').trim();
+  const changed = (
+    cleaned.province !== origP ||
+    cleaned.city !== origC ||
+    cleaned.district !== origD ||
+    cleaned.address !== origA
+  );
+  // If the source had any street content (in the address column, or crammed into
+  // city/district beyond their bare admin name) but the result is empty, treat it
+  // as degenerate and skip rather than risk wiping a real address.
+  const hadStreet = origA !== '' || cleaned.city !== origC || cleaned.district !== origD;
+  const wiped = hadStreet && !cleaned.address;
   return { cleaned, before, after, changed, wiped, skip: !changed || wiped };
 }
 
@@ -172,6 +211,10 @@ function selftest() {
     ['order #228 leading region',   '北京', '北京市', '朝阳区', '市 北京市 朝阳区 麦子店街道朝阳公园西路17号', null, '北京 北京市 朝阳区 麦子店街道朝阳公园西路17号'],
     ['ALREADY CLEAN (no change)',   '北京', '北京市', '朝阳区', '麦子店街道朝阳公园西路17号', '天安·豪园A202房', '北京 北京市 朝阳区 麦子店街道朝阳公园西路17号 天安·豪园A202房', true],
     ['lone city mid 惠州',          '广东省', '惠州市', '惠阳区', '大亚湾霞涌街道惠州市大亚湾霞涌镇银滩花园5栋32层02号房', null, '广东省 惠州市 惠阳区 大亚湾霞涌街道大亚湾霞涌镇银滩花园5栋32层02号房'],
+    // straggler shapes from the first pass:
+    ['no-space orphan 市区',        '上海', '上海市', '徐汇区', '市徐汇区淮海中路1412弄26号201 26-201', null, '上海 上海市 徐汇区 淮海中路1412弄26号201 26-201'],
+    ['district-column overflow',    '广东省', '惠州市', '惠阳区 大亚湾霞涌街道惠州市大亚湾霞涌镇银滩花园5栋32层02号房', '', null, '广东省 惠州市 惠阳区 大亚湾霞涌街道大亚湾霞涌镇银滩花园5栋32层02号房'],
+    ['district overflow + detail',  '浙江省', '杭州市', '余杭区中泰街道星未来云邸14幢2单元602室.', '', '14-2 room 602', '浙江省 杭州市 余杭区 中泰街道星未来云邸14幢2单元602室 14-2 room 602'],
   ];
   let pass = 0, fail = 0;
   for (const [name, p, c, d, a, det, expectFull, expectSkip] of cases) {
