@@ -9008,6 +9008,28 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       payload: { order_no: r.order_no, buyer: r.buyer },
     });
 
+    // Cancelled orders — both the manual "Cancel" action and the auto-cancel
+    // sweep for stale unpaid orders stamp cancelled_at, so a single query
+    // surfaces both. Without this an order that fell through (abandoned at
+    // payment, or cancelled by staff) simply vanished from the feed.
+    const cancelled = tdb().prepare(`
+      SELECT o.id, o.order_no, o.total, o.cancelled_at, o.cancelled_reason,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE o.cancelled_at IS NOT NULL AND o.cancelled_at >= ?
+       ORDER BY o.cancelled_at DESC LIMIT ?
+    `).all(sinceIso, limit);
+    for (const r of cancelled) events.push({
+      type: 'order_cancelled',
+      ts: parseTs(r.cancelled_at),
+      ref_type: 'order', ref_id: r.id,
+      payload: {
+        order_no: r.order_no, total: r.total, buyer: r.buyer,
+        reason: r.cancelled_reason,
+      },
+    });
+
     // Refund requests — refund_requested_at is set when the customer files.
     const refunds = tdb().prepare(`
       SELECT o.id, o.order_no, o.refund_amount_requested, o.refund_reason,
@@ -14598,23 +14620,35 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
   res.json({ ok: false, error: r.msg || 'print_failed' });
 });
 
-// Reprint ONE order's slip to its resolved store printer, on demand from the
-// order drawer. Records the outcome on the order so the drawer reflects it.
-// Returns success:true with ok=false on a print failure (the request itself
-// succeeded) so the UI can show the reason rather than a generic error.
-router.post('/api/retail-admin/orders/:id/print', requireRetailAdmin, async (req, res) => {
+// Reprint ONE order's slip on demand from the order drawer. By default it
+// routes to the order's resolved store printer; pass `store_id` in the body to
+// reprint at a SPECIFIC store's printer instead (the drawer's "Reprint" picker
+// lets the operator print at whichever counter they want). Records the outcome
+// on the order so the drawer reflects it. Returns success:true with ok=false on
+// a print failure (the request itself succeeded) so the UI can show the reason.
+router.post('/api/retail-admin/orders/:id/print', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
   if (!tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id)) {
     return res.status(404).json({ success: false, error: 'not_found' });
   }
   if (!_feie.feieEnabled(integ().feie)) return res.json({ success: true, ok: false, error: 'not_configured' });
+  const prefs = loadPrinterPrefs();
+  // Optional explicit store override from the drawer picker.
+  let override = null;
+  const storeId = parseInt(req.body?.store_id, 10);
+  if (Number.isFinite(storeId)) {
+    override = printerForStore(storeId, prefs);
+    if (!override || !override.sn) {
+      return res.json({ success: true, ok: false, error: 'no_printer_for_store' });
+    }
+  }
   const db = tdb();
   let r;
-  try { r = await printOrderById(id, loadPrinterPrefs()); }
+  try { r = await printOrderById(id, prefs, override || undefined); }
   catch (e) { r = { ok: false, msg: e.message }; }
   recordPrintResult(db, id, r);
-  logActivity(req.user.id, req.user.username, 'order_reprint', 'retail_order', id, { ok: r.ok, msg: r.ok ? null : (r.msg || null) }, req.ip);
+  logActivity(req.user.id, req.user.username, 'order_reprint', 'retail_order', id, { ok: r.ok, msg: r.ok ? null : (r.msg || null), store_id: Number.isFinite(storeId) ? storeId : null }, req.ip);
   res.json({ success: true, ok: r.ok, error: r.ok ? null : (r.msg || 'print_failed') });
 });
 

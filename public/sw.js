@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v159-gz-dispatch-method-icon';
+const CACHE = 'roots-v2-shell-v160-reprint-store-picker';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
