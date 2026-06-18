@@ -2578,14 +2578,17 @@ function optRemoveOption(oi) { OPT.splice(oi, 1); if (OPT_PICK && OPT_PICK.oi ==
 function optAddChoice(oi) { if (OPT[oi]) { OPT[oi].choices.push(_optBlankChoice()); optRender(); } }
 function optRemoveChoice(oi, ci) { if (OPT[oi]) { OPT[oi].choices.splice(ci, 1); OPT_PICK = null; optRender(); } }
 // ── Stock-product link (paid add-on draws from a real product's inventory) ──
-// Display name for a stock-source product (picker rows + linked chip). A variant
-// row shares its family name with its siblings, so spell out the size label and
-// weight (e.g. "Tzatziki · 1 Jar · 250g") — otherwise every sibling reads alike.
+// Display name for a stock-source product (picker rows + linked chip). Two
+// products can share a family name — whether as variant siblings (one
+// variant_group_id) or as separate same-named rows — so always spell out the
+// size label and weight (e.g. "Harissa Chilli Paste · 1 Jar · 250g"); otherwise
+// they read alike in the picker and the operator can't tell them apart.
 function _optStockName(p) {
   if (!p) return '';
   const base = (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : '');
-  if (!p.variant_group_id) return base;
-  const lab = (cuT(p.variant_label, p.variant_label_cn) || p.variant_label || p.variant_label_cn || '').toString().trim();
+  const lab = p.variant_group_id
+    ? (cuT(p.variant_label, p.variant_label_cn) || p.variant_label || p.variant_label_cn || '').toString().trim()
+    : '';
   const extra = [lab, (p.size || '').toString().trim()].filter(Boolean).join(' · ');
   return extra ? base + ' · ' + extra : base;
 }
