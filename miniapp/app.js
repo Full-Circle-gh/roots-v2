@@ -158,6 +158,22 @@ App({
     } catch (e) { /* never let the error reporter throw */ }
   },
 
+  // Entry points at a page that isn't registered in app.json. The common
+  // cause is an OLD permanent wxacode (getwxacodeunlimit) minted back when the
+  // QR endpoint used the WeChat default 'pages/index/index' — those codes never
+  // expire, so stale posters / 公众号 links keep landing here. WeChat already
+  // auto-falls-back to pages[0], BUT without this hook it ALSO throws a
+  // "page not found" error that our diagnostics logs as a red row, inflating
+  // the customer's error count for what is actually a harmless, recovered
+  // launch. Handling the hook suppresses that throw; we re-launch to the real
+  // home explicitly so the destination is deterministic. Logged silently (no
+  // diag error) — this is a recovery, not a fault.
+  onPageNotFound() {
+    try {
+      wx.reLaunch({ url: '/pages/home/home' });
+    } catch (e) { /* nothing more we can do */ }
+  },
+
   // Read launch options + scene query string and stash preview state on
   // globalData if the right flags are present. Two sources are accepted:
   //   1. options.query.preview_draft = '1' + options.query.preview_token + page
