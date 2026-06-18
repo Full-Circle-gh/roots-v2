@@ -2553,6 +2553,22 @@ if (ALIPAY_DEV_MODE) {
   console.error('[security]    Fix: set ALIPAY_APP_ID + ALIPAY_PRIVATE_KEY + ALIPAY_PUBLIC_KEY in .env, then pm2 restart roots-v2.');
 }
 
+// Manual-Alipay fallback config (per-tenant), used while 当面付 API access is
+// blocked (open-platform 入驻 pending). Operator uploads a static 收款码 image +
+// account label in the admin; the customer scans it, pays the shown amount, and
+// uploads the payment screenshot — staff confirm and Mark paid. Stored under the
+// private `integrations.` prefix so the raw QR never rides in the public config
+// blob; read server-side here and returned only to the paying customer.
+//   integrations.alipayManual = { enabled: bool, qr: <data-URL>, account: <label> }
+function getAlipayManual() {
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'integrations.alipayManual'").get();
+    if (!row) return null;
+    const v = JSON.parse(row.value_json);
+    return (v && typeof v === 'object' && v.enabled && v.qr) ? v : null;
+  } catch { return null; }
+}
+
 // Accept a key as either a ready PEM (with BEGIN/END lines) or as bare base64
 // (how the Alipay console hands them out), and return a valid PEM. Also turns
 // literal "\n" escapes from a single-line .env value into real newlines.
@@ -3293,11 +3309,27 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
   // driven by the async notify (/alipay/callback) with a query fallback in the
   // status poll — both funnel into markOrderPaid(), same as WeChat.
   if (order.payment_method === 'alipay') {
-    // Alipay is Roots-only for now: it reads Roots' global env creds, so a
-    // tenant's Alipay charge would settle to ROOTS' merchant — a money leak.
-    // Non-Roots tenants get alipay_not_configured until per-tenant Alipay is
-    // built (Platform readiness ③ decision 2026-05-29). WeChat Pay is the
-    // mini-app's primary rail and is fully per-tenant above.
+    // Manual fallback (静态收款码) takes priority when configured — it's per-tenant
+    // (the QR is whatever THIS tenant uploaded, settling to their own account) so
+    // it's safe for any tenant, and it's the only path while 当面付 API access is
+    // blocked. Order stays pending_payment; the customer uploads a screenshot and
+    // staff Mark paid. Settlement/limits are entirely the operator's收款码.
+    const manual = getAlipayManual();
+    if (manual) {
+      return res.json({
+        success: true,
+        data: {
+          method: 'alipay', mode: 'manual',
+          qr_png: manual.qr, account: manual.account || '',
+          order_no: order.order_no, total: order.total,
+        },
+      });
+    }
+    // Auto 当面付 (precreate) — Roots-only for now: it reads Roots' global env
+    // creds, so a tenant's Alipay charge would settle to ROOTS' merchant — a money
+    // leak. Non-Roots tenants get alipay_not_configured until per-tenant Alipay is
+    // built (Platform readiness ③ decision 2026-05-29). WeChat Pay is the mini-app's
+    // primary rail and is fully per-tenant above.
     if (currentTenantId() !== ROOTS_TENANT_ID || ALIPAY_DEV_MODE) {
       return res.status(501).json({ success: false, error: 'alipay_not_configured' });
     }
@@ -3363,6 +3395,28 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
   delete order.address_json;
   localizeOrderTimes(order);
   res.json({ success: true, data: order });
+});
+
+// Manual-Alipay payment proof upload. The customer pays the shown amount to the
+// static 收款码, then uploads the Alipay payment screenshot here. We just stash
+// the latest image on the order (re-upload overwrites) and leave it
+// pending_payment — staff eyeball the screenshot in the admin and Mark paid. No
+// money moves on the server; this is purely an evidence channel.
+router.post('/api/retail/payment/alipay-proof/:orderId', requireRetailAuth, express.json({ limit: '6mb' }), (req, res) => {
+  const orderId = parseInt(req.params.orderId, 10);
+  const order = tdb().prepare(
+    'SELECT id, status, payment_method FROM retail_orders WHERE id = ? AND customer_id = ?'
+  ).get(orderId, req.customer.id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (order.payment_method !== 'alipay') return res.status(400).json({ success: false, error: 'not_alipay' });
+  const img = (req.body && req.body.image) || '';
+  if (!/^data:image\/(png|jpe?g|webp);base64,/.test(img) || img.length > 5_500_000) {
+    return res.status(400).json({ success: false, error: 'bad_image' });
+  }
+  tdb().prepare(
+    "UPDATE retail_orders SET alipay_proof_image = ?, alipay_proof_at = CURRENT_TIMESTAMP WHERE id = ?"
+  ).run(img, orderId);
+  res.json({ success: true, data: { ok: true } });
 });
 
 // WeChat Pay async notify. Body looks like:
@@ -11646,6 +11700,36 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), (req,
   catch (e) { console.error('[retail-admin/config PUT]', e); return res.status(500).json({ success: false, error: 'update_failed' }); }
   logActivity(req.user.id, req.user.username, 'update', 'storefront_config', null, { keys: entries.map(e => e[0]) }, req.ip);
   res.json({ success: true, data: loadConfig() });
+});
+
+// Manual-Alipay (静态收款码) admin config. Lives under the private
+// integrations.alipayManual key (loadConfig hides integrations.*), so it needs
+// its own read/write pair — and a bigger json limit since the QR rides as a
+// data URL. { enabled, account, qr }. When enabled+qr set, /payment/create
+// returns mode:'manual' for Alipay orders (see getAlipayManual).
+router.get('/api/retail-admin/alipay-manual', requireRetailAdmin, (req, res) => {
+  let cfg = { enabled: false, account: '', qr: '' };
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'integrations.alipayManual'").get();
+    if (row) { const v = JSON.parse(row.value_json); if (v && typeof v === 'object') cfg = { enabled: !!v.enabled, account: v.account || '', qr: v.qr || '' }; }
+  } catch {}
+  res.json({ success: true, data: cfg });
+});
+
+router.put('/api/retail-admin/alipay-manual', requireRetailAdmin, express.json({ limit: '6mb' }), (req, res) => {
+  const b = req.body || {};
+  const qr = typeof b.qr === 'string' ? b.qr : '';
+  if (qr && !/^data:image\/(png|jpe?g|webp);base64,/.test(qr)) return res.status(400).json({ success: false, error: 'bad_image' });
+  if (qr.length > 5_500_000) return res.status(400).json({ success: false, error: 'image_too_big' });
+  const cfg = { enabled: !!b.enabled, account: String(b.account || '').slice(0, 80), qr };
+  if (cfg.enabled && !cfg.qr) return res.status(400).json({ success: false, error: 'qr_required' });
+  tdb().prepare(
+    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+     VALUES ('integrations.alipayManual', ?, CURRENT_TIMESTAMP, ?)
+     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+  ).run(JSON.stringify(cfg), req.user.id);
+  logActivity(req.user.id, req.user.username, 'update', 'storefront_config', null, { keys: ['integrations.alipayManual'], enabled: cfg.enabled }, req.ip);
+  res.json({ success: true, data: { enabled: cfg.enabled, account: cfg.account, hasQr: !!cfg.qr } });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
