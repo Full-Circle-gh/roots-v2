@@ -3037,6 +3037,7 @@ function printReceiptTile(o) {
     <div class="val" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
       ${badge}
       <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Reprint · 补打小票</button>
+      <button class="btn btn-sm" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label · 打印箱贴', '打印箱贴 · Box label')}</button>
     </div>
   </div>`;
 }
@@ -3071,6 +3072,65 @@ async function reprintOrder(id) {
     openOrder(id, { instant: true });
     loadOrders();
   }
+}
+
+// Print the box-label sticker(s) for an order on the LOCAL label printer (a
+// USB/Bluetooth 70×45mm device attached to the staff PC — NOT the Feie cloud
+// receipt printer, which the server drives). So this is a pure browser print:
+// we render a 70×45mm page per parcel and open the print dialog; staff send it
+// to the label printer (set it as the default to make this one-click). Each
+// sticker carries the order's last 4 digits (big, to match the waybill the
+// logistics person holds), recipient name + phone, and — for split orders —
+// which box of how many. Reads the open order from _OPEN_ORDER (no server call).
+function printBoxLabel(id) {
+  const o = _OPEN_ORDER;
+  if (!o || o.id !== id) { toast(cuT('Open the order first', '请先打开订单'), 'err'); return; }
+  // Last 4 DIGITS of the order no (strip the leading letters of "R260618156719").
+  const digits = String(o.order_no || '').replace(/\D/g, '');
+  const last4 = digits.slice(-4) || String(o.order_no || '');
+  const n = (o.shipments && o.shipments.length) || 1;   // one label per parcel
+  const name = escapeHtml(o.recipient_name || '');
+  const phone = escapeHtml(o.recipient_phone || '');
+  const orderNo = escapeHtml(o.order_no || '');
+  const big = escapeHtml(last4);
+
+  let pages = '';
+  for (let i = 1; i <= n; i++) {
+    pages += `<div class="lbl">
+        <div class="no">#${big}</div>
+        ${n > 1 ? `<div class="box">BOX ${i} / ${n}</div>` : ''}
+        ${name ? `<div class="who">${name}</div>` : ''}
+        ${phone ? `<div class="tel">${phone}</div>` : ''}
+        <div class="ref">${orderNo}</div>
+      </div>`;
+  }
+
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Label ${big}</title>
+<style>
+  @page { size: 70mm 45mm; margin: 0; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body { width:70mm; }
+  body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",Arial,sans-serif; color:#000; }
+  .lbl { width:70mm; height:45mm; padding:3mm 4mm; page-break-after:always;
+         display:flex; flex-direction:column; align-items:center; justify-content:center;
+         text-align:center; overflow:hidden; }
+  .lbl:last-child { page-break-after:auto; }
+  .no  { font-size:16mm; font-weight:800; line-height:1; letter-spacing:.5mm; }
+  .box { font-size:6mm;  font-weight:800; margin-top:1mm; }
+  .who { font-size:5.5mm; font-weight:700; margin-top:2mm; word-break:break-word; }
+  .tel { font-size:6.5mm; font-weight:800; margin-top:.5mm; letter-spacing:.3mm; }
+  .ref { font-size:3mm;  color:#444; margin-top:1.5mm; }
+</style></head>
+<body onload="window.focus();window.print();">
+${pages}
+<script>window.onafterprint=function(){window.close();};<\/script>
+</body></html>`;
+
+  const w = window.open('', '_blank', 'width=420,height=320');
+  if (!w) { toast(cuT('Allow pop-ups to print labels', '请允许弹出窗口以打印箱贴'), 'err'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
 }
 
 // Modal: choose which store's printer to reprint a receipt at. Resolves to the
