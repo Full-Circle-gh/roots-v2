@@ -66,7 +66,12 @@ async function _saveAlipayManual() {
   const account = ((document.getElementById('alipay-manual-account') || {}).value || '').trim();
   const status = document.getElementById('alipay-manual-status');
   const body = { enabled, account };
-  if (_alipayManualQr) body.qr = _alipayManualQr;   // only send when a new image was picked
+  // Read the QR straight from the preview (source of truth) — covers both a
+  // freshly-picked file and a previously-saved image, and is immune to the
+  // transient _alipayManualQr being reset by a re-render between pick and save.
+  const pv = document.getElementById('alipay-manual-preview');
+  const qr = _alipayManualQr || (pv && typeof pv.src === 'string' && pv.src.indexOf('data:image/') === 0 ? pv.src : '');
+  if (qr) body.qr = qr;
   try {
     if (status) status.textContent = 'Saving… · 保存中…';
     const r = await fetch('/api/retail-admin/alipay-manual', {
