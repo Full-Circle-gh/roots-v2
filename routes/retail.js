@@ -723,6 +723,7 @@ const RETAIL_PRODUCT_COLS = `
   p.flash_stock_limit, p.flash_sold, p.no_coupon_on_flash,
   p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
   p.low_stock_threshold,
+  p.is_batch_made,
   p.bundle_items,
   p.updated_at
 `;

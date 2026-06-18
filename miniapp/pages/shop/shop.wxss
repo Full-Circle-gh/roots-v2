@@ -291,6 +291,9 @@
   text-align: center; padding: 8rpx 0;
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.12em;
 }
+/* Ready-to-eat meal sold out but still orderable out-of-city (ships next cook
+   batch) — forest green, not the alarming SOLD-OUT veil. */
+.card-batch { background: var(--forest); }
 .card .name { font-size: calc(30rpx * var(--font-scale)); margin-top: 16rpx; line-height: 1.2; }
 .card .price { font-size: calc(28rpx * var(--font-scale)); margin-top: 4rpx; color: var(--olive); }
 .card .price.is-flash { color: #E96174; font-weight: 700; }
@@ -343,6 +346,7 @@
   text-align: center; padding: 12rpx 0;
   font-size: calc(24rpx * var(--font-scale)); letter-spacing: 0.12em;
 }
+.gal-batch { background: var(--forest); }
 .gal-meta { margin-top: 20rpx; }
 .gal-name { font-size: calc(44rpx * var(--font-scale)); line-height: 1.1; color: var(--ink); }
 .gal-sub { color: var(--olive); font-size: calc(24rpx * var(--font-scale)); margin-top: 8rpx; }
@@ -525,6 +529,7 @@
   padding: 2rpx 12rpx;
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.1em;
 }
+.row-batch { background: rgba(54,83,41,.12); color: var(--forest); }
 .row-right { text-align: right; min-width: 88rpx; display: flex; flex-direction: column; align-items: flex-end; }
 .row-price { font-size: calc(32rpx * var(--font-scale)); color: var(--ink); letter-spacing: 0.04em; line-height: 1; }
 .row-price.is-flash { color: #E96174; font-weight: 700; }

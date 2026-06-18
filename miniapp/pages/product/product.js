@@ -8,6 +8,7 @@ const api   = require('../../utils/api');
 const lang  = require('../../utils/lang');
 const cart  = require('../../utils/cart');
 const track = require('../../utils/track');
+const zone  = require('../../utils/zone');
 
 function absUrl(u) {
   if (!u) return '';
@@ -195,8 +196,18 @@ Page({
     if (!id) { this.setData({ notFound: true, loading: false }); return; }
     const app = getApp();
     this.setData({ id, lang: app.globalData.lang });
+    // Best-known shopper zone now (for the first render); refine in the
+    // background. Drives whether a sold-out ready-to-eat meal shows the hard
+    // SOLD-OUT block (Guangzhou same-day) or the soft "Next batch" state
+    // (out-of-city / unknown — it ships on the next cook batch).
+    this._shopperGz = zone.cachedGz();
     await this.refresh();
     this.refreshFavoriteState();
+    zone.resolveGz().then(gz => {
+      if (gz === this._shopperGz) return;
+      this._shopperGz = gz;
+      this.recomputeDisplay();
+    });
   },
 
   onShow() {
@@ -413,17 +424,39 @@ Page({
     // the picker instead of adding the viewed product directly.
     this._variants = Array.isArray(p.variants) ? p.variants : [];
     const hasVariants = this._variants.length > 1;
+    // A sold-out ready-to-eat meal (is_batch_made) stays orderable for
+    // out-of-city — or not-yet-known — shoppers: it just ships on the next cook
+    // batch (the server's computeBatchNotice fills in the real ship/arrival
+    // dates at checkout). Only same-day Guangzhou shoppers keep the hard
+    // SOLD-OUT block, since they expect it today. this._shopperGz is true only
+    // when we KNOW the address is Guangzhou.
+    const batchOrderable = !!p.is_batch_made && this._shopperGz !== true;
+    this._batchOrderable = batchOrderable;
+    const nextBatchTag = L === 'cn' ? '下批现做' : 'Next batch';
     // Stock state — null means untracked (treat as in-stock).
     let soldOut = false, stockTag = '', stockTagKind = '';
     if (hasVariants) {
       // Variant product: sold out only when EVERY size is out. Per-size
-      // "Only N left" lives in the picker, so the hero badge stays quiet.
-      soldOut = this._variants.every(v => v.stock != null && Number(v.stock) <= 0);
+      // "Only N left" lives in the picker, so the hero badge stays quiet —
+      // except a batch meal whose sizes are all out, which shows "Next batch"
+      // so the out-of-city shopper understands they can still order it.
+      const allOut = this._variants.every(v => v.stock != null && Number(v.stock) <= 0);
+      if (allOut && batchOrderable) {
+        stockTag = nextBatchTag;
+        stockTagKind = 'batch';
+      } else {
+        soldOut = allOut;
+      }
     } else if (p.stock != null) {
       if (Number(p.stock) <= 0) {
-        soldOut = true;
-        stockTag = L === 'cn' ? '已售罄' : 'SOLD OUT';
-        stockTagKind = 'out';
+        if (batchOrderable) {
+          stockTag = nextBatchTag;
+          stockTagKind = 'batch';
+        } else {
+          soldOut = true;
+          stockTag = L === 'cn' ? '已售罄' : 'SOLD OUT';
+          stockTagKind = 'out';
+        }
       } else if (Number(p.stock) <= 5) {
         stockTag = L === 'cn' ? '仅剩 ' + p.stock + ' 件' : 'Only ' + p.stock + ' left';
         stockTagKind = 'low';
@@ -939,7 +972,11 @@ Page({
       const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
       const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
       const stock = m.stock == null ? null : Number(m.stock);
-      const soldOut = stock != null && stock <= 0;
+      const out = stock != null && stock <= 0;
+      // A batch meal's out-of-stock size stays pickable for out-of-city
+      // shoppers (ships next batch); only a true out keeps it unselectable.
+      const nextBatch = out && this._batchOrderable;
+      const soldOut = out && !this._batchOrderable;
       return {
         id: m.id,
         // Link to this size's own product page — unless it's the one we're
@@ -952,7 +989,8 @@ Page({
         save: saveN > 0 ? (L === 'cn' ? '省¥' : 'SAVE ¥') + (Number.isInteger(saveN) ? saveN : saveN.toFixed(2)) : '',
         isFlash,
         soldOut,
-        low: (!soldOut && stock != null && stock <= 5)
+        batchTag: nextBatch ? (L === 'cn' ? '下批现做' : 'Next batch') : '',
+        low: (!soldOut && !nextBatch && stock != null && stock <= 5)
           ? (L === 'cn' ? `仅剩 ${stock}` : `Only ${stock} left`)
           : '',
       };
@@ -984,7 +1022,9 @@ Page({
     const m = (this._variants || []).find(x => Number(x.id) === id);
     if (!m) return;
     const stock = m.stock == null ? null : Number(m.stock);
-    if (stock != null && stock <= 0) {
+    // Block a truly sold-out size — UNLESS it's a batch meal orderable for an
+    // out-of-city shopper, which ships on the next cook batch.
+    if (stock != null && stock <= 0 && !this._batchOrderable) {
       wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
       return;
     }

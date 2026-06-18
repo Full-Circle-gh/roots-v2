@@ -16,6 +16,7 @@ const api    = require('../../utils/api');
 const lang   = require('../../utils/lang');
 const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
+const zone   = require('../../utils/zone');
 
 function absUrl(u) {
   if (!u) return '';
@@ -167,7 +168,16 @@ Page({
     const app = getApp();
     this._applyLang(app.globalData.lang);
     this._syncConfig();
+    // Best-known shopper zone for the first render; refine in the background.
+    // Out-of-city (or not-yet-known) shoppers see sold-out ready-to-eat meals
+    // as "Next batch" (orderable) rather than a dead SOLD-OUT card.
+    this._shopperGz = zone.cachedGz();
     this.refresh();
+    zone.resolveGz().then(gz => {
+      if (gz === this._shopperGz) return;
+      this._shopperGz = gz;
+      if (!this.data.loading) this.refresh();
+    });
   },
 
   onShow() {
@@ -226,6 +236,7 @@ Page({
       inStockLabel:      L === 'cn' ? '有货' : 'IN STOCK',
       priceFromLabel:    L === 'cn' ? '价格' : '¥',
       oosLabel:          L === 'cn' ? '售罄' : 'SOLD OUT',
+      nextBatchLabel:    L === 'cn' ? '下批现做' : 'NEXT BATCH',
       emptyTitle:        L === 'cn' ? '暂无商品' : 'No products yet.',
       emptySub:          L === 'cn' ? '请在管理后台发布商品' : 'Publish products in the Roots admin to see them here.',
       dietaryFilters: DIETARY_FILTERS.map(f => ({ ...f, label: L === 'cn' ? f.cn : f.en })),
@@ -479,7 +490,13 @@ Page({
       const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
       const isFlash = !members && !!p.is_on_flash && eff < regular;
 
-      let price, priceWas = '', pricePrefix = '', outOfStock, soldUnits, subline;
+      // A sold-out ready-to-eat meal (is_batch_made) stays orderable for
+      // out-of-city / not-yet-known shoppers — it ships on the next cook batch.
+      // Only same-day Guangzhou shoppers (this._shopperGz === true) see the
+      // hard SOLD-OUT card. The card routes ordering through the PDP, which
+      // shows the batch timeline and handles the picker.
+      const batchOrderable = !!p.is_batch_made && this._shopperGz !== true;
+      let price, priceWas = '', pricePrefix = '', outOfStock, nextBatch = false, soldUnits, subline;
       if (members) {
         // Collapsed variant card. `price` is just the lowest amount (e.g.
         // "¥89") so it stays in League Gothic at the cards' big price size;
@@ -494,12 +511,16 @@ Page({
         const allSame = prices.length > 0 && prices.every(v => v === minP);
         price = minP > 0 ? money(minP) : '—';
         pricePrefix = (minP > 0 && !allSame) ? (L === 'cn' ? '起' : 'from') : '';
-        outOfStock = members.every(m => m.stock != null && Number(m.stock) <= 0);
+        const allOut = members.every(m => m.stock != null && Number(m.stock) <= 0);
+        nextBatch = allOut && batchOrderable;
+        outOfStock = allOut && !batchOrderable;
         soldUnits = members.reduce((s, m) => s + (Number(m.units_sold) || 0), 0);
         subline = '';
       } else {
         const stockNum = p.stock == null ? null : Number(p.stock);
-        outOfStock = stockNum != null && stockNum <= 0;
+        const out = stockNum != null && stockNum <= 0;
+        nextBatch = out && batchOrderable;
+        outOfStock = out && !batchOrderable;
         // All-time units sold (server min-gates this to 0 below the badge
         // threshold), shown as a small "X SOLD" popularity caption on the card.
         soldUnits = Number(p.units_sold) || 0;
@@ -519,6 +540,7 @@ Page({
         badge: pickBadge(p.tags),
         soldCaption: soldUnits > 0 ? (L === 'cn' ? `已售 ${soldUnits}` : `${soldUnits} SOLD`) : '',
         outOfStock,
+        nextBatch,
         // image_data may now be a streamed-image URL (/api/retail/products/:id/
         // image) since the list omits inline base64 — absUrl() resolves it
         // against the API host. data: URIs and absolute URLs pass through.

@@ -687,7 +687,9 @@ Page({
         };
         // Clear the cross-page flag so onShow doesn't keep re-applying it.
         if (justPicked) patch._addressJustPicked = null;
-        try { getApp().globalData.activeAddressId = next.id; } catch {}
+        // Cache id + the full address so browse-time zone resolution (utils/zone)
+        // knows whether the shopper is in Guangzhou without a refetch.
+        try { const g = getApp().globalData; g.activeAddressId = next.id; g.activeAddress = next; } catch {}
         this.setData(patch);
         this.syncAreaLabel();
         // If the actual selected address changed, re-run /quote so the
@@ -719,7 +721,7 @@ Page({
         showNewForm: list.length === 0,
       });
       if (def) {
-        try { getApp().globalData.activeAddressId = def.id; } catch {}
+        try { const g = getApp().globalData; g.activeAddressId = def.id; g.activeAddress = def; } catch {}
         this.setData({
           address: {
             id: def.id,

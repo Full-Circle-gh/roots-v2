@@ -82,6 +82,9 @@
 }
 .stock-out  { background: var(--berry); color: #fff; }
 .stock-low  { background: var(--carrot); color: #fff; }
+/* Ready-to-eat meal that's sold out but still orderable out-of-city — it ships
+   on the next cook batch. Fresh forest-green, not the alarming berry of SOLD OUT. */
+.stock-batch { background: var(--forest); color: #fff; }
 /* PDP hero placeholder — minimalist jar at 25% of the hero size,
    centred. Matches the tab-bar icon weight and the shop-card placeholder
    so a product without a photo looks consistent everywhere. */
@@ -727,6 +730,8 @@
 .vp-opt-label { font-size: calc(32rpx * var(--font-scale)); color: var(--ink); }
 .vp-opt-weight { font-size: calc(22rpx * var(--font-scale)); color: var(--ink-soft, #8a8575); letter-spacing: 0.02em; }
 .vp-opt-low { font-size: calc(20rpx * var(--font-scale)); color: #E96174; font-weight: 700; letter-spacing: 0.04em; }
+/* "Next batch" tag on a sold-out-but-orderable meal size (out-of-city). */
+.vp-opt-batch { font-size: calc(20rpx * var(--font-scale)); color: var(--forest); font-weight: 700; letter-spacing: 0.04em; }
 .vp-opt-oos {
   font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.1em;
   background: rgba(0,0,0,.1); color: var(--olive); padding: 2rpx 12rpx; border-radius: 999rpx;

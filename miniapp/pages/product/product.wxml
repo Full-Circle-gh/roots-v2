@@ -299,6 +299,7 @@
               <text class="vp-opt-label f-bear">{{opt.label}}</text>
               <text wx:if="{{opt.weight}}" class="vp-opt-weight f-toni">{{opt.weight}}</text>
               <text wx:if="{{opt.low}}" class="vp-opt-low f-toni">{{opt.low}}</text>
+              <text wx:if="{{opt.batchTag}}" class="vp-opt-batch f-toni">{{opt.batchTag}}</text>
               <text wx:if="{{opt.save}}" class="vp-opt-save f-toni">{{opt.save}}</text>
               <text wx:if="{{opt.soldOut}}" class="vp-opt-oos f-toni">{{oosLabel}}</text>
             </view>

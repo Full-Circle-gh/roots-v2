@@ -202,6 +202,7 @@
                   <view wx:if="{{item.isFlash}}" class="row-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
                   <view wx:if="{{item.badge}}" class="row-badge f-gothic">{{item.badge}}</view>
                   <view wx:if="{{item.outOfStock}}" class="row-oos f-toni">{{oosLabel}}</view>
+                  <view wx:elif="{{item.nextBatch}}" class="row-oos row-batch f-toni">{{nextBatchLabel}}</view>
                 </view>
                 <view class="row-right">
                   <view class="row-price-stack">
@@ -209,7 +210,7 @@
                     <view wx:if="{{item.pricePrefix}}" class="row-price-prefix f-toni">{{item.pricePrefix}}</view>
                     <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
                   </view>
-                  <view wx:if="{{!item.outOfStock}}"
+                  <view wx:if="{{!item.outOfStock && !item.nextBatch}}"
                         class="row-plus"
                         id="plus-{{item.id}}"
                         data-id="{{item.id}}"
@@ -253,6 +254,7 @@
                 <view wx:if="{{item.badge}}" class="gal-badge f-gothic">{{item.badge}}</view>
                 <view wx:if="{{item.isFlash}}" class="gal-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
                 <view wx:if="{{item.outOfStock}}" class="gal-oos f-toni">{{oosLabel}}</view>
+                <view wx:elif="{{item.nextBatch}}" class="gal-oos gal-batch f-toni">{{nextBatchLabel}}</view>
               </view>
               <view class="gal-meta">
                 <view class="gal-name f-bear">{{item.name}}</view>
@@ -266,7 +268,7 @@
                   <text wx:if="{{item.pricePrefix}}" class="gal-price-prefix f-toni">{{item.pricePrefix}}</text>
                   <text class="gal-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
                 </view>
-                <view wx:if="{{!item.outOfStock}}" class="gal-plus"
+                <view wx:if="{{!item.outOfStock && !item.nextBatch}}" class="gal-plus"
                       id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"></view>
               </view>
             </view>
@@ -307,6 +309,7 @@
                 <view wx:if="{{item.badge}}" class="card-badge f-gothic">{{item.badge}}</view>
                 <view wx:if="{{item.isFlash}}" class="card-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
                 <view wx:if="{{item.outOfStock}}" class="card-oos f-toni">{{oosLabel}}</view>
+                <view wx:elif="{{item.nextBatch}}" class="card-oos card-batch f-toni">{{nextBatchLabel}}</view>
               </view>
               <view class="name f-bear">{{item.name}}</view>
               <view wx:if="{{item.hasVariants}}" class="vhint f-toni">{{item.variantHint}}</view>
@@ -317,7 +320,7 @@
                   <text wx:if="{{item.pricePrefix}}" class="price-prefix f-toni">{{item.pricePrefix}}</text>
                   <text class="price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
                 </view>
-                <view wx:if="{{!item.outOfStock}}" class="card-plus"
+                <view wx:if="{{!item.outOfStock && !item.nextBatch}}" class="card-plus"
                       id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"></view>
               </view>
             </view>
