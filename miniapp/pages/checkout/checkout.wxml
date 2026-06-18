@@ -28,6 +28,9 @@
             <view wx:if="{{item.ship_from_supplier}}" class="line-supplier f-toni">
               <text class="line-supplier-glyph">↗</text>{{lang === 'cn' ? '供应商直发 · 单独送达' : 'Ships from supplier · separately'}}
             </view>
+            <view wx:if="{{item.unavailable_same_day}}" class="line-unavailable f-toni">
+              {{lang === 'cn' ? '当天无货 · 请选择稍后送达或在弹窗中处理' : 'Not available same-day · pick a later time or resolve below'}}
+            </view>
           </view>
         </view>
         <view class="line-total f-bear">

@@ -1234,6 +1234,15 @@ Page({
         // Per-line flash treatment (strikethrough original + "save ¥X" tag)
         // and tally the flash savings for the "You saved" line below.
         let flashSavings = 0, bundleSavings = 0, markdownSavings = 0;
+        // Product ids the quote flagged as short at the nearest store. Only
+        // populated for a GZ same-day shortage (the stock gate is off for
+        // out-of-city / scheduled orders, where the kitchen restocks before
+        // fulfilment), so a hit here means "can't make it same-day" — used to
+        // tag the offending line below.
+        const shortIds = new Set(
+          (Array.isArray(data.routing?.missing_items) ? data.routing.missing_items : [])
+            .map(m => Number(m.product_id)).filter(Boolean)
+        );
         const itemRows = cart.get().items.map(it => {
           const sf = lineSaveFields(it, L);
           flashSavings += sf.flash_save;
@@ -1244,6 +1253,7 @@ Page({
             display_name: lang.pick(it.name_en, it.name_cn, L),
             display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
             line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
+            unavailable_same_day: shortIds.has(Number(it.product_id)),
             ...sf,
           };
         });

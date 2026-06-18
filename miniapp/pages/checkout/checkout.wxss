@@ -92,6 +92,20 @@
   padding: 2rpx 12rpx;
 }
 .line-supplier-glyph { font-weight: 700; }
+/* This line can't be made same-day at the chosen Guangzhou address (sold out
+   now). The 5-option fallback modal handles the actual resolution; this is the
+   per-line cue so the customer sees WHICH item is the problem. */
+.line-unavailable {
+  white-space: normal;
+  display: inline-block;
+  margin-top: 5rpx;
+  font-size: calc(19rpx * var(--font-scale));
+  letter-spacing: 0.03em;
+  color: var(--berry);
+  background: rgba(233, 97, 116, 0.10);
+  border-radius: 999rpx;
+  padding: 2rpx 12rpx;
+}
 .line-total { font-size: calc(28rpx * var(--font-scale)); display: flex; flex-direction: column; align-items: flex-end; }
 /* Flash-sale line: struck-through original price + a green "save ¥X" tag. */
 .line-was { color: var(--olive); text-decoration: line-through; margin-right: 10rpx; font-size: calc(24rpx * var(--font-scale)); }
