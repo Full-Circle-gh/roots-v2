@@ -1138,36 +1138,18 @@ function shipByPlan(o) {
       urgencyDate: o.promised_ship_date, urgencyBasis: 'arrival',
     };
   }
-  // 4 — Out-of-city express: the server tagged a paid + expressDispatchHours
-  // send-by deadline. Show the deadline DATE (no false-precise minute); if it
-  // couldn't compute one, fall through to "ship now".
-  if (o.ship_by_mode === 'asap') {
-    const dl = o.dispatch_deadline ? parseSchedFor(o.dispatch_deadline) : null;
-    if (dl && !isNaN(dl.getTime())) {
-      return {
-        kind: 'deadline',
-        kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
-        headlineRaw: fmtDateShort(dl),
-        subEn: 'send as soon as ready', subCn: '尽快发出',
-        urgencyDate: o.dispatch_deadline, urgencyBasis: 'deadline',
-      };
-    }
+  // 4 + 5 — No customer-chosen date. We deliberately DON'T invent a synthetic
+  // "ship by paid + Nh" deadline any more: the customer never asked for it and it
+  // cried false "OVERDUE" on perfectly fresh orders. Instead show "As soon as
+  // possible" and let the order's AGE drive urgency — an order sitting unshipped
+  // for days is the real signal an operator should act on. Covers both the old
+  // out-of-city express tag (ship_by_mode==='asap') and plain "nothing picked".
+  if (o.ship_by_mode === 'asap' || !o.scheduled_for) {
     return {
-      kind: 'ship_now',
+      kind: 'asap',
       kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
-      headlineEn: 'Ship now', headlineCn: '立即发货',
-      subEn: 'no fixed date', subCn: '无固定日期',
-      urgencyDate: null, urgencyBasis: null,
-    };
-  }
-  // 5 — Nothing scheduled and not tagged → nothing picked, send when ready.
-  if (!o.scheduled_for) {
-    return {
-      kind: 'ship_now',
-      kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
-      headlineEn: 'Ship now', headlineCn: '立即发货',
-      subEn: 'no slot picked', subCn: '未选时段',
-      urgencyDate: null, urgencyBasis: null,
+      headlineEn: 'As soon as possible', headlineCn: '尽快发货',
+      urgencyDate: o.placed_at || null, urgencyBasis: 'age',
     };
   }
   // 3 — Customer-scheduled delivery date / slot. Some orders saved an ISO
@@ -1201,6 +1183,22 @@ function shipByUrgency(p, actionable) {
     return r;
   }
   const danger = 'var(--danger)', warn = 'var(--warn)', plain = 'var(--text-1)';
+  // Age basis (ASAP orders, no promised date): urgency = how long the order has
+  // waited unshipped. amber once it's been a couple of days, red once it's stale.
+  // Thresholds are in whole days — tune the two constants here (no Settings field
+  // yet; ask if you want them operator-configurable).
+  if (p.urgencyBasis === 'age') {
+    const ASAP_AMBER_DAYS = 2, ASAP_RED_DAYS = 4;
+    const d = parseSchedFor(p.urgencyDate);
+    if (isNaN(d.getTime())) { r.color = actionable ? warn : plain; return r; }
+    const ageDays = Math.floor((Date.now() - d.getTime()) / 86400000);
+    r.days = ageDays;
+    if (ageDays >= ASAP_RED_DAYS)        { r.level = 'overdue'; if (actionable) r.color = danger; }
+    else if (ageDays >= ASAP_AMBER_DAYS) { r.level = 'soon';    if (actionable) r.color = warn; }
+    else                                 { r.level = 'fresh';   r.color = plain; }
+    if (!actionable) r.color = plain;
+    return r;
+  }
   // Date-only value → compare whole local calendar days, not raw hours.
   const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(p.urgencyDate));
   if (dm) {
@@ -1270,8 +1268,18 @@ function renderShipByCell(o) {
   const kicker = showKicker
     ? `<div style="font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); margin-bottom: 1px;">${cuT(p.kickerEn, p.kickerCn)}</div>`
     : '';
+  // ASAP orders carry no date — surface HOW LONG the order has waited as the
+  // urgency cue, coloured by age (grey when fresh, amber/red as it ages). This
+  // replaces the generic sub-line for date-less orders.
+  let ageLine = '';
+  if (p.kind === 'asap' && u.days != null) {
+    const en = u.days <= 0 ? 'placed today' : `placed ${u.days}d ago`;
+    const cn = u.days <= 0 ? '今天下单' : `${u.days}天前下单`;
+    const bold = (u.level === 'overdue' || u.level === 'soon') ? 600 : 400;
+    ageLine = `<div style="font-size: 10px; margin-top: 2px; font-weight: ${bold}; color: ${actionable ? u.color : 'var(--text-3)'};">${cuT(en, cn)}</div>`;
+  }
   return `${kicker}<div style="font-size: 12px; font-weight: 600; color: ${u.color}; line-height: 1.3;">${icon}${headline}</div>
-          ${(subText || tag) ? `<div style="font-size: 10px; margin-top: 2px; color: var(--text-3);">${subText}${tag}</div>` : ''}
+          ${ageLine || ((subText || tag) ? `<div style="font-size: 10px; margin-top: 2px; color: var(--text-3);">${subText}${tag}</div>` : '')}
           ${surcharge}`;
 }
 function fmtSlotShort(dt) {
@@ -1465,6 +1473,10 @@ function renderShipByTile(o) {
   let badge = '';
   if (!actionable) {
     // no urgency badge once the order has shipped / closed
+  } else if (p.urgencyBasis === 'age') {
+    // Age basis has no hours/date — badge the days waited, only once it matters.
+    if (u.level === 'overdue')   badge = cuT(`⚠ ${u.days}d unshipped`, `⚠ 已 ${u.days} 天未发`);
+    else if (u.level === 'soon') badge = cuT(`waiting ${u.days}d`, `已等 ${u.days} 天`);
   } else if (u.dateOnly) {
     // Calendar-day badge — no hours (a bare date has no meaningful time-of-day).
     if (u.level === 'overdue')       badge = cuT('⚠ overdue', '⚠ 已逾期');
@@ -1479,7 +1491,12 @@ function renderShipByTile(o) {
   else if (u.level === 'later' && h != null && p.urgencyBasis === 'arrival') badge = cuT(`in ${Math.round(h / 24)}d`, `${Math.round(h / 24)}天后`);
   const badgeHtml = badge ? ` <span style="font-size: 11px; color: ${u.color}; font-weight: 600;">· ${badge}</span>` : '';
   // Primary sub-line (made-fresh note / no-slot reason). Batch is highlighted.
-  const subMain = p.subEn != null ? cuT(p.subEn, p.subCn) : '';
+  // ASAP orders have no note — show the order's age instead ("placed 2 days ago").
+  const subMain = p.subEn != null ? cuT(p.subEn, p.subCn)
+    : (p.kind === 'asap' && u.days != null)
+      ? (u.days <= 0 ? cuT('placed today', '今天下单')
+                     : cuT(`placed ${u.days} day${u.days === 1 ? '' : 's'} ago`, `${u.days}天前下单`))
+      : '';
   const subLine = subMain
     ? `<div class="sub"${p.kind === 'batch' ? ' style="color: var(--warn); font-weight: 600;"' : ''}>${subMain}</div>` : '';
   // Order-level facts: delivery mode + same-day surcharge.
