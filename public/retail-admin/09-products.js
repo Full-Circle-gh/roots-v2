@@ -2511,7 +2511,10 @@ function _optChoiceRow(o, oi, c, ci) {
   // Link control: a chip when linked (name + live stock), else a "+ Stock" button.
   let link = '';
   if (paid && c.stock_product_id) {
-    const nm = escapeHtml(c.addon_name_en || c.addon_name_cn || ('#' + c.stock_product_id));
+    // Prefer the live catalogue row so a variant shows its size + weight; fall
+    // back to the snapshotted name only when the product is gone from the list.
+    const lp = (PA_PRODUCTS || []).find(x => String(x.id) === String(c.stock_product_id));
+    const nm = escapeHtml(lp ? _optStockName(lp) : (c.addon_name_en || c.addon_name_cn || ('#' + c.stock_product_id)));
     const stk = c.addon_stock != null ? ` · ${c.addon_stock} ${cuT('in stock', '库存')}` : '';
     link = `<span class="opt-link on" title="${cuT('Draws from this product’s stock', '占用该商品库存')}">🔗 ${nm}${stk}` +
       `<button type="button" class="opt-unlink" title="${cuT('Unlink', '取消关联')}" onclick="optUnlink(${oi}, ${ci})">✕</button></span>`;
@@ -2575,6 +2578,17 @@ function optRemoveOption(oi) { OPT.splice(oi, 1); if (OPT_PICK && OPT_PICK.oi ==
 function optAddChoice(oi) { if (OPT[oi]) { OPT[oi].choices.push(_optBlankChoice()); optRender(); } }
 function optRemoveChoice(oi, ci) { if (OPT[oi]) { OPT[oi].choices.splice(ci, 1); OPT_PICK = null; optRender(); } }
 // ── Stock-product link (paid add-on draws from a real product's inventory) ──
+// Display name for a stock-source product (picker rows + linked chip). A variant
+// row shares its family name with its siblings, so spell out the size label and
+// weight (e.g. "Tzatziki · 1 Jar · 250g") — otherwise every sibling reads alike.
+function _optStockName(p) {
+  if (!p) return '';
+  const base = (p.name_en || '—') + (p.name_cn ? ' · ' + p.name_cn : '');
+  if (!p.variant_group_id) return base;
+  const lab = (cuT(p.variant_label, p.variant_label_cn) || p.variant_label || p.variant_label_cn || '').toString().trim();
+  const extra = [lab, (p.size || '').toString().trim()].filter(Boolean).join(' · ');
+  return extra ? base + ' · ' + extra : base;
+}
 function optLinkPick(oi, ci) { OPT_PICK = { oi, ci }; optRender(); }
 function optPickerList() {
   const el = document.getElementById('opt-picklist'); if (!el) return;
@@ -2584,7 +2598,7 @@ function optPickerList() {
     .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
     .slice(0, 40);
   el.innerHTML = matches.length
-    ? matches.map(p => `<div class="bu-pick" onclick="optPick(${p.id})">${escapeHtml(_vaName(p))}${p.sku ? ' · ' + escapeHtml(p.sku) : ''}</div>`).join('')
+    ? matches.map(p => `<div class="bu-pick" onclick="optPick(${p.id})">${escapeHtml(_optStockName(p))}${p.sku ? ' · ' + escapeHtml(p.sku) : ''}</div>`).join('')
     : `<div class="bu-pick muted">${cuT('No matches', '无匹配')}</div>`;
 }
 function optPick(productId) {
