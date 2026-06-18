@@ -3038,6 +3038,9 @@ function printReceiptTile(o) {
       ${badge}
       <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Reprint · 补打小票</button>
       <button class="btn btn-sm" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label · 打印箱贴', '打印箱贴 · Box label')}</button>
+      <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Only this PC (the one with the label printer). Prints the parcel label when its waybill is created.', '仅本机(连接标签打印机的电脑)。生成运单时自动打印该包裹箱贴。'))}">
+        <input type="checkbox" ${boxLabelAutoOn() ? 'checked' : ''} onchange="setBoxLabelAuto(this.checked)"> ${cuT('Auto on waybill · 运单后自动', '运单后自动 · Auto')}
+      </label>
     </div>
   </div>`;
 }
@@ -3082,23 +3085,51 @@ async function reprintOrder(id) {
 // sticker carries the order's last 4 digits (big, to match the waybill the
 // logistics person holds), recipient name + phone, and — for split orders —
 // which box of how many. Reads the open order from _OPEN_ORDER (no server call).
-function printBoxLabel(id) {
+// Per-MACHINE (not per-account) toggle: auto-print a parcel's box label the
+// moment its waybill is created. Stored in localStorage because only the PC
+// physically wired to the label printer should fire it — a global setting would
+// make every operator's browser try to print.
+function boxLabelAutoOn() {
+  try { return localStorage.getItem('boxlabelAutoWaybill') === '1'; } catch (e) { return false; }
+}
+function setBoxLabelAuto(on) {
+  try { localStorage.setItem('boxlabelAutoWaybill', on ? '1' : '0'); } catch (e) {}
+  toast(on ? cuT('Box label will auto-print on waybill', '生成运单后将自动打印箱贴')
+           : cuT('Box-label auto-print off', '已关闭箱贴自动打印'));
+}
+
+// Print box-label sticker(s) for an order on the LOCAL label printer. Pass
+// `onlyShipmentId` to print just that one parcel's label (used by the auto-print
+// on waybill creation) — its BOX i/N still reflects its position among all
+// parcels. Omit it to print every parcel (the manual button).
+function printBoxLabel(id, onlyShipmentId) {
   const o = _OPEN_ORDER;
   if (!o || o.id !== id) { toast(cuT('Open the order first', '请先打开订单'), 'err'); return; }
   // Last 4 DIGITS of the order no (strip the leading letters of "R260618156719").
   const digits = String(o.order_no || '').replace(/\D/g, '');
   const last4 = digits.slice(-4) || String(o.order_no || '');
-  const n = (o.shipments && o.shipments.length) || 1;   // one label per parcel
+  const ships = (o.shipments && o.shipments.length) ? o.shipments : [];
+  const n = ships.length || 1;                          // total parcels = box count
   const name = escapeHtml(o.recipient_name || '');
   const phone = escapeHtml(o.recipient_phone || '');
   const orderNo = escapeHtml(o.order_no || '');
   const big = escapeHtml(last4);
 
+  // Which box numbers to print (1-based). A single onlyShipmentId → just that
+  // parcel; otherwise every parcel (or the lone box for an unsplit order).
+  let boxNos;
+  if (onlyShipmentId != null && ships.length) {
+    const idx = ships.findIndex(s => s.id === onlyShipmentId);
+    boxNos = idx >= 0 ? [idx + 1] : ships.map((_, k) => k + 1);
+  } else {
+    boxNos = ships.length ? ships.map((_, k) => k + 1) : [1];
+  }
+
   let pages = '';
-  for (let i = 1; i <= n; i++) {
+  for (const boxNo of boxNos) {
     pages += `<div class="lbl">
         <div class="no">#${big}</div>
-        ${n > 1 ? `<div class="box">BOX ${i} / ${n}</div>` : ''}
+        ${n > 1 ? `<div class="box">BOX ${boxNo} / ${n}</div>` : ''}
         ${name ? `<div class="who">${name}</div>` : ''}
         ${phone ? `<div class="tel">${phone}</div>` : ''}
         <div class="ref">${orderNo}</div>
@@ -3625,6 +3656,10 @@ async function submitJdLabel(orderId, shipmentId, product, btn) {
       errLabelEn: 'JD label failed', errLabelCn: '生成运单失败',
     });
     toast(cuT('JD waybill created', '京东运单已生成') + ': ' + (r?.data?.waybill || ''));
+    // Auto-print this parcel's box label (this machine only). Fire before the
+    // drawer rebuild while _OPEN_ORDER still holds the order — the label doesn't
+    // depend on the waybill itself, only the parcel/recipient.
+    if (boxLabelAutoOn()) printBoxLabel(orderId, shipmentId);
     openOrder(orderId, { instant: true });
     loadOrders();
     return true;
@@ -3782,6 +3817,9 @@ async function saveTracking(orderId, shipmentId, ev) {
     } else {
       toast('Tracking saved · 运单号已保存');
     }
+    // Auto-print this parcel's box label (this machine only) — fire before the
+    // drawer rebuild while _OPEN_ORDER still holds the order.
+    if (boxLabelAutoOn()) printBoxLabel(orderId, shipmentId);
     // openOrder() rebuilds the whole drawer body, which yanks scroll back to the
     // top — jarring when the operator is mid-list updating a parcel. Snapshot the
     // scroll offset and restore it once the re-render lands.
