@@ -1265,7 +1265,18 @@ function renderShipByCell(o) {
   const icon = p.icon === 'pickup' ? `${pickupIcon(12)} ` : '';
   const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
     ? ` <span style="font-size: 10px; color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day','当日')}</span>` : '';
-  return `<div style="font-size: 12px; font-weight: 600; color: ${u.color}; line-height: 1.3;">${icon}${headline}</div>
+  // The column header reads "Ship by", which is correct for true ship deadlines
+  // (out-of-city express, fresh-batch make-by, ship-now). But scheduled-delivery
+  // and pickup orders carry a DIFFERENT meaning — the date is when the customer
+  // wants it delivered / to collect it, not a shipping deadline. Without a label
+  // those dates masquerade as ship deadlines under the "SHIP BY" header. Show the
+  // per-row kicker ("Deliver" / "Pickup time") only for those, so the genuine
+  // ship-by rows stay clean (the header already names them).
+  const showKicker = (p.kind === 'scheduled' || p.kind === 'pickup');
+  const kicker = showKicker
+    ? `<div style="font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); margin-bottom: 1px;">${cuT(p.kickerEn, p.kickerCn)}</div>`
+    : '';
+  return `${kicker}<div style="font-size: 12px; font-weight: 600; color: ${u.color}; line-height: 1.3;">${icon}${headline}</div>
           ${(subText || tag) ? `<div style="font-size: 10px; margin-top: 2px; color: var(--text-3);">${subText}${tag}</div>` : ''}
           ${surcharge}`;
 }
@@ -4154,6 +4165,11 @@ function openRefundApproveDialog(orderId) {
   try { preLines = o.refund_lines_json ? JSON.parse(o.refund_lines_json) : []; } catch {}
   const preMap = new Map(preLines.map(l => [l.item_id, l.qty]));
   const defaultAmount = o.refund_amount_requested != null ? Number(o.refund_amount_requested) : total;
+  // Open on whatever the customer actually asked for, not a blanket full refund:
+  // selected lines → "by items"; a partial amount → "amount"; otherwise "full".
+  const initialMode = preLines.length ? 'lines'
+    : (o.refund_amount_requested != null && defaultAmount < total - 0.005) ? 'amount'
+    : 'full';
 
   const bg = document.createElement('div');
   bg.className = 'pu-editor-bg';
@@ -4171,14 +4187,14 @@ function openRefundApproveDialog(orderId) {
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Mode · 模式</label>
           <div style="display: flex; gap: 6px; flex-wrap: wrap;">
-            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="rf-mode" value="full" checked> Full · 全额</label>
-            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="rf-mode" value="amount"> Partial — amount · 部分金额</label>
-            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="rf-mode" value="lines"> Partial — by items · 按商品</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="rf-mode" value="full" ${initialMode === 'full' ? 'checked' : ''}> Full · 全额</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="rf-mode" value="amount" ${initialMode === 'amount' ? 'checked' : ''}> Partial — amount · 部分金额</label>
+            <label style="display: flex; align-items: center; gap: 6px;"><input type="radio" name="rf-mode" value="lines" ${initialMode === 'lines' ? 'checked' : ''}> Partial — by items · 按商品</label>
           </div>
         </div>
         <div class="field" id="rf-amt-wrap" style="margin-bottom: 14px;">
           <label class="stacked">Amount · 金额 (¥)</label>
-          <input type="number" id="rf-amt" step="0.01" min="0" max="${total}" value="${total.toFixed(2)}" style="width: 100%;">
+          <input type="number" id="rf-amt" step="0.01" min="0" max="${total}" value="${(initialMode === 'amount' ? defaultAmount : total).toFixed(2)}" style="width: 100%;">
           <div class="muted" style="font-size: 11px; margin-top: 4px;">${cuT('Order total', '订单总额')} ¥${fmt(total)}${o.refund_amount_requested != null ? ' · ' + cuT('customer asked for', '顾客申请') + ' ¥' + fmt(o.refund_amount_requested) : ''}</div>
         </div>
         <div class="field" id="rf-lines-wrap" style="margin-bottom: 14px; display: none;">
@@ -4228,6 +4244,12 @@ function openRefundApproveDialog(orderId) {
   };
   bg.querySelectorAll('.rf-line-chk, .rf-line-qty').forEach(el => el.addEventListener('input', recalcLineAmt));
   recalcLineAmt();
+
+  // Reflect the customer-driven initial mode in the panel visibility.
+  bg.querySelector('#rf-amt-wrap').style.display    = (initialMode === 'full' || initialMode === 'amount') ? '' : 'none';
+  bg.querySelector('#rf-lines-wrap').style.display  = (initialMode === 'lines') ? '' : 'none';
+  bg.querySelector('#rf-points-wrap').style.display = (initialMode !== 'full') ? '' : 'none';
+  bg.querySelector('#rf-points').checked = (initialMode === 'full');
 
   bg.querySelectorAll('input[name="rf-mode"]').forEach(r => r.addEventListener('change', () => {
     const mode = bg.querySelector('input[name="rf-mode"]:checked').value;
