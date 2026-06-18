@@ -11383,6 +11383,9 @@ router.post('/api/retail/orders/:id/refund-request', requireRetailAuth, express.
     customerId: req.customer.id,
     meta: normLines ? { lines: normLines } : null,
   });
+  // Auto-print a refund-request alert slip so staff get a paper heads-up the
+  // moment it's filed. Best-effort + fire-and-forget; never blocks the response.
+  autoPrintRefundRequest(id, normLines);
   res.json({ success: true });
 });
 
@@ -14271,6 +14274,9 @@ function loadPrinterPrefs() {
     // Independent of auto_print: whether to print the focused "add-on" slip
     // when a customer adds to an already-paid order. Default on.
     auto_print_addon: get('printer.auto_print_addon', true),
+    // Independent toggle: print a "refund request" alert slip the moment a
+    // customer files a refund. Default on.
+    auto_print_refund: get('printer.auto_print_refund', true),
     shop_name:  get('printer.shop_name', tenantBrandLabel()),
     by_store:   (by_store && typeof by_store === 'object') ? by_store : {},
     // Orders shipping OUTSIDE Guangzhou always print at this store's printer
@@ -14446,6 +14452,42 @@ function autoPrintAddon(orderId, newItemIds, addonPaidAt) {
   } catch (e) { console.warn('[feie addon setup]', e.message); }
 }
 
+// Print a "refund request" alert slip the moment a customer files a refund, so
+// staff get a paper heads-up without watching the dashboard. Mirrors
+// autoPrintAddon: best-effort + fire-and-forget; never blocks the request.
+// `lines` is the normalized refund-line spec (or null for a full refund);
+// we enrich it with product names so the slip is self-describing.
+function autoPrintRefundRequest(orderId, lines) {
+  try {
+    const pp = loadPrinterPrefs();
+    // Own toggle, default ON — independent of the order / add-on auto-prints.
+    if (pp.auto_print_refund === false || !_feie.feieEnabled(integ().feie)) return;
+    const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
+    if (!order) return;
+    const printer = printerForOrder(order, pp);
+    if (!printer || !printer.sn) { console.warn('[feie refund]', orderId, 'no_printer_for_store'); return; }
+    // Enrich each refund line with the item's name/sku for the slip.
+    let enriched = [];
+    if (Array.isArray(lines) && lines.length) {
+      const ids = lines.map(l => parseInt(l.item_id, 10)).filter(Boolean);
+      const ph = ids.map(() => '?').join(',');
+      const rows = ids.length ? tdb().prepare(
+        `SELECT oi.id, oi.sku, oi.name_en, oi.name_cn, oi.product_id
+           FROM retail_order_items oi WHERE oi.id IN (${ph})`
+      ).all(...ids) : [];
+      const byId = new Map(rows.map(r => [r.id, r]));
+      enriched = lines.map(l => {
+        const r = byId.get(parseInt(l.item_id, 10)) || {};
+        return { ...r, qty: l.qty, amount: l.amount };
+      });
+    }
+    const content = _feie.renderRefundRequest(order, enriched, pp.shop_name);
+    _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
+      .then(r => console.log('[feie refund]', orderId, r.ok ? 'ok' : r.msg))
+      .catch(e => console.warn('[feie refund]', orderId, e.message));
+  } catch (e) { console.warn('[feie refund setup]', e.message); }
+}
+
 router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
   const prefs = loadPrinterPrefs();
   // Join active stores with their saved printer config so the UI can render
@@ -14470,6 +14512,7 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: {
     auto_print: prefs.auto_print,
     auto_print_addon: prefs.auto_print_addon,
+    auto_print_refund: prefs.auto_print_refund,
     shop_name:  prefs.shop_name,
     enabled:    _feie.feieEnabled(integ().feie),
     templates:  _feie.TEMPLATE_IDS,
@@ -14489,6 +14532,7 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
   const tx = tdb().transaction(() => {
     if (b.auto_print !== undefined) upsert.run('printer.auto_print', JSON.stringify(!!b.auto_print), req.user.id);
     if (b.auto_print_addon !== undefined) upsert.run('printer.auto_print_addon', JSON.stringify(!!b.auto_print_addon), req.user.id);
+    if (b.auto_print_refund !== undefined) upsert.run('printer.auto_print_refund', JSON.stringify(!!b.auto_print_refund), req.user.id);
     if (b.shop_name !== undefined) {
       upsert.run('printer.shop_name', JSON.stringify(String(b.shop_name || '').slice(0, 40)), req.user.id);
     }
@@ -15944,6 +15988,23 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral cancel]', e); }
         try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission cancel]', e); }
       } catch (e) { console.error('[cancel refund bookkeeping]', e); }
+    } else {
+      // No gateway refund fired — the order was paid off-app (cash/manual, no
+      // refundable gateway row), already refunded, or this is DEV mode. The
+      // cancel is still a terminal refund event: the money is returned by hand.
+      // If a customer refund REQUEST was still open (pending/reviewing/approved),
+      // close it out as 'paid' so the cancelled order leaves the refund queue and
+      // can't be re-paid via /refund/payout. Without this, an approved-then-
+      // cancelled off-app order stays stuck at 'approved' in the queue forever.
+      try {
+        tdb().prepare(
+          `UPDATE retail_orders
+              SET refund_status   = 'paid',
+                  refund_paid_at  = COALESCE(refund_paid_at, CURRENT_TIMESTAMP),
+                  refund_payer_id = COALESCE(refund_payer_id, ?)
+            WHERE id = ? AND refund_status IN ('pending', 'reviewing', 'approved')`
+        ).run(req.user.id, id);
+      } catch (e) { console.error('[cancel close-stuck-refund]', e); }
     }
   }
   if (status === 'refunded') {
