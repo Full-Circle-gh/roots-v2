@@ -4308,10 +4308,29 @@ function openRefundApproveDialog(orderId) {
   });
 }
 
+// Map an order's original payment tender onto the payout-method picker. Only a
+// real online WeChat order can be refunded automatically (the payout endpoint
+// only auto-pushes for method 'wechat'); every other tender — including cash and
+// WeChat/Alipay paid OFF-app — is a manual record, so we must NOT default those
+// to WeChat or the operator hits "Payout failed: no WeChat transaction".
+function _payoutDefaultMethod(pm) {
+  switch ((pm || '').toLowerCase()) {
+    case 'wechat':        return 'wechat';
+    case 'alipay':
+    case 'alipay_offline':return 'alipay';
+    case 'bank_transfer': return 'bank';
+    case 'wallet':        return 'wallet';
+    case 'cash':          return 'cash';
+    default:              return 'other'; // wechat_offline / points / other / unknown
+  }
+}
+
 function openRefundPayoutDialog(orderId) {
   const o = _OPEN_ORDER;
   if (!o || o.id !== orderId) { toast('Reopen the order and try again · 请重新打开订单', 'err'); return; }
   const apv = Number(o.refund_amount_approved) || 0;
+  const defMethod = _payoutDefaultMethod(o.payment_method);
+  const isWechatOrder = (o.payment_method || '').toLowerCase() === 'wechat';
 
   const bg = document.createElement('div');
   bg.className = 'pu-editor-bg';
@@ -4337,6 +4356,12 @@ function openRefundPayoutDialog(orderId) {
             <option value="cash">Cash · 现金</option>
             <option value="other">Other · 其他</option>
           </select>
+          <div id="rfp-method-warn" class="muted" style="display: none; font-size: 11px; margin-top: 6px; color: var(--danger, #c0392b);">
+            ${cuT(
+              'This order wasn\'t paid via online WeChat — there\'s no WeChat transaction to auto-refund. Pick the method you actually returned the money with.',
+              '此订单非微信在线支付,没有可原路退款的微信交易。请选择你实际退款使用的方式。'
+            )}
+          </div>
         </div>
         <div class="field" style="margin-bottom: 14px;">
           <label class="stacked">Reference / txn id · 凭证号</label>
@@ -4358,6 +4383,19 @@ function openRefundPayoutDialog(orderId) {
       </div>
     </div>`;
   mountFloatingPuModal(bg);
+
+  // Default the picker to the tender the customer actually paid with, instead of
+  // always WeChat — a cash order defaulting to WeChat Pay only ever produces
+  // "Payout failed". Warn if the operator picks WeChat on a non-WeChat order.
+  const methodSel = bg.querySelector('#rfp-method');
+  const methodWarn = bg.querySelector('#rfp-method-warn');
+  methodSel.value = defMethod;
+  const syncMethodWarn = () => {
+    methodWarn.style.display = (methodSel.value === 'wechat' && !isWechatOrder) ? 'block' : 'none';
+  };
+  methodSel.addEventListener('change', syncMethodWarn);
+  syncMethodWarn();
+
   bg.querySelector('#rfp-submit').addEventListener('click', async (ev) => {
     const body = {
       method:    bg.querySelector('#rfp-method').value,
