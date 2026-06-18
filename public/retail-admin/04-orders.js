@@ -3113,19 +3113,23 @@ function printBoxLabel(id) {
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Label ${big}</title>
 <style>
-  @page { size: 70mm 45mm; margin: 0; }
+  @page { size: 70mm 45mm landscape; margin: 0; }
   * { margin:0; padding:0; box-sizing:border-box; }
   html, body { width:70mm; }
   body { font-family:-apple-system,"PingFang SC","Microsoft YaHei",Arial,sans-serif; color:#000; }
-  .lbl { width:70mm; height:45mm; padding:3mm 4mm; page-break-after:always;
+  /* Each label is exactly one 70x45mm landscape page. Everything is kept on a
+     single line (nowrap) and clipped rather than wrapped, so a long name or the
+     full order-no can never push content off the sticker. */
+  .lbl { width:70mm; height:45mm; padding:2mm 3mm; page-break-after:always;
          display:flex; flex-direction:column; align-items:center; justify-content:center;
          text-align:center; overflow:hidden; }
   .lbl:last-child { page-break-after:auto; }
-  .no  { font-size:16mm; font-weight:800; line-height:1; letter-spacing:.5mm; }
+  .lbl > div { max-width:64mm; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .no  { font-size:15mm; font-weight:800; line-height:1; letter-spacing:0; }
   .box { font-size:6mm;  font-weight:800; margin-top:1mm; }
-  .who { font-size:5.5mm; font-weight:700; margin-top:2mm; word-break:break-word; }
-  .tel { font-size:6.5mm; font-weight:800; margin-top:.5mm; letter-spacing:.3mm; }
-  .ref { font-size:3mm;  color:#444; margin-top:1.5mm; }
+  .who { font-size:5mm;  font-weight:700; margin-top:1.5mm; }
+  .tel { font-size:6.5mm; font-weight:800; margin-top:.5mm; letter-spacing:0; }
+  .ref { font-size:2.6mm; color:#444; margin-top:1mm; }
 </style></head>
 <body onload="window.focus();window.print();">
 ${pages}
