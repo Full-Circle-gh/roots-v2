@@ -5319,6 +5319,38 @@
 
           <div class="group-card">
             <div class="group-card-head">
+              <h3>Alipay manual收款 (静态收款码) · 支付宝手动收款
+                <span id="alipay-manual-chip" style="margin-left:8px;vertical-align:middle"></span>
+              </h3>
+              <div class="muted">Temporary fallback while 当面付 API access is pending. Customer picks Alipay → sees this收款码 + the amount → scans, pays, and uploads the payment screenshot in the app. Staff verify the screenshot on the order and click "Mark paid". Money lands in whatever account this收款码 belongs to. · 当面付接口开通前的临时方案。顾客选择支付宝后看到此收款码与金额,扫码付款并在小程序上传付款截图;客服在订单中核对截图后点击「标记已付款」。款项进入此收款码所属账户。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl">
+                <label style="display:flex; align-items:center; gap:8px; margin-bottom:10px; font-weight:700;">
+                  <input type="checkbox" id="alipay-manual-enabled"> Enable manual Alipay · 启用手动支付宝收款
+                </label>
+                <div class="field" style="margin: 0 0 8px;">
+                  <label class="stacked">Payee label (shown to customer) · 收款方名称(展示给顾客)</label>
+                  <input type="text" id="alipay-manual-account" placeholder="e.g. 哈素萌 / 柏玲" style="width: 100%;">
+                </div>
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">收款码 image · 收款二维码图片</label>
+                  <input type="file" id="alipay-manual-file" accept="image/*" onchange="_alipayManualPickFile(event)">
+                  <img id="alipay-manual-preview" alt="" style="display:none; max-width:160px; max-height:220px; margin-top:8px; border:1px solid var(--line); border-radius:8px;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_saveAlipayManual()">Save · 保存</button>
+                  <span id="alipay-manual-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  Open Alipay App → 收付款 → 收款 → save the收款码 image, then upload it here. The static code carries no amount, so the customer types the shown amount when paying. Uncheck Enable (or clear the image) to turn off and fall back to WeChat-only. · 支付宝 App → 收付款 → 收款 → 保存收款码图片,上传到这里。静态码不含金额,顾客付款时手动输入页面显示的金额。取消勾选或清除图片即关闭。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="group-card">
+            <div class="group-card-head">
               <h3>SMS when delivered (out-of-Guangzhou orders) · 送达短信(广州市外订单)
                 <span id="aliyun_sms-chip" style="margin-left:8px;vertical-align:middle"></span>
               </h3>
@@ -5768,6 +5800,10 @@
               <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
                 <input type="checkbox" id="feie-auto-addon" style="width:18px;height:18px">
                 <label for="feie-auto-addon" style="font-size:13px;color:var(--text-1)">Print an add-on slip when a customer adds to a paid order · 顾客加单后补打加单小票</label>
+              </div>
+              <div style="grid-column:1/-1;display:flex;align-items:center;gap:10px">
+                <input type="checkbox" id="feie-auto-refund" style="width:18px;height:18px">
+                <label for="feie-auto-refund" style="font-size:13px;color:var(--text-1)">Print a refund-request slip when a customer files a refund · 顾客申请退款后自动打印退款申请单</label>
               </div>
               <div style="grid-column:1/-1">
                 <label class="field-label">Receipt header · 小票抬头</label>

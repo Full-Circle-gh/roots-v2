@@ -2564,6 +2564,13 @@ addColumn('retail_orders', 'delivery_slot_kind', 'TEXT');
 // once when the delivered-notice SMS is dispatched (out-of-GZ orders only).
 addColumn('retail_orders', 'sms_delivered_sent_at', 'DATETIME');
 
+// Manual-Alipay payment proof: when the operator can't take 当面付 yet (open-
+// platform 入驻 blocked), Alipay orders fall back to a static收款码 the customer
+// scans + pays, then uploads the payment screenshot here. Staff eyeball it and
+// hit "Mark paid". Single latest screenshot (data URL); re-upload overwrites.
+addColumn('retail_orders', 'alipay_proof_image', 'TEXT');
+addColumn('retail_orders', 'alipay_proof_at',    'DATETIME');
+
 // Cloud-printer (Feie) auto-print outcome, so the backend can show whether a
 // slip actually printed and offer a one-click reprint instead of the operator
 // guessing. null = never attempted; 'printed' = Feieyun accepted the job;

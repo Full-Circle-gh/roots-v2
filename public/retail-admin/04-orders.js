@@ -2783,6 +2783,11 @@ function renderOpenOrder(o) {
             <div class="kicker">Payment · 付款 ${_pmt?.transaction_id ? copyChip(_pmt.transaction_id, 'Txn ID') : ''}</div>
             <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml(paymentStatusLabel(_pmt?.status))}</div>
           </div>`; })()}
+          ${o.alipay_proof_image ? `<div class="full">
+            <div class="kicker">Alipay payment proof · 支付宝付款截图${o.alipay_proof_at ? ' · ' + escapeHtml(o.alipay_proof_at) : ''}</div>
+            <img src="${o.alipay_proof_image}" alt="Alipay payment proof" style="max-width: 220px; max-height: 300px; border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; display: block;" onclick="(function(s){var w=window.open();if(w)w.document.write('<img src=\\''+s+'\\' style=\\'max-width:100%\\'>');})(this.src)">
+            ${o.status === 'pending_payment' ? `<div class="sub" style="margin-top: 6px; color: var(--brass); font-weight: 700;">${cuT('Verify the amount matches, then Mark paid below.', '核对金额一致后,点击下方“标记已付款”。')}</div>` : ''}
+          </div>` : ''}
           ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
           ${renderShipByTile(o)}
           ${o.store_code ? `<div>

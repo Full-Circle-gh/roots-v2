@@ -21,6 +21,10 @@
         <view class="lbl f-toni">{{t.amount}}</view>
         <view class="val f-bear total">{{total}}</view>
       </view>
+      <view wx:if="{{manual && account}}" class="row">
+        <view class="lbl f-toni">{{t.payee}}</view>
+        <view class="val">{{account}}</view>
+      </view>
       <view wx:if="{{orderNo}}" class="row">
         <view class="lbl f-toni">{{t.order}}</view>
         <view class="val">{{orderNo}}</view>
@@ -34,18 +38,23 @@
       </view>
     </view>
 
-    <button wx:if="{{!paid}}" class="btn primary f-toni" bindtap="saveQr">{{t.save}}</button>
+    <button wx:if="{{!paid}}" class="btn secondary f-toni" bindtap="saveQr">{{t.save}}</button>
+
+    <!-- manual mode: upload the payment screenshot for staff to confirm -->
+    <button wx:if="{{manual && !paid}}" class="btn primary f-toni" bindtap="uploadProof" loading="{{uploading}}" disabled="{{uploading}}">
+      {{ proofUploaded ? t.reupload : t.upload }}
+    </button>
 
     <view class="steps">
-      <view wx:for="{{t.steps}}" wx:key="*this" class="step f-aleo">
+      <view wx:for="{{ manual ? t.manualSteps : t.steps }}" wx:key="*this" class="step f-aleo">
         <view class="num f-bear">{{index + 1}}</view>
         <view class="step-txt">{{item}}</view>
       </view>
     </view>
 
-    <view wx:if="{{!paid}}" class="waiting f-aleo">
+    <view wx:if="{{!paid && (!manual || proofUploaded)}}" class="waiting f-aleo">
       <view class="dot"></view>
-      <text>{{t.waiting}}</text>
+      <text>{{ manual ? t.manualWaiting : t.waiting }}</text>
     </view>
   </block>
 

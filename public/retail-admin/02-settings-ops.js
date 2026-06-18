@@ -16,6 +16,76 @@ function loadOpsPanel() {
   loadIntegrationsStatus();
   loadShippingIntegrations();
   loadPrinterPrefs();
+  loadAlipayManual();
+}
+
+// ── Manual-Alipay (静态收款码) fallback card ──────────────────────────────
+// Stopgap while 当面付 API access is blocked: operator uploads a static收款码 +
+// payee label; customer scans/pays/uploads a screenshot; staff Mark paid.
+let _alipayManualQr = null;   // pending data URL from the file picker (null = keep existing)
+
+function _alipayManualChip(enabled) {
+  const el = document.getElementById('alipay-manual-chip');
+  if (!el) return;
+  el.innerHTML = enabled
+    ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
+    : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ OFF · 未启用</span>';
+}
+
+async function loadAlipayManual() {
+  try {
+    const r = await fetch('/api/retail-admin/alipay-manual');
+    if (!r.ok) return;
+    const d = (await r.json()).data || {};
+    const cb = document.getElementById('alipay-manual-enabled');
+    const ac = document.getElementById('alipay-manual-account');
+    const pv = document.getElementById('alipay-manual-preview');
+    if (cb) cb.checked = !!d.enabled;
+    if (ac) ac.value = d.account || '';
+    if (pv) { if (d.qr) { pv.src = d.qr; pv.style.display = 'block'; } else { pv.removeAttribute('src'); pv.style.display = 'none'; } }
+    _alipayManualQr = null;   // existing image stays unless operator picks a new one
+    _alipayManualChip(!!d.enabled);
+  } catch (e) { console.warn('[alipay-manual] load failed', e); }
+}
+
+function _alipayManualPickFile(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5MB) · 图片过大(最大5MB)', 'error'); event.target.value = ''; return; }
+  const reader = new FileReader();
+  reader.onload = () => {
+    _alipayManualQr = reader.result;        // data URL
+    const pv = document.getElementById('alipay-manual-preview');
+    if (pv) { pv.src = reader.result; pv.style.display = 'block'; }
+  };
+  reader.readAsDataURL(file);
+}
+
+async function _saveAlipayManual() {
+  const enabled = !!(document.getElementById('alipay-manual-enabled') || {}).checked;
+  const account = ((document.getElementById('alipay-manual-account') || {}).value || '').trim();
+  const status = document.getElementById('alipay-manual-status');
+  const body = { enabled, account };
+  if (_alipayManualQr) body.qr = _alipayManualQr;   // only send when a new image was picked
+  try {
+    if (status) status.textContent = 'Saving… · 保存中…';
+    const r = await fetch('/api/retail-admin/alipay-manual', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) {
+      const msg = j.error === 'qr_required' ? 'Upload a收款码 image first · 请先上传收款码图片'
+                : j.error === 'image_too_big' ? 'Image too large · 图片过大'
+                : j.error === 'bad_image' ? 'Not a valid image · 图片格式无效' : (j.error || 'save failed');
+      if (status) status.textContent = '';
+      toast(msg, 'error');
+      return;
+    }
+    if (status) status.textContent = 'Saved ✓ · 已保存';
+    _alipayManualQr = null;
+    _alipayManualChip(enabled);
+    toast('Saved · 已保存', 'success');
+  } catch (e) { if (status) status.textContent = ''; toast('Save failed · 保存失败: ' + e.message, 'error'); }
 }
 
 // ── Stores · 门店 — list + add/edit, online-store self-managed ──
@@ -230,9 +300,11 @@ async function loadPrinterPrefs() {
     const p = (await r.json()).data || {};
     const auto = document.getElementById('feie-auto');
     const autoAddon = document.getElementById('feie-auto-addon');
+    const autoRefund = document.getElementById('feie-auto-refund');
     const shop = document.getElementById('feie-shop');
     if (auto) auto.checked = p.auto_print !== false;
     if (autoAddon) autoAddon.checked = p.auto_print_addon !== false;
+    if (autoRefund) autoRefund.checked = p.auto_print_refund !== false;
     if (shop) shop.value = p.shop_name || '';
 
     const box = document.getElementById('feie-stores');
@@ -356,6 +428,7 @@ async function _savePrinter() {
     const body = {
       auto_print: document.getElementById('feie-auto')?.checked,
       auto_print_addon: document.getElementById('feie-auto-addon')?.checked,
+      auto_print_refund: document.getElementById('feie-auto-refund')?.checked,
       shop_name:  document.getElementById('feie-shop')?.value || '',
       by_store:   _collectPrinterByStore(),
       out_of_city_store_id: document.getElementById('feie-ooc')?.value || null,
