@@ -41,7 +41,7 @@
         <text wx:if="{{c.priceWas}}" class="fsd-was">{{c.priceWas}}</text>
       </view>
       <view wx:if="{{c.meterPct !== null}}" class="fsd-meter"><view class="fsd-meter-bar" style="width:{{c.meterPct}}%"></view></view>
-      <view class="fsd-sold">{{c.soldLbl}}</view>
+      <view wx:if="{{c.soldLbl}}" class="fsd-sold">{{c.soldLbl}}</view>
     </view>
   </view>
 </template>
@@ -1106,7 +1106,7 @@
 
   <!-- Wallet: top kicker, big greeting, accent-bordered wallet/points strip -->
   <view wx:elif="{{greeting.view === 'wallet'}}">
-    <view wx:if="{{greeting.kicker}}" class="grd-top"><text class="grd-kicker">{{greeting.kicker}}</text></view>
+    <view wx:if="{{greeting.kicker}}" class="grd-top"><view wx:if="{{greeting.todIcon}}" class="grd-icon grd-icon-{{greeting.todIcon}}"></view><text class="grd-kicker">{{greeting.kicker}}</text></view>
     <view class="grd-head">{{greeting.greetWord}}<text wx:if="{{greeting.firstName}}">, {{greeting.firstName}}</text>.</view>
     <view wx:if="{{greeting.pointsNum}}" class="grd-bar">
       <view class="grd-seg">
@@ -1126,7 +1126,7 @@
   <view wx:elif="{{greeting.view === 'coin'}}" class="grd-row grd-coin-row">
     <view class="grd-halftone"></view>
     <view class="grd-col">
-      <view wx:if="{{greeting.kicker}}" class="grd-top grd-top-accent"><text class="grd-kicker">{{greeting.kicker}}</text></view>
+      <view wx:if="{{greeting.kicker}}" class="grd-top grd-top-accent"><view wx:if="{{greeting.todIcon}}" class="grd-icon grd-icon-{{greeting.todIcon}}"></view><text class="grd-kicker">{{greeting.kicker}}</text></view>
       <view class="grd-head">{{greeting.greetWord}}{{greeting.firstName ? ',' : '.'}}<text wx:if="{{greeting.firstName}}" class="grd-name"> {{greeting.firstName}}.</text></view>
       <view wx:if="{{greeting.ctaLabel}}" class="grd-pill"><text class="grd-pill-lbl">{{greeting.ctaLabel}} →</text></view>
     </view>

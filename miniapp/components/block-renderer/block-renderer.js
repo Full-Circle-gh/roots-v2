@@ -972,9 +972,14 @@ Component({
                 const sold = p.flash.stock_sold || 0;
                 const cap = p.flash.stock_limit;
                 const pctc = (cap != null && cap > 0) ? Math.min(100, Math.round((sold / cap) * 100)) : null;
-                const soldLbl = L === 'cn'
-                  ? (cap != null ? `已抢 ${sold} / ${cap}` : `已抢 ${sold}`)
-                  : (cap != null ? `${sold} OF ${cap} SOLD` : `${sold} SOLD`);
+                // Only show the sold caption once there's real movement —
+                // a brand-new flash product reading "0 SOLD" is anti-social
+                // proof. Mirrors the top-selling grid (units > 0 gate above).
+                const soldLbl = sold > 0
+                  ? (L === 'cn'
+                      ? (cap != null ? `已抢 ${sold} / ${cap}` : `已抢 ${sold}`)
+                      : (cap != null ? `${sold} OF ${cap} SOLD` : `${sold} SOLD`))
+                  : '';
                 return {
                   id: p.id,
                   image: absUrl(p.image_url) || p.image_data || '',
@@ -1502,6 +1507,10 @@ Component({
             const g = out.greeting;
             g.firstName = firstName;
             g.greetWord = greeting;            // greeting without the name suffix
+            // Time-of-day glyph beside the kicker (sun by day, moon by night) —
+            // mirrors the cms.html preview's .grd-icon. Rendered as a masked
+            // view so it inherits the kicker/accent colour.
+            g.todIcon   = (tone === 'evening' || tone === 'night') ? 'moon' : 'sun';
             // No secondary cross-language greeting line — each language stays
             // single-language (no EN+CN mix).
             g.cnLine    = '';
