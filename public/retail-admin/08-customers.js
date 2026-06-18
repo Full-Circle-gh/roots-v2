@@ -771,9 +771,16 @@ async function adminWrite({ btn, btnId, url, method = 'POST', body, errLabelEn =
     const res = await fetch(url, opts);
     const j = await res.json().catch(() => ({ success: false, error: 'bad_response' }));
     if (!j.success) {
+      // Show the server's logical reason, never a bare code. Prefer the human
+      // `message`; append the stable `error` code in brackets so it can be
+      // quoted in support ("… [use_refund_payout]").
+      const code = j.error || 'unknown';
+      const reason = j.message ? `${j.message} [${code}]` : code;
       const extra = j.current !== undefined ? ` (current · 当前: ${j.current})` : '';
-      toast(`${errLabelEn} · ${errLabelCn}: ${j.error || 'unknown'}${extra}`, 'err');
-      throw new Error(j.error || 'request_failed');
+      toast(`${errLabelEn} · ${errLabelCn}: ${reason}${extra}`, 'err');
+      const err = new Error(j.error || 'request_failed');
+      err.code = code;
+      throw err;
     }
     return j;
   } catch (e) {

@@ -4056,7 +4056,10 @@
      Sits top-right of the header, just left of the ⋯ View popover; the eyebrow
      line keeps the order# row from feeling crowded. */
   .order-head .od-head-tx { padding-top: 0; flex: 0 0 auto; }
-  .order-head .title-row { display: flex; align-items: center; gap: var(--s2); margin-bottom: 4px; }
+  /* Wrap so a long pill set (Paid + Items added + refund-approved + …) drops to
+     a second line instead of overflowing into / under the header action button
+     (Start preparing), which read as the two overlapping. */
+  .order-head .title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2); margin-bottom: 4px; }
   .order-head .title-row b { font-size: 18px; font-weight: 500; font-family: var(--f-mono); letter-spacing: .02em; }
   /* Mono caps eyebrow under the order number — the design's "ORDER PLACED"
      micro-label, keeping the real placed timestamp. */
