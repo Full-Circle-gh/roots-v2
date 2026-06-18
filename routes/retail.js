@@ -15737,11 +15737,24 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     (status === 'cancelled' && o.status !== 'pending_payment');
   if (isPaidRefundEvent && !payContext().devMode) {
     const already = tdb().prepare('SELECT refund_status FROM retail_orders WHERE id = ?').get(id)?.refund_status;
-    // An order that already went through the explicit refund workflow
-    // (approved / paying / paid) must NOT be force-refunded at full total via
-    // this status shortcut — that would ignore a smaller approved amount and/or
-    // double-refund. Route the operator to the auditable payout flow instead.
-    if (['approved', 'paying', 'paid'].includes(already)) {
+    // 'paying' means a refund is being pushed to the gateway RIGHT NOW — never
+    // race it, whatever the operator clicked.
+    if (already === 'paying') {
+      return res.status(409).json({
+        success: false, error: 'refund_already_processing',
+        message: 'A refund is currently being processed for this order — try again in a moment.',
+      });
+    }
+    // A standalone "Refund" must still defer to the auditable payout flow when an
+    // approval/payout is already mid-workflow — force-refunding the full total
+    // there would ignore a smaller approved amount. CANCEL is the deliberate
+    // exception: it has to be able to wind the whole order down even after a
+    // PARTIAL refund was approved/paid (split-tender, e.g. cash original + a
+    // refunded WeChat add-on). It refunds ONLY what the payment ledger still owes
+    // — settleOrderRefundAcrossTenders caps each row at amount−refunded_amount, so
+    // an already-returned portion is never pushed twice — and reverses only the
+    // still-unrefunded stock (see the cancel block below).
+    if (status === 'refunded' && ['approved', 'paid'].includes(already)) {
       return res.status(409).json({
         success: false, error: 'use_refund_payout', refund_status: already,
         message: 'This order already has an approved or paid refund — use the refund payout action.',
@@ -15756,13 +15769,16 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // gateway rows — not just the most recent one.
     if (orderHasRefundableGatewayMoney(id)) {
       // Atomically claim the refund (→ 'paying') so a double-click or a second
-      // operator can't each fire a real WeChat refund. Only the request that
-      // wins this transition proceeds; on failure we revert to the prior state.
+      // operator can't each fire a real WeChat refund. Allowed from any resting
+      // state except 'paying' (blocked above); on failure we revert to `already`.
       const claim = tdb().prepare(
-        "UPDATE retail_orders SET refund_status = 'paying' WHERE id = ? AND COALESCE(refund_status, '') NOT IN ('approved', 'paying', 'paid')"
+        "UPDATE retail_orders SET refund_status = 'paying' WHERE id = ? AND COALESCE(refund_status, '') != 'paying'"
       ).run(id);
       if (claim.changes !== 1) {
-        return res.status(409).json({ success: false, error: 'refund_already_processing' });
+        return res.status(409).json({
+          success: false, error: 'refund_already_processing',
+          message: 'A refund is currently being processed for this order — try again in a moment.',
+        });
       }
       const fullTotal = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
       try {
@@ -15892,8 +15908,29 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       try { reverseOrderRedeem(id); } catch (e) { console.error('[admin-cancel.reverseRedeem]', e); }
       try { reverseOrderVoucher(id); } catch (e) { console.error('[admin-cancel.reverseVoucher]', e); }
     } else {
-      try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
-      catch (e) { console.error('[inventory.reverse (cancel)]', e); }
+      // Release the committed stock back to available. If a PARTIAL refund already
+      // ran, its lines were released at approve-time via reverseCommittedLines
+      // (ledger reason 'order_reverse_partial'); reverseCommittedOrder would
+      // re-release the FULL committed qty and double-count them (its idempotency
+      // guard only sees the 'order_reverse' reason). So when anything was already
+      // refunded, reverse ONLY the still-unrefunded units; otherwise full reverse.
+      try {
+        const actor = { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null };
+        const anyRefunded = tdb().prepare(
+          'SELECT 1 FROM retail_order_items WHERE order_id = ? AND COALESCE(refunded_qty, 0) > 0 LIMIT 1'
+        ).get(id);
+        if (anyRefunded) {
+          const remaining = tdb().prepare(
+            `SELECT product_id, SUM(qty - COALESCE(refunded_qty, 0)) AS qty
+               FROM retail_order_items
+              WHERE order_id = ? AND product_id IS NOT NULL
+              GROUP BY product_id HAVING qty > 0`
+          ).all(id);
+          inventory.reverseCommittedLines(id, remaining, { ...actor, note: reason || 'cancel — remaining units after partial refund' });
+        } else {
+          inventory.reverseCommittedOrder(id, { ...actor, note: reason || null });
+        }
+      } catch (e) { console.error('[inventory.reverse (cancel)]', e); }
     }
     // Cancelling a paid order issues a full refund — record the payout +
     // reverse points/redeem so the cancelled order reflects the money returned.
@@ -15903,8 +15940,8 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         tdb().prepare(
           `UPDATE retail_orders
               SET refund_status = 'paid',
-                  refund_amount_approved = COALESCE(refund_amount_approved, ?),
-                  refund_amount_paid     = COALESCE(refund_amount_paid,     ?),
+                  refund_amount_approved = ?,
+                  refund_amount_paid     = ?,
                   refund_approved_at     = COALESCE(refund_approved_at, CURRENT_TIMESTAMP),
                   refund_paid_at         = COALESCE(refund_paid_at,     CURRENT_TIMESTAMP),
                   refund_payout_method   = 'wechat',

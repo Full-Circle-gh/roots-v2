@@ -41,7 +41,15 @@ async function api(path, opts = {}) {
   if (r.status === 401) { location.href = '/backend/login'; throw new Error('401'); }
   const j = await r.json().catch(() => ({ success: false, error: 'bad_response', status: r.status }));
   if (!j.success) {
-    const err = new Error(j.error || ('request_failed (' + r.status + ')'));
+    // Surface a LOGICAL reason, never a bare "failed". Servers send a stable
+    // `error` code (e.g. `use_refund_payout`) and often a human `message`. We
+    // build "<human message> [<code>]" so an operator reads why it failed AND
+    // gets the exact code to quote in support. When the server gave only a code
+    // (no message), `err.message` stays equal to that code — so existing
+    // `e.code === '…'` / legacy `e.message === '…'` branches keep matching.
+    const code = j.error || ('request_failed (' + r.status + ')');
+    const err = new Error(j.message ? `${j.message} [${code}]` : code);
+    err.code = j.error || ('http_' + r.status);  // raw code for programmatic checks
     err.data = j;            // carry server detail (e.g. sku_taken `conflict`) to callers
     err.status = r.status;
     throw err;

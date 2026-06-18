@@ -3224,7 +3224,7 @@ async function undoDispatch(id) {
     openOrder(id, { instant: true });
     loadOrders();
   } catch (e) {
-    const msg = e.message === 'already_shipped'
+    const msg = e.code === 'already_shipped'
       ? cuT('A parcel already has a waybill — cancel it first.', '已有包裹生成运单 — 请先取消运单。')
       : 'Failed · 失败: ' + e.message;
     toast(msg, 'err');
@@ -3264,7 +3264,7 @@ async function undoPreparing(id) {
     openOrder(id, { instant: true });
     loadOrders();
   } catch (e) {
-    const msg = e.message === 'already_shipped'
+    const msg = e.code === 'already_shipped'
       ? cuT('A parcel already has a waybill — cancel it first.', '已有包裹生成运单 — 请先取消运单。')
       : 'Failed · 失败: ' + e.message;
     toast(msg, 'err');
