@@ -2601,7 +2601,13 @@ function optPickerList() {
     .filter(p => !q || (p.name_en || '').toLowerCase().includes(q) || (p.name_cn || '').includes(q) || (p.sku || '').toLowerCase().includes(q))
     .slice(0, 40);
   el.innerHTML = matches.length
-    ? matches.map(p => `<div class="bu-pick" onclick="optPick(${p.id})">${escapeHtml(_optStockName(p))}${p.sku ? ' · ' + escapeHtml(p.sku) : ''}</div>`).join('')
+    // Append the SKU when present, else a faint #id — so two products that
+    // share a name with no weight/SKU set are still never indistinguishable.
+    ? matches.map(p => {
+        const tail = p.sku ? ' · ' + escapeHtml(p.sku)
+          : (((p.size || '').toString().trim()) ? '' : ` · <span class="muted">#${p.id}</span>`);
+        return `<div class="bu-pick" onclick="optPick(${p.id})">${escapeHtml(_optStockName(p))}${tail}</div>`;
+      }).join('')
     : `<div class="bu-pick muted">${cuT('No matches', '无匹配')}</div>`;
 }
 function optPick(productId) {
