@@ -2516,7 +2516,11 @@ function _optChoiceRow(o, oi, c, ci) {
     const lp = (PA_PRODUCTS || []).find(x => String(x.id) === String(c.stock_product_id));
     const nm = escapeHtml(lp ? _optStockName(lp) : (c.addon_name_en || c.addon_name_cn || ('#' + c.stock_product_id)));
     const stk = c.addon_stock != null ? ` · ${c.addon_stock} ${cuT('in stock', '库存')}` : '';
-    link = `<span class="opt-link on" title="${cuT('Draws from this product’s stock', '占用该商品库存')}">🔗 ${nm}${stk}` +
+    // data-no-i18n: _optStockName packs "name_en · name_cn · variant · weight"
+    // using " · " — the same separator the bilingual text walker (10-extras.js)
+    // treats as an EN·CN divider. Without this opt-out it strips the chip down to
+    // just the English name, hiding the variant/weight that disambiguates siblings.
+    link = `<span class="opt-link on" data-no-i18n title="${cuT('Draws from this product’s stock', '占用该商品库存')}">🔗 ${nm}${stk}` +
       `<button type="button" class="opt-unlink" title="${cuT('Unlink', '取消关联')}" onclick="optUnlink(${oi}, ${ci})">✕</button></span>`;
   } else if (paid) {
     link = `<button type="button" class="btn btn-sm opt-link-btn" title="${cuT('Link a product so this extra uses its stock', '关联商品,使此加项占用其库存')}" onclick="optLinkPick(${oi}, ${ci})">${cuT('+ Stock product', '+ 关联库存商品')}</button>`;
@@ -2524,7 +2528,7 @@ function _optChoiceRow(o, oi, c, ci) {
   const picking = OPT_PICK && OPT_PICK.oi === oi && OPT_PICK.ci === ci;
   const picker = picking ? `<div class="opt-picker">` +
     `<input id="opt-search" class="bu-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to use for stock…', '搜索作为库存来源的商品…')}" oninput="optPickerList()">` +
-    `<div id="opt-picklist" class="bu-picklist"></div></div>` : '';
+    `<div id="opt-picklist" class="bu-picklist" data-no-i18n></div></div>` : '';
   return `<div class="opt-choice" data-oi="${oi}" data-ci="${ci}" ondragover="optDragOver(event,'choice',${oi})" ondrop="optDrop(event,'choice',${oi},${ci})" ondragleave="optDragLeave(event)">` +
     `<span class="opt-drag" draggable="true" title="${cuT('Drag to reorder', '拖动排序')}" ondragstart="optDragStart(event,'choice',${oi},${ci})" ondragend="optDragEnd()">${OPT_GRIP}</span>` +
     def +
