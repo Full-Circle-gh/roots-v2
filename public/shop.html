@@ -546,7 +546,7 @@ function renderCartItems(){
 // Delivery-only MVP: pick/add address → /checkout/quote (fees + slots) → place
 // via /orders (handles the out-of-stock fallback). Server re-prices & re-checks
 // stock authoritatively. Payment is Phase 3c (order is created pending_payment).
-var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null };
+var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null, offersDone:false, _offers:null, _offerSig:'', _offerSkew:0, _offerTimer:null };
 function coItems(){return cartGet().map(l=>({product_id:l.product_id,qty:l.qty,choices:l.choices||[]}));}
 function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
 function coErrMsg(code){const map={
@@ -628,6 +628,7 @@ async function coQuote(){
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
   renderCoSlots(d); renderCoSummary(d);
+  coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
 function renderCoSlots(d){
   const box=$('#coSlots'); if(!box)return; const sc=d.scheduling||{}; const slots=Array.isArray(sc.slots)?sc.slots:[];
@@ -652,10 +653,135 @@ function renderNoZone(d){
   const s=$('#coSummary'); if(s)s.innerHTML='<div class="co-msg" style="color:var(--berry)">'+(state.lang==='cn'?'抱歉，该地址暂不支持配送。':'Sorry, we don’t deliver to this address yet.')+(d&&d.kitchen_address?'<br>'+esc(d.kitchen_address):'')+'</div>';
   const place=$('#coPlace'); if(place)place.disabled=true;
 }
+
+/* ════════════ LAST-CHANCE OFFERS (pre-pay upsell) ════════════ */
+// Prefetch add-on offers for the current cart (cached by cart signature) so the
+// pre-pay popup opens instantly; an empty list keeps the popup suppressed. The
+// server returns complements to the cart + anything on an active flash sale.
+function coOfferSig(){return coItems().map(i=>i.product_id+'x'+i.qty).sort().join(',');}
+async function coLoadOffers(){
+  const items=coItems(); if(!items.length){co._offers=[];co._offerSig='';return;}
+  const sig=coOfferSig();
+  if(sig===co._offerSig&&Array.isArray(co._offers))return;   // cart unchanged
+  co._offerSig=sig;
+  try{
+    const r=await fetch('/api/retail/checkout/offers',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify({items})});
+    const j=await r.json().catch(()=>({}));
+    const list=Array.isArray(j&&j.data)?j.data:[];
+    co._offerSkew=(Number(j&&j.meta&&j.meta.server_time_ms)||Date.now())-Date.now();
+    const inCart=new Set(items.map(i=>Number(i.product_id)));
+    co._offers=list.filter(o=>!inCart.has(Number(o.id)));
+  }catch(e){/* offers are optional — never block checkout */}
+}
+function coFmtCountdown(ms){
+  const s=Math.max(0,Math.floor(ms/1000)),h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=s%60;
+  if(h>0)return state.lang==='cn'?`${h}小时${m}分`:`${h}h ${String(m).padStart(2,'0')}m`;
+  return `${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`;
+}
+function coOfferRows(){
+  const now=Date.now()+(co._offerSkew||0); const rows=[];
+  for(const o of (co._offers||[])){
+    const onFlash=!!o.is_on_flash;
+    const eff=Number(o.effective_price)||Number(o.price)||0;
+    const was=onFlash?(Number(o.price)||0):(Number(o.compare_at_price)>eff?Number(o.compare_at_price):0);
+    const pct=was>eff&&was>0?Math.round((was-eff)/was*100):0;
+    let cd='';
+    if(onFlash&&o.flash&&o.flash.ends_at){const ms=new Date(o.flash.ends_at).getTime()-now;if(ms<=0)continue;cd=coFmtCountdown(ms);}
+    rows.push({id:o.id,name:pick(o.name_en,o.name_cn),image:o.image_data||o.image_url||'',
+      price:money(eff),was:was>eff?money(was):'',off:pct>0?(state.lang==='cn'?('省'+pct+'%'):('-'+pct+'%')):'',
+      tag:o.is_complement?(state.lang==='cn'?'搭配推荐':'GOES WELL WITH'):(state.lang==='cn'?'限时秒杀':'FLASH DEAL'),
+      flash:onFlash,countdown:cd,cta:o.has_options?(state.lang==='cn'?'选规格':'Pick'):(state.lang==='cn'?'加入':'Add')});
+  }
+  return rows;
+}
+function coRenderOfferList(){
+  const box=$('#coOfBody'); if(!box)return;
+  const go=$('#coOfGo'); if(go)go.textContent=(state.lang==='cn'?'去支付 ':'Continue to pay ')+money(Number((co.quote&&co.quote.total)||0));
+  const rows=coOfferRows();
+  if(!rows.length){box.innerHTML='<div class="coof-empty">'+(state.lang==='cn'?'都加好啦 🎉':'All set 🎉')+'</div>';return;}
+  box.innerHTML=rows.map(r=>`<div class="coof-card">
+    ${r.image?`<img class="coof-img" src="${escAttr(r.image)}" alt="">`:'<div class="coof-img coof-ph">🥗</div>'}
+    <div class="coof-main">
+      <div class="coof-tag ${r.flash?'coof-tag--flash':''}">${esc(r.tag)}</div>
+      <div class="coof-name">${esc(r.name)}</div>
+      ${r.countdown?`<div class="coof-count">⏳ ${esc(r.countdown)}</div>`:''}
+      <div class="coof-prow"><span class="coof-price">${r.price}</span>${r.was?`<span class="coof-was">${r.was}</span>`:''}${r.off?`<span class="coof-off">${esc(r.off)}</span>`:''}</div>
+    </div>
+    <button class="coof-add" data-id="${r.id}">${esc(r.cta)}</button>
+  </div>`).join('');
+  box.querySelectorAll('.coof-add').forEach(b=>b.addEventListener('click',()=>coOfferAdd(Number(b.dataset.id))));
+}
+function coInjectOfferStyle(){
+  if($('#coofStyle'))return;
+  const s=document.createElement('style'); s.id='coofStyle';
+  s.textContent=`
+  .coof-overlay{position:fixed;inset:0;z-index:3000;background:rgba(26,35,20,.55);display:flex;align-items:center;justify-content:center;padding:16px;animation:coofFade .18s ease-out}
+  @keyframes coofFade{from{opacity:0}to{opacity:1}}
+  .coof-wrap{width:100%;max-width:420px;max-height:86vh;overflow-y:auto;background:#FFFCF7;border-radius:20px;padding:0 0 8px;box-shadow:0 18px 48px rgba(26,35,20,.38);animation:coofPop .22s cubic-bezier(.2,.9,.3,1.1)}
+  @keyframes coofPop{from{transform:scale(.92);opacity:.6}to{transform:scale(1);opacity:1}}
+  .coof-hero{height:74px;background:linear-gradient(135deg,#e9efd0,#d9e6b3);border-radius:20px 20px 0 0;display:flex;align-items:center;justify-content:center;font-size:34px;margin-bottom:8px}
+  .coof-kicker{text-align:center;font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#6d7a2a}
+  .coof-title{text-align:center;font-size:22px;font-weight:700;color:#1a2314;margin:2px 0 14px}
+  .coof-list{padding:0 16px;display:flex;flex-direction:column;gap:10px}
+  .coof-card{display:flex;align-items:center;gap:12px;padding:10px;border-radius:14px;border:1px solid rgba(109,122,42,.16)}
+  .coof-img{width:60px;height:60px;border-radius:10px;object-fit:cover;flex-shrink:0;background:#f0ede6}
+  .coof-ph{display:flex;align-items:center;justify-content:center;font-size:28px}
+  .coof-main{flex:1;min-width:0}
+  .coof-tag{font-size:10px;letter-spacing:.1em;text-transform:uppercase;font-weight:700;color:#6d7a2a}
+  .coof-tag--flash{color:#c0392b}
+  .coof-name{font-size:15px;color:#1a2314;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .coof-count{font-size:12px;color:#c0392b;font-weight:600}
+  .coof-prow{display:flex;align-items:baseline;gap:8px;margin-top:2px}
+  .coof-price{font-size:16px;font-weight:700;color:#1a2314}
+  .coof-was{font-size:12px;color:#9a9a8a;text-decoration:line-through}
+  .coof-off{font-size:11px;color:#c0392b;font-weight:700}
+  .coof-add{flex-shrink:0;border:none;padding:9px 16px;border-radius:999px;background:var(--lime,#c3e000);color:#1a2314;font-size:14px;font-weight:600;cursor:pointer}
+  .coof-add:active{opacity:.85}
+  .coof-empty{text-align:center;color:#6d7a2a;font-size:14px;padding:10px 0}
+  .coof-go{margin:16px 16px 0;width:calc(100% - 32px);padding:14px 0;border:none;border-radius:12px;background:#1a2314;color:var(--lime,#c3e000);font-size:15px;font-weight:600;cursor:pointer}
+  .coof-go:active{opacity:.9}`;
+  document.head.appendChild(s);
+}
+function coShowOffers(){
+  const rows=coOfferRows();
+  if(!rows.length){co.offersDone=true;return coPlace();}   // all expired since prefetch
+  coInjectOfferStyle();
+  let ov=$('#coOffers');
+  if(!ov){ov=document.createElement('div');ov.id='coOffers';ov.className='coof-overlay';document.body.appendChild(ov);}
+  ov.innerHTML=`<div class="coof-wrap">
+    <div class="coof-hero">🛒</div>
+    <div class="coof-kicker">${state.lang==='cn'?'结账前 · 别错过':'BEFORE YOU PAY'}</div>
+    <div class="coof-title">${state.lang==='cn'?'再加一件？':'Add one more?'}</div>
+    <div id="coOfBody" class="coof-list"></div>
+    <button id="coOfGo" class="coof-go"></button>
+  </div>`;
+  ov.hidden=false;
+  ov.onclick=e=>{if(e.target===ov)coOffersContinue();};
+  $('#coOfGo').addEventListener('click',coOffersContinue);
+  coRenderOfferList();
+  if(co._offerTimer)clearInterval(co._offerTimer);
+  co._offerTimer=setInterval(()=>{const o=$('#coOffers');if(!o||o.hidden){clearInterval(co._offerTimer);co._offerTimer=null;return;}coRenderOfferList();},1000);
+}
+function coCloseOffers(){const ov=$('#coOffers');if(ov)ov.hidden=true;if(co._offerTimer){clearInterval(co._offerTimer);co._offerTimer=null;}}
+async function coOfferAdd(id){
+  const o=(co._offers||[]).find(x=>Number(x.id)===id); if(!o)return;
+  if(o.has_options){co.offersDone=true;coCloseOffers();location.hash='#/product/'+id;return;}  // needs a choice — go to PDP
+  cartAdd({product_id:o.id,qty:1,choices:[],name:pick(o.name_en,o.name_cn),price:Number(o.effective_price)||Number(o.price)||0,image:o.image_data||o.image_url||'',optLabel:''});
+  co._offers=(co._offers||[]).filter(x=>Number(x.id)!==id); co._offerSig='';   // can't re-offer; cart changed
+  toast(state.lang==='cn'?'已加入 🌱':'Added 🌱');
+  await coQuote();        // full re-quote (fees + slots + stock-gate)
+  coRenderOfferList();
+}
+function coOffersContinue(){co.offersDone=true;coCloseOffers();coPlace();}
+
 async function coPlace(){
   if(co.placing)return;
   if(!co.addrId){coMsg(state.lang==='cn'?'请选择配送地址':'Choose a delivery address');return;}
   if(!co.slotId){coMsg(state.lang==='cn'?'请选择配送时间':'Choose a delivery time');return;}
+  // Last-chance upsell: the first time the customer is ready to pay, surface any
+  // prefetched add-on offers once. Continuing or dismissing sets offersDone and
+  // re-enters coPlace, falling straight through to the order POST below.
+  if(!co.offersDone&&Array.isArray(co._offers)&&co._offers.length){ coShowOffers(); return; }
   co.placing=true; $('#coPlace').disabled=true; coMsg('');
   const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId,delivery_slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:0,voucher_code:co.voucher||null,customer_note:co.note||null,idempotency_key:co.idem};
   if(co.fallback)body.fallback_choice=co.fallback;

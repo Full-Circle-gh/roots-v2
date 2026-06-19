@@ -2351,6 +2351,131 @@ router.get('/api/retail/flash-sales', (req, res) => {
   res.json({ success: true, data: rows, meta: { server_time_ms: now } });
 });
 
+// ─── Last-chance checkout offers ───────────────────────────────────────────
+// The "before you pay" upsell. Given the customer's current cart, return up to
+// a handful of ADD-ON candidates worth a one-tap add before they pay:
+//   • complements the operator already curated ("buy together" bundle ids on a
+//     cart product, or extras choices linked to a cart product via stock_product_id)
+//   • anything on an ACTIVE flash sale right now ("discounted opportunities")
+// Ranking: a complement that is ALSO on flash > complement > flash-only.
+// Discounts ride ONLY on these add-on candidates — we never mark down a line
+// already in the cart (cart ids are excluded outright). Returns [] when nothing
+// relevant exists, so the surface can suppress the popup instead of nagging.
+// No category "filler" tier on purpose: the operator chose "show nothing" over
+// weak full-price suggestions. Public (no auth): reads catalogue by id only,
+// no customer data; checkout itself stays login-gated + re-quoted on the client.
+router.post('/api/retail/checkout/offers', express.json(), (req, res) => {
+  const now = Date.now();
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const body = req.body || {};
+  const MAX = Math.min(parseInt(req.query.limit || '4', 10) || 4, 6);
+
+  // Cart product ids — the things we recommend AROUND, and never re-offer.
+  const cartIds = [...new Set((Array.isArray(body.items) ? body.items : [])
+    .map(i => parseInt(i && i.product_id, 10))
+    .filter(Number.isFinite))];
+  const exclude = new Set(cartIds);
+
+  // reason rank: a curated complement beats a bare flash deal.
+  const REASON_RANK = { bundle: 0, extra: 1, flash: 2 };
+  // candidate id → best (lowest-rank) complement reason seen for it.
+  const reasonFor = new Map();
+  const note = (id, reason) => {
+    if (!Number.isFinite(id) || exclude.has(id)) return;
+    const prev = reasonFor.get(id);
+    if (prev == null || REASON_RANK[reason] < REASON_RANK[prev]) reasonFor.set(id, reason);
+  };
+
+  if (cartIds.length) {
+    const ph = cartIds.map(() => '?').join(',');
+    // 1) Curated "buy together" bundle ids on any cart product.
+    try {
+      for (const r of tdb().prepare(
+        `SELECT bundle FROM store_products WHERE id IN (${ph}) AND bundle IS NOT NULL`
+      ).all(...cartIds)) {
+        let b; try { b = JSON.parse(r.bundle); } catch { b = null; }
+        const ids = Array.isArray(b && b.ids) ? b.ids : [];
+        ids.forEach(n => note(parseInt(n, 10), 'bundle'));
+      }
+    } catch (_) { /* bundle column optional — skip on any shape surprise */ }
+    // 2) Extras choices linked to real inventory on any cart product.
+    try {
+      for (const r of tdb().prepare(
+        `SELECT DISTINCT c.stock_product_id AS pid
+           FROM retail_product_option_choices c
+           JOIN retail_product_options o ON o.id = c.option_id
+          WHERE o.product_id IN (${ph}) AND c.stock_product_id IS NOT NULL`
+      ).all(...cartIds)) {
+        note(parseInt(r.pid, 10), 'extra');
+      }
+    } catch (_) { /* options tables optional — skip */ }
+  }
+
+  // 3) Everything on an active flash sale right now — the "right now" deals.
+  const flashRows = tdb().prepare(
+    `SELECT ${RETAIL_PRODUCT_COLS_CARD}, ${hasImageFallbackSql('p')} AS has_group_image
+       FROM store_products p
+      WHERE p.is_published = 1
+        AND COALESCE(p.is_active, 1) = 1
+        AND p.flash_price IS NOT NULL AND p.flash_price > 0
+        AND p.flash_ends_at IS NOT NULL`
+  ).all()
+    .map(hydrateNutrition)
+    .map(r => flashsales.decorateProduct(r, now))
+    .filter(r => r.is_on_flash && !exclude.has(r.id));
+  const flashById = new Map(flashRows.map(r => [r.id, r]));
+  flashRows.forEach(r => note(r.id, 'flash'));
+
+  // Nothing to say → empty list, popup stays hidden.
+  if (!reasonFor.size) {
+    return res.json({ success: true, data: [], meta: { server_time_ms: now } });
+  }
+
+  // Hydrate complement ids we haven't already loaded as flash rows.
+  const needFetch = [...reasonFor.keys()].filter(id => !flashById.has(id));
+  const fetched = new Map();
+  if (needFetch.length) {
+    const ph = needFetch.map(() => '?').join(',');
+    tdb().prepare(
+      `SELECT ${RETAIL_PRODUCT_COLS_CARD}, ${hasImageFallbackSql('p')} AS has_group_image
+         FROM store_products p
+        WHERE p.id IN (${ph}) AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1`
+    ).all(...needFetch)
+      .map(hydrateNutrition)
+      .map(r => flashsales.decorateProduct(r, now))
+      .forEach(r => fetched.set(r.id, r));
+  }
+
+  const offers = [...reasonFor.entries()]
+    .map(([id, reason]) => {
+      const row = flashById.get(id) || fetched.get(id);
+      if (!row) return null;
+      // Sold-out add-ons are pointless to push; the order endpoint would reject
+      // them anyway. (GZ same-day batch nuance is re-checked at re-quote time.)
+      if (Number(row.stock) <= 0) return null;
+      row.offer_reason = reason;            // 'bundle' | 'extra' | 'flash'
+      row.is_complement = reason !== 'flash';
+      return row;
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      // Complement-with-discount first, then complements, then flash-only;
+      // within a tier, soonest-ending flash leads (urgency), else by name.
+      const ra = REASON_RANK[a.offer_reason], rb = REASON_RANK[b.offer_reason];
+      if (ra !== rb) return ra - rb;
+      const fa = a.is_on_flash ? 0 : 1, fb = b.is_on_flash ? 0 : 1;
+      if (fa !== fb) return fa - fb;
+      if (a.is_on_flash && b.is_on_flash) {
+        return new Date(a.flash.ends_at).getTime() - new Date(b.flash.ends_at).getTime();
+      }
+      return String(a.name_en || '').localeCompare(String(b.name_en || ''));
+    })
+    .slice(0, MAX)
+    .map(r => lazifyProductImage(r, baseUrl));
+
+  res.json({ success: true, data: offers, meta: { server_time_ms: now } });
+});
+
 // ─── Auth handshake ──────────────────────────────────────────────────────
 // Flow: mini app calls wx.login → gets `code` → POSTs here → we exchange
 // the code with WeChat's jscode2session API → upsert retail_customers row
