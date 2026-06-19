@@ -432,13 +432,13 @@
       </view>
     </view>
 
-    <view class="opt-row opt-disabled" data-method="alipay">
-      <view class="dot"></view>
+    <view class="opt-row {{alipayEnabled ? '' : 'opt-disabled'}}" data-method="alipay" bindtap="{{alipayEnabled ? 'setPayment' : ''}}">
+      <view class="dot {{alipayEnabled && paymentMethod === 'alipay' ? 'on' : ''}}"></view>
       <view class="pay-swatch" style="background: #1677FF;"></view>
       <view class="opt-body">
         <view class="opt-label f-bear">{{copy.alipayOpt}}</view>
       </view>
-      <view class="soon-pill f-bear">{{copy.comingSoon}}</view>
+      <view wx:if="{{!alipayEnabled}}" class="soon-pill f-bear">{{copy.comingSoon}}</view>
     </view>
 
     <!-- When points fully cover the bill, the picked radio is purely a
@@ -970,6 +970,14 @@
           <view class="bn-tl-lbl f-toni">{{ lang === 'cn' ? '新鲜送达' : 'ARRIVES FRESH' }}</view>
           <view class="bn-tl-date f-bear">{{batchNotice.delivery_date}}</view>
         </view>
+      </view>
+
+      <!-- Freshness recommendation: consume within 48h of arrival -->
+      <view class="bn-tip">
+        <view class="bn-tip-icon">
+          <view class="bn-tip-dot"></view>
+        </view>
+        <view class="bn-tip-text">{{ lang === 'cn' ? '我们建议在收到后 48 小时内享用这些新鲜现做的商品，以获得最佳口感与新鲜度。' : 'We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness.' }}</view>
       </view>
 
       <view class="bn-cta f-toni" bindtap="closeBatchNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
