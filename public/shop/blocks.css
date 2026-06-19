@@ -792,7 +792,10 @@
   .shop-blocks .sb-hero-full.sb-hero-fit-contain {
     aspect-ratio: auto !important; height: auto !important;
     min-height: 380px; max-height: 70vh;
-    background: var(--oat); display: flex; align-items: center; justify-content: center;
+    /* forest backdrop (not oat) so the box fills its 1240 band as a green hero
+       that lines up with the greeting band below, instead of the artwork
+       floating narrow on an invisible oat field. */
+    background: var(--forest); display: flex; align-items: center; justify-content: center;
   }
   .shop-blocks .sb-hero-full.sb-hero-fit-contain .sb-hero-img,
   .shop-blocks .sb-hero-full.sb-hero-fit-contain .sb-hero-video {
