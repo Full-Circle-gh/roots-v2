@@ -13290,8 +13290,9 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                        WHERE sha.order_id = o.id
                          AND sha.mode = 'air'
                          AND sha.dispatched_at IS NOT NULL
-                         AND sha.delivered_at IS NOT NULL
-                         AND DATE(sha.delivered_at) > DATE(sha.dispatched_at, '+1 day')
+                         AND (sha.delivered_at IS NOT NULL OR sha.tracking_status = 'delivered')
+                         AND DATE(COALESCE(sha.delivered_at, sha.tracking_synced_at))
+                               > DATE(sha.dispatched_at, '+1 day')
                        LIMIT 1) AS air_delivery_delayed,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
