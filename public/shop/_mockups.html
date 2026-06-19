@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PC-native block mockups</title>
+<style>
+  /* Brand fonts (served from /assets/fonts) — faithful when served. */
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); unicode-range:U+0024,U+0025,U+0030-0039,U+00A5; font-display:swap; }
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'League Gothic'; src:url('/assets/fonts/LeagueGothic.ttf') format('truetype'); font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
+    --berry:#E96174; --carrot:#FF6B0C; --papaya:#FFAF60; --corn:#F2CA6C;
+    --sky:#B2CFED; --pea:#7BBD3B; --lotus:#EEB8E4; --pink:#F4B8CB; --citrus:#E7E74C; --almond:#C37F4E;
+    --bear:'Bear Serif','DF Yuan',Georgia,serif;
+    --toni:'Toni Grotesk',-apple-system,sans-serif;
+    --gothic:'League Gothic','Bebas Neue',Impact,sans-serif;
+    --aleo:'Aleo',Georgia,serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--oat);color:var(--ink);font-family:var(--aleo);-webkit-font-smoothing:antialiased;}
+  .page{max-width:1240px;margin:0 auto;padding:40px 30px 120px;}
+
+  .lede{margin-bottom:48px;}
+  .lede h1{font-family:var(--bear);font-size:34px;line-height:1.05;}
+  .lede p{font-family:var(--aleo);font-size:16px;color:#5b5347;margin-top:10px;max-width:780px;}
+
+  .case{margin:0 0 64px;}
+  .case-head{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap;}
+  .case-head h2{font-family:var(--bear);font-size:22px;}
+  .tag{font-family:var(--toni);font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+       padding:5px 11px;border-radius:999px;}
+  .tag.one{background:var(--pea);color:#fff;}
+  .tag.two{background:var(--corn);color:var(--ink);}
+  .case-head .note{font-family:var(--aleo);font-size:13px;color:#7a7163;}
+
+  .kicker{font-family:var(--toni);font-size:13px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;}
+  .btn{font-family:var(--toni);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:14px;
+       border:0;border-radius:999px;padding:15px 28px;cursor:pointer;display:inline-block;}
+  .btn.lime{background:var(--lime);color:var(--ink);}
+  .btn.ink{background:var(--ink);color:var(--oat);}
+  .btn.ghost{background:transparent;color:var(--oat);border:2px solid var(--oat);}
+
+  /* ── 1 · HERO — full-bleed split ───────────────────────────────────── */
+  .hero{display:grid;grid-template-columns:1fr 1fr;min-height:520px;border-radius:28px;overflow:hidden;
+        box-shadow:0 24px 60px rgba(54,83,41,.18);}
+  .hero-art{position:relative;background:#2c4422 url('/assets/brand/welcome-roots.jpg') center/cover;}
+  .hero-art::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,0) 60%,rgba(44,68,34,.35));}
+  .hero-panel{background:var(--forest);color:var(--oat);padding:60px 56px;display:flex;flex-direction:column;justify-content:center;gap:18px;}
+  .hero-panel .kicker{color:var(--lime);}
+  .hero-panel h3{font-family:var(--bear);font-size:60px;line-height:.98;}
+  .hero-panel p{font-family:var(--aleo);font-size:19px;line-height:1.45;opacity:.9;max-width:440px;}
+  .hero-cta{display:flex;gap:14px;margin-top:14px;}
+
+  /* ── 2 · GREETING — wide member banner ─────────────────────────────── */
+  .greet{display:grid;grid-template-columns:1fr auto;align-items:center;gap:40px;
+         background:#fff;border:3px solid var(--ink);border-radius:24px;padding:40px 44px;}
+  .greet .kicker{color:var(--olive);}
+  .greet h3{font-family:var(--bear);font-size:46px;line-height:1;margin-top:10px;}
+  .greet p{font-family:var(--aleo);font-size:17px;color:#5b5347;margin-top:12px;}
+  .greet .prog{margin-top:18px;height:12px;width:min(460px,42vw);background:#eadfd2;border-radius:999px;overflow:hidden;}
+  .greet .prog i{display:block;height:100%;width:72%;background:var(--lime);}
+  .pts-card{background:var(--forest);color:var(--oat);border-radius:20px;padding:28px 40px;text-align:center;min-width:200px;}
+  .pts-card .n{font-family:var(--gothic);font-size:72px;line-height:.8;color:var(--lime);}
+  .pts-card .l{font-family:var(--toni);font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin-top:12px;}
+
+  /* ── 3 · CATEGORY — asymmetric bento ───────────────────────────────── */
+  .bento{display:grid;grid-template-columns:repeat(4,1fr);grid-auto-rows:170px;gap:16px;}
+  .btile{position:relative;border-radius:20px;overflow:hidden;padding:22px;display:flex;align-items:flex-end;
+         color:#fff;cursor:pointer;transition:transform .18s ease, box-shadow .18s ease;}
+  .btile:hover{transform:translateY(-4px);box-shadow:0 16px 36px rgba(0,0,0,.18);}
+  .btile::after{content:'';position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.5),rgba(0,0,0,0) 65%);}
+  .btile .cap{position:relative;z-index:1;}
+  .btile .cap .en{font-family:var(--bear);font-size:26px;line-height:1;}
+  .btile .cap .ct{font-family:var(--toni);font-size:12px;font-weight:700;letter-spacing:.1em;opacity:.9;}
+  .btile.feat{grid-column:span 2;grid-row:span 2;}
+  .btile.feat .cap .en{font-size:44px;}
+  .b1{background:#3f6b2e;} .b2{background:#7BBD3B;} .b3{background:var(--berry);}
+  .b4{background:var(--corn);color:var(--ink);} .b4::after{background:linear-gradient(to top,rgba(0,0,0,.28),transparent 65%);}
+  .b5{background:var(--sky);color:var(--ink);} .b5::after{background:linear-gradient(to top,rgba(0,0,0,.22),transparent 65%);}
+  .b6{background:var(--lotus);color:var(--ink);} .b6::after{background:linear-gradient(to top,rgba(0,0,0,.22),transparent 65%);}
+  .b7{background:var(--papaya);color:var(--ink);} .b7::after{background:linear-gradient(to top,rgba(0,0,0,.24),transparent 65%);}
+
+  /* ── 4 · PRODUCT GRID — featured + 4-up with hover quick-add ───────── */
+  .pgrid{display:grid;grid-template-columns:1.3fr 1fr 1fr;gap:22px;}
+  .pcard{cursor:pointer;}
+  .pcard .ph{position:relative;aspect-ratio:4/5;background:#e3dccf;border-radius:16px;overflow:hidden;}
+  .pcard.lg .ph{aspect-ratio:auto;height:100%;min-height:380px;}
+  .pcard.lg{grid-row:span 2;display:flex;flex-direction:column;}
+  .pcard .ph::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,#cdbfa8,#b7a98f);opacity:.5;}
+  .quick{position:absolute;left:14px;right:14px;bottom:14px;z-index:2;opacity:0;transform:translateY(8px);
+         transition:.18s ease;background:var(--ink);color:var(--oat);border-radius:999px;text-align:center;
+         font-family:var(--toni);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:13px;padding:13px 0;}
+  .pcard:hover .quick{opacity:1;transform:none;}
+  .pcard .nm{font-family:var(--bear);font-size:20px;margin-top:12px;line-height:1.1;}
+  .pcard.lg .nm{font-size:28px;}
+  .pcard .pr{font-family:var(--gothic);font-size:24px;color:var(--olive);margin-top:4px;}
+  .badge{position:absolute;top:12px;left:12px;z-index:2;font-family:var(--toni);font-weight:700;font-size:11px;
+         letter-spacing:.1em;text-transform:uppercase;background:var(--berry);color:#fff;padding:5px 11px;border-radius:999px;}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="lede">
+    <h1>PC-native blocks — direction mockups</h1>
+    <p>Static design targets (real brand fonts, colours &amp; content) showing what each block becomes when designed <em>for</em> a monitor instead of a phone layout widened. Tags show the build path each look implies:
+      <span class="tag one" style="margin:0 4px">#1 CSS only</span> re-composes one block's own elements (no editor change);
+      <span class="tag two" style="margin:0 4px">#2 regions</span> needs the desktop layout layer.</p>
+  </div>
+
+  <!-- 1 HERO -->
+  <section class="case">
+    <div class="case-head"><h2>1 · Hero</h2><span class="tag one">#1 CSS only</span>
+      <span class="note">Full-bleed split: image one side, headline + CTAs the other. No more centred poster with margins.</span></div>
+    <div class="hero">
+      <div class="hero-art"></div>
+      <div class="hero-panel">
+        <div class="kicker">Welcome to Roots</div>
+        <h3>Real food, from soil to soul.</h3>
+        <p>Whole-food pantry staples, fresh deli, and ready-to-eat meals — made from food, nothing else.</p>
+        <div class="hero-cta"><a class="btn lime">Shop the garden</a><a class="btn ghost">Our story</a></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 GREETING -->
+  <section class="case">
+    <div class="case-head"><h2>2 · Greeting</h2><span class="tag one">#1 CSS only</span>
+      <span class="note">Wide member banner: greeting + reward progress left, points card right.</span></div>
+    <div class="greet">
+      <div>
+        <div class="kicker">Welcome back</div>
+        <h3>Good afternoon, Asher.</h3>
+        <p>You're <b>120 points</b> from a free oat milk — keep it going.</p>
+        <div class="prog"><i></i></div>
+      </div>
+      <div class="pts-card"><div class="n">380</div><div class="l">Roots points</div></div>
+    </div>
+  </section>
+
+  <!-- 3 CATEGORY -->
+  <section class="case">
+    <div class="case-head"><h2>3 · Categories ("Shop the garden")</h2><span class="tag one">#1 CSS only</span>
+      <span class="note">Asymmetric image bento instead of 7 little circles in a row.</span></div>
+    <div class="bento">
+      <div class="btile feat b1"><div class="cap"><div class="ct">24 items</div><div class="en">Ready to Eat</div></div></div>
+      <div class="btile b2"><div class="cap"><div class="ct">31 items</div><div class="en">Fresh &amp; Deli</div></div></div>
+      <div class="btile b3"><div class="cap"><div class="ct">18 items</div><div class="en">Drinks</div></div></div>
+      <div class="btile b4"><div class="cap"><div class="ct">42 items</div><div class="en">Dry &amp; Pantry</div></div></div>
+      <div class="btile b5"><div class="cap"><div class="ct">12 items</div><div class="en">Wellness</div></div></div>
+      <div class="btile b6"><div class="cap"><div class="ct">27 items</div><div class="en">Snacks &amp; Treats</div></div></div>
+      <div class="btile b7"><div class="cap"><div class="ct">15 items</div><div class="en">Home &amp; Body</div></div></div>
+    </div>
+  </section>
+
+  <!-- 4 PRODUCT GRID -->
+  <section class="case">
+    <div class="case-head"><h2>4 · Product grid</h2><span class="tag one">#1 CSS only</span>
+      <span class="note">Featured large tile + 4-up, with hover quick-add. (5-up plain grid is the simpler variant.)</span></div>
+    <div class="pgrid">
+      <div class="pcard lg"><div class="ph"><span class="badge">Bestseller</span><div class="quick">+ Quick add</div></div>
+        <div class="nm">Stone-ground Almond Butter</div><div class="pr">¥58</div></div>
+      <div class="pcard"><div class="ph"><div class="quick">+ Quick add</div></div><div class="nm">Oat Milk · Barista</div><div class="pr">¥22</div></div>
+      <div class="pcard"><div class="ph"><div class="quick">+ Quick add</div></div><div class="nm">Sourdough Loaf</div><div class="pr">¥34</div></div>
+      <div class="pcard"><div class="ph"><div class="quick">+ Quick add</div></div><div class="nm">Kimchi · House</div><div class="pr">¥28</div></div>
+      <div class="pcard"><div class="ph"><div class="quick">+ Quick add</div></div><div class="nm">Cold-press Greens</div><div class="pr">¥26</div></div>
+    </div>
+  </section>
+
+  <p style="font-family:var(--aleo);font-size:13px;color:#7a7163;border-top:1px solid #ddd0c0;padding-top:20px">
+    All four redesigns above are <b>#1 (CSS only)</b> — they rearrange each block's existing elements, no editor changes.
+    <b>#2 (regions)</b> would add things like the greeting sitting beside the order tracker, or a category rail next to a promo — cross-block arrangement.</p>
+
+</div>
+</body>
+</html>

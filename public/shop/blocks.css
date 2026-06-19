@@ -720,3 +720,66 @@
   }
   .shop-blocks .sb-hero-full { border-radius: calc(24 * var(--u)); overflow: hidden; }
 }
+
+/* ════════════════════════════════════════════════════════════════════════
+   PC-NATIVE BLOCKS (Phase A) — blocks designed FOR the surface, not the phone
+   layout widened. 3 tiers: phone <768 (app-faithful, above) · tablet 768-1023
+   (simplified) · desktop >=1024 (full composition). Each PC block renders a
+   canonical `.sb-*-pc` body from the renderer; the phone body is hidden >=768.
+   Sizes here are FIXED px (a desktop type scale), never *var(--u), so they're
+   independent of the phone scale unit.
+
+   ① CATEGORIES — image bento (replaces 7 circles / classic tiles on desktop).
+   ════════════════════════════════════════════════════════════════════════ */
+.shop-blocks .sb-cat-pc { display: none; }
+
+@media (min-width: 768px) {
+  /* roomier band on desktop tiers */
+  .shop-blocks .sb-blk-outer[data-block-type="category_tabs"] { max-width: 1240px; }
+
+  /* swap phone body -> PC bento */
+  .shop-blocks .sb-cat-phone { display: none; }
+  .shop-blocks .sb-cat-pc { display: block; }
+
+  /* PC head: prominent title, see-all top-right */
+  .shop-blocks .sb-cattabs .sb-cat-head { margin-bottom: 28px; align-items: flex-end; }
+  .shop-blocks .sb-cattabs .sb-kicker { font-size: 13px; }
+  .shop-blocks .sb-cattabs .sb-ttl { font-size: 40px; }
+  .shop-blocks .sb-cattabs .sb-more { font-size: 13px; }
+
+  .shop-blocks .sb-pcbento {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(2, 1fr);
+    grid-auto-rows: 150px;
+  }
+  .shop-blocks .sb-pcb-tile {
+    position: relative; border-radius: 18px; overflow: hidden;
+    display: flex; align-items: flex-end; padding: 20px;
+    color: var(--ink); cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .shop-blocks .sb-pcb-tile.has-img { color: #fff; }
+  .shop-blocks .sb-pcb-tile:hover { transform: translateY(-4px); box-shadow: 0 16px 36px rgba(0,0,0,.18); }
+  .shop-blocks .sb-pcb-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .shop-blocks .sb-pcb-tile.has-img::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(to top, rgba(0,0,0,.55), rgba(0,0,0,0) 65%);
+  }
+  .shop-blocks .sb-pcb-cap { position: relative; z-index: 1; }
+  .shop-blocks .sb-pcb-ct { font-family: var(--f-toni); font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; opacity: .9; }
+  .shop-blocks .sb-pcb-en { font-family: var(--f-bear); font-size: 24px; line-height: 1; margin-top: 4px; }
+}
+
+/* tablet: uniform bento (no asymmetric feature tile) */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .shop-blocks .sb-pcbento { grid-template-columns: repeat(3, 1fr); }
+}
+
+/* desktop: asymmetric bento — first tile is a 2x2 feature */
+@media (min-width: 1024px) {
+  .shop-blocks .sb-blk-outer[data-block-type="category_tabs"] { max-width: 1240px; }
+  .shop-blocks .sb-cattabs .sb-ttl { font-size: 48px; }
+  .shop-blocks .sb-pcbento { grid-template-columns: repeat(4, 1fr); grid-auto-rows: 168px; }
+  .shop-blocks .sb-pcb-tile.feat { grid-column: span 2; grid-row: span 2; }
+  .shop-blocks .sb-pcb-tile.feat .sb-pcb-en { font-size: 44px; }
+}
