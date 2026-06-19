@@ -83,8 +83,29 @@
   border-top: 2rpx dashed rgba(0, 0, 0, 0.25);
 }
 .row:first-child { border-top: 3rpx solid var(--ink); margin-top: 24rpx; }
-.thumb { width: 128rpx; height: 152rpx; background: var(--oat); border: 2rpx solid var(--ink); }
+.thumb-wrap { position: relative; flex-shrink: 0; }
+.thumb { display: block; width: 128rpx; height: 152rpx; background: var(--oat); border: 2rpx solid var(--ink); }
 .thumb-empty { background: var(--oat); padding: 24rpx; box-sizing: border-box; opacity: 0.55; }
+/* Circular × delete badge overlapping the image's top-left corner — the
+   universal "remove from cart" affordance. Opens the confirm modal. */
+.thumb-del {
+  position: absolute;
+  top: -18rpx;
+  left: -18rpx;
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  border: 3rpx solid #FFFCF7;
+  font-size: calc(34rpx * var(--font-scale));
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+.thumb-del:active { background: #E96174; }
 .info { flex: 1; min-width: 0; }
 .name { font-size: calc(34rpx * var(--font-scale)); line-height: 1.05; }
 .meta { font-size: calc(20rpx * var(--font-scale)); color: var(--olive); margin-top: 4rpx; }
@@ -105,8 +126,7 @@
 /* Chosen options (e.g. dressing) — darker than the size meta so the pick reads
    as a real choice, not a spec. */
 .opt-meta { font-size: calc(22rpx * var(--font-scale)); color: var(--ink); margin-top: 4rpx; line-height: 1.2; }
-.qty { display: flex; align-items: center; margin-top: 12rpx; }
-.stepper { display: flex; align-items: center; gap: 20rpx; }
+.qty { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; }
 .qty-btn {
   width: 48rpx; height: 48rpx;
   border: 2rpx solid var(--ink);
@@ -119,23 +139,6 @@
   text-align: center;
   font-size: calc(26rpx * var(--font-scale));
 }
-/* Clear, labeled delete control. The old bare "×" floated unlabeled and read
-   as decoration; this bordered trash + "Remove/删除" pill is obviously tappable
-   and obviously destructive. */
-.del-btn {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8rpx;
-  padding: 8rpx 20rpx;
-  border: 2rpx solid rgba(0, 0, 0, 0.22);
-  border-radius: 999rpx;
-  color: var(--olive);
-  font-size: calc(22rpx * var(--font-scale));
-  letter-spacing: 0.04em;
-}
-.del-btn:active { background: rgba(233, 97, 116, 0.1); border-color: #E96174; color: #E96174; }
-.del-glyph { font-size: calc(24rpx * var(--font-scale)); line-height: 1; }
 .line-total { font-size: calc(44rpx * var(--font-scale)); }
 .line-total.is-flash { color: #E96174; }
 .line-total-stack {
