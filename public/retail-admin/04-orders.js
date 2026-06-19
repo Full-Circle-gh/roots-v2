@@ -1166,14 +1166,32 @@ function shipByPlan(o) {
   if (o.promised_ship_date) {
     const ship = fmtDateShort(parseSchedFor(o.promised_ship_date));
     const arr = o.promised_delivery_date ? fmtDateShort(parseSchedFor(o.promised_delivery_date)) : '';
+    if (arr) {
+      // Lead with the DELIVERY date (what the customer expects), like a
+      // scheduled order, and carry the make-fresh SHIP date in the sub-line so a
+      // packer still knows the make/ship day and won't ship early off the shelf.
+      // Urgency stays pinned to the ship date (the date the operator acts on),
+      // but we suppress the stale "today/tomorrow" word downstream because it now
+      // sits beside the ARRIVAL date and would misread (Jun 21 isn't "tomorrow";
+      // the Jun 20 ship is). A genuinely missed ship date still flags overdue.
+      return {
+        kind: 'batch', kickerShow: true,
+        kickerEn: done ? reqEn : 'Deliver', kickerCn: done ? reqCn : '送达时间',
+        headlineRaw: arr,
+        subEn: `🥗 made fresh · ship ${ship}`,
+        subCn: `🥗 现做 · ${ship}发货`,
+        cellSubEn: `made fresh · ship ${ship}`,
+        cellSubCn: `现做 · ${ship}发货`,
+        urgencyDate: o.promised_ship_date, urgencyBasis: 'arrival',
+      };
+    }
+    // No arrival estimate — fall back to the make-fresh SHIP date as the headline.
     return {
       kind: 'batch',
       kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
       headlineRaw: ship,
-      subEn: `🥗 made fresh${arr ? ` · arrives ~${arr}` : ''}`,
-      subCn: `🥗 现做${arr ? ` · 约${arr}送达` : ''}`,
-      cellSubEn: `made fresh${arr ? ` · arrives ~${arr}` : ''}`,
-      cellSubCn: `现做${arr ? ` · 约${arr}送达` : ''}`,
+      subEn: '🥗 made fresh', subCn: '🥗 现做',
+      cellSubEn: 'made fresh', cellSubCn: '现做',
       urgencyDate: o.promised_ship_date, urgencyBasis: 'arrival',
     };
   }
@@ -1287,6 +1305,10 @@ function renderShipByCell(o) {
   let tag = '';
   if (actionable) {
     if (u.level === 'overdue')       tag = ` · <b>${cuT('OVERDUE', '已逾期')}</b>`;
+    // Batch rows lead with the ARRIVAL date but colour by the SHIP date, so a
+    // "today/tomorrow" word here would misread against the headline — suppress it
+    // (the concrete ship date is already in the sub-line). Keep it for others.
+    else if (p.kind === 'batch') {}
     else if (u.level === 'today')    tag = ` · ${cuT('today', '今天')}`;
     else if (u.level === 'tomorrow') tag = ` · ${cuT('tomorrow', '明天')}`;
   }
@@ -1303,7 +1325,7 @@ function renderShipByCell(o) {
   // those dates masquerade as ship deadlines under the "SHIP BY" header. Show the
   // per-row kicker ("Deliver" / "Pickup time") only for those, so the genuine
   // ship-by rows stay clean (the header already names them).
-  const showKicker = (p.kind === 'scheduled' || p.kind === 'pickup');
+  const showKicker = !!p.kickerShow || p.kind === 'scheduled' || p.kind === 'pickup';
   const kicker = showKicker
     ? `<div style="font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--accent); margin-bottom: 1px;">${cuT(p.kickerEn, p.kickerCn)}</div>`
     : '';
@@ -1541,6 +1563,9 @@ function renderShipByTile(o) {
   } else if (u.dateOnly) {
     // Calendar-day badge — no hours (a bare date has no meaningful time-of-day).
     if (u.level === 'overdue')       badge = cuT('⚠ overdue', '⚠ 已逾期');
+    // Batch leads with the arrival date but colours by the ship date — a relative
+    // word would misread beside the headline, so show only the overdue alert.
+    else if (p.kind === 'batch') {}
     else if (u.level === 'today')    badge = cuT('today', '今天');
     else if (u.level === 'tomorrow') badge = cuT('tomorrow', '明天');
     else if (u.level === 'later')    badge = cuT(`in ${u.days}d`, `${u.days}天后`);
