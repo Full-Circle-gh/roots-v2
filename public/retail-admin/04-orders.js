@@ -3469,12 +3469,29 @@ async function ensureTrackingCarriers() {
   return TRACKING_CARRIERS;
 }
 
+// Delivered date (YYYY-MM-DD) for a parcel. Prefer the stamped delivered_at
+// (operator hit "Mark delivered"), but fall back to the carrier's own delivery
+// event: JD live-sync flips tracking_status to 'delivered' and logs a 已送达
+// event WITHOUT ever stamping delivered_at, so an air parcel can read
+// "Dispatched" on its pill yet already be delivered per JD. Honour that or the
+// delay alert never fires for JD-synced parcels.
+function shipmentDeliveredDate(s) {
+  const stamped = (s.delivered_at || '').slice(0, 10);
+  if (stamped && stamped !== '0000-00-00') return stamped;
+  const t = s.tracking;
+  const delivered = s.tracking_status === 'delivered' || (t && t.status_code === 'delivered');
+  if (!delivered) return '';
+  const evs = (t && t.events) || [];
+  const hit = evs.find(ev => /送达|签收|delivered/i.test(`${ev.description_cn || ''} ${ev.description_en || ''}`)) || evs[0];
+  return ((hit && hit.time) || (t && t.synced_at) || '').slice(0, 10);
+}
+
 // Returns how many days late an air shipment arrived, or 0 if on time / not air.
 // An "Air shipment · 空运" parcel promises next-day arrival, so the deadline is
-// simply the dispatch date + 1 day: sent out today → must arrive tomorrow.
+// the dispatch date + 1 day: sent out today → must arrive tomorrow.
 function airShipmentDelayDays(o, s) {
   if ((s.mode || '') !== 'air') return 0;
-  const deliveredDate  = (s.delivered_at  || '').slice(0, 10);
+  const deliveredDate  = shipmentDeliveredDate(s);
   const dispatchedDate = (s.dispatched_at || '').slice(0, 10);
   if (!deliveredDate  || deliveredDate  === '0000-00-00') return 0;
   if (!dispatchedDate || dispatchedDate === '0000-00-00') return 0;
