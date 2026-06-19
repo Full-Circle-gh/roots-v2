@@ -306,9 +306,30 @@ async function route(){
 async function renderHome(){
   const layout = state.config && state.config.home && state.config.home.layout;
   if(!(Array.isArray(layout) && layout.length) || !window.ShopBlocks) return renderHomeAuto();
-  // Block engine needs the full product list + active flash sales as context
-  // (by-id lookups, manual grids, flash strip). Fetch once, then cache.
-  if(!state.homeProducts){ try{ state.homeProducts = await api('/api/retail/products?limit=100'); }catch(e){ state.homeProducts=[]; } }
+  // Block engine needs products as context for by-id lookups (manual grids,
+  // featured items, bundles). Fetch a base pull PLUS every product id the layout
+  // references explicitly — manual product_ids/featured product_id/bundle product
+  // — since hand-picked items often sort past the base pull. Bundles need their
+  // components too (bundle_components=1). Referenced copies win (carry components).
+  if(!state.homeProducts){
+    let base=[]; try{ base=(await api('/api/retail/products?limit=100'))||[]; }catch(e){}
+    const ids=new Set();
+    for(const b of layout){
+      (b.product_ids||[]).forEach(id=>id&&ids.add(id));
+      if(b.product_id) ids.add(b.product_id);
+      if(b.bundle_product_id) ids.add(b.bundle_product_id);
+    }
+    const refIds=[...ids];
+    if(refIds.length){
+      try{
+        const ref=(await api('/api/retail/products?ids='+refIds.join(',')+'&bundle_components=1&limit=200'))||[];
+        const map=new Map(base.map(p=>[p.id,p]));
+        for(const p of ref) map.set(p.id,p);
+        base=[...map.values()];
+      }catch(e){}
+    }
+    state.homeProducts=base;
+  }
   if(!state.flash){ try{ state.flash = await api('/api/retail/flash-sales'); }catch(e){ state.flash=[]; } }
   ShopBlocks.stopTimers();
   ShopBlocks.setContext({ lang:state.lang, products:state.homeProducts||[], categories:state.cats, flashSales:state.flash||[], config:state.config });
