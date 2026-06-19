@@ -546,7 +546,7 @@ function renderCartItems(){
 // Delivery-only MVP: pick/add address → /checkout/quote (fees + slots) → place
 // via /orders (handles the out-of-stock fallback). Server re-prices & re-checks
 // stock authoritatively. Payment is Phase 3c (order is created pending_payment).
-var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', quote:null, placing:false, idem:null, fallback:null, showAddForm:false };
+var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null };
 function coItems(){return cartGet().map(l=>({product_id:l.product_id,qty:l.qty,choices:l.choices||[]}));}
 function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
 function coErrMsg(code){const map={
@@ -662,7 +662,7 @@ async function coPlace(){
   let r,j;
   try{ r=await fetch('/api/retail/orders',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); co.placing=false; $('#coPlace').disabled=false; return; }
-  if(r.ok&&j.success){ coOnPlaced(j.data); return; }
+  if(r.ok&&j.success){ coStartPayment(j.data); return; }
   co.placing=false; $('#coPlace').disabled=false;
   if(r.status===409&&j.error==='needs_fallback_confirmation'){ coFallback(); return; }
   coMsg(coErrMsg(j.error));
@@ -675,14 +675,91 @@ function coFallback(){
   $('#fbFull').onclick=()=>{co.fallback='full_from_fallback';coPlace();};
   $('#fbCancel').onclick=()=>{co.fallback='cancel_missing';coPlace();};
 }
-function coOnPlaced(order){
-  try{ localStorage.removeItem('shop_cart'); }catch{} cartBadge(); co.idem=null; co.fallback=null; co.note=''; co.voucher='';
+/* ════════════ PAYMENT (Phase 3c — manual Alipay QR + screenshot) ════════════ */
+async function coStartPayment(order){
+  try{ localStorage.removeItem('shop_cart'); }catch{} cartBadge();
+  co.idem=null; co.fallback=null; co.note=''; co.voucher='';
+  $('#view').innerHTML=`<div class="wrap"><div class="co"><div class="co-ok"><div class="co-msg" style="color:var(--muted)">${state.lang==='cn'?'正在创建支付…':'Setting up payment…'}</div></div></div></div>`;
+  document.title=(state.lang==='cn'?'支付':'Payment')+' · '+state.brand;
+  let j;
+  try{ j=await postJson('/api/retail/payment/create',{order_id:order.id}); }
+  catch(e){ return coOrderPlaced(order); }   // payment not available → order stands
+  if(j&&j.status==='paid') return coPaid(order);
+  if(j&&j.method==='alipay'&&j.mode==='manual'&&j.qr_png) return coRenderAlipay(order,j);
+  return coOrderPlaced(order);
+}
+function coRenderAlipay(order,p){
+  $('#view').innerHTML=`<div class="wrap"><div class="co">
+    <h1>${state.lang==='cn'?'支付宝付款':'Pay with Alipay'}</h1>
+    <div class="co-sec" style="text-align:center">
+      <div style="font-family:var(--bf-gothic);font-size:30px;letter-spacing:.03em">${esc(p.total||money(order.total))}</div>
+      <img src="${escAttr(p.qr_png)}" alt="Alipay QR" style="width:240px;max-width:78%;border-radius:12px;margin:10px auto;display:block">
+      ${p.account?`<div style="color:var(--muted);font-size:13px">${esc(p.account)}</div>`:''}
+      <div class="co-msg" style="color:var(--muted);text-align:left;margin-top:12px">${state.lang==='cn'?'1. 用支付宝「扫一扫」扫描二维码<br>2. 务必按显示金额付款<br>3. 付款后在下方上传付款截图':'1. Scan the QR with Alipay “Scan”<br>2. Pay the EXACT amount shown<br>3. Upload your payment screenshot below'}</div>
+    </div>
+    <div class="co-sec">
+      <h3>${state.lang==='cn'?'上传付款截图':'Upload payment screenshot'}</h3>
+      <input type="file" id="payProof" accept="image/*" style="width:100%;font:inherit">
+      <div class="co-msg" id="payMsg" style="color:var(--muted)"></div>
+    </div>
+    <div style="text-align:center;margin-top:10px"><a class="more" href="#/shop">${state.lang==='cn'?'稍后支付（订单已保留）':'Pay later (order is saved)'}</a></div>
+  </div></div>`;
+  document.title=(state.lang==='cn'?'支付':'Payment')+' · '+state.brand;
+  $('#payProof').addEventListener('change',e=>coUploadProof(order,e.target.files&&e.target.files[0]));
+  coPollStatus(order);
+}
+function coUploadProof(order,file){
+  const msg=$('#payMsg'); if(!file||!msg)return; msg.style.color='var(--muted)';
+  if(file.size>5.5*1024*1024){msg.textContent=state.lang==='cn'?'图片过大（上限5MB）':'Image too large (max 5MB)';return;}
+  msg.textContent=state.lang==='cn'?'上传中…':'Uploading…';
+  const reader=new FileReader();
+  reader.onload=async()=>{
+    try{ const d=await postJson('/api/retail/payment/alipay-proof/'+order.id,{image:reader.result});
+      if(d&&d.auto_paid)return coPaid(order);
+      msg.textContent=state.lang==='cn'?'已上传，等待商家确认 ✓':'Uploaded — awaiting confirmation ✓';
+    }catch(e){ msg.style.color='var(--berry)'; msg.textContent=state.lang==='cn'?'上传失败，请重试':'Upload failed — please retry'; }
+  };
+  reader.onerror=()=>{msg.style.color='var(--berry)';msg.textContent=state.lang==='cn'?'读取图片失败':'Could not read image';};
+  reader.readAsDataURL(file);
+}
+function coPollStatus(order){
+  clearInterval(co.pollTimer);
+  co.pollTimer=setInterval(async()=>{
+    if(!document.querySelector('#payProof')){ clearInterval(co.pollTimer); return; }   // left the page
+    let d; try{ d=await api('/api/retail/payment/status/'+order.id); }catch(e){ return; }
+    if(!d)return;
+    if(d.status==='paid'||d.status==='awaiting_restock'){ clearInterval(co.pollTimer); coPaid(order); }
+    else if(d.status==='cancelled'){ clearInterval(co.pollTimer); coOrderCancelled(order); }
+  },3000);
+}
+function coPaid(order){
+  clearInterval(co.pollTimer);
+  $('#view').innerHTML=`<div class="wrap"><div class="co"><div class="co-ok">
+    <div style="font-size:46px">✅</div>
+    <div class="big">${state.lang==='cn'?'支付成功！':'Payment received!'}</div>
+    <div>${state.lang==='cn'?'订单号':'Order'} <b>${esc(order.order_no||('#'+order.id))}</b></div>
+    <div class="co-msg" style="color:var(--muted)">${state.lang==='cn'?'我们正在为您备货 🌱':'We’re preparing your order 🌱'}</div>
+    <a class="more" href="#/shop">${state.lang==='cn'?'继续购物 →':'Continue shopping →'}</a>
+  </div></div></div>`;
+  document.title=(state.lang==='cn'?'支付成功':'Paid')+' · '+state.brand;
+}
+function coOrderCancelled(order){
+  $('#view').innerHTML=`<div class="wrap"><div class="co"><div class="co-ok">
+    <div class="big">${state.lang==='cn'?'订单已取消':'Order cancelled'}</div>
+    <div class="co-msg" style="color:var(--muted)">${state.lang==='cn'?'未在时限内完成付款，订单已自动取消。':'It wasn’t paid in time, so the order was cancelled.'}</div>
+    <a class="more" href="#/shop">${state.lang==='cn'?'重新购物 →':'Back to shop →'}</a>
+  </div></div></div>`;
+}
+// Order created but online payment isn't available (gateway off / not configured):
+// keep the order and tell the customer staff will follow up.
+function coOrderPlaced(order){
+  clearInterval(co.pollTimer);
   $('#view').innerHTML=`<div class="wrap"><div class="co"><div class="co-ok">
     <div style="font-size:44px">🌱</div>
     <div class="big">${state.lang==='cn'?'下单成功！':'Order placed!'}</div>
     <div>${state.lang==='cn'?'订单号':'Order'} <b>${esc(order.order_no||('#'+order.id))}</b></div>
     <div class="co-line tot" style="justify-content:center;border:0">${money(order.total)}</div>
-    <div class="co-msg" style="color:var(--muted)">${state.lang==='cn'?'在线支付即将上线，我们会尽快与您联系确认订单。':'Online payment is coming soon — we’ll contact you to confirm this order.'}</div>
+    <div class="co-msg" style="color:var(--muted)">${state.lang==='cn'?'我们会尽快与您联系确认付款。':'We’ll contact you shortly to arrange payment.'}</div>
     <a class="more" href="#/shop">${state.lang==='cn'?'继续购物 →':'Continue shopping →'}</a>
   </div></div></div>`;
   document.title=(state.lang==='cn'?'下单成功':'Order placed')+' · '+state.brand;
@@ -699,6 +776,7 @@ function parseHash(){
 async function route(){
   const {seg,params}=parseHash();
   if(window.ShopBlocks) ShopBlocks.stopTimers();   // clear any home countdowns before leaving
+  clearInterval(co.pollTimer);                      // stop any payment-status polling
   // highlight nav
   document.querySelectorAll('nav.links a').forEach(a=>{
     const n=a.dataset.nav;
