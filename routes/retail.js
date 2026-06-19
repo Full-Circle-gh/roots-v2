@@ -4687,18 +4687,35 @@ const STALE_ORDER_CANCEL_HOURS_DEFAULT = 6;
 
 function cancelStalePendingOrdersForTenant() {
   const hours = Number(cfgValue('orders.autoCancelHours', STALE_ORDER_CANCEL_HOURS_DEFAULT));
-  if (!Number.isFinite(hours) || hours <= 0) return 0;   // disabled
-  let rows;
+  // Manual-Alipay short deadline = the same pay-window the customer is shown.
+  const manual = getAlipayManual();
+  const alipayWin = manual && Number(manual.timeWindowMin) > 0 ? Number(manual.timeWindowMin) : 0;
+  if ((!Number.isFinite(hours) || hours <= 0) && !alipayWin) return 0;   // both disabled
+  const byId = new Map();   // id -> status (dedup across the two rules)
   try {
-    rows = tdb().prepare(
-      `SELECT id, status FROM retail_orders
-        WHERE status = 'pending_payment'
-          AND placed_at <= datetime('now', ?)`
-    ).all(`-${hours} hours`);
+    if (Number.isFinite(hours) && hours > 0) {
+      for (const o of tdb().prepare(
+        `SELECT id, status FROM retail_orders
+          WHERE status = 'pending_payment' AND placed_at <= datetime('now', ?)`
+      ).all(`-${hours} hours`)) byId.set(o.id, o.status);
+    }
+    // Manual-Alipay orders past their pay window — but ONLY when the customer
+    // never uploaded a screenshot (alipay_proof_image IS NULL). If a proof WAS
+    // uploaded the customer (claims to have) paid, so it waits for staff /
+    // auto-verify; cancelling a paid order would be wrong.
+    if (alipayWin > 0) {
+      for (const o of tdb().prepare(
+        `SELECT id, status FROM retail_orders
+          WHERE status = 'pending_payment' AND payment_method = 'alipay'
+            AND alipay_proof_image IS NULL
+            AND placed_at <= datetime('now', ?)`
+      ).all(`-${alipayWin} minutes`)) byId.set(o.id, o.status);
+    }
   } catch (e) {
     if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
     throw e;
   }
+  const rows = [...byId.entries()].map(([id, status]) => ({ id, status }));
   let cancelled = 0;
   for (const o of rows) {
     // Atomic claim: only the tick that wins the pending_payment → cancelled flip
@@ -16814,7 +16831,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   tdb().prepare(
     `UPDATE retail_orders
         SET refund_status = 'paid',
-            refund_amount_requested = COALESCE(refund_amount_requested, ?),
+            refund_amount_requested = MAX(COALESCE(refund_amount_requested, 0), ?),
             refund_amount_approved = ?,
             refund_amount_paid = ?,
             refund_lines_json = ?,
