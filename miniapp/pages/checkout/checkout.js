@@ -87,6 +87,7 @@ Page({
     pickupMinDate: '',
     pickupMaxDate: '',
     paymentMethod: 'wechat',     // 'wechat' | 'alipay'  (points is no longer a method; see usePoints toggle below)
+    alipayEnabled: false,        // set from cfg.payments.alipay — gates the Alipay radio (greyed until true)
     pointsBalance: 0,            // customer's available points (drives Points option visibility)
     pointsValue: '0.00',         // ¥ value of the balance (display only)
     pointsRequired: 0,           // points needed to pay this order entirely
@@ -312,7 +313,12 @@ Page({
     // Stash the kitchen address for the "we don't deliver here" message.
     try {
       const cfg = await config.load();
-      this.setData({ kitchenAddress: cfg?.delivery?.kitchenAddress || '' });
+      this.setData({
+        kitchenAddress: cfg?.delivery?.kitchenAddress || '',
+        // Alipay is selectable only when the server says it'll work (manual
+        // 收款码 configured or auto 当面付 live); otherwise it stays greyed.
+        alipayEnabled: !!(cfg && cfg.payments && cfg.payments.alipay),
+      });
     } catch {}
 
     // Unbound customer — skip the address/quote/coupon loads. They'll run
