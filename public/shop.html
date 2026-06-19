@@ -17,6 +17,7 @@
   @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW5.ttf') format('truetype'); font-weight:500; font-display:swap; }
   @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW7.ttf') format('truetype'); font-weight:700; font-display:swap; }
   @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW9.ttf') format('truetype'); font-weight:900; font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
 
   :root{
     --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
@@ -28,6 +29,13 @@
     --bf-toni:'Toni Grotesk','DF Yuan',-apple-system,BlinkMacSystemFont,sans-serif;
     --bf-gothic:'League Gothic','DF Yuan','Bebas Neue',Impact,sans-serif;
     --bf-yuan:'DF Yuan','PingFang SC','Hiragino Sans GB',sans-serif;
+    /* Font vars the ported block engines (blocks.css / product-blocks.css) use —
+       MUST match the mini-app's --f-* names exactly, incl. Aleo for body copy. */
+    --f-bear:'Bear Serif','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    --f-toni:'Toni Grotesk','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif;
+    --f-gothic:'League Gothic','DF Yuan','PingFang SC','Hiragino Sans GB','Bebas Neue',sans-serif;
+    --f-aleo:'Aleo','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    --f-yuan:'DF Yuan','PingFang SC','Hiragino Sans GB',sans-serif;
     --wrap:1180px;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
