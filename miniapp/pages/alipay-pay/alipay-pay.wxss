@@ -64,6 +64,20 @@
   letter-spacing: 0;
 }
 
+/* pay-within deadline notice */
+.deadline {
+  margin: 0 auto 24rpx;
+  max-width: 480rpx;
+  text-align: center;
+  font-size: calc(24rpx * var(--font-scale));
+  color: #8a5a00;
+  background: #fff4d6;
+  border: 2rpx solid #f0c862;
+  border-radius: 12rpx;
+  padding: 14rpx 20rpx;
+  line-height: 1.4;
+}
+
 /* QR */
 .qr-wrap {
   position: relative;
