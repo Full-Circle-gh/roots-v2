@@ -2577,6 +2577,10 @@ addColumn('retail_orders', 'alipay_proof_at',    'DATETIME');
 addColumn('retail_orders', 'alipay_ocr_verdict', 'TEXT');
 addColumn('retail_orders', 'alipay_ocr_json',    'TEXT');
 addColumn('retail_orders', 'alipay_txn_id',      'TEXT');
+// sha256 of the uploaded screenshot — the primary reuse guard for auto-flip
+// (most Alipay success screens show no txn-id, so we dedup the image itself:
+// the exact same screenshot can't settle two different orders).
+addColumn('retail_orders', 'alipay_proof_hash',  'TEXT');
 
 // Cloud-printer (Feie) auto-print outcome, so the backend can show whether a
 // slip actually printed and offer a one-click reprint instead of the operator

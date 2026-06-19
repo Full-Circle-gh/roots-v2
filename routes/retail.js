@@ -3482,9 +3482,10 @@ router.post('/api/retail/payment/alipay-proof/:orderId', requireRetailAuth, expr
   if (!/^data:image\/(png|jpe?g|webp);base64,/.test(img) || img.length > 5_500_000) {
     return res.status(400).json({ success: false, error: 'bad_image' });
   }
+  const imgHash = crypto.createHash('sha256').update(img).digest('hex');
   tdb().prepare(
-    "UPDATE retail_orders SET alipay_proof_image = ?, alipay_proof_at = CURRENT_TIMESTAMP, alipay_ocr_verdict = NULL, alipay_ocr_json = NULL WHERE id = ?"
-  ).run(img, orderId);
+    "UPDATE retail_orders SET alipay_proof_image = ?, alipay_proof_hash = ?, alipay_proof_at = CURRENT_TIMESTAMP, alipay_ocr_verdict = NULL, alipay_ocr_json = NULL WHERE id = ?"
+  ).run(img, imgHash, orderId);
 
   // Vision-AI read + verify (when configured). Always fail-soft: any error keeps
   // the order pending for a human and never auto-flips. The customer's status
@@ -3496,20 +3497,20 @@ router.post('/api/retail/payment/alipay-proof/:orderId', requireRetailAuth, expr
       const ocr = await alipayOcr.readPaymentScreenshot(img, { apiKey: manual.anthropicKey });
       const v = validateAlipayProof(order, ocr, manual);
       verdict = v.verdict;
-      // txn-id reuse guard: an old/duplicate screenshot whose txn already sits on
-      // ANOTHER order is rejected (the one hard defense against screenshot reuse).
-      let reused = null;
-      if (ocr.txn_id) {
-        reused = tdb().prepare('SELECT id FROM retail_orders WHERE alipay_txn_id = ? AND id != ? LIMIT 1').get(ocr.txn_id, orderId);
-        if (reused) { verdict = 'mismatch'; v.verdict = 'mismatch'; v.reasons.push(`txn-id already used on order #${reused.id}`); }
-      }
+      // Reuse guard — the real defense against "upload an old screenshot". The
+      // primary key is the image itself (the same screenshot can't settle two
+      // orders); the txn-id is a bonus check when the screen happens to show one.
+      const dupImg = tdb().prepare('SELECT id FROM retail_orders WHERE alipay_proof_hash = ? AND id != ? LIMIT 1').get(imgHash, orderId);
+      const dupTxn = ocr.txn_id ? tdb().prepare('SELECT id FROM retail_orders WHERE alipay_txn_id = ? AND id != ? LIMIT 1').get(ocr.txn_id, orderId) : null;
+      const reused = dupImg || dupTxn;
+      if (reused) { verdict = 'mismatch'; v.verdict = 'mismatch'; v.reasons.push(`this ${dupImg ? 'screenshot' : 'transaction'} was already used on order #${reused.id}`); }
       tdb().prepare(
         "UPDATE retail_orders SET alipay_ocr_verdict = ?, alipay_ocr_json = ?, alipay_txn_id = ? WHERE id = ?"
       ).run(verdict, JSON.stringify({ ...ocr, reasons: v.reasons, checks: v.checks }), ocr.txn_id || null, orderId);
 
-      // Auto-flip ONLY when the operator enabled it AND every guard passed: full
-      // match, a readable txn-id (so reuse is detectable), and not reused.
-      if (manual.autoFlip && verdict === 'match' && ocr.txn_id && !reused) {
+      // Auto-flip ONLY when the operator enabled it AND every guard passed: a full
+      // match (amount + payee + recent time) and not a reused screenshot/txn.
+      if (manual.autoFlip && verdict === 'match' && !reused) {
         markOrderPaid(orderId);
         autoPaid = true;
       }
@@ -9189,6 +9190,11 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     });
 
     // Refund requests — refund_requested_at is set when the customer files.
+    // A staff DIRECT refund stamps refund_requested_at and refund_paid_at in the
+    // same UPDATE, so request+payout share a timestamp. Suppress the "Refund"
+    // (request) row when the two are effectively simultaneous (within 5s) so a
+    // direct refund shows only the green "Refunded" line, not a redundant pair.
+    // Customer-filed refunds (request precedes payout) keep both rows.
     const refunds = tdb().prepare(`
       SELECT o.id, o.order_no, o.refund_amount_requested, o.refund_reason,
              o.refund_status, o.refund_requested_at,
@@ -9196,6 +9202,8 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.refund_requested_at IS NOT NULL AND o.refund_requested_at >= ?
+         AND (o.refund_paid_at IS NULL
+              OR strftime('%s', o.refund_paid_at) - strftime('%s', o.refund_requested_at) > 5)
        ORDER BY o.refund_requested_at DESC LIMIT ?
     `).all(sinceIso, limit);
     for (const r of refunds) events.push({
