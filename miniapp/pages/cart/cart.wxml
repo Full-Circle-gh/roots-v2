@@ -18,6 +18,11 @@
       </view>
     </view>
 
+    <view class="list-head">
+      <text class="list-head-count f-toni">{{items.length}} {{lang === 'cn' ? '件商品' : (items.length === 1 ? 'item' : 'items')}}</text>
+      <view class="clear-all f-toni" bindtap="clearAll">{{lang === 'cn' ? '清空购物车' : 'Clear all'}}</view>
+    </view>
+
     <view class="items">
       <view wx:for="{{items}}" wx:key="key" class="row">
         <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="thumb"/>
@@ -30,10 +35,14 @@
           <view wx:if="{{item.display_options}}" class="opt-meta f-toni">{{item.display_options}}</view>
           <view class="meta">{{item.display_size}}</view>
           <view class="qty">
-            <view class="qty-btn" data-key="{{item.key}}" bindtap="decQty">−</view>
-            <view class="qty-val f-gothic">{{item.qty}}</view>
-            <view class="qty-btn" data-key="{{item.key}}" bindtap="incQty">+</view>
-            <view class="del" data-key="{{item.key}}" bindtap="removeItem">×</view>
+            <view class="stepper">
+              <view class="qty-btn" data-key="{{item.key}}" bindtap="decQty">−</view>
+              <view class="qty-val f-gothic">{{item.qty}}</view>
+              <view class="qty-btn" data-key="{{item.key}}" bindtap="incQty">+</view>
+            </view>
+            <view class="del-btn f-toni" data-key="{{item.key}}" data-name="{{item.display_name}}" bindtap="removeItem">
+              <text class="del-glyph">🗑</text>{{lang === 'cn' ? '删除' : 'Remove'}}
+            </view>
           </view>
         </view>
         <view class="line-total-stack">
@@ -75,6 +84,24 @@
       <view class="bind-actions">
         <view class="bind-btn bind-btn--secondary f-toni" bindtap="bindModalCancel">{{ lang === 'cn' ? '取消' : 'Cancel' }}</view>
         <view class="bind-btn bind-btn--primary f-toni" bindtap="bindModalConfirm">{{ lang === 'cn' ? '去绑定 →' : 'Bind now →' }}</view>
+      </view>
+    </view>
+  </view>
+
+  <!-- Remove-from-cart confirmation. Mirrors the bind modal's Bear/Toni +
+       oat/ink card, with a red primary so it reads as destructive. Prevents a
+       stray tap on the trash button from silently deleting an item. -->
+  <view wx:if="{{showRemoveModal}}" class="bind-backdrop" bindtap="removeCancel">
+    <view class="bind-card" catchtap="noop">
+      <view class="bind-icon">🗑</view>
+      <view class="bind-kicker f-toni">{{ removeAll ? (lang === 'cn' ? '清空购物车' : 'CLEAR BASKET') : (lang === 'cn' ? '移出购物车' : 'REMOVE ITEM') }}</view>
+      <view class="bind-title f-bear">{{ removeAll ? (lang === 'cn' ? '清空所有商品？' : 'Empty your basket?') : pendingRemoveName }}</view>
+      <view class="bind-body f-aleo">{{ removeAll
+        ? (lang === 'cn' ? '将移除购物车中的全部商品，此操作无法撤销。' : 'This removes every item from your basket. You can\'t undo it.')
+        : (lang === 'cn' ? '确定要从购物车中移除这件商品吗？' : 'Remove this item from your basket?') }}</view>
+      <view class="bind-actions">
+        <view class="bind-btn bind-btn--secondary f-toni" bindtap="removeCancel">{{ lang === 'cn' ? '保留' : 'Keep' }}</view>
+        <view class="bind-btn bind-btn--danger f-toni" bindtap="removeConfirm">{{ removeAll ? (lang === 'cn' ? '全部移除' : 'Clear all') : (lang === 'cn' ? '移除' : 'Remove') }}</view>
       </view>
     </view>
   </view>

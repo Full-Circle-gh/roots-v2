@@ -50,6 +50,30 @@
   transition: width 0.3s ease;
 }
 
+/* Header row above the item list: count on the left, a quiet "Clear all" link
+   on the right. Underlined so it reads as an action, olive so it stays
+   secondary to the per-row Remove buttons and the checkout CTA. */
+.list-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 24rpx 44rpx 0;
+}
+.list-head-count {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.1em;
+  color: var(--olive);
+  text-transform: uppercase;
+}
+.clear-all {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+  color: var(--olive);
+  text-decoration: underline;
+  padding: 4rpx 4rpx 4rpx 16rpx;
+}
+.clear-all:active { color: #E96174; }
+
 .items { margin: 0; }
 .row {
   display: flex;
@@ -81,7 +105,8 @@
 /* Chosen options (e.g. dressing) — darker than the size meta so the pick reads
    as a real choice, not a spec. */
 .opt-meta { font-size: calc(22rpx * var(--font-scale)); color: var(--ink); margin-top: 4rpx; line-height: 1.2; }
-.qty { display: flex; align-items: center; gap: 20rpx; margin-top: 12rpx; }
+.qty { display: flex; align-items: center; margin-top: 12rpx; }
+.stepper { display: flex; align-items: center; gap: 20rpx; }
 .qty-btn {
   width: 48rpx; height: 48rpx;
   border: 2rpx solid var(--ink);
@@ -94,7 +119,23 @@
   text-align: center;
   font-size: calc(26rpx * var(--font-scale));
 }
-.del { color: var(--olive); font-size: calc(32rpx * var(--font-scale)); margin-left: auto; padding: 8rpx; }
+/* Clear, labeled delete control. The old bare "×" floated unlabeled and read
+   as decoration; this bordered trash + "Remove/删除" pill is obviously tappable
+   and obviously destructive. */
+.del-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8rpx;
+  padding: 8rpx 20rpx;
+  border: 2rpx solid rgba(0, 0, 0, 0.22);
+  border-radius: 999rpx;
+  color: var(--olive);
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.04em;
+}
+.del-btn:active { background: rgba(233, 97, 116, 0.1); border-color: #E96174; color: #E96174; }
+.del-glyph { font-size: calc(24rpx * var(--font-scale)); line-height: 1; }
 .line-total { font-size: calc(44rpx * var(--font-scale)); }
 .line-total.is-flash { color: #E96174; }
 .line-total-stack {
@@ -214,6 +255,9 @@
 .bind-btn--secondary:active { background: rgba(26, 35, 20, 0.06); }
 .bind-btn--primary { background: var(--ink); color: var(--lime); }
 .bind-btn--primary:active { background: #2a3a22; }
+/* Destructive variant for the remove-from-cart confirm. */
+.bind-btn--danger { background: #E96174; color: #fff; border-color: #E96174; }
+.bind-btn--danger:active { background: #d44c60; }
 
 .empty { padding: 200rpx 44rpx 0; text-align: center; }
 .empty-title { font-size: calc(44rpx * var(--font-scale)); font-weight: 500; margin-bottom: 32rpx; line-height: 1.3; }

@@ -17,6 +17,10 @@ Page({
     pct: 0,
     lang: 'en',
     showBindModal: false,
+    showRemoveModal: false,
+    removeAll: false,
+    pendingRemoveKey: '',
+    pendingRemoveName: '',
     copy: { title: 'Almost yours.', kicker: 'YOUR BASKET', empty: 'Your basket is empty — shop the garden →', checkout: 'CHECK OUT' },
   },
 
@@ -96,7 +100,7 @@ Page({
         display_name: lang.pick(it.name_en, it.name_cn, L),
         display_size: lang.pickLabel(it.size, L),
         // Chosen options (e.g. dressing). Labels were localised at add-time.
-        display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
+        display_options: (it.options || []).map(o => o.question && o.label ? o.question + ': ' + o.label : o.label).filter(Boolean).join(' · '),
         line_total: (unit * qty).toFixed(2),
         regular_total: (onFlash || onBundle || onMarkdown) ? wasN.toFixed(2) : '',
         // Per-line "save ¥X" tag — mirrors the checkout receipt so the saving is
@@ -182,8 +186,35 @@ Page({
     const it = cart.get().items.find(i => i.key === key);
     if (it) cart.setQty(key, Math.max(1, it.qty - 1));
   },
+  // Tapping the trash button no longer deletes outright — it opens a branded
+  // confirm so a stray tap can't silently empty a row. Confirm in removeConfirm.
   removeItem(e) {
-    cart.remove(e.currentTarget.dataset.key);
+    this.setData({
+      showRemoveModal: true,
+      removeAll: false,
+      pendingRemoveKey: e.currentTarget.dataset.key,
+      pendingRemoveName: e.currentTarget.dataset.name || '',
+    });
+  },
+  // Empty the whole basket — same confirm modal, clear-all copy + red CTA.
+  clearAll() {
+    if (!this.data.items.length) return;
+    this.setData({ showRemoveModal: true, removeAll: true, pendingRemoveKey: '', pendingRemoveName: '' });
+  },
+  removeConfirm() {
+    const L = this.data.lang;
+    const { removeAll, pendingRemoveKey } = this.data;
+    this.setData({ showRemoveModal: false, removeAll: false, pendingRemoveKey: '', pendingRemoveName: '' });
+    if (removeAll) {
+      cart.clear();
+      wx.showToast({ title: L === 'cn' ? '已清空' : 'Basket cleared', icon: 'none', duration: 1200 });
+    } else if (pendingRemoveKey) {
+      cart.remove(pendingRemoveKey);
+      wx.showToast({ title: L === 'cn' ? '已移除' : 'Removed', icon: 'none', duration: 1200 });
+    }
+  },
+  removeCancel() {
+    this.setData({ showRemoveModal: false, removeAll: false, pendingRemoveKey: '', pendingRemoveName: '' });
   },
   async goCheckout() {
     if (!this.data.items.length) return;
