@@ -56,6 +56,11 @@ Page({
     localOnlyBody: '',       // computed body copy for that popup (avoids an apostrophe literal in WXML)
     localOnlyCta: '',        // computed CTA label for that popup
     localOnlyBrowse: false,  // true when closing the popup should send the customer back to browse (cart emptied)
+    // Last-chance upsell popup (shown once, right before payment). Offers are
+    // prefetched on quote and surfaced via the single `showOffers` flag.
+    showOffers: false,
+    offers: [],
+    offerTotalLabel: '',
     quoting: false,          // suppresses spam-clicks while a quote is in flight
     total: 0,
     voucherCode: '',         // applied code (uppercase)
@@ -1152,6 +1157,9 @@ Page({
   // quote in the background and patches the fee fields when it lands. The
   // server is the source of truth for the zone-driven delivery + packing fees.
   refreshQuote() {
+    // Keep the pre-pay upsell offers warm for the CURRENT cart (cached by cart
+    // signature, so re-quotes don't re-hit the network). Fire-and-forget.
+    this.prefetchOffers();
     // Pickup has no zone/fee quote — compute totals locally and bail. Every
     // trigger that calls refreshQuote (voucher apply, points toggle, payment
     // change) routes here while in pickup mode.
@@ -2176,6 +2184,135 @@ Page({
     return this.submitOrder({ accept_fallback: !!this.data.acceptedFallback });
   },
 
+  // ── Last-chance offers (pre-pay upsell) ──────────────────────────────────
+  // Prefetch add-on offers for the current cart, cached by a cart signature so
+  // toggling vouchers/points/slots (each re-quotes) doesn't re-hit the network.
+  // The server returns complements to the cart + anything on an active flash;
+  // an empty list means "nothing relevant" → the popup stays suppressed.
+  prefetchOffers() {
+    const items = cart.get().items.map(it => ({ product_id: it.product_id, qty: it.qty }));
+    if (!items.length) { this._offers = []; this._offerSig = ''; return; }
+    const sig = items.map(i => i.product_id + 'x' + i.qty).sort().join(',');
+    if (sig === this._offerSig && Array.isArray(this._offers)) return;  // cart unchanged
+    this._offerSig = sig;
+    api.post('/api/retail/checkout/offers', { items }, { raw: true })
+      .then(body => {
+        const list = Array.isArray(body && body.data) ? body.data : [];
+        this._offerServerSkew = (Number(body && body.meta && body.meta.server_time_ms) || Date.now()) - Date.now();
+        const inCart = new Set(cart.get().items.map(i => Number(i.product_id)));
+        this._offers = list.filter(o => !inCart.has(Number(o.id)));
+      })
+      .catch(() => { /* offers are optional — never block checkout */ });
+  },
+
+  // Resolve a (possibly relative) image path to a URL the <image> tag can load.
+  // The server already absolutises image_data; image_url may be a bare /path.
+  _offerImg(o) {
+    const u = o.image_data || o.image_url || '';
+    if (!u) return '';
+    if (/^(https?:|data:|wxfile:)/i.test(u)) return u;
+    return u.startsWith('/') ? api.BASE + u : u;
+  },
+
+  _fmtCountdown(ms, L) {
+    const s = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+    if (h > 0) return L === 'cn' ? `${h}小时${m}分` : `${h}h ${String(m).padStart(2, '0')}m`;
+    return `${String(m).padStart(2, '0')}:${String(ss).padStart(2, '0')}`;
+  },
+
+  // Build the popup's display rows from the cached raw offers, computing
+  // price / was / %-off + a live flash countdown against server-skewed time.
+  buildOfferRows() {
+    const L = this.data.lang;
+    const now = Date.now() + (this._offerServerSkew || 0);
+    const rows = [];
+    for (const o of (this._offers || [])) {
+      const onFlash = !!o.is_on_flash;
+      const eff = Number(o.effective_price) || Number(o.price) || 0;
+      const was = onFlash ? (Number(o.price) || 0)
+                          : (Number(o.compare_at_price) > eff ? Number(o.compare_at_price) : 0);
+      const pct = was > eff && was > 0 ? Math.round((was - eff) / was * 100) : 0;
+      let countdown = '';
+      if (onFlash && o.flash && o.flash.ends_at) {
+        const ms = new Date(o.flash.ends_at).getTime() - now;
+        if (ms <= 0) continue;                 // flash ended mid-checkout — drop it
+        countdown = this._fmtCountdown(ms, L);
+      }
+      rows.push({
+        id: o.id,
+        name: lang.pick(o.name_en, o.name_cn, L),
+        image: this._offerImg(o),
+        size: o.size || '',
+        price: '¥' + eff.toFixed(2),
+        was: was > eff ? '¥' + was.toFixed(2) : '',
+        off: pct > 0 ? (L === 'cn' ? ('省' + pct + '%') : ('-' + pct + '%')) : '',
+        tag: o.is_complement ? (L === 'cn' ? '搭配推荐' : 'GOES WELL WITH')
+                             : (L === 'cn' ? '限时秒杀' : 'FLASH DEAL'),
+        flash: onFlash,
+        countdown,
+        needs_options: !!o.has_options,
+        cta: o.has_options ? (L === 'cn' ? '选规格' : 'Pick') : (L === 'cn' ? '加入' : 'Add'),
+      });
+    }
+    return rows;
+  },
+
+  _offerCtaLabel() {
+    const L = this.data.lang;
+    return (L === 'cn' ? '去支付 ¥' : 'Continue to pay ¥') + (this.data.total || '0.00');
+  },
+
+  openOffersPopup() {
+    const rows = this.buildOfferRows();
+    if (!rows.length) {                        // every offer expired since prefetch
+      this._offersDone = true;
+      return this.submitOrder(this._pendingExtra);
+    }
+    this.setData({ showOffers: true, offers: rows, offerTotalLabel: this._offerCtaLabel() });
+    // Tick the flash countdowns once a second while the popup is open.
+    if (this._offerTimer) clearInterval(this._offerTimer);
+    this._offerTimer = setInterval(() => {
+      if (!this.data.showOffers) { this.closeOffersTimer(); return; }
+      this.setData({ offers: this.buildOfferRows() });
+    }, 1000);
+  },
+
+  closeOffersTimer() {
+    if (this._offerTimer) { clearInterval(this._offerTimer); this._offerTimer = null; }
+  },
+
+  // Add one offer to the cart inline, then re-quote so fees / free-shipping /
+  // stock-gate all stay correct. An offer that itself needs a required choice
+  // routes to its PDP instead (can't one-tap add).
+  async onOfferAdd(e) {
+    const id = Number(e.currentTarget.dataset.id);
+    const o = (this._offers || []).find(x => Number(x.id) === id);
+    if (!o) return;
+    if (o.has_options) {
+      this._offersDone = true;                 // chose to customise — don't nag again
+      this.closeOffersTimer();
+      this.setData({ showOffers: false });
+      wx.navigateTo({ url: '/pages/product/product?id=' + id });
+      return;
+    }
+    cart.add(o, 1, []);
+    this._offers = (this._offers || []).filter(x => Number(x.id) !== id);  // can't re-offer
+    this._offerSig = '';                       // cart changed — let prefetch refresh
+    wx.showToast({ title: this.data.lang === 'cn' ? '已加入' : 'Added', icon: 'success', duration: 900 });
+    await this.refreshQuote();                 // full re-quote (fees + slots + gate)
+    this.setData({ offers: this.buildOfferRows(), offerTotalLabel: this._offerCtaLabel() });
+  },
+
+  // "Continue to pay" / backdrop dismiss — stop offering and proceed to the
+  // real order submit with the original (fallback) payload.
+  onOffersContinue() {
+    this._offersDone = true;
+    this.closeOffersTimer();
+    this.setData({ showOffers: false });
+    this.submitOrder(this._pendingExtra);
+  },
+
   // Auto-remove Guangzhou-only items from the cart on the customer's behalf,
   // tell them what happened, then re-quote so the remaining cart checks out.
   // `products` is [{id, name_en, name_cn}] from the server. When the list is
@@ -2318,6 +2455,15 @@ Page({
   // 5-option modal handlers can call it directly with the right
   // fallback_choice / replacements payload.
   async submitOrder(extra) {
+    // Last-chance upsell: the first time we reach a real pay submit for this
+    // checkout, surface any prefetched add-on offers once. Continuing or
+    // dismissing the popup re-enters submitOrder with `_offersDone` set, so we
+    // fall straight through to the order POST below.
+    if (!this._offersDone && Array.isArray(this._offers) && this._offers.length) {
+      this._pendingExtra = extra;
+      this.openOffersPopup();
+      return;
+    }
     const a = this.data.address;
     this.setData({ placing: true, showFallbackModal: false, showReplacePicker: false });
     this._placingStartedAt = Date.now();

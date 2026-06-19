@@ -1013,4 +1013,39 @@
       <view class="bn-cta f-toni" bindtap="closeLocalOnly">{{localOnlyCta}}</view>
     </view>
   </view>
+
+  <!-- Last-chance upsell — shown once right before payment. Single `showOffers`
+       flag so it can't stack. Tapping the backdrop or "Continue to pay"
+       proceeds to payment; each "Add" drops the item in and re-quotes. -->
+  <view wx:if="{{showOffers}}" class="bn-backdrop" bindtap="onOffersContinue" catchtouchmove="noop">
+    <view class="bn-card" catchtap="noop">
+      <view class="bn-hero">
+        <view class="bn-badge">🛒</view>
+      </view>
+      <view class="bn-kicker">{{ lang === 'cn' ? '结账前 · 别错过' : 'BEFORE YOU PAY' }}</view>
+      <view class="bn-title f-bear">{{ lang === 'cn' ? '再加一件？' : 'Add one more?' }}</view>
+
+      <view class="of-list">
+        <view wx:for="{{offers}}" wx:key="id" class="of-card">
+          <image wx:if="{{item.image}}" class="of-img" src="{{item.image}}" mode="aspectFill"/>
+          <view wx:else class="of-img of-img--ph">🥗</view>
+          <view class="of-main">
+            <view class="of-tag {{item.flash ? 'of-tag--flash' : ''}}">{{item.tag}}</view>
+            <view class="of-name">{{item.name}}</view>
+            <view wx:if="{{item.countdown}}" class="of-count">⏳ {{item.countdown}}</view>
+            <view class="of-price-row">
+              <text class="of-price">{{item.price}}</text>
+              <text wx:if="{{item.was}}" class="of-was">{{item.was}}</text>
+              <text wx:if="{{item.off}}" class="of-off">{{item.off}}</text>
+            </view>
+          </view>
+          <view class="of-add f-toni" data-id="{{item.id}}" catchtap="onOfferAdd">{{item.cta}}</view>
+        </view>
+      </view>
+
+      <view wx:if="{{!offers.length}}" class="of-empty">{{ lang === 'cn' ? '都加好啦 🎉' : 'All set 🎉' }}</view>
+
+      <view class="bn-cta f-toni" catchtap="onOffersContinue">{{offerTotalLabel}}</view>
+    </view>
+  </view>
 </view>
