@@ -77,7 +77,15 @@ function refundBadge(o) {
   const rs = o.refund_status;
   if (!rs || rs === 'withdrawn' || rs === 'rejected') return '';
   if (rs === 'paid') {
-    return `<span class="pill refund-pending" title="Refund paid · 已退款">↩ refunded · 已退款</span>`;
+    // A FULL refund flips the order's primary status to 'refunded'; a partial
+    // refund leaves it (still Paid/Delivered/…). Distinguish the two so a
+    // part-refund doesn't masquerade as a full "refunded".
+    if (o.status === 'refunded') {
+      return `<span class="pill refund-pending" title="Refund paid · 已退款">↩ refunded · 已退款</span>`;
+    }
+    const amt = (o.refund_amount_requested != null && Number(o.refund_amount_requested) > 0)
+      ? ` ¥${fmt(o.refund_amount_requested)}` : '';
+    return `<span class="pill refund-partial" title="Partial refund · 部分退款${amt}">↩ part refund${amt} · 部分退款</span>`;
   }
   const labels = {
     pending:   'refund req · 申请退款',
@@ -4251,6 +4259,7 @@ function openDirectRefundDialog(orderId) {
   if (!o || o.id !== orderId) { toast('Reopen the order and try again · 请重新打开订单', 'err'); return; }
   const items = (o.items || []).map(it => ({
     id: it.id, name: it.name_en || it.name_cn || ('item #' + it.id),
+    image_url: it.image_url || '', sku: it.sku || '', size: it.size || '',
     qty: Number(it.qty) || 0, unit: it.qty > 0 ? (Number(it.line_total) / Number(it.qty)) : Number(it.unit_price || 0),
   }));
   const total = Number(o.total) || 0;
@@ -4288,9 +4297,10 @@ function openDirectRefundDialog(orderId) {
           <div style="border: 1px solid var(--line-soft); border-radius: 6px; padding: 6px;">
             ${items.length ? items.map(it => `
               <div style="display: flex; align-items: center; gap: 10px; padding: 6px; border-bottom: 1px solid var(--line-soft);">
-                <label style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <label style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0;">
                   <input type="checkbox" class="drf-line-chk" data-item="${it.id}" data-unit="${it.unit}" data-maxqty="${it.qty}">
-                  <span>${escapeHtml(it.name)}</span>
+                  ${itemThumb(it)}
+                  <span style="min-width: 0;">${escapeHtml(it.name)}${it.size ? ` · ${escapeHtml(it.size)}` : ''}<br>${itemSkuHtml(it)}</span>
                 </label>
                 <input type="number" class="drf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${it.qty}" value="${it.qty}" style="width: 80px;">
                 <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="drf-line-amt-${it.id}">¥${fmt(it.unit * it.qty)}</b></span>
@@ -4390,6 +4400,7 @@ function openRefundApproveDialog(orderId) {
   if (!o || o.id !== orderId) { toast('Reopen the order and try again · 请重新打开订单', 'err'); return; }
   const items = (o.items || []).map(it => ({
     id: it.id, name: it.name_en || it.name_cn || ('item #' + it.id),
+    image_url: it.image_url || '', sku: it.sku || '', size: it.size || '',
     qty: Number(it.qty) || 0, unit: it.qty > 0 ? (Number(it.line_total) / Number(it.qty)) : Number(it.unit_price || 0),
   }));
   const total = Number(o.total) || 0;
@@ -4434,9 +4445,10 @@ function openRefundApproveDialog(orderId) {
           <div style="border: 1px solid var(--line-soft); border-radius: 6px; padding: 6px;">
             ${items.length ? items.map(it => `
               <div style="display: flex; align-items: center; gap: 10px; padding: 6px; border-bottom: 1px solid var(--line-soft);">
-                <label style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                <label style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0;">
                   <input type="checkbox" class="rf-line-chk" data-item="${it.id}" data-unit="${it.unit}" data-maxqty="${it.qty}" ${preMap.has(it.id) ? 'checked' : ''}>
-                  <span>${escapeHtml(it.name)}</span>
+                  ${itemThumb(it)}
+                  <span style="min-width: 0;">${escapeHtml(it.name)}${it.size ? ` · ${escapeHtml(it.size)}` : ''}<br>${itemSkuHtml(it)}</span>
                 </label>
                 <input type="number" class="rf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${it.qty}" value="${preMap.get(it.id) ?? it.qty}" style="width: 80px;">
                 <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="rf-line-amt-${it.id}">¥${fmt(it.unit * (preMap.get(it.id) ?? it.qty))}</b></span>
