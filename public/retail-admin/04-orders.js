@@ -3435,21 +3435,19 @@ async function ensureTrackingCarriers() {
 }
 
 // Returns how many days late an air shipment arrived, or 0 if on time / not air.
-// Expected delivery = promised_delivery_date if set, otherwise placed_at + 1 day.
+// An "Air shipment · 空运" parcel promises next-day arrival, so the deadline is
+// simply the dispatch date + 1 day: sent out today → must arrive tomorrow.
 function airShipmentDelayDays(o, s) {
   if ((s.mode || '') !== 'air') return 0;
-  const deliveredDate = (s.delivered_at || '').slice(0, 10);
-  if (!deliveredDate || deliveredDate === '0000-00-00') return 0;
-  let expectedDate = (o.promised_delivery_date || '').slice(0, 10);
-  if (!expectedDate) {
-    const placedDate = (o.placed_at || '').slice(0, 10);
-    if (!placedDate) return 0;
-    const d = new Date(placedDate + 'T00:00:00Z');
-    d.setUTCDate(d.getUTCDate() + 1);
-    expectedDate = d.toISOString().slice(0, 10);
-  }
-  if (deliveredDate <= expectedDate) return 0;
-  return Math.round((new Date(deliveredDate) - new Date(expectedDate)) / 86400000);
+  const deliveredDate  = (s.delivered_at  || '').slice(0, 10);
+  const dispatchedDate = (s.dispatched_at || '').slice(0, 10);
+  if (!deliveredDate  || deliveredDate  === '0000-00-00') return 0;
+  if (!dispatchedDate || dispatchedDate === '0000-00-00') return 0;
+  const d = new Date(dispatchedDate + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + 1);
+  const deadline = d.toISOString().slice(0, 10);
+  if (deliveredDate <= deadline) return 0;
+  return Math.round((new Date(deliveredDate) - new Date(deadline)) / 86400000);
 }
 
 // Tracking card for one shipment row. Each shipment gets its own carrier +
