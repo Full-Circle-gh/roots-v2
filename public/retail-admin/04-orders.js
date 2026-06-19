@@ -4260,7 +4260,8 @@ function openDirectRefundDialog(orderId) {
   const items = (o.items || []).map(it => ({
     id: it.id, name: it.name_en || it.name_cn || ('item #' + it.id),
     image_url: it.image_url || '', sku: it.sku || '', size: it.size || '',
-    qty: Number(it.qty) || 0, unit: it.qty > 0 ? (Number(it.line_total) / Number(it.qty)) : Number(it.unit_price || 0),
+    qty: Number(it.qty) || 0, refunded_qty: Number(it.refunded_qty) || 0,
+    unit: it.qty > 0 ? (Number(it.line_total) / Number(it.qty)) : Number(it.unit_price || 0),
   }));
   const total = Number(o.total) || 0;
 
@@ -4295,16 +4296,26 @@ function openDirectRefundDialog(orderId) {
         <div class="field" id="drf-lines-wrap" style="margin-bottom: 14px; display: none;">
           <label class="stacked">${cuT('Items to refund', '退款商品')}</label>
           <div style="border: 1px solid var(--line-soft); border-radius: 6px; padding: 6px;">
-            ${items.length ? items.map(it => `
+            ${(() => {
+              // Only offer units NOT already refunded, so a second refund can't
+              // re-pick the same units (mirrors the server's remaining-qty cap).
+              const refundable = items.filter(it => !itemFullyRefunded(it));
+              if (!refundable.length) return `<div class="muted" style="padding: 8px;">${cuT('Everything has already been refunded', '已全部退款')}</div>`;
+              return refundable.map(it => {
+                const remain = Math.max(0, (Number(it.qty) || 0) - itemRefundedQty(it));
+                const already = itemRefundedQty(it);
+                return `
               <div style="display: flex; align-items: center; gap: 10px; padding: 6px; border-bottom: 1px solid var(--line-soft);">
                 <label style="flex: 1; display: flex; align-items: center; gap: 8px; cursor: pointer; min-width: 0;">
-                  <input type="checkbox" class="drf-line-chk" data-item="${it.id}" data-unit="${it.unit}" data-maxqty="${it.qty}">
+                  <input type="checkbox" class="drf-line-chk" data-item="${it.id}" data-unit="${it.unit}" data-maxqty="${remain}">
                   ${itemThumb(it)}
-                  <span style="min-width: 0;">${escapeHtml(it.name)}${it.size ? ` · ${escapeHtml(it.size)}` : ''}<br>${itemSkuHtml(it)}</span>
+                  <span style="min-width: 0;">${escapeHtml(it.name)}${it.size ? ` · ${escapeHtml(it.size)}` : ''}${already > 0 ? ` <span class="muted" style="font-size:10px;">(${already} ${cuT('already refunded', '已退')})</span>` : ''}<br>${itemSkuHtml(it)}</span>
                 </label>
-                <input type="number" class="drf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${it.qty}" value="${it.qty}" style="width: 80px;">
-                <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="drf-line-amt-${it.id}">¥${fmt(it.unit * it.qty)}</b></span>
-              </div>`).join('') : `<div class="muted" style="padding: 8px;">${cuT('No items', '无商品')}</div>`}
+                <input type="number" class="drf-line-qty" data-item="${it.id}" step="0.001" min="0" max="${remain}" value="${remain}" style="width: 80px;">
+                <span class="muted" style="font-size: 11px;">× ¥${fmt(it.unit)} = <b id="drf-line-amt-${it.id}">¥${fmt(it.unit * remain)}</b></span>
+              </div>`;
+              }).join('');
+            })()}
           </div>
           <div style="margin-top: 6px; text-align: right; font-size: 13px;">${cuT('Items total', '商品合计')}: <b id="drf-lines-total">¥0.00</b></div>
         </div>
