@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v172-deliver-tile-absolute-date';
+const CACHE = 'roots-v2-shell-v173-deliver-absolute-date-print';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
