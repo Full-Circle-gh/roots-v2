@@ -175,21 +175,22 @@
 
   @media(max-width:820px){
     .pd{grid-template-columns:1fr;gap:24px;}
-    nav.links{display:none;}
   }
   @media(max-width:520px){
-    .bar-in{flex-wrap:wrap;gap:10px;}
+    .bar-in{flex-wrap:wrap;gap:10px 14px;}
+    nav.links{order:1;gap:14px;}
     .search{order:3;max-width:none;flex-basis:100%;}
     .grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
   }
 </style>
+<link rel="stylesheet" href="/assets/shop/blocks.css">
+<script src="/assets/shop/blocks.js"></script>
 </head>
 <body>
   <div id="boot"><div class="spin"></div></div>
 
   <header class="bar" hidden>
     <div class="bar-in">
-      <a class="wordmark" id="hdrWordmark" href="#/">Store</a>
       <nav class="links">
         <a href="#/" data-nav="home">Home</a>
         <a href="#/shop" data-nav="shop">Shop</a>
@@ -281,6 +282,7 @@ function parseHash(){
 }
 async function route(){
   const {seg,params}=parseHash();
+  if(window.ShopBlocks) ShopBlocks.stopTimers();   // clear any home countdowns before leaving
   // highlight nav
   document.querySelectorAll('nav.links a').forEach(a=>{
     const n=a.dataset.nav;
@@ -297,21 +299,22 @@ async function route(){
 }
 
 /* ════════════ HOME ════════════ */
+// Renders the operator's REAL CMS home layout using the shared block engine
+// (public/shop/blocks.js — a web port of the mini-app's block-renderer). Same
+// content as the mini-app, responsive for phone + desktop. Falls back to a
+// clean auto-layout when nothing is published.
 async function renderHome(){
-  // Render the operator's REAL CMS home layout via the SAME engine the mini-app
-  // preview uses, by embedding /storefront?embed=1 (edited in one place). If
-  // nothing is published yet, fall back to a clean auto-layout so a fresh tenant
-  // still has a usable home.
   const layout = state.config && state.config.home && state.config.home.layout;
-  if (Array.isArray(layout) && layout.length) return renderHomeEmbed();
-  return renderHomeAuto();
-}
-
-function renderHomeEmbed(){
-  const src = '/storefront?embed=1&lang=' + encodeURIComponent(state.lang);
-  $('#view').innerHTML =
-    `<div class="wrap"><iframe id="homeFrame" title="Home" src="${escAttr(src)}" scrolling="no"
-       style="width:100%;border:0;display:block;min-height:70vh;margin:0 auto;"></iframe></div>`;
+  if(!(Array.isArray(layout) && layout.length) || !window.ShopBlocks) return renderHomeAuto();
+  // Block engine needs the full product list + active flash sales as context
+  // (by-id lookups, manual grids, flash strip). Fetch once, then cache.
+  if(!state.homeProducts){ try{ state.homeProducts = await api('/api/retail/products?limit=100'); }catch(e){ state.homeProducts=[]; } }
+  if(!state.flash){ try{ state.flash = await api('/api/retail/flash-sales'); }catch(e){ state.flash=[]; } }
+  ShopBlocks.stopTimers();
+  ShopBlocks.setContext({ lang:state.lang, products:state.homeProducts||[], categories:state.cats, flashSales:state.flash||[], config:state.config });
+  const view=$('#view');
+  view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
+  ShopBlocks.startTimers(view);
 }
 
 async function renderHomeAuto(){
@@ -497,10 +500,27 @@ async function renderProduct(id){
 function applyLangToUI(){
   document.querySelectorAll('#langToggle button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
   $('#searchInput').placeholder=state.lang==='cn'?'搜索商品':'Search products';
-  $('#hdrWordmark').textContent=state.brand;
   document.querySelector('nav.links [data-nav=home]').textContent=state.lang==='cn'?'首页':'Home';
   document.querySelector('nav.links [data-nav=shop]').textContent=state.lang==='cn'?'商品':'Shop';
   $('#footBrand').textContent=state.brand;
+}
+
+// Route a block-engine CTA target (data-cta-target) through our own router.
+// Shopping targets navigate; account/cart targets are honest "coming soon".
+function ctaRoute(t){
+  t=String(t||'');
+  if(!t) return;
+  if(t.indexOf('product:')===0){ location.hash='#/product/'+t.slice(8); return; }
+  if(t.indexOf('category:')===0){
+    const key=t.slice(9); const c=state.cats.find(x=>String(x.id)===key||x.name===key);
+    location.hash='#/shop'+(c?`?cat=${encodeURIComponent(c.name)}`:''); return;
+  }
+  if(t==='shop'){ location.hash='#/shop'; return; }
+  if(t.indexOf('copy:')===0){ const code=t.slice(5);
+    try{ navigator.clipboard.writeText(code); }catch{}
+    toast((state.lang==='cn'?'已复制 ':'Copied ')+code); return; }
+  // cart / wallet / coupons / voting / wecom / notifications / order:* → later phases
+  toast(state.lang==='cn'?'此功能即将上线 🌱':'That feature is coming soon 🌱');
 }
 
 (async function boot(){
@@ -529,19 +549,17 @@ function applyLangToUI(){
     applyLangToUI();route();});
   $('#cartBtn').addEventListener('click',()=>toast(state.lang==='cn'?'购物车即将上线 🌱':'Cart is coming soon 🌱'));
 
-  // Messages from the embedded home (/storefront?embed=1): auto-size the iframe
-  // and route CTA taps through our own router.
-  window.addEventListener('message',e=>{
-    const d=e.data;if(!d||typeof d!=='object')return;
-    if(d.type==='sf:height'){const f=document.getElementById('homeFrame');if(f&&d.height)f.style.height=(d.height+2)+'px';return;}
-    if(d.type==='sf:cta'){
-      const t=String(d.target||'');
-      if(t.indexOf('product:')===0) location.hash='#/product/'+t.split(':')[1];
-      else if(t.indexOf('category:')===0) location.hash='#/shop';
-      else if(t==='shop') location.hash='#/shop';
-      else if(t==='cart') toast(state.lang==='cn'?'购物车即将上线 🌱':'Cart is coming soon 🌱');
-    }
+  // Block-engine CTAs: every clickable in a rendered block carries
+  // data-cta-target. Delegate clicks here and route them.
+  $('#view').addEventListener('click',e=>{
+    const el=e.target.closest('[data-cta-target]');
+    if(!el) return;
+    e.preventDefault();
+    ctaRoute(el.getAttribute('data-cta-target'));
   });
+  // When the block engine pulls lazy data (top-selling grids, flash sales) or a
+  // countdown hits zero, re-render the home if that's where we are.
+  if(window.ShopBlocks) ShopBlocks.onRerender(()=>{ if(parseHash().seg.length===0) renderHome(); });
 
   window.addEventListener('hashchange',route);
   await route();
