@@ -46,7 +46,7 @@ Page({
         '付款后上传付款截图,客服核对后确认订单',
       ],
       deadlinePre: '请在 ',
-      deadlinePost: ' 分钟内完成付款并上传截图',
+      deadlinePost: ' 分钟内完成付款并上传截图,超时未付款订单将自动取消',
       save: '保存二维码到相册',
       waiting: '等待付款确认…',
       manualWaiting: '已收到截图,客服核对中…',
@@ -55,6 +55,8 @@ Page({
       uploaded: '已上传 ✓',
       uploadFail: '上传失败,请重试',
       paidToast: '支付成功 ✓',
+      cancelledTitle: '订单已取消',
+      cancelledMsg: '此订单因超时未付款已自动取消,请重新下单。',
       saved: '已保存到相册',
       saveFail: '保存失败,请长按截屏',
       retry: '重新加载',
@@ -75,7 +77,7 @@ Page({
         'Upload your payment screenshot — we confirm shortly',
       ],
       deadlinePre: 'Please pay and upload your screenshot within ',
-      deadlinePost: ' minutes',
+      deadlinePost: ' minutes — unpaid orders are cancelled after that',
       save: 'Save QR to album',
       waiting: 'Waiting for payment…',
       manualWaiting: 'Screenshot received — confirming…',
@@ -84,6 +86,8 @@ Page({
       uploaded: 'Uploaded ✓',
       uploadFail: 'Upload failed, try again',
       paidToast: 'Paid ✓',
+      cancelledTitle: 'Order cancelled',
+      cancelledMsg: 'This order was cancelled because it wasn’t paid in time. Please place a new order.',
       saved: 'Saved to album',
       saveFail: 'Save failed — long-press to save',
       retry: 'Reload',
@@ -146,7 +150,22 @@ Page({
     try {
       const o = await api.get('/api/retail/payment/status/' + this.data.orderId);
       if (o && (o.status === 'paid' || o.status === 'awaiting_restock')) this.onPaid();
+      else if (o && o.status === 'cancelled') this.onCancelled();
     } catch (e) { /* transient network/auth blip — keep polling */ }
+  },
+
+  // The pay-window lapsed and the auto-cancel sweep reaped this unpaid order —
+  // tell the customer plainly rather than leaving them staring at a dead QR.
+  onCancelled() {
+    if (this._terminal) return;
+    this._terminal = true;
+    this.stopPolling();
+    wx.showModal({
+      title: this.data.t.cancelledTitle,
+      content: this.data.t.cancelledMsg,
+      showCancel: false,
+      success: () => { try { wx.reLaunch({ url: '/pages/home/home' }); } catch (e) {} },
+    });
   },
 
   onPaid() {

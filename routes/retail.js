@@ -4696,7 +4696,10 @@ function cancelStalePendingOrdersForTenant() {
     if (Number.isFinite(hours) && hours > 0) {
       for (const o of tdb().prepare(
         `SELECT id, status FROM retail_orders
-          WHERE status = 'pending_payment' AND placed_at <= datetime('now', ?)`
+          WHERE status = 'pending_payment' AND placed_at <= datetime('now', ?)
+            -- never reap an Alipay order the customer has uploaded a screenshot
+            -- for: it's (claimed) paid and awaiting staff/auto-verify.
+            AND NOT (payment_method = 'alipay' AND alipay_proof_image IS NOT NULL)`
       ).all(`-${hours} hours`)) byId.set(o.id, o.status);
     }
     // Manual-Alipay orders past their pay window — but ONLY when the customer
