@@ -95,7 +95,7 @@
       <view class="bind-kicker f-toni">{{ removeAll ? (lang === 'cn' ? '清空购物车' : 'CLEAR BASKET') : (lang === 'cn' ? '移出购物车' : 'REMOVE ITEM') }}</view>
       <view class="bind-title f-bear">{{ removeAll ? (lang === 'cn' ? '清空所有商品？' : 'Empty your basket?') : pendingRemoveName }}</view>
       <view class="bind-body f-aleo">{{ removeAll
-        ? (lang === 'cn' ? '将移除购物车中的全部商品，此操作无法撤销。' : 'This removes every item from your basket. You can\'t undo it.')
+        ? (lang === 'cn' ? '将移除购物车中的全部商品，此操作无法撤销。' : 'This removes every item from your basket. You can’t undo it.')
         : (lang === 'cn' ? '确定要从购物车中移除这件商品吗？' : 'Remove this item from your basket?') }}</view>
       <view class="bind-actions">
         <view class="bind-btn bind-btn--secondary f-toni" bindtap="removeCancel">{{ lang === 'cn' ? '保留' : 'Keep' }}</view>
