@@ -14501,6 +14501,7 @@ const INTEGRATION_KEYS = {
     ak_secret:          { env: 'ALIYUN_SMS_AK_SECRET', secret: true,  cred: CRED_KEYS.ALIYUN_SMS_AK_SECRET, bkey: 'accessKeySecret'   },
     sign_name:          { env: 'ALIYUN_SMS_SIGN',      secret: false, cred: CRED_KEYS.ALIYUN_SMS_SIGN,      bkey: 'signName'          },
     template_delivered: { env: 'ALIYUN_SMS_TPL_DELIV', secret: false, cred: CRED_KEYS.ALIYUN_SMS_TPL_DELIV, bkey: 'templateDelivered' },
+    template_otp:       { env: 'ALIYUN_SMS_TPL_OTP',   secret: false, cred: CRED_KEYS.ALIYUN_SMS_TPL_OTP,   bkey: 'templateOtp'       },
   },
 };
 

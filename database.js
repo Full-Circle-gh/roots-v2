@@ -3163,6 +3163,7 @@ try {
     'integrations.aliyun_sms.ak_secret':          'ALIYUN_SMS_AK_SECRET',
     'integrations.aliyun_sms.sign_name':          'ALIYUN_SMS_SIGN',
     'integrations.aliyun_sms.template_delivered': 'ALIYUN_SMS_TPL_DELIV',
+    'integrations.aliyun_sms.template_otp':       'ALIYUN_SMS_TPL_OTP',
   };
   let hydrated = 0;
   for (const [cfgKey, envKey] of Object.entries(envMap)) {

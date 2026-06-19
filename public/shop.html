@@ -215,6 +215,7 @@
       <div class="lang" id="langToggle">
         <button data-lang="en">EN</button><button data-lang="cn">中</button>
       </div>
+      <button class="acctbtn" id="acctBtn">Sign in</button>
       <button class="iconbtn" id="cartBtn" title="Cart" aria-label="Cart">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
       </button>
@@ -230,6 +231,60 @@
     </div>
   </footer>
 
+  <!-- ── Account: header button menu + phone-OTP login modal (Phase 2) ── -->
+  <style>
+    .acctbtn{font:inherit;font-weight:700;font-size:13px;letter-spacing:.02em;background:transparent;
+      color:var(--ink);border:1.5px solid var(--ink);border-radius:999px;padding:7px 16px;cursor:pointer;white-space:nowrap;max-width:160px;overflow:hidden;text-overflow:ellipsis;}
+    .acctbtn.on{background:var(--accent);color:#fff;border-color:var(--accent);}
+    #acctMenu{position:absolute;top:54px;right:16px;z-index:80;background:#fff;border:1.5px solid var(--ink);
+      border-radius:14px;box-shadow:0 12px 34px rgba(0,0,0,.18);min-width:200px;overflow:hidden;}
+    #acctMenu[hidden]{display:none;}
+    #acctMenu .am-head{padding:14px 16px;border-bottom:1px solid var(--line);}
+    #acctMenu .am-name{font-family:var(--bf-bear);font-size:16px;}
+    #acctMenu .am-sub{font-size:12px;color:var(--muted);margin-top:2px;}
+    #acctMenu button{display:block;width:100%;text-align:left;background:none;border:0;padding:12px 16px;font:inherit;font-size:14px;cursor:pointer;color:var(--ink);}
+    #acctMenu button:hover{background:var(--oat);}
+    #acctMenu .am-out{color:var(--berry);border-top:1px solid var(--line);}
+    .lm-overlay{position:fixed;inset:0;z-index:100;background:rgba(26,26,23,.55);display:flex;align-items:center;justify-content:center;padding:20px;}
+    .lm-overlay[hidden]{display:none;}
+    .lm-card{position:relative;background:var(--oat);border:2.5px solid var(--ink);border-radius:22px;
+      width:100%;max-width:380px;padding:34px 30px 30px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+    .lm-x{position:absolute;top:14px;right:16px;background:none;border:0;font-size:26px;line-height:1;cursor:pointer;color:var(--ink);}
+    .lm-title{font-family:var(--bf-bear);font-size:26px;line-height:1.05;}
+    .lm-sub{font-size:14px;color:var(--muted);margin-top:8px;line-height:1.4;}
+    .lm-step{margin-top:20px;display:flex;flex-direction:column;gap:12px;}
+    .lm-step[hidden]{display:none;}
+    .lm-step input{font:inherit;font-size:18px;letter-spacing:.06em;padding:14px 16px;border:1.5px solid var(--ink);
+      border-radius:12px;background:#fff;color:var(--ink);width:100%;}
+    .lm-step input:focus{outline:2px solid var(--accent);outline-offset:1px;}
+    .lm-btn{font:inherit;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:14px;
+      background:var(--accent);color:#fff;border:0;border-radius:999px;padding:15px;cursor:pointer;}
+    .lm-btn:disabled{opacity:.5;cursor:default;}
+    .lm-link{background:none;border:0;color:var(--accent);font:inherit;font-size:13px;cursor:pointer;align-self:flex-start;padding:2px 0;}
+    .lm-link:disabled{color:var(--muted);cursor:default;}
+    .lm-err{margin-top:12px;font-size:13px;color:var(--berry);min-height:16px;}
+  </style>
+
+  <div id="acctMenu" hidden></div>
+
+  <div id="loginModal" class="lm-overlay" hidden>
+    <div class="lm-card">
+      <button class="lm-x" id="lmClose" aria-label="Close">×</button>
+      <div class="lm-title" id="lmTitle">Sign in</div>
+      <div class="lm-sub" id="lmSub">Enter your phone to get a verification code.</div>
+      <div class="lm-step" id="lmPhoneStep">
+        <input id="otpPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Phone number" maxlength="11">
+        <button class="lm-btn" id="otpSendBtn">Send code</button>
+      </div>
+      <div class="lm-step" id="lmCodeStep" hidden>
+        <input id="otpCode" type="tel" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="6">
+        <button class="lm-btn" id="otpVerifyBtn">Verify &amp; sign in</button>
+        <button class="lm-link" id="otpResend">Resend code</button>
+      </div>
+      <div class="lm-err" id="lmErr"></div>
+    </div>
+  </div>
+
   <div id="toast"></div>
 
 <script>
@@ -243,7 +298,7 @@
    honest stubs for now. The operator's exact CMS home blocks (Phase 1b) will
    render via a shared block engine; today the home shows a clean auto-layout.
    ════════════════════════════════════════════════════════════════════════ */
-const state = { lang:'en', config:{}, brand:'Store', cats:[], productCache:new Map() };
+const state = { lang:'en', config:{}, brand:'Store', cats:[], productCache:new Map(), token:'', customer:null };
 
 /* ── tiny helpers ── */
 const $ = (s,r=document)=>r.querySelector(s);
@@ -259,11 +314,97 @@ function wasPrice(p){return isFlash(p)&&Number(p.price)>Number(p.flash.price)?Nu
 function catLabel(c){return pick(c.name,c.name_cn);}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._h);toast._h=setTimeout(()=>t.classList.remove('show'),2400);}
 
+function authHeaders(h){h=h||{};if(state.token)h['Authorization']='Bearer '+state.token;return h;}
 async function api(path){
-  const r=await fetch(path,{headers:{'Accept':'application/json'}});
+  const r=await fetch(path,{headers:authHeaders({'Accept':'application/json'})});
+  if(r.status===401) clearAuth();   // token expired/invalid → drop it silently
   if(!r.ok) throw new Error(path+' → '+r.status);
   const j=await r.json();
   return j&&('data'in j)?j.data:j;
+}
+// POST JSON; throws an Error whose .code is the server's error string.
+async function postJson(path,body){
+  const r=await fetch(path,{method:'POST',headers:authHeaders({'Accept':'application/json','Content-Type':'application/json'}),body:JSON.stringify(body||{})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){const e=new Error(j.error||('http_'+r.status));e.code=j.error;e.status=r.status;throw e;}
+  return j&&('data'in j)?j.data:j;
+}
+
+/* ════════════ ACCOUNT (phone-OTP login) ════════════ */
+function setAuth(token,customer){state.token=token||'';state.customer=customer||null;
+  try{token?localStorage.setItem('shop_token',token):localStorage.removeItem('shop_token');}catch{}
+  renderAcct();}
+function clearAuth(){setAuth('',null);}
+async function loadCustomer(){if(!state.token)return;
+  try{state.customer=await api('/api/retail/customer');}catch(e){/* 401 already cleared */}
+  renderAcct();}
+function renderAcct(){
+  const b=$('#acctBtn');if(!b)return;
+  if(state.token&&state.customer){
+    const c=state.customer;
+    const nm=(c.nickname||'').trim()||(c.phone?('···'+String(c.phone).slice(-4)):(state.lang==='cn'?'我的账户':'Account'));
+    b.textContent=nm;b.classList.add('on');
+  }else{b.textContent=state.lang==='cn'?'登录':'Sign in';b.classList.remove('on');}
+}
+function acctMenuToggle(force){
+  const m=$('#acctMenu');const show=force!=null?force:m.hidden;
+  if(!show){m.hidden=true;return;}
+  const c=state.customer||{};
+  const nm=(c.nickname||'').trim()||(state.lang==='cn'?'我的账户':'My account');
+  const pts=Number(c.points_balance)||0;
+  m.innerHTML=
+    '<div class="am-head"><div class="am-name">'+esc(nm)+'</div>'+
+    '<div class="am-sub">'+(c.phone?esc(String(c.phone)):'')+(pts>0?(' · '+pts+(state.lang==='cn'?' 积分':' pts')):'')+'</div></div>'+
+    '<button data-am="orders">'+(state.lang==='cn'?'我的订单':'My orders')+'</button>'+
+    '<button class="am-out" data-am="out">'+(state.lang==='cn'?'退出登录':'Sign out')+'</button>';
+  m.hidden=false;
+}
+/* login modal */
+let _otpTimer=null;
+function lmErr(msg){$('#lmErr').textContent=msg||'';}
+function openLogin(){lmErr('');$('#lmPhoneStep').hidden=false;$('#lmCodeStep').hidden=true;
+  $('#otpCode').value='';$('#loginModal').hidden=false;setTimeout(()=>$('#otpPhone').focus(),50);}
+function closeLogin(){$('#loginModal').hidden=true;clearInterval(_otpTimer);}
+function otpCooldown(secs){
+  const btn=$('#otpResend');let n=secs||60;clearInterval(_otpTimer);
+  const tick=()=>{if(n<=0){clearInterval(_otpTimer);btn.disabled=false;btn.textContent=state.lang==='cn'?'重新发送':'Resend code';return;}
+    btn.disabled=true;btn.textContent=(state.lang==='cn'?'重新发送 ':'Resend in ')+n+'s';n--;};
+  tick();_otpTimer=setInterval(tick,1000);
+}
+async function otpSend(){
+  const phone=($('#otpPhone').value||'').replace(/\D/g,'');
+  if(!/^1\d{10}$/.test(phone)){lmErr(state.lang==='cn'?'请输入11位手机号':'Enter an 11-digit phone number');return;}
+  lmErr('');const btn=$('#otpSendBtn');btn.disabled=true;
+  try{
+    const d=await postJson('/api/retail/auth/otp/request',{phone});
+    $('#lmPhoneStep').hidden=true;$('#lmCodeStep').hidden=false;
+    $('#lmSub').textContent=(state.lang==='cn'?'验证码已发送至 ':'Code sent to ')+phone;
+    setTimeout(()=>$('#otpCode').focus(),50);
+    otpCooldown(d&&d.cooldown||60);
+    if(d&&d.dev&&d.code){$('#otpCode').value=d.code;toast('DEV code '+d.code);}  // dev-echo only
+  }catch(e){
+    if(e.code==='too_soon'){$('#lmPhoneStep').hidden=true;$('#lmCodeStep').hidden=false;otpCooldown(60);}
+    else if(e.code==='sms_unavailable')lmErr(state.lang==='cn'?'短信服务尚未配置，请稍后再试':'SMS isn’t set up yet — please try later');
+    else if(e.code==='daily_cap')lmErr(state.lang==='cn'?'今日请求过多':'Too many requests today');
+    else lmErr(state.lang==='cn'?'发送失败':'Could not send code');
+  }finally{btn.disabled=false;}
+}
+async function otpVerify(){
+  const phone=($('#otpPhone').value||'').replace(/\D/g,'');
+  const code=($('#otpCode').value||'').replace(/\D/g,'');
+  if(!/^\d{6}$/.test(code)){lmErr(state.lang==='cn'?'请输入6位验证码':'Enter the 6-digit code');return;}
+  lmErr('');const btn=$('#otpVerifyBtn');btn.disabled=true;
+  try{
+    const d=await postJson('/api/retail/auth/otp/verify',{phone,code});
+    setAuth(d.token,d.customer);closeLogin();
+    toast(state.lang==='cn'?'登录成功 🌱':'Signed in 🌱');
+    route();
+  }catch(e){
+    if(e.code==='bad_code')lmErr(state.lang==='cn'?'验证码错误':'Incorrect code');
+    else if(e.code==='code_expired')lmErr(state.lang==='cn'?'验证码已过期，请重新发送':'Code expired — resend');
+    else if(e.code==='too_many_attempts')lmErr(state.lang==='cn'?'尝试过多，请重新发送':'Too many tries — resend');
+    else lmErr(state.lang==='cn'?'登录失败':'Sign-in failed');
+  }finally{btn.disabled=false;}
 }
 
 /* ── theming ── */
@@ -520,7 +661,7 @@ async function renderProduct(id){
         </div>
         ${rc>0?`<div class="rating"><span class="stars">${'★'.repeat(Math.round(avg))}<span class="off">${'★'.repeat(5-Math.round(avg))}</span></span>${avg.toFixed(1)} · ${rc} ${state.lang==='cn'?'条评价':'reviews'}</div>`:''}
         <div class="buybar">
-          <button class="btn-primary" id="buyBtn">${state.lang==='cn'?'登录后下单':'Sign in to order'}</button>
+          <button class="btn-primary" id="buyBtn">${state.token?(state.lang==='cn'?'网页下单即将上线':'Checkout coming soon'):(state.lang==='cn'?'登录后下单':'Sign in to order')}</button>
         </div>
         <div class="pd-note">${state.lang==='cn'?'网页下单功能即将上线。':'Online checkout is coming soon to the website.'}</div>
         ${varsHtml}
@@ -534,7 +675,8 @@ async function renderProduct(id){
   const thumbs=$('#pdThumbs');
   if(thumbs) thumbs.onclick=e=>{const b=e.target.closest('button');if(!b)return;
     $('#pdMain').src=b.dataset.src;thumbs.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));};
-  $('#buyBtn').onclick=()=>toast(state.lang==='cn'?'账户与下单功能即将上线 🌱':'Accounts & checkout are coming soon 🌱');
+  $('#buyBtn').onclick=()=>{ if(!state.token) return openLogin();
+    toast(state.lang==='cn'?'网页下单功能即将上线 🌱':'Online checkout is coming soon 🌱'); };
 }
 
 /* ════════════ CHROME / INIT ════════════ */
@@ -557,6 +699,7 @@ function ctaRoute(t){
     location.hash='#/shop'+(c?`?cat=${encodeURIComponent(c.name)}`:''); return;
   }
   if(t==='shop'){ location.hash='#/shop'; return; }
+  if(t==='login'||t==='account'||t==='me'){ if(state.token&&state.customer) acctMenuToggle(true); else openLogin(); return; }
   if(t.indexOf('copy:')===0){ const code=t.slice(5);
     try{ navigator.clipboard.writeText(code); }catch{}
     toast((state.lang==='cn'?'已复制 ':'Copied ')+code); return; }
@@ -568,6 +711,7 @@ function ctaRoute(t){
   // config first (theme + brand), then categories — both tenant-scoped by Host.
   try{ state.config=await api('/api/retail/config')||{}; }catch(e){ state.config={}; }
   try{ state.lang=localStorage.getItem('shop_lang')||'en'; }catch{}
+  try{ state.token=localStorage.getItem('shop_token')||''; }catch{}
   if(!['en','cn'].includes(state.lang)) state.lang='en';
   applyTheme(state.config);
   state.brand=brandName(state.config);
@@ -589,6 +733,25 @@ function ctaRoute(t){
     state.lang=b.dataset.lang;try{localStorage.setItem('shop_lang',state.lang);}catch{}
     applyLangToUI();route();});
   $('#cartBtn').addEventListener('click',()=>toast(state.lang==='cn'?'购物车即将上线 🌱':'Cart is coming soon 🌱'));
+
+  // ── account: header button → login modal (logged-out) or menu (logged-in) ──
+  renderAcct();
+  $('#acctBtn').addEventListener('click',(e)=>{e.stopPropagation();
+    if(state.token&&state.customer) acctMenuToggle(); else openLogin();});
+  $('#acctMenu').addEventListener('click',(e)=>{const b=e.target.closest('button');if(!b)return;
+    const a=b.dataset.am;acctMenuToggle(false);
+    if(a==='out'){clearAuth();toast(state.lang==='cn'?'已退出':'Signed out');if(parseHash().seg[0]!=='shop')location.hash='#/';else route();}
+    else if(a==='orders')toast(state.lang==='cn'?'订单页即将上线 🌱':'Order history is coming soon 🌱');});
+  document.addEventListener('click',()=>acctMenuToggle(false));  // click-away closes the menu
+  // login modal wiring
+  $('#lmClose').addEventListener('click',closeLogin);
+  $('#loginModal').addEventListener('click',(e)=>{if(e.target.id==='loginModal')closeLogin();});
+  $('#otpSendBtn').addEventListener('click',otpSend);
+  $('#otpResend').addEventListener('click',otpSend);
+  $('#otpVerifyBtn').addEventListener('click',otpVerify);
+  $('#otpPhone').addEventListener('keydown',(e)=>{if(e.key==='Enter')otpSend();});
+  $('#otpCode').addEventListener('keydown',(e)=>{if(e.key==='Enter')otpVerify();});
+  if(state.token) loadCustomer();   // resolve the saved session (or silently drop it)
 
   // Block-engine CTAs: every clickable in a rendered block carries
   // data-cta-target. Delegate clicks here and route them.
