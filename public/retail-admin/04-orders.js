@@ -1709,7 +1709,7 @@ function renderTrackingCell(o) {
     ? `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:${dl.tone === 'urgent' ? 700 : 600}; color:${dl.color};">${deliveryIcon(dl.icon, 11)}<span>${cuT(dl.en, dl.cn)}</span></div>`
     : '';
   const airDelayBadge = o.air_delivery_delayed
-    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color:#b85000; margin-top:3px;">⚠ ${cuT('AIR DELAYED · contact customer', '空运延误 · 联系客户')}</div>`
+    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color: var(--danger); margin-top:3px;">⚠ ${cuT('AIR DELAYED · contact customer', '空运延误 · 联系客户')}</div>`
     : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
           <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${airDelayBadge}`;
@@ -3625,17 +3625,18 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   const delayDays = airShipmentDelayDays(o, s);
   const delayBanner = delayDays > 0 ? `
     <div style="display:flex; gap:10px; align-items:flex-start; padding:12px 14px; margin-bottom:12px;
-                background:#fff4e0; border:2px solid #e07000; border-radius:8px; font-size:12.5px; line-height:1.5;">
-      <span style="font-size:20px; line-height:1.1; flex-shrink:0;">🚨</span>
+                background: var(--danger-soft, rgba(232,85,106,.14)); border:1px solid var(--danger, #e8556a);
+                border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.5;">
+      <span style="font-size:18px; line-height:1.1; flex-shrink:0;">🚨</span>
       <div>
-        <div style="font-weight:700; font-size:13.5px; color:#b85000; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em;">
+        <div style="font-weight:700; font-size:13px; color: var(--danger, #e8556a); margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em;">
           ${cuT(`Air shipment delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `空运延误 — 晚到 ${delayDays} 天`)}
         </div>
-        <div style="color:#5a3000; margin-bottom:6px;">
+        <div style="color: var(--text-1); margin-bottom:6px;">
           <strong>${cuT('1. Contact customer immediately:', '1. 立即联系客户：')}</strong>
           ${cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。')}
         </div>
-        <div style="color:#5a3000;">
+        <div style="color: var(--text-1);">
           <strong>${cuT('2. Contact JD Logistics for delay compensation.', '2. 联系京东物流，申请延误赔偿。')}</strong>
         </div>
       </div>
