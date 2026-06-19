@@ -262,6 +262,34 @@
 
 /* Refund banners */
 /* Partial-shipment notice — "X of Y items shipped, rest to follow" */
+/* Late air shipment — food-safety warning. Berry red + filled tint so it
+   reads as urgent, distinct from the amber partial / green eta banners. */
+.air-delay-banner {
+  margin: 32rpx 44rpx 0;
+  padding: 24rpx 28rpx;
+  border-radius: 4rpx;
+  border-left: 8rpx solid var(--berry);
+  background: rgba(233, 97, 116, 0.12);
+  display: flex;
+  align-items: flex-start;
+  gap: 18rpx;
+}
+.air-delay-banner .air-delay-icon {
+  font-size: calc(34rpx * var(--font-scale));
+  line-height: 1.2;
+}
+.air-delay-banner .air-delay-body { flex: 1; min-width: 0; }
+.air-delay-banner .air-delay-line {
+  font-size: calc(28rpx * var(--font-scale));
+  color: var(--berry);
+}
+.air-delay-banner .air-delay-sub {
+  font-size: calc(23rpx * var(--font-scale));
+  margin-top: 6rpx;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
 .partial-banner {
   margin: 32rpx 44rpx 0;
   padding: 22rpx 26rpx;

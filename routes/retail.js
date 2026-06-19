@@ -4044,13 +4044,49 @@ function buildOrderStatusData(orderId, orderNo, tip) {
   };
 }
 
+// True when an order carries an AIR parcel that delivered MORE than one day
+// after it dispatched — a late cold-chain shipment whose fresh/perishable
+// contents may no longer be safe. Mirrors the `air_delivery_delayed` computed
+// field on the admin orders list (mode='air', dispatched, delivered, and
+// DATE(delivered) > DATE(dispatched +1d)), using tracking_synced_at as the
+// delivered-date fallback because JD live-sync flips tracking_status to
+// 'delivered' but never stamps delivered_at. Best-effort; false on any error.
+function orderHasDelayedAirShipment(orderId) {
+  try {
+    const row = tdb().prepare(
+      `SELECT 1 FROM retail_shipments sha
+         WHERE sha.order_id = ?
+           AND sha.mode = 'air'
+           AND sha.dispatched_at IS NOT NULL
+           AND (sha.delivered_at IS NOT NULL OR sha.tracking_status = 'delivered')
+           AND DATE(COALESCE(sha.delivered_at, sha.tracking_synced_at))
+                 > DATE(sha.dispatched_at, '+1 day')
+         LIMIT 1`
+    ).get(orderId);
+    return !!row;
+  } catch (e) { return false; }
+}
+
 // Helper used by the admin status-transition endpoint — fires the in-app
 // notification (always) and, when configured, the WeChat subscribe-message.
 function notifyOrderStatusChange(orderId, newStatus) {
   // Out-of-GZ "package delivered" SMS — independent channel, own gating.
   if (newStatus === 'delivered') maybeSendDeliveredSms(orderId);
+  // A late air parcel turns the "delivered" message into a food-safety
+  // warning instead of the usual celebratory note — the customer mirror of
+  // the admin "AIR SHIPMENT DELAYED" banner. Inform + apologise only; the
+  // operator handles JD compensation / refunds on the staff side.
+  const airDelayed = newStatus === 'delivered' && orderHasDelayedAirShipment(orderId);
   // In-app notification first — independent of WeChat push configuration.
   notifyForOrder(orderId, (o) => {
+    if (airDelayed) {
+      return {
+        category: 'order', type: 'order_air_delayed',
+        title_en: 'Delivery arrived late', title_cn: '配送延误送达',
+        body_en: `Order ${o.order_no} arrived later than planned. For your safety, please don't eat any fresh or perishable items from it. We're very sorry — we'll be in touch.`,
+        body_cn: `订单 ${o.order_no} 送达时间晚于预期。为保障您的食品安全,请勿食用其中的生鲜或易变质商品。非常抱歉,我们会尽快与您联系。`,
+      };
+    }
     const m = ORDER_STATUS_NOTIF[newStatus];
     if (!m) return null;
     return {
@@ -4071,7 +4107,10 @@ function notifyOrderStatusChange(orderId, newStatus) {
     if (!tplId) return;
     const o = tdb().prepare('SELECT order_no, customer_id, total FROM retail_orders WHERE id = ?').get(orderId);
     if (!o) return;
-    const data = buildOrderStatusData(orderId, o.order_no, ORDER_STATUS_TIP[newStatus]);
+    // thing3 (温馨提示) caps at 20 chars and rejects most punctuation — keep the
+    // delayed tip short, Chinese-first, punctuation-free.
+    const tip = airDelayed ? '送达延误 请勿食用生鲜' : ORDER_STATUS_TIP[newStatus];
+    const data = buildOrderStatusData(orderId, o.order_no, tip);
     sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
       .catch(e => console.warn('[notify-status]', e));
   } catch (e) { console.error('[notify-status]', e); }
@@ -7346,6 +7385,9 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   }
   delete o.refund_lines_json;
   o.tracking = buildTrackingView(o);
+  // Late air parcel → drives the customer-facing food-safety banner on the
+  // order page (the mirror of the admin "AIR SHIPMENT DELAYED" alert).
+  o.air_delayed = orderHasDelayedAirShipment(orderId);
   // Split orders (2+ parcels): surface a per-parcel `shipments[]` so the
   // customer sees how their order is being shipped — each parcel's own status
   // (not shipped / dispatched / delivered) and the items riding in it. Tracking

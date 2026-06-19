@@ -44,6 +44,7 @@ Page({
     shipments: [],
     etaLabel: '',                // local (same-city) delivery arrival time, e.g. "2:50 PM"
     partialShip: null,           // {line, sub} when some-but-not-all parcels shipped
+    airDelay: null,              // {line, sub} when a late air parcel may be unsafe to eat
     trackingEvents: [],
     trackingEventsVisible: [],   // computed: 1 latest by default, all when expanded
     trackingEventsExpanded: false,
@@ -402,6 +403,18 @@ Page({
               sub:  `${left} ${left === 1 ? 'item is' : 'items are'} still to follow` };
       }
 
+      // Late air parcel — a fresh/perishable cold-chain shipment that arrived
+      // more than a day late. Surfaced as a persistent food-safety banner so it
+      // can't be missed (the in-app notification + push are easy to scroll past).
+      // Inform + apologise only; staff handle compensation off-app.
+      const airDelay = data.air_delayed
+        ? (L === 'cn'
+            ? { line: '配送延误送达',
+                sub:  '为保障食品安全,请勿食用其中的生鲜或易变质商品。非常抱歉,我们会尽快与您联系。' }
+            : { line: 'Your delivery arrived late',
+                sub:  "For your safety, please don't eat any fresh or perishable items from this order. We're very sorry — we'll be in touch." })
+        : null;
+
       // Local (same-city / Guangzhou) delivery has no waybill — the store sets a
       // same-day arrival time instead. Surface it as a single label the page
       // shows above the items ("Estimated arrival · 2:50 PM").
@@ -439,6 +452,7 @@ Page({
         shipments,
         etaLabel,
         partialShip,
+        airDelay,
         trackingEvents,
         trackingEventsVisible,
         refundView,
