@@ -1149,9 +1149,11 @@ async function loadAliyunSms() {
     const sec  = $('#aliyun_sms-ak_secret');
     const sign = $('#aliyun_sms-sign_name');
     const tpl  = $('#aliyun_sms-template_delivered');
+    const tplOtp = $('#aliyun_sms-template_otp');
     if (id)   id.value = a.ak_id || '';
     if (sign) sign.value = a.sign_name || '';
     if (tpl)  tpl.value = a.template_delivered || '';
+    if (tplOtp) tplOtp.value = a.template_otp || '';
     if (sec)  sec.placeholder = a.ak_secret_masked
       ? (a.ak_secret_masked + ' · leave blank to keep · 留空保持不变')
       : 'paste AccessKey Secret · 粘贴 AccessKey Secret';
@@ -1170,12 +1172,14 @@ async function saveAliyunSms_() {
   const sec  = $('#aliyun_sms-ak_secret').value;   // exact — secrets not trimmed
   const sign = $('#aliyun_sms-sign_name').value.trim();
   const tpl  = $('#aliyun_sms-template_delivered').value.trim();
+  const tplOtp = ($('#aliyun_sms-template_otp')||{}).value;
   await api('/api/retail-admin/integrations', { method: 'PUT', body: {
     aliyun_sms: {
       ak_id:              id || null,
       ak_secret:          sec ? sec : undefined,
       sign_name:          sign || null,
       template_delivered: tpl || null,
+      template_otp:       (tplOtp != null ? tplOtp.trim() : '') || null,
     },
   } });
   $('#aliyun_sms-ak_secret').value = '';   // never keep plaintext in the field
