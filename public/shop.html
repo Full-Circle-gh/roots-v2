@@ -334,6 +334,26 @@
     .pd-qty button{background:none;border:0;width:40px;height:46px;font-size:20px;cursor:pointer;color:var(--ink);}
     .pd-qty span{min-width:34px;text-align:center;font-weight:700;font-size:16px;}
     #addBtn{flex:1;}
+    /* checkout */
+    .co{max-width:760px;margin:0 auto;}
+    .co h1{font-family:var(--bf-bear);font-size:30px;margin:6px 0 18px;}
+    .co-sec{background:#fff;border:1.5px solid var(--ink);border-radius:16px;padding:18px 20px;margin-bottom:16px;}
+    .co-sec h3{font-family:var(--bf-bear);font-size:17px;margin-bottom:12px;}
+    .co-addr{display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer;}
+    .co-addr:last-of-type{border-bottom:0;}
+    .co-addr .ad-n{font-weight:700;font-size:14px;display:block;} .co-addr .ad-d{font-size:13px;color:var(--muted);margin-top:2px;display:block;}
+    .co-slot{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);cursor:pointer;font-size:14px;}
+    .co-slot:last-of-type{border-bottom:0;}
+    .co-field{margin-top:10px;} .co-field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px;}
+    .co-field input,.co-field textarea{width:100%;font:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--ink);border-radius:10px;background:#fff;}
+    .co-addbtn{background:none;border:1.5px dashed var(--ink);border-radius:10px;padding:10px;width:100%;cursor:pointer;font:inherit;margin-top:8px;}
+    .co-line{display:flex;justify-content:space-between;font-size:14px;padding:5px 0;}
+    .co-line.tot{font-family:var(--bf-gothic);font-size:24px;border-top:1.5px solid var(--ink);margin-top:8px;padding-top:10px;letter-spacing:.03em;}
+    .co-place{width:100%;font:inherit;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:15px;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:17px;cursor:pointer;margin-top:6px;}
+    .co-place:disabled{opacity:.5;cursor:default;}
+    .co-msg{font-size:13px;color:var(--berry);min-height:16px;margin-top:8px;line-height:1.5;}
+    .co-ok{text-align:center;padding:48px 20px;}
+    .co-ok .big{font-family:var(--bf-bear);font-size:28px;margin:10px 0;}
   </style>
   <div id="cartDrawer" class="cd-overlay" hidden>
     <div class="cd-panel">
@@ -522,6 +542,152 @@ function renderCartItems(){
   foot.hidden=false;
 }
 
+/* ════════════ CHECKOUT (Phase 3b) ════════════ */
+// Delivery-only MVP: pick/add address → /checkout/quote (fees + slots) → place
+// via /orders (handles the out-of-stock fallback). Server re-prices & re-checks
+// stock authoritatively. Payment is Phase 3c (order is created pending_payment).
+var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', quote:null, placing:false, idem:null, fallback:null, showAddForm:false };
+function coItems(){return cartGet().map(l=>({product_id:l.product_id,qty:l.qty,choices:l.choices||[]}));}
+function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
+function coErrMsg(code){const map={
+  address_required:state.lang==='cn'?'请选择地址':'Choose an address',
+  delivery_slot_required:state.lang==='cn'?'请选择配送时间':'Choose a delivery time',
+  insufficient_points:state.lang==='cn'?'积分不足':'Not enough points',
+  voucher_exhausted:state.lang==='cn'?'优惠码已失效':'Voucher no longer valid',
+  flash_stock_exceeded:state.lang==='cn'?'秒杀库存不足':'Flash stock exceeded',
+  local_only_outside_gz:state.lang==='cn'?'部分商品仅限本地':'Some items are local-only',
+  no_zone_match:state.lang==='cn'?'该地址暂不支持配送':'We don’t deliver to this address yet'};
+  return (state.lang==='cn'?'下单失败：':'Order failed: ')+(map[code]||code||'error');}
+
+async function renderCheckout(){
+  const v=$('#view');
+  if(!state.token){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(state.lang==='cn'?'请先登录后结算':'Please sign in to check out')+'</div></div></div>'; openLogin(); return; }
+  if(!coItems().length){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(state.lang==='cn'?'购物车是空的 🌱':'Your cart is empty 🌱')+'<br><a class="more" href="#/shop">'+(state.lang==='cn'?'去购物':'Browse products')+'</a></div></div></div>'; return; }
+  co.idem=co.idem||('web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));
+  v.innerHTML=`<div class="wrap"><div class="co">
+    <h1>${state.lang==='cn'?'结算':'Checkout'}</h1>
+    <div class="co-sec"><h3>${state.lang==='cn'?'配送地址':'Delivery address'}</h3><div id="coAddr">…</div></div>
+    <div class="co-sec"><h3>${state.lang==='cn'?'配送时间':'Delivery time'}</h3><div id="coSlots">…</div></div>
+    <div class="co-sec"><h3>${state.lang==='cn'?'备注与优惠码':'Note & voucher'}</h3>
+      <div class="co-field"><label>${state.lang==='cn'?'订单备注 (选填)':'Order note (optional)'}</label><textarea id="coNote" rows="2"></textarea></div>
+      <div class="co-field"><label>${state.lang==='cn'?'优惠码 (选填)':'Voucher code (optional)'}</label><input id="coVoucher" type="text"></div>
+    </div>
+    <div class="co-sec"><h3>${state.lang==='cn'?'订单摘要':'Order summary'}</h3><div id="coSummary">…</div></div>
+    <div class="co-msg" id="coMsg"></div>
+    <button class="co-place" id="coPlace" disabled>${state.lang==='cn'?'提交订单':'Place order'}</button>
+  </div></div>`;
+  document.title=(state.lang==='cn'?'结算':'Checkout')+' · '+state.brand;
+  $('#coNote').value=co.note; $('#coVoucher').value=co.voucher;
+  $('#coNote').addEventListener('input',e=>co.note=e.target.value);
+  $('#coVoucher').addEventListener('input',e=>co.voucher=e.target.value.trim());
+  $('#coPlace').addEventListener('click',coPlace);
+  await coLoadAddrs();
+  await coQuote();
+}
+async function coLoadAddrs(){
+  try{ co.addrs=await api('/api/retail/addresses')||[]; }catch(e){ co.addrs=[]; }
+  if(!co.addrId||!co.addrs.find(a=>a.id===co.addrId)){ const def=co.addrs.find(a=>a.is_default)||co.addrs[0]; co.addrId=def?def.id:null; }
+  renderCoAddrs();
+}
+function renderCoAddrs(){
+  const box=$('#coAddr'); if(!box)return;
+  if(co.showAddForm||!co.addrs.length){
+    box.innerHTML=`<div class="co-field"><label>${state.lang==='cn'?'收货人':'Name'}</label><input id="afName"></div>
+     <div class="co-field"><label>${state.lang==='cn'?'手机号':'Phone'}</label><input id="afPhone" inputmode="numeric" maxlength="11"></div>
+     <div class="co-field"><label>${state.lang==='cn'?'城市':'City'}</label><input id="afCity"></div>
+     <div class="co-field"><label>${state.lang==='cn'?'区/县':'District'}</label><input id="afDist"></div>
+     <div class="co-field"><label>${state.lang==='cn'?'详细地址':'Street address'}</label><input id="afAddr"></div>
+     <div class="co-field"><label>${state.lang==='cn'?'门牌/楼层 (选填)':'Apt / detail (optional)'}</label><input id="afDetail"></div>
+     <button class="co-place" id="afSave" style="margin-top:12px">${state.lang==='cn'?'保存地址':'Save address'}</button>
+     ${co.addrs.length?`<button class="co-addbtn" id="afCancel">${state.lang==='cn'?'取消':'Cancel'}</button>`:''}`;
+    const save=$('#afSave');
+    save.addEventListener('click',async()=>{
+      const body={recipient_name:$('#afName').value.trim(),phone:$('#afPhone').value.trim(),city:$('#afCity').value.trim(),district:$('#afDist').value.trim(),address:$('#afAddr').value.trim(),detail:$('#afDetail').value.trim(),is_default:co.addrs.length===0};
+      if(!body.recipient_name||!body.phone||!body.city||!body.address){coMsg(state.lang==='cn'?'请填写收货人、手机、城市、地址':'Fill name, phone, city and address');return;}
+      save.disabled=true; coMsg('');
+      try{ const a=await postJson('/api/retail/addresses',body); co.addrs.push(a); co.addrId=a.id; co.showAddForm=false; renderCoAddrs(); coQuote(); }
+      catch(e){ coMsg(state.lang==='cn'?'地址保存失败':'Could not save address'); save.disabled=false; }
+    });
+    const c=$('#afCancel'); if(c)c.addEventListener('click',()=>{co.showAddForm=false;renderCoAddrs();});
+    return;
+  }
+  box.innerHTML=co.addrs.map(a=>`<label class="co-addr"><input type="radio" name="coaddr" value="${a.id}" ${a.id===co.addrId?'checked':''}>
+    <span><span class="ad-n">${esc(a.recipient_name||'')} · ${esc(String(a.phone||''))}</span>
+    <span class="ad-d">${esc([a.city,a.district,a.address,a.detail].filter(Boolean).join(' '))}</span></span></label>`).join('')
+    +`<button class="co-addbtn" id="coAddNew">+ ${state.lang==='cn'?'新增地址':'Add address'}</button>`;
+  box.querySelectorAll('input[name=coaddr]').forEach(r=>r.addEventListener('change',()=>{co.addrId=Number(r.value);coQuote();}));
+  $('#coAddNew').addEventListener('click',()=>{co.showAddForm=true;renderCoAddrs();});
+}
+async function coQuote(){
+  const place=$('#coPlace'); if(place)place.disabled=true;
+  if(!co.addrId){ const s=$('#coSummary'); if(s)s.innerHTML='<div class="co-line">'+(state.lang==='cn'?'选择地址后显示总价':'Add an address to see totals')+'</div>'; return; }
+  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId||null,slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:0};
+  let j;
+  try{ const r=await fetch('/api/retail/checkout/quote',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
+  catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
+  if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
+  const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
+  renderCoSlots(d); renderCoSummary(d);
+}
+function renderCoSlots(d){
+  const box=$('#coSlots'); if(!box)return; const sc=d.scheduling||{}; const slots=Array.isArray(sc.slots)?sc.slots:[];
+  if(!slots.length){ box.innerHTML='<div class="co-slot">'+(state.lang==='cn'?'尽快送达':'As soon as possible')+'</div>';
+    if(!co.slotId){co.slotId=sc.right_away_available?'right_away':'right_away';co.slotKind='right_away';} return; }
+  if(!co.slotId||!slots.find(s=>s.slot_id===co.slotId)){ co.slotId=slots[0].slot_id; co.slotKind=slots[0].slot_kind||''; }
+  box.innerHTML=slots.map(s=>`<label class="co-slot"><input type="radio" name="coslot" value="${escAttr(s.slot_id)}" ${s.slot_id===co.slotId?'checked':''}>
+    <span>${esc(state.lang==='cn'?(s.label_cn||s.label_en):(s.label_en||s.label_cn))}${Number(s.surcharge)>0?` (+${money(s.surcharge)})`:''}</span></label>`).join('');
+  box.querySelectorAll('input[name=coslot]').forEach(r=>r.addEventListener('change',()=>{const s=slots.find(x=>x.slot_id===r.value);co.slotId=r.value;co.slotKind=s?(s.slot_kind||''):'';coQuote();}));
+}
+function renderCoSummary(d){
+  const box=$('#coSummary'); if(!box)return;
+  const sub=Number(d.subtotal)||0, ship=Number(d.delivery_fee)||0, pack=Number(d.packing_fee)||0, tot=Number(d.total)||0;
+  box.innerHTML=
+    `<div class="co-line"><span>${state.lang==='cn'?'小计':'Subtotal'}</span><span>${money(sub)}</span></div>`+
+    `<div class="co-line"><span>${state.lang==='cn'?'配送费':'Delivery'}</span><span>${d.free_shipping?(state.lang==='cn'?'免运费':'Free'):money(ship)}</span></div>`+
+    (pack>0?`<div class="co-line"><span>${state.lang==='cn'?'包装费':'Packing'}</span><span>${money(pack)}</span></div>`:'')+
+    `<div class="co-line tot"><span>${state.lang==='cn'?'合计':'Total'}</span><span>${money(tot)}</span></div>`;
+  const place=$('#coPlace'); if(place)place.disabled=false;
+}
+function renderNoZone(d){
+  const s=$('#coSummary'); if(s)s.innerHTML='<div class="co-msg" style="color:var(--berry)">'+(state.lang==='cn'?'抱歉，该地址暂不支持配送。':'Sorry, we don’t deliver to this address yet.')+(d&&d.kitchen_address?'<br>'+esc(d.kitchen_address):'')+'</div>';
+  const place=$('#coPlace'); if(place)place.disabled=true;
+}
+async function coPlace(){
+  if(co.placing)return;
+  if(!co.addrId){coMsg(state.lang==='cn'?'请选择配送地址':'Choose a delivery address');return;}
+  if(!co.slotId){coMsg(state.lang==='cn'?'请选择配送时间':'Choose a delivery time');return;}
+  co.placing=true; $('#coPlace').disabled=true; coMsg('');
+  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId,delivery_slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:0,voucher_code:co.voucher||null,customer_note:co.note||null,idempotency_key:co.idem};
+  if(co.fallback)body.fallback_choice=co.fallback;
+  let r,j;
+  try{ r=await fetch('/api/retail/orders',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
+  catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); co.placing=false; $('#coPlace').disabled=false; return; }
+  if(r.ok&&j.success){ coOnPlaced(j.data); return; }
+  co.placing=false; $('#coPlace').disabled=false;
+  if(r.status===409&&j.error==='needs_fallback_confirmation'){ coFallback(); return; }
+  coMsg(coErrMsg(j.error));
+}
+function coFallback(){
+  const m=$('#coMsg'); if(!m)return;
+  m.innerHTML=(state.lang==='cn'?'部分商品在最近门店缺货：':'Some items are short at the nearest store: ')+
+    '<button class="co-addbtn" id="fbFull" style="display:inline-block;width:auto;padding:6px 12px;margin:6px 6px 0 0">'+(state.lang==='cn'?'从邻近门店发货':'Ship from a nearby store')+'</button>'+
+    '<button class="co-addbtn" id="fbCancel" style="display:inline-block;width:auto;padding:6px 12px;margin-top:6px">'+(state.lang==='cn'?'移除缺货商品并下单':'Remove out-of-stock & order')+'</button>';
+  $('#fbFull').onclick=()=>{co.fallback='full_from_fallback';coPlace();};
+  $('#fbCancel').onclick=()=>{co.fallback='cancel_missing';coPlace();};
+}
+function coOnPlaced(order){
+  try{ localStorage.removeItem('shop_cart'); }catch{} cartBadge(); co.idem=null; co.fallback=null; co.note=''; co.voucher='';
+  $('#view').innerHTML=`<div class="wrap"><div class="co"><div class="co-ok">
+    <div style="font-size:44px">🌱</div>
+    <div class="big">${state.lang==='cn'?'下单成功！':'Order placed!'}</div>
+    <div>${state.lang==='cn'?'订单号':'Order'} <b>${esc(order.order_no||('#'+order.id))}</b></div>
+    <div class="co-line tot" style="justify-content:center;border:0">${money(order.total)}</div>
+    <div class="co-msg" style="color:var(--muted)">${state.lang==='cn'?'在线支付即将上线，我们会尽快与您联系确认订单。':'Online payment is coming soon — we’ll contact you to confirm this order.'}</div>
+    <a class="more" href="#/shop">${state.lang==='cn'?'继续购物 →':'Continue shopping →'}</a>
+  </div></div></div>`;
+  document.title=(state.lang==='cn'?'下单成功':'Order placed')+' · '+state.brand;
+}
+
 /* ════════════ ROUTER ════════════ */
 function parseHash(){
   const raw=location.hash.replace(/^#/,'')||'/';
@@ -542,6 +708,7 @@ async function route(){
   try{
     if(seg[0]==='product'&&seg[1]) return renderProduct(seg[1]);
     if(seg[0]==='shop')           return renderShop(params);
+    if(seg[0]==='checkout')        return renderCheckout();
     return renderHome();
   }catch(e){
     $('#view').innerHTML=`<div class="wrap"><div class="empty">Something went wrong loading this page.<br>${esc(e.message)}</div></div>`;
@@ -878,7 +1045,7 @@ function ctaRoute(t){
   $('#cdCheckout').addEventListener('click',()=>{
     if(!cartCount())return;
     if(!state.token){closeCart();return openLogin();}
-    toast(state.lang==='cn'?'结算功能即将上线 🌱':'Checkout is coming soon 🌱');  // Phase 3b
+    closeCart();location.hash='#/checkout';
   });
 
   // ── account: header button → login modal (logged-out) or menu (logged-in) ──
