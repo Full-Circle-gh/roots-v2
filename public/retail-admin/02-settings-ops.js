@@ -53,7 +53,12 @@ async function loadAlipayManual() {
     if (af)  af.checked = !!d.autoFlip;
     if (pm)  pm.value = d.payeeMatch || '';
     if (win) win.value = d.timeWindowMin || '';
-    if (key) { key.value = ''; key.placeholder = d.hasKey ? (d.keyMasked + ' · leave blank to keep · 留空保持不变') : 'sk-ant-… · paste once · 粘贴一次'; }
+    if (key) {
+      key.value = '';
+      key.placeholder = d.hasKey ? (d.keyMasked + ' · leave blank to keep · 留空保持不变')
+                       : d.serverKeyAvailable ? 'Using the existing server key — leave blank · 已使用服务器密钥,可留空'
+                       : 'sk-ant-… · paste once · 粘贴一次';
+    }
     _alipayOcrToggle();
     _alipayManualQr = null;   // existing image stays unless operator picks a new one
     _alipayManualChip(!!d.enabled);

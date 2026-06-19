@@ -3491,9 +3491,9 @@ router.post('/api/retail/payment/alipay-proof/:orderId', requireRetailAuth, expr
   // poll picks up an auto-flip; the upload response just reports the verdict.
   let verdict = null, autoPaid = false;
   const manual = getAlipayManual();
-  if (manual && manual.ocrEnabled && manual.anthropicKey && order.status === 'pending_payment') {
+  if (manual && manual.ocrEnabled && alipayOcr.ocrAvailable(manual.anthropicKey) && order.status === 'pending_payment') {
     try {
-      const ocr = await alipayOcr.readPaymentScreenshot(img, manual.anthropicKey);
+      const ocr = await alipayOcr.readPaymentScreenshot(img, { apiKey: manual.anthropicKey });
       const v = validateAlipayProof(order, ocr, manual);
       verdict = v.verdict;
       // txn-id reuse guard: an old/duplicate screenshot whose txn already sits on
@@ -11827,6 +11827,7 @@ router.get('/api/retail-admin/alipay-manual', requireRetailAdmin, (req, res) => 
     ocrEnabled: !!v.ocrEnabled, autoFlip: !!v.autoFlip,
     payeeMatch: v.payeeMatch || '', timeWindowMin: Number(v.timeWindowMin || 0),
     hasKey: !!key, keyMasked: key ? ('sk-…' + key.slice(-4)) : '',   // never return the raw key
+    serverKeyAvailable: alipayOcr.ocrAvailable(''),   // shared model key present → no per-tenant key needed
   }});
 });
 
@@ -11851,7 +11852,8 @@ router.put('/api/retail-admin/alipay-manual', requireRetailAdmin, express.json({
     anthropicKey,
   };
   if (cfg.enabled && !cfg.qr) return res.status(400).json({ success: false, error: 'qr_required' });
-  if (cfg.ocrEnabled && !cfg.anthropicKey) return res.status(400).json({ success: false, error: 'ocr_key_required' });
+  // A pasted key is only required when the shared server key isn't already available.
+  if (cfg.ocrEnabled && !alipayOcr.ocrAvailable(cfg.anthropicKey)) return res.status(400).json({ success: false, error: 'ocr_key_required' });
   tdb().prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
      VALUES ('integrations.alipayManual', ?, CURRENT_TIMESTAMP, ?)
