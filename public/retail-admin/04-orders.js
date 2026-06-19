@@ -83,8 +83,12 @@ function refundBadge(o) {
     if (o.status === 'refunded') {
       return `<span class="pill refund-pending" title="Refund paid · 已退款">↩ refunded · 已退款</span>`;
     }
-    const amt = (o.refund_amount_requested != null && Number(o.refund_amount_requested) > 0)
-      ? ` ¥${fmt(o.refund_amount_requested)}` : '';
+    // Show the CUMULATIVE amount actually refunded (refund_amount_paid accumulates
+    // across repeated partial refunds); fall back to approved/requested for older
+    // rows that predate the accumulation fix.
+    const paid = [o.refund_amount_paid, o.refund_amount_approved, o.refund_amount_requested]
+      .map(Number).find(n => Number.isFinite(n) && n > 0);
+    const amt = paid ? ` ¥${fmt(paid)}` : '';
     return `<span class="pill refund-partial" title="Partial refund · 部分退款${amt}">↩ part refund${amt} · 部分退款</span>`;
   }
   const labels = {

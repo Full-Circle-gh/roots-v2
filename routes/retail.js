@@ -13269,6 +13269,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.delivery_mode, o.same_day_surcharge_fee,
                     o.updated_at, o.seen_at,
                     o.refund_status, o.refund_amount_requested,
+                    o.refund_amount_approved, o.refund_amount_paid,
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
