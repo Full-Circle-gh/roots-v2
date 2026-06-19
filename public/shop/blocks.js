@@ -199,7 +199,7 @@
     }
     var scrim = (heroVideo || imageUrl) && ctas.length && heroScrim !== 'none'
       ? '<div class="sb-hero-scrim"></div>' : '';
-    return '<div class="sb-hero sb-hero-full sb-scrim-' + heroScrim + ' sb-enter-' + heroEnter +
+    return '<div class="sb-hero sb-hero-full sb-hero-fit-' + objFit + ' sb-scrim-' + heroScrim + ' sb-enter-' + heroEnter +
       '" style="' + boxStyle + '">' + media() + scrim + ctaStack('') + '</div>';
   };
 
@@ -677,9 +677,13 @@
           '<div class="sb-name">' + escapeHtml(it.name) + '</div>' + priceRow(it) + sold(it) + '</div>');
       }).join('') + '</div>';
     } else {
+      // desktop hover affordance (cosmetic — the whole card already links to the
+      // product, so this navigates there too; not a real add-to-cart yet).
+      var qaddLbl = CN() ? '快速查看' : 'Quick view';
       inner = '<div class="sb-grid sb-cols-' + cols + '">' + products.map(function (it) {
         return ctaWrap('product:' + it.id, '<div class="sb-card' + (it.rank ? ' sb-rank-card-' + it.rank : '') + '">' +
-          '<div class="sb-img">' + (it.image ? '<img class="sb-img-full" src="' + attr(it.image) + '" alt="">' : '') + badge(it) + '</div>' +
+          '<div class="sb-img">' + (it.image ? '<img class="sb-img-full" src="' + attr(it.image) + '" alt="">' : '') + badge(it) +
+          '<div class="sb-qadd">' + escapeHtml(qaddLbl) + '</div></div>' +
           '<div class="sb-name">' + escapeHtml(it.name) + '</div>' + priceRow(it) + sold(it) + '</div>');
       }).join('') + '</div>';
     }
