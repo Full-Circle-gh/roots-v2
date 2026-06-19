@@ -1314,14 +1314,13 @@ function fmtDateShort(dt) {
 // scheduled_for) passes through untouched.
 function absolutizeSlotLabel(label, scheduledForIso) {
   if (label == null || label === '') return label;
-  const s = String(label).trim();
-  const rel = /^(today|tomorrow|yesterday|今天|明天|昨天)\s*[,，]?\s*/i;
-  if (!rel.test(s)) return label;
+  const s = String(label);
+  const m = /(today|tomorrow|yesterday|今天|明天|昨天)/i.exec(s);
+  if (!m) return label;
   const dt = parseSchedFor(scheduledForIso);
   if (isNaN(dt.getTime())) return label;       // can't resolve the date → leave as-is
-  const datePart = fmtDateShort(dt);           // "Jun 19" / "6月19日" — language-aware
-  const rest = s.replace(rel, '').trim();      // the surviving time tail, e.g. "10:00–12:00"
-  return rest ? `${datePart} · ${rest}` : datePart;
+  const datePart = fmtDateShort(dt);           // "Jun 19" / "6月19日" — operator-language
+  return s.replace(m[1], datePart);            // swap the word in place, keep "Pickup …"/time tail
 }
 // The customer's delivery_slot_label is stored as free text in WHATEVER language
 // they checked out in (e.g. "Today 10AM–12PM", "Thu Jun 25 2026", "ASAP") — the
