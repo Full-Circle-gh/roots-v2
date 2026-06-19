@@ -777,8 +777,11 @@
    headline/subtitle/CTAs to compose; a `full` hero is just media (+ optional
    CTAs). `full + cover` = photo banner; `full + contain` = poster (no crop). */
 @media (min-width: 768px) {
-  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] { max-width: 1240px; }
-  .shop-blocks .sb-hero-full, .shop-blocks .sb-hero-split { border-radius: 24px; overflow: hidden; }
+  /* full-bleed: hero spans the whole viewport, edge to edge (no 1240 cap,
+     no rounded corners at the screen edges). */
+  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] { max-width: none; }
+  .shop-blocks .sb-hero-full { overflow: hidden; }
+  .shop-blocks .sb-hero-split { border-radius: 24px; overflow: hidden; }
 
   /* full + cover (photo): a real banner; CTAs overlaid bottom-left, not a stack */
   .shop-blocks .sb-hero-full.sb-hero-fit-cover { min-height: 420px; }
@@ -859,17 +862,27 @@
    only size it comfortably on desktop — no forced full-width empty band. The
    rich banner ships with accounts. */
 @media (min-width: 768px) {
-  /* align the greeting band to the SAME 1240 band as hero/categories so the
-     adjacent forest bands line up (was stranded at 720 → looked out of sync). */
+  /* greeting is full-bleed too (matches the full-bleed hero above it = one
+     cohesive green header), but its inner content stays aligned to the central
+     1240 column so the headline lines up with the rest of the page. */
   .shop-blocks .sb-blk-outer[data-block-type="greeting"] {
-    width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
+    width: 100vw; max-width: none; position: relative; left: 50%; transform: translateX(-50%);
   }
-  /* roomier inner padding so the headline isn't hard against the wide band edge */
+  /* inset to a 1188 column so the headline lines up with the band blocks'
+     inner content (1240 band minus their ~26px inner padding). */
   .shop-blocks .sb-greet-classic,
   .shop-blocks .sb-greet-wallet,
-  .shop-blocks .sb-greet-coin { padding: 48px 56px; }
+  .shop-blocks .sb-greet-coin {
+    padding-top: 48px; padding-bottom: 48px;
+    padding-left: max(56px, calc((100vw - 1188px) / 2));
+    padding-right: max(56px, calc((100vw - 1188px) / 2));
+  }
   .shop-blocks .sb-greet,
-  .shop-blocks .sb-greet-inline { padding: 40px 56px; margin: 0; }
+  .shop-blocks .sb-greet-inline {
+    margin: 0; padding-top: 40px; padding-bottom: 40px;
+    padding-left: max(56px, calc((100vw - 1188px) / 2));
+    padding-right: max(56px, calc((100vw - 1188px) / 2));
+  }
 }
 @media (min-width: 1024px) {
   .shop-blocks .sb-gr-headline { font-size: 44px; }
