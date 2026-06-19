@@ -11446,7 +11446,7 @@ function logRefundEvent({ orderId, event, amount = null, note = null, userId = n
 function normalizeRefundLines(orderId, lines) {
   if (!Array.isArray(lines) || !lines.length) return { lines: null, amount: 0 };
   const items = tdb().prepare(
-    'SELECT id, product_id, qty, unit_price, line_total FROM retail_order_items WHERE order_id = ?'
+    'SELECT id, product_id, qty, COALESCE(refunded_qty, 0) AS refunded_qty, unit_price, line_total FROM retail_order_items WHERE order_id = ?'
   ).all(orderId);
   const byId = new Map(items.map(it => [it.id, it]));
   const out = [];
@@ -11455,7 +11455,10 @@ function normalizeRefundLines(orderId, lines) {
     const itemId = parseInt(l.item_id, 10);
     const it = byId.get(itemId);
     if (!it) continue;
-    const qty = Math.max(0, Math.min(Number(l.qty) || 0, it.qty));
+    // Cap at the units NOT already refunded so repeated partial refunds can't
+    // re-refund the same unit (refunded_qty accumulates per line).
+    const remaining = Math.max(0, it.qty - it.refunded_qty);
+    const qty = Math.max(0, Math.min(Number(l.qty) || 0, remaining));
     if (!(qty > 0)) continue;
     // line_total ÷ qty gives unit price (after option deltas)
     const unit = it.qty > 0 ? (it.line_total / it.qty) : it.unit_price;
@@ -16684,15 +16687,23 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
 router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
-    'SELECT id, status, total, refund_status FROM retail_orders WHERE id = ?'
+    `SELECT id, status, total, refund_status,
+            refund_amount_requested, refund_amount_approved, refund_amount_paid, refund_lines_json
+       FROM retail_orders WHERE id = ?`
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   // Only paid/fulfilment states can be refunded (mirror STATUS_TRANSITIONS.refunded.prev).
+  // A fully-refunded order is status='refunded' so it's already excluded here.
   if (!['paid', 'preparing', 'dispatched', 'delivered'].includes(o.status)) {
     return res.status(409).json({ success: false, error: 'invalid_status', status: o.status });
   }
-  // Don't collide with the customer-request workflow or an already-settled refund.
-  if (['pending', 'reviewing', 'approved', 'paying', 'paid'].includes(o.refund_status)) {
+  // Don't collide with the customer-request workflow or a refund still in flight.
+  // NOTE: 'paid' (a previously *settled* refund) is allowed through — a partial
+  // refund leaves refund_status='paid', and staff must be able to refund more of
+  // the same order later. Over-refund is prevented downstream by the per-line
+  // remaining-qty cap (normalizeRefundLines) and the per-payment money cap
+  // (settleOrderRefundAcrossTenders / orderHasRefundableGatewayMoney).
+  if (['pending', 'reviewing', 'approved', 'paying'].includes(o.refund_status)) {
     return res.status(409).json({
       success: false, error: 'refund_in_progress', refund_status: o.refund_status,
       message: 'This order already has a refund in progress — use the refund panel.',
@@ -16713,11 +16724,16 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   } else {
     amount = +Number(o.total).toFixed(2);
   }
-  // Cap at the order total (= net cash charged) so a per-line sum that includes
-  // redeemed-points value can never pay back more than was actually taken.
-  if (amount != null) amount = +Math.min(Number(amount) || 0, Number(o.total) || 0).toFixed(2);
-  if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
-  const isFull = amount + 0.005 >= Number(o.total); // ¥0.01 rounding tolerance
+  // Cap at the REMAINING refundable balance (net cash charged minus anything
+  // already refunded) so a per-line sum that includes redeemed-points value — or
+  // a second refund on the same order — can never pay back more than is left.
+  const alreadyPaid = Number(o.refund_amount_paid) || 0;
+  const remainingRefundable = +Math.max(0, (Number(o.total) || 0) - alreadyPaid).toFixed(2);
+  if (amount != null) amount = +Math.min(Number(amount) || 0, remainingRefundable).toFixed(2);
+  if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount', message: 'Nothing left to refund on this order.' });
+  // "Full" = this refund clears the remaining balance (covers both a single full
+  // refund and a final partial that completes the order).
+  const isFull = amount + 0.005 >= remainingRefundable && alreadyPaid <= 0.005;
 
   // Real WeChat refund — same eligibility rules as the status shortcut. Off-app
   // payments hold no money at WeChat, so we just record the bookkeeping and the
@@ -16727,7 +16743,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   if (orderHasRefundableGatewayMoney(id) && !payContext().devMode) {
     // Atomically claim (→ 'paying') so a double-click can't fire two real refunds.
     const claim = tdb().prepare(
-      "UPDATE retail_orders SET refund_status = 'paying', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(refund_status,'') NOT IN ('pending','reviewing','approved','paying','paid')"
+      "UPDATE retail_orders SET refund_status = 'paying', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(refund_status,'') NOT IN ('pending','reviewing','approved','paying')"
     ).run(id);
     if (claim.changes !== 1) return res.status(409).json({ success: false, error: 'refund_already_processing' });
     try {
@@ -16753,7 +16769,30 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
     catch (e) { console.error('[refund-direct manual-mirror]', e); }
   }
 
-  // Record the settled refund (approved + paid in one shot).
+  // Record the settled refund (approved + paid in one shot). ACCUMULATE rather
+  // than clobber so a second partial refund adds to the first: amounts sum, and
+  // the line snapshot merges by item_id (per-line refunded_qty is the source of
+  // truth, but the JSON drives the customer/drawer display).
+  const priorApproved = Number(o.refund_amount_approved) || 0;
+  const priorPaid     = Number(o.refund_amount_paid) || 0;
+  const newApproved = +(priorApproved + amount).toFixed(2);
+  const newPaid     = +(priorPaid + amount).toFixed(2);
+  let mergedLinesJson = lines ? JSON.stringify(lines) : null;
+  if (lines) {
+    let prior = [];
+    try { prior = o.refund_lines_json ? JSON.parse(o.refund_lines_json) : []; } catch { prior = []; }
+    if (Array.isArray(prior) && prior.length) {
+      const byItem = new Map();
+      for (const l of [...prior, ...lines]) {
+        const k = l.item_id;
+        const cur = byItem.get(k) || { item_id: l.item_id, product_id: l.product_id, qty: 0, amount: 0 };
+        cur.qty = (Number(cur.qty) || 0) + (Number(l.qty) || 0);
+        cur.amount = +((Number(cur.amount) || 0) + (Number(l.amount) || 0)).toFixed(2);
+        byItem.set(k, cur);
+      }
+      mergedLinesJson = JSON.stringify([...byItem.values()]);
+    }
+  }
   tdb().prepare(
     `UPDATE retail_orders
         SET refund_status = 'paid',
@@ -16771,7 +16810,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
             refund_payer_id = COALESCE(refund_payer_id, ?),
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`
-  ).run(amount, amount, amount, lines ? JSON.stringify(lines) : null, payoutMethod, payoutRef, note, req.user.id, req.user.id, id);
+  ).run(newApproved, newApproved, newPaid, mergedLinesJson, payoutMethod, payoutRef, note, req.user.id, req.user.id, id);
 
   // (retail_payments rows were already updated per-tender by
   // settleOrderRefundAcrossTenders above — no blanket mirror needed.)
