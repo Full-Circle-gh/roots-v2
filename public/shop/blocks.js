@@ -567,8 +567,25 @@
       }).join('') + '</div>';
     }
 
+    // PC-native body (tablet/desktop): a canonical image bento built from the
+    // same tiles, regardless of the phone style chosen. Covers are auto-derived
+    // (catCover -> explicit image / category cover / first product photo); falls
+    // back to the brand colour when no image exists. Phone body stays untouched;
+    // CSS shows .sb-cat-phone <768 and .sb-cat-pc >=768.
+    var pcBody = '';
+    if (tiles.length) {
+      pcBody = '<div class="sb-cat-pc"><div class="sb-pcbento">' + tiles.map(function (t, i) {
+        var st = t.cover ? '' : ('background:' + attr(t.bg) + ';color:' + attr(t.fg));
+        return ctaWrap('category:' + t.id, '<div class="sb-pcb-tile' + (i === 0 ? ' feat' : '') + (t.cover ? ' has-img' : '') + '" style="' + st + '">' +
+          (t.cover ? '<img class="sb-pcb-img" src="' + attr(t.cover) + '" alt="" loading="lazy">' : '') +
+          '<div class="sb-pcb-cap"><div class="sb-pcb-ct">' + t.count + ' ' + escapeHtml(catWord) + '</div>' +
+          '<div class="sb-pcb-en">' + escapeHtml(t.name) + '</div></div></div>');
+      }).join('') + '</div></div>';
+    }
+
     return '<div class="sb-cattabs sb-cattabs-' + catView + ' sb-cat-' + catStyle + ' sb-corner-' + corner +
-      '" style="' + (catBg ? 'background:' + attr(catBg) + ';' : '') + attr(vars) + '">' + head + body + '</div>';
+      '" style="' + (catBg ? 'background:' + attr(catBg) + ';' : '') + attr(vars) + '">' +
+      head + '<div class="sb-cat-phone">' + body + '</div>' + pcBody + '</div>';
   };
 
   // product_grid ------------------------------------------------------------
