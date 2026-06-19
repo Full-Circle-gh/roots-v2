@@ -643,10 +643,9 @@
       '<div class="sb-ttl">' + escapeHtml(title) + '</div></div>' +
       ctaWrap(seeAllTarget, '<div class="sb-more">' + escapeHtml(seeAll) + '</div>') + '</div>';
 
+    if (!products.length) return '';   // public site: hide an empty/misconfigured grid (no editor placeholder)
     var inner;
-    if (!products.length) {
-      inner = '<div class="sb-empty">No products yet</div>';
-    } else if (gridView === 'list') {
+    if (gridView === 'list') {
       inner = '<div class="sb-list-rows">' + products.map(function (it) {
         return ctaWrap('product:' + it.id, '<div class="sb-list-row' + (it.rank ? ' sb-rank-card-' + it.rank : '') + '">' +
           '<div class="sb-img">' + (it.image ? '<img class="sb-img-full" src="' + attr(it.image) + '" alt="">' : '') + badge(it) + '</div>' +
@@ -842,7 +841,6 @@
     var activeIndex = recIdx >= 0 ? recIdx : 0;
     var active = variants[activeIndex] || variants[0];
     if (!active) return '';
-    var emptyText = CN() ? '请在管理后台选择商品' : 'Pick products in the admin';
     var titleSize = 'calc(' + Math.round(48 * HS) + ' * var(--u))';
     var priceSize = 'calc(' + Math.round(44 * HS) + ' * var(--u))';
 
@@ -858,7 +856,7 @@
 
     var content;
     if (active.empty) {
-      content = '<div class="sb-bun-empty">' + escapeHtml(emptyText) + '</div>';
+      return '';   // public site: hide an unconfigured bundle (no editor placeholder)
     } else {
       var cards = '<div class="sb-bun-cards"><div class="sb-bun-card-row">' + active.cards.map(function (it, i) {
         return ctaWrap('product:' + it.id, '<div class="sb-bun-card">' +
