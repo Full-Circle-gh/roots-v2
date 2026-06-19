@@ -3391,6 +3391,10 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
           method: 'alipay', mode: 'manual',
           qr_png: manual.qr, account: manual.account || '',
           order_no: order.order_no, total: order.total,
+          // Pay-within window (minutes) — drives the "pay within N min" notice on
+          // the pay page; kept in sync with the OCR time check (same setting). 0
+          // → no deadline shown.
+          pay_window_min: Number(manual.timeWindowMin) > 0 ? Number(manual.timeWindowMin) : 0,
         },
       });
     }

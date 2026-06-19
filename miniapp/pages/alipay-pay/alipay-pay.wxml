@@ -31,6 +31,10 @@
       </view>
     </view>
 
+    <view wx:if="{{manual && payWindowMin > 0 && !paid}}" class="deadline f-toni">
+      ⏱ {{t.deadlinePre}}{{payWindowMin}}{{t.deadlinePost}}
+    </view>
+
     <view class="qr-wrap">
       <image wx:if="{{qrPng}}" class="qr" src="{{qrPng}}" mode="widthFix" show-menu-by-longpress></image>
       <view wx:if="{{paid}}" class="paid-overlay">

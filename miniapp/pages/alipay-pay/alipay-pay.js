@@ -19,6 +19,7 @@ Page({
     qrPng: '',
     manual: false,        // static-收款码 fallback mode
     account: '',          // payee label (manual mode)
+    payWindowMin: 0,      // pay-within deadline shown to the customer (0 = none)
     proofUploaded: false, // customer has uploaded a payment screenshot
     uploading: false,
     loading: true,
@@ -44,6 +45,8 @@ Page({
         '务必按显示的金额付款',
         '付款后上传付款截图,客服核对后确认订单',
       ],
+      deadlinePre: '请在 ',
+      deadlinePost: ' 分钟内完成付款并上传截图',
       save: '保存二维码到相册',
       waiting: '等待付款确认…',
       manualWaiting: '已收到截图,客服核对中…',
@@ -71,6 +74,8 @@ Page({
         'Pay the EXACT amount shown above',
         'Upload your payment screenshot — we confirm shortly',
       ],
+      deadlinePre: 'Please pay and upload your screenshot within ',
+      deadlinePost: ' minutes',
       save: 'Save QR to album',
       waiting: 'Waiting for payment…',
       manualWaiting: 'Screenshot received — confirming…',
@@ -119,6 +124,7 @@ Page({
         qrPng: pay.qr_png,
         manual: pay.mode === 'manual',
         account: pay.account || '',
+        payWindowMin: Number(pay.pay_window_min) || 0,
         orderNo: pay.order_no || '',
         total: '¥' + Number(pay.total || 0).toFixed(2),
         loading: false,
