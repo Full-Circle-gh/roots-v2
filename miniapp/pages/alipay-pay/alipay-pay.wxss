@@ -157,15 +157,28 @@
   animation: pulse 1.2s ease-in-out infinite;
 }
 
-/* buttons */
+/* buttons — share the QR's 480rpx column so they align under it */
+.actions {
+  width: 480rpx;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
 .btn {
-  padding: 28rpx 0;
-  font-size: calc(28rpx * var(--font-scale));
-  letter-spacing: 0.12em;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  line-height: 1.3;
+  letter-spacing: 0.08em;
   text-align: center;
   border-radius: 0;
 }
-.btn + .btn { margin-top: 16rpx; }
 .btn.primary {
   background: var(--ink);
   color: var(--lime);
@@ -175,6 +188,8 @@
   color: var(--ink);
   border: 3rpx solid var(--ink);
 }
+/* standalone retry button (error state) keeps its own width */
+.state .btn { width: auto; padding: 0 48rpx; }
 
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes pulse {

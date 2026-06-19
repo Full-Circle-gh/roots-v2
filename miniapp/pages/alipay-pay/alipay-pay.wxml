@@ -42,12 +42,14 @@
       </view>
     </view>
 
-    <button wx:if="{{!paid}}" class="btn secondary f-toni" bindtap="saveQr">{{t.save}}</button>
+    <view wx:if="{{!paid}}" class="actions">
+      <button class="btn secondary f-toni" bindtap="saveQr">{{t.save}}</button>
 
-    <!-- manual mode: upload the payment screenshot for staff to confirm -->
-    <button wx:if="{{manual && !paid}}" class="btn primary f-toni" bindtap="uploadProof" loading="{{uploading}}" disabled="{{uploading}}">
-      {{ proofUploaded ? t.reupload : t.upload }}
-    </button>
+      <!-- manual mode: upload the payment screenshot for staff to confirm -->
+      <button wx:if="{{manual}}" class="btn primary f-toni" bindtap="uploadProof" loading="{{uploading}}" disabled="{{uploading}}">
+        {{ proofUploaded ? t.reupload : t.upload }}
+      </button>
+    </view>
 
     <view class="steps">
       <view wx:for="{{ manual ? t.manualSteps : t.steps }}" wx:key="*this" class="step f-aleo">
