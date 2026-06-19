@@ -706,19 +706,7 @@
     grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   }
 
-  /* Hero: fill the band, but cap height so portrait/poster art doesn't run huge.
-     `contain` never crops poster art (e.g. "WELCOME TO ROOTS"); letterbox onto
-     the page oat so the side margins blend into the page and read intentional.
-     (For a full-bleed photo hero, swap to object-fit: cover.) */
-  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-hero {
-    max-height: 78vh;
-    background: var(--oat);
-  }
-  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-hero-img,
-  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-hero-video {
-    object-fit: contain;
-  }
-  .shop-blocks .sb-hero-full { border-radius: calc(24 * var(--u)); overflow: hidden; }
+  /* hero PC handling lives in the PC-native section below */
 }
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -782,4 +770,94 @@
   .shop-blocks .sb-pcbento { grid-template-columns: repeat(4, 1fr); grid-auto-rows: 168px; }
   .shop-blocks .sb-pcb-tile.feat { grid-column: span 2; grid-row: span 2; }
   .shop-blocks .sb-pcb-tile.feat .sb-pcb-en { font-size: 44px; }
+}
+
+/* ② HERO — split (image + panel) / full-bleed cover banner / framed poster.
+   What's possible depends on the block's content: a `split` hero has a
+   headline/subtitle/CTAs to compose; a `full` hero is just media (+ optional
+   CTAs). `full + cover` = photo banner; `full + contain` = poster (no crop). */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] { max-width: 1240px; }
+  .shop-blocks .sb-hero-full, .shop-blocks .sb-hero-split { border-radius: 24px; overflow: hidden; }
+
+  /* full + cover (photo): a real banner; CTAs overlaid bottom-left, not a stack */
+  .shop-blocks .sb-hero-full.sb-hero-fit-cover { min-height: 420px; }
+  .shop-blocks .sb-hero-full .sb-cta-stack {
+    flex-direction: row; flex-wrap: wrap; width: auto; left: 48px; right: auto; bottom: 44px; gap: 14px;
+  }
+  .shop-blocks .sb-hero-full .sb-cta-btn { width: auto; padding: 16px 32px; font-size: 14px; }
+
+  /* full + contain (poster): framed, centered, capped — never the 950px monster,
+     and a min-height floor so a slow/broken image can't collapse the block. */
+  .shop-blocks .sb-hero-full.sb-hero-fit-contain {
+    aspect-ratio: auto !important; height: auto !important;
+    min-height: 380px; max-height: 70vh;
+    background: var(--oat); display: flex; align-items: center; justify-content: center;
+  }
+  .shop-blocks .sb-hero-full.sb-hero-fit-contain .sb-hero-img,
+  .shop-blocks .sb-hero-full.sb-hero-fit-contain .sb-hero-video {
+    width: auto; height: auto; max-width: 100%; max-height: 70vh; object-fit: contain;
+  }
+
+  /* split: image one side, panel the other — fixed px type, not phone scale */
+  .shop-blocks .sb-hero-split { grid-template-columns: 1.05fr .95fr; min-height: 380px; }
+  .shop-blocks .sb-hero-split .sb-split-img .sb-hero-img,
+  .shop-blocks .sb-hero-split .sb-split-img .sb-hero-video { width: 100%; height: 100%; object-fit: cover; }
+  .shop-blocks .sb-split-panel { padding: 40px 44px; gap: 16px; justify-content: center; }
+  .shop-blocks .sb-split-panel .sb-headline { font-size: 40px; line-height: 1; }
+  .shop-blocks .sb-split-panel .sb-subtitle { font-size: 17px; line-height: 1.45; }
+  .shop-blocks .sb-split-panel .sb-cta-stack {
+    position: static; flex-direction: row; flex-wrap: wrap; width: auto; gap: 14px; margin-top: 8px;
+    left: auto; right: auto; bottom: auto;
+  }
+  .shop-blocks .sb-split-panel .sb-cta-btn { width: auto; padding: 15px 28px; font-size: 14px; }
+}
+
+@media (min-width: 1024px) {
+  .shop-blocks .sb-hero-split { min-height: 520px; }
+  .shop-blocks .sb-split-panel { padding: 60px 56px; }
+  .shop-blocks .sb-split-panel .sb-headline { font-size: 56px; line-height: .98; }
+  .shop-blocks .sb-split-panel .sb-subtitle { font-size: 19px; }
+}
+
+/* ③ PRODUCT GRID — multi-up with hover lift + quick-view overlay (cosmetic;
+   the whole card links to the product). Quick-view shows on hover, desktop only. */
+.shop-blocks .sb-qadd { display: none; }
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="product_grid"] { max-width: 1240px; }
+  .shop-blocks .sb-grid-block .sb-ttl { font-size: 40px; }
+  .shop-blocks .sb-grid-block .sb-kicker,
+  .shop-blocks .sb-grid-block .sb-more { font-size: 13px; }
+  .shop-blocks .sb-card .sb-name { font-size: 18px; }
+  .shop-blocks .sb-card .sb-price { font-size: 17px; }
+  .shop-blocks .sb-card .sb-img { border-radius: 14px; }
+}
+@media (min-width: 1024px) {
+  .shop-blocks .sb-blk-outer[data-block-type="product_grid"] .sb-grid.sb-cols-1,
+  .shop-blocks .sb-blk-outer[data-block-type="product_grid"] .sb-grid.sb-cols-2,
+  .shop-blocks .sb-blk-outer[data-block-type="product_grid"] .sb-grid.sb-cols-3 {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+  .shop-blocks .sb-card { transition: transform .18s ease; }
+  .shop-blocks .sb-card:hover { transform: translateY(-4px); }
+  .shop-blocks .sb-qadd {
+    display: block; position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 2;
+    background: var(--ink); color: var(--oat); text-align: center; border-radius: 999px;
+    font-family: var(--f-toni); font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+    font-size: 12px; padding: 11px 0; opacity: 0; transform: translateY(8px);
+    transition: opacity .18s ease, transform .18s ease; pointer-events: none;
+  }
+  .shop-blocks .sb-card:hover .sb-qadd { opacity: 1; transform: none; }
+}
+
+/* ④ GREETING — LIGHT PASS ONLY. The full PC "member banner" (name + points
+   card + reward progress) needs account data that doesn't exist until Phase 2
+   (web logins); on the public site greeting renders just a generic line. So we
+   only size it comfortably on desktop — no forced full-width empty band. The
+   rich banner ships with accounts. */
+@media (min-width: 1024px) {
+  .shop-blocks .sb-gr-headline { font-size: 44px; }
+  .shop-blocks .sb-greet-classic .sb-grd-head,
+  .shop-blocks .sb-greet-wallet .sb-grd-head,
+  .shop-blocks .sb-greet-coin .sb-grd-head { font-size: 48px; }
 }
