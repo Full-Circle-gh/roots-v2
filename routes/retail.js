@@ -583,6 +583,13 @@ router.get('/api/retail/config', (req, res) => {
     // Mirror live vouchers into coupon_blocks so a renamed/repriced coupon (or
     // one reusing the same code) updates the home page without re-picking it.
     try { refreshCouponBlocks(cfg); } catch (e) { console.error('[retail/config refreshCouponBlocks]', e); }
+    // Which payment rails the mini-app may offer. Alipay becomes selectable only
+    // when it will actually work: a manual 收款码 is configured for this tenant,
+    // OR the auto 当面付 path is live (Roots + env creds). Otherwise the checkout
+    // keeps Alipay greyed ("Coming soon") so customers can't pick a dead rail.
+    cfg.payments = Object.assign({}, cfg.payments, {
+      alipay: !!getAlipayManual() || (currentTenantId() === ROOTS_TENANT_ID && !ALIPAY_DEV_MODE),
+    });
     res.set('Cache-Control', 'public, max-age=60');
     res.json({ success: true, data: cfg });
   } catch (e) {
@@ -13155,6 +13162,14 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                        ORDER BY sh.id ASC LIMIT 1) AS local_eta,
                     (SELECT 1 FROM retail_shipments sh2
                        WHERE sh2.order_id = o.id AND sh2.mode = 'local' LIMIT 1) AS is_local,
+                    (SELECT 1 FROM retail_shipments sha
+                       WHERE sha.order_id = o.id
+                         AND sha.mode = 'air'
+                         AND sha.delivered_at IS NOT NULL
+                         AND DATE(sha.delivered_at) > DATE(
+                               COALESCE(o.promised_delivery_date,
+                                        DATE(o.placed_at, '+1 day')))
+                       LIMIT 1) AS air_delivery_delayed,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
           LEFT JOIN retail_customers c ON c.id = o.customer_id
