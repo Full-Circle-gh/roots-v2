@@ -855,6 +855,19 @@
    (web logins); on the public site greeting renders just a generic line. So we
    only size it comfortably on desktop — no forced full-width empty band. The
    rich banner ships with accounts. */
+@media (min-width: 768px) {
+  /* align the greeting band to the SAME 1240 band as hero/categories so the
+     adjacent forest bands line up (was stranded at 720 → looked out of sync). */
+  .shop-blocks .sb-blk-outer[data-block-type="greeting"] {
+    width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  /* roomier inner padding so the headline isn't hard against the wide band edge */
+  .shop-blocks .sb-greet-classic,
+  .shop-blocks .sb-greet-wallet,
+  .shop-blocks .sb-greet-coin { padding: 48px 56px; }
+  .shop-blocks .sb-greet,
+  .shop-blocks .sb-greet-inline { padding: 40px 56px; margin: 0; }
+}
 @media (min-width: 1024px) {
   .shop-blocks .sb-gr-headline { font-size: 44px; }
   .shop-blocks .sb-greet-classic .sb-grd-head,
