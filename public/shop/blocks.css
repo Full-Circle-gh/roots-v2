@@ -909,15 +909,17 @@
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-headline { font-size: 46px; }
 }
 
-/* ⑥ COUPON — wide ticket: discount block | copy | CTA in a row, fixed-px. */
+/* ⑥ COUPON — a COMPACT centered ticket (a coupon is a small object, not a
+   full-width bar). Content is grouped/centered so there's no empty middle. */
 @media (min-width: 768px) {
   .shop-blocks .sb-blk-outer[data-block-type="coupon_block"] {
-    width: 100vw; max-width: 880px; position: relative; left: 50%; transform: translateX(-50%);
+    width: 100vw; max-width: 680px; position: relative; left: 50%; transform: translateX(-50%);
   }
-  .shop-blocks .sb-coupon-blk { margin: 0; padding: 32px 40px; border-radius: 18px; gap: 32px; }
-  .shop-blocks .sb-cp-big { font-size: 52px; }
+  .shop-blocks .sb-coupon-blk { margin: 0; padding: 30px 40px; border-radius: 18px; gap: 28px; justify-content: center; }
+  .shop-blocks .sb-cp-body { flex: 0 1 auto; }      /* don't stretch -> no empty gap */
+  .shop-blocks .sb-cp-big { font-size: 48px; }
   .shop-blocks .sb-cp-kicker { font-size: 13px; }
-  .shop-blocks .sb-cp-title { font-size: 22px; }
+  .shop-blocks .sb-cp-title { font-size: 21px; }
   .shop-blocks .sb-cp-sub { font-size: 15px; }
   .shop-blocks .sb-cp-cta { padding: 16px 28px; font-size: 14px; }
 }
@@ -943,8 +945,12 @@
     width: 100vw; max-width: 880px; position: relative; left: 50%; transform: translateX(-50%);
   }
   .shop-blocks .sb-blk-outer[data-block-type="wecom_contact"] {
-    width: 100vw; max-width: 1000px; position: relative; left: 50%; transform: translateX(-50%);
+    width: 100vw; max-width: 900px; position: relative; left: 50%; transform: translateX(-50%);
   }
+  /* group copy + QR toward the centre (was edge-to-edge with an empty middle) */
+  .shop-blocks .sb-wc-lm-body { justify-content: center; gap: 56px; }
+  .shop-blocks .sb-wc-lm-l { flex: 0 1 auto; max-width: 540px; }
+  .shop-blocks .sb-wc-loop-foot { justify-content: space-between; }
   .shop-blocks .sb-blk-outer[data-block-type="bundle"],
   .shop-blocks .sb-blk-outer[data-block-type="flash_sale_strip"] {
     width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
@@ -973,4 +979,30 @@
   .shop-blocks .sb-rv-quote { font-size: 26px; }
   .shop-blocks .sb-vb-title,
   .shop-blocks .sb-vb-q { font-size: 32px; }
+}
+
+/* ⑨ FLASH SALE (design view) — centre the product cards under the centred
+   header instead of clustering them bottom-left in empty space. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-fsd-cards { justify-content: center; flex-wrap: wrap; }
+  .shop-blocks .sb-fsd-card { flex: 0 0 240px; width: 240px; }
+  .shop-blocks .sb-fs-cards { justify-content: center; flex-wrap: wrap; }
+}
+
+/* ⑩ BUNDLE — 2-column on desktop: products on the left, a price + ADD BUNDLE
+   summary panel on the right (was products-left / CTA-right with an empty gap). */
+@media (min-width: 1024px) {
+  .shop-blocks .sb-bun-inner {
+    display: grid; grid-template-columns: minmax(0, 1fr) 300px; column-gap: 44px; align-items: start;
+  }
+  .shop-blocks .sb-bun-kicker,
+  .shop-blocks .sb-bun-pills-scroll,
+  .shop-blocks .sb-bun-title,
+  .shop-blocks .sb-bun-sub,
+  .shop-blocks .sb-bun-cards { grid-column: 1; }
+  .shop-blocks .sb-bun-foot {
+    grid-column: 2; grid-row: 1 / span 10; align-self: center;
+    flex-direction: column; align-items: flex-start; gap: 16px;
+    padding-left: 36px; border-left: 2px solid rgba(0,0,0,.12);
+  }
 }
