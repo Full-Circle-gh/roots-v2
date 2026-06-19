@@ -33,6 +33,7 @@ const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto
 const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
 const _aliyunSms = require('../lib/aliyun-sms'); // 阿里云短信 delivered-notice SMS (dormant until creds)
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
+const alipayOcr = require('../lib/alipay-ocr');  // Vision-AI read of manual-Alipay payment screenshots
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
 // than crashing — the image endpoint just skips the resize branch when null.
@@ -2576,6 +2577,67 @@ function getAlipayManual() {
   } catch { return null; }
 }
 
+// Parse an Alipay screenshot time string ("YYYY-MM-DD HH:MM", Beijing) → epoch
+// ms, or null if unreadable. Bare "HH:MM" is assumed to be today (Beijing).
+function parseBeijingTime(s) {
+  if (!s) return null;
+  let m = /(\d{4})-(\d{1,2})-(\d{1,2})[ T](\d{1,2}):(\d{2})/.exec(s);
+  if (m) {
+    const [_, y, mo, d, h, mi] = m;
+    const t = Date.parse(`${y}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}T${String(h).padStart(2,'0')}:${mi}:00+08:00`);
+    return Number.isFinite(t) ? t : null;
+  }
+  m = /(\d{1,2}):(\d{2})/.exec(s);
+  if (m) {
+    const nowBj = new Date(Date.now() + 8 * 3600 * 1000);
+    const ymd = nowBj.toISOString().slice(0, 10);
+    const t = Date.parse(`${ymd}T${String(m[1]).padStart(2,'0')}:${m[2]}:00+08:00`);
+    return Number.isFinite(t) ? t : null;
+  }
+  return null;
+}
+
+// Validate a Vision-AI reading of an uploaded payment screenshot against the
+// order. Returns { verdict: 'match'|'mismatch', reasons: [...], checks: {...} }.
+// HARD checks (all must pass for 'match'): success screen, amount == order total,
+// payee contains the configured substring (when set), and payment time within
+// the window (when set). The txn-id reuse check is applied by the caller (needs
+// a cross-order query). A screenshot is forgeable, so 'match' only *permits* an
+// auto-flip when the operator enabled it — it is never proof on its own.
+function validateAlipayProof(order, ocr, manual) {
+  const reasons = [];
+  const checks = {};
+  // 1. success screen
+  checks.success = !!ocr.success;
+  if (!ocr.success) reasons.push('not a successful-payment screen');
+  // 2. amount exact (to the fen)
+  const want = Number(order.total).toFixed(2);
+  const got = ocr.amount == null ? null : Number(ocr.amount).toFixed(2);
+  checks.amount = got === want;
+  if (got !== want) reasons.push(`amount ${got == null ? 'unreadable' : '¥' + got} ≠ expected ¥${want}`);
+  // 3. payee contains the configured match text (skip if not configured)
+  const payeeMatch = (manual.payeeMatch || '').trim();
+  if (payeeMatch) {
+    const ok = !!ocr.payee && ocr.payee.replace(/\s+/g, '').toLowerCase().includes(payeeMatch.replace(/\s+/g, '').toLowerCase());
+    checks.payee = ok;
+    if (!ok) reasons.push(`payee ${ocr.payee ? '“' + ocr.payee + '”' : 'unreadable'} doesn’t match “${payeeMatch}”`);
+  } else { checks.payee = null; }
+  // 4. recent payment time (skip if window is 0/unset)
+  const win = Number(manual.timeWindowMin || 0);
+  if (win > 0) {
+    const t = parseBeijingTime(ocr.paid_at || ocr.raw_time_text);
+    if (t == null) { checks.time = false; reasons.push('payment time unreadable'); }
+    else {
+      const ageMin = (Date.now() - t) / 60000;
+      checks.time = ageMin >= -10 && ageMin <= win;   // allow 10min clock skew
+      if (!checks.time) reasons.push(`payment time ${Math.round(ageMin)}min ago is outside the ${win}min window`);
+    }
+  } else { checks.time = null; }
+
+  const hardPass = checks.success && checks.amount && checks.payee !== false && checks.time !== false;
+  return { verdict: hardPass ? 'match' : 'mismatch', reasons, checks };
+}
+
 // Accept a key as either a ready PEM (with BEGIN/END lines) or as bare base64
 // (how the Alipay console hands them out), and return a valid PEM. Also turns
 // literal "\n" escapes from a single-line .env value into real newlines.
@@ -3409,10 +3471,10 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
 // the latest image on the order (re-upload overwrites) and leave it
 // pending_payment — staff eyeball the screenshot in the admin and Mark paid. No
 // money moves on the server; this is purely an evidence channel.
-router.post('/api/retail/payment/alipay-proof/:orderId', requireRetailAuth, express.json({ limit: '6mb' }), (req, res) => {
+router.post('/api/retail/payment/alipay-proof/:orderId', requireRetailAuth, express.json({ limit: '6mb' }), async (req, res) => {
   const orderId = parseInt(req.params.orderId, 10);
   const order = tdb().prepare(
-    'SELECT id, status, payment_method FROM retail_orders WHERE id = ? AND customer_id = ?'
+    'SELECT id, status, payment_method, total FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   if (order.payment_method !== 'alipay') return res.status(400).json({ success: false, error: 'not_alipay' });
@@ -3421,9 +3483,43 @@ router.post('/api/retail/payment/alipay-proof/:orderId', requireRetailAuth, expr
     return res.status(400).json({ success: false, error: 'bad_image' });
   }
   tdb().prepare(
-    "UPDATE retail_orders SET alipay_proof_image = ?, alipay_proof_at = CURRENT_TIMESTAMP WHERE id = ?"
+    "UPDATE retail_orders SET alipay_proof_image = ?, alipay_proof_at = CURRENT_TIMESTAMP, alipay_ocr_verdict = NULL, alipay_ocr_json = NULL WHERE id = ?"
   ).run(img, orderId);
-  res.json({ success: true, data: { ok: true } });
+
+  // Vision-AI read + verify (when configured). Always fail-soft: any error keeps
+  // the order pending for a human and never auto-flips. The customer's status
+  // poll picks up an auto-flip; the upload response just reports the verdict.
+  let verdict = null, autoPaid = false;
+  const manual = getAlipayManual();
+  if (manual && manual.ocrEnabled && manual.anthropicKey && order.status === 'pending_payment') {
+    try {
+      const ocr = await alipayOcr.readPaymentScreenshot(img, manual.anthropicKey);
+      const v = validateAlipayProof(order, ocr, manual);
+      verdict = v.verdict;
+      // txn-id reuse guard: an old/duplicate screenshot whose txn already sits on
+      // ANOTHER order is rejected (the one hard defense against screenshot reuse).
+      let reused = null;
+      if (ocr.txn_id) {
+        reused = tdb().prepare('SELECT id FROM retail_orders WHERE alipay_txn_id = ? AND id != ? LIMIT 1').get(ocr.txn_id, orderId);
+        if (reused) { verdict = 'mismatch'; v.verdict = 'mismatch'; v.reasons.push(`txn-id already used on order #${reused.id}`); }
+      }
+      tdb().prepare(
+        "UPDATE retail_orders SET alipay_ocr_verdict = ?, alipay_ocr_json = ?, alipay_txn_id = ? WHERE id = ?"
+      ).run(verdict, JSON.stringify({ ...ocr, reasons: v.reasons, checks: v.checks }), ocr.txn_id || null, orderId);
+
+      // Auto-flip ONLY when the operator enabled it AND every guard passed: full
+      // match, a readable txn-id (so reuse is detectable), and not reused.
+      if (manual.autoFlip && verdict === 'match' && ocr.txn_id && !reused) {
+        markOrderPaid(orderId);
+        autoPaid = true;
+      }
+    } catch (e) {
+      console.warn('[alipay/ocr]', e.message);
+      verdict = 'error';
+      try { tdb().prepare("UPDATE retail_orders SET alipay_ocr_verdict = 'error', alipay_ocr_json = ? WHERE id = ?").run(JSON.stringify({ error: e.message }), orderId); } catch {}
+    }
+  }
+  res.json({ success: true, data: { ok: true, verdict, auto_paid: autoPaid } });
 });
 
 // WeChat Pay async notify. Body looks like:
@@ -11714,29 +11810,55 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), (req,
 // its own read/write pair — and a bigger json limit since the QR rides as a
 // data URL. { enabled, account, qr }. When enabled+qr set, /payment/create
 // returns mode:'manual' for Alipay orders (see getAlipayManual).
-router.get('/api/retail-admin/alipay-manual', requireRetailAdmin, (req, res) => {
-  let cfg = { enabled: false, account: '', qr: '' };
+function _readAlipayManualRaw() {
   try {
     const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'integrations.alipayManual'").get();
-    if (row) { const v = JSON.parse(row.value_json); if (v && typeof v === 'object') cfg = { enabled: !!v.enabled, account: v.account || '', qr: v.qr || '' }; }
-  } catch {}
-  res.json({ success: true, data: cfg });
+    if (!row) return {};
+    const v = JSON.parse(row.value_json);
+    return (v && typeof v === 'object') ? v : {};
+  } catch { return {}; }
+}
+
+router.get('/api/retail-admin/alipay-manual', requireRetailAdmin, (req, res) => {
+  const v = _readAlipayManualRaw();
+  const key = v.anthropicKey || '';
+  res.json({ success: true, data: {
+    enabled: !!v.enabled, account: v.account || '', qr: v.qr || '',
+    ocrEnabled: !!v.ocrEnabled, autoFlip: !!v.autoFlip,
+    payeeMatch: v.payeeMatch || '', timeWindowMin: Number(v.timeWindowMin || 0),
+    hasKey: !!key, keyMasked: key ? ('sk-…' + key.slice(-4)) : '',   // never return the raw key
+  }});
 });
 
 router.put('/api/retail-admin/alipay-manual', requireRetailAdmin, express.json({ limit: '6mb' }), (req, res) => {
   const b = req.body || {};
-  const qr = typeof b.qr === 'string' ? b.qr : '';
+  const prev = _readAlipayManualRaw();
+  // qr: keep existing unless a new data-URL is provided.
+  let qr = typeof b.qr === 'string' && b.qr ? b.qr : (prev.qr || '');
   if (qr && !/^data:image\/(png|jpe?g|webp);base64,/.test(qr)) return res.status(400).json({ success: false, error: 'bad_image' });
   if (qr.length > 5_500_000) return res.status(400).json({ success: false, error: 'image_too_big' });
-  const cfg = { enabled: !!b.enabled, account: String(b.account || '').slice(0, 80), qr };
+  // API key: only overwrite when a fresh non-masked value is typed; blank keeps existing.
+  const typedKey = typeof b.anthropicKey === 'string' ? b.anthropicKey.trim() : '';
+  const anthropicKey = (typedKey && !typedKey.startsWith('sk-…')) ? typedKey : (prev.anthropicKey || '');
+  const cfg = {
+    enabled: !!b.enabled,
+    account: String(b.account || '').slice(0, 80),
+    qr,
+    ocrEnabled: !!b.ocrEnabled,
+    autoFlip: !!b.autoFlip,
+    payeeMatch: String(b.payeeMatch || '').slice(0, 80),
+    timeWindowMin: Math.max(0, Math.min(1440, parseInt(b.timeWindowMin, 10) || 0)),
+    anthropicKey,
+  };
   if (cfg.enabled && !cfg.qr) return res.status(400).json({ success: false, error: 'qr_required' });
+  if (cfg.ocrEnabled && !cfg.anthropicKey) return res.status(400).json({ success: false, error: 'ocr_key_required' });
   tdb().prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
      VALUES ('integrations.alipayManual', ?, CURRENT_TIMESTAMP, ?)
      ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
   ).run(JSON.stringify(cfg), req.user.id);
-  logActivity(req.user.id, req.user.username, 'update', 'storefront_config', null, { keys: ['integrations.alipayManual'], enabled: cfg.enabled }, req.ip);
-  res.json({ success: true, data: { enabled: cfg.enabled, account: cfg.account, hasQr: !!cfg.qr } });
+  logActivity(req.user.id, req.user.username, 'update', 'storefront_config', null, { keys: ['integrations.alipayManual'], enabled: cfg.enabled, ocr: cfg.ocrEnabled, autoFlip: cfg.autoFlip }, req.ip);
+  res.json({ success: true, data: { enabled: cfg.enabled, ocrEnabled: cfg.ocrEnabled, autoFlip: cfg.autoFlip, hasQr: !!cfg.qr, hasKey: !!cfg.anthropicKey } });
 });
 
 // ═══════════════════════════════════════════════════════════════════════

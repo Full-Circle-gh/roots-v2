@@ -5338,6 +5338,33 @@
                   <input type="file" id="alipay-manual-file" accept="image/*" onchange="_alipayManualPickFile(event)">
                   <img id="alipay-manual-preview" alt="" style="display:none; max-width:160px; max-height:220px; margin-top:8px; border:1px solid var(--line); border-radius:8px;">
                 </div>
+
+                <!-- Vision-AI auto-read of the customer's payment screenshot -->
+                <div style="margin-top:14px; padding-top:12px; border-top:1px dashed var(--line);">
+                  <label style="display:flex; align-items:center; gap:8px; font-weight:700;">
+                    <input type="checkbox" id="alipay-manual-ocr" onchange="_alipayOcrToggle()"> 🔍 Auto-read payment screenshots (AI) · 自动识别付款截图
+                  </label>
+                  <div class="muted" style="margin-top:4px;">When a customer uploads their Alipay screenshot, AI reads the amount, payee and time and checks them against the order — shown as a green ✓ / red ⚠ on the order. ~¥0.03/order. · 顾客上传支付宝截图后,AI 自动读取金额、收款方、时间并与订单核对,在订单上显示 ✓/⚠。约¥0.03/单。</div>
+                  <div id="alipay-ocr-fields" style="display:none; margin-top:10px;">
+                    <div class="field" style="margin: 0 0 8px;">
+                      <label class="stacked">Anthropic API key (sk-…) · 密钥</label>
+                      <input type="password" id="alipay-manual-key" autocomplete="off" placeholder="sk-ant-… · paste once, leave blank to keep · 留空则保持不变" style="width: 100%; font-family: monospace;">
+                    </div>
+                    <div class="field" style="margin: 0 0 8px;">
+                      <label class="stacked">Expected payee contains · 收款方应包含</label>
+                      <input type="text" id="alipay-manual-payee" placeholder="e.g. 哈素萌 或 玲 — must appear in the screenshot's 收款方" style="width: 100%;">
+                    </div>
+                    <div class="field" style="margin: 0 0 8px;">
+                      <label class="stacked">Accept payments within (minutes, 0 = no time check) · 付款时间不超过(分钟,0=不检查)</label>
+                      <input type="number" id="alipay-manual-window" min="0" max="1440" placeholder="60" style="width: 100%; font-family: monospace;">
+                    </div>
+                    <label style="display:flex; align-items:center; gap:8px; font-weight:700; color:#991b1b;">
+                      <input type="checkbox" id="alipay-manual-autoflip"> ⚡ Auto-mark paid on full match (no human review) · 完全匹配时自动标记付款(无需人工)
+                    </label>
+                    <div class="muted" style="margin-top:4px; line-height:1.5;">Leave OFF at first: AI shows a verdict but staff still tap Mark paid. Turn ON only once you trust it — a perfect fake screenshot can then auto-pass. Reuse is blocked by the transaction-id check. · 建议先关闭:AI 仅给出判断,仍由人工点击「标记已付款」。信任后再开启 — 开启后伪造完美的截图也会自动通过;重复使用由交易号去重拦截。</div>
+                  </div>
+                </div>
+
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                   <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_saveAlipayManual()">Save · 保存</button>
                   <span id="alipay-manual-status" class="muted" style="font-size: 11px;"></span>

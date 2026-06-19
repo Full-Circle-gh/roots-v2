@@ -43,9 +43,28 @@ async function loadAlipayManual() {
     if (cb) cb.checked = !!d.enabled;
     if (ac) ac.value = d.account || '';
     if (pv) { if (d.qr) { pv.src = d.qr; pv.style.display = 'block'; } else { pv.removeAttribute('src'); pv.style.display = 'none'; } }
+    // OCR sub-fields
+    const ocr = document.getElementById('alipay-manual-ocr');
+    const af  = document.getElementById('alipay-manual-autoflip');
+    const pm  = document.getElementById('alipay-manual-payee');
+    const win = document.getElementById('alipay-manual-window');
+    const key = document.getElementById('alipay-manual-key');
+    if (ocr) ocr.checked = !!d.ocrEnabled;
+    if (af)  af.checked = !!d.autoFlip;
+    if (pm)  pm.value = d.payeeMatch || '';
+    if (win) win.value = d.timeWindowMin || '';
+    if (key) { key.value = ''; key.placeholder = d.hasKey ? (d.keyMasked + ' · leave blank to keep · 留空保持不变') : 'sk-ant-… · paste once · 粘贴一次'; }
+    _alipayOcrToggle();
     _alipayManualQr = null;   // existing image stays unless operator picks a new one
     _alipayManualChip(!!d.enabled);
   } catch (e) { console.warn('[alipay-manual] load failed', e); }
+}
+
+// Show/hide the OCR detail fields with the master OCR checkbox.
+function _alipayOcrToggle() {
+  const on = !!(document.getElementById('alipay-manual-ocr') || {}).checked;
+  const box = document.getElementById('alipay-ocr-fields');
+  if (box) box.style.display = on ? 'block' : 'none';
 }
 
 function _alipayManualPickFile(event) {
@@ -62,10 +81,20 @@ function _alipayManualPickFile(event) {
 }
 
 async function _saveAlipayManual() {
-  const enabled = !!(document.getElementById('alipay-manual-enabled') || {}).checked;
-  const account = ((document.getElementById('alipay-manual-account') || {}).value || '').trim();
+  const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
+  const chk = (id) => !!(document.getElementById(id) || {}).checked;
   const status = document.getElementById('alipay-manual-status');
-  const body = { enabled, account };
+  const body = {
+    enabled: chk('alipay-manual-enabled'),
+    account: val('alipay-manual-account'),
+    ocrEnabled: chk('alipay-manual-ocr'),
+    autoFlip: chk('alipay-manual-autoflip'),
+    payeeMatch: val('alipay-manual-payee'),
+    timeWindowMin: parseInt(val('alipay-manual-window'), 10) || 0,
+  };
+  // API key only when freshly typed (blank = keep existing server-side).
+  const typedKey = val('alipay-manual-key');
+  if (typedKey) body.anthropicKey = typedKey;
   // Read the QR straight from the preview (source of truth) — covers both a
   // freshly-picked file and a previously-saved image, and is immune to the
   // transient _alipayManualQr being reset by a re-render between pick and save.
@@ -81,6 +110,7 @@ async function _saveAlipayManual() {
     if (!r.ok || !j.success) {
       const msg = j.error === 'qr_required' ? 'Upload a收款码 image first · 请先上传收款码图片'
                 : j.error === 'image_too_big' ? 'Image too large · 图片过大'
+                : j.error === 'ocr_key_required' ? 'Enter the Anthropic API key to enable auto-read · 请填写 API 密钥以启用自动识别'
                 : j.error === 'bad_image' ? 'Not a valid image · 图片格式无效' : (j.error || 'save failed');
       if (status) status.textContent = '';
       toast(msg, 'error');

@@ -2570,6 +2570,13 @@ addColumn('retail_orders', 'sms_delivered_sent_at', 'DATETIME');
 // hit "Mark paid". Single latest screenshot (data URL); re-upload overwrites.
 addColumn('retail_orders', 'alipay_proof_image', 'TEXT');
 addColumn('retail_orders', 'alipay_proof_at',    'DATETIME');
+// Vision-AI read of the uploaded proof: verdict ('match'|'mismatch'|'error'),
+// the extracted fields (JSON: amount/payee/paid_at/txn_id/reasons), and the
+// payment txn-id pulled out for cross-order reuse dedup (an old/duplicate
+// screenshot whose txn-id already settled another order is rejected).
+addColumn('retail_orders', 'alipay_ocr_verdict', 'TEXT');
+addColumn('retail_orders', 'alipay_ocr_json',    'TEXT');
+addColumn('retail_orders', 'alipay_txn_id',      'TEXT');
 
 // Cloud-printer (Feie) auto-print outcome, so the backend can show whether a
 // slip actually printed and offer a one-click reprint instead of the operator

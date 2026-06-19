@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v175-placed-date-absolute';
+const CACHE = 'roots-v2-shell-v176-alipay-ocr-verify';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?

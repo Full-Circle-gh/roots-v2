@@ -116,6 +116,33 @@ function drawerRefundBanner(o) {
     </div>`;
 }
 
+// Vision-AI verdict banner for a manual-Alipay payment screenshot. Green when
+// the OCR read matched (amount/payee/time/txn all check out), red on mismatch
+// (with reasons), grey when the read failed. Auto-flip mode turns a green match
+// straight to paid; assisted mode just helps staff decide the Mark-paid tap.
+function alipayOcrBanner(o) {
+  const v = o.alipay_ocr_verdict;
+  if (!v) return '';
+  let d = {}; try { d = o.alipay_ocr_json ? JSON.parse(o.alipay_ocr_json) : {}; } catch {}
+  const reasons = Array.isArray(d.reasons) ? d.reasons : [];
+  const facts = [];
+  if (d.amount != null) facts.push('¥' + Number(d.amount).toFixed(2));
+  if (d.payee) facts.push(escapeHtml(d.payee));
+  if (d.paid_at || d.raw_time_text) facts.push(escapeHtml(d.paid_at || d.raw_time_text));
+  const factStr = facts.join(' · ');
+  if (v === 'match') {
+    const paid = o.status !== 'pending_payment';
+    return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#d1fae5; color:#065f46; font-weight:700; font-size:12px; line-height:1.5;">
+      ✓ ${cuT('Auto-verified', '自动核对通过')}${factStr ? ' — ' + factStr : ''}${paid ? ` · ${cuT('auto-marked paid', '已自动标记付款')}` : ` · ${cuT('looks good', '可放心标记付款')}`}</div>`;
+  }
+  if (v === 'mismatch') {
+    return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#fee2e2; color:#991b1b; font-weight:700; font-size:12px; line-height:1.5;">
+      ⚠ ${cuT('Does not match — check before paying', '不一致 · 请核实后再付款')}${factStr ? '<br><span style="font-weight:600">' + factStr + '</span>' : ''}${reasons.length ? '<br><span style="font-weight:600">' + reasons.map(escapeHtml).join('；') + '</span>' : ''}</div>`;
+  }
+  return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:var(--bg-elev-2); color:var(--text-2); font-weight:600; font-size:12px; line-height:1.5;">
+    ${cuT('Could not read the screenshot automatically — verify manually.', '无法自动识别截图 · 请人工核对。')}</div>`;
+}
+
 // Split-package suggestion banner — appears above the Items section in the
 // Orders drawer when buildShipmentSuggestion (server-side) returns
 // eligible:true. Bilingual EN · 中文, with per-bucket cost detail. Apply
@@ -1273,8 +1300,12 @@ function renderShipByCell(o) {
   // replaces the generic sub-line for date-less orders.
   let ageLine = '';
   if (p.kind === 'asap' && u.days != null) {
-    const en = u.days <= 0 ? 'placed today' : `placed ${u.days}d ago`;
-    const cn = u.days <= 0 ? '今天下单' : `${u.days}天前下单`;
+    // Never print the relative word "today" — by the time staff read a closed
+    // order it's stale. Swap in the concrete placed date (operator-language).
+    const pd = parseSchedFor(p.urgencyDate || o.placed_at);
+    const placedDate = isNaN(pd.getTime()) ? '' : fmtDateShort(pd);
+    const en = u.days <= 0 ? (placedDate ? `placed ${placedDate}` : 'placed today') : `placed ${u.days}d ago`;
+    const cn = u.days <= 0 ? (placedDate ? `下单于${placedDate}` : '今天下单') : `${u.days}天前下单`;
     const bold = (u.level === 'overdue' || u.level === 'soon') ? 600 : 400;
     ageLine = `<div style="font-size: 10px; margin-top: 2px; font-weight: ${bold}; color: ${actionable ? u.color : 'var(--text-3)'};">${cuT(en, cn)}</div>`;
   }
@@ -1510,10 +1541,13 @@ function renderShipByTile(o) {
   const badgeHtml = badge ? ` <span style="font-size: 11px; color: ${u.color}; font-weight: 600;">· ${badge}</span>` : '';
   // Primary sub-line (made-fresh note / no-slot reason). Batch is highlighted.
   // ASAP orders have no note — show the order's age instead ("placed 2 days ago").
+  const pdTile = parseSchedFor(p.urgencyDate || o.placed_at);
+  const placedDateTile = isNaN(pdTile.getTime()) ? '' : fmtDateShort(pdTile);
   const subMain = p.subEn != null ? cuT(p.subEn, p.subCn)
     : (p.kind === 'asap' && u.days != null)
-      ? (u.days <= 0 ? cuT('placed today', '今天下单')
-                     : cuT(`placed ${u.days} day${u.days === 1 ? '' : 's'} ago`, `${u.days}天前下单`))
+      ? (u.days <= 0
+          ? (placedDateTile ? cuT(`placed ${placedDateTile}`, `下单于${placedDateTile}`) : cuT('placed today', '今天下单'))
+          : cuT(`placed ${u.days} day${u.days === 1 ? '' : 's'} ago`, `${u.days}天前下单`))
       : '';
   const subLine = subMain
     ? `<div class="sub"${p.kind === 'batch' ? ' style="color: var(--warn); font-weight: 600;"' : ''}>${subMain}</div>` : '';
@@ -2807,6 +2841,7 @@ function renderOpenOrder(o) {
           ${o.alipay_proof_image ? `<div class="full">
             <div class="kicker">Alipay payment proof · 支付宝付款截图${o.alipay_proof_at ? ' · ' + escapeHtml(o.alipay_proof_at) : ''}</div>
             <img src="${o.alipay_proof_image}" alt="Alipay payment proof" style="max-width: 220px; max-height: 300px; border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; display: block;" onclick="(function(s){var w=window.open();if(w)w.document.write('<img src=\\''+s+'\\' style=\\'max-width:100%\\'>');})(this.src)">
+            ${alipayOcrBanner(o)}
             ${o.status === 'pending_payment' ? `<div class="sub" style="margin-top: 6px; color: var(--brass); font-weight: 700;">${cuT('Verify the amount matches, then Mark paid below.', '核对金额一致后,点击下方“标记已付款”。')}</div>` : ''}
           </div>` : ''}
           ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
