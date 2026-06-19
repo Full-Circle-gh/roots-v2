@@ -2471,6 +2471,106 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
   });
 });
 
+// ─── Web (browser) phone-OTP login ─────────────────────────────────────────
+// Lets non-WeChat shoppers sign in on the website with a phone number + a
+// one-time SMS code (Aliyun). Reuses retail_auth_tokens / requireRetailAuth.
+// Accounts are UNIFIED BY PHONE: a WeChat customer who already bound this phone
+// logs into the SAME record (their addresses/orders/points), otherwise a fresh
+// web account is created with a synthetic 'web:' openid — so no schema change is
+// needed (openid stays UNIQUE NOT NULL, web identities just live in the 'web:'
+// namespace).
+const OTP_TTL_MS       = 5 * 60 * 1000;   // code valid 5 minutes
+const OTP_RESEND_MS    = 60 * 1000;       // 60s between sends to one phone
+const OTP_MAX_SENDS    = 8;               // sends per phone per rolling 24h
+const OTP_MAX_ATTEMPTS = 5;               // wrong guesses before the code burns
+const OTP_DEV_ECHO     = process.env.OTP_DEV_ECHO === '1';  // dev only — never set in prod
+function genOtp() { return String(crypto.randomInt(0, 1000000)).padStart(6, '0'); }
+
+router.post('/api/retail/auth/otp/request', express.json(), async (req, res) => {
+  const phone = _aliyunSms.normalizeCnMobile((req.body || {}).phone);
+  if (!phone) return res.status(400).json({ success: false, error: 'bad_phone' });
+
+  const now = Date.now();
+  const existing = tdb().prepare('SELECT * FROM retail_otp_codes WHERE phone = ?').get(phone);
+  if (existing && existing.last_sent_at && (now - Date.parse(existing.last_sent_at)) < OTP_RESEND_MS) {
+    return res.status(429).json({ success: false, error: 'too_soon' });
+  }
+  // rolling 24h send window (created_at is JS-written ISO, so parseable)
+  let createdIso = new Date(now).toISOString(), sendCount = 1;
+  if (existing) {
+    const createdMs = Date.parse(existing.created_at);
+    if (Number.isFinite(createdMs) && (now - createdMs) < 86400000) {
+      createdIso = existing.created_at; sendCount = (existing.send_count || 0) + 1;
+    }
+  }
+  if (sendCount > OTP_MAX_SENDS) return res.status(429).json({ success: false, error: 'daily_cap' });
+
+  const code = genOtp();
+  tdb().prepare(
+    `INSERT INTO retail_otp_codes (phone, code, expires_at, attempts, send_count, last_sent_at, created_at)
+     VALUES (?, ?, ?, 0, ?, ?, ?)
+     ON CONFLICT(phone) DO UPDATE SET
+       code = excluded.code, expires_at = excluded.expires_at, attempts = 0,
+       send_count = excluded.send_count, last_sent_at = excluded.last_sent_at, created_at = excluded.created_at`
+  ).run(phone, code, new Date(now + OTP_TTL_MS).toISOString(), sendCount,
+        new Date(now).toISOString(), createdIso);
+
+  let sent;
+  try { sent = await _aliyunSms.sendOtpSms(phone, code, integ().aliyun_sms); }
+  catch (e) { sent = { ok: false, error: 'send_threw: ' + e.message }; }
+
+  if (sent.ok) return res.json({ success: true, data: { sent: true, cooldown: OTP_RESEND_MS / 1000 } });
+  console.warn('[retail/otp] send failed for', phone.slice(0, 3) + '****' + phone.slice(-2),
+    '-', sent.error, OTP_DEV_ECHO ? '(dev echo on)' : '');
+  // Dev-only: surface the code so the flow is testable before the Aliyun OTP
+  // template is registered. OTP_DEV_ECHO must NEVER be set on production.
+  if (OTP_DEV_ECHO) return res.json({ success: true, data: { sent: false, dev: true, code, cooldown: OTP_RESEND_MS / 1000 } });
+  return res.status(503).json({ success: false, error: 'sms_unavailable' });
+});
+
+router.post('/api/retail/auth/otp/verify', express.json(), (req, res) => {
+  const phone = _aliyunSms.normalizeCnMobile((req.body || {}).phone);
+  const code  = String((req.body || {}).code || '').trim();
+  if (!phone || !/^\d{6}$/.test(code)) return res.status(400).json({ success: false, error: 'bad_input' });
+
+  const row = tdb().prepare('SELECT * FROM retail_otp_codes WHERE phone = ?').get(phone);
+  if (!row) return res.status(400).json({ success: false, error: 'no_code' });
+  if (Date.parse(row.expires_at) < Date.now()) {
+    tdb().prepare('DELETE FROM retail_otp_codes WHERE phone = ?').run(phone);
+    return res.status(400).json({ success: false, error: 'code_expired' });
+  }
+  if ((row.attempts || 0) >= OTP_MAX_ATTEMPTS) {
+    tdb().prepare('DELETE FROM retail_otp_codes WHERE phone = ?').run(phone);
+    return res.status(429).json({ success: false, error: 'too_many_attempts' });
+  }
+  if (row.code !== code) {
+    tdb().prepare('UPDATE retail_otp_codes SET attempts = attempts + 1 WHERE phone = ?').run(phone);
+    return res.status(400).json({ success: false, error: 'bad_code' });
+  }
+  tdb().prepare('DELETE FROM retail_otp_codes WHERE phone = ?').run(phone);   // burn on success
+
+  // Unify by phone (WeChat customer who bound this phone, or prior web account),
+  // else create a web account with a synthetic openid.
+  let customer = tdb().prepare('SELECT * FROM retail_customers WHERE phone = ? ORDER BY id LIMIT 1').get(phone);
+  if (!customer) {
+    const synthetic = 'web:' + crypto.randomBytes(12).toString('hex');
+    const info = tdb().prepare(
+      'INSERT INTO retail_customers (openid, phone, last_login_at) VALUES (?, ?, CURRENT_TIMESTAMP)'
+    ).run(synthetic, phone);
+    customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(info.lastInsertRowid);
+    try { claimMigrationCredit(customer.id); } catch (e) { console.warn('[retail/otp] migration claim failed:', e.message); }
+    try { reconcileSignupVouchers(customer.id); } catch (e) { console.warn('[retail/otp] voucher reconcile failed:', e.message); }
+    customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
+  } else {
+    tdb().prepare('UPDATE retail_customers SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?').run(customer.id);
+    customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
+  }
+  if (customer.is_blocked) return res.status(403).json({ success: false, error: 'account_blocked' });
+
+  const { token, expiresAt } = issueToken(customer.id, req.headers['user-agent']);
+  res.json({ success: true, data: { token, expires_at: expiresAt, customer: publicCustomer(customer) } });
+});
+
 // ─── Payment ─────────────────────────────────────────────────────────────
 // POST /api/retail/payment/create — kicks off payment for an order.
 //   • DEV mode (no WECHAT_PAY_MCH_ID env): auto-marks the order 'paid' and

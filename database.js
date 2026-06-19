@@ -1077,6 +1077,19 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_tokens_customer ON retail_auth_tokens(customer_id);
   CREATE INDEX IF NOT EXISTS idx_retail_tokens_expires  ON retail_auth_tokens(expires_at);
 
+  -- One-time passcodes for browser (web) phone login. One active code per phone
+  -- (phone is the PK); a fresh request overwrites the previous row. The code is
+  -- short-lived (expires_at) and burns after a few wrong tries (attempts).
+  CREATE TABLE IF NOT EXISTS retail_otp_codes (
+    phone           TEXT PRIMARY KEY,
+    code            TEXT NOT NULL,
+    expires_at      DATETIME NOT NULL,
+    attempts        INTEGER DEFAULT 0,   -- wrong-guess counter (burn at 5)
+    send_count      INTEGER DEFAULT 0,   -- sends in the current day (abuse cap)
+    last_sent_at    DATETIME,            -- for the resend cooldown
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS retail_orders (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     order_no            TEXT UNIQUE NOT NULL,    -- public-facing, e.g. R2026051601234
