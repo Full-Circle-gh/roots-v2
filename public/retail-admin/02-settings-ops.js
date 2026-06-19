@@ -123,7 +123,7 @@ async function _saveAlipayManual() {
     }
     if (status) status.textContent = 'Saved ✓ · 已保存';
     _alipayManualQr = null;
-    _alipayManualChip(enabled);
+    _alipayManualChip(body.enabled);
     toast('Saved · 已保存', 'success');
   } catch (e) { if (status) status.textContent = ''; toast('Save failed · 保存失败: ' + e.message, 'error'); }
 }
