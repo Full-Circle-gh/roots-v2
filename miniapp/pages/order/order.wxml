@@ -32,6 +32,17 @@
       </view>
     </view>
 
+    <!-- Late air shipment — a fresh/perishable parcel that arrived a day-plus
+         late and may no longer be safe. Food-safety warning, shown above all
+         other banners because it's the most urgent thing on the order. -->
+    <view wx:if="{{airDelay}}" class="air-delay-banner">
+      <view class="air-delay-icon">🚨</view>
+      <view class="air-delay-body">
+        <view class="air-delay-line f-bear">{{airDelay.line}}</view>
+        <view class="air-delay-sub">{{airDelay.sub}}</view>
+      </view>
+    </view>
+
     <!-- Local (same-city) delivery ETA — Guangzhou orders have no waybill, so
          the store sets an estimated arrival time the customer can see here. -->
     <view wx:if="{{etaLabel}}" class="eta-banner">
