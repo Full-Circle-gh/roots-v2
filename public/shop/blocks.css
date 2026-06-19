@@ -879,7 +879,7 @@
    Markup is image + body siblings, so CSS lays them out as 2 columns. */
 @media (min-width: 768px) {
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] {
-    width: 100vw; max-width: 1100px; position: relative; left: 50%; transform: translateX(-50%);
+    width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
   }
   .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-recipe-blk {
     display: grid; grid-template-columns: 1fr 1fr; align-items: stretch;
@@ -927,4 +927,47 @@
   .shop-blocks .sb-nbar-text { font-size: 16px; }
   .shop-blocks .sb-nbar-icon { font-size: 20px; }
   .shop-blocks .sb-nbar-banner .sb-nbar-text { font-size: 18px; }
+}
+
+/* ⑧ REMAINING HOMEPAGE BLOCKS — consistent band + fixed-px (de-stretched).
+   Contained card/text blocks (review, voting, wecom) centre in a reading band
+   so they read as an intentional symmetric inset next to the wide 1240 blocks;
+   flash & bundle join the 1240 band. (Deeper per-view art-direction can follow
+   once these can be eyeballed live.) */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="review_card"],
+  .shop-blocks .sb-blk-outer[data-block-type="voting_block"] {
+    width: 100vw; max-width: 880px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-blk-outer[data-block-type="wecom_contact"] {
+    width: 100vw; max-width: 1000px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-blk-outer[data-block-type="bundle"],
+  .shop-blocks .sb-blk-outer[data-block-type="flash_sale_strip"] {
+    width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  /* review */
+  .shop-blocks .sb-rv-quote { font-size: 22px; line-height: 1.5; }
+  .shop-blocks .sb-rv-name { font-size: 18px; }
+  .shop-blocks .sb-spot-title { font-size: 34px; }
+  /* voting */
+  .shop-blocks .sb-vb-title,
+  .shop-blocks .sb-vb-q { font-size: 28px; }
+  .shop-blocks .sb-vb-opt-label { font-size: 18px; }
+  /* wecom */
+  .shop-blocks .sb-wc-loop-title,
+  .shop-blocks .sb-wc-lm-title,
+  .shop-blocks .sb-wc-strip-title { font-size: 30px; }
+  .shop-blocks .sb-wc-loop-sub,
+  .shop-blocks .sb-wc-lm-sub,
+  .shop-blocks .sb-wc-strip-sub { font-size: 16px; }
+  /* flash */
+  .shop-blocks .sb-fs-title { font-size: 32px; }
+  .shop-blocks .sb-fsd-tile-num { font-size: 30px; }
+  .shop-blocks .sb-fsd-name { font-size: 17px; }
+}
+@media (min-width: 1024px) {
+  .shop-blocks .sb-rv-quote { font-size: 26px; }
+  .shop-blocks .sb-vb-title,
+  .shop-blocks .sb-vb-q { font-size: 32px; }
 }
