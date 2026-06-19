@@ -1625,8 +1625,11 @@ function renderTrackingCell(o) {
   const dlLine = dl
     ? `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:${dl.tone === 'urgent' ? 700 : 600}; color:${dl.color};">${deliveryIcon(dl.icon, 11)}<span>${cuT(dl.en, dl.cn)}</span></div>`
     : '';
+  const airDelayBadge = o.air_delivery_delayed
+    ? `<div style="display:flex; align-items:center; gap:3px; font-size:10px; font-weight:700; color:#b85000; margin-top:3px;">⚠ ${cuT('AIR DELAYED · contact customer', '空运延误 · 联系客户')}</div>`
+    : '';
   return `<div style="font-family: var(--f-mono); font-size: 11px; font-weight: 600;">${escapeHtml(carrier)} ${escapeHtml(o.tracking_number)}</div>
-          <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}`;
+          <div style="margin-top: 2px;">${sync}</div>${splitLine}${dlLine}${airDelayBadge}`;
 }
 
 // For multi-parcel (split) orders, a two-line summary: "N parcels" + a breakdown
@@ -3419,9 +3422,27 @@ async function ensureTrackingCarriers() {
   return TRACKING_CARRIERS;
 }
 
-// Tracking card for one shipment row inside a shipment-card. Each shipment
-// gets its own carrier + waybill input. The save/clear/retry handlers all
-// pass the shipment_id so the right row in retail_shipments is touched.
+// Returns how many days late an air shipment arrived, or 0 if on time / not air.
+// Expected delivery = promised_delivery_date if set, otherwise placed_at + 1 day.
+function airShipmentDelayDays(o, s) {
+  if ((s.mode || '') !== 'air') return 0;
+  const deliveredDate = (s.delivered_at || '').slice(0, 10);
+  if (!deliveredDate || deliveredDate === '0000-00-00') return 0;
+  let expectedDate = (o.promised_delivery_date || '').slice(0, 10);
+  if (!expectedDate) {
+    const placedDate = (o.placed_at || '').slice(0, 10);
+    if (!placedDate) return 0;
+    const d = new Date(placedDate + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + 1);
+    expectedDate = d.toISOString().slice(0, 10);
+  }
+  if (deliveredDate <= expectedDate) return 0;
+  return Math.round((new Date(deliveredDate) - new Date(expectedDate)) / 86400000);
+}
+
+// Tracking card for one shipment row. Each shipment gets its own carrier +
+// waybill input. The save/clear/retry handlers all pass the shipment_id so
+// the right row in retail_shipments is touched.
 function renderShipmentTrackingCard(o, s, hoisted) {
   const t = s.tracking;
   const has = !!(t && t.number);
@@ -3502,11 +3523,30 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       </div>
     </div>` : '';
 
+  const delayDays = airShipmentDelayDays(o, s);
+  const delayBanner = delayDays > 0 ? `
+    <div style="display:flex; gap:10px; align-items:flex-start; padding:12px 14px; margin-bottom:12px;
+                background:#fff4e0; border:2px solid #e07000; border-radius:8px; font-size:12.5px; line-height:1.5;">
+      <span style="font-size:20px; line-height:1.1; flex-shrink:0;">🚨</span>
+      <div>
+        <div style="font-weight:700; font-size:13.5px; color:#b85000; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em;">
+          ${cuT(`Air shipment delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `空运延误 — 晚到 ${delayDays} 天`)}
+        </div>
+        <div style="color:#5a3000; margin-bottom:6px;">
+          <strong>${cuT('1. Contact customer immediately:', '1. 立即联系客户：')}</strong>
+          ${cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。')}
+        </div>
+        <div style="color:#5a3000;">
+          <strong>${cuT('2. Contact JD Logistics for delay compensation.', '2. 联系京东物流，申请延误赔偿。')}</strong>
+        </div>
+      </div>
+    </div>` : '';
+
   return `
     <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
       ${renderGzMethodToggle(o, s)}
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Tracking · 物流</div>
-      ${reuseBanner}
+      ${delayBanner}${reuseBanner}
       ${has ? `
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
           <div>
