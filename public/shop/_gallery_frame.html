@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>block frame</title>
+
+<!-- Brand fonts + color/font vars — kept in sync with public/shop.html :root so
+     the gallery is font-faithful when served. From file:// the @font-face URLs
+     won't resolve and the fallback stacks apply (fine for layout QA). -->
+<style>
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/LilitaOne.ttf') format('truetype'); unicode-range:U+0024,U+0025,U+0030-0039,U+00A5; font-display:swap; }
+  @font-face { font-family:'Bear Serif'; src:url('/assets/fonts/BearSerif.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'Toni Grotesk'; src:url('/assets/fonts/ToniGroteskPro.otf') format('opentype'); font-display:swap; }
+  @font-face { font-family:'League Gothic'; src:url('/assets/fonts/LeagueGothic.ttf') format('truetype'); font-display:swap; }
+  @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW5.ttf') format('truetype'); font-weight:500; font-display:swap; }
+  @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW7.ttf') format('truetype'); font-weight:700; font-display:swap; }
+  @font-face { font-family:'DF Yuan'; src:url('/assets/fonts/DFYuanW9.ttf') format('truetype'); font-weight:900; font-display:swap; }
+  @font-face { font-family:'Aleo'; src:url('/assets/fonts/Aleo-Regular.otf') format('opentype'); font-display:swap; }
+  :root{
+    --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
+    --berry:#E96174; --carrot:#FF6B0C; --papaya:#FFAF60; --corn:#F2CA6C;
+    --sky:#B2CFED; --pea:#7BBD3B; --lotus:#EEB8E4; --pink:#F4B8CB; --citrus:#E7E74C;
+    --accent:#365329;
+    --f-bear:'Bear Serif','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    --f-toni:'Toni Grotesk','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif;
+    --f-gothic:'League Gothic','DF Yuan','PingFang SC','Hiragino Sans GB','Bebas Neue',sans-serif;
+    --f-aleo:'Aleo','DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,serif;
+    --f-yuan:'DF Yuan','PingFang SC','Hiragino Sans GB',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{background:var(--oat);color:var(--ink);font-family:var(--f-toni);}
+  /* faint frame so the page edge (where breakouts must reach) is visible */
+  body{border:1px dashed rgba(0,0,0,.18);min-height:60px;overflow-x:hidden;}
+</style>
+
+<link rel="stylesheet" href="/assets/shop/blocks.css">
+<link rel="stylesheet" href="/assets/shop/product-blocks.css">
+</head>
+<body>
+<div class="shop-blocks" id="root"></div>
+
+<script src="/assets/shop/blocks.js"></script>
+<script src="/assets/shop/_gallery.fixtures.js"></script>
+<script>
+(function () {
+  var W = window.__WSF__ || {};
+  var cfg = W.config || {};
+  var home = cfg.home || {};
+  var layout = (home.layout || home.blocks || []).slice();
+
+  // ?only=<type> filters the home layout to a single block type (spacers dropped
+  // so a single block isn't padded by stray gaps). ?only=all shows everything.
+  var only = new URLSearchParams(location.search).get('only') || 'all';
+  if (only && only !== 'all') {
+    layout = layout.filter(function (b) { return b && b.type === only; });
+  }
+
+  var root = document.getElementById('root');
+  if (!window.ShopBlocks) { root.textContent = 'ShopBlocks engine failed to load.'; report(); return; }
+
+  ShopBlocks.setContext({
+    lang: 'en',
+    products: W.products || [],
+    categories: W.cats || [],
+    flashSales: W.flash || [],
+    config: cfg,
+  });
+  ShopBlocks.onRerender(function () {
+    root.innerHTML = ShopBlocks.render(layout);
+    report();
+  });
+  root.innerHTML = ShopBlocks.render(layout);
+  try { ShopBlocks.startTimers(document.body); } catch (e) {}
+
+  // Tell the parent how tall we are so it can size the iframe (no inner scroll).
+  function report() {
+    var h = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+    try { parent.postMessage({ type: 'wsf-frame-height', only: only, h: h }, '*'); } catch (e) {}
+  }
+  report();
+  window.addEventListener('load', report);
+  window.addEventListener('resize', report);
+  // lazy data (top sellers / new arrivals) arrives async → re-measure a few times
+  var n = 0, iv = setInterval(function () { report(); if (++n > 12) clearInterval(iv); }, 500);
+})();
+</script>
+</body>
+</html>

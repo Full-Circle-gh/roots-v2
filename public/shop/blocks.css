@@ -651,57 +651,72 @@
 .shop-blocks .sb-enter-slide_up { animation: sbSlideUp .45s ease-out both; }
 
 /* ════════════════════════════════════════════════════════════════════════
-   DESKTOP — app-faithful centered column (560px) for text/card blocks; grid-
-   like blocks break out to a wider band with more columns to use the screen.
+   DESKTOP — the durable model (so NEW/generated blocks look right by default):
+
+   1. Visual scale (--u) is DECOUPLED from layout width. On phones --u tracked
+      the viewport (100vw/750) which, ported naively, made everything balloon on
+      a monitor. On desktop --u is pinned to a fixed, slightly-larger-than-phone
+      scale so type/spacing/icons stay sane no matter how wide the column is.
+   2. EVERY block sits in a centered mid column (720px) by default — no block is
+      ever stranded. A new block type inherits this with zero extra CSS.
+   3. Grid-family + hero blocks OPT INTO a wider band and use auto-fill grids
+      (repeat(auto-fill, minmax(min, 1fr))) so items reflow to fill the row and
+      never orphan — works for any item count, at any width, for blocks not yet
+      written.
    ════════════════════════════════════════════════════════════════════════ */
 @media (min-width: 768px) {
   .shop-blocks {
-    --u: calc(560px / 750);
-    max-width: 560px;
+    --u: calc(440px / 750);   /* ~0.59: fixed visual scale, independent of width */
+    max-width: 720px;         /* default mid column for all blocks */
     margin: 0 auto;
   }
-  /* breakout children use 100vw; avoid a horizontal scrollbar from the
-     scrollbar's own width by clamping the page. */
+  /* breakout children use 100vw; clamp the page so the scrollbar's own width
+     can't introduce a horizontal scrollbar. */
   html, body { overflow-x: hidden; }
-  /* Grid-like blocks break out wider + centered, and add columns. */
+
+  /* Grid-family + hero blocks break out to a wider centered band. They keep the
+     same --u (NO inflation — that's what used to balloon the icons/type); the
+     extra width is spent on more grid columns, not bigger elements. */
   .shop-blocks .sb-blk-outer[data-block-type="product_grid"],
   .shop-blocks .sb-blk-outer[data-block-type="category_tabs"],
   .shop-blocks .sb-blk-outer[data-block-type="bundle"],
-  .shop-blocks .sb-blk-outer[data-block-type="flash_sale_strip"] {
+  .shop-blocks .sb-blk-outer[data-block-type="flash_sale_strip"],
+  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] {
     width: 100vw;
-    max-width: 1040px;
+    max-width: 1120px;
     position: relative;
     left: 50%;
     transform: translateX(-50%);
-    /* grids use a larger --u so type/spacing don't balloon at 1040px */
-    --u: calc(1040px / 750);
   }
-  /* product grids: 2-col phone -> 4-col desktop */
-  .shop-blocks .sb-blk-outer[data-block-type="product_grid"] .sb-grid.sb-cols-2,
-  .shop-blocks .sb-blk-outer[data-block-type="product_grid"] .sb-grid.sb-cols-3 {
-    grid-template-columns: repeat(4, 1fr);
+
+  /* Auto-fill grids — never orphan, fill the row at any width / item count. */
+  .shop-blocks .sb-grid.sb-cols-1,
+  .shop-blocks .sb-grid.sb-cols-2,
+  .shop-blocks .sb-grid.sb-cols-3 {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   }
-  /* category tiles / bento / icons: more columns on desktop */
   .shop-blocks .sb-cat-grid,
-  .shop-blocks .sb-bento-grid { grid-template-columns: repeat(4, 1fr); }
+  .shop-blocks .sb-bento-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
   .shop-blocks .sb-bento-tile.sb-hero { grid-column: span 2; }
   .shop-blocks .sb-icons-cols-3,
   .shop-blocks .sb-icons-cols-4,
-  .shop-blocks .sb-icons-cols-5 { grid-template-columns: repeat(6, 1fr); }
-  /* flash design + strip cards size down so more fit per row */
-  .shop-blocks .sb-fsd-card { flex-basis: calc(280 * var(--u)); width: calc(280 * var(--u)); }
-  .shop-blocks .sb-fs-card { flex-basis: calc(240 * var(--u)); width: calc(240 * var(--u)); }
-  /* hero can be a touch taller / wider feeling; cap its column with the page */
-  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] {
-    width: 100vw; max-width: 1040px; position: relative; left: 50%; transform: translateX(-50%);
-    --u: calc(1040px / 750);
+  .shop-blocks .sb-icons-cols-5 {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  }
+
+  /* Hero: fill the band, but cap height so portrait/poster art doesn't run huge.
+     `contain` never crops poster art (e.g. "WELCOME TO ROOTS"); letterbox onto
+     the page oat so the side margins blend into the page and read intentional.
+     (For a full-bleed photo hero, swap to object-fit: cover.) */
+  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-hero {
+    max-height: 78vh;
+    background: var(--oat);
+  }
+  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-hero-img,
+  .shop-blocks .sb-blk-outer[data-block-type="hero_banner"] .sb-hero-video {
+    object-fit: contain;
   }
   .shop-blocks .sb-hero-full { border-radius: calc(24 * var(--u)); overflow: hidden; }
-}
-
-/* Wider desktop — let the grid band breathe a bit more. */
-@media (min-width: 1280px) {
-  .shop-blocks .sb-blk-outer[data-block-type="product_grid"] .sb-grid.sb-cols-3 {
-    grid-template-columns: repeat(5, 1fr);
-  }
 }

@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storefront block gallery</title>
+<style>
+  :root{ --bg:#1b1b1a; --panel:#26262400; --ink:#f4efe7; --muted:#9b978d; --line:#3a3a37; --hi:#CCD900; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:#201f1d;color:var(--ink);font:14px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;}
+  header{position:sticky;top:0;z-index:10;background:#17110f;border-bottom:1px solid var(--line);
+    padding:10px 16px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;}
+  header h1{font-size:14px;font-weight:700;letter-spacing:.04em;margin:0;opacity:.85;}
+  header .grp{display:flex;gap:6px;align-items:center;}
+  header label{font-size:11px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);}
+  select{background:#2a2926;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;}
+  .btn{background:#2a2926;color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 11px;cursor:pointer;font:inherit;}
+  .btn:hover{border-color:#666;}
+  .btn.on{background:var(--hi);color:#1a1a17;border-color:var(--hi);font-weight:700;}
+  .hint{color:var(--muted);font-size:12px;}
+  main{padding:18px;overflow-x:auto;}
+  .stage{display:flex;gap:24px;align-items:flex-start;min-width:min-content;}
+  .frame{background:var(--oat,#F2E7DF);border-radius:10px;overflow:hidden;box-shadow:0 8px 30px rgba(0,0,0,.4);flex:0 0 auto;}
+  .frame .bar{display:flex;justify-content:space-between;align-items:center;background:#17110f;color:var(--ink);
+    padding:6px 12px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;}
+  .frame .bar b{color:var(--hi);}
+  iframe{display:block;border:0;width:100%;background:#F2E7DF;}
+</style>
+</head>
+<body>
+<header>
+  <h1>BLOCK GALLERY</h1>
+  <div class="grp">
+    <label for="blk">Block</label>
+    <select id="blk"></select>
+  </div>
+  <div class="grp">
+    <label>Desktop width</label>
+    <span id="widths"></span>
+  </div>
+  <div class="grp">
+    <button class="btn on" id="cmp">Compare phone ↔ desktop</button>
+  </div>
+  <span class="hint" id="hint"></span>
+</header>
+<main><div class="stage" id="stage"></div></main>
+
+<!-- only used here to enumerate the block types for the dropdown -->
+<script src="/assets/shop/_gallery.fixtures.js"></script>
+<script>
+(function () {
+  var W = window.__WSF__ || {};
+  var layout = ((W.config || {}).home || {}).layout || [];
+  var PHONE = 390;
+  var DESKTOPS = [768, 1024, 1280, 1440];
+  var state = { only: 'all', w: 1280, compare: true };
+
+  // ── dropdown: All + each unique block type (in layout order) ──────────────
+  var seen = {}, types = [];
+  layout.forEach(function (b) { if (b && b.type && !seen[b.type]) { seen[b.type] = 1; types.push(b.type); } });
+  var sel = document.getElementById('blk');
+  sel.innerHTML = '<option value="all">All blocks (full home)</option>' +
+    types.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
+  sel.onchange = function () { state.only = sel.value; build(); };
+
+  // ── width preset buttons ──────────────────────────────────────────────────
+  var wbox = document.getElementById('widths');
+  DESKTOPS.forEach(function (w) {
+    var b = document.createElement('button');
+    b.className = 'btn' + (w === state.w ? ' on' : '');
+    b.textContent = w;
+    b.onclick = function () { state.w = w; syncW(); build(); };
+    b.dataset.w = w;
+    wbox.appendChild(b);
+  });
+  function syncW() {
+    [].forEach.call(wbox.children, function (b) { b.classList.toggle('on', +b.dataset.w === state.w); });
+  }
+
+  var cmp = document.getElementById('cmp');
+  cmp.onclick = function () { state.compare = !state.compare; cmp.classList.toggle('on', state.compare); build(); };
+
+  document.getElementById('hint').textContent =
+    layout.length + ' blocks in fixture · dashed edge = page boundary (breakouts should reach it)';
+
+  // ── frame factory ───────────────────────────────────────────────────────
+  function frame(width, label) {
+    var wrap = document.createElement('div');
+    wrap.className = 'frame';
+    wrap.style.width = width + 'px';
+    var src = '/assets/shop/_gallery_frame.html?only=' + encodeURIComponent(state.only) + '&t=' + Date.now();
+    wrap.innerHTML = '<div class="bar"><span>' + label + '</span><b>' + width + 'px</b></div>' +
+      '<iframe src="' + src + '" style="height:600px" scrolling="no"></iframe>';
+    return wrap;
+  }
+
+  function build() {
+    var stage = document.getElementById('stage');
+    stage.innerHTML = '';
+    if (state.compare) stage.appendChild(frame(PHONE, 'Phone'));
+    stage.appendChild(frame(state.w, 'Desktop'));
+  }
+
+  // iframes report their content height so there's no inner scrollbar
+  window.addEventListener('message', function (e) {
+    var d = e.data || {};
+    if (d.type !== 'wsf-frame-height') return;
+    [].forEach.call(document.querySelectorAll('iframe'), function (f) {
+      if (f.contentWindow === e.source) f.style.height = Math.max(80, d.h + 4) + 'px';
+    });
+  });
+
+  build();
+})();
+</script>
+</body>
+</html>
