@@ -861,3 +861,57 @@
   .shop-blocks .sb-greet-wallet .sb-grd-head,
   .shop-blocks .sb-greet-coin .sb-grd-head { font-size: 48px; }
 }
+
+/* ⑤ RECIPE / EDITORIAL — magazine side-by-side (image | text), fixed-px type.
+   Markup is image + body siblings, so CSS lays them out as 2 columns. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] {
+    width: 100vw; max-width: 1100px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-recipe-blk {
+    display: grid; grid-template-columns: 1fr 1fr; align-items: stretch;
+    margin: 0; border: 2px solid var(--ink); border-radius: 20px; overflow: hidden;
+  }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-img {
+    width: 100%; height: 100%; aspect-ratio: auto; min-height: 380px;
+  }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-body {
+    padding: 44px 48px; display: flex; flex-direction: column; justify-content: center;
+  }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-kicker { font-size: 13px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-headline { font-size: 38px; line-height: 1.04; margin-top: 8px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-meta { font-size: 14px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-para { font-size: 16px; line-height: 1.6; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-card-name { font-size: 18px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-card-tag { font-size: 14px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-card-price { font-size: 17px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-card-img { width: 96px; height: 96px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-cta { font-size: 14px; }
+}
+@media (min-width: 1024px) {
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-body { padding: 56px 60px; }
+  .shop-blocks .sb-blk-outer[data-block-type="recipe_story"] .sb-rcp-headline { font-size: 46px; }
+}
+
+/* ⑥ COUPON — wide ticket: discount block | copy | CTA in a row, fixed-px. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="coupon_block"] {
+    width: 100vw; max-width: 880px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-coupon-blk { margin: 0; padding: 32px 40px; border-radius: 18px; gap: 32px; }
+  .shop-blocks .sb-cp-big { font-size: 52px; }
+  .shop-blocks .sb-cp-kicker { font-size: 13px; }
+  .shop-blocks .sb-cp-title { font-size: 22px; }
+  .shop-blocks .sb-cp-sub { font-size: 15px; }
+  .shop-blocks .sb-cp-cta { padding: 16px 28px; font-size: 14px; }
+}
+
+/* ⑦ NOTIFICATION BAR — a contained centered notice, fixed-px (never full-bleed). */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="notification_bar"] {
+    width: 100vw; max-width: 1040px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-nbar-text { font-size: 16px; }
+  .shop-blocks .sb-nbar-icon { font-size: 20px; }
+  .shop-blocks .sb-nbar-banner .sb-nbar-text { font-size: 18px; }
+}
