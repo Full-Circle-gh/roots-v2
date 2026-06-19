@@ -1109,7 +1109,7 @@ function shipByPlan(o) {
   const reqEn = 'Requested timing', reqCn = '原定时间';
   // 1 — Pickup: show the counter window, never a ship deadline.
   if (o.fulfillment_type === 'pickup') {
-    const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
+    const label = localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
       || (o.scheduled_for ? localizeSlotLabel(humanizeSlotLabel(o.scheduled_for)) : null);
     return {
       kind: 'pickup', icon: 'pickup',
@@ -1157,7 +1157,7 @@ function shipByPlan(o) {
   // operator never sees raw ISO.
   const dt = parseSchedFor(o.scheduled_for);
   const valid = !isNaN(dt.getTime());
-  const label = localizeSlotLabel(humanizeSlotLabel(o.delivery_slot_label))
+  const label = localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
     || (valid ? fmtSlotShort(dt) : String(o.scheduled_for));
   // If the human label isn't itself the date, surface the date as a sub-line.
   const dateLine = valid ? fmtSlotShort(dt) : '';
@@ -1303,6 +1303,25 @@ function fmtDateShort(dt) {
   }
   const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
   return `${M} ${String(dt.getDate()).padStart(2, '0')}`;
+}
+// A slot label captured at checkout can LEAD with a relative day word —
+// "Tomorrow 10:00–12:00" / "明天 10:00–12:00" — frozen at the moment the customer
+// ordered. By the time staff read it on the actual delivery day, "tomorrow" has
+// silently become today: a stale, misleading word. Replace any leading relative
+// day with the CONCRETE date resolved from scheduled_for (the absolute slot
+// timestamp), so the tile always shows an unambiguous day in the operator's own
+// language. Anything without a leading relative word (or with no usable
+// scheduled_for) passes through untouched.
+function absolutizeSlotLabel(label, scheduledForIso) {
+  if (label == null || label === '') return label;
+  const s = String(label).trim();
+  const rel = /^(today|tomorrow|yesterday|今天|明天|昨天)\s*[,，]?\s*/i;
+  if (!rel.test(s)) return label;
+  const dt = parseSchedFor(scheduledForIso);
+  if (isNaN(dt.getTime())) return label;       // can't resolve the date → leave as-is
+  const datePart = fmtDateShort(dt);           // "Jun 19" / "6月19日" — language-aware
+  const rest = s.replace(rel, '').trim();      // the surviving time tail, e.g. "10:00–12:00"
+  return rest ? `${datePart} · ${rest}` : datePart;
 }
 // The customer's delivery_slot_label is stored as free text in WHATEVER language
 // they checked out in (e.g. "Today 10AM–12PM", "Thu Jun 25 2026", "ASAP") — the
