@@ -159,6 +159,8 @@
   .review .when{font-size:12px;color:var(--muted);}
   .review .body{font-size:14px;color:#4a4a44;line-height:1.5;}
 
+  .pd-body{max-width:760px;margin:6px auto 0;}
+  .shop-product-blocks{margin-top:8px;}
   .crumb{font-size:13px;color:var(--muted);padding-top:18px;}
   .crumb a:hover{color:var(--accent);}
 
@@ -184,7 +186,9 @@
   }
 </style>
 <link rel="stylesheet" href="/assets/shop/blocks.css">
+<link rel="stylesheet" href="/assets/shop/product-blocks.css">
 <script src="/assets/shop/blocks.js"></script>
+<script src="/assets/shop/product-blocks.js"></script>
 </head>
 <body>
   <div id="boot"><div class="spin"></div></div>
@@ -462,6 +466,15 @@ async function renderProduct(id){
   const desc=pick(p.description_en,p.description_cn);
   const avg=Number(p.review_avg)||0, rc=Number(p.review_count)||0;
 
+  // Description body: render the mini-app PRODUCT design-blocks when the product
+  // uses them (identical to the mini-app); else fall back to plain rich text.
+  let blocks=p.description_blocks;
+  if(typeof blocks==='string'){ try{ blocks=JSON.parse(blocks); }catch{ blocks=null; } }
+  const useBlocks = p.use_block_design && Array.isArray(blocks) && blocks.length && window.ShopProductBlocks;
+  const descBody = useBlocks
+    ? `<div class="shop-product-blocks">${ShopProductBlocks.render(blocks,{lang:state.lang})}</div>`
+    : (desc?`<div class="pd-section"><h3>${state.lang==='cn'?'商品详情':'Description'}</h3><div class="desc">${desc}</div></div>`:'');
+
   const optsHtml=(Array.isArray(p.options)&&p.options.length)?`<div class="pd-section"><h3>${state.lang==='cn'?'选项':'Options'}</h3>${
     p.options.map(o=>`<div class="opt"><div class="q">${esc(pick(o.question_en,o.question_cn))}${o.is_required?' *':''}</div>
       <div class="choices">${(o.choices||[]).map(c=>`<span class="choice">${esc(pick(c.label_en,c.label_cn))}${Number(c.price_delta)?`<span class="delta">+${money(c.price_delta)}</span>`:''}</span>`).join('')}</div></div>`).join('')
@@ -504,10 +517,9 @@ async function renderProduct(id){
         <div class="pd-note">${state.lang==='cn'?'网页下单功能即将上线。':'Online checkout is coming soon to the website.'}</div>
         ${varsHtml}
         ${optsHtml}
-        ${desc?`<div class="pd-section"><h3>${state.lang==='cn'?'商品详情':'Description'}</h3><div class="desc">${desc}</div></div>`:''}
-        ${revHtml}
       </div>
     </div>
+    <div class="pd-body">${descBody}${revHtml}</div>
   </div>`;
 
   document.title=pick(p.name_en,p.name_cn)+' · '+state.brand;
