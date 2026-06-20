@@ -216,6 +216,19 @@ Page({
       this.setData({ lang: app.globalData.lang });
       this.recomputeDisplay();
     }
+    // The delivery address may have changed (checkout / address page) since
+    // this page rendered — e.g. Guangzhou → Beijing. Re-evaluate the shopper
+    // zone and recompute so a sold-out item flips between the hard SOLD-OUT
+    // block (GZ same-day) and the orderable SHIPS SOON / NEXT BATCH state.
+    // cachedGz() reflects the now-active address synchronously; resolveGz()
+    // refines. recomputeDisplay() re-renders from the loaded product (no refetch).
+    const gzNow = zone.cachedGz();
+    if (gzNow !== this._shopperGz) { this._shopperGz = gzNow; this.recomputeDisplay(); }
+    zone.resolveGz().then(gz => {
+      if (gz === this._shopperGz) return;
+      this._shopperGz = gz;
+      this.recomputeDisplay();
+    });
     // On a not-found page there's no product to tick / ping for — skip the
     // background timers so we don't keep hammering /viewing for a dead id
     // (which felt like the app was stuck on a frozen page).

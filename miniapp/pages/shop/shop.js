@@ -182,11 +182,29 @@ Page({
 
   onShow() {
     const app = getApp();
+    let refreshed = false;
     if (app.globalData.lang !== this.data.lang) {
       this._applyLang(app.globalData.lang);
       this.refresh();
+      refreshed = true;
     }
     this._syncConfig();
+    // The delivery address may have changed on the checkout / address page
+    // since this list rendered (e.g. Guangzhou → Beijing). Re-evaluate the
+    // shopper zone and re-render so sold-out items flip between the hard
+    // SOLD-OUT card (GZ same-day) and the orderable SHIPS SOON / NEXT BATCH
+    // state. cachedGz() reflects the now-active address synchronously;
+    // resolveGz() refines in the background. Only re-render on an actual flip.
+    const gzNow = zone.cachedGz();
+    if (gzNow !== this._shopperGz) {
+      this._shopperGz = gzNow;
+      if (!refreshed && !this.data.loading) { this.refresh(); refreshed = true; }
+    }
+    zone.resolveGz().then(gz => {
+      if (gz === this._shopperGz) return;
+      this._shopperGz = gz;
+      if (!this.data.loading) this.refresh();
+    });
     const tb = this.getTabBar && this.getTabBar();
     if (tb && tb.setSelected) tb.setSelected('pages/shop/shop');
     // Honour a category deep-link handed off from the home page (a tapped
