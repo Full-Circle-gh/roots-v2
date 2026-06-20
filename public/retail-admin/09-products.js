@@ -1643,6 +1643,10 @@ function pdOpen(id) {
   const ck = (el, v) => { const n = document.getElementById(el); if (n) n.checked = !!v; };
   ck('pd-is-market', p && p.is_market === 1); ck('pd-is-batch-made', p && p.is_batch_made === 1); ck('pd-is-restock-only', p && p.is_restock_only === 1);
   ck('pd-ship-from-supplier', p && p.ship_from_supplier === 1);
+  // Out-of-stock policy. Show the effective value: a blank policy on a legacy
+  // batch meal reads as "backorder outside GZ" (and persists explicitly on save).
+  { const os = document.getElementById('pd-oos-policy');
+    if (os) os.value = (p && p.oos_policy) || (p && p.is_batch_made === 1 ? 'backorder_gz' : 'strict'); }
   pdLoadStoreStocks(p ? p.id : null);
   set('pd-badge', p ? pdBadgeOf(p.tags) : '');
   // Description is always the Classic (rich-text) editor now. A legacy plain
@@ -3508,6 +3512,7 @@ function pdCollectBody() {
     status: g('pd-status') || 'Active',
     free_of: pdFreeOfGet(), notes: g('pd-notes'), product_facts: pdFactsGet(),
     is_market: ckd('pd-is-market'), is_restock_only: ckd('pd-is-restock-only'), is_batch_made: ckd('pd-is-batch-made'),
+    oos_policy: (g('pd-oos-policy') === 'backorder_gz' ? 'backorder_gz' : 'strict'),
     ship_from_supplier: ckd('pd-ship-from-supplier'),
     ship_modes: modes.join(',') || 'air,land',
     description_en: pdRteClean(document.getElementById('pd-rte-en').innerHTML),
@@ -3683,6 +3688,7 @@ function pdSnapshot() {
     notes: g('pd-notes'), badge: g('pd-badge'), facts: pdFactsGet(),
     top: g('pd-top-category'), sub: g('pd-subcategory'),
     is_market: ck('pd-is-market'), is_batch: ck('pd-is-batch-made'), is_restock: ck('pd-is-restock-only'),
+    oos_policy: g('pd-oos-policy'),
     air: ck('pd-ship-air'), land: ck('pd-ship-land'), local: ck('pd-ship-local'), published: ck('pd-published'),
     desc_en: document.getElementById('pd-rte-en').innerHTML, desc_cn: document.getElementById('pd-rte-cn').innerHTML,
     gallery: _pdGallery.slice(),
@@ -3696,6 +3702,7 @@ function pdApplySnapshot(s) {
   set('pd-sku', s.sku); set('pd-weight', s.weight); set('pd-status', s.status); pdFreeOfSet(s.free_of);
   set('pd-notes', s.notes); set('pd-badge', s.badge); pdFactsSet(s.facts);
   ck('pd-is-market', s.is_market); ck('pd-is-batch-made', s.is_batch); ck('pd-is-restock-only', s.is_restock);
+  set('pd-oos-policy', s.oos_policy || 'strict');
   ck('pd-ship-air', s.air); ck('pd-ship-land', s.land); ck('pd-ship-local', s.local); ck('pd-published', s.published);
   pdShipModeChanged();
   document.getElementById('pd-rte-en').innerHTML = s.desc_en;

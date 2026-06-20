@@ -490,12 +490,13 @@ Page({
       const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
       const isFlash = !members && !!p.is_on_flash && eff < regular;
 
-      // A sold-out ready-to-eat meal (is_batch_made) stays orderable for
-      // out-of-city / not-yet-known shoppers — it ships on the next cook batch.
-      // Only same-day Guangzhou shoppers (this._shopperGz === true) see the
-      // hard SOLD-OUT card. The card routes ordering through the PDP, which
-      // shows the batch timeline and handles the picker.
-      const batchOrderable = !!p.is_batch_made && this._shopperGz !== true;
+      // A sold-out product whose operator set the "backorder outside Guangzhou"
+      // policy (or a legacy batch meal) stays orderable for out-of-city /
+      // not-yet-known shoppers — it ships on the next batch / restock. Only
+      // same-day Guangzhou shoppers (this._shopperGz === true) see the hard
+      // SOLD-OUT card. The card routes ordering through the PDP.
+      const batchOrderable = zone.policyBackorderOutsideGz(p) && this._shopperGz !== true;
+      const nextBatchText = zone.oosOrderableBadge(p, L);
       let price, priceWas = '', pricePrefix = '', outOfStock, nextBatch = false, soldUnits, subline;
       if (members) {
         // Collapsed variant card. `price` is just the lowest amount (e.g.
@@ -541,6 +542,7 @@ Page({
         soldCaption: soldUnits > 0 ? (L === 'cn' ? `已售 ${soldUnits}` : `${soldUnits} SOLD`) : '',
         outOfStock,
         nextBatch,
+        nextBatchText,
         // image_data may now be a streamed-image URL (/api/retail/products/:id/
         // image) since the list omits inline base64 — absUrl() resolves it
         // against the API host. data: URIs and absolute URLs pass through.

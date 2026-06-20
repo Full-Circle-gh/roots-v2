@@ -732,9 +732,24 @@ const RETAIL_PRODUCT_COLS = `
   p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
   p.low_stock_threshold,
   p.is_batch_made,
+  p.oos_policy,
   p.bundle_items,
   p.updated_at
 `;
+
+// Effective out-of-stock policy for a catalog row, resolving the legacy
+// is_batch_made flag and NULL defaults to one of two concrete modes:
+//   'strict'       → not orderable in ANY region once stock ≤ 0 (default).
+//   'backorder_gz' → out-of-city shoppers may still pre-order; only same-day
+//                    Guangzhou stays hard-blocked.
+// An explicit oos_policy always wins; a blank policy falls back to the legacy
+// rule (batch meals = backorder, everything else = strict) so nothing that
+// relied on is_batch_made regresses before operators opt products in.
+function effectiveOosPolicy(p) {
+  const pol = (p && p.oos_policy) || '';
+  if (pol === 'backorder_gz' || pol === 'strict') return pol;
+  return (p && p.is_batch_made) ? 'backorder_gz' : 'strict';
+}
 
 // List/grid variant of the column set: NEVER pull the heavy inline base64 photo.
 // A data: URI is collapsed to the tiny literal 'data:' marker INSIDE SQLite, so
@@ -6596,7 +6611,15 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
               sell_price AS price, stock_qty AS stock, image_data,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold, no_coupon_on_flash,
-              ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items
+              ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items,
+              is_batch_made, oos_policy,
+              COALESCE(
+                (SELECT SUM(rss.physical_qty)
+                   FROM retail_store_stock rss
+                   JOIN retail_stores      rs ON rs.id = rss.store_id
+                  WHERE rss.product_id = store_products.id AND rs.is_active = 1),
+                stock_qty
+              ) AS real_stock
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
@@ -6655,6 +6678,29 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       isFlash: eff.is_flash,
       // Ring-fence this line from coupons only while its flash window is LIVE.
       noCoupon: !!(eff.is_flash && p.no_coupon_on_flash),
+    });
+  }
+
+  // ── Hard out-of-stock gate ("sells out everywhere" products) ─────────
+  // requiresStockGate only fires for GZ + same-day, so an out-of-GZ or
+  // scheduled order otherwise routes with ignoreStock and never refuses on
+  // stock. Products whose effective policy is 'strict' (the default) must
+  // NEVER be orderable once stock hits 0, in ANY region — enforce that here,
+  // up front, so a stale page or a direct API call can't slip a sold-out item
+  // through. 'backorder_gz' products are deliberately exempt (out-of-city
+  // pre-order is the whole point); they stay gated only for GZ same-day by the
+  // normal reservation path below. real_stock is the same per-store SUM the
+  // shop grid shows; NULL (untracked / bundles) is treated as available.
+  const hardOos = resolved.find(r => {
+    if (effectiveOosPolicy(r.product) !== 'strict') return false;
+    const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
+    return avail != null && avail < r.qty;
+  });
+  if (hardOos) {
+    return res.status(409).json({
+      success: false, error: 'insufficient_stock',
+      product_id: hardOos.product.id,
+      available: Math.max(0, Number(hardOos.product.real_stock) || 0),
     });
   }
 
@@ -12381,7 +12427,7 @@ const VERSION_COLUMNS = [
   'sell_price', 'compare_at_price', 'low_stock_threshold', 'ship_modes', 'ship_from_supplier',
   'description_en', 'description_cn', 'description_format', 'image_data', 'image_url', 'images', 'image_aspect',
   'barcode', 'free_of', 'notes', 'product_facts', 'nutrition',
-  'is_market', 'is_restock_only', 'is_batch_made', 'status', 'is_published',
+  'is_market', 'is_restock_only', 'is_batch_made', 'oos_policy', 'status', 'is_published',
   'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
   'description_blocks', 'use_block_design', 'bundle', 'bundle_items', 'tags',
   'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn', 'page_template',
@@ -12640,6 +12686,13 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   if ('bundle_items' in body) { sets.push('bundle_items = ?'); params.push(sanitizeBundleItems(body.bundle_items, id)); }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
+  // Out-of-stock policy: only the two known modes persist; anything else (incl.
+  // the default) stores NULL → effectiveOosPolicy() treats it as 'strict'.
+  if ('oos_policy' in body) {
+    const pol = body.oos_policy === 'backorder_gz' ? 'backorder_gz'
+              : body.oos_policy === 'strict'       ? 'strict' : null;
+    sets.push('oos_policy = ?'); params.push(pol);
+  }
   if ('ship_from_supplier' in body) { sets.push('ship_from_supplier = ?'); params.push(body.ship_from_supplier ? 1 : 0); }
   // Kitchen-parity flags brought over so the store editor is a full superset.
   if ('is_market' in body) { sets.push('is_market = ?'); params.push(body.is_market ? 1 : 0); }
@@ -12708,7 +12761,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
-            is_batch_made, ship_from_supplier, page_template,
+            is_batch_made, oos_policy, ship_from_supplier, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
   ).get(id);
@@ -12754,7 +12807,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
             variant_group_id, variant_label, variant_sort,
-            is_batch_made, ship_from_supplier, page_template,
+            is_batch_made, oos_policy, ship_from_supplier, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
@@ -13308,7 +13361,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     nutrition, bundle, bundle_items, tags,
                     variant_group_id, variant_label, variant_label_cn, variant_sort,
-                    is_batch_made, ship_from_supplier, use_block_design,
+                    is_batch_made, oos_policy, ship_from_supplier, use_block_design,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks

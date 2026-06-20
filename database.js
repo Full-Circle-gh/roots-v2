@@ -2557,6 +2557,16 @@ addColumn('products', 'ship_from_supplier', 'INTEGER DEFAULT 0');
 // cadence itself lives in storefront_config['batch.schedule'].
 addColumn('products', 'is_batch_made', 'INTEGER DEFAULT 0');
 
+// Per-product out-of-stock policy — who may still order once stock hits 0:
+//   'strict' (default/NULL) → not orderable in ANY region; the card shows a
+//            hard SOLD OUT and the server refuses the order everywhere.
+//   'backorder_gz'          → out-of-city shoppers may still pre-order (badge
+//            现订现发 / SHIPS SOON, or 下批现做 / NEXT BATCH for batch meals);
+//            only same-day Guangzhou stays hard-blocked. This generalises the
+//            legacy is_batch_made rule to any product the operator chooses.
+// NULL is treated as 'strict' UNLESS is_batch_made=1 (legacy back-compat).
+addColumn('products', 'oos_policy', 'TEXT');
+
 // Promised production + arrival dates stamped on outside-GZ orders that hold
 // a batch-made item (YYYY-MM-DD). Drives the customer notice + the operator's
 // "make on this day" cue in the Mini App Backend.
@@ -3400,6 +3410,12 @@ try {
   // won't pile on top of the deep flash price). Dormant when the product isn't on
   // flash — the checkout only honours it for items whose flash window is live.
   addColumn('store_products', 'no_coupon_on_flash', 'INTEGER');
+  // Store-only mirror of products.oos_policy (see the products addColumn above):
+  // 'strict' (default/NULL) = sold-out blocks ordering in every region;
+  // 'backorder_gz' = out-of-city shoppers may still pre-order, only same-day
+  // Guangzhou stays hard-blocked. NULL falls back to is_batch_made for
+  // back-compat. Operator-set per product in the store editor.
+  addColumn('store_products', 'oos_policy', 'TEXT');
   // Mini-app PDP hero aspect ratio (width/height as a REAL). When present, the
   // product page sizes the hero box to the photo's true shape so nothing crops;
   // when NULL the mini-app self-corrects from the image's bindload event, then

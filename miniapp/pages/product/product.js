@@ -424,15 +424,15 @@ Page({
     // the picker instead of adding the viewed product directly.
     this._variants = Array.isArray(p.variants) ? p.variants : [];
     const hasVariants = this._variants.length > 1;
-    // A sold-out ready-to-eat meal (is_batch_made) stays orderable for
-    // out-of-city — or not-yet-known — shoppers: it just ships on the next cook
-    // batch (the server's computeBatchNotice fills in the real ship/arrival
-    // dates at checkout). Only same-day Guangzhou shoppers keep the hard
-    // SOLD-OUT block, since they expect it today. this._shopperGz is true only
-    // when we KNOW the address is Guangzhou.
-    const batchOrderable = !!p.is_batch_made && this._shopperGz !== true;
+    // A sold-out product whose operator chose the "backorder outside Guangzhou"
+    // policy (or a legacy batch meal) stays orderable for out-of-city — or
+    // not-yet-known — shoppers: it ships on the next batch / restock (the
+    // server's computeBatchNotice fills in real dates at checkout for meals).
+    // Only same-day Guangzhou shoppers keep the hard SOLD-OUT block, since they
+    // expect it today. this._shopperGz is true only when we KNOW it's Guangzhou.
+    const batchOrderable = zone.policyBackorderOutsideGz(p) && this._shopperGz !== true;
     this._batchOrderable = batchOrderable;
-    const nextBatchTag = L === 'cn' ? '下批现做' : 'Next batch';
+    const nextBatchTag = zone.oosOrderableBadge(p, L);
     // Stock state — null means untracked (treat as in-stock).
     let soldOut = false, stockTag = '', stockTagKind = '';
     if (hasVariants) {

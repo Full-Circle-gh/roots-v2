@@ -69,4 +69,25 @@ function resolveGz() {
   return _inflight;
 }
 
-module.exports = { isGuangzhouAddress, cachedGz, resolveGz };
+// Effective per-product out-of-stock policy — mirrors effectiveOosPolicy() on
+// the server (routes/retail.js). Returns true when a sold-out product should
+// STAY orderable for out-of-city shoppers (only same-day Guangzhou is then the
+// hard SOLD-OUT case):
+//   oos_policy 'backorder_gz' → true   (out-of-city may pre-order)
+//   oos_policy 'strict'       → false  (sold out everywhere)
+//   blank → legacy is_batch_made rule (batch meals true, everything else false)
+function policyBackorderOutsideGz(p) {
+  const pol = (p && p.oos_policy) || '';
+  if (pol === 'backorder_gz') return true;
+  if (pol === 'strict') return false;
+  return !!(p && p.is_batch_made);
+}
+
+// Badge text for a sold-out-but-still-orderable card. Batch meals keep their
+// kitchen "next batch" wording; any other pre-order product reads "ships soon".
+function oosOrderableBadge(p, L) {
+  if (p && p.is_batch_made) return L === 'cn' ? '下批现做' : 'NEXT BATCH';
+  return L === 'cn' ? '现订现发' : 'SHIPS SOON';
+}
+
+module.exports = { isGuangzhouAddress, cachedGz, resolveGz, policyBackorderOutsideGz, oosOrderableBadge };

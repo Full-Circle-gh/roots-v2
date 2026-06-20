@@ -104,6 +104,15 @@
   .card .was{font-size:13px;color:var(--muted);text-decoration:line-through;}
   .badge{position:absolute;top:10px;left:10px;background:var(--berry);color:#fff;font-size:12px;font-weight:700;padding:4px 9px;border-radius:999px;}
   .pill-sold{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;padding:3px 8px;border-radius:999px;}
+  /* Out-of-stock tags. Strict = hard SOLD OUT (greyed card); backorder = orderable pre-order. */
+  .oos-tag{position:absolute;top:10px;right:10px;font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:999px;text-transform:uppercase;}
+  .oos-tag.sold{background:rgba(0,0,0,.72);color:#fff;}
+  .oos-tag.soon{background:var(--accent,#6d9c2a);color:#fff;}
+  .card.is-oos .ph img{filter:grayscale(.55);opacity:.78;}
+  .pd-oos-tag{font-size:12px;font-weight:700;letter-spacing:.03em;padding:4px 10px;border-radius:999px;text-transform:uppercase;}
+  .pd-oos-tag.sold{background:rgba(0,0,0,.72);color:#fff;}
+  .pd-oos-tag.soon{background:var(--accent,#6d9c2a);color:#fff;}
+  .pd-oos-note{margin:8px 0 0;font-size:13px;line-height:1.5;color:var(--accent,#6d9c2a);}
   .opt-cue{font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 8px;align-self:flex-start;}
 
   /* ── Category chips ── */
@@ -1045,16 +1054,41 @@ async function renderShop(params){
 function catLabelByName(name){const c=state.cats.find(x=>x.name===name);return c?catLabel(c):name;}
 
 /* ════════════ PRODUCT CARD ════════════ */
+// Effective out-of-stock policy — mirror of effectiveOosPolicy() on the server.
+// true  → sold-out item stays orderable for out-of-city shoppers (pre-order);
+// false → strict, sold out everywhere. Blank policy falls back to is_batch_made.
+function oosBackorder(p){
+  const pol=(p&&p.oos_policy)||'';
+  if(pol==='backorder_gz')return true;
+  if(pol==='strict')return false;
+  return !!(p&&p.is_batch_made);
+}
+// Browse-time stock verdict. The web storefront doesn't know the shopper's zone
+// yet, so a backorder product is shown orderable (the server enforces the GZ
+// same-day gate at checkout) while a strict sold-out item is a hard SOLD OUT.
+// Untracked stock (null) counts as in stock.
+function stockState(p){
+  const vs=Array.isArray(p.variants)?p.variants:null;
+  const out = (vs&&vs.length>1)
+    ? vs.every(v=>v.stock!=null&&Number(v.stock)<=0)
+    : (p.stock!=null&&Number(p.stock)<=0);
+  if(!out) return {oos:false,soldOut:false,badge:''};
+  if(oosBackorder(p)) return {oos:true,soldOut:false,
+    badge:p.is_batch_made?(state.lang==='cn'?'下批现做':'NEXT BATCH'):(state.lang==='cn'?'现订现发':'SHIPS SOON')};
+  return {oos:true,soldOut:true,badge:state.lang==='cn'?'售罄':'SOLD OUT'};
+}
 function cardHtml(p){
   const src=thumb(p),now=nowPrice(p),was=wasPrice(p);
+  const ss=stockState(p);
   const off=was>0?Math.round((1-now/was)*100):0;
   const sold=Number(p.sold_count||p.units_sold||0);
   const other=altLang(p.name_en,p.name_cn);
   const tag=pick(p.tagline_en,p.tagline_cn);
-  return `<a class="card" href="#/product/${p.id}">
+  return `<a class="card${ss.soldOut?' is-oos':''}" href="#/product/${p.id}">
     <div class="ph">
       ${src?`<img src="${escAttr(src)}" alt="" loading="lazy">`:'<span class="none">no image</span>'}
       ${off>0?`<span class="badge">-${off}%</span>`:''}
+      ${ss.oos?`<span class="oos-tag${ss.soldOut?' sold':' soon'}">${ss.badge}</span>`:''}
       ${sold>0?`<span class="pill-sold">${state.lang==='cn'?'已售 '+sold:sold+' sold'}</span>`:''}
     </div>
     <div class="body">
@@ -1076,6 +1110,7 @@ async function renderProduct(id){
   catch(e){ view.innerHTML=`<div class="wrap"><div class="empty">${state.lang==='cn'?'商品不存在或已下架。':'This product is unavailable.'}<br><a class="more" href="#/shop">← ${state.lang==='cn'?'返回商品':'Back to shop'}</a></div></div>`; return; }
 
   const now=nowPrice(p),was=wasPrice(p);
+  const ss=stockState(p);
   const gallery=[thumb(p),...(Array.isArray(p.images)?p.images:[])].filter(Boolean)
     .filter((v,i,a)=>a.indexOf(v)===i).slice(0,8);
   const other=altLang(p.name_en,p.name_cn);
@@ -1130,13 +1165,17 @@ async function renderProduct(id){
         <div class="price-row">
           <span class="price-now">${money(now)}</span>
           ${was>0?`<span class="price-was">${money(was)}</span><span class="flash-tag">${state.lang==='cn'?'限时':'Flash'}</span>`:''}
+          ${ss.oos?`<span class="pd-oos-tag${ss.soldOut?' sold':' soon'}">${ss.badge}</span>`:''}
         </div>
+        ${ss.oos&&!ss.soldOut?`<div class="pd-oos-note">${state.lang==='cn'?'当前缺货，外地可预订，下批/补货后发出。':'Out of stock now — orderable outside Guangzhou; ships on the next batch / restock.'}</div>`:''}
         ${rc>0?`<div class="rating"><span class="stars">${'★'.repeat(Math.round(avg))}<span class="off">${'★'.repeat(5-Math.round(avg))}</span></span>${avg.toFixed(1)} · ${rc} ${state.lang==='cn'?'条评价':'reviews'}</div>`:''}
         ${varsHtml}
         ${optsHtml}
         <div class="pd-buy">
-          <div class="pd-qty"><button type="button" data-q="dec">−</button><span id="pdQty">1</span><button type="button" data-q="inc">+</button></div>
-          <button class="btn-primary" id="addBtn">Add to cart</button>
+          ${ss.soldOut
+            ? `<button class="btn-primary" id="addBtn" disabled>${state.lang==='cn'?'已售罄':'Sold out'}</button>`
+            : `<div class="pd-qty"><button type="button" data-q="dec">−</button><span id="pdQty">1</span><button type="button" data-q="inc">+</button></div>
+          <button class="btn-primary" id="addBtn">Add to cart</button>`}
         </div>
       </div>
     </div>
@@ -1150,6 +1189,9 @@ async function renderProduct(id){
   // purchase block: selectable options + qty + add-to-cart (works logged-out;
   // sign-in is required later at checkout). Server re-prices authoritatively.
   (function wirePurchase(){
+    // Strict sold-out: the button is rendered disabled; skip wiring so refresh()
+    // doesn't overwrite its "Sold out" label. (Backorder OOS stays orderable.)
+    if(ss.soldOut) return;
     const base=nowPrice(p); let qty=1;
     const optsEl=$('#pdOpts');
     const chips=()=>optsEl?[...optsEl.querySelectorAll('.pd-choice.on')]:[];
