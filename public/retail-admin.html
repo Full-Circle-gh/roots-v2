@@ -3415,6 +3415,24 @@
 
     <div class="card" style="margin-bottom: var(--s4);">
       <h3 class="fc-sec" style="margin-bottom: 4px;">
+        Fresh order reschedule cutoff · 新鲜订单改期截止
+        <span class="help-i" data-tip="For an order that contains a 'Made fresh in batches' product: how late the customer may still change their own delivery/pickup time. The time locks at this hour the evening BEFORE the scheduled day, and also locks the moment staff start preparing. Default 20 = 8pm the night before. Non-fresh orders are unaffected — they stay changeable until they leave. · 含「分批新鲜现做」商品的订单:顾客最晚可在配送日「前一天」的此时间点之前自助修改配送/取货时间;开始备货后也会锁定。默认 20 = 前一晚 20:00。非新鲜订单不受影响,发货前始终可改。">?</span>
+      </h3>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Only affects orders containing a batch-made product. A same-day slot can never be chosen for a fresh order. · 仅影响含「分批现做」商品的订单。新鲜订单不可改为当日时段。</div>
+      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Lock at hour, evening before · 前一晚锁定时间</label>
+          <span style="display:inline-flex;align-items:center;gap:6px;">
+            <input type="number" id="fresh-resched-cutoff" min="0" max="23" step="1" value="20" style="width: 80px;">
+            <span style="font-size:12px;">:00 &nbsp;(0–23)</span>
+          </span>
+        </div>
+        <button class="btn btn-primary" onclick="saveRescheduleSettings()" style="align-self: flex-end;">Save · 保存</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom: var(--s4);">
+      <h3 class="fc-sec" style="margin-bottom: 4px;">
         Default delivery — rest of China · 默认配送 — 中国其他地区
         <span class="help-i" data-tip="One flat fee for any mainland address not covered by a zone below. Turn this on and you only need to add zones for the exceptions (cheaper provinces, same-day Guangzhou, Hong Kong). Off = addresses with no matching zone can't check out. · 适用于下方未单独设置区域的任何中国大陆地址的统一运费。开启后,您只需为「例外」添加区域(更便宜的省份、广州当日达、香港)。关闭时,无匹配区域的地址将无法结账。">?</span>
       </h3>
