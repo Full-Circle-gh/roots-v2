@@ -1026,6 +1026,15 @@ async function loadConfig() {
     $('#cfg-legal-terms-en').value   = c.legal?.terms?.body_en   || '';
     $('#cfg-legal-terms-cn').value   = c.legal?.terms?.body_cn   || '';
     // Mini-app footer + Me-page menu moved to the Mini App Editor (/cms) 2026-06-09.
+    // Checkout upsell pop-up — storefront_config 'checkout.upsell'. Unset =
+    // historical default (ON, all tiers, 4 items), matching the server.
+    const up = (c.checkout && c.checkout.upsell) || {};
+    if ($('#cfg-upsell-enabled')) $('#cfg-upsell-enabled').checked = up.enabled !== false;
+    if ($('#cfg-upsell-bundles')) $('#cfg-upsell-bundles').checked = up.bundles !== false;
+    if ($('#cfg-upsell-extras'))  $('#cfg-upsell-extras').checked  = up.extras  !== false;
+    if ($('#cfg-upsell-flash'))   $('#cfg-upsell-flash').checked   = up.flash   !== false;
+    if ($('#cfg-upsell-max'))     $('#cfg-upsell-max').value       = up.max != null ? up.max : 4;
+
     // Social-proof widgets — five sub-objects under social_proof. Defaults
     // mirror the server-side fallbacks in routes/retail.js getSocialConfig().
     const sp = c.social_proof || {};
@@ -1339,6 +1348,25 @@ function buildSocialProof() {
       boost_max: sbR.max,
     },
   };
+}
+async function saveCheckoutUpsell() {
+  const status = $('#upsell-status');
+  if (status) { status.textContent = 'Saving… · 保存中…'; status.style.color = ''; }
+  const upsell = {
+    enabled: $('#cfg-upsell-enabled').checked,
+    bundles: $('#cfg-upsell-bundles').checked,
+    extras:  $('#cfg-upsell-extras').checked,
+    flash:   $('#cfg-upsell-flash').checked,
+    max:     Math.max(1, Math.min(6, Number($('#cfg-upsell-max').value) || 4)),
+  };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'checkout.upsell': upsell } });
+    if (status) status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>';
+    toast('Saved · 已保存');
+  } catch (e) {
+    if (status) { status.textContent = 'Save failed · 保存失败'; status.style.color = 'var(--danger)'; }
+    toast('Save failed · 保存失败: ' + e.message, 'err');
+  }
 }
 async function saveSocialProof() {
   const status = $('#social-status');

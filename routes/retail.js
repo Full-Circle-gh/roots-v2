@@ -2385,6 +2385,18 @@ router.post('/api/retail/checkout/offers', express.json(), (req, res) => {
   const body = req.body || {};
   const MAX = Math.min(parseInt(req.query.limit || '4', 10) || 4, 6);
 
+  // Operator controls (Mini App Backend → Marketing → Checkout upsell):
+  // master on/off + which content tiers may appear + a max-items cap. Unset =
+  // the historical behaviour — ON with all three tiers, up to MAX.
+  const up = cfgValue('checkout.upsell', {}) || {};
+  if (up.enabled === false) {
+    return res.json({ success: true, data: [], meta: { server_time_ms: now } });
+  }
+  const allowBundles = up.bundles !== false;
+  const allowExtras  = up.extras  !== false;
+  const allowFlash   = up.flash   !== false;
+  const cap = Math.max(1, Math.min(MAX, parseInt(up.max, 10) || MAX));
+
   // Cart product ids — the things we recommend AROUND, and never re-offer.
   const cartIds = [...new Set((Array.isArray(body.items) ? body.items : [])
     .map(i => parseInt(i && i.product_id, 10))
@@ -2404,7 +2416,7 @@ router.post('/api/retail/checkout/offers', express.json(), (req, res) => {
   if (cartIds.length) {
     const ph = cartIds.map(() => '?').join(',');
     // 1) Curated "buy together" bundle ids on any cart product.
-    try {
+    if (allowBundles) try {
       for (const r of tdb().prepare(
         `SELECT bundle FROM store_products WHERE id IN (${ph}) AND bundle IS NOT NULL`
       ).all(...cartIds)) {
@@ -2414,7 +2426,7 @@ router.post('/api/retail/checkout/offers', express.json(), (req, res) => {
       }
     } catch (_) { /* bundle column optional — skip on any shape surprise */ }
     // 2) Extras choices linked to real inventory on any cart product.
-    try {
+    if (allowExtras) try {
       for (const r of tdb().prepare(
         `SELECT DISTINCT c.stock_product_id AS pid
            FROM retail_product_option_choices c
@@ -2427,7 +2439,7 @@ router.post('/api/retail/checkout/offers', express.json(), (req, res) => {
   }
 
   // 3) Everything on an active flash sale right now — the "right now" deals.
-  const flashRows = tdb().prepare(
+  const flashRows = !allowFlash ? [] : tdb().prepare(
     `SELECT ${RETAIL_PRODUCT_COLS_CARD}, ${hasImageFallbackSql('p')} AS has_group_image
        FROM store_products p
       WHERE p.is_published = 1
@@ -2485,7 +2497,7 @@ router.post('/api/retail/checkout/offers', express.json(), (req, res) => {
       }
       return String(a.name_en || '').localeCompare(String(b.name_en || ''));
     })
-    .slice(0, MAX)
+    .slice(0, cap)
     .map(r => lazifyProductImage(r, baseUrl));
 
   res.json({ success: true, data: offers, meta: { server_time_ms: now } });

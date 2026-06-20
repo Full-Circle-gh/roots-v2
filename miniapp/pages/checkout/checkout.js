@@ -2288,6 +2288,13 @@ Page({
   },
 
   openOffersPopup() {
+    // Never stack the upsell on top of an open checkout notice (Made-fresh /
+    // Ships-soon / Guangzhou-only). They're modal so this is defensive, but if
+    // one is still showing, skip the upsell this round and go straight to pay.
+    if (this.data.batchNoticePopup || this.data.preorderNoticePopup || this.data.localOnlyPopup) {
+      this._offersDone = true;
+      return this.submitOrder(this._pendingExtra);
+    }
     const rows = this.buildOfferRows();
     if (!rows.length) {                        // every offer expired since prefetch
       this._offersDone = true;

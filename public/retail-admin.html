@@ -5911,6 +5911,41 @@
             Five live engagement widgets that surface real customer activity in the mini app. Toggle any of them off to hide the widget instantly across all customers (no WeChat republish needed). Tuning numbers control how aggressive each one is. · 五个实时互动组件,在小程序中呈现真实的顾客活动。关闭任意组件可立即对所有顾客隐藏(无需重新发布微信小程序)。调节数值用于控制每个组件触发的积极程度。
           </div>
 
+          <!-- Checkout upsell pop-up — the "before you pay" offer popup. Gates the
+               server /checkout/offers tiers; saves to storefront_config 'checkout.upsell'.
+               Applies instantly to web + mini-app (no republish). -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Checkout upsell pop-up · 结账推荐弹窗</h3>
+              <div class="muted">The "before you pay" pop-up that suggests add-ons. Turn it off entirely, or choose which content it may offer. Shows only when a chosen tier has something relevant; hides itself otherwise. Applies instantly to web + mini-app. · 结账付款前推荐加购商品的弹窗。可整体关闭,或选择允许展示的内容类型。仅在所选类型有相关内容时显示。即时生效,无需重新发布。</div>
+            </div>
+            <label class="ckbox" style="margin-bottom: 12px;">
+              <input type="checkbox" id="cfg-upsell-enabled">
+              <span>Show the checkout upsell pop-up · 显示结账推荐弹窗</span>
+            </label>
+            <div class="muted" style="margin-bottom: 8px;">Content it may offer · 可展示的内容</div>
+            <label class="ckbox" style="margin-bottom: 8px;">
+              <input type="checkbox" id="cfg-upsell-bundles">
+              <span>Bundles ("buy together") · 套餐(搭配购买)</span>
+            </label>
+            <label class="ckbox" style="margin-bottom: 8px;">
+              <input type="checkbox" id="cfg-upsell-extras">
+              <span>Linked extras · 关联加购</span>
+            </label>
+            <label class="ckbox" style="margin-bottom: 12px;">
+              <input type="checkbox" id="cfg-upsell-flash">
+              <span>Flash sales (active deals) · 限时秒杀(进行中)</span>
+            </label>
+            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Max items shown · 最多展示数量</label>
+                <input type="number" min="1" max="6" id="cfg-upsell-max" style="width: 90px;">
+              </div>
+              <button class="btn btn-primary" onclick="saveCheckoutUpsell()" style="margin: 0;">Save · 保存</button>
+              <span id="upsell-status" style="font-size: 12px;"></span>
+            </div>
+          </div>
+
           <!-- 1. Bought-count -->
           <div class="group-card">
             <div class="group-card-head">
