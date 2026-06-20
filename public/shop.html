@@ -847,6 +847,8 @@ function coInjectOfferStyle(){
   document.head.appendChild(s);
 }
 function coShowOffers(){
+  // Defensive: never stack the upsell over an open "Ships soon" pre-order popup.
+  const pop=$('#copoPop'); if(pop&&!pop.hidden){co.offersDone=true;return coPlace();}
   const rows=coOfferRows();
   if(!rows.length){co.offersDone=true;return coPlace();}   // all expired since prefetch
   coInjectOfferStyle();
