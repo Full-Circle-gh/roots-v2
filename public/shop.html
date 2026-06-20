@@ -944,7 +944,7 @@ function orderCardHtml(o){
   const cn=state.lang==='cn';
   const thumbs=(o.items_preview||[]).map(it=>`<div class="oc-th">${it.image_url?`<img src="${escAttr(it.image_url)}" alt="">`:''}</div>`).join('');
   const date=String(o.placed_at||'').replace('T',' ').slice(0,16);
-  return `<div class="oc">
+  return `<div class="oc" data-oid="${o.id}" style="cursor:pointer">
     <div class="oc-top"><span class="oc-no">${esc(o.order_no||('#'+o.id))}</span><span class="oc-st st-${esc(o.status)}">${esc(orderStatusLabel(o.status))}</span></div>
     <div class="oc-body"><div class="oc-thumbs">${thumbs}</div>
       <div class="oc-meta"><div class="oc-date">${esc(date)}</div><div class="oc-cnt">${o.item_count||0} ${cn?'件':'items'} · ${money(o.total)}</div></div></div>
@@ -960,7 +960,46 @@ async function renderOrders(){
   const box=$('#ordList'); if(!box)return;
   if(!Array.isArray(list)||!list.length){ box.innerHTML='<div class="empty">'+(cn?'还没有订单 🌱':'No orders yet 🌱')+'<br><a class="more" href="#/shop">'+(cn?'去购物':'Browse products')+'</a></div>'; return; }
   box.innerHTML=list.map(orderCardHtml).join('');
-  box.querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',()=>coStartPayment({id:Number(b.dataset.pay),order_no:b.dataset.no,total:Number(b.dataset.total)})));
+  box.querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();coStartPayment({id:Number(b.dataset.pay),order_no:b.dataset.no,total:Number(b.dataset.total)});}));
+  box.querySelectorAll('.oc[data-oid]').forEach(c=>c.addEventListener('click',()=>{location.hash='#/order/'+c.dataset.oid;}));
+}
+async function renderOrderDetail(id){
+  const v=$('#view'); const cn=state.lang==='cn';
+  if(!state.token){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(cn?'请先登录':'Please sign in')+'</div></div></div>'; openLogin(); return; }
+  v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(cn?'加载中…':'Loading…')+'</div></div></div>';
+  let o; try{ o=await api('/api/retail/orders/'+encodeURIComponent(id)); }catch(e){ o=null; }
+  if(!o){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(cn?'订单不存在':'Order not found')+'<br><a class="more" href="#/orders">'+(cn?'返回订单':'Back to orders')+'</a></div></div></div>'; return; }
+  document.title=(o.order_no||('#'+o.id))+' · '+state.brand;
+  const items=Array.isArray(o.items)?o.items:[];
+  const itemRows=items.map(it=>`<div class="co-line"><span>${esc(pick(it.name_en,it.name_cn))} ×${it.qty}</span><span>${money(Number(it.line_total)||Number(it.unit_price)*it.qty||0)}</span></div>`).join('');
+  const isPickup=o.fulfillment_type==='pickup';
+  const where=isPickup
+    ? [pick(o.pickup_store_name_en,o.pickup_store_name_cn),o.pickup_store_address].filter(Boolean).map(esc).join('<br>')
+    : esc(o.address_full||'');
+  const slot=esc(o.delivery_slot_label||'');
+  const track=(o.tracking_carrier||o.tracking_number)?`${esc(o.tracking_carrier||'')} ${esc(o.tracking_number||'')}`.trim():'';
+  const sub=Number(o.subtotal)||0, ship=Number(o.shipping_fee)||0, pack=Number(o.packing_fee)||0, vou=Number(o.voucher_amount)||0, pts=Number(o.points_amount)||0, tot=Number(o.total)||0;
+  v.innerHTML=`<div class="wrap"><div class="co">
+    <div class="crumb"><a href="#/orders">${cn?'我的订单':'My orders'}</a> / ${esc(o.order_no||('#'+o.id))}</div>
+    <h1 style="display:flex;justify-content:space-between;align-items:center;gap:12px">${esc(o.order_no||('#'+o.id))}<span class="oc-st st-${esc(o.status)}">${esc(orderStatusLabel(o.status))}</span></h1>
+    <div class="co-sec"><h3>${cn?'商品':'Items'}</h3>${itemRows||'<div class="co-line">—</div>'}</div>
+    <div class="co-sec"><h3>${isPickup?(cn?'自提门店':'Pickup store'):(cn?'配送至':'Delivering to')}</h3>
+      <div style="font-size:14px;line-height:1.5">${where||'—'}</div>
+      ${slot?`<div style="font-size:13px;color:var(--muted);margin-top:6px">${slot}</div>`:''}
+      ${track?`<div style="font-size:13px;color:var(--muted);margin-top:6px">${cn?'物流':'Tracking'}: ${track}</div>`:''}
+    </div>
+    <div class="co-sec"><h3>${cn?'金额':'Payment'}</h3>
+      <div class="co-line"><span>${cn?'小计':'Subtotal'}</span><span>${money(sub)}</span></div>
+      ${ship>0?`<div class="co-line"><span>${cn?'配送费':'Delivery'}</span><span>${money(ship)}</span></div>`:''}
+      ${pack>0?`<div class="co-line"><span>${cn?'包装费':'Packing'}</span><span>${money(pack)}</span></div>`:''}
+      ${vou>0?`<div class="co-line"><span>${cn?'优惠':'Voucher'}</span><span>−${money(vou)}</span></div>`:''}
+      ${pts>0?`<div class="co-line"><span>${cn?'积分抵扣':'Points'}</span><span>−${money(pts)}</span></div>`:''}
+      <div class="co-line tot"><span>${cn?'合计':'Total'}</span><span>${money(tot)}</span></div>
+    </div>
+    ${o.status==='pending_payment'?`<button class="co-place" id="odPay">${cn?'去支付':'Pay now'}</button>`:''}
+    <div style="text-align:center;margin-top:14px"><a class="more" href="#/orders">${cn?'返回订单 →':'Back to orders →'}</a></div>
+  </div></div>`;
+  const pay=$('#odPay'); if(pay)pay.addEventListener('click',()=>coStartPayment({id:o.id,order_no:o.order_no,total:o.total}));
 }
 
 /* ════════════ ROUTER ════════════ */
@@ -986,6 +1025,7 @@ async function route(){
     if(seg[0]==='shop')           return renderShop(params);
     if(seg[0]==='checkout')        return renderCheckout();
     if(seg[0]==='orders')          return renderOrders();
+    if(seg[0]==='order'&&seg[1])   return renderOrderDetail(seg[1]);
     return renderHome();
   }catch(e){
     $('#view').innerHTML=`<div class="wrap"><div class="empty">Something went wrong loading this page.<br>${esc(e.message)}</div></div>`;
