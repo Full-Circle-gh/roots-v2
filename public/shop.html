@@ -273,6 +273,11 @@
     .lm-link{background:none;border:0;color:var(--accent);font:inherit;font-size:13px;cursor:pointer;align-self:flex-start;padding:2px 0;}
     .lm-link:disabled{color:var(--muted);cursor:default;}
     .lm-err{margin-top:12px;font-size:13px;color:var(--berry);min-height:16px;}
+    .rs-btn{margin-top:10px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.03em;background:var(--oat);border:1.5px solid var(--ink);border-radius:10px;padding:8px 14px;cursor:pointer;color:var(--ink);}
+    .rs-hint{margin-top:8px;font-size:12.5px;color:var(--muted);line-height:1.45;}
+    .rs-slots{display:flex;flex-direction:column;gap:8px;}
+    .rs-slot{display:flex;align-items:center;gap:10px;font-size:14px;border:1.5px solid var(--ink);border-radius:10px;padding:10px 12px;cursor:pointer;}
+    #rsBody input[type=date],#rsBody input[type=datetime-local]{font:inherit;font-size:15px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:10px;background:#fff;color:var(--ink);width:100%;box-sizing:border-box;margin-top:6px;}
   </style>
 
   <div id="acctMenu" hidden></div>
@@ -1035,6 +1040,14 @@ async function renderOrderDetail(id){
     : esc(o.address_full||'');
   const slot=esc(o.delivery_slot_label||'');
   const track=(o.tracking_carrier||o.tracking_number)?`${esc(o.tracking_carrier||'')} ${esc(o.tracking_number||'')}`.trim():'';
+  // Self-service reschedule control (change delivery/pickup time before departure).
+  const rs=o.reschedule||{};
+  let rsCtl='';
+  if(rs.allowed){
+    rsCtl=`<button class="rs-btn" id="odResched">${isPickup?(cn?'修改取货时间':'Change pickup time'):(cn?'修改配送时间':'Change delivery time')}</button>`;
+  } else if(rs.reason==='fresh_cutoff'||rs.reason==='fresh_preparing'){
+    rsCtl=`<div class="rs-hint">${cn?'鲜食已在为您备制，如需改期请联系我们 💚':'Your fresh items are already being prepared — message us to change the time 💚'}</div>`;
+  }
   const sub=Number(o.subtotal)||0, ship=Number(o.shipping_fee)||0, pack=Number(o.packing_fee)||0, vou=Number(o.voucher_amount)||0, pts=Number(o.points_amount)||0, tot=Number(o.total)||0;
   v.innerHTML=`<div class="wrap"><div class="co">
     <div class="crumb"><a href="#/orders">${cn?'我的订单':'My orders'}</a> / ${esc(o.order_no||('#'+o.id))}</div>
@@ -1044,6 +1057,7 @@ async function renderOrderDetail(id){
       <div style="font-size:14px;line-height:1.5">${where||'—'}</div>
       ${slot?`<div style="font-size:13px;color:var(--muted);margin-top:6px">${slot}</div>`:''}
       ${track?`<div style="font-size:13px;color:var(--muted);margin-top:6px">${cn?'物流':'Tracking'}: ${track}</div>`:''}
+      ${rsCtl}
     </div>
     <div class="co-sec"><h3>${cn?'金额':'Payment'}</h3>
       <div class="co-line"><span>${cn?'小计':'Subtotal'}</span><span>${money(sub)}</span></div>
@@ -1057,6 +1071,87 @@ async function renderOrderDetail(id){
     <div style="text-align:center;margin-top:14px"><a class="more" href="#/orders">${cn?'返回订单 →':'Back to orders →'}</a></div>
   </div></div>`;
   const pay=$('#odPay'); if(pay)pay.addEventListener('click',()=>coStartPayment({id:o.id,order_no:o.order_no,total:o.total}));
+  const rb=$('#odResched'); if(rb)rb.addEventListener('click',()=>openReschedule(o));
+}
+function rsReasonText(reason,cn){
+  switch(reason){
+    case 'fresh_cutoff':
+    case 'fresh_preparing': return cn?'鲜食已在为您备制，如需改期请联系我们。':'Your fresh items are already being prepared — please message us to change the time.';
+    case 'departed':        return cn?'订单已发出，无法修改时间。':'Your order has already left — the time can’t be changed.';
+    case 'refund':          return cn?'退款处理中，暂时无法修改。':'A refund is in progress, so the time can’t be changed right now.';
+    default:                return cn?'该订单暂时无法修改时间。':'This order’s time can’t be changed.';
+  }
+}
+function rsErrText(j,cn){
+  const e=(j&&j.error)||''; const reason=j&&j.reason;
+  if(e==='price_change')     return cn?'该时段会改变费用，暂不支持自助修改，请联系我们。':'That time would change the price — please message us to switch to it.';
+  if(e==='fresh_no_sameday') return cn?'鲜食无法改到当天，请选择其他日期。':'Fresh items can’t move to a same-day slot — please pick a later date.';
+  if(e==='not_reschedulable')return rsReasonText(reason,cn);
+  if(/^slot_/.test(e))       return cn?'请选择有效的时间。':'Please pick a valid time.';
+  if(/pickup_time/.test(e))  return cn?'请选择营业时间内的取货时间。':'Please pick a time within opening hours.';
+  return cn?'修改失败，请重试。':'Could not change the time. Please try again.';
+}
+// Reschedule modal: load the order's slot options, let the customer pick a new
+// delivery/pickup time, POST it. Price-neutral (Phase 1) — a surcharge-changing
+// pick is refused by the server and surfaced as "message us".
+async function openReschedule(o){
+  const cn=state.lang==='cn';
+  const isPickup=o.fulfillment_type==='pickup';
+  const ov=document.createElement('div'); ov.className='lm-overlay'; ov.id='rsModal';
+  ov.innerHTML=`<div class="lm-card"><button class="lm-x" id="rsX">×</button>
+    <div class="lm-title">${isPickup?(cn?'修改取货时间':'Change pickup time'):(cn?'修改配送时间':'Change delivery time')}</div>
+    <div class="lm-sub" id="rsSub">${cn?'加载中…':'Loading…'}</div>
+    <div class="lm-step" id="rsBody" hidden></div>
+    <div class="lm-err" id="rsErr"></div>
+    <button class="lm-btn" id="rsSave" hidden disabled>${cn?'确认修改':'Confirm change'}</button>
+  </div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  $('#rsX').addEventListener('click',close);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+
+  let opt; try{ opt=await api('/api/retail/orders/'+encodeURIComponent(o.id)+'/reschedule-options'); }catch(e){ opt=null; }
+  if(!opt){ $('#rsSub').textContent=cn?'无法加载，请稍后再试。':'Could not load options.'; return; }
+  if(!opt.eligibility||!opt.eligibility.allowed){ $('#rsSub').textContent=rsReasonText(opt.eligibility&&opt.eligibility.reason,cn); return; }
+
+  const sel={slotId:null,slotKind:null,label:null,pickup:null};
+  $('#rsSub').textContent=(cn?'当前：':'Current: ')+(o.delivery_slot_label||'—');
+  const body=$('#rsBody'); body.hidden=false;
+  const save=$('#rsSave'); save.hidden=false;
+
+  if(isPickup){
+    const win=opt.pickup_window||{open:'10:00',close:'20:00'};
+    body.innerHTML=`<label style="font-size:13px;color:var(--muted)">${cn?('取货时间（营业 '+win.open+'–'+win.close+'）'):('Pickup time (open '+win.open+'–'+win.close+')')}</label>
+      <input type="datetime-local" id="rsDt">`;
+    const dt=$('#rsDt');
+    dt.addEventListener('change',()=>{ sel.pickup=dt.value; save.disabled=!dt.value; });
+  } else {
+    const sc=opt.scheduling||{}; const slots=Array.isArray(sc.slots)?sc.slots:[]; const sch=sc.schedule;
+    let html='';
+    if(slots.length){
+      html+='<div class="rs-slots">'+slots.map(s=>`<label class="rs-slot"><input type="radio" name="rsslot" value="${escAttr(s.slot_id)}" data-kind="${escAttr(s.slot_kind||(s.is_same_day?'today':'schedule'))}"><span>${esc(cn?(s.label_cn||s.label_en):(s.label_en||s.label_cn))}${Number(s.surcharge)>0?` (+${money(s.surcharge)})`:''}</span></label>`).join('')+'</div>';
+    }
+    if(sch){
+      html+=`<label style="font-size:13px;color:var(--muted);margin-top:10px;display:block">${cn?'或选择日期':'Or pick a date'}</label><input type="date" id="rsDate" min="${escAttr(sch.min_date)}" max="${escAttr(sch.max_date)}">`;
+    }
+    if(!slots.length&&!sch){ html='<div style="font-size:13px;color:var(--muted)">'+(cn?'暂无可选时间。':'No times available.')+'</div>'; }
+    body.innerHTML=html;
+    body.querySelectorAll('input[name=rsslot]').forEach(r=>r.addEventListener('change',()=>{ const s=slots.find(x=>x.slot_id===r.value); sel.slotId=r.value; sel.slotKind=r.dataset.kind||''; sel.label=s?(cn?(s.label_cn||s.label_en):(s.label_en||s.label_cn)):''; const dd=$('#rsDate'); if(dd)dd.value=''; save.disabled=false; }));
+    const dd=$('#rsDate'); if(dd)dd.addEventListener('change',()=>{ if(!dd.value)return; sel.slotId=dd.value; sel.slotKind='schedule'; sel.label=(cn?'配送 ':'Deliver ')+dd.value; body.querySelectorAll('input[name=rsslot]').forEach(r=>r.checked=false); save.disabled=false; });
+  }
+
+  save.addEventListener('click',async()=>{
+    $('#rsErr').textContent=''; save.disabled=true;
+    let payload;
+    if(isPickup){ if(!sel.pickup){save.disabled=false;return;} payload={pickup_time:sel.pickup}; }
+    else { if(!sel.slotId){save.disabled=false;return;} payload={delivery_slot_id:sel.slotId}; if(sel.slotKind)payload.delivery_slot_kind=sel.slotKind; if(sel.label)payload.delivery_slot_label=sel.label; }
+    let r;
+    try{ r=await fetch('/api/retail/orders/'+encodeURIComponent(o.id)+'/reschedule',{method:'POST',headers:authHeaders({'Accept':'application/json','Content-Type':'application/json'}),body:JSON.stringify(payload)}); }
+    catch(e){ $('#rsErr').textContent=cn?'网络错误。':'Network error.'; save.disabled=false; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j.success){ $('#rsErr').textContent=rsErrText(j,cn); save.disabled=false; return; }
+    close(); renderOrderDetail(o.id);
+  });
 }
 
 /* ════════════ ROUTER ════════════ */

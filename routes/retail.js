@@ -7639,7 +7639,8 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
             refund_lines_json, refund_payout_method, refund_payout_ref,
             refund_reviewed_at, refund_approved_at, refund_paid_at,
             store_id, routing_reason, channel, fulfillment_type,
-            scheduled_for, delivery_slot_label,
+            scheduled_for, delivery_slot_label, delivery_slot_kind,
+            same_day_surcharge_fee,
             promised_ship_date, promised_delivery_date,
             tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at,
@@ -7757,7 +7758,91 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   }
   o.fulfillment = buildCustomerFulfillment(orderId, o.items);
   o.timeline = orderTimeline(o);
+  // Phase-1 self-service reschedule: can the customer still change the
+  // delivery/pickup time? scheduled_for is left raw (not in GZ_LOCAL_TS_FIELDS)
+  // so the cutoff math below reads the real timestamp.
+  o.reschedule = rescheduleEligibility(o, o.items.map((it) => it.product_id));
   return o;
+}
+
+// ── Customer self-service reschedule (change delivery/pickup time before
+// departure) ─────────────────────────────────────────────────────────────
+// Decide whether the customer may still move this order's delivery/pickup
+// time, and why not when they can't. Returns
+// { allowed, reason, fresh, kind, cutoff_at? }.
+//
+// Locks (any one blocks):
+//   • status must be paid|preparing (not unpaid/cancelled/refunded/etc)
+//   • nothing has departed — order-level dispatched_at OR any parcel moved
+//   • no refund in flight (pending/reviewing/approved)
+//   • FRESH (batch-made) orders carry an extra prep-lock, because the kitchen
+//     commits a morning batch to the scheduled day:
+//       – locked the moment staff move it to 'preparing'
+//       – locked immediately for a same-day / right-away fresh pick (cooking now)
+//       – otherwise locked once we pass the cutoff (default 20:00) the EVENING
+//         BEFORE the currently-scheduled day. Config fresh.rescheduleCutoffHour.
+// `kind` is 'pickup' | 'delivery' so the client picks the right slot UI.
+function rescheduleEligibility(o, productIds, now = new Date()) {
+  const kind = (o && o.fulfillment_type === 'pickup') ? 'pickup' : 'delivery';
+  const block = (reason, fresh) => ({ allowed: false, reason, fresh: !!fresh, kind });
+  if (!o) return block('not_found', false);
+  if (!['paid', 'preparing'].includes(o.status)) return block('status', false);
+  if (o.dispatched_at) return block('departed', false);
+  if (['pending', 'reviewing', 'approved'].includes(o.refund_status || '')) {
+    return block('refund', false);
+  }
+  // Any parcel already dispatched/delivered (split orders depart per-parcel).
+  try {
+    const moved = tdb().prepare(
+      `SELECT 1 FROM retail_shipments
+        WHERE order_id = ?
+          AND (dispatched_at IS NOT NULL OR delivered_at IS NOT NULL
+               OR tracking_status = 'delivered')
+        LIMIT 1`
+    ).get(o.id);
+    if (moved) return block('departed', false);
+  } catch (_) { /* shipments table optional on older DBs */ }
+
+  const fresh = batchItemsInCart(productIds).length > 0;
+  if (fresh) {
+    if (o.status === 'preparing') return block('fresh_preparing', true);
+    // A fresh same-day/right-away order is being cooked imminently — no moves.
+    if (['right_away', 'today'].includes(o.delivery_slot_kind || '')) {
+      return block('fresh_cutoff', true);
+    }
+    if (o.scheduled_for) {
+      const sched = new Date(o.scheduled_for);
+      if (!isNaN(sched.getTime())) {
+        const cutoffHour = Number(cfgValue('fresh.rescheduleCutoffHour', 20)) || 20;
+        const cutoff = new Date(
+          sched.getFullYear(), sched.getMonth(), sched.getDate() - 1, cutoffHour, 0, 0
+        );
+        if (now.getTime() >= cutoff.getTime()) {
+          return { allowed: false, reason: 'fresh_cutoff', fresh: true, kind, cutoff_at: cutoff.toISOString() };
+        }
+      }
+    }
+  }
+  return { allowed: true, reason: null, fresh, kind };
+}
+
+// Reconstruct the delivery zone an order shipped under, so reschedule offers
+// the SAME slot window/surcharges the original quote used. delivery_zone_id is
+// NULL when the default zone matched, so fall back to re-matching the stored
+// address. Returns a zone row (or null) — never throws.
+function zoneForOrder(o) {
+  try {
+    if (o.delivery_zone_id) {
+      const z = tdb().prepare('SELECT * FROM retail_delivery_zones WHERE id = ?').get(o.delivery_zone_id);
+      if (z) return z;
+    }
+    let address = {};
+    try { address = o.address_json ? JSON.parse(o.address_json) : (o.address || {}); } catch (_) {}
+    return matchDeliveryZone(normalizeChinaAddress(address));
+  } catch (e) {
+    console.error('[zoneForOrder]', e);
+    return null;
+  }
 }
 
 // Partial-shipment summary for the customer — "X of Y items shipped, the rest
@@ -11954,6 +12039,137 @@ router.post('/api/retail/orders/:id/cancel', requireRetailAuth, express.json(), 
   try { inventory.releaseOrderReservations(id, { reason: 'customer_cancelled' }); }
   catch (e) { console.error('[inventory.release]', e); }
   res.json({ success: true });
+});
+
+// ─── Customer self-service reschedule ──────────────────────────────────────
+// Change the delivery/pickup time of an order that hasn't departed yet.
+// GET returns eligibility + the slot options to choose from (the same
+// computeDeliverySlots the checkout uses, for the order's own zone — or the
+// pickup window for collection orders). POST validates + applies the change.
+// Phase 1 is PRICE-NEUTRAL: a pick whose same-day surcharge differs from what
+// the customer already paid is refused (no charge/refund plumbing yet).
+
+router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare(
+    `SELECT id, status, fulfillment_type, scheduled_for, delivery_slot_kind,
+            delivery_slot_label, delivery_zone_id, address_json, refund_status,
+            dispatched_at, same_day_surcharge_fee
+       FROM retail_orders WHERE id = ? AND customer_id = ?`
+  ).get(id, req.customer.id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const productIds = tdb().prepare(
+    'SELECT product_id FROM retail_order_items WHERE order_id = ?'
+  ).all(id).map((r) => r.product_id);
+  const eligibility = rescheduleEligibility(o, productIds);
+  const data = {
+    eligibility,
+    fulfillment_type: eligibility.kind,
+    current: {
+      scheduled_for: o.scheduled_for,
+      slot_label:    o.delivery_slot_label,
+      slot_kind:     o.delivery_slot_kind,
+    },
+  };
+  if (eligibility.kind === 'pickup') {
+    data.pickup_window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+  } else {
+    const zone = zoneForOrder(o);
+    data.scheduling = computeDeliverySlots(zone, new Date());
+    data.zone = zone ? {
+      id: zone.id, zone_type: zone.zone_type,
+      name_en: zone.name_en, name_cn: zone.name_cn,
+    } : null;
+  }
+  res.json({ success: true, data });
+});
+
+router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare(
+    `SELECT id, status, fulfillment_type, scheduled_for, delivery_slot_kind,
+            delivery_slot_label, delivery_zone_id, address_json, refund_status,
+            dispatched_at, same_day_surcharge_fee
+       FROM retail_orders WHERE id = ? AND customer_id = ?`
+  ).get(id, req.customer.id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const productIds = tdb().prepare(
+    'SELECT product_id FROM retail_order_items WHERE order_id = ?'
+  ).all(id).map((r) => r.product_id);
+  const eligibility = rescheduleEligibility(o, productIds);
+  if (!eligibility.allowed) {
+    return res.status(409).json({
+      success: false, error: 'not_reschedulable',
+      reason: eligibility.reason, fresh: eligibility.fresh,
+    });
+  }
+
+  const body = req.body || {};
+  const now = new Date();
+  let scheduledFor, slotLabel, slotKind;
+
+  if (eligibility.kind === 'pickup') {
+    // Collection orders carry their window in the same scheduled_for + label
+    // columns; resolvePickupTime re-validates against the pickup hours.
+    const r = resolvePickupTime(body.pickup_time, now);
+    if (r.error) return res.status(400).json({ success: false, error: r.error });
+    scheduledFor = r.scheduled_for;
+    slotLabel    = r.label;
+    slotKind     = 'pickup';
+  } else {
+    const slotId = body.delivery_slot_id;
+    if (!slotId) return res.status(400).json({ success: false, error: 'slot_required' });
+    const zone = zoneForOrder(o);
+    const resolved = resolveDeliverySlot(zone, slotId, now);
+    if (resolved.error) return res.status(400).json({ success: false, error: resolved.error });
+
+    // Phase 1 is price-neutral. A slot that adds (or drops) a same-day surcharge
+    // changes the total, which needs charge/refund plumbing we haven't built —
+    // refuse it and tell the client to contact staff.
+    const newSurcharge     = Number(resolved.surcharge) || 0;
+    const currentSurcharge = Number(o.same_day_surcharge_fee) || 0;
+    if (newSurcharge !== currentSurcharge) {
+      return res.status(409).json({
+        success: false, error: 'price_change',
+        new_surcharge: newSurcharge, current_surcharge: currentSurcharge,
+      });
+    }
+
+    // A FRESH order can't be pulled into a same-day slot — the kitchen can't
+    // conjure a batch on no notice. requiresStockGate is exactly the "GZ +
+    // same-day" condition that would demand on-hand stock. Future-date moves
+    // are fine (the kitchen restocks before the day).
+    if (eligibility.fresh) {
+      let address = {};
+      try { address = o.address_json ? JSON.parse(o.address_json) : {}; } catch (_) {}
+      address = normalizeChinaAddress(address);
+      if (inventory.requiresStockGate({ address, deliverySlotId: slotId })) {
+        return res.status(409).json({ success: false, error: 'fresh_no_sameday' });
+      }
+    }
+
+    scheduledFor = resolved.scheduled_for;
+    slotLabel    = body.delivery_slot_label
+                    || resolved.slot?.label_en
+                    || (slotId === 'right_away' ? 'Right away' : null);
+    slotKind     = body.delivery_slot_kind
+                    || (slotId === 'right_away' ? 'right_away' : null);
+  }
+
+  // Apply. seen_at = NULL re-flags the order in the admin queue so staff
+  // re-notice the changed time when planning the run.
+  tdb().prepare(
+    `UPDATE retail_orders
+        SET scheduled_for = ?, delivery_slot_label = ?, delivery_slot_kind = ?,
+            seen_at = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(scheduledFor, slotLabel, slotKind, id);
+
+  res.json({
+    success: true,
+    data: { scheduled_for: scheduledFor, slot_label: slotLabel, slot_kind: slotKind },
+  });
 });
 
 // ─── Current customer ────────────────────────────────────────────────────
