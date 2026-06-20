@@ -1129,12 +1129,28 @@ function slotEndAnchor(scheduledForIso, label) {
   const start = parseSchedFor(scheduledForIso);
   if (isNaN(start.getTime())) return scheduledForIso;
   const m = /(\d{1,2}):(\d{2})\s*(?:[-–—~]|to|至)\s*(\d{1,2}):(\d{2})/.exec(String(label == null ? '' : label));
-  if (!m) return scheduledForIso;
-  const endH = Number(m[3]), endM = Number(m[4]);
-  if (endH > 23 || endM > 59) return scheduledForIso;
-  const end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), endH, endM);
-  if (end.getTime() < start.getTime()) return scheduledForIso; // parse fluke guard
-  return end.toISOString();
+  if (m) {
+    const endH = Number(m[3]), endM = Number(m[4]);
+    if (endH <= 23 && endM <= 59) {
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), endH, endM);
+      if (end.getTime() >= start.getTime()) return end.toISOString(); // window END is the real deadline
+    }
+  }
+  // No usable time window. A DAY-ONLY pick — the same-day "Today" chip or a
+  // schedule-for-later calendar date — is stored at LOCAL MIDNIGHT (the server's
+  // sentinel for "a day, no hour"; see resolveDeliverySlot). Anchoring urgency on
+  // that midnight makes the order read OVERDUE from 00:00 on its OWN delivery day.
+  // Collapse it to a bare local date so urgency compares whole calendar days
+  // (today/tomorrow/overdue) instead of treating 00:00 as a missed deadline. A
+  // genuinely timed slot/pickup (e.g. 14:30) isn't midnight, so it stays
+  // hour-precise and still goes red as its time approaches.
+  if (start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0) {
+    const y = start.getFullYear();
+    const mo = String(start.getMonth() + 1).padStart(2, '0');
+    const d = String(start.getDate()).padStart(2, '0');
+    return `${y}-${mo}-${d}`;
+  }
+  return scheduledForIso;
 }
 // ── Ship-by: ONE decision shared by the orders-list cell, the drawer tile,
 // AND the printed receipt / packing slip (the print side mirrors this in
