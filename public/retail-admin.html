@@ -1861,6 +1861,14 @@
                 <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-from-supplier" style="width:15px;height:15px;"> Ships directly from supplier · 供应商直发</label>
                 <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-restock-only" style="width:15px;height:15px;"> Restock-only, internal · 仅内部补货</label>
               </div>
+              <div style="margin-top:11px;border-top:1px solid #eee;padding-top:10px;">
+                <div style="font-weight:600;margin-bottom:5px;">When out of stock · 缺货时</div>
+                <select id="pd-oos-policy" style="width:100%;padding:7px 8px;border:1px solid #d6d1c7;border-radius:7px;font:inherit;">
+                  <option value="strict">Sold out everywhere · 全国售罄停售</option>
+                  <option value="backorder_gz">Pre-order outside Guangzhou · 广州外可预订（现订现发）</option>
+                </select>
+                <div style="font-size:12px;color:#8a8378;margin-top:5px;line-height:1.4;">“Pre-order outside Guangzhou” keeps the product orderable for out-of-city shoppers when stock hits 0 (ships on the next batch / restock); only same-day Guangzhou is blocked.<br>广州外顾客在缺货时仍可下单预订，仅广州当日配送会被拦截。</div>
+              </div>
             </section>
             <section class="pd-card">
               <div class="pd-card-h">Pricing · 价格</div>
