@@ -554,6 +554,40 @@
 }
 .rs-actions .btn { flex: 1; }
 
+/* ─── Reschedule (change delivery/pickup time) ──────────────────────── */
+.rsc-hint-row { padding: 0 32rpx 20rpx; }
+.rsc-loading { padding: 32rpx 0; text-align: center; }
+.rsc-current { margin-bottom: 18rpx; font-size: calc(24rpx * var(--font-scale)); }
+.rsc-empty { padding: 16rpx 0; }
+.rsc-slots {
+  display: flex; flex-wrap: wrap; gap: 16rpx;
+  margin-bottom: 24rpx;
+}
+.rsc-slot {
+  padding: 16rpx 24rpx;
+  border: 3rpx solid rgba(0,0,0,.15);
+  border-radius: 12rpx;
+  background: rgba(255,255,255,.4);
+  font-size: calc(26rpx * var(--font-scale));
+}
+.rsc-slot.on {
+  background: var(--ink);
+  color: var(--oat);
+  border-color: var(--ink);
+}
+.rsc-picker-val {
+  padding: 16rpx 24rpx;
+  border: 3rpx solid rgba(0,0,0,.15);
+  border-radius: 12rpx;
+  background: rgba(255,255,255,.4);
+  font-size: calc(28rpx * var(--font-scale));
+}
+.rsc-err {
+  margin: 4rpx 0 16rpx;
+  color: var(--berry);
+  font-size: calc(24rpx * var(--font-scale));
+}
+
 /* ─── Shipment tracking section ─────────────────────────────────── */
 .tracking-section { }
 

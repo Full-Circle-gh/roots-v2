@@ -239,6 +239,12 @@
       <view class="addr-full muted">{{address}}</view>
     </view>
 
+    <!-- Change delivery/pickup time (before departure) -->
+    <view wx:if="{{canReschedule}}" class="cust-actions rsc-cta">
+      <button class="btn ghost f-toni" bindtap="openReschedule">{{rescheduleKind === 'pickup' ? copy.rescheduleBtnPickup : copy.rescheduleBtnDelivery}}</button>
+    </view>
+    <view wx:elif="{{rescheduleHint}}" class="rsc-hint-row"><text class="muted">{{rescheduleHint}}</text></view>
+
     <!-- Payment -->
     <view class="section">
       <view class="section-label f-toni">{{copy.payLabel}}</view>
@@ -406,5 +412,59 @@
         {{invoiceBusy ? (lang === 'cn' ? '提交中…' : 'Submitting…') : copy.invoiceSubmit}}
       </button>
     </view>
+  </view>
+</view>
+
+<!-- ── Reschedule (change delivery/pickup time) bottom sheet ─────────── -->
+<view wx:if="{{rscSheetOpen}}" class="rs-mask" bindtap="onRescheduleMaskTap">
+  <view class="rs-sheet" catchtap="noop">
+    <view class="rs-handle"></view>
+    <view class="rs-title f-toni">{{rescheduleKind === 'pickup' ? copy.rescheduleTitlePickup : copy.rescheduleTitleDelivery}}</view>
+
+    <view wx:if="{{rscLoading}}" class="rsc-loading muted">…</view>
+
+    <block wx:else>
+      <view wx:if="{{rscCurrentLabel}}" class="rsc-current muted">{{copy.rescheduleCurrent}}: {{rscCurrentLabel}}</view>
+
+      <!-- Delivery: soonest chips + a schedule-for-later calendar -->
+      <block wx:if="{{rescheduleKind !== 'pickup'}}">
+        <view wx:if="{{rscSlots.length}}" class="rsc-slots">
+          <view wx:for="{{rscSlots}}" wx:key="slot_id"
+                class="rsc-slot {{item.sel ? 'on' : ''}}"
+                data-id="{{item.slot_id}}" bindtap="pickRscSlot">{{item.label}}{{item.surcharge_disp}}</view>
+        </view>
+        <view wx:if="{{rscSchedule}}" class="rs-field">
+          <text class="rs-label">{{copy.reschedulePickDate}}</text>
+          <picker mode="date" value="{{rscDate}}" start="{{rscSchedule.min_date}}" end="{{rscSchedule.max_date}}" bindchange="onRscDateChange">
+            <view class="rsc-picker-val">{{rscDate || (lang === 'cn' ? '选择日期' : 'Select a date')}}</view>
+          </picker>
+        </view>
+        <view wx:if="{{!rscSlots.length && !rscSchedule}}" class="rsc-empty muted">{{copy.rescheduleNoSlots}}</view>
+      </block>
+
+      <!-- Pickup: a date + a time within the pickup window -->
+      <block wx:else>
+        <view class="rs-field">
+          <text class="rs-label">{{copy.reschedulePickupDate}}</text>
+          <picker mode="date" value="{{rscPickupDate}}" bindchange="onRscPickupDateChange">
+            <view class="rsc-picker-val">{{rscPickupDate || (lang === 'cn' ? '选择日期' : 'Select a date')}}</view>
+          </picker>
+        </view>
+        <view class="rs-field">
+          <text class="rs-label">{{copy.reschedulePickupTimeOfDay}} ({{rscPickupWindow.open}}–{{rscPickupWindow.close}})</text>
+          <picker mode="time" value="{{rscPickupTime}}" start="{{rscPickupWindow.open}}" end="{{rscPickupWindow.close}}" bindchange="onRscPickupTimeChange">
+            <view class="rsc-picker-val">{{rscPickupTime || (lang === 'cn' ? '选择时间' : 'Select a time')}}</view>
+          </picker>
+        </view>
+      </block>
+
+      <view wx:if="{{rscErr}}" class="rsc-err">{{rscErr}}</view>
+      <view class="rs-actions">
+        <button class="btn ghost f-toni" bindtap="closeRescheduleSheet" disabled="{{rscBusy}}">{{copy.refundCancelBtn}}</button>
+        <button class="btn primary f-toni" bindtap="confirmReschedule" disabled="{{rscBusy}}">
+          {{rscBusy ? copy.paying : copy.rescheduleConfirm}}
+        </button>
+      </view>
+    </block>
   </view>
 </view>

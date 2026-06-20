@@ -124,7 +124,35 @@ Page({
       invoiceSubmit: 'Submit request',
       invoiceProcessing: '🧾 Invoice requested — we\'ll email it once issued.',
       invoiceIssued: '✓ Invoice issued',
+      rescheduleBtnDelivery: 'Change delivery time',
+      rescheduleBtnPickup: 'Change pickup time',
+      rescheduleTitleDelivery: 'Change delivery time',
+      rescheduleTitlePickup: 'Change pickup time',
+      rescheduleCurrent: 'Current',
+      reschedulePickDate: 'Or pick a date',
+      reschedulePickupDate: 'Pickup date',
+      reschedulePickupTimeOfDay: 'Pickup time',
+      rescheduleConfirm: 'Confirm change',
+      rescheduleNoSlots: 'No times available right now.',
+      rescheduleFreshHint: 'Your fresh items are already being prepared — message us to change the time 💚',
+      rescheduleSaved: 'Time updated ✓',
     },
+    // Reschedule (change delivery/pickup time) state
+    canReschedule: false,
+    rescheduleHint: '',
+    rescheduleKind: 'delivery',     // 'delivery' | 'pickup'
+    rscSheetOpen: false,
+    rscBusy: false,
+    rscLoading: false,
+    rscCurrentLabel: '',
+    rscSlots: [],                   // [{ slot_id, label, kind, surcharge_disp, sel }]
+    rscPickedSlot: '',
+    rscSchedule: null,              // { min_date, max_date } when a calendar window exists
+    rscDate: '',                    // chosen schedule-for-later date (delivery)
+    rscPickupDate: '',
+    rscPickupTime: '',
+    rscPickupWindow: { open: '10:00', close: '20:00' },
+    rscErr: '',
     // Refund sheet state
     refundSheetOpen: false,
     refundBusy: false,
@@ -245,6 +273,18 @@ Page({
         invoiceSubmit: '提交申请',
         invoiceProcessing: '🧾 发票已申请 — 开具后将发送至您的邮箱。',
         invoiceIssued: '✓ 发票已开具',
+        rescheduleBtnDelivery: '修改配送时间',
+        rescheduleBtnPickup: '修改取货时间',
+        rescheduleTitleDelivery: '修改配送时间',
+        rescheduleTitlePickup: '修改取货时间',
+        rescheduleCurrent: '当前',
+        reschedulePickDate: '或选择日期',
+        reschedulePickupDate: '取货日期',
+        reschedulePickupTimeOfDay: '取货时间',
+        rescheduleConfirm: '确认修改',
+        rescheduleNoSlots: '暂无可选时间。',
+        rescheduleFreshHint: '鲜食已在为您备制，如需改期请联系我们 💚',
+        rescheduleSaved: '时间已更新 ✓',
       },
     });
   },
@@ -433,6 +473,17 @@ Page({
         ['pending', 'reviewing', 'approved', 'paid'].includes(data.refund_status);
       const canAddItems = ['paid', 'preparing'].includes(data.status) && !shippedAny && !refundInFlight;
 
+      // Self-service reschedule (change delivery/pickup time before departure).
+      // Eligibility is decided server-side and rides on data.reschedule; we just
+      // surface the button when allowed, or a gentle hint when fresh items have
+      // locked the time.
+      const rsv = data.reschedule || {};
+      const canReschedule = !!rsv.allowed;
+      const rescheduleKind = rsv.kind === 'pickup' ? 'pickup' : 'delivery';
+      const rescheduleHint = (!rsv.allowed && (rsv.reason === 'fresh_cutoff' || rsv.reason === 'fresh_preparing'))
+        ? this.data.copy.rescheduleFreshHint
+        : '';
+
       const isPickup = data.fulfillment_type === 'pickup';
       const pa = data.address || {};
       const pickupStoreName = isPickup
@@ -457,6 +508,9 @@ Page({
         trackingEventsVisible,
         refundView,
         canAddItems,
+        canReschedule,
+        rescheduleKind,
+        rescheduleHint,
         isPickup,
         pickupStoreName,
         pickupAddress,
@@ -639,6 +693,116 @@ Page({
   // way back, onShow's refresh repulls the order so the new items appear.
   addToOrder() {
     wx.navigateTo({ url: '/pages/add-to-order/add-to-order?order_id=' + this.data.id });
+  },
+
+  // ─── Reschedule flow (change delivery/pickup time before departure) ───────
+  // Open the sheet and load this order's slot options (the same windows the
+  // checkout offers, for the order's own zone — or the pickup window for
+  // collection orders). Price-neutral: a surcharge-changing pick is refused by
+  // the server and surfaced as "message us".
+  async openReschedule() {
+    const cn = this.data.lang === 'cn';
+    this.setData({ rscSheetOpen: true, rscLoading: true, rscErr: '', rscSlots: [], rscPickedSlot: '', rscDate: '', rscPickupDate: '', rscPickupTime: '', rscSchedule: null });
+    try {
+      const r = await api.get('/api/retail/orders/' + this.data.id + '/reschedule-options');
+      const d = r?.data || r;
+      if (!d || !d.eligibility || !d.eligibility.allowed) {
+        this.setData({ rscLoading: false, rscErr: this.data.copy.rescheduleFreshHint });
+        return;
+      }
+      const cur = (d.current && d.current.slot_label) || '';
+      if (d.fulfillment_type === 'pickup') {
+        this.setData({
+          rscLoading: false,
+          rscCurrentLabel: cur,
+          rscPickupWindow: d.pickup_window || { open: '10:00', close: '20:00' },
+        });
+      } else {
+        const sc = d.scheduling || {};
+        const slots = (Array.isArray(sc.slots) ? sc.slots : []).map(s => ({
+          slot_id: s.slot_id,
+          kind: s.slot_kind || (s.is_same_day ? 'today' : 'schedule'),
+          label: cn ? (s.label_cn || s.label_en) : (s.label_en || s.label_cn),
+          surcharge_disp: Number(s.surcharge) > 0 ? (' (+¥' + Number(s.surcharge).toFixed(2) + ')') : '',
+          sel: false,
+        }));
+        this.setData({
+          rscLoading: false,
+          rscCurrentLabel: cur,
+          rscSlots: slots,
+          rscSchedule: sc.schedule || null,
+        });
+      }
+    } catch (e) {
+      this.setData({ rscLoading: false, rscErr: cn ? '无法加载，请稍后再试。' : 'Could not load options.' });
+    }
+  },
+  closeRescheduleSheet() {
+    if (this.data.rscBusy) return;
+    this.setData({ rscSheetOpen: false });
+  },
+  onRescheduleMaskTap() { this.closeRescheduleSheet(); },
+  // Pick one of the soonest slot chips — clears any calendar date pick.
+  pickRscSlot(e) {
+    const id = e.currentTarget.dataset.id;
+    const slots = this.data.rscSlots.map(s => ({ ...s, sel: s.slot_id === id }));
+    this.setData({ rscSlots: slots, rscPickedSlot: id, rscDate: '', rscErr: '' });
+  },
+  // Schedule-for-later calendar pick (delivery) — clears any chip selection.
+  onRscDateChange(e) {
+    const slots = this.data.rscSlots.map(s => ({ ...s, sel: false }));
+    this.setData({ rscDate: e.detail.value, rscSlots: slots, rscPickedSlot: '', rscErr: '' });
+  },
+  onRscPickupDateChange(e) { this.setData({ rscPickupDate: e.detail.value, rscErr: '' }); },
+  onRscPickupTimeChange(e) { this.setData({ rscPickupTime: e.detail.value, rscErr: '' }); },
+  async confirmReschedule() {
+    if (this.data.rscBusy) return;
+    const cn = this.data.lang === 'cn';
+    const isPickup = this.data.rescheduleKind === 'pickup';
+    let payload;
+    if (isPickup) {
+      if (!this.data.rscPickupDate || !this.data.rscPickupTime) {
+        this.setData({ rscErr: cn ? '请选择取货日期和时间。' : 'Pick a date and time.' });
+        return;
+      }
+      payload = { pickup_time: this.data.rscPickupDate + 'T' + this.data.rscPickupTime };
+    } else {
+      const slotId = this.data.rscPickedSlot || this.data.rscDate;
+      if (!slotId) {
+        this.setData({ rscErr: cn ? '请选择一个时间。' : 'Pick a time.' });
+        return;
+      }
+      payload = { delivery_slot_id: slotId };
+      if (this.data.rscPickedSlot) {
+        const s = this.data.rscSlots.find(x => x.slot_id === slotId);
+        if (s && s.kind) payload.delivery_slot_kind = s.kind;
+        if (s && s.label) payload.delivery_slot_label = s.label;
+      } else {
+        payload.delivery_slot_kind = 'schedule';
+        payload.delivery_slot_label = (cn ? '配送 ' : 'Deliver ') + slotId;
+      }
+    }
+    this.setData({ rscBusy: true, rscErr: '' });
+    try {
+      await api.post('/api/retail/orders/' + this.data.id + '/reschedule', payload);
+      this.setData({ rscBusy: false, rscSheetOpen: false });
+      wx.showToast({ title: this.data.copy.rescheduleSaved, icon: 'success' });
+      await this.refresh(true);
+    } catch (e) {
+      this.setData({ rscBusy: false, rscErr: this._rescheduleErrText(e) });
+    }
+  },
+  // Map a server error (api.post throws an Error with .message = error string)
+  // to friendly copy. The server's price-neutral + fresh guards live here.
+  _rescheduleErrText(e) {
+    const cn = this.data.lang === 'cn';
+    const m = (e && (e.code || e.message)) || '';
+    if (/price_change/.test(m))     return cn ? '该时段会改变费用，请联系我们。' : 'That time changes the price — message us to switch.';
+    if (/fresh_no_sameday/.test(m)) return cn ? '鲜食无法改到当天，请选其他日期。' : 'Fresh items can’t move to a same-day slot — pick a later date.';
+    if (/not_reschedulable/.test(m))return this.data.copy.rescheduleFreshHint;
+    if (/slot_/.test(m))            return cn ? '请选择有效的时间。' : 'Please pick a valid time.';
+    if (/pickup_time/.test(m))      return cn ? '请选择营业时间内的取货时间。' : 'Pick a time within opening hours.';
+    return cn ? '修改失败，请重试。' : 'Could not change the time. Please try again.';
   },
 
   reorder() {
