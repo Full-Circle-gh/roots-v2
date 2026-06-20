@@ -194,6 +194,11 @@ async function loadDeliveryZones() {
         if (blbl) blbl.textContent = bcb.checked ? 'ON · 开启' : 'OFF · 关闭';
       });
     }
+    // Fresh-order reschedule cutoff hour (evening-before lock for batch-made orders)
+    const fresh = (cfg?.data && cfg.data.fresh) || {};
+    if ($('#fresh-resched-cutoff')) {
+      $('#fresh-resched-cutoff').value = (fresh.rescheduleCutoffHour != null ? fresh.rescheduleCutoffHour : 20);
+    }
     // Default zone — rest of China
     const dz = dlv.defaultZone || {};
     if ($('#dlv-default-enabled')) {
@@ -263,6 +268,17 @@ async function saveBatchSchedule() {
     await api('/api/retail-admin/config', { method: 'PUT', body });
     toast('Saved · 已保存');
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+async function saveRescheduleSettings() {
+  const h = parseInt(($('#fresh-resched-cutoff') && $('#fresh-resched-cutoff').value) || '', 10);
+  if (!Number.isFinite(h) || h < 0 || h > 23) {
+    toast('Enter an hour 0–23 · 请输入 0–23 的小时', 'err'); return;
+  }
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'fresh.rescheduleCutoffHour': h } });
+    toast('Saved · 已保存');
+  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); }
 }
 
 async function saveDefaultZone() {
