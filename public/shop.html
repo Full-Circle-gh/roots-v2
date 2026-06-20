@@ -592,8 +592,10 @@ async function renderCheckout(){
   if(!state.token){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(state.lang==='cn'?'请先登录后结算':'Please sign in to check out')+'</div></div></div>'; openLogin(); return; }
   if(!coItems().length){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(state.lang==='cn'?'购物车是空的 🌱':'Your cart is empty 🌱')+'<br><a class="more" href="#/shop">'+(state.lang==='cn'?'去购物':'Browse products')+'</a></div></div></div>'; return; }
   co.idem=co.idem||('web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));
+  co.preorderSeen=false;   // pre-order popup auto-shows once per checkout visit
   v.innerHTML=`<div class="wrap"><div class="co">
     <h1>${state.lang==='cn'?'结算':'Checkout'}</h1>
+    <div id="coPreorder"></div>
     <div class="co-sec"><h3>${state.lang==='cn'?'配送地址':'Delivery address'}</h3><div id="coAddr">…</div></div>
     <div class="co-sec"><h3>${state.lang==='cn'?'配送时间':'Delivery time'}</h3><div id="coSlots">…</div></div>
     <div class="co-sec"><h3>${state.lang==='cn'?'备注与优惠码':'Note & voucher'}</h3>
@@ -656,8 +658,63 @@ async function coQuote(){
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
-  renderCoSlots(d); renderCoPoints(d); renderCoSummary(d);
+  renderCoSlots(d); renderCoPoints(d); renderCoSummary(d); renderCoPreorder(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
+}
+// "Ships soon" pre-order notice (server preorder_notice): a persistent banner in
+// the checkout panel + a one-time popup, so a customer pre-ordering a sold-out
+// backorder item knows it ships on the next restock — mirrors the mini-app.
+function coInjectPreorderStyle(){
+  if($('#copoStyle'))return;
+  const s=document.createElement('style'); s.id='copoStyle';
+  s.textContent=`
+  .copo-banner{display:flex;align-items:flex-start;gap:11px;margin:0 0 18px;padding:13px 15px;border:1px solid var(--accent,#6d9c2a);background:rgba(109,156,42,.08);border-radius:14px;}
+  .copo-ic{font-size:22px;line-height:1.2;flex:0 0 auto;}
+  .copo-t{font-weight:700;margin-bottom:2px;}
+  .copo-m{font-size:13px;line-height:1.5;color:var(--muted,#6b6358);}
+  .copo-more{margin-left:auto;flex:0 0 auto;align-self:center;font:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent,#6d9c2a);background:none;border:0;cursor:pointer;}
+  .copo-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:120;padding:20px;}
+  .copo-card{background:#fff;border-radius:20px;max-width:380px;width:100%;padding:26px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .copo-hero{font-size:40px;}
+  .copo-kicker{margin-top:6px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent,#6d9c2a);}
+  .copo-title{font-size:22px;font-weight:800;margin:2px 0 14px;}
+  .copo-items{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:14px;}
+  .copo-chip{font-size:13px;background:rgba(109,156,42,.1);border:1px solid rgba(109,156,42,.28);border-radius:999px;padding:5px 11px;}
+  .copo-body{font-size:14px;line-height:1.6;color:var(--muted,#6b6358);margin-bottom:18px;}
+  .copo-go{width:100%;font:inherit;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--accent,#6d9c2a);color:#fff;border:0;border-radius:999px;padding:14px;cursor:pointer;}`;
+  document.head.appendChild(s);
+}
+function renderCoPreorder(d){
+  const box=$('#coPreorder'); if(!box)return;
+  const n=d&&d.preorder_notice;
+  if(!n){ box.innerHTML=''; return; }
+  coInjectPreorderStyle();
+  const t=state.lang==='cn'?n.title_cn:n.title_en, m=state.lang==='cn'?n.message_cn:n.message_en;
+  box.innerHTML=`<div class="copo-banner"><span class="copo-ic">📦</span>
+    <div><div class="copo-t">${esc(t||'')}</div><div class="copo-m">${esc(m||'')}</div></div>
+    <button class="copo-more" id="copoMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
+  $('#copoMore').addEventListener('click',coPreorderPopup);
+  if(!co.preorderSeen){ co.preorderSeen=true; coPreorderPopup(); }
+}
+function coPreorderPopup(){
+  const n=co.quote&&co.quote.preorder_notice; if(!n)return;
+  coInjectPreorderStyle();
+  let ov=$('#copoPop');
+  if(!ov){ov=document.createElement('div');ov.id='copoPop';ov.className='copo-overlay';document.body.appendChild(ov);}
+  const L=state.lang;
+  const items=(Array.isArray(n.items)?n.items:[]).map(it=>`<span class="copo-chip">${esc(pick(it.name_en,it.name_cn))}</span>`).join('');
+  ov.innerHTML=`<div class="copo-card">
+    <div class="copo-hero">📦</div>
+    <div class="copo-kicker">${esc(L==='cn'?n.kicker_cn:n.kicker_en)}</div>
+    <div class="copo-title">${esc(L==='cn'?n.title_cn:n.title_en)}</div>
+    ${items?`<div class="copo-items">${items}</div>`:''}
+    <div class="copo-body">${esc(L==='cn'?n.message_cn:n.message_en)}</div>
+    <button class="copo-go" id="copoGot">${L==='cn'?'知道了':'Got it'}</button>
+  </div>`;
+  ov.hidden=false;
+  const close=()=>{ov.hidden=true;};
+  ov.onclick=e=>{if(e.target===ov)close();};
+  $('#copoGot').addEventListener('click',close);
 }
 // Points redemption: a single opt-in toggle (server clamps points_to_use to the
 // usable max). Hidden when the customer has no usable points on this order.

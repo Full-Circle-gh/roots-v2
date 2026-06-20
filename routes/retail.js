@@ -18335,6 +18335,46 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
   };
 }
 
+// Customer-facing "Ships soon / pre-order" notice for an order that holds a
+// GENERIC sold-out item the operator left orderable as backorder (oos_policy
+// 'backorder_gz') — NOT a batch meal (those get computeBatchNotice, with dates).
+// It only fires when the order is genuinely a pre-order: the relaxed, non-(GZ
+// same-day) path where requiresStockGate is false and a sold-out backorder item
+// is allowed through to ship on the next restock. (GZ same-day gates stock hard,
+// so a shortage there routes to the fallback modal, not a pre-order.) Mirrors
+// the computeBatchNotice shape so the checkout can reuse its popup/banner.
+// Returns null when nothing qualifies.
+function computePreorderNotice(zone, address, productIds, slotId) {
+  if (inventory.requiresStockGate({ address, deliverySlotId: slotId })) return null;
+  const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
+  if (!ids.length) return null;
+  const ph = ids.map(() => '?').join(',');
+  const rows = tdb().prepare(
+    `SELECT id, name_en, name_cn, is_batch_made, oos_policy,
+            COALESCE(
+              (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
+                 JOIN retail_stores rs ON rs.id = rss.store_id
+                WHERE rss.product_id = store_products.id AND rs.is_active = 1),
+              stock_qty
+            ) AS real_stock
+       FROM store_products WHERE id IN (${ph})`
+  ).all(...ids);
+  const items = rows.filter((r) => {
+    if (r.is_batch_made) return false;                       // meals → computeBatchNotice
+    if (effectiveOosPolicy(r) !== 'backorder_gz') return false;
+    const st = r.real_stock == null ? null : Number(r.real_stock);
+    return st != null && st <= 0;                            // genuinely sold out
+  }).map((r) => ({ id: r.id, name_en: r.name_en, name_cn: r.name_cn }));
+  if (!items.length) return null;
+  return {
+    kicker_en: 'Pre-order',  kicker_cn: '预订',
+    title_en:  'Ships soon', title_cn:  '现订现发',
+    message_en: 'Some items in your order are currently out of stock. Your order is a pre-order — we’ll ship everything together as soon as they’re back in stock.',
+    message_cn: '您订单中的部分商品目前缺货。此为预订订单，我们将在补货后尽快为您一并发货。',
+    items,
+  };
+}
+
 // ─── Delivery-slot enumerator ────────────────────────────────────────────
 // Given a matched zone (or null) + the current server time, produce the
 // list of slots the customer can pick from on the checkout page.
@@ -19396,6 +19436,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       },
       scheduling: computeDeliverySlots(zone, new Date()),
       batch_notice: computeBatchNotice(zone, (items || []).map((i) => i.product_id), new Date(), body.delivery_slot_id, body.slot_kind),
+      preorder_notice: computePreorderNotice(zone, address, (items || []).map((i) => i.product_id), body.delivery_slot_id),
       routing: routingPreview,
     },
   });

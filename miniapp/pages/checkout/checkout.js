@@ -109,6 +109,12 @@ Page({
     batchNoticeItems: [],         // [{ id, name, image }] — the fresh items, matched to the cart for thumbnails
     batchNoticePopup: false,      // true → the "Made fresh for you" modal is open
     batchNoticeSeen: false,       // popup auto-shows once per checkout visit; banner persists after
+    // Generic "Ships soon / pre-order" notice — a sold-out backorder item (not a
+    // batch meal) the customer is pre-ordering. Same popup+banner UX as batch.
+    preorderNotice: null,         // { kicker/title/message_en/cn, items[] } or null
+    preorderNoticeItems: [],      // [{ id, name, image }] matched to the cart for thumbnails
+    preorderNoticePopup: false,   // true → the "Ships soon" modal is open
+    preorderNoticeSeen: false,    // auto-shows once per visit; banner persists after
     deliverySlotId: '',          // 'right_away' | 'YYYY-MM-DD' | 'YYYY-MM-DDTHH:MM' — required before placeOrder
     deliverySlotLabel: '',       // human-readable label for the picked slot (passed back to server)
     deliverySurcharge: 0,        // ¥ same-day surcharge for the picked slot
@@ -1373,6 +1379,8 @@ Page({
           scheduling: sch,
           batchNotice: data.batch_notice || null,
           batchNoticeItems: this.buildBatchNoticeItems(data.batch_notice),
+          preorderNotice: data.preorder_notice || null,
+          preorderNoticeItems: this.buildBatchNoticeItems(data.preorder_notice),
           slotsByDay,
           deliverySlotId: nextSlotId,
           deliverySlotLabel: nextSlotLabel,
@@ -1398,6 +1406,14 @@ Page({
         // The batch banner stays put, so it's reachable once they dismiss it.
         if (data.batch_notice && !this.data.batchNoticeSeen && !this.data.localOnlyPopup) {
           this.setData({ batchNoticePopup: true, batchNoticeSeen: true });
+        }
+        // Same one-time-popup behaviour for the generic "Ships soon" pre-order
+        // notice. Don't stack it on top of the batch popup (a cart could hold
+        // both) — if the batch modal is auto-showing this visit, the pre-order
+        // banner still appears and its tap target opens the modal on demand.
+        const batchAutoShowing = data.batch_notice && this.data.batchNoticePopup;
+        if (data.preorder_notice && !this.data.preorderNoticeSeen && !this.data.localOnlyPopup && !batchAutoShowing) {
+          this.setData({ preorderNoticePopup: true, preorderNoticeSeen: true });
         }
         // Day-only mode: configure the three-option picker (Express / Today /
         // Schedule for later) and auto-select Express if there's no prior pick.
@@ -1854,6 +1870,14 @@ Page({
   },
   closeBatchNotice() {
     this.setData({ batchNoticePopup: false });
+  },
+
+  // "Ships soon" pre-order modal — same once-per-visit + re-openable banner UX.
+  openPreorderNotice() {
+    if (this.data.preorderNotice) this.setData({ preorderNoticePopup: true });
+  },
+  closePreorderNotice() {
+    this.setData({ preorderNoticePopup: false });
   },
 
   onVoucherInput(e) {
@@ -2421,9 +2445,10 @@ Page({
       localOnlyCta: cta,
       localOnlyBrowse: browse,
       localOnlyPopup: true,
-      // Never stack with the "Made fresh" popup — the local-only result takes
-      // priority; the batch notice stays available via its inline banner.
+      // Never stack with the "Made fresh" / "Ships soon" popups — the local-only
+      // result takes priority; those notices stay available via their banners.
       batchNoticePopup: false,
+      preorderNoticePopup: false,
     });
   },
 
