@@ -255,6 +255,17 @@
         <view class="hb-more">{{lang === 'cn' ? '详情' : 'Details'}}</view>
       </view>
 
+      <!-- Ships-soon pre-order notice — cart holds a sold-out backorder item the
+           customer is pre-ordering (ships on the next restock). Tap to re-open. -->
+      <view wx:if="{{preorderNotice}}" class="holiday-banner" bindtap="openPreorderNotice">
+        <view class="hb-icon">📦</view>
+        <view class="hb-body">
+          <view class="hb-title f-bear">{{lang === 'cn' ? preorderNotice.title_cn : preorderNotice.title_en}}</view>
+          <view class="hb-msg">{{lang === 'cn' ? preorderNotice.message_cn : preorderNotice.message_en}}</view>
+        </view>
+        <view class="hb-more">{{lang === 'cn' ? '详情' : 'Details'}}</view>
+      </view>
+
       <!-- Right away — always visible in time-slot mode; greyed when kitchen closed
            or holiday mode is on. Disabled state shows a reason below the label. -->
       <view wx:if="{{scheduling.mode !== 'day_only'}}"
@@ -981,6 +992,32 @@
       </view>
 
       <view class="bn-cta f-toni" bindtap="closeBatchNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
+    </view>
+  </view>
+
+  <!-- "Ships soon" pre-order popup — auto-opens once when the cart holds a
+       sold-out backorder item, re-opens from its banner. Reuses the batch
+       modal styling minus the dated timeline (a restock has no fixed date). -->
+  <view wx:if="{{preorderNoticePopup && preorderNotice}}" class="bn-backdrop" bindtap="closePreorderNotice" catchtouchmove="noop">
+    <view class="bn-card" catchtap="noop">
+      <view class="bn-hero">
+        <view class="bn-badge">📦</view>
+      </view>
+      <view class="bn-kicker f-toni">{{ lang === 'cn' ? preorderNotice.kicker_cn : preorderNotice.kicker_en }}</view>
+      <view class="bn-title f-bear">{{ lang === 'cn' ? preorderNotice.title_cn : preorderNotice.title_en }}</view>
+
+      <!-- The specific sold-out items this pre-order refers to -->
+      <view wx:if="{{preorderNoticeItems.length}}" class="bn-items">
+        <view wx:for="{{preorderNoticeItems}}" wx:key="id" class="bn-item">
+          <image wx:if="{{item.image}}" class="bn-item-img" src="{{item.image}}" mode="aspectFill"/>
+          <view wx:else class="bn-item-img bn-item-img--ph">📦</view>
+          <view class="bn-item-name">{{item.name}}</view>
+        </view>
+      </view>
+
+      <view class="bn-body">{{ lang === 'cn' ? preorderNotice.message_cn : preorderNotice.message_en }}</view>
+
+      <view class="bn-cta f-toni" bindtap="closePreorderNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
     </view>
   </view>
 
