@@ -3491,6 +3491,14 @@
           <label class="stacked">结账提示(中文)· Checkout notice — Chinese</label>
           <textarea id="batch-msg-cn" rows="2" style="width: 100%;" placeholder="您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。"></textarea>
         </div>
+        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+          <label class="stacked">Freshness tip — English · 新鲜提示(英文) <span class="help-i" data-tip="A small reminder line shown below the dates in the popup (e.g. enjoy within 48 hours). Plain text — no date placeholders. Leave blank to use the default. · 弹窗日期下方的小提示(例如建议尽快享用)。纯文本,无日期占位符。留空则使用默认。">?</span></label>
+          <textarea id="batch-tip-en" rows="2" style="width: 100%;" placeholder="We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness."></textarea>
+        </div>
+        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+          <label class="stacked">新鲜提示(中文)· Freshness tip — Chinese</label>
+          <textarea id="batch-tip-cn" rows="2" style="width: 100%;" placeholder="我们建议在收到后 48 小时内享用这些新鲜现做的商品,以获得最佳口感与新鲜度。"></textarea>
+        </div>
         <button class="btn btn-primary" onclick="saveBatchSchedule()" style="align-self: flex-end;">Save · 保存</button>
       </div>
     </div>

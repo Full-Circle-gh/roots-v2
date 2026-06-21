@@ -18457,6 +18457,9 @@ function batchScheduleCfg() {
     kicker_cn:  str(c.kicker_cn),
     message_en: str(c.message_en),
     message_cn: str(c.message_cn),
+    // Optional freshness reminder line shown below the dates ("enjoy within …").
+    tip_en:     str(c.tip_en),
+    tip_cn:     str(c.tip_cn),
   };
 }
 
@@ -18612,6 +18615,10 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
     title_cn:   cfg.title_cn   || '为您新鲜现做',
     message_en: cfg.message_en ? fill(cfg.message_en) : defEn,
     message_cn: cfg.message_cn ? fill(cfg.message_cn) : defCn,
+    // Freshness reminder shown below the date strip. Operator-editable; falls
+    // back to the built-in "enjoy within 48 hours" line when left blank.
+    tip_en: cfg.tip_en || 'We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness.',
+    tip_cn: cfg.tip_cn || '我们建议在收到后 48 小时内享用这些新鲜现做的商品，以获得最佳口感与新鲜度。',
     // The specific batch-made items this notice refers to.
     items: batchItems.map((it) => ({ id: it.id, name_en: it.name_en, name_cn: it.name_cn })),
   };
