@@ -992,6 +992,7 @@ async function renderCheckout(){
   coInjectCheckoutStyle();
   co.idem=co.idem||('web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));
   co.preorderSeen=false;   // pre-order popup auto-shows once per checkout visit
+  co.batchSeen=false;      // fresh-batch popup auto-shows once per checkout visit
   co.addrPickerOpen=false;
   const n=coItems().reduce((a,l)=>a+(Number(l.qty)||0),0);
   v.innerHTML=`<div class="cox">
@@ -999,6 +1000,7 @@ async function renderCheckout(){
       <div class="cx-kicker">${cn?'下单 · 02/03':'WHERE & HOW · 02/03'}</div>
       <div class="cx-title">${cn?'去哪里、怎么送':'Where &amp; how.'}</div>
     </div>
+    <div id="coBatch" style="padding:0 22px"></div>
     <div id="coPreorder" style="padding:0 22px"></div>
     <section class="cx-sec cx-sec--first">
       <div class="cx-seclabel">${cn?'你的订单':'YOUR ORDER'} · ${n} ${cn?'件':'ITEMS'}</div>
@@ -1241,6 +1243,9 @@ function coInjectAddrStyle(){
   .mp-pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);font-size:30px;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .mp-locate{position:absolute;right:12px;bottom:12px;width:42px;height:42px;border-radius:50%;border:1.5px solid var(--ink);background:#fff;color:var(--ink);font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);padding:0;}
   .mp-locate:disabled{opacity:.5;cursor:default;}
+  .mp-userdot{width:16px;height:16px;border-radius:50%;background:#1aad19;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 1px 4px rgba(0,0,0,.35);}
+  .mp-userdot::before{content:"";position:absolute;left:50%;top:50%;width:16px;height:16px;border-radius:50%;background:rgba(26,173,25,.35);transform:translate(-50%,-50%);animation:mpPulse 1.8s ease-out infinite;}
+  @keyframes mpPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6;}100%{transform:translate(-50%,-50%) scale(3);opacity:0;}}
   .mp-addr{padding:10px 16px 0;font-size:13px;color:var(--ink);line-height:1.5;min-height:18px;}
   .mp-actions{padding:12px 16px 16px;}`;
   document.head.appendChild(s);
@@ -1337,16 +1342,27 @@ function coLoadMapSdk(cfg){
 function coMapAdapter(provider,el,center){
   if(provider==='amap'){
     const map=new AMap.Map(el,{zoom:16,center:[center.lng,center.lat],resizeEnable:true});
+    let dot=null;
     return {
       onMove:cb=>map.on('moveend',()=>{const c=map.getCenter();cb({lat:c.getLat(),lng:c.getLng()});}),
       setCenter:(lat,lng)=>map.setCenter([lng,lat]),
+      setUserDot:(lat,lng)=>{
+        if(!dot){ dot=new AMap.Marker({content:'<div class="mp-userdot"></div>',anchor:'center',offset:new AMap.Pixel(0,0),zIndex:50}); dot.setMap(map); }
+        dot.setPosition([lng,lat]);
+      },
       destroy:()=>{try{map.destroy();}catch(e){}},
     };
   }
   const map=new TMap.Map(el,{zoom:16,center:new TMap.LatLng(center.lat,center.lng)});
+  let dot=null;
   return {
     onMove:cb=>map.on('center_changed',()=>{const c=map.getCenter();cb({lat:c.getLat(),lng:c.getLng()});}),
     setCenter:(lat,lng)=>map.setCenter(new TMap.LatLng(lat,lng)),
+    setUserDot:(lat,lng)=>{
+      const pos=new TMap.LatLng(lat,lng);
+      if(!dot){ dot=new TMap.MultiMarker({map,styles:{u:new TMap.MarkerStyle({width:16,height:16,anchor:{x:8,y:8},src:'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="6" fill="#1aad19" stroke="#fff" stroke-width="2"/></svg>')})},geometries:[{id:'u',styleId:'u',position:pos}]}); }
+      else dot.updateGeometries([{id:'u',styleId:'u',position:pos}]);
+    },
     destroy:()=>{try{map.destroy();}catch(e){}},
   };
 }
@@ -1443,7 +1459,7 @@ async function openMapPicker(){
     if(!pt){ if(!silent)addrEl.textContent=cn?'无法定位，请拖动地图':'Couldn’t locate — drag the map'; return; }
     resultsEl.hidden=true;
     suppressUntil=Date.now()+1200;        // the recenter's move events shouldn't double-reverse
-    if(adapter)adapter.setCenter(pt.lat,pt.lng);
+    if(adapter){ adapter.setCenter(pt.lat,pt.lng); try{adapter.setUserDot(pt.lat,pt.lng);}catch(e){} }
     reverseCenter(pt.lat,pt.lng);
   }
   if(locateBtn)locateBtn.addEventListener('click',()=>locate(false));
@@ -1473,7 +1489,7 @@ async function coQuote(){
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
-  renderCoSlots(d); renderCoPoints(d); renderCoSummary(d); renderCoPreorder(d);
+  renderCoSlots(d); renderCoPoints(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
 // "Ships soon" pre-order notice (server preorder_notice): a persistent banner in
@@ -1530,6 +1546,79 @@ function coPreorderPopup(){
   const close=()=>{ov.hidden=true;};
   ov.onclick=e=>{if(e.target===ov)close();};
   $('#copoGot').addEventListener('click',close);
+}
+// "Made fresh for you" notice (server batch_notice): a banner + one-time popup
+// for carts holding a freshly-made batch item, with the make→arrive dates and an
+// operator-editable freshness tip — mirrors the mini-app checkout.
+function coInjectBatchStyle(){
+  if($('#cobStyle'))return;
+  const s=document.createElement('style'); s.id='cobStyle';
+  s.textContent=`
+  .cob-banner{display:flex;align-items:flex-start;gap:11px;margin:0 0 18px;padding:13px 15px;border:1px solid var(--accent,#6d9c2a);background:rgba(109,156,42,.08);border-radius:14px;}
+  .cob-ic{font-size:22px;line-height:1.2;flex:0 0 auto;}
+  .cob-t{font-weight:700;margin-bottom:2px;}
+  .cob-m{font-size:13px;line-height:1.5;color:var(--muted,#6b6358);}
+  .cob-more{margin-left:auto;flex:0 0 auto;align-self:center;font:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent,#6d9c2a);background:none;border:0;cursor:pointer;}
+  .cob-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:120;padding:20px;}
+  .cob-card{background:#fff;border-radius:20px;max-width:380px;width:100%;padding:26px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .cob-hero{font-size:40px;}
+  .cob-kicker{margin-top:6px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent,#6d9c2a);}
+  .cob-title{font-size:22px;font-weight:800;margin:2px 0 14px;}
+  .cob-items{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:14px;}
+  .cob-chip{font-size:13px;background:rgba(109,156,42,.1);border:1px solid rgba(109,156,42,.28);border-radius:999px;padding:5px 11px;}
+  .cob-body{font-size:14px;line-height:1.6;color:var(--muted,#6b6358);margin-bottom:14px;}
+  .cob-tl{display:flex;align-items:center;justify-content:center;gap:14px;background:rgba(54,83,41,.06);border-radius:14px;padding:12px;margin-bottom:14px;}
+  .cob-tl-step{flex:1;}
+  .cob-tl-dot{width:11px;height:11px;border-radius:999px;margin:0 auto 7px;}
+  .cob-tl-dot--make{background:#b5803a;}
+  .cob-tl-dot--arrive{background:var(--accent,#6d9c2a);}
+  .cob-tl-lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#6b6358);margin-bottom:3px;}
+  .cob-tl-date{font-size:14px;font-weight:800;}
+  .cob-tl-line{flex:0 0 auto;width:32px;border-top:2px dashed rgba(54,83,41,.3);}
+  .cob-tip{display:flex;align-items:flex-start;gap:9px;text-align:left;background:rgba(109,156,42,.08);border:1px solid rgba(109,156,42,.22);border-radius:12px;padding:11px 13px;margin-bottom:18px;}
+  .cob-tip-dot{flex:0 0 auto;width:9px;height:9px;border-radius:999px;background:var(--accent,#6d9c2a);margin-top:5px;}
+  .cob-tip-text{font-size:13px;line-height:1.5;color:var(--ink,#36321f);}
+  .cob-go{width:100%;font:inherit;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--accent,#6d9c2a);color:#fff;border:0;border-radius:999px;padding:14px;cursor:pointer;}`;
+  document.head.appendChild(s);
+}
+function renderCoBatch(d){
+  const box=$('#coBatch'); if(!box)return;
+  const n=d&&d.batch_notice;
+  if(!n){ box.innerHTML=''; return; }
+  coInjectBatchStyle();
+  const t=state.lang==='cn'?n.title_cn:n.title_en, m=state.lang==='cn'?n.message_cn:n.message_en;
+  box.innerHTML=`<div class="cob-banner"><span class="cob-ic">🥗</span>
+    <div><div class="cob-t">${esc(t||'')}</div><div class="cob-m">${esc(m||'')}</div></div>
+    <button class="cob-more" id="cobMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
+  $('#cobMore').addEventListener('click',coBatchPopup);
+  if(!co.batchSeen){ co.batchSeen=true; coBatchPopup(); }
+}
+function coBatchPopup(){
+  const n=co.quote&&co.quote.batch_notice; if(!n)return;
+  coInjectBatchStyle();
+  let ov=$('#cobPop');
+  if(!ov){ov=document.createElement('div');ov.id='cobPop';ov.className='cob-overlay';document.body.appendChild(ov);}
+  const L=state.lang;
+  const items=(Array.isArray(n.items)?n.items:[]).map(it=>`<span class="cob-chip">${esc(pick(it.name_en,it.name_cn))}</span>`).join('');
+  const tip=esc(L==='cn'?(n.tip_cn||''):(n.tip_en||''));
+  ov.innerHTML=`<div class="cob-card">
+    <div class="cob-hero">🥗</div>
+    <div class="cob-kicker">${esc(L==='cn'?n.kicker_cn:n.kicker_en)}</div>
+    <div class="cob-title">${esc(L==='cn'?n.title_cn:n.title_en)}</div>
+    ${items?`<div class="cob-items">${items}</div>`:''}
+    <div class="cob-body">${esc(L==='cn'?n.message_cn:n.message_en)}</div>
+    <div class="cob-tl">
+      <div class="cob-tl-step"><div class="cob-tl-dot cob-tl-dot--make"></div><div class="cob-tl-lbl">${L==='cn'?'现做发货':'MADE &amp; SHIPPED'}</div><div class="cob-tl-date">${esc(n.ship_date||'')}</div></div>
+      <div class="cob-tl-line"></div>
+      <div class="cob-tl-step"><div class="cob-tl-dot cob-tl-dot--arrive"></div><div class="cob-tl-lbl">${L==='cn'?'新鲜送达':'ARRIVES FRESH'}</div><div class="cob-tl-date">${esc(n.delivery_date||'')}</div></div>
+    </div>
+    ${tip?`<div class="cob-tip"><span class="cob-tip-dot"></span><span class="cob-tip-text">${tip}</span></div>`:''}
+    <button class="cob-go" id="cobGot">${L==='cn'?'知道了':'Got it'}</button>
+  </div>`;
+  ov.hidden=false;
+  const close=()=>{ov.hidden=true;};
+  ov.onclick=e=>{if(e.target===ov)close();};
+  $('#cobGot').addEventListener('click',close);
 }
 // Points redemption: a single opt-in toggle (server clamps points_to_use to the
 // usable max). Hidden when the customer has no usable points on this order.
@@ -2698,7 +2787,12 @@ const SL_VIEWS=[
 const SL_LIST=['list','list-compact'];
 function slMoney(v){return '¥'+(Number.isInteger(v)?v:v.toFixed(2));}
 function slEff(p){const r=Number(p.price??p.sell_price)||0;const e=Number(p.effective_price)>0?Number(p.effective_price):r;return e;}
-function slImg(p){const u=p.image_url||'';if(u)return u;const d=p.image_data||'';return /^data:image/i.test(d)?d:'';}
+// Card image. The slim list puts the streamed-image URL in image_data (not
+// image_url) and only substitutes the literal 'data:' sentinel when the row's
+// image_data was inline base64 (stripped to save bytes). So: prefer image_url,
+// else use image_data unless it's that bare sentinel. Plain '/...' and full
+// http(s)/data: URLs all render as-is (same origin).
+function slImg(p){const u=p.image_url||'';if(u)return u;const d=p.image_data||'';return (!d||d==='data:')?'':d;}
 function slPickBadge(tags){const t=String(tags||'').toLowerCase();
   if(/\bnew\b/.test(t))return 'NEW';if(/\bpop|popular\b/.test(t))return 'POP';
   if(/\bsale\b/.test(t))return 'SALE';if(/\bhot\b/.test(t))return 'HOT';return '';}
