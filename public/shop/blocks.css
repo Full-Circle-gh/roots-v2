@@ -584,9 +584,10 @@
 /* review carousel — swipeable strip + indicator dots (riso + carousel views).
    Track scrolls and carries its own padding so the riso sticker badge (which
    overflows above the card) and the card's drop-shadow are never clipped. */
-.shop-blocks .sb-rv-track { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: calc(30 * var(--u)) calc(16 * var(--u)) calc(22 * var(--u)); }
+.shop-blocks .sb-rv-track { display: flex; gap: calc(20 * var(--u)); overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-left: calc(16 * var(--u)); -webkit-overflow-scrolling: touch; scrollbar-width: none; padding: calc(30 * var(--u)) calc(16 * var(--u)) calc(22 * var(--u)); }
 .shop-blocks .sb-rv-track::-webkit-scrollbar { display: none; }
-.shop-blocks .sb-rv-slide { flex: 0 0 100%; box-sizing: border-box; scroll-snap-align: start; }
+/* slide is < full width so the next review crops on the right (one at a time) */
+.shop-blocks .sb-rv-slide { flex: 0 0 88%; box-sizing: border-box; scroll-snap-align: start; }
 .shop-blocks .sb-riso-carousel .sb-riso-card { margin-top: calc(4 * var(--u)); }
 .shop-blocks .sb-rv-dots { display: flex; justify-content: center; gap: calc(12 * var(--u)); margin-top: calc(24 * var(--u)); }
 .shop-blocks .sb-rv-dot { width: calc(14 * var(--u)); height: calc(14 * var(--u)); border-radius: 50%; background: rgba(0,0,0,0.18); cursor: pointer; transition: background 0.2s, transform 0.2s; }
