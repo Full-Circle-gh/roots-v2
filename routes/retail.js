@@ -629,6 +629,34 @@ router.get('/api/retail/districts', (req, res) => {
   res.json({ success: true, data: list });
 });
 
+// Maps JavaScript-SDK config for the browser storefront's "Choose on map"
+// address picker (the mini-app uses WeChat's native chooseLocation; the web has
+// no such API, so it loads a real Maps JS SDK in the page). This returns ONLY
+// the public, referer-restricted JS key — never a server WebService key. The
+// actual reverse-geocode / POI search still go through the server endpoints
+// below (which use lib/geocode), so this key only renders the interactive map.
+//
+// Configure ONE of these in .env (the JS key is a DIFFERENT key type than the
+// WebService key used by lib/geocode, and must be domain-whitelisted to the
+// shop's host in the provider console):
+//   • Amap (高德):  AMAP_MAPS_JS_KEY  + AMAP_MAPS_JS_SECURITY (2.0 jscode)
+//   • Tencent (腾讯): TENCENT_MAPS_JS_KEY
+// When none is set the web map button stays hidden and the picker degrades to
+// the region cascade (which still saves correctly).
+router.get('/api/retail/maps-config', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=300');
+  const amapJs    = (process.env.AMAP_MAPS_JS_KEY || '').trim();
+  const amapSec   = (process.env.AMAP_MAPS_JS_SECURITY || '').trim();
+  const tencentJs = (process.env.TENCENT_MAPS_JS_KEY || process.env.TENCENT_MAPS_KEY || '').trim();
+  if (amapJs) {
+    return res.json({ success: true, data: { provider: 'amap', key: amapJs, security: amapSec || '' } });
+  }
+  if (tencentJs) {
+    return res.json({ success: true, data: { provider: 'tencent', key: tencentJs, security: '' } });
+  }
+  res.json({ success: true, data: { provider: null } });
+});
+
 // Store-pickup point list for checkout. Returns only stores flagged
 // pickup_enabled AND is_active, plus the single global pickup window the
 // storefront uses to build selectable time slots. The checkout Pickup tab
@@ -2874,12 +2902,17 @@ function validateAlipayProof(order, ocr, manual) {
     checks.payee = ok;
     if (!ok) reasons.push(`payee ${ocr.payee ? '“' + ocr.payee + '”' : 'unreadable'} doesn’t match “${payeeMatch}”`);
   } else { checks.payee = null; }
-  // 4. recent payment time (skip if window is 0/unset)
+  // 4. recent payment time (skip if window is 0/unset). An unreadable timestamp
+  // is a "couldn't verify", not evidence the payment is wrong — so we only call
+  // it out when it is the *deciding* factor (amount/payee/success all passed).
+  // Otherwise it's just noise next to a concrete mismatch like a wrong amount.
   const win = Number(manual.timeWindowMin || 0);
   if (win > 0) {
     const t = parseBeijingTime(ocr.paid_at || ocr.raw_time_text);
-    if (t == null) { checks.time = false; reasons.push('payment time unreadable'); }
-    else {
+    if (t == null) {
+      checks.time = false;
+      if (checks.success && checks.amount && checks.payee !== false) reasons.push("couldn't read the payment time on the screenshot");
+    } else {
       const ageMin = (Date.now() - t) / 60000;
       checks.time = ageMin >= -10 && ageMin <= win;   // allow 10min clock skew
       if (!checks.time) reasons.push(`payment time ${Math.round(ageMin)}min ago is outside the ${win}min window`);
