@@ -49,10 +49,20 @@ app.set('trust proxy', 1);
 // Security headers. CSP/COEP are intentionally OFF — existing pages use
 // inline scripts and the mini app loads images cross-origin via wx.previewImage.
 // Tighten later by moving inline scripts to files and reviewing CORS surfaces.
+//
+// Referrer-Policy: helmet defaults to `no-referrer`, which strips the Referer
+// from EVERY cross-origin request — including the Amap Maps JS-SDK tile/style
+// calls on the web storefront's checkout map picker. Amap's domain whitelist is
+// referer-based, so a stripped referer returns INVALID_USER_DOMAIN and the map
+// renders blank in all browsers. `strict-origin-when-cross-origin` (the modern
+// browser default) sends only the origin (scheme+host, no path/query) to secure
+// cross-origin destinations, so the whitelist matches while leaking no page
+// paths. Same-origin requests still get the full referer; downgrades send none.
 app.use(helmet({
   contentSecurityPolicy: false,
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: 'cross-origin' },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
 
 // Body parsing
