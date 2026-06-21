@@ -410,6 +410,103 @@
     .poll-opt .po-txt,.poll-opt .po-pct{position:relative;z-index:1;}
     .poll-opt .po-txt{flex:1;font-family:var(--bf-bear);font-size:15px;}
     .poll-opt.on{border-color:var(--accent);}
+
+    /* ════════ Shop — mobile LIST layout (faithful port of the mini-app shop
+         list view: CATEGORIES header · search · view-switcher · dietary chips ·
+         left category rail + grouped product list). Rendered only <768px;
+         desktop keeps its own PC-native grid. Sizes ≈ mini-app rpx × 0.5. ════ */
+    .shoplist{display:flex;flex-direction:column;overflow:hidden;}
+    .sl-hd{padding:18px 22px 8px;text-align:center;}
+    .sl-hd .t{font-family:var(--bf-bear);font-size:21px;letter-spacing:.04em;color:var(--ink);}
+    .sl-search{display:flex;align-items:center;gap:8px;margin:6px 22px 10px;padding:9px 12px;background:#FFFCF7;border:1.5px solid var(--ink);}
+    .sl-search .ic{font-size:15px;opacity:.55;flex:none;}
+    .sl-search input{flex:1;border:0;outline:0;background:transparent;font:inherit;font-size:14px;color:var(--ink);}
+    .sl-search .clr{width:22px;text-align:center;color:var(--olive);font-size:18px;cursor:pointer;flex:none;}
+    .sl-vs{display:flex;justify-content:flex-end;gap:5px;padding:0 22px 6px;}
+    .sl-vs button{width:30px;height:30px;display:flex;align-items:center;justify-content:center;background:transparent;border:1.5px solid rgba(0,0,0,.2);color:var(--olive);font-size:15px;line-height:1;border-radius:0;}
+    .sl-vs button.on{background:var(--ink);border-color:var(--ink);color:var(--lime);}
+    .sl-diet{display:flex;gap:6px;overflow-x:auto;padding:2px 22px 12px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+    .sl-diet::-webkit-scrollbar{display:none;}
+    .sl-diet .c{flex:none;padding:5px 13px;background:rgba(0,0,0,.04);color:var(--olive);border:1.5px solid transparent;border-radius:999px;font-family:var(--bf-toni);font-weight:700;font-size:11px;letter-spacing:.08em;white-space:nowrap;cursor:pointer;}
+    .sl-diet .c.on{background:var(--lime);color:var(--ink);border-color:var(--ink);}
+    .sl-body{flex:1;display:flex;min-height:0;border-top:1.5px solid rgba(0,0,0,.1);}
+    .sl-side{width:92px;flex:none;background:var(--oat);border-right:1.5px solid var(--ink);overflow-y:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+    .sl-side::-webkit-scrollbar{display:none;}
+    .sl-tab{display:flex;align-items:center;justify-content:center;gap:2px;padding:16px 5px;text-align:center;border-bottom:1.5px solid rgba(0,0,0,.08);cursor:pointer;}
+    .sl-tab .lb{font-family:var(--bf-bear);font-size:13px;line-height:1.15;color:var(--ink);}
+    .sl-tab.on{background:var(--lime);}
+    .sl-tab .chev{flex:none;width:10px;text-align:center;color:var(--olive);font-size:13px;line-height:1;}
+    .sl-tab.has-chev::before{content:'';flex:none;width:10px;}
+    .sl-tab.on .chev{color:var(--ink);}
+    .sl-back{display:flex;align-items:center;justify-content:center;gap:4px;padding:14px 6px;background:var(--olive);cursor:pointer;}
+    .sl-back .cv{color:var(--oat);font-size:18px;line-height:1;}
+    .sl-back .tx{color:var(--oat);font-size:10px;letter-spacing:.04em;font-family:var(--bf-bear);}
+    .sl-parent{padding:9px 6px 7px;text-align:center;font-size:10px;letter-spacing:.14em;color:var(--olive);border-bottom:1.5px solid rgba(0,0,0,.12);font-family:var(--bf-toni);text-transform:uppercase;}
+    .sl-main{flex:1;min-width:0;background:#FFFCF7;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative;}
+    .sl-sec+.sl-sec{border-top:6px solid var(--oat);}
+    .sl-gh{padding:14px 16px 7px;display:flex;align-items:baseline;justify-content:space-between;}
+    .sl-gh .k{font-family:var(--bf-toni);font-size:11px;letter-spacing:.2em;color:var(--olive);text-transform:uppercase;}
+    .sl-gh .n{font-family:var(--bf-gothic);font-size:19px;color:var(--olive);letter-spacing:.04em;}
+    .sl-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1.5px solid rgba(0,0,0,.08);cursor:pointer;}
+    .sl-row.compact{padding:16px;gap:0;}
+    .sl-img{width:88px;height:106px;flex:none;background:var(--oat);overflow:hidden;position:relative;}
+    .sl-img img{width:100%;height:100%;object-fit:cover;display:block;}
+    .sl-rb{flex:1;min-width:0;}
+    .sl-nm{font-family:var(--bf-bear);font-size:15px;line-height:1.35;color:var(--ink);}
+    .sl-row.compact .sl-nm{font-size:17px;}
+    .sl-sub{font-family:var(--bf-yuan);font-size:11px;color:var(--olive);margin-top:4px;line-height:1.35;}
+    .sl-sold{margin-top:3px;font-weight:700;font-size:9px;letter-spacing:.12em;color:var(--olive);font-family:var(--bf-toni);}
+    .sl-bd{display:inline-block;margin-top:7px;background:var(--ink);color:var(--lime);padding:3px 7px;font-size:11px;letter-spacing:.08em;font-family:var(--bf-gothic);line-height:1;}
+    .sl-flash{display:inline-block;margin-top:7px;background:var(--berry);color:#fff;font-weight:700;padding:3px 7px;font-size:11px;letter-spacing:.08em;font-family:var(--bf-toni);line-height:1;}
+    .sl-flash+.sl-bd{margin-left:5px;}
+    .sl-vh{display:inline-block;margin-top:9px;padding:2px 9px;background:var(--lime);color:var(--ink);border-radius:999px;font-size:9px;font-weight:700;font-family:var(--bf-toni);letter-spacing:.04em;line-height:1.3;}
+    .sl-vh+.sl-bd,.sl-vh+.sl-flash{margin-left:5px;}
+    .sl-oos{display:inline-block;margin-top:5px;margin-left:4px;background:rgba(0,0,0,.1);color:var(--olive);padding:1px 7px;font-size:10px;letter-spacing:.1em;font-family:var(--bf-toni);line-height:1.4;}
+    .sl-oos.batch{background:rgba(54,83,41,.12);color:var(--forest);}
+    .sl-rr{text-align:right;min-width:44px;display:flex;flex-direction:column;align-items:flex-end;flex:none;}
+    .sl-ps{display:flex;align-items:baseline;justify-content:flex-end;gap:4px;}
+    .sl-pre{font-size:9px;color:var(--olive);font-family:var(--bf-toni);line-height:1;}
+    .sl-was{font-size:11px;color:rgba(0,0,0,.4);text-decoration:line-through;line-height:1;}
+    .sl-pr{font-family:var(--bf-bear);font-size:16px;color:var(--ink);letter-spacing:.04em;line-height:1;}
+    .sl-pr.flash{color:var(--berry);font-weight:700;}
+    .sl-plus{position:relative;width:26px;height:26px;background:var(--ink);color:var(--lime);margin-top:8px;font-size:0;flex:none;}
+    .sl-plus::before,.sl-plus::after{content:"";position:absolute;top:50%;left:50%;background:currentColor;transform:translate(-50%,-50%);}
+    .sl-plus::before{width:13px;height:2.5px;}
+    .sl-plus::after{width:2.5px;height:13px;}
+    /* grid + compact-grid modes inside the right pane */
+    .sl-grid{display:grid;gap:16px;padding:12px 16px;}
+    .sl-grid.g2{grid-template-columns:1fr 1fr;}
+    .sl-grid.g3{grid-template-columns:1fr 1fr 1fr;gap:9px;padding:12px;}
+    .sl-card{display:flex;flex-direction:column;cursor:pointer;}
+    .sl-ci{width:100%;aspect-ratio:4/5;background:var(--oat);overflow:hidden;position:relative;}
+    .sl-ci img{width:100%;height:100%;object-fit:cover;display:block;}
+    .sl-card .cn{font-family:var(--bf-bear);font-size:14px;line-height:1.2;margin-top:9px;color:var(--ink);}
+    .sl-grid.g3 .sl-card .cn{font-size:12px;}
+    .sl-cfoot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:auto;padding-top:5px;}
+    .sl-cbadge{position:absolute;top:6px;left:6px;background:var(--ink);color:var(--lime);padding:1px 7px;font-size:10px;letter-spacing:.08em;font-family:var(--bf-gothic);}
+    .sl-cflash{position:absolute;top:6px;left:6px;background:var(--berry);color:#fff;font-weight:700;padding:2px 7px;font-size:10px;letter-spacing:.06em;font-family:var(--bf-toni);}
+    .sl-coos{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.75);color:#fff;text-align:center;padding:4px 0;font-size:10px;letter-spacing:.12em;font-family:var(--bf-toni);}
+    .sl-coos.batch{background:var(--forest);}
+    .sl-empty{padding:60px 22px;text-align:center;}
+    .sl-empty .et{font-family:var(--bf-bear);font-size:18px;color:var(--ink);}
+    .sl-empty .es{font-size:13px;color:var(--olive);margin-top:6px;}
+    .sl-skel{height:120px;margin:14px 16px;background:linear-gradient(90deg,rgba(0,0,0,.05),rgba(0,0,0,.09),rgba(0,0,0,.05));background-size:200% 100%;animation:slShimmer 1.2s infinite;}
+    @keyframes slShimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
+    /* variant size-picker sheet */
+    .sl-vpmask{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:80;display:flex;align-items:flex-end;}
+    .sl-vp{background:var(--oat);width:100%;max-height:76vh;overflow-y:auto;border-top:2px solid var(--ink);padding-bottom:env(safe-area-inset-bottom);}
+    .sl-vp-h{display:flex;align-items:flex-start;justify-content:space-between;padding:18px 18px 8px;}
+    .sl-vp-t{font-family:var(--bf-bear);font-size:18px;color:var(--ink);}
+    .sl-vp-n{font-family:var(--bf-yuan);font-size:13px;color:var(--olive);margin-top:2px;}
+    .sl-vp-x{font-size:24px;color:var(--olive);line-height:1;cursor:pointer;padding:0 4px;}
+    .sl-vp-o{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 18px;border-top:1.5px solid rgba(0,0,0,.1);cursor:pointer;}
+    .sl-vp-o.sold{opacity:.45;}
+    .sl-vp-lb{font-family:var(--bf-bear);font-size:15px;color:var(--ink);}
+    .sl-vp-wt{font-family:var(--bf-toni);font-size:11px;color:var(--olive);margin-left:6px;}
+    .sl-vp-low{font-family:var(--bf-toni);font-size:10px;color:var(--berry);margin-left:6px;}
+    .sl-vp-ps{display:flex;align-items:baseline;gap:6px;flex:none;}
+    .sl-vp-was{font-size:11px;color:rgba(0,0,0,.4);text-decoration:line-through;}
+    .sl-vp-pr{font-family:var(--bf-bear);font-size:16px;color:var(--ink);}
   </style>
   <nav class="tabbar" id="tabbar" hidden aria-label="Primary">
     <a class="tabitem" data-tab="home" href="#/">
@@ -1327,7 +1424,7 @@ async function openMapPicker(){
       if(cfg.provider!=='amap'||!window.AMap){ resolve(null); return; }
       try{
         AMap.plugin('AMap.Geolocation',()=>{
-          const geo=new AMap.Geolocation({enableHighAccuracy:true,timeout:8000});
+          const geo=new AMap.Geolocation({enableHighAccuracy:true,timeout:8000,GeoLocationFirst:true,convert:true});
           geo.getCurrentPosition((status,result)=>{
             const p=result&&result.position;
             if(status==='complete'&&p&&isFinite(p.lat)&&isFinite(p.lng))resolve({lat:p.lat,lng:p.lng});
@@ -2515,6 +2612,9 @@ async function renderHomeAuto(){
 
 /* ════════════ SHOP ════════════ */
 async function renderShop(params){
+  // Mobile (<768px): faithful mini-app LIST layout (left rail + grouped list).
+  // Desktop keeps its own PC-native responsive grid below.
+  if(window.matchMedia('(max-width:767px)').matches) return renderShopList(params);
   const view=$('#view');
   const cat=params.get('cat')||'';
   const q=params.get('q')||'';
@@ -2571,6 +2671,470 @@ async function renderShop(params){
   }catch(e){ $('#shopGrid').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
 }
 function catLabelByName(name){const c=state.cats.find(x=>x.name===name);return c?catLabel(c):name;}
+
+/* ════════════ SHOP — MOBILE LIST LAYOUT (mini-app parity) ════════════ */
+/* A faithful web port of miniapp/pages/shop (list view): CATEGORIES header,
+   search, 4-way view-switcher, dietary chips, a left category rail that drills
+   into subcategories, and a scroll-synced grouped product list. Quick-add +
+   button and the variant size-picker mirror the mini-app. */
+const SL = {
+  prods:[], sections:[], visible:[], members:{},
+  layout:'list', diet:'', q:'',
+  drill:'', drillLabel:'', subTabs:[], activeCat:'', activeSub:'',
+  suppress:0, offsets:[], vpRep:null, _searchT:null, _scrollT:null,
+};
+const SL_DIET=[
+  {key:'gluten',en:'GLUTEN FREE',cn:'无麸质'},
+  {key:'nuts',  en:'NUT FREE',   cn:'无坚果'},
+  {key:'soy',   en:'SOY FREE',   cn:'无大豆'},
+  {key:'5spice',en:'5-SPICE FREE',cn:'无五香'},
+];
+const SL_VIEWS=[
+  {key:'list',        icon:'☰'},
+  {key:'list-compact',icon:'≡'},
+  {key:'grid-2col',   icon:'⊞'},
+  {key:'grid-3col',   icon:'⊟'},
+];
+const SL_LIST=['list','list-compact'];
+function slMoney(v){return '¥'+(Number.isInteger(v)?v:v.toFixed(2));}
+function slEff(p){const r=Number(p.price??p.sell_price)||0;const e=Number(p.effective_price)>0?Number(p.effective_price):r;return e;}
+function slImg(p){const u=p.image_url||'';if(u)return u;const d=p.image_data||'';return /^data:image/i.test(d)?d:'';}
+function slPickBadge(tags){const t=String(tags||'').toLowerCase();
+  if(/\bnew\b/.test(t))return 'NEW';if(/\bpop|popular\b/.test(t))return 'POP';
+  if(/\bsale\b/.test(t))return 'SALE';if(/\bhot\b/.test(t))return 'HOT';return '';}
+
+// Collapse variant siblings (same variant_group_id) into one card — mirror of
+// the mini-app _collapseVariants. The representative is the group owner.
+function slCollapse(raw){
+  const groups=new Map();
+  for(const p of raw){if(!p.variant_group_id)continue;
+    if(!groups.has(p.variant_group_id))groups.set(p.variant_group_id,[]);
+    groups.get(p.variant_group_id).push(p);}
+  const emitted=new Set(),out=[];
+  for(const p of raw){
+    const gid=p.variant_group_id;const members=gid?groups.get(gid):null;
+    if(!members||members.length<2){out.push(p);continue;}
+    if(emitted.has(gid))continue;emitted.add(gid);
+    const sorted=members.slice().sort((a,b)=>
+      ((a.variant_sort??0)-(b.variant_sort??0))||
+      String(a.variant_label||'').localeCompare(String(b.variant_label||''))||
+      (a.id-b.id));
+    const rep=sorted.find(m=>m.id===gid)||sorted[0];
+    out.push({...rep,_members:sorted});
+  }
+  return out;
+}
+
+// Product → display row. Browse-time stock verdict mirrors the existing web
+// stockState()/oosBackorder(): strict sold-out is a hard SOLD OUT; a backorder
+// (or batch-meal) item stays orderable as SHIPS SOON / NEXT BATCH.
+function slToRows(products){
+  const L=state.lang;
+  return products.map(p=>{
+    const members=p._members||null;
+    const regular=Number(p.price??p.sell_price)||0;
+    const eff=slEff(p);
+    const isFlash=!members&&!!p.is_on_flash&&eff<regular;
+    let price,priceWas='',pricePrefix='',outOfStock=false,nextBatch=false,soldUnits=0,subline='';
+    if(members){
+      const prices=members.map(slEff).filter(v=>v>0);
+      const minP=prices.length?Math.min(...prices):0;
+      const allSame=prices.length>0&&prices.every(v=>v===minP);
+      price=minP>0?slMoney(minP):'—';
+      pricePrefix=(minP>0&&!allSame)?(L==='cn'?'起':'from'):'';
+      const allOut=members.every(m=>m.stock!=null&&Number(m.stock)<=0);
+      const anyBack=members.some(m=>oosBackorder(m));
+      nextBatch=allOut&&anyBack;outOfStock=allOut&&!anyBack;
+      soldUnits=members.reduce((s,m)=>s+(Number(m.units_sold)||0),0);
+    }else{
+      const sn=p.stock==null?null:Number(p.stock);
+      const out=sn!=null&&sn<=0;
+      nextBatch=out&&oosBackorder(p);outOfStock=out&&!oosBackorder(p);
+      soldUnits=Number(p.units_sold||p.sold_count||0);
+      price=eff>0?slMoney(eff):'—';
+      const cmp=Number(p.compare_at_price)||0;
+      const wasN=isFlash?regular:(cmp>eff&&eff>0?cmp:0);
+      priceWas=wasN>0?slMoney(wasN):'';
+      subline=(p.size||'').toString().trim();
+    }
+    const batchTxt=p.is_batch_made?(L==='cn'?'下批现做':'NEXT BATCH'):(L==='cn'?'现订现发':'SHIPS SOON');
+    return {id:p.id,name:pick(p.name_en,p.name_cn),subline,badge:slPickBadge(p.tags),
+      soldCaption:soldUnits>0?(L==='cn'?'已售 '+soldUnits:soldUnits+' SOLD'):'',
+      outOfStock,nextBatch,batchTxt,oosLabel:state.lang==='cn'?'售罄':'SOLD OUT',
+      image:slImg(p),price,priceWas,pricePrefix,isFlash,
+      hasVariants:!!members,variantHint:members?(L==='cn'?members.length+' 规格':members.length+' sizes'):''};
+  });
+}
+
+// Build top-category sections (rail entries + scroll anchors), each holding
+// subcategory groups — mirror of the mini-app _buildSections.
+function slBuildSections(display,tree){
+  const L=state.lang,pad=n=>(n<10?'0'+n:String(n));
+  const byTop=new Map(),orphans=[];
+  for(const p of display){
+    const top=p.top_category;
+    if(!top){orphans.push(p);continue;}
+    if(!byTop.has(top))byTop.set(top,new Map());
+    const subMap=byTop.get(top);
+    const key=p.subcategory||'__nosub__';
+    if(!subMap.has(key))subMap.set(key,[]);
+    subMap.get(key).push(p);
+  }
+  const sections=[];
+  (tree||[]).forEach((top,ti)=>{
+    const subMap=byTop.get(top.name);
+    if(!subMap)return;
+    const groups=[];let gi=0;
+    for(const sub of (top.subs||[])){
+      const items=subMap.get(sub.name);
+      if(!items||!items.length)continue;
+      groups.push({id:`top${ti}-g${gi++}`,label:((L==='cn'?sub.name_cn:sub.name)||sub.name).toUpperCase(),
+        items:slToRows(items),countStr:pad(items.length)});
+      subMap.delete(sub.name);
+    }
+    for(const [key,items] of subMap){
+      if(!items.length)continue;
+      groups.push({id:`top${ti}-g${gi++}`,
+        label:key==='__nosub__'?(L==='cn'?'更多':'MORE'):key.toUpperCase(),
+        items:slToRows(items),countStr:pad(items.length)});
+    }
+    if(!groups.length)return;
+    sections.push({id:`top${ti}`,name:top.name,
+      label:((L==='cn'?top.name_cn:top.name)||top.name).toUpperCase(),
+      drillable:groups.length>=2,groups});
+  });
+  if(orphans.length){
+    sections.push({id:'other',name:'__other__',label:L==='cn'?'其他':'OTHER',drillable:false,
+      groups:[{id:'other-g0',label:'',items:slToRows(orphans),countStr:pad(orphans.length)}]});
+  }
+  return sections;
+}
+
+async function renderShopList(params){
+  const view=$('#view');
+  SL.q=params.get('q')||'';
+  SL.diet='';SL.drill='';SL.drillLabel='';SL.subTabs=[];SL.activeCat='';SL.activeSub='';
+  SL._pendingCat=params.get('cat')||'';
+  // restore saved view preference
+  try{const sv=localStorage.getItem('shop_layout_pref');if(sv&&SL_VIEWS.some(v=>v.key===sv))SL.layout=sv;}catch{}
+  view.innerHTML=`<div class="shoplist" id="slRoot">
+    <div class="sl-hd"><div class="t">${state.lang==='cn'?'分类':'CATEGORIES'}</div></div>
+    <div class="sl-search">
+      <span class="ic">🔍</span>
+      <input id="slSearch" type="search" value="${escAttr(SL.q)}" placeholder="${state.lang==='cn'?'搜索…':'Search the pantry…'}" autocomplete="off">
+      <span class="clr" id="slClear" ${SL.q?'':'hidden'}>×</span>
+    </div>
+    <div class="sl-vs" id="slVs">${SL_VIEWS.map(v=>`<button data-k="${v.key}" class="${SL.layout===v.key?'on':''}">${v.icon}</button>`).join('')}</div>
+    <div class="sl-diet" id="slDiet">${SL_DIET.map(d=>`<span class="c" data-k="${d.key}">${state.lang==='cn'?d.cn:d.en}</span>`).join('')}</div>
+    <div class="sl-body">
+      <div class="sl-side" id="slSide"></div>
+      <div class="sl-main" id="slMain"><div class="sl-skel"></div><div class="sl-skel"></div><div class="sl-skel"></div></div>
+    </div>
+  </div>`;
+  slFit();
+  // wire controls
+  const si=$('#slSearch');
+  si.addEventListener('input',e=>{
+    SL.q=e.target.value;$('#slClear').hidden=!SL.q;
+    clearTimeout(SL._searchT);SL._searchT=setTimeout(slRefresh,300);
+  });
+  $('#slClear').onclick=()=>{SL.q='';si.value='';$('#slClear').hidden=true;slRefresh();};
+  $('#slVs').onclick=e=>{const b=e.target.closest('button');if(!b)return;
+    const k=b.dataset.k;if(!k||k===SL.layout)return;SL.layout=k;
+    try{localStorage.setItem('shop_layout_pref',k);}catch{}
+    $('#slVs').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.k===k));
+    slRenderMain();};
+  $('#slDiet').onclick=e=>{const c=e.target.closest('.c');if(!c)return;
+    const k=c.dataset.k;SL.diet=(SL.diet===k?'':k);
+    $('#slDiet').querySelectorAll('.c').forEach(x=>x.classList.toggle('on',x.dataset.k===SL.diet&&SL.diet));
+    slRefresh();};
+  $('#slMain').addEventListener('scroll',()=>{
+    clearTimeout(SL._scrollT);SL._scrollT=setTimeout(slOnScroll,40);
+  },{passive:true});
+  if(!SL._resizeBound){SL._resizeBound=true;window.addEventListener('resize',slFit);}
+  await slRefresh();
+}
+
+// Re-size the list body to fill the viewport between the slim top bar and the
+// bottom tab bar so the rail + list scroll internally (mini-app feel).
+function slFit(){
+  const root=$('#slRoot');if(!root)return;
+  const mtop=document.getElementById('mtop');
+  const topH=(mtop&&!mtop.hidden)?mtop.offsetHeight:0;
+  const tb=document.getElementById('tabbar');
+  const tab=(tb&&!tb.hidden)?tb.offsetHeight:56;   // fill exactly to the tab bar top
+  root.style.height=(window.innerHeight-topH-tab)+'px';
+}
+
+async function slRefresh(){
+  const main=$('#slMain');if(main&&!SL.prods.length)main.innerHTML='<div class="sl-skel"></div><div class="sl-skel"></div><div class="sl-skel"></div>';
+  try{
+    const qp=new URLSearchParams();qp.set('slim','1');qp.set('limit','500');
+    if(SL.q)qp.set('q',SL.q);
+    const r=await fetch('/api/retail/products?'+qp.toString()).then(x=>x.json());
+    let raw=(r&&r.data)||[];
+    if(SL.diet){
+      raw=raw.filter(p=>{const tags=(p.free_of||'').split(',').map(s=>s.trim());return tags.includes(SL.diet);});
+    }
+    SL.prods=raw;
+    const display=slCollapse(raw);
+    SL.members={};for(const p of display)if(p._members)SL.members[p.id]=p._members;
+    SL.sections=slBuildSections(display,state.cats);
+    // preserve an active drill across refresh; drop if it emptied out
+    if(SL.drill){
+      const sec=SL.sections.find(s=>s.name===SL.drill);
+      if(sec){SL.visible=[sec];SL.subTabs=sec.groups.map(g=>({id:g.id,label:g.label}));SL.drillLabel=sec.label;}
+      else{SL.drill='';SL.drillLabel='';SL.subTabs=[];SL.visible=SL.sections;}
+    }else SL.visible=SL.sections;
+    slRenderSide();slRenderMain();
+    // honour a pending category deep-link (from a home category tile)
+    if(SL._pendingCat){
+      const sec=SL.sections.find(s=>s.name===SL._pendingCat);
+      SL._pendingCat='';
+      if(sec){if(sec.drillable)slDrillInto(sec.name);else slScrollToSection(sec.id);}
+    }
+  }catch(e){
+    const main=$('#slMain');if(main)main.innerHTML=`<div class="sl-empty"><div class="et">${state.lang==='cn'?'加载失败':'Could not load'}</div><div class="es">${esc(e.message)}</div></div>`;
+  }
+}
+
+function slRenderSide(){
+  const side=$('#slSide');if(!side)return;
+  const seeAll=state.lang==='cn'?'全部':'ALL';
+  let html;
+  if(!SL.drill){
+    html=`<div class="sl-tab ${!SL.activeCat?'on':''}" data-name=""><span class="lb">${seeAll}</span></div>`+
+      SL.sections.map(s=>`<div class="sl-tab ${s.drillable?'has-chev':''} ${SL.activeCat===s.name?'on':''}" data-name="${escAttr(s.name)}"><span class="lb">${esc(s.label)}</span>${s.drillable?'<span class="chev">›</span>':''}</div>`).join('');
+  }else{
+    html=`<div class="sl-back" id="slBack"><span class="cv">‹</span><span class="tx">${state.lang==='cn'?'全部分类':'ALL CATEGORIES'}</span></div>`+
+      `<div class="sl-parent">${esc(SL.drillLabel)}</div>`+
+      `<div class="sl-tab ${!SL.activeSub?'on':''}" data-sub=""><span class="lb">${seeAll}</span></div>`+
+      SL.subTabs.map(g=>`<div class="sl-tab ${SL.activeSub===g.id?'on':''}" data-sub="${g.id}"><span class="lb">${esc(g.label)}</span></div>`).join('');
+  }
+  side.innerHTML=html;
+  side.onclick=e=>{
+    const back=e.target.closest('#slBack');if(back){slDrillBack();return;}
+    const tab=e.target.closest('.sl-tab');if(!tab)return;
+    if(tab.dataset.sub!==undefined){slSetSub(tab.dataset.sub);return;}
+    const name=tab.dataset.name||'';
+    const sec=name?SL.sections.find(s=>s.name===name):null;
+    if(sec&&sec.drillable){slDrillInto(name);return;}
+    slSetActive(name);
+    if(!name){$('#slMain').scrollTo({top:0,behavior:'smooth'});}
+    else if(sec){slScrollToSection(sec.id);}
+  };
+}
+
+// One product row (list / list-compact).
+function slRowHtml(it,compact){
+  const flags=[];
+  if(it.isFlash)flags.push(`<span class="sl-flash">${state.lang==='cn'?'秒杀':'FLASH'}</span>`);
+  if(it.badge)flags.push(`<span class="sl-bd">${it.badge}</span>`);
+  const oos=it.outOfStock?`<span class="sl-oos">${it.oosLabel}</span>`
+    :it.nextBatch?`<span class="sl-oos batch">${it.batchTxt}</span>`:'';
+  return `<div class="sl-row ${compact?'compact':''}" data-id="${it.id}">
+    ${compact?'':`<div class="sl-img">${it.image?`<img src="${escAttr(it.image)}" alt="" loading="lazy">`:''}</div>`}
+    <div class="sl-rb">
+      <div class="sl-nm">${esc(it.name)}</div>
+      ${it.subline?`<div class="sl-sub">${esc(it.subline)}</div>`:''}
+      ${it.hasVariants?`<span class="sl-vh">${esc(it.variantHint)}</span>`:''}
+      ${it.soldCaption?`<div class="sl-sold">${esc(it.soldCaption)}</div>`:''}
+      ${flags.join('')}
+      ${oos}
+    </div>
+    <div class="sl-rr">
+      <div class="sl-ps">
+        ${it.priceWas?`<span class="sl-was">${it.priceWas}</span>`:''}
+        ${it.pricePrefix?`<span class="sl-pre">${it.pricePrefix}</span>`:''}
+        <span class="sl-pr ${it.isFlash?'flash':''}">${it.price}</span>
+      </div>
+      ${(!it.outOfStock&&!it.nextBatch)?`<div class="sl-plus" data-add="${it.id}"></div>`:''}
+    </div>
+  </div>`;
+}
+
+// One product card (grid-2col / grid-3col).
+function slCardHtml(it){
+  const veil=it.outOfStock?`<span class="sl-coos">${it.oosLabel}</span>`
+    :it.nextBatch?`<span class="sl-coos batch">${it.batchTxt}</span>`:'';
+  return `<div class="sl-card" data-id="${it.id}">
+    <div class="sl-ci">
+      ${it.image?`<img src="${escAttr(it.image)}" alt="" loading="lazy">`:''}
+      ${it.isFlash?`<span class="sl-cflash">${state.lang==='cn'?'秒杀':'FLASH'}</span>`:it.badge?`<span class="sl-cbadge">${it.badge}</span>`:''}
+      ${veil}
+    </div>
+    <div class="cn">${esc(it.name)}</div>
+    ${it.hasVariants?`<span class="sl-vh">${esc(it.variantHint)}</span>`:''}
+    <div class="sl-cfoot">
+      <div class="sl-ps">
+        ${it.priceWas?`<span class="sl-was">${it.priceWas}</span>`:''}
+        ${it.pricePrefix?`<span class="sl-pre">${it.pricePrefix}</span>`:''}
+        <span class="sl-pr ${it.isFlash?'flash':''}">${it.price}</span>
+      </div>
+      ${(!it.outOfStock&&!it.nextBatch)?`<div class="sl-plus" data-add="${it.id}"></div>`:''}
+    </div>
+  </div>`;
+}
+
+function slRenderMain(){
+  const main=$('#slMain');if(!main)return;
+  if(!SL.sections.length){
+    main.innerHTML=`<div class="sl-empty"><div class="et">${state.lang==='cn'?'暂无商品':'No products yet.'}</div><div class="es">${state.lang==='cn'?'请稍后再来':'Check back soon.'}</div></div>`;
+    return;
+  }
+  const isList=SL_LIST.includes(SL.layout);
+  const compact=SL.layout==='list-compact';
+  const gcls=SL.layout==='grid-3col'?'g3':'g2';
+  const html=SL.visible.map(sec=>`<div class="sl-sec" id="slsec-${sec.id}">`+
+    sec.groups.map(g=>{
+      const head=g.label?`<div class="sl-gh"><span class="k">${esc(g.label)}</span><span class="n">${g.countStr}</span></div>`:'';
+      const body=isList
+        ? g.items.map(it=>slRowHtml(it,compact)).join('')
+        : `<div class="sl-grid ${gcls}">${g.items.map(slCardHtml).join('')}</div>`;
+      return `<div class="sl-grp" data-gid="${g.id}">${head}${body}</div>`;
+    }).join('')+`</div>`).join('');
+  main.innerHTML=html;
+  main.scrollTop=0;
+  main.onclick=e=>{
+    const plus=e.target.closest('[data-add]');
+    if(plus){e.stopPropagation();slAdd(Number(plus.dataset.add));return;}
+    const node=e.target.closest('[data-id]');
+    if(node)location.hash='#/product/'+node.dataset.id;
+  };
+  // measure section offsets for scroll-sync
+  setTimeout(slMeasure,60);
+}
+
+function slMeasure(){
+  const main=$('#slMain');if(!main)return;
+  SL.offsets=SL.visible.map(sec=>{
+    const el=document.getElementById('slsec-'+sec.id);
+    return {id:sec.id,name:sec.name,top:el?el.offsetTop:0};
+  });
+}
+
+function slOnScroll(){
+  if(SL.suppress&&Date.now()<SL.suppress)return;
+  const main=$('#slMain');if(!main||!SL.offsets.length)return;
+  const cutoff=main.scrollTop+Math.max(60,main.clientHeight*0.28);
+  if(SL.drill){slSyncSub(cutoff);return;}  // highlight active subcategory
+  if(main.scrollTop<=2){if(SL.activeCat!=='')slSetActive('',true);return;}
+  if(cutoff<SL.offsets[0].top){if(SL.activeCat!=='')slSetActive('',true);return;}
+  let name=SL.offsets[0].name;
+  for(const s of SL.offsets){if(s.top<=cutoff)name=s.name;else break;}
+  if(name!==SL.activeCat)slSetActive(name,true);
+}
+
+function slSetActive(name,fromScroll){
+  SL.activeCat=name;
+  const side=$('#slSide');if(!side)return;
+  side.querySelectorAll('.sl-tab').forEach(t=>t.classList.toggle('on',(t.dataset.name||'')===name));
+  if(fromScroll){
+    const on=side.querySelector('.sl-tab.on');
+    if(on)on.scrollIntoView({block:'nearest'});
+  }
+}
+
+function slScrollToSection(id){
+  const main=$('#slMain');const el=document.getElementById('slsec-'+id);
+  if(!main||!el)return;
+  SL.suppress=Date.now()+500;
+  main.scrollTo({top:el.offsetTop,behavior:'smooth'});
+  const sec=SL.sections.find(s=>s.id===id);
+  if(sec)slSetActive(sec.name,true);
+}
+
+// ── Drill in / out ──────────────────────────────────────────────────
+function slDrillInto(name){
+  const sec=SL.sections.find(s=>s.name===name);if(!sec)return;
+  SL.drill=name;SL.drillLabel=sec.label;SL.subTabs=sec.groups.map(g=>({id:g.id,label:g.label}));
+  SL.activeCat=name;SL.activeSub='';SL.visible=[sec];
+  SL.suppress=Date.now()+600;
+  slRenderSide();slRenderMain();
+}
+function slDrillBack(){
+  const prev=SL.drill;
+  SL.drill='';SL.drillLabel='';SL.subTabs=[];SL.activeSub='';SL.visible=SL.sections;
+  SL.suppress=Date.now()+600;
+  slRenderSide();slRenderMain();
+  setTimeout(()=>{const sec=SL.sections.find(s=>s.name===prev);if(sec){slMeasure();slScrollToSection(sec.id);}},120);
+}
+// Sub-rail: scroll the right pane to a subcategory group heading.
+function slSetSub(gid){
+  SL.activeSub=gid||'';
+  const side=$('#slSide');if(side)side.querySelectorAll('.sl-tab').forEach(t=>t.classList.toggle('on',(t.dataset.sub||'')===(gid||'')));
+  const main=$('#slMain');if(!main)return;
+  SL.suppress=Date.now()+500;
+  if(!gid){main.scrollTo({top:0,behavior:'smooth'});return;}
+  const el=main.querySelector(`[data-gid="${gid}"]`);
+  if(el)main.scrollTo({top:el.offsetTop,behavior:'smooth'});
+}
+function slSyncSub(cutoff){
+  const main=$('#slMain');if(!main)return;
+  if(main.scrollTop<=2){if(SL.activeSub!==''){SL.activeSub='';slMarkSub('');}return;}
+  let active='';
+  for(const g of SL.subTabs){
+    const el=main.querySelector(`[data-gid="${g.id}"]`);
+    if(el&&el.offsetTop<=cutoff)active=g.id;else if(el)break;
+  }
+  if(active!==SL.activeSub){SL.activeSub=active;slMarkSub(active);}
+}
+function slMarkSub(gid){
+  const side=$('#slSide');if(!side)return;
+  side.querySelectorAll('.sl-tab').forEach(t=>t.classList.toggle('on',(t.dataset.sub||'')===(gid||'')));
+  const on=side.querySelector('.sl-tab.on');if(on)on.scrollIntoView({block:'nearest'});
+}
+
+// ── Quick-add + variant size-picker ─────────────────────────────────
+function slAdd(id){
+  const members=SL.members&&SL.members[id];
+  if(members&&members.length>1){slOpenVp(id,members);return;}
+  const raw=(SL.prods||[]).find(p=>Number(p.id)===Number(id));
+  if(!raw)return;
+  if(raw.has_options){location.hash='#/product/'+id;return;}  // needs a choice → PDP
+  slAddRaw(raw);
+}
+function slAddRaw(raw){
+  const price=slEff(raw);
+  cartAdd({product_id:raw.id,qty:1,choices:[],
+    name:pick(raw.name_en,raw.name_cn),
+    price,image:slImg(raw),size:raw.size||'',optLabel:''});
+  toast(state.lang==='cn'?'已加入 🌱':'Added 🌱');
+}
+function slOpenVp(repId,members){
+  const L=state.lang;SL.vpRep=repId;
+  const opts=members.map(m=>{
+    const regular=Number(m.price??m.sell_price)||0,eff=slEff(m);
+    const isFlash=!!m.is_on_flash&&eff<regular;
+    const cmp=Number(m.compare_at_price)||0;
+    const wasN=isFlash?regular:(cmp>eff&&eff>0?cmp:0);
+    const stock=m.stock==null?null:Number(m.stock);
+    const soldOut=stock!=null&&stock<=0;
+    const label=pick(m.variant_label,m.variant_label_cn)||pick(m.name_en,m.name_cn)||('#'+m.id);
+    return {id:m.id,label,weight:(m.size||'').toString().trim(),
+      price:eff>0?slMoney(eff):'',priceWas:wasN>0?slMoney(wasN):'',isFlash,soldOut,
+      low:(!soldOut&&stock!=null&&stock<=5)?(L==='cn'?`仅剩 ${stock}`:`Only ${stock} left`):''};
+  });
+  const rep=(SL.prods||[]).find(p=>Number(p.id)===Number(repId));
+  const mask=document.createElement('div');mask.className='sl-vpmask';mask.id='slVpMask';
+  mask.innerHTML=`<div class="sl-vp">
+    <div class="sl-vp-h"><div>
+      <div class="sl-vp-t">${L==='cn'?'选择规格':'Choose a size'}</div>
+      ${rep?`<div class="sl-vp-n">${esc(pick(rep.name_en,rep.name_cn))}</div>`:''}
+    </div><div class="sl-vp-x" id="slVpX">×</div></div>
+    ${opts.map(o=>`<div class="sl-vp-o ${o.soldOut?'sold':''}" data-id="${o.id}">
+      <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}</div>
+      <div class="sl-vp-ps">${o.priceWas?`<span class="sl-vp-was">${o.priceWas}</span>`:''}<span class="sl-vp-pr">${o.price}</span></div>
+    </div>`).join('')}
+  </div>`;
+  document.body.appendChild(mask);
+  mask.addEventListener('click',e=>{
+    if(e.target===mask||e.target.id==='slVpX'){mask.remove();return;}
+    const o=e.target.closest('.sl-vp-o');if(!o||o.classList.contains('sold'))return;
+    const m=(SL.members[repId]||[]).find(x=>Number(x.id)===Number(o.dataset.id));
+    if(m){mask.remove();slAddRaw(m);}
+  });
+}
 
 /* ════════════ PRODUCT CARD ════════════ */
 // Effective out-of-stock policy — mirror of effectiveOosPolicy() on the server.
