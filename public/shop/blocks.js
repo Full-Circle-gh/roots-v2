@@ -110,6 +110,15 @@
   }
 
   function pad2(n) { return String(n).padStart(2, '0'); }
+  // Wrap pre-rendered review cards in a swipeable, autoplaying carousel with
+  // indicator dots. Hydrated by initCarousels() after render.
+  function rvCarousel(cards, extraClass) {
+    var slides = cards.map(function (c) { return '<div class="sb-rv-slide">' + c + '</div>'; }).join('');
+    var dots = cards.map(function (_, i) { return '<span class="sb-rv-dot' + (i === 0 ? ' on' : '') + '" data-rv-go="' + i + '"></span>'; }).join('');
+    return '<div class="sb-rv-carousel ' + (extraClass || '') + '" data-rv-carousel>' +
+      '<div class="sb-rv-track">' + slides + '</div></div>' +
+      '<div class="sb-rv-dots">' + dots + '</div>';
+  }
   function moneyEff(p) {
     var regular = Number(p.sell_price != null ? p.sell_price : p.price) || 0;
     var eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
@@ -1195,8 +1204,7 @@
     }
 
     if (view === 'riso') {
-      // first review as a static riso card (carousel handled as a static stack)
-      var cards = (R.length < 2 ? [R[0]] : R).map(function (r) {
+      function risoCard(r) {
         return '<div class="sb-rv-card sb-riso-card">' +
           '<div class="sb-riso-badge">' + '★★★★★'.split('').map(function (s) { return '<span class="sb-riso-badge-star">' + s + '</span>'; }).join('') + '</div>' +
           '<div class="sb-riso-stamp">' + (CN() ? '真实评价' : 'VERIFIED') + '</div>' +
@@ -1206,8 +1214,11 @@
           (r.avatar ? '<img class="sb-rv-mono-img" src="' + attr(r.avatar) + '" alt="">' : '<span class="sb-rv-mono-inner">' + escapeHtml(r.avatarInitial) + '</span>') + '</div>' +
           '<div class="sb-rv-person-text">' + (r.authorName ? '<div class="sb-rv-name">' + escapeHtml(r.authorName) + '</div>' : '') +
           (r.authorSub ? '<div class="sb-rv-role">' + escapeHtml(r.authorSub) + '</div>' : '') + '</div></div></div>';
-      }).join('');
-      return shell('<div class="sb-riso-stack">' + cards + '</div>');
+      }
+      // One review → a static card; 2+ → an autoplay carousel that swipes
+      // through every review (mirrors the mini-app riso swiper).
+      if (R.length < 2) return shell('<div class="sb-riso-stack">' + risoCard(R[0]) + '</div>');
+      return shell(rvCarousel(R.map(risoCard), 'sb-riso-carousel'));
     }
     if (view === 'editorial') {
       var r0 = R[0];
@@ -1234,14 +1245,17 @@
         (a.authorSub ? '<div class="sb-rv-role">' + escapeHtml(a.authorSub) + '</div>' : '') + '</div></div></div></div>' +
         '<div class="sb-spot-rail">' + rail + '</div>');
     }
-    // card / carousel (default): first review centred
-    var rc = R[0];
-    return shell((kicker ? '<div class="sb-rv-kicker">' + escapeHtml(kicker) + '</div>' : '') +
-      '<div class="sb-rv-item">' + stars(rc.rating, false) +
-      (rc.quote ? '<div class="sb-rv-quote">' + escapeHtml(rc.quote) + '</div>' : '') +
-      '<div class="sb-rv-byline"><div class="sb-rv-avatar">' + (rc.avatar ? '<img class="sb-rv-avatar-img" src="' + attr(rc.avatar) + '" alt="">' : '<span class="sb-rv-avatar-fallback">' + escapeHtml(rc.avatarInitial) + '</span>') + '</div>' +
-      '<div class="sb-rv-byline-text">' + (rc.authorName ? '<div class="sb-rv-name">' + escapeHtml(rc.authorName) + '</div>' : '') +
-      (rc.authorSub ? '<div class="sb-rv-sub">' + escapeHtml(rc.authorSub) + '</div>' : '') + '</div></div></div>');
+    // card / carousel (default): one centred item, or swipe through all
+    function rvItem(rc) {
+      return '<div class="sb-rv-item">' + stars(rc.rating, false) +
+        (rc.quote ? '<div class="sb-rv-quote">' + escapeHtml(rc.quote) + '</div>' : '') +
+        '<div class="sb-rv-byline"><div class="sb-rv-avatar">' + (rc.avatar ? '<img class="sb-rv-avatar-img" src="' + attr(rc.avatar) + '" alt="">' : '<span class="sb-rv-avatar-fallback">' + escapeHtml(rc.avatarInitial) + '</span>') + '</div>' +
+        '<div class="sb-rv-byline-text">' + (rc.authorName ? '<div class="sb-rv-name">' + escapeHtml(rc.authorName) + '</div>' : '') +
+        (rc.authorSub ? '<div class="sb-rv-sub">' + escapeHtml(rc.authorSub) + '</div>' : '') + '</div></div></div>';
+    }
+    var head = kicker ? '<div class="sb-rv-kicker">' + escapeHtml(kicker) + '</div>' : '';
+    if (view === 'carousel' && R.length > 1) return shell(head + rvCarousel(R.map(rvItem), ''));
+    return shell(head + rvItem(R[0]));
   };
 
   // wecom_contact -----------------------------------------------------------
@@ -1399,10 +1413,12 @@
 
   // ── Timers — countdown digits + periodic flash refetch ───────────────────
   var tickHandle = null, flashHandle = null, lastZeroFired = false;
+  var carouselHandles = [];
 
   function startTimers(rootEl) {
     stopTimers();
     if (!rootEl) return;
+    initCarousels(rootEl);
     var blocks = ctx.config && ctx.config.home && ctx.config.home.layout;
     warmLazyData(blocks);
     tickHandle = setInterval(function () { tick(rootEl); }, 1000);
@@ -1445,6 +1461,43 @@
   function stopTimers() {
     if (tickHandle) { clearInterval(tickHandle); tickHandle = null; }
     if (flashHandle) { clearInterval(flashHandle); flashHandle = null; }
+    for (var i = 0; i < carouselHandles.length; i++) clearInterval(carouselHandles[i]);
+    carouselHandles = [];
+  }
+
+  // ── Review carousels — autoplay + scroll-synced dots + dot tap nav ────────
+  function initCarousels(rootEl) {
+    var els = rootEl.querySelectorAll('[data-rv-carousel]');
+    for (var i = 0; i < els.length; i++) bindCarousel(els[i]);
+  }
+  function bindCarousel(car) {
+    var track = car.querySelector('.sb-rv-track');
+    var dotsWrap = car.parentNode.querySelector('.sb-rv-dots');
+    var dots = dotsWrap ? dotsWrap.querySelectorAll('.sb-rv-dot') : [];
+    var n = track ? track.children.length : 0;
+    if (!track || n < 2) return;
+    var cur = 0, paused = false;
+    // stride = distance between consecutive slides (handles the track padding)
+    function stride() { return track.children[1].offsetLeft - track.children[0].offsetLeft || 1; }
+    function go(i) { cur = (i % n + n) % n; track.scrollTo({ left: cur * stride(), behavior: 'smooth' }); }
+    function syncDots() {
+      var idx = Math.round(track.scrollLeft / stride());
+      cur = Math.max(0, Math.min(n - 1, idx));
+      for (var d = 0; d < dots.length; d++) dots[d].classList.toggle('on', d === cur);
+    }
+    track.addEventListener('scroll', function () {
+      window.clearTimeout(track._rvT);
+      track._rvT = window.setTimeout(syncDots, 80);
+    });
+    for (var d = 0; d < dots.length; d++) {
+      (function (idx) { dots[idx].addEventListener('click', function () { paused = true; go(idx); }); })(d);
+    }
+    // pause autoplay while the user is touching/hovering the strip
+    ['pointerdown', 'touchstart', 'mouseenter'].forEach(function (ev) { car.addEventListener(ev, function () { paused = true; }); });
+    carouselHandles.push(setInterval(function () {
+      if (paused || !car.offsetParent) return;
+      go(cur + 1);
+    }, 5000));
   }
 
   global.ShopBlocks = {
