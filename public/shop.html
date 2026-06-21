@@ -211,6 +211,11 @@
 <body>
   <div id="boot"><div class="spin"></div></div>
 
+  <div class="mtop" id="mtop" hidden>
+    <span class="mt-wm" id="mtWm">Store</span>
+    <span class="mt-lang" id="mtLang"><button data-lang="en">EN</button><button data-lang="cn">中</button></span>
+  </div>
+
   <header class="bar" hidden>
     <div class="bar-in">
       <nav class="links">
@@ -265,40 +270,50 @@
 
     /* ── Me page (#/me) — port of the mini-app me page. Namespaced .me-* so it
          never collides with the storefront's existing .hero/.kicker/.title. ── */
-    .me-hero{background:var(--lime);padding:38px 22px 64px;position:relative;overflow:hidden;}
-    .me-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--forest);}
-    .me-title{font-family:var(--bf-bear);font-size:40px;line-height:1.06;margin-top:7px;color:var(--ink);}
-    .me-meta{margin-top:8px;font-size:13px;color:var(--forest);}
-    .me-cta{display:inline-block;margin-top:10px;font-family:var(--bf-toni);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-decoration:underline;cursor:pointer;}
-    .me-stats{display:flex;background:var(--ink);color:#fff;margin:-22px 22px 0;position:relative;z-index:2;}
-    .me-stat{flex:1;text-align:left;padding:15px 14px;border-left:1px solid rgba(255,255,255,.18);background:none;border-top:0;border-right:0;border-bottom:0;cursor:default;font:inherit;}
+    .me-hero{background:var(--lime);padding:38px 22px 60px;position:relative;overflow:hidden;min-height:210px;}
+    .me-hero-ip{position:absolute;right:6px;bottom:-4px;width:150px;height:auto;pointer-events:none;mix-blend-mode:multiply;}
+    .me-hero-in{position:relative;z-index:1;max-width:64%;}
+    .me-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--forest);}
+    .me-title{font-family:var(--bf-bear);font-size:40px;line-height:1.04;margin-top:8px;color:var(--ink);}
+    .me-meta{margin-top:10px;font-size:13px;color:var(--forest);}
+    .me-cta{display:inline-block;margin-top:12px;font-family:var(--bf-toni);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);text-decoration:underline;cursor:pointer;}
+    .me-stats{display:flex;background:var(--ink);color:#fff;margin:-26px 22px 0;position:relative;z-index:2;}
+    .me-stat{flex:1;text-align:left;padding:14px 14px;border-left:1px solid rgba(255,255,255,.18);background:none;border-top:0;border-right:0;border-bottom:0;cursor:default;font:inherit;}
     .me-stat:first-child{border-left:0;}
     .me-stat.tap{cursor:pointer;}
-    .me-stat .v{font-family:var(--bf-bear);font-size:23px;color:var(--lime);line-height:1.1;}
+    .me-stat .v{font-family:var(--bf-bear);font-size:22px;color:var(--lime);line-height:1.1;}
     .me-stat .l{display:block;font-family:var(--bf-toni);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,.7);margin-top:3px;}
     .me-section{padding:26px 22px 0;}
-    .me-sec-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;}
+    .me-sec-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;}
     .me-sec-title{font-family:var(--bf-bear);font-size:23px;color:var(--ink);}
     .me-viewall{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);text-decoration:underline;}
     .me-buckets{display:flex;justify-content:space-between;gap:2px;}
     .me-bucket{flex:1;text-align:center;padding:2px 0;cursor:pointer;background:none;border:0;font:inherit;}
-    .me-bk-ic{width:40px;height:40px;margin:0 auto 7px;position:relative;color:var(--forest);}
-    .me-bk-ic svg{width:40px;height:40px;display:block;}
-    .me-bk-badge{position:absolute;top:-5px;right:0;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--berry);color:#fff;font-size:10px;font-weight:700;line-height:16px;text-align:center;}
+    .me-bk-ic{width:44px;height:44px;margin:0 auto 8px;position:relative;}
+    .me-bk-ic svg{width:44px;height:44px;display:block;}
+    .me-bk-badge{position:absolute;top:-4px;right:-2px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--berry);color:#fff;font-size:10px;font-weight:700;line-height:18px;text-align:center;box-shadow:0 0 0 2px var(--oat);}
     .me-bk-lb{font-family:var(--bf-toni);font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink);}
-    .me-rows{margin-top:24px;}
-    .me-row{display:flex;align-items:center;gap:12px;width:100%;padding:16px 22px;border-top:1px solid rgba(0,0,0,.1);border-left:0;border-right:0;border-bottom:0;background:none;cursor:pointer;text-align:left;font:inherit;}
+    .me-rows{margin-top:26px;}
+    .me-row{display:flex;align-items:center;gap:12px;width:100%;padding:15px 22px;border-top:1px solid rgba(0,0,0,.1);border-left:0;border-right:0;border-bottom:0;background:none;cursor:pointer;text-align:left;font:inherit;}
     .me-row:last-child{border-bottom:1px solid rgba(0,0,0,.1);}
-    .me-row .rt{flex:1;font-family:var(--bf-bear);font-size:16px;color:var(--ink);}
+    .me-row .rbody{flex:1;min-width:0;}
+    .me-row .rt{display:block;font-family:var(--bf-bear);font-size:16px;color:var(--ink);}
+    .me-row .rmeta{display:block;font-size:12px;color:var(--olive);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
     .me-row .ra{font-family:var(--bf-bear);font-size:19px;color:var(--olive);}
-    .me-row.acc .rt{color:var(--berry);} .me-row.acc .ra{color:var(--berry);}
+    .me-row.fg .rt,.me-row.fg .ra{color:var(--forest);}
+    .me-row.danger .rt,.me-row.danger .ra{color:var(--berry);}
+    .me-rbadge{display:inline-block;min-width:18px;height:18px;padding:0 5px;margin-left:8px;border-radius:999px;background:var(--berry);color:#fff;font-family:var(--bf-toni);font-size:10px;font-weight:700;line-height:18px;text-align:center;vertical-align:middle;}
     .me-lang{padding:30px 22px 0;}
     .me-lang .ll{font-family:var(--bf-toni);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);}
     .me-lang-row{display:flex;gap:8px;margin-top:10px;}
-    .me-lang-opt{flex:1;padding:12px;border:2px solid var(--ink);text-align:center;font-family:var(--bf-toni);font-weight:600;font-size:12px;letter-spacing:.08em;cursor:pointer;background:transparent;color:var(--ink);}
+    .me-lang-opt{flex:1;padding:13px;border:2px solid var(--ink);text-align:center;font-family:var(--bf-toni);font-weight:600;font-size:12px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;background:transparent;color:var(--ink);}
     .me-lang-opt.on{background:var(--ink);color:var(--oat);}
-    .me-footer{margin-top:30px;padding:24px 22px 30px;text-align:center;opacity:.55;}
+    .me-legal{display:flex;justify-content:center;align-items:center;gap:10px;margin-top:34px;padding:8px 22px;}
+    .me-legal-a{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--olive);text-decoration:underline;cursor:pointer;}
+    .me-legal-sep{color:var(--olive);opacity:.5;}
+    .me-footer{margin-top:18px;padding:20px 22px 36px;text-align:center;opacity:.55;}
     .me-fm{font-family:var(--bf-bear);font-size:26px;color:var(--olive);letter-spacing:1px;}
+    .me-fm-img{max-width:170px;max-height:60px;margin:0 auto 4px;display:block;object-fit:contain;}
     .me-fsub{font-size:11px;margin-top:6px;color:var(--olive);}
 
     /* ── Cart page (#/cart) — full-page cart so the Cart tab has a destination ── */
@@ -309,6 +324,92 @@
     .cp-sub .l{font-size:13px;color:var(--olive);} .cp-sub .v{font-family:var(--bf-gothic);font-size:24px;}
     .cp-checkout{width:100%;font-family:var(--bf-toni);font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:14px;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:16px;cursor:pointer;}
     .cp-empty{text-align:center;color:var(--olive);padding:70px 22px;}
+
+    /* ── Mobile chrome: hide the desktop top nav, show a slim title bar (the
+         mini-app has no top nav — search lives inside the Shop page). ── */
+    .mtop{display:none;}
+    @media(max-width:767px){
+      header.bar{display:none!important;}
+      .mtop{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;
+        background:var(--oat);border-bottom:1.5px solid var(--ink);padding:11px 18px;}
+      .mtop .mt-wm{flex:1;font-family:var(--bf-bear);font-size:21px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+      .mtop .mt-lang{display:inline-flex;border:2px solid var(--ink);overflow:hidden;}
+      .mtop .mt-lang button{border:0;background:transparent;padding:6px 12px;font-family:var(--bf-toni);font-weight:600;font-size:12px;letter-spacing:.04em;color:var(--olive);cursor:pointer;}
+      .mtop .mt-lang button.active{background:var(--lime);color:var(--ink);}
+    }
+    /* in-page Shop search (mobile uses this; desktop keeps the header search) */
+    .shop-search{display:flex;align-items:center;gap:10px;background:#FFFCF7;border:2px solid var(--ink);padding:11px 16px;margin:14px 0 4px;}
+    .shop-search svg{width:18px;height:18px;color:var(--olive);flex:none;}
+    .shop-search input{flex:1;border:0;outline:0;background:transparent;font:inherit;font-size:15px;color:var(--ink);}
+    @media(min-width:768px){.shop-search{display:none;}}
+
+    /* ── Shared sub-page shell (.sp-*) for Me's linked pages ── */
+    .sp{max-width:600px;margin:0 auto;padding:0 0 36px;}
+    .sp-head{padding:22px 22px 4px;}
+    .sp-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--olive);}
+    .sp-title{font-family:var(--bf-bear);font-size:34px;line-height:1.02;color:var(--ink);margin-top:4px;}
+    .sp-sub{font-size:13px;color:var(--olive);margin-top:8px;line-height:1.45;}
+    .sp-back{display:inline-flex;align-items:center;gap:6px;margin:14px 22px 2px;font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--olive);cursor:pointer;}
+    .sp-empty{text-align:center;color:var(--olive);padding:64px 22px;line-height:1.6;}
+    .sp-tabs{display:flex;gap:8px;padding:14px 22px 6px;}
+    .sp-tab{flex:1;padding:10px;border:2px solid var(--ink);text-align:center;font-family:var(--bf-toni);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;background:transparent;color:var(--olive);cursor:pointer;}
+    .sp-tab.on{background:var(--ink);color:var(--oat);}
+    .sp-card{margin:14px 22px 0;border:2px solid var(--ink);background:#fff;padding:16px 18px;}
+    .sp-card.lime{background:var(--lime);border-color:var(--ink);}
+    .sp-card.ink{background:var(--ink);color:#fff;}
+    .sp-list{margin-top:8px;}
+    .sp-li{display:flex;gap:12px;align-items:flex-start;padding:14px 22px;border-top:1px solid rgba(0,0,0,.1);}
+    .sp-li .sp-main{flex:1;min-width:0;}
+    .sp-li .sp-t{font-family:var(--bf-bear);font-size:15px;color:var(--ink);line-height:1.25;}
+    .sp-li .sp-d{font-size:12.5px;color:var(--olive);margin-top:3px;line-height:1.4;}
+    .sp-li .sp-amt{font-family:var(--bf-gothic);font-size:18px;letter-spacing:.02em;white-space:nowrap;}
+    .sp-pos{color:var(--pea);} .sp-neg{color:var(--berry);}
+    .sp-row-in{display:flex;gap:8px;padding:12px 22px 2px;}
+    .sp-input{flex:1;font:inherit;font-size:15px;padding:12px 14px;border:2px solid var(--ink);background:#fff;color:var(--ink);}
+    .sp-input::placeholder{color:#a59c8f;}
+    textarea.sp-input{resize:vertical;min-height:120px;font-family:var(--f-aleo);}
+    .sp-btn{font-family:var(--bf-toni);font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:13px;background:var(--accent);color:#fff;border:0;border-radius:999px;padding:14px 22px;cursor:pointer;}
+    .sp-btn:disabled{opacity:.5;cursor:default;}
+    .sp-btn.ink{background:var(--ink);} .sp-btn.block{width:100%;}
+    .sp-btn.ghost{background:transparent;color:var(--ink);border:2px solid var(--ink);border-radius:0;}
+    .sp-foot{padding:18px 22px;}
+    .sp-chip{display:inline-block;padding:3px 10px;border-radius:0;font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:var(--lime);}
+    .sp-msg{font-size:13px;color:var(--berry);padding:8px 22px 0;min-height:16px;}
+    /* coupon sticker */
+    .cpn{display:flex;align-items:stretch;margin:14px 22px 0;border:2px solid var(--ink);background:var(--corn);}
+    .cpn.used{opacity:.5;}
+    .cpn .cpn-l{flex:1;padding:14px 16px;}
+    .cpn .cpn-big{font-family:var(--bf-bear);font-size:26px;line-height:1;color:var(--ink);}
+    .cpn .cpn-sub{font-size:12px;color:var(--ink);opacity:.8;margin-top:6px;}
+    .cpn .cpn-r{width:96px;border-left:2px dashed rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-family:var(--bf-toni);font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink);}
+    /* favorites grid (reuse .grid/.card) */
+    .fav-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:14px 22px 0;}
+    /* membership ladder */
+    .tier-now{margin:14px 22px 0;padding:20px;border:2px solid var(--ink);text-align:center;}
+    .tier-now .tn-name{font-family:var(--bf-bear);font-size:30px;color:var(--ink);}
+    .tier-bar{height:12px;background:rgba(0,0,0,.1);margin:14px 0 6px;overflow:hidden;}
+    .tier-bar > i{display:block;height:100%;background:var(--accent);}
+    .tier-step{display:flex;gap:12px;align-items:flex-start;padding:14px 22px;border-top:1px solid rgba(0,0,0,.1);}
+    .tier-dot{width:14px;height:14px;border-radius:999px;border:2px solid var(--ink);margin-top:4px;flex:none;}
+    .tier-step.on .tier-dot{background:var(--lime);}
+    .tier-step .ts-name{font-family:var(--bf-bear);font-size:16px;color:var(--ink);}
+    .tier-step .ts-perk{font-size:12.5px;color:var(--olive);margin-top:3px;line-height:1.45;}
+    /* notifications */
+    .ntf-dot{width:8px;height:8px;border-radius:999px;background:var(--berry);margin-top:6px;flex:none;}
+    /* about */
+    .about-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(0,0,0,.12);margin:18px 22px 0;border:2px solid var(--ink);}
+    .about-stat{background:var(--oat);padding:16px;}
+    .about-stat .as-v{font-family:var(--bf-bear);font-size:26px;color:var(--ink);}
+    .about-stat .as-l{font-family:var(--bf-toni);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--olive);margin-top:2px;}
+    .about-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:18px 22px 0;}
+    .about-col h4{font-family:var(--bf-toni);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;}
+    .about-col li{list-style:none;font-size:13px;line-height:1.7;color:var(--ink);}
+    /* poll */
+    .poll-opt{display:flex;align-items:center;gap:10px;padding:13px 16px;border:2px solid var(--ink);margin-top:10px;cursor:pointer;position:relative;overflow:hidden;background:#fff;}
+    .poll-opt .po-bar{position:absolute;inset:0;background:var(--lime);opacity:.35;z-index:0;}
+    .poll-opt .po-txt,.poll-opt .po-pct{position:relative;z-index:1;}
+    .poll-opt .po-txt{flex:1;font-family:var(--bf-bear);font-size:15px;}
+    .poll-opt.on{border-color:var(--accent);}
   </style>
   <nav class="tabbar" id="tabbar" hidden aria-label="Primary">
     <a class="tabitem" data-tab="home" href="#/">
@@ -1788,85 +1889,152 @@ async function openReschedule(o){
 // Port of the mini-app me page: lime hero greeting, ink stats strip
 // (balance/coupons/points), order-status buckets, menu rows, language picker,
 // footer wordmark. Account surface the browser site previously lacked.
+// Colored filled-disc bucket icons (matches the mini-app's bucket SVGs).
 function meBucketIcon(name){
-  const open='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">';
-  const g={
-    unpaid:'<rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10.5h15"/><circle cx="17.5" cy="14" r="1.3"/>',
-    pending:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-    preparing:'<path d="M12 3l8 4v10l-8 4-8-4V7z"/><path d="M4 7l8 4 8-4"/><path d="M12 11v10"/>',
-    sent:'<rect x="1" y="6" width="13" height="10" rx="1"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18.5" r="1.6"/><circle cx="18" cy="18.5" r="1.6"/>',
-    review:'<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 17l-5.2 2.6 1-5.8L3.5 9.7l5.9-.9z"/>'
+  const C={unpaid:'#F2CA6C',pending:'#FFAF60',preparing:'#7BBD3B',sent:'#F4B8CB',review:'#E96174'};
+  const G={
+    unpaid:'<text x="20" y="27.5" font-size="21" font-weight="700" text-anchor="middle" fill="#1a1a17" font-family="Georgia,serif">¥</text>',
+    pending:'<g fill="none" stroke="#1a1a17" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="20" cy="20" r="8.5"/><path d="M20 15.5v5l3.4 2"/></g>',
+    preparing:'<g fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11l8 4v10l-8 4-8-4V15z"/><path d="M12 15l8 4 8-4"/><path d="M20 19v10"/></g>',
+    sent:'<g fill="none" stroke="#1a1a17" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="14" width="12" height="9" rx="1"/><path d="M21 17h4l3 3v3h-7z"/><circle cx="14" cy="25" r="1.7" fill="#1a1a17"/><circle cx="25" cy="25" r="1.7" fill="#1a1a17"/></g>',
+    review:'<path d="M20 11l2.6 5.3 5.9.9-4.3 4.1 1 5.8L20 24.5l-5.2 2.6 1-5.8-4.3-4.1 5.9-.9z" fill="#ffffff"/>'
   };
-  return open+(g[name]||'')+'</svg>';
+  return '<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="20" fill="'+C[name]+'"/>'+(G[name]||'')+'</svg>';
 }
 async function renderMe(){
   const v=$('#view'); const cn=state.lang==='cn';
   document.title=(cn?'我的':'Me')+' · '+state.brand;
   if(state.token&&!state.customer){ try{ await loadCustomer(); }catch(e){} }
-  const c=state.customer; const loggedIn=!!(state.token&&c);
-  const nick=(c&&(c.nickname||'').trim())||'';
-  const balance=Number(c&&(c.balance!=null?c.balance:c.wallet_balance))||0;
-  const coupons=Number(c&&c.coupon_count)||0;
-  const points=Number(c&&c.points_balance)||0;
+  const c=state.customer||{}; const loggedIn=!!(state.token&&state.customer);
+  // order-status counts + notification unread (best-effort, parallel)
+  let stats={}, notifUnread=0;
+  if(loggedIn){
+    const [s,n]=await Promise.all([
+      api('/api/retail/orders/stats').catch(()=>null),
+      api('/api/retail/notifications/unread-count').catch(()=>null),
+    ]);
+    stats=s||{}; notifUnread=Number(n&&(n.count!=null?n.count:n.unread))||0;
+  }
+  const nick=(c.nickname||'').trim();
+  const balance=Number(c.balance!=null?c.balance:c.wallet_balance)||0;
+  const points=Number(c.points_balance)||0;
+  const coupons=Number(c.coupon_count)||0;
+  const favCount=Number(c.favorite_count)||0;
+  const totalOrders=Number(stats.total)||0;
+  const tierKey=c.tier_key||'seed';
+  const tierLevel=({seed:1,sprout:2,root:3,tree:4})[tierKey]||1;
+  const tierName=(cn?{seed:'种子',sprout:'幼苗',root:'根',tree:'大树'}:{seed:'Seed',sprout:'Sprout',root:'Root',tree:'Tree'})[tierKey]||(cn?'种子':'Seed');
+  const memberYear=c.created_at?String(c.created_at).slice(0,4):'';
+  const addrs=Array.isArray(c.addresses)?c.addresses:[];
+  const defAddr=addrs.find(a=>a.is_default)||addrs[0];
+  let addrPreview='';
+  if(defAddr){ const bits=[defAddr.city,defAddr.address].filter(Boolean); const extra=addrs.length>1?(' +'+(addrs.length-1)):''; addrPreview=(bits.join(' ')||defAddr.recipient_name||'')+extra; }
+  const aff=(state.config&&state.config.affiliate)||{};
+  const affYou=Number(aff.rewardPerOrder)||30, affThem=Number(aff.rewardReferee)||0;
+
+  // hero
   let kicker,title,sub;
   if(loggedIn){
-    kicker=cn?'会员 · 欢迎回来':'Member · welcome back';
-    title=nick?((cn?'你好，':'Hey, ')+esc(nick)+'.'):(cn?'你好 🌱':'Hey there 🌱');
-    sub=`<div class="me-meta">ID ${esc(String(c.id||''))}${c.phone?(' · ···'+esc(String(c.phone).slice(-4))):''}</div>`;
+    kicker=(cn?'会员自 ':'MEMBER SINCE ')+(memberYear||'—')+' · '+(cn?'等级 ':'LVL ')+tierLevel;
+    title=nick?((cn?'你好，':'Hey, ')+esc(nick)+'.'):(cn?'你好。':'Hello, you.');
+    sub=`<div class="me-meta">ID ${esc(String(c.id||''))} · ${totalOrders} ${cn?'订单':'orders'}</div>`;
   }else{
-    kicker=cn?'欢迎来到':'Welcome to';
-    title=esc(state.brand);
+    kicker=cn?'欢迎':'WELCOME';
+    title=cn?'你好。':'Hello, you.';
     sub=`<span class="me-cta" id="meSignin">${cn?'登录或注册 →':'Sign in or join →'}</span>`;
   }
-  const st={unpaid:0,pending:0,preparing:0,shipped:0,review:0};
-  if(loggedIn){ try{ const list=await api('/api/retail/orders?limit=50')||[];
-    for(const o of (Array.isArray(list)?list:[])){ const s=o.status;
-      if(s==='pending_payment')st.unpaid++;
-      else if(s==='paid')st.pending++;
-      else if(s==='preparing')st.preparing++;
-      else if(s==='dispatched')st.shipped++;
-      else if(s==='delivered')st.review++; } }catch(e){} }
-  const bk=(icon,key,lbl)=>`<button class="me-bucket"><span class="me-bk-ic">${meBucketIcon(icon)}${st[key]?`<span class="me-bk-badge">${st[key]>99?'99+':st[key]}</span>`:''}</span><span class="me-bk-lb">${lbl}</span></button>`;
-  const buckets=bk('unpaid','unpaid',cn?'待付款':'Unpaid')+bk('pending','pending',cn?'待发货':'To ship')+
-    bk('preparing','preparing',cn?'备货中':'Prep')+bk('sent','shipped',cn?'配送中':'Sent')+bk('review','review',cn?'待评价':'Review');
-  let rows=`<button class="me-row" data-go="#/orders"><span class="rt">${cn?'我的订单':'My orders'}</span><span class="ra">→</span></button>`+
-    `<button class="me-row" data-go="#/cart"><span class="rt">${cn?'购物车':'My cart'}</span><span class="ra">→</span></button>`+
-    `<button class="me-row" data-go="#/shop"><span class="rt">${cn?'继续购物':'Continue shopping'}</span><span class="ra">→</span></button>`;
-  rows+=loggedIn
-    ?`<button class="me-row acc" data-act="signout"><span class="rt">${cn?'退出登录':'Sign out'}</span><span class="ra">→</span></button>`
-    :`<button class="me-row" data-act="signin"><span class="rt">${cn?'登录':'Sign in'}</span><span class="ra">→</span></button>`;
-  const tagline=(state.config&&state.config.brand&&state.config.brand.me_footer&&state.config.brand.me_footer.tagline)||'';
+
+  // order buckets
+  const bstat={unpaid:Number(stats.unpaid)||0,pending:Number(stats.pending)||0,preparing:Number(stats.preparing)||0,shipped:Number(stats.shipped!=null?stats.shipped:stats.to_ship)||0,review:Number(stats.to_review)||0};
+  const bk=(icon,key,lbl)=>`<button class="me-bucket" data-go="#/orders"><span class="me-bk-ic">${meBucketIcon(icon)}${bstat[key]?`<span class="me-bk-badge">${bstat[key]>99?'99+':bstat[key]}</span>`:''}</span><span class="me-bk-lb">${lbl}</span></button>`;
+  const buckets=bk('unpaid','unpaid',cn?'待付款':'Unpaid')+bk('pending','pending',cn?'待确认':'Pending')+
+    bk('preparing','preparing',cn?'备货中':'Preparing')+bk('sent','shipped',cn?'已发货':'Sent')+bk('review','review',cn?'待评价':'Review');
+
+  // full menu (mirrors mini-app ROW_DEFS; tour omitted = WeChat onboarding)
+  const meta={
+    notif: notifUnread>0?(notifUnread+(cn?' 条未读':' new')):'',
+    addresses: addrPreview||(cn?'点击添加地址':'Tap to add an address'),
+    wallet: '¥'+balance.toFixed(2)+' · '+points+(cn?' 积分':' Points'),
+    topup: cn?'充值得积分，余额随时用':'Add credit, earn bonus points',
+    affiliate: affThem>0?(cn?`你得 ¥${affYou}，好友得 ¥${affThem}`:`¥${affYou} for you, ¥${affThem} for them`):(cn?`每位好友下单，你得 ¥${affYou}`:`¥${affYou} per friend who orders`),
+    coupons: coupons>0?(coupons+(cn?' 张可用':' active')):'',
+    invoices:'',
+    favorites: favCount+(cn?' 件已收藏':' saved'),
+    membership: tierName+' · '+(cn?'等级 ':'LVL ')+tierLevel,
+    voting: cn?'一起决定下一款产品':'Help shape the menu',
+    about: cn?'我们的故事':'Our story',
+    faq: cn?'常见问题解答':'Answers to common questions',
+    bug: cn?'告诉我们哪里出错了':'Tell us what broke',
+  };
+  const ROWS=[
+    {id:'notif',go:'#/notifications',title:cn?'通知':'Notifications',accent:notifUnread>0},
+    {id:'addresses',go:'#/addresses',title:cn?'收货地址':'Delivery addresses'},
+    {id:'wallet',go:'#/wallet',title:cn?'钱包积分':'Wallet & points'},
+    {id:'topup',go:'#/topup',title:cn?'充值':'Top up',accent:true},
+    {id:'affiliate',go:'#/affiliate',title:cn?'推广计划':'Refer a friend',accent:true},
+    {id:'coupons',go:'#/coupons',title:cn?'优惠券':'Coupons'},
+    {id:'invoices',go:'#/invoices',title:cn?'我的发票':'Invoices'},
+    {id:'favorites',go:'#/favorites',title:cn?'收藏夹':'Favorites'},
+    {id:'membership',go:'#/membership',title:cn?'会员':'Membership'},
+    {id:'voting',go:'#/voting',title:cn?'投票':'Your say'},
+    {id:'about',go:'#/about',title:(cn?'关于':'About ')+esc(state.brand)},
+    {id:'faq',go:'#/faq',title:cn?'帮助中心':'Help & FAQ'},
+    {id:'bug',go:'#/feedback',title:cn?'报告问题':'Found a bug?'},
+  ];
+  const rowsHtml=ROWS.map(r=>{
+    const m=meta[r.id]||'';
+    const badge=r.id==='notif'&&notifUnread>0?`<span class="me-rbadge">${notifUnread>99?'99+':notifUnread}</span>`:'';
+    return `<button class="me-row${r.accent?' fg':''}" data-go="${r.go}">
+      <span class="rbody"><span class="rt">${r.title}${badge}</span>${m?`<span class="rmeta">${esc(m)}</span>`:''}</span>
+      <span class="ra">→</span></button>`;
+  }).join('')
+    +(loggedIn?`<button class="me-row danger" data-act="signout"><span class="rbody"><span class="rt">${cn?'退出登录':'Sign out'}</span></span><span class="ra">→</span></button>`:'');
+
+  // footer (brand me_footer; falls back to Full Circle for un-customised tenants)
+  const mf=(state.config&&state.config.brand&&state.config.brand.me_footer)||{};
+  const wmImg=mf.wordmark_image||'';
+  const tagEN=(mf.tagline_en||'').trim(),tagCN=(mf.tagline_cn||'').trim();
+  const tagline=(tagEN&&tagCN)?(tagEN+' · '+tagCN):(tagEN||tagCN||mf.tagline||'Clarity with code');
+  const credit=cn?(mf.credit_cn||'由 Full Circle 提供技术支持'):(mf.credit_en||'Powered by Full Circle');
+  const wmText=mf.wordmark_text||(wmImg?'':state.brand);
+
   v.innerHTML=`<div class="me">
     <div class="me-hero">
-      <div class="me-kicker">${kicker}</div>
-      <div class="me-title">${title}</div>
-      ${sub}
+      <img class="me-hero-ip" src="/assets/brand/ip-onion.png" alt="" onerror="this.style.display='none'">
+      <div class="me-hero-in">
+        <div class="me-kicker">${kicker}</div>
+        <div class="me-title">${title}</div>
+        ${sub}
+      </div>
     </div>
     <div class="me-stats">
-      <div class="me-stat"><span class="v">¥${balance.toFixed(0)}</span><span class="l">${cn?'余额':'Balance'}</span></div>
-      <button class="me-stat tap" data-go="#/orders"><span class="v">${coupons}</span><span class="l">${cn?'优惠券':'Coupons'}</span></button>
-      <div class="me-stat"><span class="v">${points}</span><span class="l">${cn?'积分':'Points'}</span></div>
+      <div class="me-stat"><span class="v">¥${balance.toFixed(2)}</span><span class="l">${cn?'余额':'Balance'}</span></div>
+      <button class="me-stat tap" data-go="#/coupons"><span class="v">${coupons}</span><span class="l">${cn?'优惠券':'Coupons'}</span></button>
+      <button class="me-stat tap" data-go="#/wallet"><span class="v">${points}</span><span class="l">${cn?'积分':'Points'}</span></button>
     </div>
     <div class="me-section">
-      <div class="me-sec-head"><div class="me-sec-title">${cn?'我的订单':'My orders'}</div><a class="me-viewall" href="#/orders">${cn?'全部 →':'All →'}</a></div>
+      <div class="me-sec-head"><div class="me-sec-title">${cn?'我的订单':'My orders'}</div><a class="me-viewall" href="#/orders">${cn?'全部订单 →':'ALL ORDERS →'}</a></div>
       <div class="me-buckets">${buckets}</div>
     </div>
-    <div class="me-rows">${rows}</div>
+    <div class="me-rows">${rowsHtml}</div>
     <div class="me-lang">
-      <div class="ll">${cn?'语言':'Language'}</div>
+      <div class="ll">${cn?'语言':'LANGUAGE'}</div>
       <div class="me-lang-row">
         <button class="me-lang-opt ${state.lang==='en'?'on':''}" data-lang="en">English</button>
         <button class="me-lang-opt ${state.lang==='cn'?'on':''}" data-lang="cn">中文</button>
       </div>
     </div>
+    <div class="me-legal">
+      <a class="me-legal-a" data-go="#/legal/privacy">${cn?'隐私政策':'Privacy'}</a>
+      <span class="me-legal-sep">·</span>
+      <a class="me-legal-a" data-go="#/legal/terms">${cn?'服务条款':'Terms'}</a>
+    </div>
     <div class="me-footer">
-      <div class="me-fm">${esc(state.brand)}</div>
-      ${tagline?`<div class="me-fsub">${esc(tagline)}</div>`:''}
-      <div class="me-fsub">${esc(location.hostname)}</div>
+      ${wmImg?`<img class="me-fm-img" src="${escAttr(wmImg)}" alt="${escAttr(state.brand)}">`:`<div class="me-fm">${esc(wmText)}</div>`}
+      <div class="me-fsub">${esc(tagline)}</div>
+      <div class="me-fsub">${esc(credit)}</div>
     </div>
   </div>`;
-  v.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>{location.hash=el.dataset.go;}));
-  v.querySelectorAll('.me-bucket').forEach(b=>b.addEventListener('click',()=>{ if(!state.token)return openLogin(); location.hash='#/orders'; }));
   v.querySelectorAll('.me-row[data-act]').forEach(b=>b.addEventListener('click',()=>{
     if(b.dataset.act==='signout'){clearAuth();toast(cn?'已退出':'Signed out');renderMe();}
     else openLogin();
@@ -1924,8 +2092,307 @@ function setActiveTab(seg){
   let key='home';
   if(s0==='shop'||s0==='product')key='shop';
   else if(s0==='cart'||s0==='checkout')key='cart';
-  else if(s0==='me'||s0==='orders'||s0==='order')key='me';
+  else if(['me','orders','order','addresses','wallet','topup','coupons','invoices','favorites','membership','affiliate','notifications','voting','about','faq','feedback','legal'].includes(s0))key='me';
   document.querySelectorAll('.tabitem').forEach(a=>a.classList.toggle('on',a.dataset.tab===key));
+}
+
+/* ════════════ ME SUB-PAGES (#/wallet, #/coupons, …) ════════════ */
+// Web ports of the mini-app account pages — same /api/retail/* endpoints, same
+// bilingual copy, namespaced .sp-* shell. WeChat-only bits (JSAPI pay, share,
+// chooseAddress) are simplified/noted; everything else is feature-parity.
+async function apiSend(method,path,body){
+  const r=await fetch(path,{method,headers:authHeaders({'Accept':'application/json','Content-Type':'application/json'}),body:body!=null?JSON.stringify(body):undefined});
+  if(r.status===401) clearAuth();
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok){const e=new Error(j.error||('http_'+r.status));e.code=j.error;e.status=r.status;throw e;}
+  return j&&('data'in j)?j.data:j;
+}
+function spHead(kicker,title,sub){return `<div class="sp-head">${kicker?`<div class="sp-kicker">${esc(kicker)}</div>`:''}<div class="sp-title">${title}</div>${sub?`<div class="sp-sub">${esc(sub)}</div>`:''}</div>`;}
+function spBack(){const cn=state.lang==='cn';return `<button class="sp-back" data-go="#/me">← ${cn?'我的':'Me'}</button>`;}
+function spGuard(v){ if(state.token)return false;
+  const cn=state.lang==='cn';
+  v.innerHTML=`<div class="sp">${spBack()}${spHead('',cn?'请先登录':'Please sign in','')}<div class="sp-empty">${cn?'登录后查看此页面':'Sign in to view this page'}</div></div>`;
+  openLogin(); return true;
+}
+function relTime(s){ if(!s)return ''; const cn=state.lang==='cn'; const t=new Date(String(s).replace(' ','T')); const d=(Date.now()-t.getTime())/1000;
+  if(isNaN(d))return String(s).slice(0,10);
+  if(d<60)return cn?'刚刚':'just now';
+  if(d<3600)return Math.floor(d/60)+(cn?' 分钟前':'m ago');
+  if(d<86400)return Math.floor(d/3600)+(cn?' 小时前':'h ago');
+  if(d<604800)return Math.floor(d/86400)+(cn?' 天前':'d ago');
+  return String(s).slice(0,10); }
+function pointsSource(s,cn){return ({order_earn:cn?'订单获得':'Earned from order',topup_bonus:cn?'充值赠送':'Top-up bonus',order_redeem:cn?'订单抵扣':'Redeemed on order',expiry:cn?'已过期':'Expired',refund_reverse:cn?'退款回退':'Refund reversal',poll_vote:cn?'投票奖励':'Poll reward',admin_adjust:cn?'调整':'Adjustment'})[s]||s||(cn?'积分':'Points');}
+
+async function renderAddresses(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'收货地址':'Addresses')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'收货地址':'Delivery addresses','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
+  let list; try{ list=await api('/api/retail/addresses')||[]; }catch(e){ list=[]; }
+  const box=v.querySelector('.sp');
+  const rows=(list||[]).map(a=>`<div class="sp-li"><div class="sp-main">
+      <div class="sp-t">${esc(a.recipient_name||'')} ${a.is_default?'<span class="sp-chip">'+(cn?'默认':'Default')+'</span>':''}</div>
+      <div class="sp-d">${esc([a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' '))}</div>
+      <div class="sp-d">${esc(a.phone||'')}</div>
+      <div style="margin-top:8px;display:flex;gap:16px">${a.is_default?'':`<button class="me-legal-a" data-def="${a.id}">${cn?'设为默认':'Set default'}</button>`}<button class="me-legal-a" style="color:var(--berry)" data-del="${a.id}">${cn?'删除':'Delete'}</button></div>
+    </div></div>`).join('');
+  box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'收货地址':'Delivery addresses','')+
+    (rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'还没有收货地址':'No saved addresses yet'}</div>`)+
+    `<div class="sp-foot"><div class="sp-sub" style="padding:0 0 10px">${cn?'新地址可在结算时添加（含地图选点）。':'Add a new address at checkout — with map pin & region picker.'}</div><button class="sp-btn block ink" data-go="#/cart">${cn?'去结算':'Go to checkout'}</button></div>`;
+  box.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm(cn?'删除此地址？':'Delete this address?'))return;
+    try{ await apiSend('DELETE','/api/retail/addresses/'+b.dataset.del); renderAddresses(); }catch(e){ toast(cn?'删除失败':'Delete failed'); } }));
+  box.querySelectorAll('[data-def]').forEach(b=>b.addEventListener('click',async()=>{
+    try{ await apiSend('PUT','/api/retail/addresses/'+b.dataset.def,{is_default:true}); renderAddresses(); }catch(e){ toast(cn?'操作失败':'Failed'); } }));
+}
+
+async function renderWallet(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'钱包积分':'Wallet')+' · '+state.brand;
+  if(!state.customer){ try{ await loadCustomer(); }catch(e){} }
+  const c=state.customer||{};
+  const balance=Number(c.balance)||0, points=Number(c.points_balance)||0, pv=Number(c.point_value_yuan)||0;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'钱包积分':'Wallet & points','')}
+    <div class="sp-tabs"><button class="sp-tab on" data-wt="wallet">${cn?'余额':'Wallet'}</button><button class="sp-tab" data-wt="points">${cn?'积分':'Points'}</button></div>
+    <div id="wtBody"></div></div>`;
+  const body=$('#wtBody');
+  async function show(tab){
+    v.querySelectorAll('.sp-tab').forEach(t=>t.classList.toggle('on',t.dataset.wt===tab));
+    body.innerHTML=`<div class="sp-empty">${cn?'加载中…':'Loading…'}</div>`;
+    if(tab==='wallet'){
+      let tx; try{ tx=await api('/api/retail/topup/transactions?limit=100')||[]; }catch(e){ tx=[]; }
+      const rows=(tx||[]).map(t=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${cn?'充值':'Top-up'}${t.bonus_points?` <span class="sp-chip">+${t.bonus_points}</span>`:''}</div><div class="sp-d">${esc(String(t.paid_at||t.created_at||'').slice(0,16).replace('T',' '))}${t.payment_method?' · '+esc(t.payment_method):''}</div></div><div class="sp-amt sp-pos">+¥${(Number(t.amount)||0).toFixed(2)}</div></div>`).join('');
+      body.innerHTML=`<div class="sp-card ink"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;opacity:.7">${cn?'账户余额':'BALANCE'}</div><div style="font-family:var(--bf-bear);font-size:38px;color:var(--lime);line-height:1.1;margin-top:4px">¥${balance.toFixed(2)}</div></div>`+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无充值记录':'No top-up history yet'}</div>`)+`<div class="sp-foot"><button class="sp-btn block" data-go="#/topup">${cn?'去充值':'Top up'}</button></div>`;
+    }else{
+      let tx; try{ tx=await api('/api/retail/points/transactions?limit=100')||[]; }catch(e){ tx=[]; }
+      const rows=(tx||[]).map(t=>{const d=Number(t.delta)||0;return `<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(pointsSource(t.source,cn))}</div><div class="sp-d">${esc(String(t.created_at||'').slice(0,16).replace('T',' '))}${t.expires_at?` · ${cn?'到期':'expires'} ${String(t.expires_at).slice(0,10)}`:''}</div></div><div class="sp-amt ${d>=0?'sp-pos':'sp-neg'}">${d>=0?'+':''}${d}</div></div>`;}).join('');
+      body.innerHTML=`<div class="sp-card lime"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;color:var(--forest)">${cn?'积分余额':'POINTS'}</div><div style="font-family:var(--bf-bear);font-size:38px;line-height:1.1;margin-top:4px">${points}</div>${pv>0?`<div style="font-size:12px;color:var(--forest);margin-top:4px">≈ ¥${(points*pv).toFixed(2)}</div>`:''}</div>`+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无积分记录':'No points history yet'}</div>`);
+    }
+  }
+  v.querySelectorAll('.sp-tab').forEach(t=>t.addEventListener('click',()=>show(t.dataset.wt)));
+  show('wallet');
+}
+
+async function renderTopup(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'充值':'Top up')+' · '+state.brand;
+  if(!state.customer){ try{ await loadCustomer(); }catch(e){} }
+  const c=state.customer||{};
+  let pkgs; try{ pkgs=await api('/api/retail/topup-packages')||[]; }catch(e){ pkgs=[]; }
+  const cards=(pkgs||[]).map(p=>`<button class="sp-card" style="margin:0;text-align:left;cursor:pointer" data-pkg="${p.id}" data-amt="${p.amount}"><div style="font-family:var(--bf-bear);font-size:28px">¥${Number(p.amount).toFixed(0)}</div>${p.bonus_points?`<div style="font-size:12px;color:var(--forest);margin-top:4px">+${p.bonus_points} ${cn?'积分':'pts'}</div>`:''}</button>`).join('');
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'账户':'ACCOUNT',cn?'充值':'Top up',cn?'充值得积分，余额随时用':'Add credit, earn bonus points')}
+    <div class="sp-card ink"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;opacity:.7">${cn?'当前余额':'CURRENT BALANCE'}</div><div style="font-family:var(--bf-bear);font-size:32px;color:var(--lime);margin-top:4px">¥${(Number(c.balance)||0).toFixed(2)}</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px 22px 0">${cards||`<div class="sp-empty">${cn?'暂无充值套餐':'No packages'}</div>`}</div>
+    <div class="sp-msg" id="tuMsg"></div>
+    <div class="sp-foot"><button class="sp-btn block" id="tuBtn" disabled>${cn?'选择金额':'Select an amount'}</button></div></div>`;
+  let sel=null;
+  v.querySelectorAll('[data-pkg]').forEach(b=>b.addEventListener('click',()=>{ sel=b.dataset.pkg;
+    v.querySelectorAll('[data-pkg]').forEach(x=>{x.style.borderColor='var(--ink)';x.style.borderWidth='2px';});
+    b.style.borderColor='var(--accent)'; b.style.borderWidth='3px';
+    const btn=$('#tuBtn'); btn.disabled=false; btn.textContent=(cn?'充值 ¥':'Top up ¥')+Number(b.dataset.amt).toFixed(0); }));
+  $('#tuBtn').addEventListener('click',async()=>{ if(!sel)return; const btn=$('#tuBtn'); btn.disabled=true;
+    try{ const d=await postJson('/api/retail/topup/create',{package_id:Number(sel),payment_method:'alipay'});
+      if(d&&(d.status==='success'||d.dev)){ toast(cn?'充值成功':'Topped up'); state.customer=null; location.hash='#/wallet'; }
+      else { $('#tuMsg').textContent=cn?'网页端充值即将上线，请在小程序内完成支付。':'Web top-up payment is coming soon — please top up in the mini-app for now.'; }
+    }catch(e){ $('#tuMsg').textContent=cn?'暂时无法充值':'Top-up unavailable right now.'; }
+    btn.disabled=false; });
+}
+
+async function renderCoupons(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'优惠券':'Coupons')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'优惠券':'Coupons','')}
+    <div class="sp-row-in"><input class="sp-input" id="cpnCode" placeholder="${cn?'输入优惠码':'Enter a code'}"><button class="sp-btn ink" id="cpnRedeem">${cn?'兑换':'Redeem'}</button></div>
+    <div class="sp-msg" id="cpnMsg"></div>
+    <div class="sp-tabs"><button class="sp-tab on" data-ct="active">${cn?'可用':'Active'}</button><button class="sp-tab" data-ct="used">${cn?'已用':'Used'}</button></div>
+    <div id="cpnBody"><div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div></div>`;
+  let mine=[],pub=[],used=[];
+  try{ [mine,pub]=await Promise.all([api('/api/retail/my-vouchers').catch(()=>[]),api('/api/retail/vouchers/public').catch(()=>[])]); }catch(e){}
+  try{ const ords=await api('/api/retail/orders?limit=50')||[]; used=(ords||[]).filter(o=>o.voucher_code); }catch(e){}
+  const fmtVal=(t)=>{ if(t.type==='percent')return (Number(t.value)||0)+(cn?'% 折':'% OFF'); if(t.type==='free_shipping')return cn?'免邮':'FREE SHIP'; return '¥'+(Number(t.value)||0); };
+  function show(tab){
+    v.querySelectorAll('.sp-tab').forEach(t=>t.classList.toggle('on',t.dataset.ct===tab));
+    const body=$('#cpnBody');
+    if(tab==='active'){
+      const seen=new Set(); const all=[...(mine||[]),...(pub||[])].filter(x=>{const k=x.code;if(!k||seen.has(k))return false;seen.add(k);return true;});
+      body.innerHTML=all.length?all.map(t=>`<div class="cpn"><div class="cpn-l"><div class="cpn-big">${esc(fmtVal(t))}</div><div class="cpn-sub">${esc(pick(t.title_en,t.title_cn)||'')}${t.min_subtotal?` · ${cn?'满 ¥':'over ¥'}${t.min_subtotal}`:''}${t.expires_at?` · ${cn?'至 ':'till '}${String(t.expires_at).slice(0,10)}`:''}</div></div><button class="cpn-r" data-use="${escAttr(t.code)}">${cn?'使用':'Use'}</button></div>`).join(''):`<div class="sp-empty">${cn?'暂无可用优惠券':'No active coupons'}</div>`;
+      body.querySelectorAll('[data-use]').forEach(b=>b.addEventListener('click',()=>{ try{localStorage.setItem('pending_voucher_code',b.dataset.use);}catch{} toast(cn?'已选择，去结算使用':'Applied — checkout to use'); location.hash='#/cart'; }));
+    }else{
+      body.innerHTML=used.length?used.map(o=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(o.voucher_code)}</div><div class="sp-d">${esc(o.order_no||'')} · ${String(o.placed_at||'').slice(0,10)}</div></div><div class="sp-amt sp-neg">−¥${(Number(o.voucher_amount)||0).toFixed(2)}</div></div>`).join(''):`<div class="sp-empty">${cn?'暂无使用记录':'Nothing used yet'}</div>`;
+    }
+  }
+  v.querySelectorAll('.sp-tab').forEach(t=>t.addEventListener('click',()=>show(t.dataset.ct)));
+  $('#cpnRedeem').addEventListener('click',async()=>{ const code=($('#cpnCode').value||'').trim(); if(!code)return; $('#cpnMsg').textContent='';
+    try{ await postJson('/api/retail/vouchers/validate',{code,subtotal:0}); try{localStorage.setItem('pending_voucher_code',code);}catch{} toast(cn?'优惠码有效，去结算':'Valid — checkout to use'); location.hash='#/cart'; }
+    catch(e){ $('#cpnMsg').textContent=cn?'优惠码无效或不适用':'Code invalid or not applicable'; } });
+  show('active');
+}
+
+async function renderInvoices(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'发票':'Invoices')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'发票':'Invoices','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
+  let list; try{ list=await api('/api/retail/invoices')||[]; }catch(e){ list=[]; }
+  const box=v.querySelector('.sp');
+  const rows=(list||[]).map(i=>{const issued=i.invoice_state==='issued';return `<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(i.invoice_title||i.order_no||'')} <span class="sp-chip">${i.invoice_type==='company'?(cn?'企业':'Company'):(cn?'个人':'Personal')}</span></div><div class="sp-d">${esc(i.order_no||'')} · ${String(i.placed_at||'').slice(0,10)} · ¥${(Number(i.total)||0).toFixed(2)}</div><div class="sp-d">${issued?(cn?'已开具':'Issued'):(cn?'处理中':'Processing')}${i.invoice_number?' · '+esc(i.invoice_number):''}</div>${issued&&i.invoice_file_url?`<div style="margin-top:8px"><a class="me-legal-a" href="${escAttr(i.invoice_file_url)}" target="_blank" rel="noopener">${cn?'查看发票 →':'View invoice →'}</a></div>`:''}</div></div>`;}).join('');
+  box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'发票':'Invoices','')+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无发票':'No invoices yet'}</div>`);
+}
+
+async function renderFavorites(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'收藏夹':'Favorites')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'收藏夹':'Favorites','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
+  let list; try{ list=await api('/api/retail/favorites')||[]; }catch(e){ list=[]; }
+  const box=v.querySelector('.sp');
+  if(!list||!list.length){ box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'收藏夹':'Favorites','')+`<div class="sp-empty">${cn?'还没有收藏 🌱':'No favorites yet 🌱'}<br><br><a class="me-viewall" href="#/shop">${cn?'去逛逛 →':'Browse →'}</a></div>`; return; }
+  const grid=list.map(p=>{const price=Number(p.effective_price!=null?p.effective_price:p.price)||0;const img=p.image_url||p.image_data||'';const sold=Number(p.stock)<=0;
+    return `<div class="card"><a class="ph" href="#/product/${p.id}">${img?`<img src="${escAttr(img)}" alt="">`:''}${sold?`<span class="pill-sold">${cn?'售罄':'Sold out'}</span>`:''}</a><div class="body"><a class="nm" href="#/product/${p.id}">${esc(pick(p.name_en,p.name_cn))}</a><div class="prices"><span class="now">¥${price.toFixed(2)}</span></div><button class="me-legal-a" style="color:var(--berry);margin-top:6px;align-self:flex-start" data-unfav="${p.id}">${cn?'取消收藏':'Remove'}</button></div></div>`;}).join('');
+  box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'收藏夹':'Favorites','')+`<div class="fav-grid">${grid}</div>`;
+  box.querySelectorAll('[data-unfav]').forEach(b=>b.addEventListener('click',async()=>{ try{ await apiSend('DELETE','/api/retail/favorites/'+b.dataset.unfav); renderFavorites(); }catch(e){ toast(cn?'操作失败':'Failed'); } }));
+}
+
+async function renderMembership(){
+  const v=$('#view'),cn=state.lang==='cn';
+  document.title=(cn?'会员':'Membership')+' · '+state.brand;
+  if(state.token&&!state.customer){ try{ await loadCustomer(); }catch(e){} }
+  const c=state.customer||{};
+  const tiers=(state.config&&state.config.roots_club&&state.config.roots_club.tiers)||[{key:'seed',name_en:'Seed',name_cn:'种子',threshold:0},{key:'sprout',name_en:'Sprout',name_cn:'幼苗',threshold:500},{key:'root',name_en:'Root',name_cn:'根',threshold:2000},{key:'tree',name_en:'Tree',name_cn:'大树',threshold:5000}];
+  const spend=Number(c.lifetime_spend)||0;
+  const curIdx=Math.max(0,tiers.findIndex(t=>t.key===(c.tier_key||'seed')));
+  const cur=tiers[curIdx]||tiers[0], next=tiers[curIdx+1];
+  const toGo=next?Math.max(0,(Number(next.threshold)||0)-spend):0;
+  const pct=next?Math.min(100,Math.round((spend/((Number(next.threshold))||1))*100)):100;
+  const ladder=tiers.map((t,i)=>`<div class="tier-step ${i<=curIdx?'on':''}"><span class="tier-dot"></span><div><div class="ts-name">${esc(pick(t.name_en,t.name_cn))}${i===curIdx?` · ${cn?'当前':'You'}`:''}</div><div class="ts-perk">${cn?'消费满 ¥':'Spend ¥'}${Number(t.threshold)||0}${(t.perks_en||t.perks_cn)?' · '+esc(pick(t.perks_en,t.perks_cn)):''}</div></div></div>`).join('');
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'会员俱乐部':'CLUB',cn?'会员':'Membership','')}
+    <div class="tier-now"><div class="tn-name">${esc(pick(cur.name_en,cur.name_cn))}</div>
+      ${next?`<div class="tier-bar"><i style="width:${pct}%"></i></div><div style="font-size:12px;color:var(--olive)">${cn?`再消费 ¥${toGo.toFixed(0)} 升至 ${pick(next.name_en,next.name_cn)}`:`¥${toGo.toFixed(0)} more to reach ${pick(next.name_en,next.name_cn)}`}</div>`:`<div style="font-size:12px;color:var(--olive);margin-top:8px">${cn?'已达最高等级 🌳':'Top tier reached 🌳'}</div>`}</div>
+    <div class="sp-list" style="margin-top:18px">${ladder}</div>
+    <div class="sp-foot"><button class="sp-btn block" data-go="#/shop">${cn?'去购物':'Shop now'}</button></div></div>`;
+}
+
+async function renderAffiliate(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'推广计划':'Refer')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
+  let d; try{ d=await api('/api/retail/affiliate'); }catch(e){ d=null; }
+  const box=v.querySelector('.sp');
+  if(!d||d.enabled===false){ box.innerHTML=spBack()+spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend','')+`<div class="sp-empty">${cn?'推广计划暂未开放':'The referral program isn’t live yet'}</div>`; return; }
+  const st=d.stats||{}; const you=Number(d.reward_per_order)||0, them=Number(d.reward_referee)||0;
+  const tagline=them>0?(cn?`你得 ¥${you}，好友得 ¥${them}`:`¥${you} for you, ¥${them} for them`):(cn?`每位下单好友，你得 ¥${you}`:`¥${you} per friend who orders`);
+  const invites=(d.invites||[]).map(iv=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(iv.nickname||(cn?'好友':'Friend'))}</div><div class="sp-d">${String(iv.joined_at||iv.rewarded_at||'').slice(0,10)}</div></div><div class="sp-amt ${iv.status==='ordered'?'sp-pos':''}">${iv.status==='ordered'?'+¥'+(Number(iv.reward_amount)||0).toFixed(0):(iv.status==='voided'?(cn?'无效':'Void'):(cn?'已加入':'Joined'))}</div></div>`).join('');
+  box.innerHTML=spBack()+spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend',tagline)+
+    `<div class="about-stats" style="grid-template-columns:1fr 1fr 1fr"><div class="about-stat"><div class="as-v">¥${(Number(st.earned)||0).toFixed(0)}</div><div class="as-l">${cn?'已赚':'Earned'}</div></div><div class="about-stat"><div class="as-v">${Number(st.total_invites)||0}</div><div class="as-l">${cn?'邀请':'Invited'}</div></div><div class="about-stat"><div class="as-v">${Number(st.converted)||0}</div><div class="as-l">${cn?'下单':'Ordered'}</div></div></div>`+
+    (d.code?`<div class="sp-card"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;color:var(--olive)">${cn?'我的邀请码':'YOUR CODE'}</div><div style="font-family:var(--bf-bear);font-size:30px;letter-spacing:2px;margin-top:4px">${esc(d.code)}</div><button class="sp-btn ink" style="margin-top:12px" data-copy="${escAttr(d.code)}">${cn?'复制邀请码':'Copy code'}</button></div>`:'')+
+    (invites?`<div class="me-section"><div class="me-sec-title">${cn?'我的邀请':'Your invites'}</div><div class="sp-list" style="margin-top:8px">${invites}</div></div>`:'')+
+    (!d.referred_by?`<div class="sp-foot"><div class="sp-sub" style="padding:0 0 8px">${cn?'有好友邀请码？':'Got a friend’s code?'}</div><div class="sp-row-in" style="padding:0"><input class="sp-input" id="afCode" placeholder="${cn?'输入邀请码':'Enter code'}"><button class="sp-btn ink" id="afApply">${cn?'应用':'Apply'}</button></div><div class="sp-msg" id="afMsg" style="padding-left:0"></div></div>`:'');
+  const cp=box.querySelector('[data-copy]'); if(cp)cp.addEventListener('click',()=>{ try{navigator.clipboard.writeText(cp.dataset.copy);}catch{} toast(cn?'已复制':'Copied'); });
+  const ap=box.querySelector('#afApply'); if(ap)ap.addEventListener('click',async()=>{ const code=($('#afCode').value||'').trim(); if(!code)return;
+    try{ await postJson('/api/retail/affiliate/apply',{code}); toast(cn?'成功！':'Applied!'); renderAffiliate(); }
+    catch(e){ const m={already_referred:cn?'你已被推荐':'Already referred',code_not_found:cn?'邀请码不存在':'Code not found',cannot_refer_self:cn?'不能填自己':'Can’t refer yourself',program_disabled:cn?'暂未开放':'Program off',mutual_referral:cn?'对方已邀请你':'Mutual referral'}; $('#afMsg').textContent=m[e.code]||(cn?'应用失败':'Could not apply'); } });
+}
+
+async function renderNotifications(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'通知':'Notifications')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'消息':'INBOX',cn?'通知':'Notifications','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
+  let list; try{ list=await api('/api/retail/notifications')||[]; }catch(e){ list=[]; }
+  const box=v.querySelector('.sp');
+  const hasUnread=(list||[]).some(n=>!n.read_at);
+  const rows=(list||[]).map(n=>`<button class="sp-li" style="width:100%;text-align:left;background:none;cursor:pointer" data-ntf="${n.id}" data-ref="${escAttr(n.ref_type||'')}" data-rid="${escAttr(String(n.ref_id||''))}">${!n.read_at?'<span class="ntf-dot"></span>':'<span style="width:8px;flex:none"></span>'}<div class="sp-main"><div class="sp-t">${esc(pick(n.title_en,n.title_cn))}</div><div class="sp-d">${esc(pick(n.body_en,n.body_cn)||'')}</div><div class="sp-d">${relTime(n.created_at)}</div></div></button>`).join('');
+  box.innerHTML=spBack()+`<div class="me-section" style="padding-top:22px"><div class="me-sec-head"><div class="me-sec-title">${cn?'通知':'Notifications'}</div>${hasUnread?`<button class="me-viewall" id="ntfAll">${cn?'全部已读':'Mark all read'}</button>`:''}</div></div>`+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无通知 🌱':'No notifications 🌱'}</div>`);
+  const all=$('#ntfAll'); if(all)all.addEventListener('click',async()=>{ try{ await postJson('/api/retail/notifications/read-all',{}); }catch{} renderNotifications(); });
+  box.querySelectorAll('[data-ntf]').forEach(b=>b.addEventListener('click',async()=>{ try{ await postJson('/api/retail/notifications/'+b.dataset.ntf+'/read',{}); }catch{}
+    const ref=b.dataset.ref,rid=b.dataset.rid;
+    if(ref==='order'&&rid)location.hash='#/order/'+rid;
+    else if(ref==='invoice')location.hash='#/invoices';
+    else if(ref==='feedback')location.hash='#/feedback';
+    else renderNotifications(); }));
+}
+
+async function renderVoting(){
+  const v=$('#view'),cn=state.lang==='cn';
+  document.title=(cn?'投票':'Your say')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
+  let polls,cfg; try{ [polls,cfg]=await Promise.all([api('/api/retail/polls').catch(()=>[]),api('/api/retail/voting/config').catch(()=>({}))]); }catch(e){ polls=[]; cfg={}; }
+  const box=v.querySelector('.sp');
+  const showCounts=!cfg||cfg.show_counts!==false;
+  const intro=pick(cfg&&cfg.intro_en,cfg&&cfg.intro_cn)||(cn?'帮我们决定下一款产品':'Help shape what we make next');
+  if(!polls||!polls.length){ box.innerHTML=spBack()+spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say',intro)+`<div class="sp-empty">${cn?'暂无投票':'No polls right now'}</div>`; return; }
+  const pollCard=(p)=>{ const voted=!!p.my_vote_option_id||p.status==='closed';
+    const opts=(p.options||[]).map(o=>{ const pct=p.total_votes?Math.round((Number(o.votes)||0)/p.total_votes*100):0; const mine=p.my_vote_option_id===o.id;
+      return `<button class="poll-opt ${mine?'on':''}" data-opt="${o.id}" ${voted?'disabled':''}>${(voted&&showCounts)?`<span class="po-bar" style="width:${pct}%"></span>`:''}<span class="po-txt">${esc(pick(o.title_en,o.title_cn))}</span>${(voted&&showCounts)?`<span class="po-pct">${pct}%</span>`:''}</button>`; }).join('');
+    return `<div class="sp-card" data-poll="${p.id}"><div style="font-family:var(--bf-bear);font-size:20px;line-height:1.15">${esc(pick(p.question_en,p.question_cn))}</div>${p.reward_points?`<div style="font-size:12px;color:var(--forest);margin-top:6px">+${p.reward_points} ${cn?'积分':'points'}</div>`:''}<div style="margin-top:6px">${opts}</div></div>`; };
+  box.innerHTML=spBack()+spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say',intro)+polls.map(pollCard).join('');
+  box.querySelectorAll('.poll-opt').forEach(b=>b.addEventListener('click',async()=>{ if(!state.token)return openLogin();
+    const card=b.closest('[data-poll]'); try{ const r=await postJson('/api/retail/polls/'+card.dataset.poll+'/vote',{option_id:Number(b.dataset.opt)}); if(r&&r.awarded_points)toast('+'+r.awarded_points+(cn?' 积分':' points')); state.customer=null; renderVoting(); }catch(e){ toast(cn?'投票失败':'Vote failed'); } }));
+}
+
+async function renderAbout(){
+  const v=$('#view'),cn=state.lang==='cn';
+  document.title=(cn?'关于':'About')+' · '+state.brand;
+  const a=(state.config&&state.config.about&&state.config.about.content)||{};
+  const manifesto=pick(a.manifesto_en,a.manifesto_cn)||'';
+  const inItems=(cn?a.in_items_cn:a.in_items_en)||a.in_items||[];
+  const outItems=(cn?a.out_items_cn:a.out_items_en)||a.out_items||[];
+  const stats=a.stats||[];
+  const founderQuote=pick(a.founder_quote_en,a.founder_quote_cn)||a.founder_quote||'';
+  const esct=(s)=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(pick(a.kicker_en,a.kicker_cn)||(cn?'我们的故事':'OUR STORY'),(cn?'关于 ':'About ')+esc(state.brand),'')}
+    ${manifesto?`<div class="sp-pad" style="font-family:var(--f-aleo);font-size:16px;line-height:1.7;color:var(--ink)">${esct(manifesto)}</div>`:''}
+    ${stats.length?`<div class="about-stats">${stats.slice(0,4).map(s=>`<div class="about-stat"><div class="as-v">${esc(s.value||s.v||'')}</div><div class="as-l">${esc(pick(s.label_en,s.label_cn)||s.label||s.l||'')}</div></div>`).join('')}</div>`:''}
+    ${founderQuote?`<div class="sp-card" style="margin-top:18px"><div style="font-family:var(--f-aleo);font-style:italic;font-size:15px;line-height:1.6">“${esc(founderQuote)}”</div>${a.founder_name?`<div style="font-family:var(--bf-bear);font-size:14px;margin-top:10px">${esc(a.founder_name)}</div>`:''}${a.founder_title?`<div class="sp-d">${esc(a.founder_title)}</div>`:''}</div>`:''}
+    ${(inItems.length||outItems.length)?`<div class="about-cols"><div class="about-col"><h4 style="color:var(--forest)">${cn?'我们坚持':'What’s in'}</h4><ul>${(inItems||[]).map(x=>`<li>✓ ${esc(typeof x==='string'?x:pick(x.en,x.cn))}</li>`).join('')}</ul></div><div class="about-col"><h4 style="color:var(--berry)">${cn?'我们拒绝':'What’s out'}</h4><ul>${(outItems||[]).map(x=>`<li>✕ ${esc(typeof x==='string'?x:pick(x.en,x.cn))}</li>`).join('')}</ul></div></div>`:''}
+    ${(!manifesto&&!stats.length&&!founderQuote)?`<div class="sp-empty">${cn?'品牌故事即将上线 🌱':'Our story is coming soon 🌱'}</div>`:''}
+    <div class="sp-foot"><button class="sp-btn block" data-go="#/shop">${cn?'去购物':'Shop now'}</button></div></div>`;
+}
+
+async function renderFaq(){
+  const v=$('#view'),cn=state.lang==='cn';
+  document.title=(cn?'帮助中心':'Help')+' · '+state.brand;
+  const f=(state.config&&state.config.faq)||{};
+  const cats=f.categories||[]; const qs=f.questions||[];
+  const cs=(state.config&&state.config.customer_service)||{};
+  const list=(cat)=>{ const items=qs.filter(q=>cat==='all'||String(q.cat)===String(cat));
+    return items.length?items.map((q,i)=>`<div class="sp-li" style="display:block;cursor:pointer" data-q="${i}"><div class="sp-t">${esc(pick(q.q_en,q.q_cn))}</div><div class="faq-a" hidden style="margin-top:8px;font-size:14px;line-height:1.6;color:var(--ink);font-family:var(--f-aleo)">${esc(pick(q.a_en,q.a_cn)||'').replace(/\n/g,'<br>')}</div></div>`).join(''):`<div class="sp-empty">${cn?'暂无相关问题':'No questions here'}</div>`; };
+  let contact='';
+  if(cs.mode&&cs.mode!=='off'){ const label=pick(cs.label_en,cs.label_cn)||(cn?'联系客服':'Contact us');
+    if(cs.mode==='phone'&&cs.phone)contact=`<a class="sp-btn ink block" href="tel:${escAttr(cs.phone)}" style="display:block;text-align:center;text-decoration:none;box-sizing:border-box">${esc(label)} · ${esc(cs.phone)}</a>`;
+    else if(cs.mode==='qr'&&cs.qr_image_url)contact=`<div style="text-align:center"><img src="${escAttr(cs.qr_image_url)}" style="width:180px;height:180px;object-fit:contain"><div class="sp-d">${esc(label)}</div></div>`; }
+  const chips=`<div class="chips" style="padding:14px 22px 4px"><span class="chip on" data-cat="all">${cn?'全部':'All'}</span>${cats.map(c=>`<span class="chip" data-cat="${escAttr(String(c.id))}">${esc(pick(c.en,c.cn))}</span>`).join('')}</div>`;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'帮助中心':'HELP',cn?'常见问题':'Help & FAQ','')}${qs.length?chips:''}<div id="faqList">${qs.length?list('all'):`<div class="sp-empty">${cn?'帮助内容即将上线':'Help content coming soon'}</div>`}</div>${(pick(cs.hours_en,cs.hours_cn)||contact)?`<div class="sp-foot"><div class="sp-sub" style="padding:0 0 10px">${cn?'还有疑问？':'Still stuck?'}${pick(cs.hours_en,cs.hours_cn)?' · '+esc(pick(cs.hours_en,cs.hours_cn)):''}</div>${contact}</div>`:''}</div>`;
+  const bindQ=()=>v.querySelectorAll('#faqList [data-q]').forEach(row=>row.addEventListener('click',()=>{ const a=row.querySelector('.faq-a'); if(a)a.hidden=!a.hidden; }));
+  v.querySelectorAll('.chip[data-cat]').forEach(ch=>ch.addEventListener('click',()=>{ v.querySelectorAll('.chip[data-cat]').forEach(x=>x.classList.toggle('on',x===ch)); $('#faqList').innerHTML=list(ch.dataset.cat); bindQ(); }));
+  bindQ();
+}
+
+async function renderFeedback(){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'报告问题':'Feedback')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'报告问题':'FEEDBACK',cn?'发现问题？':'Found a bug?',cn?'告诉我们哪里出错了，我们会尽快修复。':'Tell us what broke — we’ll fix it fast.')}
+    <div class="sp-pad"><textarea class="sp-input" id="fbMsg" placeholder="${cn?'描述你遇到的问题…':'Describe what went wrong…'}"></textarea></div>
+    <div class="sp-pad" style="padding-top:0"><div id="fbThumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div><label class="sp-btn ghost" style="display:inline-block;cursor:pointer">${cn?'添加截图':'Add screenshot'}<input type="file" id="fbFile" accept="image/*" hidden></label></div>
+    <div class="sp-msg" id="fbErr"></div>
+    <div class="sp-foot"><button class="sp-btn block" id="fbSend">${cn?'提交':'Send report'}</button></div>
+    <div id="fbPast"></div></div>`;
+  const photos=[];
+  const paint=()=>{ $('#fbThumbs').innerHTML=photos.map((u,i)=>`<div style="position:relative;width:60px;height:60px"><img src="${escAttr(u)}" style="width:60px;height:60px;object-fit:cover;border:2px solid var(--ink)"><button data-rm="${i}" style="position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:999px;background:var(--berry);color:#fff;border:0;cursor:pointer;line-height:1">×</button></div>`).join(''); $('#fbThumbs').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{photos.splice(Number(b.dataset.rm),1);paint();})); };
+  $('#fbFile').addEventListener('change',async e=>{ const file=e.target.files&&e.target.files[0]; if(!file||photos.length>=6)return;
+    const data=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(file);});
+    try{ const up=await postJson('/api/retail/review-photos',{data}); if(up&&up.url){ photos.push(up.url); paint(); } }catch(err){ $('#fbErr').textContent=cn?'图片上传失败':'Photo upload failed'; }
+    e.target.value=''; });
+  $('#fbSend').addEventListener('click',async()=>{ const msg=($('#fbMsg').value||'').trim(); if(!msg){ $('#fbErr').textContent=cn?'请填写问题描述':'Please describe the issue'; return; }
+    const btn=$('#fbSend'); btn.disabled=true; $('#fbErr').textContent='';
+    try{ await postJson('/api/retail/feedback',{message:msg,photos,page_context:'web',app_version:'web'}); toast(cn?'已提交，谢谢！':'Sent — thank you!'); location.hash='#/me'; }
+    catch(e){ $('#fbErr').textContent=cn?'提交失败，请重试':'Could not send — try again'; btn.disabled=false; } });
+  try{ const past=await api('/api/retail/feedback')||[]; if(past&&past.length){ $('#fbPast').innerHTML=`<div class="me-section"><div class="me-sec-title">${cn?'历史反馈':'Past reports'}</div><div class="sp-list" style="margin-top:8px">${past.map(p=>`<div class="sp-li"><div class="sp-main"><div class="sp-t" style="font-size:14px">${esc(String(p.message||'').slice(0,60))}</div>${p.reply_count?`<div class="sp-d">${cn?'有新回复':'New reply'}</div>`:''}</div>${p.unread?'<span class="ntf-dot"></span>':''}</div>`).join('')}</div></div>`; } }catch(e){}
+}
+
+async function renderLegal(doc){
+  const v=$('#view'),cn=state.lang==='cn';
+  const isTerms=doc==='terms';
+  document.title=(isTerms?(cn?'服务条款':'Terms'):(cn?'隐私政策':'Privacy'))+' · '+state.brand;
+  const legal=(state.config&&state.config.legal)||{};
+  const key=isTerms?'terms':'privacy';
+  const bodyTxt=pick(legal[key+'_en'],legal[key+'_cn'])||legal[key]||'';
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'条款':'LEGAL',isTerms?(cn?'服务条款':'Terms of service'):(cn?'隐私政策':'Privacy policy'),'')}<div class="sp-pad" style="font-family:var(--f-aleo);font-size:14px;line-height:1.7;color:var(--ink)">${bodyTxt?esc(bodyTxt).replace(/\n/g,'<br>'):(cn?'暂无内容。':'No content published yet.')}</div></div>`;
 }
 
 /* ════════════ ROUTER ════════════ */
@@ -1955,6 +2422,20 @@ async function route(){
     if(seg[0]==='checkout')        return renderCheckout();
     if(seg[0]==='orders')          return renderOrders();
     if(seg[0]==='order'&&seg[1])   return renderOrderDetail(seg[1]);
+    if(seg[0]==='addresses')       return renderAddresses();
+    if(seg[0]==='wallet')          return renderWallet();
+    if(seg[0]==='topup')           return renderTopup();
+    if(seg[0]==='coupons')         return renderCoupons();
+    if(seg[0]==='invoices')        return renderInvoices();
+    if(seg[0]==='favorites')       return renderFavorites();
+    if(seg[0]==='membership')      return renderMembership();
+    if(seg[0]==='affiliate')       return renderAffiliate();
+    if(seg[0]==='notifications')   return renderNotifications();
+    if(seg[0]==='voting')          return renderVoting();
+    if(seg[0]==='about')           return renderAbout();
+    if(seg[0]==='faq')             return renderFaq();
+    if(seg[0]==='feedback')        return renderFeedback();
+    if(seg[0]==='legal')           return renderLegal(seg[1]||'privacy');
     return renderHome();
   }catch(e){
     $('#view').innerHTML=`<div class="wrap"><div class="empty">Something went wrong loading this page.<br>${esc(e.message)}</div></div>`;
@@ -2053,6 +2534,7 @@ async function renderShop(params){
 
   view.innerHTML=`<div class="wrap sec">
     <div class="crumb"><a href="#/">${state.lang==='cn'?'首页':'Home'}</a> / ${state.lang==='cn'?'商品':'Shop'}</div>
+    <form class="shop-search" id="shopSearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input id="shopSearchInput" type="search" value="${escAttr(q)}" placeholder="${state.lang==='cn'?'搜索商品':'Search products'}" autocomplete="off"></form>
     <div class="sec-head"><div class="ttl">${heading}</div></div>
     <div class="chips">${chips}</div>
     <div class="toolbar">
@@ -2066,6 +2548,10 @@ async function renderShop(params){
     </div>
     <div class="grid" id="shopGrid">${skeletons(10)}</div>
   </div>`;
+  const sf=$('#shopSearch'); if(sf)sf.addEventListener('submit',e=>{e.preventDefault();
+    const val=($('#shopSearchInput').value||'').trim();const qp2=new URLSearchParams();
+    if(cat)qp2.set('cat',cat);if(val)qp2.set('q',val);
+    location.hash='#/shop'+(qp2.toString()?`?${qp2.toString()}`:'');});
   $('#sortSel').value=sort;
   $('#sortSel').onchange=e=>{
     const qp=new URLSearchParams();if(cat)qp.set('cat',cat);if(q)qp.set('q',q);
@@ -2259,7 +2745,7 @@ async function renderProduct(id){
 
 /* ════════════ CHROME / INIT ════════════ */
 function applyLangToUI(){
-  document.querySelectorAll('#langToggle button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
+  document.querySelectorAll('#langToggle button, #mtLang button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
   $('#searchInput').placeholder=state.lang==='cn'?'搜索商品':'Search products';
   document.querySelector('nav.links [data-nav=home]').textContent=state.lang==='cn'?'首页':'Home';
   document.querySelector('nav.links [data-nav=shop]').textContent=state.lang==='cn'?'商品':'Shop';
@@ -2307,6 +2793,13 @@ function ctaRoute(t){
   $('#view').hidden=false;
   $('#footer').hidden=false;
   $('#tabbar').hidden=false;
+  // mobile slim top bar (wordmark + lang) — desktop hides it via CSS
+  $('#mtop').hidden=false;
+  $('#mtWm').textContent=state.brand;
+  $('#mtWm').style.cursor='pointer';
+  $('#mtWm').addEventListener('click',()=>{location.hash='#/';});
+  $('#mtLang').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+    state.lang=b.dataset.lang;try{localStorage.setItem('shop_lang',state.lang);}catch{}applyLangToUI();route();});
 
   // search submit → shop
   $('#searchForm').addEventListener('submit',e=>{e.preventDefault();
@@ -2358,6 +2851,12 @@ function ctaRoute(t){
     if(!el) return;
     e.preventDefault();
     ctaRoute(el.getAttribute('data-cta-target'));
+  });
+  // Global navigation delegation for [data-go] (Me page + all sub-pages).
+  $('#view').addEventListener('click',e=>{
+    const g=e.target.closest('[data-go]'); if(!g) return;
+    if((g.classList.contains('me-bucket')||g.classList.contains('me-stat'))&&!state.token){ openLogin(); return; }
+    location.hash=g.dataset.go;
   });
   // When the block engine pulls lazy data (top-selling grids, flash sales) or a
   // countdown hits zero, re-render the home if that's where we are.
