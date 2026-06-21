@@ -992,6 +992,7 @@ async function renderCheckout(){
   coInjectCheckoutStyle();
   co.idem=co.idem||('web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));
   co.preorderSeen=false;   // pre-order popup auto-shows once per checkout visit
+  co.batchSeen=false;      // fresh-batch popup auto-shows once per checkout visit
   co.addrPickerOpen=false;
   const n=coItems().reduce((a,l)=>a+(Number(l.qty)||0),0);
   v.innerHTML=`<div class="cox">
@@ -999,6 +1000,7 @@ async function renderCheckout(){
       <div class="cx-kicker">${cn?'下单 · 02/03':'WHERE & HOW · 02/03'}</div>
       <div class="cx-title">${cn?'去哪里、怎么送':'Where &amp; how.'}</div>
     </div>
+    <div id="coBatch" style="padding:0 22px"></div>
     <div id="coPreorder" style="padding:0 22px"></div>
     <section class="cx-sec cx-sec--first">
       <div class="cx-seclabel">${cn?'你的订单':'YOUR ORDER'} · ${n} ${cn?'件':'ITEMS'}</div>
@@ -1473,7 +1475,7 @@ async function coQuote(){
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
-  renderCoSlots(d); renderCoPoints(d); renderCoSummary(d); renderCoPreorder(d);
+  renderCoSlots(d); renderCoPoints(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
 // "Ships soon" pre-order notice (server preorder_notice): a persistent banner in
@@ -1530,6 +1532,79 @@ function coPreorderPopup(){
   const close=()=>{ov.hidden=true;};
   ov.onclick=e=>{if(e.target===ov)close();};
   $('#copoGot').addEventListener('click',close);
+}
+// "Made fresh for you" notice (server batch_notice): a banner + one-time popup
+// for carts holding a freshly-made batch item, with the make→arrive dates and an
+// operator-editable freshness tip — mirrors the mini-app checkout.
+function coInjectBatchStyle(){
+  if($('#cobStyle'))return;
+  const s=document.createElement('style'); s.id='cobStyle';
+  s.textContent=`
+  .cob-banner{display:flex;align-items:flex-start;gap:11px;margin:0 0 18px;padding:13px 15px;border:1px solid var(--accent,#6d9c2a);background:rgba(109,156,42,.08);border-radius:14px;}
+  .cob-ic{font-size:22px;line-height:1.2;flex:0 0 auto;}
+  .cob-t{font-weight:700;margin-bottom:2px;}
+  .cob-m{font-size:13px;line-height:1.5;color:var(--muted,#6b6358);}
+  .cob-more{margin-left:auto;flex:0 0 auto;align-self:center;font:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent,#6d9c2a);background:none;border:0;cursor:pointer;}
+  .cob-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:120;padding:20px;}
+  .cob-card{background:#fff;border-radius:20px;max-width:380px;width:100%;padding:26px 22px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.25);}
+  .cob-hero{font-size:40px;}
+  .cob-kicker{margin-top:6px;font-size:12px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent,#6d9c2a);}
+  .cob-title{font-size:22px;font-weight:800;margin:2px 0 14px;}
+  .cob-items{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;margin-bottom:14px;}
+  .cob-chip{font-size:13px;background:rgba(109,156,42,.1);border:1px solid rgba(109,156,42,.28);border-radius:999px;padding:5px 11px;}
+  .cob-body{font-size:14px;line-height:1.6;color:var(--muted,#6b6358);margin-bottom:14px;}
+  .cob-tl{display:flex;align-items:center;justify-content:center;gap:14px;background:rgba(54,83,41,.06);border-radius:14px;padding:12px;margin-bottom:14px;}
+  .cob-tl-step{flex:1;}
+  .cob-tl-dot{width:11px;height:11px;border-radius:999px;margin:0 auto 7px;}
+  .cob-tl-dot--make{background:#b5803a;}
+  .cob-tl-dot--arrive{background:var(--accent,#6d9c2a);}
+  .cob-tl-lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#6b6358);margin-bottom:3px;}
+  .cob-tl-date{font-size:14px;font-weight:800;}
+  .cob-tl-line{flex:0 0 auto;width:32px;border-top:2px dashed rgba(54,83,41,.3);}
+  .cob-tip{display:flex;align-items:flex-start;gap:9px;text-align:left;background:rgba(109,156,42,.08);border:1px solid rgba(109,156,42,.22);border-radius:12px;padding:11px 13px;margin-bottom:18px;}
+  .cob-tip-dot{flex:0 0 auto;width:9px;height:9px;border-radius:999px;background:var(--accent,#6d9c2a);margin-top:5px;}
+  .cob-tip-text{font-size:13px;line-height:1.5;color:var(--ink,#36321f);}
+  .cob-go{width:100%;font:inherit;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--accent,#6d9c2a);color:#fff;border:0;border-radius:999px;padding:14px;cursor:pointer;}`;
+  document.head.appendChild(s);
+}
+function renderCoBatch(d){
+  const box=$('#coBatch'); if(!box)return;
+  const n=d&&d.batch_notice;
+  if(!n){ box.innerHTML=''; return; }
+  coInjectBatchStyle();
+  const t=state.lang==='cn'?n.title_cn:n.title_en, m=state.lang==='cn'?n.message_cn:n.message_en;
+  box.innerHTML=`<div class="cob-banner"><span class="cob-ic">🥗</span>
+    <div><div class="cob-t">${esc(t||'')}</div><div class="cob-m">${esc(m||'')}</div></div>
+    <button class="cob-more" id="cobMore">${state.lang==='cn'?'详情':'Details'}</button></div>`;
+  $('#cobMore').addEventListener('click',coBatchPopup);
+  if(!co.batchSeen){ co.batchSeen=true; coBatchPopup(); }
+}
+function coBatchPopup(){
+  const n=co.quote&&co.quote.batch_notice; if(!n)return;
+  coInjectBatchStyle();
+  let ov=$('#cobPop');
+  if(!ov){ov=document.createElement('div');ov.id='cobPop';ov.className='cob-overlay';document.body.appendChild(ov);}
+  const L=state.lang;
+  const items=(Array.isArray(n.items)?n.items:[]).map(it=>`<span class="cob-chip">${esc(pick(it.name_en,it.name_cn))}</span>`).join('');
+  const tip=esc(L==='cn'?(n.tip_cn||''):(n.tip_en||''));
+  ov.innerHTML=`<div class="cob-card">
+    <div class="cob-hero">🥗</div>
+    <div class="cob-kicker">${esc(L==='cn'?n.kicker_cn:n.kicker_en)}</div>
+    <div class="cob-title">${esc(L==='cn'?n.title_cn:n.title_en)}</div>
+    ${items?`<div class="cob-items">${items}</div>`:''}
+    <div class="cob-body">${esc(L==='cn'?n.message_cn:n.message_en)}</div>
+    <div class="cob-tl">
+      <div class="cob-tl-step"><div class="cob-tl-dot cob-tl-dot--make"></div><div class="cob-tl-lbl">${L==='cn'?'现做发货':'MADE &amp; SHIPPED'}</div><div class="cob-tl-date">${esc(n.ship_date||'')}</div></div>
+      <div class="cob-tl-line"></div>
+      <div class="cob-tl-step"><div class="cob-tl-dot cob-tl-dot--arrive"></div><div class="cob-tl-lbl">${L==='cn'?'新鲜送达':'ARRIVES FRESH'}</div><div class="cob-tl-date">${esc(n.delivery_date||'')}</div></div>
+    </div>
+    ${tip?`<div class="cob-tip"><span class="cob-tip-dot"></span><span class="cob-tip-text">${tip}</span></div>`:''}
+    <button class="cob-go" id="cobGot">${L==='cn'?'知道了':'Got it'}</button>
+  </div>`;
+  ov.hidden=false;
+  const close=()=>{ov.hidden=true;};
+  ov.onclick=e=>{if(e.target===ov)close();};
+  $('#cobGot').addEventListener('click',close);
 }
 // Points redemption: a single opt-in toggle (server clamps points_to_use to the
 // usable max). Hidden when the customer has no usable points on this order.
