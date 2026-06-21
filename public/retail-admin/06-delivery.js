@@ -186,6 +186,8 @@ async function loadDeliveryZones() {
     if ($('#batch-title-cn'))  $('#batch-title-cn').value  = batch.title_cn || '';
     if ($('#batch-msg-en'))   $('#batch-msg-en').value   = batch.message_en || '';
     if ($('#batch-msg-cn'))   $('#batch-msg-cn').value   = batch.message_cn || '';
+    if ($('#batch-tip-en'))   $('#batch-tip-en').value   = batch.tip_en || '';
+    if ($('#batch-tip-cn'))   $('#batch-tip-cn').value   = batch.tip_cn || '';
     const bcb = $('#batch-enabled');
     if (bcb && !bcb._wired) {
       bcb._wired = true;
@@ -262,6 +264,8 @@ async function saveBatchSchedule() {
       title_cn:  val('#batch-title-cn'),
       message_en: val('#batch-msg-en'),
       message_cn: val('#batch-msg-cn'),
+      tip_en: val('#batch-tip-en'),
+      tip_cn: val('#batch-tip-cn'),
     },
   };
   try {

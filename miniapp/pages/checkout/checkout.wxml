@@ -988,7 +988,7 @@
         <view class="bn-tip-icon">
           <view class="bn-tip-dot"></view>
         </view>
-        <view class="bn-tip-text">{{ lang === 'cn' ? '我们建议在收到后 48 小时内享用这些新鲜现做的商品，以获得最佳口感与新鲜度。' : 'We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness.' }}</view>
+        <view class="bn-tip-text">{{ lang === 'cn' ? (batchNotice.tip_cn || '我们建议在收到后 48 小时内享用这些新鲜现做的商品，以获得最佳口感与新鲜度。') : (batchNotice.tip_en || 'We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness.') }}</view>
       </view>
 
       <view class="bn-cta f-toni" bindtap="closeBatchNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
