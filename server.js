@@ -347,11 +347,11 @@ app.get('/backend/billing', (req, res) => {
 // bare domain all keep serving the kitchen app.
 const STORE_HOST = 'store.rootskitchenchina.com';
 
-// Subdomain that serves the PLATFORM account-manager console (store-admin.html)
+// Subdomain that serves the PLATFORM "System Back Office" console (store-admin.html)
 // at its root. This is the back office for the whole SaaS — the team manages
 // every merchant account here (platform_admins realm). Distinct from STORE_HOST
 // above, which serves an individual MERCHANT their own retail-admin backend.
-const STORE_ADMIN_HOST = 'store-admin.rootskitchenchina.com';
+const STORE_ADMIN_HOST = 'system.rootskitchenchina.com';
 
 // Serve the platform console shell. The page self-auths via /api/store-admin/me
 // and shows its own login form when signed out, so no server-side gate here

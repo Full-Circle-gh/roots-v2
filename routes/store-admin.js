@@ -1,6 +1,6 @@
 // store-admin console API — the PLATFORM account-manager backend.
 //
-// Serves store-admin.rootskitchenchina.com: the team that runs the SaaS signs
+// Serves system.rootskitchenchina.com (the "System Back Office"): the team that runs the SaaS signs
 // in here (platform_admins realm — see lib/platform-admin.js) and manages every
 // merchant account. This file owns the things UNIQUE to the platform console:
 //   • platform-staff auth (login / me / logout / password)
@@ -28,7 +28,7 @@ const router = express.Router();
 // session cookie is set on the right origin (cookies are host-scoped). Override
 // via env if the backend ever moves off store.rootskitchenchina.com.
 const STORE_BACKEND_HOST = process.env.STORE_BACKEND_HOST || 'store.rootskitchenchina.com';
-const STORE_ADMIN_HOST = process.env.STORE_ADMIN_HOST || 'store-admin.rootskitchenchina.com';
+const STORE_ADMIN_HOST = process.env.STORE_ADMIN_HOST || 'system.rootskitchenchina.com';
 // Hosts reserved for the platform itself — never registrable as a tenant domain.
 const RESERVED_HOSTS = new Set([STORE_BACKEND_HOST, STORE_ADMIN_HOST]);
 
