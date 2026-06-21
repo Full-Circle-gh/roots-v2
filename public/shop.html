@@ -1243,6 +1243,9 @@ function coInjectAddrStyle(){
   .mp-pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);font-size:30px;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
   .mp-locate{position:absolute;right:12px;bottom:12px;width:42px;height:42px;border-radius:50%;border:1.5px solid var(--ink);background:#fff;color:var(--ink);font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);padding:0;}
   .mp-locate:disabled{opacity:.5;cursor:default;}
+  .mp-userdot{width:16px;height:16px;border-radius:50%;background:#1aad19;border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.25),0 1px 4px rgba(0,0,0,.35);}
+  .mp-userdot::before{content:"";position:absolute;left:50%;top:50%;width:16px;height:16px;border-radius:50%;background:rgba(26,173,25,.35);transform:translate(-50%,-50%);animation:mpPulse 1.8s ease-out infinite;}
+  @keyframes mpPulse{0%{transform:translate(-50%,-50%) scale(1);opacity:.6;}100%{transform:translate(-50%,-50%) scale(3);opacity:0;}}
   .mp-addr{padding:10px 16px 0;font-size:13px;color:var(--ink);line-height:1.5;min-height:18px;}
   .mp-actions{padding:12px 16px 16px;}`;
   document.head.appendChild(s);
@@ -1339,16 +1342,27 @@ function coLoadMapSdk(cfg){
 function coMapAdapter(provider,el,center){
   if(provider==='amap'){
     const map=new AMap.Map(el,{zoom:16,center:[center.lng,center.lat],resizeEnable:true});
+    let dot=null;
     return {
       onMove:cb=>map.on('moveend',()=>{const c=map.getCenter();cb({lat:c.getLat(),lng:c.getLng()});}),
       setCenter:(lat,lng)=>map.setCenter([lng,lat]),
+      setUserDot:(lat,lng)=>{
+        if(!dot){ dot=new AMap.Marker({content:'<div class="mp-userdot"></div>',anchor:'center',offset:new AMap.Pixel(0,0),zIndex:50}); dot.setMap(map); }
+        dot.setPosition([lng,lat]);
+      },
       destroy:()=>{try{map.destroy();}catch(e){}},
     };
   }
   const map=new TMap.Map(el,{zoom:16,center:new TMap.LatLng(center.lat,center.lng)});
+  let dot=null;
   return {
     onMove:cb=>map.on('center_changed',()=>{const c=map.getCenter();cb({lat:c.getLat(),lng:c.getLng()});}),
     setCenter:(lat,lng)=>map.setCenter(new TMap.LatLng(lat,lng)),
+    setUserDot:(lat,lng)=>{
+      const pos=new TMap.LatLng(lat,lng);
+      if(!dot){ dot=new TMap.MultiMarker({map,styles:{u:new TMap.MarkerStyle({width:16,height:16,anchor:{x:8,y:8},src:'data:image/svg+xml;base64,'+btoa('<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><circle cx="8" cy="8" r="6" fill="#1aad19" stroke="#fff" stroke-width="2"/></svg>')})},geometries:[{id:'u',styleId:'u',position:pos}]}); }
+      else dot.updateGeometries([{id:'u',styleId:'u',position:pos}]);
+    },
     destroy:()=>{try{map.destroy();}catch(e){}},
   };
 }
@@ -1445,7 +1459,7 @@ async function openMapPicker(){
     if(!pt){ if(!silent)addrEl.textContent=cn?'无法定位，请拖动地图':'Couldn’t locate — drag the map'; return; }
     resultsEl.hidden=true;
     suppressUntil=Date.now()+1200;        // the recenter's move events shouldn't double-reverse
-    if(adapter)adapter.setCenter(pt.lat,pt.lng);
+    if(adapter){ adapter.setCenter(pt.lat,pt.lng); try{adapter.setUserDot(pt.lat,pt.lng);}catch(e){} }
     reverseCenter(pt.lat,pt.lng);
   }
   if(locateBtn)locateBtn.addEventListener('click',()=>locate(false));
