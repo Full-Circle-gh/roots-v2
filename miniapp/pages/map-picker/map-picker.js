@@ -48,31 +48,39 @@ Page({
   onReady() {
     this.mapCtx = wx.createMapContext('picker-map', this);
     // Open centred on the customer. Give the map a moment to initialise, then
-    // make sure we have location permission BEFORE moving — otherwise the very
-    // first open silently no-ops (and the user only sees themselves after
-    // tapping the locate button).
-    setTimeout(() => this.initLocate(), 300);
+    // recentre on a coarse (≈ district-level) fix from wx.getFuzzyLocation —
+    // precise enough that the customer only drags a few blocks. We use FUZZY,
+    // not wx.getLocation: the precise-location interface is rejected for this
+    // AppID, while getFuzzyLocation is the approvable one for "locate to fill a
+    // delivery address". If it's denied / not yet enabled, fall back to a
+    // coarse IP lookup off the server.
+    setTimeout(() => this.locateViaFuzzy(true), 300);
   },
 
-  initLocate() {
-    wx.getSetting({
-      success: (s) => {
-        const granted = s.authSetting && s.authSetting['scope.userLocation'];
-        if (granted === false) {
-          // Explicitly denied before — can't auto-locate; resolve the default.
-          this.refreshForCenter();
-          return;
+  // type:'gcj02' so the coords line up with the <map> component's coordinate
+  // system (and could feed chooseLocation/openLocation directly).
+  locateViaFuzzy(initial) {
+    wx.getFuzzyLocation({
+      type: 'gcj02',
+      success: (r) => {
+        if (r && isFinite(r.latitude) && isFinite(r.longitude)) {
+          this.recenterTo(r.latitude, r.longitude);
+        } else {
+          this.ipLocateFallback(initial);
         }
-        if (granted === true) { this.centerOnMe(true); return; }
-        // Undecided → ask once; on grant, locate; otherwise fall back.
-        wx.authorize({
-          scope: 'scope.userLocation',
-          success: () => this.centerOnMe(true),
-          fail: () => this.refreshForCenter(),
-        });
       },
-      fail: () => this.centerOnMe(true),
+      fail: () => this.ipLocateFallback(initial),
     });
+  },
+
+  // Move the map to a fix and resolve the pin's address (selection stays on the
+  // centre pin so the customer drags the final spot). `_suppress` skips the
+  // regionchange the programmatic move would otherwise trigger.
+  recenterTo(lat, lng) {
+    this._center = { lat, lng };
+    this._suppress = true;
+    this.setData({ selectedId: 'pin', lat, lng });
+    setTimeout(() => this.refreshForCenter(), 300);
   },
 
   onUnload() {
@@ -194,23 +202,23 @@ Page({
     this.setData({ selectedId: poi.id, canConfirm: true, lat: poi.lat, lng: poi.lng });
   },
 
-  // Recentre the map on the device. `initial` = on-open (silent on failure);
-  // retries once because the first attempt can fire before the map's location
-  // subsystem is ready (which is why the on-open jump used to be missed).
-  centerOnMe(initial, _retry) {
-    if (!this.mapCtx) return;
-    this.mapCtx.moveToLocation({
-      success: () => { setTimeout(() => this.refreshForCenter(), 250); },
-      fail: () => {
-        if (!_retry) { setTimeout(() => this.centerOnMe(initial, true), 700); return; }
-        if (!initial) {
-          wx.showToast({ title: this.data.lang === 'cn' ? '无法定位,请手动拖动地图' : 'Can’t locate — drag the map', icon: 'none' });
-        }
-        this.refreshForCenter();
-      },
-    });
+  // Coarse "where am I" from the server's IP geolocation — the fallback when
+  // getFuzzyLocation is denied or its interface isn't enabled yet. Recenters on
+  // the returned city centre (selection stays on the pin so the customer drags
+  // the final spot). Toasts only on an explicit tap that yields nothing.
+  ipLocateFallback(initial) {
+    const toast = () => {
+      if (!initial) wx.showToast({ title: this.data.lang === 'cn' ? '无法定位,请手动拖动地图' : 'Can’t locate — drag the map', icon: 'none' });
+      this.refreshForCenter();
+    };
+    api.get('/api/retail/ip-locate')
+      .then((g) => {
+        if (g && isFinite(g.lat) && isFinite(g.lng)) this.recenterTo(g.lat, g.lng);
+        else toast();
+      })
+      .catch(toast);
   },
-  locateMe() { this.setData({ selectedId: 'pin' }); this.centerOnMe(false); },
+  locateMe() { this.locateViaFuzzy(false); },
 
   confirm() {
     if (this.data.resolving && this.data.selectedId === 'pin') {

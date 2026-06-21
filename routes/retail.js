@@ -5700,6 +5700,27 @@ router.post('/api/retail/reverse-geocode', requireRetailAuth, express.json(), as
   }
 });
 
+// GET /api/retail/ip-locate — coarse "where am I" from the caller's IP, for the
+// map picker's locate button when precise GPS is unavailable (mini-app: WeChat
+// getLocation interface not granted; web: SDK geolocation denied/failed). The
+// client can't trust its own IP, so we read it server-side from the proxy
+// headers (nginx sets X-Forwarded-For; trust-proxy makes req.ip the real one).
+// City-level only — the picker still expects the customer to drag the final pin.
+router.get('/api/retail/ip-locate', requireRetailAuth, async (req, res) => {
+  if (!geocode.configured()) {
+    return res.json({ success: false, error: 'maps_key_missing' });
+  }
+  const ip = (req.headers['x-forwarded-for'] || req.ip || '').toString().split(',')[0].trim();
+  try {
+    const out = await geocode.ipLocate(ip);
+    if (!out || out.lat == null) return res.json({ success: false, error: 'no_result' });
+    return res.json({ success: true, data: out });
+  } catch (e) {
+    console.warn('[ip-locate]', e.message);
+    return res.json({ success: false, error: 'lookup_failed' });
+  }
+});
+
 // POI search for the in-app map picker's "search + nearby list" (mirrors
 // WeChat's chooseLocation UI). No keyword → places around the map centre; with
 // a keyword → a text search biased to the centre / city. Degrades to
