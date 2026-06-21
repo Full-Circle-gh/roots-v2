@@ -112,7 +112,13 @@ function _alipayManualPickFile(event) {
   reader.readAsDataURL(file);
 }
 
-async function _saveAlipayManual() {
+// Persist the manual-Alipay card. Throws Error(friendlyMessage) on failure so
+// the shared "Save settings" bar (saveConfig) can surface it — this card no
+// longer has its own Save button. Updates the card's chip/status on success and
+// emits no toast of its own (the caller toasts once for the whole settings save).
+async function saveAlipayManualInline() {
+  // Card absent from this build → nothing to save (keeps saveConfig generic).
+  if (!document.getElementById('alipay-manual-enabled')) return;
   const val = (id) => ((document.getElementById(id) || {}).value || '').trim();
   const chk = (id) => !!(document.getElementById(id) || {}).checked;
   const status = document.getElementById('alipay-manual-status');
@@ -132,26 +138,34 @@ async function _saveAlipayManual() {
   // on every routine save (e.g. just toggling a checkbox) re-uploads the whole
   // image and trips the reverse-proxy body limit → a non-JSON 413 → "Save failed".
   if (_alipayManualQr) body.qr = _alipayManualQr;
+  if (status) status.textContent = 'Saving… · 保存中…';
+  let r, j;
   try {
-    if (status) status.textContent = 'Saving… · 保存中…';
-    const r = await fetch('/api/retail-admin/alipay-manual', {
+    r = await fetch('/api/retail-admin/alipay-manual', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
-    const j = await r.json();
-    if (!r.ok || !j.success) {
-      const msg = j.error === 'qr_required' ? 'Upload a收款码 image first · 请先上传收款码图片'
-                : j.error === 'image_too_big' ? 'Image too large · 图片过大'
-                : j.error === 'ocr_key_required' ? 'Enter the Anthropic API key to enable auto-read · 请填写 API 密钥以启用自动识别'
-                : j.error === 'bad_image' ? 'Not a valid image · 图片格式无效' : (j.error || 'save failed');
-      if (status) status.textContent = '';
-      toast(msg, 'error');
-      return;
-    }
-    if (status) status.textContent = 'Saved ✓ · 已保存';
-    _alipayManualQr = null;
-    _alipayManualChip(enabled);
-    toast('Saved · 已保存', 'success');
-  } catch (e) { if (status) status.textContent = ''; toast('Save failed · 保存失败: ' + e.message, 'error'); }
+    j = await r.json();
+  } catch (e) {
+    if (status) status.textContent = '';
+    throw new Error('Alipay 收款码: ' + (e.message || 'network error'));
+  }
+  if (!r.ok || !j.success) {
+    const msg = j.error === 'qr_required' ? 'Upload a收款码 image first · 请先上传收款码图片'
+              : j.error === 'image_too_big' ? 'Image too large · 图片过大'
+              : j.error === 'ocr_key_required' ? 'Enter the Anthropic API key to enable auto-read · 请填写 API 密钥以启用自动识别'
+              : j.error === 'bad_image' ? 'Not a valid image · 图片格式无效' : (j.error || 'save failed');
+    if (status) status.textContent = '';
+    throw new Error(msg);
+  }
+  if (status) status.textContent = 'Saved ✓ · 已保存';
+  _alipayManualQr = null;
+  _alipayManualChip(body.enabled);
+}
+
+// Backward-compat shim for any direct caller — saves just this card and toasts.
+async function _saveAlipayManual() {
+  try { await saveAlipayManualInline(); toast('Saved · 已保存', 'success'); }
+  catch (e) { toast(e.message || 'Save failed · 保存失败', 'error'); }
 }
 
 // ── Stores · 门店 — list + add/edit, online-store self-managed ──

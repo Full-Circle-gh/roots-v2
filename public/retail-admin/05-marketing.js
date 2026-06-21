@@ -1279,10 +1279,14 @@ async function saveConfig() {
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
+    // The manual-Alipay 收款码 card shares this Save bar now (it no longer has
+    // its own button). Save it too; it throws a friendly message on failure.
+    if (typeof saveAlipayManualInline === 'function') await saveAlipayManualInline();
     status.innerHTML = '<span class="ok">Saved ✓</span>';
     toast('Settings saved · 设置已保存');
   } catch (e) {
     status.innerHTML = '<span class="err">Failed · 失败: ' + e.message + '</span>';
+    toast('Save failed · 保存失败: ' + e.message, 'err');
   }
 }
 
