@@ -3551,11 +3551,9 @@ function ctaRoute(t){
   try{ state.cats=(await api('/api/retail/category-tree?counts=1'))||[]; }catch(e){ state.cats=[]; }
   state.cats=state.cats.filter(c=>!c.count||c.count>0);
 
-  $('#footMeta').textContent=location.hostname;
   applyLangToUI();
   document.querySelector('header.bar').hidden=false;
   $('#view').hidden=false;
-  $('#footer').hidden=false;
   $('#tabbar').hidden=false;
   // mobile floating language toggle (over the home hero) — desktop hides it via CSS.
   // Shown only on the home route (see route()); the hero is the top of the page now.
