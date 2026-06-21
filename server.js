@@ -376,7 +376,7 @@ app.get('/store-admin', serveStoreAdmin);
 app.get('/impersonate', (req, res) => {
   const dbx = require('./database');
   const token = String(req.query.t || '').trim();
-  const fail = (msg) => res.status(400).type('html').send('<!doctype html><meta charset="utf-8"><body style="font-family:system-ui,sans-serif;padding:40px;max-width:520px;margin:auto;color:#12161A"><h2>Impersonation link invalid</h2><p>'+msg+'</p><p><a href="https://'+STORE_ADMIN_HOST+'/">Back to Store Admin · 返回平台后台</a></p></body>');
+  const fail = (msg) => res.status(400).type('html').send('<!doctype html><meta charset="utf-8"><body style="font-family:system-ui,sans-serif;padding:40px;max-width:520px;margin:auto;color:#12161A"><h2>Impersonation link invalid</h2><p>'+msg+'</p><p><a href="https://'+STORE_ADMIN_HOST+'/">Back to System Back Office · 返回平台后台</a></p></body>');
   if (!token) return fail('Missing token. · 缺少令牌。');
   let row;
   try { row = dbx.prepare('SELECT * FROM platform_impersonation_tokens WHERE token = ?').get(token); }
