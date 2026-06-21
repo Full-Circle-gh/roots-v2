@@ -379,6 +379,25 @@
     .sp-foot{padding:18px 22px;}
     .sp-chip{display:inline-block;padding:3px 10px;border-radius:0;font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:var(--lime);}
     .sp-msg{font-size:13px;color:var(--berry);padding:8px 22px 0;min-height:16px;}
+    /* Address add/edit form — mirrors the mini-app's placeholder-only fields,
+       single delivery-area trigger, default toggle and ink/lime Save button. */
+    .af-form{padding:0 22px;}
+    .af-sub{font-family:var(--bf-bear);font-size:22px;color:var(--ink);line-height:1.1;margin:2px 0 16px;}
+    .af2-input{width:100%;box-sizing:border-box;font-family:var(--f-aleo);font-size:15px;padding:13px 14px;border:2px solid var(--ink);background:#FFFCF7;color:var(--ink);border-radius:0;margin-bottom:10px;}
+    .af2-input::placeholder{color:rgba(26,26,23,.42);}
+    .af2-area{position:relative;width:100%;box-sizing:border-box;text-align:left;font-family:var(--f-aleo);font-size:15px;padding:13px 38px 13px 14px;border:2px solid var(--ink);background:#FFFCF7;color:var(--ink);border-radius:0;margin-bottom:10px;cursor:pointer;}
+    .af2-area.ph{color:rgba(26,26,23,.42);}
+    .af2-area::after{content:'\203A';position:absolute;right:15px;top:50%;transform:translateY(-50%);font-size:22px;line-height:1;color:rgba(26,26,23,.5);}
+    .af2-map{display:block;width:100%;box-sizing:border-box;text-align:center;font-family:var(--bf-toni);font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:13px;padding:12px;border:2px solid var(--ink);background:#FFFCF7;color:var(--ink);cursor:pointer;margin-bottom:14px;border-radius:0;}
+    .af2-map[hidden]{display:none;}
+    .af2-default{display:flex;align-items:center;gap:12px;margin-top:16px;font-family:var(--f-aleo);font-size:15px;color:var(--ink);cursor:pointer;user-select:none;}
+    .af2-switch{position:relative;display:inline-block;width:48px;height:26px;flex:none;}
+    .af2-switch input{position:absolute;opacity:0;width:0;height:0;}
+    .af2-slider{position:absolute;inset:0;background:#d8d2c6;border:2px solid var(--ink);border-radius:999px;transition:background .15s;}
+    .af2-slider::before{content:'';position:absolute;left:2px;top:2px;width:18px;height:18px;background:#fff;border-radius:50%;transition:transform .15s;}
+    .af2-switch input:checked + .af2-slider{background:var(--ink);}
+    .af2-switch input:checked + .af2-slider::before{transform:translateX(22px);background:var(--lime);}
+    .sp-btn.af2-save{background:var(--ink);color:var(--lime);border-radius:0;}
     /* coupon sticker */
     .cpn{display:flex;align-items:stretch;margin:14px 22px 0;border:2px solid var(--ink);background:var(--corn);}
     .cpn.used{opacity:.5;}
@@ -2363,7 +2382,7 @@ async function renderAddresses(edit){
       <div class="sp-d">${esc(a.phone||'')}</div>
       <div style="margin-top:8px;display:flex;gap:16px"><button class="me-legal-a" data-edit="${a.id}">${cn?'编辑':'Edit'}</button>${a.is_default?'':`<button class="me-legal-a" data-def="${a.id}">${cn?'设为默认':'Set default'}</button>`}<button class="me-legal-a" style="color:var(--berry)" data-del="${a.id}">${cn?'删除':'Delete'}</button></div>
     </div></div>`).join('');
-  box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'收货地址':'Delivery addresses','')+
+  box.innerHTML=spBack()+spHead(cn?'收货地址':'ADDRESSES',cn?'我的地址':'Saved spots.','')+
     (rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'还没有收货地址':'No saved addresses yet'}</div>`)+
     `<div class="sp-foot"><button class="sp-btn block ink" id="addrNew">＋ ${cn?'添加新地址':'Add address'}</button></div>`;
   $('#addrNew').addEventListener('click',()=>renderAddresses('new'));
@@ -2383,36 +2402,36 @@ async function renderAddressForm(edit){
   let a={};
   if(isEdit){ try{ const all=await api('/api/retail/addresses')||[]; a=(all||[]).find(x=>String(x.id)===String(edit))||{}; }catch(e){} }
   await coLoadZones();
-  const cities=coCityRows();
-  const fst='width:100%;font:inherit;font-size:15px;padding:12px 14px;border:2px solid var(--ink);background:#fff;color:var(--ink);box-sizing:border-box;margin-top:6px;';
-  const lbl='display:block;font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--olive);margin-top:14px;';
-  const cityOpts=`<option value="">${cn?'选择城市':'Select a city'}</option>`+cities.map(c=>`<option value="${escAttr(c.name_cn)}" data-prov="${escAttr(c.province_cn||'')}" ${a.city===c.name_cn?'selected':''}>${esc(c.label)}</option>`).join('');
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'地址':'ADDRESS',isEdit?(cn?'编辑地址':'Edit address'):(cn?'新增地址':'New address'),'')}
-    <div class="sp-pad">
-      <label style="${lbl};margin-top:4px">${cn?'收件人':'Recipient'}</label><input id="afName" style="${fst}" value="${escAttr(a.recipient_name||'')}" placeholder="${cn?'姓名':'Full name'}">
-      <label style="${lbl}">${cn?'手机号':'Phone'}</label><input id="afPhone" type="tel" inputmode="numeric" style="${fst}" value="${escAttr(a.phone||'')}" placeholder="${cn?'手机号':'Phone number'}">
-      <label style="${lbl}">${cn?'城市':'City'}</label><select id="afCity" style="${fst}">${cityOpts}</select>
-      <label style="${lbl}">${cn?'区/县':'District'}</label><select id="afDist" style="${fst}"><option value="">${cn?'全城':'City-wide'}</option></select>
-      <label style="${lbl}">${cn?'详细地址':'Street address'}</label><textarea id="afAddr" style="${fst};min-height:70px;font-family:var(--f-aleo)" placeholder="${cn?'街道、楼栋、门牌号':'Street, building, number'}">${esc(a.address||'')}</textarea>
-      <label style="${lbl}">${cn?'门牌/单元（可选）':'Apt / unit (optional)'}</label><input id="afDetail" style="${fst}" value="${escAttr(a.detail||'')}">
-      <label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-size:14px;cursor:pointer"><input type="checkbox" id="afDef" ${a.is_default?'checked':''} style="width:18px;height:18px"> ${cn?'设为默认地址':'Set as default'}</label>
+  coInjectAddrStyle();   // ap-*/mp-* overlay styles for the area + map pickers
+  // Reuse checkout's shared delivery-area machinery (co.af + openAreaPicker +
+  // coApplyArea + the map picker), seeded from the address being edited so the
+  // single "delivery area" trigger shows the saved city/district on open —
+  // matching the mini-app's region picker rather than two raw dropdowns.
+  co.af={ province:a.province||'', city:a.city||'', district:a.district||'',
+          areaLabel:[a.city,a.district].filter(Boolean).join(' · ') };
+  const areaTxt=co.af.areaLabel||(cn?'点击选择配送区域':'Tap to choose your delivery area');
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'收货地址':'ADDRESSES',cn?'我的地址':'Saved spots.','')}
+    <div class="sp-pad af-form">
+      <div class="af-sub">${isEdit?(cn?'编辑地址':'Edit address'):(cn?'新增地址':'Add address')}</div>
+      <button type="button" id="afMap" class="af2-map" hidden>📍 ${cn?'地图选点':'Choose on map'}</button>
+      <input id="afName" class="af2-input" value="${escAttr(a.recipient_name||'')}" placeholder="${cn?'收件人姓名':'Recipient name'}">
+      <input id="afPhone" class="af2-input" type="tel" inputmode="numeric" value="${escAttr(a.phone||'')}" placeholder="${cn?'手机号码':'Phone number'}">
+      <button type="button" id="afArea" class="af2-area ${co.af.city?'':'ph'}">${esc(areaTxt)}</button>
+      <input id="afAddr" class="af2-input" value="${escAttr(a.address||'')}" placeholder="${cn?'详细地址':'Street address'}">
+      <input id="afDetail" class="af2-input" value="${escAttr(a.detail||'')}" placeholder="${cn?'楼层 / 单元 / 公寓（可选）':'Floor / unit / apartment (optional)'}">
+      <label class="af2-default"><span class="af2-switch"><input type="checkbox" id="afDef" ${a.is_default?'checked':''}><span class="af2-slider"></span></span> ${cn?'设为默认':'Set as default'}</label>
       <div class="sp-msg" id="afErr" style="padding-left:0"></div>
     </div>
-    <div class="sp-foot" style="display:flex;gap:10px"><button class="sp-btn ghost" id="afCancel" style="flex:1">${cn?'取消':'Cancel'}</button><button class="sp-btn" id="afSave" style="flex:2">${cn?'保存':'Save'}</button></div></div>`;
-  async function fillDistricts(cityCn,selDist){ const sel=$('#afDist');
-    if(!cityCn){ sel.innerHTML=`<option value="">${cn?'全城':'City-wide'}</option>`; return; }
-    const dists=await coLoadDistricts(cityCn);
-    sel.innerHTML=`<option value="">${cn?'全城':'City-wide'}</option>`+(dists||[]).map(d=>`<option value="${escAttr(d.name_cn)}" ${selDist===d.name_cn?'selected':''}>${esc(cn?d.name_cn:d.name_en)}</option>`).join(''); }
-  $('#afCity').addEventListener('change',()=>fillDistricts($('#afCity').value,''));
-  if(a.city) await fillDistricts(a.city,a.district);
+    <div class="sp-foot" style="display:flex;gap:10px"><button class="sp-btn ghost" id="afCancel" style="flex:1">${cn?'取消':'Cancel'}</button><button class="sp-btn af2-save" id="afSave" style="flex:1">${cn?'保存':'Save'}</button></div></div>`;
+  $('#afArea').addEventListener('click',openAreaPicker);
+  coSetupMapButton();   // reveals #afMap once maps-config confirms a JS key
   $('#afCancel').addEventListener('click',()=>renderAddresses());
   $('#afSave').addEventListener('click',async()=>{
     const name=($('#afName').value||'').trim(), phone=($('#afPhone').value||'').replace(/\D/g,'');
-    const citySel=$('#afCity'), cityCn=citySel.value, prov=(citySel.selectedOptions[0]&&citySel.selectedOptions[0].dataset.prov)||'';
-    const distCn=$('#afDist').value, street=($('#afAddr').value||'').trim(), detail=($('#afDetail').value||'').trim(), isDef=$('#afDef').checked;
-    if(!name||!phone||!cityCn||!street){ $('#afErr').textContent=cn?'请填写姓名、手机、城市和详细地址':'Please fill name, phone, city and street'; return; }
+    const street=($('#afAddr').value||'').trim(), detail=($('#afDetail').value||'').trim(), isDef=$('#afDef').checked;
+    if(!name||!phone||!co.af.city||!street){ $('#afErr').textContent=cn?'请填写姓名、手机、配送区域和详细地址':'Please fill name, phone, delivery area and street'; return; }
     const btn=$('#afSave'); btn.disabled=true; $('#afErr').textContent='';
-    const body={recipient_name:name,phone,province:prov,city:cityCn,district:distCn,address:street,detail,is_default:isDef};
+    const body={recipient_name:name,phone,province:co.af.province,city:co.af.city,district:co.af.district,address:street,detail,is_default:isDef};
     try{ if(isEdit) await apiSend('PUT','/api/retail/addresses/'+edit,body); else await postJson('/api/retail/addresses',body);
       toast(cn?'已保存':'Saved'); state.customer=null; renderAddresses(); }
     catch(e){ $('#afErr').textContent=cn?'保存失败，请检查信息':'Save failed — please check the details'; btn.disabled=false; }
