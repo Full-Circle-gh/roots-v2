@@ -2597,7 +2597,9 @@ async function renderVoting(){
   const v=$('#view'),cn=state.lang==='cn';
   document.title=(cn?'投票':'Your say')+' · '+state.brand;
   v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
-  let polls,cfg; try{ [polls,cfg]=await Promise.all([api('/api/retail/polls').catch(()=>[]),api('/api/retail/voting/config').catch(()=>({}))]); }catch(e){ polls=[]; cfg={}; }
+  // Public poll endpoint so the page works for anonymous shoppers too — api()
+  // still forwards the token when signed in, so my_vote + result bars persist.
+  let polls,cfg; try{ [polls,cfg]=await Promise.all([api('/api/retail/polls/public').catch(()=>[]),api('/api/retail/voting/config').catch(()=>({}))]); }catch(e){ polls=[]; cfg={}; }
   const box=v.querySelector('.sp');
   const showCounts=!cfg||cfg.show_counts!==false;
   const intro=pick(cfg&&cfg.intro_en,cfg&&cfg.intro_cn)||(cn?'帮我们决定下一款产品':'Help shape what we make next');
@@ -2608,7 +2610,7 @@ async function renderVoting(){
     return `<div class="sp-card" data-poll="${p.id}"><div style="font-family:var(--bf-bear);font-size:20px;line-height:1.15">${esc(pick(p.question_en,p.question_cn))}</div>${p.reward_points?`<div style="font-size:12px;color:var(--forest);margin-top:6px">+${p.reward_points} ${cn?'积分':'points'}</div>`:''}<div style="margin-top:6px">${opts}</div></div>`; };
   box.innerHTML=spBack()+spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say',intro)+polls.map(pollCard).join('');
   box.querySelectorAll('.poll-opt').forEach(b=>b.addEventListener('click',async()=>{ if(!state.token)return openLogin();
-    const card=b.closest('[data-poll]'); try{ const r=await postJson('/api/retail/polls/'+card.dataset.poll+'/vote',{option_id:Number(b.dataset.opt)}); if(r&&r.awarded_points)toast('+'+r.awarded_points+(cn?' 积分':' points')); state.customer=null; renderVoting(); }catch(e){ toast(cn?'投票失败':'Vote failed'); } }));
+    const card=b.closest('[data-poll]'); try{ const r=await postJson('/api/retail/polls/'+card.dataset.poll+'/vote',{option_id:Number(b.dataset.opt)}); if(r&&r.awarded_points)toast('+'+r.awarded_points+(cn?' 积分':' points')); state.customer=null; state.polls=undefined; renderVoting(); }catch(e){ toast(cn?'投票失败':'Vote failed'); } }));
 }
 
 async function renderAbout(){
@@ -2731,6 +2733,22 @@ async function route(){
 }
 
 /* ════════════ HOME ════════════ */
+// True when the home layout has a voting_block that auto-pulls a live poll
+// (teaser views + static blocks supply their own copy and need no poll data).
+// Used to avoid an extra network call on storefronts that don't show polls.
+function layoutNeedsPolls(layout){
+  return Array.isArray(layout) && layout.some(b =>
+    b && b.type==='voting_block'
+    && (b.data_source||'auto_pull')==='auto_pull'
+    && (b.view||((b.title_en||b.title_cn)?'teaser':'peek'))!=='teaser');
+}
+// Load live polls for the voting_block. Uses the public endpoint so anonymous
+// shoppers see polls too; the token (when present) is forwarded by api() so a
+// signed-in shopper still gets their own vote + result bars. Never throws.
+async function loadPolls(){
+  try{ return (await api('/api/retail/polls/public'))||[]; }catch(e){ return []; }
+}
+
 // Renders the operator's REAL CMS home layout using the shared block engine
 // (public/shop/blocks.js — a web port of the mini-app's block-renderer). Same
 // content as the mini-app, responsive for phone + desktop. Falls back to a
@@ -2768,7 +2786,13 @@ async function renderHome(){
   // the storefront config), so fold it in here — load it first if we have a
   // token but haven't fetched it yet — to match the mini-app's personalised card.
   if(state.token&&!state.customer){ try{ await loadCustomer(); }catch(e){} }
-  const homeConfig = Object.assign({}, state.config, { customer: state.customer||null });
+  // voting_block (auto-pull) reads ctx.config.polls — the same data the mini app
+  // feeds its block renderer. The web never loaded it before, so the block always
+  // fell through to its "No live poll" stub. Fetch live polls when the layout
+  // actually uses one (via the public endpoint so anonymous visitors see them
+  // too), and cache on state.polls. Generic: works for every tenant's storefront.
+  if(state.polls===undefined && layoutNeedsPolls(layout)){ state.polls = await loadPolls(); }
+  const homeConfig = Object.assign({}, state.config, { customer: state.customer||null, polls: state.polls||[] });
   ShopBlocks.stopTimers();
   ShopBlocks.setContext({ lang:state.lang, products:state.homeProducts||[], categories:state.cats, flashSales:state.flash||[], config:homeConfig });
   const view=$('#view');
@@ -3533,6 +3557,7 @@ function ctaRoute(t){
     location.hash='#/shop'+(c?`?cat=${encodeURIComponent(c.name)}`:''); return;
   }
   if(t==='shop'){ location.hash='#/shop'; return; }
+  if(t==='voting'){ location.hash='#/voting'; return; }
   if(t==='login'||t==='account'||t==='me'){ if(state.token&&state.customer) acctMenuToggle(true); else openLogin(); return; }
   if(t.indexOf('copy:')===0){ const code=t.slice(5);
     try{ navigator.clipboard.writeText(code); }catch{}
@@ -3617,6 +3642,22 @@ function ctaRoute(t){
     if(!el) return;
     e.preventDefault();
     ctaRoute(el.getAttribute('data-cta-target'));
+  });
+  // Block-engine inline poll voting: tapping an option in a home voting_block
+  // casts a vote (parity with the mini app). Requires login; on success it
+  // refreshes polls so the result bars + "vote counted" state appear in place.
+  $('#view').addEventListener('click',async e=>{
+    const opt=e.target.closest('.sb-vb-opt[data-vote-id]'); if(!opt) return;
+    const wrap=opt.closest('.sb-vb-opts[data-poll-id]'); if(!wrap||wrap.getAttribute('data-voted')) return;
+    if(!state.token) return openLogin();
+    const cn=state.lang==='cn';
+    try{
+      const r=await postJson('/api/retail/polls/'+wrap.getAttribute('data-poll-id')+'/vote',{option_id:Number(opt.getAttribute('data-vote-id'))});
+      if(r&&r.awarded_points) toast('+'+r.awarded_points+(cn?' 积分':' points'));
+      state.customer=null;                 // points changed — refetch on next read
+      state.polls=await loadPolls();        // pull fresh tallies + my_vote
+      renderHome();
+    }catch(err){ toast(cn?'投票失败':'Vote failed'); }
   });
   // Global navigation delegation for [data-go] (Me page + all sub-pages).
   $('#view').addEventListener('click',e=>{

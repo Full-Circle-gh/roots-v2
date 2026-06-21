@@ -1157,7 +1157,7 @@
       ? '<div class="sb-vb-voted" style="background:' + attr(accent) + '"><div class="sb-vb-voted-dot" style="color:' + attr(accent) + '">✓</div><div class="sb-vb-voted-text">' + (CN() ? '已投票 · 谢谢' : 'Vote counted. Thanks!') + '</div></div>'
       : ctaWrap(ctaTarget, '<div class="sb-vb-cta">' + (CN() ? '请选择' : 'PICK ONE TO VOTE') + '</div>');
     return shell(statusRow + '<div class="sb-vb-q">' + escapeHtml(question) + '</div>' +
-      '<div class="sb-vb-opts">' + opts + '</div>' + foot +
+      '<div class="sb-vb-opts" data-poll-id="' + escapeHtml(String(livePoll.id)) + '"' + (showResults ? ' data-voted="1"' : '') + '>' + opts + '</div>' + foot +
       '<div class="sb-vb-foot">' + totalVotes + ' ' + (CN() ? '票' : 'VOTES SO FAR') + '</div>');
   };
 
