@@ -226,10 +226,12 @@ app.use('/api', (req, res, next) => {
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
 app.use(require('./routes/backend-team'));   // Mini App Backend team management (operators within a tenant)
+app.use(require('./routes/backend-notices')); // Merchant-facing platform notices (broadcasts + impersonation banner)
 app.use(require('./routes/billing'));        // Mini App Backend billing control plane (plans / subscriptions / invoices)
 app.use(require('./routes/billing-pay'));    // Mini App Backend billing payments & lifecycle (select-plan / checkout / mark-paid)
 app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
 app.use(require('./routes/saas-admin'));     // Platform owner console — tenants / subscriptions / branding (kitchen-admin gated)
+app.use(require('./routes/store-admin'));    // Platform account-manager console — store-admin.* (platform_admins realm + audit)
 app.use(require('./routes/ingredients'));
 app.use(require('./routes/recipes'));
 app.use(require('./routes/admin'));
@@ -335,6 +337,63 @@ app.get('/backend/billing', (req, res) => {
 // bare domain all keep serving the kitchen app.
 const STORE_HOST = 'store.rootskitchenchina.com';
 
+// Subdomain that serves the PLATFORM "System Back Office" console (store-admin.html)
+// at its root. This is the back office for the whole SaaS — the team manages
+// every merchant account here (platform_admins realm). Distinct from STORE_HOST
+// above, which serves an individual MERCHANT their own retail-admin backend.
+const STORE_ADMIN_HOST = 'system.rootskitchenchina.com';
+
+// Serve the platform console shell. The page self-auths via /api/store-admin/me
+// and shows its own login form when signed out, so no server-side gate here
+// (same self-auth pattern as the retail-admin shell). Always fresh — low-traffic
+// and must never be pinned to a stale build by an intermediary cache.
+function serveStoreAdmin(req, res) {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'store-admin.html'));
+}
+
+// Preview path on the EXISTING secure domain, so the console can be opened
+// before store-admin.* DNS + TLS are set up (mirrors /shop-preview). Same shell.
+app.get('/store-admin', serveStoreAdmin);
+
+// ── Impersonation hand-off ("log in as store") ───────────────────────────
+// A one-time token minted by the store-admin console is opened here ON THE
+// MERCHANT-BACKEND HOST, so the session cookie lands on the right origin
+// (cookies are host-scoped). We validate + burn the token, start the tenant's
+// operator session, and stamp who's impersonating so the retail-admin banner
+// can show it and offer an exit.
+app.get('/impersonate', (req, res) => {
+  const dbx = require('./database');
+  const token = String(req.query.t || '').trim();
+  const fail = (msg) => res.status(400).type('html').send('<!doctype html><meta charset="utf-8"><body style="font-family:system-ui,sans-serif;padding:40px;max-width:520px;margin:auto;color:#12161A"><h2>Impersonation link invalid</h2><p>'+msg+'</p><p><a href="https://'+STORE_ADMIN_HOST+'/">Back to System Back Office · 返回平台后台</a></p></body>');
+  if (!token) return fail('Missing token. · 缺少令牌。');
+  let row;
+  try { row = dbx.prepare('SELECT * FROM platform_impersonation_tokens WHERE token = ?').get(token); }
+  catch (e) { return fail('Not available. · 暂不可用。'); }
+  if (!row || row.used_at) return fail('This link was already used. · 链接已被使用。');
+  if (Date.parse(row.expires_at) < Date.now()) return fail('This link has expired — links last 2 minutes. · 链接已过期(有效期 2 分钟)。');
+  const op = dbx.prepare('SELECT id, tenant_id, is_active FROM tenant_users WHERE id = ?').get(row.operator_id);
+  const tenant = op && dbx.prepare('SELECT status FROM tenants WHERE id = ?').get(op.tenant_id);
+  if (!op || !op.is_active || !tenant || tenant.status !== 'active') return fail('The store or operator is no longer available. · 店铺或操作员不可用。');
+  dbx.prepare('UPDATE platform_impersonation_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
+  req.session.backendUserId = op.id;
+  req.session.tenantId = op.tenant_id;
+  req.session.impersonatedBy = { kind: row.by_kind, id: row.by_id, name: row.by_name, at: new Date().toISOString() };
+  req.session.cookie.maxAge = 2 * 60 * 60 * 1000;   // impersonation sessions stay short-lived
+  return res.redirect('/');
+});
+
+// End an impersonation session and return to the console.
+app.get('/impersonate/exit', (req, res) => {
+  if (req.session) {
+    delete req.session.backendUserId;
+    delete req.session.tenantId;
+    delete req.session.impersonatedBy;
+  }
+  return res.redirect('https://' + STORE_ADMIN_HOST + '/');
+});
+
 // Serve the Mini App Backend (retail-admin) shell. Page self-auths via
 // /api/auth/me. Shared by the /retail-admin path and the store.* subdomain root.
 function serveRetailAdmin(req, res) {
@@ -374,9 +433,16 @@ function serveShop(req, res) {
 // Main app - serves the SPA shell
 const { requireAuth } = require('./middleware/auth');
 app.get('/', (req, res) => {
+  const host = (req.hostname || '').toLowerCase();
+  // Platform account-manager console subdomain → the store-admin shell. Self-
+  // auths against the platform_admins realm; checked before STORE_HOST so the
+  // two subdomains never cross.
+  if (host === STORE_ADMIN_HOST) {
+    return serveStoreAdmin(req, res);
+  }
   // Online-store subdomain lands directly on the Mini App Backend, not the
   // kitchen SPA. It self-auths, so we skip requireAuth for that host.
-  if ((req.hostname || '').toLowerCase() === STORE_HOST) {
+  if (host === STORE_HOST) {
     return serveRetailAdmin(req, res);
   }
   // A registered storefront domain → the public customer website.

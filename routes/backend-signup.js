@@ -9,6 +9,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const db = require('../database');
 const { provisionTenant } = require('../lib/provision-tenant');
+const { requirePlatformAdmin, logAudit } = require('../lib/platform-admin');
 const router = express.Router();
 
 const SIGNUP_OPEN = () => process.env.BACKEND_SIGNUP_OPEN === '1';
@@ -32,13 +33,11 @@ db.exec(`
   );
 `);
 
-// Same kitchen-admin gate saas-admin uses — the leads list is platform-owner only.
-function requireSaasAdmin(req, res, next) {
-  if (!req.session?.userId) return res.status(401).json({ error: 'Admin login required · 需要管理员登录' });
-  const u = db.prepare('SELECT role FROM users WHERE id = ? AND is_active = 1').get(req.session.userId);
-  if (!u || u.role !== 'admin') return res.status(403).json({ error: 'Admin only · 仅限管理员' });
-  next();
-}
+// The leads list / lead actions are platform-owner only. Accepts a platform-staff
+// session (or a kitchen admin as implicit super); the lead actions additionally
+// require the `signup.write` capability (super + support roles).
+const requireLeadsView = requirePlatformAdmin('view');
+const requireLeadsWrite = requirePlatformAdmin('signup.write');
 
 const signupLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
@@ -124,17 +123,18 @@ router.post('/api/backend/signup/request', requestLimiter, express.json(), (req,
 });
 
 // ── Leads list + status (platform owner / kitchen admin only) ────────────
-router.get('/api/backend/signup/requests', requireSaasAdmin, (req, res) => {
+router.get('/api/backend/signup/requests', requireLeadsView, (req, res) => {
   const rows = db.prepare('SELECT * FROM tenant_signup_requests ORDER BY (status = \'new\') DESC, created_at DESC').all();
   res.json({ success: true, requests: rows });
 });
 
-router.post('/api/backend/signup/requests/:id/status', requireSaasAdmin, express.json(), (req, res) => {
+router.post('/api/backend/signup/requests/:id/status', requireLeadsWrite, express.json(), (req, res) => {
   const allowed = ['new', 'contacted', 'provisioned', 'declined'];
   const status = String((req.body && req.body.status) || '').trim();
   if (!allowed.includes(status)) return res.status(400).json({ success: false, error: 'Unknown status · 未知状态' });
   const r = db.prepare('UPDATE tenant_signup_requests SET status = ? WHERE id = ?').run(status, Number(req.params.id));
   if (!r.changes) return res.status(404).json({ success: false, error: 'Request not found · 未找到请求' });
+  logAudit(req, { action: 'lead.status', targetType: 'lead', targetId: req.params.id, meta: { status } });
   res.json({ success: true });
 });
 

@@ -73,6 +73,88 @@
      applyFeatureGates() then removes the class for any feature an operator (or
      the platform) has turned off. -->
 <body class="feat-membership feat-affiliate feat-reviews feat-feedback feat-socialProof">
+<!-- Platform notice bar (impersonation indicator + platform broadcasts).
+     Self-contained: it fetches /api/backend/notices and renders a fixed top bar,
+     independent of the app JS so it works even if a module fails. visibility is
+     forced visible so it shows through the anti-FOUC body guard above. -->
+<div id="fc-pnotice" style="position:fixed;top:0;left:0;right:0;z-index:99999;visibility:visible;font-family:'IBM Plex Sans','IBM Plex Sans SC',system-ui,sans-serif"></div>
+<script>
+(function(){
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function bar(bg,fg,html){return '<div style="background:'+bg+';color:'+fg+';padding:8px 14px;font-size:13px;line-height:1.35;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(0,0,0,.18)">'+html+'</div>';}
+  fetch('/api/backend/notices',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(j){
+    if(!j) return; var host=document.getElementById('fc-pnotice'); if(!host) return; var out='';
+    if(j.impersonation){
+      var who=esc(j.impersonation.by||'platform staff');
+      out+=bar('#8a1c2b','#fff','<strong style="letter-spacing:.04em;white-space:nowrap">IMPERSONATING · 代登录</strong><span style="flex:1;min-width:0">Viewing this store as its operator — actions are real. Started by '+who+'. · 您正以该店铺操作员身份操作,所有更改真实生效。</span><a href="/impersonate/exit" style="background:#fff;color:#8a1c2b;font-weight:600;text-decoration:none;padding:5px 11px;border-radius:6px;white-space:nowrap">Exit · 退出</a>');
+    }
+    (j.broadcasts||[]).forEach(function(b){
+      try{ if(localStorage.getItem('fc-bc-dismiss-'+b.id)) return; }catch(e){}
+      var pal=b.level==='critical'?['#8a1c2b','#fff']:(b.level==='warn'?['#7a5b12','#fff']:['#1f2a30','#E8E5DC']);
+      var t=esc(b.titleEn||'')+((b.titleEn&&b.titleCn)?' · ':'')+esc(b.titleCn||'');
+      var bd=esc(b.bodyEn||'')+((b.bodyEn&&b.bodyCn)?' · ':'')+esc(b.bodyCn||'');
+      out+=bar(pal[0],pal[1],(t?'<strong>'+t+'</strong> ':'')+'<span style="flex:1;min-width:0">'+bd+'</span><button data-bc="'+b.id+'" aria-label="Dismiss" style="background:transparent;border:0;color:inherit;opacity:.7;font-size:18px;line-height:1;cursor:pointer">&times;</button>');
+    });
+    if(out){ host.innerHTML=out;
+      Array.prototype.forEach.call(host.querySelectorAll('[data-bc]'),function(btn){ btn.addEventListener('click',function(){ try{localStorage.setItem('fc-bc-dismiss-'+btn.getAttribute('data-bc'),'1');}catch(e){} var row=btn.parentNode; if(row&&row.parentNode) row.parentNode.removeChild(row); }); });
+    }
+  }).catch(function(){});
+})();
+</script>
+<!-- Platform support launcher — a self-contained floating widget so a merchant
+     can reach platform support (tickets) from their backend. Independent of the
+     app JS. Only mounts once a backend operator is signed in. -->
+<script>
+(function(){
+  var FG='#12161A', AC='#B08D4A', PANEL='#fff', LINE='#e4e1d8';
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function el(tag,css,html){var e=document.createElement(tag); if(css)e.style.cssText=css; if(html!=null)e.innerHTML=html; return e;}
+  // Only mount for a signed-in operator — probe the lightweight notices endpoint.
+  fetch('/api/backend/me',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(j){
+    if(!j||!j.user) return; mount();
+  }).catch(function(){});
+  function mount(){
+    var btn=el('button','position:fixed;right:18px;bottom:84px;z-index:99998;background:'+AC+';color:'+FG+';border:0;border-radius:999px;padding:11px 16px;font:600 13px/1 "IBM Plex Sans",system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;visibility:visible','Support · 客服');
+    var panel=el('div','position:fixed;right:18px;bottom:84px;z-index:99999;width:340px;max-width:calc(100vw - 36px);max-height:72vh;background:'+PANEL+';color:'+FG+';border:1px solid '+LINE+';border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.3);display:none;flex-direction:column;overflow:hidden;font-family:"IBM Plex Sans","IBM Plex Sans SC",system-ui,sans-serif');
+    document.body.appendChild(btn); document.body.appendChild(panel);
+    btn.addEventListener('click',function(){ var open=panel.style.display!=='none'; panel.style.display=open?'none':'flex'; btn.style.display=open?'block':'none'; if(!open) list(); });
+    function head(title,back){ return '<div style="display:flex;align-items:center;gap:8px;padding:13px 14px;border-bottom:1px solid '+LINE+'">'+(back?'<button id="sp-back" style="background:0;border:0;font-size:16px;cursor:pointer;color:'+FG+'">‹</button>':'')+'<strong style="flex:1;font-size:14px">'+title+'</strong><button id="sp-close" style="background:0;border:0;font-size:20px;line-height:1;cursor:pointer;color:#888">×</button></div>'; }
+    function wire(){ var c=panel.querySelector('#sp-close'); if(c)c.addEventListener('click',function(){panel.style.display='none';btn.style.display='block';}); var b=panel.querySelector('#sp-back'); if(b)b.addEventListener('click',list); }
+    function list(){
+      panel.innerHTML=head('Support · 客服',false)+'<div id="sp-body" style="padding:12px 14px;overflow:auto"><div style="color:#888;font-size:13px">Loading… · 加载中…</div></div>'; wire();
+      fetch('/api/backend/support',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+        var body=panel.querySelector('#sp-body'); if(!body) return; var h='<button id="sp-new" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:10px;font:600 13px/1 inherit;cursor:pointer;margin-bottom:12px">+ New request · 新建</button>';
+        var ts=(j&&j.tickets)||[];
+        if(!ts.length){ h+='<div style="color:#888;font-size:13px">No requests yet. · 暂无工单。</div>'; }
+        ts.forEach(function(t){ var rep=t.lastSender==='platform'?' <span style="color:'+AC+';font-weight:600">• reply</span>':''; h+='<div class="sp-t" data-id="'+t.id+'" style="border:1px solid '+LINE+';border-radius:9px;padding:10px;margin-bottom:8px;cursor:pointer"><div style="font-weight:600;font-size:13px">'+esc(t.subject||'(no subject)')+'</div><div style="color:#888;font-size:11px;margin-top:3px">'+esc(t.status)+rep+'</div></div>'; });
+        body.innerHTML=h;
+        var nb=body.querySelector('#sp-new'); if(nb)nb.addEventListener('click',compose);
+        Array.prototype.forEach.call(body.querySelectorAll('.sp-t'),function(d){ d.addEventListener('click',function(){ thread(d.getAttribute('data-id')); }); });
+      }).catch(function(){});
+    }
+    function compose(){
+      panel.innerHTML=head('New request · 新建',true)+'<div style="padding:12px 14px;overflow:auto"><input id="sp-subj" placeholder="Subject · 主题" style="width:100%;border:1px solid '+LINE+';border-radius:8px;padding:9px;font:14px inherit;margin-bottom:9px;box-sizing:border-box"><textarea id="sp-msg" placeholder="How can we help? · 需要什么帮助?" style="width:100%;height:120px;border:1px solid '+LINE+';border-radius:8px;padding:9px;font:14px inherit;box-sizing:border-box;resize:vertical"></textarea><button id="sp-send" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:10px;font:600 13px/1 inherit;cursor:pointer;margin-top:10px">Send · 发送</button><div id="sp-err" style="color:#c0392b;font-size:12px;margin-top:8px"></div></div>'; wire();
+      panel.querySelector('#sp-send').addEventListener('click',function(){
+        var msg=panel.querySelector('#sp-msg').value.trim(); if(!msg){ panel.querySelector('#sp-err').textContent='Enter your message · 请输入内容'; return; }
+        fetch('/api/backend/support',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject:panel.querySelector('#sp-subj').value.trim(),message:msg})})
+          .then(function(r){return r.json();}).then(function(j){ if(j&&j.success) list(); else panel.querySelector('#sp-err').textContent=(j&&j.error)||'Failed · 失败'; }).catch(function(){});
+      });
+    }
+    function thread(id){
+      panel.innerHTML=head('Request · 工单',true)+'<div id="sp-th" style="padding:12px 14px;overflow:auto;flex:1"><div style="color:#888">Loading…</div></div>'; wire();
+      fetch('/api/backend/support',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
+        var t=((j&&j.tickets)||[]).filter(function(x){return String(x.id)===String(id);})[0]; var th=panel.querySelector('#sp-th'); if(!t||!th){ list(); return; }
+        var h='<div style="font-weight:600;margin-bottom:10px">'+esc(t.subject||'(no subject)')+'</div>';
+        (t.messages||[]).forEach(function(m){ var me=m.senderKind==='merchant'; h+='<div style="margin-bottom:9px;text-align:'+(me?'right':'left')+'"><div style="display:inline-block;max-width:85%;text-align:left;background:'+(me?'#eef3ee':'#f5f2ea')+';border:1px solid '+LINE+';border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.4"><div style="font-size:10px;color:#999;margin-bottom:3px">'+esc(m.senderName||(me?'You':'Support'))+'</div>'+esc(m.body)+'</div></div>'; });
+        if(t.status!=='resolved'){ h+='<textarea id="sp-rmsg" placeholder="Reply · 回复" style="width:100%;height:64px;border:1px solid '+LINE+';border-radius:8px;padding:8px;font:14px inherit;box-sizing:border-box;resize:vertical;margin-top:6px"></textarea><button id="sp-rsend" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:9px;font:600 13px/1 inherit;cursor:pointer;margin-top:8px">Send · 发送</button>'; }
+        else { h+='<div style="color:#888;font-size:12px;text-align:center;margin-top:8px">Resolved · 已解决</div>'; }
+        th.innerHTML=h;
+        var rs=panel.querySelector('#sp-rsend'); if(rs)rs.addEventListener('click',function(){ var m=panel.querySelector('#sp-rmsg').value.trim(); if(!m)return; fetch('/api/backend/support/'+id+'/reply',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}).then(function(r){return r.json();}).then(function(){ thread(id); }).catch(function(){}); });
+      }).catch(function(){});
+    }
+  }
+})();
+</script>
 
 <!-- Portrait lock — covers the screen when a phone is held landscape so the
      desktop layout never shows on the mobile app. CSS-gated to phone-sized
