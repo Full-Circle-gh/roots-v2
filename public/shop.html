@@ -2698,7 +2698,12 @@ const SL_VIEWS=[
 const SL_LIST=['list','list-compact'];
 function slMoney(v){return '¥'+(Number.isInteger(v)?v:v.toFixed(2));}
 function slEff(p){const r=Number(p.price??p.sell_price)||0;const e=Number(p.effective_price)>0?Number(p.effective_price):r;return e;}
-function slImg(p){const u=p.image_url||'';if(u)return u;const d=p.image_data||'';return /^data:image/i.test(d)?d:'';}
+// Card image. The slim list puts the streamed-image URL in image_data (not
+// image_url) and only substitutes the literal 'data:' sentinel when the row's
+// image_data was inline base64 (stripped to save bytes). So: prefer image_url,
+// else use image_data unless it's that bare sentinel. Plain '/...' and full
+// http(s)/data: URLs all render as-is (same origin).
+function slImg(p){const u=p.image_url||'';if(u)return u;const d=p.image_data||'';return (!d||d==='data:')?'':d;}
 function slPickBadge(tags){const t=String(tags||'').toLowerCase();
   if(/\bnew\b/.test(t))return 'NEW';if(/\bpop|popular\b/.test(t))return 'POP';
   if(/\bsale\b/.test(t))return 'SALE';if(/\bhot\b/.test(t))return 'HOT';return '';}
