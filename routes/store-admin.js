@@ -21,6 +21,7 @@ const {
 } = require('../lib/platform-admin');
 const { registerTenantDomain } = require('../lib/provision-tenant');
 const { normalizeHost } = require('../middleware/public-tenant');
+const { getTenantDb } = require('../lib/tenant-db');
 const router = express.Router();
 
 // The merchant backend host — where an impersonation hand-off lands so the
@@ -58,6 +59,29 @@ db.exec(`
     used_at     DATETIME,
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+  -- Support tickets raised by merchants from their backend, triaged by platform
+  -- staff in the store-admin Support inbox. Thread of messages per ticket.
+  CREATE TABLE IF NOT EXISTS platform_tickets (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_id     INTEGER NOT NULL,
+    operator_id   INTEGER,
+    operator_name TEXT,
+    subject       TEXT,
+    status        TEXT NOT NULL DEFAULT 'open',   -- open | pending | resolved
+    last_sender   TEXT,                           -- merchant | platform
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_platform_tickets_status ON platform_tickets(status, updated_at);
+  CREATE TABLE IF NOT EXISTS platform_ticket_messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id   INTEGER NOT NULL,
+    sender_kind TEXT NOT NULL,                    -- merchant | platform
+    sender_name TEXT,
+    body        TEXT NOT NULL,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_platform_ticket_messages ON platform_ticket_messages(ticket_id, id);
 `);
 
 // ── Brute-force guard, same posture as the kitchen / backend logins ───────
@@ -473,6 +497,107 @@ router.get('/api/store-admin/analytics', requirePlatformAdmin('view'), (req, res
     revenue: { last30: collected(30), last90: collected(90) },
     signupsByMonth,
   });
+});
+
+// ════════════════ GLOBAL LOOKUP (cross-tenant customers + orders) ════════════════
+// Support tool: find a shopper or order across EVERY store. Each tenant's
+// customer/order data lives in its OWN DB (data plane) — Roots in the shared
+// db, others in data/tenants/<id>.db — so we iterate active tenants and query
+// each connection, tagging every hit with its store. One bad tenant DB is
+// skipped, never failing the whole search.
+router.get('/api/store-admin/lookup', requirePlatformAdmin('view'), (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return res.status(400).json({ error: 'Type at least 2 characters · 请输入至少 2 个字符' });
+  const like = '%' + q.replace(/[%_]/g, '') + '%';
+  const PER = 6;
+  const customers = [], orders = [];
+  const tenants = db.prepare("SELECT id, name, brand_name FROM tenants WHERE status = 'active' ORDER BY id ASC").all();
+  for (const t of tenants) {
+    let tdb; try { tdb = getTenantDb(t.id); } catch (e) { continue; }
+    const label = t.brand_name || t.name;
+    try {
+      tdb.prepare(`SELECT id, nickname, phone, email, tier_key, lifetime_spend, points_balance, balance, is_blocked, created_at
+                   FROM retail_customers WHERE phone LIKE ? OR nickname LIKE ? OR email LIKE ? OR CAST(id AS TEXT) = ?
+                   ORDER BY lifetime_spend DESC LIMIT ?`).all(like, like, like, q, PER)
+        .forEach(c => customers.push({ tenantId: t.id, tenant: label, id: c.id, nickname: c.nickname, phone: c.phone, email: c.email, tier: c.tier_key, lifetimeSpend: c.lifetime_spend, pointsBalance: c.points_balance, balance: c.balance, isBlocked: !!c.is_blocked, createdAt: c.created_at }));
+    } catch (e) { /* tenant has no customer table / unreadable → skip */ }
+    try {
+      tdb.prepare(`SELECT id, order_no, status, payment_method, recipient_name, recipient_phone, address_full, total, created_at
+                   FROM retail_orders WHERE order_no LIKE ? OR recipient_phone LIKE ? OR recipient_name LIKE ?
+                   ORDER BY created_at DESC LIMIT ?`).all(like, like, like, PER)
+        .forEach(o => orders.push({ tenantId: t.id, tenant: label, id: o.id, orderNo: o.order_no, status: o.status, paymentMethod: o.payment_method, recipientName: o.recipient_name, recipientPhone: o.recipient_phone, addressFull: o.address_full, total: o.total, createdAt: o.created_at }));
+    } catch (e) { /* skip */ }
+  }
+  customers.sort((a, b) => (b.lifetimeSpend || 0) - (a.lifetimeSpend || 0));
+  orders.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  logAudit(req, { action: 'lookup.search', meta: { q, customers: customers.length, orders: orders.length } });
+  res.json({ success: true, query: q, customers: customers.slice(0, 60), orders: orders.slice(0, 60) });
+});
+
+// Drill into one customer (in one store): profile + recent orders.
+router.get('/api/store-admin/lookup/customer', requirePlatformAdmin('view'), (req, res) => {
+  const tid = Number(req.query.tenant), cid = Number(req.query.id);
+  if (!tid || !cid) return res.status(400).json({ error: 'tenant and id required' });
+  const t = db.prepare('SELECT id, name, brand_name FROM tenants WHERE id = ?').get(tid);
+  if (!t) return res.status(404).json({ error: 'Store not found · 未找到店铺' });
+  let tdb; try { tdb = getTenantDb(tid); } catch (e) { return res.status(500).json({ error: 'Store data unavailable · 店铺数据不可用' }); }
+  let c; try { c = tdb.prepare(`SELECT id, nickname, phone, email, tier_key, lifetime_spend, points_balance, balance, coupon_count, is_blocked, created_at, last_login_at FROM retail_customers WHERE id = ?`).get(cid); }
+  catch (e) { return res.status(500).json({ error: 'Store data unavailable · 店铺数据不可用' }); }
+  if (!c) return res.status(404).json({ error: 'Customer not found · 未找到顾客' });
+  let orders = [];
+  try { orders = tdb.prepare(`SELECT id, order_no, status, payment_method, total, created_at FROM retail_orders WHERE customer_id = ? ORDER BY created_at DESC LIMIT 20`).all(cid); } catch (e) {}
+  logAudit(req, { action: 'lookup.customer', targetType: 'tenant', targetId: tid, meta: { customerId: cid } });
+  res.json({
+    success: true, store: t.brand_name || t.name,
+    customer: { id: c.id, nickname: c.nickname, phone: c.phone, email: c.email, tier: c.tier_key, lifetimeSpend: c.lifetime_spend, pointsBalance: c.points_balance, balance: c.balance, couponCount: c.coupon_count, isBlocked: !!c.is_blocked, createdAt: c.created_at, lastLoginAt: c.last_login_at },
+    orders: orders.map(o => ({ id: o.id, orderNo: o.order_no, status: o.status, paymentMethod: o.payment_method, total: o.total, createdAt: o.created_at })),
+  });
+});
+
+// ════════════════ SUPPORT INBOX (merchant tickets) ════════════════
+function ticketSummary(r) {
+  return { id: r.id, tenantId: r.tenant_id, tenant: r.tenant_brand || r.tenant_name || ('#' + r.tenant_id),
+    operator: r.operator_name, subject: r.subject, status: r.status, lastSender: r.last_sender,
+    createdAt: r.created_at, updatedAt: r.updated_at };
+}
+router.get('/api/store-admin/tickets', requirePlatformAdmin('view'), (req, res) => {
+  const status = req.query.status ? String(req.query.status) : null;
+  let sql = `SELECT k.*, t.name AS tenant_name, t.brand_name AS tenant_brand
+             FROM platform_tickets k LEFT JOIN tenants t ON t.id = k.tenant_id`;
+  const params = [];
+  if (status && ['open', 'pending', 'resolved'].includes(status)) { sql += ' WHERE k.status = ?'; params.push(status); }
+  sql += " ORDER BY (k.status = 'resolved') ASC, k.updated_at DESC LIMIT 200";
+  const rows = db.prepare(sql).all(...params).map(ticketSummary);
+  const openCount = db.prepare("SELECT COUNT(*) c FROM platform_tickets WHERE status != 'resolved'").get().c;
+  res.json({ success: true, tickets: rows, openCount });
+});
+router.get('/api/store-admin/tickets/:id', requirePlatformAdmin('view'), (req, res) => {
+  const k = db.prepare(`SELECT k.*, t.name AS tenant_name, t.brand_name AS tenant_brand
+                        FROM platform_tickets k LEFT JOIN tenants t ON t.id = k.tenant_id WHERE k.id = ?`).get(req.params.id);
+  if (!k) return res.status(404).json({ error: 'Ticket not found · 未找到工单' });
+  const messages = db.prepare('SELECT id, sender_kind, sender_name, body, created_at FROM platform_ticket_messages WHERE ticket_id = ? ORDER BY id ASC').all(k.id)
+    .map(m => ({ id: m.id, senderKind: m.sender_kind, senderName: m.sender_name, body: m.body, at: m.created_at }));
+  res.json({ success: true, ticket: ticketSummary(k), messages });
+});
+router.post('/api/store-admin/tickets/:id/reply', requirePlatformAdmin('support.write'), express.json(), (req, res) => {
+  const k = db.prepare('SELECT id FROM platform_tickets WHERE id = ?').get(req.params.id);
+  if (!k) return res.status(404).json({ error: 'Ticket not found · 未找到工单' });
+  const body = String((req.body && req.body.body) || '').trim();
+  if (!body) return res.status(400).json({ error: 'Enter a reply · 请输入回复' });
+  const name = (req.platformActor && req.platformActor.name) || 'Platform';
+  db.prepare('INSERT INTO platform_ticket_messages (ticket_id, sender_kind, sender_name, body) VALUES (?,?,?,?)').run(k.id, 'platform', name, body.slice(0, 4000));
+  // A platform reply moves the ticket to 'pending' (awaiting the merchant).
+  db.prepare("UPDATE platform_tickets SET status = CASE WHEN status = 'resolved' THEN 'resolved' ELSE 'pending' END, last_sender = 'platform', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(k.id);
+  logAudit(req, { action: 'ticket.reply', targetType: 'ticket', targetId: k.id });
+  res.json({ success: true });
+});
+router.post('/api/store-admin/tickets/:id/status', requirePlatformAdmin('support.write'), express.json(), (req, res) => {
+  const status = String((req.body && req.body.status) || '').trim();
+  if (!['open', 'pending', 'resolved'].includes(status)) return res.status(400).json({ error: 'Unknown status · 未知状态' });
+  const r = db.prepare('UPDATE platform_tickets SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id);
+  if (!r.changes) return res.status(404).json({ error: 'Ticket not found · 未找到工单' });
+  logAudit(req, { action: 'ticket.status', targetType: 'ticket', targetId: req.params.id, meta: { status } });
+  res.json({ success: true });
 });
 
 module.exports = router;

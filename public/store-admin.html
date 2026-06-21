@@ -207,6 +207,14 @@
   const money = (c, cur) => (cur === 'CNY' || !cur ? '¥' : cur + ' ') + (Number(c||0)/100).toLocaleString(undefined,{maximumFractionDigits:2});
   const fdate = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?esc(s):d.toISOString().slice(0,10); };
   const ftime = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?esc(s):d.toISOString().slice(0,16).replace('T',' '); };
+  // Order/customer money is stored as REAL yuan (not cents like billing).
+  const yuan = v => '¥' + (Number(v||0)).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function statusPill(s){
+    if (s==='paid' || s==='delivered') return 'active';
+    if (s==='cancelled' || s==='refunded') return 'suspended';
+    if (s==='pending_payment') return 'open';
+    return 'internal';
+  }
   function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
 
   // api(): 401 → bounce to the login view (never hard-redirect); 403 → toast the
@@ -267,13 +275,15 @@
   const TABS = [
     { id:'dashboard', en:'Dashboard', cn:'总览', cap:null },
     { id:'stores',    en:'Stores',    cn:'店铺', cap:'view' },
+    { id:'lookup',    en:'Lookup',    cn:'查询', cap:'view' },
     { id:'signups',   en:'Signups',   cn:'申请', cap:'view', badge:'leads' },
+    { id:'support',   en:'Support',   cn:'工单', cap:'view', badge:'tickets' },
     { id:'billing',   en:'Billing',   cn:'账单', cap:'view' },
     { id:'broadcasts',en:'Broadcasts',cn:'广播', cap:'view' },
     { id:'staff',     en:'Staff',     cn:'团队', cap:'staff.manage' },
     { id:'audit',     en:'Audit',     cn:'日志', cap:'view' },
   ];
-  let BADGES = { leads: 0 };
+  let BADGES = { leads: 0, tickets: 0 };
 
   function enterApp(){
     showApp();
@@ -282,8 +292,13 @@
     $('#whoRole').textContent = ME.role;
     $('#m-password').style.display = ME.kind === 'platform' ? 'block' : 'none';
     renderTabs();
+    seedBadges();
     const want = (location.hash || '#dashboard').slice(1);
     go(TABS.some(t => t.id === want && (!t.cap || can(t.cap))) ? want : 'dashboard');
+  }
+  function seedBadges(){
+    api('/api/store-admin/tickets').then(j => { if (j && j.success){ BADGES.tickets = j.openCount || 0; refreshBadges(); } }).catch(()=>{});
+    api('/api/store-admin/summary').then(j => { if (j && j.success){ BADGES.leads = j.leads.new || 0; refreshBadges(); } }).catch(()=>{});
   }
 
   function renderTabs(){
@@ -306,7 +321,7 @@
     location.hash = '#'+tab;
     document.querySelectorAll('#tabs [data-tab]').forEach(b => b.classList.toggle('on', b.getAttribute('data-tab')===tab));
     const v = $('#view'); v.innerHTML = '<div class="empty">Loading… · 加载中…</div>';
-    ({ dashboard:viewDashboard, stores:viewStores, signups:viewSignups, billing:viewBilling, broadcasts:viewBroadcasts, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
+    ({ dashboard:viewDashboard, stores:viewStores, lookup:viewLookup, signups:viewSignups, support:viewSupport, billing:viewBilling, broadcasts:viewBroadcasts, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
   }
   window.addEventListener('hashchange', () => { const h=(location.hash||'#dashboard').slice(1); if (h!==CUR && ME) go(h); });
 
@@ -948,6 +963,109 @@
           '<td>'+tgt+'</td>' +
           '<td class="mono zh">'+esc(a.ip||'—')+'</td></tr>';
       }).join('');
+    }).catch(()=>{});
+  }
+
+  // ════════════════ GLOBAL LOOKUP ════════════════
+  function viewLookup(){
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Global lookup · 全局查询</h1></div>' +
+      '<div class="zh" style="margin:-6px 0 14px;line-height:1.5">Find a customer or order across every store — by phone, name, email, order no, or customer id. · 按手机号、姓名、邮箱、订单号或顾客 ID 跨所有店铺查询。</div>' +
+      '<div class="row2" style="margin-bottom:16px"><input type="text" id="lk-q" placeholder="Search… · 搜索…" style="flex:1" autocapitalize="off" spellcheck="false"><button class="btn btn-brass" id="lk-go" style="padding:10px 16px">Search · 搜索</button></div>' +
+      '<div id="lk-results"></div>';
+    const run = () => doLookup($('#lk-q').value.trim());
+    $('#lk-go').addEventListener('click', run);
+    $('#lk-q').addEventListener('keydown', e => { if (e.key==='Enter') run(); });
+    $('#lk-q').focus();
+  }
+  function doLookup(q){
+    if (q.length < 2){ $('#lk-results').innerHTML = '<div class="empty">Type at least 2 characters · 请输入至少 2 个字符</div>'; return; }
+    $('#lk-results').innerHTML = '<div class="empty">Searching… · 查询中…</div>';
+    api('/api/store-admin/lookup?q='+encodeURIComponent(q)).then(j => {
+      if (!j || !j.success){ $('#lk-results').innerHTML = '<div class="empty">No results</div>'; return; }
+      const cust = (j.customers||[]).map(c =>
+        '<tr class="lk-cust" data-tenant="'+c.tenantId+'" data-id="'+c.id+'" style="cursor:pointer"><td class="co">'+esc(c.tenant)+'</td><td>'+esc(c.nickname||'—')+(c.isBlocked?' <span class="pill suspended">blocked</span>':'')+'</td><td class="mono">'+esc(c.phone||'—')+'</td><td class="mono">'+yuan(c.lifetimeSpend)+'</td><td class="mono">'+(c.pointsBalance||0)+'</td></tr>'
+      ).join('') || '<tr><td colspan="5" class="empty">No customers · 无顾客</td></tr>';
+      const ord = (j.orders||[]).map(o =>
+        '<tr><td class="co">'+esc(o.tenant)+'</td><td class="mono">'+esc(o.orderNo)+'</td><td><span class="pill '+statusPill(o.status)+'">'+esc(o.status)+'</span></td><td>'+esc(o.recipientName||'—')+' <span class="zh mono">'+esc(o.recipientPhone||'')+'</span></td><td class="mono">'+yuan(o.total)+'</td><td class="mono zh">'+fdate(o.createdAt)+'</td></tr>'
+      ).join('') || '<tr><td colspan="6" class="empty">No orders · 无订单</td></tr>';
+      $('#lk-results').innerHTML =
+        '<div class="bar"><h1>Customers · 顾客 <span class="zh mono">'+(j.customers||[]).length+'</span></h1></div>' +
+        '<div class="card" style="margin-bottom:22px"><table><thead><tr><th>Store · 店铺</th><th>Name · 姓名</th><th>Phone · 手机</th><th class="mono">Spend · 消费</th><th class="mono">Points</th></tr></thead><tbody>'+cust+'</tbody></table></div>' +
+        '<div class="bar"><h1>Orders · 订单 <span class="zh mono">'+(j.orders||[]).length+'</span></h1></div>' +
+        '<div class="card"><table><thead><tr><th>Store · 店铺</th><th>Order · 订单</th><th>Status · 状态</th><th>Recipient · 收件</th><th class="mono">Total · 金额</th><th class="mono">Date · 日期</th></tr></thead><tbody>'+ord+'</tbody></table></div>';
+      document.querySelectorAll('.lk-cust').forEach(r => r.addEventListener('click', () => lookupCustomerModal(r.getAttribute('data-tenant'), r.getAttribute('data-id'))));
+    }).catch(()=>{ $('#lk-results').innerHTML = '<div class="empty">Error · 出错</div>'; });
+  }
+  function lookupCustomerModal(tenant, id){
+    openModal('Customer · 顾客');
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/store-admin/lookup/customer?tenant='+encodeURIComponent(tenant)+'&id='+encodeURIComponent(id)).then(j => {
+      if (!j || !j.success){ $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      const c = j.customer;
+      $('#mTitle').textContent = (c.nickname||('Customer #'+c.id)) + ' · ' + j.store;
+      const row = (k,v) => '<div style="display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)"><span class="zh">'+k+'</span><span class="mono">'+v+'</span></div>';
+      const orders = (j.orders||[]).map(o => '<tr><td class="mono">'+esc(o.orderNo)+'</td><td><span class="pill '+statusPill(o.status)+'">'+esc(o.status)+'</span></td><td class="mono">'+yuan(o.total)+'</td><td class="mono zh">'+fdate(o.createdAt)+'</td></tr>').join('') || '<tr><td colspan="4" class="empty">No orders · 无订单</td></tr>';
+      $('#mBody').innerHTML =
+        (c.isBlocked?'<div class="msg show err">This customer is blocked in this store · 该顾客在此店铺被拉黑</div>':'') +
+        row('Store · 店铺', esc(j.store)) + row('Phone · 手机', esc(c.phone||'—')) + row('Email · 邮箱', esc(c.email||'—')) +
+        row('Tier · 等级', esc(c.tier||'—')) + row('Lifetime spend · 累计消费', yuan(c.lifetimeSpend)) +
+        row('Points · 积分', c.pointsBalance||0) + row('Wallet · 余额', yuan(c.balance)) + row('Joined · 加入', fdate(c.createdAt)) +
+        '<div class="det-sec"><h4>Recent orders · 近期订单</h4><div class="card"><table><tbody>'+orders+'</tbody></table></div></div>';
+    }).catch(()=>{});
+  }
+
+  // ════════════════ SUPPORT INBOX ════════════════
+  const TICKET_STATUS = { open:'Open · 待处理', pending:'Awaiting merchant · 待商家', resolved:'Resolved · 已解决' };
+  let TICKET_FILTER = '';
+  function viewSupport(){
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Support inbox · 工单</h1>' +
+        '<select id="tk-filter" style="width:auto"><option value="">All · 全部</option><option value="open">Open · 待处理</option><option value="pending">Awaiting merchant · 待商家</option><option value="resolved">Resolved · 已解决</option></select>' +
+      '</div>' +
+      '<div class="card"><table><thead><tr><th>Store · 店铺</th><th>Subject · 主题</th><th>From · 来自</th><th>Status · 状态</th><th class="mono">Updated · 更新</th></tr></thead>' +
+      '<tbody id="tkRows"><tr><td colspan="5" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>';
+    $('#tk-filter').value = TICKET_FILTER;
+    $('#tk-filter').addEventListener('change', () => { TICKET_FILTER = $('#tk-filter').value; loadTickets(); });
+    loadTickets();
+  }
+  function loadTickets(){
+    const qs = TICKET_FILTER ? '?status='+TICKET_FILTER : '';
+    api('/api/store-admin/tickets'+qs).then(j => {
+      if (!j || !j.success) return;
+      BADGES.tickets = j.openCount||0; refreshBadges();
+      const tbody = $('#tkRows'); if (!tbody) return;
+      const rows = j.tickets||[];
+      if (!rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No tickets · 暂无工单</td></tr>'; return; }
+      tbody.innerHTML = rows.map(t => {
+        const rep = (t.lastSender==='merchant' && t.status!=='resolved') ? ' <span class="pill open">new</span>' : '';
+        const pillCls = t.status==='resolved' ? 'internal' : (t.status==='open' ? 'open' : 'active');
+        return '<tr class="tk-row" data-id="'+t.id+'" style="cursor:pointer"><td class="co">'+esc(t.tenant)+'</td><td>'+esc(t.subject||'(no subject)')+rep+'</td><td class="zh">'+esc(t.operator||'—')+'</td><td><span class="pill '+pillCls+'">'+esc(t.status)+'</span></td><td class="mono zh">'+ftime(t.updatedAt)+'</td></tr>';
+      }).join('');
+      document.querySelectorAll('.tk-row').forEach(r => r.addEventListener('click', () => ticketModal(r.getAttribute('data-id'))));
+    }).catch(()=>{});
+  }
+  function ticketModal(id){
+    openModal('Ticket · 工单');
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/store-admin/tickets/'+id).then(j => {
+      if (!j || !j.success){ $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      const t = j.ticket; const write = can('support.write');
+      $('#mTitle').textContent = (t.subject||'Ticket')+' · '+t.tenant;
+      const thread = (j.messages||[]).map(m => {
+        const plat = m.senderKind==='platform';
+        return '<div style="margin-bottom:9px;text-align:'+(plat?'right':'left')+'"><div style="display:inline-block;max-width:88%;text-align:left;background:'+(plat?'rgba(176,141,74,.14)':'var(--elev)')+';border:1px solid var(--line-2);border-radius:10px;padding:8px 11px"><div class="zh" style="font-size:10px;margin-bottom:3px">'+esc(m.senderName||(plat?'Platform':'Merchant'))+' · '+ftime(m.at)+'</div><div style="font-size:13px;line-height:1.45;white-space:pre-wrap">'+esc(m.body)+'</div></div></div>';
+      }).join('') || '<div class="empty">No messages · 无消息</div>';
+      const statusSel = write ? '<select id="tk-status" style="width:auto;margin-bottom:12px">'+Object.keys(TICKET_STATUS).map(k=>'<option value="'+k+'"'+(t.status===k?' selected':'')+'>'+esc(TICKET_STATUS[k])+'</option>').join('')+'</select>' : '<div class="zh" style="margin-bottom:12px">Status: '+esc(t.status)+'</div>';
+      const replyBox = (write && t.status!=='resolved') ? '<div class="det-sec"><textarea id="tk-reply" placeholder="Reply to the merchant · 回复商家"></textarea><button class="btn btn-brass" id="tk-send" style="width:100%;padding:10px;margin-top:8px">Send reply · 发送回复</button></div>' : '';
+      $('#mBody').innerHTML = statusSel + '<div style="max-height:42vh;overflow:auto;margin-bottom:8px">'+thread+'</div>' + replyBox;
+      const ss = $('#tk-status'); if (ss) ss.addEventListener('change', () => {
+        api('/api/store-admin/tickets/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status:ss.value})}).then(r=>{ toast(r.success?'Updated':r.error||'Failed'); loadTickets(); }).catch(()=>{});
+      });
+      const sb = $('#tk-send'); if (sb) sb.addEventListener('click', () => {
+        const body = $('#tk-reply').value.trim(); if (!body) return;
+        api('/api/store-admin/tickets/'+id+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body})}).then(r=>{ if(r.success){ toast('Sent'); ticketModal(id); loadTickets(); } else mMsg(r.error||'Failed','err'); }).catch(()=>{});
+      });
     }).catch(()=>{});
   }
 
