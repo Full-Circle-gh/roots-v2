@@ -211,9 +211,10 @@
 <body>
   <div id="boot"><div class="spin"></div></div>
 
-  <div class="mtop" id="mtop" hidden>
-    <span class="mt-wm" id="mtWm">Store</span>
-    <span class="mt-lang" id="mtLang"><button data-lang="en">EN</button><button data-lang="cn">中</button></span>
+  <!-- Mobile home: language toggle floats over the hero (top-left), mini-app style.
+       No wordmark bar — the hero IS the top of the page. -->
+  <div class="mlang-float" id="mLangFloat" hidden>
+    <button data-lang="en">EN</button><button data-lang="cn">中</button>
   </div>
 
   <header class="bar" hidden>
@@ -327,15 +328,17 @@
 
     /* ── Mobile chrome: hide the desktop top nav, show a slim title bar (the
          mini-app has no top nav — search lives inside the Shop page). ── */
-    .mtop{display:none;}
+    /* Floating language toggle over the home hero (mobile only, mini-app style). */
+    .mlang-float{display:none;}
     @media(max-width:767px){
       header.bar{display:none!important;}
-      .mtop{display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;
-        background:var(--oat);border-bottom:1.5px solid var(--ink);padding:11px 18px;}
-      .mtop .mt-wm{flex:1;font-family:var(--bf-bear);font-size:21px;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-      .mtop .mt-lang{display:inline-flex;border:2px solid var(--ink);overflow:hidden;}
-      .mtop .mt-lang button{border:0;background:transparent;padding:6px 12px;font-family:var(--bf-toni);font-weight:600;font-size:12px;letter-spacing:.04em;color:var(--olive);cursor:pointer;}
-      .mtop .mt-lang button.active{background:var(--lime);color:var(--ink);}
+      .mlang-float{position:absolute;top:12px;left:12px;z-index:50;display:inline-flex;
+        border-radius:999px;overflow:hidden;background:rgba(0,0,0,.16);backdrop-filter:blur(4px);}
+      .mlang-float button{border:0;background:transparent;padding:6px 13px;font-family:var(--bf-toni);
+        font-weight:600;font-size:12px;letter-spacing:.04em;color:#fff;cursor:pointer;line-height:1.5;}
+      .mlang-float button.active{background:var(--lime);color:var(--ink);}
+      /* hero is the top of the page on mobile — no gap above it */
+      .hero{margin-top:0;}
     }
     /* in-page Shop search (mobile uses this; desktop keeps the header search) */
     .shop-search{display:flex;align-items:center;gap:10px;background:#FFFCF7;border:2px solid var(--ink);padding:11px 16px;margin:14px 0 4px;}
@@ -2624,6 +2627,8 @@ async function route(){
     a.classList.toggle('on',(n==='home'&&seg.length===0)||(n==='shop'&&seg[0]==='shop'));
   });
   setActiveTab(seg);
+  // language toggle floats over the hero on the home page only
+  { const mf=$('#mLangFloat'); if(mf) mf.hidden = seg.length!==0; }
   window.scrollTo({top:0,behavior:'instant'});
   try{
     if(seg[0]==='product'&&seg[1]) return renderProduct(seg[1]);
@@ -3428,7 +3433,7 @@ async function renderProduct(id){
 
 /* ════════════ CHROME / INIT ════════════ */
 function applyLangToUI(){
-  document.querySelectorAll('#langToggle button, #mtLang button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
+  document.querySelectorAll('#langToggle button, #mLangFloat button').forEach(b=>b.classList.toggle('active',b.dataset.lang===state.lang));
   $('#searchInput').placeholder=state.lang==='cn'?'搜索商品':'Search products';
   document.querySelector('nav.links [data-nav=home]').textContent=state.lang==='cn'?'首页':'Home';
   document.querySelector('nav.links [data-nav=shop]').textContent=state.lang==='cn'?'商品':'Shop';
@@ -3476,12 +3481,9 @@ function ctaRoute(t){
   $('#view').hidden=false;
   $('#footer').hidden=false;
   $('#tabbar').hidden=false;
-  // mobile slim top bar (wordmark + lang) — desktop hides it via CSS
-  $('#mtop').hidden=false;
-  $('#mtWm').textContent=state.brand;
-  $('#mtWm').style.cursor='pointer';
-  $('#mtWm').addEventListener('click',()=>{location.hash='#/';});
-  $('#mtLang').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
+  // mobile floating language toggle (over the home hero) — desktop hides it via CSS.
+  // Shown only on the home route (see route()); the hero is the top of the page now.
+  $('#mLangFloat').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
     state.lang=b.dataset.lang;try{localStorage.setItem('shop_lang',state.lang);}catch{}applyLangToUI();route();});
 
   // search submit → shop
