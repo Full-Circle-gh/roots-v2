@@ -44,7 +44,6 @@ const COPY = {
     cardLabel:    'PREPAID',
     neverExp:     'NEVER EXPIRES',
     topup:        'TOP UP →',
-    withdraw:     'WITHDRAW',
     redeem:       'REDEEM →',
     howEarn:      'HOW TO EARN',
     pointsHint:   '1 pt = ¥0.10 off.',
@@ -58,7 +57,6 @@ const COPY = {
     filterEarn:   '+ EARN',
     filterRedeem: '− REDEEM',
     empty:        'No transactions yet',
-    withdrawSoon: 'Withdrawals via customer service for now.',
     redeemSoon:   'Apply points at checkout.',
     earnExplain:  'Earn at least 1 point per ¥100 on every order — and even more as you climb Roots Club tiers. Plus bonus points on every top-up.',
     bindTitle:    'Returning customer?',
@@ -78,7 +76,6 @@ const COPY = {
     cardLabel:    '预付',
     neverExp:     '永不过期',
     topup:        '充值 →',
-    withdraw:     '提现',
     redeem:       '兑换 →',
     howEarn:      '如何获得',
     pointsHint:   '1 积分 = 抵扣 ¥0.10。',
@@ -92,7 +89,6 @@ const COPY = {
     filterEarn:   '+ 获得',
     filterRedeem: '− 兑换',
     empty:        '暂无记录',
-    withdrawSoon: '如需提现请联系客服。',
     redeemSoon:   '请在结算页面使用积分。',
     earnExplain:  '每消费 ¥100 至少得 1 积分,会员等级越高积分越多;充值另送奖励。',
     bindTitle:    '老顾客?',
@@ -313,15 +309,6 @@ Page({
 
   openTopup() {
     wx.navigateTo({ url: '/pages/topup/topup' });
-  },
-
-  showWithdraw() {
-    wx.showModal({
-      title: this.data.copy.withdraw,
-      content: this.data.copy.withdrawSoon,
-      showCancel: false,
-      confirmText: this.data.lang === 'cn' ? '好的' : 'OK',
-    });
   },
 
   showRedeem() {

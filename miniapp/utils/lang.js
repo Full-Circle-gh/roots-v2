@@ -68,6 +68,17 @@ function pickLabel(raw, lang) {
   return splitMixed(str, lang);
 }
 
+// Variant labels are now stored as two columns: `variant_label` (EN) and
+// `variant_label_cn` (CN). Prefer the side matching the mini-app language;
+// fall back to the other side when its column is empty. Each column may still
+// hold a legacy glued "EN · CN" string, so we run it through pickLabel().
+function pickVariantLabel(en, cn, lang) {
+  const e = String(en || '').trim();
+  const c = String(cn || '').trim();
+  if (lang === 'cn') return pickLabel(c, lang) || pickLabel(e, lang);
+  return pickLabel(e, lang) || pickLabel(c, lang);
+}
+
 // Localize a saved address's region to the active language. The server stores
 // canonical Chinese in city/district plus English companions in
 // city_en/district_en; show the matching side, falling back to the other when
@@ -81,4 +92,4 @@ function addrRegion(a, lang) {
   };
 }
 
-module.exports = { detect, set, pick, splitMixed, pickLabel, addrRegion };
+module.exports = { detect, set, pick, splitMixed, pickLabel, pickVariantLabel, addrRegion };

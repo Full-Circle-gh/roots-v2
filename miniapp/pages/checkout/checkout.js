@@ -1032,7 +1032,7 @@ Page({
       return {
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
-        display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
+        display_options: (it.options || []).map(o => o.question && o.label ? o.question + ': ' + o.label : o.label).filter(Boolean).join(' · '),
         line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
         ...sf,
       };
@@ -1271,7 +1271,7 @@ Page({
           return {
             ...it,
             display_name: lang.pick(it.name_en, it.name_cn, L),
-            display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
+            display_options: (it.options || []).map(o => o.question && o.label ? o.question + ': ' + o.label : o.label).filter(Boolean).join(' · '),
             line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
             unavailable_same_day: shortIds.has(Number(it.product_id)),
             ...sf,

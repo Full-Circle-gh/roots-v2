@@ -155,6 +155,15 @@
       </view>
     </block>
 
+    <!-- +3 · CALLOUT BANNER (e.g. Shipped nationwide) -->
+    <block wx:elif="{{item.type === 'callout_banner'}}">
+      <view class="pb-cbanner">
+        <view wx:if="{{item.icon}}" class="pb-cbanner-icon">{{item.icon}}</view>
+        <view wx:if="{{item.text}}" class="pb-cbanner-text">{{item.text}}</view>
+        <view wx:if="{{item.sub}}" class="pb-cbanner-sub">{{item.sub}}</view>
+      </view>
+    </block>
+
     <!-- +2 · PULL QUOTE / ORIGIN NOTE -->
     <block wx:elif="{{item.type === 'pull_quote'}}">
       <view class="pb-pullquote">

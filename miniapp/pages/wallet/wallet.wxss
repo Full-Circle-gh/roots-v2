@@ -203,11 +203,6 @@
   color: var(--ink);
   border: 3rpx solid var(--lime);
 }
-.btn-ghost {
-  background: transparent;
-  color: #fff;
-  border: 3rpx solid rgba(255,255,255,0.4);
-}
 .btn-dark {
   background: var(--ink);
   color: var(--lime);

@@ -863,7 +863,7 @@ Page({
         const c = o.choices.find(x => x.id === cid);
         if (!c || c.sold_out) return;   // never bill/add a sold-out extra
         delta += Number(c.price_delta) || 0;
-        chosen.push({ option_id: o.id, choice_id: c.id, label: c.label, delta: Number(c.price_delta) || 0 });
+        chosen.push({ option_id: o.id, choice_id: c.id, label: c.label, question: o.question, delta: Number(c.price_delta) || 0 });
       });
     });
     cart.add({
@@ -992,9 +992,10 @@ Page({
       const soldOut = out && !this._batchOrderable;
       return {
         id: m.id,
-        // Link to this size's own product page — unless it's the one we're
-        // already viewing (no point linking a row back to the current page).
-        linkId: Number(m.id) === Number(this.data.id) ? 0 : m.id,
+        // No chevron on size rows: these are sizes of the product you're
+        // already viewing, so tapping the row just adds that size — there's
+        // nowhere else to go. The "open a different product" chevron is kept
+        // only on the options/extras picker (rows backed by a stock product).
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
         weight: (m.size || '').toString().trim(),
         price: eff > 0 ? money(eff) : '',

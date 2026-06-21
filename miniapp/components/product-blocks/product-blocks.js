@@ -317,6 +317,14 @@ function _resolveBlock(b, L) {
     return { type: 'big_stat', stat, what, claim, bg: b.bg || 'lime' };
   }
 
+  if (t === 'callout_banner') {
+    const text = _pick(b.text_en, b.text_cn, L) || '';
+    const sub  = _pick(b.sub_en, b.sub_cn, L) || '';
+    const icon = (b.icon || '').trim();
+    if (!text && !sub && !icon) return { type: '_skip' };
+    return { type: t, icon, text, sub };
+  }
+
   if (t === 'pull_quote') {
     const text = _pick(b.text_en, b.text_cn, L) || '';
     const who  = _pick(b.who_en,  b.who_cn,  L) || '';

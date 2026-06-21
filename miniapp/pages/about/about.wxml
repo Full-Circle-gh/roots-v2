@@ -40,7 +40,7 @@
         <view class="founder-title f-toni">
           <text>{{lang === 'cn' ? (c.founder_title_cn || c.founder_title_en) : c.founder_title_en}}</text>
         </view>
-        <view class="founder-quote f-aleo {{storyExpanded ? '' : 'clamp'}}">"{{lang === 'cn' ? (c.founder_quote_cn || c.founder_quote_en) : (c.founder_quote_en || c.founder_quote_cn)}}"</view>
+        <view class="founder-quote f-aleo {{storyExpanded ? '' : 'clamp'}}">{{lang === 'cn' ? (c.founder_quote_cn || c.founder_quote_en) : (c.founder_quote_en || c.founder_quote_cn)}}</view>
         <view class="founder-link f-toni" bindtap="toggleStory">{{storyExpanded ? (lang === 'cn' ? '收起 ↑' : 'SHOW LESS ↑') : (lang === 'cn' ? '阅读完整故事 →' : 'READ THE FULL STORY →')}}</view>
       </view>
     </view>

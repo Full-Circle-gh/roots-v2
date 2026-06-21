@@ -63,14 +63,14 @@
 .pb-spec-cell:last-child { border-right: 0; }
 .pb-spec-k {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--pa-accent, var(--ink-60));
 }
 .pb-spec-v {
   font-family: var(--f-bear);
-  font-size: 30rpx;
+  font-size: calc(30rpx * var(--font-scale));
   line-height: 1.1;
   color: var(--pa-fg, var(--ink));
 }
@@ -88,7 +88,7 @@
   gap: 20rpx;
   margin-bottom: 28rpx;
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--pa-accent, var(--forest));
@@ -102,7 +102,7 @@
 }
 .pb-hero-body {
   font-family: var(--f-aleo);
-  font-size: 30rpx;
+  font-size: calc(30rpx * var(--font-scale));
   line-height: 1.55;
   color: var(--pa-fg, var(--ink));
   white-space: pre-line;
@@ -111,7 +111,7 @@
 .pb-ink-pull {
   font-family: var(--f-bear);
   font-style: normal;
-  font-size: 34rpx;
+  font-size: calc(34rpx * var(--font-scale));
   line-height: 1;
   letter-spacing: -0.005em;
   background: var(--lime);
@@ -135,14 +135,14 @@
 }
 .pb-why-head-l {
   font-family: var(--f-bear);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--pa-accent, var(--olive));
 }
 .pb-why-head-r {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--ink-60);
@@ -158,13 +158,13 @@
 .pb-why-row.first { border-top: 2rpx solid var(--ink); }
 .pb-why-n {
   font-family: var(--f-gothic);
-  font-size: 68rpx;
+  font-size: calc(68rpx * var(--font-scale));
   line-height: 0.85;
   color: var(--pa-accent, var(--ink));
 }
 .pb-why-claim {
   font-family: var(--f-toni);
-  font-size: 32rpx;
+  font-size: calc(32rpx * var(--font-scale));
   line-height: 1.35;
   font-weight: 400;
   color: var(--pa-fg, var(--ink));
@@ -181,14 +181,14 @@
 .pb-section-h3 {
   font-family: var(--f-bear);
   font-weight: 400;
-  font-size: 52rpx;
+  font-size: calc(52rpx * var(--font-scale));
   line-height: 0.95;
   letter-spacing: -0.005em;
   color: var(--ink);
 }
 .pb-section-tag {
   font-family: var(--f-toni);
-  font-size: 20rpx;
+  font-size: calc(20rpx * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--ink-60);
@@ -216,7 +216,7 @@
   border-radius: 999rpx;
   background: transparent;
   font-family: var(--f-toni);
-  font-size: 26rpx;
+  font-size: calc(26rpx * var(--font-scale));
   line-height: 1;
   color: var(--pa-fg, var(--ink));
 }
@@ -224,12 +224,12 @@
   background: var(--pa-accent, var(--ink));
   color: var(--oat);
   font-family: var(--f-bear);
-  font-size: 36rpx;
+  font-size: calc(36rpx * var(--font-scale));
   padding: 22rpx 32rpx 20rpx;
 }
 .pb-chip-pct {
   font-family: var(--f-gothic);
-  font-size: 28rpx;
+  font-size: calc(28rpx * var(--font-scale));
   letter-spacing: 0.02em;
   color: var(--pa-accent, var(--berry));
 }
@@ -241,7 +241,7 @@
 .pb-ing-line {
   font-family: var(--f-bear);
   font-weight: 400;
-  font-size: 44rpx;
+  font-size: calc(44rpx * var(--font-scale));
   line-height: 1.25;
   letter-spacing: -0.005em;
   color: var(--pa-fg, var(--ink));
@@ -286,7 +286,7 @@
   align-items: center;
   gap: 16rpx;
   font-family: var(--f-bear);
-  font-size: 36rpx;
+  font-size: calc(36rpx * var(--font-scale));
   line-height: 1;
   color: var(--pa-fg, var(--ink));
 }
@@ -300,12 +300,12 @@
   color: var(--oat);
   border-radius: 8rpx;
   font-family: var(--f-toni);
-  font-size: 26rpx;
+  font-size: calc(26rpx * var(--font-scale));
   font-weight: 700;
 }
 .pb-allergen-meta {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--ink-60);
@@ -321,7 +321,7 @@
 }
 .pb-allergen-lbl {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--ink-60);
@@ -339,7 +339,7 @@
   padding: 10rpx 20rpx 8rpx;
   border-radius: 999rpx;
   font-family: var(--f-toni);
-  font-size: 25rpx;
+  font-size: calc(25rpx * var(--font-scale));
   line-height: 1;
 }
 .pb-al-chip-strong {
@@ -354,7 +354,7 @@
 .pb-allergen-empty {
   font-family: var(--f-aleo);
   font-style: italic;
-  font-size: 26rpx;
+  font-size: calc(26rpx * var(--font-scale));
   color: var(--ink-60);
 }
 
@@ -386,12 +386,12 @@
   justify-content: center;
 }
 .pb-how-ic {
-  font-size: 48rpx;
+  font-size: calc(48rpx * var(--font-scale));
   line-height: 1;
 }
 .pb-how-lbl {
   font-family: var(--f-toni);
-  font-size: 24rpx;
+  font-size: calc(24rpx * var(--font-scale));
   letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--pa-fg, var(--ink));
@@ -399,7 +399,7 @@
 .pb-how-sub {
   font-family: var(--f-aleo);
   font-style: italic;
-  font-size: 24rpx;
+  font-size: calc(24rpx * var(--font-scale));
   color: var(--ink-60);
   margin-top: -8rpx;
 }
@@ -438,18 +438,18 @@
   position: absolute;
   top: 24rpx;
   right: 24rpx;
-  font-size: 36rpx;
+  font-size: calc(36rpx * var(--font-scale));
   line-height: 1;
 }
 .pb-storage-head {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
 }
 .pb-storage-num {
   font-family: var(--f-gothic);
-  font-size: 96rpx;
+  font-size: calc(96rpx * var(--font-scale));
   line-height: 0.95;
   margin-top: auto;
   /* Never clip horizontally — wrap if a value somehow runs long, whatever
@@ -465,12 +465,12 @@
    stretched-out numeral. True numeral cards keep --f-gothic. */
 .pb-storage-num.long {
   font-family: var(--f-bear);
-  font-size: 46rpx;
+  font-size: calc(46rpx * var(--font-scale));
   line-height: 1.1;
 }
 .pb-storage-unit {
   font-family: var(--f-toni);
-  font-size: 24rpx;
+  font-size: calc(24rpx * var(--font-scale));
   letter-spacing: 0.16em;
   line-height: 1.5;
   text-transform: uppercase;
@@ -479,7 +479,7 @@
   margin-top: 24rpx;
   font-family: var(--f-aleo);
   font-style: italic;
-  font-size: 24rpx;
+  font-size: calc(24rpx * var(--font-scale));
   color: var(--ink-60);
   text-align: right;
 }
@@ -493,7 +493,7 @@
 .pb-notes-p {
   font-family: var(--f-aleo);
   font-style: italic;
-  font-size: 25rpx;
+  font-size: calc(25rpx * var(--font-scale));
   line-height: 1.55;
   color: var(--pa-fg, var(--ink-60));
   position: relative;
@@ -523,14 +523,14 @@
 .pb-bigstat-num {
   font-family: var(--f-bear);
   font-weight: 400;
-  font-size: 220rpx;
+  font-size: calc(220rpx * var(--font-scale));
   line-height: 0.85;
   letter-spacing: -0.02em;
   color: var(--ink);
 }
 .pb-bigstat-what {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.32em;
   text-transform: uppercase;
   margin-top: 20rpx;
@@ -539,7 +539,7 @@
 .pb-bigstat-claim {
   font-family: var(--f-aleo);
   font-style: italic;
-  font-size: 28rpx;
+  font-size: calc(28rpx * var(--font-scale));
   margin-top: 12rpx;
   color: var(--ink);
 }
@@ -548,7 +548,7 @@
   content: "·";
   position: absolute;
   font-family: var(--f-bear);
-  font-size: 120rpx;
+  font-size: calc(120rpx * var(--font-scale));
   line-height: 1;
   top: 50%;
   transform: translateY(-50%);
@@ -556,6 +556,37 @@
 }
 .pb-bigstat::before { left: 28rpx; }
 .pb-bigstat::after  { right: 28rpx; }
+
+/* ───────── +3 · CALLOUT BANNER ─────────
+   Full-bleed forest slab, cream Bear-serif headline, Toni caps sub-line.
+   Used for the "Shipped nationwide" statement at the top of meal pages. */
+.pb-cbanner {
+  background: var(--forest);
+  color: var(--oat);
+  text-align: center;
+  padding: 40rpx 44rpx 44rpx;
+}
+.pb-cbanner-icon {
+  font-size: calc(46rpx * var(--font-scale));
+  line-height: 1;
+  margin-bottom: 10rpx;
+}
+.pb-cbanner-text {
+  font-family: var(--f-bear);
+  font-weight: 400;
+  font-size: calc(52rpx * var(--font-scale));
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  color: var(--oat);
+}
+.pb-cbanner-sub {
+  font-family: var(--f-toni);
+  font-size: calc(23rpx * var(--font-scale));
+  letter-spacing: 0.06em;
+  margin-top: 12rpx;
+  color: var(--oat);
+  opacity: 0.82;
+}
 
 /* ───────── +2 · PULL QUOTE / ORIGIN NOTE ─────────
    Background oat-deep · no border. Aleo italic with curly quotes.
@@ -567,14 +598,14 @@
 .pb-pullquote-p {
   font-family: var(--f-aleo);
   font-style: italic;
-  font-size: 30rpx;
+  font-size: calc(30rpx * var(--font-scale));
   line-height: 1.5;
   color: var(--pa-fg, var(--ink));
 }
 .pb-pullquote-who {
   margin-top: 20rpx;
   font-family: var(--f-toni);
-  font-size: 20rpx;
+  font-size: calc(20rpx * var(--font-scale));
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--ink-60);
@@ -599,7 +630,7 @@
   padding: 16rpx 44rpx 28rpx;
   font-family: var(--f-aleo);
   font-style: italic;
-  font-size: 24rpx;
+  font-size: calc(24rpx * var(--font-scale));
   line-height: 1.5;
   color: var(--ink-60);
 }
@@ -620,7 +651,7 @@
 .pb-recipe-step:first-of-type { border-top: 2rpx solid var(--ink); }
 .pb-recipe-n {
   font-family: var(--f-gothic);
-  font-size: 56rpx;
+  font-size: calc(56rpx * var(--font-scale));
   line-height: 0.9;
   color: var(--pa-accent, var(--olive));
 }
@@ -632,13 +663,13 @@
 }
 .pb-recipe-text {
   font-family: var(--f-aleo);
-  font-size: 28rpx;
+  font-size: calc(28rpx * var(--font-scale));
   line-height: 1.5;
   color: var(--pa-fg, var(--ink));
 }
 .pb-recipe-time {
   font-family: var(--f-toni);
-  font-size: 22rpx;
+  font-size: calc(22rpx * var(--font-scale));
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--olive);
@@ -677,7 +708,7 @@
   display: block;
   margin-top: 14rpx;
   font-family: var(--f-toni);
-  font-size: 25rpx;
+  font-size: calc(25rpx * var(--font-scale));
   line-height: 1.3;
   color: var(--pa-fg, var(--ink));
 }
@@ -701,14 +732,14 @@
 }
 .pb-faq-q-txt {
   font-family: var(--f-toni);
-  font-size: 27rpx;
+  font-size: calc(27rpx * var(--font-scale));
   line-height: 1.35;
   color: var(--pa-fg, var(--ink));
   flex: 1;
 }
 .pb-faq-mark {
   font-family: var(--f-bear);
-  font-size: 44rpx;
+  font-size: calc(44rpx * var(--font-scale));
   line-height: 1;
   color: var(--pa-accent, var(--olive));
   flex: none;
@@ -716,7 +747,7 @@
 .pb-faq-a {
   padding: 0 0 30rpx;
   font-family: var(--f-aleo);
-  font-size: 27rpx;
+  font-size: calc(27rpx * var(--font-scale));
   line-height: 1.55;
   color: var(--pa-fg, var(--ink-60));
 }
@@ -767,85 +798,85 @@
 
 /* shared quiet section label · mono caps + trailing hairline */
 .pb-tpl-quiet_minimal .pb-section-head { justify-content: flex-start; align-items: baseline; gap: 20rpx; margin-bottom: 36rpx; }
-.pb-tpl-quiet_minimal .pb-section-h3 { font-family: monospace !important; font-weight: 400 !important; font-size: 21rpx !important; line-height: 1.4 !important; letter-spacing: 0.28em; text-transform: uppercase; color: var(--ink-60) !important; }
+.pb-tpl-quiet_minimal .pb-section-h3 { font-family: monospace !important; font-weight: 400 !important; font-size: calc(21rpx * var(--font-scale)) !important; line-height: 1.4 !important; letter-spacing: 0.28em; text-transform: uppercase; color: var(--ink-60) !important; }
 .pb-tpl-quiet_minimal .pb-section-tag { display: none !important; }
 .pb-tpl-quiet_minimal .pb-section-head::after { content: ''; flex: 1; height: 2rpx; background: var(--ink-12); }
 
 /* hero_intro — quiet serif body, italic phrase (no lime marker) */
 .pb-tpl-quiet_minimal .pb-hero-kicker { color: var(--olive) !important; }
 .pb-tpl-quiet_minimal .pb-hero-kicker::before { background: var(--olive) !important; }
-.pb-tpl-quiet_minimal .pb-hero-body { font-size: 30rpx !important; line-height: 1.7 !important; color: var(--pa-fg, rgba(26,26,23,0.82)) !important; }
-.pb-tpl-quiet_minimal .pb-ink-pull { background: none !important; padding: 0 !important; font-style: italic !important; font-family: var(--f-bear) !important; font-size: 34rpx !important; color: var(--ink) !important; }
+.pb-tpl-quiet_minimal .pb-hero-body { font-size: calc(30rpx * var(--font-scale)) !important; line-height: 1.7 !important; color: var(--pa-fg, rgba(26,26,23,0.82)) !important; }
+.pb-tpl-quiet_minimal .pb-ink-pull { background: none !important; padding: 0 !important; font-style: italic !important; font-family: var(--f-bear) !important; font-size: calc(34rpx * var(--font-scale)) !important; color: var(--ink) !important; }
 
 /* spec — quiet label/value hairline rows */
 .pb-tpl-quiet_minimal .pb-spec { display: block; }
 .pb-tpl-quiet_minimal .pb-spec-cell { flex-direction: row; justify-content: space-between; align-items: baseline; gap: 20rpx; padding: 22rpx 0 !important; border-right: none !important; border-top: 2rpx solid var(--ink-12); }
 .pb-tpl-quiet_minimal .pb-spec-cell:first-child { border-top: none; }
-.pb-tpl-quiet_minimal .pb-spec-k { font-family: monospace !important; font-size: 22rpx !important; letter-spacing: 0.12em !important; color: var(--ink-60) !important; }
-.pb-tpl-quiet_minimal .pb-spec-v { font-family: var(--f-aleo) !important; font-size: 28rpx !important; line-height: 1.3 !important; }
+.pb-tpl-quiet_minimal .pb-spec-k { font-family: monospace !important; font-size: calc(22rpx * var(--font-scale)) !important; letter-spacing: 0.12em !important; color: var(--ink-60) !important; }
+.pb-tpl-quiet_minimal .pb-spec-v { font-family: var(--f-aleo) !important; font-size: calc(28rpx * var(--font-scale)) !important; line-height: 1.3 !important; }
 
 /* why — mono numbers, airy hairlines */
 .pb-tpl-quiet_minimal .pb-why-head { padding: 0 0 36rpx !important; }
-.pb-tpl-quiet_minimal .pb-why-head-l { font-family: monospace !important; font-size: 21rpx !important; letter-spacing: 0.28em !important; color: var(--ink-60) !important; }
+.pb-tpl-quiet_minimal .pb-why-head-l { font-family: monospace !important; font-size: calc(21rpx * var(--font-scale)) !important; letter-spacing: 0.28em !important; color: var(--ink-60) !important; }
 .pb-tpl-quiet_minimal .pb-why-head-r { display: none !important; }
 .pb-tpl-quiet_minimal .pb-why-row { grid-template-columns: 48rpx 1fr !important; gap: 32rpx !important; padding: 28rpx 0 !important; border-top: 2rpx solid var(--ink-12) !important; }
 .pb-tpl-quiet_minimal .pb-why-row.first { border-top: none !important; }
-.pb-tpl-quiet_minimal .pb-why-n { font-family: monospace !important; font-size: 22rpx !important; line-height: 1.5 !important; color: var(--pa-accent, var(--olive)) !important; padding-top: 4rpx; }
-.pb-tpl-quiet_minimal .pb-why-claim { font-family: var(--f-aleo) !important; font-weight: 400 !important; font-size: 28rpx !important; line-height: 1.55 !important; }
+.pb-tpl-quiet_minimal .pb-why-n { font-family: monospace !important; font-size: calc(22rpx * var(--font-scale)) !important; line-height: 1.5 !important; color: var(--pa-accent, var(--olive)) !important; padding-top: 4rpx; }
+.pb-tpl-quiet_minimal .pb-why-claim { font-family: var(--f-aleo) !important; font-weight: 400 !important; font-size: calc(28rpx * var(--font-scale)) !important; line-height: 1.55 !important; }
 
 /* ingredients — quiet serif run, lime slashes, mono % */
-.pb-tpl-quiet_minimal .pb-ing-chips { display: block; font-family: var(--f-bear); font-size: 38rpx; line-height: 1.5; }
-.pb-tpl-quiet_minimal .pb-chip { display: inline !important; border: none !important; border-radius: 0 !important; padding: 0 !important; background: none !important; color: var(--pa-fg, var(--ink)) !important; font-family: var(--f-bear) !important; font-size: 38rpx !important; }
+.pb-tpl-quiet_minimal .pb-ing-chips { display: block; font-family: var(--f-bear); font-size: calc(38rpx * var(--font-scale)); line-height: 1.5; }
+.pb-tpl-quiet_minimal .pb-chip { display: inline !important; border: none !important; border-radius: 0 !important; padding: 0 !important; background: none !important; color: var(--pa-fg, var(--ink)) !important; font-family: var(--f-bear) !important; font-size: calc(38rpx * var(--font-scale)) !important; }
 .pb-tpl-quiet_minimal .pb-chip:not(:last-child)::after { content: ' / '; color: var(--pa-accent, var(--lime)); }
-.pb-tpl-quiet_minimal .pb-chip-pct { font-family: monospace !important; font-size: 24rpx !important; color: var(--pa-accent, var(--ink-60)) !important; }
-.pb-tpl-quiet_minimal .pb-ing-line { font-family: var(--f-bear) !important; font-size: 38rpx !important; line-height: 1.5 !important; }
+.pb-tpl-quiet_minimal .pb-chip-pct { font-family: monospace !important; font-size: calc(24rpx * var(--font-scale)) !important; color: var(--pa-accent, var(--ink-60)) !important; }
+.pb-tpl-quiet_minimal .pb-ing-line { font-family: var(--f-bear) !important; font-size: calc(38rpx * var(--font-scale)) !important; line-height: 1.5 !important; }
 .pb-tpl-quiet_minimal .pb-ing-line-sep { width: auto; height: auto; background: none; border-radius: 0; margin: 0; vertical-align: baseline; }
 .pb-tpl-quiet_minimal .pb-ing-line-sep::before { content: ' / '; color: var(--pa-accent, var(--lime)); }
-.pb-tpl-quiet_minimal .pb-ing-line-pct { font-family: monospace !important; font-size: 24rpx !important; color: var(--pa-accent, var(--ink-60)) !important; }
+.pb-tpl-quiet_minimal .pb-ing-line-pct { font-family: monospace !important; font-size: calc(24rpx * var(--font-scale)) !important; color: var(--pa-accent, var(--ink-60)) !important; }
 
 /* how to use — clean two-column hairline list, no boxes/icons */
 .pb-tpl-quiet_minimal .pb-how-grid { grid-template-columns: 1fr 1fr !important; gap: 0 48rpx !important; background: none !important; border: none !important; }
 .pb-tpl-quiet_minimal .pb-how-grid.cols-4 { grid-template-columns: 1fr 1fr !important; }
 .pb-tpl-quiet_minimal .pb-how-tile { background: none !important; text-align: left; align-items: flex-start; justify-content: flex-start; min-height: 0 !important; padding: 26rpx 0 !important; gap: 8rpx !important; border-top: 2rpx solid var(--ink-12); }
 .pb-tpl-quiet_minimal .pb-how-ic { display: none !important; }
-.pb-tpl-quiet_minimal .pb-how-lbl { font-family: var(--f-aleo) !important; font-size: 28rpx !important; letter-spacing: 0 !important; text-transform: none !important; }
-.pb-tpl-quiet_minimal .pb-how-sub { font-family: monospace !important; font-style: normal !important; font-size: 21rpx !important; letter-spacing: 0.04em !important; color: var(--ink-60) !important; margin-top: 0 !important; }
+.pb-tpl-quiet_minimal .pb-how-lbl { font-family: var(--f-aleo) !important; font-size: calc(28rpx * var(--font-scale)) !important; letter-spacing: 0 !important; text-transform: none !important; }
+.pb-tpl-quiet_minimal .pb-how-sub { font-family: monospace !important; font-style: normal !important; font-size: calc(21rpx * var(--font-scale)) !important; letter-spacing: 0.04em !important; color: var(--ink-60) !important; margin-top: 0 !important; }
 
 /* storage — inline hairline rows: head … num · unit */
 .pb-tpl-quiet_minimal .pb-storage-pair { display: block !important; }
 .pb-tpl-quiet_minimal .pb-storage-card { flex-direction: row !important; align-items: baseline; gap: 16rpx; min-height: 0 !important; padding: 24rpx 0 !important; border: none !important; border-top: 2rpx solid var(--ink-12) !important; background: none !important; color: var(--pa-fg, var(--ink)) !important; }
 .pb-tpl-quiet_minimal .pb-storage-ic { display: none !important; }
-.pb-tpl-quiet_minimal .pb-storage-head { flex: 1; font-family: monospace !important; font-size: 22rpx !important; letter-spacing: 0.1em !important; text-transform: uppercase; color: var(--ink-60) !important; }
-.pb-tpl-quiet_minimal .pb-storage-num { font-family: var(--f-aleo) !important; font-size: 28rpx !important; margin-top: 0 !important; text-align: right; }
-.pb-tpl-quiet_minimal .pb-storage-unit { font-family: var(--f-aleo) !important; font-size: 28rpx !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--ink-60) !important; }
+.pb-tpl-quiet_minimal .pb-storage-head { flex: 1; font-family: monospace !important; font-size: calc(22rpx * var(--font-scale)) !important; letter-spacing: 0.1em !important; text-transform: uppercase; color: var(--ink-60) !important; }
+.pb-tpl-quiet_minimal .pb-storage-num { font-family: var(--f-aleo) !important; font-size: calc(28rpx * var(--font-scale)) !important; margin-top: 0 !important; text-align: right; }
+.pb-tpl-quiet_minimal .pb-storage-unit { font-family: var(--f-aleo) !important; font-size: calc(28rpx * var(--font-scale)) !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--ink-60) !important; }
 .pb-tpl-quiet_minimal .pb-storage-unit::before { content: '· '; }
-.pb-tpl-quiet_minimal .pb-storage-note { margin-top: 32rpx !important; font-family: var(--f-bear) !important; font-style: italic !important; font-size: 26rpx !important; text-align: left !important; color: var(--ink-60) !important; }
+.pb-tpl-quiet_minimal .pb-storage-note { margin-top: 32rpx !important; font-family: var(--f-bear) !important; font-style: italic !important; font-size: calc(26rpx * var(--font-scale)) !important; text-align: left !important; color: var(--ink-60) !important; }
 
 /* allergens — single quiet line, no card/warn/pills */
 .pb-tpl-quiet_minimal .pb-allergen-card { border: none !important; background: none !important; padding: 0 !important; }
 .pb-tpl-quiet_minimal .pb-allergen-top { justify-content: flex-start; gap: 20rpx; align-items: baseline; padding-bottom: 0 !important; margin-bottom: 28rpx !important; border-bottom: none !important; }
 .pb-tpl-quiet_minimal .pb-allergen-warn { display: none !important; }
-.pb-tpl-quiet_minimal .pb-allergen-ttl { font-family: monospace !important; font-size: 21rpx !important; letter-spacing: 0.28em !important; text-transform: uppercase; color: var(--ink-60) !important; }
+.pb-tpl-quiet_minimal .pb-allergen-ttl { font-family: monospace !important; font-size: calc(21rpx * var(--font-scale)) !important; letter-spacing: 0.28em !important; text-transform: uppercase; color: var(--ink-60) !important; }
 .pb-tpl-quiet_minimal .pb-allergen-meta { display: none !important; }
 .pb-tpl-quiet_minimal .pb-allergen-top::after { content: ''; flex: 1; height: 2rpx; background: var(--ink-12); }
-.pb-tpl-quiet_minimal .pb-allergen-row { display: block !important; padding: 8rpx 0 !important; border: none !important; font-family: var(--f-aleo); font-size: 28rpx; line-height: 1.6; }
+.pb-tpl-quiet_minimal .pb-allergen-row { display: block !important; padding: 8rpx 0 !important; border: none !important; font-family: var(--f-aleo); font-size: calc(28rpx * var(--font-scale)); line-height: 1.6; }
 .pb-tpl-quiet_minimal .pb-allergen-row + .pb-allergen-row { border-top: none !important; }
-.pb-tpl-quiet_minimal .pb-allergen-lbl { display: inline !important; flex: none !important; font-family: var(--f-aleo) !important; font-size: 28rpx !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--pa-fg, var(--ink)) !important; }
+.pb-tpl-quiet_minimal .pb-allergen-lbl { display: inline !important; flex: none !important; font-family: var(--f-aleo) !important; font-size: calc(28rpx * var(--font-scale)) !important; letter-spacing: 0 !important; text-transform: none !important; color: var(--pa-fg, var(--ink)) !important; }
 .pb-tpl-quiet_minimal .pb-allergen-chips { display: inline !important; }
-.pb-tpl-quiet_minimal .pb-al-chip { display: inline !important; padding: 0 !important; border-radius: 0 !important; background: none !important; color: var(--pa-fg, var(--ink-60)) !important; font-family: var(--f-aleo) !important; font-size: 28rpx !important; font-weight: 400 !important; }
+.pb-tpl-quiet_minimal .pb-al-chip { display: inline !important; padding: 0 !important; border-radius: 0 !important; background: none !important; color: var(--pa-fg, var(--ink-60)) !important; font-family: var(--f-aleo) !important; font-size: calc(28rpx * var(--font-scale)) !important; font-weight: 400 !important; }
 .pb-tpl-quiet_minimal .pb-al-chip:not(:last-child)::after { content: ', '; }
 
 /* notes — quiet lime hairline rule, italic serif */
-.pb-tpl-quiet_minimal .pb-notes-p { padding-left: 28rpx !important; border-left: 4rpx solid var(--pa-accent, var(--lime)); font-family: var(--f-bear) !important; font-style: italic !important; font-size: 28rpx !important; line-height: 1.5 !important; color: var(--pa-fg, var(--ink)) !important; }
+.pb-tpl-quiet_minimal .pb-notes-p { padding-left: 28rpx !important; border-left: 4rpx solid var(--pa-accent, var(--lime)); font-family: var(--f-bear) !important; font-style: italic !important; font-size: calc(28rpx * var(--font-scale)) !important; line-height: 1.5 !important; color: var(--pa-fg, var(--ink)) !important; }
 .pb-tpl-quiet_minimal .pb-notes-p::before { display: none !important; }
 
 /* big_stat / pull_quote — softened (no loud slab / huge type) */
 .pb-tpl-quiet_minimal .pb-bigstat { background: none !important; padding: 16rpx 16rpx !important; text-align: left; overflow: visible; }
 .pb-tpl-quiet_minimal .pb-bigstat::before, .pb-tpl-quiet_minimal .pb-bigstat::after { display: none !important; }
-.pb-tpl-quiet_minimal .pb-bigstat-num { font-size: 128rpx !important; }
+.pb-tpl-quiet_minimal .pb-bigstat-num { font-size: calc(128rpx * var(--font-scale)) !important; }
 .pb-tpl-quiet_minimal .pb-bigstat-what { letter-spacing: 0.2em !important; color: var(--ink-60) !important; }
 .pb-tpl-quiet_minimal .pb-pullquote { background: none !important; padding: 8rpx 16rpx 8rpx 28rpx !important; border-left: 4rpx solid var(--pa-accent, var(--lime)); }
-.pb-tpl-quiet_minimal .pb-pullquote-p { font-family: var(--f-bear) !important; font-style: italic !important; font-size: 32rpx !important; }
+.pb-tpl-quiet_minimal .pb-pullquote-p { font-family: var(--f-bear) !important; font-style: italic !important; font-size: calc(32rpx * var(--font-scale)) !important; }
 
 /* image band — bleed full-width for the lifestyle break, quiet caption inset */
 .pb-tpl-quiet_minimal .pb-image { margin: 0 -44rpx !important; }
@@ -854,6 +885,6 @@
 /* recipe / faq — quiet olive→mono numerals, lighter weights */
 .pb-tpl-quiet_minimal .pb-recipe-step { grid-template-columns: 48rpx 1fr !important; gap: 32rpx !important; border-top: 2rpx solid var(--ink-12) !important; }
 .pb-tpl-quiet_minimal .pb-recipe-step:first-of-type { border-top: none !important; }
-.pb-tpl-quiet_minimal .pb-recipe-n { font-family: monospace !important; font-size: 24rpx !important; line-height: 1.5 !important; color: var(--pa-accent, var(--olive)) !important; padding-top: 4rpx; }
+.pb-tpl-quiet_minimal .pb-recipe-n { font-family: monospace !important; font-size: calc(24rpx * var(--font-scale)) !important; line-height: 1.5 !important; color: var(--pa-accent, var(--olive)) !important; padding-top: 4rpx; }
 .pb-tpl-quiet_minimal .pb-faq-item:first-of-type { border-top: none !important; }
-.pb-tpl-quiet_minimal .pb-faq-q-txt { font-family: var(--f-aleo) !important; font-size: 28rpx !important; }
+.pb-tpl-quiet_minimal .pb-faq-q-txt { font-family: var(--f-aleo) !important; font-size: calc(28rpx * var(--font-scale)) !important; }

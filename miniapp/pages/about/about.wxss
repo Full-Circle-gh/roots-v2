@@ -121,6 +121,7 @@
   color: var(--forest);
   font-style: italic;
   margin-top: 16rpx;
+  white-space: pre-line; /* keep the line/paragraph breaks typed in admin */
 }
 .founder-quote.clamp {
   display: -webkit-box;

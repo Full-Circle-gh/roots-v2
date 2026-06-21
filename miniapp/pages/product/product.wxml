@@ -307,7 +307,6 @@
               <text wx:if="{{opt.priceWas}}" class="vp-opt-was f-aleo">{{opt.priceWas}}</text>
               <text class="vp-opt-price f-bear {{opt.isFlash ? 'is-flash' : ''}}">{{opt.price}}</text>
             </view>
-            <view wx:if="{{opt.linkId}}" class="vp-opt-info" catchtap="onLinkedProduct" data-id="{{opt.linkId}}">›</view>
           </view>
         </view>
       </view>

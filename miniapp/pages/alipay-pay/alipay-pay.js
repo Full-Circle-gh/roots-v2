@@ -198,6 +198,15 @@ Page({
               .then(() => {
                 this.setData({ uploading: false, proofUploaded: true });
                 wx.showToast({ title: this.data.t.uploaded, icon: 'success' });
+                // Screenshot is in — the customer has committed to this order, so
+                // clear the cart and hand them to the order detail page (shows
+                // "Awaiting payment" until staff verify + Mark paid). Polling on
+                // this page stops on unload; the order page polls for itself.
+                this.stopPolling();
+                cart.clear();
+                setTimeout(() => {
+                  wx.redirectTo({ url: '/pages/order/order?id=' + this.data.orderId });
+                }, 800);
               })
               .catch(() => {
                 this.setData({ uploading: false });

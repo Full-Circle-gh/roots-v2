@@ -3006,6 +3006,23 @@ button.cp-cta::after { border: none; }
 .greet-blk-classic .grd-top,
 .greet-blk-coin .grd-top { display: flex; align-items: center; gap: 14rpx; }
 
+/* Time-of-day glyph beside the kicker. Monochrome SVG painted via mask so it
+   inherits the kicker colour (accent on the coin view). Mirrors cms.html. */
+.grd-icon {
+  flex-shrink: 0;
+  width: 30rpx; height: 30rpx;
+  background-color: var(--gr-kicker);
+}
+.greet-blk-coin .grd-top-accent .grd-icon { background-color: var(--gr-accent); }
+.grd-icon-sun {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='4.2'/%3E%3Cpath d='M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7'/%3E%3C/svg%3E") no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='4.2'/%3E%3Cpath d='M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+.grd-icon-moon {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z'/%3E%3C/svg%3E") no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+
 /* Classic — greeting left, accent-outlined points card right */
 .greet-blk-classic .grd-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 32rpx; }
 .greet-blk-classic .grd-col { flex: 1; min-width: 0; }
