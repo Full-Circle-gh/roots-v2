@@ -442,6 +442,31 @@
     .sl-back .cv{color:var(--oat);font-size:18px;line-height:1;}
     .sl-back .tx{color:var(--oat);font-size:10px;letter-spacing:.04em;font-family:var(--bf-bear);}
     .sl-parent{padding:9px 6px 7px;text-align:center;font-size:10px;letter-spacing:.14em;color:var(--olive);border-bottom:1.5px solid rgba(0,0,0,.12);font-family:var(--bf-toni);text-transform:uppercase;}
+    /* Rail fold — the left menu hinges open like an accordion (each row drops
+       from its top edge, staggered) when the rail content changes (drill in/out
+       or first load), mirroring the mini-app .rail-pane railFold. Highlight
+       toggles don't re-mount rows, so they never replay it. */
+    .sl-side{perspective:600px;}
+    @keyframes slRailFold{from{opacity:0;transform:rotateX(-62deg);}to{opacity:1;transform:rotateX(0);}}
+    .sl-side>.sl-tab,.sl-side>.sl-back,.sl-side>.sl-parent{transform-origin:top center;animation:slRailFold .3s cubic-bezier(.34,.8,.4,1) both;}
+    .sl-side>*:nth-child(1){animation-delay:0s;}
+    .sl-side>*:nth-child(2){animation-delay:.035s;}
+    .sl-side>*:nth-child(3){animation-delay:.07s;}
+    .sl-side>*:nth-child(4){animation-delay:.105s;}
+    .sl-side>*:nth-child(5){animation-delay:.14s;}
+    .sl-side>*:nth-child(6){animation-delay:.175s;}
+    .sl-side>*:nth-child(7){animation-delay:.21s;}
+    .sl-side>*:nth-child(8){animation-delay:.245s;}
+    .sl-side>*:nth-child(9){animation-delay:.28s;}
+    .sl-side>*:nth-child(10){animation-delay:.315s;}
+    .sl-side>*:nth-child(11){animation-delay:.35s;}
+    .sl-side>*:nth-child(12){animation-delay:.385s;}
+    .sl-side>*:nth-child(13){animation-delay:.42s;}
+    .sl-side>*:nth-child(14){animation-delay:.455s;}
+    .sl-side>*:nth-child(n+15){animation-delay:.49s;}
+    /* Right pane fades as it swaps contents on drill — matches the rail fold. */
+    @keyframes slPaneFade{from{opacity:0;}to{opacity:1;}}
+    .sl-main>.sl-sec{animation:slPaneFade .34s cubic-bezier(.22,.61,.36,1) both;}
     .sl-main{flex:1;min-width:0;background:#FFFCF7;overflow-y:auto;-webkit-overflow-scrolling:touch;position:relative;}
     .sl-sec+.sl-sec{border-top:6px solid var(--oat);}
     .sl-gh{padding:14px 16px 7px;display:flex;align-items:baseline;justify-content:space-between;}
