@@ -47,14 +47,34 @@ Page({
 
   onReady() {
     this.mapCtx = wx.createMapContext('picker-map', this);
-    // Open centred on the customer. Give the map a moment to initialise, then
-    // recentre on a coarse (≈ district-level) fix from wx.getFuzzyLocation —
-    // precise enough that the customer only drags a few blocks. We use FUZZY,
-    // not wx.getLocation: the precise-location interface is rejected for this
-    // AppID, while getFuzzyLocation is the approvable one for "locate to fill a
-    // delivery address". If it's denied / not yet enabled, fall back to a
-    // coarse IP lookup off the server.
-    setTimeout(() => this.locateViaFuzzy(true), 300);
+    // Open centred on the customer. The <map show-location> green dot is the
+    // device's PRECISE fix (the map component is allowed it for this AppID even
+    // though wx.getLocation is rejected); MapContext.moveToLocation() snaps the
+    // centre to that dot. Give the map a beat to acquire the dot first. If it
+    // isn't ready, fall back to a coarse getFuzzyLocation fix, then to a server
+    // IP lookup. We use FUZZY not wx.getLocation because the precise-location
+    // interface is rejected for this AppID; getFuzzyLocation is the approvable
+    // one for "locate to fill a delivery address".
+    setTimeout(() => this.locate(true), 600);
+  },
+
+  // Snap the map centre to the green dot (the map's own precise show-location
+  // fix), then resolve the pin/POIs there. Falls back to the coarse fuzzy fix
+  // (then server IP) when the dot isn't available yet. `_suppress` skips the
+  // regionchange the programmatic move fires so we refresh on our own terms.
+  locate(initial) {
+    if (this.mapCtx && typeof this.mapCtx.moveToLocation === 'function') {
+      this.mapCtx.moveToLocation({
+        success: () => {
+          this._suppress = true;
+          this.setData({ selectedId: 'pin' });
+          setTimeout(() => this.refreshForCenter(), 350);
+        },
+        fail: () => this.locateViaFuzzy(initial),
+      });
+      return;
+    }
+    this.locateViaFuzzy(initial);
   },
 
   // type:'gcj02' so the coords line up with the <map> component's coordinate
@@ -218,7 +238,7 @@ Page({
       })
       .catch(toast);
   },
-  locateMe() { this.locateViaFuzzy(false); },
+  locateMe() { this.locate(false); },
 
   confirm() {
     if (this.data.resolving && this.data.selectedId === 'pin') {
