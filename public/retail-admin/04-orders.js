@@ -1745,7 +1745,9 @@ function renderSplitRollupLine(o) {
   const parts = [];
   if (delivered) parts.push(`<span style="color:#5a8c2a; font-weight:700;">${delivered} ${cuT('delivered','已签收')}</span>`);
   if (moving)    parts.push(`<span style="color:#1d72b8;">${moving} ${cuT('in transit','运输中')}</span>`);
-  if (toShip)    parts.push(`<span class="muted">${toShip} ${cuT('to ship','待发货')}</span>`);
+  // Amber + bold (not muted grey): an unshipped parcel on an otherwise-dispatched
+  // order is an open to-do — it's also why the order still sits in the Paid tab.
+  if (toShip)    parts.push(`<span style="color:#c47d12; font-weight:700;">${toShip} ${cuT('to ship','待发货')}</span>`);
   const breakdown = parts.join(' · ');
   return `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:600; color:var(--text-2);">`
        + `${deliveryIcon('parcels', 12)}<span>${total} ${cuT('parcels','个包裹')}</span></div>`

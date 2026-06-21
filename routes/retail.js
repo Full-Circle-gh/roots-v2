@@ -13944,6 +13944,21 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   // are reachable from the main orders table, not only the chip view.
   if (status === 'refunds_open') {
     sql += " AND o.refund_status IN ('pending','reviewing','approved')";
+  } else if (status === 'paid') {
+    // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
+    // multi-parcel order that's had only SOME parcels shipped flips to
+    // 'dispatched' as a whole, yet still owes the customer an unshipped parcel.
+    // Keep it in this tab (alongside the real `paid` orders) until every parcel
+    // is out, so the leftover parcel can't be forgotten. It still appears in the
+    // Dispatched tab too — same order, two worklists. The EXISTS matches a parcel
+    // that is NOT delivered, NOT in transit and NOT even dispatched = still owed.
+    sql += ` AND (o.status = 'paid' OR (o.status = 'dispatched' AND EXISTS (
+               SELECT 1 FROM retail_shipments shx
+                WHERE shx.order_id = o.id
+                  AND shx.delivered_at IS NULL
+                  AND COALESCE(shx.tracking_status,'') != 'delivered'
+                  AND shx.dispatched_at IS NULL
+                  AND COALESCE(shx.tracking_number,'') = '')))`;
   } else if (status) {
     sql += ' AND o.status = ?'; params.push(status);
   }
@@ -13993,6 +14008,20 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
       GROUP BY status`
   ).all(...args);
   for (const r of rows) { if (r.status in out) out[r.status] = r.n; }
+
+  // Mirror the list filter: the Paid/to-ship tab also holds partially-shipped
+  // 'dispatched' orders that still owe an unshipped parcel, so the badge must
+  // count them too (otherwise "Paid (N)" undercounts what the tab shows).
+  out.paid += tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_orders
+      WHERE status = 'dispatched'${where}
+        AND EXISTS (SELECT 1 FROM retail_shipments shx
+                     WHERE shx.order_id = retail_orders.id
+                       AND shx.delivered_at IS NULL
+                       AND COALESCE(shx.tracking_status,'') != 'delivered'
+                       AND shx.dispatched_at IS NULL
+                       AND COALESCE(shx.tracking_number,'') = '')`
+  ).get(...args).n;
 
   out.refunds_open = tdb().prepare(
     `SELECT COUNT(*) AS n FROM retail_orders
