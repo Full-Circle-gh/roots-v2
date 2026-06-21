@@ -955,6 +955,8 @@ function coInjectAddrStyle(){
   .mp-mapwrap{position:relative;margin:12px 14px 0;height:46vh;min-height:240px;border-radius:12px;overflow:hidden;border:1.5px solid var(--ink);}
   .mp-map{position:absolute;inset:0;}
   .mp-pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);font-size:30px;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
+  .mp-locate{position:absolute;right:12px;bottom:12px;width:42px;height:42px;border-radius:50%;border:1.5px solid var(--ink);background:#fff;color:var(--ink);font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.25);padding:0;}
+  .mp-locate:disabled{opacity:.5;cursor:default;}
   .mp-addr{padding:10px 16px 0;font-size:13px;color:var(--ink);line-height:1.5;min-height:18px;}
   .mp-actions{padding:12px 16px 16px;}`;
   document.head.appendChild(s);
@@ -1073,7 +1075,7 @@ async function openMapPicker(){
     <div class="mp-head"><div class="mp-title">${cn?'地图选点':'Choose on map'}</div><button class="mp-x" id="mpX">×</button></div>
     <div class="mp-searchrow"><input id="mpSearch" class="mp-search" placeholder="${cn?'搜索地点 / 小区 / 道路':'Search a place / road'}"><button id="mpSearchBtn" class="mp-sbtn">${cn?'搜索':'Search'}</button></div>
     <div id="mpResults" class="mp-results" hidden></div>
-    <div class="mp-mapwrap"><div id="mpMap" class="mp-map"></div><div class="mp-pin">📍</div></div>
+    <div class="mp-mapwrap"><div id="mpMap" class="mp-map"></div><div class="mp-pin">📍</div><button id="mpLocate" class="mp-locate" title="${cn?'定位到我的位置':'Locate me'}">◎</button></div>
     <div class="mp-addr" id="mpAddr">${cn?'拖动地图，把图钉对准你的位置':'Drag the map so the pin sits on your spot'}</div>
     <div class="mp-actions"><button id="mpUse" class="co-place" disabled>${cn?'使用此位置':'Use this location'}</button></div>
   </div>`;
@@ -1129,6 +1131,39 @@ async function openMapPicker(){
     close();
   });
 
+  // Recenter on the visitor. Amap's Geolocation plugin returns GCJ-02 coords
+  // (matching the map), so prefer it; otherwise fall back to a coarse server
+  // IP lookup. Selection stays on the centre pin — the customer drags the rest.
+  const locateBtn=$('#mpLocate');
+  function amapGeolocate(){
+    return new Promise(resolve=>{
+      if(cfg.provider!=='amap'||!window.AMap){ resolve(null); return; }
+      try{
+        AMap.plugin('AMap.Geolocation',()=>{
+          const geo=new AMap.Geolocation({enableHighAccuracy:true,timeout:8000});
+          geo.getCurrentPosition((status,result)=>{
+            const p=result&&result.position;
+            if(status==='complete'&&p&&isFinite(p.lat)&&isFinite(p.lng))resolve({lat:p.lat,lng:p.lng});
+            else resolve(null);
+          });
+        });
+      }catch(e){ resolve(null); }
+    });
+  }
+  async function locate(silent){
+    if(locateBtn)locateBtn.disabled=true;
+    if(!silent){ addrEl.textContent=cn?'定位中…':'Locating…'; useBtn.disabled=true; }
+    let pt=await amapGeolocate();
+    if(!pt){ try{ const r=await api('/api/retail/ip-locate'); if(r&&isFinite(r.lat)&&isFinite(r.lng))pt={lat:r.lat,lng:r.lng}; }catch(e){} }
+    if(locateBtn)locateBtn.disabled=false;
+    if(!pt){ if(!silent)addrEl.textContent=cn?'无法定位，请拖动地图':'Couldn’t locate — drag the map'; return; }
+    resultsEl.hidden=true;
+    suppressUntil=Date.now()+1200;        // the recenter's move events shouldn't double-reverse
+    if(adapter)adapter.setCenter(pt.lat,pt.lng);
+    reverseCenter(pt.lat,pt.lng);
+  }
+  if(locateBtn)locateBtn.addEventListener('click',()=>locate(false));
+
   // Load the SDK + build the map (seed on Guangzhou; customer searches/drags).
   try{
     await coLoadMapSdk(cfg);
@@ -1139,6 +1174,7 @@ async function openMapPicker(){
     });
     reverseCenter(23.1291,113.2644);
     if(co.af.city){ searchEl.value=co.af.city; runSearch(); }
+    else locate(true);                    // no chosen city yet → auto-jump to the visitor
   }catch(e){
     addrEl.textContent=cn?'地图加载失败':'Map failed to load';
   }
