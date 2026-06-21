@@ -583,7 +583,10 @@ var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', not
   // Add-address form region (mirrors the mini-app: pick a served zone → canonical
   // Chinese province/city/district written onto the address, never free text — the
   // server can't derive a 省 from an English city, which is why free text failed).
-  af:{province:'',city:'',district:'',areaLabel:''} };
+  af:{province:'',city:'',district:'',areaLabel:''},
+  // Mini-app-parity checkout state.
+  addrPickerOpen:false, showCode:false,
+  needsCutlery:false, needsInvoice:false, invoiceType:'personal', invoiceTitle:'', invoiceTaxId:'', invoiceEmail:'' };
 function coItems(){return cartGet().map(l=>({product_id:l.product_id,qty:l.qty,choices:l.choices||[]}));}
 function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
 function coErrMsg(code){const map={
@@ -596,33 +599,222 @@ function coErrMsg(code){const map={
   no_zone_match:state.lang==='cn'?'该地址暂不支持配送':'We don’t deliver to this address yet'};
   return (state.lang==='cn'?'下单失败：':'Order failed: ')+(map[code]||code||'error');}
 
+// Checkout styling — mirrors the mini-app checkout (flat hairline sections on
+// oat, big "Where & how." header, receipt with thumbs, ink Place-Order sticky
+// bar). Injected once so the shared big <style> block is left untouched.
+function coInjectCheckoutStyle(){
+  if($('#cxStyle'))return;
+  const s=document.createElement('style'); s.id='cxStyle';
+  s.textContent=`
+  .cox{max-width:520px;margin:0 auto;background:var(--oat);padding-bottom:120px;}
+  .cx-header{padding:26px 22px 14px;}
+  .cx-kicker{font-family:var(--bf-gothic);font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--olive);}
+  .cx-title{font-family:var(--bf-bear);font-size:40px;line-height:.95;color:var(--ink);margin-top:4px;}
+  .cx-sec{padding:16px 22px;border-top:1px solid rgba(0,0,0,.18);}
+  .cx-sec--first{border-top:2px solid var(--ink);}
+  .cx-seclabel{font-family:var(--bf-gothic);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--olive);margin-bottom:10px;}
+  .cx-sechead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;}
+  .cx-sectitle{font-family:var(--bf-bear);font-size:21px;line-height:1.1;color:var(--ink);}
+  .cx-act{font-family:var(--bf-gothic);font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);text-decoration:underline;background:none;border:0;cursor:pointer;padding:0;}
+  /* receipt */
+  .cx-line{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;}
+  .cx-line-lead{flex:1;min-width:0;display:flex;align-items:center;gap:11px;}
+  .cx-thumb{width:40px;height:40px;border-radius:7px;flex-shrink:0;background:#e3dccf;object-fit:cover;}
+  .cx-line-name{flex:1;min-width:0;font-size:14px;}
+  .cx-line-nm{font-family:var(--bf-bear);}
+  .cx-line-qty{color:var(--olive);}
+  .cx-line-opts{font-size:11px;color:var(--muted);margin-top:2px;line-height:1.2;}
+  .cx-line-tot{font-family:var(--bf-bear);font-size:15px;white-space:nowrap;}
+  /* address */
+  .cx-hint{font-family:var(--bf-gothic);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);margin-bottom:9px;line-height:1.4;}
+  .cx-addr-line{display:flex;align-items:baseline;justify-content:space-between;gap:12px;}
+  .cx-addr-name{font-family:var(--bf-bear);font-size:15px;}
+  .cx-addr-phone{color:var(--ink);font-size:14px;}
+  .cx-addr-full{color:var(--ink);opacity:.78;font-size:13px;margin-top:7px;line-height:1.5;}
+  .cx-row{display:flex;align-items:flex-start;gap:11px;padding:11px 0;cursor:pointer;}
+  .cx-row+.cx-row{border-top:1px dashed rgba(0,0,0,.18);}
+  .cx-row-body{flex:1;min-width:0;}
+  .cx-default{font-family:var(--bf-gothic);font-size:11px;letter-spacing:.1em;color:var(--forest);margin-left:6px;}
+  .cx-link{display:inline-block;padding:11px 0 2px;font-family:var(--bf-gothic);font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);text-decoration:underline;background:none;border:0;cursor:pointer;}
+  /* radio dot + right-side check */
+  .cx-dot{width:20px;height:20px;border-radius:50%;border:2px solid var(--ink);flex-shrink:0;position:relative;margin-top:1px;}
+  .cx-dot.on::after{content:'';position:absolute;inset:4px;background:var(--ink);border-radius:50%;}
+  .cx-check{width:20px;height:20px;border:2px solid var(--ink);border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+  .cx-opt.on .cx-check{background:var(--lime);}
+  .cx-check-dot{width:8px;height:8px;border-radius:50%;background:transparent;}
+  .cx-opt.on .cx-check-dot{background:var(--ink);}
+  /* slot option cards */
+  .cx-opt{display:flex;align-items:center;gap:11px;padding:13px 14px;margin-top:10px;border:2px solid var(--ink);background:transparent;cursor:pointer;}
+  .cx-opt.on{background:rgba(54,83,41,.06);}
+  .cx-opt-body{flex:1;min-width:0;}
+  .cx-opt-label{font-family:var(--bf-bear);font-size:15px;line-height:1.25;}
+  .cx-opt-sub{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35;}
+  /* payment + points */
+  .cx-pts{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:12px;background:rgba(204,217,0,.10);border:1.5px solid rgba(26,26,23,.10);border-radius:8px;}
+  .cx-pts-body{flex:1;min-width:0;}
+  .cx-pts-label{font-family:var(--bf-bear);font-size:15px;}
+  .cx-pts-sub{font-size:12px;color:var(--muted);margin-top:3px;}
+  .cx-pts-emph{color:var(--forest);font-weight:600;}
+  .cx-pay{display:flex;align-items:center;gap:12px;padding:11px 0;cursor:pointer;}
+  .cx-pay.dis{opacity:.45;cursor:default;}
+  .cx-swatch{width:24px;height:24px;border-radius:4px;flex-shrink:0;}
+  .cx-pay-label{flex:1;font-family:var(--bf-bear);font-size:16px;}
+  .cx-pill{font-family:var(--bf-gothic);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:rgba(0,0,0,.06);color:var(--ink);}
+  /* switch */
+  .cx-sw{position:relative;width:46px;height:27px;flex-shrink:0;cursor:pointer;}
+  .cx-sw input{position:absolute;opacity:0;width:0;height:0;}
+  .cx-sw .tr{position:absolute;inset:0;background:#cfc9bd;border-radius:999px;transition:.18s;}
+  .cx-sw .kn{position:absolute;top:3px;left:3px;width:21px;height:21px;background:#fff;border-radius:50%;transition:.18s;box-shadow:0 1px 3px rgba(0,0,0,.25);}
+  .cx-sw input:checked+.tr{background:var(--ink);}
+  .cx-sw input:checked+.tr+.kn{transform:translateX(19px);}
+  .cx-check-row{display:flex;align-items:center;gap:13px;padding:9px 0;}
+  .cx-check-label{font-size:14px;color:var(--ink);}
+  /* inputs */
+  .cx-input{width:100%;background:#FFFCF7;border:1.5px solid var(--ink);padding:11px 13px;font:inherit;font-size:14px;border-radius:0;box-sizing:border-box;}
+  textarea.cx-input{min-height:54px;resize:vertical;}
+  .cx-itype{display:flex;gap:8px;margin-top:8px;}
+  .cx-itype .t{flex:1;text-align:center;border:1.5px solid var(--ink);background:#FFFCF7;padding:9px 0;font-size:13px;cursor:pointer;}
+  .cx-itype .t.on{background:var(--lime);font-weight:700;}
+  /* coupon */
+  .cx-codetoggle{text-align:center;display:block;width:100%;padding:9px 0;font-family:var(--bf-gothic);font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);opacity:.6;background:none;border:0;cursor:pointer;}
+  .cx-coderow{display:flex;gap:8px;align-items:stretch;margin-top:4px;}
+  .cx-coderow .cx-input{flex:1;}
+  .cx-apply{padding:0 18px;background:var(--ink);color:var(--lime);font-family:var(--bf-gothic);font-size:13px;letter-spacing:.1em;border:0;cursor:pointer;}
+  .cx-vapplied{display:flex;align-items:center;justify-content:space-between;background:rgba(204,217,0,.18);border:1.5px solid var(--lime);padding:12px 14px;}
+  .cx-vcode{font-family:var(--bf-gothic);font-size:17px;letter-spacing:.05em;}
+  .cx-vremove{font-family:var(--bf-gothic);font-size:12px;letter-spacing:.1em;color:var(--berry);text-decoration:underline;background:none;border:0;cursor:pointer;}
+  /* breakdown */
+  .cx-bd{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;}
+  .cx-bd-l{font-size:14px;color:var(--olive);}
+  .cx-bd-v{font-family:var(--bf-bear);font-size:15px;color:var(--ink);}
+  .cx-bd.earn .cx-bd-v{color:#5a8a2f;}
+  .cx-zone{padding:14px 16px;background:rgba(233,97,116,.08);border:1px solid rgba(233,97,116,.35);font-size:13px;line-height:1.5;color:#c14b5f;}
+  .cx-msg{padding:0 22px;font-size:13px;color:var(--berry);min-height:16px;line-height:1.5;}
+  /* sticky footer */
+  .cx-sticky{position:fixed;bottom:0;left:0;right:0;z-index:60;background:var(--oat);border-top:2px solid var(--ink);
+    padding:14px 18px max(14px,env(safe-area-inset-bottom));display:flex;gap:16px;align-items:center;}
+  .cx-total{display:flex;flex-direction:column;gap:1px;}
+  .cx-total-l{font-family:var(--bf-gothic);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--olive);}
+  .cx-total-a{font-family:var(--bf-gothic);font-size:30px;line-height:1;color:var(--ink);}
+  .cx-place{flex:1;background:var(--ink);color:var(--lime);border:0;padding:16px 0;font-family:var(--bf-gothic);font-size:16px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;}
+  .cx-place:disabled{opacity:.5;color:rgba(204,217,0,.6);cursor:default;}
+  @media(min-width:560px){.cx-sticky{max-width:520px;margin:0 auto;}}`;
+  document.head.appendChild(s);
+}
 async function renderCheckout(){
-  const v=$('#view');
-  if(!state.token){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(state.lang==='cn'?'请先登录后结算':'Please sign in to check out')+'</div></div></div>'; openLogin(); return; }
-  if(!coItems().length){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(state.lang==='cn'?'购物车是空的 🌱':'Your cart is empty 🌱')+'<br><a class="more" href="#/shop">'+(state.lang==='cn'?'去购物':'Browse products')+'</a></div></div></div>'; return; }
+  const v=$('#view'); const cn=state.lang==='cn';
+  if(!state.token){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(cn?'请先登录后结算':'Please sign in to check out')+'</div></div></div>'; openLogin(); return; }
+  if(!coItems().length){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(cn?'购物车是空的 🌱':'Your cart is empty 🌱')+'<br><a class="more" href="#/shop">'+(cn?'去购物':'Browse products')+'</a></div></div></div>'; return; }
+  coInjectCheckoutStyle();
   co.idem=co.idem||('web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));
   co.preorderSeen=false;   // pre-order popup auto-shows once per checkout visit
-  v.innerHTML=`<div class="wrap"><div class="co">
-    <h1>${state.lang==='cn'?'结算':'Checkout'}</h1>
-    <div id="coPreorder"></div>
-    <div class="co-sec"><h3>${state.lang==='cn'?'配送地址':'Delivery address'}</h3><div id="coAddr">…</div></div>
-    <div class="co-sec"><h3>${state.lang==='cn'?'配送时间':'Delivery time'}</h3><div id="coSlots">…</div></div>
-    <div class="co-sec"><h3>${state.lang==='cn'?'备注与优惠码':'Note & voucher'}</h3>
-      <div class="co-field"><label>${state.lang==='cn'?'订单备注 (选填)':'Order note (optional)'}</label><textarea id="coNote" rows="2"></textarea></div>
-      <div class="co-field"><label>${state.lang==='cn'?'优惠码 (选填)':'Voucher code (optional)'}</label><input id="coVoucher" type="text"></div>
+  co.addrPickerOpen=false;
+  const n=coItems().reduce((a,l)=>a+(Number(l.qty)||0),0);
+  v.innerHTML=`<div class="cox">
+    <div class="cx-header">
+      <div class="cx-kicker">${cn?'下单 · 02/03':'WHERE & HOW · 02/03'}</div>
+      <div class="cx-title">${cn?'去哪里、怎么送':'Where &amp; how.'}</div>
     </div>
-    <div class="co-sec" id="coPointsSec" hidden><h3>${state.lang==='cn'?'积分抵扣':'Points'}</h3><div id="coPoints"></div></div>
-    <div class="co-sec"><h3>${state.lang==='cn'?'订单摘要':'Order summary'}</h3><div id="coSummary">…</div></div>
-    <div class="co-msg" id="coMsg"></div>
-    <button class="co-place" id="coPlace" disabled>${state.lang==='cn'?'提交订单':'Place order'}</button>
-  </div></div>`;
-  document.title=(state.lang==='cn'?'结算':'Checkout')+' · '+state.brand;
-  $('#coNote').value=co.note; $('#coVoucher').value=co.voucher;
+    <div id="coPreorder" style="padding:0 22px"></div>
+    <section class="cx-sec cx-sec--first">
+      <div class="cx-seclabel">${cn?'你的订单':'YOUR ORDER'} · ${n} ${cn?'件':'ITEMS'}</div>
+      <div id="coItems"></div>
+    </section>
+    <section class="cx-sec">
+      <div class="cx-sectitle">${cn?'配送至':'Deliver to'}</div>
+      <div id="coAddr">…</div>
+    </section>
+    <section class="cx-sec">
+      <div class="cx-sectitle">${cn?'什么时候送':'When'}</div>
+      <div id="coSlots">…</div>
+    </section>
+    <section class="cx-sec">
+      <div class="cx-sectitle">${cn?'支付方式':'Pay with'}</div>
+      <div id="coPointsSec" hidden><div id="coPoints"></div></div>
+      <div id="coPay"></div>
+    </section>
+    <section class="cx-sec">
+      <div class="cx-sectitle">${cn?'附加项':'Add-ons'}</div>
+      <div class="cx-check-row"><label class="cx-sw"><input type="checkbox" id="coCutlery" ${co.needsCutlery?'checked':''}><span class="tr"></span><span class="kn"></span></label><span class="cx-check-label">${cn?'附餐具':'Include cutlery'}</span></div>
+      <div class="cx-check-row"><label class="cx-sw"><input type="checkbox" id="coInvoice" ${co.needsInvoice?'checked':''}><span class="tr"></span><span class="kn"></span></label><span class="cx-check-label">${cn?'需要发票':'Need an invoice'}</span></div>
+      <div id="coInvoiceForm"></div>
+      <div style="margin-top:10px"><textarea id="coNote" class="cx-input" placeholder="${cn?'备注（选填）':'Note for the kitchen (optional)'}"></textarea></div>
+    </section>
+    <section class="cx-sec">
+      <div class="cx-sectitle">${cn?'优惠券':'Coupons'}</div>
+      <div id="coCoupon"></div>
+    </section>
+    <section class="cx-sec">
+      <div id="coSummary">…</div>
+    </section>
+    <div class="cx-msg" id="coMsg"></div>
+    <div class="cx-sticky">
+      <div class="cx-total"><div class="cx-total-l">${cn?'支付':'Pay'}</div><div class="cx-total-a" id="coStickyTotal">${money(0)}</div></div>
+      <button class="cx-place" id="coPlace" disabled>${cn?'提交订单 →':'Place order →'}</button>
+    </div>
+  </div>`;
+  document.title=(cn?'结算':'Checkout')+' · '+state.brand;
+  $('#coNote').value=co.note;
   $('#coNote').addEventListener('input',e=>co.note=e.target.value);
-  $('#coVoucher').addEventListener('input',e=>co.voucher=e.target.value.trim());
+  $('#coCutlery').addEventListener('change',e=>{co.needsCutlery=e.target.checked;});
+  $('#coInvoice').addEventListener('change',e=>{co.needsInvoice=e.target.checked;coRenderInvoiceForm();});
   $('#coPlace').addEventListener('click',coPlace);
+  coRenderItems(); coRenderPay(); coRenderInvoiceForm(); coRenderCoupon();
   await coLoadAddrs();
   await coQuote();
+}
+// Order receipt — cart lines with thumbnail, name ×qty, chosen options, line total.
+function coRenderItems(){
+  const box=$('#coItems'); if(!box)return;
+  box.innerHTML=cartGet().map(l=>`<div class="cx-line">
+    <div class="cx-line-lead">
+      ${l.image?`<img class="cx-thumb" src="${escAttr(l.image)}" alt="">`:'<div class="cx-thumb"></div>'}
+      <div class="cx-line-name"><span class="cx-line-nm">${esc(l.name||'')}</span><span class="cx-line-qty"> ×${Number(l.qty)||1}</span>${l.optLabel?`<div class="cx-line-opts">${esc(l.optLabel)}</div>`:''}</div>
+    </div>
+    <div class="cx-line-tot">${money((Number(l.price)||0)*(Number(l.qty)||1))}</div>
+  </div>`).join('');
+}
+// Payment rows — match the mini-app's swatch layout. Only Alipay works in a
+// plain browser (WeChat Pay JSAPI needs the in-WeChat openid), so WeChat shows
+// as an unavailable row rather than a dead option.
+function coRenderPay(){
+  const box=$('#coPay'); if(!box)return; const cn=state.lang==='cn';
+  if(co.payment!=='alipay')co.payment='alipay';
+  box.innerHTML=
+    `<div class="cx-pay dis"><span class="cx-dot"></span><span class="cx-swatch" style="background:#1AAD19"></span><span class="cx-pay-label">${cn?'微信支付':'WeChat Pay'}</span><span class="cx-pill">${cn?'仅微信内':'In WeChat app'}</span></div>`+
+    `<div class="cx-pay" id="coPayAlipay"><span class="cx-dot on"></span><span class="cx-swatch" style="background:#1677FF"></span><span class="cx-pay-label">${cn?'支付宝':'Alipay'}</span></div>`;
+}
+function coRenderInvoiceForm(){
+  const box=$('#coInvoiceForm'); if(!box)return; const cn=state.lang==='cn';
+  if(!co.needsInvoice){ box.innerHTML=''; return; }
+  box.innerHTML=`<div class="cx-itype">
+      <div class="t ${co.invoiceType==='personal'?'on':''}" data-t="personal">${cn?'个人':'Personal'}</div>
+      <div class="t ${co.invoiceType==='company'?'on':''}" data-t="company">${cn?'企业':'Company'}</div>
+    </div>
+    <div style="margin-top:8px"><input class="cx-input" id="coInvTitle" placeholder="${cn?'发票抬头':'Invoice title'}" value="${escAttr(co.invoiceTitle)}"></div>
+    ${co.invoiceType==='company'?`<div style="margin-top:8px"><input class="cx-input" id="coInvTax" placeholder="${cn?'税号':'Tax ID'}" value="${escAttr(co.invoiceTaxId)}"></div>`:''}
+    <div style="margin-top:8px"><input class="cx-input" id="coInvEmail" placeholder="${cn?'接收邮箱':'Email for the invoice'}" value="${escAttr(co.invoiceEmail)}"></div>`;
+  box.querySelectorAll('.cx-itype .t').forEach(t=>t.addEventListener('click',()=>{co.invoiceType=t.dataset.t;coRenderInvoiceForm();}));
+  const ti=$('#coInvTitle'); if(ti)ti.addEventListener('input',e=>co.invoiceTitle=e.target.value);
+  const tx=$('#coInvTax'); if(tx)tx.addEventListener('input',e=>co.invoiceTaxId=e.target.value);
+  const em=$('#coInvEmail'); if(em)em.addEventListener('input',e=>co.invoiceEmail=e.target.value);
+}
+function coRenderCoupon(){
+  const box=$('#coCoupon'); if(!box)return; const cn=state.lang==='cn';
+  if(co.voucher){
+    box.innerHTML=`<div class="cx-vapplied"><span class="cx-vcode">${esc(co.voucher)}</span><button class="cx-vremove" id="coVRemove">${cn?'移除':'REMOVE'}</button></div>`;
+    $('#coVRemove').addEventListener('click',()=>{co.voucher='';coRenderCoupon();coQuote();});
+    return;
+  }
+  if(!co.showCode){
+    box.innerHTML=`<button class="cx-codetoggle" id="coCodeToggle">${cn?'有优惠码?':'HAVE A CODE?'}</button>`;
+    $('#coCodeToggle').addEventListener('click',()=>{co.showCode=true;coRenderCoupon();});
+    return;
+  }
+  box.innerHTML=`<div class="cx-coderow"><input class="cx-input" id="coVInput" placeholder="${cn?'输入优惠码':'Enter code'}"><button class="cx-apply" id="coVApply">${cn?'应用':'APPLY'}</button></div>`;
+  const apply=()=>{const val=$('#coVInput').value.trim();if(!val)return;co.voucher=val;co.showCode=false;coRenderCoupon();coQuote();};
+  $('#coVApply').addEventListener('click',apply);
+  $('#coVInput').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();apply();}});
 }
 async function coLoadAddrs(){
   try{ co.addrs=await api('/api/retail/addresses')||[]; }catch(e){ co.addrs=[]; }
@@ -661,12 +853,30 @@ function renderCoAddrs(){
     const c=$('#afCancel'); if(c)c.addEventListener('click',()=>{co.showAddForm=false;co.af={province:'',city:'',district:'',areaLabel:''};renderCoAddrs();});
     return;
   }
-  box.innerHTML=co.addrs.map(a=>`<label class="co-addr"><input type="radio" name="coaddr" value="${a.id}" ${a.id===co.addrId?'checked':''}>
-    <span><span class="ad-n">${esc(a.recipient_name||'')} · ${esc(String(a.phone||''))}</span>
-    <span class="ad-d">${esc([a.city,a.district,a.address,a.detail].filter(Boolean).join(' '))}</span></span></label>`).join('')
-    +`<button class="co-addbtn" id="coAddNew">+ ${state.lang==='cn'?'新增地址':'Add address'}</button>`;
-  box.querySelectorAll('input[name=coaddr]').forEach(r=>r.addEventListener('change',()=>{co.addrId=Number(r.value);coQuote();}));
-  $('#coAddNew').addEventListener('click',()=>{co.showAddForm=true;co.af={province:'',city:'',district:'',areaLabel:''};renderCoAddrs();});
+  const cn=state.lang==='cn';
+  const fullLine=a=>esc([a.city,a.district,a.address,a.detail].filter(Boolean).join(' '));
+  // Picker open → list every saved address with a radio dot + "use a new one".
+  if(co.addrPickerOpen){
+    box.innerHTML=co.addrs.map(a=>`<div class="cx-row" data-id="${a.id}">
+        <span class="cx-dot ${a.id===co.addrId?'on':''}"></span>
+        <div class="cx-row-body">
+          <div><span class="cx-addr-name">${esc(a.recipient_name||'')}</span><span class="cx-addr-phone"> · ${esc(String(a.phone||''))}</span>${a.is_default?`<span class="cx-default">${cn?'默认':'DEFAULT'}</span>`:''}</div>
+          <div class="cx-addr-full">${fullLine(a)}</div>
+        </div></div>`).join('')
+      +`<button class="cx-link" id="coAddNew">+ ${cn?'使用新地址':'USE A NEW ADDRESS'}</button>`;
+    box.querySelectorAll('.cx-row[data-id]').forEach(r=>r.addEventListener('click',()=>{co.addrId=Number(r.dataset.id);co.addrPickerOpen=false;renderCoAddrs();coQuote();}));
+    $('#coAddNew').addEventListener('click',()=>{co.showAddForm=true;co.af={province:'',city:'',district:'',areaLabel:''};renderCoAddrs();});
+    return;
+  }
+  // Collapsed (default) → just the selected address + a CHANGE link.
+  const sel=co.addrs.find(a=>a.id===co.addrId)||co.addrs[0];
+  box.innerHTML=`<div class="cx-hint">${cn?'点击「更换」可切换地址':'TAP CHANGE TO SWITCH ADDRESS'}</div>
+    <div class="cx-addr-line">
+      <div style="min-width:0;flex:1"><span class="cx-addr-name">${esc(sel.recipient_name||'')}</span><span class="cx-addr-phone"> · ${esc(String(sel.phone||''))}</span></div>
+      <button class="cx-act" id="coAddrChange">${cn?'更换':'CHANGE'}</button>
+    </div>
+    <div class="cx-addr-full">${fullLine(sel)}</div>`;
+  $('#coAddrChange').addEventListener('click',()=>{co.addrPickerOpen=true;renderCoAddrs();});
 }
 
 /* ════════ Address region cascade + map pin (mirrors the mini-app) ════════
@@ -1004,37 +1214,50 @@ function coPreorderPopup(){
 // Points redemption: a single opt-in toggle (server clamps points_to_use to the
 // usable max). Hidden when the customer has no usable points on this order.
 function renderCoPoints(d){
-  const sec=$('#coPointsSec'), box=$('#coPoints'); if(!sec||!box)return;
+  const sec=$('#coPointsSec'), box=$('#coPoints'); if(!sec||!box)return; const cn=state.lang==='cn';
   const bal=Number(d.points_balance)||0, maxUse=Number(d.points_max_usable)||0;
   if(bal<=0||maxUse<=0){ sec.hidden=true; co.usePoints=false; return; }
   sec.hidden=false;
   const disc=Number(d.points_discount)||0;
-  box.innerHTML=`<label class="co-pts"><input type="checkbox" id="coUsePts" ${co.usePoints?'checked':''}>
-    <span>${state.lang==='cn'?('使用积分（'+bal+' 可用'):('Use my points ('+bal+' available')}${co.usePoints&&disc>0?(' · −'+money(disc)+'）'):'）'}</span></label>`;
+  const sub=co.usePoints&&disc>0
+    ? `<span class="cx-pts-emph">${cn?('已抵 −'+money(disc)):('−'+money(disc)+' off')}</span>`
+    : `${bal} ${cn?'积分 · 本单可用':'pts · use on this order'}`;
+  box.innerHTML=`<div class="cx-pts">
+    <div class="cx-pts-body"><div class="cx-pts-label">${cn?'使用积分':'Use my points'}</div><div class="cx-pts-sub">${sub}</div></div>
+    <label class="cx-sw"><input type="checkbox" id="coUsePts" ${co.usePoints?'checked':''}><span class="tr"></span><span class="kn"></span></label></div>`;
   $('#coUsePts').addEventListener('change',e=>{co.usePoints=e.target.checked;coQuote();});
 }
 function renderCoSlots(d){
-  const box=$('#coSlots'); if(!box)return; const sc=d.scheduling||{}; const slots=Array.isArray(sc.slots)?sc.slots:[];
-  if(!slots.length){ box.innerHTML='<div class="co-slot">'+(state.lang==='cn'?'尽快送达':'As soon as possible')+'</div>';
-    if(!co.slotId){co.slotId=sc.right_away_available?'right_away':'right_away';co.slotKind='right_away';} return; }
+  const box=$('#coSlots'); if(!box)return; const cn=state.lang==='cn'; const sc=d.scheduling||{}; const slots=Array.isArray(sc.slots)?sc.slots:[];
+  if(!slots.length){
+    if(!co.slotId){co.slotId='right_away';co.slotKind='right_away';}
+    box.innerHTML=`<div class="cx-opt on"><div class="cx-opt-body"><div class="cx-opt-label">${cn?'尽快送达':'As soon as possible'}</div><div class="cx-opt-sub">${cn?'我们会尽快为你发货':'we ship on the earliest available day'}</div></div><span class="cx-check"><span class="cx-check-dot"></span></span></div>`;
+    return;
+  }
   if(!co.slotId||!slots.find(s=>s.slot_id===co.slotId)){ co.slotId=slots[0].slot_id; co.slotKind=slots[0].slot_kind||''; }
-  box.innerHTML=slots.map(s=>`<label class="co-slot"><input type="radio" name="coslot" value="${escAttr(s.slot_id)}" ${s.slot_id===co.slotId?'checked':''}>
-    <span>${esc(state.lang==='cn'?(s.label_cn||s.label_en):(s.label_en||s.label_cn))}${Number(s.surcharge)>0?` (+${money(s.surcharge)})`:''}</span></label>`).join('');
-  box.querySelectorAll('input[name=coslot]').forEach(r=>r.addEventListener('change',()=>{const s=slots.find(x=>x.slot_id===r.value);co.slotId=r.value;co.slotKind=s?(s.slot_kind||''):'';coQuote();}));
+  box.innerHTML=slots.map(s=>{
+    const on=s.slot_id===co.slotId, sur=Number(s.surcharge)>0?` (+${money(s.surcharge)})`:'';
+    const label=esc(cn?(s.label_cn||s.label_en):(s.label_en||s.label_cn));
+    return `<div class="cx-opt ${on?'on':''}" data-id="${escAttr(s.slot_id)}"><div class="cx-opt-body"><div class="cx-opt-label">${label}${sur}</div>${s.sub_label?`<div class="cx-opt-sub">${esc(s.sub_label)}</div>`:''}</div><span class="cx-check"><span class="cx-check-dot"></span></span></div>`;
+  }).join('');
+  box.querySelectorAll('.cx-opt[data-id]').forEach(el=>el.addEventListener('click',()=>{const s=slots.find(x=>x.slot_id===el.dataset.id);co.slotId=el.dataset.id;co.slotKind=s?(s.slot_kind||''):'';coQuote();}));
 }
 function renderCoSummary(d){
-  const box=$('#coSummary'); if(!box)return;
+  const box=$('#coSummary'); if(!box)return; const cn=state.lang==='cn';
   const sub=Number(d.subtotal)||0, ship=Number(d.delivery_fee)||0, pack=Number(d.packing_fee)||0, tot=Number(d.total)||0;
+  const earn=Number(d.points_earn_preview||d.points_earned_preview||d.points_earn||0)||0;
   box.innerHTML=
-    `<div class="co-line"><span>${state.lang==='cn'?'小计':'Subtotal'}</span><span>${money(sub)}</span></div>`+
-    `<div class="co-line"><span>${state.lang==='cn'?'配送费':'Delivery'}</span><span>${d.free_shipping?(state.lang==='cn'?'免运费':'Free'):money(ship)}</span></div>`+
-    (pack>0?`<div class="co-line"><span>${state.lang==='cn'?'包装费':'Packing'}</span><span>${money(pack)}</span></div>`:'')+
-    (Number(d.points_discount)>0?`<div class="co-line"><span>${state.lang==='cn'?'积分抵扣':'Points'}</span><span>−${money(Number(d.points_discount))}</span></div>`:'')+
-    `<div class="co-line tot"><span>${state.lang==='cn'?'合计':'Total'}</span><span>${money(tot)}</span></div>`;
+    `<div class="cx-bd"><span class="cx-bd-l">${cn?'小计':'Subtotal'}</span><span class="cx-bd-v">${money(sub)}</span></div>`+
+    `<div class="cx-bd"><span class="cx-bd-l">${cn?'配送费':'Delivery'}</span><span class="cx-bd-v">${d.free_shipping?(cn?'免运费':'Free'):money(ship)}</span></div>`+
+    (pack>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'包装费':'Packing fee'}</span><span class="cx-bd-v">${money(pack)}</span></div>`:'')+
+    (Number(d.points_discount)>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'积分抵扣':'Points'}</span><span class="cx-bd-v">−${money(Number(d.points_discount))}</span></div>`:'')+
+    (earn>0?`<div class="cx-bd earn"><span class="cx-bd-l">${cn?'本单获得':"You'll earn"}</span><span class="cx-bd-v">+${earn} ${cn?'积分':'pts'}</span></div>`:'');
+  const t=$('#coStickyTotal'); if(t)t.textContent=money(tot);
   const place=$('#coPlace'); if(place)place.disabled=false;
 }
 function renderNoZone(d){
-  const s=$('#coSummary'); if(s)s.innerHTML='<div class="co-msg" style="color:var(--berry)">'+(state.lang==='cn'?'抱歉，该地址暂不支持配送。':'Sorry, we don’t deliver to this address yet.')+(d&&d.kitchen_address?'<br>'+esc(d.kitchen_address):'')+'</div>';
+  const s=$('#coSummary'); if(s)s.innerHTML='<div class="cx-zone">'+(state.lang==='cn'?'抱歉，该地址暂不支持配送。':'Sorry, we don’t deliver to this address yet.')+(d&&d.kitchen_address?'<br>'+esc(d.kitchen_address):'')+'</div>';
+  const t=$('#coStickyTotal'); if(t)t.textContent=money(0);
   const place=$('#coPlace'); if(place)place.disabled=true;
 }
 
@@ -1169,7 +1392,10 @@ async function coPlace(){
   // re-enters coPlace, falling straight through to the order POST below.
   if(!co.offersDone&&Array.isArray(co._offers)&&co._offers.length){ coShowOffers(); return; }
   co.placing=true; $('#coPlace').disabled=true; coMsg('');
-  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId,delivery_slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0,voucher_code:co.voucher||null,customer_note:co.note||null,idempotency_key:co.idem};
+  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId,delivery_slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0,voucher_code:co.voucher||null,customer_note:co.note||null,
+    needs_cutlery:co.needsCutlery?1:0,needs_invoice:co.needsInvoice?1:0,
+    invoice_type:co.needsInvoice?co.invoiceType:null,invoice_title:co.needsInvoice?(co.invoiceTitle||null):null,invoice_tax_id:(co.needsInvoice&&co.invoiceType==='company')?(co.invoiceTaxId||null):null,invoice_email:co.needsInvoice?(co.invoiceEmail||null):null,
+    idempotency_key:co.idem};
   if(co.fallback)body.fallback_choice=co.fallback;
   let r,j;
   try{ r=await fetch('/api/retail/orders',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
