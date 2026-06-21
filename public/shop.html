@@ -579,7 +579,11 @@ function renderCartItems(){
 // Delivery-only MVP: pick/add address → /checkout/quote (fees + slots) → place
 // via /orders (handles the out-of-stock fallback). Server re-prices & re-checks
 // stock authoritatively. Payment is Phase 3c (order is created pending_payment).
-var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', usePoints:false, quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null, offersDone:false, _offers:null, _offerSig:'', _offerSkew:0, _offerTimer:null };
+var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', usePoints:false, quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null, offersDone:false, _offers:null, _offerSig:'', _offerSkew:0, _offerTimer:null,
+  // Add-address form region (mirrors the mini-app: pick a served zone → canonical
+  // Chinese province/city/district written onto the address, never free text — the
+  // server can't derive a 省 from an English city, which is why free text failed).
+  af:{province:'',city:'',district:'',areaLabel:''} };
 function coItems(){return cartGet().map(l=>({product_id:l.product_id,qty:l.qty,choices:l.choices||[]}));}
 function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
 function coErrMsg(code){const map={
@@ -628,23 +632,33 @@ async function coLoadAddrs(){
 function renderCoAddrs(){
   const box=$('#coAddr'); if(!box)return;
   if(co.showAddForm||!co.addrs.length){
-    box.innerHTML=`<div class="co-field"><label>${state.lang==='cn'?'收货人':'Name'}</label><input id="afName"></div>
-     <div class="co-field"><label>${state.lang==='cn'?'手机号':'Phone'}</label><input id="afPhone" inputmode="numeric" maxlength="11"></div>
-     <div class="co-field"><label>${state.lang==='cn'?'城市':'City'}</label><input id="afCity"></div>
-     <div class="co-field"><label>${state.lang==='cn'?'区/县':'District'}</label><input id="afDist"></div>
-     <div class="co-field"><label>${state.lang==='cn'?'详细地址':'Street address'}</label><input id="afAddr"></div>
-     <div class="co-field"><label>${state.lang==='cn'?'门牌/楼层 (选填)':'Apt / detail (optional)'}</label><input id="afDetail"></div>
-     <button class="co-place" id="afSave" style="margin-top:12px">${state.lang==='cn'?'保存地址':'Save address'}</button>
-     ${co.addrs.length?`<button class="co-addbtn" id="afCancel">${state.lang==='cn'?'取消':'Cancel'}</button>`:''}`;
+    coInjectAddrStyle();
+    const cn=state.lang==='cn';
+    const areaTxt=co.af.areaLabel||(cn?'点击选择配送区域':'Tap to choose your delivery area');
+    box.innerHTML=`<div class="co-field"><label>${cn?'收货人':'Name'}</label><input id="afName"></div>
+     <div class="co-field"><label>${cn?'手机号':'Phone'}</label><input id="afPhone" inputmode="numeric" maxlength="11"></div>
+     <div class="co-field"><label>${cn?'配送区域':'Delivery area'}</label>
+       <button type="button" id="afArea" class="af-area ${co.af.city?'':'ph'}">${esc(areaTxt)}</button>
+       <button type="button" id="afMap" class="af-map" hidden>📍 ${cn?'地图选点':'Choose on map'}</button>
+     </div>
+     <div class="co-field"><label>${cn?'详细地址':'Street address'}</label><input id="afAddr"></div>
+     <div class="co-field"><label>${cn?'门牌/楼层 (选填)':'Apt / detail (optional)'}</label><input id="afDetail"></div>
+     <button class="co-place" id="afSave" style="margin-top:12px">${cn?'保存地址':'Save address'}</button>
+     ${co.addrs.length?`<button class="co-addbtn" id="afCancel">${cn?'取消':'Cancel'}</button>`:''}`;
+    $('#afArea').addEventListener('click',openAreaPicker);
+    coSetupMapButton();   // reveals #afMap once maps-config confirms a JS key
     const save=$('#afSave');
     save.addEventListener('click',async()=>{
-      const body={recipient_name:$('#afName').value.trim(),phone:$('#afPhone').value.trim(),city:$('#afCity').value.trim(),district:$('#afDist').value.trim(),address:$('#afAddr').value.trim(),detail:$('#afDetail').value.trim(),is_default:co.addrs.length===0};
-      if(!body.recipient_name||!body.phone||!body.city||!body.address){coMsg(state.lang==='cn'?'请填写收货人、手机、城市、地址':'Fill name, phone, city and address');return;}
+      const body={recipient_name:$('#afName').value.trim(),phone:$('#afPhone').value.trim(),
+        province:co.af.province,city:co.af.city,district:co.af.district,
+        address:$('#afAddr').value.trim(),detail:$('#afDetail').value.trim(),is_default:co.addrs.length===0};
+      if(!body.recipient_name||!body.phone||!body.address){coMsg(cn?'请填写收货人、手机、地址':'Fill name, phone and address');return;}
+      if(!body.city){coMsg(cn?'请选择配送区域':'Please choose your delivery area');return;}
       save.disabled=true; coMsg('');
-      try{ const a=await postJson('/api/retail/addresses',body); co.addrs.push(a); co.addrId=a.id; co.showAddForm=false; renderCoAddrs(); coQuote(); }
-      catch(e){ coMsg(state.lang==='cn'?'地址保存失败':'Could not save address'); save.disabled=false; }
+      try{ const a=await postJson('/api/retail/addresses',body); co.addrs.push(a); co.addrId=a.id; co.showAddForm=false; co.af={province:'',city:'',district:'',areaLabel:''}; renderCoAddrs(); coQuote(); }
+      catch(e){ coMsg((cn?'地址保存失败':'Could not save address')+(e&&e.code?(' ['+e.code+']'):'')); save.disabled=false; }
     });
-    const c=$('#afCancel'); if(c)c.addEventListener('click',()=>{co.showAddForm=false;renderCoAddrs();});
+    const c=$('#afCancel'); if(c)c.addEventListener('click',()=>{co.showAddForm=false;co.af={province:'',city:'',district:'',areaLabel:''};renderCoAddrs();});
     return;
   }
   box.innerHTML=co.addrs.map(a=>`<label class="co-addr"><input type="radio" name="coaddr" value="${a.id}" ${a.id===co.addrId?'checked':''}>
@@ -652,8 +666,274 @@ function renderCoAddrs(){
     <span class="ad-d">${esc([a.city,a.district,a.address,a.detail].filter(Boolean).join(' '))}</span></span></label>`).join('')
     +`<button class="co-addbtn" id="coAddNew">+ ${state.lang==='cn'?'新增地址':'Add address'}</button>`;
   box.querySelectorAll('input[name=coaddr]').forEach(r=>r.addEventListener('change',()=>{co.addrId=Number(r.value);coQuote();}));
-  $('#coAddNew').addEventListener('click',()=>{co.showAddForm=true;renderCoAddrs();});
+  $('#coAddNew').addEventListener('click',()=>{co.showAddForm=true;co.af={province:'',city:'',district:'',areaLabel:''};renderCoAddrs();});
 }
+
+/* ════════ Address region cascade + map pin (mirrors the mini-app) ════════
+   The web form can't free-type a city — the server derives the 省 from a
+   *Chinese* city name, so English text never resolves a region and the save
+   400s. Instead we pick from the served-zone list (canonical Chinese) and/or
+   drop a pin on a map (reverse-geocoded server-side). Both write
+   province/city/district onto co.af, exactly what /addresses expects. */
+var coZones={list:null,distCache:{},maps:undefined,_sdkP:null};
+async function coLoadZones(){
+  if(coZones.list)return coZones.list;
+  try{ coZones.list=await api('/api/retail/delivery-zones')||[]; }catch(e){ coZones.list=[]; }
+  return coZones.list;
+}
+// City rows only — GZ districts are reached via the city 广州市 + its districts,
+// the same shape as the mini-app's EN cascade. Each carries canonical Chinese.
+function coCityRows(){
+  const cn=state.lang==='cn';
+  return (coZones.list||[]).filter(z=>z.zone_type==='city').map(z=>{
+    const name_cn=z.match_city||z.name_cn||z.name_en||'';
+    const name_en=z.name_en||z.name_cn||'';
+    return {label:cn?name_cn:name_en,name_cn,name_en,province_cn:z.province_cn||'',province_en:z.province_en||''};
+  }).sort((a,b)=>String(a.label).localeCompare(String(b.label)));
+}
+async function coLoadDistricts(cityCn){
+  if(!cityCn)return [];
+  if(coZones.distCache[cityCn])return coZones.distCache[cityCn];
+  let list=[];
+  try{ list=await api('/api/retail/districts?city='+encodeURIComponent(cityCn))||[]; }catch(e){ list=[]; }
+  coZones.distCache[cityCn]=list; return list;
+}
+// Strip a leading "省市区" prefix off a reverse-geocoded street (so the street
+// field holds only the building/road, not a doubled region).
+function coStripRegion(addr,province,city,district){
+  let s=String(addr||'').trim();
+  [province,city,district].filter(Boolean).sort((a,b)=>b.length-a.length).forEach(v=>{
+    const re=new RegExp('^\\s*'+v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\s*');
+    let go=true; while(go){ go=false; if(re.test(s)){ s=s.replace(re,''); go=true; } }
+  });
+  return s.trim();
+}
+function coApplyArea(province,city,district,label,street){
+  co.af.province=province||''; co.af.city=city||''; co.af.district=district||'';
+  co.af.areaLabel=label||[city,district].filter(Boolean).join(' · ');
+  const t=$('#afArea'); if(t){ t.textContent=co.af.areaLabel; t.classList.remove('ph'); }
+  if(street!=null){ const a=$('#afAddr'); if(a)a.value=street; }
+}
+function coInjectAddrStyle(){
+  if($('#coAddrStyle'))return;
+  const s=document.createElement('style'); s.id='coAddrStyle';
+  s.textContent=`
+  .af-area{width:100%;text-align:left;font:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--ink);border-radius:10px;background:#fff;cursor:pointer;}
+  .af-area.ph{color:var(--muted);}
+  .af-map{margin-top:8px;background:none;border:0;color:var(--accent);font:inherit;font-size:13px;font-weight:700;cursor:pointer;padding:2px 0;}
+  .af-map[hidden]{display:none;}
+  .ap-search{font:inherit;font-size:15px;padding:11px 13px;border:1.5px solid var(--ink);border-radius:10px;width:100%;margin-top:14px;box-sizing:border-box;}
+  .ap-list{margin-top:12px;max-height:48vh;overflow:auto;border-top:1px solid var(--line);}
+  .ap-item{padding:13px 4px;border-bottom:1px solid var(--line);cursor:pointer;font-size:15px;}
+  .ap-item:hover{color:var(--accent);}
+  .ap-back{background:none;border:0;color:var(--accent);font:inherit;font-size:13px;font-weight:700;cursor:pointer;padding:10px 0 2px;}
+  .ap-empty{padding:20px 4px;color:var(--muted);font-size:14px;}
+  .mp-overlay{position:fixed;inset:0;z-index:130;background:rgba(26,26,23,.55);display:flex;align-items:center;justify-content:center;padding:16px;}
+  .mp-card{background:var(--oat);border:2.5px solid var(--ink);border-radius:20px;width:100%;max-width:560px;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
+  .mp-head{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:2px solid var(--ink);}
+  .mp-title{font-family:var(--bf-bear);font-size:20px;}
+  .mp-x{background:none;border:0;font-size:26px;line-height:1;cursor:pointer;color:var(--ink);}
+  .mp-searchrow{display:flex;gap:8px;padding:12px 14px 0;}
+  .mp-search{flex:1;font:inherit;font-size:15px;padding:10px 12px;border:1.5px solid var(--ink);border-radius:10px;min-width:0;}
+  .mp-sbtn{font:inherit;font-weight:700;font-size:13px;padding:0 16px;border:1.5px solid var(--ink);border-radius:10px;background:#fff;cursor:pointer;}
+  .mp-results{margin:8px 14px 0;max-height:160px;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;}
+  .mp-results[hidden]{display:none;}
+  .mp-res{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer;}
+  .mp-res:last-child{border-bottom:0;}
+  .mp-res .n{font-weight:700;font-size:14px;}
+  .mp-res .a{font-size:12px;color:var(--muted);margin-top:2px;}
+  .mp-mapwrap{position:relative;margin:12px 14px 0;height:46vh;min-height:240px;border-radius:12px;overflow:hidden;border:1.5px solid var(--ink);}
+  .mp-map{position:absolute;inset:0;}
+  .mp-pin{position:absolute;left:50%;top:50%;transform:translate(-50%,-100%);font-size:30px;pointer-events:none;filter:drop-shadow(0 2px 3px rgba(0,0,0,.4));}
+  .mp-addr{padding:10px 16px 0;font-size:13px;color:var(--ink);line-height:1.5;min-height:18px;}
+  .mp-actions{padding:12px 16px 16px;}`;
+  document.head.appendChild(s);
+}
+
+// ── City → district cascade (reuses the login-modal shell) ──
+async function openAreaPicker(){
+  const cn=state.lang==='cn';
+  coInjectAddrStyle();
+  await coLoadZones();
+  const cities=coCityRows();
+  let ov=document.createElement('div'); ov.className='lm-overlay'; ov.id='apOverlay';
+  ov.innerHTML=`<div class="lm-card"><button class="lm-x" id="apX">×</button>
+    <div class="lm-title">${cn?'配送区域':'Delivery area'}</div>
+    <input class="ap-search" id="apSearch" placeholder="${cn?'搜索城市…':'Search a city…'}">
+    <div id="apBackWrap"></div>
+    <div class="ap-list" id="apList"></div></div>`;
+  document.body.appendChild(ov);
+  const close=()=>{ try{document.body.removeChild(ov);}catch(e){} };
+  $('#apX').addEventListener('click',close);
+  ov.addEventListener('click',e=>{ if(e.target===ov)close(); });
+
+  const listEl=$('#apList'), backWrap=$('#apBackWrap'), searchEl=$('#apSearch');
+  let mode='city', curCity=null;
+
+  function renderCities(q){
+    backWrap.innerHTML=''; searchEl.placeholder=cn?'搜索城市…':'Search a city…';
+    const f=(q||'').trim().toLowerCase();
+    const rows=cities.filter(c=>!f||c.label.toLowerCase().includes(f)||(c.name_cn||'').includes(q||'')||(c.name_en||'').toLowerCase().includes(f));
+    listEl.innerHTML=rows.length?rows.map((c,i)=>`<div class="ap-item" data-i="${i}">${esc(c.label)}</div>`).join('')
+      :`<div class="ap-empty">${cn?'未找到城市':'No matching city'}</div>`;
+    listEl.querySelectorAll('.ap-item').forEach(el=>el.addEventListener('click',()=>pickCity(rows[Number(el.dataset.i)])));
+  }
+  async function pickCity(c){
+    if(!c)return;
+    curCity=c; searchEl.value=''; listEl.innerHTML=`<div class="ap-empty">${cn?'加载中…':'Loading…'}</div>`;
+    const dists=await coLoadDistricts(c.name_cn);
+    if(!dists.length){   // city-wide delivery, no districts → done
+      coApplyArea(c.province_cn,c.name_cn,'',c.label); close(); return;
+    }
+    mode='district'; searchEl.placeholder=cn?'搜索区/县…':'Search a district…';
+    backWrap.innerHTML=`<button class="ap-back" id="apBack">‹ ${esc(c.label)} — ${cn?'返回城市':'change city'}</button>`;
+    $('#apBack').addEventListener('click',()=>{ mode='city'; renderCities(''); });
+    renderDistricts(c,dists,'');
+  }
+  function renderDistricts(c,dists,q){
+    const f=(q||'').trim().toLowerCase();
+    const cityWide={label:cn?'全城':'City-wide',name_cn:'',name_en:'City-wide'};
+    const all=[cityWide].concat(dists.map(d=>({label:cn?d.name_cn:d.name_en,name_cn:d.name_cn,name_en:d.name_en})));
+    const rows=all.filter(d=>!f||d.label.toLowerCase().includes(f)||(d.name_cn||'').includes(q||''));
+    listEl.innerHTML=rows.map((d,i)=>`<div class="ap-item" data-i="${i}">${esc(d.label)}</div>`).join('');
+    listEl.querySelectorAll('.ap-item').forEach(el=>el.addEventListener('click',()=>{
+      const d=rows[Number(el.dataset.i)];
+      const label=d.name_cn?[c.label,d.label].join(' · '):c.label;
+      coApplyArea(c.province_cn,c.name_cn,d.name_cn,label); close();
+    }));
+  }
+  searchEl.addEventListener('input',()=>{
+    if(mode==='city')renderCities(searchEl.value);
+    else coLoadDistricts(curCity.name_cn).then(d=>renderDistricts(curCity,d,searchEl.value));
+  });
+  renderCities('');
+  setTimeout(()=>searchEl.focus(),60);
+}
+
+// ── Map pin ──
+async function coSetupMapButton(){
+  const btn=$('#afMap'); if(!btn)return;
+  if(coZones.maps===undefined){ try{ coZones.maps=await api('/api/retail/maps-config'); }catch(e){ coZones.maps=null; } }
+  const cfg=coZones.maps;
+  const b=$('#afMap'); if(!b)return;            // form may have re-rendered
+  if(!cfg||!cfg.provider)return;                 // no JS key → leave the button hidden
+  b.hidden=false;
+  b.addEventListener('click',openMapPicker);
+}
+function coLoadMapSdk(cfg){
+  if(coZones._sdkP)return coZones._sdkP;
+  coZones._sdkP=new Promise((resolve,reject)=>{
+    const cb='__shopMapReady';
+    window[cb]=function(){ resolve(cfg.provider); };
+    let src;
+    if(cfg.provider==='amap'){
+      if(cfg.security)window._AMapSecurityConfig={securityJsCode:cfg.security};
+      src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(cfg.key)+'&callback='+cb;
+    }else{
+      src='https://map.qq.com/api/gljs?v=1.exp&key='+encodeURIComponent(cfg.key)+'&callback='+cb;
+    }
+    const s=document.createElement('script'); s.src=src; s.async=true;
+    s.onerror=()=>reject(new Error('sdk_load_failed'));
+    document.head.appendChild(s);
+  });
+  return coZones._sdkP;
+}
+function coMapAdapter(provider,el,center){
+  if(provider==='amap'){
+    const map=new AMap.Map(el,{zoom:16,center:[center.lng,center.lat],resizeEnable:true});
+    return {
+      onMove:cb=>map.on('moveend',()=>{const c=map.getCenter();cb({lat:c.getLat(),lng:c.getLng()});}),
+      setCenter:(lat,lng)=>map.setCenter([lng,lat]),
+      destroy:()=>{try{map.destroy();}catch(e){}},
+    };
+  }
+  const map=new TMap.Map(el,{zoom:16,center:new TMap.LatLng(center.lat,center.lng)});
+  return {
+    onMove:cb=>map.on('center_changed',()=>{const c=map.getCenter();cb({lat:c.getLat(),lng:c.getLng()});}),
+    setCenter:(lat,lng)=>map.setCenter(new TMap.LatLng(lat,lng)),
+    destroy:()=>{try{map.destroy();}catch(e){}},
+  };
+}
+async function openMapPicker(){
+  const cfg=coZones.maps; if(!cfg||!cfg.provider)return;
+  const cn=state.lang==='cn';
+  coInjectAddrStyle();
+  let ov=document.createElement('div'); ov.className='mp-overlay'; ov.id='mpOverlay';
+  ov.innerHTML=`<div class="mp-card">
+    <div class="mp-head"><div class="mp-title">${cn?'地图选点':'Choose on map'}</div><button class="mp-x" id="mpX">×</button></div>
+    <div class="mp-searchrow"><input id="mpSearch" class="mp-search" placeholder="${cn?'搜索地点 / 小区 / 道路':'Search a place / road'}"><button id="mpSearchBtn" class="mp-sbtn">${cn?'搜索':'Search'}</button></div>
+    <div id="mpResults" class="mp-results" hidden></div>
+    <div class="mp-mapwrap"><div id="mpMap" class="mp-map"></div><div class="mp-pin">📍</div></div>
+    <div class="mp-addr" id="mpAddr">${cn?'拖动地图，把图钉对准你的位置':'Drag the map so the pin sits on your spot'}</div>
+    <div class="mp-actions"><button id="mpUse" class="co-place" disabled>${cn?'使用此位置':'Use this location'}</button></div>
+  </div>`;
+  document.body.appendChild(ov);
+  let adapter=null;
+  const close=()=>{ try{if(adapter)adapter.destroy();}catch(e){} try{document.body.removeChild(ov);}catch(e){} };
+  $('#mpX').addEventListener('click',close);
+  ov.addEventListener('click',e=>{ if(e.target===ov)close(); });
+
+  const addrEl=$('#mpAddr'), useBtn=$('#mpUse'), resultsEl=$('#mpResults'), searchEl=$('#mpSearch');
+  // suppressUntil: ignore move-driven reverse-geocodes for a short window after
+  // a programmatic recenter (picking a search result) — the SDK fires several
+  // move events while animating, and we don't want them to clobber the POI pick.
+  let sel=null, suppressUntil=0, moveTimer=null;
+  function setSel(s){
+    sel=s; useBtn.disabled=!s;
+    addrEl.textContent=s?[s.city,s.district].filter(Boolean).join(' · ')+(s.street?(' · '+s.street):''):(cn?'此处无法识别地址':'No address here');
+  }
+  async function reverseCenter(lat,lng){
+    addrEl.textContent=cn?'定位中…':'Locating…'; useBtn.disabled=true;
+    try{
+      const r=await postJson('/api/retail/reverse-geocode',{lat,lng});
+      if(r&&r.success===false){ setSel(null); return; }
+      const street=coStripRegion(r.address,r.province,r.city,r.district);
+      if(!r.city&&!r.province){ setSel(null); return; }
+      setSel({province:r.province||'',city:r.city||'',district:r.district||'',street,
+        label:[r.city,r.district].filter(Boolean).join(' · ')});
+    }catch(e){ setSel(null); }
+  }
+  async function runSearch(){
+    const kw=searchEl.value.trim(); if(!kw){ resultsEl.hidden=true; return; }
+    resultsEl.hidden=false; resultsEl.innerHTML=`<div class="mp-res">${cn?'搜索中…':'Searching…'}</div>`;
+    let list=null;
+    try{ list=await postJson('/api/retail/poi-search',{keyword:kw,city:co.af.city||''}); }catch(e){ list=null; }
+    if(!Array.isArray(list)||!list.length){ resultsEl.innerHTML=`<div class="mp-res">${cn?'未找到结果':'No results'}</div>`; return; }
+    resultsEl.innerHTML=list.slice(0,15).map((p,i)=>`<div class="mp-res" data-i="${i}"><div class="n">${esc(p.name||'')}</div><div class="a">${esc(p.address||'')}</div></div>`).join('');
+    resultsEl.querySelectorAll('.mp-res[data-i]').forEach(el=>el.addEventListener('click',()=>{
+      const p=list[Number(el.dataset.i)];
+      resultsEl.hidden=true; searchEl.value=p.name||'';
+      let street=coStripRegion(p.address,p.province,p.city,p.district);
+      if(p.name&&street.indexOf(p.name)===-1)street=street?(p.name+' '+street):p.name;
+      setSel({province:p.province||'',city:p.city||'',district:p.district||'',street,
+        label:[p.city,p.district].filter(Boolean).join(' · ')});
+      suppressUntil=Date.now()+1200;           // recenter shouldn't overwrite the POI pick
+      if(adapter&&p.lat!=null&&p.lng!=null)adapter.setCenter(p.lat,p.lng);
+    }));
+  }
+  $('#mpSearchBtn').addEventListener('click',runSearch);
+  searchEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();runSearch();} });
+  useBtn.addEventListener('click',()=>{
+    if(!sel)return;
+    coApplyArea(sel.province,sel.city,sel.district,sel.label||[sel.city,sel.district].filter(Boolean).join(' · '),sel.street);
+    close();
+  });
+
+  // Load the SDK + build the map (seed on Guangzhou; customer searches/drags).
+  try{
+    await coLoadMapSdk(cfg);
+    adapter=coMapAdapter(cfg.provider,$('#mpMap'),{lat:23.1291,lng:113.2644});
+    adapter.onMove(({lat,lng})=>{
+      if(Date.now()<suppressUntil)return;
+      clearTimeout(moveTimer); moveTimer=setTimeout(()=>reverseCenter(lat,lng),350);
+    });
+    reverseCenter(23.1291,113.2644);
+    if(co.af.city){ searchEl.value=co.af.city; runSearch(); }
+  }catch(e){
+    addrEl.textContent=cn?'地图加载失败':'Map failed to load';
+  }
+}
+
 async function coQuote(){
   const place=$('#coPlace'); if(place)place.disabled=true;
   if(!co.addrId){ const s=$('#coSummary'); if(s)s.innerHTML='<div class="co-line">'+(state.lang==='cn'?'选择地址后显示总价':'Add an address to see totals')+'</div>'; return; }
