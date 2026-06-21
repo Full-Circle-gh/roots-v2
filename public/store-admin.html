@@ -1,0 +1,798 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Roots · Store Admin</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="theme-color" content="#12161A" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Sans+SC:wght@300;400;500&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:#12161A; --pane:#1A1F24; --elev:#1F252B; --paper:#E8E5DC; --muted:#AEABA2; --faint:#7d7a72;
+    --line:rgba(232,229,220,.10); --line-2:rgba(232,229,220,.16);
+    --tea:#6B8E6F; --brass:#B08D4A; --brass-hi:#C29B54; --danger:#e8556a;
+    --f-sans:'IBM Plex Sans','IBM Plex Sans SC',system-ui,sans-serif;
+    --f-mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: var(--ink); color: var(--paper); font-family: var(--f-sans); }
+  .hidden { display: none !important; }
+  button { font-family: var(--f-sans); cursor: pointer; }
+  .btn { background: transparent; color: var(--muted); border: 1px solid var(--line-2); border-radius: 7px; font-size: 12px; font-weight: 500; padding: 7px 12px; }
+  .btn:hover { color: var(--paper); border-color: var(--paper); }
+  .btn-brass { background: var(--brass); color: var(--ink); border: 0; font-weight: 600; }
+  .btn-brass:hover { background: var(--brass-hi); }
+  .btn-sm { font-size: 11px; padding: 5px 9px; }
+  .btn-danger:hover { color: #f0a3ae; border-color: rgba(232,85,106,.5); background: rgba(232,85,106,.08); }
+  .zh { color: var(--faint); font-size: 11px; }
+  .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+  /* ── Login ── */
+  #login { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .login-card { width: 100%; max-width: 360px; }
+  .login-card .mark-row { display: flex; align-items: center; gap: 11px; margin-bottom: 4px; }
+  .login-card .word { font-size: 13px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase; }
+  .login-card .sub { font-family: var(--f-mono); font-size: 10px; letter-spacing: .22em; text-transform: uppercase; color: var(--faint); margin: 2px 0 26px; }
+  .login-card h2 { font-size: 17px; font-weight: 600; margin: 0 0 18px; }
+
+  /* ── App shell ── */
+  header.app { position: sticky; top: 0; z-index: 30; background: rgba(18,22,26,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  .hrow { max-width: 1140px; margin: 0 auto; display: flex; align-items: center; gap: 14px; padding: 13px 24px; }
+  .mark { width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line-2); display: flex; align-items: center; justify-content: center; flex: none; }
+  .brandwrap { display: flex; flex-direction: column; }
+  .brandwrap .word { font-size: 12px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; line-height: 1.2; }
+  .brandwrap .sub { font-family: var(--f-mono); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; color: var(--faint); }
+  .spacer { flex: 1; }
+  .who { display: flex; align-items: center; gap: 9px; cursor: pointer; padding: 5px 9px; border-radius: 8px; border: 1px solid transparent; }
+  .who:hover { border-color: var(--line-2); }
+  .avatar { width: 26px; height: 26px; border-radius: 50%; background: var(--brass); color: var(--ink); font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; }
+  .who-name { font-size: 12.5px; font-weight: 500; }
+  .role-pill { font-family: var(--f-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; background: rgba(176,141,74,.15); color: #d8b676; border: 1px solid rgba(176,141,74,.34); }
+  .menu { position: absolute; right: 24px; top: 58px; background: var(--elev); border: 1px solid var(--line-2); border-radius: 10px; padding: 6px; min-width: 184px; box-shadow: 0 18px 44px rgba(0,0,0,.5); z-index: 40; }
+  .menu button { display: block; width: 100%; text-align: left; background: transparent; border: 0; color: var(--paper); font-size: 13px; padding: 9px 11px; border-radius: 7px; }
+  .menu button:hover { background: rgba(232,229,220,.06); }
+  nav.tabs { max-width: 1140px; margin: 0 auto; display: flex; gap: 4px; padding: 0 18px; overflow-x: auto; }
+  nav.tabs button { background: transparent; border: 0; border-bottom: 2px solid transparent; color: var(--muted); font-size: 13px; font-weight: 500; padding: 12px 12px; white-space: nowrap; }
+  nav.tabs button:hover { color: var(--paper); }
+  nav.tabs button.on { color: var(--paper); border-bottom-color: var(--brass); }
+  nav.tabs button .badge { display: inline-block; min-width: 16px; text-align: center; font-family: var(--f-mono); font-size: 9px; padding: 1px 5px; border-radius: 999px; background: var(--danger); color: #fff; margin-left: 5px; vertical-align: middle; }
+
+  main { max-width: 1140px; margin: 0 auto; padding: 26px 24px 90px; }
+  .bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; gap: 12px; flex-wrap: wrap; }
+  .bar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+  .card { background: var(--pane); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-family: var(--f-mono); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 12px 14px; background: rgba(232,229,220,.03); border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:last-child td { border-bottom: 0; }
+  .co { font-weight: 600; }
+  .co .brandchip { display: inline-block; width: 9px; height: 9px; border-radius: 3px; margin-right: 7px; vertical-align: middle; border: 1px solid var(--line-2); }
+  .pill { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .pill.active, .pill.trialing, .pill.paid { background: rgba(107,142,111,.16); color: #a7c6ab; border: 1px solid rgba(107,142,111,.4); }
+  .pill.past_due, .pill.grace, .pill.open { background: rgba(176,141,74,.15); color: #d8b676; border: 1px solid rgba(176,141,74,.34); }
+  .pill.suspended, .pill.cancelled, .pill.void { background: rgba(232,85,106,.14); color: #f0a3ae; border: 1px solid rgba(232,85,106,.34); }
+  .pill.internal { background: rgba(232,229,220,.08); color: var(--muted); border: 1px solid var(--line-2); }
+  .acts { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .empty { color: var(--faint); padding: 24px; text-align: center; }
+
+  /* ── Dashboard ── */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px,1fr)); gap: 12px; margin-bottom: 22px; }
+  .stat { background: var(--pane); border: 1px solid var(--line); border-radius: 12px; padding: 15px 16px; }
+  .stat .k { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  .stat .v { font-size: 26px; font-weight: 600; margin-top: 7px; font-variant-numeric: tabular-nums; }
+  .stat .v small { font-size: 13px; color: var(--faint); font-weight: 400; }
+  .stat.alert { border-color: rgba(176,141,74,.4); }
+  .stat.danger { border-color: rgba(232,85,106,.34); }
+
+  /* ── Forms / inputs ── */
+  label { display: block; font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+  .field { margin-bottom: 13px; }
+  input[type=text], input[type=password], input[type=number] { width: 100%; background: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; color: var(--paper); font-family: var(--f-sans); font-size: 14px; padding: 10px 12px; outline: none; }
+  input:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.22); }
+  input[type=color] { width: 44px; height: 36px; padding: 0; border: 1px solid var(--line-2); border-radius: 8px; background: var(--ink); cursor: pointer; vertical-align: middle; }
+  textarea { width: 100%; background: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; color: var(--paper); font-family: var(--f-mono); font-size: 12px; line-height: 1.5; padding: 10px 12px; outline: none; resize: vertical; min-height: 62px; }
+  textarea:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.22); }
+  select { width: 100%; background: var(--ink); border: 1px solid var(--line-2); border-radius: 8px; color: var(--paper); font-family: var(--f-sans); font-size: 13px; padding: 8px 10px; outline: none; cursor: pointer; }
+  select:focus { border-color: var(--tea); box-shadow: 0 0 0 3px rgba(107,142,111,.22); }
+  .check-row { display: flex; align-items: center; gap: 9px; cursor: pointer; font-size: 13.5px; }
+  .row2 { display: flex; gap: 12px; align-items: center; }
+  .cred-stat { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .cred-note { font-size: 11px; color: var(--faint); margin-top: 4px; }
+  .det-sec { margin-top: 16px; }
+  .det-sec h4 { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+
+  /* onboarding checklist */
+  .ob-config { background: var(--elev); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+  .ob-cfg-row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+  .ob-cfg-row > div { flex: 1; min-width: 110px; }
+  .ob-cfg-row label { margin-bottom: 5px; }
+  .ob-prog { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .ob-prog-bar { flex: 1; height: 7px; background: rgba(232,229,220,.1); border-radius: 999px; overflow: hidden; }
+  .ob-prog-bar span { display: block; height: 100%; background: var(--tea); transition: width .25s; }
+  .ob-step { border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 8px; background: var(--pane); }
+  .ob-step-top { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; margin-bottom: 9px; }
+  .ob-step-label { font-size: 13px; font-weight: 500; }
+  .ob-step-label .zh { font-weight: 400; margin-top: 1px; }
+  .ob-note { color: var(--brass-hi); font-size: 11px; margin-top: 4px; }
+  .ob-owner { flex: none; font-family: var(--f-mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; padding: 3px 7px; border-radius: 999px; height: fit-content; white-space: nowrap; }
+  .ob-owner-tenant { background: rgba(176,141,74,.15); color: #d8b676; border: 1px solid rgba(176,141,74,.34); }
+  .ob-owner-us { background: rgba(107,142,111,.16); color: #a7c6ab; border: 1px solid rgba(107,142,111,.4); }
+  .ob-step-ctl { display: flex; gap: 8px; }
+  .ob-status { flex: none; width: 132px; }
+  .ob-val { flex: 1; min-width: 0; }
+
+  /* modal / toast / msg */
+  .modal { position: fixed; inset: 0; background: rgba(8,10,12,.62); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
+  .modal.show { display: flex; }
+  .modal-card { background: var(--pane); border: 1px solid var(--line-2); border-radius: 14px; padding: 22px; max-width: 540px; width: 100%; max-height: 88vh; overflow-y: auto; box-shadow: 0 24px 60px rgba(0,0,0,.5); }
+  .modal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+  .modal-x { background: transparent; border: 0; color: var(--faint); font-size: 20px; line-height: 1; cursor: pointer; }
+  .modal-x:hover { color: var(--paper); }
+  .msg { display: none; font-size: 12.5px; padding: 9px 12px; border-radius: 8px; margin-bottom: 12px; }
+  .msg.show { display: block; }
+  .msg.err { background: rgba(232,85,106,.12); border: 1px solid rgba(232,85,106,.35); color: #f0a3ae; }
+  .msg.ok  { background: rgba(107,142,111,.14); border: 1px solid rgba(107,142,111,.4); color: #a7c6ab; }
+  .toast { position: fixed; left: 50%; bottom: 28px; transform: translateX(-50%); background: var(--elev); border: 1px solid var(--line-2); color: var(--paper); font-size: 13px; padding: 11px 16px; border-radius: 10px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 60; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- ───────── Login ───────── -->
+<div id="login">
+  <div class="login-card">
+    <div class="mark-row">
+      <div class="mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#E8E5DC" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <span class="word">Roots</span>
+    </div>
+    <div class="sub">Store Admin · 平台后台</div>
+    <h2>Sign in · 登录</h2>
+    <div class="msg" id="loginMsg"></div>
+    <div class="field"><label>Username · 用户名</label><input type="text" id="li-user" autocapitalize="off" spellcheck="false" autocomplete="username"></div>
+    <div class="field"><label>Password · 密码</label><input type="password" id="li-pass" autocomplete="current-password"></div>
+    <label class="check-row" style="margin-bottom:16px"><input type="checkbox" id="li-remember"> Keep me signed in · 保持登录</label>
+    <button class="btn btn-brass" id="li-go" style="width:100%;padding:11px">Sign in · 登录</button>
+  </div>
+</div>
+
+<!-- ───────── App ───────── -->
+<div id="app" class="hidden">
+  <header class="app">
+    <div class="hrow">
+      <div class="mark" aria-hidden="true">
+        <svg width="20" height="20" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
+          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#E8E5DC" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="brandwrap"><span class="word">Roots</span><span class="sub">Store Admin · 平台后台</span></div>
+      <div class="spacer"></div>
+      <div class="who" id="whoBtn">
+        <div class="avatar" id="avatar">·</div>
+        <div><div class="who-name" id="whoName">—</div></div>
+        <span class="role-pill" id="whoRole">—</span>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs"></nav>
+  </header>
+  <div class="menu hidden" id="acctMenu">
+    <button id="m-password">Change password · 修改密码</button>
+    <button id="m-logout">Sign out · 退出登录</button>
+  </div>
+  <main id="view"></main>
+</div>
+
+<div class="modal" id="modal"><div class="modal-card">
+  <div class="modal-head"><h3 id="mTitle">—</h3><button class="modal-x" id="mClose">×</button></div>
+  <div class="msg" id="mMsg"></div>
+  <div id="mBody"></div>
+</div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const money = (c, cur) => (cur === 'CNY' || !cur ? '¥' : cur + ' ') + (Number(c||0)/100).toLocaleString(undefined,{maximumFractionDigits:2});
+  const fdate = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?esc(s):d.toISOString().slice(0,10); };
+  const ftime = s => { if (!s) return '—'; const d = new Date(String(s).replace(' ','T')+'Z'); return isNaN(d)?esc(s):d.toISOString().slice(0,16).replace('T',' '); };
+  function toast(m){ const t=$('#toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2600); }
+
+  // api(): 401 → bounce to the login view (never hard-redirect); 403 → toast the
+  // role error and reject so the caller's catch skips. Everything else returns JSON.
+  async function api(url, opts){
+    let r;
+    try { r = await fetch(url, Object.assign({ credentials:'same-origin' }, opts)); }
+    catch(e){ toast('Network error · 网络错误'); throw e; }
+    if (r.status === 401){ showLogin(); throw new Error('unauth'); }
+    let j = null; try { j = await r.json(); } catch {}
+    if (r.status === 403){ toast((j && j.error) || 'Your role cannot do that · 无权限'); throw new Error('forbidden'); }
+    return j;
+  }
+
+  let ME = null;
+  const can = cap => !!(ME && ME.caps && ME.caps.includes(cap));
+
+  // ── Modal helpers ──
+  function openModal(title){ $('#mTitle').textContent=title; $('#mMsg').className='msg'; $('#modal').classList.add('show'); }
+  function closeModal(){ $('#modal').classList.remove('show'); }
+  function mMsg(t,k){ const m=$('#mMsg'); m.textContent=t; m.className='msg show '+k; }
+  $('#mClose').addEventListener('click', closeModal);
+  $('#modal').addEventListener('click', e => { if (e.target.id==='modal') closeModal(); });
+
+  // ── Auth bootstrap ──
+  function showLogin(){ $('#app').classList.add('hidden'); $('#login').classList.remove('hidden'); }
+  function showApp(){ $('#login').classList.add('hidden'); $('#app').classList.remove('hidden'); }
+
+  $('#li-go').addEventListener('click', doLogin);
+  $('#li-pass').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+  function doLogin(){
+    const username = $('#li-user').value.trim();
+    const password = $('#li-pass').value;
+    const remember = $('#li-remember').checked;
+    if (!username || !password) { loginMsg('Enter username and password · 请输入用户名和密码'); return; }
+    api('/api/store-admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password,remember})})
+      .then(j => { if (j && j.success){ ME=j.user; $('#li-pass').value=''; enterApp(); } else loginMsg((j&&j.error)||'Sign-in failed · 登录失败'); })
+      .catch(()=>{});
+  }
+  function loginMsg(t){ const m=$('#loginMsg'); m.textContent=t; m.className='msg show err'; }
+
+  function boot(){
+    api('/api/store-admin/me').then(j => {
+      if (j && j.user){ ME=j.user; enterApp(); } else showLogin();
+    }).catch(showLogin);
+  }
+
+  // ── Account menu ──
+  $('#whoBtn').addEventListener('click', e => { e.stopPropagation(); $('#acctMenu').classList.toggle('hidden'); });
+  document.addEventListener('click', () => $('#acctMenu').classList.add('hidden'));
+  $('#acctMenu').addEventListener('click', e => e.stopPropagation());
+  $('#m-logout').addEventListener('click', () => {
+    api('/api/store-admin/logout',{method:'POST'}).then(()=>{ ME=null; showLogin(); }).catch(()=>{ showLogin(); });
+  });
+  $('#m-password').addEventListener('click', () => { $('#acctMenu').classList.add('hidden'); passwordModal(); });
+
+  // ── Navigation ──
+  const TABS = [
+    { id:'dashboard', en:'Dashboard', cn:'总览', cap:null },
+    { id:'stores',    en:'Stores',    cn:'店铺', cap:'view' },
+    { id:'signups',   en:'Signups',   cn:'申请', cap:'view', badge:'leads' },
+    { id:'billing',   en:'Billing',   cn:'账单', cap:'view' },
+    { id:'staff',     en:'Staff',     cn:'团队', cap:'staff.manage' },
+    { id:'audit',     en:'Audit',     cn:'日志', cap:'view' },
+  ];
+  let BADGES = { leads: 0 };
+
+  function enterApp(){
+    showApp();
+    $('#whoName').textContent = ME.displayName || ME.username;
+    $('#avatar').textContent = (ME.displayName || ME.username || '·').trim().charAt(0).toUpperCase();
+    $('#whoRole').textContent = ME.role;
+    $('#m-password').style.display = ME.kind === 'platform' ? 'block' : 'none';
+    renderTabs();
+    const want = (location.hash || '#dashboard').slice(1);
+    go(TABS.some(t => t.id === want && (!t.cap || can(t.cap))) ? want : 'dashboard');
+  }
+
+  function renderTabs(){
+    $('#tabs').innerHTML = TABS.filter(t => !t.cap || can(t.cap)).map(t =>
+      '<button data-tab="'+t.id+'">'+esc(t.en)+' · '+esc(t.cn)+(t.badge?'<span class="badge hidden" data-badge="'+t.badge+'"></span>':'')+'</button>'
+    ).join('');
+    document.querySelectorAll('#tabs [data-tab]').forEach(b => b.addEventListener('click', () => go(b.getAttribute('data-tab'))));
+    refreshBadges();
+  }
+  function refreshBadges(){
+    document.querySelectorAll('#tabs [data-badge]').forEach(el => {
+      const n = BADGES[el.getAttribute('data-badge')] || 0;
+      if (n > 0){ el.textContent = n; el.classList.remove('hidden'); } else el.classList.add('hidden');
+    });
+  }
+
+  let CUR = null;
+  function go(tab){
+    CUR = tab;
+    location.hash = '#'+tab;
+    document.querySelectorAll('#tabs [data-tab]').forEach(b => b.classList.toggle('on', b.getAttribute('data-tab')===tab));
+    const v = $('#view'); v.innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    ({ dashboard:viewDashboard, stores:viewStores, signups:viewSignups, billing:viewBilling, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
+  }
+  window.addEventListener('hashchange', () => { const h=(location.hash||'#dashboard').slice(1); if (h!==CUR && ME) go(h); });
+
+  // ════════════════ DASHBOARD ════════════════
+  function viewDashboard(){
+    api('/api/store-admin/summary').then(j => {
+      if (!j || !j.success){ $('#view').innerHTML='<div class="empty">No data · 暂无数据</div>'; return; }
+      BADGES.leads = j.leads.new || 0; refreshBadges();
+      const t = j.tenants, sub = j.subscriptions.byStatus, b = j.billing;
+      const stat = (k, v, cls) => '<div class="stat '+(cls||'')+'"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';
+      const grid =
+        stat('Stores · 店铺', t.total) +
+        stat('Active · 活跃', t.byStatus.active || 0) +
+        stat('Trialing · 试用', sub.trialing || 0) +
+        stat('Suspended · 已暂停', (t.byStatus.suspended||0), (t.byStatus.suspended?'danger':'')) +
+        stat('Approx MRR · 月经常性', money(b.mrrCents)) +
+        stat('Open invoices · 未结', '<small>'+(b.openInvoices||0)+' · </small>'+money(b.openValueCents), (b.openInvoices?'alert':'')) +
+        stat('Past due · 逾期', b.pastDueInvoices||0, (b.pastDueInvoices?'danger':'')) +
+        stat('New leads · 新申请', j.leads.new||0, (j.leads.new?'alert':''));
+      const recent = (j.recentTenants||[]).map(r => {
+        const sp = r.subStatus ? '<span class="pill '+esc(r.subStatus)+'">'+esc(r.subStatus)+'</span>' : '<span class="zh">—</span>';
+        return '<tr><td class="co">'+esc(r.brand||r.name)+'</td><td><span class="pill '+esc(r.status)+'">'+esc(r.status)+'</span></td><td>'+sp+'</td><td class="mono zh">'+fdate(r.created_at)+'</td></tr>';
+      }).join('') || '<tr><td colspan="4" class="empty">No stores yet · 暂无店铺</td></tr>';
+      $('#view').innerHTML =
+        '<div class="bar"><h1>Overview · 总览</h1></div>' +
+        '<div class="stat-grid">'+grid+'</div>' +
+        '<div class="bar"><h1>Recent stores · 最近店铺</h1></div>' +
+        '<div class="card"><table><thead><tr><th>Store · 店铺</th><th>Status · 状态</th><th>Subscription · 订阅</th><th>Joined · 加入</th></tr></thead><tbody>'+recent+'</tbody></table></div>';
+    }).catch(()=>{});
+  }
+
+  // ════════════════ STORES (tenants) ════════════════
+  let TENANTS = [];
+  function viewStores(){
+    const newBtn = can('tenant.manage') ? '<button class="btn btn-brass" id="newBtn">+ New store · 新建店铺</button>' : '';
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Stores · 店铺 <span class="zh mono" id="count"></span></h1>'+newBtn+'</div>' +
+      '<div class="card"><table><thead><tr>' +
+        '<th>Store · 店铺</th><th>Owner · 负责人</th><th>Plan · 套餐</th><th>Subscription · 订阅</th>' +
+        '<th>Renews / Trial · 续订/试用</th><th class="mono">Ops</th><th class="mono">Open</th><th></th>' +
+      '</tr></thead><tbody id="rows"><tr><td colspan="8" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>';
+    if (can('tenant.manage')) $('#newBtn').addEventListener('click', newTenantModal);
+    loadTenants();
+  }
+  function loadTenants(){
+    api('/api/saas-admin/tenants').then(j => {
+      if (!j || !j.success) return;
+      TENANTS = j.tenants || [];
+      if ($('#count')) $('#count').textContent = TENANTS.length;
+      renderRows();
+    }).catch(()=>{});
+  }
+  function renderRows(){
+    const tbody = $('#rows'); if (!tbody) return;
+    if (!TENANTS.length){ tbody.innerHTML = '<tr><td colspan="8" class="empty">No stores yet. · 暂无店铺。</td></tr>'; return; }
+    const manage = can('tenant.manage');
+    tbody.innerHTML = TENANTS.map(t => {
+      const chip = t.accent ? '<span class="brandchip" style="background:'+esc(t.accent)+'"></span>' : '';
+      const subPill = t.isInternal ? '<span class="pill internal">internal</span>'
+        : (t.subStatus ? '<span class="pill '+esc(t.subStatus)+'">'+esc(t.subStatus)+'</span>' : '<span class="zh">—</span>');
+      const renew = t.isInternal ? '<span class="zh">perpetual</span>'
+        : (t.subStatus==='trialing' ? 'trial → '+fdate(t.trialEnd) : fdate(t.periodEnd));
+      const planTxt = t.plan ? esc(t.plan.name)+' · '+money(t.plan.price_cents,t.plan.currency)+'/'+esc(t.plan.billing_interval) : '<span class="zh">—</span>';
+      const susBtn = (!manage || t.isInternal) ? ''
+        : (t.status==='active'
+            ? '<button class="btn btn-sm btn-danger" data-act="suspend" data-id="'+t.id+'">Suspend</button>'
+            : '<button class="btn btn-sm" data-act="reactivate" data-id="'+t.id+'">Reactivate</button>');
+      return '<tr>' +
+        '<td class="co">'+chip+esc(t.brand||t.name)+(t.brand && t.brand!==t.name ? ' <span class="zh">('+esc(t.name)+')</span>':'')+'</td>' +
+        '<td>'+esc(t.owner||'—')+(t.ownerUsername?' <span class="zh mono">@'+esc(t.ownerUsername)+'</span>':'')+'</td>' +
+        '<td>'+planTxt+'</td>' +
+        '<td>'+subPill+(t.status!=='active'&&!t.isInternal?' <span class="pill suspended">'+esc(t.status)+'</span>':'')+'</td>' +
+        '<td class="mono">'+renew+'</td>' +
+        '<td class="mono">'+t.operators+'</td>' +
+        '<td class="mono">'+(t.openInvoices||0)+'</td>' +
+        '<td><div class="acts">' +
+          '<button class="btn btn-sm" data-act="detail" data-id="'+t.id+'">Details</button>' +
+          (manage ? '<button class="btn btn-sm" data-act="onboard" data-id="'+t.id+'">Onboarding</button>' : '') +
+          (manage ? '<button class="btn btn-sm" data-act="brand" data-id="'+t.id+'">Brand</button>' : '') +
+          (manage ? '<button class="btn btn-sm" data-act="features" data-id="'+t.id+'">Features</button>' : '') +
+          (manage && !t.isInternal ? '<button class="btn btn-sm" data-act="creds" data-id="'+t.id+'">Credentials</button>' : '') +
+          susBtn +
+        '</div></td></tr>';
+    }).join('');
+    document.querySelectorAll('#rows [data-act]').forEach(b => b.addEventListener('click', () => onAct(b.getAttribute('data-act'), b.getAttribute('data-id'))));
+  }
+  function onAct(act, id){
+    const t = TENANTS.find(x => String(x.id)===String(id));
+    if (act==='suspend'){
+      if (!confirm('Suspend '+(t.brand||t.name)+'? They lose backend access until reactivated. · 暂停后该店铺将无法访问后台。')) return;
+      api('/api/saas-admin/tenants/'+id+'/suspend',{method:'POST'}).then(j=>{ toast(j.success?'Suspended':j.error||'Failed'); loadTenants(); }).catch(()=>{});
+    } else if (act==='reactivate'){
+      api('/api/saas-admin/tenants/'+id+'/reactivate',{method:'POST'}).then(j=>{ toast(j.success?'Reactivated':j.error||'Failed'); loadTenants(); }).catch(()=>{});
+    } else if (act==='brand'){ brandModal(t); }
+    else if (act==='features'){ featuresModal(t); }
+    else if (act==='creds'){ credsModal(t); }
+    else if (act==='detail'){ detailModal(id); }
+    else if (act==='onboard'){ onboardModal(id); }
+  }
+
+  function newTenantModal(){
+    openModal('New store · 新建店铺');
+    $('#mBody').innerHTML =
+      '<div class="field"><label>Company · 公司</label><input type="text" id="f-company"></div>' +
+      '<div class="field"><label>Brand (shown to operators) · 品牌名</label><input type="text" id="f-brand" placeholder="defaults to company"></div>' +
+      '<div class="field"><label>Owner name · 负责人</label><input type="text" id="f-owner"></div>' +
+      '<div class="field"><label>Username · 用户名</label><input type="text" id="f-username" autocapitalize="off" spellcheck="false"></div>' +
+      '<div class="field"><label>Password (10+ chars) · 密码</label><input type="password" id="f-password"></div>' +
+      '<button class="btn btn-brass" id="f-create" style="width:100%;padding:11px">Create store · 创建</button>';
+    $('#f-create').addEventListener('click', () => {
+      const body = { company:$('#f-company').value.trim(), brand:$('#f-brand').value.trim(),
+        owner_name:$('#f-owner').value.trim(), username:$('#f-username').value.trim(), password:$('#f-password').value };
+      if (!body.company || !body.username || body.password.length<10){ mMsg('Company, username, and a 10+ char password required · 请填写公司、用户名和至少 10 位密码','err'); return; }
+      api('/api/saas-admin/provision',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+        .then(j=>{ if(j.success){ mMsg('Store #'+j.tenantId+' created (14-day trial). · 已创建,14 天试用。','ok'); setTimeout(()=>{closeModal();loadTenants();},1100); } else mMsg(j.error||'Failed','err'); }).catch(()=>{});
+    });
+  }
+
+  function brandModal(t){
+    openModal('Brand & storefront · 品牌与门店 — '+(t.brand||t.name));
+    $('#mBody').innerHTML =
+      '<div class="field"><label>Brand name · 品牌名</label><input type="text" id="b-name" value="'+esc(t.brand||'')+'"></div>' +
+      '<div class="field"><label>Accent colour · 强调色</label><div class="row2"><input type="color" id="b-accent" value="'+(t.accent||'#B08D4A')+'"><span class="zh mono" id="b-accent-v">'+esc(t.accent||'#B08D4A')+'</span></div></div>' +
+      '<div class="field"><label>WeChat mini-program AppID · 小程序 AppID</label><input type="text" id="b-appid" value="'+esc(t.wxAppid||'')+'" placeholder="wx…………" autocapitalize="off" spellcheck="false"><div class="zh" style="margin-top:4px">Routes this store’s mini-app to its own data. · 将该店铺小程序路由到其自有数据。</div></div>' +
+      '<button class="btn btn-brass" id="b-save" style="width:100%;padding:11px">Save · 保存</button>';
+    $('#b-accent').addEventListener('input', e => $('#b-accent-v').textContent = e.target.value);
+    $('#b-save').addEventListener('click', () => {
+      api('/api/saas-admin/tenants/'+t.id+'/brand',{method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ brand_name:$('#b-name').value.trim(), brand_accent:$('#b-accent').value, wx_appid:$('#b-appid').value.trim() })})
+        .then(j=>{ if(j.success){ toast('Saved'); closeModal(); loadTenants(); } else mMsg(j.error||'Failed','err'); }).catch(()=>{});
+    });
+  }
+
+  function featuresModal(t){
+    openModal('Features · 功能 — '+(t.brand||t.name));
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/saas-admin/tenants/'+t.id+'/features').then(j => {
+      if (!j || !j.success || !Array.isArray(j.features)){ $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      $('#mBody').innerHTML =
+        '<div class="zh" style="margin-bottom:12px;line-height:1.5">Allow this store to use these features. Unchecking one removes it from their backend; they still choose whether to switch each allowed feature on. · 允许该店铺使用以下功能;取消勾选将从其后台移除该功能。</div>' +
+        j.features.map(f =>
+          '<label class="field check-row"><input type="checkbox" data-fkey="'+esc(f.key)+'"'+(f.entitled?' checked':'')+'><span>'+esc(f.en)+' · '+esc(f.cn)+'</span></label>'
+        ).join('') +
+        '<button class="btn btn-brass" id="f-save" style="width:100%;padding:11px;margin-top:8px">Save · 保存</button>';
+      $('#f-save').addEventListener('click', () => {
+        const body = {};
+        document.querySelectorAll('#mBody input[data-fkey]').forEach(inp => { body[inp.getAttribute('data-fkey')] = inp.checked; });
+        api('/api/saas-admin/tenants/'+t.id+'/features',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(j=>{ if(j.success){ toast('Saved'); closeModal(); } else mMsg(j.error||'Failed','err'); }).catch(()=>{});
+      });
+    }).catch(()=>{});
+  }
+
+  function credsModal(t){
+    openModal('Credentials · 凭证 — '+(t.brand||t.name));
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/saas-admin/tenants/'+t.id+'/credentials').then(j => {
+      if (!j || !j.success || !j.data){ $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      const d = j.data;
+      const pill = (ok, on, off) => '<span class="pill '+(ok?'active':'suspended')+'">'+(ok?on:off)+'</span>';
+      let html = '<div class="cred-stat">' + pill(!d.wechat.devMode,'Login live · 登录已配置','Login dev · 登录测试态') + pill(!d.pay.devMode,'Pay live · 支付已配置','Pay dev · 支付测试态') + '</div>';
+      if (!d.editable){ html += '<div class="cred-note">Managed via server environment (.env) — internal store. Not editable here. · 由服务器环境变量管理,不可在此编辑。</div>'; $('#mBody').innerHTML = html; return; }
+      if (!d.secretBoxConfigured){ html += '<div class="cred-note" style="color:var(--danger)">Secret store not configured (TENANT_SECRET_KEY missing). Cannot save. · 服务器未配置密钥存储,无法保存。</div>'; $('#mBody').innerHTML = html; return; }
+      const w = d.wechat, p = d.pay;
+      html +=
+        '<div class="det-sec"><h4>WeChat Mini Program · 微信小程序</h4>' +
+          '<div class="field"><label>AppID</label><input type="text" id="c-appid" value="'+esc(w.app_id||'')+'" placeholder="wx…………" autocapitalize="off" spellcheck="false"></div>' +
+          '<div class="field"><label>App Secret · 密钥</label><input type="password" id="c-appsecret" value="" placeholder="'+(w.app_secret_masked?esc(w.app_secret_masked)+' — paste to replace':'paste to set · 粘贴以设置')+'" autocomplete="off"><div class="cred-note">Blank = keep current. · 留空保持不变。</div></div>' +
+        '</div>' +
+        '<div class="det-sec"><h4>WeChat Pay (direct merchant) · 微信支付(直连商户)</h4>' +
+          '<div class="field"><label>Merchant ID · 商户号 (mchid)</label><input type="text" id="c-mchid" value="'+esc(p.mch_id||'')+'" autocapitalize="off" spellcheck="false"></div>' +
+          '<div class="field"><label>APIv3 Key · APIv3 密钥</label><input type="password" id="c-apiv3" value="" placeholder="'+(p.api_v3_key_masked?esc(p.api_v3_key_masked)+' — paste to replace':'paste to set · 粘贴以设置')+'" autocomplete="off"><div class="cred-note">Blank = keep current. · 留空保持不变。</div></div>' +
+          '<div class="field"><label>Certificate Serial No · 证书序列号</label><input type="text" id="c-serial" value="'+esc(p.serial_no||'')+'" autocapitalize="off" spellcheck="false"></div>' +
+          '<div class="field"><label>Merchant Private Key · 商户私钥 (apiclient_key.pem)</label><textarea id="c-privkey" placeholder="'+(p.private_key_set?'•••• already set — paste full PEM to replace':'-----BEGIN PRIVATE KEY-----')+'"></textarea><div class="cred-note">Blank = keep current. · 留空保持不变。</div></div>' +
+          '<div class="field"><label>Platform Public Key · 平台公钥 (optional · 可选)</label><textarea id="c-pubkey" placeholder="'+(p.platform_pub_key_set?'•••• already set — paste to replace':'-----BEGIN PUBLIC KEY-----')+'"></textarea><div class="cred-note">Blank = keep current. · 留空保持不变。</div></div>' +
+        '</div>' +
+        '<button class="btn btn-brass" id="c-save" style="width:100%;padding:11px">Save credentials · 保存凭证</button>';
+      $('#mBody').innerHTML = html;
+      $('#c-save').addEventListener('click', () => {
+        const appid = $('#c-appid').value.trim();
+        if (appid && !/^wx[0-9a-zA-Z]{16}$/.test(appid)){ mMsg('AppID must look like wx + 16 chars · AppID 格式应为 wx + 16 位','err'); return; }
+        const body = { wechat:{ app_id: appid }, pay:{ mch_id:$('#c-mchid').value.trim(), serial_no:$('#c-serial').value.trim() } };
+        const appsecret = $('#c-appsecret').value.trim(); if (appsecret) body.wechat.app_secret = appsecret;
+        const apiv3 = $('#c-apiv3').value.trim(); if (apiv3) body.pay.api_v3_key = apiv3;
+        const priv = $('#c-privkey').value.trim(); if (priv) body.pay.private_key = priv;
+        const pub = $('#c-pubkey').value.trim(); if (pub) body.pay.platform_pub_key = pub;
+        api('/api/saas-admin/tenants/'+t.id+'/credentials',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(j=>{ if(j.success){ toast('Credentials saved · 已保存'); credsModal(t); loadTenants(); } else mMsg(j.error||'Failed','err'); }).catch(()=>{});
+      });
+    }).catch(()=>{ $('#mBody').innerHTML = '<div class="empty">Error · 出错</div>'; });
+  }
+
+  function detailModal(id){
+    openModal('Store detail · 店铺详情');
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/saas-admin/tenants/'+id).then(j => {
+      if (!j || !j.success){ $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      const s = j.subscription, plan = j.plan;
+      $('#mTitle').textContent = (j.tenant.brand||j.tenant.name) + ' · 详情';
+      const subLine = s ? (s.is_internal ? 'internal · perpetual' : esc(s.status)+' · '+(plan?esc(plan.name):'no plan')+(s.current_period_end?' · until '+fdate(s.current_period_end):'')) : 'no subscription';
+      const billW = can('billing.write');
+      const invRows = (j.invoices||[]).length ? j.invoices.map(iv =>
+        '<tr><td class="mono">'+esc(iv.invoice_no||('#'+iv.id))+'</td><td class="mono">'+(iv.kind==='setup'?'<span class="zh">Setup fee · 开通费</span>':fdate(iv.period_start)+'–'+fdate(iv.period_end))+'</td><td class="mono">'+money(iv.amount_cents,iv.currency)+'</td>'+
+        '<td><span class="pill '+esc(iv.status)+'">'+esc(iv.status)+'</span></td>'+
+        '<td>'+(iv.status!=='paid'?(billW?'<button class="btn btn-sm" data-mp="'+iv.id+'">Mark paid</button>':'<span class="zh">—</span>'):'<span class="zh">'+fdate(iv.paid_at)+'</span>')+'</td></tr>'
+      ).join('') : '<tr><td colspan="5" class="empty">No invoices · 暂无发票</td></tr>';
+      const canBillSetup = billW && !(s && s.is_internal) && Number(j.tenant.setupFeeCents||0) > 0 && !j.hasOpenSetup;
+      const setupBtn = canBillSetup ? '<button class="btn btn-sm" id="bill-setup" style="float:right">+ Bill setup fee '+money(j.tenant.setupFeeCents)+' · 开通费</button>' : '';
+      const opRows = (j.operators||[]).map(o => '<tr><td>'+esc(o.display_name||o.username)+' <span class="zh mono">@'+esc(o.username)+'</span></td><td class="zh">'+esc(o.role)+'</td><td class="zh mono">'+(o.last_login?fdate(o.last_login):'never')+'</td></tr>').join('');
+      $('#mBody').innerHTML =
+        '<div class="zh" style="margin-bottom:4px">Subscription · 订阅</div><div style="margin-bottom:8px">'+subLine+'</div>' +
+        '<div class="det-sec"><h4>Invoices · 发票'+setupBtn+'</h4><div class="card"><table><tbody>'+invRows+'</tbody></table></div></div>' +
+        '<div class="det-sec"><h4>Operators · 操作员</h4><div class="card"><table><tbody>'+opRows+'</tbody></table></div></div>';
+      document.querySelectorAll('[data-mp]').forEach(b => b.addEventListener('click', () => {
+        api('/api/saas-admin/invoices/'+b.getAttribute('data-mp')+'/mark-paid',{method:'POST'}).then(j=>{ toast(j.success?'Marked paid':j.error||'Failed'); detailModal(id); loadTenants(); }).catch(()=>{});
+      }));
+      const billBtn = $('#bill-setup');
+      if (billBtn) billBtn.addEventListener('click', () => {
+        api('/api/saas-admin/tenants/'+id+'/setup-invoice',{method:'POST'}).then(j=>{ toast(j.success?'Setup fee invoiced · 已开具':j.error||'Failed'); detailModal(id); loadTenants(); }).catch(()=>{});
+      });
+    }).catch(()=>{});
+  }
+
+  // ── Onboarding checklist ──
+  const OB_STATUS = { pending:'Not started · 未开始', provided:'Provided · 已提供', verified:'Verified · 已核验', done:'Done · 完成', na:'N/A · 不适用' };
+  const OB_OWNER = { tenant:'Store · 店铺', us:'Us · 我方' };
+  const CATS = { '':'— Pick · 选择', food:'Food · 食品', retail:'Retail · 零售', other:'Other · 其他' };
+  function onboardModal(id){
+    openModal('Onboarding · 入驻清单');
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/saas-admin/tenants/'+id+'/onboarding').then(j => {
+      if (!j || !j.success){ $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      renderOnboard(id, j);
+    }).catch(()=>{});
+  }
+  function obProgLine(done, total){ return done+'/'+total+' · '+(total-done > 0 ? (total-done)+' before go-live · 待完成' : 'ready to launch · 可上线'); }
+  function refreshProg(){
+    let total=0, done=0;
+    document.querySelectorAll('.ob-status').forEach(s => { if (s.value==='na') return; total++; if (s.value==='done'||s.value==='verified') done++; });
+    const pct = total ? Math.round(done/total*100) : 0;
+    const bar = document.querySelector('.ob-prog-bar span'); if (bar) bar.style.width = pct+'%';
+    const lbl = document.querySelector('.ob-prog .zh'); if (lbl) lbl.textContent = obProgLine(done, total);
+  }
+  function renderOnboard(id, j){
+    $('#mTitle').textContent = (j.tenant.brand||j.tenant.name) + ' · 入驻清单';
+    const pr = j.progress, pct = pr.total ? Math.round(pr.done/pr.total*100) : 0;
+    const feeYuan = (Number(j.setupFeeCents||0)/100);
+    let html =
+      '<div class="ob-config"><div class="ob-cfg-row">' +
+        '<div><label>Model · 模式</label><select id="ob-model">' +
+          '<option value="self"'+(j.model==='self'?' selected':'')+'>A · Self-serve 自助</option>' +
+          '<option value="managed"'+(j.model==='managed'?' selected':'')+'>B · Managed 代管</option>' +
+        '</select></div>' +
+        '<div><label>Category · 类目</label><select id="ob-cat">' +
+          Object.keys(CATS).map(c => '<option value="'+c+'"'+(j.category===c?' selected':'')+'>'+esc(CATS[c])+'</option>').join('') +
+        '</select></div>' +
+        '<div style="flex:0 0 96px;min-width:96px"><label>Setup fee ¥ · 费用</label><input type="text" id="ob-fee" value="'+esc(feeYuan)+'"></div>' +
+        '<button class="btn btn-sm" id="ob-cfg-save">Save · 保存</button>' +
+      '</div></div>' +
+      '<div class="ob-prog"><div class="ob-prog-bar"><span style="width:'+pct+'%"></span></div>' +
+        '<span class="zh mono" style="white-space:nowrap">'+obProgLine(pr.done, pr.total)+'</span></div>';
+    j.phases.forEach(p => {
+      html += '<div class="det-sec"><h4>'+esc(p.en)+' · '+esc(p.cn)+'</h4>';
+      p.steps.forEach(s => {
+        const ownerCls = s.owner==='us' ? 'ob-owner-us' : 'ob-owner-tenant';
+        html += '<div class="ob-step"><div class="ob-step-top">' +
+            '<div class="ob-step-label">'+esc(s.en)+'<div class="zh">'+esc(s.cn)+'</div>'+(s.note?'<div class="ob-note">'+esc(s.note)+'</div>':'')+'</div>' +
+            '<span class="ob-owner '+ownerCls+'">'+esc(OB_OWNER[s.owner]||s.owner)+'</span></div>' +
+          '<div class="ob-step-ctl">' +
+            '<select class="ob-status" data-k="'+esc(s.key)+'">' + Object.keys(OB_STATUS).map(k => '<option value="'+k+'"'+(s.status===k?' selected':'')+'>'+esc(OB_STATUS[k])+'</option>').join('') + '</select>' +
+            '<input type="text" class="ob-val" data-k="'+esc(s.key)+'" value="'+esc(s.value||'')+'" placeholder="ref / notes · 备注">' +
+          '</div></div>';
+      });
+      html += '</div>';
+    });
+    $('#mBody').innerHTML = html;
+    $('#ob-cfg-save').addEventListener('click', () => {
+      const feeC = Math.round((parseFloat($('#ob-fee').value)||0)*100);
+      api('/api/saas-admin/tenants/'+id+'/onboarding/config',{method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ model:$('#ob-model').value, category:$('#ob-cat').value, setup_fee_cents:feeC })})
+        .then(r=>{ if(r.success){ toast('Saved'); onboardModal(id); } else mMsg(r.error||'Failed','err'); }).catch(()=>{});
+    });
+    function saveStep(k){
+      const sel = document.querySelector('.ob-status[data-k="'+k+'"]');
+      const val = document.querySelector('.ob-val[data-k="'+k+'"]');
+      api('/api/saas-admin/tenants/'+id+'/onboarding/step',{method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ step_key:k, status:sel.value, value:val.value })}).then(()=>{}).catch(()=>{});
+    }
+    document.querySelectorAll('.ob-status').forEach(el => el.addEventListener('change', () => { saveStep(el.getAttribute('data-k')); refreshProg(); }));
+    document.querySelectorAll('.ob-val').forEach(el => el.addEventListener('change', () => saveStep(el.getAttribute('data-k'))));
+  }
+
+  // ════════════════ SIGNUPS (waitlist leads) ════════════════
+  const REQ_STATUS = { new:'New · 新', contacted:'Contacted · 已联系', provisioned:'Provisioned · 已开通', declined:'Declined · 已婉拒' };
+  function viewSignups(){
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Signup requests · 申请开通 <span class="zh mono" id="reqCount"></span></h1></div>' +
+      '<div class="card"><table><thead><tr><th>Company · 公司</th><th>Contact · 联系</th><th>Note · 备注</th><th class="mono">When · 时间</th><th>Status · 状态</th></tr></thead>' +
+      '<tbody id="reqRows"><tr><td colspan="5" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>';
+    loadRequests();
+  }
+  function loadRequests(){
+    api('/api/backend/signup/requests').then(j => {
+      if (!j || !j.success) return;
+      const rows = j.requests || [];
+      const open = rows.filter(r => r.status === 'new').length;
+      BADGES.leads = open; refreshBadges();
+      if ($('#reqCount')) $('#reqCount').textContent = open ? open + ' new' : rows.length;
+      const tbody = $('#reqRows'); if (!tbody) return;
+      if (!rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No requests yet. · 暂无申请。</td></tr>'; return; }
+      const write = can('signup.write');
+      tbody.innerHTML = rows.map(r => {
+        const opts = Object.keys(REQ_STATUS).map(k => '<option value="'+k+'"'+(k===r.status?' selected':'')+'>'+esc(REQ_STATUS[k])+'</option>').join('');
+        const statusCell = write
+          ? '<select class="req-st" data-id="'+r.id+'" style="background:var(--ink);color:var(--paper);border:1px solid var(--line-2);border-radius:6px;padding:4px 6px;font-family:inherit;font-size:12px;">'+opts+'</select>'
+          : '<span class="pill '+(r.status==='new'?'open':(r.status==='declined'?'cancelled':'active'))+'">'+esc(REQ_STATUS[r.status]||r.status)+'</span>';
+        return '<tr'+(r.status==='new'?' style="font-weight:500"':'')+'>' +
+          '<td class="co">'+esc(r.company)+'</td>' +
+          '<td>'+esc(r.contact)+(r.contact_name?' <span class="zh">('+esc(r.contact_name)+')</span>':'')+'</td>' +
+          '<td>'+(r.note?esc(r.note):'<span class="zh">—</span>')+'</td>' +
+          '<td class="mono">'+fdate(r.created_at)+'</td>' +
+          '<td>'+statusCell+'</td></tr>';
+      }).join('');
+      document.querySelectorAll('.req-st').forEach(sel => sel.addEventListener('change', () => {
+        api('/api/backend/signup/requests/'+sel.getAttribute('data-id')+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ status: sel.value })})
+          .then(j => { toast(j && j.success ? 'Updated · 已更新' : (j && j.error) || 'Failed'); loadRequests(); }).catch(()=>{});
+      }));
+    }).catch(()=>{});
+  }
+
+  // ════════════════ BILLING (cross-tenant queue + plans) ════════════════
+  function viewBilling(){
+    const billW = can('billing.write');
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Unsettled invoices · 待结发票 <span class="zh mono" id="invCount"></span></h1></div>' +
+      '<div class="card"><table><thead><tr><th>Store · 店铺</th><th>Invoice · 发票</th><th>Period · 周期</th><th class="mono">Amount · 金额</th><th>Status · 状态</th><th></th></tr></thead>' +
+      '<tbody id="invRows"><tr><td colspan="6" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>' +
+      '<div class="bar" style="margin-top:28px"><h1>Plans · 套餐</h1></div>' +
+      '<div class="card"><table><thead><tr><th>Plan · 套餐</th><th class="mono">Price · 价格</th><th>Public · 公开</th><th>Active · 启用</th>'+(billW?'<th></th>':'')+'</tr></thead>' +
+      '<tbody id="planRows"><tr><td colspan="5" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>';
+    loadInvoices(); loadPlans();
+  }
+  function loadInvoices(){
+    api('/api/store-admin/invoices').then(j => {
+      if (!j || !j.success) return;
+      const rows = j.invoices || []; const billW = can('billing.write');
+      if ($('#invCount')) $('#invCount').textContent = rows.length;
+      const tbody = $('#invRows'); if (!tbody) return;
+      if (!rows.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">Nothing unsettled · 无待结发票</td></tr>'; return; }
+      tbody.innerHTML = rows.map(iv =>
+        '<tr><td class="co">'+esc(iv.tenant)+'</td><td class="mono">'+esc(iv.invoiceNo||('#'+iv.id))+'</td>' +
+        '<td class="mono">'+(iv.kind==='setup'?'<span class="zh">Setup · 开通费</span>':fdate(iv.periodStart)+'–'+fdate(iv.periodEnd))+'</td>' +
+        '<td class="mono">'+money(iv.amountCents,iv.currency)+'</td>' +
+        '<td><span class="pill '+esc(iv.status)+'">'+esc(iv.status)+'</span></td>' +
+        '<td>'+(billW?'<button class="btn btn-sm" data-mp="'+iv.id+'">Mark paid</button>':'<span class="zh">—</span>')+'</td></tr>'
+      ).join('');
+      document.querySelectorAll('#invRows [data-mp]').forEach(b => b.addEventListener('click', () => {
+        api('/api/saas-admin/invoices/'+b.getAttribute('data-mp')+'/mark-paid',{method:'POST'}).then(j=>{ toast(j.success?'Marked paid · 已标记':j.error||'Failed'); loadInvoices(); }).catch(()=>{});
+      }));
+    }).catch(()=>{});
+  }
+  function loadPlans(){
+    api('/api/store-admin/plans').then(j => {
+      if (!j || !j.success) return;
+      const billW = can('billing.write');
+      const tbody = $('#planRows'); if (!tbody) return;
+      tbody.innerHTML = (j.plans||[]).map(p =>
+        '<tr><td class="co">'+esc(p.name)+(p.nameCn?' <span class="zh">'+esc(p.nameCn)+'</span>':'')+' <span class="zh mono">'+esc(p.code)+'</span></td>' +
+        '<td class="mono">'+money(p.priceCents,p.currency)+'/'+esc(p.interval)+'</td>' +
+        '<td>'+(p.isPublic?'<span class="pill active">public</span>':'<span class="pill internal">hidden</span>')+'</td>' +
+        '<td>'+(p.isActive?'<span class="pill active">active</span>':'<span class="pill cancelled">off</span>')+'</td>' +
+        (billW?'<td><button class="btn btn-sm" data-plan="'+p.id+'">Edit</button></td>':'') + '</tr>'
+      ).join('');
+      if (billW) document.querySelectorAll('#planRows [data-plan]').forEach(b => b.addEventListener('click', () => planModal((j.plans||[]).find(x=>String(x.id)===b.getAttribute('data-plan')))));
+    }).catch(()=>{});
+  }
+  function planModal(p){
+    if (!p) return;
+    openModal('Plan · 套餐 — '+p.name);
+    $('#mBody').innerHTML =
+      '<div class="field"><label>Name · 名称</label><input type="text" id="p-name" value="'+esc(p.name)+'"></div>' +
+      '<div class="field"><label>Name CN · 中文名</label><input type="text" id="p-namecn" value="'+esc(p.nameCn||'')+'"></div>' +
+      '<div class="field"><label>Price ¥ / '+esc(p.interval)+' · 价格</label><input type="number" id="p-price" value="'+(Number(p.priceCents||0)/100)+'" min="0" step="1"></div>' +
+      '<label class="check-row" style="margin-bottom:10px"><input type="checkbox" id="p-public"'+(p.isPublic?' checked':'')+'> Public in catalogue · 在套餐表公开</label>' +
+      '<label class="check-row" style="margin-bottom:16px"><input type="checkbox" id="p-active"'+(p.isActive?' checked':'')+'> Active · 启用</label>' +
+      '<button class="btn btn-brass" id="p-save" style="width:100%;padding:11px">Save · 保存</button>';
+    $('#p-save').addEventListener('click', () => {
+      api('/api/store-admin/plans/'+p.id,{method:'PATCH',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ name:$('#p-name').value.trim(), name_cn:$('#p-namecn').value.trim(),
+          price_cents: Math.round((parseFloat($('#p-price').value)||0)*100), is_public:$('#p-public').checked, is_active:$('#p-active').checked })})
+        .then(j=>{ if(j.success){ toast('Saved'); closeModal(); loadPlans(); } else mMsg(j.error||'Failed','err'); }).catch(()=>{});
+    });
+  }
+
+  // ════════════════ STAFF (platform team) ════════════════
+  const ROLE_LABEL = { super:'Super-admin · 超级管理员', billing:'Billing · 账单', support:'Support · 客服' };
+  function viewStaff(){
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Platform staff · 平台团队</h1><button class="btn btn-brass" id="newStaff">+ New staff · 新建成员</button></div>' +
+      '<div class="zh" style="margin:-6px 0 14px;line-height:1.5">Super-admin can do everything. Billing handles invoices & plans. Support handles signups. · 超级管理员可执行全部操作;账单角色管理发票与套餐;客服角色处理开通申请。</div>' +
+      '<div class="card"><table><thead><tr><th>Name · 名称</th><th>Role · 角色</th><th>Status · 状态</th><th class="mono">Last login · 上次登录</th><th></th></tr></thead>' +
+      '<tbody id="staffRows"><tr><td colspan="5" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>';
+    $('#newStaff').addEventListener('click', () => staffModal(null));
+    loadStaff();
+  }
+  let STAFF = [], STAFF_ROLES = ['super','billing','support'];
+  function loadStaff(){
+    api('/api/store-admin/staff').then(j => {
+      if (!j || !j.success) return;
+      STAFF = j.staff || []; STAFF_ROLES = j.roles || STAFF_ROLES;
+      const tbody = $('#staffRows'); if (!tbody) return;
+      tbody.innerHTML = STAFF.map(s =>
+        '<tr><td class="co">'+esc(s.displayName||s.username)+' <span class="zh mono">@'+esc(s.username)+'</span></td>' +
+        '<td><span class="role-pill">'+esc(s.role)+'</span></td>' +
+        '<td>'+(s.isActive?'<span class="pill active">active</span>':'<span class="pill suspended">disabled</span>')+'</td>' +
+        '<td class="mono zh">'+(s.lastLogin?ftime(s.lastLogin):'never')+'</td>' +
+        '<td><button class="btn btn-sm" data-staff="'+s.id+'">Edit</button></td></tr>'
+      ).join('');
+      document.querySelectorAll('#staffRows [data-staff]').forEach(b => b.addEventListener('click', () => staffModal(STAFF.find(x=>String(x.id)===b.getAttribute('data-staff')))));
+    }).catch(()=>{});
+  }
+  function staffModal(s){
+    const editing = !!s;
+    openModal(editing ? ('Edit staff · 编辑成员 — '+(s.displayName||s.username)) : 'New staff · 新建成员');
+    const roleOpts = STAFF_ROLES.map(r => '<option value="'+r+'"'+(s&&s.role===r?' selected':'')+'>'+esc(ROLE_LABEL[r]||r)+'</option>').join('');
+    $('#mBody').innerHTML =
+      (editing ? '' : '<div class="field"><label>Username · 用户名</label><input type="text" id="s-user" autocapitalize="off" spellcheck="false"></div>') +
+      '<div class="field"><label>Display name · 名称</label><input type="text" id="s-name" value="'+esc(s?s.displayName||'':'')+'"></div>' +
+      '<div class="field"><label>Role · 角色</label><select id="s-role">'+roleOpts+'</select></div>' +
+      '<div class="field"><label>'+(editing?'Reset password (blank = keep) · 重置密码(留空保持)':'Password (10+ chars) · 密码')+'</label><input type="password" id="s-pass"></div>' +
+      (editing ? '<label class="check-row" style="margin-bottom:14px"><input type="checkbox" id="s-active"'+(s.isActive?' checked':'')+'> Active · 启用</label>' : '') +
+      '<button class="btn btn-brass" id="s-save" style="width:100%;padding:11px">'+(editing?'Save · 保存':'Create staff · 创建')+'</button>';
+    $('#s-save').addEventListener('click', () => {
+      if (!editing){
+        const body = { username:$('#s-user').value.trim(), display_name:$('#s-name').value.trim(), role:$('#s-role').value, password:$('#s-pass').value };
+        if (!body.username || body.password.length<10){ mMsg('Username and a 10+ char password required · 请填写用户名和至少 10 位密码','err'); return; }
+        api('/api/store-admin/staff',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(j=>{ if(j.success){ toast('Created'); closeModal(); loadStaff(); } else mMsg(j.error||'Failed','err'); }).catch(()=>{});
+      } else {
+        const body = { display_name:$('#s-name').value.trim(), role:$('#s-role').value, is_active:$('#s-active').checked };
+        if ($('#s-pass').value) body.new_password = $('#s-pass').value;
+        api('/api/store-admin/staff/'+s.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(j=>{ if(j.success){ toast('Saved'); closeModal(); loadStaff(); } else mMsg(j.error||'Failed','err'); }).catch(()=>{});
+      }
+    });
+  }
+
+  // ════════════════ AUDIT ════════════════
+  function viewAudit(){
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Audit log · 操作日志</h1></div>' +
+      '<div class="zh" style="margin:-6px 0 14px">Every consequential platform action, newest first. · 平台关键操作记录,最新在前。</div>' +
+      '<div class="card"><table><thead><tr><th class="mono">When · 时间</th><th>Who · 操作人</th><th>Action · 操作</th><th>Target · 对象</th><th class="mono">IP</th></tr></thead>' +
+      '<tbody id="auditRows"><tr><td colspan="5" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>';
+    api('/api/store-admin/audit?limit=200').then(j => {
+      if (!j || !j.success) return;
+      const tbody = $('#auditRows'); if (!tbody) return;
+      const rows = j.audit || [];
+      if (!rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No activity yet · 暂无记录</td></tr>'; return; }
+      tbody.innerHTML = rows.map(a => {
+        const tgt = a.targetType ? esc(a.targetType)+(a.targetId?' #'+esc(a.targetId):'') : '<span class="zh">—</span>';
+        return '<tr><td class="mono zh">'+ftime(a.at)+'</td>' +
+          '<td>'+esc(a.actorName||'—')+' <span class="zh">('+esc(a.actorKind)+')</span></td>' +
+          '<td class="mono">'+esc(a.action)+'</td>' +
+          '<td>'+tgt+'</td>' +
+          '<td class="mono zh">'+esc(a.ip||'—')+'</td></tr>';
+      }).join('');
+    }).catch(()=>{});
+  }
+
+  // ── Change own password ──
+  function passwordModal(){
+    if (ME.kind !== 'platform'){ toast('Manage your kitchen password in the kitchen app · 请在主系统修改密码'); return; }
+    openModal('Change password · 修改密码');
+    $('#mBody').innerHTML =
+      '<div class="field"><label>Current password · 当前密码</label><input type="password" id="pw-cur"></div>' +
+      '<div class="field"><label>New password (10+ chars) · 新密码</label><input type="password" id="pw-new"></div>' +
+      '<button class="btn btn-brass" id="pw-save" style="width:100%;padding:11px">Update · 更新</button>';
+    $('#pw-save').addEventListener('click', () => {
+      api('/api/store-admin/password',{method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ current_password:$('#pw-cur').value, new_password:$('#pw-new').value })})
+        .then(j=>{ if(j.success){ toast('Password updated · 已更新'); closeModal(); } else mMsg(j.error||'Failed','err'); }).catch(()=>{});
+    });
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>

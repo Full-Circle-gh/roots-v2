@@ -12,6 +12,7 @@ const onboarding = require('../lib/onboarding-steps');
 const featureCatalog = require('../lib/features');
 const credBox = require('../lib/secret-box');
 const { getTenantCreds, setTenantSecrets, invalidate: invalidateCreds, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
+const { requirePlatformAdmin, logAudit } = require('../lib/platform-admin');
 const router = express.Router();
 
 // Per-tenant accent colour for white-label branding (#3). Idempotent.
@@ -35,12 +36,13 @@ db.exec(`CREATE TABLE IF NOT EXISTS tenant_onboarding (
   UNIQUE(tenant_id, step_key)
 )`);
 
-function requireSaasAdmin(req, res, next) {
-  if (!req.session?.userId) return res.status(401).json({ error: 'Admin login required · 需要管理员登录' });
-  const u = db.prepare('SELECT role FROM users WHERE id = ? AND is_active = 1').get(req.session.userId);
-  if (!u || u.role !== 'admin') return res.status(403).json({ error: 'Admin only · 仅限管理员' });
-  next();
-}
+// Gates now accept EITHER the legacy kitchen `admin` session OR a platform-staff
+// session (lib/platform-admin folds kitchen admins in as implicit super-admins),
+// with role-based capabilities so a `billing` or `support` staffer can't reach
+// tenant-lifecycle / credential routes. Reads use the permissive `view` gate.
+const requireSaasAdmin = requirePlatformAdmin('view');           // any active platform staff / kitchen admin
+const requireTenantManage = requirePlatformAdmin('tenant.manage'); // super only
+const requireBillingWrite = requirePlatformAdmin('billing.write'); // super + billing
 
 // ── List every tenant with owner + subscription + plan + counts ───────────
 router.get('/api/saas-admin/tenants', requireSaasAdmin, (req, res) => {
@@ -83,20 +85,22 @@ function isInternal(tenantId) {
 }
 
 // ── Suspend / reactivate. Internal tenants (Roots) can't be suspended. ────
-router.post('/api/saas-admin/tenants/:id/suspend', requireSaasAdmin, (req, res) => {
+router.post('/api/saas-admin/tenants/:id/suspend', requireTenantManage, (req, res) => {
   if (isInternal(req.params.id)) return res.status(400).json({ error: 'Internal tenant cannot be suspended · 内部租户不可暂停' });
   db.prepare("UPDATE tenants SET status = 'suspended' WHERE id = ?").run(req.params.id);
   db.prepare("UPDATE billing_subscriptions SET status = 'suspended', updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ?").run(req.params.id);
+  logAudit(req, { action: 'tenant.suspend', targetType: 'tenant', targetId: req.params.id });
   res.json({ success: true });
 });
-router.post('/api/saas-admin/tenants/:id/reactivate', requireSaasAdmin, (req, res) => {
+router.post('/api/saas-admin/tenants/:id/reactivate', requireTenantManage, (req, res) => {
   db.prepare("UPDATE tenants SET status = 'active' WHERE id = ?").run(req.params.id);
   db.prepare("UPDATE billing_subscriptions SET status = 'active', updated_at = CURRENT_TIMESTAMP WHERE tenant_id = ?").run(req.params.id);
+  logAudit(req, { action: 'tenant.reactivate', targetType: 'tenant', targetId: req.params.id });
   res.json({ success: true });
 });
 
 // ── Edit per-tenant branding (#3) ─────────────────────────────────────────
-router.patch('/api/saas-admin/tenants/:id/brand', requireSaasAdmin, express.json(), (req, res) => {
+router.patch('/api/saas-admin/tenants/:id/brand', requireTenantManage, express.json(), (req, res) => {
   const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   const body = req.body || {};
@@ -122,6 +126,7 @@ router.patch('/api/saas-admin/tenants/:id/brand', requireSaasAdmin, express.json
   }
   params.push(req.params.id);
   db.prepare(`UPDATE tenants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  logAudit(req, { action: 'tenant.brand', targetType: 'tenant', targetId: req.params.id });
   res.json({ success: true });
 });
 
@@ -131,7 +136,7 @@ router.patch('/api/saas-admin/tenants/:id/brand', requireSaasAdmin, express.json
 // platform has withheld; a null/absent entry means "available". Lowering a key
 // here makes that feature vanish from the tenant's backend on their next load
 // (combined client-side with their own on/off preference — see retail-admin.html).
-router.get('/api/saas-admin/tenants/:id/features', requireSaasAdmin, (req, res) => {
+router.get('/api/saas-admin/tenants/:id/features', requireSaasAdmin, (req, res) => { // view
   const t = db.prepare('SELECT id, features_json FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   const entitled = featureCatalog.entitlements(t.features_json);
@@ -143,7 +148,7 @@ router.get('/api/saas-admin/tenants/:id/features', requireSaasAdmin, (req, res) 
   });
 });
 
-router.patch('/api/saas-admin/tenants/:id/features', requireSaasAdmin, express.json(), (req, res) => {
+router.patch('/api/saas-admin/tenants/:id/features', requireTenantManage, express.json(), (req, res) => {
   const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   const body = req.body || {};
@@ -154,6 +159,7 @@ router.patch('/api/saas-admin/tenants/:id/features', requireSaasAdmin, express.j
     map[f.key] = body[f.key] === false ? false : true;
   }
   db.prepare('UPDATE tenants SET features_json = ? WHERE id = ?').run(JSON.stringify(map), t.id);
+  logAudit(req, { action: 'tenant.features', targetType: 'tenant', targetId: t.id, meta: map });
   res.json({ success: true, entitlements: map });
 });
 
@@ -185,7 +191,7 @@ const SAAS_PAY_FIELDS = {
   platform_pub_key: { cred: CRED_KEYS.PAY_PLATFORM_PUB_KEY, secret: false, long: true  },
 };
 
-router.get('/api/saas-admin/tenants/:id/credentials', requireSaasAdmin, (req, res) => {
+router.get('/api/saas-admin/tenants/:id/credentials', requireSaasAdmin, (req, res) => { // view (secrets masked)
   const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   const c = getTenantCreds(t.id);
@@ -213,7 +219,7 @@ router.get('/api/saas-admin/tenants/:id/credentials', requireSaasAdmin, (req, re
   });
 });
 
-router.put('/api/saas-admin/tenants/:id/credentials', requireSaasAdmin, express.json(), (req, res) => {
+router.put('/api/saas-admin/tenants/:id/credentials', requireTenantManage, express.json(), (req, res) => {
   const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   if (isInternal(t.id)) return res.status(400).json({ error: 'Internal tenant credentials are managed via environment (.env) · 内部租户凭证通过环境变量管理' });
@@ -257,11 +263,13 @@ router.put('/api/saas-admin/tenants/:id/credentials', requireSaasAdmin, express.
   if (Object.keys(map).length) setTenantSecrets(t.id, map);   // encrypts + invalidates the cache
   else if (appIdTouched) invalidateCreds(t.id);                // appId-only edit still needs a flush
 
+  // Audit the FIELD NAMES that changed — never the secret values themselves.
+  logAudit(req, { action: 'tenant.credentials', targetType: 'tenant', targetId: t.id, meta: { changed } });
   res.json({ success: true, changed: changed.length });
 });
 
 // ── Mark an invoice paid (records an offline/manual payment) ───────────────
-router.post('/api/saas-admin/invoices/:id/mark-paid', requireSaasAdmin, (req, res) => {
+router.post('/api/saas-admin/invoices/:id/mark-paid', requireBillingWrite, (req, res) => {
   const invoice = db.prepare('SELECT * FROM billing_invoices WHERE id = ?').get(req.params.id);
   if (!invoice) return res.status(404).json({ error: 'Invoice not found · 未找到发票' });
   if (invoice.status === 'paid') return res.json({ success: true, alreadyPaid: true });
@@ -280,11 +288,12 @@ router.post('/api/saas-admin/invoices/:id/mark-paid', requireSaasAdmin, (req, re
     }
   });
   tx();
+  logAudit(req, { action: 'invoice.mark_paid', targetType: 'invoice', targetId: invoice.id, meta: { tenantId: invoice.tenant_id, amountCents: invoice.amount_cents, kind: invoice.kind || 'subscription' } });
   res.json({ success: true });
 });
 
 // ── Onboarding checklist: resolved roadmap + saved progress ───────────────
-router.get('/api/saas-admin/tenants/:id/onboarding', requireSaasAdmin, (req, res) => {
+router.get('/api/saas-admin/tenants/:id/onboarding', requireSaasAdmin, (req, res) => { // view
   const t = db.prepare('SELECT id, name, brand_name, onboarding_model, business_category, setup_fee_cents FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   const rows = db.prepare('SELECT step_key, status, value FROM tenant_onboarding WHERE tenant_id = ?').all(t.id);
@@ -301,7 +310,7 @@ router.get('/api/saas-admin/tenants/:id/onboarding', requireSaasAdmin, (req, res
 });
 
 // ── Update onboarding config (model / category / one-time setup fee) ──────
-router.patch('/api/saas-admin/tenants/:id/onboarding/config', requireSaasAdmin, express.json(), (req, res) => {
+router.patch('/api/saas-admin/tenants/:id/onboarding/config', requireTenantManage, express.json(), (req, res) => {
   const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   const b = req.body || {};
@@ -322,7 +331,7 @@ router.patch('/api/saas-admin/tenants/:id/onboarding/config', requireSaasAdmin, 
 });
 
 // ── Update a single checklist step (status + recorded non-secret note) ────
-router.patch('/api/saas-admin/tenants/:id/onboarding/step', requireSaasAdmin, express.json(), (req, res) => {
+router.patch('/api/saas-admin/tenants/:id/onboarding/step', requireTenantManage, express.json(), (req, res) => {
   const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   const b = req.body || {};
@@ -341,7 +350,7 @@ router.patch('/api/saas-admin/tenants/:id/onboarding/step', requireSaasAdmin, ex
 // ── Bill the one-time onboarding setup fee (the Model-A vs B difference) ──
 // Creates a single open invoice for the tenant's recorded setup_fee_cents.
 // kind='setup' + no period, so marking it paid never touches the subscription.
-router.post('/api/saas-admin/tenants/:id/setup-invoice', requireSaasAdmin, (req, res) => {
+router.post('/api/saas-admin/tenants/:id/setup-invoice', requireBillingWrite, (req, res) => {
   const t = db.prepare('SELECT id, setup_fee_cents FROM tenants WHERE id = ?').get(req.params.id);
   if (!t) return res.status(404).json({ error: 'Tenant not found · 未找到租户' });
   if (isInternal(t.id)) return res.status(400).json({ error: 'Internal tenant is not billed · 内部租户不计费' });
@@ -355,14 +364,16 @@ router.post('/api/saas-admin/tenants/:id/setup-invoice', requireSaasAdmin, (req,
   const info = db.prepare(`INSERT INTO billing_invoices (tenant_id, subscription_id, invoice_no, kind, amount_cents, currency, status)
                            VALUES (?, ?, ?, 'setup', ?, 'CNY', 'open')`)
     .run(t.id, sub ? sub.id : null, invoiceNo, amount);
+  logAudit(req, { action: 'invoice.setup_create', targetType: 'tenant', targetId: t.id, meta: { invoiceNo, amountCents: amount } });
   res.json({ success: true, invoiceId: info.lastInsertRowid, invoiceNo, amountCents: amount });
 });
 
 // ── Provision a new tenant from the console ───────────────────────────────
-router.post('/api/saas-admin/provision', requireSaasAdmin, express.json(), (req, res) => {
+router.post('/api/saas-admin/provision', requireTenantManage, express.json(), (req, res) => {
   const { company, brand, username, password, owner_name } = req.body || {};
   try {
     const r = provisionTenant({ company, brand, ownerUsername: username, ownerPassword: password, ownerName: owner_name });
+    logAudit(req, { action: 'tenant.provision', targetType: 'tenant', targetId: r.tenantId, meta: { company, brand, ownerUsername: r.ownerUsername } });
     res.json({ success: true, tenantId: r.tenantId, username: r.ownerUsername });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

@@ -230,6 +230,7 @@ app.use(require('./routes/billing'));        // Mini App Backend billing control
 app.use(require('./routes/billing-pay'));    // Mini App Backend billing payments & lifecycle (select-plan / checkout / mark-paid)
 app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
 app.use(require('./routes/saas-admin'));     // Platform owner console — tenants / subscriptions / branding (kitchen-admin gated)
+app.use(require('./routes/store-admin'));    // Platform account-manager console — store-admin.* (platform_admins realm + audit)
 app.use(require('./routes/ingredients'));
 app.use(require('./routes/recipes'));
 app.use(require('./routes/admin'));
@@ -335,6 +336,26 @@ app.get('/backend/billing', (req, res) => {
 // bare domain all keep serving the kitchen app.
 const STORE_HOST = 'store.rootskitchenchina.com';
 
+// Subdomain that serves the PLATFORM account-manager console (store-admin.html)
+// at its root. This is the back office for the whole SaaS — the team manages
+// every merchant account here (platform_admins realm). Distinct from STORE_HOST
+// above, which serves an individual MERCHANT their own retail-admin backend.
+const STORE_ADMIN_HOST = 'store-admin.rootskitchenchina.com';
+
+// Serve the platform console shell. The page self-auths via /api/store-admin/me
+// and shows its own login form when signed out, so no server-side gate here
+// (same self-auth pattern as the retail-admin shell). Always fresh — low-traffic
+// and must never be pinned to a stale build by an intermediary cache.
+function serveStoreAdmin(req, res) {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'store-admin.html'));
+}
+
+// Preview path on the EXISTING secure domain, so the console can be opened
+// before store-admin.* DNS + TLS are set up (mirrors /shop-preview). Same shell.
+app.get('/store-admin', serveStoreAdmin);
+
 // Serve the Mini App Backend (retail-admin) shell. Page self-auths via
 // /api/auth/me. Shared by the /retail-admin path and the store.* subdomain root.
 function serveRetailAdmin(req, res) {
@@ -374,9 +395,16 @@ function serveShop(req, res) {
 // Main app - serves the SPA shell
 const { requireAuth } = require('./middleware/auth');
 app.get('/', (req, res) => {
+  const host = (req.hostname || '').toLowerCase();
+  // Platform account-manager console subdomain → the store-admin shell. Self-
+  // auths against the platform_admins realm; checked before STORE_HOST so the
+  // two subdomains never cross.
+  if (host === STORE_ADMIN_HOST) {
+    return serveStoreAdmin(req, res);
+  }
   // Online-store subdomain lands directly on the Mini App Backend, not the
   // kitchen SPA. It self-auths, so we skip requireAuth for that host.
-  if ((req.hostname || '').toLowerCase() === STORE_HOST) {
+  if (host === STORE_HOST) {
     return serveRetailAdmin(req, res);
   }
   // A registered storefront domain → the public customer website.
