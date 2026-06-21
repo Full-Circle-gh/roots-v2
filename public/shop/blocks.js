@@ -1476,28 +1476,36 @@
     var dots = dotsWrap ? dotsWrap.querySelectorAll('.sb-rv-dot') : [];
     var n = track ? track.children.length : 0;
     if (!track || n < 2) return;
-    var cur = 0, paused = false;
-    // stride = distance between consecutive slides (handles the track padding)
-    function stride() { return track.children[1].offsetLeft - track.children[0].offsetLeft || 1; }
-    function go(i) { cur = (i % n + n) % n; track.scrollTo({ left: cur * stride(), behavior: 'smooth' }); }
-    function syncDots() {
+    var cur = 0;
+    var pauseUntil = 0;      // user interaction pauses autoplay only until this time
+    var progUntil = 0;       // ignore scroll events our own scrollTo triggers
+    var now = function () { return Date.now(); };
+    // stride = distance between consecutive slides (handles padding + gap)
+    function stride() { return (track.children[1].offsetLeft - track.children[0].offsetLeft) || track.clientWidth; }
+    function setDots() { for (var d = 0; d < dots.length; d++) dots[d].classList.toggle('on', d === cur); }
+    function go(i) {
+      cur = (i % n + n) % n;
+      progUntil = now() + 800;
+      track.scrollTo({ left: cur * stride(), behavior: 'smooth' });
+      setDots();
+    }
+    function onScroll() {
       var idx = Math.round(track.scrollLeft / stride());
       cur = Math.max(0, Math.min(n - 1, idx));
-      for (var d = 0; d < dots.length; d++) dots[d].classList.toggle('on', d === cur);
+      setDots();
+      if (now() > progUntil) pauseUntil = now() + 9000;   // a real user swipe
     }
     track.addEventListener('scroll', function () {
       window.clearTimeout(track._rvT);
-      track._rvT = window.setTimeout(syncDots, 80);
+      track._rvT = window.setTimeout(onScroll, 90);
     });
     for (var d = 0; d < dots.length; d++) {
-      (function (idx) { dots[idx].addEventListener('click', function () { paused = true; go(idx); }); })(d);
+      (function (idx) { dots[idx].addEventListener('click', function () { pauseUntil = now() + 9000; go(idx); }); })(d);
     }
-    // pause autoplay while the user is touching/hovering the strip
-    ['pointerdown', 'touchstart', 'mouseenter'].forEach(function (ev) { car.addEventListener(ev, function () { paused = true; }); });
     carouselHandles.push(setInterval(function () {
-      if (paused || !car.offsetParent) return;
+      if (!car.offsetParent || now() < pauseUntil) return;
       go(cur + 1);
-    }, 5000));
+    }, 4500));
   }
 
   global.ShopBlocks = {
