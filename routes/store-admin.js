@@ -15,10 +15,50 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const db = require('../database');
+const crypto = require('crypto');
 const {
   ROLES, capsFor, requirePlatformAdmin, currentActor, logAudit,
 } = require('../lib/platform-admin');
+const { registerTenantDomain } = require('../lib/provision-tenant');
+const { normalizeHost } = require('../middleware/public-tenant');
 const router = express.Router();
+
+// The merchant backend host — where an impersonation hand-off lands so the
+// session cookie is set on the right origin (cookies are host-scoped). Override
+// via env if the backend ever moves off store.rootskitchenchina.com.
+const STORE_BACKEND_HOST = process.env.STORE_BACKEND_HOST || 'store.rootskitchenchina.com';
+const STORE_ADMIN_HOST = process.env.STORE_ADMIN_HOST || 'store-admin.rootskitchenchina.com';
+// Hosts reserved for the platform itself — never registrable as a tenant domain.
+const RESERVED_HOSTS = new Set([STORE_BACKEND_HOST, STORE_ADMIN_HOST]);
+
+// ── Phase 2 schema (idempotent) ───────────────────────────────────────────
+db.exec(`
+  CREATE TABLE IF NOT EXISTS platform_broadcasts (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    title_en   TEXT, title_cn TEXT,
+    body_en    TEXT, body_cn  TEXT,
+    level      TEXT NOT NULL DEFAULT 'info',   -- info | warn | critical
+    audience   TEXT NOT NULL DEFAULT 'all',    -- all | tenant
+    tenant_id  INTEGER,                        -- set when audience='tenant'
+    active     INTEGER NOT NULL DEFAULT 1,
+    starts_at  DATETIME, ends_at DATETIME,
+    created_by TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  -- One-time, short-lived hand-off tokens for "log in as store". Minted on the
+  -- store-admin host, consumed on the merchant-backend host (server.js
+  -- GET /impersonate) which then starts the impersonated tenant_users session.
+  CREATE TABLE IF NOT EXISTS platform_impersonation_tokens (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    token       TEXT NOT NULL UNIQUE,
+    tenant_id   INTEGER NOT NULL,
+    operator_id INTEGER NOT NULL,
+    by_kind     TEXT, by_id INTEGER, by_name TEXT,
+    expires_at  DATETIME NOT NULL,
+    used_at     DATETIME,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
 
 // ── Brute-force guard, same posture as the kitchen / backend logins ───────
 const loginLimiter = rateLimit({
@@ -271,5 +311,168 @@ router.get('/api/store-admin/audit', requirePlatformAdmin('view'), (req, res) =>
 });
 
 function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
+
+// ════════════════ DOMAINS (tenant_domains) ════════════════
+const DOMAIN_RE = /^(?=.{4,253}$)([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$/;
+
+router.get('/api/store-admin/tenants/:id/domains', requirePlatformAdmin('view'), (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Store not found · 未找到店铺' });
+  const rows = db.prepare('SELECT id, host, kind, status, is_primary, created_at FROM tenant_domains WHERE tenant_id = ? ORDER BY is_primary DESC, id ASC').all(t.id)
+    .map(d => ({ id: d.id, host: d.host, kind: d.kind, status: d.status, isPrimary: !!d.is_primary, createdAt: d.created_at }));
+  res.json({ success: true, domains: rows, backendHost: STORE_BACKEND_HOST });
+});
+
+router.post('/api/store-admin/tenants/:id/domains', requirePlatformAdmin('tenant.manage'), express.json(), (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Store not found · 未找到店铺' });
+  const host = normalizeHost(req.body && req.body.host);
+  if (!host || !DOMAIN_RE.test(host)) return res.status(400).json({ error: 'Enter a valid domain (e.g. shop.example.com) · 请输入有效域名' });
+  if (RESERVED_HOSTS.has(host)) return res.status(400).json({ error: 'That host is reserved by the platform · 该域名为平台保留' });
+  if (db.prepare('SELECT tenant_id FROM tenant_domains WHERE host = ?').get(host)) {
+    return res.status(409).json({ error: 'That domain is already registered · 该域名已登记' });
+  }
+  const kind = req.body.kind === 'subdomain' ? 'subdomain' : 'custom';
+  // Custom (BYO) domains start 'pending' until DNS/ICP/TLS are verified; a free
+  // platform subdomain can serve immediately.
+  const status = ['active', 'pending', 'disabled'].includes(req.body.status) ? req.body.status : (kind === 'custom' ? 'pending' : 'active');
+  registerTenantDomain(t.id, host, { kind, status, primary: false });
+  const row = db.prepare('SELECT id FROM tenant_domains WHERE host = ?').get(host);
+  logAudit(req, { action: 'domain.add', targetType: 'tenant', targetId: t.id, meta: { host, kind, status } });
+  res.json({ success: true, id: row && row.id });
+});
+
+router.patch('/api/store-admin/domains/:domainId', requirePlatformAdmin('tenant.manage'), express.json(), (req, res) => {
+  const d = db.prepare('SELECT * FROM tenant_domains WHERE id = ?').get(req.params.domainId);
+  if (!d) return res.status(404).json({ error: 'Domain not found · 未找到域名' });
+  const b = req.body || {};
+  if (Object.prototype.hasOwnProperty.call(b, 'status') && ['active', 'pending', 'disabled'].includes(b.status)) {
+    db.prepare('UPDATE tenant_domains SET status = ? WHERE id = ?').run(b.status, d.id);
+  }
+  if (b.is_primary === true) {
+    // Exactly one primary per tenant; promoting also activates it.
+    const tx = db.transaction(() => {
+      db.prepare('UPDATE tenant_domains SET is_primary = 0 WHERE tenant_id = ?').run(d.tenant_id);
+      db.prepare("UPDATE tenant_domains SET is_primary = 1, status = CASE WHEN status = 'disabled' THEN 'active' ELSE status END WHERE id = ?").run(d.id);
+    });
+    tx();
+  }
+  logAudit(req, { action: 'domain.update', targetType: 'tenant', targetId: d.tenant_id, meta: { host: d.host, status: b.status, primary: b.is_primary === true } });
+  res.json({ success: true });
+});
+
+router.delete('/api/store-admin/domains/:domainId', requirePlatformAdmin('tenant.manage'), (req, res) => {
+  const d = db.prepare('SELECT * FROM tenant_domains WHERE id = ?').get(req.params.domainId);
+  if (!d) return res.status(404).json({ error: 'Domain not found · 未找到域名' });
+  db.prepare('DELETE FROM tenant_domains WHERE id = ?').run(d.id);
+  logAudit(req, { action: 'domain.remove', targetType: 'tenant', targetId: d.tenant_id, meta: { host: d.host } });
+  res.json({ success: true });
+});
+
+// ════════════════ BROADCASTS (merchant-facing notices) ════════════════
+const BROADCAST_LEVELS = ['info', 'warn', 'critical'];
+function broadcastRow(r) {
+  return {
+    id: r.id, titleEn: r.title_en, titleCn: r.title_cn, bodyEn: r.body_en, bodyCn: r.body_cn,
+    level: r.level, audience: r.audience, tenantId: r.tenant_id, active: !!r.active,
+    startsAt: r.starts_at, endsAt: r.ends_at, createdBy: r.created_by, createdAt: r.created_at,
+    tenant: r.tenant_brand || r.tenant_name || null,
+  };
+}
+router.get('/api/store-admin/broadcasts', requirePlatformAdmin('view'), (req, res) => {
+  const rows = db.prepare(`SELECT b.*, t.name AS tenant_name, t.brand_name AS tenant_brand
+                           FROM platform_broadcasts b LEFT JOIN tenants t ON t.id = b.tenant_id
+                           ORDER BY b.active DESC, b.id DESC`).all().map(broadcastRow);
+  res.json({ success: true, broadcasts: rows });
+});
+router.post('/api/store-admin/broadcasts', requirePlatformAdmin('broadcast'), express.json(), (req, res) => {
+  const b = req.body || {};
+  const level = BROADCAST_LEVELS.includes(b.level) ? b.level : 'info';
+  const audience = b.audience === 'tenant' ? 'tenant' : 'all';
+  const tenantId = audience === 'tenant' ? Number(b.tenant_id) || null : null;
+  if (audience === 'tenant' && !tenantId) return res.status(400).json({ error: 'Pick a store for a targeted notice · 请选择目标店铺' });
+  const clip = (s, n) => s == null ? null : String(s).slice(0, n) || null;
+  const titleEn = clip(b.title_en, 160), titleCn = clip(b.title_cn, 160);
+  const bodyEn = clip(b.body_en, 1200), bodyCn = clip(b.body_cn, 1200);
+  if (!titleEn && !titleCn && !bodyEn && !bodyCn) return res.status(400).json({ error: 'Enter a title or message · 请输入标题或内容' });
+  const info = db.prepare(`INSERT INTO platform_broadcasts (title_en,title_cn,body_en,body_cn,level,audience,tenant_id,active,starts_at,ends_at,created_by)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+    .run(titleEn, titleCn, bodyEn, bodyCn, level, audience, tenantId, b.active === false ? 0 : 1,
+         clip(b.starts_at, 30), clip(b.ends_at, 30), (req.platformActor && req.platformActor.name) || null);
+  logAudit(req, { action: 'broadcast.create', targetType: 'broadcast', targetId: info.lastInsertRowid, meta: { level, audience, tenantId } });
+  res.json({ success: true, id: info.lastInsertRowid });
+});
+router.patch('/api/store-admin/broadcasts/:id', requirePlatformAdmin('broadcast'), express.json(), (req, res) => {
+  const r = db.prepare('SELECT * FROM platform_broadcasts WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Notice not found · 未找到通知' });
+  const b = req.body || {}; const sets = [], params = [], changed = {};
+  const setIf = (key, col, fn) => { if (Object.prototype.hasOwnProperty.call(b, key)) { sets.push(col + ' = ?'); params.push(fn ? fn(b[key]) : b[key]); changed[key] = true; } };
+  setIf('title_en', 'title_en', v => v ? String(v).slice(0, 160) : null);
+  setIf('title_cn', 'title_cn', v => v ? String(v).slice(0, 160) : null);
+  setIf('body_en', 'body_en', v => v ? String(v).slice(0, 1200) : null);
+  setIf('body_cn', 'body_cn', v => v ? String(v).slice(0, 1200) : null);
+  if (Object.prototype.hasOwnProperty.call(b, 'level')) { sets.push('level = ?'); params.push(BROADCAST_LEVELS.includes(b.level) ? b.level : r.level); changed.level = true; }
+  if (Object.prototype.hasOwnProperty.call(b, 'active')) { sets.push('active = ?'); params.push(b.active ? 1 : 0); changed.active = !!b.active; }
+  if (!sets.length) return res.json({ success: true });
+  params.push(r.id);
+  db.prepare(`UPDATE platform_broadcasts SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+  logAudit(req, { action: 'broadcast.update', targetType: 'broadcast', targetId: r.id, meta: changed });
+  res.json({ success: true });
+});
+router.delete('/api/store-admin/broadcasts/:id', requirePlatformAdmin('broadcast'), (req, res) => {
+  const r = db.prepare('SELECT id FROM platform_broadcasts WHERE id = ?').get(req.params.id);
+  if (!r) return res.status(404).json({ error: 'Notice not found · 未找到通知' });
+  db.prepare('DELETE FROM platform_broadcasts WHERE id = ?').run(r.id);
+  logAudit(req, { action: 'broadcast.delete', targetType: 'broadcast', targetId: r.id });
+  res.json({ success: true });
+});
+
+// ════════════════ IMPERSONATE (log in as a store) ════════════════
+// Mints a one-time token; the console opens STORE_BACKEND_HOST/impersonate?t=…
+// which consumes it (server.js) and starts the impersonated tenant_users session.
+router.post('/api/store-admin/tenants/:id/impersonate', requirePlatformAdmin('impersonate'), (req, res) => {
+  const t = db.prepare('SELECT id, name, brand_name, status FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Store not found · 未找到店铺' });
+  if (t.status !== 'active') return res.status(400).json({ error: 'Store is not active · 店铺未激活' });
+  const op = db.prepare("SELECT id, username FROM tenant_users WHERE tenant_id = ? AND is_active = 1 ORDER BY (role = 'owner') DESC, id ASC LIMIT 1").get(t.id);
+  if (!op) return res.status(400).json({ error: 'This store has no active operator to act as · 该店铺没有可用操作员' });
+  const token = crypto.randomBytes(24).toString('hex');
+  const expiresAt = new Date(Date.now() + 120000).toISOString();   // 2-minute single-use window
+  const actor = req.platformActor;
+  db.prepare(`INSERT INTO platform_impersonation_tokens (token, tenant_id, operator_id, by_kind, by_id, by_name, expires_at)
+              VALUES (?,?,?,?,?,?,?)`)
+    .run(token, t.id, op.id, actor.kind, actor.id, actor.name, expiresAt);
+  logAudit(req, { action: 'impersonate.start', targetType: 'tenant', targetId: t.id, meta: { operator: op.username } });
+  res.json({ success: true, url: 'https://' + STORE_BACKEND_HOST + '/impersonate?t=' + token, store: t.brand_name || t.name, expiresInSec: 120 });
+});
+
+// ════════════════ ANALYTICS (control-plane roll-ups) ════════════════
+router.get('/api/store-admin/analytics', requirePlatformAdmin('view'), (req, res) => {
+  // Plan mix among paying (active, non-internal) subscriptions.
+  const planMix = db.prepare(`
+    SELECT p.code, p.name, p.price_cents, COUNT(*) c
+    FROM billing_subscriptions s JOIN billing_plans p ON p.id = s.plan_id
+    WHERE s.status = 'active' AND s.is_internal = 0
+    GROUP BY p.id ORDER BY p.sort_order ASC`).all();
+  const subHealth = {};
+  db.prepare('SELECT status, COUNT(*) c FROM billing_subscriptions GROUP BY status').all().forEach(r => { subHealth[r.status] = r.c; });
+  const leadFunnel = {};
+  db.prepare('SELECT status, COUNT(*) c FROM tenant_signup_requests GROUP BY status').all().forEach(r => { leadFunnel[r.status] = r.c; });
+  // Collected revenue (paid invoices) in the trailing 30 / 90 days.
+  const collected = (days) => db.prepare(
+    "SELECT COALESCE(SUM(amount_cents),0) v, COUNT(*) c FROM billing_invoices WHERE status = 'paid' AND paid_at >= datetime('now', ?)"
+  ).get('-' + days + ' days');
+  // New stores per month, last 6 months.
+  const signupsByMonth = db.prepare(`
+    SELECT strftime('%Y-%m', created_at) ym, COUNT(*) c
+    FROM tenants GROUP BY ym ORDER BY ym DESC LIMIT 6`).all().reverse();
+  res.json({
+    success: true,
+    planMix: planMix.map(p => ({ code: p.code, name: p.name, priceCents: p.price_cents, count: p.c })),
+    subHealth, leadFunnel,
+    revenue: { last30: collected(30), last90: collected(90) },
+    signupsByMonth,
+  });
+});
 
 module.exports = router;

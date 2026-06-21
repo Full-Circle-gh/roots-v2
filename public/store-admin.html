@@ -269,6 +269,7 @@
     { id:'stores',    en:'Stores',    cn:'店铺', cap:'view' },
     { id:'signups',   en:'Signups',   cn:'申请', cap:'view', badge:'leads' },
     { id:'billing',   en:'Billing',   cn:'账单', cap:'view' },
+    { id:'broadcasts',en:'Broadcasts',cn:'广播', cap:'view' },
     { id:'staff',     en:'Staff',     cn:'团队', cap:'staff.manage' },
     { id:'audit',     en:'Audit',     cn:'日志', cap:'view' },
   ];
@@ -305,7 +306,7 @@
     location.hash = '#'+tab;
     document.querySelectorAll('#tabs [data-tab]').forEach(b => b.classList.toggle('on', b.getAttribute('data-tab')===tab));
     const v = $('#view'); v.innerHTML = '<div class="empty">Loading… · 加载中…</div>';
-    ({ dashboard:viewDashboard, stores:viewStores, signups:viewSignups, billing:viewBilling, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
+    ({ dashboard:viewDashboard, stores:viewStores, signups:viewSignups, billing:viewBilling, broadcasts:viewBroadcasts, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
   }
   window.addEventListener('hashchange', () => { const h=(location.hash||'#dashboard').slice(1); if (h!==CUR && ME) go(h); });
 
@@ -332,9 +333,117 @@
       $('#view').innerHTML =
         '<div class="bar"><h1>Overview · 总览</h1></div>' +
         '<div class="stat-grid">'+grid+'</div>' +
+        '<div id="analytics"></div>' +
         '<div class="bar"><h1>Recent stores · 最近店铺</h1></div>' +
         '<div class="card"><table><thead><tr><th>Store · 店铺</th><th>Status · 状态</th><th>Subscription · 订阅</th><th>Joined · 加入</th></tr></thead><tbody>'+recent+'</tbody></table></div>';
+      loadAnalytics();
     }).catch(()=>{});
+  }
+  function loadAnalytics(){
+    api('/api/store-admin/analytics').then(j => {
+      if (!j || !j.success) return;
+      const host = $('#analytics'); if (!host) return;
+      const maxMonth = Math.max(1, ...(j.signupsByMonth||[]).map(m => m.c));
+      const months = (j.signupsByMonth||[]).map(m =>
+        '<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0">' +
+          '<div style="width:100%;display:flex;align-items:flex-end;height:64px"><div style="width:100%;background:var(--tea);border-radius:5px 5px 0 0;height:'+Math.round(m.c/maxMonth*100)+'%;min-height:3px"></div></div>' +
+          '<div class="mono" style="font-size:12px">'+m.c+'</div><div class="zh mono" style="font-size:9px">'+esc(String(m.ym).slice(2))+'</div>' +
+        '</div>').join('') || '<div class="empty" style="flex:1">No data · 暂无</div>';
+      const planMix = (j.planMix||[]).length ? j.planMix.map(p =>
+        '<tr><td class="co">'+esc(p.name)+' <span class="zh mono">'+esc(p.code)+'</span></td><td class="mono">'+money(p.priceCents)+'/mo</td><td class="mono">'+p.count+'</td></tr>'
+      ).join('') : '<tr><td colspan="3" class="empty">No paying plans yet · 暂无付费套餐</td></tr>';
+      const rev = j.revenue || {};
+      const stat = (k,v) => '<div class="stat"><div class="k">'+k+'</div><div class="v">'+v+'</div></div>';
+      host.innerHTML =
+        '<div class="bar" style="margin-top:24px"><h1>Revenue & growth · 营收与增长</h1></div>' +
+        '<div class="stat-grid">' +
+          stat('Collected 30d · 近30天回款', money(rev.last30 ? rev.last30.v : 0)) +
+          stat('Collected 90d · 近90天回款', money(rev.last90 ? rev.last90.v : 0)) +
+          stat('Paid invoices 90d · 已付发票', (rev.last90 ? rev.last90.c : 0)) +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px">' +
+          '<div class="card" style="padding:14px 16px"><div class="k" style="font-family:var(--f-mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:12px">New stores / month · 每月新店</div><div style="display:flex;gap:8px;align-items:flex-end">'+months+'</div></div>' +
+          '<div class="card"><table><thead><tr><th>Plan · 套餐</th><th class="mono">Price</th><th class="mono">Stores</th></tr></thead><tbody>'+planMix+'</tbody></table></div>' +
+        '</div>';
+    }).catch(()=>{});
+  }
+
+  // ════════════════ BROADCASTS ════════════════
+  const BC_LEVEL = { info:'Info · 信息', warn:'Warning · 提醒', critical:'Critical · 重要' };
+  function viewBroadcasts(){
+    const canWrite = can('broadcast');
+    const newBtn = canWrite ? '<button class="btn btn-brass" id="newBc">+ New broadcast · 新建广播</button>' : '';
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Broadcasts · 广播</h1>'+newBtn+'</div>' +
+      '<div class="zh" style="margin:-6px 0 14px;line-height:1.5">Active notices show as a banner inside the merchant backend (retail-admin). · 启用的通知会在商家后台顶部以横幅展示。</div>' +
+      '<div class="card"><table><thead><tr><th>Notice · 通知</th><th>Level · 级别</th><th>Audience · 对象</th><th>Status · 状态</th>'+(canWrite?'<th></th>':'')+'</tr></thead>' +
+      '<tbody id="bcRows"><tr><td colspan="5" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>';
+    if (canWrite) $('#newBc').addEventListener('click', () => bcModal(null));
+    if (!TENANTS.length) loadTenants();   // populate the targeted-store dropdown
+    loadBroadcasts();
+  }
+  function loadBroadcasts(){
+    api('/api/store-admin/broadcasts').then(j => {
+      if (!j || !j.success) return;
+      const canWrite = can('broadcast');
+      const tbody = $('#bcRows'); if (!tbody) return;
+      const rows = j.broadcasts || [];
+      if (!rows.length){ tbody.innerHTML = '<tr><td colspan="5" class="empty">No broadcasts yet · 暂无广播</td></tr>'; return; }
+      tbody.innerHTML = rows.map(b => {
+        const title = (esc(b.titleEn||'')+((b.titleEn&&b.titleCn)?' · ':'')+esc(b.titleCn||'')) || '<span class="zh">(no title)</span>';
+        const aud = b.audience==='all' ? 'All stores · 全部' : ('Store · '+(esc(b.tenant||('#'+b.tenantId))));
+        const lvl = '<span class="pill '+(b.level==='critical'?'suspended':(b.level==='warn'?'open':'internal'))+'">'+esc(b.level)+'</span>';
+        const acts = canWrite ? '<div class="acts">' +
+          '<button class="btn btn-sm" data-bc-toggle="'+b.id+'" data-active="'+(b.active?'0':'1')+'">'+(b.active?'Stop':'Start')+'</button>' +
+          '<button class="btn btn-sm" data-bc-edit="'+b.id+'">Edit</button>' +
+          '<button class="btn btn-sm btn-danger" data-bc-del="'+b.id+'">Delete</button></div>' : '';
+        return '<tr><td class="co">'+title+'</td><td>'+lvl+'</td><td>'+aud+'</td><td>'+(b.active?'<span class="pill active">live</span>':'<span class="pill internal">off</span>')+'</td>'+(canWrite?'<td>'+acts+'</td>':'')+'</tr>';
+      }).join('');
+      document.querySelectorAll('[data-bc-toggle]').forEach(btn => btn.addEventListener('click', () => {
+        api('/api/store-admin/broadcasts/'+btn.getAttribute('data-bc-toggle'),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({ active: btn.getAttribute('data-active')==='1' })})
+          .then(r=>{ toast(r.success?'Updated':r.error||'Failed'); loadBroadcasts(); }).catch(()=>{});
+      }));
+      document.querySelectorAll('[data-bc-edit]').forEach(btn => btn.addEventListener('click', () => bcModal(rows.find(x=>String(x.id)===btn.getAttribute('data-bc-edit')))));
+      document.querySelectorAll('[data-bc-del]').forEach(btn => btn.addEventListener('click', () => {
+        if (!confirm('Delete this broadcast? · 删除该广播?')) return;
+        api('/api/store-admin/broadcasts/'+btn.getAttribute('data-bc-del'),{method:'DELETE'}).then(r=>{ toast(r.success?'Deleted':r.error||'Failed'); loadBroadcasts(); }).catch(()=>{});
+      }));
+    }).catch(()=>{});
+  }
+  function bcModal(b){
+    const editing = !!b;
+    openModal(editing ? 'Edit broadcast · 编辑广播' : 'New broadcast · 新建广播');
+    const lvlOpts = Object.keys(BC_LEVEL).map(k => '<option value="'+k+'"'+(b&&b.level===k?' selected':'')+'>'+esc(BC_LEVEL[k])+'</option>').join('');
+    const storeOpts = '<option value="">— pick a store · 选择店铺</option>' + TENANTS.filter(t=>!t.isInternal).map(t => '<option value="'+t.id+'"'+(b&&String(b.tenantId)===String(t.id)?' selected':'')+'>'+esc(t.brand||t.name)+'</option>').join('');
+    $('#mBody').innerHTML =
+      '<div class="field"><label>Title EN · 英文标题</label><input type="text" id="bc-ten" value="'+esc(b?b.titleEn||'':'')+'"></div>' +
+      '<div class="field"><label>Title 中文标题</label><input type="text" id="bc-tcn" value="'+esc(b?b.titleCn||'':'')+'"></div>' +
+      '<div class="field"><label>Message EN · 英文内容</label><textarea id="bc-ben">'+esc(b?b.bodyEn||'':'')+'</textarea></div>' +
+      '<div class="field"><label>Message 中文内容</label><textarea id="bc-bcn">'+esc(b?b.bodyCn||'':'')+'</textarea></div>' +
+      '<div class="row2" style="gap:12px;margin-bottom:13px"><div style="flex:1"><label>Level · 级别</label><select id="bc-level">'+lvlOpts+'</select></div>' +
+        (editing ? '' : '<div style="flex:1"><label>Audience · 对象</label><select id="bc-aud"><option value="all">All stores · 全部</option><option value="tenant">One store · 指定店铺</option></select></div>') +
+      '</div>' +
+      (editing ? '' : '<div class="field" id="bc-store-wrap" style="display:none"><label>Store · 店铺</label><select id="bc-store">'+storeOpts+'</select></div>') +
+      '<label class="check-row" style="margin-bottom:14px"><input type="checkbox" id="bc-active"'+((!editing||b.active)?' checked':'')+'> Live now · 立即启用</label>' +
+      '<button class="btn btn-brass" id="bc-save" style="width:100%;padding:11px">'+(editing?'Save · 保存':'Create · 创建')+'</button>';
+    if (!editing){
+      const audSel = $('#bc-aud'), wrap = $('#bc-store-wrap');
+      audSel.addEventListener('change', () => { wrap.style.display = audSel.value==='tenant' ? 'block' : 'none'; });
+    }
+    $('#bc-save').addEventListener('click', () => {
+      const common = { title_en:$('#bc-ten').value.trim(), title_cn:$('#bc-tcn').value.trim(), body_en:$('#bc-ben').value.trim(), body_cn:$('#bc-bcn').value.trim(), level:$('#bc-level').value, active:$('#bc-active').checked };
+      if (editing){
+        api('/api/store-admin/broadcasts/'+b.id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(common)})
+          .then(r=>{ if(r.success){ toast('Saved'); closeModal(); loadBroadcasts(); } else mMsg(r.error||'Failed','err'); }).catch(()=>{});
+      } else {
+        const aud = $('#bc-aud').value;
+        const body = Object.assign(common, { audience:aud, tenant_id: aud==='tenant' ? $('#bc-store').value : null });
+        if (aud==='tenant' && !body.tenant_id){ mMsg('Pick a store · 请选择店铺','err'); return; }
+        if (!body.title_en && !body.title_cn && !body.body_en && !body.body_cn){ mMsg('Enter a title or message · 请输入标题或内容','err'); return; }
+        api('/api/store-admin/broadcasts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+          .then(r=>{ if(r.success){ toast('Created'); closeModal(); loadBroadcasts(); } else mMsg(r.error||'Failed','err'); }).catch(()=>{});
+      }
+    });
   }
 
   // ════════════════ STORES (tenants) ════════════════
@@ -362,6 +471,7 @@
     const tbody = $('#rows'); if (!tbody) return;
     if (!TENANTS.length){ tbody.innerHTML = '<tr><td colspan="8" class="empty">No stores yet. · 暂无店铺。</td></tr>'; return; }
     const manage = can('tenant.manage');
+    const imp = can('impersonate');
     tbody.innerHTML = TENANTS.map(t => {
       const chip = t.accent ? '<span class="brandchip" style="background:'+esc(t.accent)+'"></span>' : '';
       const subPill = t.isInternal ? '<span class="pill internal">internal</span>'
@@ -383,8 +493,10 @@
         '<td class="mono">'+(t.openInvoices||0)+'</td>' +
         '<td><div class="acts">' +
           '<button class="btn btn-sm" data-act="detail" data-id="'+t.id+'">Details</button>' +
+          (imp && !t.isInternal && t.status==='active' ? '<button class="btn btn-sm" data-act="impersonate" data-id="'+t.id+'">Open as store</button>' : '') +
           (manage ? '<button class="btn btn-sm" data-act="onboard" data-id="'+t.id+'">Onboarding</button>' : '') +
           (manage ? '<button class="btn btn-sm" data-act="brand" data-id="'+t.id+'">Brand</button>' : '') +
+          (manage ? '<button class="btn btn-sm" data-act="domains" data-id="'+t.id+'">Domains</button>' : '') +
           (manage ? '<button class="btn btn-sm" data-act="features" data-id="'+t.id+'">Features</button>' : '') +
           (manage && !t.isInternal ? '<button class="btn btn-sm" data-act="creds" data-id="'+t.id+'">Credentials</button>' : '') +
           susBtn +
@@ -404,6 +516,69 @@
     else if (act==='creds'){ credsModal(t); }
     else if (act==='detail'){ detailModal(id); }
     else if (act==='onboard'){ onboardModal(id); }
+    else if (act==='domains'){ domainsModal(t); }
+    else if (act==='impersonate'){ doImpersonate(t); }
+  }
+
+  // Open a store's backend as its operator. The server mints a one-time token
+  // and returns the hand-off URL on the merchant-backend host (so the session
+  // cookie lands there); we open it in a new tab. The merchant shell shows an
+  // "impersonating" bar with an exit button.
+  function doImpersonate(t){
+    if (!confirm('Open '+(t.brand||t.name)+' as its operator? Your actions there are REAL. · 以该店铺操作员身份打开?所有操作真实生效。')) return;
+    // Open the tab synchronously within the click gesture so popup blockers
+    // allow it, then point it at the one-time hand-off URL once it returns.
+    const w = window.open('about:blank', '_blank');
+    api('/api/store-admin/tenants/'+t.id+'/impersonate',{method:'POST'}).then(j=>{
+      if (j && j.success && j.url){ toast('Opening '+(j.store||'store')+'… · 正在打开'); if (w) w.location.href = j.url; else window.location.href = j.url; }
+      else { if (w) w.close(); toast((j&&j.error)||'Failed · 失败'); }
+    }).catch(()=>{ if (w) w.close(); });
+  }
+
+  // ── Domains (tenant_domains) ──
+  const DOM_STATUS = { active:'Active · 启用', pending:'Pending · 待验证', disabled:'Disabled · 停用' };
+  function domainsModal(t){
+    openModal('Domains · 域名 — '+(t.brand||t.name));
+    $('#mBody').innerHTML = '<div class="empty">Loading… · 加载中…</div>';
+    api('/api/store-admin/tenants/'+t.id+'/domains').then(j => {
+      if (!j || !j.success){ $('#mBody').innerHTML = '<div class="empty">Not found</div>'; return; }
+      renderDomains(t, j);
+    }).catch(()=>{});
+  }
+  function renderDomains(t, j){
+    const list = (j.domains||[]).map(d => {
+      const star = d.isPrimary ? '<span class="pill active" style="margin-left:6px">primary</span>' : '';
+      const acts = '<div class="acts">' +
+        (d.isPrimary ? '' : '<button class="btn btn-sm" data-dom-primary="'+d.id+'">Make primary</button>') +
+        (d.status==='active' ? '<button class="btn btn-sm" data-dom-status="'+d.id+'" data-to="disabled">Disable</button>' : '<button class="btn btn-sm" data-dom-status="'+d.id+'" data-to="active">Enable</button>') +
+        '<button class="btn btn-sm btn-danger" data-dom-del="'+d.id+'">Remove</button>' +
+      '</div>';
+      return '<tr><td class="mono">'+esc(d.host)+star+'</td><td class="zh">'+esc(d.kind)+'</td><td><span class="pill '+(d.status==='active'?'active':(d.status==='pending'?'open':'cancelled'))+'">'+esc(d.status)+'</span></td><td>'+acts+'</td></tr>';
+    }).join('') || '<tr><td colspan="4" class="empty">No domains yet · 暂无域名</td></tr>';
+    $('#mBody').innerHTML =
+      '<div class="card" style="margin-bottom:14px"><table><thead><tr><th>Host · 域名</th><th>Kind · 类型</th><th>Status · 状态</th><th></th></tr></thead><tbody>'+list+'</tbody></table></div>' +
+      '<div class="det-sec"><h4>Add domain · 新增域名</h4>' +
+        '<div class="field"><input type="text" id="dom-host" placeholder="shop.example.com" autocapitalize="off" spellcheck="false"></div>' +
+        '<div class="row2" style="margin-bottom:10px"><select id="dom-kind" style="flex:1"><option value="custom">Custom (BYO) · 自有域名</option><option value="subdomain">Platform subdomain · 平台子域名</option></select></div>' +
+        '<div class="zh" style="margin-bottom:10px;line-height:1.5">Custom domains start <b>pending</b> until you point DNS at the server and TLS/ICP are ready, then Enable. Customers reach the storefront at the <b>primary</b> domain. · 自有域名先为待验证,完成 DNS、TLS/ICP 后启用;顾客通过主域名访问门店。</div>' +
+        '<button class="btn btn-brass" id="dom-add" style="width:100%;padding:11px">Add domain · 新增</button>' +
+      '</div>';
+    document.querySelectorAll('[data-dom-primary]').forEach(b => b.addEventListener('click', () => domPatch(t, b.getAttribute('data-dom-primary'), { is_primary:true })));
+    document.querySelectorAll('[data-dom-status]').forEach(b => b.addEventListener('click', () => domPatch(t, b.getAttribute('data-dom-status'), { status:b.getAttribute('data-to') })));
+    document.querySelectorAll('[data-dom-del]').forEach(b => b.addEventListener('click', () => {
+      if (!confirm('Remove this domain? · 删除该域名?')) return;
+      api('/api/store-admin/domains/'+b.getAttribute('data-dom-del'),{method:'DELETE'}).then(r=>{ toast(r.success?'Removed':r.error||'Failed'); domainsModal(t); }).catch(()=>{});
+    }));
+    $('#dom-add').addEventListener('click', () => {
+      const host = $('#dom-host').value.trim().toLowerCase();
+      if (!host){ mMsg('Enter a domain · 请输入域名','err'); return; }
+      api('/api/store-admin/tenants/'+t.id+'/domains',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ host, kind:$('#dom-kind').value })})
+        .then(r=>{ if(r.success){ toast('Added'); domainsModal(t); } else mMsg(r.error||'Failed','err'); }).catch(()=>{});
+    });
+  }
+  function domPatch(t, id, body){
+    api('/api/store-admin/domains/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(r=>{ toast(r.success?'Saved':r.error||'Failed'); domainsModal(t); }).catch(()=>{});
   }
 
   function newTenantModal(){

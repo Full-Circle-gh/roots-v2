@@ -226,6 +226,7 @@ app.use('/api', (req, res, next) => {
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
 app.use(require('./routes/backend-team'));   // Mini App Backend team management (operators within a tenant)
+app.use(require('./routes/backend-notices')); // Merchant-facing platform notices (broadcasts + impersonation banner)
 app.use(require('./routes/billing'));        // Mini App Backend billing control plane (plans / subscriptions / invoices)
 app.use(require('./routes/billing-pay'));    // Mini App Backend billing payments & lifecycle (select-plan / checkout / mark-paid)
 app.use(require('./routes/backend-signup')); // Mini App Backend tenant signup / provisioning (gated in Phase 2)
@@ -355,6 +356,43 @@ function serveStoreAdmin(req, res) {
 // Preview path on the EXISTING secure domain, so the console can be opened
 // before store-admin.* DNS + TLS are set up (mirrors /shop-preview). Same shell.
 app.get('/store-admin', serveStoreAdmin);
+
+// ── Impersonation hand-off ("log in as store") ───────────────────────────
+// A one-time token minted by the store-admin console is opened here ON THE
+// MERCHANT-BACKEND HOST, so the session cookie lands on the right origin
+// (cookies are host-scoped). We validate + burn the token, start the tenant's
+// operator session, and stamp who's impersonating so the retail-admin banner
+// can show it and offer an exit.
+app.get('/impersonate', (req, res) => {
+  const dbx = require('./database');
+  const token = String(req.query.t || '').trim();
+  const fail = (msg) => res.status(400).type('html').send('<!doctype html><meta charset="utf-8"><body style="font-family:system-ui,sans-serif;padding:40px;max-width:520px;margin:auto;color:#12161A"><h2>Impersonation link invalid</h2><p>'+msg+'</p><p><a href="https://'+STORE_ADMIN_HOST+'/">Back to Store Admin · 返回平台后台</a></p></body>');
+  if (!token) return fail('Missing token. · 缺少令牌。');
+  let row;
+  try { row = dbx.prepare('SELECT * FROM platform_impersonation_tokens WHERE token = ?').get(token); }
+  catch (e) { return fail('Not available. · 暂不可用。'); }
+  if (!row || row.used_at) return fail('This link was already used. · 链接已被使用。');
+  if (Date.parse(row.expires_at) < Date.now()) return fail('This link has expired — links last 2 minutes. · 链接已过期(有效期 2 分钟)。');
+  const op = dbx.prepare('SELECT id, tenant_id, is_active FROM tenant_users WHERE id = ?').get(row.operator_id);
+  const tenant = op && dbx.prepare('SELECT status FROM tenants WHERE id = ?').get(op.tenant_id);
+  if (!op || !op.is_active || !tenant || tenant.status !== 'active') return fail('The store or operator is no longer available. · 店铺或操作员不可用。');
+  dbx.prepare('UPDATE platform_impersonation_tokens SET used_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id);
+  req.session.backendUserId = op.id;
+  req.session.tenantId = op.tenant_id;
+  req.session.impersonatedBy = { kind: row.by_kind, id: row.by_id, name: row.by_name, at: new Date().toISOString() };
+  req.session.cookie.maxAge = 2 * 60 * 60 * 1000;   // impersonation sessions stay short-lived
+  return res.redirect('/');
+});
+
+// End an impersonation session and return to the console.
+app.get('/impersonate/exit', (req, res) => {
+  if (req.session) {
+    delete req.session.backendUserId;
+    delete req.session.tenantId;
+    delete req.session.impersonatedBy;
+  }
+  return res.redirect('https://' + STORE_ADMIN_HOST + '/');
+});
 
 // Serve the Mini App Backend (retail-admin) shell. Page self-auths via
 // /api/auth/me. Shared by the /retail-admin path and the store.* subdomain root.

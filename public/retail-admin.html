@@ -73,6 +73,34 @@
      applyFeatureGates() then removes the class for any feature an operator (or
      the platform) has turned off. -->
 <body class="feat-membership feat-affiliate feat-reviews feat-feedback feat-socialProof">
+<!-- Platform notice bar (impersonation indicator + platform broadcasts).
+     Self-contained: it fetches /api/backend/notices and renders a fixed top bar,
+     independent of the app JS so it works even if a module fails. visibility is
+     forced visible so it shows through the anti-FOUC body guard above. -->
+<div id="fc-pnotice" style="position:fixed;top:0;left:0;right:0;z-index:99999;visibility:visible;font-family:'IBM Plex Sans','IBM Plex Sans SC',system-ui,sans-serif"></div>
+<script>
+(function(){
+  function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+  function bar(bg,fg,html){return '<div style="background:'+bg+';color:'+fg+';padding:8px 14px;font-size:13px;line-height:1.35;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(0,0,0,.18)">'+html+'</div>';}
+  fetch('/api/backend/notices',{credentials:'same-origin'}).then(function(r){return r.ok?r.json():null;}).then(function(j){
+    if(!j) return; var host=document.getElementById('fc-pnotice'); if(!host) return; var out='';
+    if(j.impersonation){
+      var who=esc(j.impersonation.by||'platform staff');
+      out+=bar('#8a1c2b','#fff','<strong style="letter-spacing:.04em;white-space:nowrap">IMPERSONATING · 代登录</strong><span style="flex:1;min-width:0">Viewing this store as its operator — actions are real. Started by '+who+'. · 您正以该店铺操作员身份操作,所有更改真实生效。</span><a href="/impersonate/exit" style="background:#fff;color:#8a1c2b;font-weight:600;text-decoration:none;padding:5px 11px;border-radius:6px;white-space:nowrap">Exit · 退出</a>');
+    }
+    (j.broadcasts||[]).forEach(function(b){
+      try{ if(localStorage.getItem('fc-bc-dismiss-'+b.id)) return; }catch(e){}
+      var pal=b.level==='critical'?['#8a1c2b','#fff']:(b.level==='warn'?['#7a5b12','#fff']:['#1f2a30','#E8E5DC']);
+      var t=esc(b.titleEn||'')+((b.titleEn&&b.titleCn)?' · ':'')+esc(b.titleCn||'');
+      var bd=esc(b.bodyEn||'')+((b.bodyEn&&b.bodyCn)?' · ':'')+esc(b.bodyCn||'');
+      out+=bar(pal[0],pal[1],(t?'<strong>'+t+'</strong> ':'')+'<span style="flex:1;min-width:0">'+bd+'</span><button data-bc="'+b.id+'" aria-label="Dismiss" style="background:transparent;border:0;color:inherit;opacity:.7;font-size:18px;line-height:1;cursor:pointer">&times;</button>');
+    });
+    if(out){ host.innerHTML=out;
+      Array.prototype.forEach.call(host.querySelectorAll('[data-bc]'),function(btn){ btn.addEventListener('click',function(){ try{localStorage.setItem('fc-bc-dismiss-'+btn.getAttribute('data-bc'),'1');}catch(e){} var row=btn.parentNode; if(row&&row.parentNode) row.parentNode.removeChild(row); }); });
+    }
+  }).catch(function(){});
+})();
+</script>
 
 <!-- Portrait lock — covers the screen when a phone is held landscape so the
      desktop layout never shows on the mobile app. CSS-gated to phone-sized
