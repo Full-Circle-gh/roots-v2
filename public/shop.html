@@ -2762,8 +2762,14 @@ async function renderHome(){
     state.homeProducts=base;
   }
   if(!state.flash){ try{ state.flash = await api('/api/retail/flash-sales'); }catch(e){ state.flash=[]; } }
+  // The greeting block reads ctx.config.customer for the name + wallet/points
+  // bar. The web keeps the signed-in customer in state.customer (separate from
+  // the storefront config), so fold it in here — load it first if we have a
+  // token but haven't fetched it yet — to match the mini-app's personalised card.
+  if(state.token&&!state.customer){ try{ await loadCustomer(); }catch(e){} }
+  const homeConfig = Object.assign({}, state.config, { customer: state.customer||null });
   ShopBlocks.stopTimers();
-  ShopBlocks.setContext({ lang:state.lang, products:state.homeProducts||[], categories:state.cats, flashSales:state.flash||[], config:state.config });
+  ShopBlocks.setContext({ lang:state.lang, products:state.homeProducts||[], categories:state.cats, flashSales:state.flash||[], config:homeConfig });
   const view=$('#view');
   view.innerHTML='<div class="shop-blocks">'+ShopBlocks.render(layout)+'</div>';
   ShopBlocks.startTimers(view);
