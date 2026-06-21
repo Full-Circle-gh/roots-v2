@@ -83,6 +83,9 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_platform_ticket_messages ON platform_ticket_messages(ticket_id, id);
 `);
+// Per-store platform commission rate, in basis points (500 = 5.00%; 0 = none).
+// Drives the Payouts tab: commission owed = store GMV × rate. Idempotent.
+try { db.exec('ALTER TABLE tenants ADD COLUMN commission_rate_bps INTEGER'); } catch (e) { /* already added */ }
 
 // ── Brute-force guard, same posture as the kitchen / backend logins ───────
 const loginLimiter = rateLimit({
@@ -598,6 +601,70 @@ router.post('/api/store-admin/tickets/:id/status', requirePlatformAdmin('support
   if (!r.changes) return res.status(404).json({ error: 'Ticket not found · 未找到工单' });
   logAudit(req, { action: 'ticket.status', targetType: 'ticket', targetId: req.params.id, meta: { status } });
   res.json({ success: true });
+});
+
+// ════════════════ PAYOUTS / COMMISSION ════════════════
+// Platform commission = a % (basis points) of each store's PAID order revenue
+// (GMV). We read GMV from each tenant's own order DB (data plane) and pair it
+// with the per-store rate. Subscription + setup-fee billing stays under Billing;
+// this is the usage-based slice. A commission invoice is created with NO period
+// so marking it paid never advances the subscription (same as a setup fee).
+const GMV_STATUSES = "('paid','preparing','dispatched','delivered')";
+function gmvFor(tdb, ym) {
+  try {
+    return tdb.prepare(`SELECT COALESCE(SUM(total),0) v, COUNT(*) c FROM retail_orders
+                        WHERE status IN ${GMV_STATUSES} AND strftime('%Y-%m', created_at) = ?`).get(ym);
+  } catch (e) { return { v: 0, c: 0 }; }
+}
+router.get('/api/store-admin/payouts', requirePlatformAdmin('view'), (req, res) => {
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - 1);
+  const lastMonth = d.toISOString().slice(0, 7);
+  // Exclude internal tenants (Roots) — they're not billed.
+  const tenants = db.prepare(`
+    SELECT t.id, t.name, t.brand_name, t.commission_rate_bps
+    FROM tenants t LEFT JOIN billing_subscriptions s ON s.tenant_id = t.id
+    WHERE t.status = 'active' AND COALESCE(s.is_internal, 0) = 0
+    ORDER BY t.id ASC`).all();
+  const rows = [];
+  for (const t of tenants) {
+    let tdb; try { tdb = getTenantDb(t.id); } catch (e) { continue; }
+    const cur = gmvFor(tdb, thisMonth), prev = gmvFor(tdb, lastMonth);
+    const rate = t.commission_rate_bps || 0;
+    const unpaid = db.prepare("SELECT COALESCE(SUM(amount_cents),0) v FROM billing_invoices WHERE tenant_id = ? AND kind = 'commission' AND status IN ('open','past_due')").get(t.id).v;
+    rows.push({
+      tenantId: t.id, tenant: t.brand_name || t.name, rateBps: rate,
+      gmvThisMonth: cur.v, ordersThisMonth: cur.c, gmvLastMonth: prev.v, ordersLastMonth: prev.c,
+      commissionThisMonthCents: Math.round(cur.v * rate / 100),   // gmv(¥)×bps/10000 ×100 = gmv×bps/100
+      commissionLastMonthCents: Math.round(prev.v * rate / 100),
+      unpaidCommissionCents: unpaid,
+    });
+  }
+  res.json({ success: true, thisMonth, lastMonth, payouts: rows });
+});
+
+router.patch('/api/store-admin/tenants/:id/commission', requirePlatformAdmin('billing.write'), express.json(), (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Store not found · 未找到店铺' });
+  const bps = Math.max(0, Math.min(10000, Math.round(Number(req.body && req.body.rate_bps) || 0)));
+  db.prepare('UPDATE tenants SET commission_rate_bps = ? WHERE id = ?').run(bps, t.id);
+  logAudit(req, { action: 'commission.rate', targetType: 'tenant', targetId: t.id, meta: { rateBps: bps } });
+  res.json({ success: true, rateBps: bps });
+});
+
+router.post('/api/store-admin/tenants/:id/commission-invoice', requirePlatformAdmin('billing.write'), express.json(), (req, res) => {
+  const t = db.prepare('SELECT id FROM tenants WHERE id = ?').get(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Store not found · 未找到店铺' });
+  const amount = Math.max(0, Math.round(Number(req.body && req.body.amount_cents) || 0));
+  if (!amount) return res.status(400).json({ error: 'Enter an amount · 请输入金额' });
+  const sub = db.prepare('SELECT id FROM billing_subscriptions WHERE tenant_id = ?').get(t.id);
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+  const invoiceNo = 'CM-' + t.id + '-' + stamp + '-' + crypto.randomBytes(2).toString('hex').toUpperCase();
+  // kind='commission' + NO period → marking it paid won't touch the subscription.
+  const info = db.prepare(`INSERT INTO billing_invoices (tenant_id, subscription_id, invoice_no, kind, amount_cents, currency, status)
+                           VALUES (?, ?, ?, 'commission', ?, 'CNY', 'open')`).run(t.id, sub ? sub.id : null, invoiceNo, amount);
+  logAudit(req, { action: 'commission.invoice', targetType: 'tenant', targetId: t.id, meta: { invoiceNo, amountCents: amount } });
+  res.json({ success: true, invoiceId: info.lastInsertRowid, invoiceNo });
 });
 
 module.exports = router;

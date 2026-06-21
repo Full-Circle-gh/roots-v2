@@ -279,6 +279,7 @@
     { id:'signups',   en:'Signups',   cn:'申请', cap:'view', badge:'leads' },
     { id:'support',   en:'Support',   cn:'工单', cap:'view', badge:'tickets' },
     { id:'billing',   en:'Billing',   cn:'账单', cap:'view' },
+    { id:'payouts',   en:'Payouts',   cn:'结算', cap:'view' },
     { id:'broadcasts',en:'Broadcasts',cn:'广播', cap:'view' },
     { id:'staff',     en:'Staff',     cn:'团队', cap:'staff.manage' },
     { id:'audit',     en:'Audit',     cn:'日志', cap:'view' },
@@ -321,7 +322,7 @@
     location.hash = '#'+tab;
     document.querySelectorAll('#tabs [data-tab]').forEach(b => b.classList.toggle('on', b.getAttribute('data-tab')===tab));
     const v = $('#view'); v.innerHTML = '<div class="empty">Loading… · 加载中…</div>';
-    ({ dashboard:viewDashboard, stores:viewStores, lookup:viewLookup, signups:viewSignups, support:viewSupport, billing:viewBilling, broadcasts:viewBroadcasts, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
+    ({ dashboard:viewDashboard, stores:viewStores, lookup:viewLookup, signups:viewSignups, support:viewSupport, billing:viewBilling, payouts:viewPayouts, broadcasts:viewBroadcasts, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
   }
   window.addEventListener('hashchange', () => { const h=(location.hash||'#dashboard').slice(1); if (h!==CUR && ME) go(h); });
 
@@ -698,7 +699,7 @@
       const subLine = s ? (s.is_internal ? 'internal · perpetual' : esc(s.status)+' · '+(plan?esc(plan.name):'no plan')+(s.current_period_end?' · until '+fdate(s.current_period_end):'')) : 'no subscription';
       const billW = can('billing.write');
       const invRows = (j.invoices||[]).length ? j.invoices.map(iv =>
-        '<tr><td class="mono">'+esc(iv.invoice_no||('#'+iv.id))+'</td><td class="mono">'+(iv.kind==='setup'?'<span class="zh">Setup fee · 开通费</span>':fdate(iv.period_start)+'–'+fdate(iv.period_end))+'</td><td class="mono">'+money(iv.amount_cents,iv.currency)+'</td>'+
+        '<tr><td class="mono">'+esc(iv.invoice_no||('#'+iv.id))+'</td><td class="mono">'+(iv.kind==='setup'?'<span class="zh">Setup fee · 开通费</span>':iv.kind==='commission'?'<span class="zh">Commission · 佣金</span>':fdate(iv.period_start)+'–'+fdate(iv.period_end))+'</td><td class="mono">'+money(iv.amount_cents,iv.currency)+'</td>'+
         '<td><span class="pill '+esc(iv.status)+'">'+esc(iv.status)+'</span></td>'+
         '<td>'+(iv.status!=='paid'?(billW?'<button class="btn btn-sm" data-mp="'+iv.id+'">Mark paid</button>':'<span class="zh">—</span>'):'<span class="zh">'+fdate(iv.paid_at)+'</span>')+'</td></tr>'
       ).join('') : '<tr><td colspan="5" class="empty">No invoices · 暂无发票</td></tr>';
@@ -847,7 +848,7 @@
       if (!rows.length){ tbody.innerHTML = '<tr><td colspan="6" class="empty">Nothing unsettled · 无待结发票</td></tr>'; return; }
       tbody.innerHTML = rows.map(iv =>
         '<tr><td class="co">'+esc(iv.tenant)+'</td><td class="mono">'+esc(iv.invoiceNo||('#'+iv.id))+'</td>' +
-        '<td class="mono">'+(iv.kind==='setup'?'<span class="zh">Setup · 开通费</span>':fdate(iv.periodStart)+'–'+fdate(iv.periodEnd))+'</td>' +
+        '<td class="mono">'+(iv.kind==='setup'?'<span class="zh">Setup · 开通费</span>':iv.kind==='commission'?'<span class="zh">Commission · 佣金</span>':fdate(iv.periodStart)+'–'+fdate(iv.periodEnd))+'</td>' +
         '<td class="mono">'+money(iv.amountCents,iv.currency)+'</td>' +
         '<td><span class="pill '+esc(iv.status)+'">'+esc(iv.status)+'</span></td>' +
         '<td>'+(billW?'<button class="btn btn-sm" data-mp="'+iv.id+'">Mark paid</button>':'<span class="zh">—</span>')+'</td></tr>'
@@ -1067,6 +1068,72 @@
         api('/api/store-admin/tickets/'+id+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({body})}).then(r=>{ if(r.success){ toast('Sent'); ticketModal(id); loadTickets(); } else mMsg(r.error||'Failed','err'); }).catch(()=>{});
       });
     }).catch(()=>{});
+  }
+
+  // ════════════════ PAYOUTS / COMMISSION ════════════════
+  let PAYOUTS = [];
+  function viewPayouts(){
+    $('#view').innerHTML =
+      '<div class="bar"><h1>Payouts & commission · 结算与佣金 <span class="zh mono" id="poMonth"></span></h1></div>' +
+      '<div class="zh" style="margin:-6px 0 14px;line-height:1.5">Commission = a % of each store’s paid order revenue (GMV). Set a rate, then bill it — the invoice lands in Billing. Subscription & setup fees stay under Billing. · 佣金 = 店铺已付订单营收(GMV)的百分比;设置费率后开具,发票归入账单。</div>' +
+      '<div class="card"><table><thead><tr>' +
+        '<th>Store · 店铺</th><th class="mono">GMV this mo · 本月</th><th class="mono">Last mo · 上月</th><th class="mono">Rate · 费率</th><th class="mono">Commission · 佣金</th><th class="mono">Unpaid · 未结</th><th></th>' +
+      '</tr></thead><tbody id="poRows"><tr><td colspan="7" class="empty">Loading… · 加载中…</td></tr></tbody></table></div>';
+    loadPayouts();
+  }
+  function loadPayouts(){
+    api('/api/store-admin/payouts').then(j => {
+      if (!j || !j.success) return;
+      PAYOUTS = j.payouts || [];
+      if ($('#poMonth')) $('#poMonth').textContent = j.thisMonth || '';
+      const tbody = $('#poRows'); if (!tbody) return;
+      const billW = can('billing.write');
+      if (!PAYOUTS.length){ tbody.innerHTML = '<tr><td colspan="7" class="empty">No billable stores yet · 暂无可结算店铺</td></tr>'; return; }
+      tbody.innerHTML = PAYOUTS.map(p => {
+        const ratePct = (p.rateBps/100).toFixed(2) + '%';
+        const acts = billW ? '<div class="acts"><button class="btn btn-sm" data-po-rate="'+p.tenantId+'">Rate</button>'+(p.rateBps>0?'<button class="btn btn-sm" data-po-bill="'+p.tenantId+'">Bill</button>':'')+'</div>' : '';
+        return '<tr><td class="co">'+esc(p.tenant)+'</td>' +
+          '<td class="mono">'+yuan(p.gmvThisMonth)+' <span class="zh">('+p.ordersThisMonth+')</span></td>' +
+          '<td class="mono zh">'+yuan(p.gmvLastMonth)+'</td>' +
+          '<td class="mono">'+(p.rateBps>0?ratePct:'<span class="zh">—</span>')+'</td>' +
+          '<td class="mono">'+(p.rateBps>0?money(p.commissionThisMonthCents):'<span class="zh">—</span>')+'</td>' +
+          '<td class="mono">'+(p.unpaidCommissionCents>0?'<span class="pill open" style="display:inline-block">'+money(p.unpaidCommissionCents)+'</span>':'<span class="zh">—</span>')+'</td>' +
+          '<td>'+acts+'</td></tr>';
+      }).join('');
+      document.querySelectorAll('[data-po-rate]').forEach(b => b.addEventListener('click', () => rateModal(PAYOUTS.find(x=>String(x.tenantId)===b.getAttribute('data-po-rate')))));
+      document.querySelectorAll('[data-po-bill]').forEach(b => b.addEventListener('click', () => billCommissionModal(PAYOUTS.find(x=>String(x.tenantId)===b.getAttribute('data-po-bill')))));
+    }).catch(()=>{});
+  }
+  function rateModal(p){
+    if (!p) return;
+    openModal('Commission rate · 佣金费率 — '+p.tenant);
+    $('#mBody').innerHTML =
+      '<div class="field"><label>Rate % (of paid GMV) · 费率(已付GMV占比)</label><input type="number" id="po-rate" value="'+(p.rateBps/100)+'" min="0" max="100" step="0.5"></div>' +
+      '<div class="zh" style="margin-bottom:14px">0 disables commission for this store. · 设为 0 则不收佣金。</div>' +
+      '<button class="btn btn-brass" id="po-rate-save" style="width:100%;padding:11px">Save · 保存</button>';
+    $('#po-rate-save').addEventListener('click', () => {
+      const bps = Math.round((parseFloat($('#po-rate').value)||0)*100);
+      api('/api/store-admin/tenants/'+p.tenantId+'/commission',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({ rate_bps:bps })})
+        .then(r=>{ if(r.success){ toast('Saved'); closeModal(); loadPayouts(); } else mMsg(r.error||'Failed','err'); }).catch(()=>{});
+    });
+  }
+  function billCommissionModal(p){
+    if (!p) return;
+    openModal('Bill commission · 开具佣金 — '+p.tenant);
+    const thisY = (p.commissionThisMonthCents/100), lastY = (p.commissionLastMonthCents/100);
+    $('#mBody').innerHTML =
+      '<div class="zh" style="margin-bottom:10px;line-height:1.5">Suggested from GMV × rate. Edit freely. The invoice appears in Billing as an open commission charge. · 按 GMV×费率 估算,可自行修改;发票将在账单中显示为待结佣金。</div>' +
+      '<div class="row2" style="gap:8px;margin-bottom:10px"><button class="btn btn-sm" id="po-use-this">This mo '+money(p.commissionThisMonthCents)+'</button><button class="btn btn-sm" id="po-use-last">Last mo '+money(p.commissionLastMonthCents)+'</button></div>' +
+      '<div class="field"><label>Amount ¥ · 金额</label><input type="number" id="po-amt" value="'+thisY+'" min="0" step="0.01"></div>' +
+      '<button class="btn btn-brass" id="po-bill-save" style="width:100%;padding:11px">Create invoice · 开具发票</button>';
+    $('#po-use-this').addEventListener('click', () => { $('#po-amt').value = thisY; });
+    $('#po-use-last').addEventListener('click', () => { $('#po-amt').value = lastY; });
+    $('#po-bill-save').addEventListener('click', () => {
+      const cents = Math.round((parseFloat($('#po-amt').value)||0)*100);
+      if (cents<=0){ mMsg('Enter an amount · 请输入金额','err'); return; }
+      api('/api/store-admin/tenants/'+p.tenantId+'/commission-invoice',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ amount_cents:cents })})
+        .then(r=>{ if(r.success){ mMsg('Invoice '+esc(r.invoiceNo)+' created. · 已开具。','ok'); setTimeout(()=>{closeModal();loadPayouts();},1100); } else mMsg(r.error||'Failed','err'); }).catch(()=>{});
+    });
   }
 
   // ── Change own password ──
