@@ -760,6 +760,16 @@ function clearAuth(){setAuth('',null);}
 async function loadCustomer(){if(!state.token)return;
   try{state.customer=await api('/api/retail/customer');}catch(e){/* 401 already cleared */}
   renderAcct();}
+// Apply a referral code captured from a ?ref= share link, once the visitor is
+// signed in. Silent + one-shot (clears the stash regardless; already-referred
+// etc. are expected no-ops). Web-native equivalent of the mini-app's invite.
+async function applyPendingRef(){
+  let ref=''; try{ ref=localStorage.getItem('pending_ref')||''; }catch{}
+  if(!ref||!state.token) return;
+  try{ await postJson('/api/retail/affiliate/apply',{code:ref}); toast(state.lang==='cn'?'已使用好友邀请码 🌱':'Friend’s code applied 🌱'); }
+  catch(e){ /* already_referred / self / disabled → ignore */ }
+  try{ localStorage.removeItem('pending_ref'); }catch{}
+}
 function renderAcct(){
   const b=$('#acctBtn');if(!b)return;
   if(state.token&&state.customer){
@@ -820,6 +830,7 @@ async function otpVerify(){
     const d=await postJson('/api/retail/auth/otp/verify',{phone,code});
     setAuth(d.token,d.customer);closeLogin();
     toast(state.lang==='cn'?'登录成功 🌱':'Signed in 🌱');
+    applyPendingRef();
     route();
   }catch(e){
     if(e.code==='bad_code')lmErr(state.lang==='cn'?'验证码错误':'Incorrect code');
@@ -2334,9 +2345,10 @@ function relTime(s){ if(!s)return ''; const cn=state.lang==='cn'; const t=new Da
   return String(s).slice(0,10); }
 function pointsSource(s,cn){return ({order_earn:cn?'订单获得':'Earned from order',topup_bonus:cn?'充值赠送':'Top-up bonus',order_redeem:cn?'订单抵扣':'Redeemed on order',expiry:cn?'已过期':'Expired',refund_reverse:cn?'退款回退':'Refund reversal',poll_vote:cn?'投票奖励':'Poll reward',admin_adjust:cn?'调整':'Adjustment'})[s]||s||(cn?'积分':'Points');}
 
-async function renderAddresses(){
+async function renderAddresses(edit){
   const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
   document.title=(cn?'收货地址':'Addresses')+' · '+state.brand;
+  if(edit!==undefined) return renderAddressForm(edit);   // 'new' or an id → form
   v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'收货地址':'Delivery addresses','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
   let list; try{ list=await api('/api/retail/addresses')||[]; }catch(e){ list=[]; }
   const box=v.querySelector('.sp');
@@ -2344,15 +2356,62 @@ async function renderAddresses(){
       <div class="sp-t">${esc(a.recipient_name||'')} ${a.is_default?'<span class="sp-chip">'+(cn?'默认':'Default')+'</span>':''}</div>
       <div class="sp-d">${esc([a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' '))}</div>
       <div class="sp-d">${esc(a.phone||'')}</div>
-      <div style="margin-top:8px;display:flex;gap:16px">${a.is_default?'':`<button class="me-legal-a" data-def="${a.id}">${cn?'设为默认':'Set default'}</button>`}<button class="me-legal-a" style="color:var(--berry)" data-del="${a.id}">${cn?'删除':'Delete'}</button></div>
+      <div style="margin-top:8px;display:flex;gap:16px"><button class="me-legal-a" data-edit="${a.id}">${cn?'编辑':'Edit'}</button>${a.is_default?'':`<button class="me-legal-a" data-def="${a.id}">${cn?'设为默认':'Set default'}</button>`}<button class="me-legal-a" style="color:var(--berry)" data-del="${a.id}">${cn?'删除':'Delete'}</button></div>
     </div></div>`).join('');
   box.innerHTML=spBack()+spHead(cn?'我的':'MY',cn?'收货地址':'Delivery addresses','')+
     (rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'还没有收货地址':'No saved addresses yet'}</div>`)+
-    `<div class="sp-foot"><div class="sp-sub" style="padding:0 0 10px">${cn?'新地址可在结算时添加（含地图选点）。':'Add a new address at checkout — with map pin & region picker.'}</div><button class="sp-btn block ink" data-go="#/cart">${cn?'去结算':'Go to checkout'}</button></div>`;
+    `<div class="sp-foot"><button class="sp-btn block ink" id="addrNew">＋ ${cn?'添加新地址':'Add address'}</button></div>`;
+  $('#addrNew').addEventListener('click',()=>renderAddresses('new'));
+  box.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>renderAddresses(b.dataset.edit)));
   box.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm(cn?'删除此地址？':'Delete this address?'))return;
-    try{ await apiSend('DELETE','/api/retail/addresses/'+b.dataset.del); renderAddresses(); }catch(e){ toast(cn?'删除失败':'Delete failed'); } }));
+    try{ await apiSend('DELETE','/api/retail/addresses/'+b.dataset.del); state.customer=null; renderAddresses(); }catch(e){ toast(cn?'删除失败':'Delete failed'); } }));
   box.querySelectorAll('[data-def]').forEach(b=>b.addEventListener('click',async()=>{
-    try{ await apiSend('PUT','/api/retail/addresses/'+b.dataset.def,{is_default:true}); renderAddresses(); }catch(e){ toast(cn?'操作失败':'Failed'); } }));
+    try{ await apiSend('PUT','/api/retail/addresses/'+b.dataset.def,{is_default:true}); state.customer=null; renderAddresses(); }catch(e){ toast(cn?'操作失败':'Failed'); } }));
+}
+// Web-native add/edit form. Region uses the SAME canonical-Chinese City→District
+// cascade as checkout (delivery-zones + /districts), so the server resolves the
+// 省 and the save never 400s — no WeChat chooseAddress needed. (China region
+// model is Roots-specific; gate per tenant/country when the platform expands.)
+async function renderAddressForm(edit){
+  const v=$('#view'),cn=state.lang==='cn';
+  const isEdit=edit!=='new';
+  let a={};
+  if(isEdit){ try{ const all=await api('/api/retail/addresses')||[]; a=(all||[]).find(x=>String(x.id)===String(edit))||{}; }catch(e){} }
+  await coLoadZones();
+  const cities=coCityRows();
+  const fst='width:100%;font:inherit;font-size:15px;padding:12px 14px;border:2px solid var(--ink);background:#fff;color:var(--ink);box-sizing:border-box;margin-top:6px;';
+  const lbl='display:block;font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--olive);margin-top:14px;';
+  const cityOpts=`<option value="">${cn?'选择城市':'Select a city'}</option>`+cities.map(c=>`<option value="${escAttr(c.name_cn)}" data-prov="${escAttr(c.province_cn||'')}" ${a.city===c.name_cn?'selected':''}>${esc(c.label)}</option>`).join('');
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'地址':'ADDRESS',isEdit?(cn?'编辑地址':'Edit address'):(cn?'新增地址':'New address'),'')}
+    <div class="sp-pad">
+      <label style="${lbl};margin-top:4px">${cn?'收件人':'Recipient'}</label><input id="afName" style="${fst}" value="${escAttr(a.recipient_name||'')}" placeholder="${cn?'姓名':'Full name'}">
+      <label style="${lbl}">${cn?'手机号':'Phone'}</label><input id="afPhone" type="tel" inputmode="numeric" style="${fst}" value="${escAttr(a.phone||'')}" placeholder="${cn?'手机号':'Phone number'}">
+      <label style="${lbl}">${cn?'城市':'City'}</label><select id="afCity" style="${fst}">${cityOpts}</select>
+      <label style="${lbl}">${cn?'区/县':'District'}</label><select id="afDist" style="${fst}"><option value="">${cn?'全城':'City-wide'}</option></select>
+      <label style="${lbl}">${cn?'详细地址':'Street address'}</label><textarea id="afAddr" style="${fst};min-height:70px;font-family:var(--f-aleo)" placeholder="${cn?'街道、楼栋、门牌号':'Street, building, number'}">${esc(a.address||'')}</textarea>
+      <label style="${lbl}">${cn?'门牌/单元（可选）':'Apt / unit (optional)'}</label><input id="afDetail" style="${fst}" value="${escAttr(a.detail||'')}">
+      <label style="display:flex;align-items:center;gap:8px;margin-top:16px;font-size:14px;cursor:pointer"><input type="checkbox" id="afDef" ${a.is_default?'checked':''} style="width:18px;height:18px"> ${cn?'设为默认地址':'Set as default'}</label>
+      <div class="sp-msg" id="afErr" style="padding-left:0"></div>
+    </div>
+    <div class="sp-foot" style="display:flex;gap:10px"><button class="sp-btn ghost" id="afCancel" style="flex:1">${cn?'取消':'Cancel'}</button><button class="sp-btn" id="afSave" style="flex:2">${cn?'保存':'Save'}</button></div></div>`;
+  async function fillDistricts(cityCn,selDist){ const sel=$('#afDist');
+    if(!cityCn){ sel.innerHTML=`<option value="">${cn?'全城':'City-wide'}</option>`; return; }
+    const dists=await coLoadDistricts(cityCn);
+    sel.innerHTML=`<option value="">${cn?'全城':'City-wide'}</option>`+(dists||[]).map(d=>`<option value="${escAttr(d.name_cn)}" ${selDist===d.name_cn?'selected':''}>${esc(cn?d.name_cn:d.name_en)}</option>`).join(''); }
+  $('#afCity').addEventListener('change',()=>fillDistricts($('#afCity').value,''));
+  if(a.city) await fillDistricts(a.city,a.district);
+  $('#afCancel').addEventListener('click',()=>renderAddresses());
+  $('#afSave').addEventListener('click',async()=>{
+    const name=($('#afName').value||'').trim(), phone=($('#afPhone').value||'').replace(/\D/g,'');
+    const citySel=$('#afCity'), cityCn=citySel.value, prov=(citySel.selectedOptions[0]&&citySel.selectedOptions[0].dataset.prov)||'';
+    const distCn=$('#afDist').value, street=($('#afAddr').value||'').trim(), detail=($('#afDetail').value||'').trim(), isDef=$('#afDef').checked;
+    if(!name||!phone||!cityCn||!street){ $('#afErr').textContent=cn?'请填写姓名、手机、城市和详细地址':'Please fill name, phone, city and street'; return; }
+    const btn=$('#afSave'); btn.disabled=true; $('#afErr').textContent='';
+    const body={recipient_name:name,phone,province:prov,city:cityCn,district:distCn,address:street,detail,is_default:isDef};
+    try{ if(isEdit) await apiSend('PUT','/api/retail/addresses/'+edit,body); else await postJson('/api/retail/addresses',body);
+      toast(cn?'已保存':'Saved'); state.customer=null; renderAddresses(); }
+    catch(e){ $('#afErr').textContent=cn?'保存失败，请检查信息':'Save failed — please check the details'; btn.disabled=false; }
+  });
 }
 
 async function renderWallet(){
@@ -2491,10 +2550,21 @@ async function renderAffiliate(){
   const invites=(d.invites||[]).map(iv=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(iv.nickname||(cn?'好友':'Friend'))}</div><div class="sp-d">${String(iv.joined_at||iv.rewarded_at||'').slice(0,10)}</div></div><div class="sp-amt ${iv.status==='ordered'?'sp-pos':''}">${iv.status==='ordered'?'+¥'+(Number(iv.reward_amount)||0).toFixed(0):(iv.status==='voided'?(cn?'无效':'Void'):(cn?'已加入':'Joined'))}</div></div>`).join('');
   box.innerHTML=spBack()+spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend',tagline)+
     `<div class="about-stats" style="grid-template-columns:1fr 1fr 1fr"><div class="about-stat"><div class="as-v">¥${(Number(st.earned)||0).toFixed(0)}</div><div class="as-l">${cn?'已赚':'Earned'}</div></div><div class="about-stat"><div class="as-v">${Number(st.total_invites)||0}</div><div class="as-l">${cn?'邀请':'Invited'}</div></div><div class="about-stat"><div class="as-v">${Number(st.converted)||0}</div><div class="as-l">${cn?'下单':'Ordered'}</div></div></div>`+
-    (d.code?`<div class="sp-card"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;color:var(--olive)">${cn?'我的邀请码':'YOUR CODE'}</div><div style="font-family:var(--bf-bear);font-size:30px;letter-spacing:2px;margin-top:4px">${esc(d.code)}</div><button class="sp-btn ink" style="margin-top:12px" data-copy="${escAttr(d.code)}">${cn?'复制邀请码':'Copy code'}</button></div>`:'')+
+    (d.code?`<div class="sp-card"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;color:var(--olive)">${cn?'我的邀请码':'YOUR CODE'}</div><div style="font-family:var(--bf-bear);font-size:30px;letter-spacing:2px;margin-top:4px">${esc(d.code)}</div><div style="display:flex;gap:8px;margin-top:14px"><button class="sp-btn" id="afShare" style="flex:1">${cn?'分享链接':'Share link'}</button><button class="sp-btn ink" id="afCopyLink" style="flex:1">${cn?'复制链接':'Copy link'}</button></div><button class="me-legal-a" id="afCopyCode" style="display:inline-block;margin-top:12px">${cn?'仅复制邀请码':'Copy code only'}</button></div>`:'')+
     (invites?`<div class="me-section"><div class="me-sec-title">${cn?'我的邀请':'Your invites'}</div><div class="sp-list" style="margin-top:8px">${invites}</div></div>`:'')+
     (!d.referred_by?`<div class="sp-foot"><div class="sp-sub" style="padding:0 0 8px">${cn?'有好友邀请码？':'Got a friend’s code?'}</div><div class="sp-row-in" style="padding:0"><input class="sp-input" id="afCode" placeholder="${cn?'输入邀请码':'Enter code'}"><button class="sp-btn ink" id="afApply">${cn?'应用':'Apply'}</button></div><div class="sp-msg" id="afMsg" style="padding-left:0"></div></div>`:'');
-  const cp=box.querySelector('[data-copy]'); if(cp)cp.addEventListener('click',()=>{ try{navigator.clipboard.writeText(cp.dataset.copy);}catch{} toast(cn?'已复制':'Copied'); });
+  // Web-native sharing: native share sheet on mobile, copy-link fallback on
+  // desktop. The link carries ?ref=CODE which auto-fills on the friend's first
+  // visit (handled in boot). No WeChat share-card needed.
+  if(d.code){
+    const refUrl=location.origin+'/?ref='+encodeURIComponent(d.code);
+    const shareText=cn?`用我的邀请码 ${d.code} 在 ${state.brand} 下单，我们都有优惠！`:`Shop ${state.brand} with my code ${d.code} — we both save!`;
+    const sh=box.querySelector('#afShare'); if(sh)sh.addEventListener('click',async()=>{
+      if(navigator.share){ try{ await navigator.share({title:state.brand,text:shareText,url:refUrl}); }catch(e){} }
+      else { try{ await navigator.clipboard.writeText(refUrl); }catch{} toast(cn?'链接已复制':'Link copied'); } });
+    const cl=box.querySelector('#afCopyLink'); if(cl)cl.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(refUrl); }catch{} toast(cn?'链接已复制':'Link copied'); });
+    const cc=box.querySelector('#afCopyCode'); if(cc)cc.addEventListener('click',async()=>{ try{ await navigator.clipboard.writeText(d.code); }catch{} toast(cn?'邀请码已复制':'Code copied'); });
+  }
   const ap=box.querySelector('#afApply'); if(ap)ap.addEventListener('click',async()=>{ const code=($('#afCode').value||'').trim(); if(!code)return;
     try{ await postJson('/api/retail/affiliate/apply',{code}); toast(cn?'成功！':'Applied!'); renderAffiliate(); }
     catch(e){ const m={already_referred:cn?'你已被推荐':'Already referred',code_not_found:cn?'邀请码不存在':'Code not found',cannot_refer_self:cn?'不能填自己':'Can’t refer yourself',program_disabled:cn?'暂未开放':'Program off',mutual_referral:cn?'对方已邀请你':'Mutual referral'}; $('#afMsg').textContent=m[e.code]||(cn?'应用失败':'Could not apply'); } });
@@ -3463,6 +3533,11 @@ function ctaRoute(t){
   try{ state.config=await api('/api/retail/config')||{}; }catch(e){ state.config={}; }
   try{ state.lang=localStorage.getItem('shop_lang')||'en'; }catch{}
   try{ state.token=localStorage.getItem('shop_token')||''; }catch{}
+  // Capture a referral code from a shared ?ref= link and stash it for after
+  // sign-in (applyPendingRef). Strip it from the URL so it isn't re-applied.
+  try{ const ref=new URLSearchParams(location.search).get('ref');
+    if(ref){ localStorage.setItem('pending_ref',ref);
+      const u=new URL(location.href); u.searchParams.delete('ref'); history.replaceState(null,'',u.pathname+u.search+u.hash); } }catch{}
   if(!['en','cn'].includes(state.lang)) state.lang='en';
   applyTheme(state.config);
   state.brand=brandName(state.config);
@@ -3525,7 +3600,7 @@ function ctaRoute(t){
   $('#otpVerifyBtn').addEventListener('click',otpVerify);
   $('#otpPhone').addEventListener('keydown',(e)=>{if(e.key==='Enter')otpSend();});
   $('#otpCode').addEventListener('keydown',(e)=>{if(e.key==='Enter')otpVerify();});
-  if(state.token) loadCustomer();   // resolve the saved session (or silently drop it)
+  if(state.token) loadCustomer().then(applyPendingRef);   // resolve the saved session (or silently drop it) + apply any ?ref=
 
   // Block-engine CTAs: every clickable in a rendered block carries
   // data-cta-target. Delegate clicks here and route them.
