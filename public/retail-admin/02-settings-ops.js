@@ -75,12 +75,39 @@ function _alipayOcrToggle() {
 function _alipayManualPickFile(event) {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
-  if (file.size > 5 * 1024 * 1024) { toast('Image too large (max 5MB) · 图片过大(最大5MB)', 'error'); event.target.value = ''; return; }
+  if (file.size > 10 * 1024 * 1024) { toast('Image too large (max 10MB) · 图片过大(最大10MB)', 'error'); event.target.value = ''; return; }
   const reader = new FileReader();
   reader.onload = () => {
-    _alipayManualQr = reader.result;        // data URL
-    const pv = document.getElementById('alipay-manual-preview');
-    if (pv) { pv.src = reader.result; pv.style.display = 'block'; }
+    // Downscale the收款码 to a sane size before we ship it. The raw photo can be
+    // several MB → its base64 blows past the reverse-proxy body limit and the
+    // save dies with a non-JSON 413 ("Save failed"). A QR stays crisp well under
+    // 1000px, so a compressed copy is both smaller AND scans fine.
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const MAX = 1000;
+        const scale = Math.min(1, MAX / Math.max(img.naturalWidth || MAX, img.naturalHeight || MAX));
+        const w = Math.max(1, Math.round((img.naturalWidth || MAX) * scale));
+        const h = Math.max(1, Math.round((img.naturalHeight || MAX) * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);   // flatten any transparency to white
+        ctx.drawImage(img, 0, 0, w, h);
+        const out = canvas.toDataURL('image/jpeg', 0.85);
+        _alipayManualQr = (out && out.length < reader.result.length) ? out : reader.result;
+      } catch (_) {
+        _alipayManualQr = reader.result;     // canvas failed → fall back to the raw data URL
+      }
+      const pv = document.getElementById('alipay-manual-preview');
+      if (pv) { pv.src = _alipayManualQr; pv.style.display = 'block'; }
+    };
+    img.onerror = () => {                     // not decodable as an image → send raw, server validates
+      _alipayManualQr = reader.result;
+      const pv = document.getElementById('alipay-manual-preview');
+      if (pv) { pv.src = _alipayManualQr; pv.style.display = 'block'; }
+    };
+    img.src = reader.result;
   };
   reader.readAsDataURL(file);
 }
@@ -100,12 +127,11 @@ async function _saveAlipayManual() {
   // API key only when freshly typed (blank = keep existing server-side).
   const typedKey = val('alipay-manual-key');
   if (typedKey) body.anthropicKey = typedKey;
-  // Read the QR straight from the preview (source of truth) — covers both a
-  // freshly-picked file and a previously-saved image, and is immune to the
-  // transient _alipayManualQr being reset by a re-render between pick and save.
-  const pv = document.getElementById('alipay-manual-preview');
-  const qr = _alipayManualQr || (pv && typeof pv.src === 'string' && pv.src.indexOf('data:image/') === 0 ? pv.src : '');
-  if (qr) body.qr = qr;
+  // Only send the image when the operator freshly picked one — the server keeps
+  // the existing QR when `qr` is absent. Re-sending the previously-saved data URL
+  // on every routine save (e.g. just toggling a checkbox) re-uploads the whole
+  // image and trips the reverse-proxy body limit → a non-JSON 413 → "Save failed".
+  if (_alipayManualQr) body.qr = _alipayManualQr;
   try {
     if (status) status.textContent = 'Saving… · 保存中…';
     const r = await fetch('/api/retail-admin/alipay-manual', {
