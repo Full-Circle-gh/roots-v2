@@ -9,6 +9,7 @@
   let _storeA    = null; // 天河
   let _storeB    = null; // 越秀
   let _listings  = {};   // { store_code: [real Meituan listing names] }
+  let _review    = { ambiguous: [], unmatched: [] };  // post-fetch manual-review queue
   let _initiated = false;
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -307,36 +308,38 @@
   }
 
   async function mtFillFromListings(stores) {
-    const targets = [], ambiguous = [], unmatched = [];
+    const targets = [];
+    _review = { ambiguous: [], unmatched: [] };       // reset for this run
+
     for (const p of _products) {
       for (const store of stores) {
         const existing = (p.stores?.[store.code]?.meituan_name || '').trim();
         if (existing) continue;                       // keep operator entries
         const m = mtMatchListing(p, store.code);
+        const base = { pid: p.id, storeId: store.id, storeCode: store.code,
+                       storeName: store.name || store.code, label: mtProductLabel(p),
+                       suggestion: mtSuggestName(p) };
         if (m.name) targets.push({ p, store, name: m.name });
-        else if (m.reason === 'ambiguous') ambiguous.push({ p, store, candidates: m.candidates });
-        else unmatched.push({ p, store });
+        else if (m.reason === 'ambiguous') _review.ambiguous.push({ ...base, candidates: m.candidates });
+        else if (m.reason !== 'no-listings') _review.unmatched.push({ ...base });
+        // reason 'no-listings' = store wasn't fetched; don't flag those
       }
     }
 
-    const logManual = () => {
-      if (!ambiguous.length && !unmatched.length) return;
-      console.group('[meituan] needs manual mapping');
-      ambiguous.forEach(a => console.log('AMBIGUOUS', a.p.name_cn, a.p.variant_label || '', '→ candidates:', a.candidates));
-      unmatched.forEach(u => console.log('UNMATCHED', u.p.name_cn, u.p.name_en || '', `(${u.store.code})`));
-      console.groupEnd();
-    };
+    const a = _review.ambiguous.length, u = _review.unmatched.length;
 
     if (!targets.length) {
-      logManual();
-      toast(`No confident matches. ${ambiguous.length} ambiguous, ${unmatched.length} unmatched — see console (F12).`);
+      mtRenderReview();
+      toast(a + u
+        ? `No confident matches. ${a} ambiguous, ${u} unmatched — see the review panel below.`
+        : 'No empty fields to fill (everything already mapped).');
       return;
     }
     if (!confirm(
       `Fill ${targets.length} field(s) with matched Meituan names?\n\n`
-      + `${ambiguous.length} ambiguous (multiple Meituan titles match) and ${unmatched.length} unmatched `
-      + `will be left blank for you to set manually (details in console).`
-    )) { logManual(); return; }
+      + `${a} ambiguous (multiple Meituan titles match) and ${u} unmatched `
+      + `will be listed in the review panel below for you to resolve.`
+    )) { mtRenderReview(); return; }
 
     let done = 0, failed = 0;
     for (const t of targets) {
@@ -355,10 +358,109 @@
     }
     mtRenderProducts();
     mtLoadStatus();
-    logManual();
+    mtRenderReview();
     toast(`Filled ${done} matched name(s)${failed ? `, ${failed} failed` : ''}. `
-      + `${ambiguous.length} ambiguous, ${unmatched.length} unmatched (see console).`);
+      + (a + u ? `${a} ambiguous, ${u} unmatched — resolve below.` : 'All matched!'));
   }
+
+  function mtProductLabel(p) {
+    const main = [p.name_cn, p.name_en].filter(Boolean).join('  ');
+    return p.variant_label ? `${main} · ${p.variant_label}` : main;
+  }
+
+  // ── Review panel ─────────────────────────────────────────────────────────────
+  // On-screen list of products the Meituan fetch couldn't confidently map.
+  // Ambiguous → pick one of the matching Meituan titles. Unmatched → no Meituan
+  // listing contained the name (won't sync) — offer the Chinese-name fallback.
+  function mtRenderReview() {
+    const panel = document.getElementById('mt-review-panel');
+    if (!panel) return;
+    const { ambiguous, unmatched } = _review;
+
+    if (!ambiguous.length && !unmatched.length) {
+      panel.style.display = 'none';
+      panel.innerHTML = '';
+      return;
+    }
+
+    const ambHtml = ambiguous.map((it, i) => `
+      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--border)">
+        <div style="font-weight:600;margin-bottom:6px">${esc(it.label)}
+          <span class="muted" style="font-weight:400;font-size:11px">· ${esc(it.storeName)}</span></div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+          <span class="muted" style="font-size:12px">Pick the Meituan title:</span>
+          ${it.candidates.map((c, j) =>
+            `<button class="btn btn-sm" style="font-size:12px" onclick="mtPickListing(${i},${j})">${esc(c)}</button>`
+          ).join('')}
+        </div>
+      </div>`).join('');
+
+    const unmHtml = unmatched.map((it, i) => `
+      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+        <div>
+          <div style="font-weight:600">${esc(it.label)}
+            <span class="muted" style="font-weight:400;font-size:11px">· ${esc(it.storeName)}</span></div>
+          <div class="muted" style="font-size:11px">No Meituan listing contains this name — it won't sync until mapped.</div>
+        </div>
+        ${it.suggestion ? `<button class="btn btn-sm" style="font-size:12px" onclick="mtUseFallback(${i})" title="Fill with the product's Chinese name">Use “${esc(it.suggestion)}”</button>` : ''}
+      </div>`).join('');
+
+    panel.style.display = 'block';
+    panel.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg-elev-1)">
+        <b style="font-size:13px">Needs your attention · 需手动确认
+          <span class="muted" style="font-weight:400">(${ambiguous.length} ambiguous · ${unmatched.length} unmatched)</span></b>
+        <button class="btn btn-sm" onclick="mtDismissReview()" title="Hide this panel">Dismiss</button>
+      </div>
+      ${ambiguous.length ? `<div style="padding:8px 14px 0;font-size:12px;color:var(--fg-muted)">Multiple Meituan titles matched — choose the right one:</div>${ambHtml}` : ''}
+      ${unmatched.length ? `<div style="padding:10px 14px 0;font-size:12px;color:var(--fg-muted)">Not found on Meituan:</div>${unmHtml}` : ''}
+    `;
+  }
+
+  async function mtApplyReviewName(pid, storeId, storeCode, name) {
+    const product = _products.find(p => p.id == pid);
+    try {
+      await api(`/api/retail-admin/meituan/products/${pid}/map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId, storeCode, meituanName: name, syncEnabled: 1 }),
+      });
+      if (product) {
+        if (!product.stores) product.stores = {};
+        product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, sync_enabled: 1 };
+      }
+      return true;
+    } catch (e) {
+      toast('Save failed: ' + e.message, 'error');
+      return false;
+    }
+  }
+
+  window.mtPickListing = async function (i, j) {
+    const it = _review.ambiguous[i];
+    if (!it) return;
+    const name = it.candidates[j];
+    if (await mtApplyReviewName(it.pid, it.storeId, it.storeCode, name)) {
+      _review.ambiguous.splice(i, 1);
+      mtRenderProducts();
+      mtRenderReview();
+    }
+  };
+
+  window.mtUseFallback = async function (i) {
+    const it = _review.unmatched[i];
+    if (!it || !it.suggestion) return;
+    if (await mtApplyReviewName(it.pid, it.storeId, it.storeCode, it.suggestion)) {
+      _review.unmatched.splice(i, 1);
+      mtRenderProducts();
+      mtRenderReview();
+    }
+  };
+
+  window.mtDismissReview = function () {
+    _review = { ambiguous: [], unmatched: [] };
+    mtRenderReview();
+  };
 
   // ── Save mapping ────────────────────────────────────────────────────────────
   window.mtSaveMap = async function (input) {
