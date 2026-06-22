@@ -32,7 +32,8 @@
   line-height: 1;
 }
 .page-list,
-.page-list-compact { padding-bottom: 0; height: 100vh; display: flex; flex-direction: column; }
+.page-list-compact,
+.page-grid-2col { padding-bottom: 0; height: 100vh; display: flex; flex-direction: column; }
 
 /* ─── Header ─────────────────────────────────────────────────────── */
 .header { padding: 60rpx 44rpx 24rpx; }
@@ -256,6 +257,10 @@
   display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16rpx;
   padding: 8rpx 28rpx;
 }
+/* grid-2col rendered inside the left-rail body: the right pane is ~580rpx
+   wide, so tighten the gutters/gap from the full-width grid defaults. */
+.list-main .grid-rail { padding: 12rpx 20rpx; gap: 20rpx; }
+.list-main .grid-section-head { padding: 24rpx 20rpx 12rpx; }
 .card { position: relative; display: flex; flex-direction: column; }
 /* In the flex-column card, default align-items:stretch widens children to
    the full card. The "N sizes" pill must keep hugging its text, so opt it

@@ -66,12 +66,16 @@ function pickBadge(tags) {
 }
 
 const LIST_LAYOUTS = ['list', 'list-compact'];
+// Rail layouts = the ones rendered inside the left category-rail + inner
+// scroll-view body (NOT page-scrolled). grid-2col joins list/list-compact
+// here so its 2-col grid sits beside the category rail (like the web store).
+const RAIL_LAYOUTS = ['list', 'list-compact', 'grid-2col'];
 const VALID_LAYOUTS = ['list', 'list-compact', 'grid-2col', 'grid-3col', 'gallery', 'grid'];
 
 const LAYOUT_OPTIONS = [
   { key: 'list',         icon: '☰',  en: 'List with sidebar',  cn: '列表（侧栏）' },
-  { key: 'list-compact', icon: '≡',  en: 'List compact',       cn: '列表（紧凑）' },
   { key: 'grid-2col',    icon: '⊞',  en: 'Grid 2-col',          cn: '网格 2 列' },
+  { key: 'list-compact', icon: '≡',  en: 'List compact',       cn: '列表（紧凑）' },
   { key: 'grid-3col',    icon: '⊟',  en: 'Grid 3-col',          cn: '网格 3 列' },
 ];
 
@@ -119,6 +123,8 @@ Page({
 
     layout: 'list',
     isListLayout: true,
+    railLayout: true,        // list / list-compact / grid-2col → left-rail body
+    isGridRail: false,       // grid-2col → render 2-col cards in the rail body
     layoutLocked: false,
     layoutOptions: LAYOUT_OPTIONS.map(o => ({ ...o, label: o.en })),
 
@@ -234,7 +240,7 @@ Page({
   // page itself scrolls then). For list layouts, scrolling happens inside
   // the list-main scroll-view and we handle it via bindscroll there.
   onPageScroll(e) {
-    if (LIST_LAYOUTS.includes(this.data.layout)) return;
+    if (RAIL_LAYOUTS.includes(this.data.layout)) return;
     // Drilled (grid/gallery) → track the active subcategory via the chips.
     if (this.data.drillTop) { this._updateActiveSubByScrollTop(e.scrollTop, STICKY_OFFSET_PX); return; }
     this._updateActiveByScrollTop(e.scrollTop, STICKY_OFFSET_PX);
@@ -282,6 +288,8 @@ Page({
     if (!VALID_LAYOUTS.includes(layout)) layout = 'list';
     if (layout === 'grid') layout = 'grid-2col';
     const isListLayout = LIST_LAYOUTS.includes(layout);
+    const railLayout = RAIL_LAYOUTS.includes(layout);
+    const isGridRail = layout === 'grid-2col';
 
     let sortIndex = 0;
     if (s.defaultSort) {
@@ -297,7 +305,7 @@ Page({
     const showAnyFilter    = showSort || showDietary || showStockFilter || showBadgeFilter || showPriceFilter;
 
     this.setData({
-      layout, isListLayout, layoutLocked,
+      layout, isListLayout, railLayout, isGridRail, layoutLocked,
       showSort, showDietary, showStockFilter, showBadgeFilter, showPriceFilter, showAnyFilter,
       hideOutOfStock: !!s.hideOutOfStock,
       sortIndex,
@@ -310,9 +318,11 @@ Page({
     if (!key || !VALID_LAYOUTS.includes(key)) return;
     if (key === this.data.layout) return;
     const isListLayout = LIST_LAYOUTS.includes(key);
+    const railLayout = RAIL_LAYOUTS.includes(key);
+    const isGridRail = key === 'grid-2col';
     // Drill works in every layout (sidebar rail ⇄ chip row), so it carries
     // across a layout switch — just re-measure for the new view.
-    this.setData({ layout: key, isListLayout });
+    this.setData({ layout: key, isListLayout, railLayout, isGridRail });
     try { wx.setStorageSync(LAYOUT_STORAGE_KEY, key); } catch {}
     setTimeout(() => {
       if (this.data.drillTop) this._measureGroups(); else this._measureSections();
@@ -614,7 +624,7 @@ Page({
   // without re-querying for every scroll event.
   _measureSections() {
     if (!this.data.sections.length) { this._sectionOffsets = []; return; }
-    const isList = LIST_LAYOUTS.includes(this.data.layout);
+    const isList = RAIL_LAYOUTS.includes(this.data.layout);
     const q = wx.createSelectorQuery().in(this);
     this.data.sections.forEach(s => q.select('#' + s.id).boundingClientRect());
     if (isList) {
@@ -657,7 +667,7 @@ Page({
     if (!this.data.drillTop) { this._groupOffsets = []; return; }
     const sec = this.data.sections.find(s => s.name === this.data.drillTop);
     if (!sec || !sec.groups.length) { this._groupOffsets = []; return; }
-    const isList = LIST_LAYOUTS.includes(this.data.layout);
+    const isList = RAIL_LAYOUTS.includes(this.data.layout);
     const q = wx.createSelectorQuery().in(this);
     sec.groups.forEach(g => q.select('#g-' + g.id).boundingClientRect());
     if (isList) {
@@ -784,7 +794,7 @@ Page({
   drillInto(name) {
     const section = this.data.sections.find(s => s.name === name);
     if (!section) return;
-    const isList = LIST_LAYOUTS.includes(this.data.layout);
+    const isList = RAIL_LAYOUTS.includes(this.data.layout);
     const subTabs = section.groups.map(g => ({ id: g.id, label: g.label }));
     this._suppressScrollUntil = Date.now() + 600;
     this.setData({
@@ -817,7 +827,7 @@ Page({
   // were just in, so "back" feels like stepping up a level, not a reset.
   drillBack() {
     const prev = this.data.drillTop;
-    const isList = LIST_LAYOUTS.includes(this.data.layout);
+    const isList = RAIL_LAYOUTS.includes(this.data.layout);
     this._suppressScrollUntil = Date.now() + 700;
     this.setData({
       drillTop: '', drillLabel: '', subTabs: [], activeSub: '',
@@ -854,7 +864,7 @@ Page({
   // heading ('' = the ALL-of-category top).
   setSub(e) {
     const gid = e.currentTarget.dataset.sub || '';
-    const isList = LIST_LAYOUTS.includes(this.data.layout);
+    const isList = RAIL_LAYOUTS.includes(this.data.layout);
     this._suppressScrollUntil = Date.now() + 500;
     this.setData({
       activeSub: gid,
@@ -889,7 +899,7 @@ Page({
 
     if (!name) {
       // ALL → scroll to the very top
-      if (LIST_LAYOUTS.includes(this.data.layout)) {
+      if (RAIL_LAYOUTS.includes(this.data.layout)) {
         this.setData({ scrollIntoListId: 'top-anchor' });
         setTimeout(() => this.setData({ scrollIntoListId: '' }), 400);
       } else {
@@ -902,7 +912,7 @@ Page({
     // Pause scroll-triggered active-category updates briefly so the
     // smooth scroll doesn't flicker through every section on the way.
     this._suppressScrollUntil = Date.now() + 500;
-    if (LIST_LAYOUTS.includes(this.data.layout)) {
+    if (RAIL_LAYOUTS.includes(this.data.layout)) {
       this.setData({ scrollIntoListId: section.id });
       setTimeout(() => this.setData({ scrollIntoListId: '' }), 400);
     } else {

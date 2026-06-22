@@ -13,7 +13,7 @@
 
 
   <!-- ════ HEADER ═══════════════════════════════════════════════ -->
-  <block wx:if="{{isListLayout}}">
+  <block wx:if="{{railLayout}}">
     <view class="hdr-list">
       <view class="hdr-title f-bear">{{listTitle}}</view>
     </view>
@@ -26,14 +26,14 @@
   </block>
 
   <!-- ════ STICKY TOP — search / switcher / filters / category chips -->
-  <view class="sticky-top {{isListLayout ? '' : 'sticky-grid'}}">
-    <view class="search-bar {{isListLayout ? 'search-bar-list' : ''}}">
+  <view class="sticky-top {{railLayout ? '' : 'sticky-grid'}}">
+    <view class="search-bar {{railLayout ? 'search-bar-list' : ''}}">
       <view class="search-icon">🔍</view>
       <input class="search-input" placeholder="{{searchPlaceholder}}" value="{{query}}" bindinput="onSearchInput" confirm-type="search"/>
       <view wx:if="{{query}}" class="search-clear" bindtap="clearSearch">×</view>
     </view>
 
-    <view wx:if="{{!layoutLocked}}" class="view-switcher {{isListLayout ? 'view-switcher-list' : ''}}">
+    <view wx:if="{{!layoutLocked}}" class="view-switcher {{railLayout ? 'view-switcher-list' : ''}}">
       <view wx:for="{{layoutOptions}}" wx:key="key"
             class="vs-btn {{layout === item.key ? 'on' : ''}}"
             data-key="{{item.key}}" bindtap="setLayout"
@@ -85,7 +85,7 @@
 
     <!-- Category chips (non-list layouts) — auto-highlights from scroll
          and auto-scrolls horizontally to keep the active chip in view. -->
-    <scroll-view wx:if="{{!isListLayout}}" scroll-x class="chips"
+    <scroll-view wx:if="{{!railLayout}}" scroll-x class="chips"
                  scroll-into-view="{{activeChipId}}"
                  scroll-with-animation
                  enhanced show-scrollbar="{{false}}">
@@ -109,8 +109,8 @@
     </scroll-view>
   </view>
 
-  <!-- ════ LIST + LIST-COMPACT ══════════════════════════════════ -->
-  <block wx:if="{{isListLayout}}">
+  <!-- ════ LIST + LIST-COMPACT + GRID-2COL (left-rail body) ═════ -->
+  <block wx:if="{{railLayout}}">
     <view class="list-body">
       <scroll-view scroll-y class="list-side" enhanced show-scrollbar="{{false}}"
                    scroll-into-view="{{sidebarScrollId}}"
@@ -180,6 +180,42 @@
                 id="{{section.id}}" class="cat-section">
             <view wx:for="{{section.groups}}" wx:key="id" wx:for-item="group"
                   id="g-{{group.id}}" class="cat-group">
+
+              <!-- GRID-2COL inside the rail: section heading + 2-col cards -->
+              <block wx:if="{{isGridRail}}">
+                <view wx:if="{{group.label}}" class="grid-section-head">
+                  <view class="grid-section-kicker f-toni">{{group.label}}</view>
+                  <view class="grid-section-count f-gothic">{{group.countStr}}</view>
+                </view>
+                <view class="grid grid-2 grid-rail">
+                  <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item"
+                        class="card" data-id="{{item.id}}" bindtap="openProduct">
+                    <view class="img">
+                      <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full" lazy-load/>
+                      <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
+                      <view wx:if="{{item.badge}}" class="card-badge f-gothic">{{item.badge}}</view>
+                      <view wx:if="{{item.isFlash}}" class="card-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+                      <view wx:if="{{item.outOfStock}}" class="card-oos f-toni">{{oosLabel}}</view>
+                      <view wx:elif="{{item.nextBatch}}" class="card-oos card-batch f-toni">{{item.nextBatchText}}</view>
+                    </view>
+                    <view class="name f-bear">{{item.name}}</view>
+                    <view wx:if="{{item.hasVariants}}" class="vhint f-toni">{{item.variantHint}}</view>
+                    <view wx:if="{{item.soldCaption}}" class="sold-cap f-toni">{{item.soldCaption}}</view>
+                    <view class="card-foot">
+                      <view class="price-stack">
+                        <text wx:if="{{item.priceWas}}" class="price-was f-aleo">{{item.priceWas}}</text>
+                        <text wx:if="{{item.pricePrefix}}" class="price-prefix f-toni">{{item.pricePrefix}}</text>
+                        <text class="price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+                      </view>
+                      <view wx:if="{{!item.outOfStock && !item.nextBatch}}" class="card-plus"
+                            id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"></view>
+                    </view>
+                  </view>
+                </view>
+              </block>
+
+              <!-- LIST / LIST-COMPACT: section heading + rows -->
+              <block wx:else>
               <view wx:if="{{group.label}}" class="list-section-head">
                 <view>
                   <view class="list-section-kicker f-toni">{{group.label}}</view>
@@ -217,6 +253,7 @@
                         catchtap="addToCart"></view>
                 </view>
               </view>
+              </block>
             </view>
           </view>
         </block>
