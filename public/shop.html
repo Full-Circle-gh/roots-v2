@@ -193,6 +193,26 @@
   #toast{position:fixed;left:50%;bottom:30px;transform:translateX(-50%) translateY(20px);background:rgba(20,20,24,.96);color:#f2f2ec;padding:12px 20px;border-radius:10px;font-size:14px;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:80;max-width:90vw;text-align:center;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+  /* ─── Floating customer-service bubble (web parity with mini-app cs-button) ─── */
+  .cs-fab{position:fixed;right:18px;bottom:96px;z-index:58;width:52px;height:52px;padding:0;border:0;
+    border-radius:50%;background:var(--forest);color:#fff;cursor:pointer;box-sizing:border-box;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    box-shadow:0 6px 22px rgba(0,0,0,.24);transition:transform .14s ease;-webkit-tap-highlight-color:transparent;}
+  .cs-fab:hover{transform:translateY(-2px);}
+  .cs-fab[hidden]{display:none;}
+  .cs-fab.pill{width:auto;height:46px;border-radius:999px;padding:0 18px;gap:9px;}
+  .cs-fab .cs-dots{display:flex;gap:4px;}
+  .cs-fab .cs-dots i{width:6px;height:6px;border-radius:50%;background:#fff;display:block;}
+  .cs-fab .cs-glyph{font-size:22px;line-height:1;font-weight:700;}
+  .cs-fab .cs-lab{font-family:var(--bf-toni);font-weight:700;font-size:13px;letter-spacing:.04em;white-space:nowrap;color:#fff;}
+  .cs-qr-bg{position:fixed;inset:0;z-index:140;background:rgba(20,20,24,.72);display:flex;align-items:center;justify-content:center;padding:20px;}
+  .cs-qr-card{width:300px;max-width:90vw;background:#fff;border-radius:18px;padding:26px 22px 16px;text-align:center;}
+  .cs-qr-title{font-family:var(--bf-bear);font-size:18px;color:#1a1a17;}
+  .cs-qr-hours{font-size:13px;color:#9b9285;margin-top:6px;}
+  .cs-qr-img{width:220px;height:220px;max-width:72vw;max-height:72vw;object-fit:contain;display:block;margin:18px auto 10px;background:#f7f3ee;border-radius:10px;}
+  .cs-qr-hint{font-size:12px;color:#9b9285;}
+  .cs-qr-close{margin-top:16px;padding:13px 0;font-family:var(--bf-toni);font-weight:700;font-size:14px;letter-spacing:.04em;color:var(--forest);border-top:1px solid rgba(0,0,0,.08);cursor:pointer;}
+
   @media(max-width:820px){
     .pd{grid-template-columns:1fr;gap:24px;}
   }
@@ -236,6 +256,10 @@
   <div class="mlang-float" id="mLangFloat" hidden>
     <button data-lang="en">EN</button><button data-lang="cn">中</button>
   </div>
+
+  <!-- Floating customer-service bubble — web parity with the mini-app cs-button.
+       Appearance + tap action come from the tenant's customer_service config. -->
+  <button class="cs-fab" id="csFab" type="button" hidden aria-label="Customer support"></button>
 
   <header class="bar" hidden>
     <div class="bar-in">
@@ -2727,6 +2751,73 @@ function parseHash(){
   const seg=path.split('/').filter(Boolean);   // ['shop'] | ['product','12']
   return {seg,params};
 }
+/* ════════════ Customer-service floating bubble ════════════ */
+// Web parity with miniapp/components/cs-button. Appearance + tap action come
+// from the tenant's customer_service config; routes the tap by mode:
+//   wecom → open the 微信客服 https link (new tab on desktop / WeChat deep-link on mobile)
+//   qr    → in-page QR modal      phone → tel: link
+//   kf    → WeChat-native 客服 has no browser equivalent → QR if set, else feedback form
+//   off   → hidden
+function csPlacement(seg){
+  if(seg.length===0)                       return 'home';
+  if(seg[0]==='product')                   return 'product';
+  if(seg[0]==='checkout')                  return 'checkout';
+  if(seg[0]==='order'||seg[0]==='orders')  return 'order';
+  return 'me';   // me + generic account/help pages: shown by default
+}
+function csApply(seg){
+  const fab=$('#csFab'); if(!fab) return;
+  const cs=(state.config&&state.config.customer_service)||{};
+  const mode=cs.mode||'off';
+  if(mode==='off'){ fab.hidden=true; return; }
+  const placement=csPlacement(seg);
+  const flagDefault={me:true,home:false,product:true,checkout:true,order:true};
+  const flagKey='show_'+placement;
+  const flag=(flagKey in cs)?!!cs[flagKey]:!!flagDefault[placement];
+  if(!flag){ fab.hidden=true; return; }
+  const label=pick(cs.label_en,cs.label_cn)||(state.lang==='cn'?'联系客服':'Help');
+  const color=((cs.fab_color||'').trim())||'#365329';
+  const shape=cs.fab_shape||'circle';
+  const side=cs.fab_side==='left'?'left':'right';
+  const SIZES={sm:44,md:52,lg:62}; const sizePx=SIZES[cs.fab_size]||52;
+  const bn=Number(cs.fab_bottom); const bottomPx=(isFinite(bn)&&bn>=0)?Math.max(Math.round(bn/2),72):96;
+  fab.style.background=color; fab.style.left=''; fab.style.right='';
+  fab.style[side]='18px'; fab.style.bottom=bottomPx+'px';
+  const isPill=shape==='pill';
+  fab.classList.toggle('pill',isPill);
+  if(!isPill){ fab.style.width=sizePx+'px'; fab.style.height=sizePx+'px';
+    fab.style.borderRadius=shape==='rounded'?Math.round(sizePx*0.28)+'px':'50%'; }
+  else { fab.style.width=''; fab.style.height=''; fab.style.borderRadius=''; }
+  const ICONS={bubble:'💬',question:'?',headset:'🎧'};
+  const kind=cs.fab_icon||'dots';
+  let inner;
+  if(kind==='dots') inner='<span class="cs-dots"><i></i><i></i><i></i></span>';
+  else { const g=kind==='custom'?((cs.fab_icon_emoji||'').trim()||'💬'):(ICONS[kind]||'💬'); inner='<span class="cs-glyph">'+esc(g)+'</span>'; }
+  if(isPill) inner+='<span class="cs-lab">'+esc(label)+'</span>';
+  fab.innerHTML=inner; fab.title=label; fab.setAttribute('aria-label',label);
+  fab.hidden=false;
+}
+function csTap(){
+  const cs=(state.config&&state.config.customer_service)||{};
+  const mode=cs.mode||'off', cn=state.lang==='cn';
+  if(mode==='wecom'){ const url=(cs.url||'').trim();
+    if(url) window.open(url,'_blank','noopener'); else toast(cn?'客服未配置':'Support not set up'); return; }
+  if(mode==='phone'){ const ph=(cs.phone||'').trim();
+    if(ph) location.href='tel:'+ph; else toast(cn?'客服未配置':'Support not set up'); return; }
+  if(mode==='qr'||mode==='kf'){
+    if((cs.qr_image_url||'').trim()) return csOpenQr(cs);
+    location.hash='#/feedback'; }   // kf: no browser chat + no QR → async feedback
+}
+function csOpenQr(cs){
+  const cn=state.lang==='cn';
+  const label=pick(cs.label_en,cs.label_cn)||(cn?'联系客服':'Contact us');
+  const hours=pick(cs.hours_en,cs.hours_cn)||'';
+  const bg=document.createElement('div'); bg.className='cs-qr-bg';
+  bg.innerHTML=`<div class="cs-qr-card"><div class="cs-qr-title">${esc(label)}</div>${hours?`<div class="cs-qr-hours">${esc(hours)}</div>`:''}<img class="cs-qr-img" src="${escAttr(cs.qr_image_url)}" alt=""><div class="cs-qr-hint">${cn?'长按二维码保存':'Long-press the code to save'}</div><div class="cs-qr-close">${cn?'关闭':'Close'}</div></div>`;
+  bg.addEventListener('click',e=>{ if(e.target===bg||e.target.classList.contains('cs-qr-close')) bg.remove(); });
+  document.body.appendChild(bg);
+}
+
 async function route(){
   try{ await routeDispatch(); }
   finally{ syncThemeColor(); setTimeout(syncThemeColor,60); }
@@ -2746,6 +2837,7 @@ async function routeDispatch(){
   // Product page mirrors the mini-app sub-page: no bottom tab bar — the sticky
   // buy bar owns the bottom. Restore it on every other route.
   { const tb=$('#tabbar'); if(tb) tb.hidden = (seg[0]==='product'); }
+  csApply(seg);   // floating customer-service bubble, per-placement
   window.scrollTo({top:0,behavior:'instant'});
   try{
     if(seg[0]==='product'&&seg[1]) return renderProduct(seg[1]);
@@ -3610,6 +3702,7 @@ function ctaRoute(t){
   // Shown only on the home route (see route()); the hero is the top of the page now.
   $('#mLangFloat').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
     state.lang=b.dataset.lang;try{localStorage.setItem('shop_lang',state.lang);}catch{}applyLangToUI();route();});
+  $('#csFab').addEventListener('click',csTap);
 
   // search submit → shop
   $('#searchForm').addEventListener('submit',e=>{e.preventDefault();
