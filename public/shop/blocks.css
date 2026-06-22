@@ -116,8 +116,18 @@
   font-family: var(--f-toni); font-size: calc(20 * var(--u) * var(--font-scale)); letter-spacing: 0.2em; text-transform: uppercase; color: var(--gr-kicker);
 }
 .shop-blocks .sb-grd-top { display: flex; align-items: center; gap: calc(14 * var(--u)); }
-.shop-blocks .sb-grd-icon { width: calc(28 * var(--u)); height: calc(28 * var(--u)); border-radius: 50%; background-color: var(--gr-kicker); flex: none; }
+.shop-blocks .sb-grd-icon { width: calc(28 * var(--u)); height: calc(28 * var(--u)); background-color: var(--gr-kicker); flex: none; }
 .shop-blocks .sb-grd-top-accent .sb-grd-icon { background-color: var(--gr-accent); }
+/* Time-of-day glyph beside the kicker. Monochrome SVG painted via mask so it
+   inherits the kicker colour (accent on the coin view). Mirrors the mini-app. */
+.shop-blocks .sb-grd-icon-sun {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='4.2'/%3E%3Cpath d='M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7'/%3E%3C/svg%3E") no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='4.2'/%3E%3Cpath d='M12 2.5v2.4M12 19.1v2.4M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2.5 12h2.4M19.1 12h2.4M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7'/%3E%3C/svg%3E") no-repeat center / contain;
+}
+.shop-blocks .sb-grd-icon-moon {
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z'/%3E%3C/svg%3E") no-repeat center / contain;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linejoin='round'%3E%3Cpath d='M20 14.5A8 8 0 0 1 9.5 4a7 7 0 1 0 10.5 10.5z'/%3E%3C/svg%3E") no-repeat center / contain;
+}
 .shop-blocks .sb-grd-row { display: flex; align-items: flex-start; justify-content: space-between; gap: calc(32 * var(--u)); }
 .shop-blocks .sb-grd-col { flex: 1; min-width: 0; }
 .shop-blocks .sb-grd-head { font-family: var(--f-bear); font-size: calc(64 * var(--gr-head, 1) * var(--u) * var(--font-scale)); line-height: 1; color: var(--gr-ink); margin-top: calc(20 * var(--u)); }
