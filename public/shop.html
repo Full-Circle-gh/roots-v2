@@ -222,6 +222,9 @@
      qty stepper) instead of the inline pill. */
   @media(max-width:767px){
     .pd-body{max-width:none;margin-left:-20px;margin-right:-20px;}
+    /* The -20px bleed lets ShopProductBlocks run edge-to-edge, but text sections
+       (reviews + plain description) must keep their gutter back off the screen edge. */
+    .pd-body>.pd-section{padding-left:20px;padding-right:20px;}
     .pd-wrap{padding-bottom:104px;}
     .pd-buy{position:fixed;left:0;right:0;bottom:0;z-index:65;margin:0;gap:12px;align-items:center;
       background:var(--oat);border-top:3px solid var(--ink);
