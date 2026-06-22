@@ -198,6 +198,8 @@
     border-radius:50%;background:var(--forest);color:#fff;cursor:pointer;box-sizing:border-box;
     display:flex;align-items:center;justify-content:center;gap:6px;
     box-shadow:0 6px 22px rgba(0,0,0,.24);transition:transform .14s ease;-webkit-tap-highlight-color:transparent;}
+  .cs-fab{touch-action:none;cursor:grab;}
+  .cs-fab:active{cursor:grabbing;}
   .cs-fab:hover{transform:translateY(-2px);}
   .cs-fab[hidden]{display:none;}
   .cs-fab.pill{width:auto;height:46px;border-radius:999px;padding:0 18px;gap:9px;}
@@ -463,6 +465,49 @@
     .about-cols{display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:18px 22px 0;}
     .about-col h4{font-family:var(--bf-toni);font-size:12px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;}
     .about-col li{list-style:none;font-size:13px;line-height:1.7;color:var(--ink);}
+    /* about — mini-app parity */
+    .ab-page{background:var(--oat);}
+    .ab-hero{width:100%;height:320px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:var(--oat);}
+    .ab-hero img{width:96%;height:100%;object-fit:contain;}
+    .ab-sec{padding:0 26px;margin-top:40px;}
+    .ab-sec.ab-manifesto{margin-top:12px;}
+    .ab-kicker{font-family:var(--bf-toni);font-size:11px;letter-spacing:.25em;color:var(--olive);text-transform:uppercase;}
+    .ab-manifesto-txt{font-family:var(--f-aleo);font-size:21px;line-height:1.4;color:var(--forest);margin-top:8px;}
+    .ab-manifesto-txt b{font-weight:700;}
+    .ab-manifesto-cn{font-family:var(--bf-yuan,var(--f-aleo));font-size:15px;line-height:1.55;color:var(--forest);margin-top:8px;}
+    .ab-stats{margin:32px 22px 0;background:var(--ink);color:#fff;padding:18px 12px;display:flex;}
+    .ab-stat{flex:1;padding-right:10px;}
+    .ab-stat + .ab-stat{border-left:1px solid rgba(255,255,255,.15);padding-left:10px;}
+    .ab-stat-v{font-family:var(--bf-bear);font-size:26px;line-height:1;color:var(--lime);}
+    .ab-stat-l{font-family:var(--bf-toni);font-size:9.5px;letter-spacing:.1em;opacity:.6;margin-top:5px;text-transform:uppercase;}
+    .ab-founder-row{margin-top:12px;overflow:hidden;}
+    .ab-founder-photo{float:left;width:120px;height:152px;margin:0 16px 10px 0;background:var(--lime);border:2px solid var(--ink);position:relative;}
+    .ab-founder-photo img{display:block;width:100%;height:100%;object-fit:cover;}
+    .ab-founder-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:var(--bf-toni);font-size:10px;letter-spacing:.15em;color:rgba(0,0,0,.55);}
+    .ab-founder-name{font-family:var(--bf-bear);font-size:24px;line-height:.95;color:var(--ink);}
+    .ab-founder-title{font-family:var(--bf-toni);font-size:11px;letter-spacing:.18em;color:var(--olive);margin-top:5px;text-transform:uppercase;}
+    .ab-founder-quote{font-family:var(--f-aleo);font-size:14px;line-height:1.4;color:var(--forest);font-style:italic;margin-top:9px;white-space:pre-line;}
+    .ab-founder-quote.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden;}
+    .ab-founder-link{display:inline-block;margin-top:9px;font-family:var(--bf-toni);font-size:11px;letter-spacing:.15em;color:var(--ink);border-bottom:2px solid var(--ink);padding-bottom:2px;cursor:pointer;}
+    .ab-promise-title{font-family:var(--bf-bear);font-size:34px;line-height:1;margin-top:5px;color:var(--ink);}
+    .ab-promise-title .hl{background:var(--lime);padding:0 6px;}
+    .ab-promise-title .strike{text-decoration:line-through;text-decoration-thickness:2px;color:var(--olive);}
+    .ab-promise-title .line{display:block;white-space:nowrap;}
+    .ab-promise-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px;}
+    .ab-promise-col{border:2px solid var(--ink);padding:14px 14px 16px;}
+    .ab-promise-col.in{background:var(--lime);}
+    .ab-promise-col.out{background:var(--ink);}
+    .ab-promise-head{display:flex;align-items:center;gap:7px;font-family:var(--bf-gothic,var(--bf-toni));font-size:15px;letter-spacing:.12em;color:var(--ink);margin-bottom:9px;}
+    .ab-promise-head.light{color:#fff;}
+    .ab-tick{background:var(--ink);color:var(--lime);width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:14px;line-height:1;}
+    .ab-tick.light{background:#fff;color:var(--ink);}
+    .ab-promise-item{font-family:var(--f-aleo);font-size:14px;line-height:1.35;color:var(--ink);padding-top:5px;}
+    .ab-promise-item.dark{color:#fff;}
+    .ab-promise-item.dark.strike{text-decoration:line-through;text-decoration-color:rgba(255,255,255,.5);}
+    .ab-outro{text-align:center;margin-top:52px;padding:0 22px 8px;}
+    .ab-outro-title{font-family:var(--bf-bear);font-size:42px;line-height:1;color:var(--forest);letter-spacing:-.01em;}
+    .ab-outro-cn{font-family:var(--bf-yuan,var(--f-aleo));font-size:14px;color:var(--olive);margin-top:8px;letter-spacing:.05em;}
+    .ab-outro-cta{margin-top:22px;background:var(--ink);color:var(--lime);padding:18px 0;font-family:var(--bf-gothic,var(--bf-toni));font-size:18px;letter-spacing:.14em;cursor:pointer;}
     /* poll */
     .poll-opt{display:flex;align-items:center;gap:10px;padding:13px 16px;border:2px solid var(--ink);margin-top:10px;cursor:pointer;position:relative;overflow:hidden;background:#fff;}
     .poll-opt .po-bar{position:absolute;inset:0;background:var(--lime);opacity:.35;z-index:0;}
@@ -2705,23 +2750,72 @@ async function renderVoting(){
     const card=b.closest('[data-poll]'); try{ const r=await postJson('/api/retail/polls/'+card.dataset.poll+'/vote',{option_id:Number(b.dataset.opt)}); if(r&&r.awarded_points)toast('+'+r.awarded_points+(cn?' 积分':' points')); state.customer=null; renderVoting(); }catch(e){ toast(cn?'投票失败':'Vote failed'); } }));
 }
 
+// Mini-app /pages/about parity. Defaults inlined so the page renders even
+// if config is missing fields; server about.content overrides them.
+const ABOUT_DEFAULTS={
+  kicker_en:'WHO WE ARE',kicker_cn:'我们是谁',
+  manifesto_en:'We exist to make **plant-based food** so mind blowing good it transforms how people eat, how they see plants, and how we create a better, more sustainable future — without ever giving up flavor, health, or joy!',
+  manifesto_cn:'我们存在的意义,是把**植物食物**做到令人惊艳的好——好到改变人们的饮食方式、对植物的认知,也改变我们共同走向更可持续未来的方式——而风味、健康与快乐,一样也不放下。',
+  stats:[{value_en:'2017',value_cn:'2017',label_en:'EST.',label_cn:'成立'},{value_en:'广州',value_cn:'广州',label_en:'MADE IN',label_cn:'产地'},{value_en:'50+',value_cn:'50+',label_en:'PRODUCTS',label_cn:'产品'},{value_en:'100%',value_cn:'100%',label_en:'PLANT',label_cn:'植物'}],
+  founder_kicker_en:'MEET THE FOUNDER',founder_kicker_cn:'创始人',
+  founder_name_en:'Founder Name',founder_name_cn:'创始人姓名',
+  founder_title_en:'FOUNDER & CEO',founder_title_cn:'创始人兼首席执行官',
+  founder_quote_en:'I started Roots because I wanted to prove that plants don\'t have to be the boring option.',
+  founder_quote_cn:'我创立 Roots,是想证明植物从来不该是无聊的选择。',
+  founder_photo_url:'',
+  promise_kicker_en:'OUR PROMISE',promise_kicker_cn:'我们的承诺',
+  in_items:[{en:'100% plant-based',cn:'100% 植物'},{en:'Made from scratch',cn:'原料自制'},{en:'Real fermentation',cn:'真发酵'},{en:'Whole ingredients',cn:'完整食材'},{en:'Small batch',cn:'小批量'},{en:'Seasonal',cn:'应季'},{en:'Local-first · 广州',cn:'本地优先'},{en:'Recyclable packaging',cn:'可回收包装'}],
+  out_items:[{en:'Preservatives',cn:'防腐剂'},{en:'Refined sugar',cn:'精制糖'},{en:'Artificial color',cn:'人造色素'},{en:'Artificial flavor',cn:'人造香精'},{en:'Additives',cn:'添加剂'},{en:'GMO',cn:'转基因'},{en:'Animal products',cn:'动物产品'},{en:'Cutting corners',cn:'走捷径'}],
+  outro_en:'From soil to soul.',outro_cn:'从土壤到灵魂',
+  cta_en:'SHOP NOW',cta_cn:'立即购买',
+};
+let aboutExpanded=false;
 async function renderAbout(){
   const v=$('#view'),cn=state.lang==='cn';
   document.title=(cn?'关于':'About')+' · '+state.brand;
-  const a=(state.config&&state.config.about&&state.config.about.content)||{};
-  const manifesto=pick(a.manifesto_en,a.manifesto_cn)||'';
-  const inItems=(cn?a.in_items_cn:a.in_items_en)||a.in_items||[];
-  const outItems=(cn?a.out_items_cn:a.out_items_en)||a.out_items||[];
-  const stats=a.stats||[];
-  const founderQuote=pick(a.founder_quote_en,a.founder_quote_cn)||a.founder_quote||'';
-  const esct=(s)=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/\n/g,'<br>');
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(pick(a.kicker_en,a.kicker_cn)||(cn?'我们的故事':'OUR STORY'),(cn?'关于 ':'About ')+esc(state.brand),'')}
-    ${manifesto?`<div class="sp-pad" style="font-family:var(--f-aleo);font-size:16px;line-height:1.7;color:var(--ink)">${esct(manifesto)}</div>`:''}
-    ${stats.length?`<div class="about-stats">${stats.slice(0,4).map(s=>`<div class="about-stat"><div class="as-v">${esc(s.value||s.v||'')}</div><div class="as-l">${esc(pick(s.label_en,s.label_cn)||s.label||s.l||'')}</div></div>`).join('')}</div>`:''}
-    ${founderQuote?`<div class="sp-card" style="margin-top:18px"><div style="font-family:var(--f-aleo);font-style:italic;font-size:15px;line-height:1.6">“${esc(founderQuote)}”</div>${a.founder_name?`<div style="font-family:var(--bf-bear);font-size:14px;margin-top:10px">${esc(a.founder_name)}</div>`:''}${a.founder_title?`<div class="sp-d">${esc(a.founder_title)}</div>`:''}</div>`:''}
-    ${(inItems.length||outItems.length)?`<div class="about-cols"><div class="about-col"><h4 style="color:var(--forest)">${cn?'我们坚持':'What’s in'}</h4><ul>${(inItems||[]).map(x=>`<li>✓ ${esc(typeof x==='string'?x:pick(x.en,x.cn))}</li>`).join('')}</ul></div><div class="about-col"><h4 style="color:var(--berry)">${cn?'我们拒绝':'What’s out'}</h4><ul>${(outItems||[]).map(x=>`<li>✕ ${esc(typeof x==='string'?x:pick(x.en,x.cn))}</li>`).join('')}</ul></div></div>`:''}
-    ${(!manifesto&&!stats.length&&!founderQuote)?`<div class="sp-empty">${cn?'品牌故事即将上线 🌱':'Our story is coming soon 🌱'}</div>`:''}
-    <div class="sp-foot"><button class="sp-btn block" data-go="#/shop">${cn?'去购物':'Shop now'}</button></div></div>`;
+  const stored=(state.config&&state.config.about&&state.config.about.content)||null;
+  const c=(stored&&typeof stored==='object')?Object.assign({},ABOUT_DEFAULTS,stored):ABOUT_DEFAULTS;
+  if(!Array.isArray(c.stats))c.stats=ABOUT_DEFAULTS.stats;
+  if(!Array.isArray(c.in_items))c.in_items=ABOUT_DEFAULTS.in_items;
+  if(!Array.isArray(c.out_items))c.out_items=ABOUT_DEFAULTS.out_items;
+  const manifesto=(cn?(c.manifesto_cn||c.manifesto_en):(c.manifesto_en||c.manifesto_cn))||'';
+  const manifestoHtml=esc(manifesto).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+  const founderPhoto=c.founder_photo_url||'';
+  const founderQuote=(cn?(c.founder_quote_cn||c.founder_quote_en):(c.founder_quote_en||c.founder_quote_cn))||'';
+  const promiseTitle=cn
+    ?`<span class="line">留下<span class="hl">该有的</span>。</span><span class="line">剔除<span class="strike">多余的</span>。</span>`
+    :`<span class="line">What’s <span class="hl">in</span>.</span><span class="line">What’s <span class="strike">out</span>.</span>`;
+  v.innerHTML=`<div class="sp ab-page">${spBack()}
+    <div class="ab-hero"><img src="/brand/welcome-roots.jpg" alt=""></div>
+    <div class="ab-sec ab-manifesto">
+      <div class="ab-kicker">${esc(cn?(c.kicker_cn||c.kicker_en):c.kicker_en)}</div>
+      <div class="ab-manifesto-txt">${manifestoHtml}</div>
+      ${(cn&&c.manifesto_cn&&c.manifesto_cn!==c.manifesto_en)?`<div class="ab-manifesto-cn">${esc(c.manifesto_cn)}</div>`:''}
+    </div>
+    <div class="ab-stats">${c.stats.slice(0,4).map(s=>`<div class="ab-stat"><div class="ab-stat-v">${esc(cn?(s.value_cn||s.value_en):(s.value_en||s.value_cn))}</div><div class="ab-stat-l">${esc(cn?(s.label_cn||s.label_en):(s.label_en||s.label_cn))}</div></div>`).join('')}</div>
+    <div class="ab-sec">
+      <div class="ab-kicker">${esc(cn?(c.founder_kicker_cn||c.founder_kicker_en):c.founder_kicker_en)}</div>
+      <div class="ab-founder-row">
+        <div class="ab-founder-photo">${founderPhoto?`<img src="${escAttr(founderPhoto)}" alt="">`:`<div class="ab-founder-empty">${cn?'照片':'PHOTO'}</div>`}</div>
+        <div class="ab-founder-name">${esc(cn?(c.founder_name_cn||c.founder_name_en):(c.founder_name_en||c.founder_name_cn))}</div>
+        <div class="ab-founder-title">${esc(cn?(c.founder_title_cn||c.founder_title_en):c.founder_title_en)}</div>
+        <div class="ab-founder-quote ${aboutExpanded?'':'clamp'}">${esc(founderQuote)}</div>
+        <div class="ab-founder-link" id="abStory">${aboutExpanded?(cn?'收起 ↑':'SHOW LESS ↑'):(cn?'阅读完整故事 →':'READ THE FULL STORY →')}</div>
+      </div>
+    </div>
+    <div class="ab-sec">
+      <div class="ab-kicker">${esc(cn?(c.promise_kicker_cn||c.promise_kicker_en):c.promise_kicker_en)}</div>
+      <div class="ab-promise-title">${promiseTitle}</div>
+      <div class="ab-promise-grid">
+        <div class="ab-promise-col in"><div class="ab-promise-head"><div class="ab-tick">✓</div><span>${cn?'是':'IN'}</span></div>${c.in_items.map(x=>`<div class="ab-promise-item">· ${esc(cn?(x.cn||x.en):x.en)}</div>`).join('')}</div>
+        <div class="ab-promise-col out"><div class="ab-promise-head light"><div class="ab-tick light">✕</div><span>${cn?'否':'OUT'}</span></div>${c.out_items.map(x=>`<div class="ab-promise-item dark strike">· ${esc(cn?(x.cn||x.en):x.en)}</div>`).join('')}</div>
+      </div>
+    </div>
+    <div class="ab-outro">
+      ${cn?`<div class="ab-outro-cn">${esc(c.outro_cn||c.outro_en)}</div>`:`<div class="ab-outro-title">${esc(c.outro_en)}</div>`}
+      <div class="ab-outro-cta" data-go="#/shop">${esc(cn?(c.cta_cn||c.cta_en):(c.cta_en||c.cta_cn))} →</div>
+    </div></div>`;
+  const st=$('#abStory');if(st)st.addEventListener('click',()=>{aboutExpanded=!aboutExpanded;renderAbout();});
 }
 
 async function renderFaq(){
@@ -2828,8 +2922,59 @@ function csApply(seg){
   if(isPill) inner+='<span class="cs-lab">'+esc(label)+'</span>';
   fab.innerHTML=inner; fab.title=label; fab.setAttribute('aria-label',label);
   fab.hidden=false;
+  // If the user dragged the bubble before, restore that position (overrides the
+  // config-driven corner) — mirrors the mini-app's persisted drag spot.
+  csApplySavedPos(fab);
+}
+// ── Draggable customer-service bubble (mini-app parity) ──────────────────
+// Drag the bubble anywhere; on release it snaps to the nearest side and the
+// {side,top} is remembered in localStorage so it stays put across pages.
+const CS_DRAG_MARGIN=10;
+function csLoadPos(){ try{ return JSON.parse(localStorage.getItem('cs_fab_pos')||'null'); }catch{ return null; } }
+function csSavePos(p){ try{ localStorage.setItem('cs_fab_pos',JSON.stringify(p)); }catch{} }
+function csApplySavedPos(fab){
+  const pos=csLoadPos(); if(!pos||!pos.side) return;
+  const r=fab.getBoundingClientRect(); const w=r.width||52, h=r.height||52;
+  const W=window.innerWidth, H=window.innerHeight;
+  const left=pos.side==='left'?CS_DRAG_MARGIN:(W-w-CS_DRAG_MARGIN);
+  const top=Math.max(CS_DRAG_MARGIN,Math.min(pos.top||0,H-h-CS_DRAG_MARGIN));
+  fab.style.left=left+'px'; fab.style.top=top+'px'; fab.style.right='auto'; fab.style.bottom='auto';
+}
+function csMakeDraggable(fab){
+  let d=null;
+  fab.addEventListener('pointerdown',e=>{
+    const r=fab.getBoundingClientRect();
+    d={moved:false,sx:e.clientX,sy:e.clientY,offX:e.clientX-r.left,offY:e.clientY-r.top,w:r.width,h:r.height};
+    try{ fab.setPointerCapture(e.pointerId); }catch{}
+  });
+  fab.addEventListener('pointermove',e=>{
+    if(!d) return;
+    if(Math.abs(e.clientX-d.sx)>6||Math.abs(e.clientY-d.sy)>6) d.moved=true;
+    if(!d.moved) return;
+    const W=window.innerWidth, H=window.innerHeight;
+    const left=Math.max(CS_DRAG_MARGIN,Math.min(e.clientX-d.offX,W-d.w-CS_DRAG_MARGIN));
+    const top =Math.max(CS_DRAG_MARGIN,Math.min(e.clientY-d.offY,H-d.h-CS_DRAG_MARGIN));
+    fab.style.left=left+'px'; fab.style.top=top+'px'; fab.style.right='auto'; fab.style.bottom='auto';
+  });
+  function end(e){
+    if(!d) return; const drag=d; d=null;
+    try{ fab.releasePointerCapture(e.pointerId); }catch{}
+    if(!drag.moved) return;          // a plain tap → let csTap proceed
+    fab._suppressTap=true; setTimeout(()=>{fab._suppressTap=false;},60);
+    const W=window.innerWidth, H=window.innerHeight;
+    const left=e.clientX-drag.offX;
+    const top=Math.max(CS_DRAG_MARGIN,Math.min(e.clientY-drag.offY,H-drag.h-CS_DRAG_MARGIN));
+    const snapLeft=(left+drag.w/2)<W/2;
+    const x=snapLeft?CS_DRAG_MARGIN:(W-drag.w-CS_DRAG_MARGIN);
+    fab.style.left=x+'px'; fab.style.top=top+'px'; fab.style.right='auto'; fab.style.bottom='auto';
+    csSavePos({side:snapLeft?'left':'right',top});
+  }
+  fab.addEventListener('pointerup',end);
+  fab.addEventListener('pointercancel',end);
 }
 function csTap(){
+  // A drag just ended → swallow the synthetic click so we don't open chat/QR.
+  const fab=$('#csFab'); if(fab&&fab._suppressTap){ fab._suppressTap=false; return; }
   const cs=(state.config&&state.config.customer_service)||{};
   const mode=cs.mode||'off', cn=state.lang==='cn';
   if(mode==='wecom'){ const url=(cs.url||'').trim();
@@ -3790,6 +3935,7 @@ function ctaRoute(t){
   $('#mLangFloat').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
     state.lang=b.dataset.lang;try{localStorage.setItem('shop_lang',state.lang);}catch{}applyLangToUI();route();});
   $('#csFab').addEventListener('click',csTap);
+  csMakeDraggable($('#csFab'));
 
   // search submit → shop
   $('#searchForm').addEventListener('submit',e=>{e.preventDefault();
