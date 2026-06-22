@@ -406,14 +406,19 @@
       </div>`).join('');
 
     panel.style.display = 'block';
+    panel.style.maxHeight = '60vh';
+    panel.style.overflow = 'auto';
     panel.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--bg-elev-1)">
+      <div style="position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-elev-1);border-bottom:1px solid var(--border)">
         <b style="font-size:13px">Needs your attention · 需手动确认
           <span class="muted" style="font-weight:400">(${ambiguous.length} ambiguous · ${unmatched.length} unmatched)</span></b>
-        <button class="btn btn-sm" onclick="mtDismissReview()" title="Hide this panel">Dismiss</button>
+        <button class="btn btn-sm" onclick="mtDismissReview()" title="Clear this whole list">Dismiss all ✕</button>
       </div>
       ${ambiguous.length ? `<div style="padding:8px 14px 0;font-size:12px;color:var(--fg-muted)">Multiple Meituan titles matched — choose the right one:</div>${ambHtml}` : ''}
       ${unmatched.length ? `<div style="padding:10px 14px 0;font-size:12px;color:var(--fg-muted)">Not found on Meituan:</div>${unmHtml}` : ''}
+      <div style="position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:10px 14px;background:var(--bg-elev-1);border-top:1px solid var(--border)">
+        <button class="btn btn-sm" onclick="mtDismissReview()" title="Clear this whole list">Dismiss all ✕</button>
+      </div>
     `;
   }
 
