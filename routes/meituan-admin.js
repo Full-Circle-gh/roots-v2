@@ -22,9 +22,11 @@ router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) 
   const db = tdb();
   try {
     const products = db.prepare(`
-      SELECT p.id, p.name_cn, p.name_en, p.category, p.is_active
+      SELECT p.id, p.name_cn, p.name_en, p.category, p.is_active,
+             p.variant_label, p.variant_group_id
         FROM products p
-       ORDER BY p.name_cn
+       WHERE p.is_active = 1
+       ORDER BY p.name_cn, p.variant_group_id, p.id
     `).all();
 
     const maps = db.prepare(`
