@@ -3639,4 +3639,76 @@ try {
   }
 } catch (e) { console.error('[drop_ledger_actor_fk_v1] failed (left untouched):', e); }
 
+// ── Meituan bidirectional sync (2026-06-22) ────────────────────────────────
+// Four tables supporting automated stock push (roots-v2 → Meituan) and
+// order ingestion (Meituan → roots-v2).
+
+// Maps a roots-v2 (store, product) pair to Meituan product details.
+// Populated via the admin Meituan→Products mapping UI or auto-match by name.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_product_map (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_store_id   INTEGER NOT NULL,
+    product_id        INTEGER NOT NULL,
+    store_code        TEXT NOT NULL,
+    meituan_name      TEXT,
+    last_pushed_qty   INTEGER,
+    last_pushed_at    DATETIME,
+    sync_enabled      INTEGER NOT NULL DEFAULT 1,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(retail_store_id, product_id),
+    FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id)      REFERENCES products(id)       ON DELETE CASCADE
+  );
+`);
+
+// Queue of stock changes to push to Meituan. Written by retail.js whenever
+// retail_store_stock is updated; consumed by the meituan-daemon process.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_sync_queue (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_store_id  INTEGER NOT NULL,
+    product_id       INTEGER NOT NULL,
+    store_code       TEXT NOT NULL,
+    new_qty          INTEGER NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending',
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    last_error       TEXT,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    processed_at     DATETIME,
+    FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id),
+    FOREIGN KEY (product_id)      REFERENCES products(id)
+  );
+`);
+
+// Tracks which Meituan orders have been imported into roots-v2 (idempotency).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_order_import (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    meituan_order_no  TEXT UNIQUE NOT NULL,
+    retail_order_id   INTEGER,
+    store_code        TEXT NOT NULL,
+    accepted_at       DATETIME,
+    imported_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status            TEXT NOT NULL DEFAULT 'accepted',
+    raw_payload       TEXT,
+    FOREIGN KEY (retail_order_id) REFERENCES retail_orders(id) ON DELETE SET NULL
+  );
+`);
+
+// Append-only log of all sync events (order polls, stock pushes) for the
+// admin sync-status panel and debugging.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_sync_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    detail      TEXT,
+    error_msg   TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 module.exports = db;
