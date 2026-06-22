@@ -938,6 +938,35 @@ function applyTheme(cfg){
   document.documentElement.style.setProperty('--accent',hex);
   const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',hex);
 }
+// Make the mobile browser address bar (theme-color) follow the top of whatever
+// page is showing — green hero on home, lime hero on Me, oat elsewhere, etc.
+// Fully generic: we sample the actual rendered colour just under the browser
+// chrome rather than hardcoding per route, so it fits any tenant/layout.
+function _rgbToHex(c){
+  const m=String(c||'').match(/\d+(\.\d+)?/g); if(!m||m.length<3) return null;
+  return '#'+m.slice(0,3).map(n=>Math.round(+n).toString(16).padStart(2,'0')).join('');
+}
+function _effectiveBg(el){
+  for(let n=el; n && n!==document.documentElement; n=n.parentElement){
+    const c=getComputedStyle(n).backgroundColor;
+    if(c && c!=='transparent' && !/^rgba?\(0,\s*0,\s*0,\s*0\)$/.test(c.replace(/\s/g,'')) ) return c;
+  }
+  return getComputedStyle(document.body).backgroundColor;
+}
+function syncThemeColor(){
+  const m=document.querySelector('meta[name=theme-color]'); if(!m) return;
+  const x=Math.round(window.innerWidth/2);
+  let el=null;
+  // Sample a few points down from the very top; skip floating/fixed chrome that
+  // overlays the content (lang pill, top bar, tab bar) so we read the page itself.
+  for(const y of [3,8,16,28]){
+    const hit=document.elementFromPoint(x,y);
+    if(hit && !(hit.closest && hit.closest('#mLangFloat,#mtop,header,nav.links,.tabbar,#tabbar'))){ el=hit; break; }
+  }
+  if(!el) return;
+  const hex=_rgbToHex(_effectiveBg(el));
+  if(hex) m.setAttribute('content',hex);
+}
 function brandName(cfg){
   const w=cfg&&cfg.brand&&cfg.brand.me_footer&&cfg.brand.me_footer.wordmark_text;
   return (w&&String(w).trim())||document.title||'Store';
@@ -2856,6 +2885,10 @@ function parseHash(){
   return {seg,params};
 }
 async function route(){
+  try{ await routeDispatch(); }
+  finally{ syncThemeColor(); setTimeout(syncThemeColor,60); }
+}
+async function routeDispatch(){
   const {seg,params}=parseHash();
   if(window.ShopBlocks) ShopBlocks.stopTimers();   // clear any home countdowns before leaving
   clearInterval(co.pollTimer);                      // stop any payment-status polling
