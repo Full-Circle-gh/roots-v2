@@ -54,11 +54,18 @@ router.get('/api/saas-admin/tenants', requireSaasAdmin, (req, res) => {
     const owner = db.prepare('SELECT username, display_name FROM tenant_users WHERE tenant_id = ? ORDER BY id ASC LIMIT 1').get(t.id);
     const operators = db.prepare('SELECT COUNT(*) c FROM tenant_users WHERE tenant_id = ?').get(t.id).c;
     const openInvoices = db.prepare("SELECT COUNT(*) c FROM billing_invoices WHERE tenant_id = ? AND status = 'open'").get(t.id).c;
+    // Cheap onboarding roll-up so the stores list can triage at a glance.
+    const obState = {};
+    for (const r of db.prepare('SELECT step_key, status, value FROM tenant_onboarding WHERE tenant_id = ?').all(t.id)) {
+      obState[r.step_key] = { status: r.status, value: r.value };
+    }
+    const obModel = t.onboarding_model === 'managed' ? 'managed' : 'self';
+    const obProgress = onboarding.progress(onboarding.resolveChecklist(obModel, t.business_category, obState));
     return {
       id: t.id, name: t.name, brand: t.brand_name, accent: t.brand_accent, wxAppid: t.wx_appid, status: t.status,
       owner: owner ? (owner.display_name || owner.username) : null,
       ownerUsername: owner ? owner.username : null,
-      operators, openInvoices, plan,
+      operators, openInvoices, plan, onboarding: obProgress,
       subStatus: sub ? sub.status : null, isInternal: sub ? !!sub.is_internal : false,
       periodEnd: sub ? sub.current_period_end : null, trialEnd: sub ? sub.trial_end : null,
     };
