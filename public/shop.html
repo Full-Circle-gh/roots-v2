@@ -196,6 +196,26 @@
   @media(max-width:820px){
     .pd{grid-template-columns:1fr;gap:24px;}
   }
+  /* Mobile product page = mini-app parity: full-bleed description blocks (so the
+     spec strip / big-stat read edge-to-edge at the mini-app's exact rpx scale)
+     + a fixed sticky buy bar (square ink button w/ lime label + price, square
+     qty stepper) instead of the inline pill. */
+  @media(max-width:767px){
+    .pd-body{max-width:none;margin-left:-20px;margin-right:-20px;}
+    .pd-wrap{padding-bottom:104px;}
+    .pd-buy{position:fixed;left:0;right:0;bottom:0;z-index:65;margin:0;gap:12px;align-items:center;
+      background:var(--oat);border-top:3px solid var(--ink);
+      padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));}
+    .pd-qty{border:2px solid var(--ink);border-radius:0;flex:0 0 auto;}
+    .pd-qty button{width:44px;height:52px;}
+    .pd-qty span{min-width:46px;height:52px;display:flex;align-items:center;justify-content:center;
+      border-left:2px solid var(--ink);border-right:2px solid var(--ink);font-size:17px;}
+    #addBtn{flex:1;background:var(--ink);color:var(--lime);border-radius:0;height:52px;padding:0 22px;
+      display:flex;justify-content:space-between;align-items:center;letter-spacing:.1em;}
+    #addBtn .add-label{font-family:var(--bf-toni);font-size:15px;font-weight:700;}
+    #addBtn .add-price{font-family:var(--bf-bear);font-size:19px;letter-spacing:0;}
+    #addBtn:disabled{background:rgba(0,0,0,.3);color:rgba(255,255,255,.7);justify-content:center;opacity:1;}
+  }
   @media(max-width:520px){
     .bar-in{flex-wrap:wrap;gap:10px 14px;}
     nav.links{order:1;gap:14px;}
@@ -2847,6 +2867,9 @@ async function route(){
   setActiveTab(seg);
   // language toggle floats over the hero on the home page only
   { const mf=$('#mLangFloat'); if(mf) mf.hidden = seg.length!==0; }
+  // Product page mirrors the mini-app sub-page: no bottom tab bar — the sticky
+  // buy bar owns the bottom. Restore it on every other route.
+  { const tb=$('#tabbar'); if(tb) tb.hidden = (seg[0]==='product'); }
   window.scrollTo({top:0,behavior:'instant'});
   try{
     if(seg[0]==='product'&&seg[1]) return renderProduct(seg[1]);
@@ -3604,7 +3627,7 @@ async function renderProduct(id){
         <span class="who">${esc(who)}</span></div>${body?`<div class="body">${esc(body)}</div>`:''}</div>`;
     }).join('')}</div>`:'';
 
-  view.innerHTML=`<div class="wrap">
+  view.innerHTML=`<div class="wrap pd-wrap">
     <div class="crumb"><a href="#/">${state.lang==='cn'?'首页':'Home'}</a> / <a href="#/shop">${state.lang==='cn'?'商品':'Shop'}</a> / ${esc(pick(p.name_en,p.name_cn))}</div>
     <div class="pd">
       <div class="pd-gallery">
@@ -3628,7 +3651,7 @@ async function renderProduct(id){
           ${ss.soldOut
             ? `<button class="btn-primary" id="addBtn" disabled>${state.lang==='cn'?'已售罄':'Sold out'}</button>`
             : `<div class="pd-qty"><button type="button" data-q="dec">−</button><span id="pdQty">1</span><button type="button" data-q="inc">+</button></div>
-          <button class="btn-primary" id="addBtn">Add to cart</button>`}
+          <button class="btn-primary" id="addBtn"><span class="add-label">${state.lang==='cn'?'加入购物车':'ADD TO BASKET'}</span><span class="add-price"></span></button>`}
         </div>
       </div>
     </div>
@@ -3649,7 +3672,11 @@ async function renderProduct(id){
     const optsEl=$('#pdOpts');
     const chips=()=>optsEl?[...optsEl.querySelectorAll('.pd-choice.on')]:[];
     const unit=()=>chips().reduce((s,c)=>s+(Number(c.dataset.delta)||0),base);
-    function refresh(){$('#addBtn').textContent=(state.lang==='cn'?'加入购物车 · ':'Add to cart · ')+money(unit()*qty);}
+    function refresh(){
+      const lbl=$('#addBtn .add-label'), pr=$('#addBtn .add-price');
+      if(lbl) lbl.textContent=(state.lang==='cn'?'加入购物车':'ADD TO BASKET');
+      if(pr) pr.textContent=money(unit()*qty);
+    }
     if(optsEl){
       optsEl.addEventListener('click',e=>{const ch=e.target.closest('.pd-choice');if(!ch)return;
         const g=ch.closest('.pd-opt');
