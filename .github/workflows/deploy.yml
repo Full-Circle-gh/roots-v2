@@ -1,0 +1,146 @@
+name: Deploy to production
+
+# Auto-deploy to the live roots-v2 server on every push to main, mirroring the
+# local post-commit hook (scripts/deploy-changed.sh -> deploy-apply.sh): ship the
+# changed deployable files into the server's __stage__/ and run the existing safe
+# installer (syntax-gate -> backup -> pm2 restart -> health probe with
+# auto-rollback). This lets a push to main from anywhere — including mobile —
+# reach the live site without a developer machine in the loop.
+#
+# Requires two repo secrets (Settings -> Secrets and variables -> Actions):
+#   DEPLOY_HOST     the server IP/host (e.g. 47.239.89.63)
+#   DEPLOY_SSH_KEY  a passphrase-less private key authorized as root on the host
+#
+# A "[skip deploy]" / "[no deploy]" token in the head commit message bypasses,
+# matching deploy-changed.sh.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      full_sync:
+        description: "Ship ALL deployable files, not just the changed ones"
+        type: boolean
+        default: false
+
+# Never run two deploys at once; let an in-flight deploy finish rather than
+# cancelling it mid-restart.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout (full history for accurate diffs)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Honour [skip deploy] token
+        id: gate
+        run: |
+          MSG="$(git log -1 --pretty=%B)"
+          case "$MSG" in
+            *"[skip deploy]"*|*"[no deploy]"*)
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "Skip token in commit message — not deploying." ;;
+            *) echo "skip=false" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Configure SSH
+        if: steps.gate.outputs.skip == 'false'
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          cat > ~/.ssh/config <<EOF
+          Host prod
+            HostName $DEPLOY_HOST
+            User root
+            IdentityFile ~/.ssh/id_deploy
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Compute deployable files
+        if: steps.gate.outputs.skip == 'false'
+        id: files
+        run: |
+          set -euo pipefail
+          # Same allowlist the local deploy uses — only paths the Node app serves.
+          deployable() {
+            case "$1" in
+              public/*|routes/*|lib/*|middleware/*|scripts/*) return 0 ;;
+              server.js|database.js|schema.sql) return 0 ;;
+              *) return 1 ;;
+            esac
+          }
+          : > /tmp/changed.txt
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.full_sync }}" = "true" ]; then
+            MODE=full
+            git ls-files > /tmp/changed.txt
+          else
+            MODE=changed
+            BEFORE="${{ github.event.before }}"
+            # First push / unknown base / force-push: fall back to HEAD~1, then to
+            # a full file list so we never silently ship nothing on a real change.
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+              BEFORE="$(git rev-parse HEAD~1 2>/dev/null || true)"
+            fi
+            if [ -n "$BEFORE" ]; then
+              git diff --name-only "$BEFORE" "${{ github.sha }}" > /tmp/changed.txt
+            else
+              git ls-files > /tmp/changed.txt
+            fi
+          fi
+          : > /tmp/files.txt
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            deployable "$f" || continue
+            [ -f "$f" ] || continue   # skip deletions — the installer only adds files
+            echo "$f" >> /tmp/files.txt
+          done < /tmp/changed.txt
+          COUNT=$(wc -l < /tmp/files.txt | tr -d ' ')
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "Mode: $MODE — $COUNT deployable file(s):"
+          cat /tmp/files.txt || true
+
+      - name: Verify connectivity (nothing to ship)
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count == '0'
+        run: |
+          ssh prod "echo connected to \$(hostname); pm2 describe roots-v2 >/dev/null 2>&1 && echo 'roots-v2 online' || echo 'WARN: roots-v2 not found in pm2'"
+          echo "No deployable files in this change — nothing to ship."
+
+      - name: Ship changed files + run safe installer
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          APP=/root/roots-v2
+          STAGE="$APP/__stage__"
+          ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
+          # Recreate the directory tree for any nested files.
+          DIRS=$(sed 's@/[^/]*$@@' /tmp/files.txt | grep '/' | sort -u || true)
+          for d in $DIRS; do ssh prod "mkdir -p '$STAGE/$d'"; done
+          # Upload each file to its matching relative path under __stage__.
+          while IFS= read -r f; do
+            scp -q "$f" "prod:$STAGE/$f"
+          done < /tmp/files.txt
+          # Hand off to the server's installer: syntax-check, backup, install,
+          # pm2 restart, health probe, auto-rollback. RESULT= line is the verdict.
+          ssh prod "cp '$APP/scripts/deploy-apply.sh' /tmp/roots-v2-apply.sh && bash /tmp/roots-v2-apply.sh" | tee /tmp/apply.log || true
+          if grep -q 'RESULT=ROLLED_BACK' /tmp/apply.log; then
+            echo "::error::Deploy auto-rolled-back — the app did not come up healthy. Live site is unchanged. See installer output above."
+            exit 1
+          fi
+          if ! grep -q 'RESULT=SUCCESS' /tmp/apply.log; then
+            echo "::error::Installer did not report SUCCESS — see output above."
+            exit 1
+          fi
+          echo "Deployed successfully."
