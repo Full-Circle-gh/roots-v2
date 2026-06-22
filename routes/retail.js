@@ -21068,8 +21068,10 @@ function hydratePoll(poll, customerId) {
   return applyPollDisplayBoost({ ...poll, options, my_vote_option_id: myVoteOptionId });
 }
 
-// Customer-facing list — only `open` and `closed` polls (drafts hidden).
-router.get('/api/retail/polls', requireRetailAuth, (req, res) => {
+// Customer-facing poll list — only `open` and `closed` polls (drafts hidden).
+// Shared by the authed and public endpoints so both return an identical shape.
+// `customerId` may be null (anonymous), which hydrates polls with no my_vote.
+function listCustomerPolls(customerId) {
   const rows = tdb().prepare(
     `SELECT * FROM retail_polls
       WHERE status IN ('open', 'closed')
@@ -21080,8 +21082,38 @@ router.get('/api/retail/polls', requireRetailAuth, (req, res) => {
         id DESC
       LIMIT 50`
   ).all();
-  const hydrated = rows.map(p => hydratePoll(p, req.customer.id));
-  res.json({ success: true, data: hydrated });
+  return rows.map(p => hydratePoll(p, customerId));
+}
+
+// Best-effort token → customer id. Never throws / never 401s — for endpoints
+// that are readable anonymously but want to personalise when a token is sent.
+function customerIdFromToken(req) {
+  const m = /^Bearer\s+([A-Za-z0-9]+)$/.exec(req.headers.authorization || '');
+  if (!m) return null;
+  const row = tdb().prepare(
+    `SELECT c.id AS cid FROM retail_auth_tokens t
+       JOIN retail_customers c ON c.id = t.customer_id
+      WHERE t.token = ? AND datetime(t.expires_at) > CURRENT_TIMESTAMP
+        AND c.is_blocked = 0`
+  ).get(m[1]);
+  return row ? row.cid : null;
+}
+
+// Customer-facing list — only `open` and `closed` polls (drafts hidden).
+router.get('/api/retail/polls', requireRetailAuth, (req, res) => {
+  res.json({ success: true, data: listCustomerPolls(req.customer.id) });
+});
+
+// Public, no-auth variant of the poll list. The web storefront
+// (public/shop.html) is browsable anonymously — unlike the mini app, where the
+// shopper is always signed in via WeChat — so a home `voting_block` (and the
+// "Your say" page) needs a way to read live polls without a token. This is what
+// lets ANY tenant's web storefront show its live poll, not just signed-in
+// visitors. A valid token is still honoured when present, so a logged-in
+// shopper sees their own vote + result bars; anonymous callers get the same
+// polls with my_vote_option_id = null. Casting a vote still requires auth.
+router.get('/api/retail/polls/public', (req, res) => {
+  res.json({ success: true, data: listCustomerPolls(customerIdFromToken(req)) });
 });
 
 // Customer-facing voting config (editable intro tagline). Read live by the
