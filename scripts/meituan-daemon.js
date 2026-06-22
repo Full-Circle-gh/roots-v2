@@ -49,6 +49,10 @@ function jitter(baseMs, frac = 0.3) {
   return Math.round(baseMs - spread + Math.random() * spread * 2);
 }
 
+// Per-store latch so a 验证中心 challenge is logged once on transition, not
+// every poll (which would flood the sync log the admin tab reads).
+const verifyFlagged = {};
+
 // ── Store config ─────────────────────────────────────────────────────────────
 // Reads store codes from retail_stores table; maps code → Meituan credentials
 // from environment variables.
@@ -74,6 +78,17 @@ async function pollOrders(storeConfig) {
   try {
     browser = await getBrowser(storeCode);
     const orders = await browser.getPendingOrders();
+
+    // Surface a risk-control 验证中心 challenge to the admin tab — but only on
+    // the transition (not every poll) so it doesn't flood the sync log.
+    if (browser.verificationRequired && !verifyFlagged[storeCode]) {
+      verifyFlagged[storeCode] = true;
+      logSync(storeCode, 'verify_required', 'error', null,
+        'Meituan 验证中心 challenge — a human must pass the captcha to resume sync');
+    } else if (!browser.verificationRequired && verifyFlagged[storeCode]) {
+      verifyFlagged[storeCode] = false;
+      logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
+    }
 
     for (const order of orders) {
       if (!order.meituanOrderNo) continue;
