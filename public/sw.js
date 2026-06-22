@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v192-batch-tip';
+const CACHE = 'roots-v2-shell-v194-greeting-tod-glyph';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
