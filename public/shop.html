@@ -226,18 +226,26 @@
        (reviews + plain description) must keep their gutter back off the screen edge. */
     .pd-body>.pd-section{padding-left:20px;padding-right:20px;}
     .pd-wrap{padding-bottom:104px;}
-    .pd-buy{position:fixed;left:0;right:0;bottom:0;z-index:65;margin:0;gap:12px;align-items:center;
+    /* Title at the mini-app's poster scale (88rpx ≈ 12vw); the desktop clamp
+       bottoms out at 26px on a phone, far smaller than the mini-app. */
+    .pd-wrap .pd-info h1{font-size:min(48px,12vw);line-height:.92;letter-spacing:-.015em;}
+    .pd-wrap .pd-info .cn{font-size:19px;}
+    .pd-wrap .pd-info .tagline{font-size:17px;}
+    /* Buy-bar selectors scoped under .pd-wrap so they beat the later base
+       .pd-buy/.pd-qty rules in the second <style> block (which keeps the
+       desktop rounded pill). Square stepper = mini-app parity. */
+    .pd-wrap .pd-buy{position:fixed;left:0;right:0;bottom:0;z-index:65;margin:0;gap:12px;align-items:center;
       background:var(--oat);border-top:3px solid var(--ink);
       padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));}
-    .pd-qty{border:2px solid var(--ink);border-radius:0;flex:0 0 auto;}
-    .pd-qty button{width:44px;height:52px;}
-    .pd-qty span{min-width:46px;height:52px;display:flex;align-items:center;justify-content:center;
+    .pd-wrap .pd-qty{border:2px solid var(--ink);border-radius:0;flex:0 0 auto;overflow:visible;}
+    .pd-wrap .pd-qty button{width:44px;height:52px;font-size:22px;}
+    .pd-wrap .pd-qty span{min-width:46px;height:52px;display:flex;align-items:center;justify-content:center;
       border-left:2px solid var(--ink);border-right:2px solid var(--ink);font-size:17px;}
-    #addBtn{flex:1;background:var(--ink);color:var(--lime);border-radius:0;height:52px;padding:0 22px;
+    .pd-wrap #addBtn{flex:1;background:var(--ink);color:var(--lime);border-radius:0;height:52px;padding:0 22px;
       display:flex;justify-content:space-between;align-items:center;letter-spacing:.1em;}
-    #addBtn .add-label{font-family:var(--bf-toni);font-size:15px;font-weight:700;}
-    #addBtn .add-price{font-family:var(--bf-bear);font-size:19px;letter-spacing:0;}
-    #addBtn:disabled{background:rgba(0,0,0,.3);color:rgba(255,255,255,.7);justify-content:center;opacity:1;}
+    .pd-wrap #addBtn .add-label{font-family:var(--bf-toni);font-size:15px;font-weight:700;}
+    .pd-wrap #addBtn .add-price{font-family:var(--bf-bear);font-size:19px;letter-spacing:0;}
+    .pd-wrap #addBtn:disabled{background:rgba(0,0,0,.3);color:rgba(255,255,255,.7);justify-content:center;opacity:1;}
   }
   @media(max-width:520px){
     .bar-in{flex-wrap:wrap;gap:10px 14px;}
