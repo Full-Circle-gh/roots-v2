@@ -1945,22 +1945,50 @@ async function coStartPayment(order){
   return coOrderPlaced(order);
 }
 function coRenderAlipay(order,p){
-  $('#view').innerHTML=`<div class="wrap"><div class="co">
-    <h1>${state.lang==='cn'?'支付宝付款':'Pay with Alipay'}</h1>
-    <div class="co-sec" style="text-align:center">
-      <div style="font-family:var(--bf-gothic);font-size:30px;letter-spacing:.03em">${esc(p.total||money(order.total))}</div>
-      <img src="${escAttr(p.qr_png)}" alt="Alipay QR" style="width:240px;max-width:78%;border-radius:12px;margin:10px auto;display:block">
-      ${p.account?`<div style="color:var(--muted);font-size:13px">${esc(p.account)}</div>`:''}
-      <div class="co-msg" style="color:var(--muted);text-align:left;margin-top:12px">${state.lang==='cn'?'1. 用支付宝「扫一扫」扫描二维码<br>2. 务必按显示金额付款<br>3. 付款后在下方上传付款截图':'1. Scan the QR with Alipay “Scan”<br>2. Pay the EXACT amount shown<br>3. Upload your payment screenshot below'}</div>
+  const cn=state.lang==='cn';
+  const steps=cn
+    ?['用支付宝「扫一扫」扫描下方二维码','务必按上方显示的金额付款','付款后在下方上传付款截图，客服核对后确认']
+    :['Scan the QR below with Alipay “Scan”','Pay the EXACT amount shown above','Upload your payment screenshot below'];
+  const orderNo=order.order_no||('#'+order.id);
+  const win=Number(p.pay_window_min)||0;
+  const col='width:300px;max-width:92%;margin:0 auto;box-sizing:border-box';
+  $('#view').innerHTML=`<div class="wrap"><div class="co" style="text-align:center">
+    <h1>${cn?'支付宝付款':'Pay with Alipay'}</h1>
+
+    <!-- 1 · amount due — read first -->
+    <div style="${col};background:var(--ink);padding:16px 20px;margin-bottom:16px">
+      <div style="font-size:11px;letter-spacing:.16em;color:var(--lime);text-transform:uppercase">${cn?'应付金额':'Amount due'}</div>
+      <div style="font-family:var(--bf-gothic);font-size:38px;line-height:1.05;color:#fff">${esc(p.total||money(order.total))}</div>
     </div>
-    <div class="co-sec">
-      <h3>${state.lang==='cn'?'上传付款截图':'Upload payment screenshot'}</h3>
-      <input type="file" id="payProof" accept="image/*" style="width:100%;font:inherit">
-      <div class="co-msg" id="payMsg" style="color:var(--muted)"></div>
+
+    <!-- 2 · QR to scan -->
+    <div style="${col};background:#fff;border:2px solid var(--ink);padding:14px;margin-bottom:16px">
+      <img src="${escAttr(p.qr_png)}" alt="Alipay QR" style="width:100%;display:block">
     </div>
-    <div style="text-align:center;margin-top:10px"><a class="more" href="#/shop">${state.lang==='cn'?'稍后支付（订单已保留）':'Pay later (order is saved)'}</a></div>
+
+    <!-- 3 · how to pay -->
+    <div style="${col};text-align:left;display:flex;flex-direction:column;gap:11px;margin-bottom:16px">
+      ${steps.map((s,i)=>`<div style="display:flex;gap:10px;align-items:flex-start">
+        <span style="flex:0 0 22px;height:22px;background:var(--ink);color:var(--lime);border-radius:50%;text-align:center;line-height:22px;font-size:12px;font-weight:700">${i+1}</span>
+        <span style="font-size:14px;color:var(--ink);line-height:1.45">${s}</span></div>`).join('')}
+    </div>
+
+    <!-- 4 · upload (the real next step) -->
+    <div style="${col};margin-bottom:14px">
+      <label for="payProof" style="display:block;background:var(--ink);color:var(--lime);padding:13px;font-weight:600;letter-spacing:.06em;cursor:pointer;text-transform:uppercase">${cn?'上传付款截图':'Upload payment screenshot'}</label>
+      <input type="file" id="payProof" accept="image/*" style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden">
+      <div class="co-msg" id="payMsg" style="color:var(--muted);margin-top:8px"></div>
+    </div>
+
+    <!-- 5 · quiet meta -->
+    <div style="${col};color:var(--muted);font-size:12px;line-height:1.7">
+      ${win>0?`<div style="color:#8a5a00;background:#fff4d6;border:1px solid #f0c862;border-radius:8px;padding:9px 12px;margin-bottom:9px">⏱ ${cn?'请在 '+win+' 分钟内完成付款，超时订单自动取消':'Pay within '+win+' min — unpaid orders are cancelled after that'}</div>`:''}
+      <div>${cn?'订单号':'Order'} · ${esc(orderNo)}</div>
+      ${p.account?`<div>${cn?'收款方':'Pays to'} · ${esc(p.account)}</div>`:''}
+      <div style="margin-top:8px"><a class="more" href="#/shop">${cn?'稍后支付（订单已保留）':'Pay later (order is saved)'}</a></div>
+    </div>
   </div></div>`;
-  document.title=(state.lang==='cn'?'支付':'Payment')+' · '+state.brand;
+  document.title=(cn?'支付':'Payment')+' · '+state.brand;
   $('#payProof').addEventListener('change',e=>coUploadProof(order,e.target.files&&e.target.files[0]));
   coPollStatus(order);
 }

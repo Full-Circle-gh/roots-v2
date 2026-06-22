@@ -34,55 +34,34 @@
   line-height: 1.5;
 }
 
-/* amount / order card */
-.card {
-  background: #FFFCF7;
+/* 1 · amount due — hero black card, read first */
+.amount-card {
+  width: 480rpx;
+  box-sizing: border-box;
+  margin: 0 auto 28rpx;
+  background: var(--ink);
   border: 3rpx solid var(--ink);
-  padding: 28rpx 32rpx;
-  margin-bottom: 40rpx;
-}
-.row {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 14rpx 0;
-}
-.row + .row { border-top: 2rpx dashed rgba(0, 0, 0, 0.15); }
-.lbl {
-  font-size: calc(22rpx * var(--font-scale));
-  letter-spacing: 0.14em;
-  color: var(--olive);
-}
-.val {
-  font-size: calc(30rpx * var(--font-scale));
-  color: var(--ink);
-  font-family: monospace;
-}
-.val.total {
-  font-size: calc(48rpx * var(--font-scale));
-  font-family: var(--f-bear);
-  letter-spacing: 0;
-}
-
-/* pay-within deadline notice */
-.deadline {
-  margin: 0 auto 24rpx;
-  max-width: 480rpx;
+  padding: 22rpx 28rpx;
   text-align: center;
-  font-size: calc(24rpx * var(--font-scale));
-  color: #8a5a00;
-  background: #fff4d6;
-  border: 2rpx solid #f0c862;
-  border-radius: 12rpx;
-  padding: 14rpx 20rpx;
-  line-height: 1.4;
+}
+.amount-lbl {
+  font-size: calc(22rpx * var(--font-scale));
+  letter-spacing: 0.16em;
+  color: var(--lime);
+  text-transform: uppercase;
+}
+.amount-val {
+  font-size: calc(64rpx * var(--font-scale));
+  line-height: 1.1;
+  color: #FFFFFF;
+  margin-top: 6rpx;
 }
 
 /* QR */
 .qr-wrap {
   position: relative;
   width: 480rpx;
-  margin: 0 auto 40rpx;
+  margin: 0 auto 28rpx;
   background: #FFFFFF;
   border: 3rpx solid var(--ink);
   padding: 24rpx;
@@ -109,12 +88,14 @@
   border-radius: 999rpx;
 }
 
-/* steps */
+/* steps — sit directly under the QR */
 .steps {
-  margin: 48rpx 0 0;
+  width: 480rpx;
+  box-sizing: border-box;
+  margin: 0 auto 28rpx;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: 20rpx;
 }
 .step {
   display: flex;
@@ -139,9 +120,38 @@
   padding-top: 4rpx;
 }
 
+/* 5 · quiet meta — deadline / order / payee, below the fold */
+.meta {
+  width: 480rpx;
+  box-sizing: border-box;
+  margin: 32rpx auto 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+.meta-deadline {
+  text-align: center;
+  font-size: calc(22rpx * var(--font-scale));
+  color: #8a5a00;
+  background: #fff4d6;
+  border: 2rpx solid #f0c862;
+  border-radius: 10rpx;
+  padding: 12rpx 18rpx;
+  line-height: 1.4;
+  margin-bottom: 4rpx;
+}
+.meta-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: calc(22rpx * var(--font-scale));
+}
+.meta-lbl { color: var(--olive); letter-spacing: 0.06em; }
+.meta-val { color: var(--ink); font-family: monospace; }
+
 /* waiting */
 .waiting {
-  margin-top: 48rpx;
+  margin-top: 36rpx;
   display: flex;
   align-items: center;
   justify-content: center;
