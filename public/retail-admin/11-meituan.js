@@ -22,7 +22,7 @@
   async function mtLoadStores() {
     try {
       const res = await api('/api/retail-admin/meituan/stores');
-      _stores = res;
+      _stores = res.data || [];
       // Try to guess 天河 / 越秀 by code or name
       _storeA = _stores.find(s => s.code === 'tianhe' || s.name?.includes('天河')) || _stores[0] || null;
       _storeB = _stores.find(s => s.code === 'yuexiu' || s.name?.includes('越秀')) || _stores[1] || null;
@@ -79,7 +79,8 @@
     const tbody = document.getElementById('mt-products-body');
     tbody.innerHTML = '<tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
     try {
-      _products = await api('/api/retail-admin/meituan/products');
+      const res = await api('/api/retail-admin/meituan/products');
+      _products = res.data || [];
       mtRenderProducts();
     } catch (e) {
       tbody.innerHTML = `<tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Error: ${escape(e.message)}</td></tr>`;
