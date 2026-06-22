@@ -652,6 +652,27 @@
     .sl-vp-ps{display:flex;align-items:baseline;gap:6px;flex:none;}
     .sl-vp-was{font-size:11px;color:rgba(0,0,0,.4);text-decoration:line-through;}
     .sl-vp-pr{font-family:var(--bf-bear);font-size:16px;color:var(--ink);}
+    /* Product options bottom-sheet (dressing / paid extras) — reuses .sl-vp shell.
+       Full-width stacked rows, ink fill when chosen, like the mini-app. */
+    .op-body{padding:4px 18px 0;}
+    .op-group{margin-bottom:18px;}
+    .op-q{font-family:var(--bf-toni);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--olive);margin-bottom:9px;}
+    .op-q .op-req{color:var(--berry);}
+    .op-choices{display:flex;flex-direction:column;gap:8px;}
+    .op-choice{display:flex;align-items:center;justify-content:space-between;gap:10px;width:100%;text-align:left;
+      padding:13px 16px;background:#FFFCF7;border:2px solid var(--ink);border-radius:8px;cursor:pointer;color:var(--ink);font:inherit;}
+    .op-choice .op-cl{font-family:var(--bf-bear);font-size:16px;}
+    .op-choice .op-cd{font-family:var(--bf-toni);font-size:13px;color:var(--olive);flex:none;}
+    .op-choice.on{background:var(--ink);}
+    .op-choice.on .op-cl,.op-choice.on .op-cd{color:var(--oat);}
+    .op-extra{justify-content:flex-start;}
+    .op-extra .op-cl{flex:1;}
+    .op-box{flex:none;width:20px;height:20px;border:2px solid var(--ink);border-radius:5px;display:flex;
+      align-items:center;justify-content:center;font-size:13px;color:var(--oat);line-height:1;}
+    .op-extra.on .op-box{background:var(--oat);color:var(--ink);}
+    .op-foot{padding:14px 18px calc(16px + env(safe-area-inset-bottom,0px));}
+    .op-add{width:100%;background:var(--ink);color:var(--oat);border:0;border-radius:8px;padding:15px 0;cursor:pointer;
+      font-family:var(--bf-toni);font-size:15px;font-weight:700;letter-spacing:.06em;}
   </style>
   <nav class="tabbar" id="tabbar" hidden aria-label="Primary">
     <a class="tabitem" data-tab="home" href="#/">
@@ -3798,14 +3819,9 @@ async function renderProduct(id){
     ? `<div class="shop-product-blocks">${ShopProductBlocks.render(blocks,{lang:state.lang})}</div>`
     : (desc?`<div class="pd-section"><h3>${state.lang==='cn'?'商品详情':'Description'}</h3><div class="desc">${desc}</div></div>`:'');
 
+  // Per-product options (dressing, spice, paid extras) are chosen in a bottom
+  // sheet opened from ADD TO BASKET — not inline — to match the mini-app.
   const popts=Array.isArray(p.options)?p.options:[];
-  const optsHtml=popts.length?`<div class="pd-opts" id="pdOpts">${popts.map(o=>{
-    const multi=o.type==='multi';
-    return `<div class="pd-opt" data-multi="${multi?1:0}" data-req="${o.is_required?1:0}">
-      <div class="q">${esc(pick(o.question_en,o.question_cn))}${o.is_required?' <span class="req">*</span>':''}</div>
-      <div class="choices">${(o.choices||[]).map(c=>`<button type="button" class="pd-choice" data-cid="${c.id}" data-delta="${Number(c.price_delta)||0}" data-label="${escAttr(pick(c.label_en,c.label_cn))}">${esc(pick(c.label_en,c.label_cn))}${Number(c.price_delta)?`<span class="delta">+${money(c.price_delta)}</span>`:''}</button>`).join('')}</div>
-    </div>`;
-  }).join('')}</div>`:'';
 
   const variants=Array.isArray(p.variants)?p.variants:[];
   const varsHtml=variants.length>1?`<div class="pd-section"><h3>${state.lang==='cn'?'规格':'Choose'}</h3><div class="variants">${
@@ -3841,7 +3857,6 @@ async function renderProduct(id){
         ${ss.oos&&!ss.soldOut?`<div class="pd-oos-note">${state.lang==='cn'?'当前缺货，外地可预订，下批/补货后发出。':'Out of stock now — orderable outside Guangzhou; ships on the next batch / restock.'}</div>`:''}
         ${rc>0?`<div class="rating"><span class="stars">${'★'.repeat(Math.round(avg))}<span class="off">${'★'.repeat(5-Math.round(avg))}</span></span>${avg.toFixed(1)} · ${rc} ${state.lang==='cn'?'条评价':'reviews'}</div>`:''}
         ${varsHtml}
-        ${optsHtml}
         <div class="pd-buy">
           ${ss.soldOut
             ? `<button class="btn-primary" id="addBtn" disabled>${state.lang==='cn'?'已售罄':'Sold out'}</button>`
@@ -3864,38 +3879,99 @@ async function renderProduct(id){
     // doesn't overwrite its "Sold out" label. (Backorder OOS stays orderable.)
     if(ss.soldOut) return;
     const base=nowPrice(p); let qty=1;
-    const optsEl=$('#pdOpts');
-    const chips=()=>optsEl?[...optsEl.querySelectorAll('.pd-choice.on')]:[];
-    const unit=()=>chips().reduce((s,c)=>s+(Number(c.dataset.delta)||0),base);
-    function refresh(){
+    // Mini-app flow: single/radio options (dressing) → first sheet, multi
+    // options (paid extras) → second sheet. Chosen in a popup, not inline.
+    const single=popts.filter(o=>o.type!=='multi');
+    const extra =popts.filter(o=>o.type==='multi');
+    const sel={};   // option.id -> [chosen choice id, …]
+    // radios start with their first choice picked (mini-app parity)
+    single.forEach(o=>{ if((o.choices||[]).length) sel[o.id]=[o.choices[0].id]; });
+    extra.forEach(o=>{ sel[o.id]=sel[o.id]||[]; });
+
+    const selIds=o=>sel[o.id]||[];
+    const findChoice=(o,cid)=>(o.choices||[]).find(c=>c.id===cid);
+    function unit(){
+      let d=0;
+      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) d+=Number(c.price_delta)||0;}));
+      return base+d;
+    }
+    const priceLabel=()=>(state.lang==='cn'?'加入购物车 · ':'Add to basket · ')+money(unit()*qty);
+    function refreshBar(){
       const lbl=$('#addBtn .add-label'), pr=$('#addBtn .add-price');
       if(lbl) lbl.textContent=(state.lang==='cn'?'加入购物车':'ADD TO BASKET');
       if(pr) pr.textContent=money(unit()*qty);
     }
-    if(optsEl){
-      optsEl.addEventListener('click',e=>{const ch=e.target.closest('.pd-choice');if(!ch)return;
-        const g=ch.closest('.pd-opt');
-        if(g.dataset.multi==='1')ch.classList.toggle('on');
-        else g.querySelectorAll('.pd-choice').forEach(x=>x.classList.toggle('on',x===ch));
-        refresh();});
-      // radios start with their first choice picked (mini-app parity)
-      optsEl.querySelectorAll('.pd-opt[data-multi="0"]').forEach(g=>{const f=g.querySelector('.pd-choice');if(f)f.classList.add('on');});
-    }
     $('.pd-qty').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
       if(b.dataset.q==='inc')qty++;else if(b.dataset.q==='dec'&&qty>1)qty--;
-      $('#pdQty').textContent=qty;refresh();});
-    $('#addBtn').addEventListener('click',()=>{
-      let missing=null;
-      if(optsEl)optsEl.querySelectorAll('.pd-opt[data-req="1"]').forEach(g=>{if(!g.querySelector('.pd-choice.on'))missing=g;});
-      if(missing){toast(state.lang==='cn'?'请选择必选项':'Please choose the required option');missing.scrollIntoView({block:'center',behavior:'smooth'});return;}
-      const sel=chips();
-      cartAdd({product_id:p.id,qty,choices:sel.map(c=>Number(c.dataset.cid)),
+      $('#pdQty').textContent=qty;refreshBar();});
+
+    function doAdd(){
+      for(const o of popts){ if(o.is_required && !selIds(o).length){
+        toast(state.lang==='cn'?('请选择 '+pick(o.question_en,o.question_cn)):('Please choose: '+pick(o.question_en,o.question_cn))); return false; } }
+      const chosen=[];
+      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) chosen.push(c);}));
+      cartAdd({product_id:p.id,qty,choices:chosen.map(c=>Number(c.id)),
         name:pick(p.name_en,p.name_cn),price:unit(),image:thumb(p),
-        optLabel:sel.map(c=>c.dataset.label).filter(Boolean).join(' · ')});
+        optLabel:chosen.map(c=>pick(c.label_en,c.label_cn)).filter(Boolean).join(' · ')});
       toast(state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
       openCart();
+      return true;
+    }
+
+    // Build one options bottom-sheet (single=radio, multi=tick-box) reusing the
+    // size-picker shell. opts:{title,multi,btnLabel(),onConfirm(close)}.
+    function buildSheet(groups,o){
+      const mask=document.createElement('div'); mask.className='sl-vpmask';
+      const rows=groups.map(g=>`<div class="op-group">
+        <div class="op-q">${esc(pick(g.question_en,g.question_cn))}${g.is_required?' <span class="op-req">*</span>':''}</div>
+        <div class="op-choices">${(g.choices||[]).map(c=>{
+          const on=selIds(g).indexOf(c.id)>=0, d=Number(c.price_delta)||0;
+          return `<button type="button" class="op-choice${o.multi?' op-extra':''}${on?' on':''}" data-oid="${g.id}" data-cid="${c.id}">
+            ${o.multi?'<span class="op-box">'+(on?'✓':'')+'</span>':''}
+            <span class="op-cl">${esc(pick(c.label_en,c.label_cn))}</span>
+            ${d?`<span class="op-cd">+${money(d)}</span>`:''}</button>`;
+        }).join('')}</div></div>`).join('');
+      mask.innerHTML=`<div class="sl-vp"><div class="sl-vp-h"><div>
+        <div class="sl-vp-t">${esc(o.title)}</div><div class="sl-vp-n">${esc(pick(p.name_en,p.name_cn))}</div>
+        </div><div class="sl-vp-x" data-x>×</div></div>
+        <div class="op-body">${rows}</div>
+        <div class="op-foot"><button class="op-add" data-add>${esc(o.btnLabel())}</button></div></div>`;
+      document.body.appendChild(mask);
+      const close=()=>mask.remove();
+      const updFoot=()=>{const a=mask.querySelector('[data-add]'); if(a)a.textContent=o.btnLabel();};
+      mask.addEventListener('click',e=>{
+        if(e.target===mask||e.target.closest('[data-x]')){ close(); return; }
+        const ch=e.target.closest('.op-choice');
+        if(ch){ const oid=ch.dataset.oid, cid=Number(ch.dataset.cid);
+          if(o.multi){ const arr=sel[oid]||(sel[oid]=[]); const i=arr.indexOf(cid);
+            if(i>=0)arr.splice(i,1); else arr.push(cid);
+            ch.classList.toggle('on'); const bx=ch.querySelector('.op-box'); if(bx)bx.textContent=ch.classList.contains('on')?'✓':'';
+          } else { sel[oid]=[cid];
+            ch.parentElement.querySelectorAll('.op-choice').forEach(x=>x.classList.toggle('on',x===ch)); }
+          updFoot(); refreshBar(); return; }
+        if(e.target.closest('[data-add]')){ o.onConfirm(close); return; }
+      });
+    }
+    function openSingle(){
+      buildSheet(single,{title:state.lang==='cn'?'选择选项':'Choose your options',multi:false,
+        btnLabel:()=>extra.length?(state.lang==='cn'?'下一步':'Next'):priceLabel(),
+        onConfirm:close=>{
+          for(const g of single){ if(g.is_required && !selIds(g).length){
+            toast(state.lang==='cn'?('请选择 '+pick(g.question_en,g.question_cn)):('Please choose: '+pick(g.question_en,g.question_cn))); return; } }
+          close();
+          if(extra.length) openExtra(); else doAdd();
+        }});
+    }
+    function openExtra(){
+      buildSheet(extra,{title:state.lang==='cn'?'加点配料?':'Add extras?',multi:true,
+        btnLabel:priceLabel, onConfirm:close=>{ if(doAdd()) close(); }});
+    }
+    $('#addBtn').addEventListener('click',()=>{
+      if(single.length){ openSingle(); return; }
+      if(extra.length){ openExtra(); return; }
+      doAdd();
     });
-    refresh();
+    refreshBar();
   })();
 }
 
