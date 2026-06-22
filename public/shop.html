@@ -2413,7 +2413,7 @@ async function renderAddressForm(edit){
   v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'收货地址':'ADDRESSES',cn?'我的地址':'Saved spots.','')}
     <div class="sp-pad af-form">
       <div class="af-sub">${isEdit?(cn?'编辑地址':'Edit address'):(cn?'新增地址':'Add address')}</div>
-      <button type="button" id="afMap" class="af2-map" hidden>📍 ${cn?'地图选点':'Choose on map'}</button>
+      <button type="button" id="afMap" class="af2-map">📍 ${cn?'地图选点':'Choose on map'}</button>
       <input id="afName" class="af2-input" value="${escAttr(a.recipient_name||'')}" placeholder="${cn?'收件人姓名':'Recipient name'}">
       <input id="afPhone" class="af2-input" type="tel" inputmode="numeric" value="${escAttr(a.phone||'')}" placeholder="${cn?'手机号码':'Phone number'}">
       <button type="button" id="afArea" class="af2-area ${co.af.city?'':'ph'}">${esc(areaTxt)}</button>
@@ -2424,7 +2424,14 @@ async function renderAddressForm(edit){
     </div>
     <div class="sp-foot" style="display:flex;gap:10px"><button class="sp-btn ghost" id="afCancel" style="flex:1">${cn?'取消':'Cancel'}</button><button class="sp-btn af2-save" id="afSave" style="flex:1">${cn?'保存':'Save'}</button></div></div>`;
   $('#afArea').addEventListener('click',openAreaPicker);
-  coSetupMapButton();   // reveals #afMap once maps-config confirms a JS key
+  // "Choose on map" mirrors the mini-app and stays visible for visual parity.
+  // It opens the real map picker when a maps JS key is configured, and falls
+  // back to the city/district picker otherwise so it's never a dead button.
+  (async()=>{
+    if(coZones.maps===undefined){ try{ coZones.maps=await api('/api/retail/maps-config'); }catch(e){ coZones.maps=null; } }
+    const mb=$('#afMap'); if(!mb)return;
+    mb.addEventListener('click',(coZones.maps&&coZones.maps.provider)?openMapPicker:openAreaPicker);
+  })();
   $('#afCancel').addEventListener('click',()=>renderAddresses());
   $('#afSave').addEventListener('click',async()=>{
     const name=($('#afName').value||'').trim(), phone=($('#afPhone').value||'').replace(/\D/g,'');
