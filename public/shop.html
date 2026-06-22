@@ -806,19 +806,66 @@
     .co-tab.on{background:var(--ink);color:var(--oat);border-color:var(--ink);}
     .co-pts{display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;}
     .co-pts input{width:18px;height:18px;}
-    /* order history */
-    .oc{background:#fff;border:2px solid var(--ink);border-radius:0;padding:14px 16px;margin-bottom:14px;}
-    .oc-top{display:flex;justify-content:space-between;align-items:center;}
-    .oc-no{font-family:var(--bf-gothic);font-size:16px;letter-spacing:.03em;}
-    .oc-st{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:var(--oat);color:var(--ink);}
-    .oc-st.st-pending_payment{background:#fde8ec;color:#b3243f;} .oc-st.st-paid,.oc-st.st-preparing{background:#e6f0d9;color:#3a5a1e;}
-    .oc-st.st-dispatched{background:#e0ecfb;color:#2a5; } .oc-st.st-delivered{background:#dff0e4;color:#16653a;} .oc-st.st-cancelled{background:#eee;color:#888;}
-    .oc-body{display:flex;gap:12px;align-items:center;margin-top:12px;}
-    .oc-thumbs{display:flex;}
-    .oc-th{width:48px;height:48px;border-radius:9px;overflow:hidden;background:#e3dccf;margin-left:-8px;border:2px solid #fff;}
-    .oc-th:first-child{margin-left:0;} .oc-th img{width:100%;height:100%;object-fit:cover;}
-    .oc-meta{flex:1;} .oc-date{font-size:12px;color:var(--muted);} .oc-cnt{font-size:14px;font-weight:700;margin-top:2px;}
-    .oc-pay{margin-top:12px;width:100%;font:inherit;font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:13px;background:var(--berry);color:#fff;border:0;border-radius:999px;padding:11px;cursor:pointer;}
+    /* order history — editorial, mini-app parity */
+    .ord-head{padding:22px 22px 4px;}
+    .ord-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--olive);}
+    .ord-title{font-family:var(--bf-bear);font-size:38px;line-height:1;color:var(--ink);margin-top:6px;}
+    .ord-chips{display:flex;gap:9px;overflow-x:auto;padding:14px 22px 16px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+    .ord-chips::-webkit-scrollbar{display:none;}
+    .ord-chip{flex:0 0 auto;border:2px solid var(--ink);background:transparent;border-radius:999px;padding:7px 16px;font-family:var(--bf-toni);font-weight:600;font-size:12px;letter-spacing:.04em;color:var(--olive);white-space:nowrap;cursor:pointer;}
+    .ord-chip.on{background:var(--ink);color:var(--oat);}
+    .ord-list{padding:0 22px;}
+    .oc{background:#FFFCF7;border:2px solid var(--ink);border-radius:0;padding:18px;margin-bottom:14px;cursor:pointer;}
+    .oc-top{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;}
+    .oc-no{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:700;letter-spacing:.02em;color:var(--ink);}
+    .oc-tags{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+    .oc-pickup{font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.04em;padding:4px 10px;border-radius:999px;background:rgba(123,189,59,.14);color:#3a6817;border:1.5px solid rgba(123,189,59,.35);}
+    .oc-st{font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:4px 11px;border-radius:999px;border:1.5px solid;}
+    .oc-st.st-pending_payment{background:rgba(255,175,96,.18);color:#c66800;border-color:rgba(255,175,96,.4);}
+    .oc-st.st-paid{background:rgba(178,207,237,.2);color:#2456a3;border-color:rgba(178,207,237,.5);}
+    .oc-st.st-preparing{background:rgba(242,202,108,.2);color:#7f5800;border-color:rgba(242,202,108,.5);}
+    .oc-st.st-dispatched{background:rgba(123,189,59,.18);color:#3a6817;border-color:rgba(123,189,59,.4);}
+    .oc-st.st-delivered{background:rgba(54,83,41,.92);color:#fff;border-color:var(--forest);}
+    .oc-st.st-cancelled{background:rgba(0,0,0,.06);color:var(--olive);border-color:rgba(0,0,0,.18);}
+    .oc-st.st-refunded,.oc-st.st-awaiting_restock{background:rgba(233,97,116,.18);color:#9c1f33;border-color:rgba(233,97,116,.4);}
+    .oc-body{display:flex;gap:14px;align-items:center;}
+    .oc-thumbs{display:flex;gap:6px;flex:1;align-items:center;min-width:0;}
+    .oc-th{width:46px;height:46px;flex:0 0 auto;border-radius:0;background:var(--oat);border:2px solid var(--ink);overflow:hidden;}
+    .oc-th img{width:100%;height:100%;object-fit:cover;}
+    .oc-more{font-family:var(--bf-gothic);font-size:15px;color:var(--olive);margin-left:4px;}
+    .oc-amt{font-family:var(--bf-bear);font-size:24px;color:var(--ink);white-space:nowrap;}
+    .oc-date{font-size:11px;color:var(--olive);margin-top:12px;letter-spacing:.02em;}
+    .oc-pay{margin-top:14px;width:100%;font-family:var(--bf-toni);font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:13px;background:var(--ink);color:var(--lime);border:0;border-radius:0;padding:13px;cursor:pointer;}
+    /* top-up — editorial tier grid, mini-app parity */
+    .tu-strip{margin:16px 22px 0;background:var(--ink);color:#fff;padding:16px 18px;display:flex;justify-content:space-between;align-items:center;border:2px solid var(--ink);}
+    .tu-strip .l{font-family:var(--bf-toni);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:rgba(255,255,255,.55);}
+    .tu-strip .vals{display:flex;align-items:baseline;gap:12px;margin-top:6px;}
+    .tu-strip .amt{font-family:var(--bf-bear);font-size:30px;line-height:1;color:var(--lime);}
+    .tu-strip .pts{font-family:var(--bf-gothic);font-size:15px;color:rgba(255,255,255,.6);letter-spacing:.03em;}
+    .tu-strip .link{font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--lime);text-decoration:underline;cursor:pointer;white-space:nowrap;}
+    .tu-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:18px 22px 0;}
+    .tu-tier{position:relative;border:2px solid var(--ink);padding:16px 16px 18px;cursor:pointer;transition:transform .12s ease,box-shadow .12s ease;overflow:visible;}
+    .tu-tier.on{background:var(--ink);box-shadow:5px 5px 0 rgba(0,0,0,.85);transform:translate(-2px,-2px);}
+    .tu-best{position:absolute;top:-12px;right:-8px;background:var(--berry);color:#fff;padding:3px 10px;font-family:var(--bf-gothic);font-size:11px;letter-spacing:.06em;transform:rotate(6deg);border:2px solid var(--ink);box-shadow:3px 3px 0 var(--ink);z-index:2;}
+    .tu-lab{font-family:var(--bf-gothic);font-size:12px;letter-spacing:.08em;color:var(--olive);}
+    .tu-tier.on .tu-lab{color:var(--lime);}
+    .tu-amt{font-family:var(--bf-bear);font-size:38px;line-height:.9;margin-top:8px;letter-spacing:-.01em;color:var(--ink);}
+    .tu-tier.on .tu-amt{color:#fff;}
+    .tu-bonus{display:inline-block;margin-top:12px;padding:4px 10px;font-family:var(--bf-gothic);font-size:12px;letter-spacing:.05em;background:var(--ink);color:var(--lime);}
+    .tu-tier.on .tu-bonus{background:var(--lime);color:var(--ink);}
+    .tu-foot{margin-top:10px;font-family:var(--bf-toni);font-size:10px;letter-spacing:.06em;color:var(--olive);}
+    .tu-tier.on .tu-foot{color:rgba(255,255,255,.55);}
+    .tu-check{position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--bf-bear);font-size:15px;background:var(--lime);color:var(--ink);}
+    .tu-payfoot{margin:20px 22px 0;padding:16px 0 0;border-top:2px solid var(--ink);}
+    .tu-pf-row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:14px;}
+    .tu-pf-l{font-family:var(--bf-toni);font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--olive);}
+    .tu-pf-big{font-family:var(--bf-bear);font-size:30px;line-height:1;margin-top:4px;color:var(--ink);}
+    .tu-pf-r{text-align:right;}
+    .tu-pf-val{font-family:var(--bf-bear);font-size:22px;line-height:1;margin-top:4px;color:var(--ink);}
+    .tu-pf-plus{font-size:15px;color:var(--olive);}
+    .tu-pf-value{font-family:var(--bf-toni);font-size:10px;letter-spacing:.1em;color:var(--berry);margin-top:4px;}
+    .tu-cta{width:100%;padding:16px;display:flex;align-items:center;justify-content:center;white-space:nowrap;font-family:var(--bf-toni);font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase;background:var(--ink);color:var(--lime);border:0;border-radius:0;cursor:pointer;}
+    .tu-cta:disabled{opacity:.55;cursor:default;}
   </style>
   <div id="cartDrawer" class="cd-overlay" hidden>
     <div class="cd-panel">
@@ -2159,24 +2206,45 @@ function orderStatusLabel(s){
 }
 function orderCardHtml(o){
   const cn=state.lang==='cn';
-  const thumbs=(o.items_preview||[]).map(it=>`<div class="oc-th">${it.image_url?`<img src="${escAttr(it.image_url)}" alt="">`:''}</div>`).join('');
+  const prev=(o.items_preview||[]);
+  const cnt=Number(o.item_count)||prev.length;
+  const thumbs=prev.slice(0,3).map(it=>`<div class="oc-th">${it.image_url?`<img src="${escAttr(it.image_url)}" alt="">`:''}</div>`).join('')
+    +(cnt>3?`<span class="oc-more">+${cnt-3}</span>`:'');
   const date=String(o.placed_at||'').replace('T',' ').slice(0,16);
-  return `<div class="oc" data-oid="${o.id}" style="cursor:pointer">
-    <div class="oc-top"><span class="oc-no">${esc(o.order_no||('#'+o.id))}</span><span class="oc-st st-${esc(o.status)}">${esc(orderStatusLabel(o.status))}</span></div>
-    <div class="oc-body"><div class="oc-thumbs">${thumbs}</div>
-      <div class="oc-meta"><div class="oc-date">${esc(date)}</div><div class="oc-cnt">${o.item_count||0} ${cn?'件':'items'} · ${money(o.total)}</div></div></div>
+  const isPickup=o.fulfillment_type==='pickup';
+  return `<div class="oc" data-oid="${o.id}">
+    <div class="oc-top"><span class="oc-no">${esc(o.order_no||('#'+o.id))}</span>
+      <span class="oc-tags">${isPickup?`<span class="oc-pickup">${cn?'🏬 自提':'🏬 Pickup'}</span>`:''}<span class="oc-st st-${esc(o.status)}">${esc(orderStatusLabel(o.status))}</span></span></div>
+    <div class="oc-body"><div class="oc-thumbs">${thumbs}</div><div class="oc-amt">${money(o.total)}</div></div>
+    <div class="oc-date">${esc(date)}</div>
     ${o.status==='pending_payment'?`<button class="oc-pay" data-pay="${o.id}" data-no="${escAttr(o.order_no||'')}" data-total="${escAttr(String(o.total))}">${cn?'去支付':'Pay now'}</button>`:''}
   </div>`;
 }
+let ordersFilter='';
 async function renderOrders(){
   const v=$('#view'); const cn=state.lang==='cn';
-  if(!state.token){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(cn?'请先登录查看订单':'Please sign in to view orders')+'</div></div></div>'; openLogin(); return; }
-  v.innerHTML='<div class="wrap"><div class="co"><h1>'+(cn?'我的订单':'My orders')+'</h1><div id="ordList"><div class="empty">'+(cn?'加载中…':'Loading…')+'</div></div></div></div>';
+  if(!state.token){ v.innerHTML='<div class="sp"><div class="sp-empty">'+(cn?'请先登录查看订单':'Please sign in to view orders')+'</div></div>'; openLogin(); return; }
   document.title=(cn?'我的订单':'My orders')+' · '+state.brand;
-  let list; try{ list=await api('/api/retail/orders?limit=30'); }catch(e){ list=null; }
+  const filters=[
+    {key:'',label:cn?'全部':'All'},
+    {key:'pending_payment',label:orderStatusLabel('pending_payment')},
+    {key:'paid',label:orderStatusLabel('paid')},
+    {key:'preparing',label:orderStatusLabel('preparing')},
+    {key:'dispatched',label:orderStatusLabel('dispatched')},
+    {key:'delivered',label:orderStatusLabel('delivered')},
+  ];
+  const chips=filters.map(f=>`<button class="ord-chip ${ordersFilter===f.key?'on':''}" data-of="${escAttr(f.key)}">${esc(f.label)}</button>`).join('');
+  v.innerHTML=`<div class="sp">${spBack()}
+    <div class="ord-head"><div class="ord-kicker">${cn?'我的订单':'MY ORDERS'}</div><div class="ord-title">${cn?'历史记录':'History.'}</div></div>
+    <div class="ord-chips">${chips}</div>
+    <div class="ord-list" id="ordList"><div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div></div>`;
+  v.querySelectorAll('[data-of]').forEach(b=>b.addEventListener('click',()=>{ if(ordersFilter===b.dataset.of)return; ordersFilter=b.dataset.of; renderOrders(); }));
+  let list; try{ list=await api('/api/retail/orders?limit=50'); }catch(e){ list=null; }
   const box=$('#ordList'); if(!box)return;
-  if(!Array.isArray(list)||!list.length){ box.innerHTML='<div class="empty">'+(cn?'还没有订单 🌱':'No orders yet 🌱')+'<br><a class="more" href="#/shop">'+(cn?'去购物':'Browse products')+'</a></div>'; return; }
-  box.innerHTML=list.map(orderCardHtml).join('');
+  let rows=Array.isArray(list)?list:[];
+  if(ordersFilter)rows=rows.filter(o=>o.status===ordersFilter);
+  if(!rows.length){ box.innerHTML=`<div class="sp-empty">${cn?'暂无订单 🌱':'No orders yet 🌱'}<br><br><a class="me-viewall" href="#/shop">${cn?'去逛逛 →':'Browse the shop →'}</a></div>`; return; }
+  box.innerHTML=rows.map(orderCardHtml).join('');
   box.querySelectorAll('[data-pay]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();coStartPayment({id:Number(b.dataset.pay),order_no:b.dataset.no,total:Number(b.dataset.total)});}));
   box.querySelectorAll('.oc[data-oid]').forEach(c=>c.addEventListener('click',()=>{location.hash='#/order/'+c.dataset.oid;}));
 }
@@ -2602,23 +2670,55 @@ async function renderTopup(){
   if(!state.customer){ try{ await loadCustomer(); }catch(e){} }
   const c=state.customer||{};
   let pkgs; try{ pkgs=await api('/api/retail/topup-packages')||[]; }catch(e){ pkgs=[]; }
-  const cards=(pkgs||[]).map(p=>`<button class="sp-card" style="margin:0;text-align:left;cursor:pointer" data-pkg="${p.id}" data-amt="${p.amount}"><div style="font-family:var(--bf-bear);font-size:28px">¥${Number(p.amount).toFixed(0)}</div>${p.bonus_points?`<div style="font-size:12px;color:var(--forest);margin-top:4px">+${p.bonus_points} ${cn?'积分':'pts'}</div>`:''}</button>`).join('');
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'账户':'ACCOUNT',cn?'充值':'Top up',cn?'充值得积分，余额随时用':'Add credit, earn bonus points')}
-    <div class="sp-card ink"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;opacity:.7">${cn?'当前余额':'CURRENT BALANCE'}</div><div style="font-family:var(--bf-bear);font-size:32px;color:var(--lime);margin-top:4px">¥${(Number(c.balance)||0).toFixed(2)}</div></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px 22px 0">${cards||`<div class="sp-empty">${cn?'暂无充值套餐':'No packages'}</div>`}</div>
-    <div class="sp-msg" id="tuMsg"></div>
-    <div class="sp-foot"><button class="sp-btn block" id="tuBtn" disabled>${cn?'选择金额':'Select an amount'}</button></div></div>`;
-  let sel=null;
-  v.querySelectorAll('[data-pkg]').forEach(b=>b.addEventListener('click',()=>{ sel=b.dataset.pkg;
-    v.querySelectorAll('[data-pkg]').forEach(x=>{x.style.borderColor='var(--ink)';x.style.borderWidth='2px';});
-    b.style.borderColor='var(--accent)'; b.style.borderWidth='3px';
-    const btn=$('#tuBtn'); btn.disabled=false; btn.textContent=(cn?'充值 ¥':'Top up ¥')+Number(b.dataset.amt).toFixed(0); }));
-  $('#tuBtn').addEventListener('click',async()=>{ if(!sel)return; const btn=$('#tuBtn'); btn.disabled=true;
-    try{ const d=await postJson('/api/retail/topup/create',{package_id:Number(sel),payment_method:'alipay'});
+  const labelsEN=['STARTER','REGULAR','PLUS','BEST VALUE'],labelsCN=['入门','常规','高级','最划算'];
+  const tiers=(pkgs||[]).map((p,i)=>{
+    const amount=Number(p.amount||0),bonus=Number(p.bonus_points||0);
+    const pv=Number(p.point_value_yuan)>0?Number(p.point_value_yuan):0.01;
+    const bonusYuan=bonus*pv, pct=amount>0?parseFloat(((bonusYuan/amount)*100).toFixed(2)):0;
+    const total=amount+bonusYuan;
+    const lab=(cn?(p.title_cn||labelsCN[Math.min(i,3)]):(p.title_en||labelsEN[Math.min(i,3)])).toUpperCase();
+    return {id:p.id,amount,bonus,pct,total,label:lab,num:'NO. '+String(i+1).padStart(2,'0'),best:false};
+  });
+  if(tiers.length)tiers[tiers.length-1].best=true;
+  let sel=tiers.length>=4?tiers.length-2:Math.max(0,tiers.length-1);
+  const fmtN=n=>Number(n).toLocaleString();
+  const headline=cn?'更大的钱包，<br>更多的 <span style="background:var(--lime);padding:0 6px">福利</span>。':'Bigger wallet,<br>bigger <span style="background:var(--lime);padding:0 6px">perks</span>.';
+
+  async function doTopUp(){
+    const t=tiers[sel]; if(!t)return; const btn=$('#tuBtn'); btn.disabled=true;
+    try{ const d=await postJson('/api/retail/topup/create',{package_id:Number(t.id),payment_method:'alipay'});
       if(d&&(d.status==='success'||d.dev)){ toast(cn?'充值成功':'Topped up'); state.customer=null; location.hash='#/wallet'; }
       else { $('#tuMsg').textContent=cn?'网页端充值即将上线，请在小程序内完成支付。':'Web top-up payment is coming soon — please top up in the mini-app for now.'; }
     }catch(e){ $('#tuMsg').textContent=cn?'暂时无法充值':'Top-up unavailable right now.'; }
-    btn.disabled=false; });
+    btn.disabled=false;
+  }
+  function paint(){
+    const t=tiers[sel]||{amount:0,bonus:0,total:0};
+    const TIER_BGS=['#FFFCF7','var(--corn)','var(--papaya)','var(--lime)'];
+    const grid=tiers.map((x,i)=>`<div class="tu-tier ${i===sel?'on':''}" data-i="${i}" style="background:${i===sel?'var(--ink)':TIER_BGS[i%TIER_BGS.length]}">
+      ${x.best?`<div class="tu-best">${cn?'最划算':'BEST VALUE'}</div>`:''}
+      <div class="tu-lab">${esc(x.num+' · '+x.label)}</div>
+      <div class="tu-amt">¥${fmtN(x.amount)}</div>
+      <div class="tu-bonus">+ ${x.bonus} PTS</div>
+      <div class="tu-foot">${x.pct}% ${cn?'赠送':'BONUS'} · ≈¥${fmtN(Number(x.total.toFixed(2)))} ${cn?'总价值':'VALUE'}</div>
+      ${i===sel?`<div class="tu-check">✓</div>`:''}
+    </div>`).join('');
+    const foot=tiers.length?`<div class="tu-payfoot">
+      <div class="tu-pf-row">
+        <div><div class="tu-pf-l">${cn?'应付':'YOU PAY'}</div><div class="tu-pf-big">¥${fmtN(t.amount)}</div></div>
+        <div class="tu-pf-r"><div class="tu-pf-l">${cn?'到账':'YOU GET'}</div><div class="tu-pf-val">¥${fmtN(t.amount)} <span class="tu-pf-plus">+ ${t.bonus} ${cn?'积分':'pts'}</span></div><div class="tu-pf-value">≈¥${fmtN(Number((t.total||0).toFixed(2)))} ${cn?'总价值':'VALUE'}</div></div>
+      </div>
+      <button class="tu-cta" id="tuBtn">${cn?'充值 ¥':'TOP UP ¥'}${fmtN(t.amount)} →</button>
+      <div class="sp-msg" id="tuMsg" style="padding-left:0"></div>
+    </div>`:`<div class="sp-empty">${cn?'暂无充值套餐':'No packages yet'}</div>`;
+    v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'充值 · TOP UP':'TOP UP',headline,cn?'充值得积分，余额随时用':'Add credit, earn bonus points')}
+      <div class="tu-strip"><div><div class="l">${cn?'当前余额':'CURRENT BALANCE'}</div><div class="vals"><span class="amt">¥${(Number(c.balance)||0).toFixed(2)}</span><span class="pts">· ${Number(c.points_balance)||0} ${cn?'积分':'PTS'}</span></div></div><div class="link" data-go="#/wallet">${cn?'查看历史 →':'HISTORY →'}</div></div>
+      ${tiers.length?`<div class="tu-grid">${grid}</div>`:''}
+      ${foot}</div>`;
+    v.querySelectorAll('.tu-tier').forEach(el=>el.addEventListener('click',()=>{sel=Number(el.dataset.i);paint();}));
+    const btn=$('#tuBtn'); if(btn)btn.addEventListener('click',doTopUp);
+  }
+  paint();
 }
 
 async function renderCoupons(){
