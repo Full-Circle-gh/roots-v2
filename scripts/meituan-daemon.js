@@ -18,8 +18,20 @@
 'use strict';
 
 const path = require('path');
-// Load .env from project root so DATABASE_URL / SERVER_PORT etc are available
-require('dotenv').config({ path: path.join(__dirname, '../.env') });
+const fs   = require('fs');
+// Load .env from project root (dotenv may not be installed — fall back to manual parse)
+const envFile = path.join(__dirname, '../.env');
+try {
+  require('dotenv').config({ path: envFile });
+} catch {
+  // dotenv not available — parse .env manually
+  if (fs.existsSync(envFile)) {
+    for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
+      const m = line.match(/^([^#=\s][^=]*)=(.*)$/);
+      if (m) process.env[m[1].trim()] = m[2].trim().replace(/^['"]|['"]$/g, '');
+    }
+  }
+}
 
 const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
