@@ -39,10 +39,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Honour [skip deploy] token
+      - name: Honour skip-deploy token
         id: gate
         run: |
-          MSG="$(git log -1 --pretty=%B)"
+          # Read the SUBJECT line only (not the body) so prose that merely
+          # mentions the token — like this workflow's own docs — never trips it.
+          MSG="$(git log -1 --pretty=%s)"
           case "$MSG" in
             *"[skip deploy]"*|*"[no deploy]"*)
               echo "skip=true" >> "$GITHUB_OUTPUT"
