@@ -6437,6 +6437,7 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-sm" onclick="mtLoadStatus()">↻ Status</button>
+        <button id="mt-clear-btn" class="btn btn-sm" onclick="mtClearAll()" title="Delete every saved Meituan name mapping across all stores. Use before re-filling from scratch.">🧹 Clear all names</button>
         <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name.">📋 Paste Meituan names</button>
         <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles from your Meituan backend (via the sync daemon) and fill empty fields with the matched real names.">⟳ Fetch from Meituan</button>
         <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Meituan name with the product's Chinese name (variant size appended where needed), both districts. Existing entries are kept.">✨ Auto-fill names</button>
