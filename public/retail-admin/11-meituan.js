@@ -462,6 +462,50 @@
     mtRenderReview();
   };
 
+  // ── Clear all mappings ───────────────────────────────────────────────────────
+  // Wipe every saved Meituan name across all stores (empty name → the map API
+  // deletes the row). Use before re-filling from scratch.
+  window.mtClearAll = async function () {
+    const targets = [];
+    for (const p of _products) {
+      for (const [code, m] of Object.entries(p.stores || {})) {
+        if (!m || !m.meituan_name) continue;
+        const store = _stores.find(s => s.code === code);
+        if (!store) continue;
+        targets.push({ p, store, code });
+      }
+    }
+    if (!targets.length) { toast('Nothing to clear — no names are set.'); return; }
+    if (!confirm(
+      `Clear ALL ${targets.length} Meituan name mapping(s) across every store?\n\n`
+      + `This deletes the mappings (you can re-fill afterwards). Continue?`
+    )) return;
+
+    const btn = document.getElementById('mt-clear-btn');
+    if (btn) btn.disabled = true;
+    let done = 0, failed = 0;
+    for (const t of targets) {
+      try {
+        await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.code, meituanName: '', syncEnabled: 0 }),
+        });
+        if (t.p.stores) delete t.p.stores[t.code];
+        done++;
+      } catch (e) {
+        failed++;
+      }
+      if (btn) btn.textContent = `Clearing… ${done + failed}/${targets.length}`;
+    }
+    _review = { ambiguous: [], unmatched: [] };
+    mtRenderProducts();
+    mtRenderReview();
+    mtLoadStatus();
+    if (btn) { btn.disabled = false; btn.textContent = '🧹 Clear all names'; }
+    toast(`Cleared ${done} mapping(s)${failed ? `, ${failed} failed` : ''}.`);
+  };
+
   // ── Paste listing names (manual, no scrape) ──────────────────────────────────
   // Operator pastes the exact Meituan titles (one per line, copied straight off
   // the Meituan product list), picks a store, and the same matcher fills the
