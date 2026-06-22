@@ -439,6 +439,11 @@
     Delivery · 配送
   </button>
 
+  <button data-tab="meituan" onclick="mtAdminInit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
+    Meituan · 美团
+  </button>
+
   <!-- Auto-refresh dot — pinned right of the tab bar, next to the
        settings gear. A small green pulsing dot signals that the orders
        list is live-polling. Click toggles pause; tooltip explains.
@@ -6423,6 +6428,56 @@
        (/product-editor) loaded in-page as iframe tab sections. Lazy-loaded on
        first open (no src until then) so the two big editor apps don't download
        until used. They self-auth exactly as the standalone pages did. -->
+  <!-- ── Meituan Sync ── -->
+  <section id="tab-meituan">
+    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div>
+        <h2 style="margin:0;font-size:20px">美团同步 · Meituan Sync</h2>
+        <p class="muted" style="margin:4px 0 0;font-size:13px">Map your products to Meituan listings. Stock changes auto-push every 10 s. Orders pull every 60 s.</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-sm" onclick="mtLoadStatus()">↻ Status</button>
+        <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div id="mt-status-bar" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;padding:12px 16px;background:var(--bg-elev-1);border-radius:8px;font-size:13px">
+      <span>Loading…</span>
+    </div>
+
+    <!-- Recent log -->
+    <details id="mt-log-details" style="margin-bottom:14px">
+      <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted);padding:4px 0">Recent sync log · 最近日志</summary>
+      <div id="mt-log" style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
+    </details>
+
+    <!-- Filter row -->
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
+      <input id="mt-search" type="search" placeholder="Search products · 搜索商品" class="form-control" style="max-width:280px;font-size:13px" oninput="mtFilterProducts()">
+      <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="mt-show-unmapped" onchange="mtFilterProducts()"> Show unmapped only · 仅未映射
+      </label>
+    </div>
+
+    <!-- Product mapping table -->
+    <div id="mt-products-wrap" style="overflow-x:auto">
+      <table id="mt-products-table" class="data-table" style="min-width:700px;font-size:13px">
+        <thead>
+          <tr>
+            <th style="width:30%">Product · 商品</th>
+            <th id="mt-th-store-0" style="width:28%">天河 Meituan name</th>
+            <th id="mt-th-store-1" style="width:28%">越秀 Meituan name</th>
+            <th style="width:14%;text-align:center">Sync</th>
+          </tr>
+        </thead>
+        <tbody id="mt-products-body">
+          <tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <section id="tab-mini-app-editor" class="tab-embed-editor">
     <iframe id="frame-mini-app-editor" class="ed-frame" title="Mini App Editor · 小程序编辑器" data-src="/cms"></iframe>
   </section>
@@ -6483,6 +6538,7 @@
 <script src="/assets/retail-admin/08-customers.js"></script>
 <script src="/assets/retail-admin/09-products.js"></script>
 <script src="/assets/retail-admin/10-extras.js"></script>
+<script src="/assets/retail-admin/11-meituan.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
