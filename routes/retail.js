@@ -2890,11 +2890,15 @@ function validateAlipayProof(order, ocr, manual) {
   // 1. success screen
   checks.success = !!ocr.success;
   if (!ocr.success) reasons.push('not a successful-payment screen');
-  // 2. amount exact (to the fen)
+  // 2. amount covers the order total (to the fen). Alipay can add a card /
+  // cross-border processing surcharge on top of what we charged, so the
+  // customer is debited MORE than the order total (e.g. ¥241.54 paid for a
+  // ¥234.50 order). A higher amount still fully covers the order, so accept
+  // anything at or above the total; only a SHORT (or unreadable) amount fails.
   const want = Number(order.total).toFixed(2);
   const got = ocr.amount == null ? null : Number(ocr.amount).toFixed(2);
-  checks.amount = got === want;
-  if (got !== want) reasons.push(`amount ${got == null ? 'unreadable' : '¥' + got} ≠ expected ¥${want}`);
+  checks.amount = got != null && Number(got) >= Number(want) - 0.005;
+  if (!checks.amount) reasons.push(`amount ${got == null ? 'unreadable' : '¥' + got} < expected ¥${want}`);
   // 3. payee contains the configured match text (skip if not configured)
   const payeeMatch = (manual.payeeMatch || '').trim();
   if (payeeMatch) {
