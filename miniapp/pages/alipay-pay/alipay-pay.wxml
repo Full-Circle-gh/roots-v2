@@ -16,25 +16,13 @@
 
   <!-- qr + flow -->
   <block wx:else>
-    <view class="card">
-      <view class="row">
-        <view class="lbl f-toni">{{t.amount}}</view>
-        <view class="val f-bear total">{{total}}</view>
-      </view>
-      <view wx:if="{{manual && account}}" class="row">
-        <view class="lbl f-toni">{{t.payee}}</view>
-        <view class="val">{{account}}</view>
-      </view>
-      <view wx:if="{{orderNo}}" class="row">
-        <view class="lbl f-toni">{{t.order}}</view>
-        <view class="val">{{orderNo}}</view>
-      </view>
+    <!-- 1 · amount due — the first thing the customer must read -->
+    <view class="amount-card">
+      <view class="amount-lbl f-toni">{{t.amount}}</view>
+      <view class="amount-val f-bear">{{total}}</view>
     </view>
 
-    <view wx:if="{{manual && payWindowMin > 0 && !paid}}" class="deadline f-toni">
-      ⏱ {{t.deadlinePre}}{{payWindowMin}}{{t.deadlinePost}}
-    </view>
-
+    <!-- 2 · the QR to scan -->
     <view class="qr-wrap">
       <image wx:if="{{qrPng}}" class="qr" src="{{qrPng}}" mode="widthFix" show-menu-by-longpress></image>
       <view wx:if="{{paid}}" class="paid-overlay">
@@ -42,18 +30,29 @@
       </view>
     </view>
 
-    <button wx:if="{{!paid}}" class="btn secondary f-toni" bindtap="saveQr">{{t.save}}</button>
-
-    <!-- manual mode: upload the payment screenshot for staff to confirm -->
-    <button wx:if="{{manual && !paid}}" class="btn primary f-toni" bindtap="uploadProof" loading="{{uploading}}" disabled="{{uploading}}">
-      {{ proofUploaded ? t.reupload : t.upload }}
-    </button>
-
+    <!-- 3 · how to pay -->
     <view class="steps">
       <view wx:for="{{ manual ? t.manualSteps : t.steps }}" wx:key="*this" class="step f-aleo">
         <view class="num f-bear">{{index + 1}}</view>
         <view class="step-txt">{{item}}</view>
       </view>
+    </view>
+
+    <!-- 4 · actions — upload is the real next step (manual), save is secondary -->
+    <view wx:if="{{!paid}}" class="actions">
+      <button wx:if="{{manual}}" class="btn primary f-toni" bindtap="uploadProof" loading="{{uploading}}" disabled="{{uploading}}">
+        {{ proofUploaded ? t.reupload : t.upload }}
+      </button>
+      <button class="btn secondary f-toni" bindtap="saveQr">{{t.save}}</button>
+    </view>
+
+    <!-- 5 · quiet meta — deadline / order / payee, demoted below the fold -->
+    <view class="meta f-aleo">
+      <view wx:if="{{manual && payWindowMin > 0 && !paid}}" class="meta-deadline f-toni">
+        ⏱ {{t.deadlinePre}}{{payWindowMin}}{{t.deadlinePost}}
+      </view>
+      <view wx:if="{{orderNo}}" class="meta-row"><text class="meta-lbl">{{t.order}}</text><text class="meta-val">{{orderNo}}</text></view>
+      <view wx:if="{{manual && account}}" class="meta-row"><text class="meta-lbl">{{t.payee}}</text><text class="meta-val">{{account}}</text></view>
     </view>
 
     <view wx:if="{{!paid && (!manual || proofUploaded)}}" class="waiting f-aleo">
