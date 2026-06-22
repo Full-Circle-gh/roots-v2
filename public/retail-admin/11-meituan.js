@@ -8,6 +8,7 @@
   let _stores    = [];  // [{id, name, code}]
   let _storeA    = null; // 天河
   let _storeB    = null; // 越秀
+  let _listings  = {};   // { store_code: [real Meituan listing names] }
   let _initiated = false;
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -217,6 +218,147 @@
     if (btn) { btn.disabled = false; btn.textContent = '✨ Auto-fill names'; }
     toast(`Filled ${done} field(s)${failed ? `, ${failed} failed` : ''}. Review and tweak as needed.`);
   };
+
+  // ── Fetch real listing names from Meituan ────────────────────────────────────
+  // Enqueue a daemon scrape job per store, poll until done, then fill empty
+  // fields with the matched real Meituan titles. Unlike Auto-fill (which copies
+  // name_cn), this uses the actual listing names read from the Meituan backend.
+  function mtUniqueStores() {
+    return [_storeA, _storeB].filter((s, i, arr) => s && arr.findIndex(x => x && x.id === s.id) === i);
+  }
+
+  window.mtFetchListings = async function () {
+    const stores = mtUniqueStores();
+    if (!stores.length) { toast('No stores detected.', 'error'); return; }
+    if (!confirm(
+      `Ask the sync daemon to read the live product names from your Meituan backend(s)?\n\n`
+      + `This drives the logged-in browser session and can take ~30–60s per store. `
+      + `Then I'll fill empty fields with the matched real names.`
+    )) return;
+
+    const btn = document.getElementById('mt-fetch-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
+    try {
+      const r = await api('/api/retail-admin/meituan/listings/refresh', { method: 'POST' });
+      if (!(r.queued || []).length && !(r.alreadyRunning || []).length) {
+        toast('No active stores to fetch.');
+        return mtResetFetchBtn(btn);
+      }
+
+      // Poll until no jobs are running (cap ~3 min).
+      const t0 = Date.now();
+      let data = null;
+      while (Date.now() - t0 < 180000) {
+        await new Promise(res => setTimeout(res, 3000));
+        data = await api('/api/retail-admin/meituan/listings');
+        const total = Object.values(data.listings || {}).reduce((a, b) => a + b.length, 0);
+        if (btn) btn.textContent = `Fetching… (${total})`;
+        if (!data.running) break;
+      }
+      _listings = (data && data.listings) || {};
+
+      const errs = ((data && data.jobs) || []).filter(j => j.status === 'error');
+      if (errs.length) {
+        toast(`Fetch error on ${errs.map(e => e.store_code).join(', ')}: ${errs[0].error || 'unknown'}. Is the daemon logged in?`, 'error');
+      }
+      const counts = stores.map(s => `${s.name || s.code}: ${(_listings[s.code] || []).length}`).join(' · ');
+      toast(`Fetched — ${counts}`);
+
+      await mtFillFromListings(stores);
+    } catch (e) {
+      toast('Fetch failed: ' + e.message, 'error');
+    }
+    mtResetFetchBtn(btn);
+  };
+
+  function mtResetFetchBtn(btn) {
+    if (btn) { btn.disabled = false; btn.textContent = '⟳ Fetch from Meituan'; }
+  }
+
+  // Match one product to a store's scraped listing names. Confident match → the
+  // exact Meituan title; otherwise classified so it can be left for manual review.
+  function mtMatchListing(p, storeCode) {
+    const list = _listings[storeCode] || [];
+    if (!list.length) return { name: '', reason: 'no-listings' };
+    const cn = (p.name_cn || '').trim();
+    const en = (p.name_en || '').trim().toLowerCase();
+
+    if (cn) {
+      const exact = list.find(n => n === cn);
+      if (exact) return { name: exact, reason: 'exact' };
+      const subs = list.filter(n => n.includes(cn));
+      if (subs.length === 1) return { name: subs[0], reason: 'substring' };
+      if (subs.length > 1) {
+        // Multiple Meituan titles contain this Chinese name — size variants.
+        // Only auto-pick if the variant label uniquely disambiguates.
+        const v = (p.variant_label || '').trim().toLowerCase();
+        if (v) {
+          const vm = subs.filter(n => n.toLowerCase().includes(v));
+          if (vm.length === 1) return { name: vm[0], reason: 'variant' };
+        }
+        return { name: '', reason: 'ambiguous', candidates: subs };
+      }
+    }
+    if (en) {
+      const subs = list.filter(n => n.toLowerCase().includes(en));
+      if (subs.length === 1) return { name: subs[0], reason: 'substring-en' };
+    }
+    return { name: '', reason: 'unmatched' };
+  }
+
+  async function mtFillFromListings(stores) {
+    const targets = [], ambiguous = [], unmatched = [];
+    for (const p of _products) {
+      for (const store of stores) {
+        const existing = (p.stores?.[store.code]?.meituan_name || '').trim();
+        if (existing) continue;                       // keep operator entries
+        const m = mtMatchListing(p, store.code);
+        if (m.name) targets.push({ p, store, name: m.name });
+        else if (m.reason === 'ambiguous') ambiguous.push({ p, store, candidates: m.candidates });
+        else unmatched.push({ p, store });
+      }
+    }
+
+    const logManual = () => {
+      if (!ambiguous.length && !unmatched.length) return;
+      console.group('[meituan] needs manual mapping');
+      ambiguous.forEach(a => console.log('AMBIGUOUS', a.p.name_cn, a.p.variant_label || '', '→ candidates:', a.candidates));
+      unmatched.forEach(u => console.log('UNMATCHED', u.p.name_cn, u.p.name_en || '', `(${u.store.code})`));
+      console.groupEnd();
+    };
+
+    if (!targets.length) {
+      logManual();
+      toast(`No confident matches. ${ambiguous.length} ambiguous, ${unmatched.length} unmatched — see console (F12).`);
+      return;
+    }
+    if (!confirm(
+      `Fill ${targets.length} field(s) with matched Meituan names?\n\n`
+      + `${ambiguous.length} ambiguous (multiple Meituan titles match) and ${unmatched.length} unmatched `
+      + `will be left blank for you to set manually (details in console).`
+    )) { logManual(); return; }
+
+    let done = 0, failed = 0;
+    for (const t of targets) {
+      try {
+        await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: 1 }),
+        });
+        if (!t.p.stores) t.p.stores = {};
+        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, sync_enabled: 1 };
+        done++;
+      } catch (e) {
+        failed++;
+      }
+    }
+    mtRenderProducts();
+    mtLoadStatus();
+    logManual();
+    toast(`Filled ${done} matched name(s)${failed ? `, ${failed} failed` : ''}. `
+      + `${ambiguous.length} ambiguous, ${unmatched.length} unmatched (see console).`);
+  }
 
   // ── Save mapping ────────────────────────────────────────────────────────────
   window.mtSaveMap = async function (input) {

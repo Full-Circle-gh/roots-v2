@@ -3711,4 +3711,34 @@ db.exec(`
   );
 `);
 
+// Cache of the actual product/listing titles scraped from each store's Meituan
+// merchant backend. Written by the meituan-daemon when it runs a listing job;
+// read by the admin Meituan tab to match roots products to their real Meituan
+// names (instead of guessing from name_cn).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_listings (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code   TEXT NOT NULL,
+    listing_name TEXT NOT NULL,
+    scraped_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(store_code, listing_name)
+  );
+`);
+
+// On-demand request channel: the admin enqueues a job, the daemon (which owns the
+// logged-in browser sessions) picks it up, scrapes the Meituan product list, and
+// fills meituan_listings. The web server can't drive Playwright itself, so the DB
+// is the hand-off — same pattern as meituan_sync_queue.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_listing_jobs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code   TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|done|error
+    result_count INTEGER,
+    error        TEXT,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+  );
+`);
+
 module.exports = db;

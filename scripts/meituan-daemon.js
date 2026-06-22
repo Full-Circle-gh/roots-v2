@@ -197,6 +197,56 @@ async function processStockQueue() {
   }
 }
 
+// ── Listing scrape jobs ────────────────────────────────────────────────────────
+// The admin Meituan tab enqueues a job to read the live product titles from a
+// store's Meituan backend; we own the logged-in browser, so we run it and fill
+// meituan_listings. One store at a time (each navigates the shared browser).
+
+async function processListingJobs() {
+  const jobs = db.prepare(`
+    SELECT * FROM meituan_listing_jobs
+     WHERE status = 'pending'
+     ORDER BY created_at
+     LIMIT 5
+  `).all();
+
+  if (!jobs.length) return;
+
+  for (const job of jobs) {
+    db.prepare(`UPDATE meituan_listing_jobs SET status='processing' WHERE id=?`).run(job.id);
+    try {
+      const browser = await getBrowser(job.store_code);
+      const names = await browser.listProducts();
+      if (!names) throw new Error('scrape returned null (not logged in or no content iframe)');
+
+      const tx = db.transaction(() => {
+        db.prepare(`DELETE FROM meituan_listings WHERE store_code=?`).run(job.store_code);
+        const ins = db.prepare(
+          `INSERT OR IGNORE INTO meituan_listings (store_code, listing_name) VALUES (?, ?)`
+        );
+        for (const n of names) ins.run(job.store_code, n);
+      });
+      tx();
+
+      db.prepare(`
+        UPDATE meituan_listing_jobs
+           SET status='done', result_count=?, error=NULL, completed_at=CURRENT_TIMESTAMP
+         WHERE id=?
+      `).run(names.length, job.id);
+      logSync(job.store_code, 'listing_scrape', 'ok', { count: names.length });
+      log(job.store_code, `listing scrape done: ${names.length} listing(s)`);
+    } catch (err) {
+      db.prepare(`
+        UPDATE meituan_listing_jobs
+           SET status='error', error=?, completed_at=CURRENT_TIMESTAMP
+         WHERE id=?
+      `).run(err.message.slice(0, 200), job.id);
+      logSync(job.store_code, 'listing_scrape', 'error', null, err.message);
+      log(job.store_code, `processListingJobs error: ${err.message}`);
+    }
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function internalSecret() {
@@ -249,6 +299,9 @@ async function main() {
 
     // Always process stock queue
     await processStockQueue();
+
+    // Handle any on-demand listing-scrape requests from the admin tab
+    await processListingJobs();
 
     await sleep(jitter(QUEUE_CHECK_MS));
   }
