@@ -1980,7 +1980,15 @@ function vaRender() {
         `<input class="va-num va-was" type="number" min="0" step="0.01" value="${cmp === '' ? '' : cmp}" placeholder="—" title="${cuT('Was price — shown struck-through to shoppers when higher than the price. Leave blank for no discount.', '划线价 — 高于售价时在顾客端显示删除线。留空则不打折。')}" oninput="vaSelfField('compare', this.value)">` +
         stkCell +
         `<span class="va-show"><input type="checkbox" ${v.published ? 'checked' : ''} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaSelfField('published', this.checked ? 1 : 0)"></span>` +
-        `<span class="va-self" title="${cuT('This is the main product. Its name, photos & details are edited in the form above; the quick fields here stay in sync.', '这是主产品。名称、图片和详情在上方表单中编辑;此处的快捷字段保持同步。')}">●</span></div>`;
+        // Trailing cell: a lone product has no siblings, so the single row IS the
+        // product — show a ✕ that deletes it (otherwise there's no way to remove a
+        // size-less product from this table). In a real group the primary keeps the
+        // ● badge (deleting the anchor while siblings exist would orphan them — delete
+        // the other sizes first, then this becomes a lone row you can ✕).
+        (hasReal
+          ? `<span class="va-self" title="${cuT('This is the main product. Its name, photos & details are edited in the form above; the quick fields here stay in sync. To remove the whole family, delete the other sizes first.', '这是主产品。名称、图片和详情在上方表单中编辑;此处的快捷字段保持同步。如需删除整个系列,请先删除其他规格。')}">●</span>`
+          : `<button type="button" class="va-x" title="${cuT('Delete this product', '删除此产品')}" onclick="vaRemoveSelf()">✕</button>`) +
+        `</div>`;
     }
     return rowOpen + grip + photo + label +
       `<input class="va-label" type="text" value="${escapeAttr(v.sku || '')}" placeholder="${cuT('SKU', '货号')}" oninput="vaField(${v.id}, 'sku', this.value)">` +
@@ -2115,6 +2123,15 @@ async function vaRemove(id) {
     pdLoadStoreStocks(VA_ID);   // drop the removed variant's row from the stock grid
     toast(cuT('Size deleted', '规格已删除'));
   } catch (e) { toast(cuT('Delete failed: ', '删除失败:') + e.message, 'err'); }
+}
+// Delete the lone (size-less) product from its own variant row. Only offered
+// when this is a single-variant product — the row IS the product, so this is the
+// same soft-delete as the editor's "Delete product" button (pdDelete handles the
+// confirm, endpoint call, list refresh & editor close). For a real group the
+// primary keeps the ● badge instead; remove the other sizes first.
+function vaRemoveSelf() {
+  if (VA_MEMBERS.length > 1) return;
+  pdDelete();
 }
 // Add a new size: clone the current product (inherits photos/description/etc.,
 // blank SKU, 0 stock, hidden) and drop it straight into the list — no leaving
