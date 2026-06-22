@@ -462,6 +462,73 @@
     mtRenderReview();
   };
 
+  // ── Paste listing names (manual, no scrape) ──────────────────────────────────
+  // Operator pastes the exact Meituan titles (one per line, copied straight off
+  // the Meituan product list), picks a store, and the same matcher fills the
+  // empty fields. This is the reliable path when the auto-scrape can't reach the
+  // Meituan content iframe.
+  window.mtOpenPaste = function () {
+    if (document.getElementById('mt-paste-overlay')) return;
+    const opts = _stores.map(s =>
+      `<option value="${esc(s.code)}" data-id="${s.id}">${esc(s.name || s.code)}</option>`
+    ).join('');
+    const ov = document.createElement('div');
+    ov.id = 'mt-paste-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML = `
+      <div style="background:var(--bg);color:var(--fg);width:min(560px,100%);max-height:88vh;overflow:auto;border-radius:10px;border:1px solid var(--border);box-shadow:0 18px 50px rgba(0,0,0,.4)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)">
+          <b style="font-size:15px">Paste Meituan names · 粘贴美团商品名</b>
+          <button class="btn btn-sm" onclick="mtClosePaste()">✕</button>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">
+            Store · 门店
+            <select id="mt-paste-store" class="form-control" style="font-size:13px">${opts}</select>
+          </label>
+          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">
+            Meituan titles — one per line (copy exactly as shown on Meituan)
+            <textarea id="mt-paste-text" class="form-control" rows="12" placeholder="超级莓 SuperBerries Blend
+羽衣甘蓝粉 Kale Powder
+姜黄粉 Turmeric Powder
+…" style="font-size:13px;font-family:inherit;line-height:1.5"></textarea>
+          </label>
+          <div class="muted" style="font-size:12px">I'll match each title to a product by its Chinese name and fill only empty fields. Anything unsure goes to the review panel.</div>
+          <div style="display:flex;gap:8px;justify-content:flex-end">
+            <button class="btn btn-sm" onclick="mtClosePaste()">Cancel</button>
+            <button class="btn btn-sm btn-primary" onclick="mtPasteApply()">Match &amp; fill</button>
+          </div>
+        </div>
+      </div>`;
+    ov.addEventListener('click', e => { if (e.target === ov) mtClosePaste(); });
+    document.body.appendChild(ov);
+  };
+
+  window.mtClosePaste = function () {
+    const ov = document.getElementById('mt-paste-overlay');
+    if (ov) ov.remove();
+  };
+
+  window.mtPasteApply = async function () {
+    const sel  = document.getElementById('mt-paste-store');
+    const text = document.getElementById('mt-paste-text');
+    if (!sel || !text) return;
+    const code  = sel.value;
+    const store = _stores.find(s => s.code === code);
+    if (!store) { toast('Pick a store first.', 'error'); return; }
+
+    const names = text.value.split('\n')
+      .map(s => s.replace(/^[\s•\-–·]+/, '').trim())   // strip bullets/leading punctuation
+      .filter(Boolean);
+    // de-dupe while preserving order
+    _listings[code] = Array.from(new Set(names));
+
+    if (!_listings[code].length) { toast('Paste at least one title.', 'error'); return; }
+    mtClosePaste();
+    toast(`Loaded ${_listings[code].length} title(s) for ${store.name || code}. Matching…`);
+    await mtFillFromListings([store]);
+  };
+
   // ── Save mapping ────────────────────────────────────────────────────────────
   window.mtSaveMap = async function (input) {
     const pid       = input.dataset.pid;
