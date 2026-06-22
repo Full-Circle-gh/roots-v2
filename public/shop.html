@@ -398,8 +398,20 @@
     .tier-step.on .tier-dot{background:var(--lime);}
     .tier-step .ts-name{font-family:var(--bf-bear);font-size:16px;color:var(--ink);}
     .tier-step .ts-perk{font-size:12.5px;color:var(--olive);margin-top:3px;line-height:1.45;}
-    /* notifications */
-    .ntf-dot{width:8px;height:8px;border-radius:999px;background:var(--berry);margin-top:6px;flex:none;}
+    /* notifications — card layout mirrors the mini-app (category badge + ink card,
+       tea-green left rail for unread). */
+    .ntf-list{display:flex;flex-direction:column;gap:8px;padding:0 22px;margin-top:8px;}
+    .ntf-card{display:block;width:100%;text-align:left;background:#FFFCF7;border:2px solid var(--ink);padding:13px 14px;cursor:pointer;font:inherit;color:var(--ink);}
+    .ntf-card.unread{box-shadow:inset 6px 0 0 #6B8E6F;}
+    .ntf-top{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+    .ntf-cat{font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;padding:2px 8px;border:2px solid var(--ink);color:var(--ink);white-space:nowrap;}
+    .ntf-cat.cat-order{background:var(--lime);}
+    .ntf-cat.cat-refund{background:#E8E0CF;}
+    .ntf-cat.cat-invoice{background:#FFFCF7;}
+    .ntf-cat.cat-broadcast{background:#C43A6A;color:#fff;border-color:#C43A6A;}
+    .ntf-time{font-family:var(--bf-toni);font-size:11px;color:var(--olive);white-space:nowrap;}
+    .ntf-title{font-family:var(--bf-bear);font-size:17px;color:var(--ink);margin-top:8px;line-height:1.2;}
+    .ntf-body{font-size:13px;color:var(--olive);margin-top:4px;line-height:1.5;}
     /* about */
     .about-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(0,0,0,.12);margin:18px 22px 0;border:2px solid var(--ink);}
     .about-stat{background:var(--oat);padding:16px;}
@@ -2575,15 +2587,37 @@ async function renderAffiliate(){
     catch(e){ const m={already_referred:cn?'你已被推荐':'Already referred',code_not_found:cn?'邀请码不存在':'Code not found',cannot_refer_self:cn?'不能填自己':'Can’t refer yourself',program_disabled:cn?'暂未开放':'Program off',mutual_referral:cn?'对方已邀请你':'Mutual referral'}; $('#afMsg').textContent=m[e.code]||(cn?'应用失败':'Could not apply'); } });
 }
 
+// Category badge labels — mirror the mini-app's CAT map so REFUND / REPLY /
+// ORDER / INVOICE / ANNOUNCEMENT tags read identically on both surfaces.
+const NTF_CAT={
+  order:    {en:'ORDER',           cn:'订单'},
+  refund:   {en:'REFUND',          cn:'退款'},
+  invoice:  {en:'INVOICE',         cn:'发票'},
+  feedback: {en:'REPLY',           cn:'回复'},
+  broadcast:{en:'📣 ANNOUNCEMENT', cn:'📣 公告'},
+};
 async function renderNotifications(){
   const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
   document.title=(cn?'通知':'Notifications')+' · '+state.brand;
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'消息':'INBOX',cn?'通知':'Notifications','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'通知':'NOTIFICATIONS',cn?'我的消息。':'Your updates.','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
   let list; try{ list=await api('/api/retail/notifications')||[]; }catch(e){ list=[]; }
   const box=v.querySelector('.sp');
   const hasUnread=(list||[]).some(n=>!n.read_at);
-  const rows=(list||[]).map(n=>`<button class="sp-li" style="width:100%;text-align:left;background:none;cursor:pointer" data-ntf="${n.id}" data-ref="${escAttr(n.ref_type||'')}" data-rid="${escAttr(String(n.ref_id||''))}">${!n.read_at?'<span class="ntf-dot"></span>':'<span style="width:8px;flex:none"></span>'}<div class="sp-main"><div class="sp-t">${esc(pick(n.title_en,n.title_cn))}</div><div class="sp-d">${esc(pick(n.body_en,n.body_cn)||'')}</div><div class="sp-d">${relTime(n.created_at)}</div></div></button>`).join('');
-  box.innerHTML=spBack()+`<div class="me-section" style="padding-top:22px"><div class="me-sec-head"><div class="me-sec-title">${cn?'通知':'Notifications'}</div>${hasUnread?`<button class="me-viewall" id="ntfAll">${cn?'全部已读':'Mark all read'}</button>`:''}</div></div>`+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无通知 🌱':'No notifications 🌱'}</div>`);
+  const rows=(list||[]).map(n=>{
+    const catKey=n.category||'';
+    const cat=NTF_CAT[catKey]||{en:catKey,cn:catKey};
+    const label=cn?(cat.cn||cat.en):(cat.en||cat.cn);
+    const body=pick(n.body_en,n.body_cn)||'';
+    return `<button class="ntf-card${!n.read_at?' unread':''}" data-ntf="${n.id}" data-ref="${escAttr(n.ref_type||'')}" data-rid="${escAttr(String(n.ref_id||''))}">`
+      +`<div class="ntf-top"><span class="ntf-cat cat-${escAttr(catKey)}">${esc(label)}</span><span class="ntf-time">${relTime(n.created_at)}</span></div>`
+      +`<div class="ntf-title">${esc(pick(n.title_en,n.title_cn))}</div>`
+      +(body?`<div class="ntf-body">${esc(body)}</div>`:'')
+      +`</button>`;
+  }).join('');
+  box.innerHTML=spBack()+spHead(cn?'通知':'NOTIFICATIONS',cn?'我的消息。':'Your updates.','')
+    +(hasUnread?`<div style="padding:2px 22px 0;text-align:right"><button class="me-viewall" id="ntfAll">${cn?'全部已读':'Mark all read'}</button></div>`:'')
+    +(rows?`<div class="ntf-list">${rows}</div>`
+          :`<div class="sp-empty"><div class="sp-title" style="font-size:22px">${cn?'暂无通知':'No notifications yet.'}</div><div style="margin-top:8px">${cn?'订单、退款与发票的更新会显示在这里。':'Order, refund and invoice updates will show up here.'}</div></div>`);
   const all=$('#ntfAll'); if(all)all.addEventListener('click',async()=>{ try{ await postJson('/api/retail/notifications/read-all',{}); }catch{} renderNotifications(); });
   box.querySelectorAll('[data-ntf]').forEach(b=>b.addEventListener('click',async()=>{ try{ await postJson('/api/retail/notifications/'+b.dataset.ntf+'/read',{}); }catch{}
     const ref=b.dataset.ref,rid=b.dataset.rid;
