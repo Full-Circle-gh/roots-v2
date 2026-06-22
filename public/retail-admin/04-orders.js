@@ -151,8 +151,43 @@ function alipayOcrBanner(o) {
     return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#fee2e2; color:#991b1b; font-weight:700; font-size:12px; line-height:1.5;">
       ⚠ ${cuT('Does not match — check before paying', '不一致 · 请核实后再付款')}${factStr ? '<br><span style="font-weight:600">' + factStr + '</span>' : ''}${reasons.length ? '<br><span style="font-weight:600">' + reasons.map(escapeHtml).join('；') + '</span>' : ''}</div>`;
   }
+  // verdict 'error' (or unknown): the read couldn't complete — usually a
+  // momentary network blip reaching the model. Offer a one-tap re-run so staff
+  // don't have to ask the customer to re-upload a perfectly good screenshot.
   return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:var(--bg-elev-2); color:var(--text-2); font-weight:600; font-size:12px; line-height:1.5;">
-    ${cuT('Could not read the screenshot automatically — verify manually.', '无法自动识别截图 · 请人工核对。')}</div>`;
+    ${cuT('Could not read the screenshot automatically — verify manually.', '无法自动识别截图 · 请人工核对。')}
+    <div style="margin-top:6px;"><button class="btn btn-sm" onclick="rerunAlipayOcr(${o.id}, this)">${cuT('Re-run OCR', '重新识别')}</button></div>
+  </div>`;
+}
+
+// Retry the Vision-AI read on the stored Alipay proof (after a transient read
+// failure). Re-renders the drawer with the fresh verdict; a clean match on a
+// still-pending order auto-marks it paid when auto-flip is on.
+async function rerunAlipayOcr(orderId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Reading …', '识别中 …'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/alipay-ocr/rerun`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok || !data.success) {
+      const reason = (data.data && data.data) || data.error || 'unknown';
+      toast(cuT(`Re-run failed (${reason})`, `重新识别失败 (${reason})`), 'error');
+      if (btn) { btn.disabled = false; btn.textContent = cuT('Re-run OCR', '重新识别'); }
+      return;
+    }
+    const v = data.data.verdict;
+    toast(
+      v === 'match' ? cuT('Verified ✓', '核对通过 ✓')
+        : v === 'mismatch' ? cuT('Read it — does not match', '已识别 · 不一致')
+        : cuT('Still could not read — try again or verify manually', '仍无法识别 · 请重试或人工核对'),
+      v === 'match' ? 'success' : v === 'mismatch' ? 'error' : 'info'
+    );
+    openOrder(orderId); if (typeof loadOrders === 'function') loadOrders();
+  } catch (e) {
+    toast(cuT('Network error', '网络错误'), 'error');
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Re-run OCR', '重新识别'); }
+  }
 }
 
 // Split-package suggestion banner — appears above the Items section in the
@@ -1128,9 +1163,23 @@ function parseSchedFor(s) {
 function slotEndAnchor(scheduledForIso, label) {
   const start = parseSchedFor(scheduledForIso);
   if (isNaN(start.getTime())) return scheduledForIso;
-  const m = /(\d{1,2}):(\d{2})\s*(?:[-–—~]|to|至)\s*(\d{1,2}):(\d{2})/.exec(String(label == null ? '' : label));
+  const lbl = String(label == null ? '' : label);
+  const m = /(\d{1,2}):(\d{2})\s*(?:[-–—~]|to|至)\s*(\d{1,2}):(\d{2})/.exec(lbl);
   if (m) {
     const endH = Number(m[3]), endM = Number(m[4]);
+    if (endH <= 23 && endM <= 59) {
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), endH, endM);
+      if (end.getTime() >= start.getTime()) return end.toISOString(); // window END is the real deadline
+    }
+  }
+  // AM/PM window without colons, e.g. "10AM–12PM" or "10:30 AM - 12 PM". The
+  // HH:MM regex above misses these, so the order would wrongly anchor on its
+  // start time and read OVERDUE minutes into the window.
+  const ap = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:[-–—~]|to|至)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i.exec(lbl);
+  if (ap) {
+    let endH = Number(ap[4]); const endM = Number(ap[5] || 0); const mer = ap[6].toLowerCase();
+    if (mer === 'pm' && endH < 12) endH += 12;
+    else if (mer === 'am' && endH === 12) endH = 0;
     if (endH <= 23 && endM <= 59) {
       const end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), endH, endM);
       if (end.getTime() >= start.getTime()) return end.toISOString(); // window END is the real deadline

@@ -3786,35 +3786,69 @@ router.post('/api/retail/payment/alipay-proof/:orderId', requireRetailAuth, expr
   let verdict = null, autoPaid = false;
   const manual = getAlipayManual();
   if (manual && manual.ocrEnabled && alipayOcr.ocrAvailable(manual.anthropicKey) && order.status === 'pending_payment') {
-    try {
-      const ocr = await alipayOcr.readPaymentScreenshot(img, { apiKey: manual.anthropicKey });
-      const v = validateAlipayProof(order, ocr, manual);
-      verdict = v.verdict;
-      // Reuse guard — the real defense against "upload an old screenshot". The
-      // primary key is the image itself (the same screenshot can't settle two
-      // orders); the txn-id is a bonus check when the screen happens to show one.
-      const dupImg = tdb().prepare('SELECT id FROM retail_orders WHERE alipay_proof_hash = ? AND id != ? LIMIT 1').get(imgHash, orderId);
-      const dupTxn = ocr.txn_id ? tdb().prepare('SELECT id FROM retail_orders WHERE alipay_txn_id = ? AND id != ? LIMIT 1').get(ocr.txn_id, orderId) : null;
-      const reused = dupImg || dupTxn;
-      if (reused) { verdict = 'mismatch'; v.verdict = 'mismatch'; v.reasons.push(`this ${dupImg ? 'screenshot' : 'transaction'} was already used on order #${reused.id}`); }
-      tdb().prepare(
-        "UPDATE retail_orders SET alipay_ocr_verdict = ?, alipay_ocr_json = ?, alipay_txn_id = ? WHERE id = ?"
-      ).run(verdict, JSON.stringify({ ...ocr, reasons: v.reasons, checks: v.checks }), ocr.txn_id || null, orderId);
-
-      // Auto-flip ONLY when the operator enabled it AND every guard passed: a full
-      // match (amount + payee + recent time) and not a reused screenshot/txn.
-      if (manual.autoFlip && verdict === 'match' && !reused) {
-        markOrderPaid(orderId);
-        autoPaid = true;
-      }
-    } catch (e) {
-      console.warn('[alipay/ocr]', e.message);
-      verdict = 'error';
-      try { tdb().prepare("UPDATE retail_orders SET alipay_ocr_verdict = 'error', alipay_ocr_json = ? WHERE id = ?").run(JSON.stringify({ error: e.message }), orderId); } catch {}
-    }
+    ({ verdict, autoPaid } = await ocrVerifyAlipayProof(order, img, imgHash, manual));
   }
   res.json({ success: true, data: { ok: true, verdict, auto_paid: autoPaid } });
 });
+
+// A transient network failure (relay blip, DNS hiccup, TLS reset, timeout)
+// surfaces from undici/https as "fetch failed" / a timeout string — that's a
+// "couldn't reach the model" condition, NOT a real read result. We retry once
+// after a short pause so a momentary outage doesn't strand a paid order on
+// "verify manually". A genuine read error (bad image, unparseable reply, auth)
+// is NOT retried — retrying wouldn't change the answer.
+function isTransientOcrError(e) {
+  const m = ((e && e.message) || '').toLowerCase();
+  return /fetch failed|timeout|etimedout|econnreset|econnrefused|enotfound|eai_again|socket hang up|network|dns/.test(m);
+}
+async function readAlipayProofWithRetry(img, manual) {
+  try {
+    return await alipayOcr.readPaymentScreenshot(img, { apiKey: manual.anthropicKey });
+  } catch (e) {
+    if (!isTransientOcrError(e)) throw e;
+    console.warn('[alipay/ocr] transient read error, retrying once:', e.message);
+    await new Promise((r) => setTimeout(r, 1500));
+    return await alipayOcr.readPaymentScreenshot(img, { apiKey: manual.anthropicKey });
+  }
+}
+
+// Read + verify an Alipay proof image and persist the verdict on the order.
+// Shared by the customer upload route and the admin "re-run OCR" action so both
+// apply the same reuse-guard, auto-flip rule and fail-soft behaviour. Returns
+// { verdict, autoPaid }. Auto-flip ONLY fires for a clean match on a still-
+// pending order with the operator toggle on — re-running on an already-shipped
+// order can never re-flip it.
+async function ocrVerifyAlipayProof(order, img, imgHash, manual) {
+  let verdict = null, autoPaid = false;
+  try {
+    const ocr = await readAlipayProofWithRetry(img, manual);
+    const v = validateAlipayProof(order, ocr, manual);
+    verdict = v.verdict;
+    // Reuse guard — the real defense against "upload an old screenshot". The
+    // primary key is the image itself (the same screenshot can't settle two
+    // orders); the txn-id is a bonus check when the screen happens to show one.
+    const dupImg = tdb().prepare('SELECT id FROM retail_orders WHERE alipay_proof_hash = ? AND id != ? LIMIT 1').get(imgHash, order.id);
+    const dupTxn = ocr.txn_id ? tdb().prepare('SELECT id FROM retail_orders WHERE alipay_txn_id = ? AND id != ? LIMIT 1').get(ocr.txn_id, order.id) : null;
+    const reused = dupImg || dupTxn;
+    if (reused) { verdict = 'mismatch'; v.verdict = 'mismatch'; v.reasons.push(`this ${dupImg ? 'screenshot' : 'transaction'} was already used on order #${reused.id}`); }
+    tdb().prepare(
+      "UPDATE retail_orders SET alipay_ocr_verdict = ?, alipay_ocr_json = ?, alipay_txn_id = ? WHERE id = ?"
+    ).run(verdict, JSON.stringify({ ...ocr, reasons: v.reasons, checks: v.checks }), ocr.txn_id || null, order.id);
+
+    // Auto-flip ONLY when the operator enabled it AND every guard passed: a full
+    // match (amount + payee + recent time), not a reused screenshot/txn, and the
+    // order is still awaiting payment (a re-run on a dispatched order won't flip).
+    if (manual.autoFlip && verdict === 'match' && !reused && order.status === 'pending_payment') {
+      markOrderPaid(order.id);
+      autoPaid = true;
+    }
+  } catch (e) {
+    console.warn('[alipay/ocr]', e.message);
+    verdict = 'error';
+    try { tdb().prepare("UPDATE retail_orders SET alipay_ocr_verdict = 'error', alipay_ocr_json = ? WHERE id = ?").run(JSON.stringify({ error: e.message }), order.id); } catch {}
+  }
+  return { verdict, autoPaid };
+}
 
 // WeChat Pay async notify. Body looks like:
 //   { id, create_time, resource_type, event_type, summary,
@@ -16976,6 +17010,32 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
 // contradict, and the operator confirms the action. Silent by design — no
 // customer notification fires (a quick misclick correction). Both timestamps are
 // cleared on the order and its parcels so the reversal is clean.
+// Re-run the Vision-AI read on an already-uploaded Alipay proof. A transient
+// network blip (the model relay down for a moment) lands the order on verdict
+// 'error' — the grey "couldn't read the screenshot — verify manually" banner —
+// even though the screenshot is perfectly readable. This lets staff retry the
+// read in one tap without asking the customer to re-upload. The auto-flip rule
+// is unchanged: it only fires for a clean match on a still-pending order with
+// the operator toggle on.
+router.post('/api/retail-admin/orders/:id/alipay-ocr/rerun', requireRetailAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const order = tdb().prepare(
+    'SELECT id, status, payment_method, total, alipay_proof_image, alipay_proof_hash FROM retail_orders WHERE id = ?'
+  ).get(id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (order.payment_method !== 'alipay' || !order.alipay_proof_image) {
+    return res.status(400).json({ success: false, error: 'no_proof' });
+  }
+  const manual = getAlipayManual();
+  if (!manual || !manual.ocrEnabled || !alipayOcr.ocrAvailable(manual.anthropicKey)) {
+    return res.status(400).json({ success: false, error: 'ocr_unavailable' });
+  }
+  const imgHash = order.alipay_proof_hash || crypto.createHash('sha256').update(order.alipay_proof_image).digest('hex');
+  const { verdict, autoPaid } = await ocrVerifyAlipayProof(order, order.alipay_proof_image, imgHash, manual);
+  logActivity(req.user.id, req.user.username, 'rerun_ocr', 'retail_order', id, { verdict, auto_paid: autoPaid }, req.ip);
+  res.json({ success: true, data: { verdict, auto_paid: autoPaid } });
+});
+
 router.post('/api/retail-admin/orders/:id/undo-dispatch', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
