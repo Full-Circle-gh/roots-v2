@@ -98,6 +98,14 @@
       return;
     }
 
+    // Rows sharing the exact same name look like duplicates. Tag them so they're
+    // tellable apart: prefer the variant label, else fall back to the product id.
+    const dupNames = {};
+    for (const p of list) {
+      const k = (p.name_cn || '') + '|' + (p.name_en || '');
+      dupNames[k] = (dupNames[k] || 0) + 1;
+    }
+
     tbody.innerHTML = list.map(p => {
       const mapA = storeA ? (p.stores[storeA.code] || {}) : {};
       const mapB = storeB ? (p.stores[storeB.code] || {}) : {};
@@ -107,8 +115,7 @@
 
       return `<tr data-pid="${p.id}" class="mt-product-row${anyMapped ? '' : ' mt-unmapped'}">
         <td>
-          <div style="font-weight:600;line-height:1.3">${esc(p.name_cn || '')}</div>
-          <div class="muted" style="font-size:11px">${esc(p.name_en || '')}</div>
+          <div style="font-weight:600;line-height:1.3">${esc([p.name_cn, p.name_en].filter(Boolean).join('  '))}${p.variant_label ? ` <span class="muted" style="font-weight:400;font-size:11px">· ${esc(p.variant_label)}</span>` : (dupNames[(p.name_cn || '') + '|' + (p.name_en || '')] > 1 ? ` <span class="muted" style="font-weight:400;font-size:11px">· #${p.id}</span>` : '')}</div>
         </td>
         <td>
           ${storeA ? `<input type="text"
@@ -144,6 +151,72 @@
       </tr>`;
     }).join('');
   }
+
+  // ── Auto-fill names ──────────────────────────────────────────────────────────
+  // Suggest a Meituan listing name for a product. On a Chinese marketplace the
+  // listing is the Chinese name; the variant label is appended (full-width parens)
+  // so products that share a name_cn — the size variants — stay distinguishable.
+  // The push daemon matches by name_cn substring (lib/meituan-browser.js), so a
+  // name_cn-prefixed value still matches.
+  function mtSuggestName(p) {
+    const base = (p.name_cn || p.name_en || '').trim();
+    if (!base) return '';
+    const v = (p.variant_label || '').trim();
+    return v ? `${base}（${v}）` : base;
+  }
+
+  // Fill every EMPTY Meituan-name field (both districts) with the suggested name.
+  // Never clobbers a value the operator already entered. Saves straight through
+  // the map API, then re-renders.
+  window.mtAutofill = async function () {
+    const stores = [_storeA, _storeB]
+      .filter((s, i, arr) => s && arr.findIndex(x => x && x.id === s.id) === i);
+    if (!stores.length) { toast('No stores detected to map.', 'error'); return; }
+
+    const targets = [];
+    for (const p of _products) {
+      const name = mtSuggestName(p);
+      if (!name) continue;
+      for (const store of stores) {
+        const existing = (p.stores?.[store.code]?.meituan_name || '').trim();
+        if (existing) continue;               // keep what the operator typed
+        targets.push({ p, store, name });
+      }
+    }
+
+    if (!targets.length) {
+      toast('Nothing to fill — every product already has a Meituan name.');
+      return;
+    }
+    if (!confirm(
+      `Auto-fill ${targets.length} empty Meituan name field(s) using each product's Chinese name `
+      + `(variant size appended where needed), for both districts?\n\n`
+      + `Existing entries are left untouched, and you can edit any field afterwards.`
+    )) return;
+
+    const btn = document.getElementById('mt-autofill-btn');
+    if (btn) { btn.disabled = true; }
+    let done = 0, failed = 0;
+    for (const t of targets) {
+      try {
+        await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: 1 }),
+        });
+        if (!t.p.stores) t.p.stores = {};
+        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, sync_enabled: 1 };
+        done++;
+      } catch (e) {
+        failed++;
+      }
+      if (btn) btn.textContent = `Filling… ${done + failed}/${targets.length}`;
+    }
+    mtRenderProducts();
+    mtLoadStatus();
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Auto-fill names'; }
+    toast(`Filled ${done} field(s)${failed ? `, ${failed} failed` : ''}. Review and tweak as needed.`);
+  };
 
   // ── Save mapping ────────────────────────────────────────────────────────────
   window.mtSaveMap = async function (input) {
