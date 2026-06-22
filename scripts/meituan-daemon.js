@@ -41,6 +41,14 @@ const QUEUE_CHECK_MS = 10_000;  // how often to process the stock push queue
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 
+// Tier 1 fingerprint reduction: never act on an exact fixed cadence. Each
+// interval is re-jittered so order polls and queue checks land at human-
+// irregular times instead of a metronomic 60s / 10s that screams "bot".
+function jitter(baseMs, frac = 0.3) {
+  const spread = baseMs * frac;
+  return Math.round(baseMs - spread + Math.random() * spread * 2);
+}
+
 // ── Store config ─────────────────────────────────────────────────────────────
 // Reads store codes from retail_stores table; maps code → Meituan credentials
 // from environment variables.
@@ -221,21 +229,28 @@ async function main() {
   console.log(`[meituan-daemon] stores: ${stores.map(s => s.storeCode).join(', ')}`);
 
   let lastOrderPoll = 0;
+  let orderPollGap  = jitter(ORDER_POLL_MS);
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const now = Date.now();
 
-    // Poll for new orders every ORDER_POLL_MS
-    if (now - lastOrderPoll >= ORDER_POLL_MS) {
+    // Poll for new orders on a jittered ~60s cadence. Stagger stores so the two
+    // browsers never hit Meituan at the same instant (lockstep concurrent polls
+    // are themselves a bot tell, and serialising keeps RAM to one busy browser).
+    if (now - lastOrderPoll >= orderPollGap) {
       lastOrderPoll = now;
-      await Promise.allSettled(stores.map(s => pollOrders(s)));
+      orderPollGap  = jitter(ORDER_POLL_MS);
+      for (let i = 0; i < stores.length; i++) {
+        await pollOrders(stores[i]);
+        if (i < stores.length - 1) await sleep(jitter(8000, 0.5));
+      }
     }
 
     // Always process stock queue
     await processStockQueue();
 
-    await sleep(QUEUE_CHECK_MS);
+    await sleep(jitter(QUEUE_CHECK_MS));
   }
 }
 
