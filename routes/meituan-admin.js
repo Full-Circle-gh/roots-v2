@@ -150,4 +150,64 @@ router.post('/api/retail-admin/meituan/push-all', requireRetailAdmin, (req, res)
   }
 });
 
+// ── POST /api/retail-admin/meituan/listings/refresh ───────────────────────
+// Enqueue a listing-scrape job per store for the daemon to run. Skips stores
+// that already have a pending/processing job so repeated clicks don't pile up.
+router.post('/api/retail-admin/meituan/listings/refresh', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const stores = db.prepare(
+      `SELECT code FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id`
+    ).all();
+
+    const pending = db.prepare(
+      `SELECT store_code FROM meituan_listing_jobs WHERE status IN ('pending','processing')`
+    ).all().map(r => r.store_code);
+
+    const insert = db.prepare(
+      `INSERT INTO meituan_listing_jobs (store_code, status) VALUES (?, 'pending')`
+    );
+    const queued = [];
+    for (const s of stores) {
+      if (pending.includes(s.code)) continue;
+      insert.run(s.code);
+      queued.push(s.code);
+    }
+
+    res.json({ success: true, queued, alreadyRunning: pending });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── GET /api/retail-admin/meituan/listings ────────────────────────────────
+// Cached listing names per store + the latest job status per store (so the UI
+// can poll until the scrape finishes).
+router.get('/api/retail-admin/meituan/listings', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const rows = db.prepare(
+      `SELECT store_code, listing_name FROM meituan_listings ORDER BY store_code, listing_name`
+    ).all();
+    const listings = {};
+    for (const r of rows) (listings[r.store_code] = listings[r.store_code] || []).push(r.listing_name);
+
+    // Latest job per store
+    const jobs = db.prepare(`
+      SELECT j.store_code, j.status, j.result_count, j.error, j.created_at, j.completed_at
+        FROM meituan_listing_jobs j
+        JOIN (SELECT store_code, MAX(id) AS mx FROM meituan_listing_jobs GROUP BY store_code) m
+          ON m.store_code = j.store_code AND m.mx = j.id
+    `).all();
+
+    const running = db.prepare(
+      `SELECT COUNT(*) AS n FROM meituan_listing_jobs WHERE status IN ('pending','processing')`
+    ).get()?.n || 0;
+
+    res.json({ success: true, listings, jobs, running });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;

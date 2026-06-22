@@ -6437,6 +6437,7 @@
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn btn-sm" onclick="mtLoadStatus()">↻ Status</button>
+        <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles from your Meituan backend (via the sync daemon) and fill empty fields with the matched real names.">⟳ Fetch from Meituan</button>
         <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Meituan name with the product's Chinese name (variant size appended where needed), both districts. Existing entries are kept.">✨ Auto-fill names</button>
         <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
       </div>

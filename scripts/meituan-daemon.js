@@ -41,6 +41,14 @@ const QUEUE_CHECK_MS = 10_000;  // how often to process the stock push queue
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 
+// Tier 1 fingerprint reduction: never act on an exact fixed cadence. Each
+// interval is re-jittered so order polls and queue checks land at human-
+// irregular times instead of a metronomic 60s / 10s that screams "bot".
+function jitter(baseMs, frac = 0.3) {
+  const spread = baseMs * frac;
+  return Math.round(baseMs - spread + Math.random() * spread * 2);
+}
+
 // ── Store config ─────────────────────────────────────────────────────────────
 // Reads store codes from retail_stores table; maps code → Meituan credentials
 // from environment variables.
@@ -189,6 +197,56 @@ async function processStockQueue() {
   }
 }
 
+// ── Listing scrape jobs ────────────────────────────────────────────────────────
+// The admin Meituan tab enqueues a job to read the live product titles from a
+// store's Meituan backend; we own the logged-in browser, so we run it and fill
+// meituan_listings. One store at a time (each navigates the shared browser).
+
+async function processListingJobs() {
+  const jobs = db.prepare(`
+    SELECT * FROM meituan_listing_jobs
+     WHERE status = 'pending'
+     ORDER BY created_at
+     LIMIT 5
+  `).all();
+
+  if (!jobs.length) return;
+
+  for (const job of jobs) {
+    db.prepare(`UPDATE meituan_listing_jobs SET status='processing' WHERE id=?`).run(job.id);
+    try {
+      const browser = await getBrowser(job.store_code);
+      const names = await browser.listProducts();
+      if (!names) throw new Error('scrape returned null (not logged in or no content iframe)');
+
+      const tx = db.transaction(() => {
+        db.prepare(`DELETE FROM meituan_listings WHERE store_code=?`).run(job.store_code);
+        const ins = db.prepare(
+          `INSERT OR IGNORE INTO meituan_listings (store_code, listing_name) VALUES (?, ?)`
+        );
+        for (const n of names) ins.run(job.store_code, n);
+      });
+      tx();
+
+      db.prepare(`
+        UPDATE meituan_listing_jobs
+           SET status='done', result_count=?, error=NULL, completed_at=CURRENT_TIMESTAMP
+         WHERE id=?
+      `).run(names.length, job.id);
+      logSync(job.store_code, 'listing_scrape', 'ok', { count: names.length });
+      log(job.store_code, `listing scrape done: ${names.length} listing(s)`);
+    } catch (err) {
+      db.prepare(`
+        UPDATE meituan_listing_jobs
+           SET status='error', error=?, completed_at=CURRENT_TIMESTAMP
+         WHERE id=?
+      `).run(err.message.slice(0, 200), job.id);
+      logSync(job.store_code, 'listing_scrape', 'error', null, err.message);
+      log(job.store_code, `processListingJobs error: ${err.message}`);
+    }
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function internalSecret() {
@@ -221,21 +279,31 @@ async function main() {
   console.log(`[meituan-daemon] stores: ${stores.map(s => s.storeCode).join(', ')}`);
 
   let lastOrderPoll = 0;
+  let orderPollGap  = jitter(ORDER_POLL_MS);
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const now = Date.now();
 
-    // Poll for new orders every ORDER_POLL_MS
-    if (now - lastOrderPoll >= ORDER_POLL_MS) {
+    // Poll for new orders on a jittered ~60s cadence. Stagger stores so the two
+    // browsers never hit Meituan at the same instant (lockstep concurrent polls
+    // are themselves a bot tell, and serialising keeps RAM to one busy browser).
+    if (now - lastOrderPoll >= orderPollGap) {
       lastOrderPoll = now;
-      await Promise.allSettled(stores.map(s => pollOrders(s)));
+      orderPollGap  = jitter(ORDER_POLL_MS);
+      for (let i = 0; i < stores.length; i++) {
+        await pollOrders(stores[i]);
+        if (i < stores.length - 1) await sleep(jitter(8000, 0.5));
+      }
     }
 
     // Always process stock queue
     await processStockQueue();
 
-    await sleep(QUEUE_CHECK_MS);
+    // Handle any on-demand listing-scrape requests from the admin tab
+    await processListingJobs();
+
+    await sleep(jitter(QUEUE_CHECK_MS));
   }
 }
 
