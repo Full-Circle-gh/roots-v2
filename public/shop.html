@@ -953,18 +953,49 @@ function _effectiveBg(el){
   }
   return getComputedStyle(document.body).backgroundColor;
 }
+// Many heroes are full-bleed <img>/<video> whose colour lives in the pixels, not
+// a CSS background — read the actual pixel under the sample point for those.
+function _mediaPixelHex(el,cx,cy){
+  try{
+    const tag=el.tagName, r=el.getBoundingClientRect();
+    let nw,nh,src=el;
+    if(tag==='IMG'){ if(!el.complete||!el.naturalWidth) return null; nw=el.naturalWidth; nh=el.naturalHeight; }
+    else if(tag==='VIDEO'){ if(!el.videoWidth) return null; nw=el.videoWidth; nh=el.videoHeight; }
+    else if(tag==='CANVAS'){ nw=el.width; nh=el.height; }
+    else return null;
+    if(!nw||!nh) return null;
+    // Map the client point into natural-pixel space. object-fit:cover scales to
+    // fill (centre-crop); contain letterboxes. Approximate by the dominant axis.
+    const fit=getComputedStyle(el).objectFit||'fill';
+    const rx=Math.min(1,Math.max(0,(cx-r.left)/r.width));
+    const ry=Math.min(1,Math.max(0,(cy-r.top)/r.height));
+    let nx, ny;
+    if(fit==='cover'||fit==='contain'){
+      const s = fit==='cover' ? Math.max(r.width/nw, r.height/nh) : Math.min(r.width/nw, r.height/nh);
+      const dw=nw*s, dh=nh*s, ox=(r.width-dw)/2, oy=(r.height-dh)/2;
+      nx=Math.round(((cx-r.left)-ox)/s); ny=Math.round(((cy-r.top)-oy)/s);
+    } else { nx=Math.round(rx*nw); ny=Math.round(ry*nh); }
+    nx=Math.min(nw-1,Math.max(0,nx)); ny=Math.min(nh-1,Math.max(0,ny));
+    const cv=document.createElement('canvas'); cv.width=1; cv.height=1;
+    const g=cv.getContext('2d'); g.drawImage(src,nx,ny,1,1,0,0,1,1);
+    const d=g.getImageData(0,0,1,1).data;
+    if(d[3]===0) return null;
+    return '#'+[d[0],d[1],d[2]].map(n=>n.toString(16).padStart(2,'0')).join('');
+  }catch(e){ return null; }   // cross-origin taint etc. → fall back to CSS bg
+}
 function syncThemeColor(){
   const m=document.querySelector('meta[name=theme-color]'); if(!m) return;
   const x=Math.round(window.innerWidth/2);
-  let el=null;
+  let el=null, y0=0;
   // Sample a few points down from the very top; skip floating/fixed chrome that
   // overlays the content (lang pill, top bar, tab bar) so we read the page itself.
   for(const y of [3,8,16,28]){
     const hit=document.elementFromPoint(x,y);
-    if(hit && !(hit.closest && hit.closest('#mLangFloat,#mtop,header,nav.links,.tabbar,#tabbar'))){ el=hit; break; }
+    if(hit && !(hit.closest && hit.closest('#mLangFloat,#mtop,header,nav.links,.tabbar,#tabbar'))){ el=hit; y0=y; break; }
   }
   if(!el) return;
-  const hex=_rgbToHex(_effectiveBg(el));
+  // Image/video/canvas heroes carry colour in pixels; CSS bg otherwise.
+  let hex = _mediaPixelHex(el,x,y0) || _rgbToHex(_effectiveBg(el));
   if(hex) m.setAttribute('content',hex);
 }
 function brandName(cfg){
