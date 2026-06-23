@@ -6499,6 +6499,7 @@
       <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name.">📋 Paste Meituan names</button>
       <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles from your Meituan backend (via the sync daemon) and fill empty fields with the matched real names.">⟳ Fetch from Meituan</button>
       <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Meituan name with the product's Chinese name (variant size appended where needed), both districts. Existing entries are kept.">✨ Auto-fill names</button>
+      <button id="mt-verify-btn" class="btn btn-sm" onclick="mtVerify()" title="Check that variants sharing one Meituan listing each have a distinct SKU, so stock pushes to the right spec instead of overwriting each other.">✓ Verify mappings</button>
       <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
     </div>
 
@@ -6524,14 +6525,15 @@
       <table id="mt-products-table" class="data-table" style="min-width:700px;font-size:13px">
         <thead>
           <tr>
-            <th style="width:30%">Product · 商品</th>
-            <th id="mt-th-store-0" style="width:28%">天河 Meituan name</th>
-            <th id="mt-th-store-1" style="width:28%">越秀 Meituan name</th>
-            <th style="width:14%;text-align:center">Sync</th>
+            <th style="width:26%">Product · 商品</th>
+            <th style="width:13%">SKU · 货号</th>
+            <th id="mt-th-store-0" style="width:25%">天河 Meituan name</th>
+            <th id="mt-th-store-1" style="width:25%">越秀 Meituan name</th>
+            <th style="width:11%;text-align:center">Sync</th>
           </tr>
         </thead>
         <tbody id="mt-products-body">
-          <tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+          <tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
         </tbody>
       </table>
     </div>

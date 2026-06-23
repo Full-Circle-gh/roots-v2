@@ -3663,6 +3663,26 @@ db.exec(`
   );
 `);
 
+// Per-variant SKU binding for the Meituan mapping. A Roots size-variant maps to
+// ONE Meituan spec; its SKU code (货号, e.g. "1-180") is what makes resolution
+// deterministic — it appears verbatim in the Meituan spec text ("130g 小 (1-180)")
+// so the daemon can push that one spec instead of fuzzily matching the listing
+// name and overwriting sibling variants. spu/sku ids are cached after the first
+// successful resolve. (Idempotent: ALTER is swallowed if the column exists.)
+addColumn('meituan_product_map', 'meituan_sku',    'TEXT');
+addColumn('meituan_product_map', 'meituan_spu_id', 'TEXT');
+addColumn('meituan_product_map', 'meituan_sku_id', 'TEXT');
+// One-time backfill: seed each mapping's SKU from its store_products variant so
+// existing mappings become deterministic without the operator re-entering codes.
+try {
+  db.exec(`
+    UPDATE meituan_product_map
+       SET meituan_sku = (SELECT sp.sku FROM store_products sp WHERE sp.id = meituan_product_map.product_id)
+     WHERE (meituan_sku IS NULL OR meituan_sku = '')
+       AND EXISTS (SELECT 1 FROM store_products sp WHERE sp.id = meituan_product_map.product_id AND sp.sku IS NOT NULL AND sp.sku <> '')
+  `);
+} catch (e) { /* store_products may not exist yet in a fresh db; created above */ }
+
 // Queue of stock changes to push to Meituan. Written by retail.js whenever
 // retail_store_stock is updated; consumed by the meituan-daemon process.
 db.exec(`

@@ -1,13 +1,13 @@
 // Meituan bidirectional sync daemon — runs as a separate pm2 process.
 //
-// Every ~120 seconds:
+// Every ~5 minutes (jittered):
 //   1. Poll 天河 + 越秀 Meituan backends for new pending orders
 //   2. Import each order into roots-v2 + deduct stock (import-only by default;
 //      auto-accept on Meituan is off unless MEITUAN_AUTO_ACCEPT=1)
-// (120s, not 60s: order timing isn't critical — Meituan prints its own receipt
-//  — so the daemon's job is stock sync + unified records. A slower poll halves
-//  the recurring page loads = smaller bot footprint, while still deducting stock
-//  within ~2 min so other channels don't oversell.)
+// (~5 min, not 60–120s: order timing isn't critical — Meituan prints its own
+//  receipt — so the daemon's job is stock sync + unified records. A slow,
+//  irregular poll minimises the recurring page loads = smaller bot footprint,
+//  while still deducting stock within minutes so other channels don't oversell.)
 //
 // Immediately (checked every 10 seconds):
 //   3. Process meituan_sync_queue — push stock changes from roots-v2 to Meituan
@@ -41,13 +41,51 @@ try {
 const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 
-const ORDER_POLL_MS  = 120_000; // how often to check for new Meituan orders (jittered)
+const ORDER_POLL_MS  = 300_000; // how often to check for new Meituan orders (jittered ±40%)
 // Import-only by default: pull orders into roots (records + stock) but do NOT
 // click "accept" on Meituan. Set MEITUAN_AUTO_ACCEPT=1 in .env to re-enable.
 const AUTO_ACCEPT    = process.env.MEITUAN_AUTO_ACCEPT === '1';
 const QUEUE_CHECK_MS = 10_000;  // how often to process the stock push queue
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
+
+// Per-store opening hours (Asia/Shanghai). Outside these windows the store is
+// closed on Meituan, so we stop order-polling: a merchant backend that keeps
+// refreshing at 4am is itself a bot tell, and idling the browser saves RAM +
+// proxy traffic. Minutes are local 24h; [open, close). A small grace buffer
+// (OPEN_GRACE_MIN) widens the window so trailing/pre-orders still import and the
+// on/off edge doesn't land exactly on the hour (also more human-looking).
+const OPEN_GRACE_MIN = 15;
+const STORE_HOURS = {
+  yuexiu: { open: 11 * 60 + 0,  close: 20 * 60 + 15 }, // 11:00–20:15
+  tianhe: { open: 10 * 60 + 0,  close: 20 * 60 + 0  }, // 10:00–20:00
+};
+
+// Minutes-since-midnight in Asia/Shanghai (UTC+8), independent of server TZ.
+function shanghaiMinutes(now = new Date()) {
+  const shanghai = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  return shanghai.getUTCHours() * 60 + shanghai.getUTCMinutes();
+}
+
+// Self-expiring manual override (for testing a push outside opening hours):
+// set env MEITUAN_FORCE_OPEN_MINUTES=30 and restart — every store counts as open
+// for that many minutes from daemon start, then it reverts to the real hours on
+// its own (no risk of leaving 24/7 edits on, which would be a bot tell). Harmless
+// when unset.
+const FORCE_OPEN_UNTIL = Number(process.env.MEITUAN_FORCE_OPEN_MINUTES) > 0
+  ? Date.now() + Number(process.env.MEITUAN_FORCE_OPEN_MINUTES) * 60_000
+  : 0;
+
+// True when the store is within its (grace-padded) Meituan opening window. Stores
+// with no configured hours default to always-open so a new store is never silently
+// muted.
+function isStoreOpen(storeCode, now = new Date()) {
+  if (FORCE_OPEN_UNTIL && now.getTime() < FORCE_OPEN_UNTIL) return true;
+  const h = STORE_HOURS[storeCode];
+  if (!h) return true;
+  const m = shanghaiMinutes(now);
+  return m >= (h.open - OPEN_GRACE_MIN) && m < (h.close + OPEN_GRACE_MIN);
+}
 
 // Tier 1 fingerprint reduction: never act on an exact fixed cadence. Each
 // interval is re-jittered so order polls and queue checks land at human-
@@ -60,6 +98,50 @@ function jitter(baseMs, frac = 0.3) {
 // Per-store latch so a 验证中心 challenge is logged once on transition, not
 // every poll (which would flood the sync log the admin tab reads).
 const verifyFlagged = {};
+
+// Per-store latch so the "store closed → pausing polls" / "reopened → resuming"
+// edge is logged once on transition, not on every loop tick.
+const closedFlagged = {};
+
+// When a store hits the 验证中心 challenge, STOP touching it for a while instead
+// of re-navigating into the verify page every cycle — every such hit re-pokes
+// risk-control from the already-flagged session and only deepens the flag /
+// poisons the proxy IP. The cool-down escalates per consecutive strike and
+// resets once a poll comes back clean. A human still has to pass the captcha;
+// this just stops us hammering it in the meantime.
+const VERIFY_COOLDOWN_BASE_MS = 30 * 60_000;      // first strike: 30 min
+const VERIFY_COOLDOWN_MAX_MS  = 4 * 60 * 60_000;  // cap: 4 h
+const verifyState = {}; // storeCode -> { until: epochMs, strikes: n }
+
+function inVerifyCooldown(storeCode, now = Date.now()) {
+  const s = verifyState[storeCode];
+  return !!(s && s.until && now < s.until);
+}
+
+// Record the outcome of a navigation that could have been challenged. On a
+// challenge: escalate the cool-down and log once on transition. On a clean
+// result: clear the cool-down and log the recovery once.
+function noteVerifyResult(storeCode, challenged) {
+  const s = verifyState[storeCode] || (verifyState[storeCode] = { until: 0, strikes: 0 });
+  if (challenged) {
+    s.strikes = Math.min(s.strikes + 1, 8);
+    const wait = Math.min(VERIFY_COOLDOWN_BASE_MS * 2 ** (s.strikes - 1), VERIFY_COOLDOWN_MAX_MS);
+    s.until = Date.now() + wait;
+    if (!verifyFlagged[storeCode]) {
+      verifyFlagged[storeCode] = true;
+      logSync(storeCode, 'verify_required', 'error', null,
+        `Meituan 验证中心 challenge — a human must pass the captcha; backing off ~${Math.round(wait / 60000)} min`);
+    }
+    log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
+  } else {
+    if (verifyFlagged[storeCode]) {
+      verifyFlagged[storeCode] = false;
+      logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
+    }
+    s.strikes = 0;
+    s.until = 0;
+  }
+}
 
 // ── Store config ─────────────────────────────────────────────────────────────
 // Reads store codes from retail_stores table; maps code → Meituan credentials
@@ -87,16 +169,10 @@ async function pollOrders(storeConfig) {
     browser = await getBrowser(storeCode);
     const orders = await browser.getPendingOrders();
 
-    // Surface a risk-control 验证中心 challenge to the admin tab — but only on
-    // the transition (not every poll) so it doesn't flood the sync log.
-    if (browser.verificationRequired && !verifyFlagged[storeCode]) {
-      verifyFlagged[storeCode] = true;
-      logSync(storeCode, 'verify_required', 'error', null,
-        'Meituan 验证中心 challenge — a human must pass the captcha to resume sync');
-    } else if (!browser.verificationRequired && verifyFlagged[storeCode]) {
-      verifyFlagged[storeCode] = false;
-      logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
-    }
+    // Surface + back off on a risk-control 验证中心 challenge: escalating
+    // cool-down so we stop re-poking the verify page every cycle (logged once on
+    // transition so it doesn't flood the sync log the admin tab reads).
+    noteVerifyResult(storeCode, browser.verificationRequired);
 
     for (const order of orders) {
       if (!order.meituanOrderNo) continue;
@@ -166,12 +242,15 @@ async function ingestOrder(storeId, storeCode, meituanOrder) {
 
 async function processStockQueue() {
   const rows = db.prepare(`
-    SELECT q.*, p.name_cn, p.name_en
+    SELECT q.*, p.name_cn, p.name_en,
+           COALESCE(mm.meituan_sku, p.sku) AS sku
       FROM meituan_sync_queue q
       LEFT JOIN products p ON p.id = q.product_id
+      LEFT JOIN meituan_product_map mm
+             ON mm.product_id = q.product_id AND mm.retail_store_id = q.retail_store_id
      WHERE q.status = 'pending' AND q.attempts < 3
      ORDER BY q.created_at
-     LIMIT 20
+     LIMIT 40
   `).all();
 
   if (!rows.length) return;
@@ -183,55 +262,91 @@ async function processStockQueue() {
   }
 
   for (const [storeCode, items] of Object.entries(byStore)) {
+    // Don't push while the store is CLOSED on Meituan (a backend edit at 3am is a
+    // bot tell, and stock accuracy doesn't matter until it reopens) or while it's
+    // in a verification cool-down (a push would re-hit risk-control). Rows stay
+    // pending and flush at the next open / after the cool-down.
+    if (!isStoreOpen(storeCode)) continue;
+    if (inVerifyCooldown(storeCode)) continue;
+
+    // Collapse to the latest qty per product/bundle so we push each target once,
+    // not replay every intermediate change. Older same-target rows are retired.
+    const latest = new Map(); // key -> row
+    const superseded = [];
+    for (const row of items) {
+      const key = row.bundle_id ? `b:${row.bundle_id}` : `p:${row.product_id}`;
+      const prev = latest.get(key);
+      if (prev) superseded.push(prev);
+      latest.set(key, row);
+    }
+    for (const row of superseded) {
+      db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error='superseded' WHERE id=?`)
+        .run(row.id);
+    }
+    const pushRows = Array.from(latest.values());
+
     let browser;
     try {
       browser = await getBrowser(storeCode);
 
-      for (const item of items) {
-        // Mark as processing
+      // Mark the rows we're about to push as processing.
+      for (const row of pushRows) {
         db.prepare(`UPDATE meituan_sync_queue SET status='processing', attempts=attempts+1 WHERE id=?`)
-          .run(item.id);
+          .run(row.id);
+      }
 
-        // Bundle rows target a Meituan listing by name; product rows by the
-        // product's own name. updateStock matches the list row by name substring.
-        const isBundle = !!item.bundle_id;
-        const targetCn = isBundle ? item.meituan_name : item.name_cn;
-        const targetEn = isBundle ? null : item.name_en;
-        const ok = await browser.updateStock(targetCn, targetEn, item.new_qty);
+      // Bundle rows target a Meituan listing by name; product rows by the
+      // product's own name. _updateOneOnPage matches the list row by substring.
+      const batchItems = pushRows.map(row => {
+        const isBundle = !!row.bundle_id;
+        return {
+          row, isBundle,
+          targetCn: isBundle ? row.meituan_name : row.name_cn,
+          targetEn: isBundle ? null : row.name_en,
+          sku:      isBundle ? null : row.sku,
+          newQty:   row.new_qty,
+        };
+      });
 
-        db.prepare(`
-          UPDATE meituan_sync_queue
-             SET status=?, processed_at=CURRENT_TIMESTAMP, last_error=?
-           WHERE id=?
-        `).run(ok ? 'done' : 'error', ok ? null : 'browser update failed', item.id);
+      // One product-list page visit for the whole store (was one per item).
+      const results = await browser.batchUpdateStock(batchItems);
 
+      // If the store got challenged mid-batch, start its cool-down now.
+      const challenged = browser.verificationRequired;
+      if (challenged) noteVerifyResult(storeCode, true);
+
+      for (const res of results) {
+        const { row, isBundle, newQty, ok } = res;
         if (ok) {
+          db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error=NULL WHERE id=?`)
+            .run(row.id);
           if (isBundle) {
-            db.prepare(`
-              UPDATE meituan_bundles
-                 SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP
-               WHERE id=?
-            `).run(item.new_qty, item.bundle_id);
+            db.prepare(`UPDATE meituan_bundles SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE id=?`)
+              .run(newQty, row.bundle_id);
           } else {
-            db.prepare(`
-              UPDATE meituan_product_map
-                 SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP
-               WHERE retail_store_id=? AND product_id=?
-            `).run(item.new_qty, item.retail_store_id, item.product_id);
+            db.prepare(`UPDATE meituan_product_map SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE retail_store_id=? AND product_id=?`)
+              .run(newQty, row.retail_store_id, row.product_id);
           }
+          logSync(storeCode, 'stock_push', 'ok',
+            { name: isBundle ? row.meituan_name : row.name_en, qty: newQty, bundle: isBundle });
+        } else if (challenged) {
+          // Deferred by risk-control, not a real failure — requeue and refund the
+          // attempt so it retries once the cool-down passes (no burned attempts).
+          db.prepare(`UPDATE meituan_sync_queue SET status='pending', attempts=attempts-1 WHERE id=?`)
+            .run(row.id);
+        } else {
+          db.prepare(`UPDATE meituan_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error='browser update failed' WHERE id=?`)
+            .run(row.id);
+          logSync(storeCode, 'stock_push', 'error',
+            { name: isBundle ? row.meituan_name : row.name_en, qty: newQty, bundle: isBundle });
         }
-
-        logSync(storeCode, 'stock_push', ok ? 'ok' : 'error',
-          { name: isBundle ? item.meituan_name : item.name_en, qty: item.new_qty, bundle: isBundle });
       }
     } catch (err) {
       log(storeCode, `processStockQueue error: ${err.message}`);
-      // Mark all items for this store as error
-      for (const item of items) {
-        if (item.status === 'processing') {
-          db.prepare(`UPDATE meituan_sync_queue SET status='error', last_error=? WHERE id=?`)
-            .run(err.message.slice(0, 200), item.id);
-        }
+      // Reset only the rows we marked processing back to error.
+      for (const row of pushRows) {
+        db.prepare(`UPDATE meituan_sync_queue SET status='error', last_error=? WHERE id=? AND status='processing'`)
+          .run(err.message.slice(0, 200), row.id);
       }
     }
   }
@@ -319,21 +434,37 @@ async function main() {
   console.log(`[meituan-daemon] stores: ${stores.map(s => s.storeCode).join(', ')}`);
 
   let lastOrderPoll = 0;
-  let orderPollGap  = jitter(ORDER_POLL_MS);
+  let orderPollGap  = jitter(ORDER_POLL_MS, 0.4);
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const now = Date.now();
 
-    // Poll for new orders on a jittered ~60s cadence. Stagger stores so the two
+    // Poll for new orders on a jittered ~5 min cadence. Stagger stores so the two
     // browsers never hit Meituan at the same instant (lockstep concurrent polls
     // are themselves a bot tell, and serialising keeps RAM to one busy browser).
     if (now - lastOrderPoll >= orderPollGap) {
       lastOrderPoll = now;
-      orderPollGap  = jitter(ORDER_POLL_MS);
-      for (let i = 0; i < stores.length; i++) {
-        await pollOrders(stores[i]);
-        if (i < stores.length - 1) await sleep(jitter(8000, 0.5));
+      orderPollGap  = jitter(ORDER_POLL_MS, 0.4);
+      // Only poll stores that are currently open on Meituan. Skipping closed
+      // stores idles the browser overnight (RAM/proxy savings) and drops the
+      // round-the-clock cadence that reads as a bot.
+      const openStores = stores.filter(s => {
+        const open = isStoreOpen(s.storeCode);
+        if (!open && !closedFlagged[s.storeCode]) {
+          closedFlagged[s.storeCode] = true;
+          log(s.storeCode, 'store closed — pausing order polls');
+          logSync(s.storeCode, 'poll_paused', 'ok', null, 'outside opening hours');
+        } else if (open && closedFlagged[s.storeCode]) {
+          closedFlagged[s.storeCode] = false;
+          log(s.storeCode, 'store reopened — resuming order polls');
+          logSync(s.storeCode, 'poll_resumed', 'ok', null, 'within opening hours');
+        }
+        return open;
+      }).filter(s => !inVerifyCooldown(s.storeCode)); // skip stores in a verify cool-down
+      for (let i = 0; i < openStores.length; i++) {
+        await pollOrders(openStores[i]);
+        if (i < openStores.length - 1) await sleep(jitter(8000, 0.5));
       }
     }
 

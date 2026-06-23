@@ -158,7 +158,7 @@
   // ── Products ───────────────────────────────────────────────────────────────
   async function mtLoadProducts() {
     const tbody = document.getElementById('mt-products-body');
-    tbody.innerHTML = '<tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
     try {
       // includeInactive so the bundle-component picker can attach paused
       // variants; the mapping list filters back to active in mtRenderProducts.
@@ -166,7 +166,7 @@
       _products = res.data || [];
       mtRenderProducts();
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Error: ${escape(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Error: ${escape(e.message)}</td></tr>`;
     }
   }
 
@@ -186,7 +186,7 @@
     }
 
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="4" class="muted" style="padding:24px;text-align:center">No products found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">No products found.</td></tr>';
       return;
     }
 
@@ -204,10 +204,23 @@
       const anyMapped = mapA.meituan_name || mapB.meituan_name;
       const syncA = mapA.sync_enabled !== 0;
       const syncB = mapB.sync_enabled !== 0;
+      // SKU is intrinsic to the Roots variant (same code in both districts). Show
+      // the mapped value if set, else the product's own SKU as the default.
+      const sku = (mapA.meituan_sku || mapB.meituan_sku || p.product_sku || '');
 
       return `<tr data-pid="${p.id}" class="mt-product-row${anyMapped ? '' : ' mt-unmapped'}">
         <td>
           <div style="font-weight:600;line-height:1.3">${esc([p.name_cn, p.name_en].filter(Boolean).join('  '))}${p.variant_label ? ` <span class="muted" style="font-weight:400;font-size:11px">· ${esc(p.variant_label)}</span>` : (dupNames[(p.name_cn || '') + '|' + (p.name_en || '')] > 1 ? ` <span class="muted" style="font-weight:400;font-size:11px">· #${p.id}</span>` : '')}</div>
+        </td>
+        <td>
+          <input type="text"
+            class="form-control mt-sku-input"
+            style="font-size:12px;font-family:ui-monospace,monospace"
+            placeholder="货号 / SKU"
+            value="${esc(sku)}"
+            data-pid="${p.id}"
+            onblur="mtSaveSku(this)"
+            onkeydown="if(event.key==='Enter')this.blur()">
         </td>
         <td>
           ${storeA ? `<input type="text"
@@ -294,10 +307,10 @@
         await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: 1 }),
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: 1, meituanSku: t.p.product_sku || '' }),
         });
         if (!t.p.stores) t.p.stores = {};
-        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, sync_enabled: 1 };
+        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, meituan_sku: t.p.product_sku || '', sync_enabled: 1 };
         done++;
       } catch (e) {
         failed++;
@@ -437,10 +450,10 @@
         await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: 1 }),
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: 1, meituanSku: t.p.product_sku || '' }),
         });
         if (!t.p.stores) t.p.stores = {};
-        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, sync_enabled: 1 };
+        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, meituan_sku: t.p.product_sku || '', sync_enabled: 1 };
         done++;
       } catch (e) {
         failed++;
@@ -518,11 +531,11 @@
       await api(`/api/retail-admin/meituan/products/${pid}/map`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId, storeCode, meituanName: name, syncEnabled: 1 }),
+        body: JSON.stringify({ storeId, storeCode, meituanName: name, syncEnabled: 1, meituanSku: product?.product_sku || '' }),
       });
       if (product) {
         if (!product.stores) product.stores = {};
-        product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, sync_enabled: 1 };
+        product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, meituan_sku: product?.product_sku || '', sync_enabled: 1 };
       }
       return true;
     } catch (e) {
@@ -680,18 +693,22 @@
     const existing = product?.stores?.[storeCode];
     if ((existing?.meituan_name || '') === name) return;
 
+    // Carry this row's SKU so a freshly-created mapping is born deterministic.
+    const skuInput = input.closest('tr')?.querySelector('.mt-sku-input');
+    const meituanSku = skuInput ? skuInput.value.trim() : (product?.product_sku || '');
+
     input.style.opacity = '0.5';
     try {
       await api(`/api/retail-admin/meituan/products/${pid}/map`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled: 1 }),
+        body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled: 1, meituanSku }),
       });
       // Update local cache
       if (product) {
         if (!product.stores) product.stores = {};
         if (name) {
-          product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, sync_enabled: 1 };
+          product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, meituan_sku: meituanSku, sync_enabled: 1 };
         } else {
           delete product.stores[storeCode];
         }
@@ -713,6 +730,103 @@
     }
     input.style.opacity = '';
   };
+
+  // ── Save SKU ─────────────────────────────────────────────────────────────────
+  // The SKU (货号) is what makes the push deterministic: the daemon matches it
+  // against the Meituan spec text so each variant hits its own spec. It's intrinsic
+  // to the variant, so we write it to every store this product is mapped to. If the
+  // product isn't mapped anywhere yet, we just cache it locally — it rides along the
+  // next time a Meituan name is saved on this row.
+  window.mtSaveSku = async function (input) {
+    const pid     = input.dataset.pid;
+    const sku     = input.value.trim();
+    const product = _products.find(p => p.id == pid);
+    if (!product) return;
+
+    const mapped = Object.entries(product.stores || {})
+      .filter(([, m]) => m && m.meituan_name);
+    if (!mapped.length) {
+      // Not mapped yet — keep it on the product so mtSaveMap can send it later.
+      product.product_sku = sku;
+      return;
+    }
+    // Skip if nothing changed across all mapped stores.
+    if (mapped.every(([, m]) => (m.meituan_sku || '') === sku)) return;
+
+    input.style.opacity = '0.5';
+    let failed = 0;
+    for (const [code, m] of mapped) {
+      const store = _stores.find(s => s.code === code);
+      if (!store) continue;
+      try {
+        await api(`/api/retail-admin/meituan/products/${pid}/map`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId: store.id, storeCode: code, meituanName: m.meituan_name, syncEnabled: m.sync_enabled ? 1 : 0, meituanSku: sku }),
+        });
+        m.meituan_sku = sku;
+      } catch (e) { failed++; }
+    }
+    input.style.opacity = '';
+    if (failed) toast('SKU save failed for ' + failed + ' store(s)', 'error');
+  };
+
+  // ── Verify mappings ────────────────────────────────────────────────────────
+  // Ask the server which shared-listing groups still lack a distinct SKU per
+  // variant (i.e. would still overwrite each other). Renders into the review panel.
+  window.mtVerify = async function () {
+    const btn = document.getElementById('mt-verify-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+    try {
+      const r = await api('/api/retail-admin/meituan/verify');
+      const probs = r.problems || [];
+      mtRenderVerify(probs, r);
+      toast(probs.length
+        ? `${probs.length} listing(s) still conflict — see the panel below.`
+        : `All clear — ${r.checked} mappings across ${r.listings} listings, no conflicts.`,
+        probs.length ? 'error' : undefined);
+    } catch (e) {
+      toast('Verify failed: ' + e.message, 'error');
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = '✓ Verify mappings'; }
+    }
+  };
+
+  function mtRenderVerify(problems, meta) {
+    const panel = document.getElementById('mt-review-panel');
+    if (!panel) return;
+    if (!problems.length) {
+      panel.style.display = 'block';
+      panel.innerHTML = `<div style="padding:12px 14px;background:var(--bg-elev-1)">
+        <b style="font-size:13px;color:var(--ok,#16a34a)">✓ Mappings verified</b>
+        <span class="muted" style="font-size:12px"> · ${meta.checked} enabled mappings, ${meta.listings} Meituan listings, every shared listing has a distinct SKU per variant.</span>
+      </div>`;
+      return;
+    }
+    const storeName = code => (_stores.find(s => s.code === code) || {}).name || code;
+    const rows = problems.map(pr => `
+      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--line)">
+        <div style="font-weight:600;margin-bottom:6px">${esc(pr.meituanName)}
+          <span class="muted" style="font-weight:400;font-size:11px">· ${esc(storeName(pr.storeCode))} · ${pr.count} variants share this listing</span></div>
+        ${pr.members.map(m => `<div style="display:flex;gap:8px;align-items:center;font-size:12px;padding:2px 0">
+          <span style="flex:1">${esc(m.label || ('#' + m.productId))}</span>
+          <span style="font-family:ui-monospace,monospace">${m.sku ? esc(m.sku) : '<span style="color:var(--warn,#d97706)">no SKU</span>'}</span>
+          ${m.issue === 'duplicate-sku' ? '<span style="color:var(--warn,#d97706);font-size:11px">duplicate</span>'
+            : m.issue === 'no-sku' ? '<span style="color:var(--warn,#d97706);font-size:11px">missing</span>'
+            : '<span style="color:var(--ok,#16a34a);font-size:11px">ok</span>'}
+        </div>`).join('')}
+      </div>`).join('');
+    panel.style.display = 'block';
+    panel.style.maxHeight = '60vh';
+    panel.style.overflow = 'auto';
+    panel.innerHTML = `
+      <div style="position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-elev-1);border-bottom:1px solid var(--line)">
+        <b style="font-size:13px">⚠ ${problems.length} listing(s) will still overwrite · 需各规格唯一货号</b>
+        <button class="btn btn-sm" onclick="mtDismissReview()">Dismiss ✕</button>
+      </div>
+      <div style="padding:8px 14px 0;font-size:12px;color:var(--text-2)">Each variant sharing one Meituan listing needs its own SKU (货号). Give the flagged rows a distinct SKU, then re-verify.</div>
+      ${rows}`;
+  }
 
   // ── Toggle sync ─────────────────────────────────────────────────────────────
   window.mtToggleSync = async function (checkbox) {
