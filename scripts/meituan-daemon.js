@@ -2,7 +2,8 @@
 //
 // Every ~120 seconds:
 //   1. Poll 天河 + 越秀 Meituan backends for new pending orders
-//   2. Accept each order on Meituan, create it in roots-v2, deduct stock
+//   2. Import each order into roots-v2 + deduct stock (import-only by default;
+//      auto-accept on Meituan is off unless MEITUAN_AUTO_ACCEPT=1)
 // (120s, not 60s: order timing isn't critical — Meituan prints its own receipt
 //  — so the daemon's job is stock sync + unified records. A slower poll halves
 //  the recurring page loads = smaller bot footprint, while still deducting stock
@@ -41,6 +42,9 @@ const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 
 const ORDER_POLL_MS  = 120_000; // how often to check for new Meituan orders (jittered)
+// Import-only by default: pull orders into roots (records + stock) but do NOT
+// click "accept" on Meituan. Set MEITUAN_AUTO_ACCEPT=1 in .env to re-enable.
+const AUTO_ACCEPT    = process.env.MEITUAN_AUTO_ACCEPT === '1';
 const QUEUE_CHECK_MS = 10_000;  // how often to process the stock push queue
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
@@ -105,10 +109,14 @@ async function pollOrders(storeConfig) {
 
       log(storeCode, `new order ${order.meituanOrderNo}`);
 
-      // 1. Accept on Meituan
-      const accepted = await browser.acceptOrder(order.meituanOrderNo);
+      // 1. (optional) Accept on Meituan — OFF by default (import-only mode).
+      //    Meituan prints its own receipt and acceptance is handled on Meituan's
+      //    side, so the daemon just mirrors the order into roots for records +
+      //    stock. Set MEITUAN_AUTO_ACCEPT=1 to re-enable the auto-accept click.
+      let accepted = null;
+      if (AUTO_ACCEPT) accepted = await browser.acceptOrder(order.meituanOrderNo);
 
-      // 2. Create in roots-v2 via internal API
+      // 2. Create in roots-v2 via internal API (this deducts stock → re-syncs)
       const rootsOrderId = await ingestOrder(storeId, storeCode, order);
 
       // 3. Record import
@@ -120,11 +128,11 @@ async function pollOrders(storeConfig) {
         order.meituanOrderNo,
         rootsOrderId || null,
         storeCode,
-        rootsOrderId ? 'imported' : (accepted ? 'accepted' : 'error')
+        rootsOrderId ? 'imported' : 'error'
       );
 
-      logSync(storeCode, 'order_accept', accepted ? 'ok' : 'error',
-        { meituanOrderNo: order.meituanOrderNo, rootsOrderId });
+      logSync(storeCode, 'order_import', rootsOrderId ? 'ok' : 'error',
+        { meituanOrderNo: order.meituanOrderNo, rootsOrderId, accepted: AUTO_ACCEPT ? !!accepted : 'skipped' });
     }
   } catch (err) {
     log(storeCode, `pollOrders error: ${err.message}`);
