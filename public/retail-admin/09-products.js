@@ -82,11 +82,22 @@ function paSetStatus(v) {
   PA_PAGE = 1;
   paRender();
 }
+// Stock to judge OOS / Low against, honouring the "Stock for" switcher: when a
+// single store is selected (and its per-store map has loaded) use that store's
+// own count, otherwise the combined effective_stock (legacy stock_qty as a last
+// resort). Keeps the KPI tiles, quick-filter and grid OOS badge all answering
+// the same question — "out of stock *where I'm looking*" — so picking Tianhe +
+// Out of stock lists items zero in Tianhe even if they're stocked elsewhere.
+function _paStockOf(p) {
+  if (PA_STORE !== 'all' && PA_STOCK_LOADED) return _paStoreQty(p.id, PA_STORE);
+  return Number(p.effective_stock ?? p.stock_qty ?? 0);
+}
+
 // Does a product match the active status filter? Mirrors paRenderKpis' buckets.
 function _paStatusMatch(p) {
   if (PA_STATUS === 'all') return true;
   const pub = p.is_published === 1;
-  const s = Number(p.effective_stock ?? p.stock_qty ?? 0);
+  const s = _paStockOf(p);
   switch (PA_STATUS) {
     case 'live':   return pub;
     case 'drafts': return !pub;
@@ -903,7 +914,7 @@ function pvOutside(e) { if (!(e.target.closest && e.target.closest('.ovp-wrap'))
 function paRenderKpis(animate) {
   if (!document.getElementById('pa-kpis')) return;
   const rows = Array.isArray(PA_PRODUCTS) ? PA_PRODUCTS : [];
-  const eff = x => Number(x.effective_stock ?? x.stock_qty ?? 0);
+  const eff = x => _paStockOf(x);   // store-aware: counts follow the "Stock for" pick
   let live = 0, drafts = 0, oos = 0, low = 0;
   for (const p of rows) {
     const pub = p.is_published === 1;
@@ -1305,7 +1316,7 @@ function paRender() {
     // visible from the grid without opening the product. Use effective_stock
     // (per-store sum, same as the shop) so a product stocked per-store doesn't
     // show a false "OUT" off the stale legacy stock_qty column.
-    const effStock = x => Number(x.effective_stock ?? x.stock_qty);
+    const effStock = x => _paStockOf(x);   // store-aware, matching the OOS quick-filter
     const oosCount = u.group
       ? u.members.filter(m => m.is_published === 1 && effStock(m) <= 0).length
       : ((p.is_published === 1 && effStock(p) <= 0) ? 1 : 0);
