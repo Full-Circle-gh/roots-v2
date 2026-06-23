@@ -47,12 +47,12 @@
     try {
       const s = await api('/api/retail-admin/meituan/status');
       bar.innerHTML = `
-        <span style="color:var(--fg-ok)">● Daemon active</span>
+        <span style="color:var(--success)">● Daemon active</span>
         <span class="sep">·</span>
         <b>${s.mappedCount}</b> products mapped
         <span class="sep">·</span>
         Queue: <b>${s.queuePending}</b> pending
-        ${s.queueFailed ? `<span style="color:var(--fg-warn)"> / ${s.queueFailed} failed</span>` : ''}
+        ${s.queueFailed ? `<span style="color:var(--warn)"> / ${s.queueFailed} failed</span>` : ''}
         ${s.lastOrder.length ? `<span class="sep">·</span>Last order: <b>${s.lastOrder[0].meituan_order_no}</b> (${s.lastOrder[0].store_code}) ${fmtAgo(s.lastOrder[0].imported_at)}` : ''}
       `;
       if (log) {
@@ -61,7 +61,7 @@
           : 'No sync events yet.';
       }
     } catch (e) {
-      bar.innerHTML = `<span style="color:var(--fg-warn)">● Could not reach daemon status API</span>`;
+      bar.innerHTML = `<span style="color:var(--warn)">● Could not reach daemon status API</span>`;
     }
   };
 
@@ -388,7 +388,7 @@
     }
 
     const ambHtml = ambiguous.map((it, i) => `
-      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--border)">
+      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--line)">
         <div style="font-weight:600;margin-bottom:6px">${esc(it.label)}
           <span class="muted" style="font-weight:400;font-size:11px">· ${esc(it.storeName)}</span></div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
@@ -400,7 +400,7 @@
       </div>`).join('');
 
     const unmHtml = unmatched.map((it, i) => `
-      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
         <div>
           <div style="font-weight:600">${esc(it.label)}
             <span class="muted" style="font-weight:400;font-size:11px">· ${esc(it.storeName)}</span></div>
@@ -413,14 +413,14 @@
     panel.style.maxHeight = '60vh';
     panel.style.overflow = 'auto';
     panel.innerHTML = `
-      <div style="position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-elev-1);border-bottom:1px solid var(--border)">
+      <div style="position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-elev-1);border-bottom:1px solid var(--line)">
         <b style="font-size:13px">Needs your attention · 需手动确认
           <span class="muted" style="font-weight:400">(${ambiguous.length} ambiguous · ${unmatched.length} unmatched)</span></b>
         <button class="btn btn-sm" onclick="mtDismissReview()" title="Clear this whole list">Dismiss all ✕</button>
       </div>
-      ${ambiguous.length ? `<div style="padding:8px 14px 0;font-size:12px;color:var(--fg-muted)">Multiple Meituan titles matched — choose the right one:</div>${ambHtml}` : ''}
-      ${unmatched.length ? `<div style="padding:10px 14px 0;font-size:12px;color:var(--fg-muted)">Not found on Meituan:</div>${unmHtml}` : ''}
-      <div style="position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:10px 14px;background:var(--bg-elev-1);border-top:1px solid var(--border)">
+      ${ambiguous.length ? `<div style="padding:8px 14px 0;font-size:12px;color:var(--text-2)">Multiple Meituan titles matched — choose the right one:</div>${ambHtml}` : ''}
+      ${unmatched.length ? `<div style="padding:10px 14px 0;font-size:12px;color:var(--text-2)">Not found on Meituan:</div>${unmHtml}` : ''}
+      <div style="position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:10px 14px;background:var(--bg-elev-1);border-top:1px solid var(--line)">
         <button class="btn btn-sm" onclick="mtDismissReview()" title="Clear this whole list">Dismiss all ✕</button>
       </div>
     `;
@@ -529,8 +529,8 @@
     ov.id = 'mt-paste-overlay';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
     ov.innerHTML = `
-      <div style="background:var(--bg);color:var(--fg);width:min(560px,100%);max-height:88vh;overflow:auto;border-radius:10px;border:1px solid var(--border);box-shadow:0 18px 50px rgba(0,0,0,.4)">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)">
+      <div style="background:var(--bg-pane);color:var(--text-1);width:min(560px,100%);max-height:88vh;overflow:auto;border-radius:10px;border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.4)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)">
           <b style="font-size:15px">Paste Meituan names · 粘贴美团商品名</b>
           <button class="btn btn-sm" onclick="mtClosePaste()">✕</button>
         </div>
@@ -689,10 +689,10 @@
         `${esc([c.name_cn, c.name_en].filter(Boolean).join(' '))}${c.variant_label ? ` (${esc(c.variant_label)})` : ''}${c.qty > 1 ? ` ×${c.qty}` : ''}`
       ).join(', ');
       const storeName = (_stores.find(s => s.code === b.store_code) || {}).name || b.store_code;
-      return `<div style="border-top:1px solid var(--border);padding:10px 0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      return `<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:240px;flex:1">
           <div style="font-weight:600">${esc(b.meituan_name)} <span class="muted" style="font-weight:400;font-size:11px">· ${esc(storeName)}</span></div>
-          <div class="muted" style="font-size:12px;margin-top:2px">${comps || '<span style="color:var(--fg-warn)">no components — add some</span>'}</div>
+          <div class="muted" style="font-size:12px;margin-top:2px">${comps || '<span style="color:var(--warn)">no components — add some</span>'}</div>
           <div style="font-size:12px;margin-top:3px">Available now: <b>${b.available}</b>${b.max_qty != null ? ` (cap ${b.max_qty})` : ''}${b.sync_enabled ? '' : ' · <span class="muted">sync off</span>'}${b.last_pushed_at ? ` · last pushed ${b.last_pushed_qty} ${fmtAgo(b.last_pushed_at)}` : ''}</div>
         </div>
         <div style="display:flex;gap:6px">
@@ -718,8 +718,8 @@
     ov.id = 'mt-bundle-overlay';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
     ov.innerHTML = `
-      <div style="background:var(--bg);color:var(--fg);width:min(620px,100%);max-height:90vh;overflow:auto;border-radius:10px;border:1px solid var(--border)">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)">
+      <div style="background:var(--bg-pane);color:var(--text-1);width:min(620px,100%);max-height:90vh;overflow:auto;border-radius:10px;border:1px solid var(--line-strong);box-shadow:0 18px 50px rgba(0,0,0,.4)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)">
           <b style="font-size:15px">${existing ? 'Edit' : 'Add'} bundle</b>
           <button class="btn btn-sm" onclick="mtCloseBundle()">✕</button>
         </div>
@@ -832,7 +832,7 @@
       box.innerHTML = `<div class="muted" style="font-size:12px;padding:6px 0">No combo-looking titles found. Use 📋 Paste Meituan names first (this session), then try again.</div>`;
       return;
     }
-    box.innerHTML = `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin:8px 0">
+    box.innerHTML = `<div style="border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:8px 0">
       <div style="font-size:12px;font-weight:600;margin-bottom:4px">${_bundleSuggest.length} possible bundle(s) — click Create to set components</div>
       ${_bundleSuggest.map((s, i) => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0">
         <span style="font-size:13px">${esc(s.name)} <span class="muted" style="font-size:11px">· ${esc(s.storeName)}</span></span>
