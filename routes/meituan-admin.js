@@ -240,6 +240,7 @@ router.post('/api/retail-admin/meituan/bundles/:id/push', requireRetailAdmin, (r
     const b = db.prepare('SELECT * FROM meituan_bundles WHERE id=?').get(parseInt(req.params.id, 10));
     if (!b) return res.status(404).json({ success: false, error: 'bundle not found' });
     const qty = bundleLib.enqueueBundle(db, b);
+    if (qty == null) return res.json({ success: false, error: 'Bundle has no components yet — add at least one product first.' });
     res.json({ success: true, qty });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
