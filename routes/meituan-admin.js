@@ -22,11 +22,14 @@ const bundleLib = require('../lib/meituan-bundles');
 router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) => {
   const db = tdb();
   try {
+    // Mapping list wants active products only; the bundle-component picker passes
+    // ?includeInactive=1 so an operator can attach a paused/unpublished variant.
+    const includeInactive = req.query.includeInactive === '1';
     const products = db.prepare(`
       SELECT p.id, p.name_cn, p.name_en, p.category, p.is_active,
              p.variant_label, p.variant_group_id
         FROM products p
-       WHERE p.is_active = 1
+       ${includeInactive ? '' : 'WHERE p.is_active = 1'}
        ORDER BY p.name_cn, p.variant_group_id, p.id
     `).all();
 

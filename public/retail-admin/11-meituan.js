@@ -85,7 +85,9 @@
     const tbody = document.getElementById('mt-products-body');
     tbody.innerHTML = '<tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
     try {
-      const res = await api('/api/retail-admin/meituan/products');
+      // includeInactive so the bundle-component picker can attach paused
+      // variants; the mapping list filters back to active in mtRenderProducts.
+      const res = await api('/api/retail-admin/meituan/products?includeInactive=1');
       _products = res.data || [];
       mtRenderProducts();
     } catch (e) {
@@ -94,7 +96,8 @@
   }
 
   function mtRenderProducts(filtered) {
-    const list   = filtered || _products;
+    // Mapping list stays active-only (picker loads inactive variants too).
+    const list   = (filtered || _products).filter(p => p.is_active);
     const tbody  = document.getElementById('mt-products-body');
     const storeA = _storeA;
     const storeB = _storeB;
@@ -739,7 +742,7 @@
           <div style="display:flex;gap:6px;align-items:center">
             <select id="mt-b-prodpick" class="form-control" style="font-size:13px;flex:1">
               <option value="">+ add a component product…</option>
-              ${_products.map(p => { const lbl = [p.name_cn, p.name_en].filter(Boolean).join(' ') + (p.variant_label ? ` (${p.variant_label})` : ''); return `<option value="${p.id}" data-label="${esc(lbl.toLowerCase())}">${esc(lbl)}</option>`; }).join('')}
+              ${_products.map(p => { const lbl = [p.name_cn, p.name_en].filter(Boolean).join(' ') + (p.variant_label ? ` (${p.variant_label})` : '') + (p.is_active ? '' : ' · 已下架/inactive'); return `<option value="${p.id}" data-label="${esc(lbl.toLowerCase())}">${esc(lbl)}</option>`; }).join('')}
             </select>
             <button class="btn btn-sm" onclick="mtBundleAddComp()">Add</button>
           </div>
