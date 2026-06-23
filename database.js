@@ -3813,5 +3813,38 @@ for (const t of ['meituan_product_map', 'meituan_bundle_components', 'meituan_sy
   try { repointMeituanProductFk(db, t); } catch (e) { console.error(`[meituan-fk] ${t}:`, e.message); }
 }
 
+// ── Migration: meituan_sync_queue.product_id must be NULLABLE ────────────────
+// Bundle pushes carry product_id = NULL (the listing is keyed by bundle_id +
+// meituan_name, not a single product). The table was first created with
+// product_id INTEGER NOT NULL, so "Push all stock now" blew up on the first
+// bundle with "NOT NULL constraint failed: meituan_sync_queue.product_id".
+// SQLite can't drop a NOT NULL in place, so rebuild the table verbatim with
+// that one constraint removed. Idempotent: skips if product_id is already
+// nullable.
+(function dropMeituanQueueProductNotNull(database) {
+  const col = database.pragma('table_info(meituan_sync_queue)')
+    .find(c => c.name === 'product_id');
+  if (!col || col.notnull === 0) return;  // already nullable (or table absent)
+  const row = database.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='meituan_sync_queue'"
+  ).get();
+  if (!row || !row.sql) return;
+  const newSql = row.sql.replace(
+    /(product_id\s+INTEGER)\s+NOT\s+NULL/i, '$1'
+  );
+  if (newSql === row.sql) return;  // pattern didn't match — leave it alone
+  database.pragma('foreign_keys = OFF');
+  try {
+    database.transaction(() => {
+      database.exec('ALTER TABLE meituan_sync_queue RENAME TO meituan_sync_queue__nnmig');
+      database.exec(newSql);
+      database.exec('INSERT INTO meituan_sync_queue SELECT * FROM meituan_sync_queue__nnmig');
+      database.exec('DROP TABLE meituan_sync_queue__nnmig');
+    })();
+  } finally {
+    database.pragma('foreign_keys = ON');
+  }
+})(db);
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
