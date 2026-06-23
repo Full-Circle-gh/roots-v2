@@ -6430,24 +6430,37 @@
        until used. They self-auth exactly as the standalone pages did. -->
   <!-- ── Meituan Sync ── -->
   <section id="tab-meituan">
-    <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <div>
-        <h2 style="margin:0;font-size:20px">美团同步 · Meituan Sync</h2>
-        <p class="muted" style="margin:4px 0 0;font-size:13px">Map your products to Meituan listings. Stock changes auto-push every 10 s. Orders pull every 60 s.</p>
-      </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn btn-sm" onclick="mtLoadStatus()">↻ Status</button>
-        <button id="mt-clear-btn" class="btn btn-sm" onclick="mtClearAll()" title="Delete every saved Meituan name mapping across all stores. Use before re-filling from scratch.">🧹 Clear all names</button>
-        <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name.">📋 Paste Meituan names</button>
-        <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles from your Meituan backend (via the sync daemon) and fill empty fields with the matched real names.">⟳ Fetch from Meituan</button>
-        <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Meituan name with the product's Chinese name (variant size appended where needed), both districts. Existing entries are kept.">✨ Auto-fill names</button>
-        <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
-      </div>
-    </div>
+    <h2>美团同步 · Meituan Sync</h2>
+    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      Map your products to Meituan listings. Stock changes auto-push every 10 s, and orders pull back every 60 s.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      将产品映射到美团商品。库存变动每 10 秒自动推送,订单每 60 秒回拉。
+    </p>
 
-    <!-- Status bar -->
-    <div id="mt-status-bar" style="display:flex;gap:12px;flex-wrap:wrap;margin:14px 0;padding:12px 16px;background:var(--bg-elev-1);border-radius:8px;font-size:13px">
-      <span>Loading…</span>
+    <!-- Sync health — same fc-* KPI strip as the Products catalogue, fed by
+         mtLoadStatus(). Queue / failed tiles flip to .alert when work backs up. -->
+    <div class="fc-kpis" id="mt-kpis">
+      <div class="fc-kpi accent" id="mt-kpi-daemon-tile">
+        <div class="lbl">Daemon · 同步服务</div>
+        <div class="val" id="mt-kpi-daemon-val">—</div>
+        <div class="sub" id="mt-kpi-daemon-sub">auto every 10s · 每 10 秒</div>
+      </div>
+      <div class="fc-kpi" id="mt-kpi-mapped-tile">
+        <div class="lbl">Mapped · 已映射</div>
+        <div class="val" id="mt-kpi-mapped">—</div>
+        <div class="sub">products mapped · 已映射商品</div>
+      </div>
+      <div class="fc-kpi" id="mt-kpi-queue-tile">
+        <div class="lbl">Queue · 待推送</div>
+        <div class="val" id="mt-kpi-queue">—</div>
+        <div class="sub" id="mt-kpi-queue-sub">pending push · 待推送</div>
+      </div>
+      <div class="fc-kpi" id="mt-kpi-order-tile">
+        <div class="lbl">Last order · 最近订单</div>
+        <div class="val" id="mt-kpi-order">—</div>
+        <div class="sub" id="mt-kpi-order-sub">no orders yet · 暂无订单</div>
+      </div>
     </div>
 
     <!-- Recent log -->
@@ -6459,12 +6472,20 @@
     <!-- Review panel — ambiguous / unmatched products after a Meituan fetch -->
     <div id="mt-review-panel" style="display:none;margin:14px 0;border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
 
-    <!-- Filter row -->
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap">
-      <input id="mt-search" type="search" placeholder="Search products · 搜索商品" class="form-control" style="max-width:280px;font-size:13px" oninput="mtFilterProducts()">
-      <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer">
+    <!-- Toolbar — search + filter on the left, sync actions on the right,
+         mirroring the Products catalogue toolbar. -->
+    <div class="pa-toolbar">
+      <input id="mt-search" type="text" placeholder="Search products · 搜索商品" oninput="mtFilterProducts()">
+      <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
         <input type="checkbox" id="mt-show-unmapped" onchange="mtFilterProducts()"> Show unmapped only · 仅未映射
       </label>
+      <div id="mt-count" class="pa-count"></div>
+      <button class="btn btn-sm" onclick="mtLoadStatus()" title="Refresh sync status">↻ Status</button>
+      <button id="mt-clear-btn" class="btn btn-sm" onclick="mtClearAll()" title="Delete every saved Meituan name mapping across all stores. Use before re-filling from scratch.">🧹 Clear all names</button>
+      <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name.">📋 Paste Meituan names</button>
+      <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles from your Meituan backend (via the sync daemon) and fill empty fields with the matched real names.">⟳ Fetch from Meituan</button>
+      <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Meituan name with the product's Chinese name (variant size appended where needed), both districts. Existing entries are kept.">✨ Auto-fill names</button>
+      <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
     </div>
 
     <!-- Meituan-only bundles (套餐/combos with no single roots product) -->
