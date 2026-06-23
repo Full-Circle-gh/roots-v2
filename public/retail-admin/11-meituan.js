@@ -12,6 +12,7 @@
   let _review    = { ambiguous: [], unmatched: [] };  // post-fetch manual-review queue
   let _bundles   = [];   // meituan-only bundles with components + computed stock
   let _bundleDraft = null; // working copy while the bundle editor modal is open
+  let _bundleSuggest = []; // combo candidates surfaced from pasted/fetched titles
   let _initiated = false;
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -702,13 +703,16 @@
     }).join('');
   }
 
-  window.mtEditBundle = function (id) {
+  window.mtEditBundle = function (id, prefill) {
     if (document.getElementById('mt-bundle-overlay')) return;
     const existing = id ? _bundles.find(b => b.id == id) : null;
     const stores = mtUniqueStores();
     _bundleDraft = existing
       ? { id: existing.id, storeCode: existing.store_code, meituanName: existing.meituan_name, maxQty: existing.max_qty, components: (existing.components || []).map(c => ({ productId: c.product_id, qty: c.qty })) }
-      : { id: null, storeCode: (stores[0] || {}).code || '', meituanName: '', maxQty: '', components: [] };
+      : { id: null,
+          storeCode: (prefill && prefill.storeCode) || (stores[0] || {}).code || '',
+          meituanName: (prefill && prefill.meituanName) || '',
+          maxQty: '', components: [] };
 
     const ov = document.createElement('div');
     ov.id = 'mt-bundle-overlay';
@@ -804,6 +808,43 @@
     } catch (e) {
       toast('Save failed: ' + e.message, 'error');
     }
+  };
+
+  // Surface combo-looking titles from the loaded Meituan names as quick-create
+  // suggestions. Looks for 套餐/Combo or a +/& joiner; skips titles already a
+  // bundle. _listings is filled by Paste/Fetch in this session.
+  function mtComboCandidates(storeCode) {
+    const list = _listings[storeCode] || [];
+    const existing = new Set(_bundles.filter(b => b.store_code === storeCode).map(b => b.meituan_name));
+    return list.filter(t => !existing.has(t) && (/套餐|combo/i.test(t) || /[+＋&]/.test(t)));
+  }
+
+  window.mtSuggestBundles = function () {
+    const box = document.getElementById('mt-bundle-suggest');
+    if (!box) return;
+    _bundleSuggest = [];
+    for (const st of mtUniqueStores()) {
+      for (const t of mtComboCandidates(st.code)) {
+        _bundleSuggest.push({ storeCode: st.code, storeName: st.name || st.code, name: t });
+      }
+    }
+    if (!_bundleSuggest.length) {
+      box.innerHTML = `<div class="muted" style="font-size:12px;padding:6px 0">No combo-looking titles found. Use 📋 Paste Meituan names first (this session), then try again.</div>`;
+      return;
+    }
+    box.innerHTML = `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin:8px 0">
+      <div style="font-size:12px;font-weight:600;margin-bottom:4px">${_bundleSuggest.length} possible bundle(s) — click Create to set components</div>
+      ${_bundleSuggest.map((s, i) => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0">
+        <span style="font-size:13px">${esc(s.name)} <span class="muted" style="font-size:11px">· ${esc(s.storeName)}</span></span>
+        <button class="btn btn-sm" onclick="mtCreateBundleFrom(${i})">Create</button>
+      </div>`).join('')}
+    </div>`;
+  };
+
+  window.mtCreateBundleFrom = function (i) {
+    const s = _bundleSuggest[i];
+    if (!s) return;
+    mtEditBundle(null, { storeCode: s.storeCode, meituanName: s.name });
   };
 
   window.mtDeleteBundle = async function (id) {

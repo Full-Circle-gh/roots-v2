@@ -6476,7 +6476,11 @@
         For combos sold on Meituan but not in your store. Link each to its component products;
         stock auto-syncs as the minimum the components can make, and drops to 0 when any ingredient runs out.
       </p>
-      <div style="margin-bottom:10px"><button class="btn btn-sm btn-primary" onclick="mtEditBundle()">+ Add bundle</button></div>
+      <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-primary" onclick="mtEditBundle()">+ Add bundle</button>
+        <button class="btn btn-sm" onclick="mtSuggestBundles()" title="Scan the Meituan titles you pasted/fetched for combo-looking entries and create bundles from them.">✨ Suggest from pasted names</button>
+      </div>
+      <div id="mt-bundle-suggest"></div>
       <div id="mt-bundles-list"></div>
     </details>
 
