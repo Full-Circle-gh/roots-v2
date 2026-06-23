@@ -98,75 +98,59 @@ const MERCHANT_URL = 'https://e.waimai.meituan.com';
   // Drive the search box with REAL Playwright keystrokes — synthetic input/Enter
   // events dispatched via evaluate don't trigger Meituan's (React) search, so the
   // list stays on the default category and the target never renders.
+  // Search query = the leading same-script run of the name (CJK or Latin), so a
+  // mapping like "红扁豆汤Red Lentils Soup" still searches "红扁豆汤" — Meituan's
+  // search matches a substring of the title; an over-long query finds nothing.
+  const coreQuery = (() => {
+    const m = term.match(/^[一-鿿]+/) || term.match(/^[A-Za-z][A-Za-z ]*[A-Za-z]/) || term.match(/^[A-Za-z]+/);
+    const c = m ? m[0].trim() : term;
+    return c.length >= 2 ? c : term;
+  })();
   if (term) {
     const sh = await iframe.$('input[placeholder="搜索商品或规格名称"]');
     if (!sh) { console.log('[probe] search box NOT found'); }
     else {
       await sh.click({ timeout: 8000 }).catch(e => console.log('[probe] search click failed:', e.message));
       await sh.fill('');               // clear any prior text
-      await sh.type(term, { delay: 60 });
+      await sh.type(coreQuery, { delay: 60 });
       await sh.press('Enter');
-      console.log('[probe] typed search term via Playwright');
+      console.log(`[probe] searched "${coreQuery}" (from "${term}") via Playwright`);
     }
     await iframe.waitForTimeout(3000); // results may lazy-load after the filter
   }
 
-  const dump = await iframe.evaluate((term) => {
+  // Run the PROPOSED matcher (read-only — does NOT click anything). Each product
+  // card is div.product-card_*; its name is input.roo-input.value or the parent
+  // [title]. Report every rendered product name and which card the matcher picks.
+  const dump = await iframe.evaluate(({ cn, en }) => {
     const body = document.body.innerText || '';
     const out = {
-      searchBoxPresent: !!Array.from(document.querySelectorAll('input')).find(i => i.placeholder === '搜索商品或规格名称'),
       salesRows: (body.match(/月售/g) || []).length,
-      nameFullInBody: !!term && body.includes(term),
-      namePrefixInBody: term.length >= 4 ? body.includes(term.slice(0, 4)) : null,
-      titleAttrs: [],
-      cardHtml: null,
-      cardTextByLevel: [],
+      productCards: [],
+      matched: null,
     };
-
-    // Product names are likely in span[title] (ellipsis-truncated text, full
-    // value in the title attr) — same pattern the category tags use. Dump every
-    // distinct title attribute value so we can see the real listing names.
-    const titles = new Set();
-    for (const el of document.querySelectorAll('[title]')) {
-      const t = (el.getAttribute('title') || '').trim();
-      if (t) titles.add(t);
-      if (titles.size >= 40) break;
-    }
-    out.titleAttrs = Array.from(titles);
-
-    // Anchor on a real product card: the SMALLEST element whose text contains
-    // 月售 (the stock cell), then walk up to the card that also has a price (¥)
-    // and a checkbox — dump its HTML so we can see exactly where the name sits.
-    let cell = null, best = Infinity;
-    for (const el of document.querySelectorAll('*')) {
-      const t = el.innerText || '';
-      if (t.includes('月售') && t.length < best) { best = t.length; cell = el; }
-    }
-    if (cell) {
-      let node = cell;
-      for (let i = 0; i < 16 && node.parentElement; i++) {
-        node = node.parentElement;
-        const txt = node.innerText || '';
-        const hasCb = !!(node.querySelector && node.querySelector('input[type=checkbox]'));
-        out.cardTextByLevel.push(`L${i}${hasCb ? '*' : ' '}: ` + txt.replace(/\s+/g, ' ').trim().slice(0, 100));
-        // The product card: has the stock area AND a price AND its own checkbox.
-        if (hasCb && /¥/.test(txt) && /月售/.test(txt)) { out.cardHtml = (node.outerHTML || '').slice(0, 3500); break; }
-      }
+    const cardName = (card) => {
+      const inp = card.querySelector('input.roo-input');
+      if (inp && inp.value) return inp.value.trim();
+      const tw = card.querySelector('[title]');
+      return tw ? (tw.getAttribute('title') || '').trim() : '';
+    };
+    const cards = document.querySelectorAll('[class*="product-card"]');
+    for (const card of cards) {
+      const name = cardName(card);
+      const hasCb = !!card.querySelector('input[type=checkbox]');
+      if (name) out.productCards.push(name);
+      const hit = name && (name.includes(cn) || (en && name.toLowerCase().includes(en.toLowerCase())));
+      if (hit && !out.matched) out.matched = { name, hasCheckbox: hasCb };
     }
     return out;
-  }, term);
+  }, { cn: term, en: '' });
 
   console.log('───── PROBE RESULT ─────');
-  console.log(JSON.stringify({
-    searchBoxPresent: dump.searchBoxPresent,
-    salesRows: dump.salesRows,
-    nameFullInBody: dump.nameFullInBody,
-    namePrefixInBody: dump.namePrefixInBody,
-  }, null, 2));
-  console.log('titleAttrs:', JSON.stringify(dump.titleAttrs, null, 2));
-  console.log('cardTextByLevel (* = has checkbox):');
-  for (const l of dump.cardTextByLevel) console.log('  ' + l);
-  console.log('cardHtml:\n' + (dump.cardHtml || '(none)'));
+  console.log('searchedCore:', JSON.stringify(coreQuery));
+  console.log('salesRows:', dump.salesRows);
+  console.log('productCards rendered:', JSON.stringify(dump.productCards, null, 2));
+  console.log('matched:', JSON.stringify(dump.matched));
   console.log('────────────────────────');
 
   await b.close();
