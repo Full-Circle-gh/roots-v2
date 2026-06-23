@@ -130,6 +130,40 @@ router.get('/api/retail-admin/meituan/status', requireRetailAdmin, (req, res) =>
   }
 });
 
+// ── GET /api/retail-admin/meituan/orders ──────────────────────────────────
+// Read-only record of orders that arrived from Meituan. The daemon mirrors
+// every Meituan order into retail_orders (channel='meituan') to deduct stock;
+// this surfaces them as a plain ledger in the Meituan tab. The storefront does
+// NOT manage these — no status workflow, no printing — so the list is just
+// "an order came in": when, how much, what, and (when Meituan exposes it) who.
+// Deliberately excluded from the main Orders worklist + count badges.
+router.get('/api/retail-admin/meituan/orders', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const limit = Math.min(parseInt(req.query.limit || '50', 10) || 50, 200);
+    const orders = db.prepare(`
+      SELECT o.id, o.order_no, o.total, o.placed_at,
+             o.recipient_name, o.recipient_phone, o.address_full,
+             s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
+        FROM retail_orders o
+        LEFT JOIN retail_stores s ON s.id = o.store_id
+       WHERE o.channel = 'meituan'
+       ORDER BY o.placed_at DESC
+       LIMIT ?
+    `).all(limit);
+
+    const itemStmt = db.prepare(`
+      SELECT name_cn, name_en, qty FROM retail_order_items
+       WHERE order_id = ? ORDER BY id
+    `);
+    for (const o of orders) o.items = itemStmt.all(o.id);
+
+    res.json({ success: true, data: orders });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ── POST /api/retail-admin/meituan/push-all ──────────────────────────────
 // Queue a stock push for every mapped product ("sync now").
 router.post('/api/retail-admin/meituan/push-all', requireRetailAdmin, (req, res) => {

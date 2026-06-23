@@ -13979,7 +13979,12 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
           LEFT JOIN retail_customers c ON c.id = o.customer_id
           LEFT JOIN retail_stores    s ON s.id = o.store_id
           LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
-              WHERE 1=1`;
+              WHERE 1=1
+                -- Meituan orders are mirrored in only as a stock-deducting record
+                -- (see routes/meituan-internal.js). The storefront doesn't fulfil
+                -- or print them, so they're kept out of this worklist and shown
+                -- read-only in the Meituan tab instead.
+                AND COALESCE(o.channel,'') != 'meituan'`;
   const params = [];
   // `refunds_open` is a pseudo-status that pulls every order currently in
   // the refund pipeline regardless of primary status — so open requests
@@ -14040,7 +14045,9 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
 router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, res) => {
   const { store_id } = req.query;
   const sid = store_id ? parseInt(store_id, 10) : null;
-  const where = sid ? ' AND store_id = ?' : '';
+  // Mirror the list filter: Meituan-channel orders are a read-only stock record,
+  // not operator worklist items, so they never feed the open-work count badges.
+  const where = " AND COALESCE(channel,'') != 'meituan'" + (sid ? ' AND store_id = ?' : '');
   const args  = sid ? [sid] : [];
 
   const out = { pending_payment: 0, paid: 0, preparing: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0 };

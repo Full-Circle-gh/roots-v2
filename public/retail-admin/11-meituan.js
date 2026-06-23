@@ -22,7 +22,54 @@
     await Promise.all([mtLoadStores(), mtLoadStatus()]);
     await mtLoadProducts();
     mtLoadBundles();
+    mtLoadOrders();
   };
+
+  // ── Incoming orders (read-only) ──────────────────────────────────────────────
+  // A plain ledger of orders mirrored in from Meituan: when, amount, products,
+  // and (when Meituan exposes it) recipient. No status, no actions — the store
+  // doesn't manage or print these; it just shows that they came in.
+  window.mtLoadOrders = async function () {
+    const list = document.getElementById('mt-orders-list');
+    const cnt  = document.getElementById('mt-orders-count');
+    if (!list) return;
+    list.innerHTML = '<div class="muted" style="font-size:13px;padding:10px 0">Loading…</div>';
+    try {
+      const res = await api('/api/retail-admin/meituan/orders');
+      const orders = res.data || [];
+      if (cnt) cnt.textContent = orders.length ? `(${orders.length})` : '';
+      if (!orders.length) {
+        list.innerHTML = '<div class="muted" style="font-size:13px;padding:10px 0">No Meituan orders yet · 暂无美团订单</div>';
+        return;
+      }
+      list.innerHTML = orders.map(mtOrderRow).join('');
+    } catch (e) {
+      list.innerHTML = `<div class="muted" style="font-size:13px;padding:10px 0">Error: ${esc(e.message)}</div>`;
+    }
+  };
+
+  function mtOrderRow(o) {
+    const store = (_stores.find(s => s.code === o.store_code) || {}).name
+      || o.store_name_cn || o.store_name_en || o.store_code || '';
+    const items = (o.items || []).map(it =>
+      `${esc([it.name_cn, it.name_en].filter(Boolean).join(' '))}${it.qty > 1 ? ` ×${it.qty}` : ''}`
+    ).join(', ') || '<span class="muted">—</span>';
+    // Name/address are only shown when Meituan exposed them (often masked).
+    const who = [o.recipient_name, o.recipient_phone].filter(Boolean).map(esc).join(' · ');
+    const addr = o.address_full ? esc(o.address_full) : '';
+    const meta = [who, addr].filter(Boolean).join(' — ');
+    const amount = o.total != null ? '¥' + Number(o.total).toFixed(2) : '—';
+
+    return `<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
+      <div style="min-width:240px;flex:1">
+        <div style="font-weight:600;font-size:13px">${esc(o.order_no || '')}
+          <span class="muted" style="font-weight:400;font-size:11px">· ${esc(store)} · ${fmtAgo(o.placed_at) || ''}</span></div>
+        <div style="font-size:12px;margin-top:3px">${items}</div>
+        ${meta ? `<div class="muted" style="font-size:11px;margin-top:3px">${meta}</div>` : ''}
+      </div>
+      <div style="font-weight:700;font-size:14px;white-space:nowrap">${amount}</div>
+    </div>`;
+  }
 
   // ── Stores ─────────────────────────────────────────────────────────────────
   async function mtLoadStores() {
