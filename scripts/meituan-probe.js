@@ -58,19 +58,20 @@ const MERCHANT_URL = 'https://e.waimai.meituan.com';
   const iframe = await b._getMainIframe();
   if (!iframe) { console.log(`[probe:${store}] no content iframe`); await b.close(); process.exit(1); }
 
-  // Type the term into the list search box (same as updateStock).
+  // Drive the search box with REAL Playwright keystrokes — synthetic input/Enter
+  // events dispatched via evaluate don't trigger Meituan's (React) search, so the
+  // list stays on the default category and the target never renders.
   if (term) {
-    await iframe.evaluate((t) => {
-      const s = Array.from(document.querySelectorAll('input')).find(i => i.placeholder === '搜索商品或规格名称');
-      if (!s) return;
-      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
-      setter.call(s, t);
-      s.dispatchEvent(new Event('input',  { bubbles: true }));
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-      for (const type of ['keydown', 'keyup'])
-        s.dispatchEvent(new KeyboardEvent(type, { bubbles: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
-    }, term);
-    await iframe.waitForTimeout(3500); // results may lazy-load after the filter
+    const sh = await iframe.$('input[placeholder="搜索商品或规格名称"]');
+    if (!sh) { console.log('[probe] search box NOT found'); }
+    else {
+      await sh.click();
+      await sh.fill('');               // clear any prior text
+      await sh.type(term, { delay: 60 });
+      await sh.press('Enter');
+      console.log('[probe] typed search term via Playwright');
+    }
+    await iframe.waitForTimeout(3000); // results may lazy-load after the filter
   }
 
   const dump = await iframe.evaluate((term) => {
