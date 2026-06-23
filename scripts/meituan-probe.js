@@ -70,7 +70,7 @@ const MERCHANT_URL = 'https://e.waimai.meituan.com';
       for (const type of ['keydown', 'keyup'])
         s.dispatchEvent(new KeyboardEvent(type, { bubbles: true, key: 'Enter', code: 'Enter', keyCode: 13, which: 13 }));
     }, term);
-    await iframe.waitForTimeout(2200);
+    await iframe.waitForTimeout(3500); // results may lazy-load after the filter
   }
 
   const dump = await iframe.evaluate((term) => {
@@ -80,45 +80,39 @@ const MERCHANT_URL = 'https://e.waimai.meituan.com';
       salesRows: (body.match(/月售/g) || []).length,
       nameFullInBody: !!term && body.includes(term),
       namePrefixInBody: term.length >= 4 ? body.includes(term.slice(0, 4)) : null,
-      candidateNames: [],
-      rowHtml: null,
-      rowTextByLevel: [],
+      titleAttrs: [],
+      cardHtml: null,
+      cardTextByLevel: [],
     };
 
-    // Candidate product titles: leaf elements with short non-numeric, non-label text.
-    const LABELS = ['月售','库存','无限','上架','下架','促销','编辑','删除','更多','批量','全选','改库存','打包费','已下架','售卖中','未录入','分时置顶','新建','分组','门店故事','智能排序'];
-    const names = new Set();
-    for (const el of document.querySelectorAll('*')) {
-      if (el.children.length) continue;
-      const t = (el.innerText || '').trim();
-      if (t.length < 2 || t.length > 48) continue;
-      if (/^[\d¥%./,\s-]+$/.test(t)) continue;
-      if (LABELS.some(l => t.includes(l))) continue;
-      names.add(t);
-      if (names.size >= 20) break;
+    // Product names are likely in span[title] (ellipsis-truncated text, full
+    // value in the title attr) — same pattern the category tags use. Dump every
+    // distinct title attribute value so we can see the real listing names.
+    const titles = new Set();
+    for (const el of document.querySelectorAll('[title]')) {
+      const t = (el.getAttribute('title') || '').trim();
+      if (t) titles.add(t);
+      if (titles.size >= 40) break;
     }
-    out.candidateNames = Array.from(names);
+    out.titleAttrs = Array.from(titles);
 
-    // Anchor: leaf element holding the name (full or 4-char prefix); else the
-    // first checkbox on the page.
-    let anchor = null;
-    const pfx = term.length >= 4 ? term.slice(0, 4) : term;
+    // Anchor on a real product card: the SMALLEST element whose text contains
+    // 月售 (the stock cell), then walk up to the card that also has a price (¥)
+    // and a checkbox — dump its HTML so we can see exactly where the name sits.
+    let cell = null, best = Infinity;
     for (const el of document.querySelectorAll('*')) {
-      if (el.children.length) continue;
       const t = el.innerText || '';
-      if (term && (t.includes(term) || (pfx && t.includes(pfx)))) { anchor = el; break; }
+      if (t.includes('月售') && t.length < best) { best = t.length; cell = el; }
     }
-    if (!anchor) anchor = document.querySelector('input[type=checkbox]');
-
-    if (anchor) {
-      // Walk up to the product row (has a checkbox AND 月售), dump its HTML + text.
-      let row = anchor;
-      for (let i = 0; i < 16 && row.parentElement; i++) {
-        row = row.parentElement;
-        const txt = row.innerText || '';
-        const hasCb = !!(row.querySelector && row.querySelector('input[type=checkbox]'));
-        out.rowTextByLevel.push(`L${i}${hasCb ? '*' : ' '}: ` + txt.replace(/\s+/g, ' ').trim().slice(0, 90));
-        if (hasCb && /月售/.test(txt)) { out.rowHtml = (row.outerHTML || '').slice(0, 3000); break; }
+    if (cell) {
+      let node = cell;
+      for (let i = 0; i < 16 && node.parentElement; i++) {
+        node = node.parentElement;
+        const txt = node.innerText || '';
+        const hasCb = !!(node.querySelector && node.querySelector('input[type=checkbox]'));
+        out.cardTextByLevel.push(`L${i}${hasCb ? '*' : ' '}: ` + txt.replace(/\s+/g, ' ').trim().slice(0, 100));
+        // The product card: has the stock area AND a price AND its own checkbox.
+        if (hasCb && /¥/.test(txt) && /月售/.test(txt)) { out.cardHtml = (node.outerHTML || '').slice(0, 3500); break; }
       }
     }
     return out;
@@ -131,10 +125,10 @@ const MERCHANT_URL = 'https://e.waimai.meituan.com';
     nameFullInBody: dump.nameFullInBody,
     namePrefixInBody: dump.namePrefixInBody,
   }, null, 2));
-  console.log('candidateNames:', JSON.stringify(dump.candidateNames, null, 2));
-  console.log('rowTextByLevel (* = has checkbox):');
-  for (const l of dump.rowTextByLevel) console.log('  ' + l);
-  console.log('rowHtml:\n' + (dump.rowHtml || '(none)'));
+  console.log('titleAttrs:', JSON.stringify(dump.titleAttrs, null, 2));
+  console.log('cardTextByLevel (* = has checkbox):');
+  for (const l of dump.cardTextByLevel) console.log('  ' + l);
+  console.log('cardHtml:\n' + (dump.cardHtml || '(none)'));
   console.log('────────────────────────');
 
   await b.close();
