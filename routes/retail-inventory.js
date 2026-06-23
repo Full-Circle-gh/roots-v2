@@ -282,21 +282,10 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   // Queue a Meituan stock push whenever physical_qty changes and this
   // (store, product) pair is mapped in meituan_product_map.
   if ('physical_qty' in b && row) {
-    try {
-      const map = db.prepare(
-        'SELECT store_code FROM meituan_product_map WHERE retail_store_id=? AND product_id=? AND sync_enabled=1'
-      ).get(storeId, productId);
-      if (map) {
-        db.prepare(`
-          INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
-          VALUES (?, ?, ?, ?, 'pending')
-        `).run(storeId, productId, map.store_code, row.physical_qty);
-      }
-      // Re-push any Meituan-only bundles this product is a component of, so the
-      // bundle auto-drops when an ingredient runs out (independent of whether the
-      // component itself is individually mapped/sold on Meituan).
-      require('../lib/meituan-bundles').enqueueBundlesForProduct(db, storeId, productId);
-    } catch (e) { console.error('[meituan-sync-queue] enqueue error:', e.message); }
+    // Push the product's new stock to Meituan, plus any bundles it's a component
+    // of. Same helper the order/inventory paths use, so every physical_qty change
+    // (operator edit OR sale) syncs to Meituan identically.
+    require('../lib/meituan-bundles').enqueueProductStock(db, storeId, productId);
   }
 
   res.json({ success: true, data: { ...row, ...out } });
