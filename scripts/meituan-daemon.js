@@ -165,10 +165,17 @@ async function ingestOrder(storeId, storeCode, meituanOrder) {
 // ── Stock push queue ──────────────────────────────────────────────────────────
 
 async function processStockQueue() {
+  // Pull the operator-mapped Meituan title (meituan_product_map.meituan_name)
+  // alongside the product's own names. The Meituan listing is titled by the
+  // operator, NOT by our name_cn — searching the merchant list by name_cn
+  // matches nothing. name_cn/name_en come from store_products (the storefront
+  // catalog the product_id actually references), not the stale kitchen table.
   const rows = db.prepare(`
-    SELECT q.*, p.name_cn, p.name_en
+    SELECT q.*, sp.name_cn, sp.name_en, m.meituan_name AS mapped_name
       FROM meituan_sync_queue q
-      LEFT JOIN products p ON p.id = q.product_id
+      LEFT JOIN store_products sp ON sp.id = q.product_id
+      LEFT JOIN meituan_product_map m
+             ON m.product_id = q.product_id AND m.retail_store_id = q.retail_store_id
      WHERE q.status = 'pending' AND q.attempts < 3
      ORDER BY q.created_at
      LIMIT 20
@@ -195,7 +202,9 @@ async function processStockQueue() {
         // Bundle rows target a Meituan listing by name; product rows by the
         // product's own name. updateStock matches the list row by name substring.
         const isBundle = !!item.bundle_id;
-        const targetCn = isBundle ? item.meituan_name : item.name_cn;
+        // Products search by the mapped Meituan title (fallback to name_cn if
+        // the operator never filled 商品名). Bundles carry their own meituan_name.
+        const targetCn = isBundle ? item.meituan_name : (item.mapped_name || item.name_cn);
         const targetEn = isBundle ? null : item.name_en;
         const ok = await browser.updateStock(targetCn, targetEn, item.new_qty);
 
