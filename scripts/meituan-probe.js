@@ -133,59 +133,206 @@ const MERCHANT_URL = 'https://e.waimai.meituan.com';
     const c = m ? m[0].trim() : term;
     return c.length >= 2 ? c : term;
   })();
-  if (term) {
-    // Find the search box in WHICHEVER frame holds it — placeholder text or exact
-    // wording may drift, so match any input whose placeholder mentions 搜索/search.
-    let sh = null;
-    for (const fr of b.page.frames()) {
-      sh = await fr.$('input[placeholder*="搜索"], input[placeholder*="search" i]').catch(() => null);
-      if (sh) { console.log(`[probe] search box found in frame ${JSON.stringify(fr.url().slice(0, 90))}`); break; }
+  // The product list lives in a SEPARATE content frame from the page shell
+  // (the shell holds only the global ORDER search box). Pick the frame that
+  // owns the PRODUCT search box (placeholder 搜索商品或规格名称) — that's the one
+  // with the product cards. Fall back to _getMainIframe's frame if not found.
+  let contentFrame = iframe;
+  for (const fr of b.page.frames()) {
+    const hasProductSearch = await fr.$('input[placeholder="搜索商品或规格名称"]').catch(() => null);
+    if (hasProductSearch) {
+      contentFrame = fr;
+      console.log(`[probe] content frame = ${JSON.stringify(fr.url().slice(0, 90))}`);
+      break;
     }
-    if (!sh) { console.log('[probe] search box NOT found in any frame'); }
-    else {
-      await sh.click({ timeout: 8000 }).catch(e => console.log('[probe] search click failed:', e.message));
-      await sh.fill('');               // clear any prior text
-      await sh.type(coreQuery, { delay: 60 });
-      await sh.press('Enter');
-      console.log(`[probe] searched "${coreQuery}" (from "${term}") via Playwright`);
-    }
-    await iframe.waitForTimeout(3000); // results may lazy-load after the filter
   }
 
-  // Run the PROPOSED matcher (read-only — does NOT click anything). Each product
-  // card is div.product-card_*; its name is input.roo-input.value or the parent
-  // [title]. Report every rendered product name and which card the matcher picks.
-  const dump = await iframe.evaluate(({ cn, en }) => {
-    if (!document.body) return { noBody: true, salesRows: 0, productCards: [], matched: null };
+  // Probe the SEARCH MECHANISM. The box is a roo-autoComplete, so typing may
+  // open a suggestion dropdown rather than filter the list. Dump what appears
+  // after typing, look for an explicit search button, then try Enter + button.
+  if (term) {
+    const sh = await contentFrame.$('input[placeholder="搜索商品或规格名称"]').catch(() => null);
+    if (!sh) { console.log('[probe] product search box NOT found in content frame'); }
+    else {
+      await sh.click({ timeout: 8000 }).catch(e => console.log('[probe] search click failed:', e.message));
+      await sh.fill('');
+      await sh.type(coreQuery, { delay: 80 });
+      await contentFrame.waitForTimeout(1500);
+
+      // What opened after typing? (autocomplete dropdown items + any search button)
+      const afterType = await contentFrame.evaluate(() => {
+        const optSel = '.roo-autoComplete-option, [class*="autocomplete"] li, [class*="autoComplete"] [class*="option"], ul[role="listbox"] li, [class*="dropdown"] li';
+        const opts = Array.from(document.querySelectorAll(optSel))
+          .map(o => (o.innerText || '').replace(/\s+/g, ' ').trim()).filter(Boolean).slice(0, 12);
+        const btns = Array.from(document.querySelectorAll('button, .roo-btn, [class*="search"] [class*="btn"], span'))
+          .filter(b => /^搜索$|搜 索/.test((b.innerText || '').trim()))
+          .map(b => ({ t: (b.innerText || '').trim(), cls: (b.className || '').toString().slice(0, 50) }))
+          .slice(0, 6);
+        return { dropdownOptions: opts, searchButtons: btns };
+      });
+      console.log('[probe] afterType:', JSON.stringify(afterType));
+
+      // The search is a roo-autoComplete: Enter does NOT filter the list — you
+      // must CLICK the matching suggestion. Real Playwright click so React fires.
+      const optSel = '.roo-autoComplete-option, [class*="autocomplete"] li, [class*="autoComplete"] [class*="option"], ul[role="listbox"] li, [class*="dropdown"] li';
+      const optionHandles = await contentFrame.$$(optSel);
+      let clicked = null;
+      for (const oh of optionHandles) {
+        const txt = ((await oh.innerText().catch(() => '')) || '').trim();
+        if (txt.includes(coreQuery)) {
+          await oh.click({ timeout: 5000 }).catch(e => console.log('[probe] option click failed:', e.message));
+          clicked = txt;
+          break;
+        }
+      }
+      console.log('[probe] clicked suggestion:', JSON.stringify(clicked));
+      if (!clicked) { await sh.press('Enter'); console.log('[probe] no suggestion matched — fell back to Enter'); }
+    }
+    await contentFrame.waitForTimeout(3000); // results may lazy-load after the filter
+  }
+
+  // STRUCTURAL DUMP — find where the target name actually lives in the DOM and
+  // report the real row structure (class names, name source, checkbox) so we can
+  // derive correct selectors for updateStock.
+  const dump = await contentFrame.evaluate(({ cn }) => {
+    if (!document.body) return { noBody: true };
     const body = document.body.innerText || '';
     const out = {
       salesRows: (body.match(/月售/g) || []).length,
-      productCards: [],
-      matched: null,
+      bodyHasTarget: body.includes(cn),
+      rooInputValues: [],
+      cardClassCounts: {},
+      targetRow: null,
+      monthSaleRows: [],
     };
-    const cardName = (card) => {
-      const inp = card.querySelector('input.roo-input');
-      if (inp && inp.value) return inp.value.trim();
-      const tw = card.querySelector('[title]');
-      return tw ? (tw.getAttribute('title') || '').trim() : '';
+
+    // All roo-input values on screen (the product name is usually an editable
+    // roo-input; this shows whether the target is among them).
+    out.rooInputValues = Array.from(document.querySelectorAll('input.roo-input'))
+      .map(i => i.value).filter(Boolean).slice(0, 20);
+
+    // Every product-card with its name + status line + checkbox presence.
+    out.allCards = Array.from(document.querySelectorAll('[class*="product-card"]')).map(c => ({
+      cls: (c.className || '').toString().slice(0, 40),
+      name: (c.querySelector('input.roo-input') || {}).value
+         || (c.querySelector('[title]') ? c.querySelector('[title]').getAttribute('title') : '') || '',
+      status: (c.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 70),
+      hasCheckbox: !!c.querySelector('input[type=checkbox]'),
+    })).slice(0, 20);
+
+    // Top tabs (销售中 / 已售完 / 已下架 …) and which looks active.
+    out.tabs = Array.from(document.querySelectorAll('[class*="tab"] , [role="tab"], [class*="Tab"] li'))
+      .map(t => ({ t: (t.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 24),
+                   active: /active|selected|current/i.test((t.className || '').toString()) }))
+      .filter(x => x.t && x.t.length < 24).slice(0, 16);
+
+    // Distinct class fragments of candidate card containers.
+    for (const sel of ['product-card', 'card', 'item', 'list-row', 'sku']) {
+      out.cardClassCounts[sel] = document.querySelectorAll(`[class*="${sel}"]`).length;
+    }
+
+    const describe = (el, depth) => {
+      let node = el, chain = [];
+      for (let i = 0; i < depth && node; i++) {
+        chain.push({
+          tag: node.tagName,
+          cls: (node.className && node.className.toString) ? node.className.toString().slice(0, 60) : '',
+          hasCheckbox: !!node.querySelector && !!node.querySelector('input[type=checkbox]'),
+          rooInputVal: node.querySelector ? (node.querySelector('input.roo-input') || {}).value || '' : '',
+          titleAttr: node.querySelector && node.querySelector('[title]') ? node.querySelector('[title]').getAttribute('title') : '',
+        });
+        node = node.parentElement;
+      }
+      return chain;
     };
-    const cards = document.querySelectorAll('[class*="product-card"]');
-    for (const card of cards) {
-      const name = cardName(card);
-      const hasCb = !!card.querySelector('input[type=checkbox]');
-      if (name) out.productCards.push(name);
-      const hit = name && (name.includes(cn) || (en && name.toLowerCase().includes(en.toLowerCase())));
-      if (hit && !out.matched) out.matched = { name, hasCheckbox: hasCb };
+
+    // Locate the target name anywhere (text node, input value, or title attr),
+    // then walk up 8 ancestors to expose the row container + its checkbox.
+    let hitEl = null;
+    const inputHit = Array.from(document.querySelectorAll('input'))
+      .find(i => (i.value || '').includes(cn) || (i.getAttribute('title') || '').includes(cn));
+    if (inputHit) hitEl = inputHit;
+    if (!hitEl) {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        if (walker.currentNode.nodeValue && walker.currentNode.nodeValue.includes(cn)) {
+          hitEl = walker.currentNode.parentElement; break;
+        }
+      }
+    }
+    if (hitEl) {
+      out.targetRow = { foundVia: inputHit ? 'input' : 'text', ancestors: describe(hitEl, 8) };
+    }
+
+    // For each 月售 occurrence, expose its nearest ancestor that has a checkbox.
+    const all = Array.from(document.querySelectorAll('*'));
+    for (const el of all) {
+      if (el.children.length === 0 && /月售/.test(el.textContent || '')) {
+        let row = el;
+        for (let i = 0; i < 12 && row; i++) {
+          if (row.querySelector && row.querySelector('input[type=checkbox]')) {
+            out.monthSaleRows.push({
+              cls: (row.className || '').toString().slice(0, 60),
+              name: (row.querySelector('input.roo-input') || {}).value
+                 || (row.querySelector('[title]') ? row.querySelector('[title]').getAttribute('title') : '') || '',
+              text: (row.innerText || '').replace(/\s+/g, ' ').slice(0, 80),
+            });
+            break;
+          }
+          row = row.parentElement;
+        }
+      }
     }
     return out;
-  }, { cn: term, en: '' });
+  }, { cn: term });
 
   console.log('───── PROBE RESULT ─────');
   console.log('searchedCore:', JSON.stringify(coreQuery));
-  console.log('salesRows:', dump.salesRows);
-  console.log('productCards rendered:', JSON.stringify(dump.productCards, null, 2));
-  console.log('matched:', JSON.stringify(dump.matched));
+  console.log(JSON.stringify(dump, null, 2));
   console.log('────────────────────────');
+
+  // EDIT-PAGE STOCK FIELD — clicking the suggestion jumps to the product editor.
+  // Locate the 库存 (stock) field + its input, and the 保存 (save) button.
+  const editDump = await contentFrame.evaluate(() => {
+    if (!document.body) return { noBody: true };
+    const out = { onEditPage: !!document.querySelector('[class*="productNameWrapper"], [class*="module-item-wrap"]'),
+                  stockFields: [], saveButtons: [], skuRows: [] };
+
+    // Every field-wrapper whose label mentions 库存; report the input(s) inside.
+    const wraps = document.querySelectorAll('[class*="field-wrapper"], [class*="module-item-wrap"], [class*="field-item"]');
+    for (const w of wraps) {
+      const label = (w.querySelector('[class*="field-label"], label, [class*="label"]') || {}).innerText || '';
+      const txt = (w.innerText || '').replace(/\s+/g, ' ').trim();
+      if (/库存/.test(label) || /库存/.test(txt.slice(0, 30))) {
+        out.stockFields.push({
+          label: label.replace(/\s+/g, ' ').trim().slice(0, 30),
+          text: txt.slice(0, 80),
+          inputs: Array.from(w.querySelectorAll('input')).map(i => ({
+            cls: (i.className || '').toString().slice(0, 40),
+            type: i.type, value: i.value, placeholder: i.placeholder, name: i.name,
+          })).slice(0, 6),
+        });
+      }
+    }
+
+    // SKU rows often carry per-spec stock; dump any input near a 库存 column.
+    const stockInputs = Array.from(document.querySelectorAll('input'))
+      .filter(i => /库存|stock/i.test(i.placeholder || '') || /库存/.test((i.closest('[class*="field"], td, [class*="col"]') || {}).textContent || ''))
+      .map(i => ({ cls: (i.className||'').toString().slice(0,40), value: i.value, placeholder: i.placeholder, type: i.type }))
+      .slice(0, 8);
+    out.skuRows = stockInputs;
+
+    // Save buttons.
+    out.saveButtons = Array.from(document.querySelectorAll('button, .roo-btn, span, div'))
+      .map(b => (b.innerText || '').trim())
+      .filter(t => /^保存$|^保存并上架$|^保存草稿$|^确定$/.test(t))
+      .slice(0, 8);
+
+    return out;
+  });
+  console.log('───── EDIT PAGE ─────');
+  console.log(JSON.stringify(editDump, null, 2));
+  console.log('─────────────────────');
 
   await b.close();
   process.exit(0);
