@@ -808,7 +808,8 @@
     const cap   = document.getElementById('mt-b-cap').value;
     if (!store) { toast('Pick a store.', 'error'); return; }
     if (!name)  { toast('Enter the Meituan bundle title.', 'error'); return; }
-    if (!_bundleDraft.components.length) { toast('Add at least one component.', 'error'); return; }
+    // Components optional: a 0-component shell can be saved now and filled later
+    // (stock won't sync until it has at least one component).
     try {
       await api('/api/retail-admin/meituan/bundles', {
         method: 'POST',
