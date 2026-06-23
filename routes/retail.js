@@ -2912,7 +2912,11 @@ function validateAlipayProof(order, ocr, manual) {
   // Otherwise it's just noise next to a concrete mismatch like a wrong amount.
   const win = Number(manual.timeWindowMin || 0);
   if (win > 0) {
-    const t = parseBeijingTime(ocr.paid_at || ocr.raw_time_text);
+    // Prefer a printed transaction time; fall back to the phone's status-bar
+    // clock (HH:MM) when the success screen shows no timestamp of its own. The
+    // device clock is a fine freshness signal for a screenshot taken right after
+    // paying — parseBeijingTime treats a bare HH:MM as today (Beijing).
+    const t = parseBeijingTime(ocr.paid_at || ocr.raw_time_text || ocr.status_bar_time);
     if (t == null) {
       checks.time = false;
       if (checks.success && checks.amount && checks.payee !== false) reasons.push("couldn't read the payment time on the screenshot");
