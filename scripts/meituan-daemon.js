@@ -1,8 +1,12 @@
 // Meituan bidirectional sync daemon — runs as a separate pm2 process.
 //
-// Every 60 seconds:
+// Every ~120 seconds:
 //   1. Poll 天河 + 越秀 Meituan backends for new pending orders
 //   2. Accept each order on Meituan, create it in roots-v2, deduct stock
+// (120s, not 60s: order timing isn't critical — Meituan prints its own receipt
+//  — so the daemon's job is stock sync + unified records. A slower poll halves
+//  the recurring page loads = smaller bot footprint, while still deducting stock
+//  within ~2 min so other channels don't oversell.)
 //
 // Immediately (checked every 10 seconds):
 //   3. Process meituan_sync_queue — push stock changes from roots-v2 to Meituan
@@ -36,7 +40,7 @@ try {
 const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 
-const ORDER_POLL_MS  = 60_000;  // how often to check for new Meituan orders
+const ORDER_POLL_MS  = 120_000; // how often to check for new Meituan orders (jittered)
 const QUEUE_CHECK_MS = 10_000;  // how often to process the stock push queue
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
