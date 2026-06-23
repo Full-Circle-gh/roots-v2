@@ -15,6 +15,7 @@ const express = require('express');
 const router  = express.Router();
 const { tdb } = require('../lib/tenant-db');
 const { requireRetailAdmin } = require('./retail');
+const bundleLib = require('../lib/meituan-bundles');
 
 // ── GET /api/retail-admin/meituan/products ─────────────────────────────────
 // All products with their meituan_product_map entries per store.
@@ -139,12 +140,107 @@ router.post('/api/retail-admin/meituan/push-all', requireRetailAdmin, (req, res)
       INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
       VALUES (?, ?, ?, ?, 'pending')
     `);
+    let bundleCount = 0;
     const tx = db.transaction(() => {
       for (const row of mapped) insert.run(row.retail_store_id, row.product_id, row.store_code, row.qty);
+      bundleCount = bundleLib.enqueueAllBundles(db);
     });
     tx();
 
-    res.json({ success: true, queued: mapped.length });
+    res.json({ success: true, queued: mapped.length + bundleCount, products: mapped.length, bundles: bundleCount });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── Bundles (Meituan-only combos) ──────────────────────────────────────────
+// GET list with components + live computed availability.
+router.get('/api/retail-admin/meituan/bundles', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const bundles = db.prepare('SELECT * FROM meituan_bundles ORDER BY store_code, meituan_name').all();
+    const comps = db.prepare(`
+      SELECT c.bundle_id, c.product_id, c.qty, p.name_cn, p.name_en, p.variant_label
+        FROM meituan_bundle_components c
+        JOIN products p ON p.id = c.product_id
+    `).all();
+    const byBundle = {};
+    for (const c of comps) (byBundle[c.bundle_id] = byBundle[c.bundle_id] || []).push(c);
+    const data = bundles.map(b => ({
+      ...b,
+      components: byBundle[b.id] || [],
+      available: bundleLib.bundleStock(db, b),
+    }));
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Upsert a bundle + its components. body: { id?, storeId, storeCode, meituanName,
+// maxQty?, syncEnabled?, components: [{ productId, qty }] }
+router.post('/api/retail-admin/meituan/bundles', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const { id, storeId, storeCode, meituanName, maxQty, syncEnabled, components } = req.body || {};
+  if (!storeId || !storeCode || !meituanName || !meituanName.trim()) {
+    return res.status(400).json({ success: false, error: 'storeId, storeCode and meituanName are required' });
+  }
+  const sync = syncEnabled === undefined ? 1 : (syncEnabled ? 1 : 0);
+  const cap  = (maxQty === undefined || maxQty === null || maxQty === '') ? null : parseInt(maxQty, 10);
+  try {
+    const tx = db.transaction(() => {
+      let bundleId = id ? parseInt(id, 10) : null;
+      if (bundleId) {
+        db.prepare(`
+          UPDATE meituan_bundles
+             SET meituan_name=?, store_code=?, retail_store_id=?, max_qty=?, sync_enabled=?, updated_at=CURRENT_TIMESTAMP
+           WHERE id=?
+        `).run(meituanName.trim(), storeCode, storeId, cap, sync, bundleId);
+      } else {
+        db.prepare(`
+          INSERT INTO meituan_bundles (retail_store_id, store_code, meituan_name, max_qty, sync_enabled)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(retail_store_id, meituan_name) DO UPDATE SET
+            store_code=excluded.store_code, max_qty=excluded.max_qty,
+            sync_enabled=excluded.sync_enabled, updated_at=CURRENT_TIMESTAMP
+        `).run(storeId, storeCode, meituanName.trim(), cap, sync);
+        bundleId = db.prepare('SELECT id FROM meituan_bundles WHERE retail_store_id=? AND meituan_name=?')
+          .get(storeId, meituanName.trim()).id;
+      }
+      db.prepare('DELETE FROM meituan_bundle_components WHERE bundle_id=?').run(bundleId);
+      const ins = db.prepare('INSERT OR IGNORE INTO meituan_bundle_components (bundle_id, product_id, qty) VALUES (?, ?, ?)');
+      for (const c of (components || [])) {
+        if (c && c.productId) ins.run(bundleId, parseInt(c.productId, 10), c.qty > 0 ? parseInt(c.qty, 10) : 1);
+      }
+      return bundleId;
+    });
+    const bundleId = tx();
+    res.json({ success: true, id: bundleId });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+router.delete('/api/retail-admin/meituan/bundles/:id', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  const id = parseInt(req.params.id, 10);
+  try {
+    db.prepare('DELETE FROM meituan_bundle_components WHERE bundle_id=?').run(id);
+    db.prepare('DELETE FROM meituan_bundles WHERE id=?').run(id);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Enqueue a single bundle's stock now.
+router.post('/api/retail-admin/meituan/bundles/:id/push', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const b = db.prepare('SELECT * FROM meituan_bundles WHERE id=?').get(parseInt(req.params.id, 10));
+    if (!b) return res.status(404).json({ success: false, error: 'bundle not found' });
+    const qty = bundleLib.enqueueBundle(db, b);
+    res.json({ success: true, qty });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

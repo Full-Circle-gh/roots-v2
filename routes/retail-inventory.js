@@ -292,6 +292,10 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
           VALUES (?, ?, ?, ?, 'pending')
         `).run(storeId, productId, map.store_code, row.physical_qty);
       }
+      // Re-push any Meituan-only bundles this product is a component of, so the
+      // bundle auto-drops when an ingredient runs out (independent of whether the
+      // component itself is individually mapped/sold on Meituan).
+      require('../lib/meituan-bundles').enqueueBundlesForProduct(db, storeId, productId);
     } catch (e) { console.error('[meituan-sync-queue] enqueue error:', e.message); }
   }
 

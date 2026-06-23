@@ -10,6 +10,8 @@
   let _storeB    = null; // 越秀
   let _listings  = {};   // { store_code: [real Meituan listing names] }
   let _review    = { ambiguous: [], unmatched: [] };  // post-fetch manual-review queue
+  let _bundles   = [];   // meituan-only bundles with components + computed stock
+  let _bundleDraft = null; // working copy while the bundle editor modal is open
   let _initiated = false;
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -18,6 +20,7 @@
     _initiated = true;
     await Promise.all([mtLoadStores(), mtLoadStatus()]);
     await mtLoadProducts();
+    mtLoadBundles();
   };
 
   // ── Stores ─────────────────────────────────────────────────────────────────
@@ -660,6 +663,158 @@
       return (p.name_cn || '').toLowerCase().includes(q) || (p.name_en || '').toLowerCase().includes(q);
     });
     mtRenderProducts(filtered);
+  };
+
+  // ── Bundles (Meituan-only combos) ────────────────────────────────────────────
+  window.mtLoadBundles = async function () {
+    try {
+      const res = await api('/api/retail-admin/meituan/bundles');
+      _bundles = res.data || [];
+    } catch (e) { _bundles = []; }
+    mtRenderBundles();
+  };
+
+  function mtRenderBundles() {
+    const wrap = document.getElementById('mt-bundles-list');
+    const cnt  = document.getElementById('mt-bundles-count');
+    if (cnt) cnt.textContent = _bundles.length ? `(${_bundles.length})` : '';
+    if (!wrap) return;
+    if (!_bundles.length) {
+      wrap.innerHTML = '<div class="muted" style="font-size:13px;padding:6px 0">No bundles yet.</div>';
+      return;
+    }
+    wrap.innerHTML = _bundles.map(b => {
+      const comps = (b.components || []).map(c =>
+        `${esc([c.name_cn, c.name_en].filter(Boolean).join(' '))}${c.variant_label ? ` (${esc(c.variant_label)})` : ''}${c.qty > 1 ? ` ×${c.qty}` : ''}`
+      ).join(', ');
+      const storeName = (_stores.find(s => s.code === b.store_code) || {}).name || b.store_code;
+      return `<div style="border-top:1px solid var(--border);padding:10px 0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+        <div style="min-width:240px;flex:1">
+          <div style="font-weight:600">${esc(b.meituan_name)} <span class="muted" style="font-weight:400;font-size:11px">· ${esc(storeName)}</span></div>
+          <div class="muted" style="font-size:12px;margin-top:2px">${comps || '<span style="color:var(--fg-warn)">no components — add some</span>'}</div>
+          <div style="font-size:12px;margin-top:3px">Available now: <b>${b.available}</b>${b.max_qty != null ? ` (cap ${b.max_qty})` : ''}${b.sync_enabled ? '' : ' · <span class="muted">sync off</span>'}${b.last_pushed_at ? ` · last pushed ${b.last_pushed_qty} ${fmtAgo(b.last_pushed_at)}` : ''}</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm" onclick="mtEditBundle(${b.id})">Edit</button>
+          <button class="btn btn-sm" onclick="mtDeleteBundle(${b.id})">Delete</button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  window.mtEditBundle = function (id) {
+    if (document.getElementById('mt-bundle-overlay')) return;
+    const existing = id ? _bundles.find(b => b.id == id) : null;
+    const stores = mtUniqueStores();
+    _bundleDraft = existing
+      ? { id: existing.id, storeCode: existing.store_code, meituanName: existing.meituan_name, maxQty: existing.max_qty, components: (existing.components || []).map(c => ({ productId: c.product_id, qty: c.qty })) }
+      : { id: null, storeCode: (stores[0] || {}).code || '', meituanName: '', maxQty: '', components: [] };
+
+    const ov = document.createElement('div');
+    ov.id = 'mt-bundle-overlay';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.innerHTML = `
+      <div style="background:var(--bg);color:var(--fg);width:min(620px,100%);max-height:90vh;overflow:auto;border-radius:10px;border:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--border)">
+          <b style="font-size:15px">${existing ? 'Edit' : 'Add'} bundle</b>
+          <button class="btn btn-sm" onclick="mtCloseBundle()">✕</button>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">Store · 门店
+            <select id="mt-b-store" class="form-control" style="font-size:13px">${_stores.map(s => `<option value="${esc(s.code)}" ${s.code === _bundleDraft.storeCode ? 'selected' : ''}>${esc(s.name || s.code)}</option>`).join('')}</select>
+          </label>
+          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">Meituan bundle title (exact, as on Meituan)
+            <input id="mt-b-name" class="form-control" style="font-size:13px" value="${esc(_bundleDraft.meituanName)}" placeholder="e.g. 藜麦沙拉套餐 Quinoa Salad Combo">
+          </label>
+          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">Max stock cap (optional)
+            <input id="mt-b-cap" type="number" min="0" class="form-control" style="font-size:13px;max-width:140px" value="${_bundleDraft.maxQty == null ? '' : _bundleDraft.maxQty}" placeholder="none">
+          </label>
+          <div style="font-size:13px;font-weight:600">Components (the products this bundle uses up)</div>
+          <div id="mt-b-comps"></div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select id="mt-b-prodpick" class="form-control" style="font-size:13px;flex:1">
+              <option value="">+ add a component product…</option>
+              ${_products.map(p => `<option value="${p.id}">${esc([p.name_cn, p.name_en].filter(Boolean).join(' '))}${p.variant_label ? ` (${esc(p.variant_label)})` : ''}</option>`).join('')}
+            </select>
+            <button class="btn btn-sm" onclick="mtBundleAddComp()">Add</button>
+          </div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
+            <button class="btn btn-sm" onclick="mtCloseBundle()">Cancel</button>
+            <button class="btn btn-sm btn-primary" onclick="mtSaveBundle()">Save bundle</button>
+          </div>
+        </div>
+      </div>`;
+    ov.addEventListener('click', e => { if (e.target === ov) mtCloseBundle(); });
+    document.body.appendChild(ov);
+    mtRenderBundleComps();
+  };
+
+  function mtRenderBundleComps() {
+    const box = document.getElementById('mt-b-comps');
+    if (!box) return;
+    if (!_bundleDraft.components.length) {
+      box.innerHTML = '<div class="muted" style="font-size:12px">No components yet — add at least one.</div>';
+      return;
+    }
+    box.innerHTML = _bundleDraft.components.map((c, i) => {
+      const p = _products.find(pp => pp.id == c.productId) || {};
+      const label = [p.name_cn, p.name_en].filter(Boolean).join(' ') + (p.variant_label ? ` (${p.variant_label})` : '');
+      return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+        <span style="flex:1;font-size:13px">${esc(label || ('#' + c.productId))}</span>
+        <span class="muted" style="font-size:12px">qty</span>
+        <input type="number" min="1" value="${c.qty}" class="form-control" style="width:62px;font-size:13px" onchange="mtBundleCompQty(${i}, this.value)">
+        <button class="btn btn-sm" onclick="mtBundleRemoveComp(${i})">✕</button>
+      </div>`;
+    }).join('');
+  }
+
+  window.mtBundleAddComp = function () {
+    const sel = document.getElementById('mt-b-prodpick');
+    const pid = parseInt(sel.value, 10);
+    if (!pid) return;
+    if (_bundleDraft.components.some(c => c.productId == pid)) { toast('Already added.'); return; }
+    _bundleDraft.components.push({ productId: pid, qty: 1 });
+    sel.value = '';
+    mtRenderBundleComps();
+  };
+  window.mtBundleCompQty = function (i, v) { if (_bundleDraft.components[i]) _bundleDraft.components[i].qty = Math.max(1, parseInt(v, 10) || 1); };
+  window.mtBundleRemoveComp = function (i) { _bundleDraft.components.splice(i, 1); mtRenderBundleComps(); };
+  window.mtCloseBundle = function () { const ov = document.getElementById('mt-bundle-overlay'); if (ov) ov.remove(); _bundleDraft = null; };
+
+  window.mtSaveBundle = async function () {
+    const code  = document.getElementById('mt-b-store').value;
+    const store = _stores.find(s => s.code === code);
+    const name  = document.getElementById('mt-b-name').value.trim();
+    const cap   = document.getElementById('mt-b-cap').value;
+    if (!store) { toast('Pick a store.', 'error'); return; }
+    if (!name)  { toast('Enter the Meituan bundle title.', 'error'); return; }
+    if (!_bundleDraft.components.length) { toast('Add at least one component.', 'error'); return; }
+    try {
+      await api('/api/retail-admin/meituan/bundles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: _bundleDraft.id, storeId: store.id, storeCode: code, meituanName: name,
+          maxQty: cap === '' ? null : cap, syncEnabled: 1, components: _bundleDraft.components,
+        }),
+      });
+      mtCloseBundle();
+      toast('Bundle saved.');
+      mtLoadBundles();
+    } catch (e) {
+      toast('Save failed: ' + e.message, 'error');
+    }
+  };
+
+  window.mtDeleteBundle = async function (id) {
+    if (!confirm('Delete this bundle? This only stops auto-stock — it does not touch the Meituan listing.')) return;
+    try {
+      await api(`/api/retail-admin/meituan/bundles/${id}`, { method: 'DELETE' });
+      toast('Deleted.');
+      mtLoadBundles();
+    } catch (e) {
+      toast('Delete failed: ' + e.message, 'error');
+    }
   };
 
   // ── Utils ───────────────────────────────────────────────────────────────────
