@@ -6469,6 +6469,20 @@
       <div id="mt-log" style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
     </details>
 
+    <!-- Incoming Meituan orders — read-only record. These don't print and aren't
+         managed here; the store just shows what came in. -->
+    <div id="mt-orders-card" style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--bg-elev-1)">
+        <b style="font-size:14px">Incoming Meituan orders · 美团订单
+          <span id="mt-orders-count" class="muted" style="font-weight:400"></span></b>
+        <button class="btn btn-sm" onclick="mtLoadOrders()" title="Refresh">↻ Refresh</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin:0;padding:8px 14px 0">
+        Record only — these orders are managed on Meituan and the store does not print them.
+      </p>
+      <div id="mt-orders-list" style="padding:6px 14px 12px"></div>
+    </div>
+
     <!-- Review panel — ambiguous / unmatched products after a Meituan fetch -->
     <div id="mt-review-panel" style="display:none;margin:14px 0;border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
 
