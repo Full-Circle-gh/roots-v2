@@ -735,10 +735,11 @@
           </label>
           <div style="font-size:13px;font-weight:600">Components (the products this bundle uses up)</div>
           <div id="mt-b-comps"></div>
+          <input id="mt-b-prodsearch" class="form-control" style="font-size:13px" placeholder="🔍 Search products…" oninput="mtBundleFilterProds(this.value)">
           <div style="display:flex;gap:6px;align-items:center">
             <select id="mt-b-prodpick" class="form-control" style="font-size:13px;flex:1">
               <option value="">+ add a component product…</option>
-              ${_products.map(p => `<option value="${p.id}">${esc([p.name_cn, p.name_en].filter(Boolean).join(' '))}${p.variant_label ? ` (${esc(p.variant_label)})` : ''}</option>`).join('')}
+              ${_products.map(p => { const lbl = [p.name_cn, p.name_en].filter(Boolean).join(' ') + (p.variant_label ? ` (${p.variant_label})` : ''); return `<option value="${p.id}" data-label="${esc(lbl.toLowerCase())}">${esc(lbl)}</option>`; }).join('')}
             </select>
             <button class="btn btn-sm" onclick="mtBundleAddComp()">Add</button>
           </div>
@@ -771,6 +772,21 @@
       </div>`;
     }).join('');
   }
+
+  window.mtBundleFilterProds = function (q) {
+    const sel = document.getElementById('mt-b-prodpick');
+    if (!sel) return;
+    const term = (q || '').trim().toLowerCase();
+    let firstMatch = null;
+    Array.from(sel.options).forEach(opt => {
+      if (!opt.value) { opt.hidden = false; return; } // keep placeholder
+      const hit = !term || (opt.getAttribute('data-label') || '').includes(term);
+      opt.hidden = !hit;
+      if (hit && !firstMatch) firstMatch = opt;
+    });
+    // if current selection got hidden, jump to first match
+    if (sel.selectedOptions[0] && sel.selectedOptions[0].hidden && firstMatch) sel.value = firstMatch.value;
+  };
 
   window.mtBundleAddComp = function () {
     const sel = document.getElementById('mt-b-prodpick');
