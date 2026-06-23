@@ -3659,7 +3659,7 @@ db.exec(`
     updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(retail_store_id, product_id),
     FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id)      REFERENCES products(id)       ON DELETE CASCADE
+    FOREIGN KEY (product_id)      REFERENCES store_products(id) ON DELETE CASCADE
   );
 `);
 
@@ -3678,7 +3678,7 @@ db.exec(`
     created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
     processed_at     DATETIME,
     FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id),
-    FOREIGN KEY (product_id)      REFERENCES products(id)
+    FOREIGN KEY (product_id)      REFERENCES store_products(id)
   );
 `);
 
@@ -3769,7 +3769,7 @@ db.exec(`
     qty         INTEGER NOT NULL DEFAULT 1,   -- units of this product per bundle
     UNIQUE(bundle_id, product_id),
     FOREIGN KEY (bundle_id)  REFERENCES meituan_bundles(id) ON DELETE CASCADE,
-    FOREIGN KEY (product_id) REFERENCES products(id)        ON DELETE CASCADE
+    FOREIGN KEY (product_id) REFERENCES store_products(id)  ON DELETE CASCADE
   );
 `);
 
@@ -3779,4 +3779,39 @@ for (const [col, ddl] of [['meituan_name', 'TEXT'], ['bundle_id', 'INTEGER']]) {
   try { db.exec(`ALTER TABLE meituan_sync_queue ADD COLUMN ${col} ${ddl}`); } catch (e) { /* column exists */ }
 }
 
+// ── Migration: repoint Meituan product_id FKs to store_products ──────────────
+// These three tables were created with product_id → products(id) (the kitchen
+// catalog). The storefront forked to store_products (own id space), which is
+// what the Meituan admin, stock, and bundles key off — so a product_id that
+// only exists in store_products (any post-fork variant) failed the FK on save
+// ("FOREIGN KEY constraint failed"). SQLite can't ALTER a constraint, so rebuild
+// each table verbatim with the one word changed. Idempotent: skips a table whose
+// product_id FK already targets store_products. Existing rows are copied as-is
+// (validation is off during the swap; forked-era ids match 1:1 anyway).
+function repointMeituanProductFk(database, table) {
+  const row = database.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name=?"
+  ).get(table);
+  if (!row || !row.sql) return;
+  const fks = database.pragma(`foreign_key_list(${table})`);
+  if (!fks.some(f => f.from === 'product_id' && f.table === 'products')) return;
+  // \s+ before "products" means "store_products" (no leading space) is left alone.
+  const newSql = row.sql.replace(/REFERENCES\s+products\s*\(/gi, 'REFERENCES store_products(');
+  database.pragma('foreign_keys = OFF');
+  try {
+    database.transaction(() => {
+      database.exec(`ALTER TABLE ${table} RENAME TO ${table}__fkmig`);
+      database.exec(newSql);
+      database.exec(`INSERT INTO ${table} SELECT * FROM ${table}__fkmig`);
+      database.exec(`DROP TABLE ${table}__fkmig`);
+    })();
+  } finally {
+    database.pragma('foreign_keys = ON');
+  }
+}
+for (const t of ['meituan_product_map', 'meituan_bundle_components', 'meituan_sync_queue']) {
+  try { repointMeituanProductFk(db, t); } catch (e) { console.error(`[meituan-fk] ${t}:`, e.message); }
+}
+
 module.exports = db;
+module.exports.repointMeituanProductFk = repointMeituanProductFk;
