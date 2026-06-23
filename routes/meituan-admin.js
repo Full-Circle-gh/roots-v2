@@ -25,10 +25,15 @@ router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) 
     // Mapping list wants active products only; the bundle-component picker passes
     // ?includeInactive=1 so an operator can attach a paused/unpublished variant.
     const includeInactive = req.query.includeInactive === '1';
+    // store_products is the storefront's OWN catalog (forked from kitchen
+    // `products`, own id space) and is what retail_store_stock / the editor
+    // key off — so variants created in the store editor live here, not in
+    // `products`. Read it so every sellable variant shows in the mapping +
+    // bundle picker.
     const products = db.prepare(`
       SELECT p.id, p.name_cn, p.name_en, p.category, p.is_active,
              p.variant_label, p.variant_group_id
-        FROM products p
+        FROM store_products p
        ${includeInactive ? '' : 'WHERE p.is_active = 1'}
        ORDER BY p.name_cn, p.variant_group_id, p.id
     `).all();
@@ -165,7 +170,7 @@ router.get('/api/retail-admin/meituan/bundles', requireRetailAdmin, (req, res) =
     const comps = db.prepare(`
       SELECT c.bundle_id, c.product_id, c.qty, p.name_cn, p.name_en, p.variant_label
         FROM meituan_bundle_components c
-        JOIN products p ON p.id = c.product_id
+        JOIN store_products p ON p.id = c.product_id
     `).all();
     const byBundle = {};
     for (const c of comps) (byBundle[c.bundle_id] = byBundle[c.bundle_id] || []).push(c);
