@@ -58,6 +58,43 @@ const MERCHANT_URL = 'https://e.waimai.meituan.com';
   const iframe = await b._getMainIframe();
   if (!iframe) { console.log(`[probe:${store}] no content iframe`); await b.close(); process.exit(1); }
 
+  // A roo-modal (e.g. the 商品助手 promo) opens on load and its backdrop
+  // intercepts every click. Inspect it, then dismiss it (safe buttons + close
+  // icons) and neutralise any leftover backdrop so the page is interactable.
+  const modalInfo = await iframe.evaluate(() => {
+    const info = { backdrops: 0, modalText: '', buttons: [] };
+    const bds = document.querySelectorAll('.roo-modal.backdrop, .roo-modal-backdrop, [class*="backdrop"]');
+    info.backdrops = bds.length;
+    const modal = document.querySelector('.roo-modal, [class*="modal"][class*="content"], [role="dialog"]');
+    if (modal) {
+      info.modalText = (modal.innerText || '').replace(/\s+/g, ' ').trim().slice(0, 160);
+      info.buttons = Array.from(modal.querySelectorAll('button, .roo-btn'))
+        .map(b => (b.innerText || '').trim()).filter(Boolean).slice(0, 8);
+    }
+    return info;
+  });
+  console.log('[probe] modalInfo:', JSON.stringify(modalInfo));
+
+  await iframe.evaluate(() => {
+    const SAFE = ['我知道了','知道了','跳过','以后再说','关闭','下次再说','取消'];
+    for (const el of document.querySelectorAll('button, .roo-btn, span, a, i')) {
+      const t = (el.innerText || '').trim();
+      if (SAFE.includes(t)) { try { el.click(); } catch (e) {} }
+    }
+    for (const ic of document.querySelectorAll('.roo-modal .roo-icon-close, .roo-modal-close, [class*="close"]')) {
+      try { ic.click(); } catch (e) {}
+    }
+  });
+  await iframe.waitForTimeout(700);
+  // Hard fallback: hide any remaining modal/backdrop so it can't eat clicks.
+  await iframe.evaluate(() => {
+    for (const el of document.querySelectorAll('.roo-modal, [class*="backdrop"]')) {
+      el.style.pointerEvents = 'none';
+      el.style.display = 'none';
+    }
+  });
+  await iframe.waitForTimeout(300);
+
   // Drive the search box with REAL Playwright keystrokes — synthetic input/Enter
   // events dispatched via evaluate don't trigger Meituan's (React) search, so the
   // list stays on the default category and the target never renders.
@@ -65,7 +102,7 @@ const MERCHANT_URL = 'https://e.waimai.meituan.com';
     const sh = await iframe.$('input[placeholder="搜索商品或规格名称"]');
     if (!sh) { console.log('[probe] search box NOT found'); }
     else {
-      await sh.click();
+      await sh.click({ timeout: 8000 }).catch(e => console.log('[probe] search click failed:', e.message));
       await sh.fill('');               // clear any prior text
       await sh.type(term, { delay: 60 });
       await sh.press('Enter');
