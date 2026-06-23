@@ -41,27 +41,55 @@
   }
 
   // ── Status ─────────────────────────────────────────────────────────────────
+  // Populates the fc-kpis strip (matches the Products catalogue's KPI tiles).
+  function mtSetKpi(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+  function mtAlertTile(id, on) {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('alert', !!on);
+  }
+
   window.mtLoadStatus = async function () {
-    const bar = document.getElementById('mt-status-bar');
     const log = document.getElementById('mt-log');
     try {
       const s = await api('/api/retail-admin/meituan/status');
-      bar.innerHTML = `
-        <span style="color:var(--success)">● Daemon active</span>
-        <span class="sep">·</span>
-        <b>${s.mappedCount}</b> products mapped
-        <span class="sep">·</span>
-        Queue: <b>${s.queuePending}</b> pending
-        ${s.queueFailed ? `<span style="color:var(--warn)"> / ${s.queueFailed} failed</span>` : ''}
-        ${s.lastOrder.length ? `<span class="sep">·</span>Last order: <b>${s.lastOrder[0].meituan_order_no}</b> (${s.lastOrder[0].store_code}) ${fmtAgo(s.lastOrder[0].imported_at)}` : ''}
-      `;
+
+      // Daemon tile (accent) — active/offline
+      mtSetKpi('mt-kpi-daemon-val', '● Active');
+      mtSetKpi('mt-kpi-daemon-sub', 'auto every 10s · 每 10 秒');
+      mtAlertTile('mt-kpi-daemon-tile', false);
+      document.getElementById('mt-kpi-daemon-tile')?.classList.add('accent');
+
+      // Mapped
+      mtSetKpi('mt-kpi-mapped', s.mappedCount != null ? s.mappedCount : '—');
+
+      // Queue — alert when anything pending or failed
+      mtSetKpi('mt-kpi-queue', s.queuePending != null ? s.queuePending : '—');
+      mtSetKpi('mt-kpi-queue-sub', s.queueFailed
+        ? `${s.queueFailed} failed · ${s.queueFailed} 失败`
+        : 'pending push · 待推送');
+      mtAlertTile('mt-kpi-queue-tile', s.queuePending > 0 || s.queueFailed > 0);
+
+      // Last order
+      const lo = (s.lastOrder && s.lastOrder[0]) || null;
+      if (lo) {
+        mtSetKpi('mt-kpi-order', fmtAgo(lo.imported_at) || '—');
+        mtSetKpi('mt-kpi-order-sub', `${lo.meituan_order_no} · ${lo.store_code}`);
+      } else {
+        mtSetKpi('mt-kpi-order', '—');
+        mtSetKpi('mt-kpi-order-sub', 'no orders yet · 暂无订单');
+      }
+
       if (log) {
         log.textContent = s.recentLogs.length
           ? s.recentLogs.map(l => `[${l.created_at?.slice(11,19)}] ${l.store_code} ${l.event_type} ${l.status}${l.detail ? ' ' + l.detail : ''}${l.error_msg ? ' ERR:' + l.error_msg : ''}`).join('\n')
           : 'No sync events yet.';
       }
     } catch (e) {
-      bar.innerHTML = `<span style="color:var(--warn)">● Could not reach daemon status API</span>`;
+      // Daemon unreachable — show on the accent tile, flip it to alert.
+      document.getElementById('mt-kpi-daemon-tile')?.classList.remove('accent');
+      mtAlertTile('mt-kpi-daemon-tile', true);
+      mtSetKpi('mt-kpi-daemon-val', '● Offline');
+      mtSetKpi('mt-kpi-daemon-sub', "can't reach status API · 无法连接");
     }
   };
 
@@ -101,6 +129,14 @@
     const tbody  = document.getElementById('mt-products-body');
     const storeA = _storeA;
     const storeB = _storeB;
+
+    // Toolbar count — N shown, plus how many of the total are mapped.
+    const cnt = document.getElementById('mt-count');
+    if (cnt) {
+      const total  = _products.filter(p => p.is_active).length;
+      const mapped = _products.filter(p => p.is_active && Object.values(p.stores || {}).some(m => m.meituan_name)).length;
+      cnt.textContent = `${list.length} of ${total} · ${mapped} mapped`;
+    }
 
     if (!list.length) {
       tbody.innerHTML = '<tr><td colspan="4" class="muted" style="padding:24px;text-align:center">No products found.</td></tr>';
