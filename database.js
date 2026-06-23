@@ -3741,4 +3741,42 @@ db.exec(`
   );
 `);
 
+// Meituan-only bundles (套餐/combos) that have no single roots product. Each is
+// defined as a set of component products; its sellable stock is computed as the
+// minimum of what its components can make, and pushed to the bundle's Meituan
+// listing. When any component runs out, the bundle auto-drops to 0.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_bundles (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_store_id  INTEGER NOT NULL,
+    store_code       TEXT NOT NULL,
+    meituan_name     TEXT NOT NULL,
+    max_qty          INTEGER,            -- optional cap on the pushed stock
+    sync_enabled     INTEGER NOT NULL DEFAULT 1,
+    last_pushed_qty  INTEGER,
+    last_pushed_at   DATETIME,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(retail_store_id, meituan_name),
+    FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id) ON DELETE CASCADE
+  );
+`);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_bundle_components (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    bundle_id   INTEGER NOT NULL,
+    product_id  INTEGER NOT NULL,
+    qty         INTEGER NOT NULL DEFAULT 1,   -- units of this product per bundle
+    UNIQUE(bundle_id, product_id),
+    FOREIGN KEY (bundle_id)  REFERENCES meituan_bundles(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id)        ON DELETE CASCADE
+  );
+`);
+
+// The sync queue can carry bundle pushes too: when bundle_id is set, the daemon
+// updates the listing named meituan_name instead of looking up a product.
+for (const [col, ddl] of [['meituan_name', 'TEXT'], ['bundle_id', 'INTEGER']]) {
+  try { db.exec(`ALTER TABLE meituan_sync_queue ADD COLUMN ${col} ${ddl}`); } catch (e) { /* column exists */ }
+}
+
 module.exports = db;

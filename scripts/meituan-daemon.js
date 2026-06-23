@@ -49,6 +49,10 @@ function jitter(baseMs, frac = 0.3) {
   return Math.round(baseMs - spread + Math.random() * spread * 2);
 }
 
+// Per-store latch so a 验证中心 challenge is logged once on transition, not
+// every poll (which would flood the sync log the admin tab reads).
+const verifyFlagged = {};
+
 // ── Store config ─────────────────────────────────────────────────────────────
 // Reads store codes from retail_stores table; maps code → Meituan credentials
 // from environment variables.
@@ -74,6 +78,17 @@ async function pollOrders(storeConfig) {
   try {
     browser = await getBrowser(storeCode);
     const orders = await browser.getPendingOrders();
+
+    // Surface a risk-control 验证中心 challenge to the admin tab — but only on
+    // the transition (not every poll) so it doesn't flood the sync log.
+    if (browser.verificationRequired && !verifyFlagged[storeCode]) {
+      verifyFlagged[storeCode] = true;
+      logSync(storeCode, 'verify_required', 'error', null,
+        'Meituan 验证中心 challenge — a human must pass the captcha to resume sync');
+    } else if (!browser.verificationRequired && verifyFlagged[storeCode]) {
+      verifyFlagged[storeCode] = false;
+      logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
+    }
 
     for (const order of orders) {
       if (!order.meituanOrderNo) continue;
@@ -141,7 +156,7 @@ async function processStockQueue() {
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en
       FROM meituan_sync_queue q
-      JOIN products p ON p.id = q.product_id
+      LEFT JOIN products p ON p.id = q.product_id
      WHERE q.status = 'pending' AND q.attempts < 3
      ORDER BY q.created_at
      LIMIT 20
@@ -165,7 +180,12 @@ async function processStockQueue() {
         db.prepare(`UPDATE meituan_sync_queue SET status='processing', attempts=attempts+1 WHERE id=?`)
           .run(item.id);
 
-        const ok = await browser.updateStock(item.name_cn, item.name_en, item.new_qty);
+        // Bundle rows target a Meituan listing by name; product rows by the
+        // product's own name. updateStock matches the list row by name substring.
+        const isBundle = !!item.bundle_id;
+        const targetCn = isBundle ? item.meituan_name : item.name_cn;
+        const targetEn = isBundle ? null : item.name_en;
+        const ok = await browser.updateStock(targetCn, targetEn, item.new_qty);
 
         db.prepare(`
           UPDATE meituan_sync_queue
@@ -174,15 +194,23 @@ async function processStockQueue() {
         `).run(ok ? 'done' : 'error', ok ? null : 'browser update failed', item.id);
 
         if (ok) {
-          db.prepare(`
-            UPDATE meituan_product_map
-               SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP
-             WHERE retail_store_id=? AND product_id=?
-          `).run(item.new_qty, item.retail_store_id, item.product_id);
+          if (isBundle) {
+            db.prepare(`
+              UPDATE meituan_bundles
+                 SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP
+               WHERE id=?
+            `).run(item.new_qty, item.bundle_id);
+          } else {
+            db.prepare(`
+              UPDATE meituan_product_map
+                 SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP
+               WHERE retail_store_id=? AND product_id=?
+            `).run(item.new_qty, item.retail_store_id, item.product_id);
+          }
         }
 
         logSync(storeCode, 'stock_push', ok ? 'ok' : 'error',
-          { productId: item.product_id, name: item.name_en, qty: item.new_qty });
+          { name: isBundle ? item.meituan_name : item.name_en, qty: item.new_qty, bundle: isBundle });
       }
     } catch (err) {
       log(storeCode, `processStockQueue error: ${err.message}`);
