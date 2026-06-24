@@ -270,6 +270,7 @@ app.use(require('./routes/retail-inventory'));
 app.use(require('./routes/retail-page-templates')); // product editor: imported custom templates
 app.use('/api/internal/meituan', require('./routes/meituan-internal')); // daemon-only, localhost
 app.use(require('./routes/meituan-admin')); // retail-admin Meituan sync config
+app.use(require('./routes/guanyi-admin')); // retail-admin Guanyi (gzgrocery) sync config
 
 // Login page
 app.get('/login', (req, res) => {

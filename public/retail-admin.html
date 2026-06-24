@@ -444,6 +444,11 @@
     Meituan · 美团
   </button>
 
+  <button data-tab="guanyi" onclick="gyAdminInit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>
+    gzgrocery · 管易
+  </button>
+
   <!-- Auto-refresh dot — pinned right of the tab bar, next to the
        settings gear. A small green pulsing dot signals that the orders
        list is live-polling. Click toggles pause; tooltip explains.
@@ -6539,6 +6544,72 @@
     </div>
   </section>
 
+  <section id="tab-guanyi">
+    <h2>gzgrocery 同步 · Guanyi Sync</h2>
+    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      Mirror your Tianhe stock into gzgrocery's Guanyi ERP. Products are matched by the SKU embedded in the Guanyi name (e.g. "GVF 1-180"). Stock changes auto-reconcile every ~10 s by creating an inbound/outbound document for the difference.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      将天河库存同步到 gzgrocery 的管易 ERP。通过管易商品名中的货号(如 “GVF 1-180”)匹配商品。库存变动每约 10 秒自动按差额生成入库/出库单进行对账。
+    </p>
+
+    <div class="fc-kpis" id="gy-kpis">
+      <div class="fc-kpi accent">
+        <div class="lbl">Daemon · 同步服务</div>
+        <div class="val">auto</div>
+        <div class="sub">every ~10s · 每约 10 秒</div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Mapped · 已映射</div>
+        <div class="val" id="gy-kpi-mapped">—</div>
+        <div class="sub">products mapped · 已映射商品</div>
+      </div>
+      <div class="fc-kpi" id="gy-kpi-queue-tile">
+        <div class="lbl">Queue · 待推送</div>
+        <div class="val" id="gy-kpi-queue">—</div>
+        <div class="sub" id="gy-kpi-queue-sub">pending · 待推送</div>
+      </div>
+      <div class="fc-kpi">
+        <div class="lbl">Guanyi list · 管易商品</div>
+        <div class="val" id="gy-kpi-listings">—</div>
+        <div class="sub" id="gy-kpi-listings-sub">never refreshed · 未刷新</div>
+      </div>
+    </div>
+
+    <details id="gy-log-details" style="margin-bottom:14px">
+      <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted);padding:4px 0">Recent sync log · 最近日志</summary>
+      <div id="gy-log" style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
+    </details>
+
+    <div class="pa-toolbar">
+      <input id="gy-search" type="text" placeholder="Search products · 搜索商品" oninput="gyFilterProducts()">
+      <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="gy-show-unmapped" onchange="gyFilterProducts()"> Show unmapped only · 仅未映射
+      </label>
+      <div id="gy-count" class="pa-count"></div>
+      <button id="gy-refresh-btn" class="btn btn-sm" onclick="gyRefreshListings()" title="Read the live product list from gzgrocery's Guanyi backend (via the sync daemon) and cache it for matching.">⟳ Refresh Guanyi list</button>
+      <button class="btn btn-sm" onclick="gyAutoMatch()" title="Bind every Roots product to its Guanyi listing by the SKU embedded in the Guanyi product name.">✨ Auto-match by SKU</button>
+      <button class="btn btn-sm btn-primary" onclick="gyPushAll()">Push all stock now</button>
+    </div>
+
+    <div id="gy-products-wrap" style="overflow-x:auto">
+      <table id="gy-products-table" class="data-table" style="min-width:700px;font-size:13px">
+        <thead>
+          <tr>
+            <th style="width:34%">Product · 商品</th>
+            <th style="width:12%;text-align:center">天河 qty · 我方</th>
+            <th style="width:30%">Guanyi match · 管易商品</th>
+            <th style="width:14%;text-align:center">Guanyi qty · Δ</th>
+            <th style="width:10%;text-align:center">Sync</th>
+          </tr>
+        </thead>
+        <tbody id="gy-products-body">
+          <tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
   <section id="tab-mini-app-editor" class="tab-embed-editor">
     <iframe id="frame-mini-app-editor" class="ed-frame" title="Mini App Editor · 小程序编辑器" data-src="/cms"></iframe>
   </section>
@@ -6600,6 +6671,7 @@
 <script src="/assets/retail-admin/09-products.js"></script>
 <script src="/assets/retail-admin/10-extras.js"></script>
 <script src="/assets/retail-admin/11-meituan.js"></script>
+<script src="/assets/retail-admin/12-guanyi.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
