@@ -2828,12 +2828,21 @@ function renderOrderViewPopover() {
       </div>
     </div>`;
 }
+// Money breakdown under the order total: subtotal · shipping · (packing) · (voucher).
+// Packing fee only renders when one was actually charged (zero on most delivery
+// orders), mirroring how the voucher segment is conditional.
+function orderTotalSubline(o) {
+  let s = `${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}`;
+  if (Number(o.packing_fee) > 0) s += ` · ${cuT('packing','打包费')} ¥${fmt(o.packing_fee)}`;
+  if (o.voucher_amount)          s += ` · ${cuT('voucher','优惠券')} −¥${fmt(o.voucher_amount)}`;
+  return s;
+}
 function renderOrderTotalBanner(o) {
   return `
     <div class="order-total-banner">
       <div>
         <div class="otb-label">Order total · 订单总额</div>
-        <div class="otb-sub">${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · ' + cuT('voucher','优惠券') + ' −¥' + fmt(o.voucher_amount) : ''}</div>
+        <div class="otb-sub">${orderTotalSubline(o)}</div>
       </div>
       <div class="otb-amount">¥${fmt(o.total)}</div>
     </div>`;
@@ -2843,7 +2852,7 @@ function renderOrderTotalInline(o) {
     <div class="od-total-inline">
       <div class="kicker">Order total · 订单总额</div>
       <div class="od-total-big">¥${fmt(o.total)}</div>
-      <div class="od-total-sub">${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · ' + cuT('voucher','优惠券') + ' −¥' + fmt(o.voucher_amount) : ''}</div>
+      <div class="od-total-sub">${orderTotalSubline(o)}</div>
     </div>`;
 }
 function renderOrderTotalFooter(o, transitionsHtml) {
@@ -2851,7 +2860,7 @@ function renderOrderTotalFooter(o, transitionsHtml) {
     <div class="order-total-banner otb-footer">
       <div>
         <div class="otb-label">Order total · 订单总额</div>
-        <div class="otb-sub">${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}${o.voucher_amount ? ' · ' + cuT('voucher','优惠券') + ' −¥' + fmt(o.voucher_amount) : ''}</div>
+        <div class="otb-sub">${orderTotalSubline(o)}</div>
       </div>
       <div class="otb-amount">¥${fmt(o.total)}</div>
       ${transitionsHtml ? `<div class="otb-actions">${transitionsHtml}</div>` : ''}
