@@ -33,7 +33,37 @@ try {
 const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/guanyi-browser');
 
+// Defensive: ensure the pickup-inference tables exist even if the deployed
+// database.js predates them (the box is deployed by scp, not a migration run).
+function ensurePickupTables() {
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS guanyi_pickup_baseline (
+      store_code TEXT NOT NULL, product_id INTEGER NOT NULL, guanyi_sku_id TEXT,
+      baseline_qty INTEGER, acked_push_at TEXT, settle_pending INTEGER DEFAULT 0,
+      settle_target INTEGER, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (store_code, product_id));`);
+    db.exec(`CREATE TABLE IF NOT EXISTS guanyi_pickup_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, store_code TEXT, product_id INTEGER,
+      guanyi_sku_id TEXT, guanyi_name TEXT, observed_qty INTEGER, baseline_qty INTEGER,
+      drift INTEGER, inferred_pickup INTEGER, tianhe_qty INTEGER, mode TEXT, action TEXT,
+      note TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+    db.exec(`CREATE INDEX IF NOT EXISTS idx_gypl_created ON guanyi_pickup_log(created_at)`);
+  } catch (e) { console.error('[guanyi-daemon] ensurePickupTables:', e.message); }
+}
+ensurePickupTables();
+
 const QUEUE_CHECK_MS = 10_000;
+
+// ── gzgrocery pickup inference (we can't read their orders — infer from stock) ──
+// Mode: off | shadow | live.  Phase 0 = 'shadow' (detect + LOG what it WOULD
+// decrement, change nothing). 'live' (Phase 1) actually decrements Tianhe.
+let PICKUP_MODE = (process.env.GUANYI_PICKUP_MODE || 'off').toLowerCase();
+if (!['off', 'shadow', 'live'].includes(PICKUP_MODE)) PICKUP_MODE = 'off';
+const GUANYI_STORE_CODE  = process.env.GUANYI_STORE_CODE || 'tianhe';
+const RECONCILE_MS       = Number(process.env.GUANYI_RECONCILE_MS || 60_000);   // how often to sample
+const PICKUP_CAP         = Number(process.env.GUANYI_PICKUP_CAP || 50);          // a single drop bigger than this is flagged, not applied
+const SETTLE_TIMEOUT_MS  = Number(process.env.GUANYI_SETTLE_TIMEOUT_MS || 180_000); // give a push this long to settle before trusting drift
+let _lastReconcileAt = 0;
 
 // Don't fire on an exact fixed cadence.
 function jitter(baseMs, frac = 0.3) {
@@ -246,13 +276,133 @@ async function processListingJobs() {
   }
 }
 
+// ── gzgrocery pickup reconcile (infer sales from Guanyi stock drift) ──────────
+//
+// gzgrocery holds no stock and never edits the Guanyi number, so the only thing
+// that lowers a product's salableQty (besides our own push) is a customer order.
+// We mirror our stock INTO Guanyi, so a drop BELOW what we last set = exactly the
+// units they sold. This pass tracks a per-product baseline and, on an autonomous
+// downward drift, infers a pickup. In 'shadow' mode it ONLY logs what it would
+// decrement; in 'live' mode it would also apply the decrement to Tianhe (Phase 1).
+async function processPickupReconcile() {
+  if (PICKUP_MODE === 'off') return;
+  const now = Date.now();
+  if (now - _lastReconcileAt < RECONCILE_MS) return;
+  _lastReconcileAt = now;
+
+  const maps = db.prepare(`
+    SELECT m.product_id, m.retail_store_id, m.store_code, m.guanyi_sku_id, m.guanyi_name,
+           m.last_pushed_qty, m.last_pushed_at, m.last_delta,
+           COALESCE(s.physical_qty, 0) AS tianhe_qty
+      FROM guanyi_product_map m
+      LEFT JOIN retail_store_stock s ON s.product_id = m.product_id AND s.store_id = m.retail_store_id
+     WHERE m.sync_enabled = 1 AND m.guanyi_sku_id IS NOT NULL
+  `).all();
+  if (!maps.length) return;
+
+  const byStore = {};
+  for (const m of maps) (byStore[m.store_code] = byStore[m.store_code] || []).push(m);
+
+  for (const [storeCode, items] of Object.entries(byStore)) {
+    let listing;
+    try {
+      const browser = await getBrowser(storeCode);
+      listing = await browser.fetchListings();
+    } catch (e) { log(storeCode, `pickup reconcile fetch error: ${e.message}`); continue; }
+    if (!listing) continue;
+    const curBySku = new Map();
+    for (const r of listing.rows) curBySku.set(String(r.skuId), r);
+
+    let detected = 0;
+    for (const m of items) {
+      const cur = curBySku.get(String(m.guanyi_sku_id));
+      if (!cur || cur.disabled) continue;          // not listed / 已停用 → skip
+      if (reconcileOne(storeCode, m, cur)) detected++;
+    }
+    if (detected) log(storeCode, `pickup reconcile (${PICKUP_MODE}): ${detected} drop(s) detected`);
+  }
+}
+
+// Reconcile one product against its baseline. Returns true if a pickup drop was
+// logged this cycle. NEVER changes Tianhe in 'shadow' mode.
+function reconcileOne(storeCode, m, cur) {
+  const observed = cur.currentQty;
+  const name = cur.guanyiName || m.guanyi_name || '';
+  const b = db.prepare(`SELECT * FROM guanyi_pickup_baseline WHERE store_code=? AND product_id=?`).get(storeCode, m.product_id);
+
+  const logRow = (action, drift, pickup, note) => {
+    db.prepare(`INSERT INTO guanyi_pickup_log
+        (store_code,product_id,guanyi_sku_id,guanyi_name,observed_qty,baseline_qty,drift,inferred_pickup,tianhe_qty,mode,action,note)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(storeCode, m.product_id, m.guanyi_sku_id, name, observed,
+           b ? b.baseline_qty : null, drift == null ? null : drift,
+           pickup == null ? null : pickup, m.tianhe_qty, PICKUP_MODE, action, note || null);
+  };
+
+  if (!b) {
+    db.prepare(`INSERT INTO guanyi_pickup_baseline
+        (store_code,product_id,guanyi_sku_id,baseline_qty,acked_push_at,settle_pending,settle_target,updated_at)
+        VALUES (?,?,?,?,?,0,NULL,CURRENT_TIMESTAMP)`)
+      .run(storeCode, m.product_id, m.guanyi_sku_id, observed, m.last_pushed_at || null);
+    logRow('init', 0, 0, `baseline=${observed}`);
+    return false;
+  }
+
+  // Our own push also moves the Guanyi number — don't read that as a pickup.
+  // When a new push (non-zero delta) has happened, wait for it to settle.
+  const newPush = m.last_pushed_at && m.last_pushed_at !== b.acked_push_at && (m.last_delta || 0) !== 0;
+  let settlePending = b.settle_pending;
+  let settleTarget  = b.settle_target;
+  let ackedPushAt   = b.acked_push_at;
+  if (newPush) { settlePending = 1; settleTarget = m.last_pushed_qty; ackedPushAt = m.last_pushed_at; }
+
+  if (settlePending) {
+    const settled  = settleTarget != null && observed === settleTarget;
+    const pushedMs = m.last_pushed_at ? Date.parse(m.last_pushed_at.replace(' ', 'T') + 'Z') : 0;
+    const timedOut = pushedMs && (Date.now() - pushedMs > SETTLE_TIMEOUT_MS);
+    if (settled || timedOut) {
+      db.prepare(`UPDATE guanyi_pickup_baseline SET baseline_qty=?, acked_push_at=?, settle_pending=0, settle_target=NULL, updated_at=CURRENT_TIMESTAMP WHERE store_code=? AND product_id=?`)
+        .run(observed, ackedPushAt, storeCode, m.product_id);
+      logRow('resync', observed - b.baseline_qty, null, settled ? 'push settled' : 'settle timeout');
+    } else {
+      db.prepare(`UPDATE guanyi_pickup_baseline SET settle_pending=1, settle_target=?, acked_push_at=?, updated_at=CURRENT_TIMESTAMP WHERE store_code=? AND product_id=?`)
+        .run(settleTarget, ackedPushAt, storeCode, m.product_id);
+    }
+    return false;
+  }
+
+  const drift = observed - b.baseline_qty;
+  if (drift === 0) return false;
+
+  let detected = false;
+  if (drift < 0) {
+    const pickup = -drift;
+    const capped = pickup > PICKUP_CAP || pickup > m.tianhe_qty;
+    if (capped) {
+      logRow('capped', drift, pickup, `drop ${pickup} > cap ${PICKUP_CAP} or Tianhe ${m.tianhe_qty} — NOT applied, review`);
+    } else if (PICKUP_MODE === 'live') {
+      // Phase 1: apply the decrement to Tianhe here. Not wired in Phase 0.
+      logRow('would_decrement', drift, pickup, `LIVE not yet implemented — logged only; Tianhe ${m.tianhe_qty}->${m.tianhe_qty - pickup}`);
+    } else {
+      logRow('would_decrement', drift, pickup, `shadow: would set Tianhe ${m.tianhe_qty}->${m.tianhe_qty - pickup}`);
+    }
+    detected = true;
+  } else {
+    logRow('drift_up', drift, null, `Guanyi rose +${drift} with no push (cancellation/return?) — not applied`);
+  }
+  db.prepare(`UPDATE guanyi_pickup_baseline SET baseline_qty=?, updated_at=CURRENT_TIMESTAMP WHERE store_code=? AND product_id=?`)
+    .run(observed, storeCode, m.product_id);
+  return detected;
+}
+
 // ── Main loop ───────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log('[guanyi-daemon] starting');
+  console.log(`[guanyi-daemon] starting (pickup-mode=${PICKUP_MODE}, reconcile=${RECONCILE_MS}ms, cap=${PICKUP_CAP})`);
   // eslint-disable-next-line no-constant-condition
   while (true) {
     try { await processStockQueue(); } catch (e) { console.error('[guanyi-daemon] queue:', e.message); }
+    try { await processPickupReconcile(); } catch (e) { console.error('[guanyi-daemon] reconcile:', e.message); }
     try { await processListingJobs(); } catch (e) { console.error('[guanyi-daemon] jobs:', e.message); }
     await sleep(jitter(QUEUE_CHECK_MS));
   }

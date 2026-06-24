@@ -3996,5 +3996,46 @@ db.exec(`
   );
 `);
 
+// ── gzgrocery pickup inference (we CANNOT read their orders) ──────────────────
+// gzgrocery holds no stock — they pick up from our Tianhe warehouse, and they
+// never touch the Guanyi stock number. So the ONLY thing that lowers their
+// Guanyi salableQty (other than our own push) is a customer order. We mirror our
+// stock INTO Guanyi, so any drop BELOW what we last set = exactly what they sold.
+// The daemon reconcile pass tracks a per-product baseline and infers pickups
+// from autonomous downward drift. baseline = observer's last trusted salableQty;
+// acked_push_at lets it ignore our own pushes (which also move the number).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS guanyi_pickup_baseline (
+    store_code     TEXT    NOT NULL,
+    product_id     INTEGER NOT NULL,
+    guanyi_sku_id  TEXT,
+    baseline_qty   INTEGER,                 -- last trusted observed salableQty
+    acked_push_at  TEXT,                    -- guanyi_product_map.last_pushed_at already reconciled
+    settle_pending INTEGER DEFAULT 0,       -- 1 while waiting for our push to settle in Guanyi
+    settle_target  INTEGER,                 -- the last_pushed_qty we expect to see once settled
+    updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (store_code, product_id)
+  );
+`);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS guanyi_pickup_log (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code      TEXT,
+    product_id      INTEGER,
+    guanyi_sku_id   TEXT,
+    guanyi_name     TEXT,
+    observed_qty    INTEGER,                -- Guanyi salableQty now
+    baseline_qty    INTEGER,                -- what we trusted it to be
+    drift           INTEGER,                -- observed - baseline (negative = pickup)
+    inferred_pickup INTEGER,                -- units we WOULD decrement from Tianhe (drift<0)
+    tianhe_qty      INTEGER,                -- our physical_qty at detection (context/cap)
+    mode            TEXT,                   -- 'shadow' | 'live'
+    action          TEXT,                   -- would_decrement | decremented | capped | drift_up | resync | init
+    note            TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_gypl_created ON guanyi_pickup_log(created_at)`); } catch (e) {}
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
