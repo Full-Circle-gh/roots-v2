@@ -243,7 +243,8 @@ async function ingestOrder(storeId, storeCode, meituanOrder) {
 async function processStockQueue() {
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
-           COALESCE(mm.meituan_sku, p.sku) AS sku
+           COALESCE(mm.meituan_sku, p.sku) AS sku,
+           mm.meituan_name AS map_meituan_name
       FROM meituan_sync_queue q
       LEFT JOIN products p ON p.id = q.product_id
       LEFT JOIN meituan_product_map mm
@@ -301,7 +302,12 @@ async function processStockQueue() {
         const isBundle = !!row.bundle_id;
         return {
           row, isBundle,
-          targetCn: isBundle ? row.meituan_name : row.name_cn,
+          // Resolve products by the operator-confirmed Meituan listing name, not
+          // the product's name_cn: a name_cn like "纯素椰子酸奶-桃子味（小）100g"
+          // truncates (at the hyphen) to the generic "纯素椰子酸奶" shared by every
+          // coconut yogurt, so the search matched the wrong spu. The mapped name
+          // ("Peach Yogurt 纯素椰子酸奶-桃子味") is distinctive. Falls back to name_cn.
+          targetCn: isBundle ? row.meituan_name : (row.map_meituan_name || row.name_cn),
           targetEn: isBundle ? null : row.name_en,
           sku:      isBundle ? null : row.sku,
           newQty:   row.new_qty,
