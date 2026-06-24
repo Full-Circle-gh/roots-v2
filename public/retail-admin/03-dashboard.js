@@ -747,6 +747,7 @@ const FEED_SVG = {
   box:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8l5.5 3v6.4L8 14.2l-5.5-3V4.8z"/><path d="M2.6 4.9L8 7.8l5.4-2.9"/><path d="M8 7.8v6.4"/></svg>',
   wallet:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h10.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M2 4.5V4a1 1 0 0 1 1-1h7.5"/><circle cx="10.8" cy="8.5" r=".9"/></svg>',
   star:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.9 4.4 13.1l.7-4L2.2 6.3l4-.6z"/></svg>',
+  cancel:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>',
   dot:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3"/></svg>',
 };
 
@@ -768,8 +769,16 @@ function dashFeedMeta(e) {
       return { icon: FEED_SVG.truck, tone: 'muted', text: `<b>Dispatched · 已发货</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}` };
     case 'order_delivered':
       return { icon: FEED_SVG.box, tone: 'ok', text: `<b>Delivered · 已送达</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}` };
+    case 'order_cancelled': {
+      // The auto-cancel sweep stamps a machine reason ('auto_cancelled_unpaid');
+      // surface that as a human "unpaid" tag so an abandoned cart reads
+      // differently from a staff cancellation.
+      const auto = p.reason === 'auto_cancelled_unpaid'
+        ? ` <span class="db-feed-badge db-fb-muted">${cuT('unpaid','未付款')}</span>` : '';
+      return { icon: FEED_SVG.cancel, tone: 'bad', text: `<b>Cancelled · 已取消</b> ${escapeHtml(p.order_no || '')}${p.total ? ' · ¥' + Number(p.total).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}${auto}` };
+    }
     case 'refund_request':
-      return { icon: FEED_SVG.refund, tone: 'warn', text: `<b>Refund · 退款</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
+      return { icon: FEED_SVG.refund, tone: 'warn', text: `<b>Refund request · 退款申请</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
     case 'refund_paid':
       return { icon: FEED_SVG.refund, tone: 'ok', text: `<b>Refunded · 已退款</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
     case 'refund_rejected':
@@ -805,6 +814,7 @@ function dashFeedClick(row, ev) {
     case 'paid_order':
     case 'order_dispatched':
     case 'order_delivered':
+    case 'order_cancelled':
     case 'refund_request':
     case 'refund_paid':
     case 'refund_rejected':
