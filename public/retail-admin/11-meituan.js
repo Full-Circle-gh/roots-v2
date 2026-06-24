@@ -118,6 +118,14 @@
   // ── Status ─────────────────────────────────────────────────────────────────
   // Populates the fc-kpis strip (matches the Products catalogue's KPI tiles).
   function mtSetKpi(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
+  // SQLite stores created_at as UTC ("YYYY-MM-DD HH:MM:SS", no zone). Slicing it
+  // raw showed UTC times (e.g. 02:05 for a 10:05-local event), making fresh logs
+  // look hours stale. Parse as UTC and render in the browser's local zone.
+  function mtLogTime(s) {
+    if (!s) return '';
+    const d = new Date(s.replace(' ', 'T') + 'Z');
+    return isNaN(d) ? String(s).slice(11, 19) : d.toTimeString().slice(0, 8);
+  }
   function mtAlertTile(id, on) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('alert', !!on);
@@ -156,7 +164,7 @@
 
       if (log) {
         log.textContent = s.recentLogs.length
-          ? s.recentLogs.map(l => `[${l.created_at?.slice(11,19)}] ${l.store_code} ${l.event_type} ${l.status}${l.detail ? ' ' + l.detail : ''}${l.error_msg ? ' ERR:' + l.error_msg : ''}`).join('\n')
+          ? s.recentLogs.map(l => `[${mtLogTime(l.created_at)}] ${l.store_code} ${l.event_type} ${l.status}${l.detail ? ' ' + l.detail : ''}${l.error_msg ? ' ERR:' + l.error_msg : ''}`).join('\n')
           : 'No sync events yet.';
       }
     } catch (e) {
