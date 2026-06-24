@@ -24,6 +24,7 @@
 
 const path = require('path');
 const fs   = require('fs');
+const { execFile } = require('child_process');
 // Load .env from project root (dotenv may not be installed — fall back to manual parse)
 const envFile = path.join(__dirname, '../.env');
 try {
@@ -101,6 +102,33 @@ function jitter(baseMs, frac = 0.3) {
   const spread = baseMs * frac;
   return Math.round(baseMs - spread + Math.random() * spread * 2);
 }
+
+// Quick proxy health probe: can the configured proxy actually REACH Meituan? A
+// flaky GZ proxy that TCP-accepts but can't complete upstream requests makes
+// every page load hang (net::ERR_TIMED_OUT / Timeout 30000ms). The browser layer
+// then sees no dashboard iframe and MISREADS it as "session expired", triggering
+// pointless re-logins — when the session is actually fine and the proxy is the
+// dead link. Gating the loop on this turns a proxy outage into a clean, logged
+// pause. Uses curl (always on the box); no extra deps. Direct mode (no proxy
+// configured) is always "healthy". A real HTTP reply (even an error page) proves
+// the proxy→Meituan path works; only 000/timeout counts as down.
+function proxyHealthy(timeoutSec = 8) {
+  const proxy = process.env.MEITUAN_PROXY_URL || '';
+  if (!proxy) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    execFile('curl',
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-x', proxy,
+       '--max-time', String(timeoutSec), 'https://e.waimai.meituan.com/'],
+      { timeout: (timeoutSec + 4) * 1000 },
+      (_err, stdout) => {
+        const code = parseInt(String(stdout).trim(), 10) || 0;
+        resolve(code >= 200 && code < 600);
+      });
+  });
+}
+function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
+// Latch so a proxy outage is logged once per transition, not every tick.
+let proxyDownFlagged = false;
 
 // Per-store latch so a 验证中心 challenge is logged once on transition, not
 // every poll (which would flood the sync log the admin tab reads).
@@ -483,6 +511,25 @@ async function main() {
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const now = Date.now();
+
+    // Proxy health-gate: if the shared proxy can't reach Meituan, PAUSE all work
+    // this cycle. A dead proxy otherwise cascades into page-load timeouts, browser
+    // crashes, and a FALSE "session expired" that triggers needless re-logins. We
+    // simply wait it out and log the outage once (the admin sync log is the alert).
+    if (!(await proxyHealthy())) {
+      if (!proxyDownFlagged) {
+        proxyDownFlagged = true;
+        console.log(`[meituan-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(process.env.MEITUAN_PROXY_URL)}) — pausing sync until it recovers (the session is NOT logged out)`);
+        for (const s of stores) logSync(s.storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
+      }
+      await sleep(jitter(QUEUE_CHECK_MS));
+      continue;
+    }
+    if (proxyDownFlagged) {
+      proxyDownFlagged = false;
+      console.log(`[meituan-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
+      for (const s of stores) logSync(s.storeCode, 'proxy_up', 'ok', null, 'proxy reachable again — sync resumed');
+    }
 
     // Poll for new orders on a jittered ~5 min cadence. Stagger stores so the two
     // browsers never hit Meituan at the same instant (lockstep concurrent polls
