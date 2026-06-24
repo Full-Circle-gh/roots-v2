@@ -23,17 +23,45 @@
     await mtLoadProducts();
     mtLoadBundles();
     mtLoadOrders();
+    mtStartPolling();
   };
+
+  // ── Live refresh ─────────────────────────────────────────────────────────────
+  // The daemon pushes stock every 10s and pulls orders every 60s, but the admin
+  // view used to be a one-shot snapshot — the sync log looked frozen ("dead").
+  // Poll status + incoming orders on an interval while the Meituan tab is the
+  // active, visible tab; pause when it's backgrounded or another tab is showing
+  // so we don't hammer the API in the background.
+  let _pollTimer = null;
+  let _pollBusy  = false;
+  function mtTabVisible() {
+    return !document.hidden
+      && !!document.getElementById('tab-meituan')?.classList.contains('active');
+  }
+  function mtStartPolling() {
+    if (_pollTimer) return;
+    _pollTimer = setInterval(async () => {
+      if (_pollBusy || !mtTabVisible()) return;
+      _pollBusy = true;
+      try { await Promise.all([mtLoadStatus(), mtLoadOrders(true)]); }
+      catch (_) { /* transient — next tick retries */ }
+      finally { _pollBusy = false; }
+    }, 12000);
+  }
 
   // ── Incoming orders (read-only) ──────────────────────────────────────────────
   // A plain ledger of orders mirrored in from Meituan: when, amount, products,
   // and (when Meituan exposes it) recipient. No status, no actions — the store
   // doesn't manage or print these; it just shows that they came in.
-  window.mtLoadOrders = async function () {
+  window.mtLoadOrders = async function (silent) {
     const list = document.getElementById('mt-orders-list');
     const cnt  = document.getElementById('mt-orders-count');
     if (!list) return;
-    list.innerHTML = '<div class="muted" style="font-size:13px;padding:10px 0">Loading…</div>';
+    // Background polls pass silent=true so the list doesn't flash "Loading…"
+    // on every tick; only show the placeholder on the first/manual load.
+    if (!silent || !list.children.length) {
+      list.innerHTML = '<div class="muted" style="font-size:13px;padding:10px 0">Loading…</div>';
+    }
     try {
       const res = await api('/api/retail-admin/meituan/orders');
       const orders = res.data || [];
