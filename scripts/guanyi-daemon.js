@@ -381,8 +381,25 @@ function reconcileOne(storeCode, m, cur) {
     if (capped) {
       logRow('capped', drift, pickup, `drop ${pickup} > cap ${PICKUP_CAP} or Tianhe ${m.tianhe_qty} — NOT applied, review`);
     } else if (PICKUP_MODE === 'live') {
-      // Phase 1: apply the decrement to Tianhe here. Not wired in Phase 0.
-      logRow('would_decrement', drift, pickup, `LIVE not yet implemented — logged only; Tianhe ${m.tianhe_qty}->${m.tianhe_qty - pickup}`);
+      // Phase 1: apply the decrement to Tianhe through the canonical inventory
+      // path so it's ledgered AND fanned out to the other channels (Meituan/web)
+      // — the units physically left the building. adjustStock uses tdb(), which
+      // in this headless daemon resolves to the same shared db (Roots = tenant 1).
+      const newQty = Math.max(0, m.tianhe_qty - pickup);
+      const clamped = (m.tianhe_qty - pickup) < 0;
+      try {
+        const { adjustStock } = require('../lib/inventory');
+        adjustStock({
+          storeId: m.retail_store_id, productId: m.product_id, newPhysicalQty: newQty,
+          actorLabel: 'guanyi-pickup', reason: 'guanyi_pickup',
+          note: `inferred gzgrocery pickup: ${name} ${b.baseline_qty}→${observed} (−${pickup})`,
+        });
+        logRow('decremented', drift, pickup, `Tianhe ${m.tianhe_qty}→${newQty}${clamped ? ' (CLAMPED at 0)' : ''}`);
+        log(storeCode, `pickup: ${name} −${pickup} → Tianhe ${m.tianhe_qty}→${newQty}${clamped ? ' (clamped)' : ''}`);
+      } catch (e) {
+        logRow('error', drift, pickup, `adjustStock failed: ${String(e.message).slice(0, 120)}`);
+        log(storeCode, `pickup decrement FAILED for ${name}: ${e.message}`);
+      }
     } else {
       logRow('would_decrement', drift, pickup, `shadow: would set Tianhe ${m.tianhe_qty}->${m.tianhe_qty - pickup}`);
     }
