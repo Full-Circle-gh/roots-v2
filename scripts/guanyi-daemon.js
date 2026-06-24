@@ -54,6 +54,23 @@ function logSync(storeCode, eventType, status, detail, errorMsg) {
   } catch {}
 }
 
+// A transient Guanyi failure: keep the row retryable (back to 'pending') while
+// it still has attempts left, otherwise burn it to a terminal 'error' and log.
+// attempts was already incremented when the row was set 'processing', so the
+// row's current attempts reflects this try.
+function retryOrFail(storeCode, row, retryError, logDetail, terminalError) {
+  const r = db.prepare(`SELECT attempts FROM guanyi_sync_queue WHERE id=?`).get(row.id);
+  const attempts = r ? r.attempts : 99;
+  if (attempts < 3) {
+    db.prepare(`UPDATE guanyi_sync_queue SET status='pending', processed_at=NULL, last_error=? WHERE id=?`)
+      .run(retryError, row.id);
+  } else {
+    db.prepare(`UPDATE guanyi_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error=? WHERE id=?`)
+      .run(terminalError, row.id);
+    logSync(storeCode, 'stock_push', 'error', logDetail, terminalError);
+  }
+}
+
 // ── Stock push queue ──────────────────────────────────────────────────────────
 
 async function processStockQueue() {
@@ -122,8 +139,9 @@ async function processStockQueue() {
           itemId:     row.guanyi_item_id,
           itemSkuId:  row.guanyi_item_sku_id,
           code:       row.guanyi_code,
-          name:       row.guanyi_name || row.name_cn || '',
+          name:       (cur && cur.guanyiName) || row.guanyi_name || row.name_cn || '',
           currentQty: cur ? cur.currentQty : null, // null → not found in Guanyi
+          disabled:   cur ? !!cur.disabled : false, // 已停用 in Guanyi
           targetQty:  row.new_qty,
         };
       });
@@ -134,7 +152,18 @@ async function processStockQueue() {
         db.prepare(`UPDATE guanyi_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error='sku not found in Guanyi list' WHERE id=?`).run(a.row.id);
         logSync(storeCode, 'stock_push', 'error', { name: a.name, sku: a.skuId }, 'sku not in Guanyi list');
       }
-      const pushable = apply.filter(a => a.currentQty != null);
+      // 已停用 (deactivated) SKUs can't take an adjustment — Guanyi rejects them
+      // with 系统异常 and poisons the whole batch. Skip them (mark done, not error)
+      // and turn off their mapping so they stop being re-queued on the next push.
+      const disabled = apply.filter(a => a.currentQty != null && a.disabled);
+      for (const a of disabled) {
+        db.prepare(`UPDATE guanyi_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error='guanyi disabled (已停用) — skipped' WHERE id=?`).run(a.row.id);
+        db.prepare(`UPDATE guanyi_product_map SET sync_enabled=0, updated_at=CURRENT_TIMESTAMP WHERE retail_store_id=? AND product_id=?`).run(a.row.retail_store_id, a.row.product_id);
+        logSync(storeCode, 'stock_push', 'skipped', { name: a.name, sku: a.skuId }, '已停用 (disabled in Guanyi)');
+      }
+      if (disabled.length) log(storeCode, `skipped ${disabled.length} 已停用 product(s), sync_enabled cleared`);
+
+      const pushable = apply.filter(a => a.currentQty != null && !a.disabled);
       if (!pushable.length) continue;
 
       const results = await browser.applyDeltas(pushable);
@@ -147,16 +176,29 @@ async function processStockQueue() {
             .run(res.targetQty, res.skipped ? 0 : res.delta, row.retail_store_id, row.product_id);
           logSync(storeCode, 'stock_push', 'ok',
             { name: res.name, target: res.targetQty, was: res.currentQty, delta: res.skipped ? 0 : res.delta, skipped: !!res.skipped });
+        } else if (res.transient) {
+          // Guanyi-side hiccup (系统异常 etc.). Keep retryable until attempts hit
+          // 3 so the daemon self-heals; only burn to terminal error once spent.
+          retryOrFail(storeCode, row, '系统异常 (transient) — retrying', { name: res.name, target: res.targetQty }, '系统异常 after retries');
         } else {
           db.prepare(`UPDATE guanyi_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error='document create/approve failed' WHERE id=?`).run(row.id);
           logSync(storeCode, 'stock_push', 'error', { name: res.name, target: res.targetQty, delta: res.delta });
         }
       }
     } catch (err) {
+      // A thrown batch (fetchListings null, network/proxy blip) is transient —
+      // keep the still-processing rows retryable rather than failing them once.
       log(storeCode, `processStockQueue error: ${err.message}`);
       for (const row of ready) {
-        db.prepare(`UPDATE guanyi_sync_queue SET status='error', last_error=? WHERE id=? AND status='processing'`)
-          .run(String(err.message).slice(0, 200), row.id);
+        const r = db.prepare(`SELECT attempts, status FROM guanyi_sync_queue WHERE id=?`).get(row.id);
+        if (!r || r.status !== 'processing') continue;
+        if (r.attempts < 3) {
+          db.prepare(`UPDATE guanyi_sync_queue SET status='pending', processed_at=NULL, last_error=? WHERE id=?`)
+            .run(String(err.message).slice(0, 200), row.id);
+        } else {
+          db.prepare(`UPDATE guanyi_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error=? WHERE id=?`)
+            .run(String(err.message).slice(0, 200), row.id);
+        }
       }
       logSync(storeCode, 'stock_push', 'error', null, err.message);
     }
