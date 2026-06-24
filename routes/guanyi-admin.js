@@ -397,7 +397,7 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
              SUM(CASE WHEN pl.action='decremented' OR (pl.action='capped' AND pl.resolution='applied') THEN pl.inferred_pickup
                       WHEN pl.action='drift_up' THEN -ABS(COALESCE(pl.drift,0)) ELSE 0 END) AS units,
              sp.name_cn, sp.name_en, sp.sku, COALESCE(sp.sell_price,0) AS price,
-             pp.discount_pct AS disc
+             pp.discount_pct AS disc, pp.excel_retail AS xretail, pp.excel_gz_price AS xgz
         FROM guanyi_pickup_log pl
         LEFT JOIN store_products sp ON sp.id = pl.product_id
         LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id
@@ -414,8 +414,12 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
       const units = r.units || 0;
       if (!units) continue;
       const disc = r.disc == null ? null : r.disc;
-      const retail = units * (r.price || 0);
-      const owed = units * (r.price || 0) * (1 - (disc || 0));
+      // Bill what gzgrocery actually pays = the sheet's price. Fall back to our
+      // sell_price (full retail, no discount) only for products the sheet omits.
+      const unitRetail = r.xretail != null ? r.xretail : (r.price || 0);
+      const unitOwed   = r.xgz != null ? r.xgz : unitRetail;
+      const retail = units * unitRetail;
+      const owed = units * unitOwed;
       tUnits += units; tOwed += owed; tRetail += retail;
 
       const t = tsMap.get(r.bucket) || { bucket: r.bucket, units: 0, owed: 0, retail: 0 };
