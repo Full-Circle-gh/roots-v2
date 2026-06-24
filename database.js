@@ -3846,5 +3846,114 @@ for (const t of ['meituan_product_map', 'meituan_bundle_components', 'meituan_sy
   }
 })(db);
 
+// ── Guanyi ERP sync (gzgrocery backoffice, 2026-06-24) ──────────────────────
+// Mirrors the Meituan sync layer for a second sales channel: 管易C-ERP
+// (v2.guanyierp.com). Roots has a limited sub-account that sees only Roots
+// products in gzgrocery's tenant. Goal: keep gzgrocery's on-hand equal to our
+// Tianhe warehouse stock. Unlike Meituan (which SETs an absolute number), Guanyi
+// is an ERP — stock only moves via inbound/outbound documents — so the daemon
+// computes a delta (target − Guanyi current) and creates an 其他入库单 (inbound)
+// or 其他出库单 (outbound), then approves it. See lib/guanyi-browser.js.
+
+// Maps a roots-v2 (store, product) pair to its Guanyi product. Guanyi's own code
+// (商品规格代码, e.g. 7000110821) is NOT our SKU; instead our SKU ("1-180") is
+// embedded in the Guanyi product name ("GVF 1-180 …"). The admin tab auto-matches
+// by that SKU and caches Guanyi's internal ids here so the daemon writes without
+// re-resolving. guanyi_code is the barCode used to look a line item up / build it.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS guanyi_product_map (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_store_id     INTEGER NOT NULL,
+    product_id          INTEGER NOT NULL,
+    store_code          TEXT NOT NULL,
+    guanyi_name         TEXT,          -- matched Guanyi itemName (display/audit)
+    guanyi_code         TEXT,          -- Guanyi itemCode/skuCode/barCode (resolution + line item)
+    guanyi_sku_id       TEXT,          -- Guanyi internal sku id (row id in skuDTO)
+    guanyi_item_id      TEXT,          -- Guanyi item id
+    guanyi_item_sku_id  TEXT,          -- Guanyi itemSkuId
+    last_pushed_qty     INTEGER,       -- the target we last reconciled to
+    last_delta          INTEGER,       -- last inbound(+)/outbound(−) amount applied
+    last_pushed_at      DATETIME,
+    sync_enabled        INTEGER NOT NULL DEFAULT 1,
+    created_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(retail_store_id, product_id),
+    FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id)      REFERENCES store_products(id) ON DELETE CASCADE
+  );
+`);
+
+// Queue of stock targets to reconcile into Guanyi. new_qty is the ABSOLUTE target
+// (our Tianhe physical_qty at enqueue time); the daemon reads Guanyi's current
+// qty and creates an inbound/outbound document for the difference. Written by
+// lib/inventory.js on any stock change; consumed by the guanyi-daemon process.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS guanyi_sync_queue (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_store_id  INTEGER NOT NULL,
+    product_id       INTEGER NOT NULL,
+    store_code       TEXT NOT NULL,
+    new_qty          INTEGER NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending',
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    last_error       TEXT,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    processed_at     DATETIME,
+    FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id),
+    FOREIGN KEY (product_id)      REFERENCES store_products(id)
+  );
+`);
+
+// Append-only log of sync events (listing refreshes, stock pushes) for the admin
+// Guanyi tab status panel and debugging.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS guanyi_sync_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    detail      TEXT,
+    error_msg   TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// Cache of the Guanyi product list (POST /stock/message/stock_tenant/data/list)
+// scraped by the daemon. Read by the admin tab to auto-match each Roots product
+// to its Guanyi entry by the SKU embedded in guanyi_name, and to show current
+// Guanyi on-hand. Replaced wholesale per store on each refresh.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS guanyi_listings (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code    TEXT NOT NULL,
+    guanyi_name   TEXT NOT NULL,
+    code          TEXT,         -- itemCode/skuCode/barCode
+    sku_id        TEXT,         -- Guanyi internal sku id
+    item_id       TEXT,
+    item_sku_id   TEXT,
+    warehouse_id  TEXT,
+    warehouse_name TEXT,
+    current_qty   INTEGER,      -- Guanyi salable/on-hand at scrape time
+    scraped_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(store_code, sku_id)
+  );
+`);
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_gyl_store ON guanyi_listings(store_code)`); } catch (e) {}
+
+// On-demand request channel (same hand-off pattern as meituan_listing_jobs): the
+// admin enqueues a refresh job, the daemon (which owns the logged-in browser)
+// runs it and fills guanyi_listings.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS guanyi_listing_jobs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code   TEXT NOT NULL,
+    status       TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|done|error
+    result_count INTEGER,
+    error        TEXT,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    completed_at DATETIME
+  );
+`);
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
