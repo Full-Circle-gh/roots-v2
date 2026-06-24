@@ -371,8 +371,10 @@ async function processListingJobs() {
     db.prepare(`UPDATE meituan_listing_jobs SET status='processing' WHERE id=?`).run(job.id);
     try {
       const browser = await getBrowser(job.store_code);
-      const names = await browser.listProducts();
-      if (!names) throw new Error('scrape returned null (not logged in or no content iframe)');
+      const scrape = await browser.listProductsWithSpecs();
+      if (!scrape) throw new Error('scrape returned null (not logged in or no content iframe)');
+      const names = scrape.names || [];
+      const listings = scrape.listings || [];
 
       const tx = db.transaction(() => {
         db.prepare(`DELETE FROM meituan_listings WHERE store_code=?`).run(job.store_code);
@@ -380,16 +382,32 @@ async function processListingJobs() {
           `INSERT OR IGNORE INTO meituan_listings (store_code, listing_name) VALUES (?, ?)`
         );
         for (const n of names) ins.run(job.store_code, n);
+
+        // Replace this store's captured specs (货号 per spec) wholesale.
+        db.prepare(`DELETE FROM meituan_listing_specs WHERE store_code=?`).run(job.store_code);
+        const insSpec = db.prepare(`
+          INSERT INTO meituan_listing_specs
+            (store_code, listing_name, spu_id, spec, sku_code, sku_id, stock, raw)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        for (const l of listings) {
+          for (const s of (l.skus || [])) {
+            insSpec.run(job.store_code, l.name, l.spuId, s.spec || '', s.code || '',
+                        s.skuId || '', s.stock == null ? null : Number(s.stock),
+                        JSON.stringify(s.raw || null));
+          }
+        }
       });
       tx();
 
+      const specCount = listings.reduce((a, l) => a + (l.skus ? l.skus.length : 0), 0);
       db.prepare(`
         UPDATE meituan_listing_jobs
            SET status='done', result_count=?, error=NULL, completed_at=CURRENT_TIMESTAMP
          WHERE id=?
       `).run(names.length, job.id);
-      logSync(job.store_code, 'listing_scrape', 'ok', { count: names.length });
-      log(job.store_code, `listing scrape done: ${names.length} listing(s)`);
+      logSync(job.store_code, 'listing_scrape', 'ok', { count: names.length, specs: specCount });
+      log(job.store_code, `listing scrape done: ${names.length} listing(s), ${specCount} spec(s) across ${listings.length} spu(s)`);
     } catch (err) {
       db.prepare(`
         UPDATE meituan_listing_jobs

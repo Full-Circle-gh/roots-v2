@@ -3745,6 +3745,27 @@ db.exec(`
   );
 `);
 
+// Per-spec detail captured alongside the listing scrape: each Meituan listing's
+// specs (规格) with the merchant 货号 (sku_code) Meituan prints in the spec text.
+// This is the ground truth the admin uses to auto-fill each Roots variant's SKU so
+// the per-spec stock push resolves deterministically. Replaced wholesale per store
+// on each scrape (same lifecycle as meituan_listings).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_listing_specs (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code   TEXT NOT NULL,
+    listing_name TEXT NOT NULL,
+    spu_id       TEXT,
+    spec         TEXT,        -- raw spec text as shown on Meituan
+    sku_code     TEXT,        -- 货号 extracted from the spec (the push match key)
+    sku_id       TEXT,        -- Meituan internal skuId
+    stock        INTEGER,
+    raw          TEXT,        -- raw sku object JSON, to refine extraction without re-scraping
+    scraped_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+try { db.exec(`CREATE INDEX IF NOT EXISTS idx_mls_store_listing ON meituan_listing_specs(store_code, listing_name)`); } catch (e) {}
+
 // On-demand request channel: the admin enqueues a job, the daemon (which owns the
 // logged-in browser sessions) picks it up, scrapes the Meituan product list, and
 // fills meituan_listings. The web server can't drive Playwright itself, so the DB

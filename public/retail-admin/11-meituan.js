@@ -9,6 +9,7 @@
   let _storeA    = null; // 天河
   let _storeB    = null; // 越秀
   let _listings  = {};   // { store_code: [real Meituan listing names] }
+  let _listingSpecs = {}; // { store_code: { listing_name: [{spec, code, skuId, stock}] } }
   let _review    = { ambiguous: [], unmatched: [] };  // post-fetch manual-review queue
   let _bundles   = [];   // meituan-only bundles with components + computed stock
   let _bundleDraft = null; // working copy while the bundle editor modal is open
@@ -207,6 +208,17 @@
       // SKU is intrinsic to the Roots variant (same code in both districts). Show
       // the mapped value if set, else the product's own SKU as the default.
       const sku = (mapA.meituan_sku || mapB.meituan_sku || p.product_sku || '');
+      // Suggested 货号 chips from the last Meituan fetch — shown when there's a
+      // choice the operator hasn't locked in yet (multiple captured codes, or one
+      // that differs from the current SKU).
+      const choices = mtSkuChoices(p);
+      const curSku = (mapA.meituan_sku || mapB.meituan_sku || '').trim();
+      const showChips = choices.length && !(choices.length === 1 && choices[0].code === curSku);
+      const chipsHtml = showChips ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:3px">`
+        + choices.map(c => `<button type="button" class="btn btn-sm"
+            style="font-size:10px;padding:1px 6px;font-family:ui-monospace,monospace;${c.code === curSku ? 'background:var(--accent,#16a34a);color:#fff' : ''}"
+            title="${esc(c.spec)}" onclick="mtChipSku(${p.id}, '${esc(c.code).replace(/'/g, "\\'")}')">${esc(c.code)}</button>`).join('')
+        + `</div>` : '';
 
       return `<tr data-pid="${p.id}" class="mt-product-row${anyMapped ? '' : ' mt-unmapped'}">
         <td>
@@ -220,7 +232,7 @@
             value="${esc(sku)}"
             data-pid="${p.id}"
             onblur="mtSaveSku(this)"
-            onkeydown="if(event.key==='Enter')this.blur()">
+            onkeydown="if(event.key==='Enter')this.blur()">${chipsHtml}
         </td>
         <td>
           ${storeA ? `<input type="text"
@@ -360,6 +372,7 @@
         if (!data.running) break;
       }
       _listings = (data && data.listings) || {};
+      _listingSpecs = (data && data.specs) || {};
 
       const errs = ((data && data.jobs) || []).filter(j => j.status === 'error');
       if (errs.length) {
@@ -369,6 +382,7 @@
       toast(`Fetched — ${counts}`);
 
       await mtFillFromListings(stores);
+      await mtAutofillSkusFromSpecs(stores);
     } catch (e) {
       toast('Fetch failed: ' + e.message, 'error');
     }
@@ -770,6 +784,96 @@
     input.style.opacity = '';
     if (failed) toast('SKU save failed for ' + failed + ' store(s)', 'error');
   };
+
+  // ── Auto-fill SKUs from fetched Meituan specs ────────────────────────────────
+  // Does a Roots SKU code own a Meituan spec? Mirrors lib/meituan-browser.js
+  // _specHasSku: the code appears as a whole token in the spec text.
+  function mtSpecHasSku(spec, code) {
+    if (!spec || !code) return false;
+    const esc = String(code).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try { return new RegExp('(^|[^0-9A-Za-z-])' + esc + '([^0-9A-Za-z-]|$)').test(String(spec)); }
+    catch (e) { return String(spec).includes(code); }
+  }
+
+  // The specs captured for a product's mapped listing in one store (or []).
+  function mtSpecsFor(p, storeCode) {
+    const name = (p.stores?.[storeCode]?.meituan_name || '').trim();
+    if (!name) return [];
+    return (_listingSpecs[storeCode] && _listingSpecs[storeCode][name]) || [];
+  }
+
+  // After a fetch, set each variant's SKU from Meituan's real 货号 — the source of
+  // truth — so the per-spec push resolves. Confident fills only:
+  //   • the product's existing SKU matches exactly one captured spec → use that
+  //     spec's 货号 (canonicalises to exactly what Meituan prints);
+  //   • the listing has exactly one spec → use it.
+  // Anything ambiguous (multi-spec, no existing SKU) is left for the operator, who
+  // gets clickable 货号 chips under the SKU box (see mtRenderProducts).
+  async function mtAutofillSkusFromSpecs(stores) {
+    const targets = [];
+    let ambiguous = 0;
+    for (const p of _products) {
+      if (!p.is_active) continue;
+      for (const store of stores) {
+        const map = p.stores?.[store.code];
+        if (!map || !map.meituan_name) continue;
+        const specs = mtSpecsFor(p, store.code);
+        if (!specs.length) continue;
+        const have = (map.meituan_sku || p.product_sku || '').trim();
+        let pick = null;
+        if (have) {
+          const m = specs.filter(s => (s.code && s.code === have) || mtSpecHasSku(s.spec, have));
+          if (m.length === 1 && m[0].code) pick = m[0].code;
+        }
+        if (!pick && specs.length === 1 && specs[0].code) pick = specs[0].code;
+        if (!pick) { if (specs.length > 1 && !have) ambiguous++; continue; }
+        if ((map.meituan_sku || '').trim() === pick) continue;   // already correct
+        targets.push({ p, store, code: pick });
+      }
+    }
+    if (!targets.length) {
+      if (ambiguous) toast(`SKUs: nothing to auto-fill. ${ambiguous} need a manual pick — click a 货号 chip under the SKU box.`);
+      return;
+    }
+    let done = 0, failed = 0;
+    for (const t of targets) {
+      try {
+        await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code,
+            meituanName: t.p.stores[t.store.code].meituan_name,
+            syncEnabled: t.p.stores[t.store.code].sync_enabled ? 1 : 0, meituanSku: t.code }),
+        });
+        t.p.stores[t.store.code].meituan_sku = t.code;
+        done++;
+      } catch (e) { failed++; }
+    }
+    mtRenderProducts();
+    toast(`Auto-filled ${done} SKU(s) from Meituan 货号${failed ? `, ${failed} failed` : ''}`
+      + `${ambiguous ? `. ${ambiguous} need a manual pick (货号 chips under the SKU box).` : '.'}`);
+  }
+
+  // Click a suggested 货号 chip → fill the row's SKU box and save it across every
+  // store this product is mapped to (SKU is intrinsic to the variant).
+  window.mtChipSku = async function (pid, code) {
+    const inp = document.querySelector('.mt-sku-input[data-pid="' + pid + '"]');
+    if (!inp) return;
+    inp.value = code;
+    await window.mtSaveSku(inp);
+    mtRenderProducts();
+  };
+
+  // Distinct captured 货号 codes available for a product (across its mapped
+  // listings in both stores), each with its spec text for the tooltip.
+  function mtSkuChoices(p) {
+    const seen = new Map();
+    for (const code of Object.keys(p.stores || {})) {
+      for (const s of mtSpecsFor(p, code)) {
+        if (s.code && !seen.has(s.code)) seen.set(s.code, s.spec || '');
+      }
+    }
+    return Array.from(seen, ([code, spec]) => ({ code, spec }));
+  }
 
   // ── Verify mappings ────────────────────────────────────────────────────────
   // Ask the server which shared-listing groups still lack a distinct SKU per
