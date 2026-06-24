@@ -292,6 +292,7 @@
 
     const targets = [];
     for (const p of _products) {
+      if (!p.is_active) continue;             // skip deleted/paused products
       const name = mtSuggestName(p);
       if (!name) continue;
       for (const store of stores) {
@@ -429,6 +430,8 @@
     _review = { ambiguous: [], unmatched: [] };       // reset for this run
 
     for (const p of _products) {
+      if (!p.is_active) continue;                     // skip deleted/paused products
+                                                      // (loaded only for the bundle picker)
       for (const store of stores) {
         const existing = (p.stores?.[store.code]?.meituan_name || '').trim();
         if (existing) continue;                       // keep operator entries
