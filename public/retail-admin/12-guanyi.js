@@ -4,6 +4,12 @@
 (function () {
   'use strict';
 
+  // esc() is defined per-tab in this codebase (not global); the shared helper is
+  // escapeHtml() from 01-core.js. Alias it so our markup escaping works.
+  const esc = (typeof escapeHtml === 'function')
+    ? escapeHtml
+    : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+
   let _products = [];   // products + map + suggestion (+ our_qty)
   let _storeCode = '';
   let _initiated = false;
