@@ -46,6 +46,13 @@ const ORDER_POLL_MS  = 300_000; // how often to check for new Meituan orders (ji
 // click "accept" on Meituan. Set MEITUAN_AUTO_ACCEPT=1 in .env to re-enable.
 const AUTO_ACCEPT    = process.env.MEITUAN_AUTO_ACCEPT === '1';
 const QUEUE_CHECK_MS = 10_000;  // how often to process the stock push queue
+// Re-persist each store's live session to disk this often (while logged in) so a
+// CRASH — which skips the graceful close() that normally saves — still leaves a
+// fresh cookie snapshot to restore, avoiding a forced re-login (the event that
+// trips 验证中心). Meituan rotates session cookies during use; the login-time
+// snapshot goes stale otherwise. Cheap (a few-KB file write); ~30 min is plenty.
+const SESSION_SAVE_MS = 30 * 60_000;
+const lastSessionSave = {}; // storeCode -> epochMs of last on-disk session refresh
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 
@@ -173,6 +180,19 @@ async function pollOrders(storeConfig) {
     // cool-down so we stop re-poking the verify page every cycle (logged once on
     // transition so it doesn't flood the sync log the admin tab reads).
     noteVerifyResult(storeCode, browser.verificationRequired);
+
+    // Keep the on-disk session fresh while we're cleanly logged in, so a crash
+    // restores recent cookies instead of the stale login-time snapshot (fewer
+    // forced re-logins). Throttled; console-only log (not the admin sync log).
+    if (!browser.verificationRequired) {
+      const now = Date.now();
+      if (!lastSessionSave[storeCode] || now - lastSessionSave[storeCode] >= SESSION_SAVE_MS) {
+        if (await browser.persistSession()) {
+          lastSessionSave[storeCode] = now;
+          log(storeCode, 'session refreshed on disk');
+        }
+      }
+    }
 
     for (const order of orders) {
       if (!order.meituanOrderNo) continue;
