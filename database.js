@@ -4032,10 +4032,17 @@ db.exec(`
     mode            TEXT,                   -- 'shadow' | 'live'
     action          TEXT,                   -- would_decrement | decremented | capped | drift_up | resync | init
     note            TEXT,
+    resolved        INTEGER DEFAULT 0,      -- capped rows: 0 until an operator applies/ignores
+    resolution      TEXT,                   -- 'applied' | 'ignored'
+    resolved_at     DATETIME,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
 try { db.exec(`CREATE INDEX IF NOT EXISTS idx_gypl_created ON guanyi_pickup_log(created_at)`); } catch (e) {}
+// Backfill the resolution columns on pre-existing tables (CREATE IF NOT EXISTS won't alter).
+for (const col of ['resolved INTEGER DEFAULT 0', 'resolution TEXT', 'resolved_at DATETIME']) {
+  try { db.exec(`ALTER TABLE guanyi_pickup_log ADD COLUMN ${col}`); } catch (e) {}
+}
 
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;

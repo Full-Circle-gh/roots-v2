@@ -267,4 +267,108 @@ router.post('/api/retail-admin/guanyi/push-all', requireRetailAdmin, (req, res) 
   }
 });
 
+// ── GET /api/retail-admin/guanyi/pickups ────────────────────────────────────
+// gzgrocery pickup inference surface: flagged (capped, awaiting an operator
+// decision) + recent auto-applied pickups + current mode. The daemon infers a
+// pickup from a drop in Guanyi stock; big/suspicious drops are 'capped' and wait
+// here for Apply/Ignore so nothing is silently lost or silently slashed.
+router.get('/api/retail-admin/guanyi/pickups', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const store = guanyiStore(db);
+    const storeId = store ? store.id : -1;
+    const has = db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get();
+    if (!has) return res.json({ success: true, mode: 'off', flagged: [], recent: [], summary: {} });
+
+    const flagged = db.prepare(`
+      SELECT pl.id, pl.product_id, pl.guanyi_name, pl.observed_qty, pl.baseline_qty,
+             pl.drift, pl.inferred_pickup, pl.tianhe_qty, pl.created_at,
+             p.name_cn, p.name_en, p.sku AS product_sku,
+             COALESCE(ss.physical_qty, 0) AS current_qty
+        FROM guanyi_pickup_log pl
+        LEFT JOIN store_products p ON p.id = pl.product_id
+        LEFT JOIN retail_store_stock ss ON ss.product_id = pl.product_id AND ss.store_id = ?
+       WHERE pl.action = 'capped' AND COALESCE(pl.resolved, 0) = 0
+       ORDER BY pl.created_at DESC LIMIT 100
+    `).all(storeId);
+
+    const recent = db.prepare(`
+      SELECT pl.id, pl.product_id, pl.guanyi_name, pl.inferred_pickup,
+             pl.baseline_qty, pl.observed_qty, pl.created_at,
+             p.name_cn, p.name_en
+        FROM guanyi_pickup_log pl
+        LEFT JOIN store_products p ON p.id = pl.product_id
+       WHERE pl.action = 'decremented'
+       ORDER BY pl.created_at DESC LIMIT 25
+    `).all();
+
+    // The daemon stamps every row with the mode it ran in; the latest row is the
+    // truest signal of whether it's live/shadow (process env here may be stale).
+    const last = db.prepare(`SELECT mode FROM guanyi_pickup_log ORDER BY id DESC LIMIT 1`).get();
+    const today = db.prepare(`
+      SELECT COALESCE(SUM(inferred_pickup),0) units, COUNT(*) events
+        FROM guanyi_pickup_log
+       WHERE action='decremented' AND created_at >= datetime('now','-24 hours')`).get();
+
+    res.json({
+      success: true,
+      mode: (last && last.mode) || process.env.GUANYI_PICKUP_MODE || 'off',
+      flagged, recent,
+      summary: { flaggedCount: flagged.length, appliedUnits24h: today.units, appliedEvents24h: today.events },
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/guanyi/pickups/:id/apply ─────────────────────────
+// Operator confirms a flagged drop WAS a real pickup → decrement our Tianhe
+// stock by the inferred amount (through the canonical inventory path, so it's
+// ledgered + fanned out to the other channels).
+router.post('/api/retail-admin/guanyi/pickups/:id/apply', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = db.prepare(`SELECT * FROM guanyi_pickup_log WHERE id = ? AND action='capped'`).get(id);
+    if (!row) return res.status(404).json({ success: false, error: 'flagged pickup not found' });
+    if (row.resolved) return res.json({ success: true, already: true });
+    const store = guanyiStore(db);
+    if (!store) return res.status(400).json({ success: false, error: 'no active store' });
+
+    const cur = db.prepare('SELECT COALESCE(physical_qty,0) AS q FROM retail_store_stock WHERE store_id=? AND product_id=?').get(store.id, row.product_id);
+    const curQty = cur ? cur.q : 0;
+    const newQty = Math.max(0, curQty - (row.inferred_pickup || 0));
+    const { adjustStock } = require('../lib/inventory');
+    adjustStock({
+      storeId: store.id, productId: row.product_id, newPhysicalQty: newQty,
+      actorLabel: 'guanyi-pickup-manual', reason: 'guanyi_pickup',
+      note: `operator-applied flagged gzgrocery pickup #${id}: −${row.inferred_pickup} (${row.baseline_qty}→${row.observed_qty})`,
+    });
+    db.prepare(`UPDATE guanyi_pickup_log SET resolved=1, resolution='applied', resolved_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+    res.json({ success: true, newQty });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/guanyi/pickups/:id/ignore ────────────────────────
+// Operator judges a flagged drop a glitch (not a real sale) → leave our stock
+// alone and re-assert our true Tianhe qty onto Guanyi (correct the bad number).
+router.post('/api/retail-admin/guanyi/pickups/:id/ignore', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = db.prepare(`SELECT * FROM guanyi_pickup_log WHERE id = ? AND action='capped'`).get(id);
+    if (!row) return res.status(404).json({ success: false, error: 'flagged pickup not found' });
+    if (row.resolved) return res.json({ success: true, already: true });
+    const store = guanyiStore(db);
+    db.prepare(`UPDATE guanyi_pickup_log SET resolved=1, resolution='ignored', resolved_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+    // Re-push our true stock so a glitched-low Guanyi number gets corrected back up.
+    try { require('../lib/guanyi-sync').enqueueProductStock(db, store.id, row.product_id); } catch (e) {}
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;

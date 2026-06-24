@@ -18,7 +18,7 @@
   window.gyAdminInit = async function () {
     if (_initiated) return;
     _initiated = true;
-    await Promise.all([gyLoadStatus(), gyLoadListings()]);
+    await Promise.all([gyLoadStatus(), gyLoadListings(), gyLoadPickups()]);
     await gyLoadProducts();
     gyStartPolling();
   };
@@ -33,7 +33,7 @@
     _pollTimer = setInterval(async () => {
       if (_pollBusy || !gyTabVisible()) return;
       _pollBusy = true;
-      try { await Promise.all([gyLoadStatus(), gyLoadListings(true)]); } catch (_) {}
+      try { await Promise.all([gyLoadStatus(), gyLoadListings(true), gyLoadPickups(true)]); } catch (_) {}
       finally { _pollBusy = false; }
     }, 12000);
   }
@@ -210,6 +210,83 @@
       toast(`Queued ${r.queued} reconcile(s) to Guanyi`);
       await gyLoadStatus();
     } catch (e) { toast('Push failed: ' + e.message, 'error'); }
+  };
+
+  // ── gzgrocery pickups (inferred from Guanyi stock drift) ──────────────────────
+  window.gyLoadPickups = async function (silent) {
+    const wrap = document.getElementById('gy-pickups');
+    if (!wrap) return;
+    try {
+      const r = await api('/api/retail-admin/guanyi/pickups');
+      gyRenderPickups(r);
+    } catch (e) { if (!silent) console.warn('[guanyi] pickups', e); }
+  };
+
+  function gyRenderPickups(r) {
+    const wrap = document.getElementById('gy-pickups');
+    if (!wrap) return;
+    const mode = r.mode || 'off';
+    const flagged = r.flagged || [];
+    const recent = r.recent || [];
+    const sm = r.summary || {};
+    const pname = (x) => esc([x.name_cn, x.name_en].filter(Boolean).join(' ') || x.guanyi_name || ('#' + x.product_id));
+    const when = (t) => (t || '').replace('T', ' ').slice(0, 16);
+
+    const modeBadge = mode === 'live'
+      ? '<span style="background:#e6f5ec;color:#1a7a44;border:1px solid #b6e0c6;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600">● LIVE</span>'
+      : mode === 'shadow'
+        ? '<span style="background:var(--bg-elev-1);color:var(--fg-muted);border:1px solid var(--border,#ddd);border-radius:10px;padding:1px 8px;font-size:11px" title="Detecting + logging only — not changing stock">◌ shadow</span>'
+        : '<span style="background:var(--bg-elev-1);color:var(--fg-muted);border:1px solid var(--border,#ddd);border-radius:10px;padding:1px 8px;font-size:11px">off</span>';
+
+    let html = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <strong style="font-size:14px">gzgrocery pickups · 提货扣减</strong> ${modeBadge}
+      <span class="muted" style="font-size:12px;margin-left:auto">${sm.appliedEvents24h || 0} applied · ${sm.appliedUnits24h || 0} units (24h)</span>
+    </div>`;
+
+    if (flagged.length) {
+      html += `<div style="border:1px solid #e6c200;background:#fff9e0;border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:#8a6d00;margin-bottom:6px">⚠ ${flagged.length} flagged drop(s) need your decision · 待确认</div>`
+        + flagged.map(f => {
+          const drop = Math.abs(f.drift || 0);
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #f0e2a8">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;color:#4a3d00;font-weight:500">${pname(f)}</div>
+              <div style="font-size:11px;color:#8a7a3a">Guanyi ${f.baseline_qty}→${f.observed_qty} (drop ${drop}) · your stock now ${f.current_qty} · ${when(f.created_at)}</div>
+            </div>
+            <button class="btn btn-sm btn-primary" onclick="gyApplyPickup(${f.id})" title="Yes, real sale — lower my stock by ${drop}">Apply −${drop}</button>
+            <button class="btn btn-sm" onclick="gyIgnorePickup(${f.id})" title="Glitch — keep my stock, correct Guanyi back up">Ignore</button>
+          </div>`;
+        }).join('') + `</div>`;
+    } else {
+      html += `<div class="muted" style="font-size:12px;margin-bottom:8px">No flagged drops · 无待确认</div>`;
+    }
+
+    if (recent.length) {
+      html += `<details><summary style="cursor:pointer;font-size:12px;color:var(--fg-muted);padding:2px 0">Recent auto-applied pickups (${recent.length}) · 最近自动扣减</summary>
+        <div style="margin-top:6px;font-size:12px;max-height:160px;overflow-y:auto">`
+        + recent.map(x => `<div style="display:flex;gap:8px;padding:2px 0">
+            <span style="color:#c00;font-weight:600;width:44px">−${x.inferred_pickup}</span>
+            <span style="flex:1">${pname(x)}</span>
+            <span class="muted">${when(x.created_at)}</span>
+          </div>`).join('')
+        + `</div></details>`;
+    }
+    wrap.innerHTML = html;
+  }
+
+  window.gyApplyPickup = async function (id) {
+    try {
+      await api('/api/retail-admin/guanyi/pickups/' + id + '/apply', { method: 'POST' });
+      toast('Applied · stock lowered · 已扣减');
+      await Promise.all([gyLoadPickups(true), gyLoadProducts(), gyLoadStatus()]);
+    } catch (e) { toast('Apply failed: ' + e.message, 'error'); }
+  };
+  window.gyIgnorePickup = async function (id) {
+    try {
+      await api('/api/retail-admin/guanyi/pickups/' + id + '/ignore', { method: 'POST' });
+      toast('Ignored · Guanyi will be corrected · 已忽略');
+      await gyLoadPickups(true);
+    } catch (e) { toast('Ignore failed: ' + e.message, 'error'); }
   };
 
   // ── tiny helpers ──────────────────────────────────────────────────────────────

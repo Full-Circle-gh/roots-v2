@@ -46,8 +46,12 @@ function ensurePickupTables() {
       id INTEGER PRIMARY KEY AUTOINCREMENT, store_code TEXT, product_id INTEGER,
       guanyi_sku_id TEXT, guanyi_name TEXT, observed_qty INTEGER, baseline_qty INTEGER,
       drift INTEGER, inferred_pickup INTEGER, tianhe_qty INTEGER, mode TEXT, action TEXT,
-      note TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
+      note TEXT, resolved INTEGER DEFAULT 0, resolution TEXT, resolved_at DATETIME,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP);`);
     db.exec(`CREATE INDEX IF NOT EXISTS idx_gypl_created ON guanyi_pickup_log(created_at)`);
+    for (const col of ['resolved INTEGER DEFAULT 0', 'resolution TEXT', 'resolved_at DATETIME']) {
+      try { db.exec(`ALTER TABLE guanyi_pickup_log ADD COLUMN ${col}`); } catch (e) {}
+    }
   } catch (e) { console.error('[guanyi-daemon] ensurePickupTables:', e.message); }
 }
 ensurePickupTables();
