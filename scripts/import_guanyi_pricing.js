@@ -19,7 +19,7 @@ const Database = require('better-sqlite3');
 
 const db = new Database(path.join(__dirname, '..', 'data', 'roots.db'));
 const COMMIT = process.argv.includes('--commit');
-const SOURCE = 'GV6月21~6月23号.xlsx';
+const SOURCE = '1gzgrocery new template.xlsx';
 
 db.exec(`CREATE TABLE IF NOT EXISTS guanyi_product_pricing (
   product_id INTEGER PRIMARY KEY, sku TEXT, discount_pct REAL,
