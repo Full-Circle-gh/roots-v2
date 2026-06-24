@@ -371,4 +371,81 @@ router.post('/api/retail-admin/guanyi/pickups/:id/ignore', requireRetailAdmin, (
   }
 });
 
+// ── GET /api/retail-admin/guanyi/analytics ──────────────────────────────────
+// gzgrocery order analytics derived from the pickup ledger. A "billable" unit =
+// an applied pickup (auto 'decremented', or a flagged 'capped' the operator
+// Applied); a return ('drift_up') nets OUT. Money: owed = units × sell_price ×
+// (1 − discount_pct); retail value = units × sell_price.
+//   query: ?from=YYYY-MM-DD&to=YYYY-MM-DD&period=day|week|month
+router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    if (!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get())
+      return res.json({ success: true, summary: {}, timeSeries: [], products: [], unpriced: [] });
+
+    const period = ['day', 'week', 'month'].includes(req.query.period) ? req.query.period : 'day';
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : null;
+    const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : null;
+    const fromClause = from || "date('now','-90 days')";
+    const toClause   = to   || "date('now','+1 day')";
+    const bucket = period === 'month' ? "strftime('%Y-%m', pl.created_at)"
+                 : period === 'week'  ? "strftime('%Y-W%W', pl.created_at)"
+                 : "date(pl.created_at)";
+
+    const rows = db.prepare(`
+      SELECT ${bucket} AS bucket, pl.product_id,
+             SUM(CASE WHEN pl.action='decremented' OR (pl.action='capped' AND pl.resolution='applied') THEN pl.inferred_pickup
+                      WHEN pl.action='drift_up' THEN -ABS(COALESCE(pl.drift,0)) ELSE 0 END) AS units,
+             sp.name_cn, sp.name_en, sp.sku, COALESCE(sp.sell_price,0) AS price,
+             pp.discount_pct AS disc
+        FROM guanyi_pickup_log pl
+        LEFT JOIN store_products sp ON sp.id = pl.product_id
+        LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id
+       WHERE (pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied'))
+         AND pl.created_at >= ${from ? '?' : fromClause} AND pl.created_at < ${to ? '?' : toClause}
+       GROUP BY bucket, pl.product_id
+    `).all(...[from, to].filter(Boolean));
+
+    const tsMap = new Map();      // bucket -> {units,owed,retail}
+    const prodMap = new Map();    // product_id -> {...}
+    const unpriced = new Map();
+    let tUnits = 0, tOwed = 0, tRetail = 0;
+    for (const r of rows) {
+      const units = r.units || 0;
+      if (!units) continue;
+      const disc = r.disc == null ? null : r.disc;
+      const retail = units * (r.price || 0);
+      const owed = units * (r.price || 0) * (1 - (disc || 0));
+      tUnits += units; tOwed += owed; tRetail += retail;
+
+      const t = tsMap.get(r.bucket) || { bucket: r.bucket, units: 0, owed: 0, retail: 0 };
+      t.units += units; t.owed += owed; t.retail += retail; tsMap.set(r.bucket, t);
+
+      const p = prodMap.get(r.product_id) || {
+        product_id: r.product_id, sku: r.sku, name: [r.name_cn, r.name_en].filter(Boolean).join(' '),
+        units: 0, owed: 0, retail: 0, price: r.price, discount: disc,
+      };
+      p.units += units; p.owed += owed; p.retail += retail; prodMap.set(r.product_id, p);
+      if (disc == null && units > 0) unpriced.set(r.product_id, p.name);
+    }
+
+    const products = [...prodMap.values()].sort((a, b) => b.owed - a.owed);
+    const timeSeries = [...tsMap.values()].sort((a, b) => a.bucket.localeCompare(b.bucket));
+    res.json({
+      success: true,
+      period,
+      range: { from: from || null, to: to || null },
+      summary: {
+        units: tUnits, owed: tOwed, retail: tRetail,
+        avgDiscount: tRetail > 0 ? (1 - tOwed / tRetail) : 0,
+        products: products.length,
+      },
+      timeSeries, products,
+      unpriced: [...unpriced.entries()].map(([id, name]) => ({ product_id: id, name })),
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;
