@@ -55,3 +55,8 @@ DEPLOY.md
 /migration_roster.json
 /scratch_*
 C:/Users/Asher/Downloads/migration_phoneless.json
+
+# Local MCP connectors (Canva, etc.) — machine-specific, not for deploy
+.mcp.json
+
+scripts/_guanyi_pricing.json

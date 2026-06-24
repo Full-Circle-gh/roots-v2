@@ -4044,5 +4044,20 @@ for (const col of ['resolved INTEGER DEFAULT 0', 'resolution TEXT', 'resolved_at
   try { db.exec(`ALTER TABLE guanyi_pickup_log ADD COLUMN ${col}`); } catch (e) {}
 }
 
+// gzgrocery pricing: a FIXED discount % off retail per product (from the partner
+// price sheet). gzgrocery's price = retail_price × (1 − discount_pct). Used to
+// bill gzgrocery for inferred pickups and to report discount-from-retail.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS guanyi_product_pricing (
+    product_id     INTEGER PRIMARY KEY,
+    sku            TEXT,
+    discount_pct   REAL,           -- fraction off retail, e.g. 0.20 = 20%
+    excel_retail   REAL,           -- retail price as stated in the source sheet (reconcile)
+    excel_gz_price REAL,           -- gzgrocery price as stated in the source sheet (reconcile)
+    source         TEXT,
+    updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
