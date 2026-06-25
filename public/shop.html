@@ -1906,7 +1906,9 @@ function renderCoBalance(d){
   const disc=Number(d.balance_discount)||0;
   const sub=co.useBalance&&disc>0
     ? `<span class="cx-pts-emph">${cn?('已抵 −'+money(disc)):('−'+money(disc)+' off')}</span> <span>${cn?'· 余额不抵运费':'· balance never covers shipping'}</span>`
-    : `¥${bal.toFixed(2)} ${cn?'余额 · 本单可抵 ':'· worth '}${money(maxUse)}${cn?'':' on this order'}`;
+    : (cn
+        ? `余额 ¥${bal.toFixed(2)} · 本单最多可抵 ${money(maxUse)}（不含运费）`
+        : `¥${bal.toFixed(2)} balance · up to ${money(maxUse)} here (not shipping)`);
   // Nothing left for balance to cover (e.g. points already cover the goods) —
   // show the toggle but disable it so the state reads clearly.
   const dis=maxUse<=0?'disabled':'';

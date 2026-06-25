@@ -449,7 +449,7 @@
         <view class="pt-sub muted">
           <!-- OFF · balance can cover something -->
           <block wx:if="{{!useBalance && balancePotentialDiscount > 0}}">
-            <text>{{lang === 'cn' ? '余额 ¥' : '¥'}}{{balanceBalance}}{{lang === 'cn' ? ' · 本单可抵 ¥' : ' · worth ¥'}}{{balancePotentialDiscount}}{{lang === 'cn' ? '' : ' on this order'}}</text>
+            <text>{{lang === 'cn' ? '余额 ¥' : '¥'}}{{balanceBalance}}{{lang === 'cn' ? ' · 本单最多可抵 ¥' : ' balance · up to ¥'}}{{balancePotentialDiscount}}{{lang === 'cn' ? '（不含运费）' : ' here (not shipping)'}}</text>
           </block>
           <!-- OFF · nothing left for balance to cover (points already cover goods) -->
           <block wx:elif="{{!useBalance}}">
