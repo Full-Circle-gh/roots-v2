@@ -208,6 +208,16 @@ async function processStockQueue() {
           db.prepare(`UPDATE guanyi_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error=NULL WHERE id=?`).run(row.id);
           db.prepare(`UPDATE guanyi_product_map SET last_pushed_qty=?, last_delta=?, last_pushed_at=CURRENT_TIMESTAMP WHERE retail_store_id=? AND product_id=?`)
             .run(res.targetQty, res.skipped ? 0 : res.delta, row.retail_store_id, row.product_id);
+          // Optimistically reconcile the cached Guanyi listing: after a successful
+          // push Guanyi's stock for this SKU IS the target, so the admin table shows
+          // "N =" instead of a stale "+delta" until the next heavy list refresh.
+          if (res.targetQty != null) {
+            db.prepare(`UPDATE guanyi_listings SET current_qty=?
+                          WHERE store_code=? AND sku_id=(
+                            SELECT guanyi_sku_id FROM guanyi_product_map
+                             WHERE retail_store_id=? AND product_id=?)`)
+              .run(res.targetQty, storeCode, row.retail_store_id, row.product_id);
+          }
           logSync(storeCode, 'stock_push', 'ok',
             { name: res.name, target: res.targetQty, was: res.currentQty, delta: res.skipped ? 0 : res.delta, skipped: !!res.skipped });
         } else if (res.transient) {

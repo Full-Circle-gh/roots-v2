@@ -1,0 +1,94 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont/dist/tabler-icons.min.css">
+<style>
+body{margin:0;background:#fff;}
+.dw{width:1020px;--ink:#1d1d1a;--brass:#b08d4a;--tea:#6B8E6F;--oat:#faf7f0;--oat2:#f2efe6;--line:#e3ded2;--mut:#6b6b63;--red:#b2564b;padding:18px;font-family:'IBM Plex Sans',sans-serif;}
+.dw *{box-sizing:border-box;}
+.dwin{background:#fff;border:.5px solid var(--line);border-radius:14px;overflow:hidden;}
+.dtop{background:var(--ink);color:#fff;display:flex;align-items:center;gap:12px;padding:11px 18px;font-size:13px;}
+.dtop .wm{font-weight:500;}.dtop .bc{color:#b6b3a6;font-size:12px;}
+.dpage{background:var(--oat2);padding:24px;}
+.dmod{background:#fff;border:.5px solid var(--line);border-radius:12px;overflow:hidden;margin:0 auto;}
+.dmh{display:flex;justify-content:space-between;align-items:center;padding:15px 22px;border-bottom:.5px solid var(--line);}
+.dmh .t{font-size:17px;font-weight:500;}.dmh .k{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);}
+.dgrid{display:grid;}
+.drail{border-right:.5px solid var(--line);padding:20px 18px;display:flex;flex-direction:column;gap:15px;background:var(--oat);}
+.dstep{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--mut);}
+.dnum{width:23px;height:23px;border-radius:50%;border:.5px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:12px;background:#fff;flex:0 0 auto;}
+.dstep.on{color:var(--ink);font-weight:500;}.dstep.on .dnum{background:var(--tea);color:#fff;border-color:var(--tea);}
+.dstep.done .dnum{background:var(--brass);color:#fff;border-color:var(--brass);}
+.dform{padding:22px;display:flex;flex-direction:column;gap:15px;}
+.dlab{font-size:12px;color:var(--mut);margin-bottom:5px;}
+.din{background:#fff;border:.5px solid var(--line);border-radius:7px;padding:9px 11px;font-size:13.5px;display:flex;justify-content:space-between;align-items:center;}
+.dtag{font-size:10.5px;color:var(--tea);border:.5px solid var(--tea);border-radius:10px;padding:1px 7px;white-space:nowrap;}
+.dtag.b{color:var(--brass);border-color:var(--brass);}
+.dtag.r{color:var(--red);border-color:var(--red);}
+.dprev{border-left:.5px solid var(--line);padding:20px 16px;background:var(--oat);}
+.dprevl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:11px;}
+.dmf{display:flex;justify-content:space-between;align-items:center;padding:15px 22px;border-top:.5px solid var(--line);}
+.dbtn{background:var(--tea);color:#fff;border-radius:8px;padding:9px 20px;font-size:13.5px;font-weight:500;}
+.dbtn.brass{background:var(--brass);}
+.dbtno{background:#fff;border:.5px solid var(--brass);color:var(--brass);border-radius:8px;padding:9px 18px;font-size:13.5px;font-weight:500;}
+.dghost{border:.5px solid var(--line);border-radius:8px;padding:9px 18px;font-size:13.5px;color:var(--mut);background:#fff;}
+.ddots{display:flex;gap:5px;}.ddot{width:7px;height:7px;border-radius:50%;background:var(--line);}.ddot.on{background:var(--brass);}
+.docard{display:flex;align-items:center;gap:13px;border:.5px solid var(--line);border-radius:10px;padding:15px;background:#fff;}
+.docard i{color:var(--brass);font-size:24px;}
+.doct{font-size:14px;font-weight:500;}.docs{font-size:11.5px;color:var(--mut);margin-top:2px;}
+.dchip{display:inline-flex;align-items:center;gap:5px;background:var(--oat2);border-radius:20px;padding:5px 11px;font-size:12px;color:#5b5b53;}
+.dchip.ok{color:var(--tea);}.dchip.on{background:var(--tea);color:#fff;}
+.dpanel{background:#fff;border:.5px solid var(--line);border-radius:12px;padding:20px 22px;margin:0 auto;}
+.dkick{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);}
+.dtog{display:flex;gap:8px;}.dtp{padding:7px 18px;border-radius:7px;border:.5px solid var(--line);font-size:13px;background:#fff;}
+.dtp.on{background:var(--tea);color:#fff;border-color:var(--tea);}
+.daibox{background:#fff;border:.5px dashed var(--brass);border-radius:9px;padding:12px;}
+.daifill{display:inline-flex;align-items:center;gap:6px;background:var(--brass);color:#fff;border-radius:7px;padding:7px 12px;font-size:12.5px;font-weight:500;}
+.didea{display:flex;align-items:center;gap:14px;border:.5px solid var(--line);border-radius:11px;padding:14px 16px;background:#fff;}
+.didea .why{font-size:11px;color:var(--brass);font-weight:500;}
+.didea .what{font-size:14px;font-weight:500;margin-top:3px;}
+.didea .note{font-size:11px;color:var(--mut);margin-top:2px;}
+.dnote{display:flex;gap:9px;align-items:flex-start;background:#fff;border:.5px solid var(--line);border-left:3px solid var(--tea);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--ink);line-height:1.45;}
+.dnote i{font-size:16px;margin-top:1px;flex:0 0 auto;}
+.dnote.tea{border-left-color:var(--tea);}.dnote.tea i{color:var(--tea);}
+.dnote.brass{border-left-color:var(--brass);}.dnote.brass i{color:var(--brass);}
+.dnote.red{border-left-color:var(--red);}.dnote.red i{color:var(--red);}
+.dnote b{font-weight:600;}
+.dnlink{color:var(--tea);font-weight:500;white-space:nowrap;}
+/* ── flash-specific ─────────────────────────────────────────────── */
+.dtype{flex:1;text-align:center;border:.5px solid var(--line);border-radius:11px;padding:16px 10px;background:#fff;}
+.dtype.on{border-color:var(--tea);background:var(--oat);box-shadow:inset 0 0 0 1px var(--tea);}
+.dtype i{font-size:24px;color:var(--brass);}.dtype.on i{color:var(--tea);}
+.dtype .tt{font-size:13px;font-weight:500;margin-top:6px;}.dtype .ts{font-size:10.5px;color:var(--mut);margin-top:2px;}
+/* product pick row */
+.prow{display:flex;align-items:center;gap:12px;border:.5px solid var(--line);border-radius:9px;padding:9px 12px;background:#fff;}
+.prow.on{border-color:var(--tea);background:var(--oat);}
+.pbox{width:18px;height:18px;border-radius:5px;border:1.5px solid var(--line);flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;}
+.prow.on .pbox{background:var(--tea);border-color:var(--tea);}
+.pth{width:30px;height:30px;border-radius:6px;background:var(--oat2);flex:0 0 auto;}
+.pnm{font-size:13px;font-weight:500;}.psub{font-size:10.5px;color:var(--mut);}
+.ppr{margin-left:auto;font-size:12.5px;color:var(--mut);}
+/* discount table */
+.dtbl{width:100%;border-collapse:collapse;font-size:12px;}
+.dtbl th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);font-weight:500;padding:6px 8px;border-bottom:.5px solid var(--line);}
+.dtbl td{padding:8px;border-bottom:.5px solid var(--line);}
+.dtbl .was{color:var(--mut);text-decoration:line-through;}
+.dtbl .now{font-weight:600;color:var(--ink);}
+.dtbl .sv{color:var(--tea);font-weight:500;}
+.dtbl .bad{color:var(--red);font-weight:500;}
+/* customer flash card */
+.fcard{background:#fff;border:.5px solid var(--line);border-radius:12px;overflow:hidden;width:230px;}
+.fcard .ph{height:96px;background:linear-gradient(135deg,#f2efe6,#e7e1d2);position:relative;}
+.fbadge{position:absolute;top:8px;left:8px;background:#E96174;color:#fff;font-size:10px;font-weight:600;letter-spacing:.05em;border-radius:6px;padding:3px 8px;}
+.fcard .bd{padding:11px 13px;}
+.fcard .nm{font-size:12.5px;font-weight:500;}
+.fprice{display:flex;align-items:baseline;gap:7px;margin-top:5px;}
+.fnow{font-size:20px;font-weight:600;color:#E96174;line-height:1;}
+.fwas{font-size:12px;color:var(--mut);text-decoration:line-through;}
+.foff{font-size:10.5px;color:var(--tea);font-weight:500;margin-top:3px;}
+.fcd{display:flex;align-items:center;gap:5px;margin-top:9px;}
+.fcd .lb{font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);}
+.fcdcell{background:var(--ink);color:#fff;border-radius:5px;padding:3px 5px;font-size:11px;font-weight:600;min-width:21px;text-align:center;}
+.fbar{height:6px;border-radius:4px;background:var(--oat2);margin-top:9px;overflow:hidden;}
+.fbar > i{display:block;height:100%;width:62%;background:#E96174;}
+.fbarlb{font-size:9.5px;color:var(--mut);margin-top:3px;}
+</style></head><body><div class="dw"><div class="dwin"><div class="dtop"><span class="wm">Full Circle</span><span class="bc">Mini App Backend &middot; Marketing &middot; Flash sales &middot; New flash sale</span></div><div class="dpage"><div class="dpanel" style="max-width:760px;"><div class="dkick">What the shopper sees</div><div style="font-size:17px;font-weight:500;margin:2px 0 4px;">The same flash, in the mini app</div><div style="font-size:12.5px;color:var(--mut);margin-bottom:18px;">Nothing new to build &mdash; the shop already shows the flash badge, the old price struck through, a live countdown, and an &ldquo;almost gone&rdquo; bar.</div><div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;justify-content:center;"><div class="fcard"><div class="ph"><span class="fbadge">FLASH &middot; 秒杀</span></div><div class="bd"><div class="nm">Medjool Dates (Jumbo)</div><div class="fprice"><span class="fnow">&yen;73</span><span class="fwas">&yen;92</span></div><div class="foff">Save &yen;19 &middot; 20% off</div><div class="fcd"><span class="lb">Ends in</span><span class="fcdcell">47</span>:<span class="fcdcell">12</span>:<span class="fcdcell">08</span></div><div class="fbar"><i></i></div><div class="fbarlb">37 of 50 left at this price</div></div></div><div class="fcard"><div class="ph"><span class="fbadge">FLASH &middot; 秒杀</span></div><div class="bd"><div class="nm">USDA Organic Goji Berries</div><div class="fprice"><span class="fnow">&yen;37</span><span class="fwas">&yen;47</span></div><div class="foff">Save &yen;10 &middot; 20% off</div><div class="fcd"><span class="lb">Ends in</span><span class="fcdcell">47</span>:<span class="fcdcell">12</span>:<span class="fcdcell">08</span></div><div class="fbar"><i></i></div><div class="fbarlb">No limit &mdash; runs till Sun</div></div></div><div style="flex:1;min-width:220px;"><div class="dnote tea"><i class="ti ti-flame"></i><div><b>FLASH &middot; 秒杀</b> badge + old price struck through + the new price in flash colour.</div></div><div class="dnote brass" style="margin-top:9px;"><i class="ti ti-clock"></i><div>A live <b>countdown</b> to the end time. Before it starts, a <b>&ldquo;starts soon&rdquo;</b> teaser shows instead.</div></div><div class="dnote tea" style="margin-top:9px;"><i class="ti ti-urgent"></i><div>If you set a limit, an <b>&ldquo;almost gone&rdquo;</b> bar fills as it sells &mdash; ends when the clock or the stock runs out, whichever is first.</div></div></div></div></div></div></div></div></body></html>

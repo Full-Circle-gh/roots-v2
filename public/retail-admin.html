@@ -439,11 +439,6 @@
     Delivery · 配送
   </button>
 
-  <button data-tab="quickstock" data-feat="quickStock">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 7h4M12 12v5M9.5 14.5h5"/></svg>
-    Quick Stock · 手机库存
-  </button>
-
   <button data-tab="meituan" onclick="mtAdminInit()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
     Meituan · 美团
@@ -5130,6 +5125,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"/><path d="M12 2v3M12 19v3M22 12h-3M5 12H2M19.07 4.93l-2.12 2.12M7.05 16.95l-2.12 2.12M19.07 19.07l-2.12-2.12M7.05 7.05 4.93 4.93"/></svg>
           Operations · 运营
         </button>
+        <button data-sub="quickstock" data-feat="quickStock">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 7h4M12 12v5M9.5 14.5h5"/></svg>
+          Quick Stock · 手机库存
+        </button>
       </aside>
 
       <!-- ───────── content panels ───────── -->
@@ -5993,6 +5992,29 @@
           </div>
         </div>
 
+        <!-- ────── QUICK STOCK (mobile add-on) ────── -->
+        <!-- The on/off switch (.feat-bar) and the "off" card are injected at the
+             top of this panel by mountFeatureControls() (05-marketing.js), driven
+             by FEATURE_CATALOG/FEATURE_HOMES. Everything below is the "on" content. -->
+        <div class="sub-panel" id="sub-quickstock" data-feat="quickStock">
+          <h2>Quick Stock · 手机库存</h2>
+          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
+            A lightweight, phone-first stock app for your shop staff — they open it on a phone, search a product, and tap to adjust the count. No PC, no access to the rest of this back office. Each staffer only edits the store they're assigned to (Settings → Team → assign a store). · 面向门店员工的轻量级手机库存应用:在手机上打开、搜索商品、点按即可调整库存。无需电脑,也无法进入后台其他功能。每位员工只能编辑其所分配的门店(设置 → 团队 → 分配门店)。
+          </div>
+
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Open on a phone · 在手机上打开</h3>
+              <div class="muted">Open the app on a phone and tap <b>Add to Home Screen</b> — it then behaves like an installed app. Share the link below with staff. · 在手机上打开后点按<b>“添加到主屏幕”</b>,即可像已安装的应用一样使用。把下面的链接发给员工即可。</div>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
+              <button class="btn btn-primary" onclick="window.open('/stock','_blank')">Open Quick Stock · 打开手机库存</button>
+              <button class="btn" id="qs-copy-link" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
+              <code id="qs-link" style="font-size:12px;color:var(--text-3);"></code>
+            </div>
+          </div>
+        </div>
+
         <!-- ────── shared save bar ────── -->
         <div class="save-bar">
           <button class="btn btn-primary" onclick="saveConfig()">
@@ -6441,29 +6463,6 @@
        (/product-editor) loaded in-page as iframe tab sections. Lazy-loaded on
        first open (no src until then) so the two big editor apps don't download
        until used. They self-auth exactly as the standalone pages did. -->
-  <!-- ── Quick Stock (mobile add-on) ── -->
-  <!-- The on/off switch (.feat-bar) and the "off" card are injected at the top
-       of this section by mountFeatureControls() (05-marketing.js), driven by
-       FEATURE_CATALOG/FEATURE_HOMES. Everything below is the "on" content. -->
-  <section id="tab-quickstock" data-feat="quickStock">
-    <h2>Quick Stock · 手机库存</h2>
-    <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-      A lightweight, phone-first stock app for your shop staff — they open it on a phone, search a product, and tap to adjust the count. No PC, no access to the rest of this back office. Each staffer only edits the store they're assigned to (Settings → Team → assign a store). · 面向门店员工的轻量级手机库存应用:在手机上打开、搜索商品、点按即可调整库存。无需电脑,也无法进入后台其他功能。每位员工只能编辑其所分配的门店(设置 → 团队 → 分配门店)。
-    </div>
-
-    <div class="group-card">
-      <div class="group-card-head">
-        <h3>Open on a phone · 在手机上打开</h3>
-        <div class="muted">Open the app on a phone and tap <b>Add to Home Screen</b> — it then behaves like an installed app. Share the link below with staff. · 在手机上打开后点按<b>“添加到主屏幕”</b>,即可像已安装的应用一样使用。把下面的链接发给员工即可。</div>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
-        <button class="btn btn-primary" onclick="window.open('/stock','_blank')">Open Quick Stock · 打开手机库存</button>
-        <button class="btn" id="qs-copy-link" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
-        <code id="qs-link" style="font-size:12px;color:var(--text-3);"></code>
-      </div>
-    </div>
-  </section>
-
   <!-- ── Meituan Sync ── -->
   <section id="tab-meituan">
     <h2>美团同步 · Meituan Sync</h2>

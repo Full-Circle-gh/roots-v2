@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+  :root{--warn:#d97706;--line:#e5e7eb;--bg-elev-1:#f8f8f6;}
+  body{font-family:system-ui,Aleo,sans-serif;background:#fff;color:#1c1c1c;padding:24px;max-width:900px;margin:auto}
+  .muted{color:#6b7280}
+  .btn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px}
+  .btn-sm{font-size:12px;padding:5px 9px}
+</style></head><body>
+  <h2>美团同步 · Meituan Sync (banner preview)</h2>
+  <div id="mt-unmapped-warn" style="display:none"></div>
+  <div id="mt-products-wrap"></div>
+  <script>
+    // Replicated render fn (kept in sync with 11-meituan.js mtRenderUnmappedWarn).
+    function mtRenderUnmappedWarn(unmapped, total) {
+      const box = document.getElementById('mt-unmapped-warn');
+      if (!box) return;
+      if (!unmapped || unmapped <= 0) { box.style.display='none'; box.innerHTML=''; return; }
+      box.style.display = 'block';
+      box.style.cssText = 'display:block;margin:0 0 14px;border:1px solid var(--warn,#d97706);'
+        + 'border-radius:8px;background:color-mix(in srgb, var(--warn,#d97706) 10%, transparent);'
+        + 'padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap';
+      box.innerHTML = `
+        <div style="flex:1;min-width:240px">
+          <div style="font-weight:700;font-size:13px;color:var(--warn,#d97706)">
+            ⚠ ${unmapped} of ${total} active product(s) are NOT synced to Meituan · ${unmapped} 个商品未映射到美团</div>
+          <div class="muted" style="font-size:12px;margin-top:3px">
+            Stock changes never reach Meituan for these, so its listing can show the wrong number and oversell.
+            Map the ones that are listed on Meituan. · 这些商品的库存不会推送到美团,可能超卖——请映射在美团上架的商品。</div>
+        </div>
+        <button class="btn btn-sm" onclick="alert('jump to unmapped filter')">Review unmapped · 查看未映射</button>`;
+    }
+    mtRenderUnmappedWarn(37, 263);   // mock: 37 unmapped of 263
+  </script>
+</body></html>

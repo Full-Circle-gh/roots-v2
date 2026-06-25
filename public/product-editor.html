@@ -1184,6 +1184,11 @@
   .pa-prev-pullquote { padding: 24px 22px 26px; background: #E8D9CB; }
   .pa-prev-pullquote-p { font-family: 'Aleo', serif; font-style: italic; font-size: 15px; line-height: 1.5; color: var(--pa-fg, #1a1a17); }
   .pa-prev-pullquote-who { margin-top: 10px; font-family: 'Toni Grotesk', sans-serif; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; color: rgba(26, 26, 23, 0.6); }
+  /* +3b · CALLOUT BANNER */
+  .pa-prev-cbanner { padding: 24px 22px 26px; background: #365329; color: #F2E7DF; text-align: center; }
+  .pa-prev-cbanner-ic { font-size: 22px; line-height: 1; margin-bottom: 6px; }
+  .pa-prev-cbanner-text { font-family: 'Bear Serif', serif; font-weight: 400; font-size: 26px; line-height: 1.08; letter-spacing: -0.01em; color: #F2E7DF; }
+  .pa-prev-cbanner-sub { font-family: 'Toni Grotesk', sans-serif; font-size: 11px; letter-spacing: 0.06em; margin-top: 8px; color: #F2E7DF; opacity: 0.82; }
   /* +3 · IMAGE / LIFESTYLE BAND */
   .pa-prev-image { padding: 0; }
   .pa-prev-image-img { display: block; width: 100%; }
@@ -1737,6 +1742,13 @@ const PA_BLOCK_TYPES = [
     label_cn: '✨ 大数字 — 醒目数字 + 短宣言',
     name_en: 'Big Stat', name_cn: '大数字',
     make: () => ({ stat: '', what_en: '', what_cn: '', claim_en: '', claim_cn: '', bg: 'lime' }),
+  },
+  {
+    type: 'callout_banner', glyph: '📣',
+    label_en: '📣 Callout Banner — bold full-width statement',
+    label_cn: '📣 醒目横幅 — 通栏大字声明',
+    name_en: 'Callout Banner', name_cn: '醒目横幅',
+    make: () => ({ icon: '📦', text_en: 'Shipped nationwide', text_cn: '全国配送', sub_en: 'Foam box + ice packs · arrives next day', sub_cn: '泡沫箱 + 冰袋保温 · 次日送达' }),
   },
   {
     type: 'pull_quote', glyph: '❝',
@@ -3317,6 +3329,7 @@ function paBlocksCollect() {
       return hasCard(b.left) || hasCard(b.right) || b.note_en || b.note_cn;
     }
     if (b.type === 'notes_callout')  return !!(b.text_en || b.text_cn);
+    if (b.type === 'callout_banner') return !!(b.text_en || b.text_cn || b.sub_en || b.sub_cn || b.icon);
     if (b.type === 'pull_quote')     return !!(b.text_en || b.text_cn || b.who_en || b.who_cn);
     if (b.type === 'image_band')     return !!(b.url || '').trim();
     if (b.type === 'recipe_steps')   return (b.steps || []).some(s => s.text_en || s.text_cn);
@@ -3363,6 +3376,7 @@ const PE_ICONS = {
   storage_box:       _SVG('<path d="M14 14.76V5a2 2 0 0 0-4 0v9.76a4 4 0 1 0 4 0z"/>'),
   notes_callout:     _SVG('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
   big_stat:          _SVG('<path d="M12 3l1.9 4.8L18.5 9l-4.6 1.2L12 15l-1.9-4.8L5.5 9l4.6-1.2z"/><path d="M19 14l.7 1.9L21.5 17l-1.8.7L19 19.5l-.7-1.8L16.5 17l1.8-.6z"/>'),
+  callout_banner:    _SVG('<path d="M3 11v2a1 1 0 0 0 1 1h3l9 4V6L7 10H4a1 1 0 0 0-1 1z"/><path d="M19 9a3 3 0 0 1 0 6"/>'),
   pull_quote:        _SVG('<path d="M9 7H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v1a2 2 0 0 1-2 2H4v2h1a4 4 0 0 0 4-4V7zm10 0h-4a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h2v1a2 2 0 0 1-2 2h-1v2h1a4 4 0 0 0 4-4V7z"/>', { fill: 'currentColor' }),
   nutrition_facts:   _SVG('<rect x="5" y="3" width="14" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="13" y2="16"/>'),
   image_band:        _SVG('<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>'),
@@ -3391,6 +3405,7 @@ function _paBlockSubLabel(b) {
   if (b.type === 'how_to_use') { const tiles = b.tiles || []; return tiles.map(t => trim(t.label_en || t.label_cn)).filter(Boolean).slice(0, 4).join(' · ').slice(0, 40); }
   if (b.type === 'storage_box') return [b.left?.head_en || b.left?.head_cn, b.right?.head_en || b.right?.head_cn].filter(Boolean).join(' · ');
   if (b.type === 'notes_callout') return head(b.text_en || b.text_cn);
+  if (b.type === 'callout_banner') return head(b.text_en || b.text_cn || b.sub_en || b.sub_cn);
   if (b.type === 'pull_quote') return head(b.text_en || b.text_cn);
   if (b.type === 'image_band') return head(b.caption_en || b.caption_cn) || ((b.url || '').trim() ? (cuLang && cuLang() === 'cn' ? '已设置图片' : 'Image set') : '');
   if (b.type === 'recipe_steps') { const s = (b.steps || []).map(x => trim(x.text_en || x.text_cn)).filter(Boolean); return [trim(b.title_en || b.title_cn), s.length ? (s.length + (cuLang && cuLang() === 'cn' ? ' 步' : ' steps')) : ''].filter(Boolean).join(' · ').slice(0, 40); }
@@ -3589,6 +3604,17 @@ function _paBlockEditorBody(b) {
       <div class="helper" style="margin:-4px 0 14px">Fine-print band — "shake before use", warnings, sourcing notes. Max ~3 lines. · 小字注释。</div>
       <div class="pa-edit-grid-2">
         ${paPair({ label: paBiTitle('Text', '文字'), keyEn: 'text_en', keyCn: 'text_cn', valEn: b.text_en, valCn: b.text_cn, multiline: true, rows: 3, span2: true })}
+      </div>`;
+  }
+  if (b.type === 'callout_banner') {
+    return `
+      <div class="helper" style="margin:-4px 0 14px">Bold full-width band — one confident statement like "Shipped nationwide". Forest-green slab, cream type. Pin it to the top of the page. · 通栏醒目横幅 — 一句有力声明,如「全国配送」。森绿底、米色字,放在页面顶部。</div>
+      <div class="field" style="margin-bottom:12px"><label class="stacked">Icon (emoji, optional) · 图标(可选)</label>
+        <input data-bkey="icon" type="text" value="${v('icon')}" placeholder="📦" style="width:90px;text-align:center;font-size:20px">
+      </div>
+      <div class="pa-edit-grid-2">
+        ${paPair({ label: paBiTitle('Headline', '标题'), keyEn: 'text_en', keyCn: 'text_cn', valEn: b.text_en, valCn: b.text_cn, phEn: 'Shipped nationwide', phCn: '全国配送', span2: true, helper: 'The big bold line. · 醒目大字。' })}
+        ${paPair({ label: paBiTitle('Sub-line (optional)', '副标题(可选)'), keyEn: 'sub_en', keyCn: 'sub_cn', valEn: b.sub_en, valCn: b.sub_cn, phEn: 'Foam box + ice packs · arrives next day', phCn: '泡沫箱 + 冰袋保温 · 次日送达', span2: true })}
       </div>`;
   }
   if (b.type === 'big_stat' || b.type === 'stat_callout') {
@@ -3971,6 +3997,11 @@ function _paPreviewBlockHtml(b) {
     const text = pickT(b.text_en, b.text_cn);
     if (!text) return '';
     return `<div class="pa-prev-block pa-prev-notes"><div class="pa-prev-notes-p">${esc(text)}</div></div>`;
+  }
+  if (b.type === 'callout_banner') {
+    const text = pickT(b.text_en, b.text_cn), sub = pickT(b.sub_en, b.sub_cn), icon = (b.icon || '').trim();
+    if (!text && !sub && !icon) return '';
+    return `<div class="pa-prev-block pa-prev-cbanner">${icon ? `<div class="pa-prev-cbanner-ic">${esc(icon)}</div>` : ''}${text ? `<div class="pa-prev-cbanner-text">${esc(text)}</div>` : ''}${sub ? `<div class="pa-prev-cbanner-sub">${esc(sub)}</div>` : ''}</div>`;
   }
   if (b.type === 'big_stat' || b.type === 'stat_callout') {
     const stat = (b.stat || '').toString().trim();

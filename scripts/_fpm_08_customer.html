@@ -1,0 +1,73 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont/dist/tabler-icons.min.css">
+<style>
+body{margin:0;background:#fff;}
+.pw{display:inline-block;padding:16px;--ink:#1d1d1a;--brass:#b08d4a;--tea:#6B8E6F;--oat:#faf7f0;--oat2:#f2efe6;--line:#e3ded2;--mut:#6b6b63;--red:#b2564b;font-family:'IBM Plex Sans',sans-serif;}
+.pw *{box-sizing:border-box;}
+.fcp{width:236px;background:var(--ink);border-radius:30px;padding:8px;}
+.fcs{background:var(--oat);border-radius:23px;overflow:hidden;min-height:452px;display:flex;flex-direction:column;color:var(--ink);}
+.fcst{display:flex;justify-content:space-between;align-items:center;padding:8px 15px 0;font-size:11px;color:var(--mut);}
+.fch{padding:8px 15px;border-bottom:.5px solid var(--line);}
+.fck{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);font-weight:500;}
+.fctt{font-size:16px;font-weight:500;margin-top:1px;}
+.fcb{flex:1;padding:13px 15px;display:flex;flex-direction:column;gap:10px;}
+.fcf{padding:11px 15px;border-top:.5px solid var(--line);display:flex;flex-direction:column;gap:8px;}
+.fcbtn{background:var(--tea);color:#fff;text-align:center;padding:10px;border-radius:10px;font-size:13.5px;font-weight:500;}
+.fcbtno{background:#fff;border:.5px solid var(--brass);color:var(--brass);text-align:center;padding:9px;border-radius:10px;font-size:13px;font-weight:500;}
+.fclab{font-size:11px;color:var(--mut);margin-bottom:3px;}
+.fcin{background:#fff;border:.5px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12.5px;display:flex;justify-content:space-between;align-items:center;}
+.fcopt{display:flex;align-items:center;gap:11px;background:#fff;border:.5px solid var(--line);border-radius:10px;padding:12px;font-size:13.5px;font-weight:500;}
+.fcopt i{color:var(--brass);font-size:20px;}
+.fcchip{display:inline-flex;align-items:center;gap:4px;background:var(--oat2);border-radius:20px;padding:5px 10px;font-size:11px;color:#5b5b53;}
+.fcchip.ok{color:var(--tea);}.fcchip.on{background:var(--tea);color:#fff;}
+.fctag{font-size:9.5px;color:var(--tea);border:.5px solid var(--tea);border-radius:10px;padding:1px 6px;font-weight:500;white-space:nowrap;}
+.fctag.b{color:var(--brass);border-color:var(--brass);}.fctag.r{color:var(--red);border-color:var(--red);}
+.fcdots{display:flex;gap:5px;justify-content:center;}
+.fcdot{width:6px;height:6px;border-radius:50%;background:var(--line);}.fcdot.on{background:var(--brass);}
+.fctog{display:flex;gap:7px;}
+.fctp{flex:1;text-align:center;padding:8px;border-radius:8px;border:.5px solid var(--line);font-size:12px;background:#fff;}
+.fctp.on{background:var(--tea);color:#fff;border-color:var(--tea);}
+.daibox{background:#fff;border:.5px dashed var(--brass);border-radius:10px;padding:10px;}
+.daifill{display:inline-flex;align-items:center;gap:5px;background:var(--brass);color:#fff;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:500;}
+.fctype{flex:1;text-align:center;border:.5px solid var(--line);border-radius:9px;padding:9px 4px;background:#fff;}
+.fctype.on{border-color:var(--tea);background:var(--oat);box-shadow:inset 0 0 0 1px var(--tea);}
+.fctype i{font-size:18px;color:var(--brass);}.fctype.on i{color:var(--tea);}
+.fctype .tt{font-size:10.5px;font-weight:500;margin-top:3px;}
+.fcnote{display:flex;gap:7px;align-items:flex-start;background:#fff;border:.5px solid var(--line);border-left:3px solid var(--tea);border-radius:8px;padding:8px 10px;font-size:10.5px;line-height:1.4;}
+.fcnote i{font-size:14px;margin-top:1px;flex:0 0 auto;}
+.fcnote.tea{border-left-color:var(--tea);}.fcnote.tea i{color:var(--tea);}
+.fcnote.brass{border-left-color:var(--brass);}.fcnote.brass i{color:var(--brass);}
+.fcnote.red{border-left-color:var(--red);}.fcnote.red i{color:var(--red);}
+.fcnote b{font-weight:600;}
+.fcidea{border:.5px solid var(--line);border-radius:10px;padding:11px;background:#fff;}
+.fcidea .why{font-size:9.5px;color:var(--brass);font-weight:500;}
+.fcidea .what{font-size:12.5px;font-weight:500;margin:2px 0 8px;}
+/* product pick row */
+.prow{display:flex;align-items:center;gap:9px;border:.5px solid var(--line);border-radius:8px;padding:8px 10px;background:#fff;}
+.prow.on{border-color:var(--tea);background:var(--oat);}
+.pbox{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--line);flex:0 0 auto;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;}
+.prow.on .pbox{background:var(--tea);border-color:var(--tea);}
+.pnm{font-size:11.5px;font-weight:500;}.ppr{margin-left:auto;font-size:11px;color:var(--mut);}
+/* discount mini-table */
+.mtbl{width:100%;border-collapse:collapse;font-size:10.5px;}
+.mtbl td{padding:5px 4px;border-bottom:.5px solid var(--line);}
+.mtbl .was{color:var(--mut);text-decoration:line-through;}
+.mtbl .now{font-weight:600;}.mtbl .sv{color:var(--tea);}
+/* customer flash card */
+.fcard{background:#fff;border:.5px solid var(--line);border-radius:10px;overflow:hidden;}
+.fcard .ph{height:74px;background:linear-gradient(135deg,#f2efe6,#e7e1d2);position:relative;}
+.fbadge{position:absolute;top:7px;left:7px;background:#E96174;color:#fff;font-size:9px;font-weight:600;border-radius:5px;padding:2px 7px;}
+.fcard .bd{padding:9px 11px;}
+.fcard .nm{font-size:11.5px;font-weight:500;}
+.fprice{display:flex;align-items:baseline;gap:6px;margin-top:4px;}
+.fnow{font-size:17px;font-weight:600;color:#E96174;line-height:1;}
+.fwas{font-size:11px;color:var(--mut);text-decoration:line-through;}
+.foff{font-size:9.5px;color:var(--tea);font-weight:500;margin-top:2px;}
+.fcd{display:flex;align-items:center;gap:4px;margin-top:7px;}
+.fcd .lb{font-size:8px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);}
+.fcdcell{background:var(--ink);color:#fff;border-radius:4px;padding:2px 4px;font-size:10px;font-weight:600;min-width:18px;text-align:center;}
+.fbar{height:5px;border-radius:3px;background:var(--oat2);margin-top:7px;overflow:hidden;}
+.fbar > i{display:block;height:100%;width:62%;background:#E96174;}
+.fbarlb{font-size:8.5px;color:var(--mut);margin-top:2px;}
+</style></head><body><div class="pw"><div class="fcp"><div class="fcs"><div class="fcst"><span>9:41</span><span><i class="ti ti-wifi"></i></span></div><div class="fch"><div class="fck">What the shopper sees</div><div class="fctt">In the mini app</div></div><div class="fcb"><div class="fcard"><div class="ph"><span class="fbadge">FLASH &middot; 秒杀</span></div><div class="bd"><div class="nm">Medjool Dates</div><div class="fprice"><span class="fnow">&yen;73</span><span class="fwas">&yen;92</span></div><div class="foff">Save &yen;19 &middot; 20% off</div><div class="fcd"><span class="lb">Ends in</span><span class="fcdcell">47</span>:<span class="fcdcell">12</span>:<span class="fcdcell">08</span></div><div class="fbar"><i></i></div><div class="fbarlb">37 of 50 left</div></div></div><div class="fcnote tea"><i class="ti ti-flame"></i><div><b>FLASH</b> badge + old price struck through.</div></div><div class="fcnote brass"><i class="ti ti-clock"></i><div>Live <b>countdown</b>; a <b>&ldquo;starts soon&rdquo;</b> teaser before it begins.</div></div><div class="fcnote tea"><i class="ti ti-urgent"></i><div>A stock bar fills as it sells &mdash; ends on clock or sell-out.</div></div></div><div class="fcf"><div class="fcbtn">Nothing new to build</div></div></div></div></div></body></html>

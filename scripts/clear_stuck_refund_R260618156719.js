@@ -46,13 +46,14 @@ if (!WRITE) {
   process.exit(0);
 }
 
+// Clear the queue ONLY: flip refund_status and stamp the paid time for the
+// audit trail. Deliberately do NOT touch refund_amount_* / payout_method — the
+// money was returned off-app and the exact figure isn't asserted here.
 const res = db.prepare(
   `UPDATE retail_orders
-      SET refund_status        = 'paid',
-          refund_amount_paid   = COALESCE(refund_amount_paid, refund_amount_approved, total),
-          refund_paid_at       = COALESCE(refund_paid_at, CURRENT_TIMESTAMP),
-          refund_payout_method = COALESCE(refund_payout_method, 'other'),
-          updated_at           = CURRENT_TIMESTAMP
+      SET refund_status  = 'paid',
+          refund_paid_at = COALESCE(refund_paid_at, CURRENT_TIMESTAMP),
+          updated_at     = CURRENT_TIMESTAMP
     WHERE id = ? AND refund_status IN ('pending', 'reviewing', 'approved')`
 ).run(o.id);
 

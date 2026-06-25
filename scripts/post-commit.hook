@@ -2,10 +2,15 @@
 # Auto-deploy git hook. Install with:
 #   cp scripts/post-commit.hook .git/hooks/post-commit && chmod +x .git/hooks/post-commit
 #
-# After install, every `git commit` ships the files changed in that commit to
-# the live site. Logic lives in scripts/deploy-changed.sh. This runs AFTER the
-# commit is saved, so a deploy failure never blocks or undoes the commit.
+# After install, every `git commit` (1) mirrors the branch to GitHub and (2)
+# ships the files changed in that commit to the live site. Logic lives in
+# scripts/auto-push.sh and scripts/deploy-changed.sh. This runs AFTER the commit
+# is saved, so a push or deploy failure never blocks or undoes the commit.
 root=$(git rev-parse --show-toplevel)
+
+# Mirror the commit to GitHub first (all branches), before the deploy lock so a
+# slow deploy never delays the backup. Never fails the commit.
+bash "$root/scripts/auto-push.sh"
 
 # Serialize deploys with an atomic mkdir mutex. Every worktree on this machine
 # shares one lock, so two commits landing at once can't fire overlapping PM2

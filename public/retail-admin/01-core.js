@@ -719,7 +719,7 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   // The shared "Save settings" bar drives saveConfig() (Shop/Push/CS only). The
   // Operations panel has its own per-card saves, so hide the shared bar there.
   const _saveBar = document.querySelector('.settings-body > .save-bar');
-  if (_saveBar) _saveBar.style.display = (sub === 'ops') ? 'none' : '';
+  if (_saveBar) _saveBar.style.display = (sub === 'ops' || sub === 'quickstock') ? 'none' : '';
   // Lazy-load the Operations panel's live data each time it is opened.
   if (sub === 'ops') loadOpsPanel();
   // Scroll the settings body to top within the page

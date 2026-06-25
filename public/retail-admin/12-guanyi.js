@@ -33,7 +33,7 @@
     _pollTimer = setInterval(async () => {
       if (_pollBusy || !gyTabVisible()) return;
       _pollBusy = true;
-      try { await Promise.all([gyLoadStatus(), gyLoadListings(true), gyLoadPickups(true)]); } catch (_) {}
+      try { await Promise.all([gyLoadStatus(), gyLoadListings(true), gyLoadPickups(true), gyLoadProducts(true)]); } catch (_) {}
       finally { _pollBusy = false; }
     }, 12000);
   }
@@ -50,7 +50,7 @@
       const log = document.getElementById('gy-log');
       if (log) {
         log.textContent = (r.recentLogs || []).map(l =>
-          `${(l.created_at || '').replace('T', ' ').slice(0, 19)}  [${l.store_code}] ${l.event_type} ${l.status}` +
+          `${gyLocalTime(l.created_at)}  [${l.store_code}] ${l.event_type} ${l.status}` +
           (l.detail ? '  ' + l.detail : '') + (l.error_msg ? '  ⚠ ' + l.error_msg : '')
         ).join('\n') || 'No activity yet · 暂无记录';
       }
@@ -65,7 +65,7 @@
       setText('gy-kpi-listings', n);
       const job = r.job;
       const sub = job
-        ? (r.running ? 'refreshing… · 刷新中' : `${n} cached · ${job.completed_at ? (job.completed_at.replace('T', ' ').slice(0, 16)) : ''}`)
+        ? (r.running ? 'refreshing… · 刷新中' : `${n} cached · ${job.completed_at ? gyLocalTime(job.completed_at, true) : ''}`)
         : 'never refreshed · 未刷新';
       setText('gy-kpi-listings-sub', sub);
       const btn = document.getElementById('gy-refresh-btn');
@@ -109,7 +109,7 @@
   };
 
   // ── Products + mapping table ──────────────────────────────────────────────────
-  window.gyLoadProducts = async function () {
+  window.gyLoadProducts = async function (silent) {
     const body = document.getElementById('gy-products-body');
     if (body && !_products.length) body.innerHTML = '<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
     try {
@@ -118,6 +118,8 @@
       _storeCode = r.storeCode || '';
       gyRenderProducts();
     } catch (e) {
+      // On a silent poll, keep the existing table rather than wiping it on a blip.
+      if (silent && _products.length) return;
       if (body) body.innerHTML = `<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Error: ${esc(e.message)}</td></tr>`;
     }
   };
@@ -230,7 +232,7 @@
     const recent = r.recent || [];
     const sm = r.summary || {};
     const pname = (x) => esc([x.name_cn, x.name_en].filter(Boolean).join(' ') || x.guanyi_name || ('#' + x.product_id));
-    const when = (t) => (t || '').replace('T', ' ').slice(0, 16);
+    const when = (t) => gyLocalTime(t, true);
 
     const modeBadge = mode === 'live'
       ? '<span style="background:#e6f5ec;color:#1a7a44;border:1px solid #b6e0c6;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600">● LIVE</span>'
@@ -413,4 +415,18 @@
 
   // ── tiny helpers ──────────────────────────────────────────────────────────────
   function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = (v == null ? '—' : v); }
+
+  // SQLite stores timestamps in UTC with no zone marker ("2026-06-24 08:58:32").
+  // Parse them AS UTC and render in the operator's local time, else the log reads
+  // 8h behind in China. Returns 'YYYY-MM-DD HH:MM:SS' (or HH:MM if short=true).
+  function gyLocalTime(raw, short) {
+    if (!raw) return '';
+    const iso = String(raw).replace(' ', 'T');
+    const d = new Date(/[zZ]|[+\-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+    if (isNaN(d)) return String(raw).replace('T', ' ').slice(0, short ? 16 : 19);
+    const p = n => String(n).padStart(2, '0');
+    const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    const time = `${p(d.getHours())}:${p(d.getMinutes())}` + (short ? '' : `:${p(d.getSeconds())}`);
+    return `${date} ${time}`;
+  }
 })();

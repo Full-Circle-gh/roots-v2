@@ -9,6 +9,13 @@
 # Dependencies
 node_modules/
 
+# Browser login sessions — contain live cookies/tokens, NEVER commit
+data/guanyi-sessions/
+data/meituan-sessions/
+
+# Large local-only screenshot scratch
+/meituan screenshots/
+
 # Local SQLite + backups
 data/*.db
 data/*.db-shm

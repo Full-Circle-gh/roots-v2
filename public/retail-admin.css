@@ -996,6 +996,9 @@
   .db-feed-badge svg { width: 10px; height: 10px; }
   .db-feed-badge.db-fb-first { color: var(--brass); background: color-mix(in srgb, var(--brass) 14%, transparent); }
   .db-feed-badge.db-fb-big   { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+  /* Neutral grey tag — e.g. the "unpaid" marker on an auto-cancelled cart, where
+     a coloured pill would mis-signal on the already-red cancelled row. */
+  .db-feed-badge.db-fb-muted { color: var(--text-3); background: color-mix(in srgb, var(--text-3) 12%, transparent); }
   .db-feed-empty { font-size: 12px; color: var(--text-3); padding: 12px 8px; text-align: center; }
   /* New row eases in from the top with a soft highlight that decays — the
      "something just happened" signal, only on rows the latest poll added.
@@ -2286,14 +2289,14 @@
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    > :not(.feat-bar):not(.feat-off),
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
-  body.ent-quickStock:not(.feat-quickStock)   #tab-quickstock > :not(.feat-bar):not(.feat-off),
+  body.ent-quickStock:not(.feat-quickStock)   #sub-quickstock > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  .feat-off,
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
-  body.ent-quickStock:not(.feat-quickStock)   #tab-quickstock .feat-off,
+  body.ent-quickStock:not(.feat-quickStock)   #sub-quickstock .feat-off,
   body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page) */
   .feat-bar { display: flex; align-items: center; justify-content: space-between;
@@ -3483,6 +3486,17 @@
     background: rgba(176, 141, 74, .12);
     color: var(--brass);
     border: 1px solid rgba(176, 141, 74, .30);
+    white-space: nowrap;
+  }
+  /* Partial refund — visually distinct from a full "refunded" so a part-refund
+     can't be mistaken for a fully-refunded order. Cooler slate tone. */
+  .pill.refund-partial {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 999px;
+    font-size: 10px; font-weight: 700; letter-spacing: .03em;
+    background: rgba(100, 116, 139, .12);
+    color: #475569;
+    border: 1px solid rgba(100, 116, 139, .32);
     white-space: nowrap;
   }
   /* Drawer-prominent refund banner — sits between the order's status pill

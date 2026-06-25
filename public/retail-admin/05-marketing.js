@@ -901,7 +901,7 @@ const FEATURE_HOMES = {
   feedback:    '#tab-feedback',
   socialProof: '#tab-social',
   faq:         '#tab-faq',
-  quickStock:  '#tab-quickstock',
+  quickStock:  '#sub-quickstock',
 };
 let _cfgCache = {};
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home
