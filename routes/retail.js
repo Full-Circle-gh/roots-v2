@@ -9977,6 +9977,49 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 
     // (Out-of-stock is intentionally omitted here too — see the stock NOTE
     // above. It lives as live state in the "Low stock" tile + alerts page.)
+
+    // gzgrocery (Guanyi) pickups — inferred wholesale "orders" that never touch
+    // retail_orders. Surface each applied pickup as a feed row so the dashboard
+    // reflects this channel the same way the Guanyi billing tab does. The filter
+    // and pricing fallback mirror BOTH the billing tab (guanyi/analytics) and the
+    // revenue blend (guanyiPickupSales) EXACTLY, so feed + revenue agree: count
+    // 'decremented' and operator-applied 'capped' as pickups, 'drift_up' as a
+    // return (negative units). No-op for tenants without the pickup ledger.
+    try {
+      if (tdb().prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get()) {
+        const hasPricing = !!tdb().prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_product_pricing'`).get();
+        const priceJoin  = hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id' : '';
+        // Bill what gzgrocery actually pays: gz price → retail → our sell_price.
+        const unitOwed = hasPricing
+          ? 'COALESCE(pp.excel_gz_price, pp.excel_retail, sp.sell_price, 0)'
+          : 'COALESCE(sp.sell_price, 0)';
+        const picks = tdb().prepare(`
+          SELECT pl.id, pl.product_id, pl.action, pl.created_at,
+                 COALESCE(pl.inferred_pickup, 0) AS pickup, COALESCE(pl.drift, 0) AS drift,
+                 sp.name_cn, sp.name_en, sp.sku, ${unitOwed} AS unit_owed
+            FROM guanyi_pickup_log pl
+            LEFT JOIN store_products sp ON sp.id = pl.product_id
+            ${priceJoin}
+           WHERE (pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied'))
+             AND pl.created_at >= ?
+           ORDER BY pl.created_at DESC LIMIT ?
+        `).all(sinceIso, limit);
+        for (const r of picks) {
+          const isReturn = r.action === 'drift_up';
+          const units = isReturn ? -Math.abs(r.drift || 0) : (r.pickup || 0);
+          if (!units) continue;
+          events.push({
+            type: 'gzgrocery_pickup',
+            ts: parseTs(r.created_at),
+            ref_type: 'guanyi', ref_id: r.product_id,
+            payload: {
+              name_cn: r.name_cn || '', name_en: r.name_en || '', sku: r.sku || '',
+              units, owed: +(units * (r.unit_owed || 0)).toFixed(2), is_return: isReturn,
+            },
+          });
+        }
+      }
+    } catch (e) { /* tenant without the guanyi pickup ledger → no rows */ }
   } catch (e) {
     console.error('[dashboard/activity]', e.message);
   }
