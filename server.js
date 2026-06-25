@@ -605,6 +605,20 @@ app.get('/stock', (req, res) => {
 app.get('/stock-manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'stock-manifest.webmanifest'));
 });
+// Host-aware login redirect for Quick Stock. The same /stock page is reachable
+// on the online-store back office host (backend-operator realm) and on the
+// kitchen host (kitchen-user realm), which have different login pages. The
+// page sends a signed-out staffer here and the server picks the right one by
+// host — keeping the realm logic server-side (where the host routing lives)
+// instead of hardcoding a host in the client. `redirect` returns them to /stock.
+app.get('/stock-login', (req, res) => {
+  const host = (req.hostname || '').toLowerCase();
+  const isBackendHost = host === STORE_HOST || host === STORE_ADMIN_HOST;
+  // login.html honours ?redirect=<same-origin path> and returns the staffer to
+  // /stock after sign-in; backend-login.html ignores params (lands on its own
+  // home), so we just send them to the right login there.
+  res.redirect(302, isBackendHost ? '/backend/login' : '/login?redirect=%2Fstock');
+});
 app.get('/stock-icon.svg', (req, res) => {
   res.set('Cache-Control', 'public, max-age=86400');
   res.type('image/svg+xml').sendFile(path.join(__dirname, 'public', 'stock-icon.svg'));

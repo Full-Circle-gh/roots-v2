@@ -259,7 +259,7 @@ main{flex:1;padding:10px 12px calc(var(--sa-bot) + 24px);}
     if (opts.body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opts.body); }
     return fetch(path, o).then(function (r) {
       if (r.status === 401 || r.status === 403) {
-        if (r.status === 401) { location.href = '/login'; throw new Error('auth'); }
+        if (r.status === 401) { location.href = '/stock-login'; throw new Error('auth'); }
         return r.json().then(function (j) { throw new Error(j.error || 'forbidden'); });
       }
       return r.json().then(function (j) { if (!j.success) throw new Error(j.error || 'error'); return j.data; });
