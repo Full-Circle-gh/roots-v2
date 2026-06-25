@@ -16605,6 +16605,46 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   res.json({ success: true, data: { id, shipment_id: shipment.id, waybill, presort: cr.presort, order_status: 'dispatched' } });
 });
 
+// Cloud-print label data for a parcel's JD waybill. Read-only: it neither books
+// nor changes a waybill — it just fetches the ENCRYPTED label payload (via JDL
+// pullData) that the local JD print component (ws://127.0.0.1:9113, on the PC
+// wired to the label printer) needs to render + print. The admin page assembles
+// the component message from { printData, tempUrl } and sends it over the socket.
+// The label-size template is operator-set (storefront_config printer.jd_template_url),
+// defaulting to the 京东快递 76×130 standard template.
+router.get('/api/retail-admin/orders/:id/jd-waybill/print-data', requireRetailAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const jc = integ().jd;
+  if (!jd.jdEnabled(jc)) return res.status(409).json({ success: false, error: 'jd_not_configured' });
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const shipments = ensureShipments(id);
+  const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
+  const s = shipmentIdReq
+    ? shipments.find(x => x.id === shipmentIdReq)
+    : (shipments.find(x => x.tracking_carrier === 'jd' && x.tracking_number) || shipments[0]);
+  if (!s || s.tracking_carrier !== 'jd' || !s.tracking_number) {
+    return res.status(400).json({ success: false, error: 'no_jd_waybill' });
+  }
+
+  let r;
+  try { r = await jd.getPrintData({ waybillCode: s.tracking_number }, jc); }
+  catch (e) { console.error('[jd.printdata] threw', e); return res.status(502).json({ success: false, error: 'jdl_request_failed' }); }
+  if (!r.ok) {
+    console.error('[jd.printdata] order', id, 'waybill', s.tracking_number, 'failed:', r.error);
+    return res.status(502).json({ success: false, error: r.error || 'jdl_pulldata_failed' });
+  }
+
+  // Operator-chosen label template (size); fall back to the 76×130 standard.
+  let tempUrl = jd.JD_PRINT_TEMPLATES['76x130'];
+  try {
+    const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get('printer.jd_template_url');
+    if (row) { const v = JSON.parse(row.value_json); if (typeof v === 'string' && v) tempUrl = v; }
+  } catch (e) { /* default template */ }
+
+  res.json({ success: true, data: { shipment_id: s.id, waybill: s.tracking_number, printData: r.printData, tempUrl } });
+});
+
 router.delete('/api/retail-admin/orders/:id/tracking', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
@@ -20064,6 +20104,20 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   const balanceApplied   = useBalance ? balanceMaxUsable : 0;
   if (balanceApplied > 0) total = Math.max(0, total - balanceApplied);
 
+  // Would turning points ON actually lower what the customer pays? When the
+  // wallet balance is on and already covers the full non-shipping goods bill,
+  // points only DISPLACE balance (same payable) AND get consumed for nothing.
+  // Compute the counterfactual independent of the current toggle so the
+  // client can disable the points switch instead of silently burning points.
+  // Compared at max points vs zero points, holding the balance toggle fixed.
+  const _goodsBase   = walletSpendableBase(priced.subtotal, fees.packingFee, 0, 0); // non-shipping base, no points netted
+  const _pdMax       = pointsCashValue(pointsMaxUsable);
+  const _balNoPts    = useBalance ? Math.min(balanceBalance, _goodsBase) : 0;
+  const _balMaxPts   = useBalance ? Math.min(balanceBalance, Math.max(0, _goodsBase - _pdMax)) : 0;
+  const _payNoPts    = Math.max(0, grossTotal - _balNoPts);
+  const _payMaxPts   = Math.max(0, grossTotal - _pdMax - _balMaxPts);
+  const pointsReducesPayable = pointsMaxUsable > 0 && (_payNoPts - _payMaxPts) > 0.0049;
+
   // Routing preview — runs the rich shortage analysis used by the new
   // 5-option modal (GZ + non-excluded district + right-away slot). For
   // every other case the legacy yes/no fallback is what the mini-app
@@ -20172,6 +20226,10 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       points_to_use_applied: pointsToUseApplied,
       points_discount: pointsDiscount,
       points_cover_shipping: pointsCoverShipping(),
+      // false → enabling points wouldn't lower the payable (balance already
+      // covers the goods); clients disable + force-off the toggle so the
+      // customer doesn't burn points for nothing.
+      points_reduces_payable: pointsReducesPayable,
       // Wallet balance (prepaid store credit). balance_max_usable already
       // excludes shipping and nets out points; balance_applied is what's used
       // when use_balance was sent. balance_cover_shipping is always false (rule).

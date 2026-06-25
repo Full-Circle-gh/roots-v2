@@ -97,6 +97,7 @@ Page({
     pointsValue: '0.00',         // ¥ value of the balance (display only)
     pointsRequired: 0,           // points needed to pay this order entirely
     pointsAffordable: false,     // balance covers requirement — gates the Points radio
+    pointsRedundant: false,      // true → points can't lower the payable (balance covers goods) → toggle disabled
     pointsRedeemRate: 100,       // points per ¥1 (from server config)
     pointsMaxUsable: 0,          // capped at min(balance, pointsRequiredFor(grossTotal))
     pointsToUse: 0,              // points the customer chose to apply (partial stack)
@@ -1392,6 +1393,9 @@ Page({
           pointsEarnedPreview: Number(data.points_earned_preview) || 0,
           pointsRequired:    Number(data.points_required) || 0,
           pointsAffordable:  !!data.points_affordable,
+          // false → points wouldn't lower the payable (balance already covers
+          // the goods). Disables the toggle so a point isn't burned for nothing.
+          pointsRedundant:   data.points_reduces_payable === false,
           pointsRedeemRate:  Number(data.points_redeem_rate) || 100,
           pointsBalance:     Number(data.points_balance) || this.data.pointsBalance || 0,
           pointsMaxUsable,
@@ -1430,6 +1434,16 @@ Page({
           missingItems,
           acceptedFallback: keepAccepted,
         });
+        // Points became redundant (balance now covers the whole goods bill)
+        // while the points toggle was still on — flip it off so the customer
+        // doesn't spend a point for zero reduction, then re-quote to refresh
+        // the totals (balance picks up what points were covering). The flag
+        // is independent of usePoints, so the re-quote can't loop.
+        if (data.points_reduces_payable === false && this.data.usePoints) {
+          this.setData({ usePoints: false });
+          this.refreshQuote();
+          return;
+        }
         // First time a fresh-batch notice appears for this checkout visit,
         // pop the modal once so it can't be missed. The inline banner stays
         // put afterwards as a persistent reminder, and re-quotes (slot

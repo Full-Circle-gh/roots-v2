@@ -416,8 +416,14 @@
           {{lang === 'cn' ? '使用积分' : 'Use my points'}}
         </view>
         <view class="pt-sub muted">
+          <!-- Redundant · balance already covers the goods, so points can't
+               lower the bill. Toggle is disabled + held off so no point is
+               spent for nothing. -->
+          <block wx:if="{{pointsRedundant}}">
+            <text>{{lang === 'cn' ? '余额已覆盖本单 · 积分已保留' : 'Balance already covers it · points saved'}}</text>
+          </block>
           <!-- OFF · meaningful potential -->
-          <block wx:if="{{!usePoints && pointsPotentialDiscount > 0}}">
+          <block wx:elif="{{!usePoints && pointsPotentialDiscount > 0}}">
             <text>{{pointsBalance}} {{lang === 'cn' ? '积分 · 本单可抵 ¥' : 'pts · worth ¥'}}{{pointsPotentialDiscount}}{{lang === 'cn' ? '' : ' on this order'}}</text>
           </block>
           <!-- OFF · too few to matter -->
@@ -435,7 +441,7 @@
           </block>
         </view>
       </view>
-      <switch checked="{{usePoints}}" disabled="{{pointsPotentialDiscount <= 0}}" bindchange="onTogglePoints" color="#1a1a17"/>
+      <switch checked="{{usePoints}}" disabled="{{pointsPotentialDiscount <= 0 || pointsRedundant}}" bindchange="onTogglePoints" color="#1a1a17"/>
     </view>
 
     <!-- "Use my balance" — prepaid wallet store credit. Mirrors the points

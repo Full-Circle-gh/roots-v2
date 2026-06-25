@@ -1748,6 +1748,11 @@ async function coQuote(){
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
+  // Points went redundant (balance now covers the whole goods bill) while the
+  // points toggle was still on — flip it off so no point is burned for nothing,
+  // then re-quote so the totals refresh. Flag is independent of usePoints, so
+  // the next quote returns the same flag with usePoints already false → no loop.
+  if(d.points_reduces_payable===false && co.usePoints){ co.usePoints=false; return coQuote(); }
   renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
@@ -1887,12 +1892,17 @@ function renderCoPoints(d){
   if(bal<=0||maxUse<=0){ sec.hidden=true; co.usePoints=false; return; }
   sec.hidden=false;
   const disc=Number(d.points_discount)||0;
-  const sub=co.usePoints&&disc>0
-    ? `<span class="cx-pts-emph">${cn?('已抵 −'+money(disc)):('−'+money(disc)+' off')}</span>`
-    : `${bal} ${cn?'积分 · 本单可用':'pts · use on this order'}`;
+  // Redundant: balance already covers the goods, so points can't lower the
+  // bill. Disable the toggle + hold it off so no point is spent for nothing.
+  const redundant=d.points_reduces_payable===false;
+  const sub=redundant
+    ? `${cn?'余额已覆盖本单 · 积分已保留':'Balance already covers it · points saved'}`
+    : (co.usePoints&&disc>0
+        ? `<span class="cx-pts-emph">${cn?('已抵 −'+money(disc)):('−'+money(disc)+' off')}</span>`
+        : `${bal} ${cn?'积分 · 本单可用':'pts · use on this order'}`);
   box.innerHTML=`<div class="cx-pts">
     <div class="cx-pts-body"><div class="cx-pts-label">${cn?'使用积分':'Use my points'}</div><div class="cx-pts-sub">${sub}</div></div>
-    <label class="cx-sw"><input type="checkbox" id="coUsePts" ${co.usePoints?'checked':''}><span class="tr"></span><span class="kn"></span></label></div>`;
+    <label class="cx-sw"><input type="checkbox" id="coUsePts" ${co.usePoints?'checked':''} ${redundant?'disabled':''}><span class="tr"></span><span class="kn"></span></label></div>`;
   $('#coUsePts').addEventListener('change',e=>{co.usePoints=e.target.checked;coQuote();});
 }
 // Wallet balance (prepaid store credit): opt-in toggle, mirrors points. Stacks
