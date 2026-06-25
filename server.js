@@ -592,6 +592,24 @@ app.get('/restock-manifest.webmanifest', (req, res) => {
   });
 });
 
+// Quick Stock — phone-first inventory PWA for shop staff. Per-tenant add-on
+// (toggled in the online-store backend under Settings → Quick Stock). Same
+// public-route PWA pattern as /pos, /kitchen and /restock so the manifest
+// start_url validates on install; the page self-authenticates against
+// /api/auth/me and bounces unauthenticated visitors to /login. Editing is
+// gated server-side per store (users.retail_store_id) by the stock APIs.
+app.get('/stock', (req, res) => {
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'stock.html'));
+});
+app.get('/stock-manifest.webmanifest', (req, res) => {
+  res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'stock-manifest.webmanifest'));
+});
+app.get('/stock-icon.svg', (req, res) => {
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.type('image/svg+xml').sendFile(path.join(__dirname, 'public', 'stock-icon.svg'));
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', version: '2.0.0', time: new Date().toISOString() });

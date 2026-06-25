@@ -846,6 +846,11 @@
     border-radius: var(--r-md); padding: 5px 8px; font-size: 12px; color-scheme: dark;
   }
   :root[data-theme="light"] .db-range input[type=date] { color-scheme: light; }
+  .db-select {
+    background: var(--bg-input); border: 1px solid var(--line); color: var(--text-1);
+    border-radius: var(--r-md); padding: 5px 8px; font-size: 12px; cursor: pointer;
+  }
+  .db-select:hover { border-color: var(--line-strong); }
   .db-btn {
     background: var(--bg-elev-2); border: 1px solid var(--line); color: var(--text-1);
     border-radius: var(--r-md); padding: 6px 12px; font-size: 12px; cursor: pointer;
@@ -2183,6 +2188,7 @@
   body:not(.ent-reviews)     [data-feat="reviews"],
   body:not(.ent-feedback)    [data-feat="feedback"],
   body:not(.ent-socialProof) [data-feat="socialProof"],
+  body:not(.ent-quickStock)  [data-feat="quickStock"],
   body:not(.ent-faq)         [data-feat="faq"] { display: none !important; }
   /* Inbox group holds ONLY Reviews + Feedback — hide it only when NEITHER is
      entitled (off items just dim inside it, so the group still has something). */
@@ -2193,12 +2199,14 @@
   body.ent-reviews:not(.feat-reviews)         .tabs [data-feat="reviews"],
   body.ent-feedback:not(.feat-feedback)       .tabs [data-feat="feedback"],
   body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"],
+  body.ent-quickStock:not(.feat-quickStock)   .tabs [data-feat="quickStock"],
   body.ent-faq:not(.feat-faq)                 .tabs [data-feat="faq"] { opacity: .5; }
   body.ent-membership:not(.feat-membership) .tabs [data-feat="membership"]::after,
   body.ent-affiliate:not(.feat-affiliate)   .tabs [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs [data-feat="reviews"]::after,
   body.ent-feedback:not(.feat-feedback)     .tabs [data-feat="feedback"]::after,
   body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"]::after,
+  body.ent-quickStock:not(.feat-quickStock)   .tabs [data-feat="quickStock"]::after,
   body.ent-faq:not(.feat-faq)                 .tabs [data-feat="faq"]::after {
     content: "OFF"; margin-left: 6px; font: 700 9px/1 var(--f-mono, monospace);
     letter-spacing: .06em; padding: 3px 5px; border-radius: 6px;
@@ -2278,12 +2286,14 @@
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    > :not(.feat-bar):not(.feat-off),
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
+  body.ent-quickStock:not(.feat-quickStock)   #tab-quickstock > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  .feat-off,
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
+  body.ent-quickStock:not(.feat-quickStock)   #tab-quickstock .feat-off,
   body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page) */
   .feat-bar { display: flex; align-items: center; justify-content: space-between;

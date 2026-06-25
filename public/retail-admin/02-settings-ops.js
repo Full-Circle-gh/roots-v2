@@ -1244,6 +1244,8 @@ const FEATURE_CATALOG = [
     desc: 'Bought-counts, recent-buyers ticker and the SOLD badge. · 购买人数、最近购买动态与“已售”标签。' },
   { key: 'faq',         en: 'Help / FAQ',           cn: '帮助 / 常见问题', def: true,
     desc: 'The Me → Help & FAQ screen — categories, search and the contact bar. When off, the FAQ row is hidden in the mini app. · “我的”→帮助与常见问题页面:分类、搜索与联系入口。关闭后小程序内不显示该入口。' },
+  { key: 'quickStock',  en: 'Quick Stock (mobile)', cn: '手机库存',   def: true,
+    desc: 'A phone-first stock app for shop staff — open /stock on a phone and adjust counts without a PC. Each staffer only edits their assigned store. When off, the app shows a closed screen. · 面向门店员工的手机库存应用:在手机上打开 /stock 即可调整库存,无需电脑。每位员工只能编辑其所分配的门店。关闭后应用显示停用页面。' },
 ];
 let ENTITLEMENTS = {};
 (async () => {

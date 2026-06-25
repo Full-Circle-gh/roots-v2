@@ -1809,3 +1809,25 @@ window.onLangChange(function () {
     if (document.visibilityState === 'visible') check();   // and whenever the tab is refocused
   });
 })();
+
+// ════════════════════════════════════════════════════════════════
+// QUICK STOCK — the mobile inventory add-on's admin page just hosts the
+// on/off switch (injected) plus a "open / copy link" helper. The app itself
+// lives at /stock (served on the same origin, self-authenticating).
+// ════════════════════════════════════════════════════════════════
+function qsStockLink() { return location.origin + '/stock'; }
+function qsCopyStockLink() {
+  const link = qsStockLink();
+  const done = () => toast(cuT('Link copied · 链接已复制', '链接已复制'));
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(done, () => prompt('Copy this link · 复制此链接', link));
+  } else {
+    prompt('Copy this link · 复制此链接', link);
+  }
+}
+// Populate the shown link once the DOM is ready (the code element is static).
+(function () {
+  function fill() { const el = document.getElementById('qs-link'); if (el) el.textContent = qsStockLink(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fill);
+  else fill();
+})();

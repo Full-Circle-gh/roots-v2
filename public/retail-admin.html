@@ -439,6 +439,11 @@
     Delivery · 配送
   </button>
 
+  <button data-tab="quickstock" data-feat="quickStock">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 7h4M12 12v5M9.5 14.5h5"/></svg>
+    Quick Stock · 手机库存
+  </button>
+
   <button data-tab="meituan" onclick="mtAdminInit()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8M12 8v8"/></svg>
     Meituan · 美团
@@ -608,6 +613,9 @@
         <input type="date" id="db-from" aria-label="From date">
         <span style="color:var(--text-3)">–</span>
         <input type="date" id="db-to" aria-label="To date">
+        <!-- Per-store filter. Hidden until >1 store loads (single-store tenants
+             see no filter). Scopes every order/stock-derived card below. -->
+        <select id="db-store" class="db-select" hidden onchange="dashStoreChange()" aria-label="Store · 门店"></select>
         <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
         <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
       </div>
@@ -6433,6 +6441,29 @@
        (/product-editor) loaded in-page as iframe tab sections. Lazy-loaded on
        first open (no src until then) so the two big editor apps don't download
        until used. They self-auth exactly as the standalone pages did. -->
+  <!-- ── Quick Stock (mobile add-on) ── -->
+  <!-- The on/off switch (.feat-bar) and the "off" card are injected at the top
+       of this section by mountFeatureControls() (05-marketing.js), driven by
+       FEATURE_CATALOG/FEATURE_HOMES. Everything below is the "on" content. -->
+  <section id="tab-quickstock" data-feat="quickStock">
+    <h2>Quick Stock · 手机库存</h2>
+    <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
+      A lightweight, phone-first stock app for your shop staff — they open it on a phone, search a product, and tap to adjust the count. No PC, no access to the rest of this back office. Each staffer only edits the store they're assigned to (Settings → Team → assign a store). · 面向门店员工的轻量级手机库存应用:在手机上打开、搜索商品、点按即可调整库存。无需电脑,也无法进入后台其他功能。每位员工只能编辑其所分配的门店(设置 → 团队 → 分配门店)。
+    </div>
+
+    <div class="group-card">
+      <div class="group-card-head">
+        <h3>Open on a phone · 在手机上打开</h3>
+        <div class="muted">Open the app on a phone and tap <b>Add to Home Screen</b> — it then behaves like an installed app. Share the link below with staff. · 在手机上打开后点按<b>“添加到主屏幕”</b>,即可像已安装的应用一样使用。把下面的链接发给员工即可。</div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
+        <button class="btn btn-primary" onclick="window.open('/stock','_blank')">Open Quick Stock · 打开手机库存</button>
+        <button class="btn" id="qs-copy-link" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
+        <code id="qs-link" style="font-size:12px;color:var(--text-3);"></code>
+      </div>
+    </div>
+  </section>
+
   <!-- ── Meituan Sync ── -->
   <section id="tab-meituan">
     <h2>美团同步 · Meituan Sync</h2>
@@ -6502,9 +6533,11 @@
       <button class="btn btn-sm" onclick="mtLoadStatus()" title="Refresh sync status">↻ Status</button>
       <button id="mt-clear-btn" class="btn btn-sm" onclick="mtClearAll()" title="Delete every saved Meituan name mapping across all stores. Use before re-filling from scratch.">🧹 Clear all names</button>
       <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name.">📋 Paste Meituan names</button>
-      <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles from your Meituan backend (via the sync daemon) and fill empty fields with the matched real names.">⟳ Fetch from Meituan</button>
+      <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles AND each spec's 货号 from your Meituan backend (via the sync daemon), fill empty names, and auto-fill SKUs from the real 货号. Ambiguous ones show clickable 货号 chips under the SKU box.">⟳ Fetch from Meituan</button>
       <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Meituan name with the product's Chinese name (variant size appended where needed), both districts. Existing entries are kept.">✨ Auto-fill names</button>
+      <button id="mt-verify-btn" class="btn btn-sm" onclick="mtVerify()" title="Check that variants sharing one Meituan listing each have a distinct SKU, so stock pushes to the right spec instead of overwriting each other.">✓ Verify mappings</button>
       <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
+      <button id="mt-force-push-btn" class="btn btn-sm btn-danger" onclick="mtPushAll(true)" title="Emergency only: push stock to Meituan even while the store is CLOSED (outside opening hours). Use sparingly — a backend edit while closed slightly raises Meituan risk-control exposure.">⚠ Emergency push (store closed)</button>
     </div>
 
     <!-- Meituan-only bundles (套餐/combos with no single roots product) -->
@@ -6529,14 +6562,15 @@
       <table id="mt-products-table" class="data-table" style="min-width:700px;font-size:13px">
         <thead>
           <tr>
-            <th style="width:30%">Product · 商品</th>
-            <th id="mt-th-store-0" style="width:28%">天河 Meituan name</th>
-            <th id="mt-th-store-1" style="width:28%">越秀 Meituan name</th>
-            <th style="width:14%;text-align:center">Sync</th>
+            <th style="width:26%">Product · 商品</th>
+            <th style="width:13%">SKU · 货号</th>
+            <th id="mt-th-store-0" style="width:25%">天河 Meituan name</th>
+            <th id="mt-th-store-1" style="width:25%">越秀 Meituan name</th>
+            <th style="width:11%;text-align:center">Sync</th>
           </tr>
         </thead>
         <tbody id="mt-products-body">
-          <tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+          <tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
         </tbody>
       </table>
     </div>
@@ -6573,6 +6607,15 @@
         <div class="sub" id="gy-kpi-listings-sub">never refreshed · 未刷新</div>
       </div>
     </div>
+
+    <!-- gzgrocery pickup inference: flagged drops needing a decision + recent auto-applied -->
+    <div id="gy-pickups" style="margin-bottom:14px"></div>
+
+    <!-- gzgrocery order analytics & billing (derived from the pickup ledger) -->
+    <details id="gy-analytics-details" style="margin-bottom:14px;border:1px solid var(--border,#e0ddd5);border-radius:8px;padding:10px 12px">
+      <summary style="cursor:pointer;font-size:14px;font-weight:600">📊 gzgrocery analytics &amp; billing · 订货统计与对账</summary>
+      <div id="gy-analytics" style="margin-top:10px"></div>
+    </details>
 
     <details id="gy-log-details" style="margin-bottom:14px">
       <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted);padding:4px 0">Recent sync log · 最近日志</summary>
