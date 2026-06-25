@@ -57,6 +57,23 @@ function saveState(s) {
 
 function stamp() { return new Date().toISOString(); }
 
+// Optional push alert to a WeChat Work group bot (or any webhook that accepts the
+// same {msgtype:text} body). Configured via PROXY_WATCHDOG_WEBHOOK in .env; no-op
+// when unset, so the banner stays the baseline alert and the push is additive.
+function notifyWebhook(content) {
+  const url = envVal('PROXY_WATCHDOG_WEBHOOK');
+  if (!url) return;
+  try {
+    execFileSync('curl', [
+      '-s', '-o', '/dev/null',
+      '--max-time', '10',
+      '-H', 'Content-Type: application/json',
+      '-d', JSON.stringify({ msgtype: 'text', text: { content } }),
+      url,
+    ], { timeout: 13000 });
+  } catch (e) { console.error('webhook send failed:', e.message); }
+}
+
 // curl the probe URL through the proxy; any HTTP response (even 3xx/4xx) means
 // the proxy itself is alive. Only a transport failure counts as "down".
 function proxyOk(proxyUrl) {
@@ -103,6 +120,7 @@ function main() {
   if (ok) {
     if (state.alerted) {
       try { const db = openDb(); clearAlert(db); db.close(); } catch (e) { console.error('clear failed:', e.message); }
+      notifyWebhook(`✅ Stock-sync proxy RECOVERED — Meituan/Guanyi pushes resuming. (${stamp()})`);
       console.log(`${stamp()} proxy RECOVERED — alert cleared`);
     }
     saveState({ fails: 0, alerted: false });
@@ -115,6 +133,7 @@ function main() {
   if (state.fails >= FAIL_THRESHOLD && !state.alerted) {
     try { const db = openDb(); raiseAlert(db); db.close(); state.alerted = true; console.log(`${stamp()} ALERT raised (banner)`); }
     catch (e) { console.error('raise failed:', e.message); }
+    notifyWebhook(`⚠️ Stock-sync proxy UNREACHABLE for ${state.fails} checks — Meituan/Guanyi stock pushes are paused. Check tinyproxy on the GZ box (8.163.120.72). (${stamp()})`);
   }
   saveState(state);
 }
