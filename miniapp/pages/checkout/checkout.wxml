@@ -435,6 +435,33 @@
       <switch checked="{{usePoints}}" disabled="{{pointsPotentialDiscount <= 0}}" bindchange="onTogglePoints" color="#1a1a17"/>
     </view>
 
+    <!-- "Use my balance" — prepaid wallet store credit. Mirrors the points
+         toggle. Store credit never pays shipping, so the subtitle figures are
+         the non-shipping amount the balance can cover (server-clamped). -->
+    <view wx:if="{{balanceBalance > 0}}" class="points-toggle-row">
+      <view class="pt-body">
+        <view class="pt-label f-bear">
+          {{lang === 'cn' ? '使用余额' : 'Use my balance'}}
+        </view>
+        <view class="pt-sub muted">
+          <!-- OFF · balance can cover something -->
+          <block wx:if="{{!useBalance && balancePotentialDiscount > 0}}">
+            <text>{{lang === 'cn' ? '余额 ¥' : '¥'}}{{balanceBalance}}{{lang === 'cn' ? ' · 本单可抵 ¥' : ' · worth ¥'}}{{balancePotentialDiscount}}{{lang === 'cn' ? '' : ' on this order'}}</text>
+          </block>
+          <!-- OFF · nothing left for balance to cover (points already cover goods) -->
+          <block wx:elif="{{!useBalance}}">
+            <text>{{lang === 'cn' ? '余额 ¥' : '¥'}}{{balanceBalance}}{{lang === 'cn' ? ' 可用' : ' available'}}</text>
+          </block>
+          <!-- ON -->
+          <block wx:else>
+            <text class="pt-emph">{{lang === 'cn' ? '已抵 ¥' : '¥'}}{{balanceDiscount}}{{lang === 'cn' ? '' : ' off'}}</text>
+            <text>{{lang === 'cn' ? ' · 余额不抵运费' : ' · balance never covers shipping'}}</text>
+          </block>
+        </view>
+      </view>
+      <switch checked="{{useBalance}}" disabled="{{balancePotentialDiscount <= 0}}" bindchange="onToggleBalance" color="#1a1a17"/>
+    </view>
+
     <view class="opt-row" data-method="wechat" bindtap="setPayment">
       <view class="dot {{paymentMethod === 'wechat' ? 'on' : ''}}"></view>
       <view class="pay-swatch" style="background: #1AAD19;"></view>

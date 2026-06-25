@@ -103,6 +103,13 @@ Page({
     pointsDiscount: '0.00',      // ¥ off the bill from pointsToUse (only meaningful when usePoints=true)
     pointsPotentialDiscount: '0.00', // ¥ off the bill IF usePoints were on — used in the toggle subtitle BEFORE the customer flips it
     usePoints: false,            // toggle: apply max usable on this order
+    // Wallet balance (prepaid store credit). Stacks AFTER points on the
+    // non-shipping bill — store credit (balance OR points) never pays shipping.
+    balanceBalance: 0,           // customer's available wallet balance ¥ (drives the toggle visibility)
+    balanceMaxUsable: '0.00',    // ¥ this order can spend (min(balance, subtotal+packing−voucher−points))
+    balanceDiscount: '0.00',     // ¥ off the bill from balance (only meaningful when useBalance=true)
+    balancePotentialDiscount: '0.00', // ¥ off IF useBalance were on — toggle subtitle BEFORE the customer flips it
+    useBalance: false,           // toggle: apply available balance on this order
     // Delivery scheduling — populated by the /quote response.
     scheduling: null,            // full scheduling object from server (slots, surcharge, hours)
     batchNotice: null,           // { ship_date, delivery_date, kind, kicker/title/message_en/cn, items[] } when a batch-made item ships rather than instant-delivers
@@ -903,6 +910,8 @@ Page({
       this.setData({
         pointsBalance: bal,
         pointsValue: (bal * ptVal).toFixed(2),
+        // Wallet balance rides along on the same profile fetch.
+        balanceBalance: Math.max(0, Number(data.balance) || 0),
       });
     } catch (e) { /* not signed in / no profile — silently skip Points option */ }
   },
@@ -1047,7 +1056,13 @@ Page({
       pointsDiscount = pointsToUse / rate;
     }
     const pointsAffordable = grossTotal > 0 && pointsDiscount >= grossTotal;
-    const total = Math.max(0, grossTotal - pointsDiscount);
+    // Wallet balance stacks after points on the non-shipping bill (this local
+    // estimate has no shipping line yet, so the base is the whole gross total
+    // minus points). The server re-prices authoritatively in refreshQuote.
+    const balBase = Math.max(0, subtotal + packingFee - voucherDiscount - pointsDiscount);
+    const balMaxUsable = Math.min(Math.max(0, this.data.balanceBalance || 0), balBase);
+    const balanceDiscount = (this.data.useBalance && this.data.balanceBalance > 0) ? balMaxUsable : 0;
+    const total = Math.max(0, grossTotal - pointsDiscount - balanceDiscount);
     const savedTotal = flashSavings + bundleSavings + markdownSavings + voucherDiscount + pointsDiscount;
     this.setData({
       items, itemCount,
@@ -1061,6 +1076,9 @@ Page({
       pointsToUse,
       pointsDiscount: pointsDiscount.toFixed(2),
       pointsAffordable,
+      balanceMaxUsable: balMaxUsable.toFixed(2),
+      balancePotentialDiscount: balMaxUsable.toFixed(2),
+      balanceDiscount: balanceDiscount.toFixed(2),
       savedTotal: savedTotal > 0 ? savedTotal.toFixed(2) : '',
       total: total.toFixed(2),
       quoting: false,
@@ -1212,6 +1230,9 @@ Page({
       delivery_mode: this.data.deliveryMethod,
       payment_method: this.data.paymentMethod,
       points_to_use:  usingPoints ? (this.data.pointsBalance || 0) : 0,
+      // Wallet balance opt-in. Server clamps to the non-shipping remainder
+      // after points and returns balance_applied + balance_discount.
+      use_balance:    !!this.data.useBalance,
       // CRITICAL: include the picked slot so /quote's analyzeShortage uses
       // the same `requiresStockGate` decision /orders POST will use. Without
       // this, /quote sees slot=null → skips stock gate → reports gate=none,
@@ -1278,7 +1299,12 @@ Page({
         const pointsMaxUsable    = Number(data.points_max_usable) || 0;
         const pointsToUseApplied = Number(data.points_to_use_applied) || 0;
         const pointsDiscount     = Number(data.points_discount) || 0;
-        const total = payingWithPoints ? 0 : Math.max(0, grossTotal - pointsDiscount);
+        // Wallet balance applied by the server (already clamped to the
+        // non-shipping remainder after points). 0 when the toggle is off or
+        // points already covered the goods.
+        const balanceDiscount    = payingWithPoints ? 0 : (Number(data.balance_discount) || 0);
+        const balanceMaxUsable   = Number(data.balance_max_usable) || 0;
+        const total = payingWithPoints ? 0 : Math.max(0, grossTotal - pointsDiscount - balanceDiscount);
         // Group slots by date for the UI. Server returns a flat list; we
         // bucket by date_iso so the wxml can render a "day → slots" tree.
         const sch = data.scheduling || null;
@@ -1364,6 +1390,13 @@ Page({
           // in the Use-points toggle subtitle so the customer sees their
           // points have value before flipping the switch.
           pointsPotentialDiscount: (pointsMaxUsable / (Number(data.points_redeem_rate) || 100)).toFixed(2),
+          // Wallet balance — mirror of the points fields above. balanceMaxUsable
+          // already excludes shipping + nets out points, so it doubles as the
+          // "potential" figure for the toggle subtitle before it's flipped.
+          balanceBalance:           Number(data.balance_balance) || this.data.balanceBalance || 0,
+          balanceMaxUsable:         balanceMaxUsable.toFixed(2),
+          balancePotentialDiscount: balanceMaxUsable.toFixed(2),
+          balanceDiscount:          balanceDiscount.toFixed(2),
           scheduling: sch,
           batchNotice: data.batch_notice || null,
           batchNoticeItems: this.buildBatchNoticeItems(data.batch_notice),
@@ -1740,8 +1773,9 @@ Page({
     const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
     const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
+    const balanceDiscount = payingWithPoints ? 0 : (Number(this.data.balanceDiscount) || 0);
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
-    const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount);
+    const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount - balanceDiscount);
     // Re-quote on a change of slot identity OR of slot KIND. The kind matters
     // even when the id is unchanged: when the kitchen is open the server only
     // emits the surcharged "today" chip, so Express defaults onto that very
@@ -1788,8 +1822,9 @@ Page({
     const voucherDiscount = this.effectiveVoucher().discount;  // best of {manual, auto-apply}
     const pointsDiscount  = Number(this.data.pointsDiscount)  || 0;
     const payingWithPoints = !!this.data.usePoints && this.data.pointsAffordable;
+    const balanceDiscount = payingWithPoints ? 0 : (Number(this.data.balanceDiscount) || 0);
     const gross = Math.max(0, subtotal + deliveryFee + packingFee - voucherDiscount + surcharge);
-    const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount);
+    const total = payingWithPoints ? 0 : Math.max(0, gross - pointsDiscount - balanceDiscount);
     const slotChanged = id !== this.data.deliverySlotId;
     // Mutually-exclusive radio state: the Schedule-for-later option keys
     // its filled "on" state off `selectedSlotKind === 'schedule'` (set by
@@ -2050,6 +2085,18 @@ Page({
     const on = !!e.detail.value;
     if (on === this.data.usePoints) return;
     this.setData({ usePoints: on });
+    this.refreshQuote();
+  },
+
+  // Toggle: "Use my balance" (prepaid wallet store credit). Flips useBalance,
+  // the trigger for the server's use_balance path. Balance stacks AFTER points
+  // and never pays shipping, so the residual (≥ shipping) is charged to the
+  // picked WeChat/Alipay radio; if it zeroes out, /payment/create skips the
+  // gateway.
+  onToggleBalance(e) {
+    const on = !!e.detail.value;
+    if (on === this.data.useBalance) return;
+    this.setData({ useBalance: on });
     this.refreshQuote();
   },
 
@@ -2558,6 +2605,9 @@ Page({
         invoice_tax_id: this.data.needsInvoice && this.data.invoiceType === 'company' ? (this.data.invoiceTaxId || '').trim() : null,
         invoice_email:  this.data.needsInvoice ? (this.data.invoiceEmail || '').trim() : null,
         points_to_use:  usingPoints ? (this.data.pointsBalance || 0) : 0,
+        // Wallet balance opt-in — server spends min(balance, non-shipping
+        // remainder after points) and ledgers it.
+        use_balance:    !!this.data.useBalance,
       };
       const orderPayload = isPickup
         ? {
@@ -2769,9 +2819,13 @@ Page({
         this.autoRemoveLocalOnly((e.body && e.body.products) || []);
         return;
       }
+      // Balance changed between quote and submit (e.g. another order spent it).
+      // Re-quote so the toggle subtitle + total reflect the real balance.
+      if (e?.message === 'insufficient_balance') this.refreshQuote();
       const friendly = {
-        insufficient_points: this.data.lang === 'cn' ? '积分不足' : 'Not enough points',
-        no_zone_match:       this.data.lang === 'cn' ? '该地址无法配送' : 'Address not in delivery range',
+        insufficient_points:  this.data.lang === 'cn' ? '积分不足' : 'Not enough points',
+        insufficient_balance: this.data.lang === 'cn' ? '余额不足' : 'Not enough balance',
+        no_zone_match:        this.data.lang === 'cn' ? '该地址无法配送' : 'Address not in delivery range',
       };
       wx.showToast({
         title: friendly[e.message] || ((this.data.lang === 'cn' ? '出错：' : 'Error: ') + e.message),

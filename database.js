@@ -2838,6 +2838,19 @@ addColumn('retail_order_items', 'addon_id', 'INTEGER');
 // settlement paths (direct + approve) from refund_lines_json; mirrors the
 // order-level ledger so prints/drawer read one field instead of parsing JSON.
 addColumn('retail_order_items', 'refunded_qty', 'INTEGER DEFAULT 0');
+// Wallet balance (prepaid store credit) spent on this order, ¥. Mirrors
+// points_amount: deducted from retail_customers.balance inside the order-create
+// tx and reversed to the wallet on cancel/refund. Store credit (balance OR
+// points) never pays the shipping fee — see walletSpendableBase in routes/retail.js.
+addColumn('retail_orders', 'balance_used', 'REAL DEFAULT 0');
+// Cash portion (¥) of the cumulative APPROVED refund value. When an order paid
+// with store credit (points/balance) is refunded, the refund value is split
+// across tenders proportionally — credit goes back to the wallet/points and
+// only this cash slice is settled via the gateway / paid out by hand.
+// refund_amount_approved stays the TOTAL value refunded (cash + credit); this
+// is the gateway/payout ceiling. NULL on legacy/credit-free orders → callers
+// fall back to refund_amount_approved (where cash == value).
+addColumn('retail_orders', 'refund_cash_amount', 'REAL');
 
 // Seed default GZ-express excluded districts (editable from Admin →
 // Integrations later). Customers in these districts get the simple

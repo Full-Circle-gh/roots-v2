@@ -5100,6 +5100,7 @@ function cancelStalePendingOrdersForTenant() {
     ).run(o.id);
     // Same three reversals the manual pending_payment cancel performs.
     try { reverseOrderRedeem(o.id); } catch (e) { console.error('[auto-cancel.reverseRedeem]', o.id, e.message); }
+    try { reverseOrderBalance(o.id); } catch (e) { console.error('[auto-cancel.reverseBalance]', o.id, e.message); }
     try { reverseOrderVoucher(o.id); } catch (e) { console.error('[auto-cancel.reverseVoucher]', o.id, e.message); }
     try { inventory.releaseOrderReservations(o.id, { reason: 'auto_cancelled_unpaid' }); }
     catch (e) { console.error('[auto-cancel.release]', o.id, e.message); }
@@ -7338,7 +7339,22 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       });
     }
   }
-  const total = Math.max(0, grossTotal - pointsAmount);
+  // ── Wallet balance redemption (stacks AFTER points) ─────────────────
+  // Opt-in via body.use_balance. Points apply first (operator choice — they
+  // can expire), then prepaid wallet balance covers the remaining NON-SHIPPING
+  // bill. Store credit never pays shipping (walletSpendForOrder excludes it),
+  // so the residual `total` is always ≥ the shipping fee and is settled in
+  // cash with wechat/alipay. If credit zeroes the bill (e.g. pickup / free
+  // shipping), payment/create takes the `total <= 0` shortcut and marks the
+  // order paid with no gateway charge. Balance is consumed inside the order tx
+  // below (same as points) so concurrent orders can't double-spend it.
+  let balanceUsed = 0;
+  if (body.use_balance && paymentMethod !== 'points') {
+    const cust = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+    const have = Math.max(0, Number(cust?.balance) || 0);
+    balanceUsed = walletSpendForOrder(have, subtotal, packingFee, voucherDiscount, pointsAmount);
+  }
+  const total = Math.max(0, grossTotal - pointsAmount - balanceUsed);
 
   // ── Atomic write: order, items, payment intent, stock reservations ───
   // Reservations replace the old "decrement stock_qty on order create"
@@ -7362,8 +7378,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
          invoice_type, invoice_email,
          store_id, routing_reason, channel,
          fallback_choice, awaiting_restock_pids, idempotency_key,
-         fulfillment_type, fulfillment_short_pids
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         fulfillment_type, fulfillment_short_pids, balance_used
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -7390,7 +7406,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null,
       idempotencyKey,
       isPickup ? 'pickup' : 'delivery',
-      fulfillmentShortPids ? JSON.stringify(fulfillmentShortPids) : null
+      fulfillmentShortPids ? JSON.stringify(fulfillmentShortPids) : null,
+      balanceUsed
     );
     const orderId = info.lastInsertRowid;
 
@@ -7515,6 +7532,28 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       ).run(req.customer.id, -pointsUsed, after, orderId, `Order ${orderId} redeemed ${pointsUsed} pts`);
     }
 
+    // Consume prepaid wallet balance NOW (same tx as the order insert), so
+    // simultaneous orders can't double-spend it. Conditional UPDATE floor-checks
+    // the balance atomically; a stale read that would overdraw rolls back the
+    // whole order. Ledgered to retail_topup_transactions (negative amount,
+    // payment_method='order_redeem') so the wallet history shows the spend and
+    // reverseOrderBalance can find + reverse it on cancel/refund.
+    if (balanceUsed > 0) {
+      const upd = tdb().prepare(
+        'UPDATE retail_customers SET balance = ROUND(COALESCE(balance, 0) - ?, 2) WHERE id = ? AND ROUND(COALESCE(balance, 0) - ?, 2) >= 0'
+      ).run(balanceUsed, req.customer.id, balanceUsed);
+      if (upd.changes !== 1) {
+        const err = new Error('insufficient_balance');
+        err.code = 'insufficient_balance';
+        throw err;
+      }
+      tdb().prepare(
+        `INSERT INTO retail_topup_transactions
+           (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+         VALUES (?, ?, 0, 'order_redeem', 'success', CURRENT_TIMESTAMP, ?, ?)`
+      ).run(req.customer.id, -balanceUsed, `orderspend:${orderId}`, JSON.stringify({ order_id: orderId }));
+    }
+
     return orderId;
   });
 
@@ -7536,6 +7575,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     }
     if (e.code === 'insufficient_points') {
       return res.status(409).json({ success: false, error: 'insufficient_points' });
+    }
+    if (e.code === 'insufficient_balance') {
+      return res.status(409).json({ success: false, error: 'insufficient_balance' });
     }
     if (e.code === 'voucher_exhausted') {
       return res.status(409).json({ success: false, error: 'voucher_exhausted' });
@@ -12139,6 +12181,8 @@ router.post('/api/retail/orders/:id/cancel', requireRetailAuth, express.json(), 
   // on an order that was never paid. reverseOrderRedeem is idempotent.
   try { reverseOrderRedeem(id); }
   catch (e) { console.error('[cancel.reverseRedeem]', e); }
+  try { reverseOrderBalance(id); }
+  catch (e) { console.error('[cancel.reverseBalance]', e); }
   // Vouchers are also consumed at create (global pool + personal grant), so
   // return them too. Safe to call exactly once thanks to the transition guard.
   try { reverseOrderVoucher(id); }
@@ -16891,6 +16935,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       // transition guard above (def.prev) prevents re-cancelling, so these run
       // once. reverseOrderRedeem is idempotent; reverseOrderVoucher is once-only.
       try { reverseOrderRedeem(id); } catch (e) { console.error('[admin-cancel.reverseRedeem]', e); }
+      try { reverseOrderBalance(id); } catch (e) { console.error('[admin-cancel.reverseBalance]', e); }
       try { reverseOrderVoucher(id); } catch (e) { console.error('[admin-cancel.reverseVoucher]', e); }
     } else {
       // Release the committed stock back to available. If a PARTIAL refund already
@@ -16938,6 +16983,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         logRefundEvent({ orderId: id, event: 'paid', amount: fullTotal, note: 'auto-refund on cancel', userId: req.user.id, meta: { method: 'wechat', reference: wechatRefundRef } });
         try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints cancel]', e); }
         try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem cancel]', e); }
+        try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance cancel]', e); }
         try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral cancel]', e); }
         try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission cancel]', e); }
       } catch (e) { console.error('[cancel refund bookkeeping]', e); }
@@ -16964,21 +17010,28 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // Fast-forward all the way through approve + paid in one shot — legacy
     // path. New flows should use POST /refund/approve + /refund/payout for
     // explicit, auditable steps.
-    const fullTotal = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
+    // Headline refund value = full GROSS (points + balance + cash) since the
+    // reversals below return every tender in full; the cash slice is recorded
+    // separately for payout reconciliation.
+    const _row = tdb().prepare('SELECT total, points_amount, balance_used FROM retail_orders WHERE id = ?').get(id) || {};
+    const fullCash  = +(Number(_row.total) || 0).toFixed(2);
+    const fullTotal = +(((Number(_row.points_amount) || 0) + (Number(_row.balance_used) || 0) + (Number(_row.total) || 0))).toFixed(2);
     tdb().prepare(
       `UPDATE retail_orders
           SET refund_amount_approved = COALESCE(refund_amount_approved, ?),
               refund_amount_paid     = COALESCE(refund_amount_paid,     ?),
+              refund_cash_amount     = COALESCE(refund_cash_amount,     ?),
               refund_approved_at     = COALESCE(refund_approved_at, CURRENT_TIMESTAMP),
               refund_paid_at         = COALESCE(refund_paid_at,     CURRENT_TIMESTAMP),
               refund_reviewer_id     = COALESCE(refund_reviewer_id, ?),
               refund_payer_id        = COALESCE(refund_payer_id,    ?)
         WHERE id = ?`
-    ).run(fullTotal, fullTotal, req.user.id, req.user.id, id);
+    ).run(fullTotal, fullTotal, fullCash, req.user.id, req.user.id, id);
     logRefundEvent({ orderId: id, event: 'approved', amount: fullTotal, note: reason || null, userId: req.user.id });
     logRefundEvent({ orderId: id, event: 'paid',     amount: fullTotal, note: 'legacy status-transition shortcut', userId: req.user.id });
     try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem]', e); }
+    try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission]', e); }
     try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
@@ -17215,7 +17268,7 @@ router.post('/api/retail-admin/orders/:id/refund/review', requireRetailAdmin, ex
 router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
-    'SELECT id, status, total, refund_status, refund_amount_requested, refund_lines_json FROM retail_orders WHERE id = ?'
+    'SELECT id, status, total, points_amount, balance_used, refund_status, refund_amount_requested, refund_amount_approved, refund_cash_amount, refund_lines_json FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (!['pending', 'reviewing'].includes(o.refund_status)) {
@@ -17247,35 +17300,41 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   } else {
     amount = +Number(o.total).toFixed(2);
   }
-  // Cap the refund at the order total (= the NET cash actually charged after any
-  // points discount). The line-itemized paths above sum GROSS line_totals, which
-  // exceed o.total whenever points were redeemed — without this clamp a per-line
-  // refund + a non-WeChat payout would pay back more than was charged, and a full
-  // refund would ALSO return the points (double compensation). Clamping to o.total
-  // means a full refund returns net cash here + points via reverseOrderRedeem =
-  // exactly what the customer paid. (The amount-based path was already capped.)
-  if (amount != null) amount = +Math.min(Number(amount) || 0, Number(o.total) || 0).toFixed(2);
+  // Cap the refund at the order's remaining GROSS value (= subtotal + shipping +
+  // packing − voucher = points + balance + cash, minus anything already approved
+  // on this order). Line-itemized paths sum GROSS line_totals, so this is the
+  // right ceiling: the refund VALUE can be up to everything the customer gave,
+  // and splitRefundAcrossTenders sends each ¥ back to its source. (For a
+  // credit-free order gross == net cash, so behaviour is unchanged.)
+  const _t = orderTenders(o);
+  const priorApproved = Math.max(0, Number(o.refund_amount_approved) || 0);
+  const priorCash     = o.refund_cash_amount != null ? Math.max(0, Number(o.refund_cash_amount)) : priorApproved;
+  const remainingGross = Math.max(0, Math.round((_t.G - priorApproved) * 100) / 100);
+  if (amount != null) amount = +Math.min(Number(amount) || 0, remainingGross).toFixed(2);
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
 
-  const isFull = amount + 0.005 >= Number(o.total); // tolerance for ¥0.01 rounding
-  // Points reversal is ALL-OR-NOTHING (reverseOrderRedeem returns the entire
-  // redemption, with no partial notion), so only allow it on a FULL refund.
-  // Previously an operator could pass reverse_points=true on a PARTIAL refund
-  // and the customer got all redeemed points back plus partial cash — a large
-  // over-compensation. Clamp to isFull so a partial can never reverse points.
-  const reversePoints = isFull && (req.body?.reverse_points != null ? !!req.body.reverse_points : true);
+  const isFull = amount + 0.005 >= remainingGross; // tolerance for ¥0.01 rounding
+  // Split this refund across the order's original tenders. Credit (points +
+  // balance) goes straight back to the wallet/points below; only `split.cash`
+  // flows through the payout step. Honour an explicit reverse_points=false to
+  // skip returning store credit (operator override); default returns it.
+  const split = splitRefundAcrossTenders(o, amount);
+  const returnCredit = (req.body?.reverse_points != null ? !!req.body.reverse_points : true);
+  const newApproved = +(priorApproved + amount).toFixed(2);
+  const newCash     = +(priorCash + split.cash).toFixed(2);
 
   tdb().prepare(
     `UPDATE retail_orders
         SET refund_status = 'approved',
             refund_amount_approved = ?,
+            refund_cash_amount = ?,
             refund_lines_json = ?,
             refund_review_note = COALESCE(NULLIF(?, ''), refund_review_note),
             refund_approved_at = CURRENT_TIMESTAMP,
             refund_reviewer_id = COALESCE(refund_reviewer_id, ?),
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`
-  ).run(amount, lines ? JSON.stringify(lines) : null, note, req.user.id, id);
+  ).run(newApproved, newCash, lines ? JSON.stringify(lines) : null, note, req.user.id, id);
 
   // Side effects
   try {
@@ -17289,9 +17348,15 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   // Mark refunded units (see direct path) — at approval, where stock is released
   // and the operational "don't ship" decision is made.
   applyRefundedQty(id, lines, isFull);
-  if (reversePoints) {
-    try { reverseOrderPoints(id); }  catch (e) { console.error('[reverseOrderPoints]', e); }
-    try { reverseOrderRedeem(id); }  catch (e) { console.error('[reverseOrderRedeem]', e); }
+  // Return the proportional store-credit slice to its source (works on partial
+  // AND full — the reverse fns are cumulative-capped so they never over-return).
+  if (returnCredit) {
+    try { reverseOrderRedeem(id, isFull ? undefined : split.points); }   catch (e) { console.error('[reverseOrderRedeem]', e); }
+    try { reverseOrderBalance(id, isFull ? undefined : split.balance); } catch (e) { console.error('[reverseOrderBalance]', e); }
+  }
+  // Earned points + referral clawback stay ALL-OR-NOTHING on a full refund.
+  if (isFull) {
+    try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints]', e); }
   }
   // A full refund undoes the kept-first-order, so claw back any referral payout.
   if (isFull) {
@@ -17305,7 +17370,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
 
   logRefundEvent({
     orderId: id, event: 'approved', amount, note: note || null, userId: req.user.id,
-    meta: { is_full: isFull, lines, reverse_points: reversePoints },
+    meta: { is_full: isFull, lines, return_credit: returnCredit, split: { cash: split.cash, balance: split.balance, points: split.points } },
   });
   logActivity(req.user.id, req.user.username, 'refund_approve', 'retail_order', id, { amount, is_full: isFull, lines }, req.ip);
   notifyOrderStatusChange(id, isFull ? 'refunded' : null);
@@ -17323,7 +17388,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
 router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
-    'SELECT id, total, refund_status, refund_amount_approved FROM retail_orders WHERE id = ?'
+    'SELECT id, total, refund_status, refund_amount_approved, refund_cash_amount FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   if (o.refund_status !== 'approved') {
@@ -17336,15 +17401,25 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
   }
   const reference = (req.body?.reference || '').slice(0, 200);
   const note = (req.body?.note || '').slice(0, 500);
+  // Payout settles only the CASH slice. Store credit (points/balance) was already
+  // returned to the wallet at approval, so the gateway/manual payout ceiling is
+  // refund_cash_amount (fallback to refund_amount_approved for legacy/credit-free
+  // refunds where cash == value).
+  const cashCeiling = o.refund_cash_amount != null
+    ? Math.max(0, Number(o.refund_cash_amount))
+    : Math.max(0, Number(o.refund_amount_approved) || 0);
   const amount = req.body?.amount != null
-    ? Math.max(0, Math.min(Number(req.body.amount) || 0, Number(o.refund_amount_approved) || 0))
-    : Number(o.refund_amount_approved) || 0;
-  if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
+    ? Math.max(0, Math.min(Number(req.body.amount) || 0, cashCeiling))
+    : cashCeiling;
+  // A fully store-credit-funded refund has no cash to move — settle straight to
+  // 'paid' with ¥0 gateway movement (the credit already went back at approval).
+  const pureCredit = cashCeiling <= 0.005;
+  if (!pureCredit && !(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount' });
 
   // For a real WeChat refund we need at least one gateway payment row. Check it
   // exists BEFORE claiming the order so a missing txn never leaves it stuck in
-  // the transient 'paying' state.
-  if (method === 'wechat' && !payContext().devMode && !orderHasRefundableGatewayMoney(id)) {
+  // the transient 'paying' state. Skipped for a pure-credit settle (no cash).
+  if (!pureCredit && method === 'wechat' && !payContext().devMode && !orderHasRefundableGatewayMoney(id)) {
     return res.status(409).json({ success: false, error: 'no_wechat_transaction', message: 'No WeChat transaction on this order to refund against.' });
   }
 
@@ -17367,10 +17442,12 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
   // plain record too. A failed WeChat refund reverts the claim, so the order
   // returns to 'approved' and the operator sees it didn't go through.
   let payoutRef = reference;
-  if (method === 'wechat' && !payContext().devMode) {
+  if (pureCredit) {
+    // No cash to move — store credit was returned at approval. Nothing to settle.
+  } else if (method === 'wechat' && !payContext().devMode) {
     try {
-      // Push the approved amount back across every gateway payment row
-      // (gateway-first), covering a WeChat add-on behind a cash/original payment.
+      // Push the cash slice back across every gateway payment row (gateway-first),
+      // covering a WeChat add-on behind a cash/original payment.
       const settled = await settleOrderRefundAcrossTenders(id, amount, { reason: note || ('Refund order ' + id) });
       payoutRef = settled.ref || reference;
     } catch (e) {
@@ -17389,6 +17466,12 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
     catch (e) { console.error('[refund-payout manual-mirror]', e); }
   }
 
+  // For a pure-credit settle, record the full value as paid (it was returned via
+  // wallet/points) and tag the method store_credit; otherwise record the cash
+  // moved via the chosen method. settledValue is what the customer received this
+  // step — used for the receipt/notification too.
+  const settledValue = pureCredit ? Math.max(0, Number(o.refund_amount_approved) || 0) : amount;
+  const payoutMethodRec = pureCredit ? 'store_credit' : method;
   tdb().prepare(
     `UPDATE retail_orders
         SET refund_status = 'paid',
@@ -17400,24 +17483,24 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
             refund_review_note = COALESCE(NULLIF(?, ''), refund_review_note),
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND refund_status = 'paying'`
-  ).run(amount, method, payoutRef || null, req.user.id, note, id);
+  ).run(settledValue, payoutMethodRec, payoutRef || null, req.user.id, note, id);
 
   // (retail_payments rows were already updated per-tender by
   // settleOrderRefundAcrossTenders above.)
 
   logRefundEvent({
-    orderId: id, event: 'paid', amount, note: note || null, userId: req.user.id,
-    meta: { method, reference: reference || null },
+    orderId: id, event: 'paid', amount: settledValue, note: note || null, userId: req.user.id,
+    meta: { method: payoutMethodRec, reference: reference || null, cash: amount, pure_credit: pureCredit },
   });
   logActivity(req.user.id, req.user.username, 'refund_payout', 'retail_order', id, { amount, method, reference }, req.ip);
   notifyOrderStatusChange(id, null);
   notifyForOrder(id, (o) => ({
     category: 'refund', type: 'refund_paid',
     title_en: 'Refund paid', title_cn: '退款已到账',
-    body_en: `¥${Number(amount).toFixed(2)} has been refunded for order ${o.order_no}`,
-    body_cn: `订单 ${o.order_no} 的 ¥${Number(amount).toFixed(2)} 退款已退回`,
+    body_en: `¥${Number(settledValue).toFixed(2)} has been refunded for order ${o.order_no}`,
+    body_cn: `订单 ${o.order_no} 的 ¥${Number(settledValue).toFixed(2)} 退款已退回`,
   }));
-  res.json({ success: true, amount, method, reference });
+  res.json({ success: true, amount: settledValue, cash: amount, pure_credit: pureCredit, method: payoutMethodRec, reference });
 });
 
 // Operator-initiated refund — one shot, no customer request required. Backs the
@@ -17432,8 +17515,9 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
 router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare(
-    `SELECT id, status, total, refund_status,
-            refund_amount_requested, refund_amount_approved, refund_amount_paid, refund_lines_json
+    `SELECT id, status, total, points_amount, balance_used, refund_status,
+            refund_amount_requested, refund_amount_approved, refund_amount_paid,
+            refund_cash_amount, refund_lines_json
        FROM retail_orders WHERE id = ?`
   ).get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
@@ -17456,46 +17540,55 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   }
   const note = (req.body?.note || '').slice(0, 500);
 
-  // Resolve amount + lines. Staff lines win, else an explicit amount, else full total.
+  // Resolve amount + lines. Staff lines win, else an explicit amount, else full.
+  // `amount` is the total VALUE to refund (line sums are GROSS), capped below at
+  // the remaining gross; splitRefundAcrossTenders then divides it across tenders.
   let lines = null;
   let amount = null;
+  const _t = orderTenders(o);
   const norm = normalizeRefundLines(id, req.body?.lines);
   if (norm.lines) {
     lines = norm.lines;
     amount = norm.amount;
   } else if (req.body?.amount != null) {
-    const a = Math.max(0, Math.min(Number(req.body.amount) || 0, Number(o.total) || 0));
+    const a = Math.max(0, Math.min(Number(req.body.amount) || 0, _t.G));
     amount = a > 0 ? +a.toFixed(2) : null;
   } else {
-    amount = +Number(o.total).toFixed(2);
+    amount = +Number(_t.G).toFixed(2);
   }
-  // Cap at the REMAINING refundable balance (net cash charged minus anything
-  // already refunded) so a per-line sum that includes redeemed-points value — or
-  // a second refund on the same order — can never pay back more than is left.
-  const alreadyPaid = Number(o.refund_amount_paid) || 0;
-  const remainingRefundable = +Math.max(0, (Number(o.total) || 0) - alreadyPaid).toFixed(2);
-  if (amount != null) amount = +Math.min(Number(amount) || 0, remainingRefundable).toFixed(2);
+  // Cap at the REMAINING gross value (everything the customer gave, minus what
+  // earlier refunds already approved) so repeated refunds can never return more
+  // than was paid across all tenders.
+  const priorApproved = Math.max(0, Number(o.refund_amount_approved) || 0);
+  const priorCash     = o.refund_cash_amount != null ? Math.max(0, Number(o.refund_cash_amount)) : Math.max(0, Number(o.refund_amount_paid) || 0);
+  const remainingGross = +Math.max(0, _t.G - priorApproved).toFixed(2);
+  if (amount != null) amount = +Math.min(Number(amount) || 0, remainingGross).toFixed(2);
   if (!(amount > 0)) return res.status(400).json({ success: false, error: 'invalid_amount', message: 'Nothing left to refund on this order.' });
-  // "Full" = this refund clears the remaining balance (covers both a single full
-  // refund and a final partial that completes the order).
-  const isFull = amount + 0.005 >= remainingRefundable && alreadyPaid <= 0.005;
+  // "Full" = this refund clears the remaining value (single full refund or the
+  // final partial that completes the order).
+  const isFull = amount + 0.005 >= remainingGross && priorApproved <= 0.005;
+
+  // Split across tenders. Only `split.cash` moves via the gateway / manual cash;
+  // the credit slice goes back to wallet+points below.
+  const split = splitRefundAcrossTenders(o, amount);
 
   // Real WeChat refund — same eligibility rules as the status shortcut. Off-app
   // payments hold no money at WeChat, so we just record the bookkeeping and the
-  // operator returns the money themselves.
-  let payoutMethod = 'manual';
+  // operator returns the money themselves. A pure-credit refund (split.cash == 0)
+  // moves no cash at all.
+  let payoutMethod = split.cash > 0 ? 'manual' : 'store_credit';
   let payoutRef = null;
-  if (orderHasRefundableGatewayMoney(id) && !payContext().devMode) {
+  if (split.cash > 0 && orderHasRefundableGatewayMoney(id) && !payContext().devMode) {
     // Atomically claim (→ 'paying') so a double-click can't fire two real refunds.
     const claim = tdb().prepare(
       "UPDATE retail_orders SET refund_status = 'paying', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(refund_status,'') NOT IN ('pending','reviewing','approved','paying')"
     ).run(id);
     if (claim.changes !== 1) return res.status(409).json({ success: false, error: 'refund_already_processing' });
     try {
-      // Refund the chosen amount across every gateway payment row (gateway-first),
+      // Refund the cash slice across every gateway payment row (gateway-first),
       // so a split-tender order returns its WeChat add-on as well as any original
       // WeChat charge — not just the most recent payment.
-      const settled = await settleOrderRefundAcrossTenders(id, amount, { reason: note || ('Refund order ' + id) });
+      const settled = await settleOrderRefundAcrossTenders(id, split.cash, { reason: note || ('Refund order ' + id) });
       payoutMethod = settled.method;
       payoutRef = settled.ref;
     } catch (e) {
@@ -17506,11 +17599,11 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
       }
       return res.status(502).json({ success: false, error: e.code || 'wechat_refund_failed', message: e.message });
     }
-  } else {
+  } else if (split.cash > 0) {
     // No gateway money (pure off-app order) or dev mode — still record the
     // per-row refund so reconciliation sees it; the operator returns the cash by
     // hand. manualOnly so dev mode never tries to hit the gateway.
-    try { await settleOrderRefundAcrossTenders(id, amount, { reason: note || ('Refund order ' + id), manualOnly: true }); }
+    try { await settleOrderRefundAcrossTenders(id, split.cash, { reason: note || ('Refund order ' + id), manualOnly: true }); }
     catch (e) { console.error('[refund-direct manual-mirror]', e); }
   }
 
@@ -17518,10 +17611,12 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   // than clobber so a second partial refund adds to the first: amounts sum, and
   // the line snapshot merges by item_id (per-line refunded_qty is the source of
   // truth, but the JSON drives the customer/drawer display).
-  const priorApproved = Number(o.refund_amount_approved) || 0;
-  const priorPaid     = Number(o.refund_amount_paid) || 0;
+  // refund_amount_approved/_paid track total VALUE refunded (cash + credit);
+  // refund_cash_amount tracks just the cash slice (gateway/manual money moved).
+  const priorPaid     = Math.max(0, Number(o.refund_amount_paid) || 0);
   const newApproved = +(priorApproved + amount).toFixed(2);
   const newPaid     = +(priorPaid + amount).toFixed(2);
+  const newCash     = +(priorCash + split.cash).toFixed(2);
   let mergedLinesJson = lines ? JSON.stringify(lines) : null;
   if (lines) {
     let prior = [];
@@ -17544,6 +17639,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
             refund_amount_requested = MAX(COALESCE(refund_amount_requested, 0), ?),
             refund_amount_approved = ?,
             refund_amount_paid = ?,
+            refund_cash_amount = ?,
             refund_lines_json = ?,
             refund_payout_method = ?,
             refund_payout_ref = ?,
@@ -17555,7 +17651,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
             refund_payer_id = COALESCE(refund_payer_id, ?),
             updated_at = CURRENT_TIMESTAMP
       WHERE id = ?`
-  ).run(newApproved, newApproved, newPaid, mergedLinesJson, payoutMethod, payoutRef, note, req.user.id, req.user.id, id);
+  ).run(newApproved, newApproved, newPaid, newCash, mergedLinesJson, payoutMethod, payoutRef, note, req.user.id, req.user.id, id);
 
   // (retail_payments rows were already updated per-tender by
   // settleOrderRefundAcrossTenders above — no blanket mirror needed.)
@@ -17573,9 +17669,13 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   // Mark the refunded units on each line so the drawer strikes them, the packing
   // slip drops/reduces them, and the receipt stamps 已退款.
   applyRefundedQty(id, lines, isFull);
+  // Return the proportional store-credit slice to its source (partial AND full;
+  // the reverse fns are cumulative-capped so repeated refunds never over-return).
+  try { reverseOrderRedeem(id, isFull ? undefined : split.points); }   catch (e) { console.error('[reverseOrderRedeem direct]', e); }
+  try { reverseOrderBalance(id, isFull ? undefined : split.balance); } catch (e) { console.error('[reverseOrderBalance direct]', e); }
+  // Earned points + referral clawback + status flip stay full-only.
   if (isFull) {
     try { reverseOrderPoints(id); }   catch (e) { console.error('[reverseOrderPoints direct]', e); }
-    try { reverseOrderRedeem(id); }   catch (e) { console.error('[reverseOrderRedeem direct]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral direct]', e); }
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission direct]', e); }
     if (o.status !== 'refunded' && o.status !== 'cancelled') {
@@ -19441,32 +19541,124 @@ function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount
   const ship = pointsCoverShipping() ? Number(shippingFee || 0) : 0;
   return Math.max(0, Number(subtotal || 0) + ship + Number(packingFee || 0) - Number(voucherDiscount || 0));
 }
+// Cash base that prepaid wallet BALANCE may be spent against. HARD RULE
+// (operator-stated): store credit — balance OR points — never pays the
+// shipping fee. So balance covers only subtotal + packing − voucher, and only
+// the portion not already covered by points (points apply first; see the order
+// endpoint). Shipping is ALWAYS settled in cash via WeChat/Alipay. No toggle —
+// unlike points there is no balance.coverShipping escape hatch by design.
+function walletSpendableBase(subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0) {
+  return Math.max(0,
+    Number(subtotal || 0) + Number(packingFee || 0)
+    - Number(voucherDiscount || 0) - Number(pointsAmount || 0));
+}
+// How much wallet balance THIS order can actually spend: the spendable base
+// (never shipping), capped at the customer's available balance. Rounded to
+// cents so we never charge sub-fen dust.
+function walletSpendForOrder(balanceAvailable, subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0) {
+  const base = walletSpendableBase(subtotal, packingFee, voucherDiscount, pointsAmount);
+  return Math.round(Math.min(Math.max(0, Number(balanceAvailable || 0)), base) * 100) / 100;
+}
 
-// Reverse a redemption when an order is refunded. Idempotent — checks for
-// an existing 'refund_reverse' row tagged to this order's redeem.
-function reverseOrderRedeem(orderId) {
+// ── Multi-tender refund split ────────────────────────────────────────────
+// An order can be paid with up to three tenders: redeemed POINTS (¥ value),
+// prepaid wallet BALANCE, and net CASH (gateway). When a refund is issued, each
+// refunded ¥ should go back where it came from, in proportion to how the order
+// was paid — so a partial refund returns a slice of each tender, not all-cash.
+//
+// orderTenders → the original composition; splitRefundAcrossTenders → how a
+// refund of total VALUE `amount` divides across them. Cash absorbs the rounding
+// remainder, and every part is capped at its tender's original so a refund can
+// never return more to a tender than was taken from it. When no store credit
+// was used (P=B=0, the common case) the split is {cash: amount} — identical to
+// the old all-cash behaviour, so credit-free orders are completely unaffected.
+function orderTenders(o) {
+  const P = Math.max(0, Number(o.points_amount) || 0);
+  const B = Math.max(0, Number(o.balance_used)  || 0);
+  const C = Math.max(0, Number(o.total)         || 0);
+  return { P, B, C, G: Math.round((P + B + C) * 100) / 100 };
+}
+function splitRefundAcrossTenders(o, amount) {
+  const A = Math.max(0, Number(amount) || 0);
+  const { P, B, C, G } = orderTenders(o);
+  if (!(A > 0) || G <= 0) return { cash: Math.round(Math.min(A, C) * 100) / 100, balance: 0, pointsValue: 0, points: 0 };
+  const balance     = Math.round(Math.min(B, A * B / G) * 100) / 100;
+  const pointsValue = Math.round(Math.min(P, A * P / G) * 100) / 100;
+  const cash        = Math.max(0, Math.round(Math.min(C, A - balance - pointsValue) * 100) / 100);
+  const points      = Math.round(pointsValue * pointsRedeemRate());
+  return { cash, balance, pointsValue, points };
+}
+
+// Return redeemed POINTS to the customer when an order is refunded. CUMULATIVE
+// and capped: never returns more than the original redemption minus whatever
+// earlier (partial) refunds on this order already returned, so repeated partial
+// refunds are safe. `maxPoints` caps a single call (the proportional slice);
+// omit it to return the full remaining redemption (cancel / full-refund paths).
+// Returns the points actually credited.
+//
+// Ledger source is 'refund_redeem' — deliberately DISTINCT from the
+// 'refund_reverse' rows reverseOrderPoints writes for earn-clawback, so the two
+// never interfere (earn reversal stays full-only with its own idempotency).
+function reverseOrderRedeem(orderId, maxPoints) {
   const redeem = tdb().prepare(
     "SELECT customer_id, delta FROM retail_points_transactions WHERE order_id = ? AND source = 'order_redeem'"
   ).get(orderId);
   if (!redeem || redeem.delta >= 0) return 0;
-  const refundedPts = -redeem.delta;
+  const original = -redeem.delta;
+  // Already-returned redemption: new 'refund_redeem' rows + any legacy positive
+  // 'refund_reverse' rows written by the pre-split code (defensive).
   const already = tdb().prepare(
-    "SELECT id FROM retail_points_transactions WHERE order_id = ? AND source = 'refund_reverse' AND delta > 0"
-  ).get(orderId);
-  if (already) return 0;
+    `SELECT COALESCE(SUM(delta), 0) AS s FROM retail_points_transactions
+      WHERE order_id = ? AND (source = 'refund_redeem' OR (source = 'refund_reverse' AND delta > 0))`
+  ).get(orderId).s;
+  const remaining = original - already;
+  if (remaining <= 0) return 0;
+  const give = maxPoints == null ? remaining : Math.min(remaining, Math.max(0, Math.floor(Number(maxPoints) || 0)));
+  if (give <= 0) return 0;
   const tx = tdb().transaction(() => {
-    tdb().prepare(
-      'UPDATE retail_customers SET points_balance = points_balance + ? WHERE id = ?'
-    ).run(refundedPts, redeem.customer_id);
+    tdb().prepare('UPDATE retail_customers SET points_balance = points_balance + ? WHERE id = ?').run(give, redeem.customer_id);
     const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(redeem.customer_id).points_balance;
     tdb().prepare(
       `INSERT INTO retail_points_transactions
          (customer_id, delta, balance_after, source, order_id, note)
-       VALUES (?, ?, ?, 'refund_reverse', ?, 'Redemption returned on refund')`
-    ).run(redeem.customer_id, refundedPts, after, orderId);
+       VALUES (?, ?, ?, 'refund_redeem', ?, ?)`
+    ).run(redeem.customer_id, give, after, orderId, `Redemption returned on refund (${give} pts)`);
   });
-  try { tx(); } catch (e) { console.error('[reverseOrderRedeem]', e); }
-  return refundedPts;
+  try { tx(); } catch (e) { console.error('[reverseOrderRedeem]', e); return 0; }
+  return give;
+}
+
+// Return prepaid wallet BALANCE spent on an order — the cash-credit counterpart
+// of reverseOrderRedeem, same cumulative+capped contract. `maxAmount` caps a
+// single call (¥); omit for the full remaining balance (cancel / full-refund).
+// The spend is the negative 'order_redeem' row in retail_topup_transactions;
+// each return writes a positive 'refund_reverse' row tagged orderrefund:<id>:<n>
+// so multiple partial returns coexist and sum correctly. Returns ¥ credited.
+function reverseOrderBalance(orderId, maxAmount) {
+  const spend = tdb().prepare(
+    "SELECT customer_id, amount FROM retail_topup_transactions WHERE out_trade_no = ? AND payment_method = 'order_redeem'"
+  ).get(`orderspend:${orderId}`);
+  if (!spend || !(spend.amount < 0)) return 0;
+  const original = Math.round(-spend.amount * 100) / 100;
+  const prior = tdb().prepare(
+    "SELECT COALESCE(SUM(amount), 0) AS s, COUNT(*) AS n FROM retail_topup_transactions WHERE payment_method = 'refund_reverse' AND out_trade_no LIKE ?"
+  ).get(`orderrefund:${orderId}:%`);
+  const already = Math.round((prior.s || 0) * 100) / 100;
+  const remaining = Math.round((original - already) * 100) / 100;
+  if (remaining <= 0) return 0;
+  const give = Math.round(Math.min(remaining, maxAmount == null ? remaining : Math.max(0, Number(maxAmount) || 0)) * 100) / 100;
+  if (give <= 0) return 0;
+  try {
+    tdb().transaction(() => {
+      tdb().prepare('UPDATE retail_customers SET balance = ROUND(COALESCE(balance, 0) + ?, 2) WHERE id = ?').run(give, spend.customer_id);
+      tdb().prepare(
+        `INSERT INTO retail_topup_transactions
+           (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+         VALUES (?, ?, 0, 'refund_reverse', 'success', CURRENT_TIMESTAMP, ?, ?)`
+      ).run(spend.customer_id, give, `orderrefund:${orderId}:${(prior.n || 0) + 1}`, JSON.stringify({ order_id: orderId, note: 'wallet balance returned on refund' }));
+    })();
+  } catch (e) { console.error('[reverseOrderBalance]', e); return 0; }
+  return give;
 }
 
 // Restore a voucher consumed at order-create when that order is cancelled.
@@ -19721,6 +19913,18 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
     total = Math.max(0, grossTotal - pointsDiscount);
   }
 
+  // Wallet balance preview — stacks AFTER points on the non-shipping bill.
+  // Store credit never pays shipping, so balance can cover at most
+  // subtotal + packing − points already applied. (Quote doesn't apply
+  // vouchers; the order endpoint re-prices with the real voucher discount.)
+  const _wallet = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+  const balanceBalance   = Math.max(0, Number(_wallet?.balance) || 0);
+  const balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount);
+  const balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
+  const useBalance       = !!body.use_balance && paymentMethodPreview !== 'points';
+  const balanceApplied   = useBalance ? balanceMaxUsable : 0;
+  if (balanceApplied > 0) total = Math.max(0, total - balanceApplied);
+
   // Routing preview — runs the rich shortage analysis used by the new
   // 5-option modal (GZ + non-excluded district + right-away slot). For
   // every other case the legacy yes/no fallback is what the mini-app
@@ -19829,6 +20033,14 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       points_to_use_applied: pointsToUseApplied,
       points_discount: pointsDiscount,
       points_cover_shipping: pointsCoverShipping(),
+      // Wallet balance (prepaid store credit). balance_max_usable already
+      // excludes shipping and nets out points; balance_applied is what's used
+      // when use_balance was sent. balance_cover_shipping is always false (rule).
+      balance_balance:       balanceBalance,
+      balance_max_usable:    balanceMaxUsable,
+      balance_applied:       balanceApplied,
+      balance_discount:      balanceApplied,
+      balance_cover_shipping: false,
       points_earned_preview: pointsEarnedFor(pointsEarnBaseAmount(priced.subtotal, total), tierMultiplierFor(req.customer?.tier_key)),
       delivery_mode: deliveryMode,
       zone: {
