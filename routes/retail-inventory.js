@@ -470,4 +470,61 @@ router.put('/api/retail-admin/config/gz-excluded-districts', requireRetailAdmin,
   res.json({ success: true, data: list });
 });
 
+// ─── Quick Stock (mobile add-on) ───────────────────────────────────────
+// "Quick Stock" is the phone-first inventory PWA (served at /stock). It's a
+// per-tenant add-on, toggled like every other feature: an operator switch
+// persisted to storefront_config under `features.quickStock` (unset = on, to
+// match the FEATURE_CATALOG default). When off, the mobile app shows an
+// "off" screen and loads no products — the underlying stock APIs stay
+// available to the desktop admin grid either way.
+function quickStockEnabled() {
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'features.quickStock'").get();
+    if (!row) return true;                       // unset → catalog default (on)
+    return JSON.parse(row.value_json) !== false; // explicit false → off
+  } catch { return true; }
+}
+
+// GET /api/retail-admin/quick-stock/context
+// One-shot bootstrap for the mobile app: who the staffer is, whether the
+// add-on is on, and exactly which stores they may edit. Plain store staff
+// (users.retail_store_id) get their one store; admins / `retail` operators /
+// backend operators get every active store and can switch between them. The
+// app then drives the existing per-store GET/PATCH stock endpoints.
+router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, res) => {
+  const enabled = quickStockEnabled();
+
+  // Full-access = backend operator, kitchen admin, or `retail` permission.
+  // Those see and edit all stores; a plain staffer is pinned to their own.
+  const fullAccess = !!req.backendUser
+    || req.user?.role === 'admin'
+    || !!req.permissions?.retail;
+
+  let stores;
+  if (fullAccess) {
+    stores = inventory.listStores({ activeOnly: true });
+  } else {
+    const u = db.prepare('SELECT retail_store_id FROM users WHERE id = ?').get(req.user.id);
+    const assigned = u?.retail_store_id ? inventory.getStore(u.retail_store_id) : null;
+    stores = assigned && assigned.is_active !== 0 ? [assigned] : [];
+  }
+
+  const slim = stores.map(s => ({
+    id: s.id, code: s.code,
+    name_en: s.name_en, name_cn: s.name_cn,
+  }));
+
+  res.json({
+    success: true,
+    data: {
+      enabled,
+      user: {
+        name: req.user?.display_name || req.user?.username || null,
+        full_access: fullAccess,
+      },
+      stores: slim,
+    },
+  });
+});
+
 module.exports = router;

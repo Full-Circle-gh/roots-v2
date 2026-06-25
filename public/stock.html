@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" id="meta-theme-color" content="#16161a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>Quick Stock · 库存</title>
+<link rel="manifest" href="/stock-manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/stock-icon.svg">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="application-name" content="Quick Stock">
+<meta name="apple-mobile-web-app-title" content="Quick Stock">
+<script>
+  // Honour the staff-PWA theme choice (shared key with restock/pos) before paint.
+  (function () {
+    try {
+      var saved = localStorage.getItem('roots_theme');
+      var theme = saved === 'light' || saved === 'dark'
+        ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+      var meta = document.getElementById('meta-theme-color');
+      if (meta) meta.setAttribute('content', theme === 'light' ? '#ece6d8' : '#16161a');
+    } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+  })();
+</script>
+<style>
+:root {
+  --bg-app:#16161a; --bg-pane:#1f1f24; --bg-elev-1:#25252b; --bg-elev-2:#2e2e35; --bg-input:#1a1a1f;
+  --bg-overlay:rgba(10,10,12,.72);
+  --line:rgba(255,255,255,.09); --line-soft:rgba(255,255,255,.055); --line-strong:rgba(255,255,255,.15);
+  --ring:rgba(204,217,0,.35);
+  --text-1:#ecebe5; --text-2:#aeaba2; --text-3:#7d7a72; --text-4:#56544f;
+  --accent:#ccd900; --accent-hi:#dde858; --accent-ink:#16161a;
+  --success:#80c462; --danger:#e8556a; --warn:#e9a35a;
+  --sh-1:0 1px 2px rgba(0,0,0,.25); --sh-2:0 4px 16px rgba(0,0,0,.3); --sh-3:0 24px 60px rgba(0,0,0,.5);
+  --sa-top:env(safe-area-inset-top,0px); --sa-bot:env(safe-area-inset-bottom,0px);
+  color-scheme:dark;
+}
+:root[data-theme="light"]{
+  --bg-app:#ece6d8; --bg-pane:#fbf8ee; --bg-elev-1:#f4efdf; --bg-elev-2:#e9e3d0; --bg-input:#fefcf3;
+  --bg-overlay:rgba(20,20,22,.42);
+  --line:rgba(30,25,5,.16); --line-soft:rgba(30,25,5,.075); --line-strong:rgba(30,25,5,.26);
+  --ring:rgba(140,152,0,.38);
+  --text-1:#1a1a17; --text-2:#43413a; --text-3:#6a675c; --text-4:#9a978c;
+  --accent-hi:#b8c200; --success:#5a9e3f;
+  --sh-1:0 1px 3px rgba(40,30,5,.09); --sh-2:0 6px 18px rgba(40,30,5,.12); --sh-3:0 24px 60px rgba(40,30,5,.22);
+  color-scheme:light;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;height:100%;overscroll-behavior-y:none;-webkit-overflow-scrolling:touch;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+  background:var(--bg-app); color:var(--text-1); font-size:16px; line-height:1.4;
+  -webkit-font-smoothing:antialiased; user-select:none; -webkit-user-select:none;
+}
+button{font-family:inherit;cursor:pointer;border:none;background:transparent;color:inherit;}
+input{font-family:inherit;-webkit-user-select:text;user-select:text;}
+.cn{color:var(--text-3);font-weight:400;}
+
+/* ── App shell ── */
+#app{display:flex;flex-direction:column;min-height:100%;}
+header{
+  position:sticky;top:0;z-index:20;background:var(--bg-pane);
+  border-bottom:1px solid var(--line); padding:calc(var(--sa-top) + 10px) 14px 10px;
+  box-shadow:var(--sh-1);
+}
+.hrow{display:flex;align-items:center;gap:10px;}
+.h-title{font-size:18px;font-weight:800;letter-spacing:-.01em;display:flex;align-items:baseline;gap:7px;}
+.h-title .cn{font-size:13px;}
+.h-sub{font-size:12px;color:var(--text-3);margin-top:2px;}
+.h-spacer{flex:1;}
+.icon-btn{
+  width:38px;height:38px;border-radius:11px;display:grid;place-items:center;
+  background:var(--bg-elev-1);border:1px solid var(--line);color:var(--text-2);
+}
+.icon-btn:active{transform:scale(.94);}
+.icon-btn svg{width:19px;height:19px;}
+.icon-btn.spin svg{animation:spin .7s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* store switcher */
+.store-pill{
+  display:inline-flex;align-items:center;gap:6px;margin-top:9px;max-width:100%;
+  background:var(--bg-elev-1);border:1px solid var(--line);border-radius:10px;
+  padding:7px 11px;font-size:13px;font-weight:600;color:var(--text-1);
+}
+.store-pill svg{width:14px;height:14px;color:var(--text-3);flex:none;}
+.store-pill .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.store-pill.is-switch:active{background:var(--bg-elev-2);}
+.store-pill.static{cursor:default;}
+
+/* search + filters */
+.searchwrap{margin-top:10px;position:relative;}
+.searchwrap svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:17px;height:17px;color:var(--text-3);pointer-events:none;}
+#q{
+  width:100%;height:44px;border-radius:12px;border:1px solid var(--line);
+  background:var(--bg-input);color:var(--text-1);font-size:15px;padding:0 40px 0 38px;
+}
+#q:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--ring);}
+.q-clear{position:absolute;right:8px;top:50%;transform:translateY(-50%);width:28px;height:28px;border-radius:8px;display:none;place-items:center;color:var(--text-3);}
+.q-clear.show{display:grid;}
+.filters{display:flex;gap:7px;margin-top:10px;}
+.chip{
+  flex:1;padding:8px 6px;border-radius:10px;border:1px solid var(--line);background:var(--bg-elev-1);
+  font-size:13px;font-weight:600;color:var(--text-2);display:flex;align-items:center;justify-content:center;gap:5px;
+}
+.chip .badge{font-size:11px;font-weight:700;background:var(--bg-elev-2);color:var(--text-3);padding:1px 6px;border-radius:20px;min-width:18px;}
+.chip.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
+.chip.active .badge{background:rgba(0,0,0,.16);color:var(--accent-ink);}
+
+/* list */
+main{flex:1;padding:10px 12px calc(var(--sa-bot) + 24px);}
+.row{
+  display:flex;align-items:center;gap:12px;background:var(--bg-pane);
+  border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:9px;box-shadow:var(--sh-1);
+}
+.row.out{border-color:var(--danger);}
+.r-main{flex:1;min-width:0;}
+.r-name{font-size:15px;font-weight:700;line-height:1.25;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+.r-meta{display:flex;gap:8px;align-items:center;margin-top:3px;font-size:11.5px;color:var(--text-3);flex-wrap:wrap;}
+.r-sku{font-family:ui-monospace,Menlo,monospace;}
+.tag{font-size:10px;font-weight:700;letter-spacing:.04em;padding:2px 6px;border-radius:6px;text-transform:uppercase;}
+.tag.low{background:rgba(233,163,90,.16);color:var(--warn);}
+.tag.out{background:rgba(232,85,106,.16);color:var(--danger);}
+.tag.live{background:rgba(128,196,98,.16);color:var(--success);}
+
+/* stepper */
+.stepper{display:flex;align-items:center;gap:0;flex:none;background:var(--bg-elev-1);border:1px solid var(--line);border-radius:12px;overflow:hidden;}
+.stepper button{width:42px;height:46px;display:grid;place-items:center;color:var(--text-1);font-size:22px;}
+.stepper button:active{background:var(--bg-elev-2);}
+.stepper button.minus{color:var(--danger);}
+.stepper button.plus{color:var(--success);}
+.stepper button:disabled{opacity:.3;}
+.qty{
+  width:54px;height:46px;text-align:center;border:none;border-left:1px solid var(--line);border-right:1px solid var(--line);
+  background:transparent;color:var(--text-1);font-size:19px;font-weight:800;-moz-appearance:textfield;
+}
+.qty::-webkit-outer-spin-button,.qty::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.qty:focus{outline:none;background:var(--bg-input);box-shadow:inset 0 0 0 2px var(--ring);}
+.qty.saving{color:var(--accent);}
+.row.out .qty{color:var(--danger);}
+
+/* sold-out quick action */
+.r-actions{margin-top:7px;}
+.soldbtn{font-size:12px;font-weight:600;color:var(--text-3);background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:5px 9px;display:inline-flex;align-items:center;gap:5px;}
+.soldbtn svg{width:13px;height:13px;}
+.soldbtn:active{background:var(--bg-elev-2);}
+.row.out .soldbtn{color:var(--success);}
+
+/* screens */
+.screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 28px;gap:14px;color:var(--text-2);}
+.screen .big{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;background:var(--bg-elev-1);border:1px solid var(--line);color:var(--text-3);}
+.screen .big svg{width:30px;height:30px;}
+.screen h2{margin:0;font-size:18px;color:var(--text-1);}
+.screen p{margin:0;font-size:14px;line-height:1.5;max-width:300px;}
+.screen .btn{margin-top:6px;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:11px 20px;border-radius:11px;font-size:14px;}
+.spinner{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .7s linear infinite;}
+.empty{text-align:center;color:var(--text-3);padding:48px 20px;font-size:14px;}
+
+/* toast */
+#toast{position:fixed;left:50%;bottom:calc(var(--sa-bot) + 22px);transform:translateX(-50%) translateY(20px);
+  background:var(--bg-elev-2);color:var(--text-1);border:1px solid var(--line-strong);box-shadow:var(--sh-3);
+  padding:11px 16px;border-radius:12px;font-size:14px;font-weight:600;max-width:88vw;text-align:center;
+  opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:60;}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+#toast.err{border-color:var(--danger);color:var(--danger);}
+
+/* store sheet */
+.sheet-back{position:fixed;inset:0;background:var(--bg-overlay);z-index:50;opacity:0;pointer-events:none;transition:opacity .2s;}
+.sheet-back.show{opacity:1;pointer-events:auto;}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;background:var(--bg-pane);border-radius:20px 20px 0 0;
+  border-top:1px solid var(--line);box-shadow:var(--sh-3);padding:8px 0 calc(var(--sa-bot) + 14px);
+  transform:translateY(100%);transition:transform .24s cubic-bezier(.2,.8,.2,1);max-height:70vh;overflow:auto;}
+.sheet.show{transform:translateY(0);}
+.sheet-grip{width:38px;height:4px;border-radius:3px;background:var(--line-strong);margin:8px auto 6px;}
+.sheet-h{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-3);padding:8px 20px 4px;}
+.sheet-item{display:flex;align-items:center;gap:11px;padding:14px 20px;font-size:15px;font-weight:600;}
+.sheet-item:active{background:var(--bg-elev-1);}
+.sheet-item .code{font-family:ui-monospace,monospace;font-size:12px;color:var(--text-3);}
+.sheet-item .tick{margin-left:auto;color:var(--accent);width:18px;height:18px;}
+.sheet-item .tick svg{width:18px;height:18px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- header injected once authed -->
+  <header id="hdr" hidden>
+    <div class="hrow">
+      <div>
+        <div class="h-title">Quick&nbsp;Stock <span class="cn">库存</span></div>
+        <div class="h-sub" id="hsub"></div>
+      </div>
+      <div class="h-spacer"></div>
+      <button class="icon-btn" id="themeBtn" title="Theme" aria-label="Theme">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </button>
+      <button class="icon-btn" id="refreshBtn" title="Refresh" aria-label="Refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </div>
+    <button class="store-pill" id="storePill" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>
+      <span class="nm" id="storeName">—</span>
+      <svg id="storeChevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-left:auto"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="searchwrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="q" type="search" inputmode="search" autocomplete="off" placeholder="Search products · 搜索商品" enterkeyhint="search">
+      <button class="q-clear" id="qClear" aria-label="Clear"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="filters">
+      <button class="chip active" data-filter="all">All · 全部 <span class="badge" id="cAll">0</span></button>
+      <button class="chip" data-filter="low">Low · 偏低 <span class="badge" id="cLow">0</span></button>
+      <button class="chip" data-filter="out">Out · 售罄 <span class="badge" id="cOut">0</span></button>
+    </div>
+  </header>
+
+  <main id="main">
+    <div class="screen" id="bootScreen"><div class="spinner"></div><p>Loading… · 加载中…</p></div>
+  </main>
+</div>
+
+<div id="toast"></div>
+<div class="sheet-back" id="sheetBack"></div>
+<div class="sheet" id="storeSheet">
+  <div class="sheet-grip"></div>
+  <div class="sheet-h">Choose store · 选择门店</div>
+  <div id="sheetList"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+  var $ = function (s, r) { return (r || document).querySelector(s); };
+  var API = '/api/retail-admin';
+
+  var state = {
+    enabled: true, fullAccess: false, userName: '',
+    stores: [], storeId: null,
+    items: [],            // rows for current store
+    filter: 'all', q: '',
+    pending: {},          // productId -> { qty, timer, baseline }
+  };
+
+  // ── helpers ──────────────────────────────────────────────────────────
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  var _tt;
+  function toast(msg, kind) {
+    var t = $('#toast'); t.textContent = msg; t.className = kind === 'err' ? 'err show' : 'show';
+    clearTimeout(_tt); _tt = setTimeout(function () { t.className = ''; }, 2200);
+  }
+  function api(path, opts) {
+    opts = opts || {};
+    var o = { method: opts.method || 'GET', credentials: 'same-origin', headers: {} };
+    if (opts.body) { o.headers['Content-Type'] = 'application/json'; o.body = JSON.stringify(opts.body); }
+    return fetch(path, o).then(function (r) {
+      if (r.status === 401 || r.status === 403) {
+        if (r.status === 401) { location.href = '/login'; throw new Error('auth'); }
+        return r.json().then(function (j) { throw new Error(j.error || 'forbidden'); });
+      }
+      return r.json().then(function (j) { if (!j.success) throw new Error(j.error || 'error'); return j.data; });
+    });
+  }
+  function storeLabel(s) { return s.name_en || s.name_cn || s.code || ('#' + s.id); }
+  // A product is "low" when at/under its restock target (fallback 5); "out" at 0.
+  function lowFloor(it) { return it.restock_target != null && it.restock_target > 0 ? it.restock_target : 5; }
+  function statusOf(it) { if (it.physical_qty <= 0) return 'out'; if (it.physical_qty <= lowFloor(it)) return 'low'; return 'ok'; }
+
+  // ── boot ─────────────────────────────────────────────────────────────
+  function boot() {
+    api(API + '/quick-stock/context').then(function (d) {
+      state.enabled = d.enabled;
+      state.fullAccess = d.user.full_access;
+      state.userName = d.user.name || '';
+      state.stores = d.stores || [];
+      if (!state.enabled) return offScreen();
+      if (!state.stores.length) return noStoreScreen();
+      // restore last-used store if still valid, else first
+      var last = parseInt(localStorage.getItem('qs_store') || '', 10);
+      var pick = state.stores.filter(function (s) { return s.id === last; })[0] || state.stores[0];
+      mountShell();
+      selectStore(pick.id);
+    }).catch(function (e) {
+      if (e.message === 'auth') return;
+      errScreen(e.message);
+    });
+  }
+
+  function mountShell() {
+    $('#hdr').hidden = false;
+    $('#hsub').textContent = state.userName ? ('Signed in as ' + state.userName) : '';
+    // store pill: switcher if >1 store, static otherwise
+    var pill = $('#storePill'); pill.hidden = false;
+    if (state.stores.length > 1) { pill.classList.add('is-switch'); $('#storeChevron').style.display = ''; pill.onclick = openSheet; }
+    else { pill.classList.add('static'); $('#storeChevron').style.display = 'none'; pill.onclick = null; }
+    // wire controls once
+    $('#refreshBtn').onclick = function () { loadStock(true); };
+    $('#themeBtn').onclick = toggleTheme;
+    $('#q').addEventListener('input', function (e) {
+      state.q = e.target.value.trim().toLowerCase();
+      $('#qClear').classList.toggle('show', !!state.q);
+      render();
+    });
+    $('#qClear').onclick = function () { $('#q').value = ''; state.q = ''; $('#qClear').classList.remove('show'); render(); };
+    Array.prototype.forEach.call(document.querySelectorAll('.chip'), function (c) {
+      c.onclick = function () {
+        state.filter = c.getAttribute('data-filter');
+        Array.prototype.forEach.call(document.querySelectorAll('.chip'), function (x) { x.classList.toggle('active', x === c); });
+        render();
+      };
+    });
+    $('#sheetBack').onclick = closeSheet;
+  }
+
+  function selectStore(id) {
+    state.storeId = id;
+    localStorage.setItem('qs_store', String(id));
+    var s = state.stores.filter(function (x) { return x.id === id; })[0];
+    $('#storeName').textContent = s ? storeLabel(s) : '—';
+    closeSheet();
+    loadStock(false);
+  }
+
+  function loadStock(isManual) {
+    if (isManual) $('#refreshBtn').classList.add('spin');
+    // keep header; swap main to spinner only on first load
+    if (!state.items.length) $('#main').innerHTML = '<div class="screen"><div class="spinner"></div><p>Loading stock… · 加载库存…</p></div>';
+    api(API + '/stores/' + state.storeId + '/stock').then(function (rows) {
+      state.items = rows.map(function (r) { return { id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku, physical_qty: r.physical_qty | 0, restock_target: r.restock_target != null ? r.restock_target : null, updated_at: r.updated_at }; });
+      state.pending = {};
+      render();
+    }).catch(function (e) {
+      if (e.message !== 'auth') toast('Couldn\'t load · 加载失败', 'err');
+    }).then(function () { $('#refreshBtn').classList.remove('spin'); });
+  }
+
+  // ── render ───────────────────────────────────────────────────────────
+  function render() {
+    var counts = { all: state.items.length, low: 0, out: 0 };
+    state.items.forEach(function (it) { var st = statusOf(it); if (st === 'out') counts.out++; else if (st === 'low') counts.low++; });
+    $('#cAll').textContent = counts.all; $('#cLow').textContent = counts.low; $('#cOut').textContent = counts.out;
+
+    var list = state.items.filter(function (it) {
+      if (state.filter === 'out' && statusOf(it) !== 'out') return false;
+      if (state.filter === 'low' && statusOf(it) === 'ok') return false; // low view = low + out
+      if (state.q) {
+        var hay = ((it.name_en || '') + ' ' + (it.name_cn || '') + ' ' + (it.sku || '')).toLowerCase();
+        if (hay.indexOf(state.q) === -1) return false;
+      }
+      return true;
+    });
+
+    if (!list.length) {
+      $('#main').innerHTML = '<div class="empty">' + (state.q ? 'No matches · 无匹配结果' : 'Nothing here · 暂无商品') + '</div>';
+      return;
+    }
+    var html = list.map(rowHtml).join('');
+    $('#main').innerHTML = html;
+    // wire each row
+    list.forEach(function (it) { wireRow(it.id); });
+  }
+
+  function rowHtml(it) {
+    var st = statusOf(it);
+    var tag = st === 'out' ? '<span class="tag out">Sold out · 售罄</span>'
+            : st === 'low' ? '<span class="tag low">Low · 偏低</span>'
+            : '<span class="tag live">In stock · 有货</span>';
+    var name = esc(it.name_en || it.name_cn || ('#' + it.id));
+    var sub = it.name_en && it.name_cn ? '<span>' + esc(it.name_cn) + '</span>' : '';
+    var sku = it.sku ? '<span class="r-sku">' + esc(it.sku) + '</span>' : '';
+    var soldLabel = st === 'out' ? 'Back in stock · 恢复有货' : 'Mark sold out · 标记售罄';
+    return '' +
+      '<div class="row ' + (st === 'out' ? 'out' : '') + '" id="row-' + it.id + '">' +
+        '<div class="r-main">' +
+          '<div class="r-name">' + name + '</div>' +
+          '<div class="r-meta">' + tag + sku + sub + '</div>' +
+          '<div class="r-actions">' +
+            '<button class="soldbtn" data-sold="' + it.id + '">' +
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+                (st === 'out' ? '<path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/>' : '<path d="M18 6L6 18M6 6l12 12"/>') +
+              '</svg>' + soldLabel +
+            '</button>' +
+          '</div>' +
+        '</div>' +
+        '<div class="stepper">' +
+          '<button class="minus" data-dec="' + it.id + '" aria-label="Minus">&minus;</button>' +
+          '<input class="qty" data-qty="' + it.id + '" type="number" inputmode="numeric" pattern="[0-9]*" value="' + it.physical_qty + '">' +
+          '<button class="plus" data-inc="' + it.id + '" aria-label="Plus">+</button>' +
+        '</div>' +
+      '</div>';
+  }
+
+  function itemById(id) { for (var i = 0; i < state.items.length; i++) if (state.items[i].id === id) return state.items[i]; return null; }
+
+  function wireRow(id) {
+    var row = $('#row-' + id); if (!row) return;
+    $('[data-dec="' + id + '"]', row).onclick = function () { bump(id, -1); };
+    $('[data-inc="' + id + '"]', row).onclick = function () { bump(id, +1); };
+    var sold = $('[data-sold="' + id + '"]', row);
+    sold.onclick = function () { var it = itemById(id); setQty(id, it && it.physical_qty <= 0 ? Math.max(lowFloor(it), 1) : 0, true); };
+    var input = $('[data-qty="' + id + '"]', row);
+    input.addEventListener('focus', function () { input.select(); });
+    input.addEventListener('change', function () {
+      var v = parseInt(input.value, 10); if (isNaN(v) || v < 0) v = 0;
+      setQty(id, v, true);
+    });
+  }
+
+  // Optimistic local nudge; flush is debounced so a flurry of taps = one write.
+  function bump(id, delta) {
+    var it = itemById(id); if (!it) return;
+    var next = Math.max(0, it.physical_qty + delta);
+    setQty(id, next, false);
+  }
+
+  // setQty: update local + the input, repaint status, schedule (or force) a save.
+  function setQty(id, qty, immediate) {
+    var it = itemById(id); if (!it) return;
+    it.physical_qty = qty;
+    var row = $('#row-' + id);
+    if (row) {
+      var input = $('[data-qty="' + id + '"]', row); if (input) { input.value = qty; input.classList.add('saving'); }
+      row.classList.toggle('out', qty <= 0);
+    }
+    var p = state.pending[id] || (state.pending[id] = { baseline: it.__base != null ? it.__base : qty });
+    if (it.__base == null) it.__base = p.baseline;
+    p.qty = qty;
+    clearTimeout(p.timer);
+    if (immediate) flush(id);
+    else p.timer = setTimeout(function () { flush(id); }, 550);
+  }
+
+  function flush(id) {
+    var p = state.pending[id]; if (!p) return;
+    var qty = p.qty;
+    api(API + '/stores/' + state.storeId + '/stock/' + id, { method: 'PATCH', body: { physical_qty: qty, reason: 'adjust', note: 'quick-stock' } })
+      .then(function () {
+        delete state.pending[id];
+        var it = itemById(id); if (it) it.__base = qty;
+        var row = $('#row-' + id); if (row) { var input = $('[data-qty="' + id + '"]', row); if (input) input.classList.remove('saving'); refreshRowChrome(id); }
+        bumpCounts();
+      })
+      .catch(function (e) {
+        if (e.message === 'auth') return;
+        // revert to last confirmed value
+        var it = itemById(id);
+        if (it) { it.physical_qty = p.baseline; }
+        delete state.pending[id];
+        toast('Save failed · 保存失败' + (e.message ? ' (' + e.message + ')' : ''), 'err');
+        var row = $('#row-' + id);
+        if (row && it) { var input = $('[data-qty="' + id + '"]', row); if (input) { input.value = it.physical_qty; input.classList.remove('saving'); } refreshRowChrome(id); }
+      });
+  }
+
+  // Repaint a single row's tag + out-state without a full re-render (keeps focus).
+  function refreshRowChrome(id) {
+    var it = itemById(id); var row = $('#row-' + id); if (!it || !row) return;
+    var st = statusOf(it);
+    row.classList.toggle('out', st === 'out');
+    var meta = $('.r-meta', row);
+    if (meta) {
+      var tag = meta.querySelector('.tag');
+      if (tag) {
+        tag.className = 'tag ' + (st === 'out' ? 'out' : st === 'low' ? 'low' : 'live');
+        tag.textContent = st === 'out' ? 'Sold out · 售罄' : st === 'low' ? 'Low · 偏低' : 'In stock · 有货';
+      }
+    }
+    var sold = $('[data-sold="' + id + '"]', row);
+    if (sold) sold.lastChild.textContent = st === 'out' ? 'Back in stock · 恢复有货' : 'Mark sold out · 标记售罄';
+  }
+
+  function bumpCounts() {
+    var counts = { all: state.items.length, low: 0, out: 0 };
+    state.items.forEach(function (it) { var st = statusOf(it); if (st === 'out') counts.out++; else if (st === 'low') counts.low++; });
+    $('#cAll').textContent = counts.all; $('#cLow').textContent = counts.low; $('#cOut').textContent = counts.out;
+  }
+
+  // ── store sheet ──────────────────────────────────────────────────────
+  function openSheet() {
+    var html = state.stores.map(function (s) {
+      var on = s.id === state.storeId;
+      return '<div class="sheet-item" data-store="' + s.id + '">' + esc(storeLabel(s)) +
+        (s.code ? ' <span class="code">' + esc(s.code) + '</span>' : '') +
+        (on ? '<span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg></span>' : '') +
+        '</div>';
+    }).join('');
+    $('#sheetList').innerHTML = html;
+    Array.prototype.forEach.call(document.querySelectorAll('[data-store]'), function (el) {
+      el.onclick = function () { selectStore(parseInt(el.getAttribute('data-store'), 10)); };
+    });
+    $('#sheetBack').classList.add('show'); $('#storeSheet').classList.add('show');
+  }
+  function closeSheet() { $('#sheetBack').classList.remove('show'); $('#storeSheet').classList.remove('show'); }
+
+  // ── theme ────────────────────────────────────────────────────────────
+  function toggleTheme() {
+    var cur = document.documentElement.getAttribute('data-theme');
+    var next = cur === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('roots_theme', next); } catch (e) {}
+    var m = $('#meta-theme-color'); if (m) m.setAttribute('content', next === 'light' ? '#ece6d8' : '#16161a');
+  }
+
+  // ── screens ──────────────────────────────────────────────────────────
+  function screen(icon, title, body, btn) {
+    $('#hdr').hidden = true;
+    $('#main').innerHTML = '<div class="screen">' +
+      '<div class="big">' + icon + '</div><h2>' + title + '</h2><p>' + body + '</p>' +
+      (btn || '') + '</div>';
+  }
+  function offScreen() {
+    screen('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+      'Quick Stock is off · 库存功能已关闭',
+      'This add-on is turned off for your store. An admin can switch it on in the online-store back office under Settings. · 此附加功能已关闭,管理员可在后台“设置”中开启。');
+  }
+  function noStoreScreen() {
+    screen('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/></svg>',
+      'No store assigned · 未分配门店',
+      'Your account isn\'t linked to a store yet. Ask an admin to assign you one, then reopen Quick Stock. · 您的账号尚未关联门店,请联系管理员分配后重新打开。');
+  }
+  function errScreen(msg) {
+    screen('<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>',
+      'Something went wrong · 出错了', esc(msg || 'Please try again.'),
+      '<button class="btn" onclick="location.reload()">Retry · 重试</button>');
+  }
+
+  boot();
+})();
+</script>
+</body>
+</html>
