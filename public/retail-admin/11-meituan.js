@@ -226,12 +226,17 @@
     const storeB = _storeB;
 
     // Toolbar count — N shown, plus how many of the total are mapped.
+    const total  = _products.filter(p => p.is_active).length;
+    const mapped = _products.filter(p => p.is_active && Object.values(p.stores || {}).some(m => m.meituan_name)).length;
     const cnt = document.getElementById('mt-count');
     if (cnt) {
-      const total  = _products.filter(p => p.is_active).length;
-      const mapped = _products.filter(p => p.is_active && Object.values(p.stores || {}).some(m => m.meituan_name)).length;
       cnt.textContent = `${list.length} of ${total} · ${mapped} mapped`;
     }
+    // Unmapped warning — sellable products with NO Meituan mapping never get a
+    // stock push, so Meituan keeps a stale number and can oversell (this is the
+    // exact gap behind a Meituan-says-3 / store-says-2 drift). Surface it loudly
+    // instead of leaving it to the passive "show unmapped" filter.
+    mtRenderUnmappedWarn(total - mapped, total);
 
     if (!list.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="muted" style="padding:24px;text-align:center">No products found.</td></tr>';
@@ -315,6 +320,41 @@
       </tr>`;
     }).join('');
   }
+
+  // ── Unmapped warning banner ──────────────────────────────────────────────────
+  // Active products with no Meituan mapping never receive a stock push, so their
+  // Meituan listing keeps whatever number was last typed by hand — it drifts and
+  // can oversell (the storefront sold a unit, Meituan never heard). Make that gap
+  // loud at the top of the tab; clicking "Review" jumps to the unmapped filter.
+  function mtRenderUnmappedWarn(unmapped, total) {
+    const box = document.getElementById('mt-unmapped-warn');
+    if (!box) return;
+    if (!unmapped || unmapped <= 0) {
+      box.style.display = 'none';
+      box.innerHTML = '';
+      return;
+    }
+    box.style.display = 'block';
+    box.style.cssText = 'display:block;margin:0 0 14px;border:1px solid var(--warn,#d97706);'
+      + 'border-radius:8px;background:color-mix(in srgb, var(--warn,#d97706) 10%, transparent);'
+      + 'padding:12px 14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap';
+    box.innerHTML = `
+      <div style="flex:1;min-width:240px">
+        <div style="font-weight:700;font-size:13px;color:var(--warn,#d97706)">
+          ⚠ ${unmapped} of ${total} active product(s) are NOT synced to Meituan · ${unmapped} 个商品未映射到美团</div>
+        <div class="muted" style="font-size:12px;margin-top:3px">
+          Stock changes never reach Meituan for these, so its listing can show the wrong number and oversell.
+          Map the ones that are listed on Meituan. · 这些商品的库存不会推送到美团,可能超卖——请映射在美团上架的商品。</div>
+      </div>
+      <button class="btn btn-sm" onclick="mtReviewUnmapped()">Review unmapped · 查看未映射</button>`;
+  }
+
+  // Tick the "show unmapped only" filter, re-render, and scroll to the table.
+  window.mtReviewUnmapped = function () {
+    const chk = document.getElementById('mt-show-unmapped');
+    if (chk) { chk.checked = true; mtFilterProducts(); }
+    document.getElementById('mt-products-wrap')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   // ── Auto-fill names ──────────────────────────────────────────────────────────
   // Suggest a Meituan listing name for a product. On a Chinese marketplace the

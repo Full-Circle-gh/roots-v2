@@ -6499,6 +6499,11 @@
       </div>
     </div>
 
+    <!-- Unmapped warning — sellable products with no Meituan mapping silently
+         drift (stock changes never reach Meituan, so it can oversell). Rendered
+         by mtRenderProducts(); hidden when every active product is mapped. -->
+    <div id="mt-unmapped-warn" style="display:none"></div>
+
     <!-- Recent log -->
     <details id="mt-log-details" style="margin-bottom:14px">
       <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted);padding:4px 0">Recent sync log · 最近日志</summary>
