@@ -1937,10 +1937,33 @@ let _ORDER_BACK_CUSTOMER = null;
 // order, so "← Back to customer" lands on the exact same Recent-orders row.
 let _ORDER_BACK_CUSTOMER_SCROLL = 0;
 
+// Compare SKUs numerically segment-by-segment so "1-2" < "1-10" < "2-1"
+// (a plain string compare puts "1-10" before "1-2"). Splits on any non-digit
+// run; numeric chunks compare as numbers, any trailing text breaks ties.
+function skuCompare(a, b) {
+  const sa = String(a || ''), sb = String(b || '');
+  const na = sa.split(/(\d+)/).filter(s => s !== '');
+  const nb = sb.split(/(\d+)/).filter(s => s !== '');
+  const len = Math.max(na.length, nb.length);
+  for (let i = 0; i < len; i++) {
+    const pa = na[i], pb = nb[i];
+    if (pa === undefined) return -1;
+    if (pb === undefined) return 1;
+    const da = /^\d+$/.test(pa), db = /^\d+$/.test(pb);
+    if (da && db) {
+      const diff = parseInt(pa, 10) - parseInt(pb, 10);
+      if (diff) return diff;
+    } else if (pa !== pb) {
+      return pa < pb ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
 function sortOrderItems(items, mode) {
   const arr = [...items];
   if (mode === 'sku') {
-    return arr.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+    return arr.sort((a, b) => skuCompare(a.sku, b.sku));
   }
   if (mode === 'shipping') {
     // Air-only → mixed → land-only.
@@ -1950,7 +1973,7 @@ function sortOrderItems(items, mode) {
       if (m.length === 1 && m[0] === 'land') return 2;
       return 1;
     };
-    return arr.sort((a, b) => score(a) - score(b) || (a.sku || '').localeCompare(b.sku || ''));
+    return arr.sort((a, b) => score(a) - score(b) || skuCompare(a.sku, b.sku));
   }
   return arr; // 'default' — preserves order as the customer placed it
 }
@@ -2116,7 +2139,6 @@ function renderSortChips() {
   return `<div class="sort-chips">
     <span class="sort-label">Sort items · 排序:</span>
     ${mk('sku',       'SKU')}
-    ${mk('shipping',  'Shipping · 配送')}
     ${mk('default',   'As ordered · 原顺序')}
   </div>`;
 }
@@ -3215,6 +3237,11 @@ function printReceiptTile(o) {
       <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Only this PC (the one with the label printer). Prints the parcel label when its waybill is created.', '仅本机(连接标签打印机的电脑)。生成运单时自动打印该包裹箱贴。'))}">
         <input type="checkbox" ${boxLabelAutoOn() ? 'checked' : ''} onchange="setBoxLabelAuto(this.checked)"> ${cuT('Auto on waybill · 运单后自动', '运单后自动 · Auto')}
       </label>
+      ${o.tracking_carrier === 'jd' && o.tracking_number ? `
+      <button class="btn btn-sm" onclick="printJdWaybill(${o.id})" title="${escapeAttr(cuT('Print the JD waybill label on the local JD print component', '通过本机京东打印组件打印京东面单'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('JD label · 京东面单', '京东面单 · JD label')}</button>` : ''}
+      <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Only this PC (the one running the JD print component). Prints the JD waybill label when its waybill is created.', '仅本机(运行京东打印组件的电脑)。生成运单时自动打印京东面单。'))}">
+        <input type="checkbox" ${jdCloudPrintAutoOn() ? 'checked' : ''} onchange="setJdCloudPrintAuto(this.checked)"> ${cuT('JD label auto · 面单自动', '面单自动 · JD')}
+      </label>
     </div>
   </div>`;
 }
@@ -3270,6 +3297,93 @@ function setBoxLabelAuto(on) {
   try { localStorage.setItem('boxlabelAutoWaybill', on ? '1' : '0'); } catch (e) {}
   toast(on ? cuT('Box label will auto-print on waybill', '生成运单后将自动打印箱贴')
            : cuT('Box-label auto-print off', '已关闭箱贴自动打印'));
+}
+
+// ─── JD cloud-print (electronic waybill label / 京东面单) ────────────────────
+// The JD waybill LABEL (not the box sticker) prints via JD's local print
+// component (京东打印组件) listening on ws://127.0.0.1:9113 on the PC wired to the
+// label printer. Like the box label this is per-MACHINE: only that PC should
+// fire, so the toggle + the printer name (as it appears inside the JD component,
+// e.g. "labels printer") live in localStorage, never in server config.
+function jdCloudPrintAutoOn() {
+  try { return localStorage.getItem('jdCloudPrintAutoWaybill') === '1'; } catch (e) { return false; }
+}
+function jdCloudPrinterName() {
+  try { return localStorage.getItem('jdCloudPrinterName') || ''; } catch (e) { return ''; }
+}
+function setJdCloudPrinterName(name) {
+  try { localStorage.setItem('jdCloudPrinterName', name || ''); } catch (e) {}
+}
+function setJdCloudPrintAuto(on) {
+  // On first enable, ask which printer in the JD component to send to. Leaving it
+  // blank lets the component use its default printer.
+  if (on && !jdCloudPrinterName()) {
+    const pick = prompt(cuT('Printer name shown in the JD print component (e.g. "labels printer"). Leave blank to use the default.',
+                            'JD打印组件里显示的打印机名称(例如 "labels printer")。留空则用默认打印机。'), '');
+    if (pick === null) return;                 // cancelled → leave the toggle off
+    setJdCloudPrinterName(pick.trim());
+  }
+  try { localStorage.setItem('jdCloudPrintAutoWaybill', on ? '1' : '0'); } catch (e) {}
+  toast(on ? cuT('JD label will auto-print on waybill', '生成运单后将自动打印京东面单')
+           : cuT('JD label auto-print off', '已关闭京东面单自动打印'));
+  if (_OPEN_ORDER) openOrder(_OPEN_ORDER.id, { instant: true });   // re-render checkbox
+}
+
+// Send one message to the local JD print component and resolve with its parsed
+// reply. The component listens on ws://127.0.0.1:9113 on THIS machine, so this
+// only works on the PC running the JD print client. A per-call socket keeps it
+// stateless. (https → ws://127.0.0.1 is allowed: loopback is a trusted origin.)
+function jdComponentSend(msg, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    let ws, settled = false;
+    const done = (fn, arg) => { if (settled) return; settled = true; try { ws && ws.close(); } catch (e) {} fn(arg); };
+    try { ws = new WebSocket('ws://127.0.0.1:9113'); }
+    catch (e) { return reject(new Error('ws_create_failed')); }
+    const t = setTimeout(() => done(reject, new Error('ws_timeout')), timeoutMs || 8000);
+    ws.onopen    = () => ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
+    ws.onmessage = (ev) => { clearTimeout(t); let j; try { j = JSON.parse(ev.data); } catch (e) { j = { raw: ev.data }; } done(resolve, j); };
+    ws.onerror   = () => { clearTimeout(t); done(reject, new Error('ws_error')); };
+    ws.onclose   = () => { clearTimeout(t); done(reject, new Error('ws_closed')); };
+  });
+}
+
+// Print a parcel's JD electronic waybill on the local JD print component. Pulls
+// the encrypted label data from the server (pullData), assembles the component
+// message (report format 2: tempUrl + printData), and sends it. Best-effort and
+// self-toasting — it never throws into the caller, so auto-print can never block
+// the waybill flow.
+async function printJdWaybill(orderId, shipmentId) {
+  let data;
+  try {
+    const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
+    const r = await api(`/api/retail-admin/orders/${orderId}/jd-waybill/print-data${qs}`);
+    if (!r || !r.success || !r.data) {
+      toast(cuT('Could not get JD label data', '获取京东面单数据失败') + (r && r.error ? ': ' + r.error : ''), 'err');
+      return;
+    }
+    data = r.data;
+  } catch (e) { toast(cuT('Could not get JD label data', '获取京东面单数据失败'), 'err'); return; }
+
+  const printName = jdCloudPrinterName();
+  const msg = {
+    orderType: 'PRINT',
+    version:   '2',
+    key:       'jd-' + orderId + '-' + (shipmentId || 0) + '-' + Date.now(),
+    parameters: {
+      contents: [{ tempUrl: data.tempUrl, printData: data.printData }],
+    },
+  };
+  if (printName) msg.parameters.printName = printName;
+
+  try {
+    const reply = await jdComponentSend(msg);
+    const ok = reply && (reply.success === 'true' || reply.success === true) && String(reply.status || '') === '500';
+    if (ok) toast(cuT('JD label sent to printer', '京东面单已发送打印') + ' · ' + (data.waybill || ''));
+    else toast(cuT('JD print component error', '京东打印组件报错') + ': ' + (reply && (reply.message || reply.status) || 'unknown'), 'err');
+  } catch (e) {
+    toast(cuT('JD print component not reachable — is the JD print client running on this PC?',
+              'JD打印组件无法连接 — 本机是否在运行京东打印客户端?'), 'err');
+  }
 }
 
 // Print box-label sticker(s) for an order on the LOCAL label printer. Pass
@@ -3887,6 +4001,10 @@ async function submitJdLabel(orderId, shipmentId, product, btn) {
     // drawer rebuild while _OPEN_ORDER still holds the order — the label doesn't
     // depend on the waybill itself, only the parcel/recipient.
     if (boxLabelAutoOn()) printBoxLabel(orderId, shipmentId);
+    // Auto-print the JD waybill LABEL on the local JD print component (this PC
+    // only). Independent of the box-label toggle; needs the waybill, so it pulls
+    // print data from the server. Best-effort — never blocks the flow.
+    if (jdCloudPrintAutoOn()) printJdWaybill(orderId, shipmentId);
     openOrder(orderId, { instant: true });
     loadOrders();
     return true;
@@ -4230,6 +4348,12 @@ function renderRefundPanel(o) {
   const reqAmt = o.refund_amount_requested != null ? Number(o.refund_amount_requested) : null;
   const apvAmt = o.refund_amount_approved != null ? Number(o.refund_amount_approved) : null;
   const paidAmt = o.refund_amount_paid != null ? Number(o.refund_amount_paid) : null;
+  // Cash vs store-credit split. refund_cash_amount is the cash slice settled via
+  // the gateway/manual payout; the rest of the approved VALUE went back to the
+  // customer's wallet + points. Only surfaced when an order paid with store
+  // credit was refunded (creditAmt > 0) — credit-free refunds show one figure.
+  const cashAmt   = o.refund_cash_amount != null ? Number(o.refund_cash_amount) : null;
+  const creditAmt = (cashAmt != null && apvAmt != null) ? Math.max(0, +(apvAmt - cashAmt).toFixed(2)) : null;
   let lines = [];
   try { lines = o.refund_lines_json ? JSON.parse(o.refund_lines_json) : []; } catch { lines = []; }
   const lineMap = new Map((o.items || []).map(it => [it.id, it]));
@@ -4284,6 +4408,7 @@ function renderRefundPanel(o) {
         ${reqAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Requested · 申请金额</div><b>¥${fmt(reqAmt)}</b></div>` : ''}
         ${apvAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Approved · 已批准</div><b>¥${fmt(apvAmt)}</b></div>` : ''}
         ${paidAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Paid back · 已退款</div><b>¥${fmt(paidAmt)}</b></div>` : ''}
+        ${creditAmt != null && creditAmt > 0.005 ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Cash refunded · 现金退款</div><b>¥${fmt(cashAmt)}</b></div><div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">To wallet/points · 退回余额/积分</div><b>¥${fmt(creditAmt)}</b></div>` : ''}
         ${o.refund_payout_method ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Method · 方式</div><b>${escapeHtml(o.refund_payout_method)}</b>${o.refund_payout_ref ? `<div class="muted" style="font-size: 10px; font-family: var(--f-mono); margin-top: 2px;">${escapeHtml(o.refund_payout_ref)}</div>` : ''}</div>` : ''}
       </div>` : reqAmt != null
         ? `<div style="margin-top: 8px; font-size: 12px;">${cuT(`Customer asked for <b>¥${fmt(reqAmt)}</b> of <b>¥${fmt(total)}</b>`, `顾客申请退 <b>¥${fmt(reqAmt)}</b> / 共 <b>¥${fmt(total)}</b>`)}</div>`
