@@ -1120,7 +1120,7 @@ function renderCartItems(){
 // Delivery-only MVP: pick/add address → /checkout/quote (fees + slots) → place
 // via /orders (handles the out-of-stock fallback). Server re-prices & re-checks
 // stock authoritatively. Payment is Phase 3c (order is created pending_payment).
-var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', usePoints:false, quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null, offersDone:false, _offers:null, _offerSig:'', _offerSkew:0, _offerTimer:null,
+var co = { addrId:null, addrs:[], slotId:null, slotKind:'', mode:'standard', note:'', voucher:'', payment:'alipay', usePoints:false, useBalance:false, quote:null, placing:false, idem:null, fallback:null, showAddForm:false, pollTimer:null, offersDone:false, _offers:null, _offerSig:'', _offerSkew:0, _offerTimer:null,
   // Add-address form region (mirrors the mini-app: pick a served zone → canonical
   // Chinese province/city/district written onto the address, never free text — the
   // server can't derive a 省 from an English city, which is why free text failed).
@@ -1134,6 +1134,7 @@ function coErrMsg(code){const map={
   address_required:state.lang==='cn'?'请选择地址':'Choose an address',
   delivery_slot_required:state.lang==='cn'?'请选择配送时间':'Choose a delivery time',
   insufficient_points:state.lang==='cn'?'积分不足':'Not enough points',
+  insufficient_balance:state.lang==='cn'?'余额不足':'Not enough balance',
   voucher_exhausted:state.lang==='cn'?'优惠码已失效':'Voucher no longer valid',
   flash_stock_exceeded:state.lang==='cn'?'秒杀库存不足':'Flash stock exceeded',
   local_only_outside_gz:state.lang==='cn'?'部分商品仅限本地':'Some items are local-only',
@@ -1274,6 +1275,7 @@ async function renderCheckout(){
     <section class="cx-sec">
       <div class="cx-sectitle">${cn?'支付方式':'Pay with'}</div>
       <div id="coPointsSec" hidden><div id="coPoints"></div></div>
+      <div id="coBalanceSec" hidden><div id="coBalance"></div></div>
       <div id="coPay"></div>
     </section>
     <section class="cx-sec">
@@ -1740,13 +1742,13 @@ async function openMapPicker(){
 async function coQuote(){
   const place=$('#coPlace'); if(place)place.disabled=true;
   if(!co.addrId){ const s=$('#coSummary'); if(s)s.innerHTML='<div class="co-line">'+(state.lang==='cn'?'选择地址后显示总价':'Add an address to see totals')+'</div>'; return; }
-  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId||null,slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0};
+  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId||null,slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0,use_balance:!!co.useBalance};
   let j;
   try{ const r=await fetch('/api/retail/checkout/quote',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
-  renderCoSlots(d); renderCoPoints(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d);
+  renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
 // "Ships soon" pre-order notice (server preorder_notice): a persistent banner in
@@ -1893,6 +1895,26 @@ function renderCoPoints(d){
     <label class="cx-sw"><input type="checkbox" id="coUsePts" ${co.usePoints?'checked':''}><span class="tr"></span><span class="kn"></span></label></div>`;
   $('#coUsePts').addEventListener('change',e=>{co.usePoints=e.target.checked;coQuote();});
 }
+// Wallet balance (prepaid store credit): opt-in toggle, mirrors points. Stacks
+// AFTER points and never pays shipping — server clamps balance_applied to the
+// non-shipping remainder. Hidden when the wallet is empty.
+function renderCoBalance(d){
+  const sec=$('#coBalanceSec'), box=$('#coBalance'); if(!sec||!box)return; const cn=state.lang==='cn';
+  const bal=Number(d.balance_balance)||0, maxUse=Number(d.balance_max_usable)||0;
+  if(bal<=0){ sec.hidden=true; co.useBalance=false; return; }
+  sec.hidden=false;
+  const disc=Number(d.balance_discount)||0;
+  const sub=co.useBalance&&disc>0
+    ? `<span class="cx-pts-emph">${cn?('已抵 −'+money(disc)):('−'+money(disc)+' off')}</span> <span>${cn?'· 余额不抵运费':'· balance never covers shipping'}</span>`
+    : `¥${bal.toFixed(2)} ${cn?'余额 · 本单可抵 ':'· worth '}${money(maxUse)}${cn?'':' on this order'}`;
+  // Nothing left for balance to cover (e.g. points already cover the goods) —
+  // show the toggle but disable it so the state reads clearly.
+  const dis=maxUse<=0?'disabled':'';
+  box.innerHTML=`<div class="cx-pts">
+    <div class="cx-pts-body"><div class="cx-pts-label">${cn?'使用余额':'Use my balance'}</div><div class="cx-pts-sub">${sub}</div></div>
+    <label class="cx-sw"><input type="checkbox" id="coUseBal" ${co.useBalance?'checked':''} ${dis}><span class="tr"></span><span class="kn"></span></label></div>`;
+  $('#coUseBal').addEventListener('change',e=>{co.useBalance=e.target.checked;coQuote();});
+}
 function renderCoSlots(d){
   const box=$('#coSlots'); if(!box)return; const cn=state.lang==='cn'; const sc=d.scheduling||{}; const slots=Array.isArray(sc.slots)?sc.slots:[];
   if(!slots.length){
@@ -1917,6 +1939,7 @@ function renderCoSummary(d){
     `<div class="cx-bd"><span class="cx-bd-l">${cn?'配送费':'Delivery'}</span><span class="cx-bd-v">${d.free_shipping?(cn?'免运费':'Free'):money(ship)}</span></div>`+
     (pack>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'包装费':'Packing fee'}</span><span class="cx-bd-v">${money(pack)}</span></div>`:'')+
     (Number(d.points_discount)>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'积分抵扣':'Points'}</span><span class="cx-bd-v">−${money(Number(d.points_discount))}</span></div>`:'')+
+    (Number(d.balance_discount)>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'余额抵扣':'Balance'}</span><span class="cx-bd-v">−${money(Number(d.balance_discount))}</span></div>`:'')+
     (earn>0?`<div class="cx-bd earn"><span class="cx-bd-l">${cn?'本单获得':"You'll earn"}</span><span class="cx-bd-v">+${earn} ${cn?'积分':'pts'}</span></div>`:'');
   const t=$('#coStickyTotal'); if(t)t.textContent=money(tot);
   const place=$('#coPlace'); if(place)place.disabled=false;
@@ -2058,7 +2081,7 @@ async function coPlace(){
   // re-enters coPlace, falling straight through to the order POST below.
   if(!co.offersDone&&Array.isArray(co._offers)&&co._offers.length){ coShowOffers(); return; }
   co.placing=true; $('#coPlace').disabled=true; coMsg('');
-  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId,delivery_slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0,voucher_code:co.voucher||null,customer_note:co.note||null,
+  const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId,delivery_slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0,use_balance:!!co.useBalance,voucher_code:co.voucher||null,customer_note:co.note||null,
     needs_cutlery:co.needsCutlery?1:0,needs_invoice:co.needsInvoice?1:0,
     invoice_type:co.needsInvoice?co.invoiceType:null,invoice_title:co.needsInvoice?(co.invoiceTitle||null):null,invoice_tax_id:(co.needsInvoice&&co.invoiceType==='company')?(co.invoiceTaxId||null):null,invoice_email:co.needsInvoice?(co.invoiceEmail||null):null,
     idempotency_key:co.idem};
@@ -2069,6 +2092,8 @@ async function coPlace(){
   if(r.ok&&j.success){ coStartPayment(j.data); return; }
   co.placing=false; $('#coPlace').disabled=false;
   if(r.status===409&&j.error==='needs_fallback_confirmation'){ coFallback(); return; }
+  // Balance moved between quote and submit — re-quote so the toggle + total resync.
+  if(j.error==='insufficient_balance') coQuote();
   coMsg(coErrMsg(j.error));
 }
 function coFallback(){

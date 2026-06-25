@@ -5100,6 +5100,7 @@ function cancelStalePendingOrdersForTenant() {
     ).run(o.id);
     // Same three reversals the manual pending_payment cancel performs.
     try { reverseOrderRedeem(o.id); } catch (e) { console.error('[auto-cancel.reverseRedeem]', o.id, e.message); }
+    try { reverseOrderBalance(o.id); } catch (e) { console.error('[auto-cancel.reverseBalance]', o.id, e.message); }
     try { reverseOrderVoucher(o.id); } catch (e) { console.error('[auto-cancel.reverseVoucher]', o.id, e.message); }
     try { inventory.releaseOrderReservations(o.id, { reason: 'auto_cancelled_unpaid' }); }
     catch (e) { console.error('[auto-cancel.release]', o.id, e.message); }
@@ -7338,7 +7339,22 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       });
     }
   }
-  const total = Math.max(0, grossTotal - pointsAmount);
+  // ── Wallet balance redemption (stacks AFTER points) ─────────────────
+  // Opt-in via body.use_balance. Points apply first (operator choice — they
+  // can expire), then prepaid wallet balance covers the remaining NON-SHIPPING
+  // bill. Store credit never pays shipping (walletSpendForOrder excludes it),
+  // so the residual `total` is always ≥ the shipping fee and is settled in
+  // cash with wechat/alipay. If credit zeroes the bill (e.g. pickup / free
+  // shipping), payment/create takes the `total <= 0` shortcut and marks the
+  // order paid with no gateway charge. Balance is consumed inside the order tx
+  // below (same as points) so concurrent orders can't double-spend it.
+  let balanceUsed = 0;
+  if (body.use_balance && paymentMethod !== 'points') {
+    const cust = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+    const have = Math.max(0, Number(cust?.balance) || 0);
+    balanceUsed = walletSpendForOrder(have, subtotal, packingFee, voucherDiscount, pointsAmount);
+  }
+  const total = Math.max(0, grossTotal - pointsAmount - balanceUsed);
 
   // ── Atomic write: order, items, payment intent, stock reservations ───
   // Reservations replace the old "decrement stock_qty on order create"
@@ -7362,8 +7378,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
          invoice_type, invoice_email,
          store_id, routing_reason, channel,
          fallback_choice, awaiting_restock_pids, idempotency_key,
-         fulfillment_type, fulfillment_short_pids
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         fulfillment_type, fulfillment_short_pids, balance_used
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -7390,7 +7406,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null,
       idempotencyKey,
       isPickup ? 'pickup' : 'delivery',
-      fulfillmentShortPids ? JSON.stringify(fulfillmentShortPids) : null
+      fulfillmentShortPids ? JSON.stringify(fulfillmentShortPids) : null,
+      balanceUsed
     );
     const orderId = info.lastInsertRowid;
 
@@ -7515,6 +7532,28 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       ).run(req.customer.id, -pointsUsed, after, orderId, `Order ${orderId} redeemed ${pointsUsed} pts`);
     }
 
+    // Consume prepaid wallet balance NOW (same tx as the order insert), so
+    // simultaneous orders can't double-spend it. Conditional UPDATE floor-checks
+    // the balance atomically; a stale read that would overdraw rolls back the
+    // whole order. Ledgered to retail_topup_transactions (negative amount,
+    // payment_method='order_redeem') so the wallet history shows the spend and
+    // reverseOrderBalance can find + reverse it on cancel/refund.
+    if (balanceUsed > 0) {
+      const upd = tdb().prepare(
+        'UPDATE retail_customers SET balance = ROUND(COALESCE(balance, 0) - ?, 2) WHERE id = ? AND ROUND(COALESCE(balance, 0) - ?, 2) >= 0'
+      ).run(balanceUsed, req.customer.id, balanceUsed);
+      if (upd.changes !== 1) {
+        const err = new Error('insufficient_balance');
+        err.code = 'insufficient_balance';
+        throw err;
+      }
+      tdb().prepare(
+        `INSERT INTO retail_topup_transactions
+           (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+         VALUES (?, ?, 0, 'order_redeem', 'success', CURRENT_TIMESTAMP, ?, ?)`
+      ).run(req.customer.id, -balanceUsed, `orderspend:${orderId}`, JSON.stringify({ order_id: orderId }));
+    }
+
     return orderId;
   });
 
@@ -7536,6 +7575,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     }
     if (e.code === 'insufficient_points') {
       return res.status(409).json({ success: false, error: 'insufficient_points' });
+    }
+    if (e.code === 'insufficient_balance') {
+      return res.status(409).json({ success: false, error: 'insufficient_balance' });
     }
     if (e.code === 'voucher_exhausted') {
       return res.status(409).json({ success: false, error: 'voucher_exhausted' });
@@ -12248,6 +12290,8 @@ router.post('/api/retail/orders/:id/cancel', requireRetailAuth, express.json(), 
   // on an order that was never paid. reverseOrderRedeem is idempotent.
   try { reverseOrderRedeem(id); }
   catch (e) { console.error('[cancel.reverseRedeem]', e); }
+  try { reverseOrderBalance(id); }
+  catch (e) { console.error('[cancel.reverseBalance]', e); }
   // Vouchers are also consumed at create (global pool + personal grant), so
   // return them too. Safe to call exactly once thanks to the transition guard.
   try { reverseOrderVoucher(id); }
@@ -16987,6 +17031,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       // transition guard above (def.prev) prevents re-cancelling, so these run
       // once. reverseOrderRedeem is idempotent; reverseOrderVoucher is once-only.
       try { reverseOrderRedeem(id); } catch (e) { console.error('[admin-cancel.reverseRedeem]', e); }
+      try { reverseOrderBalance(id); } catch (e) { console.error('[admin-cancel.reverseBalance]', e); }
       try { reverseOrderVoucher(id); } catch (e) { console.error('[admin-cancel.reverseVoucher]', e); }
     } else {
       // Release the committed stock back to available. If a PARTIAL refund already
@@ -17034,6 +17079,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         logRefundEvent({ orderId: id, event: 'paid', amount: fullTotal, note: 'auto-refund on cancel', userId: req.user.id, meta: { method: 'wechat', reference: wechatRefundRef } });
         try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints cancel]', e); }
         try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem cancel]', e); }
+        try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance cancel]', e); }
         try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral cancel]', e); }
         try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission cancel]', e); }
       } catch (e) { console.error('[cancel refund bookkeeping]', e); }
@@ -17075,6 +17121,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     logRefundEvent({ orderId: id, event: 'paid',     amount: fullTotal, note: 'legacy status-transition shortcut', userId: req.user.id });
     try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem]', e); }
+    try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission]', e); }
     try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
@@ -17388,6 +17435,7 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   if (reversePoints) {
     try { reverseOrderPoints(id); }  catch (e) { console.error('[reverseOrderPoints]', e); }
     try { reverseOrderRedeem(id); }  catch (e) { console.error('[reverseOrderRedeem]', e); }
+    try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance]', e); }
   }
   // A full refund undoes the kept-first-order, so claw back any referral payout.
   if (isFull) {
@@ -17672,6 +17720,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   if (isFull) {
     try { reverseOrderPoints(id); }   catch (e) { console.error('[reverseOrderPoints direct]', e); }
     try { reverseOrderRedeem(id); }   catch (e) { console.error('[reverseOrderRedeem direct]', e); }
+    try { reverseOrderBalance(id); }  catch (e) { console.error('[reverseOrderBalance direct]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral direct]', e); }
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission direct]', e); }
     if (o.status !== 'refunded' && o.status !== 'cancelled') {
@@ -19537,6 +19586,24 @@ function pointsRedeemableBase(subtotal, shippingFee, packingFee, voucherDiscount
   const ship = pointsCoverShipping() ? Number(shippingFee || 0) : 0;
   return Math.max(0, Number(subtotal || 0) + ship + Number(packingFee || 0) - Number(voucherDiscount || 0));
 }
+// Cash base that prepaid wallet BALANCE may be spent against. HARD RULE
+// (operator-stated): store credit — balance OR points — never pays the
+// shipping fee. So balance covers only subtotal + packing − voucher, and only
+// the portion not already covered by points (points apply first; see the order
+// endpoint). Shipping is ALWAYS settled in cash via WeChat/Alipay. No toggle —
+// unlike points there is no balance.coverShipping escape hatch by design.
+function walletSpendableBase(subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0) {
+  return Math.max(0,
+    Number(subtotal || 0) + Number(packingFee || 0)
+    - Number(voucherDiscount || 0) - Number(pointsAmount || 0));
+}
+// How much wallet balance THIS order can actually spend: the spendable base
+// (never shipping), capped at the customer's available balance. Rounded to
+// cents so we never charge sub-fen dust.
+function walletSpendForOrder(balanceAvailable, subtotal, packingFee, voucherDiscount = 0, pointsAmount = 0) {
+  const base = walletSpendableBase(subtotal, packingFee, voucherDiscount, pointsAmount);
+  return Math.round(Math.min(Math.max(0, Number(balanceAvailable || 0)), base) * 100) / 100;
+}
 
 // Reverse a redemption when an order is refunded. Idempotent — checks for
 // an existing 'refund_reverse' row tagged to this order's redeem.
@@ -19563,6 +19630,37 @@ function reverseOrderRedeem(orderId) {
   });
   try { tx(); } catch (e) { console.error('[reverseOrderRedeem]', e); }
   return refundedPts;
+}
+
+// Refund prepaid wallet BALANCE spent on an order back to the customer's
+// wallet — the cash-credit counterpart of reverseOrderRedeem. Called on every
+// cancel/refund path alongside the points reversal. Idempotent: the spend was
+// ledgered as a negative 'order_redeem' row in retail_topup_transactions, and
+// we mark the reversal with a positive 'refund_reverse' row guarded against a
+// double credit. Returns the ¥ amount returned (0 if nothing to reverse).
+function reverseOrderBalance(orderId) {
+  const spend = tdb().prepare(
+    "SELECT customer_id, amount FROM retail_topup_transactions WHERE out_trade_no = ? AND payment_method = 'order_redeem'"
+  ).get(`orderspend:${orderId}`);
+  if (!spend || !(spend.amount < 0)) return 0;
+  const refundAmt = Math.round(-spend.amount * 100) / 100;
+  const already = tdb().prepare(
+    "SELECT id FROM retail_topup_transactions WHERE out_trade_no = ? AND payment_method = 'refund_reverse'"
+  ).get(`orderrefund:${orderId}`);
+  if (already) return 0;
+  try {
+    tdb().transaction(() => {
+      tdb().prepare(
+        'UPDATE retail_customers SET balance = ROUND(COALESCE(balance, 0) + ?, 2) WHERE id = ?'
+      ).run(refundAmt, spend.customer_id);
+      tdb().prepare(
+        `INSERT INTO retail_topup_transactions
+           (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+         VALUES (?, ?, 0, 'refund_reverse', 'success', CURRENT_TIMESTAMP, ?, ?)`
+      ).run(spend.customer_id, refundAmt, `orderrefund:${orderId}`, JSON.stringify({ order_id: orderId, note: 'wallet balance returned on refund' }));
+    })();
+  } catch (e) { console.error('[reverseOrderBalance]', e); return 0; }
+  return refundAmt;
 }
 
 // Restore a voucher consumed at order-create when that order is cancelled.
@@ -19817,6 +19915,18 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
     total = Math.max(0, grossTotal - pointsDiscount);
   }
 
+  // Wallet balance preview — stacks AFTER points on the non-shipping bill.
+  // Store credit never pays shipping, so balance can cover at most
+  // subtotal + packing − points already applied. (Quote doesn't apply
+  // vouchers; the order endpoint re-prices with the real voucher discount.)
+  const _wallet = tdb().prepare('SELECT balance FROM retail_customers WHERE id = ?').get(req.customer.id);
+  const balanceBalance   = Math.max(0, Number(_wallet?.balance) || 0);
+  const balanceSpendable = walletSpendableBase(priced.subtotal, fees.packingFee, 0, pointsDiscount);
+  const balanceMaxUsable = Math.round(Math.min(balanceBalance, balanceSpendable) * 100) / 100;
+  const useBalance       = !!body.use_balance && paymentMethodPreview !== 'points';
+  const balanceApplied   = useBalance ? balanceMaxUsable : 0;
+  if (balanceApplied > 0) total = Math.max(0, total - balanceApplied);
+
   // Routing preview — runs the rich shortage analysis used by the new
   // 5-option modal (GZ + non-excluded district + right-away slot). For
   // every other case the legacy yes/no fallback is what the mini-app
@@ -19925,6 +20035,14 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       points_to_use_applied: pointsToUseApplied,
       points_discount: pointsDiscount,
       points_cover_shipping: pointsCoverShipping(),
+      // Wallet balance (prepaid store credit). balance_max_usable already
+      // excludes shipping and nets out points; balance_applied is what's used
+      // when use_balance was sent. balance_cover_shipping is always false (rule).
+      balance_balance:       balanceBalance,
+      balance_max_usable:    balanceMaxUsable,
+      balance_applied:       balanceApplied,
+      balance_discount:      balanceApplied,
+      balance_cover_shipping: false,
       points_earned_preview: pointsEarnedFor(pointsEarnBaseAmount(priced.subtotal, total), tierMultiplierFor(req.customer?.tier_key)),
       delivery_mode: deliveryMode,
       zone: {
