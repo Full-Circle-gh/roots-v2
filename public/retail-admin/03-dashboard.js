@@ -246,7 +246,47 @@ function dashSetRange(key) {
   dashLoad();
 }
 
+// ── Per-store filter ───────────────────────────────────────────────────────
+// Returns the active store_id (string) or '' for "all stores". Read straight
+// off the select so every loader (deep-dive, Today hero, ops tiles) scopes to
+// the same store without threading state around.
+function dashStoreId() {
+  const sel = document.getElementById('db-store');
+  return sel ? (sel.value || '') : '';
+}
+// Append the store filter to a dashboard query string (no-op when "all").
+function dashStoreQS() {
+  const sid = dashStoreId();
+  return sid ? `&store_id=${encodeURIComponent(sid)}` : '';
+}
+// A store pick re-pulls every store-scoped surface at once.
+function dashStoreChange() {
+  dashLoad();                       // deep-dive + bento data tiles
+  dashHeroLoadToday({ slow: false }); // Today hero KPIs/sparklines
+  if (typeof bentoLoadOps === 'function') bentoLoadOps(); // low-stock / refunds
+}
+// Populate the store dropdown once. Hidden for single-store tenants (no filter
+// value). Mirrors the Orders tab's ensureOrdersStoreFilter.
+let DASH_STORE_FILTER_LOADED = false;
+async function dashEnsureStoreFilter() {
+  if (DASH_STORE_FILTER_LOADED) return;
+  const sel = document.getElementById('db-store');
+  if (!sel) return;
+  try {
+    const r = await api('/api/retail-admin/stores');
+    const stores = r.data || [];
+    if (stores.length <= 1) return;   // No filter UI value with one store.
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">All stores · 全部门店</option>' +
+      stores.map(s => `<option value="${s.id}">${escapeHtml(s.name_en || s.code)}</option>`).join('');
+    if (prev) sel.value = prev;
+    sel.hidden = false;
+    DASH_STORE_FILTER_LOADED = true;
+  } catch (e) { /* silent — filter just stays hidden */ }
+}
+
 function dashInit() {
+  dashEnsureStoreFilter();
   // Wire range segment + metric buttons (once).
   $$('#db-range-seg button').forEach(b => b.addEventListener('click', () => dashSetRange(b.dataset.range)));
   $$('#db-trend-metrics button').forEach(b => b.addEventListener('click', () => {
@@ -469,7 +509,7 @@ async function dashHeroLoadToday(opts) {
   // Manual refresh asks for a slow, zen roll-up; the auto-poller stays snappy.
   const dur = opts && opts.slow ? 2600 : undefined;
   try {
-    const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`);
+    const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}${dashStoreQS()}`);
     const data = j.data || {};
     DASH_HERO.todayData = data;   // stashed so a language toggle can repaint without refetching
     const k = data.kpis || {};
@@ -1172,7 +1212,7 @@ function bentoInit() {
 
 async function bentoLoadOps() {
   try {
-    const j = await api('/api/retail-admin/dashboard/ops');
+    const j = await api(`/api/retail-admin/dashboard/ops?${dashStoreQS().replace(/^&/, '')}`);
     DASH_OPS = j.data || null;
     bentoRefresh('ops');
     deliveryBannerRender();
@@ -1359,7 +1399,7 @@ async function dashLoad() {
   // blank-out flick.
   if (!DASH_DATA) $('#db-kpis').innerHTML = '<div class="db-muted">Loading… · 加载中…</div>';
   try {
-    const j = await api(`/api/retail-admin/dashboard?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    const j = await api(`/api/retail-admin/dashboard?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}${dashStoreQS()}`);
     const first = !DASH_DATA;
     DASH_DATA = j.data;
     if (first) dashRenderAll();

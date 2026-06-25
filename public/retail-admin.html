@@ -608,6 +608,9 @@
         <input type="date" id="db-from" aria-label="From date">
         <span style="color:var(--text-3)">–</span>
         <input type="date" id="db-to" aria-label="To date">
+        <!-- Per-store filter. Hidden until >1 store loads (single-store tenants
+             see no filter). Scopes every order/stock-derived card below. -->
+        <select id="db-store" class="db-select" hidden onchange="dashStoreChange()" aria-label="Store · 门店"></select>
         <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
         <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
       </div>

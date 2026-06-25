@@ -9082,6 +9082,57 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
 // heatmap, cohorts, checkout abandonment, visits) stay on placed_at — they
 // measure when demand ARRIVES, not when cash settles.
 // ─────────────────────────────────────────────────────────────────────────
+// ── gzgrocery (Guanyi) pickup sales — wholesale "orders" that never hit
+// retail_orders ────────────────────────────────────────────────────────────
+// gzgrocery buys from Roots through the Guanyi ERP; we infer each pickup from a
+// drop in Guanyi stock and ledger it in guanyi_pickup_log. There is no
+// retail_orders row, so the dashboard would otherwise show ¥0 for this channel.
+// This folds the ledger into the dashboard's "daily sales": revenue = units ×
+// the wholesale ("owed") price (same basis as the Guanyi tab's "They owe you"),
+// orders = pickup events. A return ('drift_up') nets revenue back out but is not
+// counted as an order. Buckets are GZ-local (+8) to line up with the storefront
+// trend. Returns zeros (and never throws) for tenants without the pickup ledger.
+function guanyiPickupSales(db, from, to, opts) {
+  const out = { revenue: 0, orders: 0, byBucket: {} };
+  try {
+    if (!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get()) return out;
+    const hasPricing = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_product_pricing'`).get();
+    const TZ = '+8 hours';
+    const bucketExpr = (opts && opts.hourly)
+      ? `strftime('%H', pl.created_at, '${TZ}')`
+      : `date(pl.created_at, '${TZ}')`;
+    const priceJoin = hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id' : '';
+    // Mirror the Guanyi analytics fallback chain: gz price → retail → sell_price.
+    const unitOwed = hasPricing
+      ? 'COALESCE(pp.excel_gz_price, pp.excel_retail, sp.sell_price, 0)'
+      : 'COALESCE(sp.sell_price, 0)';
+    const rows = db.prepare(`
+      SELECT ${bucketExpr} AS bucket, pl.action AS action, pl.resolution AS resolution,
+             COALESCE(pl.inferred_pickup, 0) AS pickup, COALESCE(pl.drift, 0) AS drift,
+             ${unitOwed} AS unit_owed
+        FROM guanyi_pickup_log pl
+        LEFT JOIN store_products sp ON sp.id = pl.product_id
+        ${priceJoin}
+       WHERE (pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied'))
+         AND date(pl.created_at, '${TZ}') BETWEEN ? AND ?
+    `).all(from, to);
+    for (const r of rows) {
+      const isReturn = r.action === 'drift_up';
+      const units = isReturn ? -Math.abs(r.drift || 0) : (r.pickup || 0);
+      if (!units) continue;
+      const rev = units * (r.unit_owed || 0);
+      out.revenue += rev;
+      if (!isReturn) out.orders += 1;
+      const b = out.byBucket[r.bucket] || { revenue: 0, orders: 0 };
+      b.revenue += rev;
+      if (!isReturn) b.orders += 1;
+      out.byBucket[r.bucket] = b;
+    }
+    out.revenue = +out.revenue.toFixed(2);
+  } catch (e) { /* tenant without the guanyi pickup ledger → zeros */ }
+  return out;
+}
+
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const TZ    = '+8 hours';
   const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
@@ -9102,6 +9153,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const spanDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
   const hourly = from === to;  // single-day view → hour-of-day curve
 
+  // ── Optional per-store filter. Only retail_orders carries store_id (the
+  // fulfilling store), so the filter scopes every order-derived metric below.
+  // Visits / new-customer registration / loyalty tiers / cohorts are NOT
+  // store-attributable (no store_id column) and stay global. sid is validated
+  // to a bare integer, so interpolating it into the SQL is injection-safe. ──
+  const sid = /^[0-9]+$/.test(String(req.query.store_id || '')) ? parseInt(req.query.store_id, 10) : null;
+  const SF  = sid ? ` AND store_id = ${sid}` : '';     // bare retail_orders query
+  const SFO = sid ? ` AND o.store_id = ${sid}` : '';   // retail_orders aliased as o
+
   // Preceding window of equal length, for delta arrows.
   const prevTo   = new Date(new Date(from).getTime() - 86400000).toISOString().slice(0, 10);
   const prevFrom = new Date(new Date(from).getTime() - spanDays * 86400000).toISOString().slice(0, 10);
@@ -9113,9 +9173,27 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COALESCE(AVG(total), 0) AS aov,
            COUNT(DISTINCT customer_id) AS buyers
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?`;
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}`;
   const kpi     = tdb().prepare(kpiSql).get(from, to);
   const kpiPrev = tdb().prepare(kpiSql).get(prevFrom, prevTo);
+
+  // ── Fold in gzgrocery (Guanyi) pickup sales — inferred wholesale orders that
+  // never touch retail_orders — so the headline revenue/orders, the Today hero,
+  // and the trend below all reflect this channel as part of daily sales. No-op
+  // for tenants without the guanyi pickup ledger. ──
+  // gzgrocery is its own inferred wholesale channel, not one of the retail
+  // stores, so a per-store filter excludes it entirely (empty ledger).
+  const gyEmpty     = { revenue: 0, orders: 0, byBucket: {} };
+  const gySales     = sid ? gyEmpty : guanyiPickupSales(tdb(), from, to, { hourly });
+  const gySalesPrev = sid ? gyEmpty : guanyiPickupSales(tdb(), prevFrom, prevTo, { hourly: false });
+  kpi.revenue     = +(Number(kpi.revenue || 0) + gySales.revenue).toFixed(2);
+  kpi.orders      += gySales.orders;
+  kpiPrev.revenue = +(Number(kpiPrev.revenue || 0) + gySalesPrev.revenue).toFixed(2);
+  kpiPrev.orders  += gySalesPrev.orders;
+  // AOV now spans both channels — recompute from the blended totals (matches the
+  // SQL AVG exactly when there's no gzgrocery activity).
+  kpi.aov     = kpi.orders     ? +(kpi.revenue     / kpi.orders).toFixed(2)     : 0;
+  kpiPrev.aov = kpiPrev.orders ? +(kpiPrev.revenue / kpiPrev.orders).toFixed(2) : 0;
 
   const visitsSql = `
     SELECT COUNT(*) AS visits,
@@ -9141,7 +9219,12 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     const baseTo   = prevTo;   // the day before `from`
     const bk   = tdb().prepare(kpiSql).get(baseFrom, baseTo);
     const bnew = tdb().prepare(newCustSql).get(baseFrom, baseTo).n;
-    const fo = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}`).get().d;
+    // Blend gzgrocery into the baseline too, so "Today vs a typical day" compares
+    // like with like (today's revenue/orders already include gzgrocery above).
+    const gyBase = sid ? gyEmpty : guanyiPickupSales(tdb(), baseFrom, baseTo, { hourly: false });
+    bk.revenue = Number(bk.revenue || 0) + gyBase.revenue;
+    bk.orders  = (bk.orders || 0) + gyBase.orders;
+    const fo = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}${SF}`).get().d;
     const fc = tdb().prepare(`SELECT MIN(date(created_at, '${TZ}')) AS d FROM retail_customers`).get().d;
     const firstD = [fo, fc].filter(Boolean).sort()[0] || null;
     let days = 0;
@@ -9166,7 +9249,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const funnel = tdb().prepare(`
     SELECT status, COUNT(*) AS n, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE date(placed_at, '${TZ}') BETWEEN ? AND ?${SF}
      GROUP BY status`).all(from, to);
   const byStatus = {};
   for (const r of funnel) byStatus[r.status] = { n: r.n, revenue: r.revenue };
@@ -9181,7 +9264,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       SELECT CAST(${PHOUR} AS INTEGER) AS b,
              COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
         FROM retail_orders
-       WHERE ${PAID} AND ${PDATE} = ?
+       WHERE ${PAID} AND ${PDATE} = ?${SF}
        GROUP BY b`).all(from);
     const v = tdb().prepare(`
       SELECT CAST(strftime('%H', created_at, '${TZ}') AS INTEGER) AS b,
@@ -9210,7 +9293,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       SELECT ${PDATE} AS b,
              COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
         FROM retail_orders
-       WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+       WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}
        GROUP BY b`).all(from, to);
     const v = tdb().prepare(`
       SELECT date(created_at, '${TZ}') AS b,
@@ -9233,6 +9316,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     }
   }
 
+  // Fold gzgrocery pickup revenue/orders into each trend bucket so the curve
+  // (hourly today, daily over a range) shows blended daily sales. Hourly trend
+  // buckets are 'HH:00'; gySales buckets are 'HH' — match on the hour prefix.
+  for (const t of trend) {
+    const key = hourly ? String(t.bucket).slice(0, 2) : t.bucket;
+    const g = gySales.byBucket[key];
+    if (g) { t.revenue = +(Number(t.revenue || 0) + g.revenue).toFixed(2); t.orders += g.orders; }
+  }
+
   // ── Payment-method split ──
   // Base buckets sum order.total by the order's primary tender. But a WeChat
   // add-on (paid through the gateway) was folded into order.total while the
@@ -9244,14 +9336,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     SELECT COALESCE(payment_method, 'unknown') AS method,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}
      GROUP BY method`).all(from, to);
   const addonByMethod = tdb().prepare(`
     SELECT COALESCE(o.payment_method, 'unknown') AS method,
            COALESCE(SUM(ad.amount), 0) AS addon_total
       FROM retail_orders o
       JOIN retail_order_addons ad ON ad.order_id = o.id AND ad.status = 'success'
-     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?${SFO}
      GROUP BY method`).all(from, to);
   const payMap = Object.fromEntries(payRows.map(r => [r.method, { method: r.method, orders: r.orders, revenue: Number(r.revenue) || 0 }]));
   for (const r of addonByMethod) {
@@ -9270,7 +9362,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     SELECT COALESCE(delivery_mode, 'unknown') AS mode,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}
      GROUP BY mode ORDER BY orders DESC`).all(from, to);
 
   // ── Fulfilling store + routing reason ──
@@ -9279,12 +9371,12 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS revenue
       FROM retail_orders o
       LEFT JOIN retail_stores s ON s.id = o.store_id
-     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?${SFO}
      GROUP BY o.store_id ORDER BY orders DESC`).all(from, to);
   const routing = tdb().prepare(`
     SELECT COALESCE(routing_reason, 'unknown') AS reason, COUNT(*) AS orders
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}
      GROUP BY reason ORDER BY orders DESC`).all(from, to);
 
   // ── Top products (by revenue) ──
@@ -9303,7 +9395,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       FROM retail_order_items i
       JOIN retail_orders o ON o.id = i.order_id
       LEFT JOIN store_products p ON p.id = i.product_id
-     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?${SFO}
      GROUP BY i.product_id ORDER BY revenue DESC LIMIT 15`).all(from, to).map(r => {
     let image_url = r.oi_image_url || r.p_image_url || '';
     if (!image_url && r.has_image) {
@@ -9322,7 +9414,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            MAX(o.placed_at) AS last_order
       FROM retail_orders o
       JOIN retail_customers c ON c.id = o.customer_id
-     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?${SFO}
      GROUP BY o.customer_id ORDER BY revenue DESC LIMIT 15`).all(from, to);
 
   // ── New vs returning buyers (first-ever paid order in window = new) ──
@@ -9333,7 +9425,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       JOIN (SELECT customer_id, MIN(${PDATE}) AS first_day
               FROM retail_orders WHERE ${PAID} GROUP BY customer_id) fo
         ON fo.customer_id = o.customer_id
-     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?`).get(from, to, from, to);
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?${SFO}`).get(from, to, from, to);
 
   // ── Loyalty-tier distribution (active customer base snapshot) ──
   const tiers = tdb().prepare(`
@@ -9347,7 +9439,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COUNT(*) AS orders, COUNT(DISTINCT customer_id) AS customers,
            COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}
        AND address_json IS NOT NULL AND json_extract(address_json, '$.city') IS NOT NULL
      GROUP BY city ORDER BY revenue DESC LIMIT 15`).all(from, to);
   // Attach an English city name so the dashboard can show either language
@@ -9360,7 +9452,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            json_extract(address_json, '$.district') AS district,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}
        AND address_json IS NOT NULL AND json_extract(address_json, '$.district') IS NOT NULL
      GROUP BY city, district ORDER BY revenue DESC LIMIT 20`).all(from, to);
 
@@ -9370,14 +9462,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COALESCE(SUM(voucher_amount), 0) AS discount,
            COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}
        AND voucher_code IS NOT NULL AND voucher_code != ''
      GROUP BY voucher_code ORDER BY uses DESC LIMIT 15`).all(from, to);
   const points = tdb().prepare(`
     SELECT COUNT(*) AS orders, COALESCE(SUM(points_used), 0) AS points_used,
            COALESCE(SUM(points_amount), 0) AS points_value
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ? AND points_used > 0`).get(from, to);
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF} AND points_used > 0`).get(from, to);
 
   // ── Traffic: WeChat launch-scene breakdown ──
   const scenes = tdb().prepare(`
@@ -9393,7 +9485,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            CAST(strftime('%H', placed_at, '${TZ}') AS INTEGER) AS hour,
            COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE ${PAID} AND date(placed_at, '${TZ}') BETWEEN ? AND ?${SF}
      GROUP BY dow, hour`).all(from, to);
 
   // ── Cohort retention (monthly, full history — NOT window-clipped) ──
@@ -9426,7 +9518,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COALESCE(SUM(points_amount), 0)  AS points_total,
            COALESCE(SUM(total), 0)          AS net_total
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?`).get(from, to);
+     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?${SF}`).get(from, to);
 
   // ── Checkout abandonment (quoted but never paid in the window) ──
   // started   = distinct customers who reached the checkout pricing step
@@ -9528,13 +9620,17 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     console.error('[dashboard/article-views]', e.message);
   }
 
-  const conversion = vis.sessions > 0 ? (kpi.orders / vis.sessions) * 100 : null;
+  // Conversion + refund rate are storefront-funnel metrics (gzgrocery pickups
+  // have no browsing session or refund flow), so measure them against storefront
+  // orders only — back out the gzgrocery orders blended into kpi.orders above.
+  const storefrontOrders = kpi.orders - gySales.orders;
+  const conversion = vis.sessions > 0 ? (storefrontOrders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
   res.json({
     success: true,
     data: {
-      window: { from, to, span_days: spanDays, granularity: hourly ? 'hour' : 'day' },
+      window: { from, to, span_days: spanDays, granularity: hourly ? 'hour' : 'day', store_id: sid },
       prev_window: { from: prevFrom, to: prevTo },
       kpis: {
         revenue:       kpi.revenue,
@@ -9549,8 +9645,8 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         gross_orders:  grossOrders,
         refunded_orders: refundedOrders,
         cancelled_orders: cancelledOrders,
-        refund_rate: kpi.orders + refundedOrders > 0
-          ? Math.round((refundedOrders / (kpi.orders + refundedOrders)) * 1000) / 10 : 0,
+        refund_rate: storefrontOrders + refundedOrders > 0
+          ? Math.round((refundedOrders / (storefrontOrders + refundedOrders)) * 1000) / 10 : 0,
       },
       deltas: {
         revenue:       pct(kpi.revenue, kpiPrev.revenue),
@@ -9870,13 +9966,26 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   let refunds = { count: 0, items: [] };
   let delivery_alerts = { count: 0, items: [] };
 
+  // Optional per-store filter (mirrors the main /dashboard endpoint). sid is
+  // validated to a bare integer, so interpolation is injection-safe.
+  const sid = /^[0-9]+$/.test(String(req.query.store_id || '')) ? parseInt(req.query.store_id, 10) : null;
+  const SFO = sid ? ` AND o.store_id = ${sid}` : '';   // retail_orders aliased as o
+
   // Real, sellable stock per product (matches the storefront's `stock` column).
-  const REAL_STOCK = `COALESCE(
-      (SELECT SUM(rss.physical_qty)
-         FROM retail_store_stock rss
-         JOIN retail_stores      rs ON rs.id = rss.store_id
-        WHERE rss.product_id = p.id AND rs.is_active = 1),
-      p.stock_qty, 0)`;
+  // With a store filter active, scope to that one store's shelf instead of the
+  // SUM across all active stores.
+  const REAL_STOCK = sid
+    ? `COALESCE(
+        (SELECT rss.physical_qty
+           FROM retail_store_stock rss
+          WHERE rss.product_id = p.id AND rss.store_id = ${sid}),
+        0)`
+    : `COALESCE(
+        (SELECT SUM(rss.physical_qty)
+           FROM retail_store_stock rss
+           JOIN retail_stores      rs ON rs.id = rss.store_id
+          WHERE rss.product_id = p.id AND rs.is_active = 1),
+        p.stock_qty, 0)`;
 
   try {
     const lowDefault = lowStockDefault();
@@ -9914,8 +10023,8 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     //   pending | reviewing | approved | paid | rejected | withdrawn
     // We surface the first two — actionable queue, not history.
     const refOpen = tdb().prepare(`
-      SELECT COUNT(*) AS n FROM retail_orders
-       WHERE refund_status IN ('pending','reviewing')
+      SELECT COUNT(*) AS n FROM retail_orders o
+       WHERE o.refund_status IN ('pending','reviewing')${SFO}
     `).get().n;
     const refItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.refund_amount_requested AS amount,
@@ -9923,7 +10032,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
-       WHERE o.refund_status IN ('pending','reviewing')
+       WHERE o.refund_status IN ('pending','reviewing')${SFO}
        ORDER BY o.refund_requested_at DESC LIMIT ?
     `).all(previewLimit);
     refunds = {
@@ -9947,7 +10056,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // locker drop-offs are NOT problems, so they're excluded here (they still
     // show as info in the orders list cell). Only dispatched orders qualify —
     // a delivered/cancelled order's stale flags are history, not a live alert.
-    const ALERT_WHERE = `o.status = 'dispatched'
+    const ALERT_WHERE = `o.status = 'dispatched'${SFO}
          AND ( o.tracking_status IN ('exception','returning','returned')
             OR o.tracking_scenario = 'no_contact' )`;
     const daCount = tdb().prepare(`
