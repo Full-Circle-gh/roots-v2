@@ -1943,10 +1943,33 @@ let _ORDER_BACK_CUSTOMER = null;
 // order, so "← Back to customer" lands on the exact same Recent-orders row.
 let _ORDER_BACK_CUSTOMER_SCROLL = 0;
 
+// Compare SKUs numerically segment-by-segment so "1-2" < "1-10" < "2-1"
+// (a plain string compare puts "1-10" before "1-2"). Splits on any non-digit
+// run; numeric chunks compare as numbers, any trailing text breaks ties.
+function skuCompare(a, b) {
+  const sa = String(a || ''), sb = String(b || '');
+  const na = sa.split(/(\d+)/).filter(s => s !== '');
+  const nb = sb.split(/(\d+)/).filter(s => s !== '');
+  const len = Math.max(na.length, nb.length);
+  for (let i = 0; i < len; i++) {
+    const pa = na[i], pb = nb[i];
+    if (pa === undefined) return -1;
+    if (pb === undefined) return 1;
+    const da = /^\d+$/.test(pa), db = /^\d+$/.test(pb);
+    if (da && db) {
+      const diff = parseInt(pa, 10) - parseInt(pb, 10);
+      if (diff) return diff;
+    } else if (pa !== pb) {
+      return pa < pb ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
 function sortOrderItems(items, mode) {
   const arr = [...items];
   if (mode === 'sku') {
-    return arr.sort((a, b) => (a.sku || '').localeCompare(b.sku || ''));
+    return arr.sort((a, b) => skuCompare(a.sku, b.sku));
   }
   if (mode === 'shipping') {
     // Air-only → mixed → land-only.
@@ -1956,7 +1979,7 @@ function sortOrderItems(items, mode) {
       if (m.length === 1 && m[0] === 'land') return 2;
       return 1;
     };
-    return arr.sort((a, b) => score(a) - score(b) || (a.sku || '').localeCompare(b.sku || ''));
+    return arr.sort((a, b) => score(a) - score(b) || skuCompare(a.sku, b.sku));
   }
   return arr; // 'default' — preserves order as the customer placed it
 }
@@ -2122,7 +2145,6 @@ function renderSortChips() {
   return `<div class="sort-chips">
     <span class="sort-label">Sort items · 排序:</span>
     ${mk('sku',       'SKU')}
-    ${mk('shipping',  'Shipping · 配送')}
     ${mk('default',   'As ordered · 原顺序')}
   </div>`;
 }
@@ -4236,6 +4258,12 @@ function renderRefundPanel(o) {
   const reqAmt = o.refund_amount_requested != null ? Number(o.refund_amount_requested) : null;
   const apvAmt = o.refund_amount_approved != null ? Number(o.refund_amount_approved) : null;
   const paidAmt = o.refund_amount_paid != null ? Number(o.refund_amount_paid) : null;
+  // Cash vs store-credit split. refund_cash_amount is the cash slice settled via
+  // the gateway/manual payout; the rest of the approved VALUE went back to the
+  // customer's wallet + points. Only surfaced when an order paid with store
+  // credit was refunded (creditAmt > 0) — credit-free refunds show one figure.
+  const cashAmt   = o.refund_cash_amount != null ? Number(o.refund_cash_amount) : null;
+  const creditAmt = (cashAmt != null && apvAmt != null) ? Math.max(0, +(apvAmt - cashAmt).toFixed(2)) : null;
   let lines = [];
   try { lines = o.refund_lines_json ? JSON.parse(o.refund_lines_json) : []; } catch { lines = []; }
   const lineMap = new Map((o.items || []).map(it => [it.id, it]));
@@ -4290,6 +4318,7 @@ function renderRefundPanel(o) {
         ${reqAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Requested · 申请金额</div><b>¥${fmt(reqAmt)}</b></div>` : ''}
         ${apvAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Approved · 已批准</div><b>¥${fmt(apvAmt)}</b></div>` : ''}
         ${paidAmt != null ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Paid back · 已退款</div><b>¥${fmt(paidAmt)}</b></div>` : ''}
+        ${creditAmt != null && creditAmt > 0.005 ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Cash refunded · 现金退款</div><b>¥${fmt(cashAmt)}</b></div><div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">To wallet/points · 退回余额/积分</div><b>¥${fmt(creditAmt)}</b></div>` : ''}
         ${o.refund_payout_method ? `<div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Method · 方式</div><b>${escapeHtml(o.refund_payout_method)}</b>${o.refund_payout_ref ? `<div class="muted" style="font-size: 10px; font-family: var(--f-mono); margin-top: 2px;">${escapeHtml(o.refund_payout_ref)}</div>` : ''}</div>` : ''}
       </div>` : reqAmt != null
         ? `<div style="margin-top: 8px; font-size: 12px;">${cuT(`Customer asked for <b>¥${fmt(reqAmt)}</b> of <b>¥${fmt(total)}</b>`, `顾客申请退 <b>¥${fmt(reqAmt)}</b> / 共 <b>¥${fmt(total)}</b>`)}</div>`
