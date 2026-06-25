@@ -326,6 +326,23 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
   function statusOf(it) { if (it.physical_qty <= 0) return 'out'; if (it.physical_qty <= lowFloor(it)) return 'low'; return 'ok'; }
   function statusText(st) { return st === 'out' ? t('Sold out', '售罄') : st === 'low' ? t('Low stock', '偏低') : t('In stock', '有货'); }
 
+  // Sort by SKU, not name. SKUs look like "<area>-<slot>" (e.g. 1-1, 1-10, 2-20,
+  // 3-344) — compare both halves NUMERICALLY so 1-1 < 1-10 < 1-20 < 2-1 < 3-344,
+  // not the string order that puts 1-10 before 1-2. Numeric SKUs sort first,
+  // then any non-numeric SKUs (natural order), then items with no SKU.
+  function skuParts(s) { var m = /^(\d+)-(\d+)/.exec(s || ''); return m ? [parseInt(m[1], 10), parseInt(m[2], 10)] : null; }
+  function skuCompare(a, b) {
+    var sa = a.sku || '', sb = b.sku || '';
+    if (!sa && !sb) return (a.name_en || a.name_cn || '').localeCompare(b.name_en || b.name_cn || '');
+    if (!sa) return 1;
+    if (!sb) return -1;
+    var ka = skuParts(sa), kb = skuParts(sb);
+    if (ka && kb) return (ka[0] - kb[0]) || (ka[1] - kb[1]) || sa.localeCompare(sb, undefined, { numeric: true });
+    if (ka && !kb) return -1;
+    if (!ka && kb) return 1;
+    return sa.localeCompare(sb, undefined, { numeric: true, sensitivity: 'base' });
+  }
+
   function boot() {
     api(API + '/quick-stock/context').then(function (d) {
       state.enabled = d.enabled;
@@ -423,6 +440,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     if (!state.items.length) $('#main').innerHTML = '<div class="screen"><div class="spinner"></div></div>';
     api(API + '/stores/' + state.storeId + '/stock').then(function (rows) {
       state.items = rows.map(function (r) { return { id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku, physical_qty: r.physical_qty | 0, restock_target: r.restock_target != null ? r.restock_target : null }; });
+      state.items.sort(skuCompare);
       state.pending = {};
       render();
     }).catch(function (e) {
