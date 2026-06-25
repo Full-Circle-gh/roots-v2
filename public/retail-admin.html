@@ -6506,6 +6506,7 @@
       <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Meituan name with the product's Chinese name (variant size appended where needed), both districts. Existing entries are kept.">✨ Auto-fill names</button>
       <button id="mt-verify-btn" class="btn btn-sm" onclick="mtVerify()" title="Check that variants sharing one Meituan listing each have a distinct SKU, so stock pushes to the right spec instead of overwriting each other.">✓ Verify mappings</button>
       <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
+      <button id="mt-force-push-btn" class="btn btn-sm btn-danger" onclick="mtPushAll(true)" title="Emergency only: push stock to Meituan even while the store is CLOSED (outside opening hours). Use sparingly — a backend edit while closed slightly raises Meituan risk-control exposure.">⚠ Emergency push (store closed)</button>
     </div>
 
     <!-- Meituan-only bundles (套餐/combos with no single roots product) -->

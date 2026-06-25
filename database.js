@@ -3816,7 +3816,9 @@ db.exec(`
 
 // The sync queue can carry bundle pushes too: when bundle_id is set, the daemon
 // updates the listing named meituan_name instead of looking up a product.
-for (const [col, ddl] of [['meituan_name', 'TEXT'], ['bundle_id', 'INTEGER']]) {
+// `force` lets an operator push a row even while the store is CLOSED on Meituan
+// (emergency stock correction outside opening hours). Normal rows stay gated.
+for (const [col, ddl] of [['meituan_name', 'TEXT'], ['bundle_id', 'INTEGER'], ['force', 'INTEGER NOT NULL DEFAULT 0']]) {
   try { db.exec(`ALTER TABLE meituan_sync_queue ADD COLUMN ${col} ${ddl}`); } catch (e) { /* column exists */ }
 }
 

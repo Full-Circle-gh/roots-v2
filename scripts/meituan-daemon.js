@@ -310,13 +310,19 @@ async function processStockQueue() {
     (byStore[row.store_code] = byStore[row.store_code] || []).push(row);
   }
 
-  for (const [storeCode, items] of Object.entries(byStore)) {
+  for (const [storeCode, allItems] of Object.entries(byStore)) {
     // Don't push while the store is CLOSED on Meituan (a backend edit at 3am is a
     // bot tell, and stock accuracy doesn't matter until it reopens) or while it's
     // in a verification cool-down (a push would re-hit risk-control). Rows stay
     // pending and flush at the next open / after the cool-down.
-    if (!isStoreOpen(storeCode)) continue;
+    //
+    // EXCEPTION: rows flagged force=1 ("Emergency push" from the admin) push even
+    // while closed — an operator deliberately correcting stock after hours. The
+    // verify cool-down still gates everything: forcing through a live risk-control
+    // challenge would only deepen it.
     if (inVerifyCooldown(storeCode)) continue;
+    const items = isStoreOpen(storeCode) ? allItems : allItems.filter(r => r.force);
+    if (!items.length) continue;
 
     // Collapse to the latest qty per product/bundle so we push each target once,
     // not replay every intermediate change. Older same-target rows are retired.

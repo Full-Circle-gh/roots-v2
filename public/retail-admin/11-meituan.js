@@ -178,17 +178,28 @@
   };
 
   // ── Push all ───────────────────────────────────────────────────────────────
-  window.mtPushAll = async function () {
-    const btn = document.querySelector('#tab-meituan .btn-primary');
+  window.mtPushAll = async function (force) {
+    // Emergency (force) pushes bypass the closed-store gate, so confirm first.
+    if (force && !confirm(
+      'EMERGENCY PUSH — store closed.\n\n' +
+      'This pushes stock to Meituan even though the store is outside opening hours. ' +
+      'It slightly raises Meituan risk-control exposure, so use it only for a genuine ' +
+      'stock correction that cannot wait until the store reopens.\n\nPush now?'
+    )) return;
+
+    const btn = force
+      ? document.getElementById('mt-force-push-btn')
+      : document.querySelector('#tab-meituan .btn-primary');
+    const label = btn ? btn.textContent : '';
     if (btn) { btn.disabled = true; btn.textContent = 'Queuing…'; }
     try {
-      const r = await api('/api/retail-admin/meituan/push-all', { method: 'POST' });
-      toast(`Queued ${r.queued} stock push(es) to Meituan`);
+      const r = await api('/api/retail-admin/meituan/push-all' + (force ? '?force=1' : ''), { method: 'POST' });
+      toast(`Queued ${r.queued} stock push(es) to Meituan` + (force ? ' (emergency — will push while closed)' : ''));
       await mtLoadStatus();
     } catch (e) {
       toast('Push failed: ' + e.message, 'error');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = 'Push all stock now'; }
+      if (btn) { btn.disabled = false; btn.textContent = label; }
     }
   };
 
