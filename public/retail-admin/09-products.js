@@ -3374,10 +3374,24 @@ function pdRteImage() {
 async function pdRteImagePick(e) {
   const f = e.target.files && e.target.files[0]; e.target.value = '';
   if (!f) return;
-  const fd = new FormData(); fd.append('file', f);
   toast(cuT('Uploading image…', '正在上传图片…'));
   try {
+    // Compress client-side first (same path the photo gallery uses) — a raw
+    // 4–10MB phone photo blows past the proxy body limit and bounces back as an
+    // HTML 413 page, which then fails JSON parse ("Unexpected token '<'").
+    // pdHandleImageUpload lands it ~300–600KB; it toasts + returns null on error.
+    const dataURL = await pdHandleImageUpload(f, PD_IMG_OPTS);
+    if (!dataURL) return;
+    const blob = await (await fetch(dataURL)).blob();
+    const name = (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg';
+    const fd = new FormData(); fd.append('file', blob, name);
     const r = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
+    // A proxy 413/502 returns an HTML page, not JSON — guard so the operator gets
+    // a real message instead of a raw JSON-parse error.
+    const ct = r.headers.get('content-type') || '';
+    if (!r.ok || ct.indexOf('application/json') === -1) {
+      throw new Error(r.status === 413 ? cuT('image too large', '图片过大') : ('HTTP ' + r.status));
+    }
     const j = await r.json();
     if (!j || !j.success) throw new Error((j && j.error) || 'upload_failed');
     const base = /^https:\/\//.test(location.origin) ? location.origin : 'https://rootskitchenchina.com';
