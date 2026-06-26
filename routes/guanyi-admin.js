@@ -386,11 +386,16 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
     const period = ['day', 'week', 'month'].includes(req.query.period) ? req.query.period : 'day';
     const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : null;
     const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : null;
-    const fromClause = from || "date('now','-90 days')";
-    const toClause   = to   || "date('now','+1 day')";
-    const bucket = period === 'month' ? "strftime('%Y-%m', pl.created_at)"
-                 : period === 'week'  ? "strftime('%Y-W%W', pl.created_at)"
-                 : "date(pl.created_at)";
+    // created_at is stored UTC (SQLite CURRENT_TIMESTAMP). gzgrocery and the
+    // operator are in China (UTC+8), so bucket AND filter by local date — else
+    // the day rolls over at 08:00 China time and pickups leak onto the wrong
+    // day (totals stay right, per-day rows look wrong). Matches the +8h shift
+    // every other date helper in this repo uses; per-tenant tz deferred.
+    const fromClause = from || "date('now','+8 hours','-90 days')";
+    const toClause   = to   || "date('now','+8 hours','+1 day')";
+    const bucket = period === 'month' ? "strftime('%Y-%m', pl.created_at, '+8 hours')"
+                 : period === 'week'  ? "strftime('%Y-W%W', pl.created_at, '+8 hours')"
+                 : "date(pl.created_at, '+8 hours')";
 
     const rows = db.prepare(`
       SELECT ${bucket} AS bucket, pl.product_id,
@@ -402,7 +407,7 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
         LEFT JOIN store_products sp ON sp.id = pl.product_id
         LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id
        WHERE (pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied'))
-         AND pl.created_at >= ${from ? '?' : fromClause} AND pl.created_at < ${to ? '?' : toClause}
+         AND date(pl.created_at, '+8 hours') >= ${from ? '?' : fromClause} AND date(pl.created_at, '+8 hours') < ${to ? '?' : toClause}
        GROUP BY bucket, pl.product_id
     `).all(...[from, to].filter(Boolean));
 
