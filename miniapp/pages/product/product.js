@@ -412,6 +412,8 @@ Page({
     // Kept raw on the instance for the size picker; ≥2 members → "Add" opens
     // the picker instead of adding the viewed product directly.
     this._variants = Array.isArray(p.variants) ? p.variants : [];
+    // Variant axis noun ("color"/"颜色") for the size-picker heading — operator-set.
+    this._variantNoun = { en: (p.variant_noun_en || '').trim(), cn: (p.variant_noun_cn || '').trim() };
     const hasVariants = this._variants.length > 1;
     // Stock state — null means untracked (treat as in-stock).
     let soldOut = false, stockTag = '', stockTagKind = '';
@@ -957,10 +959,13 @@ Page({
           : '',
       };
     });
+    // Picker heading uses the operator-set variant axis noun; falls back to the
+    // legacy "size" / "规格" when unset.
+    const noun = this._variantNoun || { en: '', cn: '' };
     this.setData({
       vpShow: true,
       vpName: this.data.name,
-      vpTitle: L === 'cn' ? '选择规格' : 'Choose a size',
+      vpTitle: L === 'cn' ? (noun.cn ? `选择${noun.cn}` : '选择规格') : (noun.en ? `Choose a ${noun.en}` : 'Choose a size'),
       vpOptions: options,
     });
   },

@@ -1014,10 +1014,14 @@ Page({
     });
     const rep = (this.data._raw || []).find(p => Number(p.id) === repId);
     this._vpRepId = repId;
+    // Picker heading uses the operator-set variant axis noun ("color"→"Choose a
+    // color" / "选择颜色"); falls back to the legacy "size" / "规格" when unset.
+    const nounEn = (rep && rep.variant_noun_en || '').trim();
+    const nounCn = (rep && rep.variant_noun_cn || '').trim();
     this.setData({
       vpShow: true,
       vpName: rep ? lang.pick(rep.name_en, rep.name_cn, L) : '',
-      vpTitle: L === 'cn' ? '选择规格' : 'Choose a size',
+      vpTitle: L === 'cn' ? (nounCn ? `选择${nounCn}` : '选择规格') : (nounEn ? `Choose a ${nounEn}` : 'Choose a size'),
       vpOptions: options,
     });
   },

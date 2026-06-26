@@ -758,6 +758,7 @@ const RETAIL_PRODUCT_COLS = `
   p.flash_price, p.flash_starts_at, p.flash_ends_at,
   p.flash_stock_limit, p.flash_sold, p.no_coupon_on_flash,
   p.variant_group_id, p.variant_label, p.variant_label_cn, p.variant_sort,
+  p.variant_noun_en, p.variant_noun_cn,
   p.low_stock_threshold,
   p.is_batch_made,
   p.oos_policy,
@@ -13174,7 +13175,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
-            variant_group_id, variant_label, variant_sort,
+            variant_group_id, variant_label, variant_sort, variant_noun_en, variant_noun_cn,
             is_batch_made, oos_policy, ship_from_supplier, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
@@ -13840,7 +13841,7 @@ router.get('/api/retail-admin/products/:id/images', requireRetailAdmin, (req, re
 // group under the retail-admin session.
 router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const p = tdb().prepare('SELECT id, variant_group_id FROM store_products WHERE id = ?').get(id);
+  const p = tdb().prepare('SELECT id, variant_group_id, variant_noun_en, variant_noun_cn FROM store_products WHERE id = ?').get(id);
   if (!p) return res.status(404).json({ success: false, error: 'not_found' });
   let members = [];
   if (p.variant_group_id) {
@@ -13875,7 +13876,7 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
       return m;
     });
   }
-  res.json({ success: true, data: { group_id: p.variant_group_id || null, members } });
+  res.json({ success: true, data: { group_id: p.variant_group_id || null, members, noun_en: p.variant_noun_en || '', noun_cn: p.variant_noun_cn || '' } });
 });
 
 // PUT — set this product's variant group. body: { members: [{ id, label }] }.
@@ -13889,6 +13890,11 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
   const self = tdb().prepare('SELECT id, variant_group_id, variant_label, variant_label_cn FROM store_products WHERE id = ?').get(id);
   if (!self) return res.status(404).json({ success: false, error: 'not_found' });
   const raw = Array.isArray(req.body?.members) ? req.body.members : [];
+  // Variant axis noun for the whole group ("color" / "颜色" …) — drives the
+  // storefront picker heading. Stored on EVERY member so any rep row carries it.
+  // Blank → NULL → storefront falls back to "size" / "规格".
+  const nounEn = (req.body?.noun_en || '').toString().trim().slice(0, 40) || null;
+  const nounCn = (req.body?.noun_cn || '').toString().trim().slice(0, 40) || null;
   const byId = new Map();
   for (const m of raw) {
     const mid = parseInt(m && m.id, 10);
@@ -13905,8 +13911,9 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
   try {
     const count = tdb().transaction(() => {
       if (desired.length < 2) {
-        if (prevGid) tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
-        tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
+        // Disbanding the group — also clear the axis noun (no group, no heading).
+        if (prevGid) tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, variant_noun_en=NULL, variant_noun_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
+        tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, variant_noun_en=NULL, variant_noun_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
         return 0;
       }
       if (prevGid) {
@@ -13914,8 +13921,8 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
         const ph = keep.map(() => '?').join(',');
         tdb().prepare(`UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
       }
-      const upd = tdb().prepare('UPDATE store_products SET variant_group_id=?, variant_label=?, variant_label_cn=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
-      desired.forEach(([mid, lbl], idx) => upd.run(groupId, lbl.label, lbl.label_cn, idx, mid));
+      const upd = tdb().prepare('UPDATE store_products SET variant_group_id=?, variant_label=?, variant_label_cn=?, variant_noun_en=?, variant_noun_cn=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
+      desired.forEach(([mid, lbl], idx) => upd.run(groupId, lbl.label, lbl.label_cn, nounEn, nounCn, idx, mid));
       return desired.length;
     })();
     res.json({ success: true, group_id: count >= 2 ? groupId : null, count });

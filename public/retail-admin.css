@@ -2044,6 +2044,11 @@
   .va-x { flex: none; border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 14px; padding: 2px 6px; line-height: 1; }
   .va-x:hover { color: var(--brass); }
   .va-actions { display: flex; gap: 8px; margin-top: 12px; }
+  /* Variant-axis noun ("color"/"颜色") — drives the storefront picker heading. */
+  .va-noun { display: grid; grid-template-columns: auto 1fr 1fr; align-items: center; gap: 8px; margin: 10px 0 4px; padding: 8px 10px; background: var(--bg-app); border: 1px solid var(--line-soft); border-radius: 10px; }
+  .va-noun .va-noun-lbl { font-size: 12px; font-weight: 700; color: var(--text-2); white-space: nowrap; }
+  .va-noun .va-noun-hint { grid-column: 1 / -1; font-size: 11px; color: var(--text-4); }
+  @media (max-width: 560px) { .va-noun { grid-template-columns: 1fr 1fr; } .va-noun .va-noun-lbl { grid-column: 1 / -1; } }
   /* "Buy together" bundle editor (#pd-bundle) — chips of chosen products + a
      search picker. No bundle SKU; items keep their own price/stock. */
   .bu-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }

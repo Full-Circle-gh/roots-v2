@@ -3403,6 +3403,13 @@ try {
   // holds the English option ("Big 200g"); `variant_label_cn` the Chinese ("大")
   // — the storefront/editor pick the right one per the language toggle.
   addColumn('store_products', 'variant_label_cn', 'TEXT');
+  // Store-only: the variant AXIS noun for the whole group — what the size-picker
+  // heading calls the choice. Operator types just the noun ("color", "flavor",
+  // "size"); the storefront renders "Choose a {noun_en}" / "选择{noun_cn}". NULL
+  // falls back to the legacy "size" / "规格". Propagated to every group member on
+  // save so any rep row carries it. EN/CN split, each independent (never glued).
+  addColumn('store_products', 'variant_noun_en', 'TEXT');
+  addColumn('store_products', 'variant_noun_cn', 'TEXT');
   // Store-only: per-product low-stock alert threshold. NULL = use the tenant
   // global default (storefront_config 'inventory.lowStockThreshold', default 5).
   // A product gets flagged "low" when its stock is >0 and ≤ this number — drives
