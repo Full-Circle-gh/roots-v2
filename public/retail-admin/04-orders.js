@@ -3928,17 +3928,18 @@ async function submitJdLabel(orderId, shipmentId, product, btn) {
 }
 
 // Create a JD waybill for a parcel. Air parcels always ship fresh-express
-// (生鲜特快 / LL-SD-M) — we know the parcel is air, so skip the chooser and
-// create directly. Ground/local parcels still ask (fresh-ground 生鲜标快 vs
-// ambient-ground 京东标快), since that depends on what's in the box.
+// (生鲜特快 / LL-SD-M) — the order already tells us it's air, so create the
+// waybill directly with no prompt at all. Ground/local parcels still ask the
+// one thing the order can't tell us: fresh-ground (生鲜标快) vs ambient-ground
+// (京东标快), since that depends on what's in the box. We never re-ask air vs
+// ground — only the two GROUND options are offered.
 function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   if (mode === 'air') {
-    if (!confirm(cuT('Create a JD 生鲜特快 (Fresh · Air) waybill and ship this parcel now?',
-                     '生成京东「生鲜特快」运单并发货？'))) return;
     submitJdLabel(orderId, shipmentId, 'LL-SD-M', ev?.currentTarget);
     return;
   }
   const preset = jdSuggestedService(mode, !!Number(isFresh));
+  const services = JD_SERVICES.filter(s => s.code !== 'LL-SD-M');   // ground-only: fresh vs ambient
   const bg = document.createElement('div');
   bg.className = 'pu-editor-bg';
   bg.style.display = 'flex';
@@ -3947,13 +3948,13 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
       <div class="pu-editor-head">
         <div>
           <h3 style="margin:0; font-size:14px;">${cuT('Create JD label', '生成京东运单')}</h3>
-          <div class="muted" style="font-size:11px; margin-top:2px;">${cuT('Choose the JD service for this parcel', '选择此包裹的京东时效产品')}</div>
+          <div class="muted" style="font-size:11px; margin-top:2px;">${cuT('Ground parcel — is it fresh (ice pack) or ambient?', '陆运包裹 — 生鲜(冰袋)还是普通?')}</div>
         </div>
         <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
       </div>
       <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display:block;">
         <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
-          ${JD_SERVICES.map(s => `
+          ${services.map(s => `
             <label class="jd-svc" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line-soft); border-radius:8px; cursor:pointer;">
               <input type="radio" name="jd-svc" value="${s.code}" ${s.code === preset ? 'checked' : ''} style="margin:0;">
               <span style="flex:1;">
