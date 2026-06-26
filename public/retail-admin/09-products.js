@@ -1885,6 +1885,10 @@ function paApplyRowSelection() {
 // via /api/retail-admin/products/:id/variants. Same model as the customer
 // switcher + the staff grouping.
 let VA_ID = null, VA_MEMBERS = [], VA_HAD_GROUP = false, VA_OPEN = false;
+// Variant AXIS noun for this group — what the storefront picker heading calls
+// the choice (operator types just the noun: "color" / "颜色"). Blank → the
+// storefront default "size" / "规格". Saved to every member by vaPersist.
+let VA_NOUN_EN = '', VA_NOUN_CN = '';
 // Live per-variant stock totals (variantId → sum across stores), filled by the
 // variant × store matrix panel. The variants table reads these for its
 // read-only STOCK column so both views always agree.
@@ -1903,7 +1907,7 @@ function _vaPickName(p) {
 }
 async function vaLoad(id) {
   const box = document.getElementById('pd-variants'); if (!box) return;
-  VA_ID = id; VA_MEMBERS = []; VA_HAD_GROUP = false; VA_STORE_TOTALS = {};
+  VA_ID = id; VA_MEMBERS = []; VA_HAD_GROUP = false; VA_STORE_TOTALS = {}; VA_NOUN_EN = ''; VA_NOUN_CN = '';
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Variants', '规格')}</div>` +
       `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then variants open here.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可在此添加规格。')}</div>`;
@@ -1915,6 +1919,8 @@ async function vaLoad(id) {
     const j = await api('/api/retail-admin/products/' + id + '/variants');
     const members = (j.data && j.data.members) || [];
     VA_HAD_GROUP = !!(j.data && j.data.group_id);
+    VA_NOUN_EN = (j.data && j.data.noun_en) || '';
+    VA_NOUN_CN = (j.data && j.data.noun_cn) || '';
     // Stock shown on the self row = the live per-store total (Tianhe + Yuexiu),
     // not the legacy flat stock_qty (which per-store edits never touch). Falls
     // back to stock_qty only if no per-store sum is known yet.
@@ -2010,15 +2016,30 @@ function vaRender() {
       `<span class="va-show"><input type="checkbox" ${v.published ? 'checked' : ''} title="${cuT('Show this variant in the shop', '在店面显示此规格')}" onchange="vaField(${v.id}, 'published', this.checked ? 1 : 0)"></span>` +
       `<button type="button" class="va-x" title="${cuT('Delete this variant', '删除此规格')}" onclick="vaRemove(${v.id})">✕</button></div>`;
   }).join('');
+  // What is this variant axis? Operator types just the noun ("color", "flavor").
+  // The storefront picker heading becomes "Choose a {noun}" / "选择{noun}". Blank
+  // → falls back to "size" / "规格". Only shown for a real group (≥2 variants).
+  const nounRow = hasReal
+    ? `<div class="va-noun">` +
+        `<span class="va-noun-lbl">${cuT('What are these variants? · 这些规格是什么?', '这些规格是什么? · What are these variants?')}</span>` +
+        `<input class="va-label" type="text" value="${escapeAttr(VA_NOUN_EN)}" maxlength="40" placeholder="${cuT('English · e.g. size, color, flavor', '英文 · 如 size, color')}" title="${cuT('Shoppers see “Choose a {word}”', '顾客看到「Choose a {词}」')}" oninput="vaNoun('en', this.value)">` +
+        `<input class="va-label va-label-cn" type="text" value="${escapeAttr(VA_NOUN_CN)}" maxlength="40" placeholder="${cuT('中文 · 如 规格、颜色、口味', '中文 · 如 颜色')}" title="${cuT('顾客看到「选择{词}」', 'Shoppers see “选择{词}”')}" oninput="vaNoun('cn', this.value)">` +
+        `<span class="va-noun-hint">${cuT('Picker heading — blank = “size / 规格”.', '选择器标题 — 留空为「size / 规格」。')}</span>` +
+      `</div>`
+    : '';
   box.innerHTML =
     toggle +
     `<div class="helper" style="font-size:11px;margin-bottom:2px;margin-top:6px">${cuT('Sell this product in several variants. Each has its own name, SKU, price & stock. Drag ⠿ to set the order shoppers see.', '以多种规格出售本产品。每种规格有独立的名称、货号、价格与库存。拖动 ⠿ 可调整顾客看到的顺序。')}</div>` +
+    nounRow +
     `<div class="va-table">${head}${rows}</div>` +
     `<div class="va-actions">` +
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add variant', '+ 新增规格')}</button>` +
     `</div>`;
 }
 function vaLabel(id, lang, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) { if (lang === 'cn') v.label_cn = val; else v.label = val; pdSyncMatrixLabels(); } }
+// Variant-axis noun — mutates the model only (no re-render, keeps input focus);
+// persisted to every member by vaPersist on the main Save.
+function vaNoun(lang, val) { if (lang === 'cn') VA_NOUN_CN = val; else VA_NOUN_EN = val; }
 // The opened ("self") product's quick fields mirror straight into the main form
 // inputs above, so the normal Save persists them — no separate write, and the
 // form stays in sync. Stock is intentionally not here: it's set in the
@@ -2167,7 +2188,7 @@ async function vaAddSize() {
 async function vaPersist() {
   if (VA_ID == null) return null;
   const members = VA_MEMBERS.map(v => ({ id: v.id, label: v.label || '', label_cn: v.label_cn || '' }));
-  const j = await api('/api/retail-admin/products/' + VA_ID + '/variants', { method: 'PUT', body: { members } });
+  const j = await api('/api/retail-admin/products/' + VA_ID + '/variants', { method: 'PUT', body: { members, noun_en: VA_NOUN_EN || '', noun_cn: VA_NOUN_CN || '' } });
   const gid = j.group_id, ids = new Set(members.map(m => m.id));
   // The PUT writes variant_sort = array index; mirror that into the in-memory
   // rows so the grid's collapsed card re-sorts its size chips without a reload.
@@ -3415,7 +3436,15 @@ function pdFreeOfGet() {
   return [...checked, ..._pdFreeOfExtra].join(', ');
 }
 // A visually-empty rich box (just <br>/&nbsp;) saves as '' rather than junk markup.
-function pdRteClean(html) { const d = document.createElement('div'); d.innerHTML = html || ''; return (d.innerText || '').trim() ? (html || '').trim() : ''; }
+// A box counts as "has content" when it has visible text OR embedded media —
+// an image-only (or table/divider-only) description has no innerText, so the
+// old text-only check silently discarded it on save. Keep the HTML in that case.
+function pdRteClean(html) {
+  const d = document.createElement('div'); d.innerHTML = html || '';
+  const hasText = !!(d.innerText || '').trim();
+  const hasMedia = !!d.querySelector('img, table, hr, video, iframe, audio, svg');
+  return (hasText || hasMedia) ? (html || '').trim() : '';
+}
 // Scraped/pasted rich copy (OUT1N TinyMCE, Word) glues words with non-breaking
 // spaces, so a long paragraph becomes one unbreakable line that overflows the
 // editor instead of wrapping. Swap them for plain spaces on load so the text
