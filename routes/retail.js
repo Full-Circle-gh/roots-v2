@@ -9219,23 +9219,21 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const kpi     = tdb().prepare(kpiSql).get(from, to);
   const kpiPrev = tdb().prepare(kpiSql).get(prevFrom, prevTo);
 
-  // ── Fold in gzgrocery (Guanyi) pickup sales — inferred wholesale orders that
-  // never touch retail_orders — so the headline revenue/orders, the Today hero,
-  // and the trend below all reflect this channel as part of daily sales. No-op
-  // for tenants without the guanyi pickup ledger. ──
+  // ── Fold in gzgrocery (Guanyi) pickup REVENUE only — inferred wholesale sales
+  // that never touch retail_orders — so the headline revenue, the Today hero,
+  // and the trend revenue below reflect this channel's takings as part of daily
+  // sales. By design gzgrocery does NOT count toward the ORDER count, AOV, or
+  // any customer metric: it's a wholesale pickup channel with no storefront
+  // order/customer, so blending it in would inflate those counts. It surfaces
+  // its line items separately in the activity feed. No-op for tenants without
+  // the guanyi pickup ledger. ──
   // gzgrocery is its own inferred wholesale channel, not one of the retail
   // stores, so a per-store filter excludes it entirely (empty ledger).
   const gyEmpty     = { revenue: 0, orders: 0, byBucket: {} };
   const gySales     = sid ? gyEmpty : guanyiPickupSales(tdb(), from, to, { hourly });
   const gySalesPrev = sid ? gyEmpty : guanyiPickupSales(tdb(), prevFrom, prevTo, { hourly: false });
   kpi.revenue     = +(Number(kpi.revenue || 0) + gySales.revenue).toFixed(2);
-  kpi.orders      += gySales.orders;
   kpiPrev.revenue = +(Number(kpiPrev.revenue || 0) + gySalesPrev.revenue).toFixed(2);
-  kpiPrev.orders  += gySalesPrev.orders;
-  // AOV now spans both channels — recompute from the blended totals (matches the
-  // SQL AVG exactly when there's no gzgrocery activity).
-  kpi.aov     = kpi.orders     ? +(kpi.revenue     / kpi.orders).toFixed(2)     : 0;
-  kpiPrev.aov = kpiPrev.orders ? +(kpiPrev.revenue / kpiPrev.orders).toFixed(2) : 0;
 
   const visitsSql = `
     SELECT COUNT(*) AS visits,
@@ -9261,11 +9259,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     const baseTo   = prevTo;   // the day before `from`
     const bk   = tdb().prepare(kpiSql).get(baseFrom, baseTo);
     const bnew = tdb().prepare(newCustSql).get(baseFrom, baseTo).n;
-    // Blend gzgrocery into the baseline too, so "Today vs a typical day" compares
-    // like with like (today's revenue/orders already include gzgrocery above).
+    // Blend gzgrocery REVENUE into the baseline too, so "Today vs a typical day"
+    // compares like with like (today's revenue already includes gzgrocery above).
+    // Orders stay storefront-only on both sides — gzgrocery isn't counted as an order.
     const gyBase = sid ? gyEmpty : guanyiPickupSales(tdb(), baseFrom, baseTo, { hourly: false });
     bk.revenue = Number(bk.revenue || 0) + gyBase.revenue;
-    bk.orders  = (bk.orders || 0) + gyBase.orders;
     const fo = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}${SF}`).get().d;
     const fc = tdb().prepare(`SELECT MIN(date(created_at, '${TZ}')) AS d FROM retail_customers`).get().d;
     const firstD = [fo, fc].filter(Boolean).sort()[0] || null;
@@ -9358,13 +9356,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     }
   }
 
-  // Fold gzgrocery pickup revenue/orders into each trend bucket so the curve
-  // (hourly today, daily over a range) shows blended daily sales. Hourly trend
-  // buckets are 'HH:00'; gySales buckets are 'HH' — match on the hour prefix.
+  // Fold gzgrocery pickup REVENUE into each trend bucket so the revenue curve
+  // (hourly today, daily over a range) reflects blended daily takings. The order
+  // count stays storefront-only — gzgrocery isn't counted as an order. Hourly
+  // trend buckets are 'HH:00'; gySales buckets are 'HH' — match on the hour prefix.
   for (const t of trend) {
     const key = hourly ? String(t.bucket).slice(0, 2) : t.bucket;
     const g = gySales.byBucket[key];
-    if (g) { t.revenue = +(Number(t.revenue || 0) + g.revenue).toFixed(2); t.orders += g.orders; }
+    if (g) { t.revenue = +(Number(t.revenue || 0) + g.revenue).toFixed(2); }
   }
 
   // ── Payment-method split ──
@@ -9663,9 +9662,9 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   }
 
   // Conversion + refund rate are storefront-funnel metrics (gzgrocery pickups
-  // have no browsing session or refund flow), so measure them against storefront
-  // orders only — back out the gzgrocery orders blended into kpi.orders above.
-  const storefrontOrders = kpi.orders - gySales.orders;
+  // have no browsing session or refund flow). kpi.orders is already storefront-
+  // only (gzgrocery is never counted as an order), so it IS the storefront count.
+  const storefrontOrders = kpi.orders;
   const conversion = vis.sessions > 0 ? (storefrontOrders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
