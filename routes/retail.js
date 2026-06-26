@@ -17088,6 +17088,42 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
 // read in one tap without asking the customer to re-upload. The auto-flip rule
 // is unchanged: it only fires for a clean match on a still-pending order with
 // the operator toggle on.
+// Fetch encrypted cloud-print (面单云打印) label data for an order's JD waybill.
+// Cloud-print authenticates as the JDL app (jdlAppKey/jdlAppSecret), separate
+// from the JOS waybill app — see lib/jd.js callJdl + lib/tenant-creds jd.jdl_*.
+router.get('/api/retail-admin/orders/:id/jd-waybill/print-data', requireRetailAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const jc = integ().jd;
+  if (!jd.jdEnabled(jc)) return res.status(409).json({ success: false, error: 'jd_not_configured' });
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  const shipments = ensureShipments(id);
+  const shipmentIdReq = req.query.shipment_id ? parseInt(req.query.shipment_id, 10) : null;
+  const s = shipmentIdReq
+    ? shipments.find(x => x.id === shipmentIdReq)
+    : (shipments.find(x => x.tracking_carrier === 'jd' && x.tracking_number) || shipments[0]);
+  if (!s || s.tracking_carrier !== 'jd' || !s.tracking_number) {
+    return res.status(400).json({ success: false, error: 'no_jd_waybill' });
+  }
+
+  let r;
+  try { r = await jd.getPrintData({ waybillCode: s.tracking_number }, jc); }
+  catch (e) { console.error('[jd.printdata] threw', e); return res.status(502).json({ success: false, error: 'jdl_request_failed' }); }
+  if (!r.ok) {
+    console.error('[jd.printdata] order', id, 'waybill', s.tracking_number, 'failed:', r.error);
+    return res.status(502).json({ success: false, error: r.error || 'jdl_pulldata_failed' });
+  }
+
+  // Operator-chosen label template (size); fall back to the 76×130 standard.
+  let tempUrl = jd.JD_PRINT_TEMPLATES['76x130'];
+  try {
+    const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get('printer.jd_template_url');
+    if (row) { const v = JSON.parse(row.value_json); if (typeof v === 'string' && v) tempUrl = v; }
+  } catch (e) { /* default template */ }
+
+  res.json({ success: true, data: { shipment_id: s.id, waybill: s.tracking_number, printData: r.printData, tempUrl } });
+});
+
 router.post('/api/retail-admin/orders/:id/alipay-ocr/rerun', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
