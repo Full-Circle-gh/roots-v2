@@ -2736,24 +2736,49 @@ async function pdResizeImage(file, opts = {}) {
   }
   const srcW = bitmap.width || bitmap.naturalWidth;
   const srcH = bitmap.height || bitmap.naturalHeight;
-  const longest = Math.max(srcW, srcH);
-  const scale = longest > maxLong ? (maxLong / longest) : 1;
-  const w = Math.round(srcW * scale);
-  const h = Math.round(srcH * scale);
-  const canvas = document.createElement('canvas');
-  canvas.width = w; canvas.height = h;
-  const ctx = canvas.getContext('2d');
+  const maxWidth       = opts.maxWidth || 0;          // cap WIDTH only (long description images)
+  const targetMaxBytes = opts.targetMaxBytes || 0;    // shrink until under this (upload-size guard)
   const outType = forceJpeg ? 'image/jpeg' : ((file.type === 'image/png') ? 'image/png' : 'image/jpeg');
-  if (outType === 'image/jpeg') {
-    // JPEG has no alpha — paint white so transparent PNG areas flatten to white.
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, w, h);
-  }
-  ctx.drawImage(bitmap, 0, 0, w, h);
-  if (bitmap.close) try { bitmap.close(); } catch {}
-  const outQ = outType === 'image/jpeg' ? quality : undefined;
-  const blob = await new Promise(res => canvas.toBlob(res, outType, outQ));
+  // maxWidth mode caps the width and lets the height run as tall as it needs —
+  // a long "详情页" graphic (e.g. 750×8000) would otherwise have its longest edge
+  // capped, crushing the width to a sliver. Default mode caps the longest edge
+  // (square-ish product photos).
+  const fit = (wCap) => {
+    const scale = maxWidth
+      ? (srcW > wCap ? wCap / srcW : 1)
+      : (Math.max(srcW, srcH) > maxLong ? maxLong / Math.max(srcW, srcH) : 1);
+    return { w: Math.max(1, Math.round(srcW * scale)), h: Math.max(1, Math.round(srcH * scale)) };
+  };
+  const encode = (w, h, q) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (outType === 'image/jpeg') {
+      // JPEG has no alpha — paint white so transparent PNG areas flatten to white.
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, w, h);
+    }
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    return new Promise(res => canvas.toBlob(res, outType, outType === 'image/jpeg' ? q : undefined));
+  };
+  let wCap = maxWidth || maxLong;
+  let { w, h } = fit(wCap);
+  let q = quality;
+  let blob = await encode(w, h, q);
   if (!blob) throw new Error('toBlob failed');
+  // Size-target ladder — keeps the upload under the proxy body limit no matter
+  // how tall the image is: drop quality first, then (in width mode) the width.
+  if (targetMaxBytes && outType === 'image/jpeg') {
+    let guard = 0;
+    while (blob.size > targetMaxBytes && guard++ < 8) {
+      if (q > 0.5) q = Math.max(0.5, q - 0.12);
+      else if (maxWidth && wCap > 720) { wCap = Math.round(wCap * 0.85); ({ w, h } = fit(wCap)); }
+      else break;
+      blob = await encode(w, h, q);
+      if (!blob) throw new Error('toBlob failed');
+    }
+  }
+  if (bitmap.close) try { bitmap.close(); } catch {}
   return { dataURL: await readAsDataURL(blob), originalBytes, finalBytes: blob.size, resized: true };
 }
 function pdFmtBytes(b) {
@@ -2784,6 +2809,10 @@ async function pdHandleImageUpload(file, opts = {}) {
 // screens; JPEG q0.88 is artefact-free; forcing JPEG stops heavy PNGs shipping
 // as-is. A typical 2–5MB upload lands around 300–600KB.
 const PD_IMG_OPTS = { maxLong: 1440, quality: 0.88, format: 'jpeg', passThroughBelow: 200 * 1024 };
+// Description (RTE) preset: long "详情页" graphics are very tall, so cap the WIDTH
+// (1080px is retina-sharp at full phone width) instead of the longest edge, and
+// target ≤900KB so the upload clears the proxy body limit however tall it is.
+const PD_DESC_IMG_OPTS = { maxWidth: 1080, quality: 0.85, format: 'jpeg', passThroughBelow: 150 * 1024, targetMaxBytes: 900 * 1024 };
 
 // ── Product photo gallery (editor) ──────────────────────────────────────────
 const PD_MAX_PHOTOS = 8;
@@ -3380,7 +3409,7 @@ async function pdRteImagePick(e) {
     // 4–10MB phone photo blows past the proxy body limit and bounces back as an
     // HTML 413 page, which then fails JSON parse ("Unexpected token '<'").
     // pdHandleImageUpload lands it ~300–600KB; it toasts + returns null on error.
-    const dataURL = await pdHandleImageUpload(f, PD_IMG_OPTS);
+    const dataURL = await pdHandleImageUpload(f, PD_DESC_IMG_OPTS);
     if (!dataURL) return;
     const blob = await (await fetch(dataURL)).blob();
     const name = (f.name || 'image').replace(/\.[^.]+$/, '') + '.jpg';
