@@ -1,0 +1,295 @@
+#!/usr/bin/env node
+// gzgrocery ORDER → stock daemon.
+//
+// gzgrocery sells OUR products (alongside lots of third-party grocery) through
+// their OpenCart storefront. Until now we could only INFER their sales from
+// Guanyi stock drift, which misses scheduled/next-day orders (Guanyi doesn't
+// decrement until fulfillment). This daemon reads their orders DIRECTLY and
+// decrements our Tianhe stock the moment a paid order appears — scheduled or
+// not — through the canonical adjustStock path (ledgered + fanned out to the
+// other channels). Cancellations/refunds add the stock back.
+//
+//   Modes (GZGROCERY_ORDER_MODE):
+//     off    — daemon does nothing (default; safe).
+//     shadow — read + log what it WOULD decrement; never touches stock.
+//     live   — apply decrements/reversals to Tianhe.
+//
+//   ⚠ DOUBLE-COUNT GUARD: once this is in `live`, set GUANYI_PICKUP_MODE=shadow
+//   in the guanyi-sync daemon. Otherwise, when gzgrocery later fulfills and the
+//   Guanyi number finally drops, the drift detector would decrement the SAME
+//   sale a second time. Order-read is the source of truth; drift becomes a
+//   shadow cross-check.
+//
+//   Start:  pm2 start scripts/gzgrocery-order-daemon.js --name gzgrocery-orders
+//   Recon:  node scripts/gzgrocery-order-daemon.js --once   (one cycle, verbose)
+//
+//   Requires in .env:
+//     GZGROCERY_ADMIN_URL=https://www.gzgrocery.cn/admin/
+//     GZGROCERY_ADMIN_USER=...   GZGROCERY_ADMIN_PASS=...
+//     GZGROCERY_ORDER_MODE=shadow
+
+'use strict';
+
+const path = require('path');
+const fs   = require('fs');
+const envFile = path.join(__dirname, '../.env');
+try { require('dotenv').config({ path: envFile }); } catch {
+  if (fs.existsSync(envFile)) for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
+    const m = line.match(/^([^#=\s][^=]*)=(.*)$/);
+    if (m) process.env[m[1].trim()] = m[2].trim().replace(/^['"]|['"]$/g, '');
+  }
+}
+
+const db = require('../database');
+const { adjustStock } = require('../lib/inventory');
+const { GzGroceryAdmin, extractSku } = require('../lib/gzgrocery-admin');
+
+let MODE = (process.env.GZGROCERY_ORDER_MODE || 'off').toLowerCase();
+if (!['off', 'shadow', 'live'].includes(MODE)) MODE = 'off';
+
+const STORE_CODE   = process.env.GZGROCERY_STORE_CODE || 'tianhe';
+const POLL_MS      = Number(process.env.GZGROCERY_POLL_MS || 60_000);
+const MAX_PAGES    = Number(process.env.GZGROCERY_MAX_PAGES || 5);
+const SINCE_DAYS   = Number(process.env.GZGROCERY_SINCE_DAYS || 3);
+const ONCE         = process.argv.includes('--once');
+
+// Order is committed (units have physically left / will be picked) once paid and
+// beyond. Pending/unpaid → wait. Void statuses → reverse if we already counted.
+const ACTIVE = new Set((process.env.GZGROCERY_ACTIVE_STATUSES ||
+  'Paid,Processing,Shipped,Complete,Completed,Partially Shipped,已支付,待处理,已审核,部分发货,全部发货,已完成').split(',').map(s => s.trim()).filter(Boolean));
+const VOID = new Set((process.env.GZGROCERY_VOID_STATUSES ||
+  'Canceled,Cancelled,Denied,Refunded,Reversed,Chargeback,Expired,Voided,Failed,已取消,退款中,支付失败').split(',').map(s => s.trim()).filter(Boolean));
+
+function log(msg) { console.log(`[gzgrocery-orders] ${new Date().toISOString()} ${msg}`); }
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Schema (idempotent) ──────────────────────────────────────────────────────
+function ensureTables() {
+  db.exec(`CREATE TABLE IF NOT EXISTS gzgrocery_orders (
+    order_id      INTEGER PRIMARY KEY,
+    order_no      TEXT,
+    status        TEXT,
+    total         REAL,
+    customer      TEXT,
+    date_added    TEXT,
+    delivery_time TEXT,
+    items_json    TEXT,          -- [{product,model,sku,qty,product_id,matched}]
+    our_units     INTEGER DEFAULT 0,
+    decremented   INTEGER DEFAULT 0,
+    reversed      INTEGER DEFAULT 0,
+    mode          TEXT,
+    note          TEXT,
+    first_seen_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS gzgrocery_order_log (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id   INTEGER, order_no TEXT, action TEXT, mode TEXT, detail TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+  db.exec(`CREATE TABLE IF NOT EXISTS gzgrocery_meta (
+    key TEXT PRIMARY KEY, value TEXT
+  )`);
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_gzo_status ON gzgrocery_orders(status)`);
+}
+function getMeta(k) { return db.prepare(`SELECT value FROM gzgrocery_meta WHERE key=?`).get(k)?.value ?? null; }
+function setMeta(k, v) { db.prepare(`INSERT INTO gzgrocery_meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(k, String(v)); }
+
+// Cold-start baseline: the highest order_id that already existed the first time
+// this daemon ran. Everything at/below it was placed BEFORE we started watching
+// (and was already accounted for by the legacy Guanyi-drift path), so it is
+// seeded as "counted" and NEVER decremented — only NEW orders above it act.
+// Persisted once, so a restart (or shadow→live flip) keeps the same line.
+function resolveBaseline(orders) {
+  const env = Number(process.env.GZGROCERY_DECREMENT_FROM_ID || 0);
+  if (env > 0) { setMeta('baseline_order_id', env); return env; }
+  const stored = Number(getMeta('baseline_order_id') || 0);
+  if (stored > 0) return stored;
+  const max = orders.reduce((m, o) => Math.max(m, o.orderId), 0);
+  setMeta('baseline_order_id', max);
+  log(`cold-start: baseline_order_id seeded at ${max} — existing orders (≤${max}) will NOT be decremented`);
+  return max;
+}
+function auditLog(o, action, detail) {
+  try { db.prepare(`INSERT INTO gzgrocery_order_log (order_id,order_no,action,mode,detail) VALUES (?,?,?,?,?)`)
+    .run(o.orderId, o.orderNo, action, MODE, detail || null); } catch {}
+}
+
+// ── Resolution helpers ───────────────────────────────────────────────────────
+let _storeId = null;
+function resolveStoreId() {
+  if (_storeId) return _storeId;
+  if (process.env.GZGROCERY_STORE_ID) return (_storeId = Number(process.env.GZGROCERY_STORE_ID));
+  // The Guanyi map is keyed by the same Tianhe retail store — reuse it.
+  const row = db.prepare(`SELECT retail_store_id AS id FROM guanyi_product_map WHERE store_code=? LIMIT 1`).get(STORE_CODE)
+           || db.prepare(`SELECT id FROM retail_stores WHERE store_code=? OR code=? LIMIT 1`).get(STORE_CODE, STORE_CODE);
+  if (!row) throw new Error(`cannot resolve Tianhe store id for store_code=${STORE_CODE} (set GZGROCERY_STORE_ID)`);
+  return (_storeId = row.id);
+}
+// sku (UPPERCASE) -> { productId, sku }
+function loadSkuMap() {
+  const map = new Map();
+  for (const r of db.prepare(`SELECT id, sku FROM store_products WHERE sku IS NOT NULL AND sku <> ''`).all()) {
+    const m = /\b(\d+-\d+[A-Za-z]?)\b/.exec(String(r.sku));
+    if (m) map.set(m[1].toUpperCase(), { productId: r.id, sku: r.sku });
+  }
+  return map;
+}
+
+function curQty(storeId, productId) {
+  const r = db.prepare(`SELECT physical_qty FROM retail_store_stock WHERE store_id=? AND product_id=?`).get(storeId, productId);
+  return r ? r.physical_qty : 0;
+}
+
+// Match an order's line items against our catalogue → the OUR-product units.
+function matchOurItems(items, skuMap) {
+  const ours = [];
+  for (const it of items) {
+    const sku = extractSku(it.model);   // Model field only — see extractSku notes
+    if (!sku) continue;
+    const hit = skuMap.get(sku);
+    if (!hit) continue;
+    ours.push({ ...it, sku, product_id: hit.productId, matched: true });
+  }
+  return ours;
+}
+
+// ── Core: reconcile one order against stored state ───────────────────────────
+function processOrder(o, items, skuMap, storeId) {
+  const ours = matchOurItems(items, skuMap);
+  const ourUnits = ours.reduce((s, x) => s + x.qty, 0);
+  const prev = db.prepare(`SELECT * FROM gzgrocery_orders WHERE order_id=?`).get(o.orderId);
+  const isActive = ACTIVE.has(o.status);
+  const isVoid   = VOID.has(o.status);
+
+  const upsert = (fields) => {
+    const base = {
+      order_id: o.orderId, order_no: o.orderNo, status: o.status, total: o.total,
+      customer: o.customer, date_added: o.dateAdded, delivery_time: o.deliveryTime,
+      items_json: JSON.stringify(ours), our_units: ourUnits, mode: MODE,
+      decremented: prev?.decremented || 0, reversed: prev?.reversed || 0, note: null,
+      ...fields,
+    };
+    db.prepare(`INSERT INTO gzgrocery_orders
+      (order_id,order_no,status,total,customer,date_added,delivery_time,items_json,our_units,decremented,reversed,mode,note,updated_at)
+      VALUES (@order_id,@order_no,@status,@total,@customer,@date_added,@delivery_time,@items_json,@our_units,@decremented,@reversed,@mode,@note,CURRENT_TIMESTAMP)
+      ON CONFLICT(order_id) DO UPDATE SET status=@status,total=@total,customer=@customer,delivery_time=@delivery_time,
+        items_json=@items_json,our_units=@our_units,decremented=@decremented,reversed=@reversed,mode=@mode,note=COALESCE(@note,note),updated_at=CURRENT_TIMESTAMP
+    `).run(base);
+  };
+
+  // No products of ours in this order — record & move on.
+  if (!ours.length) { upsert({ note: 'no Roots products' }); return { result: 'skip-foreign' }; }
+
+  const alreadyDecremented = prev?.decremented;
+  const alreadyReversed    = prev?.reversed;
+
+  // (1) Active + not yet counted → decrement.
+  if (isActive && !alreadyDecremented) {
+    const applied = [];
+    for (const it of ours) {
+      const cur = curQty(storeId, it.product_id);
+      const next = Math.max(0, cur - it.qty);
+      if (MODE === 'live') {
+        adjustStock({
+          storeId, productId: it.product_id, newPhysicalQty: next,
+          actorLabel: 'gzgrocery-order', reason: 'gzgrocery_order',
+          note: `gzgrocery order ${o.orderNo || o.orderId}: ${it.sku} ×${it.qty} (${cur}→${next})`,
+        });
+      }
+      applied.push(`${it.sku}×${it.qty}(${cur}→${next})`);
+    }
+    upsert({ decremented: 1, note: `${MODE}: decremented ${applied.join(', ')}` });
+    auditLog(o, MODE === 'live' ? 'decremented' : 'would_decrement', applied.join(', '));
+    log(`order ${o.orderNo || o.orderId} [${o.status}] ${MODE === 'live' ? 'DECREMENTED' : 'would decrement'}: ${applied.join(', ')}`);
+    return { result: 'decremented', units: ourUnits };
+  }
+
+  // (2) Void after we counted → reverse (add back).
+  if (isVoid && alreadyDecremented && !alreadyReversed) {
+    const applied = [];
+    for (const it of ours) {
+      const cur = curQty(storeId, it.product_id);
+      const next = cur + it.qty;
+      if (MODE === 'live') {
+        adjustStock({
+          storeId, productId: it.product_id, newPhysicalQty: next,
+          actorLabel: 'gzgrocery-order', reason: 'gzgrocery_order_reverse',
+          note: `gzgrocery order ${o.orderNo || o.orderId} ${o.status}: +${it.sku} ×${it.qty} (${cur}→${next})`,
+        });
+      }
+      applied.push(`${it.sku}+${it.qty}(${cur}→${next})`);
+    }
+    upsert({ reversed: 1, note: `${MODE}: reversed (${o.status}) ${applied.join(', ')}` });
+    auditLog(o, MODE === 'live' ? 'reversed' : 'would_reverse', applied.join(', '));
+    log(`order ${o.orderNo || o.orderId} [${o.status}] ${MODE === 'live' ? 'REVERSED' : 'would reverse'}: ${applied.join(', ')}`);
+    return { result: 'reversed', units: ourUnits };
+  }
+
+  // (3) Nothing to do (pending, or already in desired state) — keep state fresh.
+  upsert({ note: prev?.note || `seen [${o.status}]` });
+  return { result: alreadyDecremented ? 'noop-counted' : (isActive ? 'noop' : `waiting [${o.status}]`) };
+}
+
+// ── One poll cycle ───────────────────────────────────────────────────────────
+let _client = null;
+async function runCycle() {
+  if (MODE === 'off') { if (ONCE) log('MODE=off — nothing to do'); return; }
+  const storeId = resolveStoreId();
+  const skuMap  = loadSkuMap();
+  _client = _client || new GzGroceryAdmin();
+  const orders = await _client.fetchOrders({ maxPages: MAX_PAGES, sinceDays: SINCE_DAYS });
+  const baseline = resolveBaseline(orders);
+  log(`fetched ${orders.length} recent order(s) (mode=${MODE}, store=${STORE_CODE}, baseline>${baseline})`);
+
+  let dec = 0, rev = 0, foreign = 0, seeded = 0, errs = 0;
+  for (const o of orders) {
+    try {
+      const prev = db.prepare(`SELECT decremented,reversed,status FROM gzgrocery_orders WHERE order_id=?`).get(o.orderId);
+      // Pre-existing backlog (≤ baseline, never seen) → seed as counted, no
+      // item fetch, no stock action — it was handled before we started.
+      if (!prev && o.orderId <= baseline) { seedBacklog(o); seeded++; continue; }
+      // Only spend a detail request when state may change.
+      const needItems =
+        (ACTIVE.has(o.status) && !prev?.decremented) ||
+        (VOID.has(o.status) && prev?.decremented && !prev?.reversed) ||
+        !prev; // first sighting → record line items for the audit trail
+      if (!needItems) continue;
+      const items = await _client.fetchOrderItems(o.orderId);
+      const r = processOrder(o, items, skuMap, storeId);
+      if (r.result === 'decremented') dec++;
+      else if (r.result === 'reversed') rev++;
+      else if (r.result === 'skip-foreign') foreign++;
+    } catch (e) {
+      errs++;
+      log(`order ${o.orderId} error: ${e.message}`);
+      auditLog(o, 'error', e.message);
+    }
+  }
+  log(`cycle done: ${dec} decremented, ${rev} reversed, ${foreign} non-Roots, ${seeded} backlog-seeded, ${errs} error(s)`);
+}
+
+// Record a pre-baseline order as already-counted without touching stock.
+function seedBacklog(o) {
+  db.prepare(`INSERT INTO gzgrocery_orders
+    (order_id,order_no,status,total,customer,date_added,delivery_time,items_json,our_units,decremented,reversed,mode,note)
+    VALUES (?,?,?,?,?,?,?,?,0,1,0,?,?)
+    ON CONFLICT(order_id) DO NOTHING`)
+    .run(o.orderId, o.orderNo, o.status, o.total, o.customer, o.dateAdded, o.deliveryTime, '[]', MODE, 'pre-existing backlog (seeded, not decremented)');
+  auditLog(o, 'seeded', `backlog ${o.status}`);
+}
+
+async function main() {
+  ensureTables();
+  log(`starting (mode=${MODE}, poll=${POLL_MS}ms, store=${STORE_CODE}, active=${ACTIVE.size} void=${VOID.size})`);
+  if (MODE !== 'off' && (!process.env.GZGROCERY_ADMIN_USER || !process.env.GZGROCERY_ADMIN_PASS)) {
+    log('⚠ GZGROCERY_ADMIN_USER/PASS not set — cannot log in'); if (ONCE) process.exit(1);
+  }
+  if (ONCE) { await runCycle().catch(e => { log(`fatal: ${e.stack || e.message}`); process.exitCode = 1; }); return; }
+  for (;;) {
+    try { await runCycle(); } catch (e) { log(`cycle fatal: ${e.message}`); }
+    await sleep(POLL_MS);
+  }
+}
+
+main();
