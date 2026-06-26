@@ -2291,14 +2291,14 @@
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    > :not(.feat-bar):not(.feat-off),
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
-  body.ent-quickStock:not(.feat-quickStock)   #tab-quickstock > :not(.feat-bar):not(.feat-off),
+  body.ent-quickStock:not(.feat-quickStock)   #qs-home > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  .feat-off,
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
-  body.ent-quickStock:not(.feat-quickStock)   #tab-quickstock .feat-off,
+  body.ent-quickStock:not(.feat-quickStock)   #qs-home .feat-off,
   body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page) */
   .feat-bar { display: flex; align-items: center; justify-content: space-between;
