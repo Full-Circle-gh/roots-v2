@@ -7,6 +7,7 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../database');
+const inventory = require('../lib/inventory');
 
 const INTERNAL_SECRET = process.env.MEITUAN_INTERNAL_SECRET || 'meituan-daemon-internal';
 
@@ -19,95 +20,137 @@ router.use((req, res, next) => {
   next();
 });
 
+// Collapse a name for comparison: drop spec parens, whitespace, punctuation and
+// case so "巧克力榛棒 Premium Nutella Bars" and its map entry compare equal even
+// across the CN/EN word order and stray spacing Meituan inserts.
+function normName(s) {
+  return String(s || '')
+    .replace(/\([^)]*\)/g, ' ')          // (300ml), (1-300) specs
+    .replace(/[\s　]+/g, '')          // all spaces incl. full-width
+    .replace(/[^\p{L}\p{N}]/gu, '')       // punctuation/symbols
+    .toLowerCase();
+}
+
+// Resolve one parsed Meituan line-item to a store_product.
+//
+// Resolution order, most reliable first:
+//   1. Inline "(\d+-\d+)" SKU token the merchant encodes in the spec name.
+//   2. meituan_product_map — the SAME Roots↔Meituan bridge stock-push uses. The
+//      operator maps each product to its exact Meituan listing title, so when the
+//      listing carries no SKU token AND its display name differs from the Roots
+//      product name (e.g. Meituan "巧克力榛棒 Premium Nutella Bars" vs Roots
+//      "巧克力榛果棒 / Choco-Hazel Bars"), the map is the only thing that links
+//      them. Without this, such lines silently failed to deduct stock.
+//   3. UNIQUE active name match (CJK core, then English) as a last resort.
+// Ambiguous/no match → productId null (not deducted, surfaced as unresolved).
+function resolveProduct(item, storeId) {
+  const qty = parseInt(item.qty, 10) || 0;
+  const out = { name: item.name, sku: item.sku || null, qty, productId: null, nameCn: item.name, nameEn: item.name, matchBy: null };
+  const apply = (p, by) => { out.productId = p.id; out.nameCn = p.name_cn; out.nameEn = p.name_en; out.matchBy = by; };
+
+  // 1. Inline SKU token.
+  if (item.sku) {
+    const p = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ? AND is_active = 1').get(item.sku)
+           || db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ?').get(item.sku);
+    if (p) { apply(p, 'sku'); return out; }
+    // Token didn't resolve — fall through to the map/name strategies rather than
+    // stranding the line on a stale or mistyped SKU code.
+    out.matchBy = 'sku_unknown';
+  }
+
+  // 2. Product map by Meituan listing name (scoped to this store).
+  if (storeId) {
+    const wanted = normName(item.name);
+    if (wanted) {
+      const rows = db.prepare(`
+        SELECT p.id, p.name_cn, p.name_en, m.meituan_name
+          FROM meituan_product_map m
+          JOIN store_products p ON p.id = m.product_id
+         WHERE m.retail_store_id = ? AND p.is_active = 1 AND m.meituan_name IS NOT NULL
+      `).all(storeId);
+      let hit = rows.find(r => normName(r.meituan_name) === wanted);
+      if (!hit) {
+        // Substring either way (Meituan sometimes appends/trims a suffix), but
+        // only when it's unambiguous.
+        const cands = rows.filter(r => {
+          const mn = normName(r.meituan_name);
+          return mn && (mn.includes(wanted) || wanted.includes(mn));
+        });
+        if (cands.length === 1) hit = cands[0];
+      }
+      if (hit) { apply(hit, 'map'); return out; }
+    }
+  }
+
+  // 3. Unique active name match.
+  const clean = String(item.name || '').replace(/\([^)]*\)/g, ' ').trim();
+  const cjk = (clean.match(/[一-鿿]+/) || [])[0];
+  const en  = (clean.match(/[A-Za-z][A-Za-z ]+/) || [])[0];
+  let matches = [];
+  if (cjk) matches = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE is_active = 1 AND name_cn LIKE ?').all(`%${cjk}%`);
+  if (matches.length !== 1 && en) matches = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE is_active = 1 AND name_en LIKE ?').all(`%${en.trim()}%`);
+  if (matches.length === 1) { apply(matches[0], 'name'); }
+  else if (!out.matchBy || out.matchBy === 'sku_unknown') out.matchBy = matches.length > 1 ? 'ambiguous' : 'unmatched';
+  return out;
+}
+
 // POST /api/internal/meituan/ingest-order
-// Creates a retail_order from a parsed Meituan order object.
-// The daemon calls this after accepting the order on Meituan.
+// Mirrors a parsed Meituan order into roots: creates a retail_order and deducts
+// store stock (ledgered, which re-pushes the corrected number to Meituan +
+// Guanyi via enqueueChannelSync). Returns { orderId, deducted, unresolved }.
 router.post('/ingest-order', (req, res) => {
   const { storeId, storeCode, order } = req.body || {};
   if (!storeId || !order) return res.status(400).json({ error: 'storeId and order required' });
 
   try {
-    // Generate order number
-    const now   = new Date();
+    const now      = new Date();
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const rand  = Math.floor(Math.random() * 900000) + 100000;
-    const orderNo = `MT${datePart}${rand}`;
+    const rand     = Math.floor(Math.random() * 900000) + 100000;
+    const orderNo  = `MT${datePart}${rand}`;
+    const ref      = order.meituanOrderNo || orderNo;
 
-    // Map Meituan items to roots-v2 products by name
-    const items = (order.items || []).map(item => {
-      const nameCn = (item.name || '').trim();
-      // Match product by name_cn or name_en (case-insensitive)
-      const product = db.prepare(`
-        SELECT p.id, p.name_cn, p.name_en,
-               COALESCE(s.physical_qty, 0) AS stock
-          FROM products p
-          LEFT JOIN retail_store_stock s ON s.product_id = p.id AND s.store_id = ?
-         WHERE p.name_cn LIKE ? OR p.name_en LIKE ?
-         LIMIT 1
-      `).get(storeId, `%${nameCn}%`, `%${nameCn}%`);
+    const items = (order.items || []).map(it => resolveProduct(it, storeId)).filter(i => i.qty > 0);
+    const total = parseFloat(order.total) || 0;
 
-      return {
-        productId:  product?.id || null,
-        nameCn:     nameCn,
-        nameEn:     product?.name_en || nameCn,
-        qty:        parseInt(item.qty) || 1,
-        unitPrice:  parseFloat(item.price) || 0,
-        lineTotal:  (parseFloat(item.price) || 0) * (parseInt(item.qty) || 1),
-      };
-    }).filter(i => i.qty > 0);
-
-    const total    = parseFloat(order.total) || items.reduce((s, i) => s + i.lineTotal, 0);
-    const subtotal = total;
-
-    const tx = db.transaction(() => {
-      // Insert order
-      const orderResult = db.prepare(`
+    // 1. Create the order + its line items in one transaction.
+    const orderId = db.transaction(() => {
+      const r = db.prepare(`
         INSERT INTO retail_orders (
-          order_no, status, payment_method,
-          subtotal, total,
-          store_id, channel, fulfillment_type,
-          placed_at, paid_at
+          order_no, status, payment_method, subtotal, total,
+          store_id, channel, fulfillment_type, placed_at, paid_at
         ) VALUES (?, 'paid', 'meituan', ?, ?, ?, 'meituan', 'delivery',
                   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `).run(orderNo, subtotal, total, storeId);
-
-      const orderId = orderResult.lastInsertRowid;
-
-      // Insert order items + deduct stock
-      for (const item of items) {
+      `).run(orderNo, total, total, storeId);
+      const oid = r.lastInsertRowid;
+      for (const it of items) {
         db.prepare(`
           INSERT INTO retail_order_items
             (order_id, product_id, name_cn, name_en, qty, unit_price, line_total)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(orderId, item.productId, item.nameCn, item.nameEn,
-               item.qty, item.unitPrice, item.lineTotal);
-
-        // Deduct from store stock
-        if (item.productId) {
-          db.prepare(`
-            UPDATE retail_store_stock
-               SET physical_qty = MAX(0, physical_qty - ?),
-                   updated_at   = CURRENT_TIMESTAMP
-             WHERE store_id = ? AND product_id = ?
-          `).run(item.qty, storeId, item.productId);
-
-          // Queue stock push back to Meituan (so listing reflects the deduction)
-          db.prepare(`
-            INSERT INTO meituan_sync_queue
-              (retail_store_id, product_id, store_code, new_qty, status)
-            SELECT ?, ?, ?, COALESCE(physical_qty, 0), 'pending'
-              FROM retail_store_stock
-             WHERE store_id = ? AND product_id = ?
-          `).run(storeId, item.productId, storeCode, storeId, item.productId);
-        }
+          VALUES (?, ?, ?, ?, ?, 0, 0)
+        `).run(oid, it.productId, it.nameCn, it.nameEn, it.qty);
       }
+      return oid;
+    })();
 
-      return orderId;
-    });
+    // 2. Deduct stock via the ledgered adjuster (also re-pushes to Meituan +
+    //    Guanyi). Clamp at 0 — a Meituan oversell shouldn't drive us negative.
+    const unresolved = [];
+    let deducted = 0;
+    for (const it of items) {
+      if (!it.productId) { unresolved.push({ name: it.name, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
+      const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
+      const oldQ = cur ? cur.physical_qty : 0;
+      inventory.adjustStock({
+        storeId, productId: it.productId,
+        newPhysicalQty: Math.max(0, oldQ - it.qty),
+        actorLabel: 'Meituan order',
+        reason: 'meituan_order',
+        note: `Meituan ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}`,
+      });
+      deducted++;
+    }
 
-    const orderId = tx();
-
-    res.json({ ok: true, orderId, orderNo });
+    res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved });
   } catch (err) {
     console.error('[meituan-internal] ingest-order error:', err);
     res.status(500).json({ error: err.message });
