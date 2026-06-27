@@ -397,7 +397,7 @@
     .cp-row .ph img{width:100%;height:100%;object-fit:cover;display:block;}
     .cp-row .info{flex:1;min-width:0;}
     .cp-row .nm{font-family:var(--bf-bear);font-size:17px;line-height:1.05;}
-    .cp-row .opt{font-size:11px;color:var(--ink);margin-top:3px;line-height:1.2;}
+    .cp-row .opt{border:0;border-radius:0;padding:0;margin-bottom:0;font-size:11px;color:var(--ink);margin-top:3px;line-height:1.2;}
     .cp-row .sz{font-size:11px;color:var(--olive);margin-top:3px;}
     .cp-qty{display:flex;align-items:center;gap:10px;margin-top:8px;}
     .cp-qty button.q{width:26px;height:26px;border:1.5px solid var(--ink);background:none;font-family:var(--bf-bear);font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);padding:0;}
@@ -841,7 +841,7 @@
     .cd-row .ph img{width:100%;height:100%;object-fit:cover;}
     .cd-row .meta{flex:1;min-width:0;}
     .cd-row .nm{font-family:var(--bf-bear);font-size:15px;line-height:1.2;}
-    .cd-row .opt{font-size:12px;color:var(--muted);margin-top:3px;}
+    .cd-row .opt{border:0;border-radius:0;padding:0;margin-bottom:0;font-size:12px;color:var(--muted);margin-top:3px;}
     .cd-row .pr{font-family:var(--bf-gothic);font-size:17px;color:var(--accent);margin-top:5px;letter-spacing:.03em;}
     .cd-qty{display:inline-flex;align-items:center;gap:0;margin-top:8px;border:1.5px solid var(--ink);border-radius:999px;overflow:hidden;}
     .cd-qty button{background:none;border:0;width:30px;height:28px;font-size:16px;cursor:pointer;color:var(--ink);}
@@ -3410,9 +3410,9 @@ async function routeDispatch(){
   setActiveTab(seg);
   // language toggle floats over the hero on the home page only
   { const mf=$('#mLangFloat'); if(mf) mf.hidden = seg.length!==0; }
-  // Product page mirrors the mini-app sub-page: no bottom tab bar — the sticky
-  // buy bar owns the bottom. Restore it on every other route.
-  { const tb=$('#tabbar'); if(tb) tb.hidden = (seg[0]==='product'); }
+  // Product & checkout mirror the mini-app sub-pages: no bottom tab bar — their
+  // own sticky bar (buy bar / PAY bar) owns the bottom. Restore it elsewhere.
+  { const tb=$('#tabbar'); if(tb) tb.hidden = (seg[0]==='product'||seg[0]==='checkout'); }
   csApply(seg);   // floating customer-service bubble, per-placement
   window.scrollTo({top:0,behavior:'instant'});
   try{
