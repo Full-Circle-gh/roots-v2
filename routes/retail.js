@@ -9764,7 +9764,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // (no customer_id) are never flagged "first" — can't dedupe them.
     const BIG_ORDER_YUAN = 200;
     const paid = tdb().prepare(`
-      SELECT o.id, o.order_no, o.total, o.paid_at, o.customer_id,
+      SELECT o.id, o.order_no, o.total, o.paid_at, o.customer_id, o.channel,
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
              (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
                WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus,
@@ -9785,6 +9785,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       ref_type: 'order', ref_id: r.id,
       payload: {
         order_no: r.order_no, total: r.total, buyer: r.buyer, skus: r.skus || '',
+        channel: r.channel || '',
         first_order: !!r.first_order,
         big_order: Number(r.total || 0) >= BIG_ORDER_YUAN,
       },
@@ -9794,7 +9795,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // Both timestamps are set independently; a delivered order surfaces both
     // its dispatch and delivery rows.
     const dispatched = tdb().prepare(`
-      SELECT o.id, o.order_no, o.dispatched_at,
+      SELECT o.id, o.order_no, o.dispatched_at, o.channel,
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
              (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
                WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus
@@ -9807,11 +9808,11 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'order_dispatched',
       ts: parseTs(r.dispatched_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, buyer: r.buyer, skus: r.skus || '' },
+      payload: { order_no: r.order_no, buyer: r.buyer, skus: r.skus || '', channel: r.channel || '' },
     });
 
     const delivered = tdb().prepare(`
-      SELECT o.id, o.order_no, o.delivered_at,
+      SELECT o.id, o.order_no, o.delivered_at, o.channel,
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
              (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
                WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus
@@ -9824,7 +9825,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'order_delivered',
       ts: parseTs(r.delivered_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, buyer: r.buyer, skus: r.skus || '' },
+      payload: { order_no: r.order_no, buyer: r.buyer, skus: r.skus || '', channel: r.channel || '' },
     });
 
     // Cancelled orders — both the manual "Cancel" action and the auto-cancel
@@ -9832,7 +9833,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // surfaces both. Without this an order that fell through (abandoned at
     // payment, or cancelled by staff) simply vanished from the feed.
     const cancelled = tdb().prepare(`
-      SELECT o.id, o.order_no, o.total, o.cancelled_at, o.cancelled_reason,
+      SELECT o.id, o.order_no, o.total, o.cancelled_at, o.cancelled_reason, o.channel,
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
              (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
                WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus
@@ -9847,6 +9848,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       ref_type: 'order', ref_id: r.id,
       payload: {
         order_no: r.order_no, total: r.total, buyer: r.buyer, skus: r.skus || '',
+        channel: r.channel || '',
         reason: r.cancelled_reason,
       },
     });

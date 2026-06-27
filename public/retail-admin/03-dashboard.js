@@ -802,7 +802,11 @@ function dashFeedMeta(e) {
   // Order-line SKU(s) (货号) dimmed at the end of an order row. The server sends
   // a comma-joined distinct list; show the first 3 then "+N" so a big basket
   // doesn't overflow the row. Empty when no item carried a SKU.
-  const skuTag = (raw) => {
+  const skuTag = (raw, channel) => {
+    // Mini-app (wechat) orders already carry name + amount and open a full
+    // drawer on click — the SKU code is noise there. Only surface SKUs for
+    // other channels where the row is the only handle on the order.
+    if (String(channel || '').toLowerCase() === 'wechat') return '';
     const all = String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
     if (!all.length) return '';
     const shown = all.slice(0, 3).map(escapeHtml).join(' ');
@@ -813,19 +817,19 @@ function dashFeedMeta(e) {
     case 'paid_order': {
       const badge = p.first_order ? ` <span class="db-feed-badge db-fb-first">${FEED_SVG.star}First · 首单</span>`
                   : p.big_order   ? ` <span class="db-feed-badge db-fb-big">${FEED_SVG.star}Big · 大单</span>` : '';
-      return { icon: FEED_SVG.ok, tone: 'ok', text: `<b>Paid · 已付</b> ${escapeHtml(p.order_no || '')} · ¥${Number(p.total || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus)}${badge}` };
+      return { icon: FEED_SVG.ok, tone: 'ok', text: `<b>Paid · 已付</b> ${escapeHtml(p.order_no || '')} · ¥${Number(p.total || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus, p.channel)}${badge}` };
     }
     case 'order_dispatched':
-      return { icon: FEED_SVG.truck, tone: 'muted', text: `<b>Dispatched · 已发货</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus)}` };
+      return { icon: FEED_SVG.truck, tone: 'muted', text: `<b>Dispatched · 已发货</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus, p.channel)}` };
     case 'order_delivered':
-      return { icon: FEED_SVG.box, tone: 'ok', text: `<b>Delivered · 已送达</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus)}` };
+      return { icon: FEED_SVG.box, tone: 'ok', text: `<b>Delivered · 已送达</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus, p.channel)}` };
     case 'order_cancelled': {
       // The auto-cancel sweep stamps a machine reason ('auto_cancelled_unpaid');
       // surface that as a human "unpaid" tag so an abandoned cart reads
       // differently from a staff cancellation.
       const auto = p.reason === 'auto_cancelled_unpaid'
         ? ` <span class="db-feed-badge db-fb-muted">${cuT('unpaid','未付款')}</span>` : '';
-      return { icon: FEED_SVG.cancel, tone: 'bad', text: `<b>Cancelled · 已取消</b> ${escapeHtml(p.order_no || '')}${p.total ? ' · ¥' + Number(p.total).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus)}${auto}` };
+      return { icon: FEED_SVG.cancel, tone: 'bad', text: `<b>Cancelled · 已取消</b> ${escapeHtml(p.order_no || '')}${p.total ? ' · ¥' + Number(p.total).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus, p.channel)}${auto}` };
     }
     case 'refund_request':
       return { icon: FEED_SVG.refund, tone: 'warn', text: `<b>Refund request · 退款申请</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
