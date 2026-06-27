@@ -586,6 +586,54 @@
     .fbt-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:2px solid var(--ink);padding:10px 14px;display:flex;gap:10px;align-items:flex-end;max-width:520px;margin:0 auto;z-index:20;}
     .fbt-bar .sp-input{min-height:44px;max-height:120px;}
     .fbt-bar .sp-btn{flex:0 0 auto;align-self:stretch;}
+    /* feedback ("Found a bug?") — mirrors mini-app pages/feedback */
+    .fb-wrap{padding:0 0 110px;}
+    .fb-head{padding:24px 22px 0;}
+    .fb-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--olive);}
+    .fb-title{font-family:var(--bf-bear);font-size:34px;font-weight:500;line-height:.96;margin-top:6px;color:var(--ink);}
+    .fb-intro{margin:12px 22px 0;font-size:14px;line-height:1.45;color:var(--olive);}
+    .fb-sec{margin:24px 22px 0;}
+    .fb-sec-head{display:flex;justify-content:space-between;align-items:baseline;}
+    .fb-label{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--olive);}
+    .fb-count{font-family:var(--bf-toni);font-size:11px;letter-spacing:.06em;color:var(--olive);}
+    .fb-input{width:100%;box-sizing:border-box;background:#FFFCF7;border:2px solid var(--ink);padding:12px 14px;margin-top:10px;font-family:var(--f-aleo);font-size:15px;line-height:1.4;color:var(--ink);min-height:120px;resize:vertical;}
+    .fb-input::placeholder{color:#a59c8f;}
+    .fb-photos{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;}
+    .fb-tile{width:56px;height:56px;border:2px solid var(--ink);overflow:hidden;position:relative;flex:none;}
+    .fb-tile img{width:100%;height:100%;object-fit:cover;}
+    .fb-tile .fb-x{position:absolute;top:-7px;right:-7px;width:18px;height:18px;border-radius:50%;background:var(--ink);color:#fff;border:0;font-size:12px;line-height:18px;text-align:center;cursor:pointer;padding:0;}
+    .fb-add{width:56px;height:56px;border:2px dashed var(--ink);background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--olive);cursor:pointer;flex:none;}
+    .fb-add-plus{font-family:var(--f-aleo);font-size:20px;line-height:1;}
+    .fb-add-lbl{font-family:var(--bf-toni);font-size:8px;letter-spacing:.1em;text-transform:uppercase;}
+    .fb-bar{position:fixed;left:0;right:0;bottom:0;max-width:520px;margin:0 auto;background:var(--oat);border-top:2px solid var(--ink);padding:14px 22px calc(14px + env(safe-area-inset-bottom));z-index:20;}
+    .fb-send{width:100%;background:var(--ink);color:var(--lime);border:0;padding:15px 0;font-family:var(--bf-toni);font-weight:700;font-size:15px;letter-spacing:.1em;text-transform:uppercase;cursor:pointer;}
+    .fb-send:disabled{opacity:.45;cursor:default;}
+    /* membership ("Roots Club") — mirrors mini-app pages/membership */
+    .mb-hero{background:var(--forest);color:var(--oat);padding:38px 22px 30px;}
+    .mb-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--lime);}
+    .mb-title{font-family:var(--bf-bear);font-size:46px;font-weight:500;line-height:1.08;margin-top:8px;}
+    .mb-sub{margin-top:12px;font-size:14px;line-height:1.5;opacity:.85;max-width:300px;}
+    .mb-markers{display:flex;justify-content:space-around;padding:18px 22px;}
+    .mb-mk{display:flex;flex-direction:column;align-items:center;text-align:center;opacity:.35;}
+    .mb-mk.reached{opacity:.7;} .mb-mk.current{opacity:1;}
+    .mb-mk-name{font-family:var(--bf-bear);font-size:17px;color:var(--ink);padding-bottom:4px;border-bottom:3px solid transparent;}
+    .mb-mk.current .mb-mk-name{border-bottom-color:var(--ink);}
+    .mb-mk-dot{font-family:var(--bf-toni);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink);margin-top:6px;background:var(--lime);padding:2px 7px;border-radius:999px;}
+    .mb-card{margin:0 22px;background:var(--ink);color:#fff;padding:18px;}
+    .mb-pc-label{font-family:var(--bf-toni);font-size:10px;font-weight:600;letter-spacing:.16em;text-transform:uppercase;color:var(--lime);}
+    .mb-pc-amt{font-family:var(--bf-bear);font-size:30px;font-weight:500;margin:5px 0 12px;line-height:1;}
+    .mb-pc-bar{height:8px;background:rgba(255,255,255,.12);border-radius:999px;overflow:hidden;}
+    .mb-pc-fill{height:100%;background:var(--lime);border-radius:999px;}
+    .mb-pc-meta{font-size:12.5px;opacity:.75;margin-top:10px;}
+    .mb-table{padding:26px 22px 0;}
+    .mb-trc{background:#FFFCF7;border:2px solid rgba(0,0,0,.12);padding:14px 16px;margin-bottom:12px;position:relative;}
+    .mb-trc.current{border-color:var(--ink);}
+    .mb-trc.current::before{content:'★';position:absolute;top:-9px;right:14px;background:var(--lime);color:var(--ink);width:20px;height:20px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;}
+    .mb-trc-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px;padding-bottom:8px;border-bottom:1px dashed rgba(0,0,0,.14);}
+    .mb-trc-name{font-family:var(--bf-bear);font-size:19px;font-weight:500;color:var(--ink);}
+    .mb-trc-req{font-family:var(--bf-toni);font-size:11px;letter-spacing:.08em;color:var(--olive);}
+    .mb-trc-perks{display:flex;flex-direction:column;gap:4px;}
+    .mb-trc-perk{font-size:13px;color:var(--ink);line-height:1.4;}
     /* about */
     .about-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(0,0,0,.12);margin:18px 22px 0;border:2px solid var(--ink);}
     .about-stat{background:var(--oat);padding:16px;}
@@ -3404,18 +3452,32 @@ async function renderMembership(){
   document.title=(cn?'会员':'Membership')+' · '+state.brand;
   if(state.token&&!state.customer){ try{ await loadCustomer(); }catch(e){} }
   const c=state.customer||{};
-  const tiers=(state.config&&state.config.roots_club&&state.config.roots_club.tiers)||[{key:'seed',name_en:'Seed',name_cn:'种子',threshold:0},{key:'sprout',name_en:'Sprout',name_cn:'幼苗',threshold:500},{key:'root',name_en:'Root',name_cn:'根',threshold:2000},{key:'tree',name_en:'Tree',name_cn:'大树',threshold:5000}];
+  // Normalise tiers from storefront_config (mirrors mini-app normalizeTiers);
+  // fall back to the default ladder so the page still renders pre-login.
+  const FALLBACK=[
+    {key:'seed',name_en:'Seed',name_cn:'种子',threshold:0,perks_en:['5% off your first order','Member newsletter'],perks_cn:['首单 5% 折扣','会员通讯']},
+    {key:'sprout',name_en:'Sprout',name_cn:'幼苗',threshold:500,perks_en:['10% off all orders','Early access to drops','Free shipping ¥299+'],perks_cn:['全场 10% 折扣','新品优先购','满 ¥299 包邮']},
+    {key:'root',name_en:'Root',name_cn:'根',threshold:2000,perks_en:['15% off all orders','Early access to drops','Free shipping ¥199+','Birthday gift'],perks_cn:['全场 15% 折扣','新品优先购','满 ¥199 包邮','生日礼物']},
+    {key:'tree',name_en:'Tree',name_cn:'大树',threshold:5000,perks_en:['20% off all orders','Early access to drops','Free shipping (no minimum)','Birthday gift','Exclusive tasting events'],perks_cn:['全场 20% 折扣','新品优先购','免邮 (无门槛)','生日礼物','专属品鉴活动']},
+  ];
+  let tiers=((state.config&&state.config.roots_club&&state.config.roots_club.tiers)||[])
+    .map(t=>({key:String(t&&t.key||'').trim(),name_en:String(t&&t.name_en||'').trim(),name_cn:String(t&&t.name_cn||'').trim(),threshold:Math.max(0,Number(t&&t.threshold)||0),perks_en:Array.isArray(t&&t.perks_en)?t.perks_en:[],perks_cn:Array.isArray(t&&t.perks_cn)?t.perks_cn:[]}))
+    .filter(t=>t.key).sort((a,b)=>a.threshold-b.threshold);
+  if(!tiers.length)tiers=FALLBACK;
   const spend=Number(c.lifetime_spend)||0;
-  const curIdx=Math.max(0,tiers.findIndex(t=>t.key===(c.tier_key||'seed')));
-  const cur=tiers[curIdx]||tiers[0], next=tiers[curIdx+1];
-  const toGo=next?Math.max(0,(Number(next.threshold)||0)-spend):0;
-  const pct=next?Math.min(100,Math.round((spend/((Number(next.threshold))||1))*100)):100;
-  const ladder=tiers.map((t,i)=>`<div class="tier-step ${i<=curIdx?'on':''}"><span class="tier-dot"></span><div><div class="ts-name">${esc(pick(t.name_en,t.name_cn))}${i===curIdx?` · ${cn?'当前':'You'}`:''}</div><div class="ts-perk">${cn?'消费满 ¥':'Spend ¥'}${Number(t.threshold)||0}${(t.perks_en||t.perks_cn)?' · '+esc(pick(t.perks_en,t.perks_cn)):''}</div></div></div>`).join('');
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'会员俱乐部':'CLUB',cn?'会员':'Membership','')}
-    <div class="tier-now"><div class="tn-name">${esc(pick(cur.name_en,cur.name_cn))}</div>
-      ${next?`<div class="tier-bar"><i style="width:${pct}%"></i></div><div style="font-size:12px;color:var(--olive)">${cn?`再消费 ¥${toGo.toFixed(0)} 升至 ${pick(next.name_en,next.name_cn)}`:`¥${toGo.toFixed(0)} more to reach ${pick(next.name_en,next.name_cn)}`}</div>`:`<div style="font-size:12px;color:var(--olive);margin-top:8px">${cn?'已达最高等级 🌳':'Top tier reached 🌳'}</div>`}</div>
-    <div class="sp-list" style="margin-top:18px">${ladder}</div>
-    <div class="sp-foot"><button class="sp-btn block" data-go="#/shop">${cn?'去购物':'Shop now'}</button></div></div>`;
+  let curIdx=tiers.findIndex(t=>t.key===(c.tier_key||tiers[0].key)); if(curIdx<0)curIdx=0;
+  const cur=tiers[curIdx], next=tiers[curIdx+1]||null, top=tiers[tiers.length-1];
+  let pct=100, meta=cn?('最高等级 · '+pick(top.name_en,top.name_cn)):('Top tier · '+pick(top.name_en,top.name_cn));
+  if(next){ const span=(next.threshold-cur.threshold)||1; pct=Math.max(0,Math.min(100,Math.round(((spend-cur.threshold)/span)*100)));
+    const left=Math.max(0,Math.floor(next.threshold-spend)); meta=cn?('还差 ¥'+left+' 升到 '+pick(next.name_en,next.name_cn)):('¥'+left+' to '+pick(next.name_en,next.name_cn)); }
+  const markers=tiers.map((t,i)=>`<div class="mb-mk ${i===curIdx?'current':(i<curIdx?'reached':'')}"><div class="mb-mk-name">${esc(pick(t.name_en,t.name_cn))}</div>${i===curIdx?`<div class="mb-mk-dot">${cn?'当前':"You're here"}</div>`:''}</div>`).join('');
+  const table=tiers.map((t,i)=>{ const perks=(cn?t.perks_cn:t.perks_en)||[];
+    return `<div class="mb-trc ${i===curIdx?'current':''}"><div class="mb-trc-head"><div class="mb-trc-name">${esc(pick(t.name_en,t.name_cn))}</div><div class="mb-trc-req">${cn?'累计 ¥':'Spend ¥'}${t.threshold}+</div></div><div class="mb-trc-perks">${perks.map(p=>`<div class="mb-trc-perk">· ${esc(p)}</div>`).join('')}</div></div>`; }).join('');
+  v.innerHTML=`<div class="sp">${spBack()}
+    <div class="mb-hero"><div class="mb-kicker">${cn?'ROOTS 会员':'ROOTS CLUB'}</div><div class="mb-title">${cn?'一起成长。':'Grow with us.'}</div><div class="mb-sub">${cn?'每次下单解锁福利，向上生长。':'Earn perks on every order. Climb the tree.'}</div></div>
+    <div class="mb-markers">${markers}</div>
+    <div class="mb-card"><div class="mb-pc-label">${cn?'下一级':'NEXT'}: ${esc(pick((next||cur).name_en,(next||cur).name_cn))}</div><div class="mb-pc-amt">¥${spend.toFixed(0)}${next?' / ¥'+next.threshold:''}</div><div class="mb-pc-bar"><div class="mb-pc-fill" style="width:${pct}%"></div></div><div class="mb-pc-meta">${esc(meta)}</div></div>
+    <div class="mb-table">${table}</div></div>`;
 }
 
 async function renderAffiliate(){
@@ -3638,14 +3700,27 @@ async function renderFaq(){
 async function renderFeedback(){
   const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
   document.title=(cn?'报告问题':'Feedback')+' · '+state.brand;
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'报告问题':'FEEDBACK',cn?'发现问题？':'Found a bug?',cn?'告诉我们哪里出错了，我们会尽快修复。':'Tell us what broke — we’ll fix it fast.')}
-    <div class="sp-pad"><textarea class="sp-input" id="fbMsg" placeholder="${cn?'描述你遇到的问题…':'Describe what went wrong…'}"></textarea></div>
-    <div class="sp-pad" style="padding-top:0"><div id="fbThumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div><label class="sp-btn ghost" style="display:inline-block;cursor:pointer">${cn?'添加截图':'Add screenshot'}<input type="file" id="fbFile" accept="image/*" hidden></label></div>
-    <div class="sp-msg" id="fbErr"></div>
-    <div class="sp-foot"><button class="sp-btn block" id="fbSend">${cn?'提交':'Send report'}</button></div>
-    <div id="fbPast"></div></div>`;
+  const intro=cn?'遇到用不了的地方?告诉我们,我们会尽快修复。方便的话附上截图,会很有帮助。':'Spotted something not working right? Let us know and we’ll fix it. A screenshot helps a lot.';
+  v.innerHTML=`<div class="sp">${spBack()}<div class="fb-wrap">
+    <div class="fb-head"><div class="fb-kicker">${cn?'发现问题?':'Found a bug?'}</div><div class="fb-title">${cn?'告诉我们哪里出错了。':'Tell us what broke.'}</div></div>
+    <div class="fb-intro">${esc(intro)}</div>
+    <div class="fb-sec">
+      <div class="fb-sec-head"><div class="fb-label">${cn?'问题描述':'What happened'}</div><div class="fb-count" id="fbCount">0 / 1000</div></div>
+      <textarea class="fb-input" id="fbMsg" maxlength="1000" placeholder="${cn?'例如:选好地址后,点结算按钮没反应。':'e.g. The checkout button does nothing after I pick an address.'}"></textarea>
+      <div class="fb-photos" id="fbThumbs"></div>
+      <div class="sp-msg" id="fbErr" style="padding-left:0"></div>
+    </div>
+    <div id="fbPast"></div>
+  </div></div>
+  <div class="fb-bar"><button class="fb-send" id="fbSend">${cn?'提交反馈':'Send report'} →</button>
+    <input type="file" id="fbFile" accept="image/*" hidden></div>`;
   const photos=[];
-  const paint=()=>{ $('#fbThumbs').innerHTML=photos.map((u,i)=>`<div style="position:relative;width:60px;height:60px"><img src="${escAttr(u)}" style="width:60px;height:60px;object-fit:cover;border:2px solid var(--ink)"><button data-rm="${i}" style="position:absolute;top:-8px;right:-8px;width:20px;height:20px;border-radius:999px;background:var(--berry);color:#fff;border:0;cursor:pointer;line-height:1">×</button></div>`).join(''); $('#fbThumbs').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{photos.splice(Number(b.dataset.rm),1);paint();})); };
+  const paint=()=>{ const add=photos.length>=6?'':`<button class="fb-add" id="fbAdd"><span class="fb-add-plus">+</span><span class="fb-add-lbl">${cn?'截图':'Screenshot'}</span></button>`;
+    $('#fbThumbs').innerHTML=photos.map((u,i)=>`<div class="fb-tile"><img src="${escAttr(u)}"><button class="fb-x" data-rm="${i}">×</button></div>`).join('')+add;
+    $('#fbThumbs').querySelectorAll('[data-rm]').forEach(b=>b.addEventListener('click',()=>{photos.splice(Number(b.dataset.rm),1);paint();}));
+    const a=$('#fbAdd'); if(a)a.addEventListener('click',()=>$('#fbFile').click()); };
+  paint();
+  $('#fbMsg').addEventListener('input',e=>{ $('#fbCount').textContent=(e.target.value||'').length+' / 1000'; });
   $('#fbFile').addEventListener('change',async e=>{ const file=e.target.files&&e.target.files[0]; if(!file||photos.length>=6)return;
     const data=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(file);});
     try{ const up=await postJson('/api/retail/review-photos',{data}); if(up&&up.url){ photos.push(up.url); paint(); } }catch(err){ $('#fbErr').textContent=cn?'图片上传失败':'Photo upload failed'; }
@@ -3654,7 +3729,7 @@ async function renderFeedback(){
     const btn=$('#fbSend'); btn.disabled=true; $('#fbErr').textContent='';
     try{ await postJson('/api/retail/feedback',{message:msg,photos,page_context:'web',app_version:'web'}); toast(cn?'已提交，谢谢！':'Sent — thank you!'); location.hash='#/me'; }
     catch(e){ $('#fbErr').textContent=cn?'提交失败，请重试':'Could not send — try again'; btn.disabled=false; } });
-  try{ const past=await api('/api/retail/feedback')||[]; if(past&&past.length){ $('#fbPast').innerHTML=`<div class="me-section"><div class="me-sec-title">${cn?'历史反馈':'Past reports'}</div><div class="sp-list" style="margin-top:8px">${past.map(p=>`<div class="sp-li" data-fb="${p.id}" style="cursor:pointer"><div class="sp-main"><div class="sp-t" style="font-size:14px">${esc(String(p.message||'').slice(0,60))}</div>${p.reply_count?`<div class="sp-d">${cn?'有新回复':'New reply'}</div>`:''}</div>${p.unread?'<span class="ntf-dot"></span>':''}</div>`).join('')}</div></div>`;
+  try{ const past=await api('/api/retail/feedback')||[]; if(past&&past.length){ $('#fbPast').innerHTML=`<div class="fb-sec"><div class="fb-label">${cn?'你的反馈':'Your reports'}</div><div class="sp-list" style="margin-top:8px">${past.map(p=>`<div class="sp-li" data-fb="${p.id}" style="cursor:pointer"><div class="sp-main"><div class="sp-t" style="font-size:14px">${esc(String(p.message||'').slice(0,60))}</div>${p.reply_count?`<div class="sp-d">${cn?'有新回复':'New reply'}</div>`:''}</div>${p.unread?'<span class="ntf-dot"></span>':''}</div>`).join('')}</div></div>`;
     $('#fbPast').querySelectorAll('[data-fb]').forEach(r=>r.addEventListener('click',()=>{ location.hash='#/feedback/'+r.dataset.fb; })); } }catch(e){}
 }
 
