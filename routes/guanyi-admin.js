@@ -267,4 +267,218 @@ router.post('/api/retail-admin/guanyi/push-all', requireRetailAdmin, (req, res) 
   }
 });
 
+// ── GET /api/retail-admin/guanyi/pickups ────────────────────────────────────
+// gzgrocery pickup inference surface: flagged (capped, awaiting an operator
+// decision) + recent auto-applied pickups + current mode. The daemon infers a
+// pickup from a drop in Guanyi stock; big/suspicious drops are 'capped' and wait
+// here for Apply/Ignore so nothing is silently lost or silently slashed.
+router.get('/api/retail-admin/guanyi/pickups', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const store = guanyiStore(db);
+    const storeId = store ? store.id : -1;
+    const has = db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get();
+    if (!has) return res.json({ success: true, mode: 'off', flagged: [], recent: [], summary: {} });
+
+    const flagged = db.prepare(`
+      SELECT pl.id, pl.product_id, pl.guanyi_name, pl.observed_qty, pl.baseline_qty,
+             pl.drift, pl.inferred_pickup, pl.tianhe_qty, pl.created_at,
+             p.name_cn, p.name_en, p.sku AS product_sku,
+             COALESCE(ss.physical_qty, 0) AS current_qty
+        FROM guanyi_pickup_log pl
+        LEFT JOIN store_products p ON p.id = pl.product_id
+        LEFT JOIN retail_store_stock ss ON ss.product_id = pl.product_id AND ss.store_id = ?
+       WHERE pl.action = 'capped' AND COALESCE(pl.resolved, 0) = 0
+       ORDER BY pl.created_at DESC LIMIT 100
+    `).all(storeId);
+
+    // Recent deductions: union the live order-read sales (retail_stock_ledger
+    // reason=gzgrocery_order — the authoritative source now) with the legacy
+    // drift pickups (guanyi_pickup_log, pre-order-read history). One unit per
+    // -delta. Newest first.
+    const recent = db.prepare(`
+      SELECT product_id, units AS inferred_pickup, created_at, name_cn, name_en FROM (
+        SELECT l.product_id, -l.delta AS units, l.created_at,
+               p.name_cn, p.name_en
+          FROM retail_stock_ledger l
+          LEFT JOIN store_products p ON p.id = l.product_id
+         WHERE l.reason = 'gzgrocery_order' AND l.store_id = ?
+        UNION ALL
+        SELECT pl.product_id, pl.inferred_pickup AS units, pl.created_at,
+               p.name_cn, p.name_en
+          FROM guanyi_pickup_log pl
+          LEFT JOIN store_products p ON p.id = pl.product_id
+         WHERE pl.action = 'decremented'
+      )
+      ORDER BY created_at DESC LIMIT 25
+    `).all(storeId);
+
+    // Order-read is the live mechanism now; reflect its mode (drift is parked
+    // in shadow). Falls back to recent activity if the env isn't in scope.
+    const hasRecentOrder = db.prepare(`SELECT 1 FROM retail_stock_ledger WHERE reason='gzgrocery_order' AND created_at >= datetime('now','-7 days') LIMIT 1`).get();
+    const mode = (process.env.GZGROCERY_ORDER_MODE || (hasRecentOrder ? 'live' : 'off')).toLowerCase();
+    const today = db.prepare(`
+      SELECT
+        (SELECT COALESCE(SUM(-delta),0) FROM retail_stock_ledger
+          WHERE reason='gzgrocery_order' AND store_id=? AND created_at >= datetime('now','-24 hours'))
+      + (SELECT COALESCE(SUM(inferred_pickup),0) FROM guanyi_pickup_log
+          WHERE action='decremented' AND created_at >= datetime('now','-24 hours')) AS units,
+        (SELECT COUNT(*) FROM retail_stock_ledger
+          WHERE reason='gzgrocery_order' AND store_id=? AND created_at >= datetime('now','-24 hours')) AS events`).get(storeId, storeId);
+
+    res.json({
+      success: true,
+      mode,
+      flagged, recent,
+      summary: { flaggedCount: flagged.length, appliedUnits24h: today.units, appliedEvents24h: today.events },
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/guanyi/pickups/:id/apply ─────────────────────────
+// Operator confirms a flagged drop WAS a real pickup → decrement our Tianhe
+// stock by the inferred amount (through the canonical inventory path, so it's
+// ledgered + fanned out to the other channels).
+router.post('/api/retail-admin/guanyi/pickups/:id/apply', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = db.prepare(`SELECT * FROM guanyi_pickup_log WHERE id = ? AND action='capped'`).get(id);
+    if (!row) return res.status(404).json({ success: false, error: 'flagged pickup not found' });
+    if (row.resolved) return res.json({ success: true, already: true });
+    const store = guanyiStore(db);
+    if (!store) return res.status(400).json({ success: false, error: 'no active store' });
+
+    const cur = db.prepare('SELECT COALESCE(physical_qty,0) AS q FROM retail_store_stock WHERE store_id=? AND product_id=?').get(store.id, row.product_id);
+    const curQty = cur ? cur.q : 0;
+    const newQty = Math.max(0, curQty - (row.inferred_pickup || 0));
+    const { adjustStock } = require('../lib/inventory');
+    adjustStock({
+      storeId: store.id, productId: row.product_id, newPhysicalQty: newQty,
+      actorLabel: 'guanyi-pickup-manual', reason: 'guanyi_pickup',
+      note: `operator-applied flagged gzgrocery pickup #${id}: −${row.inferred_pickup} (${row.baseline_qty}→${row.observed_qty})`,
+    });
+    db.prepare(`UPDATE guanyi_pickup_log SET resolved=1, resolution='applied', resolved_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+    res.json({ success: true, newQty });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/guanyi/pickups/:id/ignore ────────────────────────
+// Operator judges a flagged drop a glitch (not a real sale) → leave our stock
+// alone and re-assert our true Tianhe qty onto Guanyi (correct the bad number).
+router.post('/api/retail-admin/guanyi/pickups/:id/ignore', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const id = parseInt(req.params.id, 10);
+    const row = db.prepare(`SELECT * FROM guanyi_pickup_log WHERE id = ? AND action='capped'`).get(id);
+    if (!row) return res.status(404).json({ success: false, error: 'flagged pickup not found' });
+    if (row.resolved) return res.json({ success: true, already: true });
+    const store = guanyiStore(db);
+    db.prepare(`UPDATE guanyi_pickup_log SET resolved=1, resolution='ignored', resolved_at=CURRENT_TIMESTAMP WHERE id=?`).run(id);
+    // Re-push our true stock so a glitched-low Guanyi number gets corrected back up.
+    try { require('../lib/guanyi-sync').enqueueProductStock(db, store.id, row.product_id); } catch (e) {}
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── GET /api/retail-admin/guanyi/analytics ──────────────────────────────────
+// gzgrocery order analytics derived from the pickup ledger. A "billable" unit =
+// an applied pickup (auto 'decremented', or a flagged 'capped' the operator
+// Applied); a return ('drift_up') nets OUT. Money: owed = units × sell_price ×
+// (1 − discount_pct); retail value = units × sell_price.
+//   query: ?from=YYYY-MM-DD&to=YYYY-MM-DD&period=day|week|month
+router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    if (!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get())
+      return res.json({ success: true, summary: {}, timeSeries: [], products: [], unpriced: [] });
+
+    const period = ['day', 'week', 'month'].includes(req.query.period) ? req.query.period : 'day';
+    const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : null;
+    const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : null;
+    const fromClause = from || "date('now','-90 days')";
+    const toClause   = to   || "date('now','+1 day')";
+    const bucket = period === 'month' ? "strftime('%Y-%m', src.created_at)"
+                 : period === 'week'  ? "strftime('%Y-W%W', src.created_at)"
+                 : "date(src.created_at)";
+
+    // Source = live order-read sales (retail_stock_ledger reason=gzgrocery_order,
+    // the authoritative record; reverses subtract) UNIONed with the legacy drift
+    // pickups (guanyi_pickup_log) so pre-order-read history is preserved. One
+    // unit per -delta. No time overlap: drift is parked in shadow.
+    const rows = db.prepare(`
+      SELECT ${bucket} AS bucket, src.product_id,
+             SUM(src.units) AS units,
+             sp.name_cn, sp.name_en, sp.sku, COALESCE(sp.sell_price,0) AS price,
+             pp.discount_pct AS disc, pp.excel_retail AS xretail, pp.excel_gz_price AS xgz
+        FROM (
+          SELECT l.product_id, -l.delta AS units, l.created_at
+            FROM retail_stock_ledger l
+           WHERE l.reason IN ('gzgrocery_order','gzgrocery_order_reverse')
+          UNION ALL
+          SELECT pl.product_id,
+                 CASE WHEN pl.action='decremented' OR (pl.action='capped' AND pl.resolution='applied') THEN pl.inferred_pickup
+                      WHEN pl.action='drift_up' THEN -ABS(COALESCE(pl.drift,0)) ELSE 0 END AS units,
+                 pl.created_at
+            FROM guanyi_pickup_log pl
+           WHERE pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied')
+        ) src
+        LEFT JOIN store_products sp ON sp.id = src.product_id
+        LEFT JOIN guanyi_product_pricing pp ON pp.product_id = src.product_id
+       WHERE src.created_at >= ${from ? '?' : fromClause} AND src.created_at < ${to ? '?' : toClause}
+       GROUP BY bucket, src.product_id
+    `).all(...[from, to].filter(Boolean));
+
+    const tsMap = new Map();      // bucket -> {units,owed,retail}
+    const prodMap = new Map();    // product_id -> {...}
+    const unpriced = new Map();
+    let tUnits = 0, tOwed = 0, tRetail = 0;
+    for (const r of rows) {
+      const units = r.units || 0;
+      if (!units) continue;
+      const disc = r.disc == null ? null : r.disc;
+      // Bill what gzgrocery actually pays = the sheet's price. Fall back to our
+      // sell_price (full retail, no discount) only for products the sheet omits.
+      const unitRetail = r.xretail != null ? r.xretail : (r.price || 0);
+      const unitOwed   = r.xgz != null ? r.xgz : unitRetail;
+      const retail = units * unitRetail;
+      const owed = units * unitOwed;
+      tUnits += units; tOwed += owed; tRetail += retail;
+
+      const t = tsMap.get(r.bucket) || { bucket: r.bucket, units: 0, owed: 0, retail: 0 };
+      t.units += units; t.owed += owed; t.retail += retail; tsMap.set(r.bucket, t);
+
+      const p = prodMap.get(r.product_id) || {
+        product_id: r.product_id, sku: r.sku, name: [r.name_cn, r.name_en].filter(Boolean).join(' '),
+        units: 0, owed: 0, retail: 0, price: r.price, discount: disc,
+      };
+      p.units += units; p.owed += owed; p.retail += retail; prodMap.set(r.product_id, p);
+      if (disc == null && units > 0) unpriced.set(r.product_id, p.name);
+    }
+
+    const products = [...prodMap.values()].sort((a, b) => b.owed - a.owed);
+    const timeSeries = [...tsMap.values()].sort((a, b) => a.bucket.localeCompare(b.bucket));
+    res.json({
+      success: true,
+      period,
+      range: { from: from || null, to: to || null },
+      summary: {
+        units: tUnits, owed: tOwed, retail: tRetail,
+        avgDiscount: tRetail > 0 ? (1 - tOwed / tRetail) : 0,
+        products: products.length,
+      },
+      timeSeries, products,
+      unpriced: [...unpriced.entries()].map(([id, name]) => ({ product_id: id, name })),
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;
