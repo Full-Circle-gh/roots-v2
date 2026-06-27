@@ -130,8 +130,18 @@ function resolveStoreId() {
 function loadSkuMap() {
   const map = new Map();
   for (const r of db.prepare(`SELECT id, sku FROM store_products WHERE sku IS NOT NULL AND sku <> ''`).all()) {
-    const m = /\b(\d+-\d+[A-Za-z]?)\b/.exec(String(r.sku));
-    if (m) map.set(m[1].toUpperCase(), { productId: r.id, sku: r.sku });
+    const raw = String(r.sku).trim();
+    const m = /\b(\d+-\d+[A-Za-z]?)\b/.exec(raw);
+    if (!m) continue;
+    const key = m[1].toUpperCase();
+    // The same numeric code can appear on a canonical product ('3-251') AND on a
+    // wrapped "sample" twin ('S(3-251)'). The canonical SKU — where the whole SKU
+    // IS the code — must win, otherwise a later-iterated twin clobbers the real
+    // product and orders decrement (and mis-price) the wrong row.
+    const canonical = raw.toUpperCase() === key;
+    const existing = map.get(key);
+    if (existing && existing.canonical && !canonical) continue;
+    map.set(key, { productId: r.id, sku: r.sku, canonical });
   }
   return map;
 }
@@ -245,10 +255,13 @@ async function runCycle() {
   let dec = 0, rev = 0, foreign = 0, seeded = 0, errs = 0;
   for (const o of orders) {
     try {
-      const prev = db.prepare(`SELECT decremented,reversed,status FROM gzgrocery_orders WHERE order_id=?`).get(o.orderId);
+      const prev = db.prepare(`SELECT decremented,reversed,status,our_units,items_json FROM gzgrocery_orders WHERE order_id=?`).get(o.orderId);
       // Pre-existing backlog (≤ baseline, never seen) → seed as counted, no
       // item fetch, no stock action — it was handled before we started.
       if (!prev && o.orderId <= baseline) { seedBacklog(o); seeded++; continue; }
+      // Already fetched once and held no Roots products. An order's line items
+      // never change after placement, so don't waste a detail request re-checking it.
+      if (prev && prev.our_units === 0 && prev.items_json === '[]') { foreign++; continue; }
       // Only spend a detail request when state may change.
       const needItems =
         (ACTIVE.has(o.status) && !prev?.decremented) ||
