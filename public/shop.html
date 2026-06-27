@@ -467,6 +467,23 @@
     .sp-chip{display:inline-block;padding:3px 10px;border-radius:0;font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:var(--lime);}
     .sp-eta{display:inline-block;margin-top:8px;padding:4px 11px;border-radius:999px;font-family:var(--bf-toni);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:rgba(180,200,90,.28);color:var(--olive);}
     .sp-msg{font-size:13px;color:var(--berry);padding:8px 22px 0;min-height:16px;}
+    /* Address cards — bold framed cards matching the mini-app "Saved spots"
+       page: ink border, lime-tinted selected state, dashed-divider actions. */
+    .ad-hint{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);padding:10px 22px 4px;}
+    .ad-list{padding:8px 22px 0;}
+    .ad-card{background:#FFFCF7;border:2px solid var(--ink);padding:18px;margin-bottom:14px;cursor:pointer;transition:transform 80ms ease-out,background 120ms ease-out;}
+    .ad-card:active{transform:scale(.99);}
+    .ad-card.on{background:rgba(204,217,0,.22);border-color:var(--olive);}
+    .ad-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:8px;}
+    .ad-name{font-size:16px;color:var(--ink);line-height:1.2;}
+    .ad-name b{font-family:var(--bf-bear);font-weight:500;}
+    .ad-badge{flex:none;padding:3px 11px;border-radius:999px;background:var(--lime);color:var(--ink);font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+    .ad-full{font-size:14px;color:var(--ink);line-height:1.4;}
+    .ad-city{font-size:12.5px;color:var(--olive);margin-top:2px;}
+    .ad-eta{display:inline-block;margin-top:10px;padding:4px 12px;border-radius:999px;font-family:var(--bf-toni);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:rgba(204,217,0,.2);color:#3a4400;}
+    .ad-actions{display:flex;gap:20px;margin-top:14px;padding-top:12px;border-top:1.5px dashed rgba(0,0,0,.18);}
+    .ad-link{font-family:var(--bf-toni);font-size:12px;font-weight:600;letter-spacing:.04em;color:var(--olive);text-decoration:underline;cursor:pointer;}
+    .ad-link.danger{color:var(--berry);}
     /* Address add/edit form — mirrors the mini-app's placeholder-only fields,
        single delivery-area trigger, default toggle and ink/lime Save button. */
     .af-form{padding:0 22px;}
@@ -2800,22 +2817,36 @@ async function renderAddresses(edit){
   v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'收货地址':'Delivery addresses','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
   let list; try{ list=await api('/api/retail/addresses')||[]; }catch(e){ list=[]; }
   const box=v.querySelector('.sp');
-  const rows=(list||[]).map(a=>`<div class="sp-li"><div class="sp-main">
-      <div class="sp-t">${esc(a.recipient_name||'')} ${a.is_default?'<span class="sp-chip">'+(cn?'默认':'Default')+'</span>':''}</div>
-      <div class="sp-d">${esc([a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' '))}</div>
-      <div class="sp-d">${esc(a.phone||'')}</div>
-      ${a.delivery_eta?`<div class="sp-eta">${a.delivery_eta.courier?(cn?'📦 快递配送':'📦 Ships by courier'):(cn?('🛵 约 '+a.delivery_eta.km+' 公里 · 约 '+a.delivery_eta.min+' 分钟'):('🛵 ~'+a.delivery_eta.km+' km · ~'+a.delivery_eta.min+' min'))}</div>`:''}
-      <div style="margin-top:8px;display:flex;gap:16px"><button class="me-legal-a" data-edit="${a.id}">${cn?'编辑':'Edit'}</button>${a.is_default?'':`<button class="me-legal-a" data-def="${a.id}">${cn?'设为默认':'Set default'}</button>`}<button class="me-legal-a" style="color:var(--berry)" data-del="${a.id}">${cn?'删除':'Delete'}</button></div>
-    </div></div>`).join('');
+  // Cards mirror the mini-app "Saved spots" page: bold ink frame, lime-tinted
+  // selected card with a SELECTED badge, ETA pill, and dashed-divider actions.
+  // Tapping the card body sets it as default ("tap an address to use it");
+  // Edit/Delete use stopPropagation so they don't bubble up to that handler.
+  const etaHtml=a=>a.delivery_eta?`<div class="ad-eta">${a.delivery_eta.courier?(cn?'📦 快递配送':'📦 Ships by courier'):(cn?('🛵 约 '+a.delivery_eta.km+' 公里 · 约 '+a.delivery_eta.min+' 分钟'):('🛵 ~'+a.delivery_eta.km+' km · ~'+a.delivery_eta.min+' min'))}</div>`:'';
+  const cityHtml=a=>{const c=[a.city,a.district].filter(Boolean).join(' · ');return c?`<div class="ad-city">${esc(c)}</div>`:'';};
+  const rows=(list||[]).map(a=>`<div class="ad-card ${a.is_default?'on':''}" data-pick="${a.id}">
+      <div class="ad-top">
+        <div class="ad-name"><b>${esc(a.recipient_name||'')}</b>${a.phone?' · '+esc(a.phone):''}</div>
+        ${a.is_default?`<span class="ad-badge">${cn?'已选':'Selected'}</span>`:''}
+      </div>
+      <div class="ad-full">${esc([a.address,a.detail].filter(Boolean).join(' · '))}</div>
+      ${cityHtml(a)}
+      ${etaHtml(a)}
+      <div class="ad-actions">
+        <span class="ad-link" data-edit="${a.id}">${cn?'编辑':'Edit'}</span>
+        <span class="ad-link danger" data-del="${a.id}">${cn?'删除':'Delete'}</span>
+      </div>
+    </div>`).join('');
   box.innerHTML=spBack()+spHead(cn?'收货地址':'ADDRESSES',cn?'我的地址':'Saved spots.','')+
-    (rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'还没有收货地址':'No saved addresses yet'}</div>`)+
-    `<div class="sp-foot"><button class="sp-btn block ink" id="addrNew">＋ ${cn?'添加新地址':'Add address'}</button></div>`;
+    (list&&list.length>1?`<div class="ad-hint">${cn?'点击地址即可使用':'Tap an address to use it'}</div>`:'')+
+    (rows?`<div class="ad-list">${rows}</div>`:`<div class="sp-empty">${cn?'还没有收货地址':'No saved addresses yet'}</div>`)+
+    `<div class="sp-foot"><button class="sp-btn block ink" id="addrNew">＋ ${cn?'添加新地址':'Add new address'}</button></div>`;
   $('#addrNew').addEventListener('click',()=>renderAddresses('new'));
-  box.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>renderAddresses(b.dataset.edit)));
-  box.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async()=>{ if(!confirm(cn?'删除此地址？':'Delete this address?'))return;
+  box.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',e=>{e.stopPropagation();renderAddresses(b.dataset.edit);}));
+  box.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',async e=>{ e.stopPropagation(); if(!confirm(cn?'删除此地址？':'Delete this address?'))return;
     try{ await apiSend('DELETE','/api/retail/addresses/'+b.dataset.del); state.customer=null; renderAddresses(); }catch(e){ toast(cn?'删除失败':'Delete failed'); } }));
-  box.querySelectorAll('[data-def]').forEach(b=>b.addEventListener('click',async()=>{
-    try{ await apiSend('PUT','/api/retail/addresses/'+b.dataset.def,{is_default:true}); state.customer=null; renderAddresses(); }catch(e){ toast(cn?'操作失败':'Failed'); } }));
+  box.querySelectorAll('[data-pick]').forEach(c=>c.addEventListener('click',async()=>{
+    if(c.classList.contains('on'))return;
+    try{ await apiSend('PUT','/api/retail/addresses/'+c.dataset.pick,{is_default:true}); state.customer=null; renderAddresses(); }catch(e){ toast(cn?'操作失败':'Failed'); } }));
 }
 // Web-native add/edit form. Region uses the SAME canonical-Chinese City→District
 // cascade as checkout (delivery-zones + /districts), so the server resolves the
