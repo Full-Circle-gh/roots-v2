@@ -310,7 +310,10 @@
     }
 
     if (recent.length) {
-      html += `<details><summary style="cursor:pointer;font-size:12px;color:var(--fg-muted);padding:2px 0">Recent auto-applied pickups (${recent.length}) · 最近自动扣减</summary>
+      // Preserve the expanded state across the background poll's re-render —
+      // otherwise the section snaps shut every refresh cycle.
+      const wasOpen = !!wrap.querySelector('#gy-pickups-recent[open]');
+      html += `<details id="gy-pickups-recent"${wasOpen ? ' open' : ''}><summary style="cursor:pointer;font-size:12px;color:var(--fg-muted);padding:2px 0">Recent auto-applied pickups (${recent.length}) · 最近自动扣减</summary>
         <div style="margin-top:6px;font-size:12px;max-height:160px;overflow-y:auto">`
         + recent.map(x => `<div style="display:flex;gap:8px;padding:2px 0">
             <span style="color:#c00;font-weight:600;width:44px">−${x.inferred_pickup}</span>

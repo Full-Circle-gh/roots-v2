@@ -78,7 +78,10 @@
   };
 
   function mtOrderRow(o) {
-    const store = (_stores.find(s => s.code === o.store_code) || {}).name
+    // Use the EN store label (Tianhe / Yuexiu) in the English view; the store
+    // record only carries a Chinese name (天河店 / 越秀店).
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    const store = mtStoreName(o.store_code, cn)
       || o.store_name_cn || o.store_name_en || o.store_code || '';
     const items = (o.items || []).map(it =>
       `${esc([it.name_cn, it.name_en].filter(Boolean).join(' '))}${it.qty > 1 ? ` ×${it.qty}` : ''}`
