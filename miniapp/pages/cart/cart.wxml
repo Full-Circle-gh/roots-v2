@@ -20,8 +20,11 @@
 
     <view class="items">
       <view wx:for="{{items}}" wx:key="key" class="row">
-        <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="thumb"/>
-        <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="thumb thumb-empty"/>
+        <view class="media">
+          <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="thumb"/>
+          <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="thumb thumb-empty"/>
+          <view class="del" data-key="{{item.key}}" bindtap="removeItem">×</view>
+        </view>
         <view class="info">
           <view class="name f-bear">{{item.display_name}}</view>
           <view wx:if="{{item.ship_from_supplier}}" class="supplier-tag f-toni">
@@ -33,7 +36,6 @@
             <view class="qty-btn" data-key="{{item.key}}" bindtap="decQty">−</view>
             <view class="qty-val f-gothic">{{item.qty}}</view>
             <view class="qty-btn" data-key="{{item.key}}" bindtap="incQty">+</view>
-            <view class="del" data-key="{{item.key}}" bindtap="removeItem">×</view>
           </view>
         </view>
         <view class="line-total-stack">

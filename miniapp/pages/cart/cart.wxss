@@ -94,7 +94,23 @@
   text-align: center;
   font-size: calc(26rpx * var(--font-scale));
 }
-.del { color: var(--olive); font-size: calc(32rpx * var(--font-scale)); margin-left: auto; padding: 8rpx; }
+.media { position: relative; flex-shrink: 0; }
+.del {
+  position: absolute;
+  top: -14rpx;
+  left: -14rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  font-size: calc(28rpx * var(--font-scale));
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
 .line-total { font-size: calc(44rpx * var(--font-scale)); }
 .line-total.is-flash { color: #E96174; }
 .line-total-stack {
