@@ -417,7 +417,9 @@
     .cp-sub{display:flex;justify-content:space-between;align-items:baseline;}
     .cp-sub .l{font-family:var(--bf-bear);font-size:15px;color:var(--ink);} .cp-sub .v{font-family:var(--bf-bear);font-size:30px;}
     .cp-checkout{margin-top:12px;width:100%;font-family:var(--bf-toni);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:17px;background:var(--ink);color:var(--lime);border:0;border-radius:0;padding:15px;cursor:pointer;}
-    .cp-empty{text-align:center;color:var(--olive);padding:70px 22px;}
+    .cp-empty{text-align:center;padding:90px 22px;}
+    .cp-empty-t{font-family:var(--bf-bear);font-size:30px;color:var(--ink);}
+    .cp-empty-btn{display:inline-block;margin-top:26px;font-family:var(--bf-toni);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:15px;background:var(--ink);color:var(--oat);border-radius:999px;padding:15px 36px;text-decoration:none;}
     /* No tab bar on desktop — drop the bar flush to the bottom there. */
     @media(min-width:768px){.cp-foot{bottom:0;}}
 
@@ -1790,15 +1792,41 @@ function coRenderItems(){
     <div class="cx-line-tot">${money((Number(l.price)||0)*(Number(l.qty)||1))}</div>
   </div>`).join('');
 }
-// Payment rows — match the mini-app's swatch layout. Only Alipay works in a
-// plain browser (WeChat Pay JSAPI needs the in-WeChat openid), so WeChat shows
-// as an unavailable row rather than a dead option.
+// Detect the shopper's environment so we can pick the right WeChat/Alipay web
+// product. WeChat: in-app → JSAPI; mobile browser → H5 (opens the WeChat app);
+// desktop → Native (scan a QR). Alipay: mobile → wap (opens the Alipay app);
+// desktop → page (Alipay login). The server maps each channel to its API.
+function payEnv(){
+  const ua=navigator.userAgent||'';
+  return { inWechat:/MicroMessenger/i.test(ua), mobile:/Mobile|Android|iPhone|iPad|iPod/i.test(ua) };
+}
+function wxChannel(){ const e=payEnv(); return e.inWechat?'jsapi':(e.mobile?'h5':'native'); }
+function aliChannel(){ const e=payEnv(); return e.mobile?'wap':'page'; }
+// Payment rows — match the mini-app's swatch layout. Both WeChat Pay and Alipay
+// are selectable on the web now (WeChat via H5/Native, Alipay via wap/page); a
+// short pill hints how each will behave on the current device.
 function coRenderPay(){
   const box=$('#coPay'); if(!box)return; const cn=state.lang==='cn';
-  if(co.payment!=='alipay')co.payment='alipay';
+  // Which rails the server says are live (real merchant configured). An
+  // unconfigured rail shows greyed "Coming soon" rather than a dead option.
+  const pay=(state.config&&state.config.payments)||{};
+  const wxOk=!!pay.wechat, aliOk=!!pay.alipay;
+  // Keep the selection on an available rail (prefer Alipay — the established web
+  // path — then WeChat).
+  if(co.payment!=='wechat'&&co.payment!=='alipay') co.payment = aliOk?'alipay':(wxOk?'wechat':'alipay');
+  if(co.payment==='wechat'&&!wxOk) co.payment = aliOk?'alipay':'wechat';
+  if(co.payment==='alipay'&&!aliOk&&wxOk) co.payment='wechat';
+  const env=payEnv();
+  const soon=cn?'即将开放':'Coming soon';
+  const wxHint = wxOk ? (env.inWechat?'':(env.mobile?(cn?'跳转微信':'Opens WeChat'):(cn?'扫码支付':'Scan QR'))) : soon;
+  const aliHint = aliOk ? (env.mobile?(cn?'跳转支付宝':'Opens Alipay'):(cn?'扫码支付':'Scan QR')) : soon;
+  const row=(id,on,dis,color,label,hint)=>
+    `<div class="cx-pay${dis?' dis':''}" id="${id}"><span class="cx-dot ${on&&!dis?'on':''}"></span><span class="cx-swatch" style="background:${color}"></span><span class="cx-pay-label">${label}</span>${hint?`<span class="cx-pill">${hint}</span>`:''}</div>`;
   box.innerHTML=
-    `<div class="cx-pay dis"><span class="cx-dot"></span><span class="cx-swatch" style="background:#1AAD19"></span><span class="cx-pay-label">${cn?'微信支付':'WeChat Pay'}</span><span class="cx-pill">${cn?'仅微信内':'In WeChat app'}</span></div>`+
-    `<div class="cx-pay" id="coPayAlipay"><span class="cx-dot on"></span><span class="cx-swatch" style="background:#1677FF"></span><span class="cx-pay-label">${cn?'支付宝':'Alipay'}</span></div>`;
+    row('coPayWechat',co.payment==='wechat',!wxOk,'#1AAD19',cn?'微信支付':'WeChat Pay',wxHint)+
+    row('coPayAlipay',co.payment==='alipay',!aliOk,'#1677FF',cn?'支付宝':'Alipay',aliHint);
+  if(wxOk)$('#coPayWechat').onclick=()=>{ co.payment='wechat'; coRenderPay(); };
+  if(aliOk)$('#coPayAlipay').onclick=()=>{ co.payment='alipay'; coRenderPay(); };
 }
 function coRenderInvoiceForm(){
   const box=$('#coInvoiceForm'); if(!box)return; const cn=state.lang==='cn';
@@ -2581,12 +2609,57 @@ async function coStartPayment(order){
   co.idem=null; co.fallback=null; co.note=''; co.voucher='';
   $('#view').innerHTML=`<div class="wrap"><div class="co"><div class="co-ok"><div class="co-msg" style="color:var(--muted)">${state.lang==='cn'?'正在创建支付…':'Setting up payment…'}</div></div></div></div>`;
   document.title=(state.lang==='cn'?'支付':'Payment')+' · '+state.brand;
+  const channel = co.payment==='wechat' ? wxChannel() : aliChannel();
   let j;
-  try{ j=await postJson('/api/retail/payment/create',{order_id:order.id}); }
+  try{ j=await postJson('/api/retail/payment/create',{order_id:order.id,channel}); }
   catch(e){ return coOrderPlaced(order); }   // payment not available → order stands
   if(j&&j.status==='paid') return coPaid(order);
+  // Redirect-style: WeChat H5 (mobile) / Alipay wap+page → hand off to the app
+  // or login page; on return the browser lands on the order screen which polls.
+  if(j&&(j.h5_url||j.pay_url)) return coRedirectToPay(order,j.h5_url||j.pay_url);
+  // Desktop: WeChat Native QR — render and poll for the async settlement.
+  if(j&&j.method==='wechat'&&j.mode==='native'&&j.qr_png) return coRenderWxNative(order,j);
+  // Alipay manual screenshot flow (静态收款码) — existing.
   if(j&&j.method==='alipay'&&j.mode==='manual'&&j.qr_png) return coRenderAlipay(order,j);
   return coOrderPlaced(order);
+}
+// Hand the browser off to WeChat / Alipay. We start the status poll first so an
+// in-app-browser back-swipe (which keeps this page alive) still settles, then
+// navigate. On desktop a redirect is unusual, but the gateway page handles it.
+function coRedirectToPay(order,url){
+  const cn=state.lang==='cn';
+  $('#view').innerHTML=`<div class="wrap"><div class="co" style="text-align:center" id="payWaiting">
+    <h1>${cn?'正在跳转…':'Opening payment…'}</h1>
+    <div class="co-msg" style="color:var(--muted)">${cn?'若未自动跳转，请点击下方按钮':'If it doesn’t open automatically, tap below'}</div>
+    <div style="margin:18px auto"><a class="more" href="${escAttr(url)}">${cn?'继续支付 →':'Continue to pay →'}</a></div>
+    <div style="margin-top:10px"><a class="more" href="#/shop">${cn?'稍后支付（订单已保留）':'Pay later (order is saved)'}</a></div>
+  </div></div>`;
+  document.title=(cn?'支付':'Payment')+' · '+state.brand;
+  coPollStatus(order);
+  try{ window.location.href=url; }catch(e){}
+}
+// Desktop WeChat Native: show the QR for the shopper to scan with phone WeChat,
+// and poll until the async notify (or the trade-state fallback) settles.
+function coRenderWxNative(order,p){
+  const cn=state.lang==='cn';
+  const col='width:300px;max-width:92%;margin:0 auto;box-sizing:border-box';
+  $('#view').innerHTML=`<div class="wrap"><div class="co" style="text-align:center" id="payWaiting">
+    <h1>${cn?'微信扫码支付':'Pay with WeChat'}</h1>
+    <div style="${col};background:var(--ink);padding:16px 20px;margin-bottom:16px">
+      <div style="font-size:11px;letter-spacing:.16em;color:var(--lime);text-transform:uppercase">${cn?'应付金额':'Amount due'}</div>
+      <div style="font-family:var(--bf-gothic);font-size:38px;line-height:1.05;color:#fff">${esc(p.total||money(order.total))}</div>
+    </div>
+    <div style="${col};background:#fff;border:2px solid var(--ink);padding:14px;margin-bottom:16px">
+      <img src="${escAttr(p.qr_png)}" alt="WeChat QR" style="width:100%;display:block">
+    </div>
+    <div style="${col};color:var(--ink);font-size:14px;line-height:1.5">${cn?'打开微信「扫一扫」，扫描上方二维码完成支付':'Open WeChat → Scan, then scan the QR above to pay'}</div>
+    <div style="${col};color:var(--muted);font-size:12px;margin-top:12px">
+      <div>${cn?'订单号':'Order'} · ${esc(order.order_no||('#'+order.id))}</div>
+      <div style="margin-top:8px"><a class="more" href="#/shop">${cn?'稍后支付（订单已保留）':'Pay later (order is saved)'}</a></div>
+    </div>
+  </div></div>`;
+  document.title=(cn?'支付':'Payment')+' · '+state.brand;
+  coPollStatus(order);
 }
 function coRenderAlipay(order,p){
   const cn=state.lang==='cn';
@@ -2653,7 +2726,7 @@ function coUploadProof(order,file){
 function coPollStatus(order){
   clearInterval(co.pollTimer);
   co.pollTimer=setInterval(async()=>{
-    if(!document.querySelector('#payProof')){ clearInterval(co.pollTimer); return; }   // left the page
+    if(!document.querySelector('#payProof')&&!document.querySelector('#payWaiting')){ clearInterval(co.pollTimer); return; }   // left the page
     let d; try{ d=await api('/api/retail/payment/status/'+order.id); }catch(e){ return; }
     if(!d)return;
     if(d.status==='paid'||d.status==='awaiting_restock'){ clearInterval(co.pollTimer); coPaid(order); }
@@ -3072,7 +3145,18 @@ function renderCartPage(){
   const v=$('#view'); const cn=state.lang==='cn';
   document.title=(cn?'购物车':'Cart')+' · '+state.brand;
   const c=cartGet();
-  if(!c.length){ v.innerHTML=`<div class="cp"><div class="cp-head"><div class="cp-kicker">${cn?'购物车':'YOUR BASKET'}</div><div class="cp-title-row"><div class="cp-title">${cn?'即将拥有。':'Almost yours.'}</div></div></div><div class="cp-empty">${cn?'购物车空空如也 🌱':'Your basket is empty 🌱'}<br><br><a class="me-viewall" href="#/shop">${cn?'去购物 →':'Browse products →'}</a></div></div>`; return; }
+  if(!c.length){ v.innerHTML=`<div class="cp">
+    <div class="cp-head">
+      <div class="cp-kicker">${cn?'购物车':'YOUR BASKET'}</div>
+      <div class="cp-title-row">
+        <div class="cp-title">${cn?'即将拥有。':'Almost yours.'}</div>
+        <div class="cp-count">00</div>
+      </div>
+    </div>
+    <div class="cp-empty">
+      <div class="cp-empty-t">${cn?'购物车空空如也':'Your basket is empty'}</div>
+      <a class="cp-empty-btn" href="#/shop">${cn?'去逛逛 →':'Browse the shop →'}</a>
+    </div></div>`; return; }
   const sub=cartSubtotal();
   // Free-shipping bar (mirrors cart.js recompute): round the gap UP so it never
   // understates what's left; clamp the fill at 100%.
