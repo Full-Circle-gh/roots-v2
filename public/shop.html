@@ -1113,6 +1113,28 @@ const ACCENTS={
   'skyberry':'#5B86C4','sky':'#5B86C4','lotus':'#C879B6','pink-guava':'#D4669A',
   'pea-sprout':'#5DA02E','pea':'#5DA02E','citrus-zest':'#9AAE22',
 };
+// Inject @font-face rules for self-hosted "upload" brand fonts so a custom
+// display/body family configured in the backoffice actually loads on web — the
+// same theme.fonts.*.url the mini-app reads. Library fonts already have their
+// @font-face in the head; these only cover source:'upload' with an https url.
+// Idempotent: one <style id="brandFonts"> rebuilt each call, deduped by family.
+function loadBrandFonts(fonts){
+  const fmt=(u)=>{ const m=String(u).toLowerCase().match(/\.(woff2|woff|otf|ttf)(?:[?#]|$)/);
+    return m?({woff2:'woff2',woff:'woff',otf:'opentype',ttf:'truetype'}[m[1]]):''; };
+  const seen=new Set(); const rules=[];
+  [fonts.display,fonts.body].forEach((f)=>{
+    if(!f||!f.url||!f.family) return;
+    if(!/^https:\/\//i.test(f.url)) return;          // server already filters, double-check
+    const fam=String(f.family).replace(/'/g,'');
+    if(seen.has(fam)) return; seen.add(fam);
+    const f2=fmt(f.url); const fc=f2?` format('${f2}')`:'';
+    rules.push(`@font-face{font-family:'${fam}';src:url('${f.url}')${fc};font-display:swap;}`);
+  });
+  let el=document.getElementById('brandFonts');
+  if(!rules.length){ if(el) el.textContent=''; return; }
+  if(!el){ el=document.createElement('style'); el.id='brandFonts'; document.head.appendChild(el); }
+  el.textContent=rules.join('\n');
+}
 function applyTheme(cfg){
   const t=(cfg&&cfg.theme)||{};
   const p=t.palette||{};
@@ -1128,8 +1150,11 @@ function applyTheme(cfg){
   setVar('--forest', p.primary);
   setVar('--lime',   p.accent);
   setVar('--olive',  p.muted);
-  // Brand fonts — same CJK fallback tail the mini-app uses. Falls back to the
-  // hardcoded stack when the family isn't loaded, so it degrades gracefully.
+  // Brand fonts — same CJK fallback tail the mini-app uses. Self-hosted upload
+  // fonts get an injected @font-face (see loadBrandFonts) so the family resolves;
+  // library fonts already have @font-face in the head. Either way this falls back
+  // to the hardcoded stack when the family can't load, so it degrades gracefully.
+  loadBrandFonts(t.fonts||{});
   const CJK="'DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif";
   const fam=(f)=> (f&&f.family) ? `'${String(f.family).replace(/'/g,'')}', ${CJK}` : '';
   setVar('--f-bear', fam(t.fonts&&t.fonts.display));
