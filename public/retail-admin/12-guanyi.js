@@ -41,26 +41,42 @@
 
   // Turn one raw sync-log row into a plain, human-readable line.
   // detail is {name, sku, target, was, delta, skipped}; never print raw JSON.
+  //
+  // We LEAD with what changed — "▲+2 → 28 in stock" — so the number (the whole
+  // point) sits near the left edge and never gets lost at the end of a long
+  // product name. The direction (▲ added / ▼ removed) comes straight from the
+  // recorded delta (or was→target), since Guanyi reconciles by writing a doc for
+  // the difference. The product name comes last.
   function gyFmtLogLine(l) {
     let d = {};
     try { d = l.detail ? JSON.parse(l.detail) : {}; } catch { d = {}; }
+    const cn = document.documentElement.dataset.uiLang === 'cn';
     const noChange = l.status === 'ok' && d.skipped;
     const glyph = l.status === 'error' ? '✗'
       : l.status === 'skipped' ? '⊘'
       : noChange ? '–' : '✓';
-    const name = d.name || (d.sku ? '' : '(no name · 无名称)');
-    const sku = d.sku ? ' · ' + d.sku : '';
-    const who = (name + sku).trim();
+    const time = (l.created_at || '').replace('T', ' ').slice(0, 19);
+
     let change = '';
     if (l.status === 'ok') {
-      change = noChange
-        ? 'no change · 无变化 (' + (d.target != null ? d.target : '?') + ')'
-        : (d.was != null ? d.was + ' → ' : '') + (d.target != null ? d.target : '?')
-          + (d.delta != null ? ' (' + (d.delta > 0 ? '+' : '') + d.delta + ')' : '');
+      const tgt = d.target != null ? d.target : '?';
+      let delta = d.delta;
+      if (delta == null && d.was != null && d.target != null) delta = d.target - d.was;
+      if (noChange) {
+        change = cn ? `库存 ${tgt}(无变化)` : `${tgt} in stock (no change)`;
+      } else if (delta != null && delta !== 0) {
+        const arrow = delta > 0 ? '▲' : '▼';
+        const sign  = delta > 0 ? `+${delta}` : `${delta}`;   // −1, +2…
+        change = cn ? `${arrow}${sign} → 库存 ${tgt}` : `${arrow}${sign} → ${tgt} in stock`;
+      } else {
+        change = cn ? `库存 ${tgt}` : `${tgt} in stock`;
+      }
     }
-    const time = (l.created_at || '').replace('T', ' ').slice(0, 19);
+    const name = d.name || (d.sku ? '' : (cn ? '(无名称)' : '(no name)'));
+    const prod = [name, d.sku ? `(${d.sku})` : ''].filter(Boolean).join(' ').trim();
     const reason = l.error_msg ? '  — ' + l.error_msg : '';
-    return `${time}  ${glyph} ${l.store_code}  ${who}  ${change}${reason}`.replace(/\s+$/, '');
+    const mid = [change, prod].filter(Boolean).join('  ·  ');
+    return `${time}  ${glyph} ${l.store_code}  ${mid}${reason}`.replace(/\s+$/, '');
   }
 
   // ── Status KPIs ─────────────────────────────────────────────────────────────
