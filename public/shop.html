@@ -512,12 +512,23 @@
     .af2-switch input:checked + .af2-slider::before{transform:translateX(22px);background:var(--lime);}
     .sp-btn.af2-save{background:var(--ink);color:var(--lime);border-radius:0;}
     /* coupon sticker */
-    .cpn{display:flex;align-items:stretch;margin:14px 22px 0;border:2px solid var(--ink);background:var(--corn);}
-    .cpn.used{opacity:.5;}
-    .cpn .cpn-l{flex:1;padding:14px 16px;}
-    .cpn .cpn-big{font-family:var(--bf-bear);font-size:26px;line-height:1;color:var(--ink);}
-    .cpn .cpn-sub{font-size:12px;color:var(--ink);opacity:.8;margin-top:6px;}
-    .cpn .cpn-r{width:96px;border-left:2px dashed rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-family:var(--bf-toni);font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink);}
+    /* Ticket design — mirrors the mini-app coupon (lime stub + perforation notches + body). */
+    .cpn{position:relative;display:flex;align-items:stretch;margin:14px 22px 0;border:2px solid var(--ink);background:#FFFCF7;min-height:104px;}
+    .cpn.used{opacity:.6;border-style:dashed;border-color:rgba(0,0,0,.3);}
+    .cpn .cpn-stub{flex:0 0 96px;background:var(--lime);color:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:12px 6px;border-right:2px solid var(--ink);}
+    .cpn.used .cpn-stub{background:rgba(0,0,0,.04);color:rgba(0,0,0,.5);border-right-style:dashed;border-right-color:rgba(0,0,0,.3);}
+    .cpn .cpn-big{font-family:var(--bf-bear);font-size:28px;line-height:.9;letter-spacing:-.02em;}
+    .cpn .cpn-stubsub{font-family:var(--bf-toni);font-size:9px;letter-spacing:.08em;text-transform:uppercase;margin-top:6px;opacity:.8;}
+    .cpn .notch{position:absolute;left:90px;width:12px;height:12px;border-radius:50%;background:var(--oat);border:2px solid var(--ink);}
+    .cpn .notch-t{top:-7px;}
+    .cpn .notch-b{bottom:-7px;}
+    .cpn.used .notch{border-style:dashed;border-color:rgba(0,0,0,.3);}
+    .cpn .cpn-body{flex:1;min-width:0;padding:12px 14px;display:flex;flex-direction:column;justify-content:center;}
+    .cpn .cpn-name{font-family:var(--bf-bear);font-size:16px;line-height:1.15;color:var(--ink);}
+    .cpn .cpn-meta{font-size:12px;color:var(--olive);margin-top:4px;}
+    .cpn .cpn-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:12px;}
+    .cpn .cpn-exp{font-size:11px;letter-spacing:.04em;color:var(--olive);}
+    .cpn .cpn-use{flex:none;background:var(--ink);color:var(--lime);border:0;padding:8px 16px;font-family:var(--bf-toni);font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
     /* favorites grid (reuse .grid/.card) */
     .fav-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:14px 22px 0;}
     /* membership ladder */
@@ -918,6 +929,22 @@
     .lm-link{background:none;border:0;color:var(--accent);font:inherit;font-size:13px;cursor:pointer;align-self:flex-start;padding:2px 0;}
     .lm-link:disabled{color:var(--muted);cursor:default;}
     .lm-err{margin-top:12px;font-size:13px;color:var(--berry);min-height:16px;}
+    .lm-social{margin-top:20px;display:flex;flex-direction:column;gap:10px;}
+    .lm-social[hidden]{display:none;}
+    .lm-soc{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+      font:inherit;font-weight:700;font-size:14.5px;background:#fff;color:var(--ink);
+      border:1.5px solid var(--ink);border-radius:12px;padding:13px 16px;cursor:pointer;}
+    .lm-soc:hover{background:var(--oat);}
+    .lm-soc svg{width:19px;height:19px;flex:0 0 auto;}
+    .lm-or{display:flex;align-items:center;gap:12px;margin:18px 0 4px;color:var(--muted);font-size:12px;}
+    .lm-or[hidden]{display:none;}
+    .lm-or::before,.lm-or::after{content:"";flex:1;height:1px;background:var(--line);}
+    .lm-tabs{display:flex;gap:8px;margin-top:16px;}
+    .lm-tabs[hidden]{display:none;}
+    .lm-tab{flex:1;font:inherit;font-weight:700;font-size:13px;letter-spacing:.03em;background:transparent;
+      color:var(--muted);border:1.5px solid var(--line);border-radius:10px;padding:9px;cursor:pointer;}
+    .lm-tab.on{color:var(--ink);border-color:var(--ink);background:var(--oat);}
+    .lm-tab[hidden]{display:none;}
     .rs-btn{margin-top:10px;font:inherit;font-size:13px;font-weight:700;letter-spacing:.03em;background:var(--oat);border:1.5px solid var(--ink);border-radius:10px;padding:8px 14px;cursor:pointer;color:var(--ink);}
     .rs-hint{margin-top:8px;font-size:12.5px;color:var(--muted);line-height:1.45;}
     .rs-slots{display:flex;flex-direction:column;gap:8px;}
@@ -931,10 +958,25 @@
     <div class="lm-card">
       <button class="lm-x" id="lmClose" aria-label="Close">×</button>
       <div class="lm-title" id="lmTitle">Sign in</div>
-      <div class="lm-sub" id="lmSub">Enter your phone to get a verification code.</div>
+      <div class="lm-sub" id="lmSub">Continue with one tap, or use your phone or email.</div>
+
+      <!-- social / SSO buttons — rendered from /auth/methods (hidden when none) -->
+      <div class="lm-social" id="lmSocial" hidden></div>
+      <div class="lm-or" id="lmOr" hidden><span>or</span></div>
+
+      <!-- phone | email method switch — Email tab shown only when configured -->
+      <div class="lm-tabs" id="lmTabs">
+        <button type="button" class="lm-tab on" data-method="phone" id="lmTabPhone">Phone</button>
+        <button type="button" class="lm-tab" data-method="email" id="lmTabEmail" hidden>Email</button>
+      </div>
+
       <div class="lm-step" id="lmPhoneStep">
         <input id="otpPhone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="Phone number" maxlength="11">
         <button class="lm-btn" id="otpSendBtn">Send code</button>
+      </div>
+      <div class="lm-step" id="lmEmailStep" hidden>
+        <input id="otpEmail" type="email" inputmode="email" autocomplete="email" placeholder="Email address">
+        <button class="lm-btn" id="emailSendBtn">Send code</button>
       </div>
       <div class="lm-step" id="lmCodeStep" hidden>
         <input id="otpCode" type="tel" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="6">
@@ -3156,12 +3198,23 @@ async function renderCoupons(){
   try{ [mine,pub]=await Promise.all([api('/api/retail/my-vouchers').catch(()=>[]),api('/api/retail/vouchers/public').catch(()=>[])]); }catch(e){}
   try{ const ords=await api('/api/retail/orders?limit=50')||[]; used=(ords||[]).filter(o=>o.voucher_code); }catch(e){}
   const fmtVal=(t)=>{ if(t.type==='percent')return (Number(t.value)||0)+(cn?'% 折':'% OFF'); if(t.type==='free_shipping')return cn?'免邮':'FREE SHIP'; return '¥'+(Number(t.value)||0); };
+  // Ticket stub shows the value big + a short qualifier under it.
+  const stubBig=(t)=>{ if(t.type==='percent')return (Number(t.value)||0)+'%'; if(t.type==='free_shipping')return cn?'免邮':'FREE'; return '¥'+(Number(t.value)||0); };
+  const stubSub=(t)=>{ if(t.type==='free_shipping')return cn?'':'SHIP'; return cn?'优惠':'OFF'; };
   function show(tab){
     v.querySelectorAll('.sp-tab').forEach(t=>t.classList.toggle('on',t.dataset.ct===tab));
     const body=$('#cpnBody');
     if(tab==='active'){
       const seen=new Set(); const all=[...(mine||[]),...(pub||[])].filter(x=>{const k=x.code;if(!k||seen.has(k))return false;seen.add(k);return true;});
-      body.innerHTML=all.length?all.map(t=>`<div class="cpn"><div class="cpn-l"><div class="cpn-big">${esc(fmtVal(t))}</div><div class="cpn-sub">${esc(pick(t.title_en,t.title_cn)||'')}${t.min_subtotal?` · ${cn?'满 ¥':'over ¥'}${t.min_subtotal}`:''}${t.expires_at?` · ${cn?'至 ':'till '}${String(t.expires_at).slice(0,10)}`:''}</div></div><button class="cpn-r" data-use="${escAttr(t.code)}">${cn?'使用':'Use'}</button></div>`).join(''):`<div class="sp-empty">${cn?'暂无可用优惠券':'No active coupons'}</div>`;
+      body.innerHTML=all.length?all.map(t=>{
+        const name=esc(pick(t.title_en,t.title_cn)||t.code||'');
+        const min=t.min_subtotal?`${cn?'满 ¥':'Over ¥'}${t.min_subtotal}`:'';
+        const exp=t.expires_at?`${cn?'有效期至 ':'Expires '}${String(t.expires_at).slice(0,10)}`:(cn?'长期有效':'No expiry');
+        return `<div class="cpn"><span class="notch notch-t"></span><span class="notch notch-b"></span>`+
+          `<div class="cpn-stub"><div class="cpn-big">${esc(stubBig(t))}</div><div class="cpn-stubsub">${esc(stubSub(t))}</div></div>`+
+          `<div class="cpn-body"><div class="cpn-name">${name}</div>${min?`<div class="cpn-meta">${esc(min)}</div>`:''}`+
+          `<div class="cpn-foot"><div class="cpn-exp">${esc(exp)}</div><button class="cpn-use" data-use="${escAttr(t.code)}">${cn?'使用':'Use'}</button></div></div></div>`;
+      }).join(''):`<div class="sp-empty">${cn?'暂无可用优惠券':'No active coupons'}</div>`;
       body.querySelectorAll('[data-use]').forEach(b=>b.addEventListener('click',()=>{ try{localStorage.setItem('pending_voucher_code',b.dataset.use);}catch{} toast(cn?'已选择，去结算使用':'Applied — checkout to use'); location.hash='#/cart'; }));
     }else{
       body.innerHTML=used.length?used.map(o=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(o.voucher_code)}</div><div class="sp-d">${esc(o.order_no||'')} · ${String(o.placed_at||'').slice(0,10)}</div></div><div class="sp-amt sp-neg">−¥${(Number(o.voucher_amount)||0).toFixed(2)}</div></div>`).join(''):`<div class="sp-empty">${cn?'暂无使用记录':'Nothing used yet'}</div>`;
