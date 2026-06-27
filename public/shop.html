@@ -1114,8 +1114,30 @@ const ACCENTS={
   'pea-sprout':'#5DA02E','pea':'#5DA02E','citrus-zest':'#9AAE22',
 };
 function applyTheme(cfg){
-  const hex=ACCENTS[cfg&&cfg.theme&&cfg.theme.accent]||'#365329';
-  document.documentElement.style.setProperty('--accent',hex);
+  const t=(cfg&&cfg.theme)||{};
+  const p=t.palette||{};
+  const root=document.documentElement;
+  const setVar=(k,v)=>{ if(v) root.style.setProperty(k,v); };
+  // Apply the FULL backoffice-published brand palette so the web store stays in
+  // lockstep with the mini-app (both read /api/retail/config). Mirror of the
+  // mini-app's buildThemeVars (miniapp/utils/theme.js): one setting → both
+  // platforms. surface→--oat (incl. the bottom nav bar), ink→--ink,
+  // primary→--forest, accent→--lime, muted→--olive.
+  setVar('--oat',    p.surface);
+  setVar('--ink',    p.ink);
+  setVar('--forest', p.primary);
+  setVar('--lime',   p.accent);
+  setVar('--olive',  p.muted);
+  // Brand fonts — same CJK fallback tail the mini-app uses. Falls back to the
+  // hardcoded stack when the family isn't loaded, so it degrades gracefully.
+  const CJK="'DF Yuan','PingFang SC','Hiragino Sans GB',-apple-system,sans-serif";
+  const fam=(f)=> (f&&f.family) ? `'${String(f.family).replace(/'/g,'')}', ${CJK}` : '';
+  setVar('--f-bear', fam(t.fonts&&t.fonts.display));
+  setVar('--f-aleo', fam(t.fonts&&t.fonts.body));
+  // Active-tab / link accent. Prefer the published palette primary (parity with
+  // the mini-app's selected tab colour); fall back to the legacy named token.
+  const hex = p.primary || ACCENTS[t.accent] || '#365329';
+  root.style.setProperty('--accent',hex);
   const m=document.querySelector('meta[name=theme-color]');if(m)m.setAttribute('content',hex);
 }
 // Make the mobile browser address bar (theme-color) follow the top of whatever
