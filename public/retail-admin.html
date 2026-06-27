@@ -6523,6 +6523,12 @@
     <!-- Recent log -->
     <details id="mt-log-details" style="margin-bottom:14px">
       <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted);padding:4px 0">Recent sync log · 最近日志</summary>
+      <p class="muted" data-lang-block="en" style="font-size:11px;margin:6px 0 0">
+        Each line = the stock level we pushed to Meituan when it changed. <b>▲+2</b> / <b>▼−1</b> is the change since the last push (stock added vs sold). “28 in stock” = the live number Meituan now shows.
+      </p>
+      <p class="muted" data-lang-block="cn" style="font-size:11px;margin:6px 0 0">
+        每行 = 库存变动时推送到美团的库存数。<b>▲+2</b> / <b>▼−1</b> 是与上次推送的差额(补货 / 售出)。“库存 28” = 美团当前显示的库存。
+      </p>
       <div id="mt-log" style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
     </details>
 

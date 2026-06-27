@@ -133,18 +133,59 @@
     if (el) el.classList.toggle('alert', !!on);
   }
 
+  function mtStoreName(code) { return (_stores.find(s => s.code === code) || {}).name || code; }
+
   // Turn one raw sync-log row into a plain, human-readable line.
-  // detail is {name, sku, qty, bundle}; we never print raw JSON.
-  function mtFmtLogLine(l) {
+  // detail is {name_en, name_cn, name, sku, qty, bundle}; we never print raw JSON.
+  //
+  // For a stock push we LEAD with what changed — "+2 → 28 in stock" — so the
+  // number (the whole point) sits near the left edge and never gets lost at the
+  // end of a long product name. The direction (▲ added / ▼ sold) is derived by
+  // diffing against the previous push for the same product within this window,
+  // so no daemon change is needed. The product name comes last.
+  // `arr`/`idx` are the full recentLogs array + this row's index (DESC order).
+  function mtFmtLogLine(l, arr, idx) {
     let d = {};
     try { d = l.detail ? JSON.parse(l.detail) : {}; } catch { d = {}; }
+    const cn = document.documentElement.dataset.uiLang === 'cn';
     const glyph = l.status === 'ok' ? '✓' : l.status === 'error' ? '✗' : '·';
-    const name = d.name || (d.sku ? '' : '(no name · 无名称)');
-    const sku = d.sku ? ' · ' + d.sku : '';
-    const who = [name + sku, d.bundle ? '(bundle · 套餐)' : ''].filter(Boolean).join(' ');
-    let change = (d.qty != null) ? '→ ' + d.qty + ' in stock · 库存 ' + d.qty : '';
+    const store = mtStoreName(l.store_code);
+    const time = mtLogTime(l.created_at);
+    // Language-aware name; fall back across fields for older rows with a single `name`.
+    const nm = cn ? (d.name_cn || d.name_en || d.name)
+                  : (d.name_en || d.name_cn || d.name);
+
+    if (l.event_type === 'stock_push' && d.qty != null) {
+      // Previous push for the same store + product, to show the change. DESC
+      // order means older rows have a HIGHER index.
+      let prev = null;
+      if (arr && d.sku) {
+        for (let j = idx + 1; j < arr.length; j++) {
+          const o = arr[j];
+          if (o.store_code !== l.store_code || o.event_type !== 'stock_push') continue;
+          let od = {}; try { od = o.detail ? JSON.parse(o.detail) : {}; } catch { od = {}; }
+          if (od.sku === d.sku && od.qty != null) { prev = od.qty; break; }
+        }
+      }
+      let change;
+      if (prev == null || prev === d.qty) {
+        change = cn ? `库存 ${d.qty}` : `${d.qty} in stock`;
+      } else {
+        const delta = d.qty - prev;
+        const arrow = delta > 0 ? '▲' : '▼';
+        const sign  = delta > 0 ? `+${delta}` : `${delta}`;   // −1, +2…
+        change = cn ? `${arrow}${sign} → 库存 ${d.qty}` : `${arrow}${sign} → ${d.qty} in stock`;
+      }
+      const bundleTag = d.bundle ? (cn ? '(套餐)' : '(bundle)') : '';
+      const prod = [nm, d.sku ? `(${d.sku})` : '', bundleTag].filter(Boolean).join(' ');
+      const err = l.status === 'error' ? `  ✗ ${l.error_msg || (cn ? '失败' : 'failed')}` : '';
+      return `${time}  ${glyph} ${store}  ${change}  ·  ${prod}${err}`.replace(/\s+$/, '');
+    }
+
+    // Other events (proxy up/down, order import/poll, needs_login…): name + reason.
+    const who = nm ? '  ' + nm + (d.sku ? ' · ' + d.sku : '') : '';
     const reason = l.error_msg ? '  — ' + l.error_msg : '';
-    return `${mtLogTime(l.created_at)}  ${glyph} ${l.store_code}  ${who}  ${change}${reason}`.replace(/\s+$/, '');
+    return `${time}  ${glyph} ${store}${who}${reason}`.replace(/\s+$/, '');
   }
 
   window.mtLoadStatus = async function () {
@@ -180,7 +221,7 @@
 
       if (log) {
         log.textContent = s.recentLogs.length
-          ? s.recentLogs.map(mtFmtLogLine).join('\n')
+          ? s.recentLogs.map((l, i, arr) => mtFmtLogLine(l, arr, i)).join('\n')
           : 'No sync events yet.';
       }
     } catch (e) {
