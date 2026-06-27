@@ -1090,6 +1090,37 @@ db.exec(`
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
+  -- One-time passcodes for browser (web) EMAIL login. Same shape/lifecycle as
+  -- retail_otp_codes but keyed by email. Accounts unify by verified email, so an
+  -- email-OTP sign-in lands on the SAME record as a Google/Apple login on that
+  -- address (see upsertWebCustomer in routes/retail.js).
+  CREATE TABLE IF NOT EXISTS retail_email_otp_codes (
+    email           TEXT PRIMARY KEY,
+    code            TEXT NOT NULL,
+    expires_at      DATETIME NOT NULL,
+    attempts        INTEGER DEFAULT 0,
+    send_count      INTEGER DEFAULT 0,
+    last_sent_at    DATETIME,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  -- Short-lived rows that bridge the OAuth (Google/Apple/WeChat-web) redirect.
+  --   kind='state'   outbound CSRF token; carries the SPA hash to return to.
+  --   kind='handoff' inbound one-time code → the issued bearer token. The
+  --                  callback redirects with ?oauth=<handoff> instead of putting
+  --                  the long-lived token in the URL; the SPA POSTs it to
+  --                  /oauth/claim to receive the token out of band. Both kinds
+  --                  expire fast (10 min / 2 min) and are deleted on use.
+  CREATE TABLE IF NOT EXISTS retail_oauth_states (
+    id              TEXT PRIMARY KEY,        -- random state token or handoff code
+    kind            TEXT NOT NULL,           -- 'state' | 'handoff'
+    provider        TEXT,
+    return_to       TEXT,                    -- SPA hash to restore after sign-in
+    auth_token      TEXT,                    -- issued bearer token (handoff rows)
+    expires_at      DATETIME NOT NULL,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   CREATE TABLE IF NOT EXISTS retail_orders (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     order_no            TEXT UNIQUE NOT NULL,    -- public-facing, e.g. R2026051601234

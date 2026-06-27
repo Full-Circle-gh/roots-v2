@@ -32,6 +32,8 @@ try { _push = require('./push'); } catch (e) { console.warn('[retail] push modul
 const _feie = require('../lib/feie');   // Feie cloud-printer client (order auto-print)
 const _nuonuo = require('../lib/nuonuo'); // 诺诺发票 e-fapiao auto-issue (dormant until creds)
 const _aliyunSms = require('../lib/aliyun-sms'); // 阿里云短信 delivered-notice SMS (dormant until creds)
+const _emailSender = require('../lib/email-sender'); // credential-gated email for web sign-in codes
+const _socialAuth = require('../lib/social-auth');   // Google/Apple/WeChat-web OAuth protocol helpers
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 const alipayOcr = require('../lib/alipay-ocr');  // Vision-AI read of manual-Alipay payment screenshots
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
@@ -2750,6 +2752,229 @@ router.post('/api/retail/auth/otp/verify', express.json(), (req, res) => {
 
   const { token, expiresAt } = issueToken(customer.id, req.headers['user-agent']);
   res.json({ success: true, data: { token, expires_at: expiresAt, customer: publicCustomer(customer) } });
+});
+
+// ─── Web sign-in: email-OTP + social (Google / Apple / WeChat-web) ──────────
+// All of these reuse retail_auth_tokens / requireRetailAuth and UNIFY ACCOUNTS:
+//   • unionid       → same person across the WeChat mini-app and WeChat-web
+//   • verified email→ Google, Apple and email-OTP on one address share ONE record
+//   • else          → a fresh account under a provider-namespaced synthetic openid
+//     ('email:…', 'google:…', 'apple:…', 'wxweb:…') so openid stays UNIQUE NOT NULL
+// Each provider is credential-gated: with no creds its button is hidden and its
+// endpoints 503 — the same dev-mode pattern used by WeChat Pay / SMS.
+
+function normEmail(e) {
+  e = String(e || '').trim().toLowerCase();
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e) ? e : '';
+}
+
+function tenantBrandName() {
+  try { const c = getTenantCreds(currentTenantId()); return c.brand_name || c.name || ''; }
+  catch (_) { return ''; }
+}
+
+// Find-or-create a customer for a web/social identity (see unification order above).
+function upsertWebCustomer({ provider, providerId, email, emailVerified, name, avatar, unionid }) {
+  const d = tdb();
+  let customer = null;
+  if (unionid) {
+    customer = d.prepare('SELECT * FROM retail_customers WHERE unionid = ? ORDER BY id LIMIT 1').get(unionid);
+  }
+  if (!customer && email && emailVerified) {
+    customer = d.prepare('SELECT * FROM retail_customers WHERE email = ? ORDER BY id LIMIT 1').get(email);
+  }
+  const synthetic = provider + ':' + providerId;
+  if (!customer) {
+    customer = d.prepare('SELECT * FROM retail_customers WHERE openid = ?').get(synthetic);
+  }
+  if (!customer) {
+    const info = d.prepare(
+      `INSERT INTO retail_customers (openid, unionid, nickname, avatar_url, email, last_login_at)
+       VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+    ).run(synthetic, unionid || null, name || null, avatar || null, (email && emailVerified) ? email : null);
+    customer = d.prepare('SELECT * FROM retail_customers WHERE id = ?').get(info.lastInsertRowid);
+    try { claimMigrationCredit(customer.id); } catch (e) { console.warn('[retail/web-auth] migration claim failed:', e.message); }
+    try { reconcileSignupVouchers(customer.id); } catch (e) { console.warn('[retail/web-auth] voucher reconcile failed:', e.message); }
+    customer = d.prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
+  } else {
+    // Refresh login + opportunistically backfill any blanks this provider gives us.
+    d.prepare(
+      `UPDATE retail_customers SET last_login_at = CURRENT_TIMESTAMP,
+         email = COALESCE(email, ?), unionid = COALESCE(unionid, ?),
+         nickname = COALESCE(nickname, ?), avatar_url = COALESCE(avatar_url, ?)
+       WHERE id = ?`
+    ).run((email && emailVerified) ? email : null, unionid || null, name || null, avatar || null, customer.id);
+    customer = d.prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
+  }
+  return customer;
+}
+
+// ── Email-OTP (mirrors the phone-OTP flow above) ──
+router.post('/api/retail/auth/email/request', express.json(), async (req, res) => {
+  const email = normEmail((req.body || {}).email);
+  if (!email) return res.status(400).json({ success: false, error: 'bad_email' });
+
+  const now = Date.now();
+  const existing = tdb().prepare('SELECT * FROM retail_email_otp_codes WHERE email = ?').get(email);
+  if (existing && existing.last_sent_at && (now - Date.parse(existing.last_sent_at)) < OTP_RESEND_MS) {
+    return res.status(429).json({ success: false, error: 'too_soon' });
+  }
+  let createdIso = new Date(now).toISOString(), sendCount = 1;
+  if (existing) {
+    const createdMs = Date.parse(existing.created_at);
+    if (Number.isFinite(createdMs) && (now - createdMs) < 86400000) {
+      createdIso = existing.created_at; sendCount = (existing.send_count || 0) + 1;
+    }
+  }
+  if (sendCount > OTP_MAX_SENDS) return res.status(429).json({ success: false, error: 'daily_cap' });
+
+  const code = genOtp();
+  tdb().prepare(
+    `INSERT INTO retail_email_otp_codes (email, code, expires_at, attempts, send_count, last_sent_at, created_at)
+     VALUES (?, ?, ?, 0, ?, ?, ?)
+     ON CONFLICT(email) DO UPDATE SET
+       code = excluded.code, expires_at = excluded.expires_at, attempts = 0,
+       send_count = excluded.send_count, last_sent_at = excluded.last_sent_at, created_at = excluded.created_at`
+  ).run(email, code, new Date(now + OTP_TTL_MS).toISOString(), sendCount,
+        new Date(now).toISOString(), createdIso);
+
+  let sent;
+  try { sent = await _emailSender.sendOtpEmail(email, code, integ().email, { brand: tenantBrandName() }); }
+  catch (e) { sent = { ok: false, error: 'send_threw: ' + e.message }; }
+
+  if (sent.ok) return res.json({ success: true, data: { sent: true, cooldown: OTP_RESEND_MS / 1000 } });
+  console.warn('[retail/email-otp] send failed for', email.replace(/^(.).*(@.*)$/, '$1***$2'), '-', sent.error);
+  if (OTP_DEV_ECHO) return res.json({ success: true, data: { sent: false, dev: true, code, cooldown: OTP_RESEND_MS / 1000 } });
+  return res.status(503).json({ success: false, error: 'email_unavailable' });
+});
+
+router.post('/api/retail/auth/email/verify', express.json(), (req, res) => {
+  const email = normEmail((req.body || {}).email);
+  const code  = String((req.body || {}).code || '').trim();
+  if (!email || !/^\d{6}$/.test(code)) return res.status(400).json({ success: false, error: 'bad_input' });
+
+  const row = tdb().prepare('SELECT * FROM retail_email_otp_codes WHERE email = ?').get(email);
+  if (!row) return res.status(400).json({ success: false, error: 'no_code' });
+  if (Date.parse(row.expires_at) < Date.now()) {
+    tdb().prepare('DELETE FROM retail_email_otp_codes WHERE email = ?').run(email);
+    return res.status(400).json({ success: false, error: 'code_expired' });
+  }
+  if ((row.attempts || 0) >= OTP_MAX_ATTEMPTS) {
+    tdb().prepare('DELETE FROM retail_email_otp_codes WHERE email = ?').run(email);
+    return res.status(429).json({ success: false, error: 'too_many_attempts' });
+  }
+  if (row.code !== code) {
+    tdb().prepare('UPDATE retail_email_otp_codes SET attempts = attempts + 1 WHERE email = ?').run(email);
+    return res.status(400).json({ success: false, error: 'bad_code' });
+  }
+  tdb().prepare('DELETE FROM retail_email_otp_codes WHERE email = ?').run(email);
+
+  // email-OTP proves ownership → emailVerified true → unifies by email.
+  const pid = crypto.createHash('sha1').update(email).digest('hex').slice(0, 16);
+  const customer = upsertWebCustomer({ provider: 'email', providerId: pid, email, emailVerified: true });
+  if (customer.is_blocked) return res.status(403).json({ success: false, error: 'account_blocked' });
+
+  const { token, expiresAt } = issueToken(customer.id, req.headers['user-agent']);
+  res.json({ success: true, data: { token, expires_at: expiresAt, customer: publicCustomer(customer) } });
+});
+
+// ── Social OAuth (Google / Apple / WeChat-web) ──
+const OAUTH_PROVIDERS = ['google', 'apple', 'wechat'];
+function oauthRedirectBase(req) {
+  return process.env.OAUTH_REDIRECT_BASE || (req.protocol + '://' + req.get('host'));
+}
+function oauthRedirectUri(req, provider) {
+  return oauthRedirectBase(req) + '/api/retail/auth/oauth/' + provider + '/callback';
+}
+
+// Which sign-in methods this tenant has live — drives which buttons the web
+// storefront renders. phone is always on; email/social light up with creds.
+router.get('/api/retail/auth/methods', (req, res) => {
+  const ig = integ();
+  res.json({ success: true, data: {
+    phone:  true,
+    email:  _emailSender.isConfigured(ig && ig.email) || OTP_DEV_ECHO,
+    google: _socialAuth.isEnabled('google', ig),
+    apple:  _socialAuth.isEnabled('apple', ig),
+    wechat: _socialAuth.isEnabled('wechat', ig),
+  } });
+});
+
+router.get('/api/retail/auth/oauth/:provider/start', (req, res) => {
+  const provider = String(req.params.provider || '').toLowerCase();
+  if (!OAUTH_PROVIDERS.includes(provider)) return res.status(404).json({ success: false, error: 'unknown_provider' });
+  const ig = integ();
+  if (!_socialAuth.isEnabled(provider, ig)) return res.status(503).json({ success: false, error: 'not_configured' });
+
+  const creds = _socialAuth.providerCreds(provider, ig);
+  const state = crypto.randomBytes(24).toString('hex');
+  const returnTo = String(req.query.return || '').slice(0, 200);
+  tdb().prepare(
+    'INSERT INTO retail_oauth_states (id, kind, provider, return_to, expires_at) VALUES (?, ?, ?, ?, ?)'
+  ).run(state, 'state', provider, returnTo, new Date(Date.now() + 10 * 60 * 1000).toISOString());
+
+  try {
+    const url = _socialAuth.authorizeUrl(provider, { creds, redirectUri: oauthRedirectUri(req, provider), state });
+    res.redirect(url);
+  } catch (e) {
+    console.error('[retail/oauth] start failed:', provider, e.message);
+    res.redirect('/?oauth_error=' + encodeURIComponent('start_failed'));
+  }
+});
+
+// Shared callback. Google/WeChat return via GET; Apple posts a form (form_post).
+async function handleOauthCallback(req, res) {
+  const provider = String(req.params.provider || '').toLowerCase();
+  const q = Object.assign({}, req.query, req.body || {});
+  const fail = (err) => res.redirect('/?oauth_error=' + encodeURIComponent(err || 'failed'));
+  try {
+    if (!OAUTH_PROVIDERS.includes(provider)) return fail('unknown_provider');
+    const code = q.code, state = q.state;
+    if (!code || !state) return fail(q.error || 'no_code');
+
+    const strow = tdb().prepare("SELECT * FROM retail_oauth_states WHERE id = ? AND kind = 'state' AND provider = ?").get(state, provider);
+    tdb().prepare('DELETE FROM retail_oauth_states WHERE id = ?').run(state);   // single-use
+    if (!strow || Date.parse(strow.expires_at) < Date.now()) return fail('bad_state');
+
+    const ig = integ();
+    if (!_socialAuth.isEnabled(provider, ig)) return fail('not_configured');
+    const creds = _socialAuth.providerCreds(provider, ig);
+    const profile = await _socialAuth.exchange(provider, { creds, code, redirectUri: oauthRedirectUri(req, provider) });
+
+    const customer = upsertWebCustomer(Object.assign(
+      { provider: provider === 'wechat' ? 'wxweb' : provider }, profile));
+    if (customer.is_blocked) return fail('account_blocked');
+
+    const { token } = issueToken(customer.id, req.headers['user-agent']);
+    // Hand the bearer token to the SPA out of band: redirect with a one-time code
+    // (not the token itself) so the long-lived token never lands in URL/history.
+    const handoff = crypto.randomBytes(24).toString('hex');
+    tdb().prepare(
+      'INSERT INTO retail_oauth_states (id, kind, provider, auth_token, expires_at) VALUES (?, ?, ?, ?, ?)'
+    ).run(handoff, 'handoff', provider, token, new Date(Date.now() + 120 * 1000).toISOString());
+    const back = strow.return_to ? ('&r=' + encodeURIComponent(strow.return_to)) : '';
+    res.redirect('/?oauth=' + handoff + back);
+  } catch (e) {
+    console.error('[retail/oauth]', provider, 'callback failed:', e.message);
+    return fail('exchange_failed');
+  }
+}
+router.get('/api/retail/auth/oauth/:provider/callback', handleOauthCallback);
+router.post('/api/retail/auth/oauth/:provider/callback', express.urlencoded({ extended: true }), handleOauthCallback);
+
+// SPA exchanges the one-time handoff code for the real bearer token + customer.
+router.post('/api/retail/auth/oauth/claim', express.json(), (req, res) => {
+  const code = String((req.body || {}).code || '').trim();
+  if (!code) return res.status(400).json({ success: false, error: 'bad_input' });
+  const row = tdb().prepare("SELECT * FROM retail_oauth_states WHERE id = ? AND kind = 'handoff'").get(code);
+  if (!row) return res.status(400).json({ success: false, error: 'invalid' });
+  tdb().prepare('DELETE FROM retail_oauth_states WHERE id = ?').run(code);   // single-use
+  if (Date.parse(row.expires_at) < Date.now()) return res.status(400).json({ success: false, error: 'expired' });
+  const tok = tdb().prepare('SELECT * FROM retail_auth_tokens WHERE token = ?').get(row.auth_token);
+  if (!tok) return res.status(400).json({ success: false, error: 'invalid' });
+  const customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(tok.customer_id);
+  if (!customer) return res.status(400).json({ success: false, error: 'invalid' });
+  res.json({ success: true, data: { token: row.auth_token, customer: publicCustomer(customer) } });
 });
 
 // ─── Payment ─────────────────────────────────────────────────────────────

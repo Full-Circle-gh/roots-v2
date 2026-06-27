@@ -1193,52 +1193,142 @@ function acctMenuToggle(force){
   m.hidden=false;
 }
 /* login modal */
-let _otpTimer=null;
+let _otpTimer=null, _lmMode='phone', _lmMethods=null;
 function lmErr(msg){$('#lmErr').textContent=msg||'';}
-function openLogin(){lmErr('');$('#lmPhoneStep').hidden=false;$('#lmCodeStep').hidden=true;
-  $('#otpCode').value='';$('#loginModal').hidden=false;setTimeout(()=>$('#otpPhone').focus(),50);}
+const cn=()=>state.lang==='cn';
+// Monochrome inline-SVG provider marks (no emoji, per house style). currentColor.
+const SOCIAL_ICONS={
+  google:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M21.35 11.1H12v2.9h5.3c-.23 1.5-1.6 4.4-5.3 4.4a5.9 5.9 0 0 1 0-11.8c1.7 0 2.8.72 3.45 1.34l2.35-2.27C16.4 3.92 14.46 3 12 3a9 9 0 1 0 0 18c5.2 0 8.65-3.65 8.65-8.8 0-.6-.07-1.05-.3-2.1z"/></svg>',
+  apple:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.3 1.9-3.4 2-3.45-1.1-1.6-2.8-1.8-3.4-1.83-1.45-.15-2.83.85-3.56.85-.73 0-1.86-.83-3.06-.8-1.57.02-3.02.91-3.83 2.32-1.63 2.83-.42 7.02 1.17 9.32.78 1.12 1.7 2.38 2.9 2.34 1.17-.05 1.61-.75 3.02-.75 1.4 0 1.8.75 3.03.73 1.25-.02 2.04-1.14 2.8-2.27.88-1.3 1.24-2.56 1.26-2.62-.03-.01-2.42-.93-2.45-3.69zM14.2 5.6c.64-.78 1.07-1.86.95-2.94-.92.04-2.04.61-2.7 1.39-.6.69-1.11 1.79-.97 2.85 1.02.08 2.07-.52 2.72-1.3z"/></svg>',
+  wechat:'<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9.1 3C5.1 3 2 5.7 2 9c0 1.9 1.1 3.6 2.7 4.7L4 16l2.6-1.3c.8.2 1.6.3 2.5.3h.5a5.3 5.3 0 0 1-.2-1.4c0-3.2 3-5.7 6.7-5.7h.6C16.3 5 13 3 9.1 3zM6.8 7.7a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8zm4.6 0a.9.9 0 1 1 0 1.8.9.9 0 0 1 0-1.8zM22 13.6c0-2.7-2.6-4.9-5.9-4.9s-5.9 2.2-5.9 4.9 2.6 4.9 5.9 4.9c.7 0 1.3-.1 1.9-.3l1.9 1-.5-1.7c1.6-.9 2.6-2.3 2.6-3.9zm-7.8-1.2a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5zm3.8 0a.75.75 0 1 1 0 1.5.75.75 0 0 1 0-1.5z"/></svg>',
+};
+const SOCIAL_LABEL={
+  google:()=>cn()?'使用 Google 继续':'Continue with Google',
+  apple :()=>cn()?'使用 Apple 继续':'Continue with Apple',
+  wechat:()=>cn()?'使用微信登录':'Continue with WeChat',
+};
+async function loadAuthMethods(){
+  if(_lmMethods) return _lmMethods;
+  try{ _lmMethods=await api('/api/retail/auth/methods'); }catch(e){ _lmMethods={phone:true}; }
+  return _lmMethods;
+}
+function renderAuthMethods(m){
+  // social buttons → full-page OAuth redirect (only the configured providers)
+  const provs=['google','apple','wechat'].filter(p=>m&&m[p]);
+  const sw=$('#lmSocial');
+  sw.innerHTML=provs.map(p=>`<button type="button" class="lm-soc" data-prov="${p}">${SOCIAL_ICONS[p]}<span>${SOCIAL_LABEL[p]()}</span></button>`).join('');
+  sw.hidden=!provs.length;
+  $('#lmOr').hidden=!provs.length;
+  // email tab appears only when email sign-in is live; hide the row otherwise
+  $('#lmTabEmail').hidden=!(m&&m.email);
+  $('#lmTabPhone').textContent=cn()?'手机':'Phone';
+  $('#lmTabEmail').textContent=cn()?'邮箱':'Email';
+  $('#lmTabs').hidden=!(m&&m.email);
+}
+function lmSetMethod(mode){
+  _lmMode=mode;lmErr('');
+  $('#lmTabPhone').classList.toggle('on',mode==='phone');
+  $('#lmTabEmail').classList.toggle('on',mode==='email');
+  $('#lmPhoneStep').hidden=mode!=='phone';
+  $('#lmEmailStep').hidden=mode!=='email';
+  $('#lmCodeStep').hidden=true;
+  setTimeout(()=>$(mode==='email'?'#otpEmail':'#otpPhone').focus(),50);
+}
+function openLogin(){
+  lmErr('');_lmMode='phone';
+  $('#lmTitle').textContent=cn()?'登录':'Sign in';
+  $('#lmSub').textContent=cn()?'一键登录，或使用手机/邮箱。':'Continue with one tap, or use your phone or email.';
+  $('#otpCode').value='';
+  $('#lmPhoneStep').hidden=false;$('#lmEmailStep').hidden=true;$('#lmCodeStep').hidden=true;
+  $('#lmTabPhone').classList.add('on');$('#lmTabEmail').classList.remove('on');
+  $('#loginModal').hidden=false;
+  loadAuthMethods().then(renderAuthMethods);
+  setTimeout(()=>$('#otpPhone').focus(),50);
+}
 function closeLogin(){$('#loginModal').hidden=true;clearInterval(_otpTimer);}
+function oauthStart(prov){
+  // remember where we were so the callback can drop us back on the same page
+  location.href='/api/retail/auth/oauth/'+prov+'/start?return='+encodeURIComponent(location.hash||'');
+}
 function otpCooldown(secs){
   const btn=$('#otpResend');let n=secs||60;clearInterval(_otpTimer);
-  const tick=()=>{if(n<=0){clearInterval(_otpTimer);btn.disabled=false;btn.textContent=state.lang==='cn'?'重新发送':'Resend code';return;}
-    btn.disabled=true;btn.textContent=(state.lang==='cn'?'重新发送 ':'Resend in ')+n+'s';n--;};
+  const tick=()=>{if(n<=0){clearInterval(_otpTimer);btn.disabled=false;btn.textContent=cn()?'重新发送':'Resend code';return;}
+    btn.disabled=true;btn.textContent=(cn()?'重新发送 ':'Resend in ')+n+'s';n--;};
   tick();_otpTimer=setInterval(tick,1000);
+}
+function _afterSend(sentTo,d){
+  $('#lmPhoneStep').hidden=true;$('#lmEmailStep').hidden=true;$('#lmCodeStep').hidden=false;
+  $('#lmSub').textContent=(cn()?'验证码已发送至 ':'Code sent to ')+sentTo;
+  setTimeout(()=>$('#otpCode').focus(),50);
+  otpCooldown(d&&d.cooldown||60);
+  if(d&&d.dev&&d.code){$('#otpCode').value=d.code;toast('DEV code '+d.code);}  // dev-echo only
 }
 async function otpSend(){
   const phone=($('#otpPhone').value||'').replace(/\D/g,'');
-  if(!/^1\d{10}$/.test(phone)){lmErr(state.lang==='cn'?'请输入11位手机号':'Enter an 11-digit phone number');return;}
+  if(!/^1\d{10}$/.test(phone)){lmErr(cn()?'请输入11位手机号':'Enter an 11-digit phone number');return;}
   lmErr('');const btn=$('#otpSendBtn');btn.disabled=true;
-  try{
-    const d=await postJson('/api/retail/auth/otp/request',{phone});
-    $('#lmPhoneStep').hidden=true;$('#lmCodeStep').hidden=false;
-    $('#lmSub').textContent=(state.lang==='cn'?'验证码已发送至 ':'Code sent to ')+phone;
-    setTimeout(()=>$('#otpCode').focus(),50);
-    otpCooldown(d&&d.cooldown||60);
-    if(d&&d.dev&&d.code){$('#otpCode').value=d.code;toast('DEV code '+d.code);}  // dev-echo only
-  }catch(e){
+  try{ const d=await postJson('/api/retail/auth/otp/request',{phone}); _afterSend(phone,d); }
+  catch(e){
     if(e.code==='too_soon'){$('#lmPhoneStep').hidden=true;$('#lmCodeStep').hidden=false;otpCooldown(60);}
-    else if(e.code==='sms_unavailable')lmErr(state.lang==='cn'?'短信服务尚未配置，请稍后再试':'SMS isn’t set up yet — please try later');
-    else if(e.code==='daily_cap')lmErr(state.lang==='cn'?'今日请求过多':'Too many requests today');
-    else lmErr(state.lang==='cn'?'发送失败':'Could not send code');
+    else if(e.code==='sms_unavailable')lmErr(cn()?'短信服务尚未配置，请稍后再试':'SMS isn’t set up yet — please try later');
+    else if(e.code==='daily_cap')lmErr(cn()?'今日请求过多':'Too many requests today');
+    else lmErr(cn()?'发送失败':'Could not send code');
   }finally{btn.disabled=false;}
 }
+async function emailSend(){
+  const email=($('#otpEmail').value||'').trim().toLowerCase();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){lmErr(cn()?'请输入有效邮箱':'Enter a valid email address');return;}
+  lmErr('');const btn=$('#emailSendBtn');btn.disabled=true;
+  try{ const d=await postJson('/api/retail/auth/email/request',{email}); _afterSend(email,d); }
+  catch(e){
+    if(e.code==='too_soon'){$('#lmEmailStep').hidden=true;$('#lmCodeStep').hidden=false;otpCooldown(60);}
+    else if(e.code==='email_unavailable')lmErr(cn()?'邮件服务尚未配置':'Email isn’t set up yet');
+    else if(e.code==='daily_cap')lmErr(cn()?'今日请求过多':'Too many requests today');
+    else if(e.code==='bad_email')lmErr(cn()?'邮箱格式不正确':'Invalid email address');
+    else lmErr(cn()?'发送失败':'Could not send code');
+  }finally{btn.disabled=false;}
+}
+function lmResend(){ _lmMode==='email'?emailSend():otpSend(); }
 async function otpVerify(){
-  const phone=($('#otpPhone').value||'').replace(/\D/g,'');
   const code=($('#otpCode').value||'').replace(/\D/g,'');
-  if(!/^\d{6}$/.test(code)){lmErr(state.lang==='cn'?'请输入6位验证码':'Enter the 6-digit code');return;}
+  if(!/^\d{6}$/.test(code)){lmErr(cn()?'请输入6位验证码':'Enter the 6-digit code');return;}
   lmErr('');const btn=$('#otpVerifyBtn');btn.disabled=true;
   try{
-    const d=await postJson('/api/retail/auth/otp/verify',{phone,code});
+    let d;
+    if(_lmMode==='email'){
+      const email=($('#otpEmail').value||'').trim().toLowerCase();
+      d=await postJson('/api/retail/auth/email/verify',{email,code});
+    }else{
+      const phone=($('#otpPhone').value||'').replace(/\D/g,'');
+      d=await postJson('/api/retail/auth/otp/verify',{phone,code});
+    }
     setAuth(d.token,d.customer);closeLogin();
-    toast(state.lang==='cn'?'登录成功 🌱':'Signed in 🌱');
+    toast(cn()?'登录成功 🌱':'Signed in 🌱');
     applyPendingRef();
     route();
   }catch(e){
-    if(e.code==='bad_code')lmErr(state.lang==='cn'?'验证码错误':'Incorrect code');
-    else if(e.code==='code_expired')lmErr(state.lang==='cn'?'验证码已过期，请重新发送':'Code expired — resend');
-    else if(e.code==='too_many_attempts')lmErr(state.lang==='cn'?'尝试过多，请重新发送':'Too many tries — resend');
-    else lmErr(state.lang==='cn'?'登录失败':'Sign-in failed');
+    if(e.code==='bad_code')lmErr(cn()?'验证码错误':'Incorrect code');
+    else if(e.code==='code_expired')lmErr(cn()?'验证码已过期，请重新发送':'Code expired — resend');
+    else if(e.code==='too_many_attempts')lmErr(cn()?'尝试过多，请重新发送':'Too many tries — resend');
+    else lmErr(cn()?'登录失败':'Sign-in failed');
   }finally{btn.disabled=false;}
+}
+// After an OAuth round-trip the callback redirects to /?oauth=<one-time code>.
+// Exchange it for the real bearer token (kept out of the URL), then clean up.
+async function consumeOauthRedirect(){
+  let p; try{ p=new URLSearchParams(location.search); }catch{ return; }
+  const err=p.get('oauth_error'); const handoff=p.get('oauth');
+  if(!err&&!handoff) return;
+  const back=p.get('r')||'';
+  try{ const u=new URL(location.href); ['oauth','oauth_error','r'].forEach(k=>u.searchParams.delete(k));
+    history.replaceState(null,'',u.pathname+u.search+(back||u.hash)); }catch{}
+  if(err){ toast(cn()?'登录失败，请重试':'Sign-in failed — please try again'); return; }
+  try{
+    const d=await postJson('/api/retail/auth/oauth/claim',{code:handoff});
+    setAuth(d.token,d.customer);
+    toast(cn()?'登录成功 🌱':'Signed in 🌱');
+    applyPendingRef();
+  }catch(e){ toast(cn()?'登录失败，请重试':'Sign-in failed — please try again'); }
 }
 
 /* ── theming ── */
@@ -4691,6 +4781,8 @@ function ctaRoute(t){
   try{ state.config=await api('/api/retail/config')||{}; }catch(e){ state.config={}; }
   try{ state.lang=localStorage.getItem('shop_lang')||'en'; }catch{}
   try{ state.token=localStorage.getItem('shop_token')||''; }catch{}
+  // Finish any OAuth round-trip first (sets state.token from the handoff code).
+  await consumeOauthRedirect();
   // Capture a referral code from a shared ?ref= link and stash it for after
   // sign-in (applyPendingRef). Strip it from the URL so it isn't re-applied.
   try{ const ref=new URLSearchParams(location.search).get('ref');
@@ -4738,10 +4830,16 @@ function ctaRoute(t){
   $('#lmClose').addEventListener('click',closeLogin);
   $('#loginModal').addEventListener('click',(e)=>{if(e.target.id==='loginModal')closeLogin();});
   $('#otpSendBtn').addEventListener('click',otpSend);
-  $('#otpResend').addEventListener('click',otpSend);
+  $('#emailSendBtn').addEventListener('click',emailSend);
+  $('#otpResend').addEventListener('click',lmResend);
   $('#otpVerifyBtn').addEventListener('click',otpVerify);
   $('#otpPhone').addEventListener('keydown',(e)=>{if(e.key==='Enter')otpSend();});
+  $('#otpEmail').addEventListener('keydown',(e)=>{if(e.key==='Enter')emailSend();});
   $('#otpCode').addEventListener('keydown',(e)=>{if(e.key==='Enter')otpVerify();});
+  // phone | email method switch
+  $('#lmTabs').addEventListener('click',(e)=>{const b=e.target.closest('button[data-method]');if(b)lmSetMethod(b.dataset.method);});
+  // social / SSO buttons → full-page OAuth redirect
+  $('#lmSocial').addEventListener('click',(e)=>{const b=e.target.closest('button[data-prov]');if(b)oauthStart(b.dataset.prov);});
   if(state.token) loadCustomer().then(applyPendingRef);   // resolve the saved session (or silently drop it) + apply any ?ref=
 
   // Block-engine CTAs: every clickable in a rendered block carries
