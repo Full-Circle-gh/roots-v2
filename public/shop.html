@@ -23,6 +23,7 @@
     --oat:#F2E7DF; --ink:#1a1a17; --forest:#365329; --olive:#6A6E2D; --lime:#CCD900;
     --berry:#E96174; --carrot:#FF6B0C; --papaya:#FFAF60; --corn:#F2CA6C;
     --sky:#B2CFED; --pea:#7BBD3B; --lotus:#EEB8E4; --pink:#F4B8CB; --citrus:#E7E74C;
+    --lemon:#F4F087; --cucumber:#A8D185; --avocado:#73BF83; --almond:#C37F4E;
     --accent:#365329;            /* overridden from tenant config at runtime */
     --paper:#fff; --line:rgba(0,0,0,.08); --muted:#7c7c72;
     --bf-bear:'Bear Serif','DF Yuan','New York',Georgia,serif;
@@ -176,6 +177,8 @@
   .review .who{font-weight:600;font-size:14px;}
   .review .when{font-size:12px;color:var(--muted);}
   .review .body{font-size:14px;color:#4a4a44;line-height:1.5;}
+  .review-reply{margin-top:8px;padding:8px 10px;border-left:2px solid var(--accent,#5a7d4f);background:rgba(0,0,0,.035);border-radius:0 6px 6px 0;font-size:13px;color:#4a4a44;line-height:1.5;}
+  .review-reply .lbl{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;color:var(--muted);margin-bottom:2px;}
 
   .pd-body{max-width:760px;margin:6px auto 0;}
   .shop-product-blocks{margin-top:8px;}
@@ -4411,8 +4414,10 @@ async function renderProduct(id){
       const rt=Math.max(0,Math.min(5,Math.round(Number(r.rating)||0)));
       const body=r.comment||r.body||r.text||r.content||'';
       const who=r.author_name||r.nickname||r.name||(state.lang==='cn'?'匿名':'Anonymous');
+      const reply=r.reply||'';
+      const replyHtml=reply?`<div class="review-reply"><span class="lbl">${state.lang==='cn'?'商家回复':'Seller reply'}</span>${esc(reply)}</div>`:'';
       return `<div class="review"><div class="head"><span class="stars">${'★'.repeat(rt)}<span class="off">${'★'.repeat(5-rt)}</span></span>
-        <span class="who">${esc(who)}</span></div>${body?`<div class="body">${esc(body)}</div>`:''}</div>`;
+        <span class="who">${esc(who)}</span></div>${body?`<div class="body">${esc(body)}</div>`:''}${replyHtml}</div>`;
     }).join('')}</div>`:'';
 
   view.innerHTML=`<div class="wrap pd-wrap">
