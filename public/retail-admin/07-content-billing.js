@@ -1567,6 +1567,11 @@ function renderFeedbackRow(f) {
   const replyTag = f.reply_count > 0
     ? `<span class="muted" style="font-size: 10px;">${cuT(f.reply_count + ' repl' + (f.reply_count === 1 ? 'y' : 'ies'), f.reply_count + ' 条往来')}</span>`
     : '';
+  // Direct messages staff started (vs customer-filed bug reports) get a tag so
+  // the shared inbox stays legible.
+  const kindTag = f.kind === 'message'
+    ? `<span class="pill neutral" style="font-size: 10px;">${cuT('✉ Message', '✉ 消息')}</span>`
+    : '';
   return `
     <tr data-id="${f.id}" onclick="openFeedbackThread(${f.id})" style="cursor: pointer;">
       <td>
@@ -1576,7 +1581,7 @@ function renderFeedbackRow(f) {
       <td>
         <div style="font-size: 12px; line-height: 1.4; max-width: 520px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(f.message || '')}</div>
         ${photosHtml ? `<div style="margin-top: 8px;">${photosHtml}</div>` : ''}
-        <div style="margin-top: 6px; display: flex; gap: 8px; align-items: center;">${feedbackStatusPill(f)}${replyTag}</div>
+        <div style="margin-top: 6px; display: flex; gap: 8px; align-items: center;">${kindTag}${feedbackStatusPill(f)}${replyTag}</div>
       </td>
       <td>${ctx}${ver}</td>
       <td class="muted" style="font-size: 11px; white-space: nowrap;">${f.created_at ? f.created_at.slice(0, 16) : ''}</td>

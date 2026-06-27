@@ -424,6 +424,7 @@ function cuRenderDetail() {
   const blockCls   = c.is_blocked ? 'btn' : 'btn btn-brass';
   $('#cu-drawer-actions').innerHTML = `
     <button class="btn" onclick="cuOpenEdit()">Edit profile · 编辑资料</button>
+    <button class="btn btn-primary" onclick="cuMessageCustomer()">✉ Message · 发消息</button>
     <button class="${blockCls}" id="cu-block-btn" onclick="cuToggleBlock()">${blockLabel}</button>
     <button class="btn btn-brass" onclick="cuForceLogout()">Sign out all devices · 退出所有设备</button>
     <button class="btn" onclick="cuResetTest()" title="Testing: become a brand-new customer on next app open">Reset to new user (test) · 重置为新用户(测试)</button>
@@ -746,6 +747,43 @@ function cuOpenEdit() {
   cuShowModal('#cu-edit-bg');
 }
 function cuCloseEdit() { $('#cu-edit-bg').classList.remove('show'); }
+
+// ── Direct message — operator opens a conversation with this customer ───────
+// Reuses the feedback thread tables (POST .../customers/:id/message creates an
+// admin-initiated thread + notifies the customer). After sending we jump into
+// the existing Feedback thread drawer so the operator can carry on the chat.
+function cuMessageCustomer() {
+  const c = CU_CURRENT?.customer;
+  if (!c) return;
+  $('#cu-msg-text').value = '';
+  $('#cu-msg-who').textContent = (c.nickname || ('#' + c.id)) + ' · #' + c.id;
+  cuShowModal('#cu-msg-bg');
+  setTimeout(() => { const t = $('#cu-msg-text'); if (t) t.focus(); }, 60);
+}
+function cuCloseMsg() { $('#cu-msg-bg').classList.remove('show'); }
+
+async function cuSendMsg() {
+  const c = CU_CURRENT?.customer;
+  if (!c) return;
+  const message = ($('#cu-msg-text').value || '').trim();
+  if (!message) { $('#cu-msg-text').focus(); return; }
+  try {
+    const j = await adminWrite({
+      btnId: 'cu-msg-send', url: '/api/retail-admin/customers/' + c.id + '/message',
+      method: 'POST', body: { message }, errLabelEn: 'Send failed', errLabelCn: '发送失败',
+    });
+    cuCloseMsg();
+    toast(cuT('Message sent · customer notified', '已发送 · 已通知顾客'), 'ok');
+    // Hand off to the Feedback thread drawer so the conversation is visible and
+    // the operator can keep replying. Close the customer drawer first so the
+    // thread drawer isn't painted behind it (same z-layer).
+    const id = j?.data?.id;
+    if (id != null && typeof openFeedbackThread === 'function') {
+      closeDrawer('#cu-drawer');
+      openFeedbackThread(id);
+    }
+  } catch (e) { /* already toasted by adminWrite */ }
+}
 
 // Shared wrapper for ALL retail-admin write paths (Customers, Orders,
 // Refunds, Tracking, etc.). Provides:

@@ -1629,6 +1629,29 @@
       </div>
     </div>
 
+    <!-- MESSAGE MODAL — operator opens a direct-message thread with this customer.
+         Reuses the feedback thread tables; the customer replies in-app. -->
+    <div id="cu-msg-bg" class="pu-editor-bg">
+      <div class="pu-editor" style="width: 480px;">
+        <div class="pu-editor-head">
+          <h3 style="margin: 0; font-size: 14px;">Message customer · 给顾客发消息</h3>
+          <button class="btn" onclick="cuCloseMsg()">Close · 关闭</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
+          <div id="cu-msg-who" class="muted" style="font-size: 12px; margin-bottom: var(--s3);"></div>
+          <div class="field" style="margin-bottom: 0;">
+            <label class="stacked">Message · 消息</label>
+            <textarea id="cu-msg-text" maxlength="4000" placeholder="Write a message to this customer…"></textarea>
+            <div class="helper">Lands in their in-app inbox (mini app + web). They can reply and you'll see it in the Feedback tab. · 会进入顾客的站内消息（小程序和网页）。顾客可回复，回复显示在“反馈”标签页。</div>
+          </div>
+        </div>
+        <div class="pu-editor-foot">
+          <button class="btn" onclick="cuCloseMsg()">Cancel · 取消</button>
+          <button class="btn btn-primary" id="cu-msg-send" onclick="cuSendMsg()">Send message · 发送消息</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ADJUST MODAL (points & wallet share same UI) -->
     <div id="cu-adjust-bg" class="pu-editor-bg">
       <div class="pu-editor" style="width: 480px;">

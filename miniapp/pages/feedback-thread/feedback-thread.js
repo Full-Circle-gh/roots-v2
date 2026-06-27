@@ -63,7 +63,12 @@ Page({
         body: m.body || '',
         time: fmtTime(m.created_at, cn),
       }));
-      this.setData({ messages, loading: false });
+      // A store-initiated direct message isn't "your report" — relabel the
+      // header so the customer sees it as a message from the store.
+      const copy = data.kind === 'message'
+        ? { ...this.data.copy, kicker: cn ? '消息' : 'MESSAGE', title: cn ? '来自商家。' : 'From the store.' }
+        : this.data.copy;
+      this.setData({ messages, copy, loading: false });
     } catch (e) {
       this.setData({ loading: false, notFound: true });
     }

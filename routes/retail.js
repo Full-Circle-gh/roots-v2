@@ -11764,9 +11764,19 @@ function buildFeedbackThread(row) {
     app_version: row.app_version,
     created_at: row.created_at,
     photos: parseJsonArray(row.photos_json),
+    kind: row.kind || 'bug',
+    initiated_by: row.initiated_by || 'customer',
     messages: [
-      // The original report, normalised into the same shape as a reply turn.
-      { id: 0, author: 'customer', author_name: null, body: row.message, created_at: row.created_at },
+      // The root turn, normalised into the same shape as a reply turn. It's the
+      // customer's first message on a bug report, or the operator's opener on an
+      // admin-initiated direct message — initiated_by/root_author_name say which.
+      {
+        id: 0,
+        author: row.initiated_by === 'admin' ? 'admin' : 'customer',
+        author_name: row.initiated_by === 'admin' ? (row.root_author_name || null) : null,
+        body: row.message,
+        created_at: row.created_at,
+      },
       ...msgs,
     ],
   };
@@ -11893,7 +11903,7 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
   const rows = tdb().prepare(
     `SELECT f.id, f.customer_id, f.customer_name, f.message,
-            f.photos_json, f.page_context, f.app_version, f.created_at,
+            f.photos_json, f.page_context, f.app_version, f.created_at, f.kind,
             f.last_customer_msg_at, f.last_admin_msg_at, f.admin_read_at,
             c.nickname AS nickname, c.avatar_url AS customer_avatar,
             (SELECT COUNT(*) FROM retail_feedback_messages m WHERE m.feedback_id = f.id) AS reply_count,
@@ -11924,14 +11934,19 @@ router.get('/api/retail-admin/feedback/unseen-count', requireRetailAdmin, (req, 
   const sinceSql = since || '1970-01-01T00:00:00.000Z';
   // New reports AND customer follow-up replies both count — either is a turn
   // waiting on the operator.
+  // Only customer-authored turns count toward the operator's "waiting" dot: a
+  // brand-new customer report (initiated_by='customer') or any customer reply.
+  // An admin-initiated direct message must not ping the admin's own counter.
   const row = tdb().prepare(
     `SELECT
        (SELECT COUNT(*) FROM retail_feedback
-          WHERE datetime(created_at) > datetime(?))
+          WHERE COALESCE(initiated_by, 'customer') = 'customer'
+            AND datetime(created_at) > datetime(?))
        + (SELECT COUNT(*) FROM retail_feedback_messages
           WHERE author = 'customer' AND datetime(created_at) > datetime(?)) AS n,
        (SELECT MAX(t) FROM (
           SELECT MAX(created_at) AS t FROM retail_feedback
+            WHERE COALESCE(initiated_by, 'customer') = 'customer'
           UNION ALL
           SELECT MAX(created_at) AS t FROM retail_feedback_messages WHERE author = 'customer'
        )) AS latest`
@@ -11982,6 +11997,49 @@ router.post('/api/retail-admin/feedback/:id/reply', requireRetailAdmin, express.
     res.json({ success: true });
   } catch (e) {
     console.error('[retail-admin/feedback reply] insert failed:', e.message);
+    res.status(500).json({ success: false, error: 'db_insert_failed' });
+  }
+});
+
+// Operator starts a direct-message thread with a specific customer. Reuses the
+// feedback thread tables: the root row is the operator's opener (initiated_by
+// 'admin', kind 'message') and the customer replies in-app exactly like a bug
+// report. Drops the same in-app notification a reply does so the customer sees
+// it next time they open the mini app / web shop. Returns the new thread id so
+// the admin UI can open it straight into the existing thread drawer.
+router.post('/api/retail-admin/customers/:id/message', requireRetailAdmin, express.json(), (req, res) => {
+  const customerId = parseInt(req.params.id, 10);
+  const body = (req.body?.message || '').toString().trim().slice(0, 4000);
+  if (!customerId) return res.status(400).json({ success: false, error: 'customer_required' });
+  if (!body)       return res.status(400).json({ success: false, error: 'message_required' });
+  const customer = tdb().prepare('SELECT id, nickname FROM retail_customers WHERE id = ?').get(customerId);
+  if (!customer) return res.status(404).json({ success: false, error: 'customer_not_found' });
+  const authorName = (req.user && (req.user.display_name || req.user.username)) || null;
+  const name = customer.nickname || ('#' + customer.id);
+  try {
+    // last_admin_msg_at + admin_read_at both stamped now: the operator just
+    // wrote and read it, so the thread doesn't show as "needs reply" to staff.
+    const info = tdb().prepare(
+      `INSERT INTO retail_feedback
+         (customer_id, customer_name, message, page_context, initiated_by, root_author_name, kind,
+          last_admin_msg_at, admin_read_at)
+       VALUES (?, ?, ?, 'admin-message', 'admin', ?, 'message', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+    ).run(customerId, name, body, authorName);
+    const id = info.lastInsertRowid;
+    const snippet = body.length > 120 ? body.slice(0, 119) + '…' : body;
+    notifyCustomer(customerId, {
+      category: 'feedback',
+      type: 'direct_message',
+      title_en: 'New message',
+      title_cn: '新消息',
+      body_en: snippet,
+      body_cn: snippet,
+      ref_type: 'feedback',
+      ref_id: id,
+    });
+    res.json({ success: true, data: { id } });
+  } catch (e) {
+    console.error('[retail-admin/customers message] insert failed:', e.message);
     res.status(500).json({ success: false, error: 'db_insert_failed' });
   }
 });

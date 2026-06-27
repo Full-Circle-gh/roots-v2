@@ -1443,6 +1443,18 @@ addColumn('retail_feedback', 'last_admin_msg_at',    'DATETIME');
 addColumn('retail_feedback', 'admin_read_at',        'DATETIME');
 addColumn('retail_feedback', 'customer_read_at',     'DATETIME');
 
+// A feedback thread is normally customer-initiated (a bug report). The same
+// two-table structure also backs operator → customer direct messages: staff
+// open a thread from the customer drawer and the customer replies in-app.
+// `initiated_by` says who wrote the root turn (so buildFeedbackThread can
+// attribute it correctly); `root_author_name` snapshots the operator's name on
+// an admin-started thread (NULL for customer reports — mirrors author_name on a
+// reply turn); `kind` separates a 'bug' report from a plain 'message' so the
+// inbox can label them. Defaults keep every pre-existing row a customer bug.
+addColumn('retail_feedback', 'initiated_by',     "TEXT DEFAULT 'customer'");
+addColumn('retail_feedback', 'root_author_name', 'TEXT');
+addColumn('retail_feedback', 'kind',             "TEXT DEFAULT 'bug'");
+
 // Customer-initiated refund requests with multi-step processing workflow.
 // States on retail_orders.refund_status:
 //   null | pending | reviewing | approved | paid | rejected | withdrawn
