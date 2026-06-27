@@ -465,6 +465,7 @@
     .sp-btn.ghost{background:transparent;color:var(--ink);border:2px solid var(--ink);border-radius:0;}
     .sp-foot{padding:18px 22px;}
     .sp-chip{display:inline-block;padding:3px 10px;border-radius:0;font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;background:var(--ink);color:var(--lime);}
+    .sp-eta{display:inline-block;margin-top:8px;padding:4px 11px;border-radius:999px;font-family:var(--bf-toni);font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:rgba(180,200,90,.28);color:var(--olive);}
     .sp-msg{font-size:13px;color:var(--berry);padding:8px 22px 0;min-height:16px;}
     /* Address add/edit form — mirrors the mini-app's placeholder-only fields,
        single delivery-area trigger, default toggle and ink/lime Save button. */
@@ -2803,6 +2804,7 @@ async function renderAddresses(edit){
       <div class="sp-t">${esc(a.recipient_name||'')} ${a.is_default?'<span class="sp-chip">'+(cn?'默认':'Default')+'</span>':''}</div>
       <div class="sp-d">${esc([a.province,a.city,a.district,a.address,a.detail].filter(Boolean).join(' '))}</div>
       <div class="sp-d">${esc(a.phone||'')}</div>
+      ${a.delivery_eta?`<div class="sp-eta">${a.delivery_eta.courier?(cn?'📦 快递配送':'📦 Ships by courier'):(cn?('🛵 约 '+a.delivery_eta.km+' 公里 · 约 '+a.delivery_eta.min+' 分钟'):('🛵 ~'+a.delivery_eta.km+' km · ~'+a.delivery_eta.min+' min'))}</div>`:''}
       <div style="margin-top:8px;display:flex;gap:16px"><button class="me-legal-a" data-edit="${a.id}">${cn?'编辑':'Edit'}</button>${a.is_default?'':`<button class="me-legal-a" data-def="${a.id}">${cn?'设为默认':'Set default'}</button>`}<button class="me-legal-a" style="color:var(--berry)" data-del="${a.id}">${cn?'删除':'Delete'}</button></div>
     </div></div>`).join('');
   box.innerHTML=spBack()+spHead(cn?'收货地址':'ADDRESSES',cn?'我的地址':'Saved spots.','')+
@@ -4293,7 +4295,51 @@ async function renderProduct(id){
       buildSheet(extra,{title:state.lang==='cn'?'加点配料?':'Add extras?',multi:true,
         btnLabel:priceLabel, onConfirm:close=>{ if(doAdd()) close(); }});
     }
+    // Variant product -> "Choose a size" opens the size-picker bottom sheet and
+    // adds the chosen sibling straight to the cart (mirror of the mini-app).
+    function openVariantPicker(){
+      const L=state.lang;
+      const opts=variants.map(m=>{
+        const regular=Number(m.price??m.sell_price)||0,eff=slEff(m);
+        const isFl=!!m.is_on_flash&&eff<regular;
+        const cmp=Number(m.compare_at_price)||0;
+        const wasN=isFl?regular:(cmp>eff&&eff>0?cmp:0);
+        const stock=m.stock==null?null:Number(m.stock);
+        const soldOut=stock!=null&&stock<=0;
+        const label=pick(m.variant_label,m.variant_label_cn)||pick(m.name_en,m.name_cn)||('#'+m.id);
+        return {id:m.id,label,weight:(m.size||'').toString().trim(),
+          price:eff>0?slMoney(eff):'',priceWas:wasN>0?slMoney(wasN):'',soldOut,
+          low:(!soldOut&&stock!=null&&stock<=5)?(L==='cn'?`仅剩 ${stock}`:`Only ${stock} left`):''};
+      });
+      const nounEn=(p.variant_noun_en||'').trim(),nounCn=(p.variant_noun_cn||'').trim();
+      const vpTitle=L==='cn'?(nounCn?`选择${nounCn}`:'选择规格'):(nounEn?`Choose a ${nounEn}`:'Choose a size');
+      const mask=document.createElement('div');mask.className='sl-vpmask';
+      mask.innerHTML=`<div class="sl-vp">
+        <div class="sl-vp-h"><div>
+          <div class="sl-vp-t">${esc(vpTitle)}</div>
+          <div class="sl-vp-n">${esc(pick(p.name_en,p.name_cn))}</div>
+        </div><div class="sl-vp-x" data-x>×</div></div>
+        ${opts.map(o=>`<div class="sl-vp-o ${o.soldOut?'sold':''}" data-id="${o.id}">
+          <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}</div>
+          <div class="sl-vp-ps">${o.priceWas?`<span class="sl-vp-was">${o.priceWas}</span>`:''}<span class="sl-vp-pr">${o.price}</span></div>
+        </div>`).join('')}
+      </div>`;
+      document.body.appendChild(mask);
+      mask.addEventListener('click',e=>{
+        if(e.target===mask||e.target.closest('[data-x]')){ mask.remove(); return; }
+        const row=e.target.closest('.sl-vp-o');if(!row||row.classList.contains('sold'))return;
+        const m=variants.find(x=>Number(x.id)===Number(row.dataset.id));if(!m)return;
+        mask.remove();
+        cartAdd({product_id:m.id,qty,choices:[],
+          name:pick(m.name_en,m.name_cn),price:slEff(m),
+          image:slImg(m)||thumb(p),size:m.size||m.variant_label||'',optLabel:'',
+          ship_from_supplier:!!m.ship_from_supplier});
+        toast(state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
+        openCart();
+      });
+    }
     $('#addBtn').addEventListener('click',()=>{
+      if(hasVariants){ openVariantPicker(); return; }
       if(single.length){ openSingle(); return; }
       if(extra.length){ openExtra(); return; }
       doAdd();
