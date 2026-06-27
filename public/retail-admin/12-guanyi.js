@@ -1,3 +1,4 @@
+/* eslint-disable no-undef, no-func-assign, no-self-assign */
 /* Guanyi (gzgrocery) Sync admin tab — product mapping + status. */
 /* namespace: gy* — mirrors 11-meituan.js but for the Guanyi C-ERP channel. */
 

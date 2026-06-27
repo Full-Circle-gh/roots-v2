@@ -1,3 +1,4 @@
+/* eslint-disable no-undef, no-func-assign, no-self-assign */
 /* Meituan Sync admin tab — product mapping + status dashboard */
 /* namespace: mt* */
 
