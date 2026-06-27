@@ -541,6 +541,16 @@
     .ntf-time{font-family:var(--bf-toni);font-size:11px;color:var(--olive);white-space:nowrap;}
     .ntf-title{font-family:var(--bf-bear);font-size:17px;color:var(--ink);margin-top:8px;line-height:1.2;}
     .ntf-body{font-size:13px;color:var(--olive);margin-top:4px;line-height:1.5;}
+    /* feedback / message thread */
+    .fbt-thread{padding:8px 22px 120px;display:flex;flex-direction:column;gap:12px;}
+    .fbt-msg{max-width:82%;border:2px solid var(--ink);padding:10px 12px;background:#FFFCF7;}
+    .fbt-msg.mine{align-self:flex-end;background:var(--lime);}
+    .fbt-msg.store{align-self:flex-start;}
+    .fbt-meta{font-family:var(--bf-toni);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--olive);margin-bottom:5px;}
+    .fbt-body{font-size:15px;line-height:1.5;color:var(--ink);font-family:var(--f-aleo);white-space:pre-wrap;word-break:break-word;}
+    .fbt-bar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:2px solid var(--ink);padding:10px 14px;display:flex;gap:10px;align-items:flex-end;max-width:520px;margin:0 auto;z-index:20;}
+    .fbt-bar .sp-input{min-height:44px;max-height:120px;}
+    .fbt-bar .sp-btn{flex:0 0 auto;align-self:stretch;}
     /* about */
     .about-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(0,0,0,.12);margin:18px 22px 0;border:2px solid var(--ink);}
     .about-stat{background:var(--oat);padding:16px;}
@@ -816,7 +826,7 @@
     </div>
   </div>
 
-  <!-- ── Cart drawer (Phase 3a — client-side cart) ── -->
+  <!-- ── Cart badge + fly-to-cart (client-side cart) ── -->
   <style>
     #cartBtn{position:relative;}
     .cart-badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;
@@ -831,34 +841,6 @@
     .fly-ball img{width:100%;height:100%;object-fit:cover;display:block;}
     .fly-ball .fp{color:var(--lime);font-size:22px;line-height:1;font-weight:700;}
     @media(prefers-reduced-motion:reduce){.fly-wrap{display:none!important;}}
-    .cd-overlay{position:fixed;inset:0;z-index:95;background:rgba(26,26,23,.5);display:flex;justify-content:flex-end;}
-    .cd-overlay[hidden]{display:none;}
-    .cd-panel{background:var(--oat);width:100%;max-width:420px;height:100%;display:flex;flex-direction:column;
-      box-shadow:-16px 0 50px rgba(0,0,0,.25);animation:cdIn .22s ease;}
-    @keyframes cdIn{from{transform:translateX(30px);opacity:.6}to{transform:none;opacity:1}}
-    .cd-head{display:flex;align-items:center;justify-content:space-between;padding:20px 22px;border-bottom:2px solid var(--ink);}
-    .cd-head .t{font-family:var(--bf-bear);font-size:22px;}
-    .cd-x{background:none;border:0;font-size:26px;line-height:1;cursor:pointer;color:var(--ink);}
-    .cd-items{flex:1;overflow:auto;padding:8px 22px;}
-    .cd-empty{text-align:center;color:var(--muted);padding:60px 0;}
-    .cd-row{display:flex;gap:14px;padding:16px 0;border-bottom:1px solid var(--line);}
-    .cd-row .ph{width:74px;height:74px;flex:0 0 auto;border-radius:0;background:var(--oat);overflow:hidden;}
-    .cd-row .ph img{width:100%;height:100%;object-fit:cover;}
-    .cd-row .meta{flex:1;min-width:0;}
-    .cd-row .nm{font-family:var(--bf-bear);font-size:15px;line-height:1.2;}
-    .cd-row .opt{border:0;border-radius:0;padding:0;margin-bottom:0;font-size:12px;color:var(--muted);margin-top:3px;}
-    .cd-row .pr{font-family:var(--bf-gothic);font-size:17px;color:var(--accent);margin-top:5px;letter-spacing:.03em;}
-    .cd-qty{display:inline-flex;align-items:center;gap:0;margin-top:8px;border:1.5px solid var(--ink);border-radius:999px;overflow:hidden;}
-    .cd-qty button{background:none;border:0;width:30px;height:28px;font-size:16px;cursor:pointer;color:var(--ink);}
-    .cd-qty span{min-width:26px;text-align:center;font-weight:700;font-size:14px;}
-    .cd-row .rm{background:none;border:0;color:var(--muted);font-size:12px;cursor:pointer;margin-top:8px;display:block;text-align:left;padding:0;}
-    .cd-foot{border-top:2px solid var(--ink);padding:18px 22px;background:#fff;}
-    .cd-sub{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;}
-    .cd-sub .l{font-size:13px;color:var(--muted);} .cd-sub .v{font-family:var(--bf-gothic);font-size:24px;}
-    .cd-note{font-size:11px;color:var(--muted);margin-bottom:12px;}
-    .cd-checkout{width:100%;font:inherit;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:14px;
-      background:var(--accent);color:#fff;border:0;border-radius:999px;padding:16px;cursor:pointer;}
-    .cd-checkout:disabled{opacity:.5;cursor:default;}
     /* product purchase block */
     .pd-opt{margin:16px 0;}
     .pd-opt .q{font-family:var(--bf-bear);font-size:15px;margin-bottom:8px;}
@@ -889,7 +871,7 @@
     .co-line{display:flex;justify-content:space-between;font-size:14px;padding:5px 0;}
     /* Drop-ship line — the supplier ships this item straight to the customer,
        so it arrives in its own parcel, separately from the rest of the order.
-       Shared across the cart drawer, checkout review and post-order detail. */
+       Shared across the cart page, checkout review and post-order detail. */
     .sup-tag{display:block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--olive);margin-top:3px;line-height:1.3;}
     .sup-tag .gly{font-weight:700;margin-right:3px;}
     .co-line.tot{font-family:var(--bf-gothic);font-size:24px;border-top:1.5px solid var(--ink);margin-top:8px;padding-top:10px;letter-spacing:.03em;}
@@ -965,18 +947,6 @@
     .tu-cta{width:100%;padding:16px;display:flex;align-items:center;justify-content:center;white-space:nowrap;font-family:var(--bf-toni);font-weight:700;font-size:14px;letter-spacing:.04em;text-transform:uppercase;background:var(--ink);color:var(--lime);border:0;border-radius:0;cursor:pointer;}
     .tu-cta:disabled{opacity:.55;cursor:default;}
   </style>
-  <div id="cartDrawer" class="cd-overlay" hidden>
-    <div class="cd-panel">
-      <div class="cd-head"><span class="t" id="cdTitle">Cart</span><button class="cd-x" id="cdClose" aria-label="Close">×</button></div>
-      <div class="cd-items" id="cdItems"></div>
-      <div class="cd-foot" id="cdFoot" hidden>
-        <div class="cd-sub"><span class="l" id="cdSubLabel">Subtotal</span><span class="v" id="cdSub">¥0</span></div>
-        <div class="cd-note" id="cdNote">Shipping &amp; total calculated at checkout.</div>
-        <button class="cd-checkout" id="cdCheckout">Checkout</button>
-      </div>
-    </div>
-  </div>
-
   <div id="toast"></div>
 
 <script>
@@ -1237,7 +1207,7 @@ function brandName(cfg){
 
 /* ════════════ CART (client-side, Phase 3a) ════════════ */
 // Drop-ship tag — shown on any line whose product ships straight from the
-// supplier (its own parcel, arrives separately). Reused in the cart drawer,
+// supplier (its own parcel, arrives separately). Reused in the cart page,
 // checkout review and the post-order detail so the wording stays identical.
 function supTag(){return '<div class="sup-tag"><span class="gly">↗</span>'+(state.lang==='cn'?'供应商直发 · 单独送达':'Ships from supplier · arrives separately')+'</div>';}
 function cartGet(){try{return JSON.parse(localStorage.getItem('shop_cart')||'[]')||[];}catch{return[];}}
@@ -1250,32 +1220,10 @@ function cartBadge(){const n=cartCount();const lbl=n>99?'99+':String(n);
 function lineKey(pid,choices){return pid+':'+(choices||[]).slice().sort((a,b)=>a-b).join(',');}
 function cartAdd(line){const c=cartGet();const k=lineKey(line.product_id,line.choices);
   const ex=c.find(l=>l.key===k);if(ex)ex.qty+=line.qty;else c.push({...line,key:k});cartSave(c);}
-function cartSetQty(key,qty){let c=cartGet();const l=c.find(x=>x.key===key);if(!l)return;
-  l.qty=qty;if(l.qty<=0)c=c.filter(x=>x.key!==key);cartSave(c);renderCartItems();}
-function cartRemove(key){cartSave(cartGet().filter(x=>x.key!==key));renderCartItems();}
 
-function openCart(){renderCartItems();$('#cartDrawer').hidden=false;}
-function closeCart(){$('#cartDrawer').hidden=true;}
-function renderCartItems(){
-  const c=cartGet();const box=$('#cdItems');const foot=$('#cdFoot');
-  $('#cdTitle').textContent=state.lang==='cn'?'购物车':'Cart';
-  $('#cdSubLabel').textContent=state.lang==='cn'?'小计':'Subtotal';
-  $('#cdNote').textContent=state.lang==='cn'?'运费与总计将在结算时计算。':'Shipping & total are calculated at checkout.';
-  $('#cdCheckout').textContent=state.lang==='cn'?'去结算':'Checkout';
-  if(!c.length){box.innerHTML='<div class="cd-empty">'+(state.lang==='cn'?'购物车是空的 🌱':'Your cart is empty 🌱')+'</div>';foot.hidden=true;return;}
-  box.innerHTML=c.map(l=>`<div class="cd-row" data-k="${escAttr(l.key)}">
-    <div class="ph">${l.image?`<img src="${escAttr(l.image)}" alt="">`:''}</div>
-    <div class="meta">
-      <div class="nm">${esc(l.name||'')}</div>
-      ${l.optLabel?`<div class="opt">${esc(l.optLabel)}</div>`:''}
-      ${l.ship_from_supplier?supTag():''}
-      <div class="pr">${money(l.price)}</div>
-      <div class="cd-qty"><button data-act="dec">−</button><span>${l.qty}</span><button data-act="inc">+</button></div>
-      <button class="rm" data-act="rm">${state.lang==='cn'?'移除':'Remove'}</button>
-    </div></div>`).join('');
-  $('#cdSub').textContent=money(cartSubtotal());
-  foot.hidden=false;
-}
+// Cart icon / add-to-cart confirmation now route to the full-page Cart (#/cart),
+// which mirrors the mini-app Cart tab. The slide-up drawer was removed.
+function openCart(){location.hash='#/cart';}
 
 /* ════════════ CHECKOUT (Phase 3b) ════════════ */
 // Delivery-only MVP: pick/add address → /checkout/quote (fees + slots) → place
@@ -2731,8 +2679,8 @@ async function renderMe(){
 }
 
 /* ════════════ CART PAGE (#/cart) ════════════ */
-// Full-page cart so the Cart tab has a real destination (the drawer still
-// works from the header cart icon). Shares the .cd-row markup + cart store.
+// Full-page cart — the single cart surface, reached from both the header cart
+// icon and the bottom Cart tab. Mirrors the mini-app Cart tab.
 function cartSetQtyPage(key,qty){let c=cartGet();const l=c.find(x=>x.key===key);if(!l)return;
   l.qty=qty;if(l.qty<=0)c=c.filter(x=>x.key!==key);cartSave(c);renderCartPage();}
 function cartRemovePage(key){cartSave(cartGet().filter(x=>x.key!==key));renderCartPage();}
@@ -3190,7 +3138,7 @@ async function renderNotifications(){
     const ref=b.dataset.ref,rid=b.dataset.rid;
     if(ref==='order'&&rid)location.hash='#/order/'+rid;
     else if(ref==='invoice')location.hash='#/invoices';
-    else if(ref==='feedback')location.hash='#/feedback';
+    else if(ref==='feedback')location.hash=rid?('#/feedback/'+rid):'#/feedback';
     else renderNotifications(); }));
 }
 
@@ -3320,7 +3268,30 @@ async function renderFeedback(){
     const btn=$('#fbSend'); btn.disabled=true; $('#fbErr').textContent='';
     try{ await postJson('/api/retail/feedback',{message:msg,photos,page_context:'web',app_version:'web'}); toast(cn?'已提交，谢谢！':'Sent — thank you!'); location.hash='#/me'; }
     catch(e){ $('#fbErr').textContent=cn?'提交失败，请重试':'Could not send — try again'; btn.disabled=false; } });
-  try{ const past=await api('/api/retail/feedback')||[]; if(past&&past.length){ $('#fbPast').innerHTML=`<div class="me-section"><div class="me-sec-title">${cn?'历史反馈':'Past reports'}</div><div class="sp-list" style="margin-top:8px">${past.map(p=>`<div class="sp-li"><div class="sp-main"><div class="sp-t" style="font-size:14px">${esc(String(p.message||'').slice(0,60))}</div>${p.reply_count?`<div class="sp-d">${cn?'有新回复':'New reply'}</div>`:''}</div>${p.unread?'<span class="ntf-dot"></span>':''}</div>`).join('')}</div></div>`; } }catch(e){}
+  try{ const past=await api('/api/retail/feedback')||[]; if(past&&past.length){ $('#fbPast').innerHTML=`<div class="me-section"><div class="me-sec-title">${cn?'历史反馈':'Past reports'}</div><div class="sp-list" style="margin-top:8px">${past.map(p=>`<div class="sp-li" data-fb="${p.id}" style="cursor:pointer"><div class="sp-main"><div class="sp-t" style="font-size:14px">${esc(String(p.message||'').slice(0,60))}</div>${p.reply_count?`<div class="sp-d">${cn?'有新回复':'New reply'}</div>`:''}</div>${p.unread?'<span class="ntf-dot"></span>':''}</div>`).join('')}</div></div>`;
+    $('#fbPast').querySelectorAll('[data-fb]').forEach(r=>r.addEventListener('click',()=>{ location.hash='#/feedback/'+r.dataset.fb; })); } }catch(e){}
+}
+
+// One conversation thread — a bug report the store replied to, or a direct
+// message staff started. Mirrors the mini-app feedback-thread page: read the
+// turns and reply back. GET marks it read (clears the inbox dot).
+async function renderFeedbackThread(id){
+  const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
+  document.title=(cn?'对话':'Conversation')+' · '+state.brand;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'对话':'CONVERSATION',cn?'消息记录。':'Your messages.','')}<div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div>`;
+  let data; try{ data=await api('/api/retail/feedback/'+id); }catch(e){ data=null; }
+  const box=v.querySelector('.sp');
+  if(!data){ box.innerHTML=spBack()+spHead(cn?'对话':'CONVERSATION','','')+`<div class="sp-empty">${cn?'未找到该对话':'This conversation could not be found.'}</div>`; return; }
+  const fmt=(iso)=>{ if(!iso)return''; const d=new Date(String(iso).includes('T')?iso:String(iso).replace(' ','T')+'Z'); if(isNaN(d))return''; const p=n=>String(n).padStart(2,'0'); return `${d.getMonth()+1}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const bubbles=(data.messages||[]).map(m=>{ const mine=m.author==='customer'; const who=mine?(cn?'你':'You'):(m.author_name||(cn?'商家':'Store'));
+    return `<div class="fbt-msg ${mine?'mine':'store'}"><div class="fbt-meta">${esc(who)}${m.created_at?' · '+fmt(m.created_at):''}</div><div class="fbt-body">${esc(m.body||'')}</div></div>`; }).join('');
+  box.innerHTML=spBack()+spHead(cn?'对话':'CONVERSATION',cn?'消息记录。':'Your messages.','')
+    +`<div class="fbt-thread">${bubbles}</div>`
+    +`<div class="fbt-bar"><textarea class="sp-input" id="fbtReply" placeholder="${cn?'回复商家…':'Reply to the store…'}" maxlength="4000"></textarea><button class="sp-btn" id="fbtSend">${cn?'发送':'Send'}</button></div>`;
+  const send=$('#fbtSend');
+  send.addEventListener('click',async()=>{ const msg=($('#fbtReply').value||'').trim(); if(!msg)return; send.disabled=true;
+    try{ await postJson('/api/retail/feedback/'+id+'/reply',{message:msg}); renderFeedbackThread(id); }
+    catch(e){ toast(cn?'发送失败':'Could not send'); send.disabled=false; } });
 }
 
 async function renderLegal(doc){
@@ -3500,6 +3471,7 @@ async function routeDispatch(){
     if(seg[0]==='voting')          return renderVoting();
     if(seg[0]==='about')           return renderAbout();
     if(seg[0]==='faq')             return renderFaq();
+    if(seg[0]==='feedback'&&seg[1])return renderFeedbackThread(seg[1]);
     if(seg[0]==='feedback')        return renderFeedback();
     if(seg[0]==='legal')           return renderLegal(seg[1]||'privacy');
     return renderHome();
@@ -4339,7 +4311,6 @@ async function renderProduct(id){
         name:pick(p.name_en,p.name_cn),price:unit(),image:thumb(p),
         optLabel:chosen.map(c=>pick(c.label_en,c.label_cn)).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier});
       toast(state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
-      openCart();
       return true;
     }
 
@@ -4431,7 +4402,6 @@ async function renderProduct(id){
           image:slImg(m)||thumb(p),size:m.size||m.variant_label||'',optLabel:'',
           ship_from_supplier:!!m.ship_from_supplier});
         toast(state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
-        openCart();
       });
     }
     $('#addBtn').addEventListener('click',()=>{
@@ -4512,22 +4482,9 @@ function ctaRoute(t){
   $('#langToggle').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;
     state.lang=b.dataset.lang;try{localStorage.setItem('shop_lang',state.lang);}catch{}
     applyLangToUI();route();});
-  // ── cart drawer ──
+  // ── cart icon → full-page Cart (#/cart) ──
   cartBadge();
   $('#cartBtn').addEventListener('click',openCart);
-  $('#cdClose').addEventListener('click',closeCart);
-  $('#cartDrawer').addEventListener('click',(e)=>{if(e.target.id==='cartDrawer')closeCart();});
-  $('#cdItems').addEventListener('click',(e)=>{const b=e.target.closest('button');if(!b)return;
-    const row=e.target.closest('.cd-row');if(!row)return;const k=row.dataset.k;const l=cartGet().find(x=>x.key===k);if(!l)return;
-    const a=b.dataset.act;
-    if(a==='inc')cartSetQty(k,l.qty+1);
-    else if(a==='dec')cartSetQty(k,l.qty-1);
-    else if(a==='rm')cartRemove(k);});
-  $('#cdCheckout').addEventListener('click',()=>{
-    if(!cartCount())return;
-    if(!state.token){closeCart();return openLogin();}
-    closeCart();location.hash='#/checkout';
-  });
 
   // ── account: header button → login modal (logged-out) or menu (logged-in) ──
   renderAcct();
