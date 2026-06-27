@@ -390,11 +390,17 @@
     .cp-prog-text b{font-family:var(--bf-bear);font-weight:400;}
     .cp-bar{margin-top:9px;height:8px;background:rgba(0,0,0,.08);}
     .cp-fill{height:100%;background:var(--lime);transition:width .3s ease;}
+    /* "N ITEMS / CLEAR ALL" row above the basket */
+    .cp-itemsbar{display:flex;align-items:baseline;justify-content:space-between;padding:18px 22px 4px;}
+    .cp-itemcount{font-family:var(--bf-toni);font-weight:600;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--olive);}
+    .cp-clear{font-family:var(--bf-toni);font-weight:600;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;text-underline-offset:2px;}
     /* product rows — full-bleed hairline separators like the mini app */
     .cp-row{display:flex;align-items:flex-start;gap:14px;padding:14px 22px;border-top:1.5px dashed rgba(0,0,0,.25);}
-    .cp-row:first-of-type{border-top:2px solid var(--ink);margin-top:12px;}
-    .cp-row .ph{width:64px;height:76px;flex:0 0 auto;background:var(--oat);border:1.5px solid var(--ink);overflow:hidden;}
+    .cp-row:first-of-type{border-top:2px solid var(--ink);margin-top:8px;}
+    .cp-row .ph{position:relative;width:64px;height:76px;flex:0 0 auto;background:var(--oat);border:1.5px solid var(--ink);overflow:visible;}
     .cp-row .ph img{width:100%;height:100%;object-fit:cover;display:block;}
+    /* remove badge — circular ink button on the top-left corner of the thumb */
+    .cp-rm{position:absolute;top:-10px;left:-10px;width:26px;height:26px;border-radius:50%;background:var(--ink);color:var(--oat);border:0;font-size:16px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;z-index:2;}
     .cp-row .info{flex:1;min-width:0;}
     .cp-row .nm{font-family:var(--bf-bear);font-size:17px;line-height:1.05;}
     .cp-row .opt{border:0;border-radius:0;padding:0;margin-bottom:0;font-size:11px;color:var(--ink);margin-top:3px;line-height:1.2;}
@@ -402,7 +408,6 @@
     .cp-qty{display:flex;align-items:center;gap:10px;margin-top:8px;}
     .cp-qty button.q{width:26px;height:26px;border:1.5px solid var(--ink);background:none;font-family:var(--bf-bear);font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink);padding:0;}
     .cp-qty .n{min-width:28px;text-align:center;font-family:var(--bf-gothic);font-size:15px;}
-    .cp-qty .del{margin-left:auto;color:var(--olive);font-size:18px;background:none;border:0;cursor:pointer;padding:4px;line-height:1;}
     .cp-row .lt{font-family:var(--bf-bear);font-size:22px;white-space:nowrap;margin-top:2px;}
     /* fixed Total + CHECK OUT bar — sits above the mobile tab bar */
     .cp-foot{position:fixed;left:0;right:0;bottom:calc(56px + env(safe-area-inset-bottom));z-index:40;max-width:560px;margin:0 auto;background:var(--oat);border-top:2px solid var(--ink);padding:14px 22px 16px;}
@@ -2773,7 +2778,10 @@ function renderCartPage(){
         ? `再差 <b>¥${remaining}</b> 即可<b>免运费</b>。`
         : `You're <b>¥${remaining}</b> away from <b>free shipping.</b>`);
   const rows=c.map(l=>`<div class="cp-row" data-k="${escAttr(l.key)}">
-    <div class="ph">${l.image?`<img src="${escAttr(l.image)}" alt="">`:''}</div>
+    <div class="ph">
+      ${l.image?`<img src="${escAttr(l.image)}" alt="">`:''}
+      <button class="cp-rm" data-act="rm" aria-label="${cn?'移除':'Remove'}">×</button>
+    </div>
     <div class="info">
       <div class="nm">${esc(l.name||'')}</div>
       ${l.optLabel?`<div class="opt">${esc(l.optLabel)}</div>`:''}
@@ -2783,11 +2791,12 @@ function renderCartPage(){
         <button class="q" data-act="dec" aria-label="${cn?'减少':'Decrease'}">−</button>
         <span class="n">${l.qty}</span>
         <button class="q" data-act="inc" aria-label="${cn?'增加':'Increase'}">+</button>
-        <button class="del" data-act="rm" aria-label="${cn?'移除':'Remove'}">×</button>
       </div>
     </div>
     <div class="lt">${money((Number(l.price)||0)*(Number(l.qty)||0))}</div>
   </div>`).join('');
+  const itemCount=c.length;
+  const itemsLabel=cn?`${itemCount} 件商品`:`${itemCount} ITEM${itemCount===1?'':'S'}`;
   v.innerHTML=`<div class="cp">
     <div class="cp-head">
       <div class="cp-kicker">${cn?'购物车':'YOUR BASKET'}</div>
@@ -2799,6 +2808,10 @@ function renderCartPage(){
     <div class="cp-prog">
       <div class="cp-prog-text">${progText}</div>
       <div class="cp-bar"><div class="cp-fill" style="width:${pct}%"></div></div>
+    </div>
+    <div class="cp-itemsbar">
+      <span class="cp-itemcount">${itemsLabel}</span>
+      <button class="cp-clear" id="cpClear">${cn?'清空':'CLEAR ALL'}</button>
     </div>
     <div id="cpItems">${rows}</div>
     <div class="cp-foot">
@@ -2815,6 +2828,11 @@ function renderCartPage(){
     if(!cartCount())return;
     if(!state.token)return openLogin();
     location.hash='#/checkout';
+  });
+  const clearBtn=$('#cpClear');
+  if(clearBtn)clearBtn.addEventListener('click',()=>{
+    if(!confirm(cn?'清空购物车？':'Clear all items from your basket?'))return;
+    cartSave([]);renderCartPage();
   });
   // Refine the bar with the customer's zone threshold (re-renders if different).
   loadZoneThreshold();
