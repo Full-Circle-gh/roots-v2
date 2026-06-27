@@ -634,6 +634,48 @@
     .mb-trc-req{font-family:var(--bf-toni);font-size:11px;letter-spacing:.08em;color:var(--olive);}
     .mb-trc-perks{display:flex;flex-direction:column;gap:4px;}
     .mb-trc-perk{font-size:13px;color:var(--ink);line-height:1.4;}
+    /* membership → leaderboard entry link */
+    .mb-lb{margin:18px 22px 0;background:var(--lime);color:var(--ink);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;border:0;width:calc(100% - 44px);cursor:pointer;font:inherit;text-align:left;}
+    .mb-lb-label{font-family:var(--bf-toni);font-weight:700;font-size:13px;letter-spacing:.12em;text-transform:uppercase;}
+    .mb-lb-arrow{font-size:18px;}
+    /* leaderboard — mirrors mini-app pages/leaderboard */
+    .lb-hero{background:var(--forest);color:var(--oat);padding:38px 22px 30px;}
+    .lb-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--lime);}
+    .lb-title{font-family:var(--bf-bear);font-size:46px;font-weight:500;line-height:1.04;margin-top:8px;}
+    .lb-sub{margin-top:12px;font-size:14px;line-height:1.5;opacity:.85;max-width:320px;}
+    .lb-meta{margin-top:16px;font-family:var(--bf-toni);font-size:11px;letter-spacing:.14em;text-transform:uppercase;opacity:.8;}
+    .lb-empty{padding:64px 22px;text-align:center;color:var(--olive);font-size:14px;line-height:1.5;}
+    .lb-podium{display:flex;align-items:flex-end;justify-content:center;gap:10px;padding:30px 22px 8px;}
+    .lb-spot{flex:1;display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0;}
+    .lb-crown{font-size:20px;color:var(--lime);margin-bottom:2px;}
+    .lb-rank{font-family:var(--bf-bear);font-size:28px;line-height:1;color:var(--ink);}
+    .lb-spot.p1 .lb-rank{color:var(--lime);-webkit-text-stroke:1px var(--ink);}
+    .lb-name{font-family:var(--bf-bear);font-size:14px;line-height:1.15;margin:5px 0 3px;color:var(--ink);width:100%;word-break:break-all;}
+    .lb-val{font-family:var(--bf-toni);font-size:10px;letter-spacing:.08em;color:var(--olive);margin-bottom:7px;}
+    .lb-bar{width:100%;background:var(--ink);border-radius:5px 5px 0 0;}
+    .lb-bar.b1{height:96px;background:var(--lime);} .lb-bar.b2{height:68px;background:rgba(26,26,23,.78);} .lb-bar.b3{height:48px;background:rgba(26,26,23,.55);}
+    .lb-list{margin:20px 22px 0;background:#FFFCF7;border:2px solid rgba(0,0,0,.12);}
+    .lb-row{display:grid;grid-template-columns:48px 1fr auto;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px dashed rgba(0,0,0,.12);}
+    .lb-row:last-child{border-bottom:none;}
+    .lb-row.me{background:rgba(204,217,0,.18);border-left:5px solid var(--lime);padding-left:11px;}
+    .lb-row-rank{font-family:var(--bf-bear);font-size:17px;color:var(--olive);}
+    .lb-row-name{font-family:var(--bf-bear);font-size:16px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .lb-row-val{font-family:var(--bf-toni);font-size:14px;letter-spacing:.06em;color:var(--ink);font-weight:500;}
+    .lb-mine{margin:20px 22px 0;background:var(--ink);color:#fff;padding:18px;}
+    .lb-mine.intop{border-left:5px solid var(--lime);padding-left:13px;}
+    .lb-mine .lb-kicker{color:var(--lime);}
+    .lb-mine-main{display:flex;align-items:baseline;justify-content:space-between;margin-top:8px;}
+    .lb-mine-num{font-family:var(--bf-bear);font-size:38px;line-height:1;}
+    .lb-mine-val{font-family:var(--bf-toni);font-size:14px;letter-spacing:.08em;opacity:.85;}
+    .lb-mine-sub{font-size:13px;opacity:.75;margin-top:6px;line-height:1.45;}
+    .lb-mine.notyet{background:#FFFCF7;color:var(--ink);border:2px solid rgba(0,0,0,.12);}
+    .lb-mine.notyet .lb-kicker{color:var(--olive);}
+    .lb-rewards{margin:20px 22px 0;background:#FFFCF7;border:2px solid rgba(0,0,0,.12);padding:14px 16px;}
+    .lb-rewards .lb-kicker{color:var(--olive);}
+    .lb-rw-row{display:flex;align-items:flex-start;gap:12px;padding:9px 0;border-bottom:1px dashed rgba(0,0,0,.12);}
+    .lb-rw-row:last-child{border-bottom:none;}
+    .lb-rw-tag{background:var(--lime);color:var(--ink);padding:3px 9px;font-family:var(--bf-toni);font-size:10px;letter-spacing:.1em;white-space:nowrap;}
+    .lb-rw-text{flex:1;font-size:13px;line-height:1.5;color:var(--ink);}
     /* about */
     .about-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:rgba(0,0,0,.12);margin:18px 22px 0;border:2px solid var(--ink);}
     .about-stat{background:var(--oat);padding:16px;}
@@ -3112,7 +3154,7 @@ function setActiveTab(seg){
   let key='home';
   if(s0==='shop'||s0==='product')key='shop';
   else if(s0==='cart'||s0==='checkout')key='cart';
-  else if(['me','orders','order','addresses','wallet','topup','coupons','invoices','favorites','membership','affiliate','notifications','voting','about','faq','feedback','legal'].includes(s0))key='me';
+  else if(['me','orders','order','addresses','wallet','topup','coupons','invoices','favorites','membership','leaderboard','affiliate','notifications','voting','about','faq','feedback','legal'].includes(s0))key='me';
   document.querySelectorAll('.tabitem').forEach(a=>a.classList.toggle('on',a.dataset.tab===key));
 }
 
@@ -3464,6 +3506,7 @@ async function renderMembership(){
     .map(t=>({key:String(t&&t.key||'').trim(),name_en:String(t&&t.name_en||'').trim(),name_cn:String(t&&t.name_cn||'').trim(),threshold:Math.max(0,Number(t&&t.threshold)||0),perks_en:Array.isArray(t&&t.perks_en)?t.perks_en:[],perks_cn:Array.isArray(t&&t.perks_cn)?t.perks_cn:[]}))
     .filter(t=>t.key).sort((a,b)=>a.threshold-b.threshold);
   if(!tiers.length)tiers=FALLBACK;
+  const lbOn=!!(state.config&&state.config.leaderboard&&state.config.leaderboard.config&&state.config.leaderboard.config.enabled);
   const spend=Number(c.lifetime_spend)||0;
   let curIdx=tiers.findIndex(t=>t.key===(c.tier_key||tiers[0].key)); if(curIdx<0)curIdx=0;
   const cur=tiers[curIdx], next=tiers[curIdx+1]||null, top=tiers[tiers.length-1];
@@ -3477,7 +3520,48 @@ async function renderMembership(){
     <div class="mb-hero"><div class="mb-kicker">${cn?'ROOTS 会员':'ROOTS CLUB'}</div><div class="mb-title">${cn?'一起成长。':'Grow with us.'}</div><div class="mb-sub">${cn?'每次下单解锁福利，向上生长。':'Earn perks on every order. Climb the tree.'}</div></div>
     <div class="mb-markers">${markers}</div>
     <div class="mb-card"><div class="mb-pc-label">${cn?'下一级':'NEXT'}: ${esc(pick((next||cur).name_en,(next||cur).name_cn))}</div><div class="mb-pc-amt">¥${spend.toFixed(0)}${next?' / ¥'+next.threshold:''}</div><div class="mb-pc-bar"><div class="mb-pc-fill" style="width:${pct}%"></div></div><div class="mb-pc-meta">${esc(meta)}</div></div>
+    ${lbOn?`<button class="mb-lb" data-go="#/leaderboard"><span class="mb-lb-label">${cn?'查看排行榜':'View leaderboard'}</span><span class="mb-lb-arrow">→</span></button>`:''}
     <div class="mb-table">${table}</div></div>`;
+}
+
+// Leaderboard — Roots Club ranking. Read-only; mirrors mini-app
+// pages/leaderboard. /api/retail/leaderboard 404s when the admin has it off.
+async function renderLeaderboard(){
+  const v=$('#view'),cn=state.lang==='cn';
+  document.title=(cn?'排行榜':'Leaderboard')+' · '+state.brand;
+  const fmtVal=(value,metric)=>{ const n=Number(value)||0;
+    if(metric==='points_balance')return n.toLocaleString()+(cn?' 分':' pts');
+    if(metric==='orders_count')return n.toLocaleString()+(cn?' 单':' orders');
+    return '¥'+n.toFixed(0); };
+  const metricLabel=(metric,period)=>{ if(metric==='points_balance')return cn?'按积分余额':'By points balance';
+    if(metric==='orders_count')return cn?'按已付订单数':'By paid orders';
+    return (period&&period!=='all')?(cn?'按消费':'By spend'):(cn?'按累计消费':'By lifetime spend'); };
+  const periodLabel=(p)=>({year:cn?'近 12 个月':'Last 12 months',month:cn?'近 30 天':'Last 30 days',week:cn?'近 7 天':'Last 7 days'})[p]||(cn?'全部时间':'All time');
+  v.innerHTML=`<div class="sp">${spBack()}<div class="lb-empty">${cn?'加载中…':'Loading leaderboard…'}</div></div>`;
+  const box=v.querySelector('.sp');
+  let myId=null; try{ if(state.token){ const cust=await api('/api/retail/customer'); myId=cust&&cust.id; } }catch(e){}
+  let data; try{ data=await api('/api/retail/leaderboard'); }
+  catch(e){ box.innerHTML=spBack()+`<div class="lb-empty">${cn?'排行榜暂时关闭,稍后再来。':'The leaderboard is taking a season off. Come back later.'}</div>`; return; }
+  const cfg=(data&&data.config)||{}, metric=cfg.metric||'lifetime_spend';
+  const all=((data&&data.entries)||[]).map(e=>({...e,isMe:e.rank===(data.me&&data.me.rank),valueDisplay:fmtVal(e.value,metric)}));
+  const top=all.slice(0,3), rest=all.slice(3), me=(data&&data.me)||{rank:null,value:0,in_top_n:false};
+  const rewards=[];
+  if(cfg.reward_top1_en||cfg.reward_top1_cn)rewards.push({tag:'TOP 1',text:pick(cfg.reward_top1_en,cfg.reward_top1_cn)});
+  if(cfg.reward_top3_en||cfg.reward_top3_cn)rewards.push({tag:'TOP 3',text:pick(cfg.reward_top3_en,cfg.reward_top3_cn)});
+  if(cfg.reward_top10_en||cfg.reward_top10_cn)rewards.push({tag:'TOP 10',text:pick(cfg.reward_top10_en,cfg.reward_top10_cn)});
+  const kicker=pick(cfg.kicker_en,cfg.kicker_cn)||(cn?'排行榜':'LEADERBOARD');
+  const title=pick(cfg.title_en,cfg.title_cn)||(cn?'攀登排行榜':'Climb the ranks.');
+  const sub=pick(cfg.subhead_en,cfg.subhead_cn);
+  const hero=`<div class="lb-hero"><div class="lb-kicker">${esc(kicker)}</div><div class="lb-title">${esc(title)}</div>${sub?`<div class="lb-sub">${esc(sub)}</div>`:''}<div class="lb-meta">${esc(metricLabel(metric,cfg.period)+' · '+periodLabel(cfg.period))}</div></div>`;
+  if(!all.length){ box.innerHTML=spBack()+hero+`<div class="lb-empty">${cn?'还没有上榜会员,快来成为第一名。':'No qualifying members yet. Be the first to climb.'}</div>`; return; }
+  const spot=(e,pos)=>e?`<div class="lb-spot p${pos}">${pos===1?'<div class="lb-crown">★</div>':''}<div class="lb-rank">${pos}</div><div class="lb-name">${esc(e.name||'')}</div><div class="lb-val">${esc(e.valueDisplay)}</div><div class="lb-bar b${pos}"></div></div>`:'';
+  const podium=top.length>=3?`<div class="lb-podium">${spot(top[1],2)}${spot(top[0],1)}${spot(top[2],3)}</div>`:'';
+  const listTop=top.length<3?top:rest;
+  const list=listTop.length?`<div class="lb-list">${listTop.map(e=>`<div class="lb-row ${e.isMe?'me':''}"><div class="lb-row-rank">#${e.rank}</div><div class="lb-row-name">${esc(e.name||'')}</div><div class="lb-row-val">${esc(e.valueDisplay)}</div></div>`).join('')}</div>`:'';
+  const mine=me.rank?`<div class="lb-mine ${me.in_top_n?'intop':''}"><div class="lb-kicker">${cn?'您的排名':'YOUR RANK'}</div><div class="lb-mine-main"><div class="lb-mine-num">#${me.rank}</div><div class="lb-mine-val">${esc(fmtVal(me.value,metric))}</div></div></div>`
+    :`<div class="lb-mine notyet"><div class="lb-kicker">${cn?'尚未上榜':'NOT RANKED YET'}</div><div class="lb-mine-sub">${cn?'完成一笔已付款订单即可开始上榜。':'Place a paid order to start climbing the leaderboard.'}</div></div>`;
+  const rw=rewards.length?`<div class="lb-rewards"><div class="lb-kicker">${cn?'奖励':'REWARDS'}</div>${rewards.map(r=>`<div class="lb-rw-row"><div class="lb-rw-tag">${esc(r.tag)}</div><div class="lb-rw-text">${esc(r.text)}</div></div>`).join('')}</div>`:'';
+  box.innerHTML=spBack()+hero+podium+list+(state.token?mine:'')+rw+'<div style="height:24px"></div>';
 }
 
 async function renderAffiliate(){
@@ -3927,6 +4011,7 @@ async function routeDispatch(){
     if(seg[0]==='invoices')        return renderInvoices();
     if(seg[0]==='favorites')       return renderFavorites();
     if(seg[0]==='membership')      return renderMembership();
+    if(seg[0]==='leaderboard')     return renderLeaderboard();
     if(seg[0]==='affiliate')       return renderAffiliate();
     if(seg[0]==='notifications')   return renderNotifications();
     if(seg[0]==='voting')          return renderVoting();
