@@ -133,7 +133,14 @@
     if (el) el.classList.toggle('alert', !!on);
   }
 
-  function mtStoreName(code) { return (_stores.find(s => s.code === code) || {}).name || code; }
+  // English store labels keyed by code — the store record only carries a Chinese
+  // `name` (天河店 / 越秀店), so in the English log we derive a Latin name instead
+  // of falling through to the Chinese one.
+  const MT_STORE_EN = { tianhe: 'Tianhe', yuexiu: 'Yuexiu' };
+  function mtStoreName(code, cn) {
+    if (cn === false && MT_STORE_EN[code]) return MT_STORE_EN[code];
+    return (_stores.find(s => s.code === code) || {}).name || code;
+  }
 
   // Turn one raw sync-log row into a plain, human-readable line.
   // detail is {name_en, name_cn, name, sku, qty, bundle}; we never print raw JSON.
@@ -149,7 +156,7 @@
     try { d = l.detail ? JSON.parse(l.detail) : {}; } catch { d = {}; }
     const cn = document.documentElement.dataset.uiLang === 'cn';
     const glyph = l.status === 'ok' ? '✓' : l.status === 'error' ? '✗' : '·';
-    const store = mtStoreName(l.store_code);
+    const store = mtStoreName(l.store_code, cn);
     const time = mtLogTime(l.created_at);
     // Language-aware name; fall back across fields for older rows with a single `name`.
     const nm = cn ? (d.name_cn || d.name_en || d.name)
