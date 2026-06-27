@@ -996,6 +996,7 @@
   .db-feed-badge svg { width: 10px; height: 10px; }
   .db-feed-badge.db-fb-first { color: var(--brass); background: color-mix(in srgb, var(--brass) 14%, transparent); }
   .db-feed-badge.db-fb-big   { color: var(--success); background: color-mix(in srgb, var(--success) 14%, transparent); }
+  .db-feed-sku { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
   .db-feed-empty { font-size: 12px; color: var(--text-3); padding: 12px 8px; text-align: center; }
   /* New row eases in from the top with a soft highlight that decays — the
      "something just happened" signal, only on rows the latest poll added.
