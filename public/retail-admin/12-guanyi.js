@@ -38,6 +38,30 @@
     }, 12000);
   }
 
+  // Turn one raw sync-log row into a plain, human-readable line.
+  // detail is {name, sku, target, was, delta, skipped}; never print raw JSON.
+  function gyFmtLogLine(l) {
+    let d = {};
+    try { d = l.detail ? JSON.parse(l.detail) : {}; } catch { d = {}; }
+    const noChange = l.status === 'ok' && d.skipped;
+    const glyph = l.status === 'error' ? '✗'
+      : l.status === 'skipped' ? '⊘'
+      : noChange ? '–' : '✓';
+    const name = d.name || (d.sku ? '' : '(no name · 无名称)');
+    const sku = d.sku ? ' · ' + d.sku : '';
+    const who = (name + sku).trim();
+    let change = '';
+    if (l.status === 'ok') {
+      change = noChange
+        ? 'no change · 无变化 (' + (d.target != null ? d.target : '?') + ')'
+        : (d.was != null ? d.was + ' → ' : '') + (d.target != null ? d.target : '?')
+          + (d.delta != null ? ' (' + (d.delta > 0 ? '+' : '') + d.delta + ')' : '');
+    }
+    const time = (l.created_at || '').replace('T', ' ').slice(0, 19);
+    const reason = l.error_msg ? '  — ' + l.error_msg : '';
+    return `${time}  ${glyph} ${l.store_code}  ${who}  ${change}${reason}`.replace(/\s+$/, '');
+  }
+
   // ── Status KPIs ─────────────────────────────────────────────────────────────
   window.gyLoadStatus = async function () {
     try {
@@ -49,10 +73,8 @@
       setText('gy-kpi-queue-sub', (r.queueError ? `${r.queueError} error · 出错` : 'pending · 待推送'));
       const log = document.getElementById('gy-log');
       if (log) {
-        log.textContent = (r.recentLogs || []).map(l =>
-          `${(l.created_at || '').replace('T', ' ').slice(0, 19)}  [${l.store_code}] ${l.event_type} ${l.status}` +
-          (l.detail ? '  ' + l.detail : '') + (l.error_msg ? '  ⚠ ' + l.error_msg : '')
-        ).join('\n') || 'No activity yet · 暂无记录';
+        log.textContent = (r.recentLogs || []).map(gyFmtLogLine).join('\n')
+          || 'No activity yet · 暂无记录';
       }
     } catch (e) { console.warn('[guanyi] status', e); }
   };

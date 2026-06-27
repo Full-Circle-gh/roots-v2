@@ -131,6 +131,20 @@
     if (el) el.classList.toggle('alert', !!on);
   }
 
+  // Turn one raw sync-log row into a plain, human-readable line.
+  // detail is {name, sku, qty, bundle}; we never print raw JSON.
+  function mtFmtLogLine(l) {
+    let d = {};
+    try { d = l.detail ? JSON.parse(l.detail) : {}; } catch { d = {}; }
+    const glyph = l.status === 'ok' ? '✓' : l.status === 'error' ? '✗' : '·';
+    const name = d.name || (d.sku ? '' : '(no name · 无名称)');
+    const sku = d.sku ? ' · ' + d.sku : '';
+    const who = [name + sku, d.bundle ? '(bundle · 套餐)' : ''].filter(Boolean).join(' ');
+    let change = (d.qty != null) ? '→ ' + d.qty + ' in stock · 库存 ' + d.qty : '';
+    const reason = l.error_msg ? '  — ' + l.error_msg : '';
+    return `${mtLogTime(l.created_at)}  ${glyph} ${l.store_code}  ${who}  ${change}${reason}`.replace(/\s+$/, '');
+  }
+
   window.mtLoadStatus = async function () {
     const log = document.getElementById('mt-log');
     try {
@@ -164,7 +178,7 @@
 
       if (log) {
         log.textContent = s.recentLogs.length
-          ? s.recentLogs.map(l => `[${mtLogTime(l.created_at)}] ${l.store_code} ${l.event_type} ${l.status}${l.detail ? ' ' + l.detail : ''}${l.error_msg ? ' ERR:' + l.error_msg : ''}`).join('\n')
+          ? s.recentLogs.map(mtFmtLogLine).join('\n')
           : 'No sync events yet.';
       }
     } catch (e) {

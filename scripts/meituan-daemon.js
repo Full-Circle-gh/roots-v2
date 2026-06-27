@@ -382,7 +382,8 @@ async function processStockQueue() {
               .run(newQty, row.retail_store_id, row.product_id);
           }
           logSync(storeCode, 'stock_push', 'ok',
-            { name: isBundle ? row.meituan_name : row.name_en, qty: newQty, bundle: isBundle });
+            { name: isBundle ? row.meituan_name : (row.name_en || row.name_cn),
+              sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle });
         } else if (challenged) {
           // Deferred by risk-control, not a real failure — requeue and refund the
           // attempt so it retries once the cool-down passes (no burned attempts).
@@ -392,7 +393,9 @@ async function processStockQueue() {
           db.prepare(`UPDATE meituan_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error='browser update failed' WHERE id=?`)
             .run(row.id);
           logSync(storeCode, 'stock_push', 'error',
-            { name: isBundle ? row.meituan_name : row.name_en, qty: newQty, bundle: isBundle });
+            { name: isBundle ? row.meituan_name : (row.name_en || row.name_cn),
+              sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle },
+            'browser update failed · 更新失败');
         }
       }
     } catch (err) {
