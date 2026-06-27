@@ -9125,6 +9125,64 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
 // heatmap, cohorts, checkout abandonment, visits) stay on placed_at — they
 // measure when demand ARRIVES, not when cash settles.
 // ─────────────────────────────────────────────────────────────────────────
+// gzgrocery wholesale takings for a date range — the inferred "they owe you"
+// revenue that never touches retail_orders. Source = live order-read sales
+// (retail_stock_ledger reason=gzgrocery_order, units=-delta; reverses subtract)
+// UNIONed with the legacy drift pickups (guanyi_pickup_log) for pre-order-read
+// history. Revenue = units × (gz price → retail → sell_price). Returns
+// { revenue, orders, byBucket } bucketed by day (or hour, opts.hourly). Folds
+// into REVENUE only — never the order/customer counts (wholesale, no storefront
+// order). No-op for a tenant without these tables.
+function guanyiPickupSales(db, from, to, opts) {
+  const out = { revenue: 0, orders: 0, byBucket: {} };
+  try {
+    const TZ = '+8 hours';
+    const hourly = !!(opts && opts.hourly);
+    const bkL = hourly ? `strftime('%H', l.created_at, '${TZ}')`  : `date(l.created_at, '${TZ}')`;
+    const bkP = hourly ? `strftime('%H', pl.created_at, '${TZ}')` : `date(pl.created_at, '${TZ}')`;
+    const hasPricing = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_product_pricing'`).get();
+    const owed = hasPricing
+      ? 'COALESCE(pp.excel_gz_price, pp.excel_retail, sp.sell_price, 0)'
+      : 'COALESCE(sp.sell_price, 0)';
+    const all = [];
+    // Live order-read sales (authoritative).
+    all.push(...db.prepare(`
+      SELECT ${bkL} AS bucket, -l.delta AS units, ${owed} AS owed
+        FROM retail_stock_ledger l
+        LEFT JOIN store_products sp ON sp.id = l.product_id
+        ${hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = l.product_id' : ''}
+       WHERE l.reason IN ('gzgrocery_order','gzgrocery_order_reverse')
+         AND date(l.created_at, '${TZ}') BETWEEN ? AND ?
+    `).all(from, to));
+    // Legacy drift pickups (pre-order-read history).
+    if (db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get()) {
+      all.push(...db.prepare(`
+        SELECT ${bkP} AS bucket,
+               CASE WHEN pl.action='drift_up' THEN -ABS(COALESCE(pl.drift,0)) ELSE COALESCE(pl.inferred_pickup,0) END AS units,
+               ${owed} AS owed
+          FROM guanyi_pickup_log pl
+          LEFT JOIN store_products sp ON sp.id = pl.product_id
+          ${hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id' : ''}
+         WHERE (pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied'))
+           AND date(pl.created_at, '${TZ}') BETWEEN ? AND ?
+      `).all(from, to));
+    }
+    for (const r of all) {
+      const units = Number(r.units) || 0;
+      if (!units) continue;
+      const rev = units * (Number(r.owed) || 0);
+      out.revenue += rev;
+      if (units > 0) out.orders += 1;
+      const b = out.byBucket[r.bucket] || { revenue: 0, orders: 0 };
+      b.revenue += rev;
+      if (units > 0) b.orders += 1;
+      out.byBucket[r.bucket] = b;
+    }
+    out.revenue = +out.revenue.toFixed(2);
+  } catch (e) { /* tenant without the gzgrocery ledger → zeros */ }
+  return out;
+}
+
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const TZ    = '+8 hours';
   const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
@@ -9160,6 +9218,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const kpi     = tdb().prepare(kpiSql).get(from, to);
   const kpiPrev = tdb().prepare(kpiSql).get(prevFrom, prevTo);
 
+  // ── Fold gzgrocery wholesale REVENUE into the headline + trend + baseline.
+  // gzgrocery is a wholesale pickup channel with no storefront order/customer,
+  // so by design it lifts REVENUE only — never the order count, AOV, or any
+  // customer metric (those stay storefront-only).
+  const gySales     = guanyiPickupSales(tdb(), from, to, { hourly });
+  const gySalesPrev = guanyiPickupSales(tdb(), prevFrom, prevTo, { hourly: false });
+  kpi.revenue     = +(Number(kpi.revenue || 0) + gySales.revenue).toFixed(2);
+  kpiPrev.revenue = +(Number(kpiPrev.revenue || 0) + gySalesPrev.revenue).toFixed(2);
+
   const visitsSql = `
     SELECT COUNT(*) AS visits,
            COUNT(DISTINCT session_id) AS sessions,
@@ -9184,6 +9251,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     const baseTo   = prevTo;   // the day before `from`
     const bk   = tdb().prepare(kpiSql).get(baseFrom, baseTo);
     const bnew = tdb().prepare(newCustSql).get(baseFrom, baseTo).n;
+    // Blend gzgrocery REVENUE into the baseline too, so "Today vs a typical day"
+    // compares like with like (today's revenue already includes gzgrocery above).
+    // Orders stay storefront-only on both sides.
+    const gyBase = guanyiPickupSales(tdb(), baseFrom, baseTo, { hourly: false });
+    bk.revenue = Number(bk.revenue || 0) + gyBase.revenue;
     const fo = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}`).get().d;
     const fc = tdb().prepare(`SELECT MIN(date(created_at, '${TZ}')) AS d FROM retail_customers`).get().d;
     const firstD = [fo, fc].filter(Boolean).sort()[0] || null;
@@ -9274,6 +9346,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
         sessions: vm[d]?.sessions || 0,
       });
     }
+  }
+
+  // Fold gzgrocery pickup REVENUE into each trend bucket so the revenue curve
+  // reflects blended daily takings. Order count stays storefront-only. Hourly
+  // trend buckets are 'HH:00'; gySales buckets are 'HH' — match on the hour.
+  for (const t of trend) {
+    const key = hourly ? String(t.bucket).slice(0, 2) : t.bucket;
+    const g = gySales.byBucket[key];
+    if (g) { t.revenue = +(Number(t.revenue || 0) + g.revenue).toFixed(2); }
   }
 
   // ── Payment-method split ──
@@ -9685,6 +9766,8 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     const paid = tdb().prepare(`
       SELECT o.id, o.order_no, o.total, o.paid_at, o.customer_id,
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
+             (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
+               WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus,
              (o.customer_id IS NOT NULL AND NOT EXISTS (
                 SELECT 1 FROM retail_orders o2
                  WHERE o2.customer_id = o.customer_id
@@ -9701,7 +9784,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       ts: parseTs(r.paid_at),
       ref_type: 'order', ref_id: r.id,
       payload: {
-        order_no: r.order_no, total: r.total, buyer: r.buyer,
+        order_no: r.order_no, total: r.total, buyer: r.buyer, skus: r.skus || '',
         first_order: !!r.first_order,
         big_order: Number(r.total || 0) >= BIG_ORDER_YUAN,
       },
@@ -9712,7 +9795,9 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // its dispatch and delivery rows.
     const dispatched = tdb().prepare(`
       SELECT o.id, o.order_no, o.dispatched_at,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
+             (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
+               WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.dispatched_at IS NOT NULL AND o.dispatched_at >= ?
@@ -9722,12 +9807,14 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'order_dispatched',
       ts: parseTs(r.dispatched_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, buyer: r.buyer },
+      payload: { order_no: r.order_no, buyer: r.buyer, skus: r.skus || '' },
     });
 
     const delivered = tdb().prepare(`
       SELECT o.id, o.order_no, o.delivered_at,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
+             (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
+               WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.delivered_at IS NOT NULL AND o.delivered_at >= ?
@@ -9737,7 +9824,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       type: 'order_delivered',
       ts: parseTs(r.delivered_at),
       ref_type: 'order', ref_id: r.id,
-      payload: { order_no: r.order_no, buyer: r.buyer },
+      payload: { order_no: r.order_no, buyer: r.buyer, skus: r.skus || '' },
     });
 
     // Cancelled orders — both the manual "Cancel" action and the auto-cancel
@@ -9746,7 +9833,9 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
     // payment, or cancelled by staff) simply vanished from the feed.
     const cancelled = tdb().prepare(`
       SELECT o.id, o.order_no, o.total, o.cancelled_at, o.cancelled_reason,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
+             (SELECT GROUP_CONCAT(DISTINCT oi.sku) FROM retail_order_items oi
+               WHERE oi.order_id = o.id AND COALESCE(oi.sku, '') <> '') AS skus
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.cancelled_at IS NOT NULL AND o.cancelled_at >= ?
@@ -9757,7 +9846,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
       ts: parseTs(r.cancelled_at),
       ref_type: 'order', ref_id: r.id,
       payload: {
-        order_no: r.order_no, total: r.total, buyer: r.buyer,
+        order_no: r.order_no, total: r.total, buyer: r.buyer, skus: r.skus || '',
         reason: r.cancelled_reason,
       },
     });
@@ -9882,6 +9971,53 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 
     // (Out-of-stock is intentionally omitted here too — see the stock NOTE
     // above. It lives as live state in the "Low stock" tile + alerts page.)
+
+    // gzgrocery wholesale sales — inferred "orders" that never touch
+    // retail_orders. Surface each as a feed row so the dashboard reflects this
+    // channel like the gzgrocery billing tab does. Source = live order-read
+    // ledger (reason=gzgrocery_order; reverses = returns) + legacy drift
+    // pickups, with the SAME pricing fallback as guanyiPickupSales so feed +
+    // revenue agree. No-op for tenants without these tables.
+    try {
+      const hasPricing = !!tdb().prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_product_pricing'`).get();
+      const owedL = hasPricing ? 'COALESCE(pp.excel_gz_price, pp.excel_retail, sp.sell_price, 0)' : 'COALESCE(sp.sell_price, 0)';
+      const picks = [];
+      picks.push(...tdb().prepare(`
+        SELECT l.id, l.product_id, l.created_at, -l.delta AS units,
+               sp.name_cn, sp.name_en, sp.sku, ${owedL} AS unit_owed
+          FROM retail_stock_ledger l
+          LEFT JOIN store_products sp ON sp.id = l.product_id
+          ${hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = l.product_id' : ''}
+         WHERE l.reason IN ('gzgrocery_order','gzgrocery_order_reverse') AND l.created_at >= ?
+         ORDER BY l.created_at DESC LIMIT ?
+      `).all(sinceIso, limit));
+      if (tdb().prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_pickup_log'`).get()) {
+        picks.push(...tdb().prepare(`
+          SELECT pl.id, pl.product_id, pl.created_at,
+                 CASE WHEN pl.action='drift_up' THEN -ABS(COALESCE(pl.drift,0)) ELSE COALESCE(pl.inferred_pickup,0) END AS units,
+                 sp.name_cn, sp.name_en, sp.sku, ${owedL} AS unit_owed
+            FROM guanyi_pickup_log pl
+            LEFT JOIN store_products sp ON sp.id = pl.product_id
+            ${hasPricing ? 'LEFT JOIN guanyi_product_pricing pp ON pp.product_id = pl.product_id' : ''}
+           WHERE (pl.action IN ('decremented','drift_up') OR (pl.action='capped' AND pl.resolution='applied'))
+             AND pl.created_at >= ?
+           ORDER BY pl.created_at DESC LIMIT ?
+        `).all(sinceIso, limit));
+      }
+      for (const r of picks) {
+        const units = Number(r.units) || 0;
+        if (!units) continue;
+        events.push({
+          type: 'gzgrocery_pickup',
+          ts: parseTs(r.created_at),
+          ref_type: 'guanyi', ref_id: r.product_id,
+          payload: {
+            name_cn: r.name_cn || '', name_en: r.name_en || '', sku: r.sku || '',
+            units, owed: +(units * (r.unit_owed || 0)).toFixed(2), is_return: units < 0,
+          },
+        });
+      }
+    } catch (e) { /* tenant without the gzgrocery ledger → no rows */ }
   } catch (e) {
     console.error('[dashboard/activity]', e.message);
   }
