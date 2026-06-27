@@ -622,7 +622,9 @@ Page({
       heroIndex: 0,
       aspectRatio: p.image_aspect ? String(p.image_aspect) : '',
       name: lang.pick(p.name_en, p.name_cn, L),
-      subtitle: lang.pick(p.name_cn, p.name_en, L === 'en' ? 'cn' : 'en'),
+      // Single live language: English page shows English only (no CN subtitle);
+      // CN page keeps the EN name as a subtitle.
+      subtitle: L === 'en' ? '' : lang.pick(p.name_cn, p.name_en, 'en'),
       priceN: v,
       price: v > 0 ? '¥' + v.toFixed(2) : '—',
       isFlash,
