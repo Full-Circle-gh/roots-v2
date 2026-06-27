@@ -108,9 +108,10 @@
       // Try to guess 天河 / 越秀 by code or name
       _storeA = _stores.find(s => s.code === 'tianhe' || s.name?.includes('天河')) || _stores[0] || null;
       _storeB = _stores.find(s => s.code === 'yuexiu' || s.name?.includes('越秀')) || _stores[1] || null;
-      // Update column headers
-      if (_storeA) document.getElementById('mt-th-store-0').textContent = (_storeA.name || '天河') + ' · Meituan name';
-      if (_storeB) document.getElementById('mt-th-store-1').textContent = (_storeB.name || '越秀') + ' · Meituan name';
+      // Update column headers — 天河 is the editable 外卖 channel, 越秀 the
+      // read-only 闪购 channel (auto-mapped by 货号 via the shangou daemon).
+      if (_storeA) document.getElementById('mt-th-store-0').textContent = (_storeA.name || '天河') + ' · 美团外卖';
+      if (_storeB) document.getElementById('mt-th-store-1').textContent = (_storeB.name || '越秀') + ' · 美团闪购';
     } catch (e) {
       console.warn('[meituan] loadStores error', e);
     }
@@ -253,8 +254,22 @@
       const mapA = storeA ? (p.stores[storeA.code] || {}) : {};
       const mapB = storeB ? (p.stores[storeB.code] || {}) : {};
       const anyMapped = mapA.meituan_name || mapB.meituan_name;
-      const syncA = mapA.sync_enabled !== 0;
-      const syncB = mapB.sync_enabled !== 0;
+      // Only 天河's 外卖 mapping is toggled here; 越秀 闪购 is auto-managed.
+      const syncA = !!mapA.meituan_name && mapA.sync_enabled !== 0;
+
+      // 越秀 · 美团闪购 — read-only. The shangou daemon maps it by 货号, so we
+      // never present an editable field that the auto-seed would overwrite; we
+      // just report whether it's on 闪购 and when it last pushed.
+      let colB;
+      if (!storeB) {
+        colB = '<span class="muted">—</span>';
+      } else if (mapB.meituan_name) {
+        const on = mapB.sync_enabled !== 0;
+        colB = `<div style="font-size:12px;line-height:1.35">${esc(mapB.meituan_name)}</div>
+          <div class="muted" style="font-size:10px;margin-top:2px">${on ? '✓ 自动 · auto by 货号' : '已关闭 · sync off'}${mapB.last_pushed_at ? ` · ${mapB.last_pushed_qty} ${fmtAgo(mapB.last_pushed_at)}` : ''}</div>`;
+      } else {
+        colB = '<span class="muted" style="font-size:11px">未在闪购 · not on 闪购</span>';
+      }
 
       return `<tr data-pid="${p.id}" class="mt-product-row${anyMapped ? '' : ' mt-unmapped'}">
         <td>
@@ -264,7 +279,7 @@
           ${storeA ? `<input type="text"
             class="form-control mt-name-input"
             style="font-size:12px"
-            placeholder="Meituan 商品名 (天河)"
+            placeholder="美团外卖商品名 (天河)"
             value="${esc(mapA.meituan_name || '')}"
             data-pid="${p.id}"
             data-store-id="${storeA.id}"
@@ -273,22 +288,10 @@
             onkeydown="if(event.key==='Enter')this.blur()">
           ${mapA.last_pushed_at ? `<div class="muted" style="font-size:10px;margin-top:2px">Last: ${mapA.last_pushed_qty} · ${fmtAgo(mapA.last_pushed_at)}</div>` : ''}` : '<span class="muted">—</span>'}
         </td>
-        <td>
-          ${storeB ? `<input type="text"
-            class="form-control mt-name-input"
-            style="font-size:12px"
-            placeholder="Meituan 商品名 (越秀)"
-            value="${esc(mapB.meituan_name || '')}"
-            data-pid="${p.id}"
-            data-store-id="${storeB.id}"
-            data-store-code="${storeB.code}"
-            onblur="mtSaveMap(this)"
-            onkeydown="if(event.key==='Enter')this.blur()">
-          ${mapB.last_pushed_at ? `<div class="muted" style="font-size:10px;margin-top:2px">Last: ${mapB.last_pushed_qty} · ${fmtAgo(mapB.last_pushed_at)}</div>` : ''}` : '<span class="muted">—</span>'}
-        </td>
+        <td>${colB}</td>
         <td style="text-align:center">
-          ${anyMapped ? `<label class="toggle-label" title="Enable/disable sync">
-            <input type="checkbox" ${(syncA || syncB) ? 'checked' : ''} data-pid="${p.id}" onchange="mtToggleSync(this)">
+          ${mapA.meituan_name ? `<label class="toggle-label" title="天河 外卖 sync on/off · 天河外卖同步开关">
+            <input type="checkbox" ${syncA ? 'checked' : ''} data-pid="${p.id}" onchange="mtToggleSync(this)">
           </label>` : '<span class="muted" style="font-size:11px">—</span>'}
         </td>
       </tr>`;
@@ -308,12 +311,11 @@
     return v ? `${base}（${v}）` : base;
   }
 
-  // Fill every EMPTY Meituan-name field (both districts) with the suggested name.
+  // Fill every EMPTY 天河 外卖 Meituan-name field with the suggested name.
   // Never clobbers a value the operator already entered. Saves straight through
   // the map API, then re-renders.
   window.mtAutofill = async function () {
-    const stores = [_storeA, _storeB]
-      .filter((s, i, arr) => s && arr.findIndex(x => x && x.id === s.id) === i);
+    const stores = mtOutletStores();   // 天河 外卖 only — 越秀 闪购 is auto by 货号
     if (!stores.length) { toast('No stores detected to map.', 'error'); return; }
 
     const targets = [];
@@ -332,8 +334,9 @@
       return;
     }
     if (!confirm(
-      `Auto-fill ${targets.length} empty Meituan name field(s) using each product's Chinese name `
-      + `(variant size appended where needed), for both districts?\n\n`
+      `Auto-fill ${targets.length} empty 天河 外卖 Meituan name field(s) using each product's Chinese name `
+      + `(variant size appended where needed)?\n\n`
+      + `越秀 闪购 is auto-mapped by 货号 and left untouched. `
       + `Existing entries are left untouched, and you can edit any field afterwards.`
     )) return;
 
@@ -370,7 +373,7 @@
   }
 
   window.mtFetchListings = async function () {
-    const stores = mtUniqueStores();
+    const stores = mtOutletStores();   // fill 天河 外卖 only; 越秀 is on 闪购
     if (!stores.length) { toast('No stores detected.', 'error'); return; }
     if (!confirm(
       `Ask the sync daemon to read the live product names from your Meituan backend(s)?\n\n`
@@ -612,19 +615,24 @@
   // Wipe every saved Meituan name across all stores (empty name → the map API
   // deletes the row). Use before re-filling from scratch.
   window.mtClearAll = async function () {
+    // 天河 外卖 mappings only. 越秀 闪购 is auto-mapped by 货号 — clearing it here
+    // would silently break 闪购 stock sync, so we never touch it.
+    const outletCodes = new Set(mtOutletStores().map(s => s.code));
     const targets = [];
     for (const p of _products) {
       for (const [code, m] of Object.entries(p.stores || {})) {
         if (!m || !m.meituan_name) continue;
+        if (!outletCodes.has(code)) continue;   // skip 越秀 闪购
         const store = _stores.find(s => s.code === code);
         if (!store) continue;
         targets.push({ p, store, code });
       }
     }
-    if (!targets.length) { toast('Nothing to clear — no names are set.'); return; }
+    if (!targets.length) { toast('Nothing to clear — no 天河 外卖 names are set.'); return; }
     if (!confirm(
-      `Clear ALL ${targets.length} Meituan name mapping(s) across every store?\n\n`
-      + `This deletes the mappings (you can re-fill afterwards). Continue?`
+      `Clear ALL ${targets.length} 天河 外卖 Meituan name mapping(s)?\n\n`
+      + `越秀 闪购 (auto by 货号) is left untouched. `
+      + `This deletes the 天河 mappings (you can re-fill afterwards). Continue?`
     )) return;
 
     const btn = document.getElementById('mt-clear-btn');
@@ -659,7 +667,8 @@
   // Meituan content iframe.
   window.mtOpenPaste = function () {
     if (document.getElementById('mt-paste-overlay')) return;
-    const opts = _stores.map(s =>
+    // Paste targets 天河 外卖 only — 越秀 闪购 maps itself by 货号.
+    const opts = mtOutletStores().map(s =>
       `<option value="${esc(s.code)}" data-id="${s.id}">${esc(s.name || s.code)}</option>`
     ).join('');
     const ov = document.createElement('div');
@@ -752,10 +761,13 @@
       if (row) {
         const anyMapped = Object.values(product?.stores || {}).some(m => m.meituan_name);
         row.classList.toggle('mt-unmapped', !anyMapped);
+        // The Sync toggle governs only 天河 外卖 (this is the 天河 input), so it
+        // shows whenever 天河 has a name — independent of 越秀 闪购.
+        const hasA = !!(product?.stores?.[storeCode]?.meituan_name);
         const syncTd = row.querySelector('td:last-child');
         if (syncTd) {
-          syncTd.innerHTML = anyMapped
-            ? `<label class="toggle-label"><input type="checkbox" checked data-pid="${pid}" onchange="mtToggleSync(this)"></label>`
+          syncTd.innerHTML = hasA
+            ? `<label class="toggle-label" title="天河 外卖 sync on/off · 天河外卖同步开关"><input type="checkbox" checked data-pid="${pid}" onchange="mtToggleSync(this)"></label>`
             : '<span class="muted" style="font-size:11px">—</span>';
         }
       }
@@ -769,24 +781,29 @@
   window.mtToggleSync = async function (checkbox) {
     const pid     = checkbox.dataset.pid;
     const product = _products.find(p => p.id == pid);
-    if (!product) return;
-    // Toggle sync_enabled for all stores this product is mapped to
-    for (const [code, map] of Object.entries(product.stores || {})) {
-      if (!map.meituan_name) continue;
-      const store = _stores.find(s => s.code === code);
-      if (!store) continue;
-      try {
-        await api(`/api/retail-admin/meituan/products/${pid}/map`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: store.id, storeCode: code, meituanName: map.meituan_name, syncEnabled: checkbox.checked }),
-        });
-        map.sync_enabled = checkbox.checked ? 1 : 0;
-      } catch (e) {
-        toast('Toggle failed: ' + e.message, 'error');
-      }
+    if (!product || !_storeA) return;
+    // This toggle governs only 天河 外卖. 越秀 闪购 is auto-managed by 货号 and
+    // never touched from here.
+    const map = product.stores?.[_storeA.code];
+    if (!map || !map.meituan_name) return;
+    try {
+      await api(`/api/retail-admin/meituan/products/${pid}/map`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: _storeA.id, storeCode: _storeA.code, meituanName: map.meituan_name, syncEnabled: checkbox.checked }),
+      });
+      map.sync_enabled = checkbox.checked ? 1 : 0;
+    } catch (e) {
+      toast('Toggle failed: ' + e.message, 'error');
     }
   };
+
+  // The editable 外卖 channel is 天河 (storeA). 越秀 is on 美团闪购 and maps
+  // itself by 货号 (shangou daemon) — so manual fill/clear/paste tools operate
+  // on 天河 only and never overwrite the 闪购 auto-mapping.
+  function mtOutletStores() {
+    return _storeA ? [_storeA] : [];
+  }
 
   // ── Filter ──────────────────────────────────────────────────────────────────
   window.mtFilterProducts = function () {

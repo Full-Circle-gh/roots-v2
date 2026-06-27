@@ -6486,9 +6486,13 @@
     <h2>美团同步 · Meituan Sync</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
       Map your products to Meituan listings. Stock changes auto-push every 10 s, and orders pull back every 60 s.
+      <br><b>天河</b> is on Meituan <b>外卖</b> — you map its listing names here.
+      <b>越秀</b> moved to Meituan <b>闪购</b> — it maps itself automatically by 货号, so its column is read-only.
     </p>
     <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
       将产品映射到美团商品。库存变动每 10 秒自动推送,订单每 60 秒回拉。
+      <br><b>天河</b>走美团<b>外卖</b>,商品名在此处映射。
+      <b>越秀</b>已迁至美团<b>闪购</b>,按货号自动映射,该列只读。
     </p>
 
     <!-- Sync health — same fc-* KPI strip as the Products catalogue, fed by
@@ -6551,8 +6555,7 @@
       <button id="mt-clear-btn" class="btn btn-sm" onclick="mtClearAll()" title="Delete every saved Meituan name mapping across all stores. Use before re-filling from scratch.">🧹 Clear all names</button>
       <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name.">📋 Paste Meituan names</button>
       <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles AND each spec's 货号 from your Meituan backend (via the sync daemon), fill empty names, and auto-fill SKUs from the real 货号. Ambiguous ones show clickable 货号 chips under the SKU box.">⟳ Fetch from Meituan</button>
-      <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Meituan name with the product's Chinese name (variant size appended where needed), both districts. Existing entries are kept.">✨ Auto-fill names</button>
-      <button id="mt-verify-btn" class="btn btn-sm" onclick="mtVerify()" title="Check that variants sharing one Meituan listing each have a distinct SKU, so stock pushes to the right spec instead of overwriting each other.">✓ Verify mappings</button>
+      <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty 天河 外卖 Meituan name with the product's Chinese name (variant size appended where needed). 越秀 闪购 is auto-mapped by 货号 and left untouched. Existing entries are kept.">✨ Auto-fill names</button>
       <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
       <button id="mt-force-push-btn" class="btn btn-sm btn-danger" onclick="mtPushAll(true)" title="Emergency only: push stock to Meituan even while the store is CLOSED (outside opening hours). Use sparingly — a backend edit while closed slightly raises Meituan risk-control exposure.">⚠ Emergency push (store closed)</button>
     </div>
@@ -6579,15 +6582,14 @@
       <table id="mt-products-table" class="data-table" style="min-width:700px;font-size:13px">
         <thead>
           <tr>
-            <th style="width:26%">Product · 商品</th>
-            <th style="width:13%">SKU · 货号</th>
-            <th id="mt-th-store-0" style="width:25%">天河 Meituan name</th>
-            <th id="mt-th-store-1" style="width:25%">越秀 Meituan name</th>
-            <th style="width:11%;text-align:center">Sync</th>
+            <th style="width:28%">Product · 商品</th>
+            <th id="mt-th-store-0" style="width:30%">天河 · 美团外卖</th>
+            <th id="mt-th-store-1" style="width:30%">越秀 · 美团闪购</th>
+            <th style="width:12%;text-align:center">天河 Sync · 同步</th>
           </tr>
         </thead>
         <tbody id="mt-products-body">
-          <tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+          <tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
         </tbody>
       </table>
     </div>
