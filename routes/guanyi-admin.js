@@ -297,15 +297,15 @@ router.get('/api/retail-admin/guanyi/pickups', requireRetailAdmin, (req, res) =>
     // drift pickups (guanyi_pickup_log, pre-order-read history). One unit per
     // -delta. Newest first.
     const recent = db.prepare(`
-      SELECT product_id, units AS inferred_pickup, created_at, name_cn, name_en FROM (
+      SELECT product_id, units AS inferred_pickup, created_at, name_cn, name_en, product_sku FROM (
         SELECT l.product_id, -l.delta AS units, l.created_at,
-               p.name_cn, p.name_en
+               p.name_cn, p.name_en, p.sku AS product_sku
           FROM retail_stock_ledger l
           LEFT JOIN store_products p ON p.id = l.product_id
          WHERE l.reason = 'gzgrocery_order' AND l.store_id = ?
         UNION ALL
         SELECT pl.product_id, pl.inferred_pickup AS units, pl.created_at,
-               p.name_cn, p.name_en
+               p.name_cn, p.name_en, p.sku AS product_sku
           FROM guanyi_pickup_log pl
           LEFT JOIN store_products p ON p.id = pl.product_id
          WHERE pl.action = 'decremented'

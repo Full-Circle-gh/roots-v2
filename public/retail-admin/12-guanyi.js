@@ -271,7 +271,13 @@
     const flagged = r.flagged || [];
     const recent = r.recent || [];
     const sm = r.summary || {};
-    const pname = (x) => esc([x.name_cn, x.name_en].filter(Boolean).join(' ') || x.guanyi_name || ('#' + x.product_id));
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    // One language only: Chinese name in the CN view, English name in the EN view.
+    const pname = (x) => esc(
+      (cn ? (x.name_cn || x.name_en) : (x.name_en || x.name_cn))
+      || x.guanyi_name || ('#' + x.product_id)
+    );
+    const psku = (x) => x.product_sku ? `<span class="muted" style="font-size:11px;margin-left:6px">${esc(x.product_sku)}</span>` : '';
     const when = (t) => (t || '').replace('T', ' ').slice(0, 16);
 
     const modeBadge = mode === 'live'
@@ -292,7 +298,7 @@
           const drop = Math.abs(f.drift || 0);
           return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #f0e2a8">
             <div style="flex:1;min-width:0">
-              <div style="font-size:13px;color:#4a3d00;font-weight:500">${pname(f)}</div>
+              <div style="font-size:13px;color:#4a3d00;font-weight:500">${pname(f)}${psku(f)}</div>
               <div style="font-size:11px;color:#8a7a3a">Guanyi ${f.baseline_qty}→${f.observed_qty} (drop ${drop}) · your stock now ${f.current_qty} · ${when(f.created_at)}</div>
             </div>
             <button class="btn btn-sm btn-primary" onclick="gyApplyPickup(${f.id})" title="Yes, real sale — lower my stock by ${drop}">Apply −${drop}</button>
@@ -308,7 +314,7 @@
         <div style="margin-top:6px;font-size:12px;max-height:160px;overflow-y:auto">`
         + recent.map(x => `<div style="display:flex;gap:8px;padding:2px 0">
             <span style="color:#c00;font-weight:600;width:44px">−${x.inferred_pickup}</span>
-            <span style="flex:1">${pname(x)}</span>
+            <span style="flex:1">${pname(x)}${psku(x)}</span>
             <span class="muted">${when(x.created_at)}</span>
           </div>`).join('')
         + `</div></details>`;
