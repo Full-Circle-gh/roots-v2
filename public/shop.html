@@ -608,6 +608,122 @@
     .poll-opt .po-txt,.poll-opt .po-pct{position:relative;z-index:1;}
     .poll-opt .po-txt{flex:1;font-family:var(--bf-bear);font-size:15px;}
     .poll-opt.on{border-color:var(--accent);}
+    /* voting — faithful port of mini-app /pages/voting design #23 */
+    .vt-card{margin:14px 22px 0;background:#FFFCF7;border:2px solid var(--ink);padding:16px 16px 18px;position:relative;}
+    .vt-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;}
+    .vt-pill{display:flex;align-items:center;gap:6px;font-family:var(--bf-gothic);font-size:11px;letter-spacing:.12em;color:var(--berry);}
+    .vt-pill.closed{color:var(--olive);}
+    .vt-dot{width:8px;height:8px;border-radius:50%;background:var(--berry);flex-shrink:0;}
+    .vt-pill.closed .vt-dot{background:var(--olive);}
+    .vt-cat{font-family:var(--bf-toni);font-size:9px;letter-spacing:.12em;color:var(--olive);text-align:right;}
+    .vt-q{font-family:var(--bf-bear);font-size:21px;line-height:1.05;color:var(--ink);}
+    .vt-explain{font-style:italic;font-size:12px;color:var(--forest);margin-top:8px;line-height:1.4;}
+    .vt-opts{margin-top:14px;display:flex;flex-direction:column;gap:7px;}
+    .vt-opt{position:relative;background:#FFFCF7;border:2px solid rgba(0,0,0,.4);padding:11px 13px;overflow:hidden;cursor:pointer;}
+    .vt-opt.chosen,.vt-opt.results{border-color:var(--ink);}
+    .vt-fill{position:absolute;left:0;top:0;bottom:0;background:rgba(204,217,0,.25);z-index:0;transition:width .4s ease;}
+    .vt-fill.mine,.vt-fill.max{background:var(--lime);}
+    .vt-row{position:relative;z-index:1;display:flex;align-items:center;gap:11px;}
+    .vt-letter{width:28px;height:28px;border-radius:50%;border:2px solid var(--ink);display:flex;align-items:center;justify-content:center;font-family:var(--bf-gothic);font-size:14px;color:var(--ink);flex-shrink:0;}
+    .vt-letter.on{background:var(--ink);color:var(--lime);}
+    .vt-body{flex:1;min-width:0;}
+    .vt-label{font-family:var(--bf-bear);font-size:16px;line-height:1.05;color:var(--ink);}
+    .vt-pct{text-align:right;flex-shrink:0;}
+    .vt-pct-num{font-family:var(--bf-gothic);font-size:17px;color:var(--ink);line-height:1;}
+    .vt-pct-lbl{font-family:var(--bf-toni);font-size:8px;letter-spacing:.1em;color:var(--olive);margin-top:3px;}
+    .vt-tick{width:20px;height:20px;border-radius:50%;border:2px solid var(--ink);background:#FFFCF7;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--bf-bear);font-size:12px;color:var(--ink);}
+    .vt-tick.on{background:var(--lime);}
+    .vt-cta{margin-top:14px;background:rgba(0,0,0,.08);color:var(--olive);padding:13px 0;text-align:center;font-family:var(--bf-gothic);font-size:15px;letter-spacing:.14em;text-transform:uppercase;cursor:pointer;}
+    .vt-cta.on{background:var(--ink);color:var(--lime);}
+    .vt-voted{margin-top:14px;display:flex;align-items:center;gap:8px;padding:11px 12px;background:var(--lime);border:2px solid var(--ink);}
+    .vt-voted-dot{width:20px;height:20px;border-radius:50%;background:var(--ink);color:var(--lime);display:flex;align-items:center;justify-content:center;font-family:var(--bf-bear);font-size:12px;flex-shrink:0;}
+    .vt-voted-txt{flex:1;font-size:12px;color:var(--ink);line-height:1.3;}
+    .vt-closed-note{margin-top:14px;padding:11px 12px;background:var(--ink);color:var(--lime);text-align:center;font-size:12px;letter-spacing:.14em;font-family:var(--bf-toni);}
+    .vt-foot{display:flex;justify-content:space-between;margin-top:11px;font-family:var(--bf-toni);font-size:9px;letter-spacing:.15em;color:var(--olive);min-height:12px;}
+    /* refer a friend — faithful port of mini-app /pages/affiliate */
+    .rf-stats{margin:14px 22px 0;background:var(--ink);color:#fff;display:flex;padding:14px 16px;border:2px solid var(--ink);}
+    .rf-stat{flex:1;}
+    .rf-stat.mid{border-left:1px solid rgba(255,255,255,.2);border-right:1px solid rgba(255,255,255,.2);padding-left:12px;}
+    .rf-stat-v{font-family:var(--bf-bear);font-size:22px;line-height:1;color:var(--lime);}
+    .rf-stat-l{font-family:var(--bf-toni);font-size:9px;letter-spacing:.1em;margin-top:5px;opacity:.7;}
+    .rf-code-card{margin:14px 22px 0;background:var(--lime);border:2px solid var(--ink);padding:16px 16px 18px;}
+    .rf-code-lbl{font-family:var(--bf-toni);font-size:10px;letter-spacing:.22em;color:var(--forest);}
+    .rf-code{font-family:var(--bf-bear);font-size:30px;line-height:1;letter-spacing:1px;color:var(--ink);margin-top:8px;}
+    .rf-share-row{display:flex;gap:8px;margin-top:14px;}
+    .rf-share{flex:1;padding:11px 0;text-align:center;font-family:var(--bf-gothic);font-size:13px;letter-spacing:.08em;border:2px solid var(--ink);background:var(--ink);color:#fff;cursor:pointer;}
+    .rf-copycode{display:inline-block;margin-top:12px;font-family:var(--bf-gothic);font-size:12px;color:var(--forest);text-decoration:underline;cursor:pointer;}
+    .rf-how{margin:18px 22px 0;}
+    .rf-how-head{font-family:var(--bf-toni);font-size:10px;letter-spacing:.22em;color:var(--olive);margin-bottom:8px;}
+    .rf-how-row{display:flex;gap:6px;}
+    .rf-how-cell{flex:1;border:2px solid var(--ink);background:#FFFCF7;padding:10px 10px 12px;}
+    .rf-how-num{font-family:var(--bf-gothic);font-size:12px;letter-spacing:.08em;color:var(--olive);}
+    .rf-how-t{font-family:var(--bf-bear);font-size:15px;line-height:1;margin-top:4px;}
+    .rf-how-sub{font-size:10px;line-height:1.3;color:var(--forest);margin-top:6px;}
+    /* wallet + points — faithful port of mini-app /pages/wallet design #16 */
+    .wl-tabs{margin:14px 22px 0;display:flex;border:2px solid var(--ink);}
+    .wl-tab{flex:1;padding:12px 14px;background:#FFFCF7;color:var(--ink);position:relative;cursor:pointer;}
+    .wl-tab.points{border-left:2px solid var(--ink);}
+    .wl-tab-lbl{font-family:var(--bf-toni);font-size:9px;letter-spacing:.22em;color:var(--olive);}
+    .wl-tab-val{font-family:var(--bf-bear);font-size:22px;line-height:1;margin-top:4px;display:block;}
+    .wl-tab-val-row{display:flex;align-items:baseline;gap:6px;margin-top:4px;}
+    .wl-tab-val-row .wl-tab-val{margin-top:0;}
+    .wl-tab-unit{font-family:var(--bf-gothic);font-size:11px;letter-spacing:.08em;color:var(--forest);}
+    .wl-tab.wallet.on{background:var(--ink);color:#fff;}
+    .wl-tab.wallet.on .wl-tab-lbl{color:rgba(255,255,255,.55);}
+    .wl-tab.wallet.on .wl-tab-val{color:var(--lime);}
+    .wl-tab.points.on{background:var(--lime);color:var(--ink);}
+    .wl-tab.points.on .wl-tab-lbl{color:var(--forest);}
+    .wl-arrow{position:absolute;bottom:-5px;left:50%;width:10px;height:10px;transform:translateX(-50%) rotate(45deg);}
+    .wl-arrow.ink{background:var(--ink);}
+    .wl-arrow.accent{background:var(--lime);border-right:2px solid var(--ink);border-bottom:2px solid var(--ink);}
+    .wl-bal{margin:14px 22px 0;border:2px solid var(--ink);padding:15px 18px 14px;}
+    .wl-bal.wallet{background:var(--ink);color:#fff;}
+    .wl-bal.points{background:var(--lime);color:var(--ink);}
+    .wl-bal-row{display:flex;justify-content:space-between;align-items:baseline;}
+    .wl-bal-lbl{font-family:var(--bf-toni);font-size:10px;letter-spacing:.2em;}
+    .wl-bal-meta{font-family:var(--bf-toni);font-size:9px;letter-spacing:.15em;}
+    .wl-bal.wallet .wl-bal-lbl,.wl-bal.wallet .wl-bal-meta{color:rgba(255,255,255,.55);}
+    .wl-bal.points .wl-bal-lbl,.wl-bal.points .wl-bal-meta{color:var(--forest);}
+    .wl-bal-amt{font-family:var(--bf-bear);font-size:44px;line-height:1;margin-top:6px;color:var(--lime);}
+    .wl-pts-row{display:flex;justify-content:space-between;align-items:baseline;margin-top:2px;}
+    .wl-pts-amt{font-family:var(--bf-bear);font-size:52px;line-height:.9;}
+    .wl-pts-cash{font-family:var(--bf-gothic);font-size:15px;color:var(--forest);}
+    .wl-btns{display:flex;gap:8px;margin-top:14px;}
+    .wl-btn{flex:1;text-align:center;padding:11px 0;font-family:var(--bf-gothic);font-size:14px;letter-spacing:.1em;cursor:pointer;}
+    .wl-btn.primary{background:var(--lime);color:var(--ink);border:2px solid var(--lime);}
+    .wl-btn.ghost{background:transparent;color:#fff;border:2px solid rgba(255,255,255,.4);}
+    .wl-btn.dark{background:var(--ink);color:var(--lime);}
+    .wl-btn.outline{background:transparent;color:var(--ink);border:2px solid var(--ink);}
+    .wl-statpair{margin:12px 22px 0;display:flex;gap:6px;}
+    .wl-statbox{flex:1;border:2px solid var(--ink);padding:7px 10px;background:#FFFCF7;}
+    .wl-stat-l{font-family:var(--bf-toni);font-size:9px;letter-spacing:.15em;color:var(--olive);}
+    .wl-stat-v{font-family:var(--bf-gothic);font-size:20px;margin-top:3px;}
+    .wl-stat-v.pos{color:var(--forest);}
+    .wl-stat-v.neg{color:var(--berry);}
+    .wl-filters{margin:14px 22px 0;display:flex;gap:6px;}
+    .wl-chip{padding:6px 12px;border:2px solid var(--ink);background:transparent;color:var(--ink);font-family:var(--bf-gothic);font-size:12px;letter-spacing:.08em;cursor:pointer;}
+    .wl-chip.on{background:var(--ink);color:var(--lime);}
+    .wl-sec{margin:16px 22px 0;display:flex;justify-content:space-between;align-items:baseline;}
+    .wl-sec-l{font-family:var(--bf-toni);font-size:10px;letter-spacing:.22em;color:var(--olive);}
+    .wl-sec-m{font-family:var(--bf-toni);font-size:9px;letter-spacing:.15em;color:var(--olive);}
+    .wl-list{margin-top:8px;}
+    .wl-row{display:flex;align-items:center;gap:12px;padding:11px 22px;border-top:1px dashed rgba(0,0,0,.2);}
+    .wl-row.first{border-top:2px solid var(--ink);}
+    .wl-row-date{width:40px;flex-shrink:0;}
+    .wl-day{font-family:var(--bf-gothic);font-size:14px;line-height:1;color:var(--ink);}
+    .wl-mon{font-family:var(--bf-toni);font-size:8px;letter-spacing:.15em;color:var(--olive);margin-top:3px;}
+    .wl-pip{width:8px;height:32px;flex-shrink:0;background:var(--olive);}
+    .wl-pip.topup,.wl-pip.earn{background:var(--lime);}
+    .wl-pip.redeem{background:var(--berry);}
+    .wl-pip.spend{background:var(--ink);}
+    .wl-row-body{flex:1;min-width:0;}
+    .wl-row-label{font-family:var(--bf-bear);font-size:14px;line-height:1.1;color:var(--ink);}
+    .wl-row-sub{display:flex;align-items:baseline;gap:6px;margin-top:3px;}
+    .wl-row-time{font-family:var(--bf-toni);font-size:9px;letter-spacing:.08em;color:var(--olive);}
+    .wl-row-bonus{font-family:var(--bf-gothic);font-size:9px;letter-spacing:.06em;background:var(--lime);color:var(--ink);padding:0 4px;}
+    .wl-row-amt{font-family:var(--bf-gothic);font-size:18px;color:var(--ink);}
+    .wl-row-amt.pos{color:var(--forest);}
+    .wl-row-amt.berry{color:var(--berry);}
 
     /* ════════ Shop — mobile LIST layout (faithful port of the mini-app shop
          list view: CATEGORIES header · search · view-switcher · dietary chips ·
@@ -2920,25 +3036,52 @@ async function renderWallet(){
   if(!state.customer){ try{ await loadCustomer(); }catch(e){} }
   const c=state.customer||{};
   const balance=Number(c.balance)||0, points=Number(c.points_balance)||0, pv=Number(c.point_value_yuan)||0;
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'钱包积分':'Wallet & points','')}
-    <div class="sp-tabs"><button class="sp-tab on" data-wt="wallet">${cn?'余额':'Wallet'}</button><button class="sp-tab" data-wt="points">${cn?'积分':'Points'}</button></div>
-    <div id="wtBody"></div></div>`;
-  const body=$('#wtBody');
-  async function show(tab){
-    v.querySelectorAll('.sp-tab').forEach(t=>t.classList.toggle('on',t.dataset.wt===tab));
-    body.innerHTML=`<div class="sp-empty">${cn?'加载中…':'Loading…'}</div>`;
-    if(tab==='wallet'){
-      let tx; try{ tx=await api('/api/retail/topup/transactions?limit=100')||[]; }catch(e){ tx=[]; }
-      const rows=(tx||[]).map(t=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${cn?'充值':'Top-up'}${t.bonus_points?` <span class="sp-chip">+${t.bonus_points}</span>`:''}</div><div class="sp-d">${esc(String(t.paid_at||t.created_at||'').slice(0,16).replace('T',' '))}${t.payment_method?' · '+esc(t.payment_method):''}</div></div><div class="sp-amt sp-pos">+¥${(Number(t.amount)||0).toFixed(2)}</div></div>`).join('');
-      body.innerHTML=`<div class="sp-card ink"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;opacity:.7">${cn?'账户余额':'BALANCE'}</div><div style="font-family:var(--bf-bear);font-size:38px;color:var(--lime);line-height:1.1;margin-top:4px">¥${balance.toFixed(2)}</div></div>`+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无充值记录':'No top-up history yet'}</div>`)+`<div class="sp-foot"><button class="sp-btn block" data-go="#/topup">${cn?'去充值':'Top up'}</button></div>`;
+  const MON=['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  const now=new Date(); const curYm=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  const monLbl=MON[now.getMonth()]+' '+now.getFullYear();
+  // Pull day / month / time out of a "2026-06-22 20:24" or ISO string.
+  const parseTs=(s)=>{ const m=/(\d{4})-(\d{2})-(\d{2})[ T]?(\d{2})?:?(\d{2})?/.exec(String(s||'')); if(!m)return{day:'',mon:'',time:'',ym:''};
+    return {day:m[3],mon:MON[Number(m[2])-1]||'',time:(m[4]&&m[5])?`${m[4]}:${m[5]}`:'',ym:m[1]+'-'+m[2]}; };
+  let wtab='wallet', wFilter='all', pFilter='all', walletTx=null, pointsTx=null;
+  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'钱包积分':'Wallet & points','')}<div id="wlBody"></div></div>`;
+  const body=$('#wlBody');
+  const emptyHtml=`<div class="sp-empty">${cn?'暂无记录':'Nothing here yet'}</div>`;
+  function tabsHtml(){
+    return `<div class="wl-tabs">
+      <div class="wl-tab wallet ${wtab==='wallet'?'on':''}" data-wt="wallet"><div class="wl-tab-lbl">${cn?'余额':'WALLET'}</div><span class="wl-tab-val">¥${balance.toFixed(2)}</span>${wtab==='wallet'?'<div class="wl-arrow ink"></div>':''}</div>
+      <div class="wl-tab points ${wtab==='points'?'on':''}" data-wt="points"><div class="wl-tab-lbl">${cn?'积分':'POINTS'}</div><div class="wl-tab-val-row"><span class="wl-tab-val">${points}</span><span class="wl-tab-unit">${cn?'积分':'PTS'}</span></div>${wtab==='points'?'<div class="wl-arrow accent"></div>':''}</div>
+    </div>`;
+  }
+  const renderRows=(items)=>items.map((r,i)=>`<div class="wl-row ${i===0?'first':''}"><div class="wl-row-date"><div class="wl-day">${r.day||''}</div><div class="wl-mon">${r.mon||''}</div></div><div class="wl-pip ${r.pip}"></div><div class="wl-row-body"><div class="wl-row-label">${esc(r.label)}</div><div class="wl-row-sub"><span class="wl-row-time">${esc(r.time||'')}</span>${r.bonus?`<span class="wl-row-bonus">+${r.bonus}</span>`:''}</div></div><div class="wl-row-amt ${r.amtClass}">${r.display}</div></div>`).join('');
+  function bindTabs(){ body.querySelectorAll('.wl-tab').forEach(t=>t.addEventListener('click',()=>{ if(t.dataset.wt!==wtab){ wtab=t.dataset.wt; paint(); } })); }
+  async function paint(){
+    body.innerHTML=tabsHtml()+`<div class="sp-empty">${cn?'加载中…':'Loading…'}</div>`; bindTabs();
+    if(wtab==='wallet'){
+      if(walletTx===null){ try{ walletTx=await api('/api/retail/topup/transactions?limit=100')||[]; }catch(e){ walletTx=[]; } }
+      const items=(walletTx||[]).map(t=>{ const ts=parseTs(t.paid_at||t.created_at); const amt=Number(t.amount)||0;
+        return {day:ts.day,mon:ts.mon,time:ts.time+(t.payment_method?' · '+t.payment_method:''),pip:'topup',label:cn?'充值':'Top-up',display:'+¥'+amt.toFixed(2),amtClass:'pos',bonus:t.bonus_points}; });
+      const filtered=items.filter(()=>wFilter!=='out'); // top-ups are all income; OUT shows none
+      const card=`<div class="wl-bal wallet"><div class="wl-bal-row"><div class="wl-bal-lbl">${cn?'可用余额':'AVAILABLE'}</div><div class="wl-bal-meta">${cn?'账户余额':'STORE CREDIT'}</div></div><div class="wl-bal-amt">¥${balance.toFixed(2)}</div><div class="wl-btns"><div class="wl-btn primary" data-go="#/topup">${cn?'充值':'TOP UP'}</div><div class="wl-btn ghost" id="wlWithdraw">${cn?'提现':'WITHDRAW'}</div></div></div>`;
+      const filters=`<div class="wl-filters"><div class="wl-chip ${wFilter==='all'?'on':''}" data-wf="all">${cn?'全部':'ALL'}</div><div class="wl-chip ${wFilter==='in'?'on':''}" data-wf="in">${cn?'收入':'IN'}</div><div class="wl-chip ${wFilter==='out'?'on':''}" data-wf="out">${cn?'支出':'OUT'}</div></div>`;
+      const sec=`<div class="wl-sec"><div class="wl-sec-l">${cn?'明细':'HISTORY'} · ${filtered.length}</div><div class="wl-sec-m">${monLbl}</div></div>`;
+      body.innerHTML=tabsHtml()+card+filters+sec+(filtered.length?`<div class="wl-list">${renderRows(filtered)}</div>`:emptyHtml);
+      bindTabs(); body.querySelectorAll('[data-wf]').forEach(ch=>ch.addEventListener('click',()=>{ wFilter=ch.dataset.wf; paint(); }));
+      const wd=$('#wlWithdraw'); if(wd)wd.addEventListener('click',()=>toast(cn?'网页端暂不支持提现':'Withdraw isn’t available on web yet'));
     }else{
-      let tx; try{ tx=await api('/api/retail/points/transactions?limit=100')||[]; }catch(e){ tx=[]; }
-      const rows=(tx||[]).map(t=>{const d=Number(t.delta)||0;return `<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(pointsSource(t.source,cn))}</div><div class="sp-d">${esc(String(t.created_at||'').slice(0,16).replace('T',' '))}${t.expires_at?` · ${cn?'到期':'expires'} ${String(t.expires_at).slice(0,10)}`:''}</div></div><div class="sp-amt ${d>=0?'sp-pos':'sp-neg'}">${d>=0?'+':''}${d}</div></div>`;}).join('');
-      body.innerHTML=`<div class="sp-card lime"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;color:var(--forest)">${cn?'积分余额':'POINTS'}</div><div style="font-family:var(--bf-bear);font-size:38px;line-height:1.1;margin-top:4px">${points}</div>${pv>0?`<div style="font-size:12px;color:var(--forest);margin-top:4px">≈ ¥${(points*pv).toFixed(2)}</div>`:''}</div>`+(rows?`<div class="sp-list">${rows}</div>`:`<div class="sp-empty">${cn?'暂无积分记录':'No points history yet'}</div>`);
+      if(pointsTx===null){ try{ pointsTx=await api('/api/retail/points/transactions?limit=100')||[]; }catch(e){ pointsTx=[]; } }
+      const items=(pointsTx||[]).map(t=>{ const d=Number(t.delta)||0; const ts=parseTs(t.created_at); const pos=d>=0;
+        return {day:ts.day,mon:ts.mon,time:ts.time,pip:pos?'earn':'redeem',label:pointsSource(t.source,cn),display:(pos?'+':'−')+Math.abs(d),amtClass:pos?'pos':'berry',ym:ts.ym,amount:d}; });
+      const filtered=items.filter(r=> pFilter==='all'||(pFilter==='earn'&&r.amount>=0)||(pFilter==='redeem'&&r.amount<0));
+      let earned=0,redeemed=0; items.forEach(r=>{ if(r.ym===curYm){ if(r.amount>=0)earned+=r.amount; else redeemed+=-r.amount; } });
+      const card=`<div class="wl-bal points"><div class="wl-bal-row"><div class="wl-bal-lbl">${cn?'可用积分':'AVAILABLE'}</div><div class="wl-bal-meta">${cn?'永不过期':'NEVER EXPIRES'}</div></div><div class="wl-pts-row"><div class="wl-pts-amt">${points}</div>${pv>0?`<div class="wl-pts-cash">≈ ¥${(points*pv).toFixed(2)}</div>`:''}</div></div>`;
+      const statpair=`<div class="wl-statpair"><div class="wl-statbox"><div class="wl-stat-l">${cn?'本月获得':'EARNED'}</div><div class="wl-stat-v pos">+${earned}</div></div><div class="wl-statbox"><div class="wl-stat-l">${cn?'本月使用':'REDEEMED'}</div><div class="wl-stat-v neg">−${redeemed}</div></div></div>`;
+      const filters=`<div class="wl-filters"><div class="wl-chip ${pFilter==='all'?'on':''}" data-pf="all">${cn?'全部':'ALL'}</div><div class="wl-chip ${pFilter==='earn'?'on':''}" data-pf="earn">${cn?'获得':'EARNED'}</div><div class="wl-chip ${pFilter==='redeem'?'on':''}" data-pf="redeem">${cn?'使用':'REDEEMED'}</div></div>`;
+      const sec=`<div class="wl-sec"><div class="wl-sec-l">${cn?'记录':'RECORD'} · ${filtered.length}</div><div class="wl-sec-m">${monLbl}</div></div>`;
+      body.innerHTML=tabsHtml()+card+statpair+filters+sec+(filtered.length?`<div class="wl-list">${renderRows(filtered)}</div>`:emptyHtml);
+      bindTabs(); body.querySelectorAll('[data-pf]').forEach(ch=>ch.addEventListener('click',()=>{ pFilter=ch.dataset.pf; paint(); }));
     }
   }
-  v.querySelectorAll('.sp-tab').forEach(t=>t.addEventListener('click',()=>show(t.dataset.wt)));
-  show('wallet');
+  paint();
 }
 
 async function renderTopup(){
@@ -3080,9 +3223,16 @@ async function renderAffiliate(){
   const st=d.stats||{}; const you=Number(d.reward_per_order)||0, them=Number(d.reward_referee)||0;
   const tagline=them>0?(cn?`你得 ¥${you}，好友得 ¥${them}`:`¥${you} for you, ¥${them} for them`):(cn?`每位下单好友，你得 ¥${you}`:`¥${you} per friend who orders`);
   const invites=(d.invites||[]).map(iv=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(iv.nickname||(cn?'好友':'Friend'))}</div><div class="sp-d">${String(iv.joined_at||iv.rewarded_at||'').slice(0,10)}</div></div><div class="sp-amt ${iv.status==='ordered'?'sp-pos':''}">${iv.status==='ordered'?'+¥'+(Number(iv.reward_amount)||0).toFixed(0):(iv.status==='voided'?(cn?'无效':'Void'):(cn?'已加入':'Joined'))}</div></div>`).join('');
+  const youR=String(you);
+  const how=`<div class="rf-how"><div class="rf-how-head">${cn?'流程':'HOW IT WORKS'}</div><div class="rf-how-row">`+
+    `<div class="rf-how-cell"><div class="rf-how-num">01</div><div class="rf-how-t">${cn?'分享':'Share'}</div><div class="rf-how-sub">${cn?'把邀请码发给朋友':'Send your code'}</div></div>`+
+    `<div class="rf-how-cell"><div class="rf-how-num">02</div><div class="rf-how-t">${cn?'下单':'They order'}</div><div class="rf-how-sub">${cn?'朋友注册并下单':'Friend joins + orders'}</div></div>`+
+    `<div class="rf-how-cell"><div class="rf-how-num">03</div><div class="rf-how-t">${cn?'获奖':'You earn'}</div><div class="rf-how-sub">${cn?('到账 ¥'+youR):('¥'+youR+' to your wallet')}</div></div>`+
+    `</div></div>`;
   box.innerHTML=spBack()+spHead(cn?'推广计划':'REFER',cn?'推荐好友':'Refer a friend',tagline)+
-    `<div class="about-stats" style="grid-template-columns:1fr 1fr 1fr"><div class="about-stat"><div class="as-v">¥${(Number(st.earned)||0).toFixed(0)}</div><div class="as-l">${cn?'已赚':'Earned'}</div></div><div class="about-stat"><div class="as-v">${Number(st.total_invites)||0}</div><div class="as-l">${cn?'邀请':'Invited'}</div></div><div class="about-stat"><div class="as-v">${Number(st.converted)||0}</div><div class="as-l">${cn?'下单':'Ordered'}</div></div></div>`+
-    (d.code?`<div class="sp-card"><div style="font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;color:var(--olive)">${cn?'我的邀请码':'YOUR CODE'}</div><div style="font-family:var(--bf-bear);font-size:30px;letter-spacing:2px;margin-top:4px">${esc(d.code)}</div><div style="display:flex;gap:8px;margin-top:14px"><button class="sp-btn" id="afShare" style="flex:1">${cn?'分享链接':'Share link'}</button><button class="sp-btn ink" id="afCopyLink" style="flex:1">${cn?'复制链接':'Copy link'}</button></div><button class="me-legal-a" id="afCopyCode" style="display:inline-block;margin-top:12px">${cn?'仅复制邀请码':'Copy code only'}</button></div>`:'')+
+    `<div class="rf-stats"><div class="rf-stat"><div class="rf-stat-v">¥${(Number(st.earned)||0).toFixed(0)}</div><div class="rf-stat-l">${cn?'已赚':'EARNED'}</div></div><div class="rf-stat mid"><div class="rf-stat-v">${Number(st.total_invites)||0}</div><div class="rf-stat-l">${cn?'邀请':'INVITED'}</div></div><div class="rf-stat"><div class="rf-stat-v">${Number(st.converted)||0}</div><div class="rf-stat-l">${cn?'下单':'ORDERED'}</div></div></div>`+
+    (d.code?`<div class="rf-code-card"><div class="rf-code-lbl">${cn?'我的邀请码':'YOUR CODE'}</div><div class="rf-code">${esc(d.code)}</div><div class="rf-share-row"><div class="rf-share" id="afShare">${cn?'分享链接':'SHARE LINK'}</div><div class="rf-share" id="afCopyLink">${cn?'复制链接':'COPY LINK'}</div></div><div class="rf-copycode" id="afCopyCode">${cn?'仅复制邀请码':'COPY CODE ONLY'}</div></div>`:'')+
+    how+
     (invites?`<div class="me-section"><div class="me-sec-title">${cn?'我的邀请':'Your invites'}</div><div class="sp-list" style="margin-top:8px">${invites}</div></div>`:'')+
     (!d.referred_by?`<div class="sp-foot"><div class="sp-sub" style="padding:0 0 8px">${cn?'有好友邀请码？':'Got a friend’s code?'}</div><div class="sp-row-in" style="padding:0"><input class="sp-input" id="afCode" placeholder="${cn?'输入邀请码':'Enter code'}"><button class="sp-btn ink" id="afApply">${cn?'应用':'Apply'}</button></div><div class="sp-msg" id="afMsg" style="padding-left:0"></div></div>`:'');
   // Web-native sharing: native share sheet on mobile, copy-link fallback on
@@ -3142,6 +3292,7 @@ async function renderNotifications(){
     else renderNotifications(); }));
 }
 
+const votingSel={};  // poll id → currently-selected (not yet cast) option id
 async function renderVoting(){
   const v=$('#view'),cn=state.lang==='cn';
   document.title=(cn?'投票':'Your say')+' · '+state.brand;
@@ -3151,15 +3302,45 @@ async function renderVoting(){
   let polls,cfg; try{ [polls,cfg]=await Promise.all([api('/api/retail/polls/public').catch(()=>[]),api('/api/retail/voting/config').catch(()=>({}))]); }catch(e){ polls=[]; cfg={}; }
   const box=v.querySelector('.sp');
   const showCounts=!cfg||cfg.show_counts!==false;
-  const intro=pick(cfg&&cfg.intro_en,cfg&&cfg.intro_cn)||(cn?'帮我们决定下一款产品':'Help shape what we make next');
-  if(!polls||!polls.length){ box.innerHTML=spBack()+spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say',intro)+`<div class="sp-empty">${cn?'暂无投票':'No polls right now'}</div>`; return; }
-  const pollCard=(p)=>{ const voted=!!p.my_vote_option_id||p.status==='closed';
-    const opts=(p.options||[]).map(o=>{ const pct=p.total_votes?Math.round((Number(o.votes)||0)/p.total_votes*100):0; const mine=p.my_vote_option_id===o.id;
-      return `<button class="poll-opt ${mine?'on':''}" data-opt="${o.id}" ${voted?'disabled':''}>${(voted&&showCounts)?`<span class="po-bar" style="width:${pct}%"></span>`:''}<span class="po-txt">${esc(pick(o.title_en,o.title_cn))}</span>${(voted&&showCounts)?`<span class="po-pct">${pct}%</span>`:''}</button>`; }).join('');
-    return `<div class="sp-card" data-poll="${p.id}"><div style="font-family:var(--bf-bear);font-size:20px;line-height:1.15">${esc(pick(p.question_en,p.question_cn))}</div>${p.reward_points?`<div style="font-size:12px;color:var(--forest);margin-top:6px">+${p.reward_points} ${cn?'积分':'points'}</div>`:''}<div style="margin-top:6px">${opts}</div></div>`; };
-  box.innerHTML=spBack()+spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say',intro)+polls.map(pollCard).join('');
-  box.querySelectorAll('.poll-opt').forEach(b=>b.addEventListener('click',async()=>{ if(!state.token)return openLogin();
-    const card=b.closest('[data-poll]'); try{ const r=await postJson('/api/retail/polls/'+card.dataset.poll+'/vote',{option_id:Number(b.dataset.opt)}); if(r&&r.awarded_points)toast('+'+r.awarded_points+(cn?' 积分':' points')); state.customer=null; state.polls=undefined; renderVoting(); }catch(e){ toast(cn?'投票失败':'Vote failed'); } }));
+  if(!polls||!polls.length){ box.innerHTML=spBack()+spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say','')+`<div class="sp-empty">${cn?'暂无投票':'No polls right now'}</div>`; return; }
+  // Featured = first open poll (else first poll); its reward fills {pts} in the intro.
+  const featured=polls.find(p=>p.status==='open')||polls[0];
+  const introTpl=pick(cfg&&cfg.intro_en,cfg&&cfg.intro_cn)||(cn?'每周日截止，投票得 {pts} 积分。':'Vote for your favorite — earn {pts} pts.');
+  const intro=String(introTpl).replace(/\{(\w+)\}/g,(_,k)=>k==='pts'?String((featured&&featured.reward_points)||5):'');
+  // Days left until a poll closes (closes_at is stored UTC).
+  const dayLeft=(p)=>{ if(!p.closes_at)return null; const t=new Date(String(p.closes_at).replace(' ','T')+'Z').getTime(); if(!t)return null; const d=Math.ceil((t-Date.now())/86400000); return d>0?d:0; };
+  const pollCard=(p)=>{ const closed=p.status==='closed';
+    const voted=!!p.my_vote_option_id||closed; const showResults=voted;
+    const total=Number(p.total_votes)||0;
+    const max=Math.max(0,...(p.options||[]).map(o=>Number(o.votes)||0));
+    const sel=votingSel[p.id]; const dleft=dayLeft(p);
+    const opts=(p.options||[]).map((o,i)=>{ const votes=Number(o.votes)||0;
+      const pct=total?(votes/total*100):0; const mine=p.my_vote_option_id===o.id;
+      const chosen=!voted&&sel===o.id; const isMax=showResults&&votes===max&&max>0;
+      const letter=String.fromCharCode(65+i);
+      const fill=(showResults&&showCounts)?`<div class="vt-fill ${mine?'mine':''} ${isMax?'max':''}" style="width:${pct.toFixed(1)}%"></div>`:'';
+      let right='';
+      if(showResults&&showCounts)right=`<div class="vt-pct"><div class="vt-pct-num">${Math.round(pct)}%</div><div class="vt-pct-lbl">${votes} ${cn?'票':'VOTES'}</div></div>`;
+      else if(!showResults)right=`<div class="vt-tick ${chosen?'on':''}">${chosen?'✓':''}</div>`;
+      return `<div class="vt-opt ${chosen?'chosen':''} ${showResults?'results':''}" data-opt="${o.id}" ${voted?'data-voted="1"':''}>${fill}<div class="vt-row"><div class="vt-letter ${chosen?'on':''}">${letter}</div><div class="vt-body"><div class="vt-label">${esc(pick(o.label_en,o.label_cn))}</div></div>${right}</div></div>`; }).join('');
+    let action='';
+    if(voted&&!closed)action=`<div class="vt-voted"><div class="vt-voted-dot">✓</div><div class="vt-voted-txt">${cn?'已记录你的投票。':'Your vote is counted.'}${p.reward_points?` +${p.reward_points} ${cn?'积分':'pts'}.`:''}</div></div>`;
+    else if(closed)action=`<div class="vt-closed-note">${cn?'投票已结束':'VOTING CLOSED'}</div>`;
+    else { const on=!!sel; action=`<div class="vt-cta ${on?'on':''}" data-cast="${p.id}">${on?`${cn?'确认投票':'CAST VOTE'} · +${p.reward_points||0} ${cn?'积分':'PTS'} →`:(cn?'选择一项':'PICK ONE')}</div>`; }
+    const head=`<div class="vt-head"><div class="vt-pill ${closed?'closed':''}"><span class="vt-dot"></span>${closed?(cn?'已结束':'CLOSED'):((cn?'进行中':'OPEN')+(dleft!=null?` · ${dleft}${cn?'天剩余':'D LEFT'}`:''))}</div>${(p.category_en||p.category_cn)?`<div class="vt-cat">${esc(pick(p.category_en,p.category_cn))}</div>`:''}</div>`;
+    const ex=(p.explainer_en||p.explainer_cn)?`<div class="vt-explain">${esc(pick(p.explainer_en,p.explainer_cn))}</div>`:'';
+    const foot=`<div class="vt-foot"><span>${showCounts?`${total} ${cn?'票':'VOTES'}`:''}</span></div>`;
+    return `<div class="vt-card" data-poll="${p.id}">${head}<div class="vt-q">${esc(pick(p.question_en,p.question_cn))}</div>${ex}<div class="vt-opts">${opts}</div>${action}${foot}</div>`; };
+  function paint(){
+    box.innerHTML=spBack()+spHead(cn?'一起决定':'YOUR SAY',cn?'投票':'Your say',intro)+polls.map(pollCard).join('');
+    box.querySelectorAll('.vt-opt').forEach(b=>b.addEventListener('click',()=>{ if(b.dataset.voted)return;
+      const pid=b.closest('[data-poll]').dataset.poll; votingSel[pid]=Number(b.dataset.opt); paint(); }));
+    box.querySelectorAll('[data-cast]').forEach(b=>b.addEventListener('click',async()=>{ if(!state.token)return openLogin();
+      const pid=b.dataset.cast,opt=votingSel[pid]; if(!opt)return;
+      try{ const r=await postJson('/api/retail/polls/'+pid+'/vote',{option_id:Number(opt)}); if(r&&r.awarded_points)toast('+'+r.awarded_points+(cn?' 积分':' points')); delete votingSel[pid]; state.customer=null; renderVoting(); }
+      catch(e){ toast(cn?'投票失败':'Vote failed'); } }));
+  }
+  paint();
 }
 
 // Mini-app /pages/about parity. Defaults inlined so the page renders even
