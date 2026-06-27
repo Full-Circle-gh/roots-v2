@@ -448,7 +448,8 @@
     .sp-kicker{font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--olive);}
     .sp-title{font-family:var(--bf-bear);font-size:34px;line-height:1.02;color:var(--ink);margin-top:4px;}
     .sp-sub{font-size:13px;color:var(--olive);margin-top:8px;line-height:1.45;}
-    .sp-back{display:inline-flex;align-items:center;gap:6px;margin:14px 22px 2px;font-family:var(--bf-toni);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--olive);cursor:pointer;}
+    .sp-back{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;margin:8px 12px 0;padding:0;background:none;border:0;color:var(--ink);cursor:pointer;-webkit-tap-highlight-color:transparent;}
+    .sp-back:active{opacity:.55;}
     .sp-empty{text-align:center;color:var(--olive);padding:64px 22px;line-height:1.6;}
     .sp-tabs{display:flex;gap:8px;padding:14px 22px 6px;}
     .sp-tab{flex:1;padding:10px;border:2px solid var(--ink);text-align:center;font-family:var(--bf-toni);font-weight:700;font-size:12px;letter-spacing:.05em;text-transform:uppercase;background:transparent;color:var(--olive);cursor:pointer;}
@@ -3079,7 +3080,7 @@ async function apiSend(method,path,body){
   return j&&('data'in j)?j.data:j;
 }
 function spHead(kicker,title,sub){return `<div class="sp-head">${kicker?`<div class="sp-kicker">${esc(kicker)}</div>`:''}<div class="sp-title">${title}</div>${sub?`<div class="sp-sub">${esc(sub)}</div>`:''}</div>`;}
-function spBack(){const cn=state.lang==='cn';return `<button class="sp-back" data-go="#/me"><svg class="sp-back-ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>${cn?'我的':'Me'}</button>`;}
+function spBack(){const cn=state.lang==='cn';return `<button class="sp-back" data-go="#/me" aria-label="${cn?'返回':'Back'}"><svg class="sp-back-ic" viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg></button>`;}
 function spGuard(v){ if(state.token)return false;
   const cn=state.lang==='cn';
   v.innerHTML=`<div class="sp">${spBack()}${spHead('',cn?'请先登录':'Please sign in','')}<div class="sp-empty">${cn?'登录后查看此页面':'Sign in to view this page'}</div></div>`;
