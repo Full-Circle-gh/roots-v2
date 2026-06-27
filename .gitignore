@@ -40,6 +40,12 @@ AGENTS.md
 .cursor/
 .aider*
 
+# Local session/auth state + scrape artifacts — never commit
+/data/
+/meituan screenshots/
+/scripts/_*.json
+/.mcp.json
+
 # Logs
 *.log
 
