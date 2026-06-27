@@ -451,6 +451,11 @@
     gzgrocery · 管易
   </button>
 
+  <button data-tab="activity" onclick="actAdminInit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg>
+    Activity · 库存流水
+  </button>
+
   <!-- Auto-refresh dot — pinned right of the tab bar, next to the
        settings gear. A small green pulsing dot signals that the orders
        list is live-polling. Click toggles pause; tooltip explains.
@@ -6601,6 +6606,58 @@
     </div>
   </section>
 
+  <section id="tab-activity">
+    <h2>Inventory activity · 库存流水</h2>
+    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      Every stock change, all channels in one timeline — mini-app, gzgrocery, Meituan, Guanyi pickups and manual adjustments. Pick a day (or a range) and download it as CSV for Excel. Times are Guangzhou local.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      所有渠道的库存变动都汇总在一条时间线 —— 小程序、gzgrocery、美团、管易自提与手动调整。选择某一天(或时间段)即可导出 CSV 用 Excel 打开。时间为广州本地时间。
+    </p>
+
+    <div class="pa-toolbar" style="flex-wrap:wrap;gap:8px;align-items:center">
+      <input id="act-from" type="date" onchange="actLoad(true)" style="padding:6px 8px">
+      <span class="muted">→</span>
+      <input id="act-to" type="date" onchange="actLoad(true)" style="padding:6px 8px">
+      <button class="btn-ghost" type="button" onclick="actSetRange('today')">Today · 今天</button>
+      <button class="btn-ghost" type="button" onclick="actSetRange('week')">7d · 近7天</button>
+      <button class="btn-ghost" type="button" onclick="actSetRange('month')">30d · 近30天</button>
+      <select id="act-source" onchange="actLoad(true)" style="padding:6px 8px">
+        <option value="">All sources · 全部来源</option>
+        <option value="miniapp">Mini-app · 小程序</option>
+        <option value="gzgrocery">gzgrocery</option>
+        <option value="meituan">Meituan · 美团</option>
+        <option value="guanyi">Guanyi · 管易</option>
+        <option value="manual">Manual · 手动</option>
+      </select>
+      <input id="act-search" type="text" placeholder="SKU / name / order · 货号 / 名称 / 订单" oninput="clearTimeout(window._actSearchT);window._actSearchT=setTimeout(()=>actLoad(true),300)" style="padding:6px 8px;min-width:200px">
+      <span style="flex:1"></span>
+      <button class="btn-primary" type="button" onclick="actExportCsv()">⬇ Export CSV · 导出</button>
+    </div>
+
+    <div id="act-summary" style="margin:12px 0"></div>
+
+    <div style="overflow-x:auto;border:1px solid var(--border,#e0ddd5);border-radius:8px">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="text-align:left;background:var(--bg-elev-1)">
+            <th style="padding:8px 10px">Time · 时间</th>
+            <th style="padding:8px 10px">Source · 来源</th>
+            <th style="padding:8px 10px">SKU · 货号</th>
+            <th style="padding:8px 10px">Product · 商品</th>
+            <th style="padding:8px 10px;text-align:right">Δ</th>
+            <th style="padding:8px 10px;text-align:right">Bal · 库存</th>
+            <th style="padding:8px 10px">Note · 备注</th>
+          </tr>
+        </thead>
+        <tbody id="act-tbody"></tbody>
+      </table>
+    </div>
+    <div style="text-align:center;margin:12px 0">
+      <button id="act-more" class="btn-ghost" type="button" onclick="actLoadMore()" style="display:none">Load more · 加载更多</button>
+    </div>
+  </section>
+
   <section id="tab-guanyi">
     <h2>gzgrocery 同步 · Guanyi Sync</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
@@ -6744,6 +6801,7 @@
 <script src="/assets/retail-admin/10-extras.js"></script>
 <script src="/assets/retail-admin/11-meituan.js"></script>
 <script src="/assets/retail-admin/12-guanyi.js"></script>
+<script src="/assets/retail-admin/13-activity.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">

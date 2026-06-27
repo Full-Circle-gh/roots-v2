@@ -9960,6 +9960,119 @@ router.get('/api/retail-admin/dashboard/presence', requireRetailAdmin, (req, res
   }});
 });
 
+// ── Inventory activity ledger: full stock-movement history + CSV export ──────
+// One read view over retail_stock_ledger — the table every channel already
+// writes to via adjustStock(). No new table, no daemon changes: this just
+// surfaces what's there. Each row carries delta, balance_after, channel, actor
+// and a `note` (which holds the order number for channel orders).
+//
+// Time: ledger.created_at is UTC ("YYYY-MM-DD HH:MM:SS"). All filtering and
+// display is in Guangzhou local (UTC+8) via datetime(created_at,'+8 hours'),
+// so a "day" matches the operator's wall clock, not UTC.
+//
+// `source` is derived from reason so the UI/CSV read cleanly regardless of
+// whether the legacy `channel` column was populated.
+const ACT_SOURCE_SQL = `CASE
+    WHEN l.reason LIKE 'gzgrocery%' THEN 'gzgrocery'
+    WHEN l.reason LIKE 'meituan%'   THEN 'Meituan'
+    WHEN l.reason LIKE 'guanyi%'    THEN 'Guanyi'
+    WHEN l.reason LIKE 'order%' OR l.reason LIKE 'awaiting%' THEN 'Mini-app'
+    ELSE 'Manual'
+  END`;
+// Map a UI `source` key → the reason LIKE pattern(s) it covers.
+const ACT_SOURCE_FILTER = {
+  gzgrocery: "l.reason LIKE 'gzgrocery%'",
+  meituan:   "l.reason LIKE 'meituan%'",
+  guanyi:    "l.reason LIKE 'guanyi%'",
+  miniapp:   "(l.reason LIKE 'order%' OR l.reason LIKE 'awaiting%')",
+  manual:    "(l.reason NOT LIKE 'gzgrocery%' AND l.reason NOT LIKE 'meituan%' AND l.reason NOT LIKE 'guanyi%' AND l.reason NOT LIKE 'order%' AND l.reason NOT LIKE 'awaiting%')",
+};
+// Build WHERE + params from the query string, shared by JSON + CSV routes.
+function buildActivityQuery(q) {
+  const gzToday = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const isDate  = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
+  const from = isDate(q.from) ? q.from : gzToday;
+  const to   = isDate(q.to)   ? q.to   : from;
+  const where = [`date(datetime(l.created_at,'+8 hours')) >= @from`,
+                 `date(datetime(l.created_at,'+8 hours')) <= @to`];
+  const params = { from, to };
+  if (q.source && ACT_SOURCE_FILTER[q.source]) where.push(ACT_SOURCE_FILTER[q.source]);
+  if (q.store_id && /^\d+$/.test(String(q.store_id))) { where.push('l.store_id = @store_id'); params.store_id = Number(q.store_id); }
+  const term = String(q.q || '').trim();
+  if (term) {
+    where.push(`(p.sku LIKE @term OR p.name_en LIKE @term OR p.name_cn LIKE @term OR l.note LIKE @term)`);
+    params.term = `%${term}%`;
+  }
+  return { from, to, where: where.join(' AND '), params };
+}
+function activityRows({ where, params }, limit, offset) {
+  return tdb().prepare(`
+    SELECT l.id,
+           datetime(l.created_at,'+8 hours') AS ts_local,
+           ${ACT_SOURCE_SQL} AS source,
+           l.reason, l.store_id,
+           COALESCE(NULLIF(TRIM(s.name_en),''), NULLIF(TRIM(s.name_cn),''), s.code) AS store,
+           p.sku,
+           COALESCE(NULLIF(TRIM(p.name_en),''), NULLIF(TRIM(p.name_cn),'')) AS product,
+           l.delta, l.balance_after, l.actor_label, l.note
+      FROM retail_stock_ledger l
+      LEFT JOIN store_products p ON p.id = l.product_id
+      LEFT JOIN retail_stores  s ON s.id = l.store_id
+     WHERE ${where}
+     ORDER BY l.id DESC
+     ${limit != null ? 'LIMIT @limit OFFSET @offset' : ''}
+  `).all(limit != null ? { ...params, limit, offset } : params);
+}
+
+// JSON: paginated rows + per-source summary for the current filter window.
+router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
+  try {
+    const built  = buildActivityQuery(req.query);
+    const limit  = Math.min(Math.max(parseInt(req.query.limit || '200', 10) || 200, 1), 2000);
+    const offset = Math.max(parseInt(req.query.offset || '0', 10) || 0, 0);
+    const rows   = activityRows(built, limit, offset);
+    const total  = tdb().prepare(`
+      SELECT COUNT(*) n FROM retail_stock_ledger l
+        LEFT JOIN store_products p ON p.id = l.product_id
+       WHERE ${built.where}`).get(built.params).n;
+    const summary = tdb().prepare(`
+      SELECT ${ACT_SOURCE_SQL} AS source, COUNT(*) AS events,
+             SUM(CASE WHEN l.delta < 0 THEN -l.delta ELSE 0 END) AS units_out,
+             SUM(CASE WHEN l.delta > 0 THEN  l.delta ELSE 0 END) AS units_in
+        FROM retail_stock_ledger l
+        LEFT JOIN store_products p ON p.id = l.product_id
+       WHERE ${built.where}
+       GROUP BY source ORDER BY events DESC`).all(built.params);
+    res.json({ success: true, from: built.from, to: built.to, total, limit, offset, summary, rows });
+  } catch (e) {
+    console.error('[activity]', e);
+    res.status(500).json({ success: false, error: 'activity_failed', message: e.message });
+  }
+});
+
+// CSV: the same filtered window, no pagination — a whole day/week/month in one
+// click. BOM-prefixed UTF-8 so Excel renders Chinese product names correctly.
+router.get('/api/retail-admin/activity/export.csv', requireRetailAdmin, (req, res) => {
+  try {
+    const built = buildActivityQuery(req.query);
+    const rows  = activityRows(built, null, 0);
+    const head  = ['Time (UTC+8)', 'Source', 'Reason', 'Store', 'SKU', 'Product', 'Delta', 'Balance after', 'Actor', 'Note'];
+    const cell  = v => { const s = v == null ? '' : String(v); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of rows) lines.push([
+      r.ts_local, r.source, r.reason, r.store, r.sku, r.product,
+      r.delta > 0 ? `+${r.delta}` : r.delta, r.balance_after, r.actor_label, r.note,
+    ].map(cell).join(','));
+    const fname = built.from === built.to ? `activity_${built.from}` : `activity_${built.from}_${built.to}`;
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${fname}.csv"`);
+    res.send('﻿' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[activity csv]', e);
+    res.status(500).json({ success: false, error: 'activity_csv_failed', message: e.message });
+  }
+});
+
 // ── Dashboard: activity feed (real events the operator might act on) ──────
 // Unions 5 real-data event streams into one timeline: paid orders, refund
 // requests, low-stock items (currently <=5 and recently touched), new
