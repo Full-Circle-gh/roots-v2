@@ -11580,6 +11580,7 @@ function synthReviewAgg(productId) {
 function mergedRecentReviews(productId, limit) {
   const real = tdb().prepare(
     `SELECT r.id, r.rating, r.comment, r.created_at, r.tags_json, r.photos_json,
+            r.reply, r.reply_at,
             c.nickname AS customer_name, c.avatar_url AS customer_avatar
        FROM retail_reviews r
   LEFT JOIN retail_customers c ON c.id = r.customer_id
@@ -11589,7 +11590,7 @@ function mergedRecentReviews(productId, limit) {
   let syn = [];
   try {
     syn = tdb().prepare(
-      `SELECT id, rating, comment, created_at, tags_json,
+      `SELECT id, rating, comment, created_at, tags_json, reply, reply_at,
               reviewer_name AS customer_name
          FROM retail_synthetic_reviews
         WHERE product_id = ? AND is_visible = 1
@@ -11601,11 +11602,13 @@ function mergedRecentReviews(productId, limit) {
       id: r.id, rating: r.rating, comment: r.comment, created_at: r.created_at,
       customer_name: r.customer_name, customer_avatar: r.customer_avatar,
       tags: parseJsonArray(r.tags_json), photos: parseJsonArray(r.photos_json),
+      reply: r.reply || null, reply_at: r.reply_at || null,
     })),
     ...syn.map(r => ({
       id: -r.id, rating: r.rating, comment: r.comment, created_at: r.created_at,
       customer_name: r.customer_name, customer_avatar: null,
       tags: parseJsonArray(r.tags_json), photos: [],
+      reply: r.reply || null, reply_at: r.reply_at || null,
     })),
   ];
   norm.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
@@ -11642,10 +11645,11 @@ router.get('/api/retail/products/:id/reviews', (req, res) => {
   let rows, total;
   try {
     rows = tdb().prepare(
-      `SELECT id, rating, comment, created_at, tags_json, photos_json, customer_name, customer_avatar
+      `SELECT id, rating, comment, created_at, tags_json, photos_json, reply, reply_at, customer_name, customer_avatar
          FROM (
            SELECT r.id AS id, r.rating AS rating, r.comment AS comment, r.created_at AS created_at,
                   r.tags_json AS tags_json, r.photos_json AS photos_json,
+                  r.reply AS reply, r.reply_at AS reply_at,
                   c.nickname AS customer_name, c.avatar_url AS customer_avatar
              FROM retail_reviews r
         LEFT JOIN retail_customers c ON c.id = r.customer_id
@@ -11653,6 +11657,7 @@ router.get('/api/retail/products/:id/reviews', (req, res) => {
            UNION ALL
            SELECT -s.id AS id, s.rating, s.comment, s.created_at,
                   s.tags_json, NULL AS photos_json,
+                  s.reply, s.reply_at,
                   s.reviewer_name AS customer_name, NULL AS customer_avatar
              FROM retail_synthetic_reviews s
             WHERE s.product_id = ? AND s.is_visible = 1
@@ -11666,6 +11671,7 @@ router.get('/api/retail/products/:id/reviews', (req, res) => {
     // Synthetic table missing → real reviews only.
     rows = tdb().prepare(
       `SELECT r.id, r.rating, r.comment, r.created_at, r.tags_json, r.photos_json,
+              r.reply, r.reply_at,
               c.nickname AS customer_name, c.avatar_url AS customer_avatar
          FROM retail_reviews r
     LEFT JOIN retail_customers c ON c.id = r.customer_id
@@ -12079,7 +12085,7 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   const unionSql = synthOk
     ? `UNION ALL
            SELECT 'synthetic' AS source, s.id, s.rating, s.comment, s.is_visible, s.created_at,
-                  s.tags_json, NULL AS photos_json,
+                  s.tags_json, NULL AS photos_json, s.reply, s.reply_at,
                   s.product_id, NULL AS order_id, NULL AS customer_id,
                   p.name_en AS product_name_en, p.name_cn AS product_name_cn,
                   s.reviewer_name AS customer_name, NULL AS customer_avatar, NULL AS order_no
@@ -12090,7 +12096,7 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT * FROM (
            SELECT 'real' AS source, r.id, r.rating, r.comment, r.is_visible, r.created_at,
-                  r.tags_json, r.photos_json,
+                  r.tags_json, r.photos_json, r.reply, r.reply_at,
                   r.product_id, r.order_id, r.customer_id,
                   p.name_en  AS product_name_en, p.name_cn AS product_name_cn,
                   c.nickname AS customer_name, c.avatar_url AS customer_avatar,
@@ -12170,6 +12176,18 @@ router.patch('/api/retail-admin/reviews/:id', requireRetailAdmin, express.json()
     tdb().prepare(`UPDATE ${table} SET is_visible = ? WHERE id = ?`).run(visible, id);
     logActivity(req.user.id, req.user.username, visible ? 'show' : 'hide',
       synthetic ? 'retail_synthetic_review' : 'retail_review', id, { is_visible: visible }, req.ip);
+  }
+  // Merchant reply — a public "seller response" shown under the review on the
+  // storefront. Empty/blank string clears the reply.
+  if ('reply' in (req.body || {})) {
+    const reply = String(req.body.reply || '').trim().slice(0, 1000);
+    if (reply) {
+      tdb().prepare(`UPDATE ${table} SET reply = ?, reply_at = CURRENT_TIMESTAMP WHERE id = ?`).run(reply, id);
+    } else {
+      tdb().prepare(`UPDATE ${table} SET reply = NULL, reply_at = NULL WHERE id = ?`).run(id);
+    }
+    logActivity(req.user.id, req.user.username, reply ? 'reply' : 'reply_clear',
+      synthetic ? 'retail_synthetic_review' : 'retail_review', id, { has_reply: !!reply }, req.ip);
   }
   res.json({ success: true });
 });

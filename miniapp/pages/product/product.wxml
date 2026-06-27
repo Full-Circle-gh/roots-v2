@@ -212,6 +212,10 @@
             <text class="review-date f-toni">{{item.created_short}}</text>
           </view>
           <view wx:if="{{item.comment}}" class="review-comment">{{item.comment}}</view>
+          <view wx:if="{{item.reply}}" class="review-reply">
+            <text class="review-reply-lbl f-toni">{{lang === 'cn' ? '商家回复' : 'Seller reply'}}</text>
+            <text class="review-reply-body">{{item.reply}}</text>
+          </view>
           <view wx:if="{{item.tags_view.length}}" class="review-tags">
             <text wx:for="{{item.tags_view}}" wx:for-item="tg" wx:key="id"
                   class="review-tag review-tag-{{tg.color}} f-aleo">{{tg.label}}</text>

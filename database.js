@@ -1366,6 +1366,10 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_reviews_customer ON retail_
 // JSON array of string ids; tag labels live client-side so we can change
 // the wording without a migration.
 addColumn('retail_reviews', 'tags_json', 'TEXT');
+// Merchant reply to a customer review — a public "seller response" shown under
+// the review on the storefront. Set/cleared by staff from the moderation list.
+addColumn('retail_reviews', 'reply',    'TEXT');
+addColumn('retail_reviews', 'reply_at', 'DATETIME');
 
 // Synthetic ("seeded") product reviews — social-proof copy written by staff,
 // NOT by a real buyer. Kept in their OWN table, fully decoupled from
@@ -1389,6 +1393,10 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_synthetic_reviews (
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
 )`);
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_synth_reviews_product ON retail_synthetic_reviews(product_id, is_visible, created_at)'); } catch {}
+// Same merchant-reply fields as real reviews so the moderation list can treat
+// both tables uniformly.
+addColumn('retail_synthetic_reviews', 'reply',    'TEXT');
+addColumn('retail_synthetic_reviews', 'reply_at', 'DATETIME');
 
 // A paid add-on choice (e.g. "Pickles", "Spicy sauce") backed by a real
 // store product so it has its OWN stock + SKU + packing line. When set, the

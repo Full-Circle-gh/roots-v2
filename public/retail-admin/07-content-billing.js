@@ -1396,6 +1396,9 @@ async function saveFaq() {
 }
 
 let REVIEWS_LOADED = false;
+// Cache of the last-loaded rows keyed by `${source}:${id}` so the Reply
+// composer can pre-fill the existing reply without a refetch.
+let REVIEWS_BY_KEY = {};
 
 async function loadReviews() {
   const tbody = $('#reviews-table tbody');
@@ -1418,6 +1421,8 @@ async function loadReviews() {
       tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">' + ICONS.empty + '</div><h3>No reviews match · 无匹配评价</h3><p class="muted">Adjust the filters above, or wait for delivered orders. · 请调整上方筛选,或等待订单送达。</p></div></td></tr>';
       return;
     }
+    REVIEWS_BY_KEY = {};
+    for (const r of data) REVIEWS_BY_KEY[`${r.source || 'real'}:${r.id}`] = r;
     tbody.innerHTML = data.map(renderReviewRow).join('');
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
@@ -1450,6 +1455,15 @@ function renderReviewRow(r) {
     ? `<div style="font-size: 12px; line-height: 1.4; max-width: 480px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(r.comment)}</div>`
     : '<div class="muted" style="font-size: 11px;">(no comment) · 无评论</div>';
 
+  // Merchant reply — a public seller response shown under the review on the
+  // storefront. When present, render it inline so staff see what's live.
+  const replyHtml = r.reply
+    ? `<div style="margin-top: 8px; padding: 6px 8px; border-left: 2px solid var(--accent); background: var(--bg-2, rgba(0,0,0,.03)); border-radius: 0 4px 4px 0; max-width: 480px;">
+         <div class="muted" style="font-size: 10px; font-weight: 600; letter-spacing: .04em;">${escapeHtml(cuT('YOUR REPLY', '商家回复'))}</div>
+         <div style="font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word;">${escapeHtml(r.reply)}</div>
+       </div>`
+    : '';
+
   return `
     <tr data-id="${r.id}" ${r.is_visible ? '' : 'style="opacity:.55"'}>
       <td><span style="color: var(--accent); font-size: 14px; letter-spacing: 1px;">${stars}</span></td>
@@ -1466,10 +1480,14 @@ function renderReviewRow(r) {
         ${commentHtml}
         ${tagsHtml ? `<div style="margin-top: 6px;">${tagsHtml}</div>` : ''}
         ${photosHtml ? `<div style="margin-top: 8px;">${photosHtml}</div>` : ''}
+        ${replyHtml}
       </td>
       <td class="muted" style="font-size: 11px; white-space: nowrap;">${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
       <td><span class="pill ${r.is_visible ? 'pub' : 'draft'}"><span class="dot"></span>${r.is_visible ? 'Visible · 显示' : 'Hidden · 隐藏'}</span></td>
       <td style="white-space: nowrap;">
+        <button class="btn btn-sm" onclick="replyReview(${r.id}, '${synthetic ? 'synthetic' : 'real'}')">
+          ${r.reply ? 'Edit reply · 编辑回复' : 'Reply · 回复'}
+        </button>
         <button class="btn btn-sm" onclick="toggleReview(${r.id}, ${r.is_visible ? 0 : 1}, '${synthetic ? 'synthetic' : 'real'}')">
           ${r.is_visible ? 'Hide · 隐藏' : 'Restore · 恢复'}
         </button>
@@ -1499,6 +1517,30 @@ async function deleteReview(id) {
   try {
     await api('/api/retail-admin/reviews/' + id + '?source=synthetic', { method: 'DELETE' });
     toast(cuT('Removed', '已删除'));
+    await loadReviews();
+  } catch (e) {
+    toast('Failed · 失败: ' + e.message, 'err');
+  }
+}
+
+// Write or edit the public merchant reply shown under a review on the
+// storefront. Blank submission clears an existing reply.
+async function replyReview(id, source) {
+  const cur = REVIEWS_BY_KEY[`${source || 'real'}:${id}`];
+  const existing = (cur && cur.reply) || '';
+  const next = prompt(
+    cuT('Your public reply to this review (customers see it under their review). Leave blank to remove.',
+        '对这条评价的公开回复(顾客会在自己的评价下看到)。留空则删除回复。'),
+    existing);
+  if (next === null) return;            // cancelled
+  const reply = next.trim();
+  if (reply === existing.trim()) return; // no change
+  try {
+    await api('/api/retail-admin/reviews/' + id, {
+      method: 'PATCH',
+      body: { reply, source: source || 'real' },
+    });
+    toast(reply ? cuT('Reply saved', '回复已保存') : cuT('Reply removed', '回复已删除'));
     await loadReviews();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');

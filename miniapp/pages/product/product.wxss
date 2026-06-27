@@ -460,6 +460,29 @@
   margin: 0 0 14rpx;
 }
 
+/* Merchant reply — public seller response shown under a customer review. */
+.review-reply {
+  margin: 0 0 14rpx;
+  padding: 14rpx 18rpx;
+  border-left: 4rpx solid var(--forest, #5a7d4f);
+  background: rgba(0, 0, 0, 0.035);
+  border-radius: 0 10rpx 10rpx 0;
+}
+.review-reply-lbl {
+  display: block;
+  font-size: calc(22rpx * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted, #8a8a82);
+  margin-bottom: 4rpx;
+}
+.review-reply-body {
+  font-family: var(--f-aleo);
+  font-size: calc(27rpx * var(--font-scale));
+  line-height: 1.5;
+  color: var(--ink);
+}
+
 .review-tags {
   display: flex;
   flex-wrap: wrap;
