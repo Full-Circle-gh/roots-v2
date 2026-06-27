@@ -22,6 +22,9 @@
     await Promise.all([gyLoadStatus(), gyLoadListings()]);
     await gyLoadProducts();
     gyStartPolling();
+    // The analytics section is open by default, so its toggle event never fires —
+    // kick off the first load here. (When closed, wireAnalyticsToggle handles it.)
+    if (document.getElementById('gy-analytics-details')?.open) gyLoadAnalytics();
   };
 
   // ── Live refresh while the tab is visible ──────────────────────────────────
@@ -250,6 +253,130 @@
       await gyLoadStatus();
     } catch (e) { toast('Push failed: ' + e.message, 'error'); }
   };
+
+  // ── gzgrocery analytics & billing ─────────────────────────────────────────────
+  // Reads the live /guanyi/analytics endpoint (billable units = applied pickups ×
+  // imported gzgrocery pricing) and renders the dashboard + Statement CSV export.
+  const _gyAna = { period: 'day', from: '', to: '', data: null };
+
+  window.gySetAnaPeriod = function (p) { _gyAna.period = p; gyLoadAnalytics(); };
+  window.gyAnaSetRange = function () {
+    _gyAna.from = (document.getElementById('gy-ana-from') || {}).value || '';
+    _gyAna.to = (document.getElementById('gy-ana-to') || {}).value || '';
+    gyLoadAnalytics();
+  };
+
+  window.gyLoadAnalytics = async function () {
+    const wrap = document.getElementById('gy-analytics');
+    if (!wrap) return;
+    const qs = new URLSearchParams({ period: _gyAna.period });
+    if (_gyAna.from) qs.set('from', _gyAna.from);
+    if (_gyAna.to) qs.set('to', _gyAna.to);
+    try {
+      const r = await api('/api/retail-admin/guanyi/analytics?' + qs.toString());
+      _gyAna.data = r;
+      gyRenderAnalytics(r);
+    } catch (e) {
+      wrap.innerHTML = `<div class="muted">Analytics error: ${esc(e.message)}</div>`;
+    }
+  };
+
+  function gyRenderAnalytics(r) {
+    const wrap = document.getElementById('gy-analytics');
+    if (!wrap) return;
+    const yuan = (n) => '¥' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const s = r.summary || {};
+    const prods = r.products || [];
+    const ts = r.timeSeries || [];
+    const per = r.period || 'day';
+    const btn = (p, label) => `<button class="btn btn-sm ${per === p ? 'btn-primary' : ''}" onclick="gySetAnaPeriod('${p}')">${label}</button>`;
+
+    const card = (label, val, sub) => `<div style="flex:1;min-width:120px;background:var(--bg-elev-1);border:1px solid var(--border,#e0ddd5);border-radius:8px;padding:10px 12px">
+      <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">${label}</div>
+      <div style="font-size:20px;font-weight:700;margin-top:2px">${val}</div>${sub ? `<div class="muted" style="font-size:11px">${sub}</div>` : ''}</div>`;
+
+    let html = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <span style="font-size:12px" class="muted">Group by</span> ${btn('day', 'Day')} ${btn('week', 'Week')} ${btn('month', 'Month')}
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
+        <input type="date" id="gy-ana-from" value="${esc(_gyAna.from)}" onchange="gyAnaSetRange()" style="font-size:12px;padding:2px 4px">
+        <span class="muted">→</span>
+        <input type="date" id="gy-ana-to" value="${esc(_gyAna.to)}" onchange="gyAnaSetRange()" style="font-size:12px;padding:2px 4px">
+        <button class="btn btn-sm" onclick="gyExportStatement()" ${prods.length ? '' : 'disabled'} title="Download itemized statement as CSV">⤓ Statement CSV</button>
+      </span>
+    </div>`;
+
+    html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+      ${card('Units ordered', Number(s.units || 0).toLocaleString())}
+      ${card('They owe you', yuan(s.owed), 'gzgrocery price')}
+      ${card('Retail value', yuan(s.retail))}
+      ${card('Avg discount', ((s.avgDiscount || 0) * 100).toFixed(1) + '%')}
+      ${card('Products', s.products || 0)}
+    </div>`;
+
+    if (r.unpriced && r.unpriced.length) {
+      html += `<div style="font-size:12px;color:#8a6d00;background:#fff9e0;border:1px solid #e6c200;border-radius:6px;padding:6px 10px;margin-bottom:10px">
+        ⚠ ${r.unpriced.length} ordered product(s) have no gzgrocery price yet — counted in units but billed at full retail: ${r.unpriced.slice(0, 6).map(u => esc(u.name || ('#' + u.product_id))).join(', ')}${r.unpriced.length > 6 ? '…' : ''}</div>`;
+    }
+
+    if (!prods.length) {
+      html += `<div class="muted" style="padding:18px;text-align:center">No gzgrocery orders in this range yet · 暂无订货<br><span style="font-size:11px">Pickups appear here automatically as gzgrocery sells.</span></div>`;
+      wrap.innerHTML = html; return;
+    }
+
+    // simple per-bucket bar list
+    if (ts.length) {
+      const max = Math.max(...ts.map(t => t.owed)) || 1;
+      html += `<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:12px;color:var(--fg-muted)">By ${per} (${ts.length})</summary>
+        <div style="margin-top:6px">` + ts.map(t => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:1px 0">
+          <span style="width:90px" class="muted">${esc(t.bucket)}</span>
+          <span style="height:10px;background:var(--accent,#7a8b3a);border-radius:2px;width:${Math.max(2, (t.owed / max) * 200)}px"></span>
+          <span>${yuan(t.owed)}</span><span class="muted">· ${t.units}u</span>
+        </div>`).join('') + `</div></details>`;
+    }
+
+    html += `<table class="data-table" style="width:100%;font-size:12px"><thead><tr>
+      <th style="text-align:left">Product</th><th style="text-align:right">Units</th>
+      <th style="text-align:right">Owed</th><th style="text-align:right">Retail</th><th style="text-align:right">Disc</th></tr></thead><tbody>`
+      + prods.slice(0, 50).map(p => `<tr>
+        <td>${esc(p.name || ('#' + p.product_id))} <span class="muted">${esc(p.sku || '')}</span></td>
+        <td style="text-align:right;font-weight:600">${p.units}</td>
+        <td style="text-align:right">${yuan(p.owed)}</td>
+        <td style="text-align:right" class="muted">${yuan(p.retail)}</td>
+        <td style="text-align:right">${p.discount == null ? '<span style="color:#c80">—</span>' : (p.discount * 100).toFixed(0) + '%'}</td>
+      </tr>`).join('') + `</tbody></table>`;
+    if (prods.length > 50) html += `<div class="muted" style="font-size:11px;margin-top:4px">Showing top 50 of ${prods.length} — full list in the CSV.</div>`;
+
+    wrap.innerHTML = html;
+  }
+
+  window.gyExportStatement = function () {
+    const r = _gyAna.data; if (!r || !r.products) return;
+    const rangeLabel = `${r.range && r.range.from || 'start'}_to_${r.range && r.range.to || 'now'}`;
+    const head = ['SKU', 'Product', 'Units', 'Unit gz price', 'Owed', 'Retail value', 'Discount %'];
+    const lines = [head.join(',')];
+    for (const p of r.products) {
+      const unit = p.units ? (p.owed / p.units) : 0;
+      const cell = (v) => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+      lines.push([cell(p.sku), cell(p.name), p.units, unit.toFixed(2), p.owed.toFixed(2), p.retail.toFixed(2), p.discount == null ? '' : (p.discount * 100).toFixed(0)].join(','));
+    }
+    const s = r.summary || {};
+    lines.push(['', 'TOTAL', s.units || 0, '', (s.owed || 0).toFixed(2), (s.retail || 0).toFixed(2), ((s.avgDiscount || 0) * 100).toFixed(1)].join(','));
+    const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `gzgrocery-statement_${rangeLabel}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  // Load analytics the first time the section is opened (it's heavier than the poll).
+  (function wireAnalyticsToggle() {
+    const det = document.getElementById('gy-analytics-details');
+    if (det) {
+      if (!det._gyWired) { det._gyWired = true; det.addEventListener('toggle', () => { if (det.open && !_gyAna.data) gyLoadAnalytics(); }); }
+    } else {
+      document.addEventListener('DOMContentLoaded', wireAnalyticsToggle, { once: true });
+    }
+  })();
 
   // ── tiny helpers ──────────────────────────────────────────────────────────────
   function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = (v == null ? '—' : v); }

@@ -219,7 +219,12 @@ async function processStockQueue() {
               .run(res.targetQty, storeCode, row.retail_store_id, row.product_id);
           }
           logSync(storeCode, 'stock_push', 'ok',
-            { name: res.name, target: res.targetQty, was: res.currentQty, delta: res.skipped ? 0 : res.delta, skipped: !!res.skipped });
+            // res.name can be empty if the browser layer didn't echo it back, and
+            // the OK line used to carry no SKU at all — so the log showed just a
+            // bare number. Fall back to the queue row's names and the roots SKU.
+            { name: res.name || row.guanyi_name || row.name_cn || row.name_en || '',
+              sku: row.sku || row.guanyi_code || null,
+              target: res.targetQty, was: res.currentQty, delta: res.skipped ? 0 : res.delta, skipped: !!res.skipped });
         } else if (res.transient) {
           // Guanyi-side hiccup (系统异常 etc.). Keep retryable until attempts hit
           // 3 so the daemon self-heals; only burn to terminal error once spent.
