@@ -529,6 +529,26 @@
     .cpn .cpn-foot{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:12px;}
     .cpn .cpn-exp{font-size:11px;letter-spacing:.04em;color:var(--olive);}
     .cpn .cpn-use{flex:none;background:var(--ink);color:var(--lime);border:0;padding:8px 16px;font-family:var(--bf-toni);font-weight:700;font-size:11px;letter-spacing:.06em;text-transform:uppercase;}
+    .cpn .cpn-state{font-family:var(--bf-toni);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--olive);}
+    /* Coupons page chrome — mirrors the mini-app (title + active pill + 3 tabs + dashed empty card). */
+    .cpn-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin:0 22px;}
+    .cpn-kick{font-family:var(--bf-gothic);letter-spacing:.18em;text-transform:uppercase;font-size:13px;color:var(--olive);}
+    .cpn-title{font-family:var(--bf-bear);font-size:40px;line-height:1.05;color:var(--ink);margin-top:6px;}
+    .cpn-pill{flex:none;background:var(--ink);text-align:center;padding:12px 18px;min-width:66px;}
+    .cpn-pill-v{font-family:var(--bf-bear);font-size:34px;line-height:.85;color:var(--lime);}
+    .cpn-pill-l{font-family:var(--bf-gothic);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#fff;opacity:.7;margin-top:6px;}
+    .cpn-redeem{display:flex;align-items:stretch;margin:18px 22px 0;background:#FFFCF7;border:2px solid var(--ink);}
+    .cpn-redeem input{flex:1;border:0;outline:0;background:transparent;font:inherit;font-size:15px;color:var(--ink);padding:14px 16px;}
+    .cpn-redeem button{flex:none;background:var(--ink);color:var(--lime);border:0;font-family:var(--bf-gothic);font-size:14px;letter-spacing:.06em;text-transform:uppercase;padding:0 22px;cursor:pointer;}
+    .cpn-tabs{display:flex;border:2px solid var(--ink);margin:18px 22px 0;}
+    .cpn-tab{flex:1;padding:12px 0;text-align:center;font-family:var(--bf-gothic);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink);background:transparent;border:0;cursor:pointer;}
+    .cpn-tab+.cpn-tab{border-left:2px solid var(--ink);}
+    .cpn-tab.on{background:var(--ink);color:var(--lime);}
+    .cpn-tab .c{opacity:.7;}
+    .cpn-tab.on .c{color:var(--lime);}
+    .cpn-empty{text-align:center;margin:18px 22px 0;padding:48px 24px;background:#FFFCF7;border:2px dashed rgba(0,0,0,.2);}
+    .cpn-empty-t{font-family:var(--bf-bear);font-size:28px;color:var(--olive);}
+    .cpn-empty-s{font-size:14px;color:var(--olive);opacity:.75;margin-top:10px;line-height:1.5;max-width:320px;margin-left:auto;margin-right:auto;}
     /* favorites grid (reuse .grid/.card) */
     .fav-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;padding:14px 22px 0;}
     /* membership ladder */
@@ -3279,38 +3299,76 @@ async function renderTopup(){
 async function renderCoupons(){
   const v=$('#view'),cn=state.lang==='cn'; if(spGuard(v))return;
   document.title=(cn?'优惠券':'Coupons')+' · '+state.brand;
-  v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'我的':'MY',cn?'优惠券':'Coupons','')}
-    <div class="sp-row-in"><input class="sp-input" id="cpnCode" placeholder="${cn?'输入优惠码':'Enter a code'}"><button class="sp-btn ink" id="cpnRedeem">${cn?'兑换':'Redeem'}</button></div>
-    <div class="sp-msg" id="cpnMsg"></div>
-    <div class="sp-tabs"><button class="sp-tab on" data-ct="active">${cn?'可用':'Active'}</button><button class="sp-tab" data-ct="used">${cn?'已用':'Used'}</button></div>
-    <div id="cpnBody"><div class="sp-empty">${cn?'加载中…':'Loading…'}</div></div></div>`;
+  const C={ kicker:cn?'优惠券':'COUPONS', title:cn?'我的优惠券。':'Your vouchers.', activeWord:cn?'可用':'ACTIVE',
+    placeholder:cn?'输入优惠码':'Enter a code', redeem:cn?'兑换':'REDEEM',
+    tabActive:cn?'可用':'ACTIVE', tabUsed:cn?'已用':'USED', tabExpired:cn?'过期':'EXPIRED',
+    use:cn?'去使用':'USE NOW', expires:cn?'有效期至':'Expires',
+    emptyTitle:cn?'暂无':'Nothing here.',
+    emptySub:cn?'订单、生日、会员活动都会送您新的优惠券。':'New coupons arrive on orders, birthdays, and member promos.' };
+  v.innerHTML=`<div class="sp">${spBack()}
+    <div class="cpn-head"><div><div class="cpn-kick">${C.kicker}</div><div class="cpn-title">${C.title}</div></div>
+      <div class="cpn-pill"><div class="cpn-pill-v" id="cpnActiveN">0</div><div class="cpn-pill-l">${C.activeWord}</div></div></div>
+    <div class="cpn-redeem"><input id="cpnCode" placeholder="${C.placeholder}"><button id="cpnRedeem">${C.redeem}</button></div>
+    <div class="sp-msg" id="cpnMsg" style="margin:0 22px"></div>
+    <div class="cpn-tabs">
+      <button class="cpn-tab on" data-ct="active">${C.tabActive} <span class="c" id="cpnCntA">· 0</span></button>
+      <button class="cpn-tab" data-ct="used">${C.tabUsed} <span class="c" id="cpnCntU">· 0</span></button>
+      <button class="cpn-tab" data-ct="expired">${C.tabExpired} <span class="c" id="cpnCntE">· 0</span></button>
+    </div>
+    <div id="cpnBody"><div class="cpn-empty"><div class="cpn-empty-t">${cn?'加载中…':'Loading…'}</div></div></div></div>`;
+
+  // Stable per-code stub accent (mirror of the mini-app's accentFor).
+  const STUB_ACCENTS=['#CCD900','#FFAF60','#B2CFED','#F4B8CB','#F2CA6C','#E96174'];
+  const accentFor=(code)=>{ if(!code)return STUB_ACCENTS[0]; let h=0; const s=String(code); for(let i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))|0; return STUB_ACCENTS[Math.abs(h)%STUB_ACCENTS.length]; };
+  const stubBig=(t)=>{ if(t.type==='percent')return (Number(t.value)||0)+'%'; if(t.type==='free_shipping')return cn?'免邮':'FREE'; return '¥'+(Number(t.value)||0); };
+  const stubSub=(t)=>{ if(t.type==='free_shipping')return cn?'':'SHIP'; return cn?'优惠':'OFF'; };
+
   let mine=[],pub=[],used=[];
   try{ [mine,pub]=await Promise.all([api('/api/retail/my-vouchers').catch(()=>[]),api('/api/retail/vouchers/public').catch(()=>[])]); }catch(e){}
   try{ const ords=await api('/api/retail/orders?limit=50')||[]; used=(ords||[]).filter(o=>o.voucher_code); }catch(e){}
-  const fmtVal=(t)=>{ if(t.type==='percent')return (Number(t.value)||0)+(cn?'% 折':'% OFF'); if(t.type==='free_shipping')return cn?'免邮':'FREE SHIP'; return '¥'+(Number(t.value)||0); };
-  // Ticket stub shows the value big + a short qualifier under it.
-  const stubBig=(t)=>{ if(t.type==='percent')return (Number(t.value)||0)+'%'; if(t.type==='free_shipping')return cn?'免邮':'FREE'; return '¥'+(Number(t.value)||0); };
-  const stubSub=(t)=>{ if(t.type==='free_shipping')return cn?'':'SHIP'; return cn?'优惠':'OFF'; };
+
+  // Active = deduped granted + public, keyed by code (granted wins). Expired is
+  // empty: the public/granted endpoints filter expired rows out (mirrors mini-app).
+  const seen=new Set();
+  const active=[...(mine||[]),...(pub||[])].filter(x=>{const k=x.code;if(!k||seen.has(k))return false;seen.add(k);return true;});
+  const expired=[];
+  const counts={active:active.length,used:used.length,expired:expired.length};
+  $('#cpnActiveN').textContent=counts.active;
+  $('#cpnCntA').textContent='· '+counts.active;
+  $('#cpnCntU').textContent='· '+counts.used;
+  $('#cpnCntE').textContent='· '+counts.expired;
+
+  const activeTicket=(t)=>{
+    const name=esc(pick(t.title_en,t.title_cn)||t.code||'');
+    const min=t.min_subtotal?`${cn?'满 ¥':'Over ¥'}${t.min_subtotal}`:'';
+    const exp=t.expires_at?`${C.expires} ${String(t.expires_at).slice(0,10)}`:(cn?'长期有效':'No expiry');
+    return `<div class="cpn"><span class="notch notch-t"></span><span class="notch notch-b"></span>`+
+      `<div class="cpn-stub" style="background:${accentFor(t.code)}"><div class="cpn-big">${esc(stubBig(t))}</div><div class="cpn-stubsub">${esc(stubSub(t))}</div></div>`+
+      `<div class="cpn-body"><div class="cpn-name">${name}</div>${min?`<div class="cpn-meta">${esc(min)}</div>`:''}`+
+      `<div class="cpn-foot"><div class="cpn-exp">${esc(exp)}</div><button class="cpn-use" data-use="${escAttr(t.code)}">${C.use} →</button></div></div></div>`;
+  };
+  const usedTicket=(o)=>{
+    const nm=(cn?'已使用 · 订单 #':'Used · Order #')+esc(o.order_no||'');
+    return `<div class="cpn used"><span class="notch notch-t"></span><span class="notch notch-b"></span>`+
+      `<div class="cpn-stub"><div class="cpn-big">−¥${(Number(o.voucher_amount)||0).toFixed(0)}</div><div class="cpn-stubsub">${cn?'抵扣':'OFF'}</div></div>`+
+      `<div class="cpn-body"><div class="cpn-name">${nm}</div>`+
+      `<div class="cpn-foot"><div class="cpn-exp">${String(o.placed_at||'').slice(0,10)}</div><div class="cpn-state">${cn?'已使用':'USED'}</div></div></div></div>`;
+  };
+  const emptyHtml=`<div class="cpn-empty"><div class="cpn-empty-t">${C.emptyTitle}</div><div class="cpn-empty-s">${C.emptySub}</div></div>`;
+
   function show(tab){
-    v.querySelectorAll('.sp-tab').forEach(t=>t.classList.toggle('on',t.dataset.ct===tab));
+    v.querySelectorAll('.cpn-tab').forEach(t=>t.classList.toggle('on',t.dataset.ct===tab));
     const body=$('#cpnBody');
     if(tab==='active'){
-      const seen=new Set(); const all=[...(mine||[]),...(pub||[])].filter(x=>{const k=x.code;if(!k||seen.has(k))return false;seen.add(k);return true;});
-      body.innerHTML=all.length?all.map(t=>{
-        const name=esc(pick(t.title_en,t.title_cn)||t.code||'');
-        const min=t.min_subtotal?`${cn?'满 ¥':'Over ¥'}${t.min_subtotal}`:'';
-        const exp=t.expires_at?`${cn?'有效期至 ':'Expires '}${String(t.expires_at).slice(0,10)}`:(cn?'长期有效':'No expiry');
-        return `<div class="cpn"><span class="notch notch-t"></span><span class="notch notch-b"></span>`+
-          `<div class="cpn-stub"><div class="cpn-big">${esc(stubBig(t))}</div><div class="cpn-stubsub">${esc(stubSub(t))}</div></div>`+
-          `<div class="cpn-body"><div class="cpn-name">${name}</div>${min?`<div class="cpn-meta">${esc(min)}</div>`:''}`+
-          `<div class="cpn-foot"><div class="cpn-exp">${esc(exp)}</div><button class="cpn-use" data-use="${escAttr(t.code)}">${cn?'使用':'Use'}</button></div></div></div>`;
-      }).join(''):`<div class="sp-empty">${cn?'暂无可用优惠券':'No active coupons'}</div>`;
+      body.innerHTML=active.length?active.map(activeTicket).join(''):emptyHtml;
       body.querySelectorAll('[data-use]').forEach(b=>b.addEventListener('click',()=>{ try{localStorage.setItem('pending_voucher_code',b.dataset.use);}catch{} toast(cn?'已选择，去结算使用':'Applied — checkout to use'); location.hash='#/cart'; }));
+    }else if(tab==='used'){
+      body.innerHTML=used.length?used.map(usedTicket).join(''):emptyHtml;
     }else{
-      body.innerHTML=used.length?used.map(o=>`<div class="sp-li"><div class="sp-main"><div class="sp-t">${esc(o.voucher_code)}</div><div class="sp-d">${esc(o.order_no||'')} · ${String(o.placed_at||'').slice(0,10)}</div></div><div class="sp-amt sp-neg">−¥${(Number(o.voucher_amount)||0).toFixed(2)}</div></div>`).join(''):`<div class="sp-empty">${cn?'暂无使用记录':'Nothing used yet'}</div>`;
+      body.innerHTML=emptyHtml;
     }
   }
-  v.querySelectorAll('.sp-tab').forEach(t=>t.addEventListener('click',()=>show(t.dataset.ct)));
+  v.querySelectorAll('.cpn-tab').forEach(t=>t.addEventListener('click',()=>show(t.dataset.ct)));
   $('#cpnRedeem').addEventListener('click',async()=>{ const code=($('#cpnCode').value||'').trim(); if(!code)return; $('#cpnMsg').textContent='';
     try{ await postJson('/api/retail/vouchers/validate',{code,subtotal:0}); try{localStorage.setItem('pending_voucher_code',code);}catch{} toast(cn?'优惠码有效，去结算':'Valid — checkout to use'); location.hash='#/cart'; }
     catch(e){ $('#cpnMsg').textContent=cn?'优惠码无效或不适用':'Code invalid or not applicable'; } });
