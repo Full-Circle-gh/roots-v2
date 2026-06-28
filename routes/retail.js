@@ -1169,6 +1169,31 @@ function expandStockLines(resolvedLines) {
   }
   return [...agg.entries()].map(([product_id, qty]) => ({ product_id, qty }));
 }
+// Decrement stock for an order that skipped checkout reservation (out-of-GZ or
+// scheduled-for-later — stockGate off). Called when staff first work the order
+// (preparing/dispatched/delivered). Rebuilds the component demand from the saved
+// line items — expanding bundles and folding in stock-backed add-ons, exactly as
+// the checkout reserve path does — then hands the expanded lines to the idempotent
+// inventory.commitUnreservedOrder (which no-ops if the order already reserved or
+// was already prepare-committed). Best-effort; never blocks the status change.
+function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel = null } = {}) {
+  const o = tdb().prepare('SELECT id, order_no FROM retail_orders WHERE id = ?').get(orderId);
+  if (!o) return;
+  const items = tdb().prepare(
+    'SELECT product_id, qty, options_json FROM retail_order_items WHERE order_id = ?'
+  ).all(orderId);
+  const resolved = [];
+  for (const it of items) {
+    if (!it.product_id) continue;
+    const prod = tdb().prepare('SELECT id, bundle_items FROM store_products WHERE id = ?').get(it.product_id);
+    if (!prod) continue;
+    let options = [];
+    try { const oj = JSON.parse(it.options_json || '[]'); if (Array.isArray(oj)) options = oj; } catch { /* no options */ }
+    resolved.push({ product: prod, qty: Number(it.qty) || 0, options });
+  }
+  const lines = expandStockLines(resolved);
+  return inventory.commitUnreservedOrder(orderId, lines, { actorUserId, actorLabel, note: o.order_no });
+}
 // Decorate a storefront list / PDP row IN PLACE: flag bundles, override the
 // displayed `stock` with the assemble-from-components figure, and (PDP only)
 // attach the "what's inside" component cards. The raw recipe JSON is stripped
@@ -16830,6 +16855,11 @@ router.post('/api/retail-admin/orders/bulk-tracking', requireRetailAdmin, expres
     if (o.status === 'paid' || o.status === 'preparing') {
       tdb().prepare("UPDATE retail_orders SET status = 'dispatched', dispatched_at = CURRENT_TIMESTAMP WHERE id = ? AND status IN ('paid','preparing')").run(o.id);
       autoDispatched = true;
+      // Waybill paste can jump an order straight to dispatched without ever
+      // hitting Preparing, so account for any unreserved (out-of-GZ / scheduled)
+      // stock here too. Idempotent — no-op for orders already decremented.
+      try { prepareCommitUnreservedOrder(o.id, { actorUserId: req.user?.id || null, actorLabel: req.user?.display_name || req.user?.username || null }); }
+      catch (e) { console.error('[inventory.prepareCommit (waybill)]', e); }
     } else if (o.status !== 'dispatched' && o.status !== 'delivered') {
       results.push({ order_no: orderNo, ok: false, error: 'wrong_status:' + o.status });
       continue;
@@ -17445,6 +17475,17 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   }
 
   logActivity(req.user.id, req.user.username, 'status_change', 'retail_order', id, { from: o.status, to: status, reason }, req.ip);
+
+  // Out-of-GZ / scheduled-ahead orders skipped stock reservation at checkout, so
+  // their stock never decremented via reserve→commit. Decrement now that staff are
+  // working the order — the first forward transition into fulfilment. Idempotent
+  // (no-ops for GZ same-day orders that already committed at payment), and hooked
+  // on all three states so an order that jumps straight paid→dispatched (e.g.
+  // waybill pasted without clicking Preparing) is still accounted for exactly once.
+  if (['preparing', 'dispatched', 'delivered'].includes(status)) {
+    try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+    catch (e) { console.error('[inventory.prepareCommit]', e); }
+  }
 
   // Points side-effects of the transition. Both helpers are idempotent.
   if (status === 'paid') {
