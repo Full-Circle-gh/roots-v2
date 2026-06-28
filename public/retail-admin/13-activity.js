@@ -115,7 +115,6 @@ const ACT_TABS = [
   ['gzgrocery',      () => 'gzgrocery'],
   ['meituan_tianhe', () => actT('Meituan Tianhe', '美团天河')],
   ['meituan_yuexiu', () => actT('Meituan Yuexiu', '美团越秀')],
-  ['guanyi',         () => actT('Guanyi', '管易')],
   ['manual',         () => actT('Manual', '手动')],
 ];
 
@@ -127,10 +126,13 @@ function actRenderTabs(summary, total) {
   if (!el) return;
   const counts = {};
   (summary || []).forEach(s => { counts[s.source] = s.events; });
+  // Grand total = sum across every channel (summary is channel-independent), so
+  // the "All channels" count never moves when you switch tabs.
+  const grand = (summary || []).reduce((a, s) => a + (s.events || 0), 0);
   const active = ACT.source || '';
   el.innerHTML = ACT_TABS.map(([src, label]) => {
     const on  = active === src;
-    const n   = src === '' ? total : (counts[src] || 0);
+    const n   = src === '' ? grand : (counts[src] || 0);
     const dot = ACT_SOURCE_COLORS[src]
       ? `<span style="width:8px;height:8px;border-radius:50%;background:${ACT_SOURCE_COLORS[src]};display:inline-block"></span>` : '';
     const base = 'padding:7px 12px;border-radius:8px;font-size:13px;cursor:pointer;display:inline-flex;'
@@ -152,7 +154,8 @@ function actRenderCaption(summary, total) {
   const active = ACT.source || '';
   const s = (summary || []).find(x => x.source === active);
   const name = active ? (ACT_SOURCE_LABELS[active] || active) : actT('All channels', '全部渠道');
-  const events = active ? (s ? s.events : 0) : total;
+  const grand = (summary || []).reduce((a, x) => a + (x.events || 0), 0);
+  const events = active ? (s ? s.events : 0) : grand;
   let out = 0, inn = 0;
   if (active) { out = s ? (s.units_out || 0) : 0; inn = s ? (s.units_in || 0) : 0; }
   else (summary || []).forEach(x => { out += x.units_out || 0; inn += x.units_in || 0; });
