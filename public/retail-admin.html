@@ -5658,6 +5658,32 @@
               </div>
             </div>
           </div>
+
+          <!-- System Alerts (ops) — dedicated WeCom group, kept SEPARATE from orders -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>System Alerts · 系统告警</h3>
+              <div class="muted">Sends operational alerts — a channel (Meituan/闪购) disconnecting, the proxy going down, or the storefront not responding — to a dedicated WeCom group. Keep this separate from your order group so ops noise doesn't bury orders. · 把运营告警(渠道掉线、代理中断、店铺无响应等)发到一个专用企业微信群,与订单群分开,避免淹没订单。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl">
+                <label class="ckbox" style="margin-bottom:10px;display:block"><input type="checkbox" id="cfg-system_alerts-enabled"> <span>Enable system alerts · 开启系统告警</span></label>
+                <div class="field" style="margin: 0;">
+                  <label class="stacked">Group-bot webhook URL · 群机器人 Webhook 地址</label>
+                  <input type="text" id="cfg-system_alerts-wecom_webhook"
+                         placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=…"
+                         style="width: 100%; font-family: monospace;">
+                </div>
+                <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                  <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_testSystemAlert()">Send test · 发送测试</button>
+                  <span id="system_alerts-test-status" class="muted" style="font-size: 11px;"></span>
+                </div>
+                <div class="helper" style="margin-top: 10px; line-height: 1.55;">
+                  Create a NEW WeCom group (separate from orders) → ··· → 群机器人 → 添加 → copy its Webhook. Paste it here, tick Enable, Send test to confirm it lands, then Save with the main "Save settings" button. Only qyapi.weixin.qq.com URLs are accepted. · 新建一个企业微信群(与订单群分开)→ ··· → 群机器人 → 添加 → 复制 Webhook,粘贴到此处,勾选开启,点"发送测试"确认,再用底部"保存设置"保存。仅接受 qyapi.weixin.qq.com 地址。
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- ────── CUSTOMER SERVICE ────── -->
@@ -6529,12 +6555,14 @@
     <details id="mt-log-details" style="margin-bottom:14px">
       <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted);padding:4px 0">Recent sync log · 最近日志</summary>
       <p class="muted" data-lang-block="en" style="font-size:11px;margin:6px 0 0">
-        Each line = the stock level we pushed to Meituan when it changed. <b>▲+2</b> / <b>▼−1</b> is the change since the last push (stock added vs sold). “28 in stock” = the live number Meituan now shows.
+        Each line is one product whose stock we pushed to Meituan: <b>product name (SKU)</b>, the change <b>▲+2</b> added / <b>▼−1</b> sold since the last push, and the live number Meituan now shows.
       </p>
       <p class="muted" data-lang-block="cn" style="font-size:11px;margin:6px 0 0">
-        每行 = 库存变动时推送到美团的库存数。<b>▲+2</b> / <b>▼−1</b> 是与上次推送的差额(补货 / 售出)。“库存 28” = 美团当前显示的库存。
+        每行 = 一个推送到美团的商品库存:<b>商品名(货号)</b>、与上次推送的差额(<b>▲+2</b> 补货 / <b>▼−1</b> 售出),以及美团当前显示的库存。
       </p>
       <div id="mt-log" style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
+      <!-- System/status events (restart, opening hours, proxy) — kept small and out of the way. -->
+      <div id="mt-log-sys" style="margin-top:6px;font-size:11px;font-family:monospace;color:var(--fg-muted);white-space:pre-wrap"></div>
     </details>
 
     <!-- Incoming Meituan orders — read-only record. These don't print and aren't

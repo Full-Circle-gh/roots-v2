@@ -187,9 +187,12 @@
         change = cn ? `${arrow}${sign} → 库存 ${d.qty}` : `${arrow}${sign} → ${d.qty} in stock`;
       }
       const bundleTag = d.bundle ? (cn ? '(套餐)' : '(bundle)') : '';
-      const prod = [nm, d.sku ? `(${d.sku})` : '', bundleTag].filter(Boolean).join(' ');
+      // Always lead with the product so the line never reads as a bare number.
+      // Older rows that lack a name fall back to the SKU, then a clear placeholder.
+      const named = nm || (d.sku ? '' : (cn ? '(未命名商品)' : '(unnamed product)'));
+      const prod = [named, d.sku ? `(${d.sku})` : '', bundleTag].filter(Boolean).join(' ');
       const err = l.status === 'error' ? `  ✗ ${l.error_msg || (cn ? '失败' : 'failed')}` : '';
-      return `${time}  ${glyph} ${store}  ${change}  ·  ${prod}${err}`.replace(/\s+$/, '');
+      return `${time}  ${glyph} ${store}  ${prod}  ·  ${change}${err}`.replace(/\s+$/, '');
     }
 
     // Other events (proxy up/down, order import/poll, needs_login…): name + reason.
@@ -230,9 +233,22 @@
       }
 
       if (log) {
-        log.textContent = s.recentLogs.length
-          ? s.recentLogs.map((l, i, arr) => mtFmtLogLine(l, arr, i)).join('\n')
-          : 'No sync events yet.';
+        // Main log = stock changes only (name + SKU + in/out), so the numbers the
+        // operator cares about never get buried under system noise. Fall back to
+        // the combined list for older daemons that don't return recentStock.
+        const stock = s.recentStock || s.recentLogs.filter(l => l.event_type === 'stock_push');
+        const cn = document.documentElement.dataset.uiLang === 'cn';
+        log.textContent = stock.length
+          ? stock.map((l, i, arr) => mtFmtLogLine(l, arr, i)).join('\n')
+          : (cn ? '暂无库存推送。' : 'No stock pushes yet.');
+        // System/status events go to a small grey line below, out of the way.
+        const sys = document.getElementById('mt-log-sys');
+        if (sys) {
+          const ev = s.recentSystem || [];
+          sys.textContent = ev.length
+            ? ev.map((l, i, arr) => mtFmtLogLine(l, arr, i)).join('\n')
+            : '';
+        }
       }
     } catch (e) {
       // Daemon unreachable — show on the accent tile, flip it to alert.

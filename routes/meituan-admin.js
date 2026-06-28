@@ -118,13 +118,27 @@ router.get('/api/retail-admin/meituan/status', requireRetailAdmin, (req, res) =>
       SELECT store_code, event_type, status, detail, error_msg, created_at
         FROM meituan_sync_log ORDER BY created_at DESC LIMIT 20
     `).all();
+    // Stock changes only (per-product pushes) — what the operator actually reads:
+    // name + SKU + in/out. Queried on its own so system noise (restart, opening
+    // hours, proxy) can't push these off the 20-row window.
+    const recentStock = db.prepare(`
+      SELECT store_code, event_type, status, detail, error_msg, created_at
+        FROM meituan_sync_log WHERE event_type='stock_push'
+        ORDER BY created_at DESC LIMIT 25
+    `).all();
+    // System/status events (everything that is NOT a per-product push), kept few.
+    const recentSystem = db.prepare(`
+      SELECT store_code, event_type, status, detail, error_msg, created_at
+        FROM meituan_sync_log WHERE event_type<>'stock_push'
+        ORDER BY created_at DESC LIMIT 6
+    `).all();
     const lastOrder = db.prepare(`
       SELECT meituan_order_no, store_code, imported_at, status
         FROM meituan_order_import ORDER BY imported_at DESC LIMIT 5
     `).all();
     const mappedCount = db.prepare('SELECT COUNT(*) AS n FROM meituan_product_map WHERE sync_enabled=1').get()?.n || 0;
 
-    res.json({ success: true, queuePending, queueFailed, recentLogs, lastOrder, mappedCount });
+    res.json({ success: true, queuePending, queueFailed, recentLogs, recentStock, recentSystem, lastOrder, mappedCount });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
