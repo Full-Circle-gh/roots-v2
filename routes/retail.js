@@ -101,6 +101,36 @@ function requireRetailAdmin(req, res, next) {
           // 500s on req.user.id — the client sees "failed" yet the customer is
           // logged out). Represent the operator faithfully so logging works.
           req.user = { id: u.id, username: u.username, role: u.role, display_name: u.display_name };
+          // RBAC layer (DARK in Phase 0/1): attach this operator's effective
+          // capability set + store scope to the request. Computed fresh every
+          // request (never cached in the session) so an admin's permission edit
+          // takes effect immediately. NOT yet enforced — route gates that read
+          // req.caps land behind a per-tenant flag in a later phase; for now
+          // owner/admin/staff resolve to ALL caps, so this changes nothing.
+          try {
+            const r = require('../lib/operator-caps').resolveOperator(db, u, tenant);
+            req.caps = new Set(r.caps);
+            req.scopeStores = r.scopeStores;   // null = all stores
+          } catch (e) { req.caps = null; req.scopeStores = null; }
+          // RBAC ENFORCEMENT (Phase 2) — only when this tenant has switched it on
+          // and the operator isn't the owner (owner always bypasses). The map
+          // gates mutations; reads stay open (the client hides sections). Unmapped
+          // routes fall through allowed, so a forgotten route never hard-blocks.
+          if (tenant.rbac_enforce && u.role !== 'owner' && req.caps) {
+            const capRoutes = require('../lib/cap-routes');
+            const need = capRoutes.requiredCapFor(req.method, req.path);
+            if (need) {
+              const ok = Array.isArray(need) ? need.some(k => req.caps.has(k)) : req.caps.has(need);
+              if (!ok) return res.status(403).json({ error: 'forbidden_capability', need });
+            }
+            // Store scope — a store-scoped operator may only act on their stores.
+            if (req.scopeStores) {
+              const sid = capRoutes.storeIdFromPath(req.path);
+              if (sid && req.scopeStores.indexOf(sid) === -1) {
+                return res.status(403).json({ error: 'forbidden_store', store: sid });
+              }
+            }
+          }
           // Per-tenant data connection (Phase 2 slice 2). Roots → global db;
           // other tenants → their own file. The request runs inside a tenant
           // ALS context so handlers reach the right connection via tdb();
@@ -117,6 +147,10 @@ function requireRetailAdmin(req, res, next) {
     _retailKitchenPermission(req, res, (err2) => {
       if (err2) return next(err2);
       req.tenantDb = getTenantDb(ROOTS_TENANT_ID);   // kitchen staff operate on Roots
+      // Legacy kitchen operators hold full retail access today — give them the
+      // full cap set so the (dark) RBAC layer never narrows their view.
+      try { req.caps = new Set(require('../lib/capabilities').ALL_KEYS); req.scopeStores = null; }
+      catch (e) { req.caps = null; req.scopeStores = null; }
       tenantAls.run(req.tenantDb, () => next());
     });
   });

@@ -83,6 +83,65 @@ function escapeAttr(s) { return escapeHtml(s); }
 function thumbUrl(p) { return p?.image_url || p?.image_data || ''; }
 function fmt(n) { return Number(n || 0).toFixed(2); }
 
+// ── Per-user capabilities (RBAC) — client mirror of the server's req.caps ──
+// One operator's effective capability set decides what this app draws: hide the
+// nav sections and action buttons they can't use. This is the "same app,
+// different view" mechanism (e.g. Quick Stock add-vs-recount), driven by what
+// the admin granted rather than hardcoded per role.
+//
+// Phase 0/1 is DARK: every operator who reaches this shell resolves to the FULL
+// set (owner/admin/staff), and an older session sends caps:null which we treat
+// as "all allowed" — so applyCapGates() hides nothing today. It's the rendering
+// half, ready for when narrower presets/overrides start being assigned.
+let CAPS = null;                                    // null = unknown ⇒ all allowed
+function can(key)     { return CAPS === null ? true : CAPS.has(key); }
+function canAny(keys) { return CAPS === null ? true : keys.some(k => CAPS.has(k)); }
+function _capAllows(v){ return Array.isArray(v) ? canAny(v) : can(v); }
+function setCaps(list){ CAPS = Array.isArray(list) ? new Set(list) : null; try { applyCapGates(); } catch (e) {} }
+
+// Nav section (data-tab / mobile data-go) → the capability that reveals it. An
+// array means "any of these". Untracked tabs stay visible. Settings (config) is
+// shown if the operator holds any one of its sub-area caps.
+const TAB_CAP = {
+  dashboard: 'dashboard:view', orders: 'orders:view', invoices: 'invoices:view',
+  customers: 'customers:view', products: 'products:view', categories: 'categories:view',
+  'mini-app-editor': 'editor:view', vouchers: 'coupons:view', flash: 'flash:view',
+  popups: 'popups:view', affiliate: 'affiliate:view', sharing: 'sharing:edit',
+  broadcasts: 'broadcasts:view', social: 'social:edit', membership: 'loyalty:view',
+  topup: 'topup:edit', leaderboard: 'leaderboard:edit', voting: 'voting:edit',
+  snippets: 'content:view', about: 'content:view', legal: 'content:view', faq: 'content:view',
+  media: 'media:view', reviews: 'reviews:view', feedback: 'feedback:view',
+  delivery: 'delivery:view', meituan: 'meituan:view', guanyi: 'guanyi:view',
+  activity: 'activity:view',
+  config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
+};
+// Hide nav sections + any [data-cap]-tagged control the operator can't use, then
+// collapse a dropdown group whose every child tab ended up hidden.
+function applyCapGates() {
+  document.querySelectorAll('.tabs [data-tab]').forEach(btn => {
+    const cap = TAB_CAP[btn.dataset.tab];
+    if (cap === undefined) return;
+    btn.style.display = _capAllows(cap) ? '' : 'none';
+  });
+  document.querySelectorAll('#rm-bottomnav [data-go]').forEach(btn => {
+    const cap = TAB_CAP[btn.dataset.go];
+    if (cap === undefined) return;
+    btn.style.display = _capAllows(cap) ? '' : 'none';
+  });
+  document.querySelectorAll('.tabs-group').forEach(g => {
+    const anyVisible = Array.prototype.some.call(g.querySelectorAll('[data-tab]'), t => t.style.display !== 'none');
+    const trig = g.querySelector('.tabs-group-trigger');
+    if (trig) trig.style.display = anyVisible ? '' : 'none';
+  });
+  // Generic hook: tag any button/section with data-cap="x" (or "x y" for any-of)
+  // and it disappears for operators without it. Used by section files in later phases.
+  document.querySelectorAll('[data-cap]').forEach(el => {
+    const v = el.dataset.cap.trim();
+    el.style.display = _capAllows(v.includes(' ') ? v.split(/\s+/) : v) ? '' : 'none';
+  });
+}
+window.can = can; window.canAny = canAny; window.applyCapGates = applyCapGates; window.setCaps = setCaps;
+
 // ── Payment-brand badge — small colored chip with the WeChat / Alipay
 // logo + bilingual label. Used in the order drawer Payment tile and in
 // the top-up history rows so admins can scan "what paid with what" at

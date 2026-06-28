@@ -49,6 +49,37 @@ db.exec(`
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_users_login ON tenant_users(tenant_id, username);
 
+  -- ── Per-user permissions (RBAC) ────────────────────────────────────────
+  -- A user's role (tenant_users.role) is a PRESET that expands to a base set of
+  -- capabilities in lib/capabilities.js. These two tables hold the per-user
+  -- DEVIATIONS from that preset, so the common case (a plain role) stores no
+  -- rows at all. Effective caps are resolved fresh on every request — never
+  -- cached in the session — so an admin's change takes effect immediately.
+  --
+  --   tenant_user_caps   : grant/revoke a single capability for one user.
+  --                        mode = 'grant' (force ON) | 'revoke' (force OFF).
+  --   tenant_user_stores : which stores a store-scoped user may touch. Used
+  --                        only when tenant_users.scope_all = 0; otherwise the
+  --                        user is unscoped (all stores).
+  CREATE TABLE IF NOT EXISTS tenant_user_caps (
+    tenant_id      INTEGER NOT NULL,
+    tenant_user_id INTEGER NOT NULL,
+    capability_key TEXT    NOT NULL,
+    mode           TEXT    NOT NULL DEFAULT 'grant',   -- 'grant' | 'revoke'
+    updated_by     INTEGER,
+    updated_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (tenant_user_id, capability_key),
+    FOREIGN KEY (tenant_user_id) REFERENCES tenant_users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_tenant_user_caps_user ON tenant_user_caps(tenant_user_id);
+
+  CREATE TABLE IF NOT EXISTS tenant_user_stores (
+    tenant_user_id INTEGER NOT NULL,
+    store_id       INTEGER NOT NULL,
+    PRIMARY KEY (tenant_user_id, store_id),
+    FOREIGN KEY (tenant_user_id) REFERENCES tenant_users(id)
+  );
+
   -- Web storefront hostnames. Each tenant can serve a browser website (alongside
   -- or instead of its WeChat mini-app); a request's Host maps to the tenant the
   -- same way x-wx-appid does for the mini-app (see middleware/public-tenant.js).
@@ -93,6 +124,19 @@ try { db.exec('ALTER TABLE tenant_users ADD COLUMN avatar_url TEXT'); } catch (e
 // 'store_stock' role (recount a store). NULL for owner/admin/staff (full-access
 // operators are not pinned to a store).
 try { db.exec('ALTER TABLE tenant_users ADD COLUMN retail_store_id INTEGER'); } catch (e) { /* already added */ }
+
+// Store-scope mode for the RBAC layer. 1 = all stores (the default, matches
+// today's owner/admin/staff, who are not pinned); 0 = only the stores listed in
+// tenant_user_stores. retail_store_id stays as the legacy single-store pin for
+// kitchen/store_stock and is read as a fallback when no scope rows exist.
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN scope_all INTEGER NOT NULL DEFAULT 1'); } catch (e) { /* already added */ }
+
+// RBAC enforcement switch (per tenant). 0 = OFF (default — capabilities are
+// computed + the client renders by them, but the server blocks nothing, so an
+// over-narrow assignment can never lock a tenant out of its own backend). 1 = ON
+// (requireRetailAdmin enforces the route→capability map). Owners always bypass.
+// Flipped from the Team page by an owner once they've assigned permissions.
+try { db.exec('ALTER TABLE tenants ADD COLUMN rbac_enforce INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already added */ }
 
 // ── Seed Roots as tenant #1 + an owner operator (mirrors auth.js seedUsers) ──
 function seedBackend() {
@@ -190,11 +234,21 @@ router.post('/api/backend/logout', (req, res) => {
 
 router.get('/api/backend/me', (req, res) => {
   if (!req.session || !req.session.backendUserId) return res.json({ user: null });
-  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url, retail_store_id, scope_all FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!u) return res.json({ user: null });
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
+  // Effective capabilities + store scope for the signed-in operator. The client
+  // renders the backend from this (hide sections/buttons the user can't use).
+  // Resolved fresh here, mirroring the server-side req.caps, so the view and the
+  // (future) enforcement always agree. Fail-open to no list on any hiccup.
+  let caps = null, scopeStores = null;
+  try {
+    const r = require('../lib/operator-caps').resolveOperator(db, u, tenant);
+    caps = r.caps; scopeStores = r.scopeStores;
+  } catch (e) { caps = null; scopeStores = null; }
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
+            caps, scopeStores,
             tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json) } : null },
   });
 });

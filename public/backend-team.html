@@ -148,6 +148,37 @@
   .modal-actions{display:flex; gap:10px; margin-top:18px;}
   .modal-actions .btn-line{flex:1;}
 
+  /* permissions matrix modal */
+  .modal.wide{max-width:580px; max-height:88vh; display:flex; flex-direction:column;}
+  .perm-ctx{font-size:12px; color:var(--faint); line-height:1.5; margin:-8px 0 12px;}
+  .perm-scroll{overflow:auto; margin:0 -6px; padding:0 6px; flex:1;}
+  .scope-box{border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:6px;}
+  .scope-stores{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
+  .scope-stores:empty{display:none;}
+  .scope-stores label{display:flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink);
+    border:1px solid var(--line); border-radius:999px; padding:6px 12px; cursor:pointer;}
+  .scope-stores input{accent-color:#B08D4A; cursor:pointer;}
+  .perm-tools{display:flex; justify-content:flex-end; gap:14px; margin:12px 2px 2px;}
+  .perm-tools button{font-size:11.5px; color:var(--tea-deep); background:none; border:0; cursor:pointer; padding:4px 0;}
+  .perm-group{margin-top:16px;}
+  .pg-h{font-size:10.5px; letter-spacing:.18em; text-transform:uppercase; color:var(--faint);
+    font-weight:700; margin:0 0 4px; padding-bottom:6px; border-bottom:1px solid var(--line);}
+  .perm-row{display:flex; align-items:center; gap:10px; padding:7px 8px; border-radius:9px;}
+  .perm-row:hover{background:rgba(18,22,26,.03);}
+  .perm-row.dev{background:rgba(176,141,74,.12);}
+  .perm-row label{flex:1; font-size:13px; color:var(--ink); cursor:pointer;}
+  .perm-row .pk{font-size:10px; color:var(--faint); font-family:ui-monospace,SFMono-Regular,monospace; margin-left:7px;}
+  .perm-row input[type=checkbox]{width:17px; height:17px; flex:none; accent-color:#B08D4A; cursor:pointer;}
+  .perm-row.locked{opacity:.55;}
+  .perm-row.locked label, .perm-row.locked input{cursor:not-allowed;}
+
+  .enforce-row{display:flex; align-items:center; justify-content:space-between; gap:14px;
+    border:1px solid var(--line); border-radius:12px; padding:13px 15px; margin:0 0 16px;}
+  .enforce-row.on{border-color:rgba(107,142,111,.45); background:rgba(107,142,111,.06);}
+  .enforce-row .lab{font-size:13.5px; font-weight:600; color:var(--ink);}
+  .enforce-row .sub{font-size:11.5px; color:var(--faint); margin-top:3px; max-width:48ch; line-height:1.45;}
+  .enforce-row #enforceBtn.danger{color:var(--danger-deep); border-color:rgba(232,85,106,.3);}
+
   .foot{margin:18px 2px 0; font-size:10.5px; letter-spacing:.22em; color:var(--faint); text-align:center;}
 </style>
 </head>
@@ -178,7 +209,17 @@
     <!-- Member list -->
     <section class="card">
       <h2><span class="en">Team members</span><span class="sep"> · </span><span class="cn">团队成员</span></h2>
-      <p class="lead"><span class="en">Staff, Admin and Owner are labels for now — each has full backend access. Kitchen members are restricted: they only get the Add Stock app for their store.</span><span class="cn">员工、管理员、负责人目前仅作标识 — 均拥有完整后台权限。后厨成员受限:仅可使用其门店的“加库存”应用。</span></p>
+      <p class="lead"><span class="en">A member's role sets sensible defaults. Open <b>Permissions</b> on anyone to fine-tune exactly what they see and do, and limit them to specific stores. Owner always keeps full access.</span><span class="cn">角色提供合理的默认权限。在任意成员上打开<b>权限</b>,即可精细控制其可见与可做的内容,并限定到指定门店。负责人始终拥有完整权限。</span></p>
+
+      <!-- Master enforcement switch — owner only -->
+      <div class="enforce-row" id="enforceRow" style="display:none">
+        <div>
+          <div class="lab"><span class="en">Enforce permissions</span><span class="cn">强制权限</span></div>
+          <div class="sub"><span class="en">On = members are blocked from actions outside their permissions. Off = permissions only shape what each member sees.</span><span class="cn">开启 = 阻止成员执行其权限之外的操作。关闭 = 权限仅影响成员可见内容。</span></div>
+        </div>
+        <button type="button" id="enforceBtn" class="btn-line" style="width:auto; padding:8px 16px;">—</button>
+      </div>
+
       <div class="members" id="members"><div class="empty"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
     </section>
 
@@ -260,10 +301,46 @@
         <button type="button" id="eActive" class="btn-line" style="width:auto; padding:8px 16px;">—</button>
       </div>
 
+      <button type="button" id="editPerms" class="btn-line" style="width:100%; margin-top:14px; display:none;">
+        <span class="en">Permissions…</span><span class="cn">权限…</span>
+      </button>
+
       <div class="msg" id="editMsg" role="status"><span></span></div>
       <div class="modal-actions">
         <button type="button" id="editCancel" class="btn-line"><span class="en">Cancel</span><span class="cn">取消</span></button>
         <button type="button" id="editSave" class="btn-brass" style="margin-top:0;"><span class="en">Save</span><span class="cn">保存</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Permissions matrix modal (stacks above the edit modal) -->
+  <div class="scrim" id="permsScrim" style="z-index:60">
+    <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="permsTitle">
+      <h3 id="permsTitle"><span class="en">Permissions</span><span class="cn">权限</span><span> — </span><span id="permsName">—</span></h3>
+      <div class="perm-ctx" id="permsCtx"></div>
+
+      <div class="perm-scroll" id="permsScroll">
+        <div class="scope-box">
+          <div class="toggle-row" style="border-top:0; padding:0; margin:0;">
+            <div>
+              <div class="lab"><span class="en">All stores</span><span class="cn">所有门店</span></div>
+              <div class="sub"><span class="en">Off = limit this member to specific stores.</span><span class="cn">关闭 = 仅限指定门店。</span></div>
+            </div>
+            <button type="button" id="permScopeAll" class="btn-line" style="width:auto; padding:8px 16px;">—</button>
+          </div>
+          <div class="scope-stores" id="permStores"></div>
+        </div>
+
+        <div class="perm-tools">
+          <button type="button" id="permResetPreset"><span class="en">Reset to role default</span><span class="cn">重置为角色默认</span></button>
+        </div>
+        <div id="permMatrix"></div>
+      </div>
+
+      <div class="msg" id="permsMsg" role="status"><span></span></div>
+      <div class="modal-actions">
+        <button type="button" id="permsCancel" class="btn-line"><span class="en">Cancel</span><span class="cn">取消</span></button>
+        <button type="button" id="permsSave" class="btn-brass" style="margin-top:0;"><span class="en">Save permissions</span><span class="cn">保存权限</span></button>
       </div>
     </div>
   </div>
@@ -329,6 +406,7 @@
     membersEl.innerHTML = TEAM.map(function (u){
       var sub = '@' + esc(u.username)
         + (u.role === 'kitchen' && u.retailStoreId ? ' · ' + esc(storeName(u.retailStoreId)) : '')
+        + (u.role !== 'kitchen' && u.scopeAll === false ? ' · ' + L('limited stores', '门店受限') : '')
         + (u.lastLogin ? '' : ' · ' + L('never signed in', '从未登录'));
       return '<div class="member' + (u.isActive ? '' : ' inactive') + '">' +
         circleHtml(u) +
@@ -339,6 +417,7 @@
           '</div>' +
           '<div class="m-sub">' + sub + '</div>' +
         '</div>' +
+        (u.hasCustomPerms ? '<span class="role-badge role-admin">' + L('Custom', '自定义') + '</span>' : '') +
         '<span class="role-badge role-' + esc(u.role) + '">' + esc(roleLabel(u.role)) + '</span>' +
         '<button class="m-edit" data-id="' + u.id + '">' + L('Edit', '编辑') + '</button>' +
       '</div>';
@@ -351,7 +430,14 @@
   function load(){
     fetch('/api/backend/team', { credentials: 'same-origin' })
       .then(function (r){ if (r.status === 401) { location.replace('/backend/login'); throw 0; } return r.json(); })
-      .then(function (j){ TEAM = (j && j.team) || []; var me = TEAM.filter(function (u){ return u.isSelf; })[0]; if (me) SELF_ID = me.id; render(); })
+      .then(function (j){
+        TEAM = (j && j.team) || [];
+        var me = TEAM.filter(function (u){ return u.isSelf; })[0];
+        if (me) { SELF_ID = me.id; SELF_OWNER = me.role === 'owner'; }
+        RBAC_ENFORCE = !!(j && j.rbacEnforce);
+        paintEnforce();
+        render();
+      })
       .catch(function (){});
   }
 
@@ -418,6 +504,9 @@
     // Self-protections (server enforces too): can't deactivate self; an owner can't drop own owner role.
     eActive.disabled = editing.isSelf;
     eActive.style.opacity = editing.isSelf ? '.5' : '1';
+    // The Permissions… button shows only to operators who may edit permissions.
+    var ep = document.getElementById('editPerms');
+    if (ep) ep.style.display = canSelf('team:permissions') ? '' : 'none';
     paintActiveBtn();
     scrim.classList.add('show');
   }
@@ -466,6 +555,177 @@
       });
   });
 
+  /* ── Permissions matrix ── */
+  var CATALOG = null;            // { capabilities:[...], groups:[...], entitlements:{} } — fetched once
+  var SELF_CAPS = null;          // signed-in operator's caps; null = unknown ⇒ allowed
+  var permEditing = null;        // member whose matrix is open
+  var permPreset = null;         // Set of the role's preset cap keys (the baseline)
+  var permState = {};            // capKey → desired on/off
+  var permScopeAllVal = true;
+  var permStoreSel = {};         // storeId → on/off
+  var permLocked = false;        // owner → read-only
+
+  var permsScrim   = document.getElementById('permsScrim');
+  var permMatrixEl = document.getElementById('permMatrix');
+  var permStoresEl = document.getElementById('permStores');
+  var permScopeBtn = document.getElementById('permScopeAll');
+  var permsMsg     = document.getElementById('permsMsg');
+  var permsSaveBtn = document.getElementById('permsSave');
+
+  function canSelf(key){ return SELF_CAPS === null ? true : SELF_CAPS.indexOf(key) !== -1; }
+
+  /* ── Enforcement master switch (owner only) ── */
+  var SELF_OWNER = false;
+  var RBAC_ENFORCE = false;
+  var enforceRow = document.getElementById('enforceRow');
+  var enforceBtn = document.getElementById('enforceBtn');
+  function paintEnforce(){
+    enforceRow.style.display = SELF_OWNER ? 'flex' : 'none';
+    enforceRow.classList.toggle('on', RBAC_ENFORCE);
+    enforceBtn.textContent = RBAC_ENFORCE ? L('On', '开') : L('Off', '关');
+    enforceBtn.classList.toggle('danger', !RBAC_ENFORCE);
+  }
+  enforceBtn.addEventListener('click', function (){
+    var turningOn = !RBAC_ENFORCE;
+    if (turningOn && !window.confirm(L(
+      'Turn on enforcement? Members will be blocked from actions outside their permissions. You (owner) always keep full access.',
+      '开启强制权限?成员将无法执行其权限之外的操作。您(负责人)始终保留完整权限。'))) return;
+    enforceBtn.disabled = true;
+    fetch('/api/backend/rbac-enforce', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+      body: JSON.stringify({ enforce: turningOn ? 1 : 0 })
+    }).then(function (r){ return r.json().catch(function (){ return {}; }).then(function (d){ return { ok: r.ok, data: d }; }); })
+      .then(function (res){
+        enforceBtn.disabled = false;
+        if (res.ok && res.data && res.data.success) { RBAC_ENFORCE = !!res.data.rbacEnforce; paintEnforce(); }
+      })
+      .catch(function (){ enforceBtn.disabled = false; });
+  });
+
+  function groupLabel(g){
+    return L({ run:'Run', sell:'Sell', content:'Content', setup:'Set up' }[g] || g,
+             { run:'运营', sell:'销售', content:'内容', setup:'设置' }[g] || g);
+  }
+  function loadSelf(){
+    fetch('/api/backend/me', { credentials:'same-origin' })
+      .then(function (r){ return r.json(); })
+      .then(function (j){ SELF_CAPS = (j && j.user && j.user.caps) || null; })
+      .catch(function (){});
+  }
+  function loadCatalog(){
+    if (CATALOG) return Promise.resolve(CATALOG);
+    return fetch('/api/backend/capabilities', { credentials:'same-origin' })
+      .then(function (r){ return r.json(); })
+      .then(function (j){ if (j && j.success) CATALOG = j; return CATALOG; });
+  }
+
+  function paintScopeBtn(){
+    permScopeBtn.textContent = permScopeAllVal ? L('On', '开') : L('Off', '关');
+    permScopeBtn.classList.toggle('danger', !permScopeAllVal);
+    permStoresEl.style.display = permScopeAllVal ? 'none' : 'flex';
+  }
+  function renderScopeStores(){
+    permStoresEl.innerHTML = STORES.map(function (s){
+      return '<label><input type="checkbox" data-store="' + s.id + '"' + (permStoreSel[s.id] ? ' checked' : '') + (permLocked ? ' disabled' : '') + '>' + esc(storeLabel(s)) + '</label>';
+    }).join('');
+    Array.prototype.forEach.call(permStoresEl.querySelectorAll('input[data-store]'), function (cb){
+      cb.addEventListener('change', function (){ permStoreSel[Number(cb.getAttribute('data-store'))] = cb.checked; });
+    });
+  }
+  function renderMatrix(){
+    if (!CATALOG) { permMatrixEl.innerHTML = ''; return; }
+    var byGroup = {};
+    CATALOG.capabilities.forEach(function (c){ (byGroup[c.group] = byGroup[c.group] || []).push(c); });
+    var html = '';
+    CATALOG.groups.forEach(function (g){
+      var caps = byGroup[g]; if (!caps || !caps.length) return;
+      html += '<div class="perm-group"><div class="pg-h">' + esc(groupLabel(g)) + '</div>';
+      caps.forEach(function (c){
+        var on = !!permState[c.key];
+        var dev = on !== permPreset.has(c.key);
+        html += '<div class="perm-row' + (dev ? ' dev' : '') + (permLocked ? ' locked' : '') + '" data-key="' + esc(c.key) + '">'
+          + '<input type="checkbox"' + (on ? ' checked' : '') + (permLocked ? ' disabled' : '') + '>'
+          + '<label>' + esc(L(c.labelEn, c.labelCn)) + '<span class="pk">' + esc(c.key) + '</span></label>'
+          + '</div>';
+      });
+      html += '</div>';
+    });
+    permMatrixEl.innerHTML = html;
+    Array.prototype.forEach.call(permMatrixEl.querySelectorAll('.perm-row'), function (row){
+      var key = row.getAttribute('data-key');
+      row.querySelector('input').addEventListener('change', function (){
+        permState[key] = this.checked;
+        row.classList.toggle('dev', this.checked !== permPreset.has(key));
+      });
+    });
+  }
+
+  function openPerms(id){
+    var m = TEAM.filter(function (u){ return u.id === id; })[0];
+    if (!m) return;
+    setMsg(permsMsg, null, '');
+    document.getElementById('permsName').textContent = m.displayName || m.username;
+    loadCatalog().then(function (){
+      return fetch('/api/backend/team/' + id + '/permissions', { credentials:'same-origin' }).then(function (r){ return r.json(); });
+    }).then(function (j){
+      if (!j || !j.success) { setMsg(permsMsg, 'err', (j && j.error) || L('Couldn’t load permissions', '无法加载权限')); return; }
+      permEditing = m;
+      permPreset = new Set(j.presetCaps || []);
+      var eff = j.effective || [];
+      permState = {};
+      (CATALOG ? CATALOG.capabilities : []).forEach(function (c){ permState[c.key] = eff.indexOf(c.key) !== -1; });
+      permScopeAllVal = j.scopeAll !== false;
+      permStoreSel = {}; (j.storeIds || []).forEach(function (sid){ permStoreSel[sid] = true; });
+      permLocked = !!j.isOwner;                       // owner = always-all, read-only
+      var ctx;
+      if (j.isOwner) ctx = L('Owner always has full access — nothing to change here.', '负责人始终拥有完整权限 — 此处无需更改。');
+      else {
+        ctx = L('Role', '角色') + ': ' + roleLabel(m.role) + '. ';
+        ctx += j.isSelf ? L('You can’t edit your own permissions.', '不能编辑自己的权限。')
+                        : L('Highlighted rows differ from the role default.', '高亮行表示与角色默认不同。');
+      }
+      document.getElementById('permsCtx').textContent = ctx;
+      permsSaveBtn.style.display = (j.isOwner || j.isSelf) ? 'none' : '';
+      paintScopeBtn(); renderScopeStores(); renderMatrix();
+      permsScrim.classList.add('show');
+    }).catch(function (){ setMsg(permsMsg, 'err', L('Network error — please try again', '网络错误,请重试')); });
+  }
+  function closePerms(){ permsScrim.classList.remove('show'); permEditing = null; }
+
+  permScopeBtn.addEventListener('click', function (){ if (permLocked) return; permScopeAllVal = !permScopeAllVal; paintScopeBtn(); });
+  document.getElementById('permResetPreset').addEventListener('click', function (){
+    if (permLocked) return;
+    (CATALOG ? CATALOG.capabilities : []).forEach(function (c){ permState[c.key] = permPreset.has(c.key); });
+    renderMatrix();
+  });
+  document.getElementById('permsCancel').addEventListener('click', closePerms);
+  permsScrim.addEventListener('mousedown', function (e){ if (e.target === permsScrim) closePerms(); });
+
+  permsSaveBtn.addEventListener('click', function (){
+    if (!permEditing) return;
+    setMsg(permsMsg, null, '');
+    var caps = Object.keys(permState).filter(function (k){ return permState[k]; });
+    var store_ids = Object.keys(permStoreSel).filter(function (k){ return permStoreSel[k]; }).map(Number);
+    if (!permScopeAllVal && !store_ids.length) { setMsg(permsMsg, 'err', L('Pick at least one store, or turn All stores on', '请至少选择一个门店,或开启“所有门店”')); return; }
+    var btn = this; btn.disabled = true; btn.classList.add('loading');
+    fetch('/api/backend/team/' + permEditing.id + '/permissions', {
+      method:'PUT', headers:{ 'Content-Type':'application/json' }, credentials:'same-origin',
+      body: JSON.stringify({ caps: caps, scope_all: permScopeAllVal ? 1 : 0, store_ids: store_ids })
+    }).then(function (r){ return r.json().catch(function (){ return {}; }).then(function (d){ return { ok:r.ok, data:d }; }); })
+      .then(function (res){
+        btn.disabled = false; btn.classList.remove('loading');
+        if (!(res.ok && res.data && res.data.success)) { setMsg(permsMsg, 'err', (res.data && res.data.error) || L('Couldn’t save', '保存失败')); return; }
+        permEditing.hasCustomPerms = !!res.data.hasCustomPerms;   // refresh roster chip
+        permEditing.scopeAll = res.data.scopeAll;
+        setMsg(permsMsg, 'ok', L('Permissions saved', '权限已保存'));
+        render();
+        setTimeout(closePerms, 650);
+      })
+      .catch(function (){ btn.disabled = false; btn.classList.remove('loading'); setMsg(permsMsg, 'err', L('Network error — please try again', '网络错误,请重试')); });
+  });
+
+  document.getElementById('editPerms').addEventListener('click', function (){ if (editing) openPerms(editing.id); });
+
   /* ── Language ── */
   function applyLang(){
     document.documentElement.setAttribute('data-lang', lang);
@@ -474,7 +734,9 @@
     fillStoreSelect(document.getElementById('iStore'));
     fillStoreSelect(document.getElementById('eStore'));
     render();
+    paintEnforce();
     if (editing) { paintActiveBtn(); }
+    if (permsScrim && permsScrim.classList.contains('show')) { paintScopeBtn(); renderScopeStores(); renderMatrix(); }
   }
   document.getElementById('langToggle').addEventListener('click', function (){
     lang = lang === 'cn' ? 'en' : 'cn';
@@ -484,6 +746,7 @@
   document.addEventListener('keydown', function (e){ if (e.key === 'Escape' && scrim.classList.contains('show')) closeEdit(); });
 
   applyLang();
+  loadSelf();
   loadStores();
   load();
 })();

@@ -1361,9 +1361,12 @@ let ENTITLEMENTS = {};
     // a missing key means entitled. loadConfig() combines this with the
     // operator's own on/off preferences before showing each feature.
     ENTITLEMENTS = (u.tenant && u.tenant.entitlements) || {};
-    // Google-style profile circle + dropdown (avatar · account · team · sign
-    // out). Every authenticated operator has full backend access — the backend
-    // realm has no per-module permission gate; role here is identity, not a gate.
+    // Per-user capabilities (RBAC). setCaps() renders the backend from this
+    // operator's effective set — hiding nav sections / buttons they can't use.
+    // DARK in Phase 0/1: owner/admin/staff resolve to the full set and an older
+    // session sends caps:null (treated as all-allowed), so nothing hides yet.
+    setCaps(u.caps);
+    // Google-style profile circle + dropdown (avatar · account · team · sign out).
     initAcctMenu(u);
   } catch (e) { location.href = '/backend/login'; return; }
   // Phase 1 — feature controls. ent-<key> = platform entitlement; the per-feature
