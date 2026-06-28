@@ -6537,14 +6537,12 @@
   <section id="tab-meituan">
     <h2>美团同步 · Meituan Sync</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      Map your products to Meituan listings. Stock changes auto-push every 10 s, and orders pull back every 60 s.
-      <br><b>天河</b> is on Meituan <b>外卖</b> — you map its listing names here.
-      <b>越秀</b> moved to Meituan <b>闪购</b> — it maps itself automatically by 货号, so its column is read-only.
+      See which products are live on each Meituan store and whether their stock is current. Stock auto-pushes every 10 s.
+      <br><b>Tianhe</b> (delivery) matches by name — set the name below. <b>Yuexiu</b> (instant) matches automatically by SKU (货号) and is read-only.
     </p>
     <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      将产品映射到美团商品。库存变动每 10 秒自动推送,订单每 60 秒回拉。
-      <br><b>天河</b>走美团<b>外卖</b>,商品名在此处映射。
-      <b>越秀</b>已迁至美团<b>闪购</b>,按货号自动映射,该列只读。
+      查看每个商品在各美团门店是否上架、库存是否最新。库存每 10 秒自动推送。
+      <br><b>天河</b>(外卖)按名称匹配,在下方填写名称;<b>越秀</b>(闪购)按货号自动匹配,只读。
     </p>
 
     <!-- Sync health — same fc-* KPI strip as the Products catalogue, fed by
@@ -6608,22 +6606,37 @@
     <!-- Review panel — ambiguous / unmatched products after a Meituan fetch -->
     <div id="mt-review-panel" style="display:none;margin:14px 0;border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
 
-    <!-- Toolbar — search + filter on the left, sync actions on the right,
-         mirroring the Products catalogue toolbar. -->
+    <!-- Toolbar — search + status filter on the left, one primary action plus an
+         overflow menu on the right. Occasional name-setup tools live in the
+         collapsible drawer below (Tianhe only — Yuexiu auto-maps by 货号). -->
     <div class="pa-toolbar">
-      <input id="mt-search" type="text" placeholder="Search products · 搜索商品" oninput="mtFilterProducts()">
-      <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
-        <input type="checkbox" id="mt-show-unmapped" onchange="mtFilterProducts()"> Show unmapped only · 仅未映射
-      </label>
-      <div id="mt-count" class="pa-count"></div>
-      <button class="btn btn-sm" onclick="mtLoadStatus()" title="Refresh sync status">↻ Status</button>
-      <button id="mt-clear-btn" class="btn btn-sm" onclick="mtClearAll()" title="Delete every saved Meituan name mapping across all stores. Use before re-filling from scratch.">🧹 Clear all names</button>
-      <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name.">📋 Paste Meituan names</button>
-      <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles AND each spec's 货号 from your Meituan backend (via the sync daemon), fill empty names, and auto-fill SKUs from the real 货号. Ambiguous ones show clickable 货号 chips under the SKU box.">⟳ Fetch from Meituan</button>
-      <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty 天河 外卖 Meituan name with the product's Chinese name (variant size appended where needed). 越秀 闪购 is auto-mapped by 货号 and left untouched. Existing entries are kept.">✨ Auto-fill names</button>
-      <button class="btn btn-sm btn-primary" onclick="mtPushAll()">Push all stock now</button>
-      <button id="mt-force-push-btn" class="btn btn-sm btn-danger" onclick="mtPushAll(true)" title="Emergency only: push stock to Meituan even while the store is CLOSED (outside opening hours). Use sparingly — a backend edit while closed slightly raises Meituan risk-control exposure.">⚠ Emergency push (store closed)</button>
+      <input id="mt-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="mtFilterProducts()">
+      <div class="mt-seg" role="tablist" aria-label="Filter products">
+        <button id="mt-seg-all" class="active" role="tab" onclick="mtSetFilter('all')">All · 全部</button>
+        <button id="mt-seg-att" role="tab" onclick="mtSetFilter('att')">Needs attention · 待处理</button>
+      </div>
+      <div id="mt-count" class="pa-count" data-no-i18n></div>
+      <span style="flex:1 1 auto"></span>
+      <button class="btn btn-sm btn-primary" id="mt-pushall-btn" onclick="mtPushAll()">Push all stock · 推送全部库存</button>
+      <div class="mt-more">
+        <button class="btn btn-sm" id="mt-more-btn" aria-haspopup="true" aria-expanded="false" onclick="mtToggleMore(event)">More · 更多</button>
+        <div class="mt-more-menu" id="mt-more-menu" hidden>
+          <button onclick="mtCloseMore();mtLoadStatus()">Refresh status · 刷新状态</button>
+          <button id="mt-force-push-btn" class="danger" onclick="mtCloseMore();mtPushAll(true)" title="Push stock even while the store is closed (outside opening hours). Use sparingly. · 即使门店打烊也推送库存,谨慎使用。">Push while closed · 打烊时推送</button>
+          <button id="mt-clear-btn" class="danger" onclick="mtCloseMore();mtClearAll()" title="Delete every saved Tianhe delivery name. Yuexiu (auto by 货号) is left untouched. · 删除所有天河外卖名称,越秀(按货号自动)不受影响。">Clear Tianhe names · 清除天河名称</button>
+        </div>
+      </div>
     </div>
+
+    <!-- Tianhe name tools — occasional setup; delivery matches by listing name -->
+    <details id="mt-name-tools" style="margin:0 0 14px;border:1px solid var(--line);border-radius:8px;padding:8px 14px">
+      <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted)">Tianhe name tools · 天河名称工具 <span class="muted" style="font-weight:400">— delivery only, matched by name · 仅外卖,按名称匹配</span></summary>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles from your Meituan delivery backend (via the sync daemon) and fill empty names. · 通过同步服务读取美团外卖后台的真实商品名并填充空缺。">Fetch from Meituan · 从美团获取</button>
+        <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Tianhe delivery name with the product's Chinese name (variant size appended). Existing entries are kept. · 用商品中文名填充天河外卖空缺名称(附规格),已有的保留。">Auto-fill names · 自动填充名称</button>
+        <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name. · 粘贴美团商品名(每行一个),选门店,按中文名匹配填充。">Paste Meituan names · 粘贴美团名称</button>
+      </div>
+    </details>
 
     <!-- Meituan-only bundles (套餐/combos with no single roots product) -->
     <details id="mt-bundles" style="margin:14px 0;border:1px solid var(--line);border-radius:8px;padding:0 14px 12px">
@@ -6644,17 +6657,16 @@
 
     <!-- Product mapping table -->
     <div id="mt-products-wrap" style="overflow-x:auto">
-      <table id="mt-products-table" class="data-table" style="min-width:700px;font-size:13px">
+      <table id="mt-products-table" class="data-table" style="min-width:640px;font-size:13px">
         <thead>
           <tr>
-            <th style="width:28%">Product · 商品</th>
-            <th id="mt-th-store-0" style="width:30%">天河 · 美团外卖</th>
-            <th id="mt-th-store-1" style="width:30%">越秀 · 美团闪购</th>
-            <th style="width:12%;text-align:center">天河 Sync · 同步</th>
+            <th style="width:38%">Product · 商品</th>
+            <th id="mt-th-store-0" style="width:31%">Tianhe delivery · 天河外卖</th>
+            <th id="mt-th-store-1" style="width:31%">Yuexiu instant · 越秀闪购</th>
           </tr>
         </thead>
-        <tbody id="mt-products-body">
-          <tr><td colspan="4" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+        <tbody id="mt-products-body" data-no-i18n>
+          <tr><td colspan="3" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
         </tbody>
       </table>
     </div>

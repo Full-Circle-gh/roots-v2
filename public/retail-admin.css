@@ -3780,6 +3780,25 @@
   .pill.pub .dot { background: var(--accent); }
   .pill.draft { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pill.draft .dot { background: var(--text-4); }
+  /* Meituan sync status — Tea = live/synced, Brass = needs action, neutral = not on store */
+  .pill.mt-ok   { background: rgba(107,142,111,.12); color: var(--accent); border-color: rgba(107,142,111,.30); }
+  .pill.mt-ok .dot   { background: var(--accent); }
+  .pill.mt-warn { background: rgba(176,141,74,.14); color: var(--warn); border-color: rgba(176,141,74,.35); }
+  .pill.mt-warn .dot { background: var(--warn); }
+  .pill.mt-off  { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
+  .pill.mt-off .dot  { background: var(--text-4); }
+  /* Meituan toolbar — segmented filter + overflow menu */
+  .mt-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .mt-seg button { border: 0; background: transparent; color: var(--text-2); font-size: 12px; padding: 5px 12px; cursor: pointer; }
+  .mt-seg button + button { border-left: 1px solid var(--line); }
+  .mt-seg button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .mt-more { position: relative; }
+  .mt-more-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 210px; background: var(--bg-pane); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.25); padding: 5px; }
+  .mt-more-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text-1); font-size: 13px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+  .mt-more-menu button:hover { background: var(--bg-elev-1); }
+  .mt-more-menu button.danger { color: var(--danger); }
+  .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+  .mt-sub { font-size: 11px; line-height: 1.35; margin-top: 3px; }
   /* Brass = needs-action / in-flight; Tea = money-in / done; neutral = closed. */
   .pill.st-pending_payment { background: rgba(176, 141, 74, .12); color: var(--st-pending_payment); border-color: rgba(176, 141, 74, .30); }
   .pill.st-pending_payment .dot { background: var(--st-pending_payment); }
