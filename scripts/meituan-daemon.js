@@ -41,6 +41,14 @@ try {
 
 const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
+const { sendOpsAlert } = require('../lib/ops-alert');
+
+// Stores handled by a DIFFERENT channel daemon (e.g. yuexiu on 闪购/shangou-sync).
+// Listed here so THIS 外卖 daemon never polls their (logged-out) e.waimai session or
+// races the other daemon on their meituan_sync_queue rows. Set in .env, e.g.
+// MEITUAN_SKIP_STORES=yuexiu
+const SKIP_STORES = (process.env.MEITUAN_SKIP_STORES || '')
+  .split(',').map(s => s.trim()).filter(Boolean);
 
 const ORDER_POLL_MS  = 300_000; // how often to check for new Meituan orders (jittered ±40%)
 // Import-only by default: pull orders into roots (records + stock) but do NOT
@@ -138,6 +146,49 @@ const verifyFlagged = {};
 // edge is logged once on transition, not on every loop tick.
 const closedFlagged = {};
 
+// Per-store browser-health tracking. A renderer crash / dropped Chromium makes
+// every call throw "…has been closed"; lib/meituan-browser now auto-relaunches a
+// dead instance, but if a page reliably crashes the renderer the relaunch can't
+// stick. Without an alert that stays SILENT (the 2026-06-28 incident: tianhe died
+// at ~04:35 and was only noticed hours later via a missing order). Track the first
+// crash-class failure; if it persists past DOWN_ALERT_AFTER_MS, page ops once.
+// Cleared (with a recovery alert) the moment a poll comes back clean.
+const browserDown = {}; // storeCode -> { since: epochMs|null, alerted: bool }
+const DOWN_ALERT_AFTER_MS = 10 * 60_000; // ~5 failed order polls before paging
+
+// Does this error look like the browser/page died (vs. a verify/proxy issue,
+// which have their own alerts)? Matches the Playwright "closed" / crash family
+// and our own relaunch-cooldown sentinel.
+function isBrowserDeadError(msg) {
+  return /has been closed|Target (page|closed)|crash|relaunch cooling/i.test(String(msg || ''));
+}
+
+// Record the health of a poll/push cycle. ok=true clears the latch (and pages a
+// recovery if we'd alerted). A crash-class failure starts/continues the latch and
+// pages once it has persisted past the threshold. Non-crash failures are ignored
+// here (verify/proxy own their own alerts) so we don't double-page.
+function noteBrowserHealth(storeCode, ok, errMsg) {
+  const s = browserDown[storeCode] || (browserDown[storeCode] = { since: null, alerted: false });
+  if (ok) {
+    if (s.alerted) {
+      logSync(storeCode, 'browser_recovered', 'ok', null, 'browser back up — sync resumed');
+      sendOpsAlert(`✅ 美团外卖 ${storeCode} 浏览器已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} browser recovered — stock/order sync resumed`);
+    }
+    s.since = null; s.alerted = false;
+    return;
+  }
+  if (!isBrowserDeadError(errMsg)) return; // not our concern
+  const now = Date.now();
+  if (s.since == null) s.since = now;
+  if (!s.alerted && now - s.since >= DOWN_ALERT_AFTER_MS) {
+    s.alerted = true;
+    const mins = Math.round((now - s.since) / 60000);
+    logSync(storeCode, 'browser_down', 'error', null,
+      `browser keeps crashing (~${mins} min) — auto-relaunch not sticking, may need the box`);
+    sendOpsAlert(`🔴 美团外卖 ${storeCode} 浏览器持续崩溃 ~${mins} 分钟，库存/订单同步已停，可能需要在盒子上处理\nMeituan 外卖 ${storeCode} browser keeps crashing for ~${mins} min — stock/order sync down, auto-relaunch isn't sticking, may need hands-on the box`);
+  }
+}
+
 // When a store hits the 验证中心 challenge, STOP touching it for a while instead
 // of re-navigating into the verify page every cycle — every such hit re-pokes
 // risk-control from the already-flagged session and only deepens the flag /
@@ -166,12 +217,14 @@ function noteVerifyResult(storeCode, challenged) {
       verifyFlagged[storeCode] = true;
       logSync(storeCode, 'verify_required', 'error', null,
         `Meituan 验证中心 challenge — a human must pass the captcha; backing off ~${Math.round(wait / 60000)} min`);
+      sendOpsAlert(`🔴 美团外卖 ${storeCode} 掉线：验证中心风控，同步已暂停，需要人工验证\nMeituan 外卖 ${storeCode} disconnected (验证中心) — sync paused, needs a human to pass the captcha`);
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
     if (verifyFlagged[storeCode]) {
       verifyFlagged[storeCode] = false;
       logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
+      sendOpsAlert(`✅ 美团外卖 ${storeCode} 已恢复，同步继续\nMeituan 外卖 ${storeCode} recovered — sync resumed`);
     }
     s.strikes = 0;
     s.until = 0;
@@ -192,7 +245,8 @@ function getStoreConfigs() {
     namEn:     s.name_en,
     meituanUser: process.env[`MEITUAN_${s.code.toUpperCase()}_USER`] || '',
     meituanPass: process.env[`MEITUAN_${s.code.toUpperCase()}_PASS`] || '',
-  })).filter(s => s.meituanUser || true); // include all active stores
+  })).filter(s => s.meituanUser || true) // include all active stores
+     .filter(s => !SKIP_STORES.includes(s.storeCode)); // …except ones on another channel
 }
 
 // ── Order polling ─────────────────────────────────────────────────────────────
@@ -203,6 +257,7 @@ async function pollOrders(storeConfig) {
   try {
     browser = await getBrowser(storeCode);
     const orders = await browser.getPendingOrders();
+    noteBrowserHealth(storeCode, true); // a clean poll = browser alive
 
     // Surface + back off on a risk-control 验证中心 challenge: escalating
     // cool-down so we stop re-poking the verify page every cycle (logged once on
@@ -261,6 +316,7 @@ async function pollOrders(storeConfig) {
   } catch (err) {
     log(storeCode, `pollOrders error: ${err.message}`);
     logSync(storeCode, 'order_poll', 'error', null, err.message);
+    noteBrowserHealth(storeCode, false, err.message); // pages ops if it persists
   }
 }
 
@@ -311,6 +367,9 @@ async function processStockQueue() {
   }
 
   for (const [storeCode, items] of Object.entries(byStore)) {
+    // A store handled by another channel daemon (e.g. yuexiu on 闪购) — leave its
+    // queue rows pending for that daemon; never touch them here.
+    if (SKIP_STORES.includes(storeCode)) continue;
     // Don't push while the store is CLOSED on Meituan (a backend edit at 3am is a
     // bot tell, and stock accuracy doesn't matter until it reopens) or while it's
     // in a verification cool-down (a push would re-hit risk-control). Rows stay
@@ -370,7 +429,7 @@ async function processStockQueue() {
       if (challenged) noteVerifyResult(storeCode, true);
 
       for (const res of results) {
-        const { row, isBundle, newQty, ok } = res;
+        const { row, isBundle, newQty, ok, transient } = res;
         if (ok) {
           db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error=NULL WHERE id=?`)
             .run(row.id);
@@ -382,20 +441,34 @@ async function processStockQueue() {
               .run(newQty, row.retail_store_id, row.product_id);
           }
           logSync(storeCode, 'stock_push', 'ok',
-            { name: isBundle ? row.meituan_name : (row.name_en || row.name_cn),
+            { name_en: isBundle ? row.meituan_name : row.name_en,
+              name_cn: isBundle ? row.meituan_name : row.name_cn,
               sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle });
         } else if (challenged) {
           // Deferred by risk-control, not a real failure — requeue and refund the
           // attempt so it retries once the cool-down passes (no burned attempts).
           db.prepare(`UPDATE meituan_sync_queue SET status='pending', attempts=attempts-1 WHERE id=?`)
             .run(row.id);
-        } else {
-          db.prepare(`UPDATE meituan_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error='browser update failed' WHERE id=?`)
+        } else if (transient && (row.attempts || 0) + 1 < 3) {
+          // Transient automation hiccup (resolve / searchSugByName / navigation),
+          // NOT a genuine Meituan API rejection. Leave the row pending so it
+          // retries instead of being buried as a terminal 'error' that never
+          // self-heals (the chronic-drift bug on flaky listings). No attempt
+          // refund — attempts<3 still caps the retries. (attempts was already
+          // incremented when the row was marked 'processing', so +1 here.)
+          db.prepare(`UPDATE meituan_sync_queue SET status='pending', last_error='transient push failure — will retry' WHERE id=?`)
             .run(row.id);
+        } else {
+          // Genuine API rejection, or transient retries exhausted → terminal.
+          // Surface the exhausted case too so a chronically-flaky listing isn't
+          // left silently drifting (the failure the old code hid on attempt 1).
+          db.prepare(`UPDATE meituan_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error=? WHERE id=?`)
+            .run(transient ? 'transient push failure — retries exhausted' : 'browser update failed', row.id);
           logSync(storeCode, 'stock_push', 'error',
-            { name: isBundle ? row.meituan_name : (row.name_en || row.name_cn),
+            { name_en: isBundle ? row.meituan_name : row.name_en,
+              name_cn: isBundle ? row.meituan_name : row.name_cn,
               sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle },
-            'browser update failed · 更新失败');
+            transient ? 'update failed after retries · 多次重试仍失败' : 'browser update failed · 更新失败');
         }
       }
     } catch (err) {
@@ -406,6 +479,102 @@ async function processStockQueue() {
           .run(err.message.slice(0, 200), row.id);
       }
     }
+  }
+}
+
+// ── Startup recovery: orphaned 'processing' rows ──────────────────────────────
+// A queue row is flipped to status='processing' (attempts+1) just BEFORE the
+// browser push. If the daemon is killed/restarted (pm2 restart, crash) mid-batch,
+// the try/catch only resets rows the CURRENT run owns — rows from the dead run are
+// stranded in 'processing' forever, and the retry query (status='pending' AND
+// attempts<3) never picks them up, so that product's Meituan stock silently
+// drifts. On 2026-06-27 we found 69 such orphans on tianhe, the oldest 5 days old.
+//
+// On startup, sweep THIS daemon's own stores for stale 'processing' rows and make
+// them retryable again — but safely, mirroring the safe recovery in
+// feature_meituan_push_error_terminal_no_retry:
+//   • Scoped to OUR stores only, so we never disturb a row the sibling channel
+//     daemon (闪购/shangou-sync) may legitimately have in flight on a shared queue.
+//   • created_at older than ~5 min, so a near-simultaneous pm2 reload (two runs
+//     briefly overlapping) can't race us onto a row a still-living run owns.
+//   • If a NEWER queue row exists for the same product/bundle, this orphan's qty is
+//     stale — retire it 'done' (superseded) rather than replay an outdated value
+//     onto live Meituan stock.
+//   • Otherwise re-enqueue at the product/bundle's CURRENT stock (physical_qty /
+//     component floor), NOT the new_qty snapped before the crash, and refund the
+//     one attempt the 'processing' mark burned.
+function recoverOrphanedProcessing(storeCodes) {
+  if (!storeCodes || !storeCodes.length) return;
+  const ph = storeCodes.map(() => '?').join(',');
+  let stale;
+  try {
+    stale = db.prepare(`
+      SELECT * FROM meituan_sync_queue
+       WHERE status = 'processing'
+         AND store_code IN (${ph})
+         AND created_at < datetime('now', '-5 minutes')
+       ORDER BY created_at, id
+    `).all(...storeCodes);
+  } catch (e) {
+    console.error('[meituan-daemon] orphan recovery query failed:', e.message);
+    return;
+  }
+  if (!stale.length) return;
+
+  const bundles = require('../lib/meituan-bundles');
+  const stats = {}; // storeCode -> { requeued, retired }
+  for (const row of stale) {
+    const st = stats[row.store_code] || (stats[row.store_code] = { requeued: 0, retired: 0 });
+    try {
+      const isBundle = !!row.bundle_id;
+      // A newer queue row for the same target (any status) means this orphan's
+      // quantity is stale — retire it instead of replaying an old value.
+      const newer = isBundle
+        ? db.prepare(`SELECT 1 FROM meituan_sync_queue
+                       WHERE store_code=? AND bundle_id=? AND id<>?
+                         AND (created_at>? OR (created_at=? AND id>?)) LIMIT 1`)
+            .get(row.store_code, row.bundle_id, row.id, row.created_at, row.created_at, row.id)
+        : db.prepare(`SELECT 1 FROM meituan_sync_queue
+                       WHERE store_code=? AND product_id=? AND bundle_id IS NULL AND id<>?
+                         AND (created_at>? OR (created_at=? AND id>?)) LIMIT 1`)
+            .get(row.store_code, row.product_id, row.id, row.created_at, row.created_at, row.id);
+      if (newer) {
+        db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error='superseded — stale processing recovered at startup' WHERE id=?`)
+          .run(row.id);
+        st.retired++;
+        continue;
+      }
+      // Latest row for its target → re-enqueue at CURRENT stock truth.
+      let qty;
+      if (isBundle) {
+        const bundle = db.prepare('SELECT * FROM meituan_bundles WHERE id=?').get(row.bundle_id);
+        if (!bundle) {
+          db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error='bundle removed — stale processing retired at startup' WHERE id=?`)
+            .run(row.id);
+          st.retired++;
+          continue;
+        }
+        qty = bundles.bundleStock(db, bundle);
+      } else {
+        const r = db.prepare('SELECT COALESCE(physical_qty,0) AS q FROM retail_store_stock WHERE store_id=? AND product_id=?')
+          .get(row.retail_store_id, row.product_id);
+        qty = r ? r.q : 0;
+      }
+      db.prepare(`UPDATE meituan_sync_queue
+                     SET status='pending', new_qty=?,
+                         attempts=MAX(attempts-1, 0),
+                         last_error='recovered stale processing at startup — re-enqueued at current stock'
+                   WHERE id=?`).run(qty, row.id);
+      st.requeued++;
+    } catch (e) {
+      console.error(`[meituan-daemon] orphan recovery row ${row.id} failed:`, e.message);
+    }
+  }
+  for (const [sc, s] of Object.entries(stats)) {
+    if (!s.requeued && !s.retired) continue;
+    console.log(`[meituan-daemon:${sc}] ${new Date().toISOString()} startup orphan recovery: ${s.requeued} re-enqueued, ${s.retired} retired`);
+    logSync(sc, 'orphan_recovery', 'ok', s,
+      `recovered ${s.requeued + s.retired} stale 'processing' row(s) at startup`);
   }
 }
 
@@ -508,6 +677,9 @@ async function main() {
   }
   console.log(`[meituan-daemon] stores: ${stores.map(s => s.storeCode).join(', ')}`);
 
+  // Heal any rows a previous run left stranded in 'processing' (killed mid-batch).
+  recoverOrphanedProcessing(stores.map(s => s.storeCode));
+
   let lastOrderPoll = 0;
   let orderPollGap  = jitter(ORDER_POLL_MS, 0.4);
 
@@ -524,6 +696,7 @@ async function main() {
         proxyDownFlagged = true;
         console.log(`[meituan-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(process.env.MEITUAN_PROXY_URL)}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of stores) logSync(s.storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
+        sendOpsAlert(`🔴 美团外卖 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 外卖 proxy down — can't reach Meituan, sync paused (not logged out)`);
       }
       await sleep(jitter(QUEUE_CHECK_MS));
       continue;
@@ -532,6 +705,7 @@ async function main() {
       proxyDownFlagged = false;
       console.log(`[meituan-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
       for (const s of stores) logSync(s.storeCode, 'proxy_up', 'ok', null, 'proxy reachable again — sync resumed');
+      sendOpsAlert(`✅ 美团外卖 代理已恢复，同步继续\nMeituan 外卖 proxy recovered — sync resumed`);
     }
 
     // Poll for new orders on a jittered ~5 min cadence. Stagger stores so the two
