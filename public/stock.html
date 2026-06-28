@@ -128,20 +128,24 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
 .r-status.low{color:var(--warn);}
 .r-status.out{color:var(--danger);}
 
-/* Full-width stepper — big − on the left, big count in the middle, big + on the
-   right. Same control for recount (the stock count) and add (the +N to add). */
+/* Full-width stepper — exactly the approved mockup: a bordered − button on the
+   left, the big number floating in the middle (no box around it), a bordered +
+   on the right. Same control for recount (the stock count) and add (the +N). */
 .stepper{display:flex;align-items:stretch;gap:10px;margin-top:14px;}
-.stepper button{height:64px;border-radius:13px;border:1px solid var(--line);
-  background:var(--bg-elev-1);display:flex;align-items:center;justify-content:center;color:var(--text-1);}
-.stepper button:active{background:var(--bg-elev-2);transform:scale(.98);}
-.stepper .minus,.stepper .plus{flex:0 0 92px;}
+.stepper button{height:64px;border-radius:13px;display:flex;align-items:center;justify-content:center;}
+.stepper button:active{transform:scale(.97);}
+.stepper .minus,.stepper .plus{flex:0 0 92px;background:var(--bg-elev-1);border:1px solid var(--line);}
+.stepper .minus:active,.stepper .plus:active{background:var(--bg-elev-2);}
 .stepper .minus{color:var(--danger);}
 .stepper .plus{color:var(--success);}
-.stepper .minus svg,.stepper .plus svg{width:30px;height:30px;}
-.stepper .qty{flex:1;font-size:38px;font-weight:800;color:var(--text-1);font-variant-numeric:tabular-nums;}
-.stepper .qty.saving{color:var(--accent);}
+.stepper .minus svg,.stepper .plus svg{width:32px;height:32px;}
+.stepper .qty{flex:1;background:transparent;border:none;font-size:38px;font-weight:800;
+  color:var(--text-1);font-variant-numeric:tabular-nums;}
+.stepper .qty:active{opacity:.6;}
+.stepper .qty.add{color:var(--text-1);}
+.stepper .qty.saving{color:var(--accent-hi);}
 .row.out .stepper .qty{color:var(--danger);}
-.row.out .stepper .minus{opacity:.4;}
+.row.out .stepper .minus{opacity:.45;}
 
 /* Add-Stock mode reuses the SAME comfortable card + big stepper as recount —
    only the number means "how many you're adding" (starts +0, commits as a delta,
