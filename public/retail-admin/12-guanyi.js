@@ -358,9 +358,36 @@
   // ── gzgrocery analytics & billing ─────────────────────────────────────────────
   // Reads the live /guanyi/analytics endpoint (billable units = applied pickups ×
   // imported gzgrocery pricing) and renders the dashboard + Statement CSV export.
-  const _gyAna = { period: 'day', from: '', to: '', data: null };
+  // period '' = no preset selected (all-time default view); Day/Week/Month set it.
+  const _gyAna = { period: '', from: '', to: '', data: null };
 
-  window.gySetAnaPeriod = function (p) { _gyAna.period = p; gyLoadAnalytics(); };
+  // Local YYYY-MM-DD (not UTC) so "today" matches the viewer's calendar day.
+  function gyYmd(d) {
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  }
+  // Day/Week/Month are quick period presets: they re-scope the date range so the
+  // summary cards reflect the chosen window (and the breakdown buckets by it too).
+  function gyPeriodRange(p) {
+    const now = new Date();
+    const today = gyYmd(now);
+    if (p === 'week') {
+      const dow = (now.getDay() + 6) % 7;            // Mon=0 … Sun=6
+      const mon = new Date(now); mon.setDate(now.getDate() - dow);
+      return { from: gyYmd(mon), to: today };
+    }
+    if (p === 'month') {
+      return { from: gyYmd(new Date(now.getFullYear(), now.getMonth(), 1)), to: today };
+    }
+    return { from: today, to: today };               // day
+  }
+
+  window.gySetAnaPeriod = function (p) {
+    _gyAna.period = p;
+    const r = gyPeriodRange(p);
+    _gyAna.from = r.from; _gyAna.to = r.to;
+    gyLoadAnalytics();
+  };
   window.gyAnaSetRange = function () {
     _gyAna.from = (document.getElementById('gy-ana-from') || {}).value || '';
     _gyAna.to = (document.getElementById('gy-ana-to') || {}).value || '';
@@ -397,7 +424,7 @@
       <div style="font-size:20px;font-weight:700;margin-top:2px">${val}</div>${sub ? `<div class="muted" style="font-size:11px">${sub}</div>` : ''}</div>`;
 
     let html = `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
-      <span style="font-size:12px" class="muted">Group by</span> ${btn('day', 'Day')} ${btn('week', 'Week')} ${btn('month', 'Month')}
+      <span style="font-size:12px" class="muted">Period</span> ${btn('day', 'Day')} ${btn('week', 'Week')} ${btn('month', 'Month')}
       <span style="margin-left:auto;display:flex;gap:6px;align-items:center">
         <input type="date" id="gy-ana-from" value="${esc(_gyAna.from)}" onchange="gyAnaSetRange()" style="font-size:12px;padding:2px 4px">
         <span class="muted">→</span>
