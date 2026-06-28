@@ -3927,20 +3927,38 @@ function jdAutoPrintOn() {
 }
 function setJdAutoPrint(on) {
   try { localStorage.setItem('jdLabelAutoWaybill', on ? '1' : '0'); } catch (e) {}
+  // The component can't enumerate printers (its GET_Printers casts every frame
+  // to a print task and throws), so the target printer NAME has to be typed in
+  // once. Ask for it the first time auto-print is switched on.
+  if (on && !jdPrinterName()) jdPromptPrinterName();
   toast(on ? cuT('JD label will auto-print on waybill', '生成运单后将自动打印京东面单')
            : cuT('JD label auto-print off', '已关闭京东面单自动打印'));
 }
-// Optionally pin a named printer; empty → the component's own default printer.
+// The EXACT OS printer name the JD label prints to (e.g. "HPRT N31"), stored
+// per-machine. The component needs it verbatim — there is no auto-discovery.
 function jdPrinterName() {
   try { return localStorage.getItem('jdLabelPrinter') || ''; } catch (e) { return ''; }
+}
+function jdPromptPrinterName() {
+  const cur = jdPrinterName();
+  const name = window.prompt(cuT(
+    'Exact name of the JD label printer (as it appears in the OS / 京东打印组件), e.g. HPRT N31:',
+    '京东面单打印机的精确名称(与系统/京东打印组件中显示一致),例如 HPRT N31:'), cur);
+  if (name == null) return cur;                 // cancelled — keep current
+  const v = String(name).trim();
+  try { localStorage.setItem('jdLabelPrinter', v); } catch (e) {}
+  return v;
 }
 
 // Open the local print component (trying each port in turn), send ONE print job,
 // and resolve { ok, msg }. Times out per port so a missing component never hangs
-// the UI. Protocol per JD's cloud-print component: an "orderType":"PRINT" frame
-// carrying { tempUrl, printData[] } in `parameters`; the component echoes a
-// status frame we read for success/failure.
-function jdSendToComponent(printData, tempUrl, ports) {
+// the UI. Protocol = JD cloud-print 报文2 (report format 2): an
+// "orderType":"PRINT","version":"2" frame whose `parameters` carry the target
+// `printName` and a `contents:[{ tempUrl, printData }]` list — the component
+// renders the template `tempUrl` with the encrypted `printData` (the perPrintData
+// string from pullData) and prints. It echoes a status frame: status 500 = ok,
+// success "true"/"false", errors[] on failure.
+function jdSendToComponent(printData, tempUrl, printName, ports) {
   ports = ports || JD_PRINT_PORTS;
   return new Promise((resolve) => {
     let i = 0;
@@ -3962,26 +3980,30 @@ function jdSendToComponent(printData, tempUrl, ports) {
       ws.onopen = () => {
         const msg = {
           orderType: 'PRINT',
+          version: '2',
           key: (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'k' + Date.now() + Math.round(Math.random() * 1e6)),
           parameters: {
-            tempUrl,
-            printData: Array.isArray(printData) ? printData : [printData],
+            printName: printName || '',
+            contents: [{ tempUrl, printData }],
           },
         };
-        const pn = jdPrinterName();
-        if (pn) msg.parameters.printer = pn;
         try { ws.send(JSON.stringify(msg)); } catch (e) { finish({ ok: false, msg: 'send_failed' }); }
       };
       ws.onmessage = (ev) => {
         // Connected + got a reply → this IS the component; from here a bad reply
         // is a real print failure, not a "wrong port", so we finish (not retry).
         let d = ev.data;
-        try { d = JSON.parse(ev.data); } catch (e) { /* non-JSON ack — treat as queued ok */ }
-        const status  = d && (d.status != null ? d.status : (d.code != null ? d.code : d.success));
-        const errMsg  = d && (d.message || d.msg || d.errorMessage || d.error);
-        const failed  = status === false || status === 'fail' || status === 'error' || status === '0'
-          || (!!errMsg && /fail|错误|失败|error/i.test(String(errMsg)));
-        finish(failed ? { ok: false, msg: errMsg || 'print_failed' } : { ok: true });
+        try { d = JSON.parse(ev.data); } catch (e) { finish({ ok: true }); return; }  // non-JSON ack
+        const status  = d && d.status;
+        const success = d && d.success;
+        const errs    = d && (d.errors || (d.detailinfo && d.detailinfo.errors));
+        const errMsg  = (Array.isArray(errs) && errs.length)
+          ? (errs[0].message || errs[0].msg || JSON.stringify(errs[0]))
+          : (d && (d.message || d.msg));
+        // JD component: status 500 (or success "true") = printed/queued ok.
+        const ok     = status === 500 || status === '500' || success === 'true' || success === true;
+        const failed = success === 'false' || success === false || (Array.isArray(errs) && errs.length > 0);
+        finish(ok || !failed ? { ok: true } : { ok: false, msg: errMsg || 'print_failed' });
       };
       ws.onerror = nextOrFail;
     };
@@ -4007,7 +4029,12 @@ async function printJdLabel(orderId, shipmentId, opts) {
     if (!opts.silent) toast(cuT('JD label data unavailable', '京东面单数据不可用'), 'err');
     return false;
   }
-  const sent = await jdSendToComponent(r.data.printData, r.data.tempUrl);
+  // The component needs the exact printer name; ask once if it isn't set yet
+  // (even on the auto path — without it the component can't pick a printer).
+  let printer = jdPrinterName();
+  if (!printer) printer = jdPromptPrinterName();
+  if (!printer) { if (!opts.silent) toast(cuT('Set the JD printer name first', '请先设置京东打印机名称'), 'err'); return false; }
+  const sent = await jdSendToComponent(r.data.printData, r.data.tempUrl, printer);
   if (sent.ok) { toast(cuT('JD label sent to printer', '京东面单已发送打印')); return true; }
   toast(sent.msg === 'component_unreachable'
     ? cuT('JD print component not detected on this PC — open 京东物流云打印组件', '未检测到本机京东打印组件 — 请打开京东物流云打印组件')
