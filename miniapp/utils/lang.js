@@ -68,6 +68,17 @@ function pickLabel(raw, lang) {
   return splitMixed(str, lang);
 }
 
+// Pick the localized side of a variant label. Newer rows store the two sides in
+// dedicated columns (variant_label = EN, variant_label_cn = CN); older rows put
+// a single combined "EN · CN" string in variant_label with no companion. When
+// both sides are present, return the one matching the language; otherwise fall
+// back to pickLabel() to split a legacy combined / mixed string.
+function pickVariantLabel(en, cn, lang) {
+  const a = (en || '').trim(), b = (cn || '').trim();
+  if (a && b) return lang === 'cn' ? b : a;
+  return pickLabel(a || b, lang);
+}
+
 // Localize a saved address's region to the active language. The server stores
 // canonical Chinese in city/district plus English companions in
 // city_en/district_en; show the matching side, falling back to the other when
@@ -81,4 +92,4 @@ function addrRegion(a, lang) {
   };
 }
 
-module.exports = { detect, set, pick, splitMixed, pickLabel, addrRegion };
+module.exports = { detect, set, pick, splitMixed, pickLabel, pickVariantLabel, addrRegion };

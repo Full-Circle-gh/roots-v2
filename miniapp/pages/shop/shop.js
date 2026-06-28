@@ -1000,7 +1000,7 @@ Page({
       const soldOut = stock != null && stock <= 0;
       return {
         id: m.id,
-        label: lang.pickLabel(m.variant_label, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
+        label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
         weight: (m.size || '').toString().trim(),
         price: eff > 0 ? money(eff) : '',
         priceWas: wasN > 0 ? money(wasN) : '',
