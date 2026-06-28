@@ -3240,8 +3240,11 @@ function printReceiptTile(o) {
       ${badge}
       <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Reprint · 补打小票</button>
       <button class="btn btn-sm" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label · 打印箱贴', '打印箱贴 · Box label')}</button>
-      <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Only this PC (the one with the label printer). Prints the parcel label when its waybill is created.', '仅本机(连接标签打印机的电脑)。生成运单时自动打印该包裹箱贴。'))}">
-        <input type="checkbox" ${boxLabelAutoOn() ? 'checked' : ''} onchange="setBoxLabelAuto(this.checked)"> ${cuT('Auto on waybill · 运单后自动', '运单后自动 · Auto')}
+      <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Only this PC (the one running 京东物流云打印组件). Auto-prints the JD waybill label the moment a waybill is created — no print dialog.', '仅本机(运行京东物流云打印组件的电脑)。生成运单时自动打印京东面单,无需弹窗。'))}">
+        <input type="checkbox" ${jdAutoPrintOn() ? 'checked' : ''} onchange="setJdAutoPrint(this.checked)"> ${cuT('Auto-print JD label · 运单后自动打印面单', '运单后自动打印面单 · Auto JD label')}
+      </label>
+      <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Optional — for stores that print their own parcel stickers instead of the JD waybill. Opens a print dialog for an order-no/name/phone sticker on this PC.', '可选 — 适用于自行打印箱贴而非京东面单的门店。在本机弹出打印订单号/姓名/电话箱贴。'))}">
+        <input type="checkbox" ${boxLabelAutoOn() ? 'checked' : ''} onchange="setBoxLabelAuto(this.checked)"> ${cuT('Box label too · 同时打印箱贴', '同时打印箱贴 · Box label too')}
       </label>
     </div>
   </div>`;
@@ -3768,6 +3771,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
             }
             return t.status_label_en ? `<div><span class="pill st-dispatched"><span class="dot"></span>${escapeHtml(t.status_label_en)} · ${escapeHtml(t.status_label_cn)}</span></div>` : '';
           })()}
+          ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" onclick="printJdLabel(${o.id}, ${sid})" title="${escapeAttr(cuT('Print this JD waybill label on the local label printer', '在本机标签打印机打印此京东面单'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print label · 打印面单', '打印面单 · Print label')}</button>` : ''}
           <div style="flex:1; min-width:160px; text-align:right;">
             <div class="muted" style="font-size:11px;">${synced}</div>
             <div style="margin-top:2px;">${kdBadge}</div>
@@ -3897,6 +3901,120 @@ function jdSuggestedService(mode, isFresh) {
   return isFresh ? 'LL-HD-M' : 'ed-m-0001';      // ground splits by fresh flag
 }
 
+// ─── JD waybill cloud-print (面单云打印) — local print component ────────────
+// After a JD waybill is created, fire its label STRAIGHT to the JD print
+// component (京东物流云打印组件) running on THIS PC, which renders the encrypted
+// label data onto the operator's thermal label printer. No browser print
+// dialog, no manual step. The server hands us the encrypted printData + the
+// chosen template URL (GET …/jd-waybill/print-data); we hand that to the
+// component over its local WebSocket and it prints.
+//
+// The component listens on a loopback WebSocket. ws://127.0.0.1 is a trusted
+// origin, so an https admin page is allowed to open it (Chrome/Edge/Firefox all
+// permit loopback ws from a secure context — it is NOT blocked as mixed content
+// the way ws:// to a remote host would be). It tries a small range of ports.
+//
+// Per-MACHINE toggle (localStorage, like the box-label one): only the PC wired
+// to the JD label printer runs the component, so the auto-fire flag is stored
+// per browser, not per account. Default ON — the common setup.
+const JD_PRINT_PORTS = [9113, 9114, 9115];
+
+function jdAutoPrintOn() {
+  try {
+    const v = localStorage.getItem('jdLabelAutoWaybill');
+    return v == null ? true : v === '1';      // default ON
+  } catch (e) { return true; }
+}
+function setJdAutoPrint(on) {
+  try { localStorage.setItem('jdLabelAutoWaybill', on ? '1' : '0'); } catch (e) {}
+  toast(on ? cuT('JD label will auto-print on waybill', '生成运单后将自动打印京东面单')
+           : cuT('JD label auto-print off', '已关闭京东面单自动打印'));
+}
+// Optionally pin a named printer; empty → the component's own default printer.
+function jdPrinterName() {
+  try { return localStorage.getItem('jdLabelPrinter') || ''; } catch (e) { return ''; }
+}
+
+// Open the local print component (trying each port in turn), send ONE print job,
+// and resolve { ok, msg }. Times out per port so a missing component never hangs
+// the UI. Protocol per JD's cloud-print component: an "orderType":"PRINT" frame
+// carrying { tempUrl, printData[] } in `parameters`; the component echoes a
+// status frame we read for success/failure.
+function jdSendToComponent(printData, tempUrl, ports) {
+  ports = ports || JD_PRINT_PORTS;
+  return new Promise((resolve) => {
+    let i = 0;
+    const tryPort = () => {
+      if (i >= ports.length) { resolve({ ok: false, msg: 'component_unreachable' }); return; }
+      const port = ports[i++];
+      let ws, settled = false, timer;
+      const finish = (r) => {
+        if (settled) return; settled = true;
+        clearTimeout(timer);
+        try { ws && ws.close(); } catch (e) {}
+        resolve(r);
+      };
+      // A failed connection should fall through to the next port, not resolve.
+      const nextOrFail = () => { if (settled) return; settled = true; clearTimeout(timer); try { ws && ws.close(); } catch (e) {} tryPort(); };
+      try { ws = new WebSocket('ws://127.0.0.1:' + port); }
+      catch (e) { nextOrFail(); return; }
+      timer = setTimeout(nextOrFail, 4000);
+      ws.onopen = () => {
+        const msg = {
+          orderType: 'PRINT',
+          key: (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'k' + Date.now() + Math.round(Math.random() * 1e6)),
+          parameters: {
+            tempUrl,
+            printData: Array.isArray(printData) ? printData : [printData],
+          },
+        };
+        const pn = jdPrinterName();
+        if (pn) msg.parameters.printer = pn;
+        try { ws.send(JSON.stringify(msg)); } catch (e) { finish({ ok: false, msg: 'send_failed' }); }
+      };
+      ws.onmessage = (ev) => {
+        // Connected + got a reply → this IS the component; from here a bad reply
+        // is a real print failure, not a "wrong port", so we finish (not retry).
+        let d = ev.data;
+        try { d = JSON.parse(ev.data); } catch (e) { /* non-JSON ack — treat as queued ok */ }
+        const status  = d && (d.status != null ? d.status : (d.code != null ? d.code : d.success));
+        const errMsg  = d && (d.message || d.msg || d.errorMessage || d.error);
+        const failed  = status === false || status === 'fail' || status === 'error' || status === '0'
+          || (!!errMsg && /fail|错误|失败|error/i.test(String(errMsg)));
+        finish(failed ? { ok: false, msg: errMsg || 'print_failed' } : { ok: true });
+      };
+      ws.onerror = nextOrFail;
+    };
+    tryPort();
+  });
+}
+
+// Fetch the encrypted label data for an order's JD waybill and fire it to the
+// local component. Shared by the auto-print-on-waybill path and the manual
+// "Print JD label" button. `silent` suppresses the "unavailable" toast for the
+// auto path when there's simply no JD waybill on the parcel yet.
+async function printJdLabel(orderId, shipmentId, opts) {
+  opts = opts || {};
+  const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
+  let r;
+  try {
+    r = await api('/api/retail-admin/orders/' + orderId + '/jd-waybill/print-data' + qs);
+  } catch (e) {
+    if (!opts.silent) toast(cuT('Could not load JD label data', '获取京东面单数据失败') + ': ' + (e.message || ''), 'err');
+    return false;
+  }
+  if (!r || !r.data || !r.data.printData) {
+    if (!opts.silent) toast(cuT('JD label data unavailable', '京东面单数据不可用'), 'err');
+    return false;
+  }
+  const sent = await jdSendToComponent(r.data.printData, r.data.tempUrl);
+  if (sent.ok) { toast(cuT('JD label sent to printer', '京东面单已发送打印')); return true; }
+  toast(sent.msg === 'component_unreachable'
+    ? cuT('JD print component not detected on this PC — open 京东物流云打印组件', '未检测到本机京东打印组件 — 请打开京东物流云打印组件')
+    : (cuT('JD label print failed', '京东面单打印失败') + ': ' + sent.msg), 'err', 6000);
+  return false;
+}
+
 // POST the JD waybill with a chosen product code. The label is created under
 // our JD account, so JD streams tracking events for free (no 快递100). Server
 // resolves the sender from the fulfilling store's 发货地址 — surface the "store
@@ -3911,9 +4029,12 @@ async function submitJdLabel(orderId, shipmentId, product, btn) {
       errLabelEn: 'JD label failed', errLabelCn: '生成运单失败',
     });
     toast(cuT('JD waybill created', '京东运单已生成') + ': ' + (r?.data?.waybill || ''));
-    // Auto-print this parcel's box label (this machine only). Fire before the
-    // drawer rebuild while _OPEN_ORDER still holds the order — the label doesn't
-    // depend on the waybill itself, only the parcel/recipient.
+    // Auto-fire the JD waybill LABEL to the local print component (this machine
+    // only) — the label sticker prints with no further action. Default ON.
+    if (jdAutoPrintOn()) printJdLabel(orderId, shipmentId, { silent: true });
+    // Optional box-label sticker (order no / name / phone) on the local label
+    // printer — opt-in, for stores that print their own parcel stickers rather
+    // than the JD waybill. Off by default; the JD label above is the primary.
     if (boxLabelAutoOn()) printBoxLabel(orderId, shipmentId);
     openOrder(orderId, { instant: true });
     loadOrders();
