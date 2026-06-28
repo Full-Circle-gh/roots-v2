@@ -40,50 +40,59 @@ const lastActive = {};            // channel -> url ('' direct), '' is valid so 
 const lastHealth = {};            // channel -> { label: bool }
 let firstRun = true;
 
-function describe(channel, ev) {
-  const parts = ev.candidates.map(c => `${pm.LABEL_CN[c.label] || c.label}${ev.health[c.label] ? '✓' : '✗'}`);
-  return parts.join(' · ');
-}
+// Hysteresis: a candidate is only treated as DOWN after FAIL_THRESHOLD
+// consecutive failed probes (and UP again on the first success). Without this a
+// single transient blip on the WireGuard tunnel would flap the active proxy —
+// thrashing browser relaunches and spamming the bot. ~2 × CHECK_MS of sustained
+// failure before a failover.
+const FAIL_THRESHOLD = Number(process.env.PROXY_FAIL_THRESHOLD || 2);
+const failCount = {}; // `${channel}:${label}` -> consecutive failed probes
 
 async function tick() {
   const stateOut = pm.readState();
   for (const channel of pm.CHANNELS) {
-    let ev;
-    try { ev = await pm.evaluate(channel); }
-    catch (e) { console.error(`[proxy-watchdog] evaluate ${channel} failed:`, e.message); continue; }
-
+    const cands = pm.candidates(channel);
     const cn = pm.CHANNEL_CN[channel] || channel;
-    const activeUrl = ev.active.url;
-    const activeLbl = ev.active.label;
+
+    // Probe every candidate; debounce into a usable/unusable verdict.
+    const avail = {};
+    for (const c of cands) {
+      let ok;
+      try { ok = await pm.probe(c.url); } catch (_) { ok = false; }
+      const key = `${channel}:${c.label}`;
+      failCount[key] = ok ? 0 : (failCount[key] || 0) + 1;
+      // 'direct' is the last resort and always usable; proxies need < threshold fails.
+      avail[c.label] = c.label === 'direct' ? true : (failCount[key] < FAIL_THRESHOLD);
+    }
+
+    // Active = first usable candidate in priority order (direct always backstops).
+    const active = cands.find(c => avail[c.label]) || cands[cands.length - 1];
+    const desc = cands.map(c => `${pm.LABEL_CN[c.label] || c.label}${avail[c.label] ? '✓' : '✗'}`).join(' · ');
 
     // 1) Per-candidate up/down transitions → one alert per flip.
     const prevHealth = lastHealth[channel] || {};
-    for (const c of ev.candidates) {
-      const now = ev.health[c.label];
-      const before = prevHealth[c.label];
+    for (const c of cands) {
+      const now = avail[c.label], before = prevHealth[c.label];
       if (before !== undefined && before !== now) {
         const name = pm.LABEL_CN[c.label] || c.label;
-        if (now) {
-          await pm.sendProxyAlert(`🟢 ${cn}：${name} 恢复可用\n${cn}: ${c.label} proxy back UP`);
-        } else {
-          await pm.sendProxyAlert(`🟠 ${cn}：${name} 不可达\n${cn}: ${c.label} proxy DOWN (can't reach Meituan)`);
-        }
+        await pm.sendProxyAlert(now
+          ? `🟢 ${cn}：${name} 恢复可用\n${cn}: ${c.label} proxy back UP`
+          : `🟠 ${cn}：${name} 不可达\n${cn}: ${c.label} proxy DOWN (can't reach Meituan)`);
       }
     }
-    lastHealth[channel] = ev.health;
+    lastHealth[channel] = avail;
 
-    // 2) Active-path change → failover / failback alert + persist for launchers.
+    // 2) Active-path change → failover/failback alert + persist for the launchers.
     const prevActive = lastActive[channel];
-    const changed = prevActive === undefined ? false : prevActive !== activeUrl;
+    const toName = pm.LABEL_CN[active.label] || active.label;
     if (firstRun) {
-      await pm.sendProxyAlert(`ℹ️ ${cn}：当前走 ${pm.LABEL_CN[activeLbl] || activeLbl}\n${cn} active proxy: ${activeLbl}\n${describe(channel, ev)}`);
-    } else if (changed) {
-      const toName = pm.LABEL_CN[activeLbl] || activeLbl;
-      await pm.sendProxyAlert(`🔀 ${cn}：切换到 ${toName}\n${cn} FAILOVER → ${activeLbl}\n${describe(channel, ev)}`);
+      await pm.sendProxyAlert(`ℹ️ ${cn}：当前走 ${toName}\n${cn} active proxy: ${active.label}\n${desc}`);
+    } else if (prevActive !== undefined && prevActive !== active.url) {
+      await pm.sendProxyAlert(`🔀 ${cn}：切换到 ${toName}\n${cn} FAILOVER → ${active.label}\n${desc}`);
     }
-    lastActive[channel] = activeUrl;
+    lastActive[channel] = active.url;
 
-    stateOut[channel] = { url: activeUrl, label: activeLbl, ts: new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19) };
+    stateOut[channel] = { url: active.url, label: active.label, ts: new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19) };
   }
   pm.writeState(stateOut);
   firstRun = false;
