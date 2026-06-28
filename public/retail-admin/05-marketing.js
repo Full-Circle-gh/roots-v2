@@ -902,6 +902,7 @@ const FEATURE_HOMES = {
   socialProof: '#tab-social',
   faq:         '#tab-faq',
   quickStock:  '#qs-home',
+  kitchenAdd:  '#ka-home',
 };
 let _cfgCache = {};
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home

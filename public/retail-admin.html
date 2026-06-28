@@ -5919,6 +5919,26 @@
             </div>
           </div>
 
+          <!-- ── Add Stock (kitchen mobile add-on) ── -->
+          <!-- Same /stock app as Quick Stock — the view is chosen by role: a
+               kitchen-role staffer (Settings → Team) gets this relative "add what
+               you made" flow; warehouse staff get the recount flow. The on/off
+               switch + "off" card are injected at the top of #ka-home by
+               mountFeatureControls(), driven by FEATURE_CATALOG/FEATURE_HOMES. -->
+          <div id="ka-home" data-feat="kitchenAdd">
+            <div class="group-card">
+              <div class="group-card-head">
+                <h3>Add Stock · 加库存</h3>
+                <div class="muted">A phone app for your kitchen / production staff. They open it, search a product, and enter only <b>how many they just made</b> — it's added to the current shelf count. They never see or recount the existing stock, so there's no double-counting. It's the same link as Quick Stock: a staffer with the <b>kitchen</b> role (Settings → Team → set role + assign a store) opens it and lands on this add view automatically; warehouse staff get the recount view. Open it on a phone and tap <b>Add to Home Screen</b> to use it like an installed app. · 面向后厨/生产员工的手机应用。打开后搜索商品,只需输入<b>刚制作的数量</b>,即可加入当前库存。他们看不到也无需清点现有库存,不会重复计数。与“手机库存”是同一链接:角色为<b>后厨</b>的员工(设置 → 团队 → 设置角色并分配门店)打开后自动进入此“加库存”视图,仓库员工则进入清点视图。在手机上打开后点按<b>“添加到主屏幕”</b>即可像已安装的应用一样使用。</div>
+              </div>
+              <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:4px 2px 2px;">
+                <button class="btn btn-primary" onclick="window.open('/stock','_blank')">Open Add Stock · 打开加库存</button>
+                <button class="btn" onclick="qsCopyStockLink()">Copy staff link · 复制员工链接</button>
+                <code id="ka-link" style="font-size:12px;color:var(--text-3);"></code>
+              </div>
+            </div>
+          </div>
+
           <!-- ── Order routing: Maps geocoding ── -->
           <div class="group-card">
             <div class="group-card-head">

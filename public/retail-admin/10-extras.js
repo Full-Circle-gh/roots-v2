@@ -1825,9 +1825,14 @@ function qsCopyStockLink() {
     prompt('Copy this link · 复制此链接', link);
   }
 }
-// Populate the shown link once the DOM is ready (the code element is static).
+// Populate the shown link once the DOM is ready (the code elements are static).
+// Quick Stock and Add Stock share the same /stock link — the view is chosen by
+// the staffer's role, so both cards show the same URL.
 (function () {
-  function fill() { const el = document.getElementById('qs-link'); if (el) el.textContent = qsStockLink(); }
+  function fill() {
+    const link = qsStockLink();
+    ['qs-link', 'ka-link'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = link; });
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fill);
   else fill();
 })();

@@ -248,7 +248,21 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
 
   const b = req.body || {};
   const out = {};
-  if ('physical_qty' in b) {
+  // Two ways to move physical_qty:
+  //   physical_qty → set the absolute count (warehouse recount / Quick Stock)
+  //   delta        → add/subtract relative to current (kitchen "I made N more")
+  // The delta path resolves the target inside adjustStock's transaction, so the
+  // kitchen client never reads the current count — it only ever sends "+N".
+  if ('delta' in b) {
+    const d = parseInt(b.delta, 10) || 0;
+    if (d !== 0) {
+      out.adjust = inventory.adjustStock({
+        storeId, productId, deltaQty: d,
+        actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null,
+        note: b.note || null, reason: b.reason || 'kitchen_add',
+      });
+    }
+  } else if ('physical_qty' in b) {
     const newQty = parseInt(b.physical_qty, 10) || 0;
     out.adjust = inventory.adjustStock({
       storeId, productId, newPhysicalQty: newQty,
@@ -279,9 +293,10 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
       FROM retail_store_stock WHERE store_id = ? AND product_id = ?
   `).get(storeId, productId);
 
-  // Queue a Meituan stock push whenever physical_qty changes and this
-  // (store, product) pair is mapped in meituan_product_map.
-  if ('physical_qty' in b && row) {
+  // Queue a Meituan stock push whenever physical_qty changes (either an
+  // absolute set or a kitchen delta add) and this (store, product) pair is
+  // mapped in meituan_product_map.
+  if (out.adjust && row) {
     try {
       const map = db.prepare(
         'SELECT store_code FROM meituan_product_map WHERE retail_store_id=? AND product_id=? AND sync_enabled=1'
@@ -485,6 +500,18 @@ function quickStockEnabled() {
   } catch { return true; }
 }
 
+// The kitchen "Add Stock" add-on — same on/off pattern as quickStock, its own
+// flag so a tenant can run either, both, or neither. Unset = on (catalog
+// default). This is the relative-add flow (kitchen logs what they just made),
+// as opposed to quickStock's absolute recount.
+function kitchenAddEnabled() {
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'features.kitchenAdd'").get();
+    if (!row) return true;
+    return JSON.parse(row.value_json) !== false;
+  } catch { return true; }
+}
+
 // GET /api/retail-admin/quick-stock/context
 // One-shot bootstrap for the mobile app: who the staffer is, whether the
 // add-on is on, and exactly which stores they may edit. Plain store staff
@@ -492,13 +519,18 @@ function quickStockEnabled() {
 // backend operators get every active store and can switch between them. The
 // app then drives the existing per-store GET/PATCH stock endpoints.
 router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, res) => {
-  const enabled = quickStockEnabled();
-
   // Full-access = backend operator, kitchen admin, or `retail` permission.
   // Those see and edit all stores; a plain staffer is pinned to their own.
   const fullAccess = !!req.backendUser
     || req.user?.role === 'admin'
     || !!req.permissions?.retail;
+
+  // Mode is role-driven: a plain kitchen-role staffer gets the relative
+  // "Add Stock" flow (log what you made, never see the running total);
+  // everyone else (warehouse / manager / admin / backend operator) gets the
+  // absolute recount flow. Each mode is gated by its own feature flag.
+  const mode = (!fullAccess && req.user?.role === 'kitchen') ? 'add' : 'recount';
+  const enabled = mode === 'add' ? kitchenAddEnabled() : quickStockEnabled();
 
   let stores;
   if (fullAccess) {
@@ -518,6 +550,7 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
     success: true,
     data: {
       enabled,
+      mode,                       // 'add' (kitchen) | 'recount' (warehouse)
       user: {
         name: req.user?.display_name || req.user?.username || null,
         full_access: fullAccess,

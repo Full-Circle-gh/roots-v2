@@ -2195,6 +2195,7 @@
   body:not(.ent-feedback)    [data-feat="feedback"],
   body:not(.ent-socialProof) [data-feat="socialProof"],
   body:not(.ent-quickStock)  [data-feat="quickStock"],
+  body:not(.ent-kitchenAdd)  [data-feat="kitchenAdd"],
   body:not(.ent-faq)         [data-feat="faq"] { display: none !important; }
   /* Inbox group holds ONLY Reviews + Feedback — hide it only when NEITHER is
      entitled (off items just dim inside it, so the group still has something). */
@@ -2293,6 +2294,7 @@
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
   body.ent-quickStock:not(.feat-quickStock)   #qs-home > :not(.feat-bar):not(.feat-off),
+  body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  .feat-off,
@@ -2300,6 +2302,7 @@
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
   body.ent-quickStock:not(.feat-quickStock)   #qs-home .feat-off,
+  body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home .feat-off,
   body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page) */
   .feat-bar { display: flex; align-items: center; justify-content: space-between;

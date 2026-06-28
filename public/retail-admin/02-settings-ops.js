@@ -1246,6 +1246,8 @@ const FEATURE_CATALOG = [
     desc: 'The Me → Help & FAQ screen — categories, search and the contact bar. When off, the FAQ row is hidden in the mini app. · “我的”→帮助与常见问题页面:分类、搜索与联系入口。关闭后小程序内不显示该入口。' },
   { key: 'quickStock',  en: 'Quick Stock (mobile)', cn: '手机库存',   def: true,
     desc: 'A phone-first stock app for shop staff — open /stock on a phone and adjust counts without a PC. Each staffer only edits their assigned store. When off, the app shows a closed screen. · 面向门店员工的手机库存应用:在手机上打开 /stock 即可调整库存,无需电脑。每位员工只能编辑其所分配的门店。关闭后应用显示停用页面。' },
+  { key: 'kitchenAdd',  en: 'Add Stock (kitchen)', cn: '加库存',     def: true,
+    desc: 'A phone app for kitchen/production staff — they search a product, enter how many they just made, and it is added to the shelf count. They never see or recount the current stock. Kitchen-role staff open /stock and get this add view automatically. When off, the app shows a closed screen. · 面向后厨/生产员工的手机应用:搜索商品,输入刚制作的数量,即可加入库存。他们看不到也无需清点现有库存。后厨角色员工打开 /stock 自动进入此“加库存”视图。关闭后应用显示停用页面。' },
 ];
 let ENTITLEMENTS = {};
 (async () => {

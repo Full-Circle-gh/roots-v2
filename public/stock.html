@@ -146,6 +146,16 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
 .row.out .stepper .qty{color:var(--danger);}
 .row.out .stepper .minus{opacity:.4;}
 
+/* Add-Stock mode: a tappable card with NO current count — kitchen staff only
+   ever log what they just made, never see or recount the shelf total. */
+.row.add{display:flex;align-items:center;gap:12px;padding:14px;}
+.row.add:active{background:var(--bg-elev-1);}
+.row.add .r-main{flex:1;min-width:0;}
+.row.add .addbtn{flex:none;display:flex;align-items:center;gap:6px;height:44px;padding:0 16px 0 13px;
+  border-radius:13px;background:var(--accent);color:var(--accent-ink);font-size:15px;font-weight:700;}
+.row.add .addbtn svg{width:20px;height:20px;}
+.row.add:active .addbtn{filter:brightness(.95);}
+
 .screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 28px;gap:14px;color:var(--text-2);}
 .screen .big{width:66px;height:66px;border-radius:19px;display:grid;place-items:center;background:var(--bg-pane);border:1px solid var(--line);color:var(--text-3);}
 .screen .big svg{width:30px;height:30px;}
@@ -189,6 +199,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
   display:flex;align-items:center;justify-content:center;font-size:23px;font-weight:600;color:var(--text-1);}
 .kp-key:active{background:var(--bg-elev-2);}
 .kp-key.sold{background:var(--danger-soft);border-color:transparent;color:var(--danger);font-size:14px;font-weight:700;}
+.kp-key.clear{font-size:14px;font-weight:700;color:var(--text-2);}
 .kp-key.back{color:var(--text-2);}
 .kp-key.back svg{width:22px;height:22px;}
 .kp-save{width:100%;height:54px;border-radius:14px;background:var(--accent);color:var(--accent-ink);
@@ -294,6 +305,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
 
   var state = {
     enabled: true, fullAccess: false, userName: '',
+    mode: 'recount',      // 'recount' (warehouse: set the count) | 'add' (kitchen: log what you made)
     stores: [], storeId: null,
     items: [],
     filter: 'all', q: '',
@@ -346,6 +358,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
   function boot() {
     api(API + '/quick-stock/context').then(function (d) {
       state.enabled = d.enabled;
+      state.mode = d.mode === 'add' ? 'add' : 'recount';
       state.fullAccess = d.user.full_access;
       state.userName = d.user.name || '';
       state.stores = d.stores || [];
@@ -363,15 +376,17 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
 
   // Fill every static label from the current language. Re-run on language flip.
   function applyLang() {
+    var add = state.mode === 'add';
     document.documentElement.setAttribute('lang', lang === 'cn' ? 'zh' : 'en');
-    $('#hTitle').textContent = t('Quick Stock', '快速库存');
+    $('#hTitle').textContent = add ? t('Add Stock', '加库存') : t('Quick Stock', '快速库存');
     $('#hsub').textContent = state.userName ? (t('Signed in as ', '已登录:') + state.userName) : '';
     $('#langLbl').textContent = lang === 'cn' ? 'EN' : '中';
     $('#q').placeholder = t('Search products', '搜索商品');
     $('#storeSheetH').textContent = t('Choose store', '选择门店');
-    $('#kpLabel').textContent = t('Set count', '设置数量');
-    $('#kpSoldKey').textContent = t('Sold out', '售罄');
-    $('#kpSave').textContent = t('Save', '保存');
+    $('#kpLabel').textContent = add ? t('How many did you make?', '制作了多少?') : t('Set count', '设置数量');
+    $('#kpSoldKey').textContent = add ? t('Clear', '清除') : t('Sold out', '售罄');
+    $('#kpSoldKey').className = add ? 'kp-key clear' : 'kp-key sold';   // neutral "Clear" vs red "Sold out"
+    $('#kpSave').textContent = add ? t('Add to stock', '加入库存') : t('Save', '保存');
     setChip('all', t('All', '全部'));
     setChip('low', t('Low', '偏低'));
     setChip('out', t('Out', '售罄'));
@@ -388,6 +403,9 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
   function mountShell() {
     state.view = 'list';
     $('#hdr').hidden = false;
+    // Add mode hides the All/Low/Out chips — those count current stock, which
+    // kitchen staff are deliberately never shown.
+    var filt = document.querySelector('.filters'); if (filt) filt.style.display = state.mode === 'add' ? 'none' : '';
     applyLang();
     var pill = $('#storePill'); pill.hidden = false;
     if (state.stores.length > 1) { $('#storeChevron').style.display = ''; pill.classList.remove('static'); pill.onclick = openStoreSheet; }
@@ -481,6 +499,18 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
   var ICO_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
 
   function rowHtml(it) {
+    // Add mode: a tappable card with NO count — name/SKU + an "Add" button that
+    // opens the quantity sheet. The shelf total is never rendered.
+    if (state.mode === 'add') {
+      return '' +
+        '<div class="row add" id="row-' + it.id + '" data-add="' + it.id + '">' +
+          '<div class="r-main">' +
+            '<div class="r-name">' + esc(pname(it)) + '</div>' +
+            (it.sku ? '<div class="r-sub">' + esc(it.sku) + '</div>' : '') +
+          '</div>' +
+          '<div class="addbtn">' + ICO_PLUS + '<span>' + t('Add', '加') + '</span></div>' +
+        '</div>';
+    }
     var st = statusOf(it);
     return '' +
       '<div class="row ' + (st === 'out' ? 'out' : '') + '" id="row-' + it.id + '">' +
@@ -501,6 +531,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
 
   function wireRow(id) {
     var row = $('#row-' + id); if (!row) return;
+    if (state.mode === 'add') { row.onclick = function () { openKeypad(id); }; return; }
     $('[data-dec="' + id + '"]', row).onclick = function () { bump(id, -1); };
     $('[data-inc="' + id + '"]', row).onclick = function () { bump(id, +1); };
     $('[data-open="' + id + '"]', row).onclick = function () { openKeypad(id); };
@@ -564,7 +595,9 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     $('#kpBack').classList.add('show'); $('#kpSheet').classList.add('show');
   }
   function closeKeypad() { $('#kpBack').classList.remove('show'); $('#kpSheet').classList.remove('show'); kp.id = null; }
-  function kpCurrent() { var it = itemById(kp.id); return it ? it.physical_qty : 0; }
+  // Add mode starts the keypad at 0 (you're entering how many you MADE, not the
+  // shelf total) — so the current count is never shown.
+  function kpCurrent() { if (state.mode === 'add') return 0; var it = itemById(kp.id); return it ? it.physical_qty : 0; }
   function renderKpVal() {
     var v = kp.entry !== null ? kp.entry : String(kpCurrent());
     if (v === '') v = '0';
@@ -582,13 +615,36 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     kp.entry = kp.entry.slice(0, -1);
     renderKpVal();
   }
-  function kpSoldOut() { kp.entry = '0'; renderKpVal(); }
+  // In add mode the bottom-left key is "Clear" (reset entry); in recount mode
+  // it's "Sold out" (set the count to zero).
+  function kpSoldOut() { kp.entry = ''; renderKpVal(); }
   function kpSave() {
     var id = kp.id, it = itemById(id);
     if (!it) { closeKeypad(); return; }
+    if (state.mode === 'add') {
+      var n = kp.entry !== null ? (parseInt(kp.entry, 10) || 0) : 0;
+      closeKeypad();
+      if (n > 0) addStock(id, n);
+      return;
+    }
     var v = kp.entry !== null ? (parseInt(kp.entry, 10) || 0) : it.physical_qty;
     closeKeypad();
     if (v !== it.physical_qty) setQty(id, v, true);
+  }
+
+  // Send a relative add. The server resolves current+N atomically; we keep the
+  // in-memory total in step (never displayed) so repeated adds stay correct.
+  function addStock(id, n) {
+    var it = itemById(id);
+    api(API + '/stores/' + state.storeId + '/stock/' + id, { method: 'PATCH', body: { delta: n, reason: 'kitchen_add', note: 'add-stock' } })
+      .then(function () {
+        if (it) it.physical_qty += n;
+        toast(t('+' + n + ' added', '已加 ' + n + ' 件') + (it ? ' · ' + pname(it) : ''));
+      })
+      .catch(function (e) {
+        if (e.message === 'auth') return;
+        toast(t('Add failed', '添加失败') + (e.message ? ' (' + e.message + ')' : ''), 'err');
+      });
   }
 
   // ── Store sheet ──
@@ -623,7 +679,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     var icon, title, body, btn = '';
     if (which === 'off') {
       icon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
-      title = t('Quick Stock is off', '库存功能已关闭');
+      title = state.mode === 'add' ? t('Add Stock is off', '加库存功能已关闭') : t('Quick Stock is off', '库存功能已关闭');
       body = t('This add-on is turned off for your store. An admin can switch it on in the online-store back office under Settings.',
                '此附加功能已关闭。管理员可在网店后台“设置”中开启。');
     } else if (which === 'nostore') {
