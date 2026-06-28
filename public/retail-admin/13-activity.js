@@ -74,7 +74,7 @@ async function actLoad(reset, silent) {
   if (reset) { ACT.offset = 0; ACT.rows = []; }
   ACT.loading = true;
   const body = document.getElementById('act-tbody');
-  if (reset && body && !silent) body.innerHTML = `<tr><td colspan="7" class="muted" style="padding:18px;text-align:center">${actT('Loading…', '加载中…')}</td></tr>`;
+  if (reset && body && !silent) body.innerHTML = `<tr><td colspan="8" class="muted" style="padding:18px;text-align:center">${actT('Loading…', '加载中…')}</td></tr>`;
   try {
     const j = await api('/api/retail-admin/activity?' + actQueryString({ limit: ACT.limit, offset: ACT.offset }));
     ACT.rows = reset ? j.rows : ACT.rows.concat(j.rows);
@@ -83,7 +83,7 @@ async function actLoad(reset, silent) {
     actRenderCaption(j.summary, j.total);
     actRenderRows();
   } catch (e) {
-    if (!silent && body) body.innerHTML = `<tr><td colspan="7" class="muted" style="padding:18px;text-align:center;color:var(--danger,#c0392b)">${escapeHtml(e.message)}</td></tr>`;
+    if (!silent && body) body.innerHTML = `<tr><td colspan="8" class="muted" style="padding:18px;text-align:center;color:var(--danger,#c0392b)">${escapeHtml(e.message)}</td></tr>`;
   } finally { ACT.loading = false; }
 }
 
@@ -182,7 +182,7 @@ function actRenderRows() {
   const body = document.getElementById('act-tbody');
   if (!body) return;
   if (!ACT.rows.length) {
-    body.innerHTML = `<tr><td colspan="7" class="muted" style="padding:18px;text-align:center">${actT('No activity in this range.', '此时间段内无记录。')}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="8" class="muted" style="padding:18px;text-align:center">${actT('No activity in this range.', '此时间段内无记录。')}</td></tr>`;
   } else {
     body.innerHTML = ACT.rows.map(r => {
       const time = (r.ts_local || '').slice(0, 19).replace('T', ' ');
@@ -191,6 +191,7 @@ function actRenderRows() {
       return `<tr>`
         + `<td style="white-space:nowrap;font-variant-numeric:tabular-nums">${escapeHtml(time)}</td>`
         + `<td>${actSourceBadge(r.source)}</td>`
+        + `<td style="white-space:nowrap">${escapeHtml(r.store || '—')}</td>`
         + `<td style="font-family:monospace">${escapeHtml(r.sku || '—')}</td>`
         + `<td>${escapeHtml(r.product || '—')}</td>`
         + `<td style="text-align:right;font-variant-numeric:tabular-nums">${delta}</td>`
