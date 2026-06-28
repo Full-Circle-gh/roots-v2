@@ -114,34 +114,31 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
 
 .row{
   background:var(--bg-pane);border:1px solid var(--line);border-radius:16px;
-  padding:13px 14px 12px;margin-bottom:10px;box-shadow:var(--sh-1);
+  padding:14px;margin-bottom:11px;box-shadow:var(--sh-1);
 }
-.row.out{border-color:var(--danger);}
-.r-name{font-size:16.5px;font-weight:700;line-height:1.25;color:var(--text-1);
+.row.out{border-color:var(--danger);border-width:2px;padding:13px;}
+.r-name{font-size:21px;font-weight:800;line-height:1.2;letter-spacing:-.01em;color:var(--text-1);
   overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
-.r-sub{font-size:12.5px;color:var(--text-3);margin-top:3px;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.r-foot{display:flex;align-items:center;margin-top:11px;}
-.r-status{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;}
+.r-meta{display:flex;align-items:center;gap:8px;margin-top:7px;flex-wrap:wrap;}
+.r-sku{font-family:ui-monospace,monospace;font-size:15px;font-weight:700;color:var(--text-2);
+  background:var(--bg-elev-1);border:1px solid var(--line);padding:3px 9px;border-radius:8px;}
+.r-status{display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:700;}
 .r-status .dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none;}
 .r-status.ok{color:var(--success);}
 .r-status.low{color:var(--warn);}
-.r-status.out{color:var(--danger);font-weight:700;}
+.r-status.out{color:var(--danger);}
 
-.stepper{margin-left:auto;display:flex;align-items:center;background:var(--bg-elev-1);
-  border:1px solid var(--line);border-radius:14px;overflow:hidden;}
-.stepper button{height:50px;display:flex;align-items:center;justify-content:center;color:var(--text-1);}
-.stepper button:active{background:var(--bg-elev-2);}
-.stepper .minus,.stepper .plus{width:50px;}
+/* Full-width stepper — big − on the left, big count in the middle, big + on the
+   right. Same control for recount (the stock count) and add (the +N to add). */
+.stepper{display:flex;align-items:stretch;gap:10px;margin-top:14px;}
+.stepper button{height:64px;border-radius:13px;border:1px solid var(--line);
+  background:var(--bg-elev-1);display:flex;align-items:center;justify-content:center;color:var(--text-1);}
+.stepper button:active{background:var(--bg-elev-2);transform:scale(.98);}
+.stepper .minus,.stepper .plus{flex:0 0 92px;}
 .stepper .minus{color:var(--danger);}
 .stepper .plus{color:var(--success);}
-.stepper .minus svg,.stepper .plus svg{width:23px;height:23px;}
-.stepper .qty{
-  min-width:58px;padding:0 6px;height:50px;font-size:26px;font-weight:800;color:var(--text-1);
-  border-left:1px solid var(--line);border-right:1px solid var(--line);background:transparent;
-  font-variant-numeric:tabular-nums;
-}
-.stepper .qty:active{background:var(--bg-elev-2);}
+.stepper .minus svg,.stepper .plus svg{width:30px;height:30px;}
+.stepper .qty{flex:1;font-size:38px;font-weight:800;color:var(--text-1);font-variant-numeric:tabular-nums;}
 .stepper .qty.saving{color:var(--accent);}
 .row.out .stepper .qty{color:var(--danger);}
 .row.out .stepper .minus{opacity:.4;}
@@ -150,7 +147,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
    only the number means "how many you're adding" (starts +0, commits as a delta,
    then resets). The current shelf total is never shown. */
 .stepper .qty.add{color:var(--accent);}                 /* tint so "+5" reads as an add, not a stock count */
-.row.addmode .r-addhint{font-size:12.5px;font-weight:600;color:var(--text-3);}
+.row.addmode .r-addhint{font-size:13.5px;font-weight:600;color:var(--text-3);}
 .row.addmode .stepper .minus.off{opacity:.35;}
 
 .screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 28px;gap:14px;color:var(--text-2);}
@@ -505,14 +502,14 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
       return '' +
         '<div class="row addmode" id="row-' + it.id + '">' +
           '<div class="r-name">' + esc(pname(it)) + '</div>' +
-          (it.sku ? '<div class="r-sub">' + esc(it.sku) + '</div>' : '') +
-          '<div class="r-foot">' +
-            '<div class="r-addhint">' + t('How many made?', '制作了多少?') + '</div>' +
-            '<div class="stepper">' +
-              '<button class="minus' + (n0 <= 0 ? ' off' : '') + '" data-dec="' + it.id + '" aria-label="Minus">' + ICO_MINUS + '</button>' +
-              '<button class="qty add" data-open="' + it.id + '">+' + n0 + '</button>' +
-              '<button class="plus" data-inc="' + it.id + '" aria-label="Plus">' + ICO_PLUS + '</button>' +
-            '</div>' +
+          '<div class="r-meta">' +
+            (it.sku ? '<span class="r-sku">' + esc(it.sku) + '</span>' : '') +
+            '<span class="r-addhint">' + t('How many made?', '制作了多少?') + '</span>' +
+          '</div>' +
+          '<div class="stepper">' +
+            '<button class="minus' + (n0 <= 0 ? ' off' : '') + '" data-dec="' + it.id + '" aria-label="Minus">' + ICO_MINUS + '</button>' +
+            '<button class="qty add" data-open="' + it.id + '">+' + n0 + '</button>' +
+            '<button class="plus" data-inc="' + it.id + '" aria-label="Plus">' + ICO_PLUS + '</button>' +
           '</div>' +
         '</div>';
     }
@@ -520,14 +517,14 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     return '' +
       '<div class="row ' + (st === 'out' ? 'out' : '') + '" id="row-' + it.id + '">' +
         '<div class="r-name">' + esc(pname(it)) + '</div>' +
-        (it.sku ? '<div class="r-sub">' + esc(it.sku) + '</div>' : '') +
-        '<div class="r-foot">' +
-          '<div class="r-status ' + st + '" data-status><span class="dot"></span>' + statusText(st) + '</div>' +
-          '<div class="stepper">' +
-            '<button class="minus" data-dec="' + it.id + '" aria-label="Minus">' + ICO_MINUS + '</button>' +
-            '<button class="qty" data-open="' + it.id + '">' + it.physical_qty + '</button>' +
-            '<button class="plus" data-inc="' + it.id + '" aria-label="Plus">' + ICO_PLUS + '</button>' +
-          '</div>' +
+        '<div class="r-meta">' +
+          (it.sku ? '<span class="r-sku">' + esc(it.sku) + '</span>' : '') +
+          '<span class="r-status ' + st + '" data-status><span class="dot"></span>' + statusText(st) + '</span>' +
+        '</div>' +
+        '<div class="stepper">' +
+          '<button class="minus" data-dec="' + it.id + '" aria-label="Minus">' + ICO_MINUS + '</button>' +
+          '<button class="qty" data-open="' + it.id + '">' + it.physical_qty + '</button>' +
+          '<button class="plus" data-inc="' + it.id + '" aria-label="Plus">' + ICO_PLUS + '</button>' +
         '</div>' +
       '</div>';
   }
