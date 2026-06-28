@@ -6663,6 +6663,10 @@
       所有渠道的库存变动都汇总在一条时间线 —— 小程序、gzgrocery、美团天河、美团越秀、管易自提与手动调整。点按某个渠道卡片即可筛选,也可单独导出该渠道的 CSV。时间为广州本地时间。
     </p>
 
+    <!-- Channel switcher: pick a sales channel and the whole view below
+         (count, log, export) scopes to it. Counts are filled in by JS. -->
+    <div id="act-tabs" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px"></div>
+
     <div class="pa-toolbar" style="flex-wrap:wrap;gap:8px;align-items:center">
       <input id="act-from" type="date" onchange="actLoad(true)" style="padding:6px 8px">
       <span class="muted">→</span>
@@ -6670,15 +6674,6 @@
       <button class="btn-ghost" type="button" onclick="actSetRange('today')">Today · 今天</button>
       <button class="btn-ghost" type="button" onclick="actSetRange('week')">7d · 近7天</button>
       <button class="btn-ghost" type="button" onclick="actSetRange('month')">30d · 近30天</button>
-      <select id="act-source" onchange="actLoad(true)" style="padding:6px 8px">
-        <option value="">All channels · 全部渠道</option>
-        <option value="miniapp">Mini-app · 小程序</option>
-        <option value="gzgrocery">gzgrocery</option>
-        <option value="meituan_tianhe">Meituan Tianhe · 美团天河</option>
-        <option value="meituan_yuexiu">Meituan Yuexiu · 美团越秀</option>
-        <option value="guanyi">Guanyi · 管易</option>
-        <option value="manual">Manual · 手动</option>
-      </select>
       <input id="act-search" type="text" placeholder="SKU / name / order · 货号 / 名称 / 订单" oninput="clearTimeout(window._actSearchT);window._actSearchT=setTimeout(()=>actLoad(true),300)" style="padding:6px 8px;min-width:200px">
       <span style="flex:1"></span>
       <button class="btn-primary" type="button" onclick="actExportCsv()">⬇ Export CSV · 导出</button>

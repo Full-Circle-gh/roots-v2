@@ -54,7 +54,7 @@ async function actAdminInit() {
 function actReadFilters() {
   ACT.from   = document.getElementById('act-from')?.value || actGzToday();
   ACT.to     = document.getElementById('act-to')?.value || ACT.from;
-  ACT.source = document.getElementById('act-source')?.value || '';
+  // Channel comes from the tab switcher (ACT.source), not a form field.
   ACT.q      = document.getElementById('act-search')?.value.trim() || '';
 }
 
@@ -76,55 +76,75 @@ async function actLoad(reset) {
     const j = await api('/api/retail-admin/activity?' + actQueryString({ limit: ACT.limit, offset: ACT.offset }));
     ACT.rows = reset ? j.rows : ACT.rows.concat(j.rows);
     ACT.total = j.total;
-    actRenderSummary(j.summary, j.total);
+    actRenderTabs(j.summary, j.total);
+    actRenderCaption(j.summary, j.total);
     actRenderRows();
   } catch (e) {
     if (body) body.innerHTML = `<tr><td colspan="7" class="muted" style="padding:18px;text-align:center;color:var(--danger,#c0392b)">${escapeHtml(e.message)}</td></tr>`;
   } finally { ACT.loading = false; }
 }
 
-// One KPI card per channel. Each card is a filter button — click it to scope
-// the table (and the main Export CSV) to that channel; its ⬇ link exports just
-// that channel's log straight away. The accent "All channels" card resets to
-// the full traffic view. The active channel is ringed.
-function actRenderSummary(summary, total) {
+// Fixed channel order for the switcher tabs. 'All channels' first, then one
+// tab per sales channel. Labels follow the live language (actT). The tabs are
+// always shown so the bar reads as a channel SELECTOR, not data-driven cards.
+const ACT_TABS = [
+  ['',               () => actT('All channels', '全部渠道')],
+  ['miniapp',        () => actT('Mini-app', '小程序')],
+  ['gzgrocery',      () => 'gzgrocery'],
+  ['meituan_tianhe', () => actT('Meituan Tianhe', '美团天河')],
+  ['meituan_yuexiu', () => actT('Meituan Yuexiu', '美团越秀')],
+  ['guanyi',         () => actT('Guanyi', '管易')],
+  ['manual',         () => actT('Manual', '手动')],
+];
+
+// Segmented channel switcher. The active tab is filled brass; every tab shows
+// its event count for the current date range (counts come from the server's
+// unfiltered summary, so they stay put as you switch tabs).
+function actRenderTabs(summary, total) {
+  const el = document.getElementById('act-tabs');
+  if (!el) return;
+  const counts = {};
+  (summary || []).forEach(s => { counts[s.source] = s.events; });
+  const active = ACT.source || '';
+  el.innerHTML = ACT_TABS.map(([src, label]) => {
+    const on  = active === src;
+    const n   = src === '' ? total : (counts[src] || 0);
+    const dot = ACT_SOURCE_COLORS[src]
+      ? `<span style="width:8px;height:8px;border-radius:50%;background:${ACT_SOURCE_COLORS[src]};display:inline-block"></span>` : '';
+    const base = 'padding:7px 12px;border-radius:8px;font-size:13px;cursor:pointer;display:inline-flex;'
+      + 'align-items:center;gap:7px;white-space:nowrap;line-height:1';
+    const style = on
+      ? `${base};background:var(--brass,#b08d57);color:#fff;border:1px solid var(--brass,#b08d57)`
+      : `${base};background:var(--bg-elev-1,#fff);color:var(--ink,#333);border:1px solid var(--border,#e0ddd5)`;
+    return `<button type="button" onclick="actPickSource('${src}')" style="${style}">`
+      + `${dot}<span>${escapeHtml(label())}</span>`
+      + `<span style="opacity:.65;font-variant-numeric:tabular-nums">${n}</span></button>`;
+  }).join('');
+}
+
+// One-line caption under the toolbar describing the active view, so it's clear
+// the page is scoped to the chosen channel and the export matches it.
+function actRenderCaption(summary, total) {
   const el = document.getElementById('act-summary');
   if (!el) return;
   const active = ACT.source || '';
-  const ring = on => on ? 'box-shadow:0 0 0 2px var(--brass,#b08d57);' : '';
-  const csvLink = src => `<a href="#" onclick="actChannelCsv('${src}');return false" `
-    + `style="font-size:11px;color:var(--brass,#b08d57);text-decoration:none" `
-    + `title="${actT('Export this channel', '导出该渠道')}">⬇ CSV</a>`;
-  const allCard = `<div class="fc-kpi accent" role="button" tabindex="0" `
-    + `onclick="actPickSource('')" style="cursor:pointer;${ring(!active)}">`
-    + `<div class="lbl">${actT('All channels', '全部渠道')}</div>`
-    + `<div class="val">${total}</div>`
-    + `<div class="sub" style="display:flex;justify-content:space-between;gap:8px;align-items:center">`
-    + `<span>${escapeHtml(ACT.from)} → ${escapeHtml(ACT.to)}</span>${csvLink('')}</div></div>`;
-  const chips = (summary || []).map(s => {
-    const label = ACT_SOURCE_LABELS[s.source] || s.source;
-    return `<div class="fc-kpi" role="button" tabindex="0" onclick="actPickSource('${s.source}')" `
-      + `style="cursor:pointer;${ring(active === s.source)}">`
-      + `<div class="lbl">${escapeHtml(label)}</div>`
-      + `<div class="val">${s.events}</div>`
-      + `<div class="sub" style="display:flex;justify-content:space-between;gap:8px;align-items:center">`
-      + `<span>▼${s.units_out || 0} · ▲${s.units_in || 0} ${actT('units', '件')}</span>${csvLink(s.source)}</div></div>`;
-  }).join('');
-  el.innerHTML = `<div class="fc-kpis">${allCard}${chips}</div>`;
+  const s = (summary || []).find(x => x.source === active);
+  const name = active ? (ACT_SOURCE_LABELS[active] || active) : actT('All channels', '全部渠道');
+  const events = active ? (s ? s.events : 0) : total;
+  let out = 0, inn = 0;
+  if (active) { out = s ? (s.units_out || 0) : 0; inn = s ? (s.units_in || 0) : 0; }
+  else (summary || []).forEach(x => { out += x.units_out || 0; inn += x.units_in || 0; });
+  el.innerHTML = `<div class="muted" style="font-size:13px">`
+    + `<strong style="color:var(--ink,#333)">${escapeHtml(name)}</strong> · `
+    + `${events} ${actT('events', '条记录')} · ▼${out} · ▲${inn} ${actT('units', '件')} · `
+    + `${escapeHtml(ACT.from)} → ${escapeHtml(ACT.to)}`
+    + ` <span style="opacity:.7">— ${actT('Export CSV downloads this channel', '导出 CSV 仅含该渠道')}</span></div>`;
 }
 
-// Set the source filter from a chip and reload (keeps the dropdown in sync).
+// Switch the active channel (tab) and reload the view + export scope.
 function actPickSource(src) {
-  const sel = document.getElementById('act-source');
-  if (sel) sel.value = src || '';
+  ACT.source = src || '';
   actLoad(true);
-}
-
-// Export ONE channel's log for the current date range, regardless of the
-// dropdown — `source` here overrides whatever the filter is set to.
-function actChannelCsv(src) {
-  actReadFilters();
-  window.location.href = '/api/retail-admin/activity/export.csv?' + actQueryString({ source: src || '' });
 }
 
 function actSourceBadge(src) {

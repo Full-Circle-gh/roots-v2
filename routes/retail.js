@@ -10002,17 +10002,22 @@ function buildActivityQuery(q) {
   const isDate  = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
   const from = isDate(q.from) ? q.from : gzToday;
   const to   = isDate(q.to)   ? q.to   : from;
-  const where = [`date(datetime(l.created_at,'+8 hours')) >= @from`,
-                 `date(datetime(l.created_at,'+8 hours')) <= @to`];
+  // `base` = date + store + search, WITHOUT the channel filter. The channel
+  // tab counts are computed over `whereNoSource` so the switcher always shows
+  // every channel's count regardless of which tab is selected; the table + CSV
+  // use `where` (base + the picked channel).
+  const base = [`date(datetime(l.created_at,'+8 hours')) >= @from`,
+                `date(datetime(l.created_at,'+8 hours')) <= @to`];
   const params = { from, to };
-  if (q.source && ACT_SOURCE_FILTER[q.source]) where.push(ACT_SOURCE_FILTER[q.source]);
-  if (q.store_id && /^\d+$/.test(String(q.store_id))) { where.push('l.store_id = @store_id'); params.store_id = Number(q.store_id); }
+  if (q.store_id && /^\d+$/.test(String(q.store_id))) { base.push('l.store_id = @store_id'); params.store_id = Number(q.store_id); }
   const term = String(q.q || '').trim();
   if (term) {
-    where.push(`(p.sku LIKE @term OR p.name_en LIKE @term OR p.name_cn LIKE @term OR l.note LIKE @term)`);
+    base.push(`(p.sku LIKE @term OR p.name_en LIKE @term OR p.name_cn LIKE @term OR l.note LIKE @term)`);
     params.term = `%${term}%`;
   }
-  return { from, to, where: where.join(' AND '), params };
+  const where = base.slice();
+  if (q.source && ACT_SOURCE_FILTER[q.source]) where.push(ACT_SOURCE_FILTER[q.source]);
+  return { from, to, where: where.join(' AND '), whereNoSource: base.join(' AND '), params };
 }
 function activityRows({ where, params }, limit, offset) {
   return tdb().prepare(`
@@ -10052,7 +10057,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
         FROM retail_stock_ledger l
         LEFT JOIN store_products p ON p.id = l.product_id
         LEFT JOIN retail_stores  s ON s.id = l.store_id
-       WHERE ${built.where}
+       WHERE ${built.whereNoSource}
        GROUP BY source ORDER BY events DESC`).all(built.params);
     res.json({ success: true, from: built.from, to: built.to, total, limit, offset, summary, rows });
   } catch (e) {
