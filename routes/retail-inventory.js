@@ -249,10 +249,12 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   const product = tdb().prepare('SELECT id FROM store_products WHERE id = ?').get(productId);
   if (!product) return res.status(404).json({ success: false, error: 'product_not_found' });
 
-  // A restricted kitchen operator may only touch their assigned store, and only
-  // ADD (a delta) — never set an absolute count.
+  // Restricted operators may only touch their assigned store. A 'kitchen'
+  // operator may additionally only ADD (a delta) — never set an absolute count;
+  // a 'store_stock' clerk recounts their own store (absolute set is allowed).
   const kitchenOp = !!req.backendUser && req.backendUser.role === 'kitchen';
-  if (kitchenOp && storeId !== req.backendUser.retail_store_id) {
+  const restrictedOp = kitchenOp || (!!req.backendUser && req.backendUser.role === 'store_stock');
+  if (restrictedOp && storeId !== req.backendUser.retail_store_id) {
     return res.status(403).json({ success: false, error: 'store_not_assigned' });
   }
 
@@ -544,16 +546,18 @@ function kitchenAddEnabled() {
 // backend operators get every active store and can switch between them. The
 // app then drives the existing per-store GET/PATCH stock endpoints.
 router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, res) => {
-  // A restricted 'kitchen'-role backend operator (created from the Team page):
-  // gets the relative Add Stock flow, pinned to the single store they're
-  // assigned to. Their req.user.role is shimmed from tenant_users in
-  // requireRetailAdmin, so check req.backendUser explicitly.
+  // Restricted backend operators are pinned to the single store they're assigned
+  // to (req.user.role is shimmed from tenant_users in requireRetailAdmin, so
+  // check req.backendUser explicitly). Two restricted roles:
+  //   • 'kitchen'     — kitchen staff: relative Add Stock flow (delta-only).
+  //   • 'store_stock' — store clerk: absolute recount of their own store.
   const kitchenOp = !!req.backendUser && req.backendUser.role === 'kitchen';
+  const restrictedOp = kitchenOp || (!!req.backendUser && req.backendUser.role === 'store_stock');
 
-  // Full-access = any non-kitchen backend operator, kitchen-app admin, or the
-  // `retail` permission. Those see and edit all stores; a plain staffer is
-  // pinned to their own.
-  const fullAccess = !kitchenOp && (
+  // Full-access = any unrestricted backend operator, kitchen-app admin, or the
+  // `retail` permission. Those see and edit all stores; a restricted operator or
+  // plain staffer is pinned to their own.
+  const fullAccess = !restrictedOp && (
     !!req.backendUser
     || req.user?.role === 'admin'
     || !!req.permissions?.retail
@@ -561,13 +565,13 @@ router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, 
 
   // Mode is role-driven: a kitchen operator (backend) or a kitchen-app staffer
   // gets the relative "Add Stock" flow (log what you made, never see the running
-  // total); everyone else gets the absolute recount flow. Each mode has its own
-  // feature flag.
+  // total); a store_stock clerk and everyone else get the absolute recount flow.
+  // Each mode has its own feature flag.
   const mode = (kitchenOp || (!fullAccess && req.user?.role === 'kitchen')) ? 'add' : 'recount';
   const enabled = mode === 'add' ? kitchenAddEnabled() : quickStockEnabled();
 
   let stores;
-  if (kitchenOp) {
+  if (restrictedOp) {
     const sid = req.backendUser.retail_store_id;
     const s = sid ? inventory.getStore(sid) : null;
     stores = s && s.is_active !== 0 ? [s] : [];

@@ -19,10 +19,15 @@ const bcrypt = require('bcrypt');
 const db = require('../database');
 const router = express.Router();
 
-// owner/admin/staff are full-access labels; 'kitchen' is a RESTRICTED role —
-// that operator only gets the Add Stock app (enforced in server.js) and is
-// pinned to one store via retail_store_id.
-const ROLES = ['owner', 'admin', 'staff', 'kitchen'];
+// owner/admin/staff are full-access labels. Two RESTRICTED roles only get the
+// Quick Stock app (enforced in server.js) and are pinned to one store via
+// retail_store_id:
+//   • 'kitchen'     — kitchen staff, managed from this Team page.
+//   • 'store_stock' — store stock clerks, managed under Settings → Operations →
+//                     Stores (see the per-store staff endpoints at the bottom of
+//                     this file). They are NOT listed on the Team page.
+const ROLES = ['owner', 'admin', 'staff', 'kitchen', 'store_stock'];
+const STORE_PINNED_ROLES = new Set(['kitchen', 'store_stock']);
 
 function requireBackend(req, res, next) {
   if (!req.session?.backendUserId || !req.session?.tenantId) {
@@ -64,8 +69,10 @@ function countActiveOwners(tenantId, exceptId) {
 
 // ── List operators in this tenant ────────────────────────────────────────
 router.get('/api/backend/team', requireBackend, (req, res) => {
+  // store_stock clerks are managed under their store (Settings → Operations →
+  // Stores), not here, so the Team roster shows only the people roles.
   const rows = db.prepare(
-    'SELECT id, username, display_name, role, retail_store_id, is_active, avatar_url, last_login FROM tenant_users WHERE tenant_id = ? ORDER BY is_active DESC, role = \'owner\' DESC, lower(display_name), lower(username)'
+    "SELECT id, username, display_name, role, retail_store_id, is_active, avatar_url, last_login FROM tenant_users WHERE tenant_id = ? AND role != 'store_stock' ORDER BY is_active DESC, role = 'owner' DESC, lower(display_name), lower(username)"
   ).all(req.session.tenantId);
   res.json({ team: rows.map(u => publicUser(u, req.session.backendUserId)) });
 });
@@ -82,12 +89,12 @@ router.post('/api/backend/team', requireBackend, express.json(), (req, res) => {
     if (!password || String(password).length < 10) {
       return res.status(400).json({ error: 'Password must be at least 10 characters · 密码至少需要 10 位' });
     }
-    // A kitchen operator must be pinned to one store (the shelf they add to).
-    // Full-access roles aren't store-scoped, so store id is dropped for them.
+    // A restricted operator must be pinned to one store (the store they manage
+    // stock for). Full-access roles aren't store-scoped, so store id is dropped.
     let storeId = null;
-    if (role === 'kitchen') {
+    if (STORE_PINNED_ROLES.has(role)) {
       storeId = parseInt(req.body && req.body.retail_store_id, 10);
-      if (!storeId) return res.status(400).json({ error: 'Pick a store for the kitchen member · 请为后厨成员选择门店' });
+      if (!storeId) return res.status(400).json({ error: 'Pick a store for this member · 请为该成员选择门店' });
     }
     // Global uniqueness — login resolves a username across every tenant.
     if (db.prepare('SELECT id FROM tenant_users WHERE username = ?').get(username)) {
@@ -142,12 +149,12 @@ router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) =
     sets.push('role = ?'); args.push(role);
   }
 
-  // Store assignment follows the (resulting) role: a kitchen operator must have
-  // one store; any full-access role clears it. Honour an explicit store id from
-  // the body, else keep the existing one.
-  if (newRole === 'kitchen') {
+  // Store assignment follows the (resulting) role: a restricted operator must
+  // have one store; any full-access role clears it. Honour an explicit store id
+  // from the body, else keep the existing one.
+  if (STORE_PINNED_ROLES.has(newRole)) {
     let storeId = body.retail_store_id !== undefined ? parseInt(body.retail_store_id, 10) : u.retail_store_id;
-    if (!storeId) return res.status(400).json({ error: 'Pick a store for the kitchen member · 请为后厨成员选择门店' });
+    if (!storeId) return res.status(400).json({ error: 'Pick a store for this member · 请为该成员选择门店' });
     sets.push('retail_store_id = ?'); args.push(storeId);
   } else if (body.role !== undefined && u.retail_store_id != null) {
     sets.push('retail_store_id = ?'); args.push(null);
@@ -173,6 +180,81 @@ router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) =
 router.post('/api/backend/team/:id/password', requireBackend, express.json(), (req, res) => {
   const u = tenantMember(req);
   if (!u) return res.status(404).json({ error: 'Operator not found · 未找到操作员' });
+  const np = (req.body && req.body.new_password) || '';
+  if (String(np).length < 10) return res.status(400).json({ error: 'Password must be at least 10 characters · 密码至少需要 10 位' });
+  db.prepare('UPDATE tenant_users SET password = ? WHERE id = ?').run(bcrypt.hashSync(String(np), 10), u.id);
+  res.json({ success: true });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Per-store stock staff (Settings → Operations → Stores)
+//
+// A 'store_stock' operator can do ONLY the Quick Stock app, pinned to ONE store
+// (server.js lockdown + retail-inventory.js store check). They are created and
+// removed here, from inside the store they belong to — never from the Team page —
+// so a Yuexiu clerk can never see or touch Tianhe stock. All rows are scoped to
+// the caller's tenant (req.session.tenantId) and the :storeId in the path.
+// ══════════════════════════════════════════════════════════════════════════
+
+// List the stock clerks for one store.
+router.get('/api/backend/stores/:storeId/staff', requireBackend, (req, res) => {
+  const storeId = parseInt(req.params.storeId, 10);
+  if (!storeId) return res.status(400).json({ error: 'Bad store · 门店无效' });
+  const rows = db.prepare(
+    "SELECT id, username, display_name, role, retail_store_id, is_active, avatar_url, last_login FROM tenant_users WHERE tenant_id = ? AND retail_store_id = ? AND role = 'store_stock' ORDER BY is_active DESC, lower(display_name), lower(username)"
+  ).all(req.session.tenantId, storeId);
+  res.json({ success: true, staff: rows.map(u => publicUser(u, req.session.backendUserId)) });
+});
+
+// Add a stock clerk to one store. Role + store are fixed by the endpoint — the
+// caller only supplies a name, login and password.
+router.post('/api/backend/stores/:storeId/staff', requireBackend, express.json(), (req, res) => {
+  try {
+    const storeId = parseInt(req.params.storeId, 10);
+    if (!storeId) return res.status(400).json({ error: 'Bad store · 门店无效' });
+    const username = validateUsername(req.body && req.body.username);
+    const displayName = String((req.body && req.body.display_name) || '').trim();
+    const { password } = req.body || {};
+    if (displayName.length > 60) return res.status(400).json({ error: 'Name is too long · 名称过长' });
+    if (!password || String(password).length < 10) {
+      return res.status(400).json({ error: 'Password must be at least 10 characters · 密码至少需要 10 位' });
+    }
+    if (db.prepare('SELECT id FROM tenant_users WHERE username = ?').get(username)) {
+      return res.status(409).json({ error: 'That username is already taken · 该用户名已被占用' });
+    }
+    const hash = bcrypt.hashSync(String(password), 10);
+    const r = db.prepare(
+      "INSERT INTO tenant_users (tenant_id, username, password, display_name, role, retail_store_id) VALUES (?,?,?,?,'store_stock',?)"
+    ).run(req.session.tenantId, username, hash, displayName || username, storeId);
+    const u = db.prepare('SELECT id, username, display_name, role, retail_store_id, is_active, avatar_url, last_login FROM tenant_users WHERE id = ?').get(r.lastInsertRowid);
+    res.json({ success: true, user: publicUser(u, req.session.backendUserId) });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// Resolve a store_stock member that belongs to the caller's tenant AND store.
+function storeStaffMember(req) {
+  const id = Number(req.params.userId);
+  const storeId = parseInt(req.params.storeId, 10);
+  if (!Number.isInteger(id) || !storeId) return null;
+  return db.prepare(
+    "SELECT * FROM tenant_users WHERE id = ? AND tenant_id = ? AND retail_store_id = ? AND role = 'store_stock'"
+  ).get(id, req.session.tenantId, storeId) || null;
+}
+
+// Remove a stock clerk (deactivate — keeps their stock-ledger history intact).
+router.delete('/api/backend/stores/:storeId/staff/:userId', requireBackend, (req, res) => {
+  const u = storeStaffMember(req);
+  if (!u) return res.status(404).json({ error: 'Member not found · 未找到成员' });
+  db.prepare('UPDATE tenant_users SET is_active = 0 WHERE id = ?').run(u.id);
+  res.json({ success: true });
+});
+
+// Reset a stock clerk's password.
+router.post('/api/backend/stores/:storeId/staff/:userId/password', requireBackend, express.json(), (req, res) => {
+  const u = storeStaffMember(req);
+  if (!u) return res.status(404).json({ error: 'Member not found · 未找到成员' });
   const np = (req.body && req.body.new_password) || '';
   if (String(np).length < 10) return res.status(400).json({ error: 'Password must be at least 10 characters · 密码至少需要 10 位' });
   db.prepare('UPDATE tenant_users SET password = ? WHERE id = ?').run(bcrypt.hashSync(String(np), 10), u.id);

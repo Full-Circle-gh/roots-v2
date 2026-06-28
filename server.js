@@ -232,18 +232,22 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-// Kitchen-operator lockdown. A backend operator with the restricted 'kitchen'
-// role (created from the Team page) may use ONLY the Add Stock app — the /stock
-// PWA, its assets, and the three stock endpoints it calls. Everything else in
-// the backend (the retail-admin shell, /backend/* pages, every other API) is
-// blocked here in ONE place, so it can't be reached by a stray requireBackend
-// copy that doesn't check the role. Non-kitchen sessions skip instantly.
+// Stock-only lockdown. A backend operator with a RESTRICTED role may use ONLY
+// the Quick Stock app — the /stock PWA, its assets, and the stock endpoints it
+// calls. Two roles are restricted this way:
+//   • 'kitchen'      — kitchen staff, created from the Team page (add-only)
+//   • 'store_stock'  — store stock clerks, created under Settings → Operations →
+//                      Stores, pinned to one store (recount their own store)
+// Everything else in the backend (the retail-admin shell, /backend/* pages,
+// every other API) is blocked here in ONE place, so it can't be reached by a
+// stray requireBackend copy that doesn't check the role. Full-access sessions
+// (owner/admin/staff) skip instantly.
 app.use((req, res, next) => {
   if (!req.session?.backendUserId) return next();
   let role;
   try { role = require('./database').prepare('SELECT role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId)?.role; }
   catch (e) { return next(); }   // tables not ready — fail open to existing gates
-  if (role !== 'kitchen') return next();
+  if (role !== 'kitchen' && role !== 'store_stock') return next();
   const p = req.path;
   if (p.startsWith('/api/')) {
     const ok = p === '/api/retail-admin/quick-stock/context'

@@ -196,7 +196,10 @@ async function loadOpsStores() {
           ${s.address ? `<div style="color:var(--text-3);font-size:12px;margin-top:2px">${escapeHtml(s.address)}</div>` : ''}
           <div style="font-size:12px;margin-top:3px">${gps}</div>
         </div>
-        <button class="btn" style="flex:none" onclick="_opsStoreEdit(${s.id})">Edit · 编辑</button>
+        <div style="display:flex;gap:8px;flex:none">
+          <button class="btn" onclick="_opsStoreStaff(${s.id})">Stock staff · 库存员</button>
+          <button class="btn" onclick="_opsStoreEdit(${s.id})">Edit · 编辑</button>
+        </div>
       </div>`;
     }).join('');
   } catch (e) {
@@ -291,6 +294,98 @@ async function _opsStoreSave(id) {
     // Address saves re-geocode in the background; refresh again shortly so the
     // 📍 GPS badge updates without a manual reload.
     setTimeout(loadOpsStores, 2500);
+  } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
+}
+
+// ── Per-store stock staff · 库存员 ──────────────────────────────────────────
+// A stock clerk added here can ONLY use the Quick Stock app, locked to THIS
+// store — they can never see or change another store's stock. Managed via the
+// tenant-scoped /api/backend/stores/:id/staff endpoints.
+async function _opsStoreStaff(storeId) {
+  const store = _opsStores.find(x => x.id === storeId);
+  const box = document.getElementById('ops-store-staff');
+  if (!box || !store) return;
+  // Toggle closed if this store's panel is already open.
+  if (box.dataset.store === String(storeId) && box.innerHTML) { box.innerHTML = ''; box.dataset.store = ''; return; }
+  box.dataset.store = String(storeId);
+  box.innerHTML = '<div style="margin-top:14px;color:var(--text-3)">Loading…</div>';
+  document.getElementById('ops-store-form').innerHTML = '';
+  try {
+    const j = await api(`/api/backend/stores/${storeId}/staff`);
+    _opsStoreStaffRender(store, j.staff || []);
+  } catch (e) {
+    box.innerHTML = `<div style="margin-top:14px;color:var(--danger)">Failed to load staff · 加载失败: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function _opsStoreStaffRender(store, staff) {
+  const box = document.getElementById('ops-store-staff');
+  if (!box) return;
+  const name = escapeHtml(store.name_en || store.code);
+  const active = staff.filter(u => u.isActive);
+  const rows = active.length ? active.map(u => `
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0">
+        <div style="color:var(--text-1)"><strong>${escapeHtml(u.displayName || u.username)}</strong></div>
+        <div style="color:var(--text-3);font-size:12px;font-family:monospace">${escapeHtml(u.username)}</div>
+      </div>
+      <div style="display:flex;gap:8px;flex:none">
+        <button class="btn" onclick="_opsStoreStaffResetPw(${store.id},${u.id})">Reset password · 重置密码</button>
+        <button class="btn" onclick="_opsStoreStaffRemove(${store.id},${u.id})">Remove · 移除</button>
+      </div>
+    </div>`).join('')
+    : '<div style="padding:10px 0;color:var(--text-3)">No stock staff yet for this store. · 该门店暂无库存员。</div>';
+  box.innerHTML = `
+    <div style="margin-top:14px;padding:16px;background:var(--bg-elev-1);border:1px solid var(--line);border-radius:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong style="color:var(--text-1)">Stock staff · 库存员 — ${name}</strong>
+        <button class="btn" style="flex:none" onclick="document.getElementById('ops-store-staff').innerHTML='';document.getElementById('ops-store-staff').dataset.store=''">✕</button>
+      </div>
+      <div class="muted" style="font-size:12px;margin-bottom:8px">These people can only open the Quick Stock app, and only for <strong>${name}</strong> — never another store. · 这些成员仅可使用快捷库存,且只能操作<strong>${name}</strong>,无法操作其他门店。</div>
+      ${rows}
+      <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div><label class="field-label">Name · 姓名</label><input type="text" id="oss_name" placeholder="张三"></div>
+        <div><label class="field-label">Login · 登录名 <span style="color:var(--text-3);font-weight:400">— letters/numbers . _ -</span></label><input type="text" id="oss_user" placeholder="yuexiu.stock" style="font-family:monospace"></div>
+        <div style="grid-column:1 / -1"><label class="field-label">Password · 密码 <span style="color:var(--text-3);font-weight:400">— at least 10 characters · 至少 10 位</span></label><input type="text" id="oss_pw" placeholder="••••••••••"></div>
+      </div>
+      <div style="margin-top:12px"><button class="btn btn-primary" onclick="_opsStoreStaffAdd(${store.id})">+ Add stock staff · 添加库存员</button></div>
+    </div>`;
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function _opsStoreStaffAdd(storeId) {
+  const name = (document.getElementById('oss_name').value || '').trim();
+  const username = (document.getElementById('oss_user').value || '').trim();
+  const password = (document.getElementById('oss_pw').value || '').trim();
+  if (!username) return toast('Login required · 请填写登录名', 'error');
+  if (password.length < 10) return toast('Password must be at least 10 characters · 密码至少需要 10 位', 'error');
+  try {
+    await api(`/api/backend/stores/${storeId}/staff`, { method: 'POST', body: { display_name: name, username, password } });
+    toast('Added · 已添加', 'success');
+    const store = _opsStores.find(x => x.id === storeId);
+    const j = await api(`/api/backend/stores/${storeId}/staff`);
+    if (store) _opsStoreStaffRender(store, j.staff || []);
+  } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
+}
+
+async function _opsStoreStaffRemove(storeId, userId) {
+  if (!confirm('Remove this stock staff member? They will lose access immediately. · 移除该库存员?其访问权限将立即失效。')) return;
+  try {
+    await api(`/api/backend/stores/${storeId}/staff/${userId}`, { method: 'DELETE' });
+    toast('Removed · 已移除', 'success');
+    const store = _opsStores.find(x => x.id === storeId);
+    const j = await api(`/api/backend/stores/${storeId}/staff`);
+    if (store) _opsStoreStaffRender(store, j.staff || []);
+  } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
+}
+
+async function _opsStoreStaffResetPw(storeId, userId) {
+  const np = (prompt('New password (at least 10 characters) · 新密码(至少 10 位)') || '').trim();
+  if (!np) return;
+  if (np.length < 10) return toast('Password must be at least 10 characters · 密码至少需要 10 位', 'error');
+  try {
+    await api(`/api/backend/stores/${storeId}/staff/${userId}/password`, { method: 'POST', body: { new_password: np } });
+    toast('Password reset · 密码已重置', 'success');
   } catch (e) { toast('Failed · 操作失败: ' + e.message, 'error'); }
 }
 
