@@ -6570,24 +6570,8 @@
       </div>
     </div>
 
-    <!-- Recent log -->
-    <details id="mt-log-details" style="margin-bottom:14px">
-      <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted);padding:4px 0">Recent sync log · 最近日志</summary>
-      <p class="muted" data-lang-block="en" style="font-size:11px;margin:6px 0 0">
-        Each line is one product whose stock we pushed to Meituan: <b>product name (SKU)</b>, the change <b>▲+2</b> added / <b>▼−1</b> sold since the last push, and the live number Meituan now shows.
-      </p>
-      <p class="muted" data-lang-block="cn" style="font-size:11px;margin:6px 0 0">
-        每行 = 一个推送到美团的商品库存:<b>商品名(货号)</b>、与上次推送的差额(<b>▲+2</b> 补货 / <b>▼−1</b> 售出),以及美团当前显示的库存。
-      </p>
-      <!-- data-no-i18n: raw data, NOT translatable prose. The lines carry their own
-           EN/CN (mtFmtLogLine renders for the active language). Without this, the
-           auto-translator reads the first "·" change-separator as a bilingual
-           "EN · CN" divider and collapses the whole multi-line block to its first
-           line in English (everything after the first "·" is dropped as the CN half). -->
-      <div id="mt-log" data-no-i18n style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
-      <!-- System/status events (restart, opening hours, proxy) — kept small and out of the way. -->
-      <div id="mt-log-sys" data-no-i18n style="margin-top:6px;font-size:11px;font-family:monospace;color:var(--fg-muted);white-space:pre-wrap"></div>
-    </details>
+    <!-- Recent sync log removed — the full cross-channel timeline now lives in the
+         Activity tab (Inventory activity). -->
 
     <!-- Incoming Meituan orders — read-only record. These don't print and aren't
          managed here; the store just shows what came in. -->
@@ -6762,18 +6746,8 @@
       <div id="gy-analytics" style="margin-top:10px"></div>
     </details>
 
-    <details id="gy-log-details" style="margin-bottom:14px">
-      <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted);padding:4px 0">Recent sync log · 最近日志</summary>
-      <p class="muted" data-lang-block="en" style="font-size:11px;margin:6px 0 0">
-        Each line = a stock reconciliation we wrote to Guanyi. <b>▲+2</b> / <b>▼−1</b> is the adjustment (stock added vs removed). “28 in stock” = the Guanyi number after the adjustment.
-      </p>
-      <p class="muted" data-lang-block="cn" style="font-size:11px;margin:6px 0 0">
-        每行 = 写入管易的一次库存对账。<b>▲+2</b> / <b>▼−1</b> 是调整量(入库 / 出库)。“库存 28” = 调整后管易的库存数。
-      </p>
-      <!-- data-no-i18n: raw data — see #mt-log note. Without it the auto-translator
-           collapses the multi-line log to its first line in English. -->
-      <div id="gy-log" data-no-i18n style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
-    </details>
+    <!-- Recent sync log removed — the full cross-channel timeline now lives in the
+         Activity tab (Inventory activity). -->
 
     <div class="pa-toolbar">
       <input id="gy-search" type="text" placeholder="Search products · 搜索商品" oninput="gyFilterProducts()">
