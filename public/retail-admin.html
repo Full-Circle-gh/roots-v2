@@ -6580,9 +6580,14 @@
       <p class="muted" data-lang-block="cn" style="font-size:11px;margin:6px 0 0">
         每行 = 一个推送到美团的商品库存:<b>商品名(货号)</b>、与上次推送的差额(<b>▲+2</b> 补货 / <b>▼−1</b> 售出),以及美团当前显示的库存。
       </p>
-      <div id="mt-log" style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
+      <!-- data-no-i18n: raw data, NOT translatable prose. The lines carry their own
+           EN/CN (mtFmtLogLine renders for the active language). Without this, the
+           auto-translator reads the first "·" change-separator as a bilingual
+           "EN · CN" divider and collapses the whole multi-line block to its first
+           line in English (everything after the first "·" is dropped as the CN half). -->
+      <div id="mt-log" data-no-i18n style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
       <!-- System/status events (restart, opening hours, proxy) — kept small and out of the way. -->
-      <div id="mt-log-sys" style="margin-top:6px;font-size:11px;font-family:monospace;color:var(--fg-muted);white-space:pre-wrap"></div>
+      <div id="mt-log-sys" data-no-i18n style="margin-top:6px;font-size:11px;font-family:monospace;color:var(--fg-muted);white-space:pre-wrap"></div>
     </details>
 
     <!-- Incoming Meituan orders — read-only record. These don't print and aren't
@@ -6751,7 +6756,9 @@
       <p class="muted" data-lang-block="cn" style="font-size:11px;margin:6px 0 0">
         每行 = 写入管易的一次库存对账。<b>▲+2</b> / <b>▼−1</b> 是调整量(入库 / 出库)。“库存 28” = 调整后管易的库存数。
       </p>
-      <div id="gy-log" style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
+      <!-- data-no-i18n: raw data — see #mt-log note. Without it the auto-translator
+           collapses the multi-line log to its first line in English. -->
+      <div id="gy-log" data-no-i18n style="margin-top:8px;font-size:12px;font-family:monospace;background:var(--bg-elev-1);padding:10px 14px;border-radius:6px;max-height:180px;overflow-y:auto;white-space:pre-wrap"></div>
     </details>
 
     <div class="pa-toolbar">
