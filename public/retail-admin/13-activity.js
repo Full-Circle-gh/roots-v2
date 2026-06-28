@@ -182,7 +182,7 @@ function actRenderRows() {
   const body = document.getElementById('act-tbody');
   if (!body) return;
   if (!ACT.rows.length) {
-    body.innerHTML = `<tr><td colspan="8" class="muted" style="padding:18px;text-align:center">${actT('No activity in this range.', '此时间段内无记录。')}</td></tr>`;
+    body.innerHTML = `<tr><td colspan="9" class="muted" style="padding:18px;text-align:center">${actT('No activity in this range.', '此时间段内无记录。')}</td></tr>`;
   } else {
     body.innerHTML = ACT.rows.map(r => {
       const time = (r.ts_local || '').slice(0, 19).replace('T', ' ');
@@ -196,6 +196,7 @@ function actRenderRows() {
         + `<td>${escapeHtml(r.product || '—')}</td>`
         + `<td style="text-align:right;font-variant-numeric:tabular-nums">${delta}</td>`
         + `<td style="text-align:right;font-variant-numeric:tabular-nums">${r.balance_after}</td>`
+        + `<td class="muted" style="font-size:12px">${escapeHtml(r.source === 'manual' ? (r.actor_label || '—') : '')}</td>`
         + `<td class="muted" style="font-size:12px">${escapeHtml(r.note || '')}</td>`
         + `</tr>`;
     }).join('');
