@@ -5,9 +5,22 @@
 // are Guangzhou local (UTC+8), matching the server's day boundaries.
 
 const ACT = { from: null, to: null, source: '', q: '', offset: 0, limit: 200, rows: [], total: 0, loading: false };
+// Source tokens come from the server (reason-derived). Meituan is split per
+// storefront — Tianhe (外卖) and Yuexiu (闪购). The front-end owns every label
+// and colour so the page reads as one overall traffic view, not a per-channel
+// page. ACT_SOURCE_LABELS = full chip label; ACT_SOURCE_SHORT = compact badge.
 const ACT_SOURCE_LABELS = {
-  gzgrocery: 'gzgrocery', Meituan: 'Meituan · 美团', Guanyi: 'Guanyi · 管易',
-  'Mini-app': 'Mini-app · 小程序', Manual: 'Manual · 手动',
+  miniapp: 'Mini-app · 小程序', gzgrocery: 'gzgrocery',
+  meituan_tianhe: 'Meituan Tianhe · 美团天河', meituan_yuexiu: 'Meituan Yuexiu · 美团越秀',
+  meituan: 'Meituan · 美团', guanyi: 'Guanyi · 管易', manual: 'Manual · 手动',
+};
+const ACT_SOURCE_SHORT = {
+  miniapp: 'Mini-app', gzgrocery: 'gzgrocery', meituan_tianhe: 'Meituan · Tianhe',
+  meituan_yuexiu: 'Meituan · Yuexiu', meituan: 'Meituan', guanyi: 'Guanyi', manual: 'Manual',
+};
+const ACT_SOURCE_COLORS = {
+  miniapp: '#1f6feb', gzgrocery: '#2d8a4e', meituan_tianhe: '#f5a623',
+  meituan_yuexiu: '#d97706', meituan: '#f5a623', guanyi: '#7b61ff', manual: '#888',
 };
 
 function actT(en, cn) { return window.cuT ? cuT(en, cn) : en; }
@@ -70,25 +83,54 @@ async function actLoad(reset) {
   } finally { ACT.loading = false; }
 }
 
+// One KPI card per channel. Each card is a filter button — click it to scope
+// the table (and the main Export CSV) to that channel; its ⬇ link exports just
+// that channel's log straight away. The accent "All channels" card resets to
+// the full traffic view. The active channel is ringed.
 function actRenderSummary(summary, total) {
   const el = document.getElementById('act-summary');
   if (!el) return;
-  if (!summary || !summary.length) { el.innerHTML = ''; return; }
-  const chips = summary.map(s => {
+  const active = ACT.source || '';
+  const ring = on => on ? 'box-shadow:0 0 0 2px var(--brass,#b08d57);' : '';
+  const csvLink = src => `<a href="#" onclick="actChannelCsv('${src}');return false" `
+    + `style="font-size:11px;color:var(--brass,#b08d57);text-decoration:none" `
+    + `title="${actT('Export this channel', '导出该渠道')}">⬇ CSV</a>`;
+  const allCard = `<div class="fc-kpi accent" role="button" tabindex="0" `
+    + `onclick="actPickSource('')" style="cursor:pointer;${ring(!active)}">`
+    + `<div class="lbl">${actT('All channels', '全部渠道')}</div>`
+    + `<div class="val">${total}</div>`
+    + `<div class="sub" style="display:flex;justify-content:space-between;gap:8px;align-items:center">`
+    + `<span>${escapeHtml(ACT.from)} → ${escapeHtml(ACT.to)}</span>${csvLink('')}</div></div>`;
+  const chips = (summary || []).map(s => {
     const label = ACT_SOURCE_LABELS[s.source] || s.source;
-    return `<div class="fc-kpi"><div class="lbl">${escapeHtml(label)}</div>`
+    return `<div class="fc-kpi" role="button" tabindex="0" onclick="actPickSource('${s.source}')" `
+      + `style="cursor:pointer;${ring(active === s.source)}">`
+      + `<div class="lbl">${escapeHtml(label)}</div>`
       + `<div class="val">${s.events}</div>`
-      + `<div class="sub">▼${s.units_out || 0} · ▲${s.units_in || 0} ${actT('units', '件')}</div></div>`;
+      + `<div class="sub" style="display:flex;justify-content:space-between;gap:8px;align-items:center">`
+      + `<span>▼${s.units_out || 0} · ▲${s.units_in || 0} ${actT('units', '件')}</span>${csvLink(s.source)}</div></div>`;
   }).join('');
-  el.innerHTML = `<div class="fc-kpis">`
-    + `<div class="fc-kpi accent"><div class="lbl">${actT('Total events', '总记录')}</div><div class="val">${total}</div><div class="sub">${escapeHtml(ACT.from)} → ${escapeHtml(ACT.to)}</div></div>`
-    + chips + `</div>`;
+  el.innerHTML = `<div class="fc-kpis">${allCard}${chips}</div>`;
+}
+
+// Set the source filter from a chip and reload (keeps the dropdown in sync).
+function actPickSource(src) {
+  const sel = document.getElementById('act-source');
+  if (sel) sel.value = src || '';
+  actLoad(true);
+}
+
+// Export ONE channel's log for the current date range, regardless of the
+// dropdown — `source` here overrides whatever the filter is set to.
+function actChannelCsv(src) {
+  actReadFilters();
+  window.location.href = '/api/retail-admin/activity/export.csv?' + actQueryString({ source: src || '' });
 }
 
 function actSourceBadge(src) {
-  const colors = { gzgrocery: '#2d8a4e', Meituan: '#f5a623', Guanyi: '#7b61ff', 'Mini-app': '#1f6feb', Manual: '#888' };
-  const c = colors[src] || '#888';
-  return `<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;color:#fff;background:${c}">${escapeHtml(src)}</span>`;
+  const c = ACT_SOURCE_COLORS[src] || '#888';
+  const label = ACT_SOURCE_SHORT[src] || src;
+  return `<span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:11px;color:#fff;background:${c};white-space:nowrap">${escapeHtml(label)}</span>`;
 }
 
 function actRenderRows() {

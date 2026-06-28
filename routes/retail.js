@@ -9972,20 +9972,29 @@ router.get('/api/retail-admin/dashboard/presence', requireRetailAdmin, (req, res
 //
 // `source` is derived from reason so the UI/CSV read cleanly regardless of
 // whether the legacy `channel` column was populated.
+// Stable source TOKENS (also the UI filter keys). Meituan is split per store —
+// Tianhe (外卖) and Yuexiu (闪购) are the same `meituan_order` reason and differ
+// only by store code — so the operator sees each storefront's traffic on its
+// own line. The front-end owns all display labels/colours for these tokens.
 const ACT_SOURCE_SQL = `CASE
     WHEN l.reason LIKE 'gzgrocery%' THEN 'gzgrocery'
-    WHEN l.reason LIKE 'meituan%'   THEN 'Meituan'
-    WHEN l.reason LIKE 'guanyi%'    THEN 'Guanyi'
-    WHEN l.reason LIKE 'order%' OR l.reason LIKE 'awaiting%' THEN 'Mini-app'
-    ELSE 'Manual'
+    WHEN l.reason LIKE 'meituan%' AND s.code = 'tianhe' THEN 'meituan_tianhe'
+    WHEN l.reason LIKE 'meituan%' AND s.code = 'yuexiu' THEN 'meituan_yuexiu'
+    WHEN l.reason LIKE 'meituan%'   THEN 'meituan'
+    WHEN l.reason LIKE 'guanyi%'    THEN 'guanyi'
+    WHEN l.reason LIKE 'order%' OR l.reason LIKE 'awaiting%' THEN 'miniapp'
+    ELSE 'manual'
   END`;
-// Map a UI `source` key → the reason LIKE pattern(s) it covers.
+// Map a UI `source` key → the WHERE fragment it covers. Meituan splits reference
+// s.code, so every query that honours these filters must JOIN retail_stores s.
 const ACT_SOURCE_FILTER = {
-  gzgrocery: "l.reason LIKE 'gzgrocery%'",
-  meituan:   "l.reason LIKE 'meituan%'",
-  guanyi:    "l.reason LIKE 'guanyi%'",
-  miniapp:   "(l.reason LIKE 'order%' OR l.reason LIKE 'awaiting%')",
-  manual:    "(l.reason NOT LIKE 'gzgrocery%' AND l.reason NOT LIKE 'meituan%' AND l.reason NOT LIKE 'guanyi%' AND l.reason NOT LIKE 'order%' AND l.reason NOT LIKE 'awaiting%')",
+  gzgrocery:      "l.reason LIKE 'gzgrocery%'",
+  meituan_tianhe: "(l.reason LIKE 'meituan%' AND s.code = 'tianhe')",
+  meituan_yuexiu: "(l.reason LIKE 'meituan%' AND s.code = 'yuexiu')",
+  meituan:        "l.reason LIKE 'meituan%'",
+  guanyi:         "l.reason LIKE 'guanyi%'",
+  miniapp:        "(l.reason LIKE 'order%' OR l.reason LIKE 'awaiting%')",
+  manual:         "(l.reason NOT LIKE 'gzgrocery%' AND l.reason NOT LIKE 'meituan%' AND l.reason NOT LIKE 'guanyi%' AND l.reason NOT LIKE 'order%' AND l.reason NOT LIKE 'awaiting%')",
 };
 // Build WHERE + params from the query string, shared by JSON + CSV routes.
 function buildActivityQuery(q) {
@@ -10034,6 +10043,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
     const total  = tdb().prepare(`
       SELECT COUNT(*) n FROM retail_stock_ledger l
         LEFT JOIN store_products p ON p.id = l.product_id
+        LEFT JOIN retail_stores  s ON s.id = l.store_id
        WHERE ${built.where}`).get(built.params).n;
     const summary = tdb().prepare(`
       SELECT ${ACT_SOURCE_SQL} AS source, COUNT(*) AS events,
@@ -10041,6 +10051,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
              SUM(CASE WHEN l.delta > 0 THEN  l.delta ELSE 0 END) AS units_in
         FROM retail_stock_ledger l
         LEFT JOIN store_products p ON p.id = l.product_id
+        LEFT JOIN retail_stores  s ON s.id = l.store_id
        WHERE ${built.where}
        GROUP BY source ORDER BY events DESC`).all(built.params);
     res.json({ success: true, from: built.from, to: built.to, total, limit, offset, summary, rows });
