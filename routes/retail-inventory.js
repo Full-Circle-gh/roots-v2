@@ -192,6 +192,13 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
   const id = parseInt(req.params.id, 10);
   if (!inventory.getStore(id)) return res.status(404).json({ success: false, error: 'store_not_found' });
 
+  // A kitchen operator may only read their own store's product list, and never
+  // the quantities — the Add Stock app needs names/SKUs to search, nothing else.
+  const kitchenOp = !!req.backendUser && req.backendUser.role === 'kitchen';
+  if (kitchenOp && id !== req.backendUser.retail_store_id) {
+    return res.status(403).json({ success: false, error: 'store_not_assigned' });
+  }
+
   const publishedOnly = req.query.published === '1';
   const extraWhere = publishedOnly ? ' AND p.is_published = 1' : '';
 
@@ -210,6 +217,14 @@ router.get('/api/retail-admin/stores/:id/stock', requireInventoryRead, (req, res
      WHERE COALESCE(p.is_active, 1) = 1${extraWhere}
      ORDER BY p.is_published DESC, p.name_en COLLATE NOCASE
   `).all(id);
+
+  // Kitchen operators get a quantity-free list (id/name/sku only) so the shelf
+  // total is never exposed — not in the UI, not over the raw API.
+  if (kitchenOp) {
+    return res.json({ success: true, data: rows.map(r => ({
+      product_id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku,
+    })) });
+  }
 
   // Decorate with computed `available` (wechat channel) so the admin sees
   // the same number the customer would see.
@@ -234,11 +249,18 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   const product = tdb().prepare('SELECT id FROM store_products WHERE id = ?').get(productId);
   if (!product) return res.status(404).json({ success: false, error: 'product_not_found' });
 
-  // Store-scoped access. A Mini App Backend operator (req.backendUser) has
-  // already passed the tenant gate in requireRetailAdmin and manages all of the
-  // tenant's stores, so the kitchen "assigned store" restriction doesn't apply.
-  // For kitchen sessions: admin is always allowed; everyone else must be
-  // assigned to this specific store.
+  // A restricted kitchen operator may only touch their assigned store, and only
+  // ADD (a delta) — never set an absolute count.
+  const kitchenOp = !!req.backendUser && req.backendUser.role === 'kitchen';
+  if (kitchenOp && storeId !== req.backendUser.retail_store_id) {
+    return res.status(403).json({ success: false, error: 'store_not_assigned' });
+  }
+
+  // Store-scoped access. A full-access Mini App Backend operator (req.backendUser,
+  // non-kitchen) has already passed the tenant gate in requireRetailAdmin and
+  // manages all of the tenant's stores, so the assigned-store restriction doesn't
+  // apply. For kitchen-app sessions: admin is always allowed; everyone else must
+  // be assigned to this specific store.
   if (!req.backendUser && req.user.role !== 'admin') {
     const u = db.prepare('SELECT retail_store_id FROM users WHERE id = ?').get(req.user.id);
     if (!u || u.retail_store_id !== storeId) {
@@ -247,6 +269,9 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
   }
 
   const b = req.body || {};
+  if (kitchenOp && !('delta' in b)) {
+    return res.status(403).json({ success: false, error: 'kitchen_add_only' });
+  }
   const out = {};
   // Two ways to move physical_qty:
   //   physical_qty → set the absolute count (warehouse recount / Quick Stock)
@@ -519,21 +544,34 @@ function kitchenAddEnabled() {
 // backend operators get every active store and can switch between them. The
 // app then drives the existing per-store GET/PATCH stock endpoints.
 router.get('/api/retail-admin/quick-stock/context', requireInventoryRead, (req, res) => {
-  // Full-access = backend operator, kitchen admin, or `retail` permission.
-  // Those see and edit all stores; a plain staffer is pinned to their own.
-  const fullAccess = !!req.backendUser
-    || req.user?.role === 'admin'
-    || !!req.permissions?.retail;
+  // A restricted 'kitchen'-role backend operator (created from the Team page):
+  // gets the relative Add Stock flow, pinned to the single store they're
+  // assigned to. Their req.user.role is shimmed from tenant_users in
+  // requireRetailAdmin, so check req.backendUser explicitly.
+  const kitchenOp = !!req.backendUser && req.backendUser.role === 'kitchen';
 
-  // Mode is role-driven: a plain kitchen-role staffer gets the relative
-  // "Add Stock" flow (log what you made, never see the running total);
-  // everyone else (warehouse / manager / admin / backend operator) gets the
-  // absolute recount flow. Each mode is gated by its own feature flag.
-  const mode = (!fullAccess && req.user?.role === 'kitchen') ? 'add' : 'recount';
+  // Full-access = any non-kitchen backend operator, kitchen-app admin, or the
+  // `retail` permission. Those see and edit all stores; a plain staffer is
+  // pinned to their own.
+  const fullAccess = !kitchenOp && (
+    !!req.backendUser
+    || req.user?.role === 'admin'
+    || !!req.permissions?.retail
+  );
+
+  // Mode is role-driven: a kitchen operator (backend) or a kitchen-app staffer
+  // gets the relative "Add Stock" flow (log what you made, never see the running
+  // total); everyone else gets the absolute recount flow. Each mode has its own
+  // feature flag.
+  const mode = (kitchenOp || (!fullAccess && req.user?.role === 'kitchen')) ? 'add' : 'recount';
   const enabled = mode === 'add' ? kitchenAddEnabled() : quickStockEnabled();
 
   let stores;
-  if (fullAccess) {
+  if (kitchenOp) {
+    const sid = req.backendUser.retail_store_id;
+    const s = sid ? inventory.getStore(sid) : null;
+    stores = s && s.is_active !== 0 ? [s] : [];
+  } else if (fullAccess) {
     stores = inventory.listStores({ activeOnly: true });
   } else {
     const u = db.prepare('SELECT retail_store_id FROM users WHERE id = ?').get(req.user.id);

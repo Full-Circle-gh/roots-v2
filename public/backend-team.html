@@ -85,6 +85,7 @@
   .role-owner{color:#7a5f24; background:rgba(176,141,74,.16);}
   .role-admin{color:var(--tea-deep); background:rgba(107,142,111,.14);}
   .role-staff{color:var(--muted); background:rgba(18,22,26,.06);}
+  .role-kitchen{color:#7a5f24; background:rgba(176,141,74,.16);}
   .m-edit{flex:none; cursor:pointer; background:transparent; border:1px solid var(--line-2);
     border-radius:9px; padding:7px 13px; font-family:inherit; font-size:12.5px; color:var(--ink); transition:border-color .15s, color .15s;}
   .m-edit:hover{border-color:var(--tea); color:var(--tea-deep);}
@@ -177,7 +178,7 @@
     <!-- Member list -->
     <section class="card">
       <h2><span class="en">Team members</span><span class="sep"> · </span><span class="cn">团队成员</span></h2>
-      <p class="lead"><span class="en">Everyone here can sign in to this store's backend. Roles are labels for now — every operator has full access.</span><span class="cn">以下成员均可登录本店后台。角色目前仅作标识 — 每位操作员都拥有完整权限。</span></p>
+      <p class="lead"><span class="en">Staff, Admin and Owner are labels for now — each has full backend access. Kitchen members are restricted: they only get the Add Stock app for their store.</span><span class="cn">员工、管理员、负责人目前仅作标识 — 均拥有完整后台权限。后厨成员受限:仅可使用其门店的“加库存”应用。</span></p>
       <div class="members" id="members"><div class="empty"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
     </section>
 
@@ -197,8 +198,14 @@
               <option value="staff">Staff · 员工</option>
               <option value="admin">Admin · 管理员</option>
               <option value="owner">Owner · 负责人</option>
+              <option value="kitchen">Kitchen · 后厨</option>
             </select>
           </div>
+        </div>
+        <div class="field" id="iStoreField" style="display:none">
+          <label class="flabel" for="iStore"><span class="en">Store</span><span class="sep"> · </span><span class="cn">门店</span></label>
+          <select id="iStore"></select>
+          <div class="lead" style="margin-top:6px"><span class="en">Kitchen members only get the Add Stock app, for this store.</span><span class="cn">后厨成员仅可使用此门店的“加库存”应用。</span></div>
         </div>
         <div class="grid2">
           <div class="field">
@@ -233,7 +240,12 @@
           <option value="staff">Staff · 员工</option>
           <option value="admin">Admin · 管理员</option>
           <option value="owner">Owner · 负责人</option>
+          <option value="kitchen">Kitchen · 后厨</option>
         </select>
+      </div>
+      <div class="field" id="eStoreField" style="display:none">
+        <label class="flabel" for="eStore"><span class="en">Store</span><span class="sep"> · </span><span class="cn">门店</span></label>
+        <select id="eStore"></select>
       </div>
       <div class="field">
         <label class="flabel" for="ePass"><span class="en">Reset password</span><span class="sep"> · </span><span class="cn">重置密码</span></label>
@@ -291,12 +303,33 @@
     if (u.avatarUrl) return '<span class="m-circle ' + (cls || '') + '"><img src="' + esc(u.avatarUrl) + '" alt=""></span>';
     return '<span class="m-circle ' + (cls || '') + '">' + esc(initials(u)) + '</span>';
   }
-  function roleLabel(role){ return L({owner:'Owner',admin:'Admin',staff:'Staff'}[role] || role, {owner:'负责人',admin:'管理员',staff:'员工'}[role] || role); }
+  function roleLabel(role){ return L({owner:'Owner',admin:'Admin',staff:'Staff',kitchen:'Kitchen'}[role] || role, {owner:'负责人',admin:'管理员',staff:'员工',kitchen:'后厨'}[role] || role); }
+
+  var STORES = [];
+  function storeLabel(s){ return (lang === 'cn' ? (s.name_cn || s.name_en) : (s.name_en || s.name_cn)) || s.code || ('#' + s.id); }
+  function storeName(id){ var s = STORES.filter(function (x){ return x.id === id; })[0]; return s ? storeLabel(s) : ('#' + id); }
+  function fillStoreSelect(sel){
+    if (!sel) return;
+    sel.innerHTML = STORES.map(function (s){ return '<option value="' + s.id + '">' + esc(storeLabel(s)) + '</option>'; }).join('');
+  }
+  function loadStores(){
+    fetch('/api/retail-admin/stores', { credentials: 'same-origin' })
+      .then(function (r){ return r.ok ? r.json() : { data: [] }; })
+      .then(function (j){ STORES = ((j && j.data) || []).filter(function (s){ return s.is_active !== 0; }); fillStoreSelect(document.getElementById('iStore')); fillStoreSelect(document.getElementById('eStore')); render(); })
+      .catch(function (){});
+  }
+  // Show the store picker only for the kitchen role.
+  function syncStoreField(roleSel, fieldId){
+    var f = document.getElementById(fieldId);
+    if (f) f.style.display = roleSel && roleSel.value === 'kitchen' ? '' : 'none';
+  }
 
   function render(){
     if (!TEAM.length) { membersEl.innerHTML = '<div class="empty">' + L('No team members yet.', '暂无团队成员。') + '</div>'; return; }
     membersEl.innerHTML = TEAM.map(function (u){
-      var sub = '@' + esc(u.username) + (u.lastLogin ? '' : ' · ' + L('never signed in', '从未登录'));
+      var sub = '@' + esc(u.username)
+        + (u.role === 'kitchen' && u.retailStoreId ? ' · ' + esc(storeName(u.retailStoreId)) : '')
+        + (u.lastLogin ? '' : ' · ' + L('never signed in', '从未登录'));
       return '<div class="member' + (u.isActive ? '' : ' inactive') + '">' +
         circleHtml(u) +
         '<div class="m-main">' +
@@ -323,25 +356,30 @@
   }
 
   /* ── Invite ── */
+  var iRoleSel = document.getElementById('iRole');
+  iRoleSel.addEventListener('change', function (){ syncStoreField(iRoleSel, 'iStoreField'); });
   inviteForm.addEventListener('submit', function (e){
     e.preventDefault();
     setMsg(inviteMsg, null, '');
     var username = document.getElementById('iUser').value.trim().toLowerCase();
     var display_name = document.getElementById('iName').value.trim();
-    var role = document.getElementById('iRole').value;
+    var role = iRoleSel.value;
     var password = document.getElementById('iPass').value;
+    var storeId = document.getElementById('iStore').value;
     if (!username) { setMsg(inviteMsg, 'err', L('Enter a username', '请输入用户名')); return; }
+    if (role === 'kitchen' && !storeId) { setMsg(inviteMsg, 'err', L('Pick a store', '请选择门店')); return; }
     if (password.length < 10) { setMsg(inviteMsg, 'err', L('Password must be at least 10 characters', '密码至少 10 位')); return; }
     inviteBtn.disabled = true; inviteBtn.classList.add('loading');
     fetch('/api/backend/team', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-      body: JSON.stringify({ username: username, display_name: display_name, role: role, password: password })
+      body: JSON.stringify({ username: username, display_name: display_name, role: role, password: password, retail_store_id: role === 'kitchen' ? parseInt(storeId, 10) : null })
     })
       .then(function (r){ return r.json().catch(function (){ return {}; }).then(function (d){ return { ok: r.ok, data: d }; }); })
       .then(function (res){
         inviteBtn.disabled = false; inviteBtn.classList.remove('loading');
         if (res.ok && res.data && res.data.success) {
           inviteForm.reset();
+          syncStoreField(iRoleSel, 'iStoreField');
           setMsg(inviteMsg, 'ok', L('Teammate added', '已添加成员'));
           load();
         } else {
@@ -372,6 +410,9 @@
     document.getElementById('editTitle').innerHTML = circleHtml(editing, '') + '<span id="editName">' + esc(editing.displayName || editing.username) + '</span>';
     eName.value = editing.displayName || '';
     eRole.value = editing.role;
+    var eStore = document.getElementById('eStore');
+    if (eStore && editing.retailStoreId) eStore.value = editing.retailStoreId;
+    syncStoreField(eRole, 'eStoreField');
     ePass.value = '';
     eActiveVal = !!editing.isActive;
     // Self-protections (server enforces too): can't deactivate self; an owner can't drop own owner role.
@@ -382,6 +423,7 @@
   }
   function closeEdit(){ scrim.classList.remove('show'); editing = null; }
 
+  eRole.addEventListener('change', function (){ syncStoreField(eRole, 'eStoreField'); });
   eActive.addEventListener('click', function (){ if (eActive.disabled) return; eActiveVal = !eActiveVal; paintActiveBtn(); });
   document.getElementById('editCancel').addEventListener('click', closeEdit);
   scrim.addEventListener('mousedown', function (e){ if (e.target === scrim) closeEdit(); });
@@ -391,6 +433,11 @@
     setMsg(editMsg, null, '');
     var saveBtn = this;
     var body = { display_name: eName.value.trim(), role: eRole.value, is_active: eActiveVal };
+    if (eRole.value === 'kitchen') {
+      var eStore = document.getElementById('eStore');
+      if (!eStore.value) { setMsg(editMsg, 'err', L('Pick a store', '请选择门店')); return; }
+      body.retail_store_id = parseInt(eStore.value, 10);
+    }
     saveBtn.disabled = true; saveBtn.classList.add('loading');
     var pw = ePass.value;
 
@@ -424,6 +471,8 @@
     document.documentElement.setAttribute('data-lang', lang);
     var tg = document.getElementById('langToggle');
     if (tg) tg.textContent = lang === 'cn' ? 'EN' : '中文';
+    fillStoreSelect(document.getElementById('iStore'));
+    fillStoreSelect(document.getElementById('eStore'));
     render();
     if (editing) { paintActiveBtn(); }
   }
@@ -435,6 +484,7 @@
   document.addEventListener('keydown', function (e){ if (e.key === 'Escape' && scrim.classList.contains('show')) closeEdit(); });
 
   applyLang();
+  loadStores();
   load();
 })();
 </script>

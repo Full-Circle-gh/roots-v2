@@ -19,7 +19,10 @@ const bcrypt = require('bcrypt');
 const db = require('../database');
 const router = express.Router();
 
-const ROLES = ['owner', 'admin', 'staff'];
+// owner/admin/staff are full-access labels; 'kitchen' is a RESTRICTED role —
+// that operator only gets the Add Stock app (enforced in server.js) and is
+// pinned to one store via retail_store_id.
+const ROLES = ['owner', 'admin', 'staff', 'kitchen'];
 
 function requireBackend(req, res, next) {
   if (!req.session?.backendUserId || !req.session?.tenantId) {
@@ -35,6 +38,7 @@ function publicUser(u, selfId) {
     username: u.username,
     displayName: u.display_name || '',
     role: u.role,
+    retailStoreId: u.retail_store_id || null,
     isActive: !!u.is_active,
     hasAvatar: !!u.avatar_url,
     avatarUrl: u.avatar_url || null,
@@ -61,7 +65,7 @@ function countActiveOwners(tenantId, exceptId) {
 // ── List operators in this tenant ────────────────────────────────────────
 router.get('/api/backend/team', requireBackend, (req, res) => {
   const rows = db.prepare(
-    'SELECT id, username, display_name, role, is_active, avatar_url, last_login FROM tenant_users WHERE tenant_id = ? ORDER BY is_active DESC, role = \'owner\' DESC, lower(display_name), lower(username)'
+    'SELECT id, username, display_name, role, retail_store_id, is_active, avatar_url, last_login FROM tenant_users WHERE tenant_id = ? ORDER BY is_active DESC, role = \'owner\' DESC, lower(display_name), lower(username)'
   ).all(req.session.tenantId);
   res.json({ team: rows.map(u => publicUser(u, req.session.backendUserId)) });
 });
@@ -78,15 +82,22 @@ router.post('/api/backend/team', requireBackend, express.json(), (req, res) => {
     if (!password || String(password).length < 10) {
       return res.status(400).json({ error: 'Password must be at least 10 characters · 密码至少需要 10 位' });
     }
+    // A kitchen operator must be pinned to one store (the shelf they add to).
+    // Full-access roles aren't store-scoped, so store id is dropped for them.
+    let storeId = null;
+    if (role === 'kitchen') {
+      storeId = parseInt(req.body && req.body.retail_store_id, 10);
+      if (!storeId) return res.status(400).json({ error: 'Pick a store for the kitchen member · 请为后厨成员选择门店' });
+    }
     // Global uniqueness — login resolves a username across every tenant.
     if (db.prepare('SELECT id FROM tenant_users WHERE username = ?').get(username)) {
       return res.status(409).json({ error: 'That username is already taken · 该用户名已被占用' });
     }
     const hash = bcrypt.hashSync(String(password), 10);
     const r = db.prepare(
-      'INSERT INTO tenant_users (tenant_id, username, password, display_name, role) VALUES (?,?,?,?,?)'
-    ).run(req.session.tenantId, username, hash, displayName || username, role);
-    const u = db.prepare('SELECT id, username, display_name, role, is_active, avatar_url, last_login FROM tenant_users WHERE id = ?').get(r.lastInsertRowid);
+      'INSERT INTO tenant_users (tenant_id, username, password, display_name, role, retail_store_id) VALUES (?,?,?,?,?,?)'
+    ).run(req.session.tenantId, username, hash, displayName || username, role, storeId);
+    const u = db.prepare('SELECT id, username, display_name, role, retail_store_id, is_active, avatar_url, last_login FROM tenant_users WHERE id = ?').get(r.lastInsertRowid);
     res.json({ success: true, user: publicUser(u, req.session.backendUserId) });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -116,6 +127,7 @@ router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) =
     sets.push('display_name = ?'); args.push(name);
   }
 
+  let newRole = u.role;
   if (body.role !== undefined) {
     const role = String(body.role || '').trim().toLowerCase();
     if (!ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role · 未知角色' });
@@ -126,7 +138,19 @@ router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) =
     if (u.role === 'owner' && role !== 'owner' && u.is_active && countActiveOwners(req.session.tenantId, u.id) === 0) {
       return res.status(400).json({ error: 'Assign another owner first · 请先指定另一位负责人' });
     }
+    newRole = role;
     sets.push('role = ?'); args.push(role);
+  }
+
+  // Store assignment follows the (resulting) role: a kitchen operator must have
+  // one store; any full-access role clears it. Honour an explicit store id from
+  // the body, else keep the existing one.
+  if (newRole === 'kitchen') {
+    let storeId = body.retail_store_id !== undefined ? parseInt(body.retail_store_id, 10) : u.retail_store_id;
+    if (!storeId) return res.status(400).json({ error: 'Pick a store for the kitchen member · 请为后厨成员选择门店' });
+    sets.push('retail_store_id = ?'); args.push(storeId);
+  } else if (body.role !== undefined && u.retail_store_id != null) {
+    sets.push('retail_store_id = ?'); args.push(null);
   }
 
   if (body.is_active !== undefined) {
@@ -141,7 +165,7 @@ router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) =
   if (!sets.length) return res.status(400).json({ error: 'Nothing to update · 无可更新内容' });
   args.push(u.id);
   db.prepare(`UPDATE tenant_users SET ${sets.join(', ')} WHERE id = ?`).run(...args);
-  const fresh = db.prepare('SELECT id, username, display_name, role, is_active, avatar_url, last_login FROM tenant_users WHERE id = ?').get(u.id);
+  const fresh = db.prepare('SELECT id, username, display_name, role, retail_store_id, is_active, avatar_url, last_login FROM tenant_users WHERE id = ?').get(u.id);
   res.json({ success: true, user: publicUser(fresh, req.session.backendUserId) });
 });
 

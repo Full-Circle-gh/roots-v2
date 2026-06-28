@@ -88,6 +88,11 @@ try { db.exec('ALTER TABLE tenants ADD COLUMN features_json TEXT'); } catch (e) 
 // planned OSS migration will sweep these up with the rest.
 try { db.exec('ALTER TABLE tenant_users ADD COLUMN avatar_url TEXT'); } catch (e) { /* already added */ }
 
+// Store assignment for restricted operators. Only meaningful for the 'kitchen'
+// role (Add Stock app): the one store whose shelf they add stock to. NULL for
+// owner/admin/staff (full-access operators are not pinned to a store).
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN retail_store_id INTEGER'); } catch (e) { /* already added */ }
+
 // ── Seed Roots as tenant #1 + an owner operator (mirrors auth.js seedUsers) ──
 function seedBackend() {
   let roots = db.prepare("SELECT id FROM tenants ORDER BY id ASC LIMIT 1").get();

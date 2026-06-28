@@ -232,6 +232,33 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+// Kitchen-operator lockdown. A backend operator with the restricted 'kitchen'
+// role (created from the Team page) may use ONLY the Add Stock app — the /stock
+// PWA, its assets, and the three stock endpoints it calls. Everything else in
+// the backend (the retail-admin shell, /backend/* pages, every other API) is
+// blocked here in ONE place, so it can't be reached by a stray requireBackend
+// copy that doesn't check the role. Non-kitchen sessions skip instantly.
+app.use((req, res, next) => {
+  if (!req.session?.backendUserId) return next();
+  let role;
+  try { role = require('./database').prepare('SELECT role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId)?.role; }
+  catch (e) { return next(); }   // tables not ready — fail open to existing gates
+  if (role !== 'kitchen') return next();
+  const p = req.path;
+  if (p.startsWith('/api/')) {
+    const ok = p === '/api/retail-admin/quick-stock/context'
+      || /^\/api\/retail-admin\/stores\/\d+\/stock(\/\d+)?$/.test(p)
+      || p === '/api/backend/logout';
+    return ok ? next() : res.status(403).json({ error: 'kitchen_add_only' });
+  }
+  // Pages/assets: let the Add Stock app + its static assets through; bounce any
+  // backend page (shell, login, team, billing…) to the app.
+  if (p === '/stock' || p === '/stock-login' || p === '/stock-manifest.webmanifest'
+      || p === '/stock-icon.svg' || p === '/apple-touch-icon.png' || p === '/favicon.ico') return next();
+  if (p === '/retail-admin' || p.startsWith('/backend/')) return res.redirect('/stock');
+  return next();   // fonts/css/img and other static assets
+});
+
 // Routes
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
