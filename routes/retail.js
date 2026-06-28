@@ -10050,6 +10050,9 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
         LEFT JOIN store_products p ON p.id = l.product_id
         LEFT JOIN retail_stores  s ON s.id = l.store_id
        WHERE ${built.where}`).get(built.params).n;
+    // GROUP BY 1 (positional) is deliberate: store_products has its own `source`
+    // column (DEFAULT 'fork'), so `GROUP BY source` would bind to p.source and
+    // collapse every channel into one bogus bucket. Position 1 = the CASE alias.
     const summary = tdb().prepare(`
       SELECT ${ACT_SOURCE_SQL} AS source, COUNT(*) AS events,
              SUM(CASE WHEN l.delta < 0 THEN -l.delta ELSE 0 END) AS units_out,
@@ -10058,7 +10061,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
         LEFT JOIN store_products p ON p.id = l.product_id
         LEFT JOIN retail_stores  s ON s.id = l.store_id
        WHERE ${built.whereNoSource}
-       GROUP BY source ORDER BY events DESC`).all(built.params);
+       GROUP BY 1 ORDER BY 2 DESC`).all(built.params);
     res.json({ success: true, from: built.from, to: built.to, total, limit, offset, summary, rows });
   } catch (e) {
     console.error('[activity]', e);
