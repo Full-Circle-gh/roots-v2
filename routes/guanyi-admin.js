@@ -403,7 +403,11 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
     const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : null;
     const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : null;
     const fromClause = from || "date('now','-90 days')";
-    const toClause   = to   || "date('now','+1 day')";
+    // Exclusive upper bound. When an explicit `to` is given it names a calendar
+    // day that must be INCLUDED, so the bound is the start of the next day —
+    // otherwise `created_at < '2026-06-28'` drops every order on 06-28 (and a
+    // single-day Day range matches nothing).
+    const toClause   = to   ? "date(?, '+1 day')" : "date('now','+1 day')";
     const bucket = period === 'month' ? "strftime('%Y-%m', src.created_at)"
                  : period === 'week'  ? "strftime('%Y-W%W', src.created_at)"
                  : "date(src.created_at)";
@@ -431,7 +435,7 @@ router.get('/api/retail-admin/guanyi/analytics', requireRetailAdmin, (req, res) 
         ) src
         LEFT JOIN store_products sp ON sp.id = src.product_id
         LEFT JOIN guanyi_product_pricing pp ON pp.product_id = src.product_id
-       WHERE src.created_at >= ${from ? '?' : fromClause} AND src.created_at < ${to ? '?' : toClause}
+       WHERE src.created_at >= ${from ? '?' : fromClause} AND src.created_at < ${toClause}
        GROUP BY bucket, src.product_id
     `).all(...[from, to].filter(Boolean));
 
