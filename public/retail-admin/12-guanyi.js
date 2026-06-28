@@ -11,6 +11,21 @@
     ? escapeHtml
     : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
 
+  // Stored timestamps are UTC (SQLite CURRENT_TIMESTAMP / ISO). Render them in
+  // the viewer's local timezone so 02:07Z reads as 10:07 here. Tenant-neutral:
+  // no hardcoded +8 offset — the browser supplies the zone.
+  function gyLocalTime(t, withSeconds) {
+    if (!t) return '';
+    let s = String(t).trim().replace(' ', 'T');
+    if (!/[zZ]|[+-]\d\d:?\d\d$/.test(s)) s += 'Z';   // bare value = stored UTC
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return String(t).replace('T', ' ').slice(0, withSeconds ? 19 : 16);
+    const p = (n) => String(n).padStart(2, '0');
+    const date = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    const time = `${p(d.getHours())}:${p(d.getMinutes())}${withSeconds ? ':' + p(d.getSeconds()) : ''}`;
+    return `${date} ${time}`;
+  }
+
   let _products = [];   // products + map + suggestion (+ our_qty)
   let _storeCode = '';
   let _initiated = false;
@@ -58,7 +73,7 @@
     const glyph = l.status === 'error' ? '✗'
       : l.status === 'skipped' ? '⊘'
       : noChange ? '–' : '✓';
-    const time = (l.created_at || '').replace('T', ' ').slice(0, 19);
+    const time = gyLocalTime(l.created_at, true);
 
     let change = '';
     if (l.status === 'ok') {
@@ -278,7 +293,7 @@
       || x.guanyi_name || ('#' + x.product_id)
     );
     const psku = (x) => x.product_sku ? `<span class="muted" style="font-size:11px;margin-left:6px">${esc(x.product_sku)}</span>` : '';
-    const when = (t) => (t || '').replace('T', ' ').slice(0, 16);
+    const when = (t) => gyLocalTime(t, false);
 
     const modeBadge = mode === 'live'
       ? '<span style="background:#e6f5ec;color:#1a7a44;border:1px solid #b6e0c6;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600">● LIVE</span>'
