@@ -592,6 +592,12 @@ router.get('/api/retail/config', (req, res) => {
     // keeps Alipay greyed ("Coming soon") so customers can't pick a dead rail.
     cfg.payments = Object.assign({}, cfg.payments, {
       alipay: !!getAlipayManual() || (currentTenantId() === ROOTS_TENANT_ID && !ALIPAY_DEV_MODE),
+      // WeChat Pay is selectable on the web storefront (H5/Native) only when a
+      // real merchant is configured. In dev mode /payment/create auto-marks the
+      // order paid WITHOUT charging — fine for the mini-app's gated testing, but
+      // on the open web that's a free-order hole, so keep WeChat OFF until the
+      // tenant's merchant creds land (payContext().devMode === false).
+      wechat: !payContext().devMode,
     });
     res.set('Cache-Control', 'public, max-age=60');
     res.json({ success: true, data: cfg });
@@ -3348,6 +3354,101 @@ async function wechatPayCreate(order, openid, p) {
   }, openid, p);
 }
 
+// ── WeChat Pay web channels (storefront, not the mini-app) ─────────────────
+// The mini-app pays via JSAPI (wx.requestPayment) above. The browser storefront
+// (shop.html) can't call JSAPI, so it uses two other v3 products, picked by the
+// shopper's device:
+//   • H5 (MWEB)  → mobile browser OUTSIDE WeChat: returns an h5_url the browser
+//                  redirects to, which hands off to the WeChat app and bounces
+//                  back to redirect_url when done.
+//   • Native     → desktop browser: returns a code_url (weixin://) we render as
+//                  a QR the shopper scans with their phone's WeChat.
+// Both settle through the SAME async /wechat/callback as JSAPI (keyed on
+// out_trade_no), so no new callback is needed — only these prepare calls.
+
+// POST /v3/pay/transactions/h5 → returns h5_url. `redirectUrl` (optional) is
+// where WeChat returns the browser after pay; `clientIp` is the shopper's IP
+// (required by the H5 scene). `p` is the resolved payContext() for the tenant.
+async function wechatH5Prepare({ outTradeNo, description, amountCents, clientIp, redirectUrl }, p) {
+  const urlPath = '/v3/pay/transactions/h5';
+  const body = {
+    appid:        p.appId,
+    mchid:        p.mchId,
+    description,
+    out_trade_no: outTradeNo,
+    notify_url:   wechatNotifyUrl(),
+    amount:       { total: amountCents, currency: 'CNY' },
+    scene_info:   { payer_client_ip: clientIp || '127.0.0.1', h5_info: { type: 'Wap' } },
+  };
+  const auth = signMerchantRequest('POST', urlPath, body, p);
+  const resp = await fetch('https://api.mch.weixin.qq.com' + urlPath, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json', 'Accept': 'application/json',
+      'Authorization': auth, 'User-Agent': WX_PAY_USER_AGENT,
+    },
+    body: JSON.stringify(body),
+  });
+  const j = await resp.json();
+  if (!j.h5_url) {
+    const err = new Error('wechat_h5_failed: ' + (j.message || JSON.stringify(j)));
+    err.code = 'wechat_pay_failed';
+    throw err;
+  }
+  // Append redirect_url so WeChat returns the shopper to our status page after
+  // pay (WeChat requires it URL-encoded on the h5_url query string).
+  if (redirectUrl) {
+    return j.h5_url + (j.h5_url.includes('?') ? '&' : '?') + 'redirect_url=' + encodeURIComponent(redirectUrl);
+  }
+  return j.h5_url;
+}
+
+// POST /v3/pay/transactions/native → returns code_url (weixin://wxpay/...) for a
+// desktop QR. `p` is the resolved payContext() for the tenant.
+async function wechatNativePrepare({ outTradeNo, description, amountCents }, p) {
+  const urlPath = '/v3/pay/transactions/native';
+  const body = {
+    appid:        p.appId,
+    mchid:        p.mchId,
+    description,
+    out_trade_no: outTradeNo,
+    notify_url:   wechatNotifyUrl(),
+    amount:       { total: amountCents, currency: 'CNY' },
+  };
+  const auth = signMerchantRequest('POST', urlPath, body, p);
+  const resp = await fetch('https://api.mch.weixin.qq.com' + urlPath, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json', 'Accept': 'application/json',
+      'Authorization': auth, 'User-Agent': WX_PAY_USER_AGENT,
+    },
+    body: JSON.stringify(body),
+  });
+  const j = await resp.json();
+  if (!j.code_url) {
+    const err = new Error('wechat_native_failed: ' + (j.message || JSON.stringify(j)));
+    err.code = 'wechat_pay_failed';
+    throw err;
+  }
+  return j.code_url;
+}
+
+// GET /v3/pay/transactions/out-trade-no/{no}?mchid=... → current trade_state.
+// Poll-time fallback so a blocked/missed async notify still settles an H5/Native
+// order (mirrors alipayTradeQuery). The signed url-path INCLUDES the query
+// string per the v3 spec. Returns the trade_state string or null on not-found.
+async function wechatTradeState(outTradeNo, p) {
+  const urlPath = `/v3/pay/transactions/out-trade-no/${encodeURIComponent(outTradeNo)}?mchid=${encodeURIComponent(p.mchId)}`;
+  const auth = signMerchantRequest('GET', urlPath, '', p);
+  const resp = await fetch('https://api.mch.weixin.qq.com' + urlPath, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json', 'Authorization': auth, 'User-Agent': WX_PAY_USER_AGENT },
+  });
+  if (resp.status === 404) return null;   // order not yet seen by WeChat
+  const j = await resp.json();
+  return j.trade_state || null;   // NOTPAY | SUCCESS | REFUND | CLOSED | USERPAYING | PAYERROR
+}
+
 // Real WeChat Pay v3 refund. Sends money back to the payer's original method.
 // Docs: POST /v3/refund/domestic/refunds. Returns the refund result object
 // { refund_id, status: 'SUCCESS'|'PROCESSING'|'CLOSED'|'ABNORMAL', ... }.
@@ -3454,6 +3555,42 @@ async function alipayPrecreate(order) {
     subject:      payDescription(order.order_no),
   }, { notifyUrl: ALIPAY_NOTIFY_URL });
   return biz.qr_code;
+}
+
+// Build a signed Alipay "page" redirect URL the browser navigates to. Unlike
+// precreate (a server POST returning a QR string), alipay.trade.wap.pay (mobile
+// web → hands off to the Alipay app) and alipay.trade.page.pay (desktop web →
+// Alipay login page) are GET redirects: every param + the RSA2 sign rides on the
+// gateway query string. Settles through the SAME async /alipay/callback (keyed
+// on out_trade_no) plus the status-poll query fallback — same as precreate.
+//   mobile === true  → alipay.trade.wap.pay
+//   mobile === false → alipay.trade.page.pay
+// `returnUrl` is the browser-return page after pay (sync redirect; the notify is
+// the source of truth). Returns a fully-signed absolute URL.
+function alipayPageRedirectUrl(order, { mobile, returnUrl } = {}) {
+  const method = mobile ? 'alipay.trade.wap.pay' : 'alipay.trade.page.pay';
+  const bizContent = {
+    out_trade_no: alipayOutTradeNo(order.order_no),
+    total_amount: Number(order.total).toFixed(2),
+    subject:      payDescription(order.order_no),
+    product_code: mobile ? 'QUICK_WAP_WAY' : 'FAST_INSTANT_TRADE_PAY',
+  };
+  const params = {
+    app_id:      ALIPAY_APP_ID,
+    method,
+    format:      'JSON',
+    charset:     'utf-8',
+    sign_type:   'RSA2',
+    timestamp:   alipayTimestamp(),
+    version:     '1.0',
+    notify_url:  ALIPAY_NOTIFY_URL,
+    biz_content: JSON.stringify(bizContent),
+  };
+  if (returnUrl) params.return_url = returnUrl;
+  params.sign = crypto.createSign('RSA-SHA256')
+                      .update(alipaySignString(params), 'utf8')
+                      .sign(ALIPAY_PRIVATE_KEY, 'base64');
+  return ALIPAY_GATEWAY + '?' + new URLSearchParams(params).toString();
 }
 
 // alipay.trade.query → current trade_status for an out_trade_no. Used as a
@@ -3809,6 +3946,24 @@ function markOrderPaid(orderId) {
       // Idempotent for callers that re-fire (e.g. wechat retry callbacks).
       try { inventory.commitOrderReservations(orderId); }
       catch (e) { console.error('[inventory.commit]', e); }
+
+      // Scheduled-for-later GZ orders skip the reserve→commit gate at checkout
+      // (stockGate off), so commitOrderReservations above is a no-op for them and
+      // their stock would otherwise sit untouched until staff click Preparing.
+      // The office wants a Guangzhou order's stock pulled the moment it's paid —
+      // regardless of the delivery day — so decrement now. Idempotent (no-ops on
+      // GZ same-day orders that already reserved, and on any prior prepare-commit).
+      // Out-of-Guangzhou orders are deliberately NOT decremented here: their stock
+      // still commits at the first fulfilment transition, so the warehouse keeps
+      // its restock-before-ship window.
+      try {
+        const ord = tdb().prepare('SELECT address_json FROM retail_orders WHERE id = ?').get(orderId);
+        let addr = null;
+        try { addr = JSON.parse(ord?.address_json || 'null'); } catch { /* no address */ }
+        if (addr && inventory.isGuangzhouAddress(addr)) {
+          prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · paid (GZ scheduled)' });
+        }
+      } catch (e) { console.error('[inventory.prepareCommit (paid GZ)]', e); }
     }
     // Award earn-points on the actual transition. awardOrderPoints is
     // idempotent so calling it on already-paid orders is safe.
@@ -3865,6 +4020,20 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
     'SELECT id, order_no, status, payment_method, total, customer_id FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
+  // Channel hint from the caller. The mini-app sends nothing (→ 'jsapi' for
+  // WeChat / QR-precreate for Alipay, its only options). The web storefront
+  // (shop.html) detects the shopper's device and sends 'h5'/'native' (WeChat)
+  // or 'wap'/'page' (Alipay) so the right web product is used. Settlement is
+  // identical for every channel (async callback keyed on out_trade_no).
+  const channel = String(req.body?.channel || '').toLowerCase();
+  // Shopper's IP — required by the WeChat H5 scene. Trust the proxy's
+  // X-Forwarded-For first hop (we sit behind nginx), else the socket address.
+  const clientIp = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()
+    || req.socket?.remoteAddress || '127.0.0.1';
+  // Page to return the browser to after a redirect-style pay (WeChat H5 /
+  // Alipay wap+page). Lands on the storefront order screen, which polls
+  // /payment/status until the async notify settles. Same origin as the notify.
+  const returnUrl = `${PAY_NOTIFY_ORIGIN}/shop.html#/order/${order.id}`;
   // THIS request's WeChat Pay creds (Roots → env bundle = unchanged; a tenant →
   // its own merchant, or devMode when unconfigured). Resolved once here.
   const payCtx = payContext();
@@ -3896,6 +4065,53 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
 
   // ── PROD path ─────────────────────────────────────────────────────────
   if (order.payment_method === 'wechat') {
+    // The async callback finds the order by out_trade_no, so every WeChat
+    // channel stamps it the same way before returning.
+    const stampOutTradeNo = () => tdb().prepare(
+      "UPDATE retail_payments SET out_trade_no = ? WHERE order_id = ? AND status = 'pending'"
+    ).run(wxOutTradeNo(order.order_no), orderId);
+
+    // Web storefront — mobile browser OUTSIDE WeChat: H5 (MWEB) hands off to the
+    // WeChat app and returns to redirect_url.
+    if (channel === 'h5') {
+      try {
+        const h5Url = await wechatH5Prepare({
+          outTradeNo:  wxOutTradeNo(order.order_no),
+          description: payDescription(order.order_no),
+          amountCents: Math.round(Number(order.total) * 100),
+          clientIp, redirectUrl: returnUrl,
+        }, payCtx);
+        stampOutTradeNo();
+        return res.json({ success: true, data: { method: 'wechat', mode: 'h5', h5_url: h5Url, order_no: order.order_no, total: order.total } });
+      } catch (e) {
+        console.error('[wechat-pay/create h5]', e);
+        return res.status(502).json({ success: false, error: e.code || 'wechat_pay_failed' });
+      }
+    }
+
+    // Web storefront — desktop browser: Native returns a code_url we render as a
+    // QR for the shopper to scan with phone WeChat. The status poll's WeChat
+    // trade-state fallback settles it if the async notify is delayed.
+    if (channel === 'native') {
+      try {
+        const codeUrl = await wechatNativePrepare({
+          outTradeNo:  wxOutTradeNo(order.order_no),
+          description: payDescription(order.order_no),
+          amountCents: Math.round(Number(order.total) * 100),
+        }, payCtx);
+        let qrPng = null;
+        try { qrPng = qrpng.qrPngDataUrl(codeUrl, { scale: 10, quiet: 4 }); }
+        catch (e) { console.error('[wechat/qr-render]', e.message); }
+        stampOutTradeNo();
+        return res.json({ success: true, data: { method: 'wechat', mode: 'native', code_url: codeUrl, qr_png: qrPng, order_no: order.order_no, total: order.total } });
+      } catch (e) {
+        console.error('[wechat-pay/create native]', e);
+        return res.status(502).json({ success: false, error: e.code || 'wechat_pay_failed' });
+      }
+    }
+
+    // Default — JSAPI (mini-app, or shop opened INSIDE WeChat). Needs the
+    // customer's openid.
     try {
       // Pull the customer's openid for the JSAPI call
       const cust = tdb().prepare('SELECT openid FROM retail_customers WHERE id = ?').get(order.customer_id);
@@ -3905,9 +4121,7 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
       const prepayId = await wechatPayCreate(order, cust.openid, payCtx);
       const params   = buildWxRequestPaymentParams(prepayId, payCtx);
       // Save the out_trade_no link for the async callback to find this order
-      tdb().prepare(
-        "UPDATE retail_payments SET out_trade_no = ? WHERE order_id = ? AND status = 'pending'"
-      ).run(wxOutTradeNo(order.order_no), orderId);
+      stampOutTradeNo();
       return res.json({ success: true, data: { method: 'wechat', ...params } });
     } catch (e) {
       console.error('[wechat-pay/create]', e);
@@ -3949,6 +4163,22 @@ router.post('/api/retail/payment/create', requireRetailAuth, express.json(), asy
     // primary rail and is fully per-tenant above.
     if (currentTenantId() !== ROOTS_TENANT_ID || ALIPAY_DEV_MODE) {
       return res.status(501).json({ success: false, error: 'alipay_not_configured' });
+    }
+    // Web storefront — Alipay redirects (mobile wap → hands off to the Alipay
+    // app; desktop page → Alipay login). One-tap, no QR to scan. Returns a
+    // signed gateway URL the browser navigates to; settlement rides the same
+    // async /alipay/callback + status-poll query as precreate.
+    if (channel === 'wap' || channel === 'page') {
+      try {
+        const payUrl = alipayPageRedirectUrl(order, { mobile: channel === 'wap', returnUrl });
+        tdb().prepare(
+          "UPDATE retail_payments SET out_trade_no = ? WHERE order_id = ? AND status = 'pending'"
+        ).run(alipayOutTradeNo(order.order_no), orderId);
+        return res.json({ success: true, data: { method: 'alipay', mode: 'redirect', pay_url: payUrl, order_no: order.order_no, total: order.total } });
+      } catch (e) {
+        console.error('[alipay/create redirect]', e);
+        return res.status(502).json({ success: false, error: e.code || 'alipay_failed' });
+      }
     }
     try {
       const qrCode = await alipayPrecreate(order);
@@ -3999,6 +4229,27 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
         }
       }
     } catch (e) { console.warn('[alipay/poll-query]', e.message); }
+  }
+  // WeChat fallback: same idea for the web H5/Native channels (the JSAPI flow
+  // gets its result via wx.requestPayment, but a redirect/QR pay relies on the
+  // async notify, which can lag). Query the trade-state so a delayed callback
+  // still settles. payContext() resolves this request's tenant merchant.
+  if (order.status === 'pending_payment' && order.payment_method === 'wechat') {
+    const wxCtx = payContext();
+    if (!wxCtx.devMode) {
+      try {
+        const pay = tdb().prepare(
+          "SELECT out_trade_no FROM retail_payments WHERE order_id = ? AND status = 'pending'"
+        ).get(orderId);
+        if (pay?.out_trade_no) {
+          const st = await wechatTradeState(pay.out_trade_no, wxCtx);
+          if (st === 'SUCCESS') {
+            markOrderPaid(orderId);
+            order = tdb().prepare(sel).get(orderId, req.customer.id);
+          }
+        }
+      } catch (e) { console.warn('[wechat/poll-query]', e.message); }
+    }
   }
   // Surface pickup store details for the success screen ("collect at <store>").
   if (order.fulfillment_type === 'pickup' && order.address_json) {
@@ -13116,6 +13367,27 @@ router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), (req,
   catch (e) { console.error('[retail-admin/config PUT]', e); return res.status(500).json({ success: false, error: 'update_failed' }); }
   logActivity(req.user.id, req.user.username, 'update', 'storefront_config', null, { keys: entries.map(e => e[0]) }, req.ip);
   res.json({ success: true, data: loadConfig() });
+});
+
+// System Alerts — send a test message to a WeCom group-bot webhook so the operator
+// can verify it BEFORE relying on it. Tests the typed value (body.webhook) when given,
+// else the saved system_alerts.wecom_webhook. Only qyapi.weixin.qq.com is allowed.
+router.post('/api/retail-admin/system-alerts/test', requireRetailAdmin, express.json(), async (req, res) => {
+  let raw = String((req.body && req.body.webhook) || '').trim();
+  if (!raw) { try { raw = String(loadConfig().system_alerts?.wecom_webhook || '').trim(); } catch (_) {} }
+  if (!raw) return res.json({ success: false, error: 'no_webhook' });
+  const url = /^https?:\/\//i.test(raw) ? raw : `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=${raw}`;
+  let host; try { host = new URL(url).hostname; } catch (_) { return res.json({ success: false, error: 'bad_url' }); }
+  if (host !== 'qyapi.weixin.qq.com') return res.json({ success: false, error: 'domain_not_allowed' });
+  try {
+    const r = await fetch(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msgtype: 'text', text: { content: '[System Alerts · 系统告警] ✅ Test — Full Circle system notifications are wired to this group.' } }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (j.errcode === 0) return res.json({ success: true });
+    return res.json({ success: false, error: j.errmsg || ('errcode ' + j.errcode) });
+  } catch (e) { return res.json({ success: false, error: e.message }); }
 });
 
 // Manual-Alipay (静态收款码) admin config. Lives under the private
