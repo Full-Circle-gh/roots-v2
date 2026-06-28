@@ -49,6 +49,7 @@ async function actAdminInit() {
   if (f && !f.value) f.value = ACT.from;
   if (t && !t.value) t.value = ACT.to;
   actLoad(true);
+  actStartPolling();
 }
 
 function actReadFilters() {
@@ -66,12 +67,14 @@ function actQueryString(extra) {
   return p.toString();
 }
 
-async function actLoad(reset) {
+// `silent` = a background auto-refresh: skip the "Loading…" placeholder so the
+// table doesn't flash, and swallow transient errors (the next tick retries).
+async function actLoad(reset, silent) {
   actReadFilters();
   if (reset) { ACT.offset = 0; ACT.rows = []; }
   ACT.loading = true;
   const body = document.getElementById('act-tbody');
-  if (reset && body) body.innerHTML = `<tr><td colspan="7" class="muted" style="padding:18px;text-align:center">${actT('Loading…', '加载中…')}</td></tr>`;
+  if (reset && body && !silent) body.innerHTML = `<tr><td colspan="7" class="muted" style="padding:18px;text-align:center">${actT('Loading…', '加载中…')}</td></tr>`;
   try {
     const j = await api('/api/retail-admin/activity?' + actQueryString({ limit: ACT.limit, offset: ACT.offset }));
     ACT.rows = reset ? j.rows : ACT.rows.concat(j.rows);
@@ -80,8 +83,27 @@ async function actLoad(reset) {
     actRenderCaption(j.summary, j.total);
     actRenderRows();
   } catch (e) {
-    if (body) body.innerHTML = `<tr><td colspan="7" class="muted" style="padding:18px;text-align:center;color:var(--danger,#c0392b)">${escapeHtml(e.message)}</td></tr>`;
+    if (!silent && body) body.innerHTML = `<tr><td colspan="7" class="muted" style="padding:18px;text-align:center;color:var(--danger,#c0392b)">${escapeHtml(e.message)}</td></tr>`;
   } finally { ACT.loading = false; }
+}
+
+// ── Live auto-refresh ────────────────────────────────────────────────────────
+// Stock moves constantly (orders, daemons, quick-stock). Poll the current view
+// while the Activity tab is the active, visible tab so the timeline stays live
+// without a manual reload. Paused when the tab is backgrounded/hidden, while a
+// load is in flight, or once the operator has paged past the first page (so an
+// auto-refresh never yanks them back to the top mid-scroll).
+let _actPollTimer = null;
+function actTabVisible() {
+  return !document.hidden
+    && !!document.getElementById('tab-activity')?.classList.contains('active');
+}
+function actStartPolling() {
+  if (_actPollTimer) return;
+  _actPollTimer = setInterval(() => {
+    if (ACT.loading || ACT.offset > 0 || !actTabVisible()) return;
+    actLoad(true, true);  // silent first-page refresh
+  }, 15000);
 }
 
 // Fixed channel order for the switcher tabs. 'All channels' first, then one
