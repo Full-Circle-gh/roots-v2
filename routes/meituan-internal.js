@@ -150,6 +150,29 @@ router.post('/ingest-order', (req, res) => {
       deducted++;
     }
 
+    // 3. Surface unmatched line-items. Previously these were dropped silently —
+    //    a combo component with no SKU token / map entry just vanished, leaving
+    //    no ledger row and no trace (e.g. an un-mapped 套餐). Log every order's
+    //    matched/unmatched breakdown so gaps are visible in the sync log and the
+    //    operator can map what's missing instead of guessing.
+    if (unresolved.length) {
+      try {
+        const matched = items.filter(i => i.productId)
+          .map(i => ({ name: i.name, sku: i.sku, qty: i.qty, by: i.matchBy }));
+        db.prepare(`
+          INSERT INTO meituan_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_unsynced', 'warn', ?, ?)
+        `).run(
+          storeCode || null,
+          JSON.stringify({ ref, deducted, matched, unresolved }),
+          `${unresolved.length} item(s) not synced: ` +
+            unresolved.map(u => `${u.name}${u.sku ? ` (${u.sku})` : ''} x${u.qty} [${u.reason}]`).join('; ')
+        );
+      } catch (logErr) {
+        console.error('[meituan-internal] order_unsynced log failed:', logErr.message);
+      }
+    }
+
     res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved });
   } catch (err) {
     console.error('[meituan-internal] ingest-order error:', err);
