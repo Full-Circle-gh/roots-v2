@@ -221,6 +221,9 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
       <button class="icon-btn" id="refreshBtn" title="Refresh" aria-label="Refresh">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
       </button>
+      <button class="icon-btn" id="logoutBtn" title="Sign out" aria-label="Sign out">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      </button>
     </div>
     <button class="store-pill" id="storePill" hidden>
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>
@@ -380,6 +383,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     $('#hTitle').textContent = add ? t('Add Stock', '加库存') : t('Quick Stock', '快速库存');
     $('#hsub').textContent = state.userName ? (t('Signed in as ', '已登录:') + state.userName) : '';
     $('#langLbl').textContent = lang === 'cn' ? 'EN' : '中';
+    $('#logoutBtn').title = t('Sign out', '退出登录');
     $('#q').placeholder = t('Search products', '搜索商品');
     $('#storeSheetH').textContent = t('Choose store', '选择门店');
     $('#kpLabel').textContent = add ? t('How many did you make?', '制作了多少?') : t('Set count', '设置数量');
@@ -412,6 +416,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     $('#langBtn').onclick = toggleLang;
     $('#refreshBtn').onclick = function () { loadStock(true); };
     $('#themeBtn').onclick = toggleTheme;
+    $('#logoutBtn').onclick = logout;
     $('#q').addEventListener('input', function (e) {
       state.q = e.target.value.trim().toLowerCase();
       $('#qClear').classList.toggle('show', !!state.q);
@@ -433,6 +438,18 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     });
     $('#kpSave').onclick = kpSave;
     $('#kpBack').onclick = closeKeypad;
+  }
+
+  // Sign out. /stock serves both realms (kitchen users + backend operators), so
+  // clear both — whichever isn't active is a harmless no-op — then hand off to
+  // /stock-login, which picks the right login page by host.
+  function logout() {
+    if (!window.confirm(t('Sign out?', '退出登录?'))) return;
+    var opts = { method: 'POST', credentials: 'same-origin' };
+    var done = function () { location.href = '/stock-login'; };
+    fetch('/api/auth/logout', opts).catch(function () {})
+      .then(function () { return fetch('/api/backend/logout', opts).catch(function () {}); })
+      .then(done, done);
   }
 
   function toggleLang() {
