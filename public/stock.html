@@ -146,15 +146,12 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
 .row.out .stepper .qty{color:var(--danger);}
 .row.out .stepper .minus{opacity:.4;}
 
-/* Add-Stock mode: a tappable card with NO current count — kitchen staff only
-   ever log what they just made, never see or recount the shelf total. */
-.row.add{display:flex;align-items:center;gap:12px;padding:14px;}
-.row.add:active{background:var(--bg-elev-1);}
-.row.add .r-main{flex:1;min-width:0;}
-.row.add .addbtn{flex:none;display:flex;align-items:center;gap:6px;height:44px;padding:0 16px 0 13px;
-  border-radius:13px;background:var(--accent);color:var(--accent-ink);font-size:15px;font-weight:700;}
-.row.add .addbtn svg{width:20px;height:20px;}
-.row.add:active .addbtn{filter:brightness(.95);}
+/* Add-Stock mode reuses the SAME comfortable card + big stepper as recount —
+   only the number means "how many you're adding" (starts +0, commits as a delta,
+   then resets). The current shelf total is never shown. */
+.stepper .qty.add{color:var(--accent);}                 /* tint so "+5" reads as an add, not a stock count */
+.row.addmode .r-addhint{font-size:12.5px;font-weight:600;color:var(--text-3);}
+.row.addmode .stepper .minus.off{opacity:.35;}
 
 .screen{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:40px 28px;gap:14px;color:var(--text-2);}
 .screen .big{width:66px;height:66px;border-radius:19px;display:grid;place-items:center;background:var(--bg-pane);border:1px solid var(--line);color:var(--text-3);}
@@ -310,6 +307,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     items: [],
     filter: 'all', q: '',
     pending: {},
+    addQty: {},           // add mode: pending "to add" amount per product (never the shelf total)
     view: 'list',         // list | off | nostore | error
     errMsg: '',
   };
@@ -460,6 +458,7 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
       state.items = rows.map(function (r) { return { id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku, physical_qty: r.physical_qty | 0, restock_target: r.restock_target != null ? r.restock_target : null }; });
       state.items.sort(skuCompare);
       state.pending = {};
+      state.addQty = {};
       render();
     }).catch(function (e) {
       if (e.message !== 'auth') toast(t('Couldn\'t load', '加载失败'), 'err');
@@ -499,16 +498,22 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
   var ICO_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
 
   function rowHtml(it) {
-    // Add mode: a tappable card with NO count — name/SKU + an "Add" button that
-    // opens the quantity sheet. The shelf total is never rendered.
+    // Add mode: SAME card + big stepper as recount, but the number is how many
+    // you're adding (starts +0). The current shelf total is never rendered.
     if (state.mode === 'add') {
+      var n0 = state.addQty[it.id] || 0;
       return '' +
-        '<div class="row add" id="row-' + it.id + '" data-add="' + it.id + '">' +
-          '<div class="r-main">' +
-            '<div class="r-name">' + esc(pname(it)) + '</div>' +
-            (it.sku ? '<div class="r-sub">' + esc(it.sku) + '</div>' : '') +
+        '<div class="row addmode" id="row-' + it.id + '">' +
+          '<div class="r-name">' + esc(pname(it)) + '</div>' +
+          (it.sku ? '<div class="r-sub">' + esc(it.sku) + '</div>' : '') +
+          '<div class="r-foot">' +
+            '<div class="r-addhint">' + t('How many made?', '制作了多少?') + '</div>' +
+            '<div class="stepper">' +
+              '<button class="minus' + (n0 <= 0 ? ' off' : '') + '" data-dec="' + it.id + '" aria-label="Minus">' + ICO_MINUS + '</button>' +
+              '<button class="qty add" data-open="' + it.id + '">+' + n0 + '</button>' +
+              '<button class="plus" data-inc="' + it.id + '" aria-label="Plus">' + ICO_PLUS + '</button>' +
+            '</div>' +
           '</div>' +
-          '<div class="addbtn">' + ICO_PLUS + '<span>' + t('Add', '加') + '</span></div>' +
         '</div>';
     }
     var st = statusOf(it);
@@ -531,7 +536,12 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
 
   function wireRow(id) {
     var row = $('#row-' + id); if (!row) return;
-    if (state.mode === 'add') { row.onclick = function () { openKeypad(id); }; return; }
+    if (state.mode === 'add') {
+      $('[data-dec="' + id + '"]', row).onclick = function () { bumpAdd(id, -1); };
+      $('[data-inc="' + id + '"]', row).onclick = function () { bumpAdd(id, +1); };
+      $('[data-open="' + id + '"]', row).onclick = function () { openKeypad(id); };
+      return;
+    }
     $('[data-dec="' + id + '"]', row).onclick = function () { bump(id, -1); };
     $('[data-inc="' + id + '"]', row).onclick = function () { bump(id, +1); };
     $('[data-open="' + id + '"]', row).onclick = function () { openKeypad(id); };
@@ -540,6 +550,44 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
   function bump(id, delta) {
     var it = itemById(id); if (!it) return;
     setQty(id, Math.max(0, it.physical_qty + delta), false);
+  }
+
+  // ── Add mode: the stepper builds a "to add" amount, then commits it as one
+  // delta after a short pause and resets to +0 (same muscle memory as recount,
+  // but additive and never showing the shelf total). ──
+  function bumpAdd(id, delta) {
+    state.addQty[id] = Math.max(0, (state.addQty[id] || 0) + delta);
+    paintAddRow(id);
+    var p = state.pending[id] || (state.pending[id] = {});
+    clearTimeout(p.timer);
+    p.timer = setTimeout(function () { flushAdd(id); }, 700);
+  }
+  function paintAddRow(id) {
+    var row = $('#row-' + id); if (!row) return;
+    var n = state.addQty[id] || 0;
+    var q = row.querySelector('.qty'); if (q) q.textContent = '+' + n;
+    var m = row.querySelector('.minus'); if (m) m.classList.toggle('off', n <= 0);
+  }
+  function flushAdd(id) {
+    if (state.pending[id]) { clearTimeout(state.pending[id].timer); delete state.pending[id]; }
+    var n = state.addQty[id] || 0;
+    if (n <= 0) return;
+    var it = itemById(id);
+    state.addQty[id] = 0; paintAddRow(id);
+    var q = $('#row-' + id + ' .qty'); if (q) q.classList.add('saving');
+    api(API + '/stores/' + state.storeId + '/stock/' + id, { method: 'PATCH', body: { delta: n, reason: 'kitchen_add', note: 'add-stock' } })
+      .then(function () {
+        if (it) it.physical_qty += n;
+        var q2 = $('#row-' + id + ' .qty'); if (q2) q2.classList.remove('saving');
+        toast(t('+' + n + ' added', '已加 ' + n + ' 件') + (it ? ' · ' + pname(it) : ''));
+      })
+      .catch(function (e) {
+        if (e.message === 'auth') return;
+        state.addQty[id] = (state.addQty[id] || 0) + n;   // restore so they can retry
+        paintAddRow(id);
+        var q2 = $('#row-' + id + ' .qty'); if (q2) q2.classList.remove('saving');
+        toast(t('Add failed', '添加失败') + (e.message ? ' (' + e.message + ')' : ''), 'err');
+      });
   }
 
   function paintRow(id) {
@@ -595,9 +643,9 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     $('#kpBack').classList.add('show'); $('#kpSheet').classList.add('show');
   }
   function closeKeypad() { $('#kpBack').classList.remove('show'); $('#kpSheet').classList.remove('show'); kp.id = null; }
-  // Add mode starts the keypad at 0 (you're entering how many you MADE, not the
-  // shelf total) — so the current count is never shown.
-  function kpCurrent() { if (state.mode === 'add') return 0; var it = itemById(kp.id); return it ? it.physical_qty : 0; }
+  // Add mode shows the pending "to add" amount (not the shelf total) — typically
+  // 0 — so the current count is never revealed.
+  function kpCurrent() { if (state.mode === 'add') return state.addQty[kp.id] || 0; var it = itemById(kp.id); return it ? it.physical_qty : 0; }
   function renderKpVal() {
     var v = kp.entry !== null ? kp.entry : String(kpCurrent());
     if (v === '') v = '0';
@@ -622,29 +670,16 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     var id = kp.id, it = itemById(id);
     if (!it) { closeKeypad(); return; }
     if (state.mode === 'add') {
-      var n = kp.entry !== null ? (parseInt(kp.entry, 10) || 0) : 0;
+      var n = kp.entry !== null ? (parseInt(kp.entry, 10) || 0) : (state.addQty[id] || 0);
+      state.addQty[id] = Math.max(0, n);
       closeKeypad();
-      if (n > 0) addStock(id, n);
+      paintAddRow(id);
+      if (state.addQty[id] > 0) flushAdd(id);   // typed entry commits immediately
       return;
     }
     var v = kp.entry !== null ? (parseInt(kp.entry, 10) || 0) : it.physical_qty;
     closeKeypad();
     if (v !== it.physical_qty) setQty(id, v, true);
-  }
-
-  // Send a relative add. The server resolves current+N atomically; we keep the
-  // in-memory total in step (never displayed) so repeated adds stay correct.
-  function addStock(id, n) {
-    var it = itemById(id);
-    api(API + '/stores/' + state.storeId + '/stock/' + id, { method: 'PATCH', body: { delta: n, reason: 'kitchen_add', note: 'add-stock' } })
-      .then(function () {
-        if (it) it.physical_qty += n;
-        toast(t('+' + n + ' added', '已加 ' + n + ' 件') + (it ? ' · ' + pname(it) : ''));
-      })
-      .catch(function (e) {
-        if (e.message === 'auth') return;
-        toast(t('Add failed', '添加失败') + (e.message ? ' (' + e.message + ')' : ''), 'err');
-      });
   }
 
   // ── Store sheet ──
