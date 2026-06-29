@@ -17537,10 +17537,16 @@ router.post('/api/retail-admin/orders/:id/jd-waybill/cancel', requireRetailAdmin
 // Stays explicit so accidental sql-injection-style status values can't slip in.
 const STATUS_TRANSITIONS = {
   paid:       { col: 'paid_at',       prev: ['pending_payment'] },
-  preparing:  { col: 'preparing_at',  prev: ['paid'] },
+  // awaiting_restock → preparing is the manual "Restocked → Start preparing"
+  // button. The order holds no reservation (stock was never deducted while it
+  // waited), but prepareCommitUnreservedOrder() below deducts it on the way into
+  // preparing — same path as out-of-GZ / scheduled orders — so this can't oversell.
+  preparing:  { col: 'preparing_at',  prev: ['paid', 'awaiting_restock'] },
   dispatched: { col: 'dispatched_at', prev: ['preparing', 'paid'] },
   delivered:  { col: 'delivered_at',  prev: ['dispatched'] },
-  cancelled:  { col: 'cancelled_at',  prev: ['pending_payment', 'paid', 'preparing'] },
+  // awaiting_restock cancels refund the (already-paid) customer; there's no
+  // committed stock to reverse, so the reversal below is a harmless no-op.
+  cancelled:  { col: 'cancelled_at',  prev: ['pending_payment', 'paid', 'preparing', 'awaiting_restock'] },
   refunded:   { col: null,            prev: ['paid', 'preparing', 'dispatched', 'delivered'] },
 };
 
