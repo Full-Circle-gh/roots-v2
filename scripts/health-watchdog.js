@@ -55,6 +55,9 @@ const FAIL_THRESHOLD = parseInt(envVal('HEALTH_FAILS', '2'), 10);
 const FD_WARN = parseInt(envVal('HEALTH_FD_WARN', '50000'), 10);
 const DISK_WARN_PCT = parseInt(envVal('HEALTH_DISK_WARN_PCT', '85'), 10);
 const MEM_WARN_MB = parseInt(envVal('HEALTH_MEM_WARN_MB', '200'), 10);
+// Above this 1-min load-per-core, a probe timeout is treated as box overload
+// (thrashing) rather than a dead app, and the auto-restart is suppressed.
+const LOAD_SKIP_PER_CORE = parseFloat(envVal('HEALTH_LOAD_SKIP_PER_CORE', '4'));
 const PROBE_TIMEOUT_MS = 8000;
 
 function loadState() {
@@ -136,14 +139,27 @@ async function probeApp() {
   console.error(`[health] app probe FAILED (${state.fails}/${FAIL_THRESHOLD}) ${APP_URL}`);
   if (state.fails >= FAIL_THRESHOLD && !state.down) {
     state.down = true;
-    let restartMsg = '';
-    try {
-      execFileSync('pm2', ['restart', 'roots-v2'], { encoding: 'utf8' });
-      restartMsg = 'auto-ran `pm2 restart roots-v2`';
-    } catch (e) {
-      restartMsg = 'pm2 restart FAILED: ' + e.message;
+    // A probe timeout while the box is thrashing (CPU starved) usually means the
+    // event loop can't answer in time — NOT that the app died. Restarting then
+    // only adds load and blanks :4000 for a beat, turning overload into a 502
+    // loop (2026-06-29 incident: load hit 20 on 2 cores from too many browser
+    // daemons → watchdog restart-looped roots-v2). A genuinely dead app leaves
+    // load LOW, so high load-per-core is the tell: alert, don't restart.
+    const cores = os.cpus().length || 1;
+    const load1 = os.loadavg()[0];
+    const perCore = load1 / cores;
+    if (perCore >= LOAD_SKIP_PER_CORE) {
+      await sendOpsAlert(`🟠 roots-v2 probe timed out but the box is OVERLOADED — load ${load1.toFixed(2)} on ${cores} cores (${perCore.toFixed(1)}/core), memAvail ${memMb}MB. Skipping auto-restart: restarting under load makes it worse. Likely too many browser daemons — shed load (stop a channel) or upsize the box.`);
+    } else {
+      let restartMsg = '';
+      try {
+        execFileSync('pm2', ['restart', 'roots-v2'], { encoding: 'utf8' });
+        restartMsg = 'auto-ran `pm2 restart roots-v2`';
+      } catch (e) {
+        restartMsg = 'pm2 restart FAILED: ' + e.message;
+      }
+      await sendOpsAlert(`🔴 roots-v2 storefront DOWN — app not responding on :4000 after ${state.fails} checks. ${restartMsg}. If this repeats, the box may be wedging (see 2026-06-28 incident).`);
     }
-    await sendOpsAlert(`🔴 roots-v2 storefront DOWN — app not responding on :4000 after ${state.fails} checks. ${restartMsg}. If this repeats, the box may be wedging (see 2026-06-28 incident).`);
   }
   saveState(state);
 })();
