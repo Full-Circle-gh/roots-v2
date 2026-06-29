@@ -354,12 +354,18 @@ function renderDiagnosticsBlock(diag) {
     ? logs.map(l => {
         const isErr = l.kind === 'error';
         const detail = [l.stack, l.extra].filter(Boolean).join('\n');
+        // The message alone (e.g. a bare "MiniProgramError") is often useless —
+        // the real cause is in the stack. Surface it inline, collapsed, instead
+        // of hiding it in a hover tooltip support won't find.
+        const detailHtml = detail
+          ? `<details style="margin-top: var(--s2);"><summary class="muted" style="cursor: pointer; font-size: 12px;">${cuT('stack / details', '堆栈 / 详情')}</summary><pre style="white-space: pre-wrap; word-break: break-word; font-size: 11px; margin: var(--s2) 0 0; max-height: 240px; overflow: auto;">${escapeHtml(detail)}</pre></details>`
+          : '';
         return `
         <tr${isErr ? ' style="background: color-mix(in srgb, var(--danger) 7%, transparent);"' : ''}>
           <td class="muted" style="white-space: nowrap;">${cuFmtTime(l.created_at)}</td>
           <td><span class="cu-pill${isErr ? ' blocked' : ''}">${isErr ? cuT('error', '报错') : cuT('open', '启动')}</span></td>
           <td class="muted" style="word-break: break-all;">${escapeHtml(l.page || '—')}</td>
-          <td${detail ? ' title="' + escapeHtml(detail) + '"' : ''} style="word-break: break-word;">${escapeHtml(l.message || (isErr ? '—' : (l.app_version || '—')))}</td>
+          <td style="word-break: break-word;">${escapeHtml(l.message || (isErr ? '—' : (l.app_version || '—')))}${detailHtml}</td>
         </tr>`;
       }).join('')
     : `<tr><td colspan="4" class="muted">${cuT('No diagnostics logged yet.', '暂无诊断记录。')}</td></tr>`;
@@ -402,8 +408,12 @@ function cuCopyDiagnostics() {
     `Errors (7d): ${diag.error_count_7d || 0} · Active sessions: ${(d.stats && d.stats.active_sessions) || 0}`,
     '',
     'Recent log:',
-    ...((diag.recent_logs || []).slice(0, 10).map(l =>
-      `  [${cuFmtTime(l.created_at)}] ${l.kind} ${l.page || ''} — ${l.message || l.app_version || ''}`)),
+    ...((diag.recent_logs || []).slice(0, 10).flatMap(l => {
+      const head = `  [${cuFmtTime(l.created_at)}] ${l.kind} ${l.page || ''} — ${l.message || l.app_version || ''}`;
+      const detail = [l.stack, l.extra].filter(Boolean).join('\n');
+      // Indent the stack under its log line so engineering gets the real cause.
+      return detail ? [head, ...detail.split('\n').map(s => '      ' + s)] : [head];
+    })),
   ];
   const text = lines.join('\n');
   const done = () => (typeof toast === 'function' ? toast(cuT('Diagnostics copied', '诊断已复制')) : null);

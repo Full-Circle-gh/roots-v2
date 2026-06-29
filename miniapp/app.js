@@ -158,6 +158,25 @@ App({
     } catch (e) { /* never let the error reporter throw */ }
   },
 
+  // Stale share cards, QR scenes, or an old console "start page" can point at
+  // a path that no longer exists (e.g. the conventional pages/index/index,
+  // which this app never registered — its entry is pages/home/home). Without a
+  // handler WeChat surfaces that as an uncaught MiniProgramError and the app
+  // fails to open. Land the customer on home instead, and log it so support can
+  // see the bad path that was attempted.
+  onPageNotFound(res) {
+    try { diag.reportError('onPageNotFound: ' + (res && res.path), null, res); } catch (e) {}
+    // home is a tab-bar page → switchTab; reLaunch covers anything else.
+    try {
+      wx.switchTab({
+        url: '/pages/home/home',
+        fail() { try { wx.reLaunch({ url: '/pages/home/home' }); } catch (e) {} },
+      });
+    } catch (e) {
+      try { wx.reLaunch({ url: '/pages/home/home' }); } catch (e2) {}
+    }
+  },
+
   // Read launch options + scene query string and stash preview state on
   // globalData if the right flags are present. Two sources are accepted:
   //   1. options.query.preview_draft = '1' + options.query.preview_token + page
