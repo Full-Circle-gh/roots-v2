@@ -302,6 +302,8 @@ app.use(require('./routes/retail-page-templates')); // product editor: imported 
 app.use('/api/internal/meituan', require('./routes/meituan-internal')); // daemon-only, localhost
 app.use(require('./routes/meituan-admin')); // retail-admin Meituan sync config
 app.use(require('./routes/guanyi-admin')); // retail-admin Guanyi (gzgrocery) sync config
+app.use('/api/internal/eleme', require('./routes/eleme-internal')); // daemon-only, localhost
+app.use(require('./routes/eleme-admin')); // retail-admin Eleme sync config + OAuth callback
 
 // Login page
 app.get('/login', (req, res) => {

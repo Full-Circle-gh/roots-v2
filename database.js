@@ -3917,6 +3917,121 @@ for (const t of ['meituan_product_map', 'meituan_bundle_components', 'meituan_sy
   }
 })(db);
 
+// ── Eleme open-platform sync (饿了么开放平台, 2026-06-28) ─────────────────────
+// A third sales channel, structurally parallel to the Meituan layer above but
+// driven by Eleme's GENUINE OAuth2 + JSON-RPC open API (open-api.shop.ele.me) —
+// no headless browser, proxy, or risk-control dance. The eleme-daemon process
+// holds a per-account access_token, pulls new orders (decrementing our stock),
+// and pushes stock changes (resolve item by 货号/extendCode → batchUpdateStock).
+// Feature is on/off per tenant via storefront_config key 'eleme.enabled'.
+
+// Per-authorised-account OAuth token store. One row per `account` (we key it by
+// store_code so each store authorises its own Eleme shop). access_token is
+// short-lived; refresh_token rotates it. expires_at is an absolute epoch-ms so
+// the daemon can refresh proactively. Written by the OAuth callback + daemon.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eleme_tokens (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    account       TEXT UNIQUE NOT NULL,      -- store_code (one Eleme shop per store)
+    access_token  TEXT,
+    refresh_token TEXT,
+    token_type    TEXT,
+    scope         TEXT,
+    expires_at    INTEGER,                   -- epoch-ms when access_token expires
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// Maps a roots store to its Eleme shop. The OAuth grant exposes the merchant's
+// shop ids; the operator picks which Eleme shop this roots store mirrors. shop_id
+// is the argument every product/order API call needs.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eleme_shops (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_store_id INTEGER NOT NULL,
+    store_code      TEXT NOT NULL,
+    shop_id         TEXT,
+    shop_name       TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(retail_store_id),
+    FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id) ON DELETE CASCADE
+  );
+`);
+
+// Roots product ↔ Eleme listing bridge. Eleme resolves a listing by its 货号
+// (extendCode) which we hold in store_products.sku, so most products auto-map by
+// SKU and no manual name entry is needed (unlike Meituan 外卖). extend_code is an
+// optional override when a store's Eleme 货号 differs from our SKU; spec_id /
+// item_id cache the resolved Eleme ids so the daemon skips re-lookup.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eleme_product_map (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_store_id   INTEGER NOT NULL,
+    product_id        INTEGER NOT NULL,
+    store_code        TEXT NOT NULL,
+    extend_code       TEXT,                  -- override 货号; NULL = use store_products.sku
+    eleme_name        TEXT,                  -- cached Eleme item title (display only)
+    item_id           TEXT,                  -- cached Eleme item id
+    spec_id           TEXT,                  -- cached Eleme spec id (the stock target)
+    last_pushed_qty   INTEGER,
+    last_pushed_at    DATETIME,
+    sync_enabled      INTEGER NOT NULL DEFAULT 1,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(retail_store_id, product_id),
+    FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id)      REFERENCES store_products(id) ON DELETE CASCADE
+  );
+`);
+
+// Queue of stock changes to push to Eleme. Written by enqueueChannelSync whenever
+// retail_store_stock moves; consumed by the eleme-daemon.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eleme_sync_queue (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_store_id  INTEGER NOT NULL,
+    product_id       INTEGER NOT NULL,
+    store_code       TEXT NOT NULL,
+    new_qty          INTEGER NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending',
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    last_error       TEXT,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    processed_at     DATETIME,
+    FOREIGN KEY (retail_store_id) REFERENCES retail_stores(id),
+    FOREIGN KEY (product_id)      REFERENCES store_products(id)
+  );
+`);
+
+// Idempotency ledger for Eleme orders mirrored into roots (deducts stock once).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eleme_order_import (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    eleme_order_id  TEXT UNIQUE NOT NULL,
+    retail_order_id INTEGER,
+    store_code      TEXT NOT NULL,
+    imported_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    status          TEXT NOT NULL DEFAULT 'imported',
+    raw_payload     TEXT,
+    FOREIGN KEY (retail_order_id) REFERENCES retail_orders(id) ON DELETE SET NULL
+  );
+`);
+
+// Append-only sync event log for the admin Eleme tab + debugging.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eleme_sync_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    detail      TEXT,
+    error_msg   TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // ── Guanyi ERP sync (gzgrocery backoffice, 2026-06-24) ──────────────────────
 // Mirrors the Meituan sync layer for a second sales channel: 管易C-ERP
 // (v2.guanyierp.com). Roots has a limited sub-account that sees only Roots

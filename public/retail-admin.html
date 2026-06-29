@@ -451,6 +451,11 @@
     gzgrocery · 管易
   </button>
 
+  <button data-tab="eleme" onclick="elAdminInit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M7 13c1.5 2 8.5 2 10 0"/><path d="M9 9h.01M15 9h.01"/></svg>
+    Eleme · 饿了么
+  </button>
+
   <button data-tab="activity" onclick="actAdminInit()">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg>
     Activity · 库存流水
@@ -6779,6 +6784,97 @@
     </div>
   </section>
 
+  <!-- ── Eleme Sync ── -->
+  <section id="tab-eleme">
+    <h2>饿了么同步 · Eleme Sync</h2>
+    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      Eleme uses a real open API (no robot, no QR re-logins). Connect each store once, map products
+      by 货号 (SKU), and stock auto-pushes whenever it changes. New Eleme orders import here and deduct stock.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      饿了么使用官方开放接口(无需机器人、无需扫码重登)。每个门店连接一次,按货号映射商品,库存变动即自动推送。
+      新订单会导入并自动扣减库存。
+    </p>
+
+    <!-- Feature switch + per-store connection -->
+    <div id="el-conn-card" style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--bg-elev-1)">
+        <b style="font-size:14px">Eleme channel · 饿了么渠道</b>
+        <label class="toggle-label" title="Turn the Eleme channel on or off for this store">
+          <input type="checkbox" id="el-enable" onchange="elToggleEnabled(this.checked)">
+          <span id="el-enable-txt" class="muted" style="font-weight:400">Off · 关闭</span>
+        </label>
+      </div>
+      <div id="el-conn-note" class="muted" style="font-size:12px;margin:0;padding:8px 14px 0"></div>
+      <div id="el-stores" style="padding:6px 14px 12px"></div>
+    </div>
+
+    <!-- Sync health KPIs -->
+    <div class="fc-kpis" id="el-kpis">
+      <div class="fc-kpi accent">
+        <div class="lbl">Daemon · 同步服务</div>
+        <div class="val" id="el-kpi-daemon">—</div>
+        <div class="sub">auto · 自动同步</div>
+      </div>
+      <div class="fc-kpi" id="el-kpi-mapped-tile">
+        <div class="lbl">Mapped · 已映射</div>
+        <div class="val" id="el-kpi-mapped">—</div>
+        <div class="sub">products synced · 同步商品</div>
+      </div>
+      <div class="fc-kpi" id="el-kpi-queue-tile">
+        <div class="lbl">Queue · 待推送</div>
+        <div class="val" id="el-kpi-queue">—</div>
+        <div class="sub">pending push · 待推送</div>
+      </div>
+      <div class="fc-kpi" id="el-kpi-order-tile">
+        <div class="lbl">Last order · 最近订单</div>
+        <div class="val" id="el-kpi-order">—</div>
+        <div class="sub" id="el-kpi-order-sub">no orders yet · 暂无订单</div>
+      </div>
+    </div>
+
+    <!-- Incoming Eleme orders — read-only record -->
+    <div id="el-orders-card" style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--bg-elev-1)">
+        <b style="font-size:14px">Incoming Eleme orders · 饿了么订单
+          <span id="el-orders-count" class="muted" style="font-weight:400"></span></b>
+        <button class="btn btn-sm" onclick="elLoadOrders()" title="Refresh">↻ Refresh</button>
+      </div>
+      <p class="muted" style="font-size:12px;margin:0;padding:8px 14px 0">
+        Record only — these are managed on Eleme; the store does not print them.
+      </p>
+      <div id="el-orders-list" style="padding:6px 14px 12px"></div>
+    </div>
+
+    <!-- Mapping toolbar -->
+    <div class="pa-toolbar">
+      <input id="el-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="elFilterProducts()">
+      <div id="el-count" class="pa-count" data-no-i18n></div>
+      <span style="flex:1 1 auto"></span>
+      <button class="btn btn-sm btn-primary" id="el-pushall-btn" onclick="elPushAll()">Push all stock · 推送全部库存</button>
+    </div>
+
+    <!-- Mapping table — rendered in one language under data-no-i18n -->
+    <div style="overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:10px">
+      <table class="pa-table" style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr>
+            <th style="text-align:left">Product · 商品</th>
+            <th style="text-align:left">SKU · 货号</th>
+            <th id="el-th-stores">Stores · 门店</th>
+          </tr>
+        </thead>
+        <tbody id="el-tbody" data-no-i18n></tbody>
+      </table>
+    </div>
+
+    <!-- Sync log (system events) -->
+    <div style="margin-top:18px">
+      <b style="font-size:14px">Sync log · 同步日志</b>
+      <div id="el-log-sys" data-no-i18n style="margin-top:8px;font-size:12px;font-family:var(--mono,monospace);max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px"></div>
+    </div>
+  </section>
+
   <section id="tab-mini-app-editor" class="tab-embed-editor">
     <iframe id="frame-mini-app-editor" class="ed-frame" title="Mini App Editor · 小程序编辑器" data-src="/cms"></iframe>
   </section>
@@ -6842,6 +6938,7 @@
 <script src="/assets/retail-admin/11-meituan.js"></script>
 <script src="/assets/retail-admin/12-guanyi.js"></script>
 <script src="/assets/retail-admin/13-activity.js"></script>
+<script src="/assets/retail-admin/14-eleme.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
