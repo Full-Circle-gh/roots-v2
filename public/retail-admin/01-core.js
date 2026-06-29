@@ -212,8 +212,18 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b === btn));
   $$('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + btn.dataset.tab));
   $$('.tabs-group').forEach(g => g.classList.toggle('has-active', g.contains(btn)));
-  $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
+  // Accordion rail: keep the active tab's group expanded; collapse the others.
+  $$('.tabs-group').forEach(g => g.classList.toggle('open', g.contains(btn)));
 }));
+// Sales overview → jump into a single channel's full admin. The "Configure"
+// buttons on #tab-sales call this; it clicks the channel's rail button, which
+// activates that tab AND fires its existing init (mtAdminInit / gyAdminInit /
+// elAdminInit) via that button's own onclick. Keeps one source of truth for
+// tab activation instead of re-implementing it here.
+function salesGo(channel) {
+  const btn = document.querySelector('.tabs [data-tab="' + channel + '"]');
+  if (btn) btn.click();
+}
 // Embedded editor — lazy-load the Mini App Editor iframe the first time the
 // Editor tab is opened, so the big editor app doesn't download until needed.
 (function () {
@@ -273,12 +283,8 @@ $$('.tabs-group-trigger').forEach(btn => btn.addEventListener('click', (ev) => {
   $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
   if (!wasOpen) group.classList.add('open');
 }));
-// Click outside any group → close every open popover.
-document.addEventListener('click', (ev) => {
-  if (!ev.target.closest('.tabs-group')) {
-    $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
-  }
-});
+// The vertical rail is an inline accordion — groups stay expanded while you
+// work in the content area, so the old click-outside-to-close handler is gone.
 // ── Categories editor ────────────────────────────────────────────────────
 // Loads the live 2-level tree, lets the operator rename (EN/CN), add, remove
 // and reorder tops + subs, then saves the whole tree back. Server migrates
