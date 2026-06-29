@@ -98,6 +98,11 @@ function proxyHealthy(timeoutSec = 8) {
 }
 function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
 let proxyDownFlagged = false;
+// Debounce: the residential SOCKS5 exit flaps for seconds at a time. Pause sync on
+// the first missed probe (safe), but only PAGE ops after a sustained outage so brief
+// blips don't spam the alerts group. ~grace × QUEUE_CHECK_MS.
+let proxyFailStreak = 0;
+const PROXY_DOWN_GRACE = Number(process.env.MEITUAN_PROXY_DOWN_GRACE || 3);
 
 // ── 验证中心 risk-control backoff (mirrors meituan-daemon) ─────────────────────
 // 闪购 rarely throws a verify challenge, but when a 403/验证中心 hits, re-poking the
@@ -543,7 +548,8 @@ async function main() {
     // as "needs login" (burning queue attempts into terminal errors). Wait it out
     // and log the outage once. No-op in direct mode (no proxy configured).
     if (!(await proxyHealthy())) {
-      if (!proxyDownFlagged) {
+      proxyFailStreak++;
+      if (!proxyDownFlagged && proxyFailStreak >= PROXY_DOWN_GRACE) {
         proxyDownFlagged = true;
         console.log(`[shangou-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(SHANGOU_PROXY)}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of SHANGOU_STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
@@ -552,6 +558,7 @@ async function main() {
       await sleep(jitter(QUEUE_CHECK_MS));
       continue;
     }
+    proxyFailStreak = 0;
     if (proxyDownFlagged) {
       proxyDownFlagged = false;
       console.log(`[shangou-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);

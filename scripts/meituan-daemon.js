@@ -147,6 +147,12 @@ function proxyHealthy(timeoutSec = 8) {
 function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
 // Latch so a proxy outage is logged once per transition, not every tick.
 let proxyDownFlagged = false;
+// Debounce: the residential SOCKS5 exit (store Lenovo over WireGuard) flaps for a
+// few seconds at a time. We still pause sync on the first missed probe (safe), but
+// only PAGE ops after MEITUAN_PROXY_DOWN_GRACE consecutive failures (~grace × 10s
+// cycle), so brief blips don't spam the alerts group with paired down/up messages.
+let proxyFailStreak = 0;
+const PROXY_DOWN_GRACE = Number(process.env.MEITUAN_PROXY_DOWN_GRACE || 3);
 
 // Per-store latch so a 验证中心 challenge is logged once on transition, not
 // every poll (which would flood the sync log the admin tab reads).
@@ -711,7 +717,8 @@ async function main() {
     // crashes, and a FALSE "session expired" that triggers needless re-logins. We
     // simply wait it out and log the outage once (the admin sync log is the alert).
     if (!(await proxyHealthy())) {
-      if (!proxyDownFlagged) {
+      proxyFailStreak++;
+      if (!proxyDownFlagged && proxyFailStreak >= PROXY_DOWN_GRACE) {
         proxyDownFlagged = true;
         console.log(`[meituan-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(process.env.MEITUAN_PROXY_URL)}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of stores) logSync(s.storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
@@ -720,6 +727,7 @@ async function main() {
       await sleep(jitter(QUEUE_CHECK_MS));
       continue;
     }
+    proxyFailStreak = 0;
     if (proxyDownFlagged) {
       proxyDownFlagged = false;
       console.log(`[meituan-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
