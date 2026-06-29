@@ -1062,7 +1062,7 @@ function _paintInboxBadges() {
   for (const cat of _INBOX_CATS) {
     const count = cat._count || 0;
     total += count;
-    const btn   = document.querySelector('.tabs [data-tab="' + cat.tab + '"]');
+    const btn   = document.querySelector('[data-tab="' + cat.tab + '"]');
     const badge = document.getElementById('inbox-badge-' + cat.tab);
     if (btn && badge) {
       if (count > 0) {
@@ -1074,9 +1074,9 @@ function _paintInboxBadges() {
       }
     }
   }
-  // Roll the combined count up to the Inbox group trigger so it shows while
-  // the dropdown is closed.
-  const trigger = document.querySelector('.tabs-group[data-group="inbox"] .tabs-group-trigger');
+  // Roll the combined count up to the topbar Inbox button so it shows on the
+  // icon while the dropdown is closed. (Inbox moved from the rail to the topbar.)
+  const trigger = document.getElementById('tbInboxBtn');
   const tBadge  = document.getElementById('inboxTriggerBadge');
   if (trigger && tBadge) {
     if (total > 0) {

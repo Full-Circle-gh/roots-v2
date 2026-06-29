@@ -224,6 +224,38 @@ function salesGo(channel) {
   const btn = document.querySelector('.tabs [data-tab="' + channel + '"]');
   if (btn) btn.click();
 }
+// Activate a tab/section by name from OUTSIDE the rail (e.g. the topbar Inbox
+// dropdown, whose Reviews/Feedback items no longer live in .tabs so the rail
+// click-handler can't see them). Mirrors that handler's section + group state.
+function goTab(tab) {
+  $$('.side-drawer.open').forEach(d => closeDrawer(d));
+  $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  $$('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
+  $$('.tabs-group').forEach(g => {
+    const has = !!g.querySelector('[data-tab="' + tab + '"]');
+    g.classList.toggle('has-active', has);
+    g.classList.toggle('open', has);
+  });
+}
+// Topbar Inbox dropdown (Reviews / Feedback).
+function toggleInboxMenu(ev) {
+  if (ev) ev.stopPropagation();
+  const m = document.getElementById('tbInboxMenu');
+  const b = document.getElementById('tbInboxBtn');
+  if (!m) return;
+  const willOpen = m.hasAttribute('hidden');
+  m.toggleAttribute('hidden', !willOpen);
+  if (b) b.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+}
+function closeInboxMenu() {
+  const m = document.getElementById('tbInboxMenu');
+  const b = document.getElementById('tbInboxBtn');
+  if (m) m.setAttribute('hidden', '');
+  if (b) b.setAttribute('aria-expanded', 'false');
+}
+document.addEventListener('click', (ev) => {
+  if (!ev.target.closest || !ev.target.closest('#tbInbox')) closeInboxMenu();
+});
 // Sales overview → fill today's per-channel figures + the folded summary from
 // /sales/summary. Called when the Sales tab is opened. Leaves the "—"
 // placeholders in place on any error rather than blanking the page. dashMoney

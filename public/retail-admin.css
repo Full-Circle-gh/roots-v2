@@ -233,6 +233,22 @@
   }
   .topbar-link:hover { background: var(--bg-elev-1); color: var(--text-1); }
 
+  /* Topbar control cluster — Inbox + live dot + sound, pulled up from the rail
+     foot. Tighter gap than the topbar's own so the three read as one group. */
+  .tb-cluster { display: flex; align-items: center; gap: 2px; flex: none; }
+  .topbar-ico {
+    position: relative; flex: none;
+    width: 34px; height: 34px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; background: transparent; cursor: pointer;
+    border-radius: var(--r-md); color: var(--text-2);
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .topbar-ico:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  .topbar-ico svg { width: 18px; height: 18px; }
+  /* Unread badge → corner pip on the icon (it was an inline dot in the rail). */
+  .topbar-ico .tab-badge { position: absolute; top: 4px; right: 4px; margin: 0; }
+
   /* ── Account widget — Google-style profile circle + dropdown ───────────── */
   .acct { position: relative; flex: none; }
   .acct-btn {
@@ -431,12 +447,14 @@
     align-items: center;
     justify-content: center;
   }
-  .tabs button.has-unseen .tab-badge {
+  /* Un-scoped from `.tabs button` so the same badge works on the topbar Inbox
+     icon (.topbar-ico) and its dropdown items (.acct-item), not just rail tabs. */
+  .has-unseen .tab-badge {
     display: inline-flex;
   }
   /* When the count is shown (≥1 with text content), expand the pill so the
      number fits without clipping. */
-  .tabs button.has-unseen .tab-badge:not(:empty) {
+  .has-unseen .tab-badge:not(:empty) {
     min-width: 16px;
     height: 16px;
     padding: 0 5px;
@@ -477,16 +495,16 @@
     color: var(--text-1);
     box-shadow: inset 3px 0 0 var(--brass);
   }
-  /* Live-poll dot, sound toggle and Settings form a cluster pinned to the
-     foot of the rail. margin-top:auto on the dot sinks the whole group down. */
-  .tabs > button.tabs-live-dot { margin-top: auto; }
+  /* Live-poll dot + sound toggle now live in the TOPBAR cluster (see
+     .tb-cluster), not the rail foot — their selectors below are un-scoped
+     from `.tabs >` so they style the buttons wherever they sit. */
   /* Tiny live-poll status dot — sits in the tab bar just before the
      settings gear. Green pulsing when live, dim/static when paused.
      Click toggles. No label — the dot IS the indicator.
      We override `.tabs button { padding: 12px 14px }` explicitly so
      the parent button shrinks to a true 28×28 hit target instead of
      stretching the inner dot into a sliver. */
-  .tabs > button.tabs-live-dot {
+  .tabs-live-dot {
     box-sizing: border-box;
     width: 32px; height: 32px;
     min-width: 32px; max-width: 32px;
@@ -502,8 +520,8 @@
     transition: background var(--t-fast) ease;
     align-self: center;
   }
-  .tabs > button.tabs-live-dot:hover { background: var(--bg-elev-1); color: inherit; }
-  .tabs > button.tabs-live-dot .dot {
+  .tabs-live-dot:hover { background: var(--bg-elev-1); color: inherit; }
+  .tabs-live-dot .dot {
     display: block;
     width: 10px; height: 10px;
     min-width: 10px; min-height: 10px;
@@ -513,7 +531,7 @@
     box-shadow: 0 0 0 0 rgba(107, 142, 111, .6);
     animation: tabs-live-dot-pulse 2.5s ease-in-out infinite;
   }
-  .tabs > button.tabs-live-dot.paused .dot {
+  .tabs-live-dot.paused .dot {
     background: var(--text-4);
     animation: none;
     box-shadow: none;
@@ -524,7 +542,7 @@
   }
 
   /* New-order sound toggle — same 32×32 icon-button chrome as the live dot. */
-  .tabs > button.tabs-sound-toggle {
+  .tabs-sound-toggle {
     box-sizing: border-box;
     width: 32px; height: 32px;
     min-width: 32px; max-width: 32px;
@@ -541,14 +559,14 @@
     transition: background var(--t-fast) ease, color var(--t-fast) ease;
     align-self: center;
   }
-  .tabs > button.tabs-sound-toggle:hover { background: var(--bg-elev-1); color: var(--text-2); }
-  .tabs > button.tabs-sound-toggle svg { width: 15px; height: 15px; }
+  .tabs-sound-toggle:hover { background: var(--bg-elev-1); color: var(--text-2); }
+  .tabs-sound-toggle svg { width: 15px; height: 15px; }
   /* Show speaker-on icon when enabled, muted icon when off. Default markup
      shows both; JS flips the `.muted` class on the button. */
-  .tabs > button.tabs-sound-toggle .ico-off { display: none; }
-  .tabs > button.tabs-sound-toggle.muted .ico-on { display: none; }
-  .tabs > button.tabs-sound-toggle.muted .ico-off { display: inline; }
-  .tabs > button.tabs-sound-toggle.muted { color: var(--text-4); }
+  .tabs-sound-toggle .ico-off { display: none; }
+  .tabs-sound-toggle.muted .ico-on { display: none; }
+  .tabs-sound-toggle.muted .ico-off { display: inline; }
+  .tabs-sound-toggle.muted { color: var(--text-4); }
 
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT

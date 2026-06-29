@@ -211,6 +211,44 @@
     <span class="gsearch-label">Search · 搜索</span>
     <span class="gsearch-kbd">Ctrl K</span>
   </button>
+
+  <!-- Inbox + live-poll dot + sound — moved up from the rail foot into the
+       topbar, sitting beside Search. Inbox is a small dropdown to its two
+       queues (Reviews / Feedback); its unread badges keep their IDs so the
+       existing notification JS finds them unchanged. -->
+  <div class="tb-cluster">
+    <div class="acct" id="tbInbox" style="flex:none">
+      <button class="topbar-ico" id="tbInboxBtn" type="button" aria-haspopup="true" aria-expanded="false"
+              onclick="toggleInboxMenu(event)" title="Inbox · 收件箱" aria-label="Inbox · 收件箱">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+        <span id="inboxTriggerBadge" class="tab-badge" aria-label="Unseen inbox items"></span>
+      </button>
+      <div class="acct-menu" id="tbInboxMenu" role="menu" hidden style="min-width:200px">
+        <button class="acct-item" type="button" role="menuitem" data-tab="reviews" data-feat="reviews" onclick="goTab('reviews'); closeInboxMenu()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+          <span>Reviews · 评价</span>
+          <span id="inbox-badge-reviews" class="tab-badge" aria-label="Unseen reviews" style="margin-left:auto"></span>
+        </button>
+        <button class="acct-item" type="button" role="menuitem" data-tab="feedback" data-feat="feedback" onclick="goTab('feedback'); closeInboxMenu()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
+          <span>Feedback · 反馈</span>
+          <span id="inbox-badge-feedback" class="tab-badge" aria-label="Unseen feedback" style="margin-left:auto"></span>
+        </button>
+      </div>
+    </div>
+    <button id="orders-live-dot" class="tabs-live-dot" type="button"
+            onclick="toggleOrdersLive()" title="Auto-refresh — click to pause/resume · 自动刷新 — 点击暂停/恢复"
+            aria-label="Toggle live updates">
+      <span class="dot"></span>
+    </button>
+    <button id="orders-sound-toggle" class="tabs-sound-toggle" type="button"
+            onclick="toggleOrdersSound()" title="Notification sound — click to mute/unmute · 通知提示音 — 点击静音/开启"
+            aria-label="Toggle notification sound">
+      <svg class="ico-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+      <svg class="ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
+    </button>
+  </div>
+
   <div class="acct" id="acct" style="display:none;">
     <button class="acct-btn" id="acctBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Account · 账户" aria-label="Account · 账户">
       <span class="acct-circle" id="acctCircle" aria-hidden="true"></span>
@@ -444,25 +482,8 @@
        live under the Editor group above. -->
 
 
-  <!-- Inbox — inbound customer voice (moderation/triage), distinct from the
-       outbound authoring in Content. Reviews + bug-report Feedback. -->
-  <div class="tabs-group" data-group="inbox" style="order:11">
-    <button type="button" class="tabs-group-trigger">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
-      Inbox · 收件箱<span id="inboxTriggerBadge" class="tab-badge" aria-label="Unseen inbox items"></span>
-      <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
-    <div class="tabs-popover">
-      <button data-tab="reviews" data-feat="reviews">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-        Reviews · 评价<span id="inbox-badge-reviews" class="tab-badge" aria-label="Unseen reviews"></span>
-      </button>
-      <button data-tab="feedback" data-feat="feedback">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2h8a2 2 0 0 1 2 2v12l-4-3H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M12 6v3"/><circle cx="12" cy="11.5" r="0.4" fill="currentColor"/></svg>
-        Feedback · 反馈<span id="inbox-badge-feedback" class="tab-badge" aria-label="Unseen feedback"></span>
-      </button>
-    </div>
-  </div>
+  <!-- Inbox moved to the topbar (next to Search) — see #tbInbox. Its sections
+       (#tab-reviews / #tab-feedback) are reached from that dropdown via goTab(). -->
 
   <button data-tab="delivery" style="order:7">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
@@ -477,28 +498,10 @@
     Activity · 库存流水
   </button>
 
-  <!-- Auto-refresh dot — pinned right of the tab bar, next to the
-       settings gear. A small green pulsing dot signals that the orders
-       list is live-polling. Click toggles pause; tooltip explains.
-       No text — the dot IS the indicator. -->
-  <button id="orders-live-dot" class="tabs-live-dot" type="button" style="order:12"
-          onclick="toggleOrdersLive()" title="Auto-refresh — click to pause/resume · 自动刷新 — 点击暂停/恢复"
-          aria-label="Toggle live updates">
-    <span class="dot"></span>
-  </button>
+  <!-- The live-poll dot + sound toggle moved to the topbar cluster (#tb-cluster);
+       Settings now sits in the rail list where Inbox used to be (order:11). -->
 
-  <!-- Notification chime mute toggle — plays a soft ding for any new
-       notification (orders, invoices, reviews, feedback). Click toggles
-       sound on/off; choice persists in localStorage. -->
-  <button id="orders-sound-toggle" class="tabs-sound-toggle" type="button" style="order:13"
-          onclick="toggleOrdersSound()" title="Notification sound — click to mute/unmute · 通知提示音 — 点击静音/开启"
-          aria-label="Toggle notification sound">
-    <svg class="ico-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-    <svg class="ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-  </button>
-
-  <!-- Settings — pinned to right edge -->
-  <button data-tab="config" class="tabs-settings" title="Settings · 设置" style="order:14">
+  <button data-tab="config" class="tabs-settings" title="Settings · 设置" style="order:11">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
     Settings · 设置
   </button>
