@@ -43,6 +43,7 @@ try { require('dotenv').config({ path: envFile }); } catch {
 const db = require('../database');
 const { adjustStock } = require('../lib/inventory');
 const { GzGroceryAdmin, extractSku } = require('../lib/gzgrocery-admin');
+const { notifyOrder } = require('../lib/gzgrocery-order-notify');
 
 let MODE = (process.env.GZGROCERY_ORDER_MODE || 'off').toLowerCase();
 if (!['off', 'shadow', 'live'].includes(MODE)) MODE = 'off';
@@ -129,7 +130,7 @@ function resolveStoreId() {
 // sku (UPPERCASE) -> { productId, sku }
 function loadSkuMap() {
   const map = new Map();
-  for (const r of db.prepare(`SELECT id, sku FROM store_products WHERE sku IS NOT NULL AND sku <> ''`).all()) {
+  for (const r of db.prepare(`SELECT id, sku, name_en, name_cn FROM store_products WHERE sku IS NOT NULL AND sku <> ''`).all()) {
     const raw = String(r.sku).trim();
     const m = /\b(\d+-\d+[A-Za-z]?)\b/.exec(raw);
     if (!m) continue;
@@ -141,7 +142,7 @@ function loadSkuMap() {
     const canonical = raw.toUpperCase() === key;
     const existing = map.get(key);
     if (existing && existing.canonical && !canonical) continue;
-    map.set(key, { productId: r.id, sku: r.sku, canonical });
+    map.set(key, { productId: r.id, sku: r.sku, name_en: r.name_en, name_cn: r.name_cn, canonical });
   }
   return map;
 }
@@ -159,7 +160,7 @@ function matchOurItems(items, skuMap) {
     if (!sku) continue;
     const hit = skuMap.get(sku);
     if (!hit) continue;
-    ours.push({ ...it, sku, product_id: hit.productId, matched: true });
+    ours.push({ ...it, sku, product_id: hit.productId, name_en: hit.name_en, name_cn: hit.name_cn, matched: true });
   }
   return ours;
 }
@@ -212,6 +213,9 @@ function processOrder(o, items, skuMap, storeId) {
     upsert({ decremented: 1, note: `${MODE}: decremented ${applied.join(', ')}` });
     auditLog(o, MODE === 'live' ? 'decremented' : 'would_decrement', applied.join(', '));
     log(`order ${o.orderNo || o.orderId} [${o.status}] ${MODE === 'live' ? 'DECREMENTED' : 'would decrement'}: ${applied.join(', ')}`);
+    // Push a WeCom card listing only our line items (fire-and-forget, never blocks).
+    notifyOrder(o, ours.map((it) => ({ name_en: it.name_en, name_cn: it.name_cn, sku: it.sku, qty: it.qty })))
+      .catch((e) => console.error('[gzgrocery-orders] notify failed:', e.message));
     return { result: 'decremented', units: ourUnits };
   }
 

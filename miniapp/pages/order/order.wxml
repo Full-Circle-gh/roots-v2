@@ -53,6 +53,27 @@
       </view>
     </view>
 
+    <!-- Live courier tracking (青云聚信 same-city e-bike) — status + a live map of
+         the rider en route. Self-hides when no Qingyun delivery is linked. -->
+    <view wx:if="{{deliveryTrack}}" class="section qy-track">
+      <view class="section-label f-toni">{{deliveryTrack.mapLabel}}</view>
+      <view class="qy-head">
+        <view class="qy-stage f-bear">{{deliveryTrack.stageLabel}}</view>
+        <view wx:if="{{deliveryTrack.carrier}}" class="qy-carrier">{{deliveryTrack.carrier}}</view>
+      </view>
+      <view wx:if="{{deliveryTrack.subLine}}" class="qy-sub muted">{{deliveryTrack.subLine}}</view>
+
+      <map wx:if="{{deliveryTrack.hasMap}}" class="qy-map"
+           longitude="{{deliveryTrack.center.lng}}" latitude="{{deliveryTrack.center.lat}}"
+           scale="14" markers="{{deliveryTrack.markers}}" polyline="{{deliveryTrack.polyline}}"
+           include-points="{{deliveryTrack.includePoints}}"
+           show-location="{{false}}" enable-rotate="{{false}}" enable-overlooking="{{false}}"></map>
+
+      <view wx:if="{{deliveryTrack.rider && deliveryTrack.rider.phone}}" class="qy-call" bindtap="callRider">
+        {{deliveryTrack.callLabel}} →
+      </view>
+    </view>
+
     <!-- Partial shipment — some parcels are out, the rest still to follow.
          Shows regardless of whether the shipped parcel carries a waybill. -->
     <view wx:if="{{partialShip}}" class="partial-banner">

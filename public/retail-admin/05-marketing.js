@@ -994,6 +994,8 @@ async function loadConfig() {
     $('#cfg-shop-lockLayout').checked       = !!c.shop?.lockLayout;
     $('#cfg-notifications-order_status_template_id').value = c.notifications?.order_status_template_id || '';
     $('#cfg-notifications-wecom_order_webhook').value = c.notifications?.wecom_order_webhook || '';
+    $('#cfg-system_alerts-enabled').checked = !!c.system_alerts?.enabled;
+    $('#cfg-system_alerts-wecom_webhook').value = c.system_alerts?.wecom_webhook || '';
     loadWecomApp();
     loadAliyunSms();
     // Customer service
@@ -1233,6 +1235,27 @@ async function _testAliyunSms() {
   } catch (e) { status.textContent = '⚠ ' + (e.message || 'failed'); }
 }
 
+// System Alerts — fire a test message to the typed (or saved) WeCom webhook so the
+// operator confirms it lands in the dedicated group before relying on it.
+async function _testSystemAlert() {
+  const st = $('#system_alerts-test-status');
+  const webhook = $('#cfg-system_alerts-wecom_webhook').value.trim();
+  if (!webhook) { if (st) st.textContent = '⚠ Paste a webhook first · 请先填入 Webhook'; return; }
+  if (st) st.textContent = 'Sending… · 发送中…';
+  try {
+    const r = await fetch('/api/retail-admin/system-alerts/test', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ webhook }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (st) st.textContent = j.success
+      ? '✅ Sent — check the group · 已发送,请查看该群'
+      : '⚠ ' + (j.error === 'domain_not_allowed' ? 'Only qyapi.weixin.qq.com URLs · 仅接受 qyapi 地址'
+              : j.error === 'no_webhook' ? 'Paste a webhook first · 请先填入 Webhook'
+              : (j.error || 'failed'));
+  } catch (e) { if (st) st.textContent = '⚠ ' + e.message; }
+}
+
 async function saveConfig() {
   const status = $('#cfg-status');
   status.textContent = 'Saving…';
@@ -1252,6 +1275,8 @@ async function saveConfig() {
     'shop.lockLayout':             $('#cfg-shop-lockLayout').checked,
     'notifications.order_status_template_id': $('#cfg-notifications-order_status_template_id').value.trim(),
     'notifications.wecom_order_webhook': $('#cfg-notifications-wecom_order_webhook').value.trim(),
+    'system_alerts.enabled':         $('#cfg-system_alerts-enabled').checked,
+    'system_alerts.wecom_webhook':   $('#cfg-system_alerts-wecom_webhook').value.trim(),
     'customer_service.mode':         $('#cfg-cs-mode').value,
     'customer_service.corp_id':      $('#cfg-cs-corp_id').value.trim(),
     'customer_service.url':          $('#cfg-cs-url').value.trim(),

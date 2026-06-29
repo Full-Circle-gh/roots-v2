@@ -355,12 +355,18 @@ async function ingestOrder(storeId, storeCode, meituanOrder) {
 // ── Stock push queue ──────────────────────────────────────────────────────────
 
 async function processStockQueue() {
+  // q.product_id is a store_products.id (order ingest, push-all, and adjustStock all
+  // key off store_products) — NOT the legacy `products` kitchen table, whose ids
+  // diverge for many SKUs. Joining `products` fed the wrong name/货号 for ~118 rows;
+  // masked because the 外卖 push resolves by map_meituan_name first and most SPUs are
+  // single-variant, but a wrong 货号 could still pick the wrong variant. Use
+  // store_products so name fallback + variant-disambiguation 货号 are correct.
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
            COALESCE(mm.meituan_sku, p.sku) AS sku,
            mm.meituan_name AS map_meituan_name
       FROM meituan_sync_queue q
-      LEFT JOIN products p ON p.id = q.product_id
+      LEFT JOIN store_products p ON p.id = q.product_id
       LEFT JOIN meituan_product_map mm
              ON mm.product_id = q.product_id AND mm.retail_store_id = q.retail_store_id
      WHERE q.status = 'pending' AND q.attempts < 3
@@ -599,7 +605,10 @@ async function processListingJobs() {
      WHERE status = 'pending'
      ORDER BY created_at
      LIMIT 5
-  `).all();
+  `).all()
+    // Leave 闪购 stores' jobs for the shangou daemon — this 外卖 browser can't
+    // reach shangoue.meituan.com, so grabbing them would only error the job.
+    .filter(job => !SKIP_STORES.includes(job.store_code));
 
   if (!jobs.length) return;
 

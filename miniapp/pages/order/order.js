@@ -41,6 +41,7 @@ Page({
     items: [],
     timeline: [],
     tracking: null,
+    deliveryTrack: null,         // live 青云聚信 courier tracking (same-city e-bike)
     shipments: [],
     etaLabel: '',                // local (same-city) delivery arrival time, e.g. "2:50 PM"
     partialShip: null,           // {line, sub} when some-but-not-all parcels shipped
@@ -526,6 +527,15 @@ Page({
         paymentLabel: (data.payment_method || '').toUpperCase(),
         loading: false,
       });
+
+      // Live courier tracking (青云聚信 same-city e-bike). Only for delivery orders
+      // that are out for delivery — fire-and-forget so it never blocks the render,
+      // and self-hides when no Qingyun delivery is linked (tracking:false).
+      if (!isPickup && ['paid', 'preparing', 'dispatched'].includes(data.status)) {
+        this.loadDeliveryTrack();
+      } else if (this.data.deliveryTrack) {
+        this.setData({ deliveryTrack: null });
+      }
     } catch (e) {
       console.warn('[order] load failed:', e.message);
       // A background poll hitting a transient error must not blank a page the
@@ -533,6 +543,76 @@ Page({
       if (silent) return;
       this.setData({ notFound: true, loading: false });
     }
+  },
+
+  // Pull the live courier track (青云聚信) and build the map view-model. Coordinates
+  // come back as decimal GCJ-02 — WeChat's <map> default datum — so markers/polyline
+  // drop in with no conversion. Hidden (deliveryTrack=null) when nothing is linked.
+  async loadDeliveryTrack() {
+    const cn = this.data.lang === 'cn';
+    try {
+      const r = await api.get('/api/retail/orders/' + this.data.id + '/delivery-track');
+      const d = r?.data || r;
+      if (!d || !d.tracking) { if (this.data.deliveryTrack) this.setData({ deliveryTrack: null }); return; }
+
+      const STAGE = {
+        awaiting_dispatch: cn ? '正在为您找骑手' : 'Finding a courier',
+        in_transit:        cn ? '骑手配送中'    : 'On the way',
+        delivered:         cn ? '已送达'        : 'Delivered',
+      };
+      const mk = (pos, text, who, id) => ({
+        id, latitude: pos.lat, longitude: pos.lng, width: 22, height: 22,
+        callout: { content: text, display: 'ALWAYS', padding: 6, borderRadius: 8,
+                   bgColor: who === 'rider' ? '#E96174' : '#FFFFFF',
+                   color: who === 'rider' ? '#FFFFFF' : '#1A1A1A', fontSize: 11 },
+      });
+      const markers = [];
+      const incl = [];
+      if (d.shop_position)      { markers.push(mk(d.shop_position,      cn ? '门店' : 'Store', 'shop', 1)); incl.push(d.shop_position); }
+      if (d.recipient_position) { markers.push(mk(d.recipient_position, cn ? '收货' : 'You',   'dest', 2)); incl.push(d.recipient_position); }
+      if (d.rider_position)     { markers.push(mk(d.rider_position,     cn ? '骑手' : 'Rider', 'rider', 3)); incl.push(d.rider_position); }
+
+      const polyline = (Array.isArray(d.route) && d.route.length > 1) ? [{
+        points: d.route.map(p => ({ latitude: p.lat, longitude: p.lng })),
+        color: '#E96174CC', width: 5, arrowLine: true,
+      }] : [];
+      const center = d.rider_position || d.recipient_position || d.shop_position || null;
+      const includePoints = incl.map(p => ({ latitude: p.lat, longitude: p.lng }));
+
+      // Sub-line: rider name · distance · ETA (only the parts we have).
+      const parts = [];
+      if (d.rider && d.rider.name) parts.push(d.rider.name);
+      if (d.rider_to_cust_m != null) parts.push((d.rider_to_cust_m / 1000).toFixed(1) + (cn ? 'km' : ' km'));
+      if (d.eta_seconds != null && d.stage !== 'delivered') {
+        const min = Math.max(1, Math.round(d.eta_seconds / 60));
+        parts.push(cn ? ('约 ' + min + ' 分钟') : ('~' + min + ' min'));
+      }
+
+      this.setData({
+        deliveryTrack: {
+          stage: d.stage,
+          stageLabel: STAGE[d.stage] || (cn ? '配送中' : 'On the way'),
+          carrier: d.carrier || '',
+          waybill: d.waybill_id || '',
+          rider: d.rider || null,
+          subLine: parts.join(cn ? ' · ' : ' · '),
+          hasMap: !!center && d.stage !== 'delivered',
+          center, markers, polyline, includePoints,
+          mapLabel: cn ? '配送追踪' : 'LIVE TRACKING',
+          callLabel: cn ? '联系骑手' : 'Call rider',
+        },
+      });
+    } catch (e) {
+      // A tracking hiccup must never blank the order page — just skip this round.
+      console.warn('[order] delivery-track load failed:', e.message);
+    }
+  },
+
+  // Call the courier (青云聚信 rider). Phone comes from the live track payload.
+  callRider() {
+    const t = this.data.deliveryTrack;
+    if (!t || !t.rider || !t.rider.phone) return;
+    wx.makePhoneCall({ phoneNumber: String(t.rider.phone), fail: () => {} });
   },
 
   back() { wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/me/me' }) }); },

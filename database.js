@@ -1551,6 +1551,15 @@ try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_refund_events_created ON re
 // exempt: SQLite treats NULLs as distinct and the partial WHERE keeps the
 // index to real keys only.
 addColumn('retail_orders', 'idempotency_key', 'TEXT');
+
+// WeChat mini-program 发货信息管理 (shipping-info upload). The mini-app/JSAPI pay
+// flow REQUIRES merchants to upload shipping info per paid order, or WeChat
+// auto-refunds it. We satisfy it automatically with a "virtual delivery"
+// (logistics_type=3) upload when the order is marked delivered. These columns
+// give us idempotency (never double-upload) + a record of the last attempt.
+addColumn('retail_orders', 'wx_shipping_uploaded_at', 'DATETIME'); // set on a confirmed upload; NULL = not yet
+addColumn('retail_orders', 'wx_shipping_status',      'TEXT');     // last result, e.g. 'ok' or 'err:<code> <msg>'
+
 try {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_orders_idem
              ON retail_orders(customer_id, idempotency_key)
@@ -3809,6 +3818,62 @@ db.exec(`
     error        TEXT,
     created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
     completed_at DATETIME
+  );
+`);
+
+// ── 青云聚信 (Qingyun, Meituan's delivery AGGREGATOR) courier-tracking ─────────
+// Mirrors a delivery dispatched through saas.cyanclouds.com back to a roots order so
+// we can relay live status + rider GPS to the customer. One row per Qingyun order
+// (qingyun_order_id). Matched to a roots order via the 备注/userRemark we stamp with
+// the roots order ref (fallback: recipient phone+address). Written by the
+// qingyun-daemon; read by the customer order-tracking endpoint.
+//   order_status / delivery_status — raw Qingyun enums (orderStatus: 20 待配送 →
+//     30 in-flight → 50 已送达; deliveryStatus parallels). rider_lat/lng are GCJ-02
+//     ×1e6 (store raw; divide by 1e6 for AMap). NULL once delivered (coords stop).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS delivery_jobs (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    qingyun_order_id TEXT UNIQUE NOT NULL,
+    retail_order_id  INTEGER,
+    store_code       TEXT NOT NULL,
+    channel_name     TEXT,            -- order source platform (channelName)
+    carrier_name     TEXT,            -- 运力 that grabbed it (orderDeliveryInfo.carrierName)
+    waybill_id       TEXT,            -- 运单号
+    delivery_id      TEXT,
+    rider_name       TEXT,
+    rider_phone      TEXT,
+    order_status     INTEGER,         -- raw Qingyun orderStatus enum
+    delivery_status  INTEGER,         -- raw Qingyun deliveryStatus enum
+    rider_lat        INTEGER,         -- GCJ-02 ×1e6 (NULL once delivered)
+    rider_lng        INTEGER,
+    rider_to_cust_m  INTEGER,         -- riderRecipientDistance (metres)
+    eta_seconds      INTEGER,         -- routeInfo.duration
+    recipient_name   TEXT,
+    recipient_phone  TEXT,
+    recipient_addr   TEXT,
+    recipient_lat    INTEGER,         -- dropoff GCJ-02 ×1e6 (from order/list)
+    recipient_lng    INTEGER,
+    expected_delivery_at TEXT,
+    raw_order        TEXT,            -- last order/list object (debug / first-capture)
+    raw_track        TEXT,            -- last order/detail/coordinate payload
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (retail_order_id) REFERENCES retail_orders(id) ON DELETE SET NULL
+  );
+`);
+
+// Append-only log of qingyun-daemon events (polls, track fetches, login/verify,
+// proxy) for the admin sync-status panel and debugging. Same shape as
+// meituan_sync_log so the panel can reuse its renderer.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS qingyun_sync_log (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code  TEXT NOT NULL,
+    event_type  TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    detail      TEXT,
+    error_msg   TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
 

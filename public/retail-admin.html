@@ -3663,6 +3663,83 @@
       <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
       <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
     </div>
+    <!-- ── Logistics integration: 快递100 tracking + 京东物流 LOP waybill ── -->
+    <div class="group-card">
+      <div class="group-card-head">
+        <h3>Logistics integration · 物流集成</h3>
+        <div class="muted">Connect carriers so Orders can stream live tracking into the customer mini app and push waybills to JD. Set up either or both — they work independently. · 物流集成:轨迹回传与一键推单,两者可单独或同时配置。</div>
+      </div>
+      <div class="dz-subtabs" role="tablist" style="margin-bottom:18px">
+        <button type="button" class="dz-subtab active" id="logtab-kd100" onclick="_logTab('kd100')"><span id="kd100-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Kuaidi100 · 快递100</button>
+        <button type="button" class="dz-subtab" id="logtab-jd" onclick="_logTab('jd')"><span id="jd-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>JD Logistics · 京东物流</button>
+      </div>
+
+      <!-- 快递100 tracking push -->
+      <div id="logpanel-kd100">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>Kuaidi100 tracking push · 快递100轨迹订阅</strong> <span id="kd100-chip"></span></div>
+        <div class="muted" style="margin-bottom:14px">Free subscribe-push API aggregating live tracking from every Chinese carrier (JD, SF, YTO, ZTO…). Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
+        <div class="ops-grid">
+          <div>
+            <label class="field-label">Customer ID · 客户编号</label>
+            <input type="text" id="kd100-customer" style="font-family:monospace" placeholder="e.g. ABCD1234">
+          </div>
+          <div>
+            <label class="field-label">Authorization key · 授权 Key</label>
+            <input type="password" id="kd100-key" data-ph-en="paste authorization key" data-ph-cn="粘贴授权 Key" placeholder="paste authorization key">
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="field-label">Callback URL · 回调地址</label>
+            <input type="text" id="kd100-callback" style="font-family:monospace" value="https://rootskitchenchina.com/api/retail/tracking/kd100/callback">
+            <div class="muted" style="font-size:11px;margin-top:4px">Whitelist this in your kd100 dashboard. Webhook fires on every event update. · 在快递100后台将其加入白名单;每次轨迹更新都会触发回调。</div>
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="field-label">Callback secret · 回调密钥</label>
+            <input type="password" id="kd100-secret" placeholder="random string — do not rotate">
+            <div class="muted" style="font-size:11px;margin-top:4px">Verifies pushes came from a request we made. Set once and leave alone. · 用于验证回调确实来自我们发起的请求;设置一次后请勿改动。</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="_saveIntegration('kd100')">💾 Save · 保存</button>
+          <button class="btn" onclick="_testKd100()">⚡ Save &amp; test · 保存并测试</button>
+        </div>
+      </div>
+
+      <!-- 京东物流 LOP direct waybill -->
+      <div id="logpanel-jd" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>JD Logistics LOP direct waybill · 京东物流直连推单</strong> <span id="jd-chip"></span></div>
+        <div class="muted" style="margin-bottom:14px">Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. Request LOP API access from your JD account manager. · 京东物流直连,一键推单、运单号自动回传。</div>
+        <div class="ops-grid">
+          <div>
+            <label class="field-label">app_key</label>
+            <input type="text" id="jd-app_key" style="font-family:monospace" placeholder="from lop.jd.com app">
+          </div>
+          <div>
+            <label class="field-label">app_secret</label>
+            <input type="password" id="jd-app_secret" placeholder="paste app_secret">
+          </div>
+          <div style="grid-column:1/-1">
+            <label class="field-label">access_token</label>
+            <input type="password" id="jd-access_token" placeholder="OAuth token">
+          </div>
+          <div>
+            <label class="field-label">customer_code · 商家编码</label>
+            <input type="text" id="jd-customer_code" style="font-family:monospace" placeholder="from jdl.com 商家后台">
+          </div>
+          <div>
+            <label class="field-label">API environment</label>
+            <select id="jd-env">
+              <option value="production">production</option>
+              <option value="sandbox">sandbox</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="_saveIntegration('jd')">💾 Save · 保存</button>
+          <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD · 保存并测试 JD</button>
+        </div>
+        <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved. · 保存后,完整推单还需对照你的 JD 商家配置做一次性字段确认 —— 凭证保存后请告知你的开发人员。</div>
+      </div>
+    </div>
   </section>
 
   <!-- Zone edit / add drawer (slide-in side drawer) -->
@@ -5957,84 +6034,6 @@
               <button class="btn btn-primary" onclick="_geocodeBackfill()">🗺 Geocode all stores &amp; addresses now · 立即定位所有门店与地址</button>
             </div>
             <div class="muted" style="font-size:11px;margin-top:10px"><strong>↻ Refresh status</strong> only re-counts — it does NOT geocode. Use <strong>🗺 Geocode all</strong> to actually fetch coordinates. New addresses + stores also geocode automatically on save. · ↻ 仅刷新计数,不定位;🗺 才会真正获取坐标。新地址保存时自动定位。</div>
-          </div>
-
-          <!-- ── Logistics integration: 快递100 tracking + 京东物流 LOP waybill ── -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Logistics integration · 物流集成</h3>
-              <div class="muted">Connect carriers so Orders can stream live tracking into the customer mini app and push waybills to JD. Set up either or both — they work independently. · 物流集成:轨迹回传与一键推单,两者可单独或同时配置。</div>
-            </div>
-            <div class="dz-subtabs" role="tablist" style="margin-bottom:18px">
-              <button type="button" class="dz-subtab active" id="logtab-kd100" onclick="_logTab('kd100')"><span id="kd100-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Kuaidi100 · 快递100</button>
-              <button type="button" class="dz-subtab" id="logtab-jd" onclick="_logTab('jd')"><span id="jd-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>JD Logistics · 京东物流</button>
-            </div>
-
-            <!-- 快递100 tracking push -->
-            <div id="logpanel-kd100">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>Kuaidi100 tracking push · 快递100轨迹订阅</strong> <span id="kd100-chip"></span></div>
-              <div class="muted" style="margin-bottom:14px">Free subscribe-push API aggregating live tracking from every Chinese carrier (JD, SF, YTO, ZTO…). Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
-              <div class="ops-grid">
-                <div>
-                  <label class="field-label">Customer ID · 客户编号</label>
-                  <input type="text" id="kd100-customer" style="font-family:monospace" placeholder="e.g. ABCD1234">
-                </div>
-                <div>
-                  <label class="field-label">Authorization key · 授权 Key</label>
-                  <input type="password" id="kd100-key" data-ph-en="paste authorization key" data-ph-cn="粘贴授权 Key" placeholder="paste authorization key">
-                </div>
-                <div style="grid-column:1/-1">
-                  <label class="field-label">Callback URL · 回调地址</label>
-                  <input type="text" id="kd100-callback" style="font-family:monospace" value="https://rootskitchenchina.com/api/retail/tracking/kd100/callback">
-                  <div class="muted" style="font-size:11px;margin-top:4px">Whitelist this in your kd100 dashboard. Webhook fires on every event update. · 在快递100后台将其加入白名单;每次轨迹更新都会触发回调。</div>
-                </div>
-                <div style="grid-column:1/-1">
-                  <label class="field-label">Callback secret · 回调密钥</label>
-                  <input type="password" id="kd100-secret" placeholder="random string — do not rotate">
-                  <div class="muted" style="font-size:11px;margin-top:4px">Verifies pushes came from a request we made. Set once and leave alone. · 用于验证回调确实来自我们发起的请求;设置一次后请勿改动。</div>
-                </div>
-              </div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <button class="btn btn-primary" onclick="_saveIntegration('kd100')">💾 Save · 保存</button>
-                <button class="btn" onclick="_testKd100()">⚡ Save &amp; test · 保存并测试</button>
-              </div>
-            </div>
-
-            <!-- 京东物流 LOP direct waybill -->
-            <div id="logpanel-jd" style="display:none">
-              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>JD Logistics LOP direct waybill · 京东物流直连推单</strong> <span id="jd-chip"></span></div>
-              <div class="muted" style="margin-bottom:14px">Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. Request LOP API access from your JD account manager. · 京东物流直连,一键推单、运单号自动回传。</div>
-              <div class="ops-grid">
-                <div>
-                  <label class="field-label">app_key</label>
-                  <input type="text" id="jd-app_key" style="font-family:monospace" placeholder="from lop.jd.com app">
-                </div>
-                <div>
-                  <label class="field-label">app_secret</label>
-                  <input type="password" id="jd-app_secret" placeholder="paste app_secret">
-                </div>
-                <div style="grid-column:1/-1">
-                  <label class="field-label">access_token</label>
-                  <input type="password" id="jd-access_token" placeholder="OAuth token">
-                </div>
-                <div>
-                  <label class="field-label">customer_code · 商家编码</label>
-                  <input type="text" id="jd-customer_code" style="font-family:monospace" placeholder="from jdl.com 商家后台">
-                </div>
-                <div>
-                  <label class="field-label">API environment</label>
-                  <select id="jd-env">
-                    <option value="production">production</option>
-                    <option value="sandbox">sandbox</option>
-                  </select>
-                </div>
-              </div>
-              <div style="display:flex;gap:10px;flex-wrap:wrap">
-                <button class="btn btn-primary" onclick="_saveIntegration('jd')">💾 Save · 保存</button>
-                <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD · 保存并测试 JD</button>
-              </div>
-              <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved. · 保存后,完整推单还需对照你的 JD 商家配置做一次性字段确认 —— 凭证保存后请告知你的开发人员。</div>
-            </div>
           </div>
 
           <!-- ── Fulfillment: 飞鹅 cloud printer ── -->

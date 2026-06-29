@@ -432,7 +432,7 @@
           ${lastB ? `<div class="muted mt-sub">${esc(lastB)}</div>` : ''}`;
       } else {
         colB = `<div>${mtPill('mt-off', cuT('Not on Meituan', '未上架'))}</div>
-          <div class="muted mt-sub">${cuT('No SKU (货号) match — add it on Meituan', '无货号匹配 — 请在美团填写货号')}</div>`;
+          <div class="muted mt-sub">${cuT('No 货号 match — list it on Meituan with this SKU, then click Fetch from Meituan', '无货号匹配 — 请在美团用此货号上架，然后点「从美团获取」')}</div>`;
       }
 
       return `<tr data-pid="${p.id}" class="mt-product-row${anyMapped ? '' : ' mt-unmapped'}">

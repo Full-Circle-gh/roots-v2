@@ -1388,6 +1388,7 @@ let ENTITLEMENTS = {};
   loadPopups();
   loadDeliveryZones();
   _loadGzExcludedDistricts();  // GZ same-day excluded-districts chips (now on the Delivery tab)
+  loadShippingIntegrations();  // Logistics integration card (kd100 / JD) — moved to the Delivery tab
   loadTopup();
   loadPointsSettings(); // Loyalty & Wallet → Membership & points (earn rate, point value, expiry)
   loadRctiers();        // Loyalty & Wallet → Membership tier ladder (Roots Club)

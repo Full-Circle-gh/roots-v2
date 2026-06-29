@@ -150,6 +150,7 @@
   background: var(--oat);
   border-top: 3rpx solid var(--ink);
   padding: 24rpx 44rpx 32rpx;
+  z-index: 10;
 }
 .total-row {
   display: flex;

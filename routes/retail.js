@@ -36,6 +36,7 @@ const _emailSender = require('../lib/email-sender'); // credential-gated email f
 const _socialAuth = require('../lib/social-auth');   // Google/Apple/WeChat-web OAuth protocol helpers
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 const alipayOcr = require('../lib/alipay-ocr');  // Vision-AI read of manual-Alipay payment screenshots
+const { sendOpsAlert } = require('../lib/ops-alert'); // WeCom ops page on auto-shipping-upload failure
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
 // than crashing — the image endpoint just skips the resize branch when null.
@@ -4935,6 +4936,14 @@ function orderHasDelayedAirShipment(orderId) {
 function notifyOrderStatusChange(orderId, newStatus) {
   // Out-of-GZ "package delivered" SMS — independent channel, own gating.
   if (newStatus === 'delivered') maybeSendDeliveredSms(orderId);
+  // WeChat 发货信息管理: a mini-program/JSAPI-paid order must have shipping info
+  // uploaded or WeChat auto-refunds it. We do it automatically as a "virtual
+  // delivery" the moment the order is marked delivered. Best-effort, async,
+  // idempotent — never throws into / blocks the status transition.
+  if (newStatus === 'delivered') {
+    uploadWeChatVirtualShipping(orderId).catch(e =>
+      console.warn('[wx-shipping]', orderId, e && e.message));
+  }
   // A late air parcel turns the "delivered" message into a food-safety
   // warning instead of the usual celebratory note — the customer mirror of
   // the admin "AIR SHIPMENT DELAYED" banner. Inform + apologise only; the
@@ -4977,6 +4986,121 @@ function notifyOrderStatusChange(orderId, newStatus) {
     sendSubscribeMessage(o.customer_id, tplId, data, `pages/order/order?id=${orderId}`)
       .catch(e => console.warn('[notify-status]', e));
   } catch (e) { console.error('[notify-status]', e); }
+}
+
+// RFC3339 timestamp in Asia/Shanghai (+08:00), the format WeChat's shipping API
+// wants for upload_time, e.g. "2026-06-29T15:29:35+08:00". Independent of the
+// server's own TZ.
+function rfc3339Shanghai() {
+  const d = new Date(Date.now() + 8 * 3600 * 1000);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}` +
+         `T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}+08:00`;
+}
+
+// Build the "product information" description WeChat shows on the shipping
+// record. Joins the order's line items (CN name preferred, EN fallback) into a
+// short, human-readable string. WeChat caps item_desc at 128 chars — we cap
+// well under and append an ellipsis when truncated.
+function buildShippingItemDesc(orderId) {
+  const items = tdb().prepare(
+    'SELECT name_cn, name_en, qty FROM retail_order_items WHERE order_id = ? ORDER BY id ASC'
+  ).all(orderId);
+  const parts = items
+    .map(it => {
+      const name = (it.name_cn || it.name_en || '').trim();
+      if (!name) return null;
+      const q = Number(it.qty);
+      return Number.isFinite(q) && q > 1 ? `${name}×${Math.round(q)}` : name;
+    })
+    .filter(Boolean);
+  let desc = parts.join('、');
+  if (!desc) desc = '商品已发货';                 // never send an empty item_desc
+  if (desc.length > 120) desc = desc.slice(0, 119) + '…';
+  return desc;
+}
+
+// Auto-upload a "virtual delivery" shipping record to WeChat for a delivered
+// order. Mirrors the manual flow (订单 → 发货 → 虚拟发货 → 商品信息 → 发货) via the
+// official server API: POST /wxa/sec/order/upload_shipping_info.
+//
+//   • logistics_type 3 = 虚拟商品 (no real tracking number) = "virtual delivery"
+//   • delivery_mode  1 = 统一发货 (single shipment for the whole order)
+//   • order_key uses the WeChat 支付订单号 (transaction_id), so order_number_type=2
+//
+// Only ever runs for genuine mini-program / JSAPI WeChat-paid orders (we need a
+// real payer openid + a transaction_id under THIS tenant's AppID). Idempotent
+// via retail_orders.wx_shipping_uploaded_at. Best-effort: pages ops on a hard
+// failure but never throws into the caller.
+async function uploadWeChatVirtualShipping(orderId) {
+  // Tenant kill-switch (defaults on). Lets a tenant who doesn't want this opt out.
+  if (cfgValue('wechat.autoVirtualShipping', true) !== true) return;
+
+  const o = tdb().prepare(
+    `SELECT o.id, o.order_no, o.payment_method, o.wx_shipping_uploaded_at, c.openid
+       FROM retail_orders o
+       JOIN retail_customers c ON c.id = o.customer_id
+      WHERE o.id = ?`
+  ).get(orderId);
+  if (!o) return;
+  if (o.wx_shipping_uploaded_at) return;          // already uploaded — idempotent
+  if (o.payment_method !== 'wechat') return;      // only WeChat-paid orders need this
+  // Need a real mini-program openid. Synthetic identities (web:/google:/email:/
+  // wxweb:/dev:) all carry a ':' — genuine WeChat openids never do.
+  if (!o.openid || o.openid.includes(':')) return;
+
+  const pay = tdb().prepare(
+    `SELECT transaction_id FROM retail_payments
+      WHERE order_id = ? AND method = 'wechat' AND status = 'success'
+        AND transaction_id IS NOT NULL AND transaction_id != ''
+      ORDER BY id DESC LIMIT 1`
+  ).get(orderId);
+  if (!pay || !pay.transaction_id) return;        // no WeChat txn id → nothing to attach to
+
+  let token;
+  try { token = await getWeChatAccessToken(); }
+  catch (e) { console.warn('[wx-shipping] token', orderId, e.message); return; }
+  if (!token) return;                             // dev / unconfigured tenant
+
+  const body = {
+    order_key:      { order_number_type: 2, transaction_id: pay.transaction_id },
+    logistics_type: 3,                            // 虚拟商品 = virtual delivery
+    delivery_mode:  1,                            // 统一发货
+    shipping_list:  [{ item_desc: buildShippingItemDesc(orderId) }],
+    upload_time:    rfc3339Shanghai(),
+    payer:          { openid: o.openid },
+  };
+
+  let j;
+  try {
+    const resp = await fetch(
+      `https://api.weixin.qq.com/wxa/sec/order/upload_shipping_info?access_token=${token}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    );
+    j = await resp.json().catch(() => ({}));
+  } catch (e) {
+    console.warn('[wx-shipping] fetch', orderId, e.message);
+    return;                                       // transient network error — a re-mark retries
+  }
+
+  // errcode 0 = success. Treat "already uploaded" (the order was shipped on the
+  // WeChat side already) as success too, so we stop retrying and stamp it.
+  const ALREADY = new Set([268480001 /* order already shipped */]);
+  if (j.errcode === 0 || ALREADY.has(j.errcode)) {
+    tdb().prepare(
+      "UPDATE retail_orders SET wx_shipping_uploaded_at = CURRENT_TIMESTAMP, wx_shipping_status = 'ok' WHERE id = ?"
+    ).run(orderId);
+    return;
+  }
+
+  // Hard failure — record it and page ops. Don't stamp uploaded_at, so a later
+  // re-mark (or a manual retry) tries again.
+  const status = `err:${j.errcode || '?'} ${j.errmsg || ''}`.trim().slice(0, 200);
+  tdb().prepare('UPDATE retail_orders SET wx_shipping_status = ? WHERE id = ?').run(status, orderId);
+  console.error('[wx-shipping] upload failed', o.order_no, status);
+  try {
+    await sendOpsAlert(`微信自动发货失败 订单 ${o.order_no}：${j.errcode || '?'} ${j.errmsg || ''}（请到小程序后台手动发货）`);
+  } catch (_) { /* alerting never blocks */ }
 }
 
 // One-time in-app notice, fired on payment, when the order holds any item the
@@ -9069,6 +9193,85 @@ router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
   res.json({ success: true, data: order });
 });
 
+// Live courier tracking for a 青云聚信 (Qingyun aggregator) delivery — status +
+// rider GPS for the customer's own order. Read-only mirror of delivery_jobs, which
+// the qingyun-daemon fills (see scripts/qingyun-daemon.js,
+// feature_qingyun_delivery_tracking). Returns { tracking:false } when no Qingyun
+// delivery is linked yet (e.g. not dispatched, or the daemon hasn't matched it).
+// Coordinates are returned as decimal GCJ-02 (raw ÷ 1e6) — AMap-ready, no conversion.
+router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const order = tdb().prepare(
+    'SELECT id, recipient_phone FROM retail_orders WHERE id = ? AND customer_id = ?'
+  ).get(id, req.customer.id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+
+  // Primary: the daemon has linked this delivery to the roots order. Fallback:
+  // match by recipient phone (the daemon may not have matched it to the order id
+  // yet, but the phone snapshot is the same). Newest row wins.
+  let job = null;
+  try {
+    job = tdb().prepare(
+      'SELECT * FROM delivery_jobs WHERE retail_order_id = ? ORDER BY updated_at DESC LIMIT 1'
+    ).get(id);
+    if (!job) {
+      const phone = String(order.recipient_phone || '').replace(/\D/g, '');
+      if (phone.length >= 7) {
+        job = tdb().prepare(
+          `SELECT * FROM delivery_jobs
+            WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
+            ORDER BY updated_at DESC LIMIT 1`
+        ).get('%' + phone.slice(-8) + '%');
+      }
+    }
+  } catch (e) {
+    // delivery_jobs missing (pre-migration) or query error — degrade gracefully.
+    return res.json({ success: true, data: { tracking: false } });
+  }
+  if (!job) return res.json({ success: true, data: { tracking: false } });
+
+  // orderStatus enum → coarse customer-facing stage. 20 待配送 → 30 in-flight
+  // (rider grabbed → delivering) → 50 已送达. < 50 with a rider assigned = in transit.
+  const os = job.order_status;
+  let stage = 'awaiting_dispatch';
+  if (os >= 50) stage = 'delivered';
+  else if (job.rider_name || (os != null && os >= 30)) stage = 'in_transit';
+  const coord = (lat, lng) => (lat != null && lng != null) ? { lat: lat / 1e6, lng: lng / 1e6 } : null;
+
+  let route = [];
+  let shopPos = null, recipientPos = null;
+  try {
+    const t = job.raw_track ? JSON.parse(job.raw_track) : null;
+    if (t) {
+      shopPos = coord(t.shopLat, t.shopLng);
+      recipientPos = coord(t.recipientLat, t.recipientLng);
+      if (Array.isArray(t.routeCoords)) {
+        route = t.routeCoords
+          .filter(p => p && p.lat != null && p.lng != null)
+          .map(p => ({ lat: p.lat / 1e6, lng: p.lng / 1e6 }));
+      }
+    }
+  } catch (e) { /* raw_track unparseable — omit route */ }
+
+  res.json({ success: true, data: {
+    tracking: true,
+    stage,
+    order_status: job.order_status,
+    delivery_status: job.delivery_status,
+    carrier: job.carrier_name || null,
+    waybill_id: job.waybill_id || null,
+    rider: job.rider_name ? { name: job.rider_name, phone: job.rider_phone || null } : null,
+    rider_position: stage === 'delivered' ? null : coord(job.rider_lat, job.rider_lng),
+    shop_position: shopPos,
+    recipient_position: recipientPos || coord(job.recipient_lat, job.recipient_lng),
+    route,
+    eta_seconds: job.eta_seconds ?? null,
+    rider_to_cust_m: job.rider_to_cust_m ?? null,
+    expected_delivery_at: job.expected_delivery_at || null,
+    updated_at: job.updated_at,
+  }});
+});
+
 // Request a fapiao (发票) for an existing PAID order — for shoppers who didn't
 // tick "need an invoice" at checkout. Sets the same fields the checkout flow
 // stores; the office then issues it (it appears in My Invoices). Re-requesting
@@ -10718,44 +10921,64 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   let refunds = { count: 0, items: [] };
   let delivery_alerts = { count: 0, items: [] };
 
-  // Real, sellable stock per product (matches the storefront's `stock` column).
-  const REAL_STOCK = `COALESCE(
-      (SELECT SUM(rss.physical_qty)
-         FROM retail_store_stock rss
-         JOIN retail_stores      rs ON rs.id = rss.store_id
-        WHERE rss.product_id = p.id AND rs.is_active = 1),
-      p.stock_qty, 0)`;
+  // Optional per-store scope (mirrors the dashboard's store picker). When a
+  // store_id is supplied we count that store's own shelf (its retail_store_stock
+  // row only); with no store_id we sum sellable stock across all active stores,
+  // matching the storefront's `stock` column.
+  const storeId = (req.query.store_id || '').trim();
+  const REAL_STOCK = storeId
+    ? `COALESCE(
+        (SELECT rss.physical_qty
+           FROM retail_store_stock rss
+          WHERE rss.product_id = p.id AND rss.store_id = @store_id),
+        0)`
+    : `COALESCE(
+        (SELECT SUM(rss.physical_qty)
+           FROM retail_store_stock rss
+           JOIN retail_stores      rs ON rs.id = rss.store_id
+          WHERE rss.product_id = p.id AND rs.is_active = 1),
+        p.stock_qty, 0)`;
+  // When scoped to a store, only surface products actually carried there.
+  const STORE_SCOPE = storeId
+    ? `AND EXISTS (SELECT 1 FROM retail_store_stock rss
+                    WHERE rss.product_id = p.id AND rss.store_id = @store_id)`
+    : '';
+  const storeBind = storeId ? { store_id: storeId } : {};
 
   try {
     const lowDefault = lowStockDefault();
     const lowCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products p
        WHERE ${REAL_STOCK} > 0
-         AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, ?)
+         AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, @low_default)
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
-    `).get(lowDefault).n;
+         ${STORE_SCOPE}
+    `).get({ ...storeBind, low_default: lowDefault }).n;
     const lowItems = tdb().prepare(`
       SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty
         FROM store_products p
        WHERE ${REAL_STOCK} > 0
-         AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, ?)
+         AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, @low_default)
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
-       ORDER BY stock_qty ASC, p.name_en LIMIT ?
-    `).all(lowDefault, previewLimit);
+         ${STORE_SCOPE}
+       ORDER BY stock_qty ASC, p.name_en LIMIT @preview
+    `).all({ ...storeBind, low_default: lowDefault, preview: previewLimit });
     low = { count: lowCount, items: lowItems };
 
     const oosCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products p
        WHERE ${REAL_STOCK} = 0
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
-    `).get().n;
+         ${STORE_SCOPE}
+    `).get(storeBind).n;
     const oosItems = tdb().prepare(`
       SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty
         FROM store_products p
        WHERE ${REAL_STOCK} = 0
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
-       ORDER BY p.name_en LIMIT ?
-    `).all(previewLimit);
+         ${STORE_SCOPE}
+       ORDER BY p.name_en LIMIT @preview
+    `).all({ ...storeBind, preview: previewLimit });
     out_of_stock = { count: oosCount, items: oosItems };
 
     // Refunds awaiting operator attention. refund_status states:
