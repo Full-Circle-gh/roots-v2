@@ -9921,6 +9921,57 @@ function guanyiPickupSales(db, from, to, opts) {
   return out;
 }
 
+// ── GET /api/retail-admin/sales/summary ──────────────────────────────────
+// Powers the Sales overview page (#tab-sales): today's per-channel revenue /
+// orders / AOV plus a folded all-channel summary. Meituan orders are mirrored
+// into retail_orders (channel='meituan'); gzgrocery is the wholesale pickup
+// channel read via guanyiPickupSales(); Eleme isn't connected yet → zeros.
+// "Today" is GZ-local (UTC+8), same convention as the dashboard.
+router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => {
+  try {
+    const TZ    = '+8 hours';
+    const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+    const PDATE = `date(COALESCE(paid_at, placed_at), '${TZ}')`;
+
+    // Meituan — storefront orders the daemon mirrors in with channel='meituan'.
+    const mt = tdb().prepare(`
+      SELECT COUNT(*) AS orders, COALESCE(SUM(total),0) AS revenue, COALESCE(AVG(total),0) AS aov
+        FROM retail_orders
+       WHERE channel='meituan' AND ${PAID} AND ${PDATE} = ?
+    `).get(today) || { orders: 0, revenue: 0, aov: 0 };
+    // Successful stock pushes today (the card's 4th metric).
+    let mtPushes = 0;
+    try {
+      mtPushes = tdb().prepare(`
+        SELECT COUNT(*) AS n FROM meituan_sync_log
+         WHERE event_type='stock_push' AND status='success'
+           AND date(created_at, '${TZ}') = ?
+      `).get(today)?.n || 0;
+    } catch (e) { /* no sync-log table for this tenant */ }
+
+    // gzgrocery — wholesale pickup channel (revenue + order count from the ledger).
+    const gy = guanyiPickupSales(tdb(), today, today);
+    const gyAov = gy.orders ? +(gy.revenue / gy.orders).toFixed(2) : 0;
+
+    const channels = {
+      meituan:   { connected: true,  revenue: +Number(mt.revenue || 0).toFixed(2), orders: mt.orders || 0, aov: +Number(mt.aov || 0).toFixed(2), extra: mtPushes },
+      gzgrocery: { connected: true,  revenue: gy.revenue || 0, orders: gy.orders || 0, aov: gyAov, extra: gy.orders || 0 },
+      eleme:     { connected: false, revenue: 0, orders: 0, aov: 0, extra: 0 },
+    };
+    let revenue = 0, orders = 0, active = 0;
+    for (const k of Object.keys(channels)) {
+      revenue += channels[k].revenue; orders += channels[k].orders;
+      if (channels[k].connected) active += 1;
+    }
+    revenue = +revenue.toFixed(2);
+    const aov = orders ? +(revenue / orders).toFixed(2) : 0;
+    res.json({ success: true, channels, summary: { revenue, orders, aov, active, total: 3 } });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const TZ    = '+8 hours';
   const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";

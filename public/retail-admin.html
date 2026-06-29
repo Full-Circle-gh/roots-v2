@@ -299,7 +299,7 @@
        opens #tab-sales (summary + per-channel cards); the children jump
        straight into a single channel's full admin. -->
   <div class="tabs-group nav-parent" data-group="sales" style="order:3">
-    <button class="nav-parent-link" data-tab="sales">
+    <button class="nav-parent-link" data-tab="sales" onclick="salesInit()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
       Sales · 销售
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
@@ -6609,10 +6609,10 @@
           <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
         <div class="sales-ch-metrics">
-          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Orders · 订单</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Avg order · 客单价</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Stock pushes · 库存推送</div><div class="m-n">—</div></div>
+          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-mt-rev">—</div></div>
+          <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-mt-orders">—</div></div>
+          <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-mt-aov">—</div></div>
+          <div><div class="m-l">Stock pushes · 库存推送</div><div class="m-n" id="sales-mt-extra">—</div></div>
         </div>
         <div class="sales-ch-foot">
           <button class="btn btn-sm" type="button" onclick="salesGo('meituan')">
@@ -6637,10 +6637,10 @@
           <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
         <div class="sales-ch-metrics">
-          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Orders · 订单</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Avg order · 客单价</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Pickups · 自提</div><div class="m-n">—</div></div>
+          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-gy-rev">—</div></div>
+          <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-gy-orders">—</div></div>
+          <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-gy-aov">—</div></div>
+          <div><div class="m-l">Pickups · 自提</div><div class="m-n" id="sales-gy-extra">—</div></div>
         </div>
         <div class="sales-ch-foot">
           <button class="btn btn-sm" type="button" onclick="salesGo('guanyi')">
@@ -6665,10 +6665,10 @@
           <button class="sales-toggle is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
         </div>
         <div class="sales-ch-metrics">
-          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Orders · 订单</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Avg order · 客单价</div><div class="m-n">—</div></div>
-          <div><div class="m-l">Stock pushes · 库存推送</div><div class="m-n">—</div></div>
+          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-el-rev">—</div></div>
+          <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-el-orders">—</div></div>
+          <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-el-aov">—</div></div>
+          <div><div class="m-l">Stock pushes · 库存推送</div><div class="m-n" id="sales-el-extra">—</div></div>
         </div>
         <div class="sales-ch-foot">
           <button class="btn btn-sm" type="button" onclick="salesGo('eleme')">

@@ -224,6 +224,34 @@ function salesGo(channel) {
   const btn = document.querySelector('.tabs [data-tab="' + channel + '"]');
   if (btn) btn.click();
 }
+// Sales overview → fill today's per-channel figures + the folded summary from
+// /sales/summary. Called when the Sales tab is opened. Leaves the "—"
+// placeholders in place on any error rather than blanking the page. dashMoney
+// (part 03) is loaded by the time a tab can be clicked.
+async function salesInit() {
+  const set   = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const money = (n) => (typeof dashMoney === 'function' ? dashMoney(n) : '¥' + Number(n || 0));
+  const num   = (n) => Number(n || 0).toLocaleString();
+  try {
+    const j = await api('/api/retail-admin/sales/summary');
+    const s = j.summary || {}, c = j.channels || {};
+    set('sales-sum-rev', money(s.revenue));
+    set('sales-sum-orders', num(s.orders));
+    set('sales-sum-aov', money(s.aov));
+    const active = document.getElementById('sales-sum-active');
+    if (active) active.innerHTML = num(s.active) + ' <span class="sales-of">/ ' + (s.total || 3) + '</span>';
+    const fill = (k, ch) => {
+      if (!ch) return;
+      set('sales-' + k + '-rev', money(ch.revenue));
+      set('sales-' + k + '-orders', num(ch.orders));
+      set('sales-' + k + '-aov', money(ch.aov));
+      set('sales-' + k + '-extra', num(ch.extra));
+    };
+    fill('mt', c.meituan);
+    fill('gy', c.gzgrocery);
+    fill('el', c.eleme);
+  } catch (e) { /* keep placeholders on error */ }
+}
 // Embedded editor — lazy-load the Mini App Editor iframe the first time the
 // Editor tab is opened, so the big editor app doesn't download until needed.
 (function () {
