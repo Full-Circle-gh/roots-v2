@@ -557,6 +557,25 @@ function refreshCouponBlocks(cfg) {
   }
 }
 
+// Online storefront open/closed (mini-app + web share ONE storefront). Stored in
+// storefront_config under 'store_status'; the Meituan per-store close is separate
+// (store_business_status). Defaults to OPEN so an unset/fresh install never blocks
+// orders. message_en/cn are shown to the customer when closed (banner + the
+// checkout-rejection reason). Read on every checkout, so keep it cheap.
+function loadStoreStatus() {
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'store_status'").get();
+    const v = row ? JSON.parse(row.value_json) : {};
+    return {
+      online_open: !(v.online_open === false || v.online_open === 0),
+      message_en: v.message_en || '',
+      message_cn: v.message_cn || '',
+    };
+  } catch (e) {
+    return { online_open: true, message_en: '', message_cn: '' };
+  }
+}
+
 router.get('/api/retail/config', (req, res) => {
   try {
     const cfg = loadConfig();
@@ -581,6 +600,13 @@ router.get('/api/retail/config', (req, res) => {
       }
       cfg._preview = true;
     }
+    // Store open/closed (online storefront). Always surface it — defaulting to
+    // OPEN — so the mini-app + web can render a "we're closed" banner + disable
+    // checkout when the operator flips it off. The server also enforces this at
+    // POST /api/retail/orders, so a stale client can't slip an order through.
+    cfg.store_status = cfg.store_status || {};
+    if (cfg.store_status.online_open == null) cfg.store_status.online_open = true;
+
     // Always surface review tags so the mini app's review form + product
     // cards have labels + colours even on fresh installs (before staff
     // has touched the Reviews editor).
@@ -7275,6 +7301,18 @@ function nextOrderNo() {
 router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req, res, next) => {
   try {
   const body = req.body || {};
+  // Store closed (online storefront)? Reject every new order — delivery AND
+  // pickup, mini-app AND web — server-side, so a client that already had the app
+  // open (or a stale cached config) still can't slip an order through. This is the
+  // authoritative gate; the customer banner/disabled button is only cosmetic.
+  const _storeStatus = loadStoreStatus();
+  if (!_storeStatus.online_open) {
+    return res.status(403).json({
+      success: false, error: 'store_closed',
+      message: _storeStatus.message_en || 'The store is currently closed and not accepting new orders.',
+      message_cn: _storeStatus.message_cn || '本店当前已打烊,暂停接单,敬请谅解。',
+    });
+  }
   const items       = Array.isArray(body.items) ? body.items : [];
   const addressId   = body.address_id;
   const paymentMethod = body.payment_method;

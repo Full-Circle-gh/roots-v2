@@ -429,4 +429,107 @@ router.post('/api/retail-admin/meituan/business-status', requireRetailAdmin, exp
   }
 });
 
+// ── Master store status (online storefront + Meituan) ─────────────────────────
+// One panel over every sales channel we control: the online storefront (mini-app +
+// web, a storefront_config 'store_status' flag enforced at POST /api/retail/orders)
+// + each Meituan store (置休 via store_business_status, applied by the sync daemons).
+// gzgrocery is a read-only B2B mirror, so it's not a closable channel here.
+
+function readOnlineStatus(db) {
+  try {
+    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key='store_status'").get();
+    const v = row ? JSON.parse(row.value_json) : {};
+    return {
+      online_open: !(v.online_open === false || v.online_open === 0),
+      message_en: v.message_en || '',
+      message_cn: v.message_cn || '',
+    };
+  } catch (e) { return { online_open: true, message_en: '', message_cn: '' }; }
+}
+function writeOnlineStatus(db, val, by) {
+  db.prepare(`
+    INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+      VALUES ('store_status', ?, CURRENT_TIMESTAMP, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by
+  `).run(JSON.stringify(val), by || 'backend');
+}
+
+// GET the whole panel: online storefront + each Meituan store + derived master.
+router.get('/api/retail-admin/store-status', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const online = readOnlineStatus(db);
+    const stores = db.prepare(
+      `SELECT code, COALESCE(name_cn, name_en, code) AS name FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id`
+    ).all();
+    const rows = db.prepare('SELECT * FROM store_business_status').all();
+    const byCode = {};
+    for (const r of rows) byCode[r.store_code] = r;
+    const meituan = stores.map((s) => {
+      const r = byCode[s.code] || {};
+      return {
+        storeCode: s.code, name: s.name,
+        isOpen: r.is_open === 1, readOk: r.read_ok === 1,
+        pending: r.target_open != null, statusDesc: r.status_desc || null,
+      };
+    });
+    // Master reflects the union: open only if EVERYTHING is open, closed only if
+    // EVERYTHING is closed, else 'mixed'.
+    const flags = [online.online_open, ...meituan.map((m) => m.isOpen)];
+    const master = flags.every(Boolean) ? 'open' : (flags.every((f) => !f) ? 'closed' : 'mixed');
+    res.json({ success: true, online, meituan, master });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Flip just the online storefront (mini-app + web). Optional custom closed message.
+router.post('/api/retail-admin/store-status/online', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const { open, message_en, message_cn } = req.body || {};
+  if (typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'open (boolean) is required' });
+  try {
+    const by = (req.backendUser && (req.backendUser.username || req.backendUser.name)) || 'backend';
+    const cur = readOnlineStatus(db);
+    const val = {
+      online_open: open,
+      message_en: message_en != null ? String(message_en).slice(0, 300) : cur.message_en,
+      message_cn: message_cn != null ? String(message_cn).slice(0, 300) : cur.message_cn,
+    };
+    writeOnlineStatus(db, val, by);
+    res.json({ success: true, online: val });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Master flip: EVERY sales channel at once — online storefront + queue every
+// Meituan store closed/open (the daemons apply the Meituan side within ~1 min).
+router.post('/api/retail-admin/store-status/master', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const { open } = req.body || {};
+  if (typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'open (boolean) is required' });
+  try {
+    const by = (req.backendUser && (req.backendUser.username || req.backendUser.name)) || 'backend';
+    const cur = readOnlineStatus(db);
+    const val = { online_open: open, message_en: cur.message_en, message_cn: cur.message_cn };
+    const stores = db.prepare('SELECT code FROM retail_stores WHERE is_active = 1').all();
+    const queueMeituan = db.prepare(`
+      INSERT INTO store_business_status (store_code, target_open, target_by, target_at, updated_at)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(store_code) DO UPDATE SET
+        target_open = excluded.target_open, target_by = excluded.target_by,
+        target_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    `);
+    db.transaction(() => {
+      writeOnlineStatus(db, val, by);
+      for (const s of stores) queueMeituan.run(s.code, open ? 1 : 0, by);
+    })();
+    res.json({ success: true, online: val, meituanQueued: stores.map((s) => s.code), target: open ? 'open' : 'closed' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;
