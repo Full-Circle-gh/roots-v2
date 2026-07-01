@@ -9979,8 +9979,16 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
 
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const TZ    = '+8 hours';
-  const PAID  = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
-  const PAIDO = "o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+  // gzgrocery is a wholesale pickup channel whose revenue is folded in via the
+  // Guanyi/order-read ledger (guanyiPickupSales, below). Its display-only mirror
+  // rows in retail_orders (channel='gzgrocery') must therefore be excluded from
+  // every retail_orders revenue/order aggregation here, or its takings would be
+  // counted twice. (Meituan, by contrast, IS sourced from retail_orders and stays
+  // included.) No-op until the gzgrocery order daemon starts writing mirror rows.
+  const NOTGZ  = "COALESCE(channel,'') != 'gzgrocery'";
+  const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
+  const PAID  = `status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZ}`;
+  const PAIDO = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
   // Revenue date = day payment landed (see header note). PDATE for bare-table
   // queries, PDATEO when the orders table is aliased `o`, PHOUR for the hourly
   // bucket of a single-day view.
@@ -10075,7 +10083,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const funnel = tdb().prepare(`
     SELECT status, COUNT(*) AS n, COALESCE(SUM(total), 0) AS revenue
       FROM retail_orders
-     WHERE date(placed_at, '${TZ}') BETWEEN ? AND ?
+     WHERE date(placed_at, '${TZ}') BETWEEN ? AND ? AND ${NOTGZ}
      GROUP BY status`).all(from, to);
   const byStatus = {};
   for (const r of funnel) byStatus[r.status] = { n: r.n, revenue: r.revenue };
@@ -10703,6 +10711,9 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.paid_at IS NOT NULL AND o.paid_at >= ?
+         -- gzgrocery has its own dedicated pickup feed row (from the ledger,
+         -- below); exclude its display-only mirror so it isn't listed twice.
+         AND COALESCE(o.channel,'') != 'gzgrocery'
        ORDER BY o.paid_at DESC LIMIT ?
     `).all(sinceIso, limit);
     for (const r of paid) events.push({
@@ -15131,6 +15142,7 @@ router.get('/api/retail-admin/orders/unseen-count', requireRetailAdmin, (req, re
     `SELECT COUNT(*) AS n, MAX(placed_at) AS latest
        FROM retail_orders
       WHERE status IN ('paid','awaiting_restock')
+        AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')
         AND datetime(placed_at) > datetime(?)`
   ).get(sinceSql);
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
@@ -15158,7 +15170,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
   // rows the storefront doesn't fulfil (the UI renders those view-only).
-  const channel = ['wechat', 'web', 'meituan'].includes(String(req.query.channel || '').toLowerCase())
+  const channel = ['wechat', 'web', 'meituan', 'gzgrocery'].includes(String(req.query.channel || '').toLowerCase())
     ? String(req.query.channel).toLowerCase() : '';
   const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
@@ -15281,9 +15293,10 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
 router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, res) => {
   const { store_id } = req.query;
   const sid = store_id ? parseInt(store_id, 10) : null;
-  // Mirror the list filter: Meituan-channel orders are a read-only stock record,
-  // not operator worklist items, so they never feed the open-work count badges.
-  const where = " AND COALESCE(channel,'') != 'meituan'" + (sid ? ' AND store_id = ?' : '');
+  // Mirror the list filter: read-only channel orders (Meituan mirror + gzgrocery
+  // wholesale mirror) are a stock/ledger record, not operator worklist items, so
+  // they never feed the open-work count badges.
+  const where = " AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')" + (sid ? ' AND store_id = ?' : '');
   const args  = sid ? [sid] : [];
 
   const out = { pending_payment: 0, paid: 0, preparing: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0 };
@@ -15337,7 +15350,7 @@ router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, r
   if (to)   { sql += ' AND o.placed_at <= ?'; params.push(to); }
   sql += ' GROUP BY ch';
 
-  const out = { all: 0, wechat: 0, web: 0, meituan: 0 };
+  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0 };
   for (const r of tdb().prepare(sql).all(...params)) {
     if (r.ch in out) out[r.ch] += r.n;
     out.all += r.n;

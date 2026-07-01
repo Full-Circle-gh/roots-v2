@@ -152,6 +152,106 @@ function curQty(storeId, productId) {
   return r ? r.physical_qty : 0;
 }
 
+// ── retail_orders mirror (combined orders view) ──────────────────────────────
+// gzgrocery is a wholesale pickup channel: its authoritative revenue stays the
+// Guanyi/order-read LEDGER (guanyiPickupSales), which the dashboard folds in and
+// which excludes channel='gzgrocery' from its retail_orders sums. These mirror
+// rows are DISPLAY-ONLY — they let gzgrocery orders show, read-only, in the
+// combined admin orders list alongside mini-app / web / Meituan. One row per
+// gzgrocery order that contains our products; order_no = 'GZ-<orderId>' (stable,
+// unique, no collision with R…/MT… numbers). Idempotent — safe to re-run.
+const GZ_MIRROR = (process.env.GZGROCERY_MIRROR_ORDERS || 'on').toLowerCase() !== 'off';
+
+// Per-unit price on the SAME basis as guanyiPickupSales so the orders-list total
+// and the Sales/dashboard revenue agree: GZ wholesale price → retail → sell.
+let _gzPriceStmt = undefined;
+function gzUnitPrice(productId) {
+  if (_gzPriceStmt === undefined) {
+    const hasPricing = !!db.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='guanyi_product_pricing'`).get();
+    _gzPriceStmt = db.prepare(hasPricing
+      ? `SELECT COALESCE(pp.excel_gz_price, pp.excel_retail, sp.sell_price, 0) AS owed
+           FROM store_products sp LEFT JOIN guanyi_product_pricing pp ON pp.product_id = sp.id WHERE sp.id=?`
+      : `SELECT COALESCE(sp.sell_price, 0) AS owed FROM store_products sp WHERE sp.id=?`);
+  }
+  const r = _gzPriceStmt.get(productId);
+  return r ? Number(r.owed) || 0 : 0;
+}
+
+function parseGzDateMs(s) {
+  if (!s) return null;
+  let m = /(\d{2})\/(\d{2})\/(\d{4})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(s);
+  if (m) return Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0)) - 8 * 3600000;
+  m = /(\d{4})[-/](\d{2})[-/](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(s);
+  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) - 8 * 3600000;
+  return null;
+}
+function gzPlacedAt(dateAdded) {
+  const ms = parseGzDateMs(dateAdded);
+  return ms ? new Date(ms).toISOString().slice(0, 19).replace('T', ' ') : null;
+}
+function gzMirrorOrderNo(orderId) { return 'GZ-' + orderId; }
+
+// Upsert the display-only retail_orders row for one gzgrocery order. `voided`
+// flips an existing mirror to 'cancelled' (and never creates a new row for an
+// order that was cancelled before we ever counted it).
+function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, voided }) {
+  if (!GZ_MIRROR || MODE !== 'live') return;
+  if (!ours || !ours.length) return;
+  const roNo = gzMirrorOrderNo(orderId);
+  const existing = db.prepare('SELECT id, status FROM retail_orders WHERE order_no=?').get(roNo);
+  const mStatus = voided ? 'cancelled' : 'paid';
+  if (existing) {
+    if (existing.status !== mStatus) {
+      db.prepare('UPDATE retail_orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(mStatus, existing.id);
+    }
+    return;
+  }
+  if (voided) return;  // never counted, already void → nothing to show
+
+  let subtotal = 0;
+  const lines = ours.map((it) => {
+    const owed = gzUnitPrice(it.product_id);
+    const line = +(owed * it.qty).toFixed(2);
+    subtotal += line;
+    return { product_id: it.product_id, name_cn: it.name_cn || null, name_en: it.name_en || null, qty: it.qty, unit_price: owed, line_total: line };
+  });
+  subtotal = +subtotal.toFixed(2);
+  const placedAt = gzPlacedAt(dateAdded);
+
+  db.transaction(() => {
+    const r = db.prepare(`INSERT INTO retail_orders
+        (order_no, status, payment_method, subtotal, total, recipient_name,
+         store_id, channel, fulfillment_type, placed_at, paid_at)
+      VALUES (?, 'paid', 'gzgrocery', ?, ?, ?, ?, 'gzgrocery', 'delivery',
+              COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`)
+      .run(roNo, subtotal, subtotal, (customer || '').slice(0, 200) || null, storeId, placedAt, placedAt);
+    const oid = r.lastInsertRowid;
+    const ins = db.prepare(`INSERT INTO retail_order_items
+      (order_id, product_id, name_cn, name_en, qty, unit_price, line_total) VALUES (?,?,?,?,?,?,?)`);
+    for (const l of lines) ins.run(oid, l.product_id, l.name_cn, l.name_en, l.qty, l.unit_price, l.line_total);
+  })();
+  log(`mirrored ${roNo} → retail_orders (channel=gzgrocery, ¥${subtotal}, ${lines.length} line(s))`);
+}
+
+// One-time (idempotent) backfill so existing gzgrocery orders show in the list
+// immediately, not only new ones. Runs at startup in live mode.
+function backfillGzMirrors(storeId) {
+  if (!GZ_MIRROR || MODE !== 'live') return;
+  let made = 0;
+  const rows = db.prepare(`SELECT order_id, status, customer, date_added, items_json, reversed
+                             FROM gzgrocery_orders WHERE decremented=1 AND our_units>0`).all();
+  for (const row of rows) {
+    let ours = [];
+    try { ours = JSON.parse(row.items_json || '[]'); } catch { ours = []; }
+    if (!ours.length) continue;
+    const had = db.prepare('SELECT 1 FROM retail_orders WHERE order_no=?').get(gzMirrorOrderNo(row.order_id));
+    ensureGzMirror({ orderId: row.order_id, status: row.status, customer: row.customer,
+      dateAdded: row.date_added, ours, storeId, voided: !!row.reversed });
+    if (!had) made++;
+  }
+  if (made) log(`backfill: mirrored ${made} existing gzgrocery order(s) into retail_orders`);
+}
+
 // Match an order's line items against our catalogue → the OUR-product units.
 function matchOurItems(items, skuMap) {
   const ours = [];
@@ -216,6 +316,9 @@ function processOrder(o, items, skuMap, storeId) {
     // Push a WeCom card listing only our line items (fire-and-forget, never blocks).
     notifyOrder(o, ours.map((it) => ({ name_en: it.name_en, name_cn: it.name_cn, sku: it.sku, qty: it.qty })))
       .catch((e) => console.error('[gzgrocery-orders] notify failed:', e.message));
+    // Display-only mirror into retail_orders so this shows in the combined list.
+    try { ensureGzMirror({ orderId: o.orderId, status: o.status, customer: o.customer, dateAdded: o.dateAdded, ours, storeId, voided: false }); }
+    catch (e) { log(`mirror ${o.orderNo || o.orderId} failed: ${e.message}`); }
     return { result: 'decremented', units: ourUnits };
   }
 
@@ -237,6 +340,9 @@ function processOrder(o, items, skuMap, storeId) {
     upsert({ reversed: 1, note: `${MODE}: reversed (${o.status}) ${applied.join(', ')}` });
     auditLog(o, MODE === 'live' ? 'reversed' : 'would_reverse', applied.join(', '));
     log(`order ${o.orderNo || o.orderId} [${o.status}] ${MODE === 'live' ? 'REVERSED' : 'would reverse'}: ${applied.join(', ')}`);
+    // Flip the display mirror to cancelled so the list reflects the void.
+    try { ensureGzMirror({ orderId: o.orderId, status: o.status, customer: o.customer, dateAdded: o.dateAdded, ours, storeId, voided: true }); }
+    catch (e) { log(`mirror-void ${o.orderNo || o.orderId} failed: ${e.message}`); }
     return { result: 'reversed', units: ourUnits };
   }
 
@@ -247,9 +353,12 @@ function processOrder(o, items, skuMap, storeId) {
 
 // ── One poll cycle ───────────────────────────────────────────────────────────
 let _client = null;
+let _backfilledMirrors = false;
 async function runCycle() {
   if (MODE === 'off') { if (ONCE) log('MODE=off — nothing to do'); return; }
   const storeId = resolveStoreId();
+  // One-time backfill so pre-existing gzgrocery orders appear in the list.
+  if (!_backfilledMirrors) { _backfilledMirrors = true; try { backfillGzMirrors(storeId); } catch (e) { log(`backfill failed: ${e.message}`); } }
   const skuMap  = loadSkuMap();
   _client = _client || new GzGroceryAdmin();
   const orders = await _client.fetchOrders({ maxPages: MAX_PAGES, sinceDays: SINCE_DAYS });

@@ -26,11 +26,15 @@ function setOrderChannel(chip) {
 // Which non-storefront channels are shown read-only in the combined list — the
 // storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For
 // now just Meituan (mirrored in to deduct stock); gzgrocery joins in phase 2.
-function ordIsReadonlyChannel(o) { return String(o.channel || '').toLowerCase() === 'meituan'; }
+function ordIsReadonlyChannel(o) {
+  const c = String(o.channel || '').toLowerCase();
+  return c === 'meituan' || c === 'gzgrocery';
+}
 function ordChannelLabel(o) {
   const c = String(o.channel || 'wechat').toLowerCase();
-  if (c === 'meituan') return 'Meituan';
-  if (c === 'web')     return 'Web';
+  if (c === 'meituan')   return 'Meituan';
+  if (c === 'gzgrocery') return 'gzgrocery';
+  if (c === 'web')       return 'Web';
   return 'Mini app';
 }
 let _ordersSearchTimer = null;
@@ -5073,10 +5077,11 @@ async function refreshOrderChannelCounts() {
     const j = await api('/api/retail-admin/order-channel-counts' + (qs.toString() ? '?' + qs : ''));
     const d = j.data || {};
     const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n > 0 ? String(n) : ''; };
-    set('occ-all',     d.all);
-    set('occ-wechat',  d.wechat);
-    set('occ-web',     d.web);
-    set('occ-meituan', d.meituan);
+    set('occ-all',       d.all);
+    set('occ-wechat',    d.wechat);
+    set('occ-web',       d.web);
+    set('occ-meituan',   d.meituan);
+    set('occ-gzgrocery', d.gzgrocery);
   } catch {}
 }
 

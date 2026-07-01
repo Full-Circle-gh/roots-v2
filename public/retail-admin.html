@@ -963,6 +963,7 @@
       <div class="status-chip"               data-channel="wechat"  onclick="setOrderChannel(this)"><span class="dot"></span>Mini app<span class="chip-ct" id="occ-wechat"></span></div>
       <div class="status-chip"               data-channel="web"     onclick="setOrderChannel(this)"><span class="dot"></span>Web<span class="chip-ct" id="occ-web"></span></div>
       <div class="status-chip"               data-channel="meituan" onclick="setOrderChannel(this)"><span class="dot"></span>Meituan<span class="chip-ct" id="occ-meituan"></span></div>
+      <div class="status-chip"               data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="dot"></span>gzgrocery<span class="chip-ct" id="occ-gzgrocery"></span></div>
     </div>
     <input type="hidden" id="orders-channel" value="">
     <!-- Hidden source-of-truth for existing loadOrders() reads -->
@@ -7632,11 +7633,15 @@
 
   // Read-only channel (Meituan) — mirrored ledger, not a worklist item. Mirrors
   // ordIsReadonlyChannel() in 04-orders.js. No swipe/advance/open, no NEW mark.
-  function roChan(o) { return String((o && o.channel) || '').toLowerCase() === 'meituan'; }
+  function roChan(o) {
+    var c = String((o && o.channel) || '').toLowerCase();
+    return c === 'meituan' || c === 'gzgrocery';
+  }
   function chanLabel(o) {
     var c = String((o && o.channel) || 'wechat').toLowerCase();
-    if (c === 'meituan') return 'Meituan';
-    if (c === 'web')     return 'Web';
+    if (c === 'meituan')   return 'Meituan';
+    if (c === 'gzgrocery') return 'gzgrocery';
+    if (c === 'web')       return 'Web';
     return 'Mini app';
   }
 
