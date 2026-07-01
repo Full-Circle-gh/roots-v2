@@ -21,7 +21,7 @@
   window.mtAdminInit = async function () {
     if (_initiated) return;
     _initiated = true;
-    await Promise.all([mtLoadStores(), mtLoadStatus()]);
+    await Promise.all([mtLoadStores(), mtLoadStatus(), mtLoadBusinessStatus()]);
     await mtLoadProducts();
     mtLoadBundles();
     mtLoadOrders();
@@ -50,11 +50,70 @@
     _pollTimer = setInterval(async () => {
       if (_pollBusy || !mtTabVisible()) return;
       _pollBusy = true;
-      try { await Promise.all([mtLoadStatus(), mtLoadOrders(true)]); }
+      try { await Promise.all([mtLoadStatus(), mtLoadOrders(true), mtLoadBusinessStatus()]); }
       catch (_) { /* transient — next tick retries */ }
       finally { _pollBusy = false; }
     }, 12000);
   }
+
+  // ── Store open/closed (Meituan 营业/休息) ─────────────────────────────────────
+  // Per-store switch. The daemon owns the live status (store_business_status); a
+  // flip just queues target_open, applied within ~1 min. Meituan's own status desc
+  // (营业中/停业中/…) is Chinese — shown verbatim under data-no-i18n.
+  window.mtLoadBusinessStatus = async function () {
+    const box = document.getElementById('mt-business-status');
+    if (!box) return;
+    let data;
+    try { data = (await api('/api/retail-admin/meituan/business-status')).data || []; }
+    catch (_) { return; }
+    if (!data.length) { box.innerHTML = ''; return; }
+    const rows = data.map(function (s) {
+      const known = s.readOk;
+      const open  = s.isOpen;
+      const dot   = !known ? 'var(--text-3)' : (open ? '#1a9d5a' : 'var(--danger,#d33)');
+      const state = !known ? cuT('Status unknown', '状态未知') : (open ? cuT('Open', '营业中') : cuT('Closed', '已停业'));
+      const mtDesc = s.statusDesc
+        ? '<span data-no-i18n style="color:var(--text-3);font-size:12px">' + escapeHtml(s.statusDesc)
+            + (s.hoursDesc ? ' · ' + escapeHtml(s.hoursDesc) : '') + '</span>'
+        : '';
+      const ctrl = s.pending
+        ? '<span class="muted" style="font-size:12px">' + cuT('Applying…', '处理中…') + '</span>'
+        : '<button class="btn btn-sm' + (open ? '' : ' btn-primary')
+            + '" onclick="mtToggleStore(\'' + s.storeCode + '\',' + (open ? 'false' : 'true') + ')">'
+            + (open ? cuT('Close store', '停止营业') : cuT('Reopen', '恢复营业')) + '</button>';
+      return ''
+        + '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--line)">'
+        +   '<span style="width:10px;height:10px;border-radius:50%;background:' + dot + ';flex:none"></span>'
+        +   '<div style="flex:1;min-width:0">'
+        +     '<div style="font-weight:600"><span data-no-i18n>' + escapeHtml(s.name) + '</span> — ' + state + '</div>'
+        +     mtDesc
+        +   '</div>'
+        +   ctrl
+        + '</div>';
+    }).join('');
+    box.innerHTML =
+      '<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">'
+      + '<div style="padding:10px 12px;border-bottom:1px solid var(--line);background:var(--bg-elev-1);font-weight:600;font-size:14px">'
+      +   cuT('Store open / closed', '门店营业状态') + '</div>'
+      + rows + '</div>';
+  };
+
+  window.mtToggleStore = async function (storeCode, open) {
+    const msg = open
+      ? cuT('Reopen this store on Meituan? It will start accepting orders again.',
+            '在美团恢复营业?门店将重新开始接单。')
+      : cuT('Close this store on Meituan? It will STOP accepting orders until you reopen it.',
+            '在美团停止营业?门店将停止接单,直到你重新营业。');
+    if (!window.confirm(msg)) return;
+    try {
+      await api('/api/retail-admin/meituan/business-status', { method: 'POST', body: { storeCode: storeCode, open: open } });
+      if (window.toast) toast(cuT('Queued — applying on Meituan…', '已提交,美团处理中…'));
+      await mtLoadBusinessStatus();
+    } catch (e) {
+      if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
+      else alert('Failed: ' + e.message);
+    }
+  };
 
   // ── Incoming orders (read-only) ──────────────────────────────────────────────
   // A plain ledger of orders mirrored in from Meituan: when, amount, products,

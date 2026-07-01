@@ -3822,6 +3822,38 @@ db.exec(`
   );
 `);
 
+// ── Store business-status (Meituan 营业/休息 open-close toggle) ────────────────
+// Per-store open/closed state, shared between the web server and the sync daemons
+// via the same DB hand-off as meituan_listing_jobs (the web server can't drive
+// Playwright itself). The web server WRITES target_open (the operator's toggle)
+// and READS the live status for the toggle UI; the daemon that owns the logged-in
+// Meituan session APPLIES target_open by POSTing /api/poi/change_status
+// (status=1 营业 / 3 停业), then reads /common/businessStatus back into these
+// columns. See feature_meituan_store_open_close memory for the captured contract.
+//   is_open     — last live read: 1 = 营业中 (mt_status 1), 0 = closed
+//   mt_status   — raw Meituan status (1 open / 3 停业); sub_status = subStatus
+//   target_open — pending operator command (1 open, 0 close); NULL = none. The
+//                 daemon clears it to NULL once applied (result → last_result).
+//   read_ok     — 1 if the last read reached the merchant API (else stale/logged out)
+db.exec(`
+  CREATE TABLE IF NOT EXISTS store_business_status (
+    store_code   TEXT PRIMARY KEY,
+    is_open      INTEGER,
+    mt_status    INTEGER,
+    sub_status   INTEGER,
+    status_desc  TEXT,
+    detail_desc  TEXT,
+    hours_desc   TEXT,
+    read_ok      INTEGER DEFAULT 0,
+    read_at      DATETIME,
+    target_open  INTEGER,
+    target_by    TEXT,
+    target_at    DATETIME,
+    last_result  TEXT,
+    updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // ── 青云聚信 (Qingyun, Meituan's delivery AGGREGATOR) courier-tracking ─────────
 // Mirrors a delivery dispatched through saas.cyanclouds.com back to a roots order so
 // we can relay live status + rider GPS to the customer. One row per Qingyun order

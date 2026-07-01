@@ -6764,6 +6764,10 @@
     <!-- Recent sync log removed — the full cross-channel timeline now lives in the
          Activity tab (Inventory activity). -->
 
+    <!-- Store open/closed (Meituan 营业/休息). Per-store switch fed by
+         mtLoadBusinessStatus(); a flip queues target_open for the sync daemon. -->
+    <div id="mt-business-status" style="margin-bottom:18px"></div>
+
     <!-- Incoming Meituan orders — read-only record. These don't print and aren't
          managed here; the store just shows what came in. -->
     <div id="mt-orders-card" style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">

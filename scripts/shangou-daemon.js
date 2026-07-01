@@ -527,6 +527,69 @@ async function processListingJobs() {
   }
 }
 
+// ── Business status (营业/休息 open-close) ───────────────────────────────────
+// The web server writes store_business_status.target_open (operator toggle); this
+// daemon — which owns the logged-in 闪购 session — applies it via change_status,
+// then reads /common/businessStatus back so the toggle UI reflects reality. Read
+// is throttled; a pending command is applied immediately on any cycle. NOT gated
+// by isStoreOpen (an operator can close/reopen anytime); the loop's proxy gate
+// still applies. See feature_meituan_store_open_close.
+const STATUS_READ_MS = 60_000;
+const lastStatusRead = {};
+
+function saveBusinessStatus(storeCode, s) {
+  db.prepare(`
+    INSERT INTO store_business_status
+      (store_code, is_open, mt_status, sub_status, status_desc, detail_desc, hours_desc, read_ok, read_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT(store_code) DO UPDATE SET
+      is_open=excluded.is_open, mt_status=excluded.mt_status, sub_status=excluded.sub_status,
+      status_desc=excluded.status_desc, detail_desc=excluded.detail_desc, hours_desc=excluded.hours_desc,
+      read_ok=1, read_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+  `).run(storeCode, s.open ? 1 : 0, s.status != null ? s.status : null, s.subStatus != null ? s.subStatus : null,
+         s.statusDesc || null, s.detailDesc || null, s.hoursDesc || null);
+}
+function markStatusReadFailed(storeCode) {
+  db.prepare(`
+    INSERT INTO store_business_status (store_code, read_ok, updated_at)
+    VALUES (?, 0, CURRENT_TIMESTAMP)
+    ON CONFLICT(store_code) DO UPDATE SET read_ok=0, updated_at=CURRENT_TIMESTAMP
+  `).run(storeCode);
+}
+
+async function syncBusinessStatus(storeCode) {
+  let cmd = null;
+  try { cmd = db.prepare("SELECT target_open FROM store_business_status WHERE store_code=? AND target_open IS NOT NULL").get(storeCode); }
+  catch (_) { cmd = null; }
+  const due = Date.now() - (lastStatusRead[storeCode] || 0) >= STATUS_READ_MS;
+  if (!cmd && !due) return;
+
+  try {
+    const browser = await getShangouBrowser(storeCode);
+    if (!(await browser.isLoggedIn())) {
+      if (browser.verificationRequired) noteVerifyResult(storeCode, true);
+      markStatusReadFailed(storeCode);
+      return; // don't clear a pending command — retry once logged back in
+    }
+    if (cmd) {
+      const targetOpen = cmd.target_open === 1;
+      const r = await browser.setBusinessStatus(targetOpen);
+      db.prepare(`UPDATE store_business_status SET target_open=NULL, last_result=?, updated_at=CURRENT_TIMESTAMP WHERE store_code=?`)
+        .run(JSON.stringify({ ok: r.ok, code: r.code, msg: r.msg || r.error || null, newDesc: r.newDesc || null, hadToken: r.hadToken, at: new Date().toISOString() }), storeCode);
+      logSync(storeCode, 'business_status_set', r.ok ? 'ok' : 'error',
+        { targetOpen, code: r.code, newDesc: r.newDesc, hadToken: r.hadToken }, r.ok ? null : (r.msg || r.error || 'change_status failed'));
+      log(storeCode, `business status → ${targetOpen ? 'OPEN' : 'CLOSED'}: ${r.ok ? 'ok' : 'FAILED ' + (r.msg || r.error || '')}`);
+    }
+    const s = await browser.getBusinessStatus();
+    lastStatusRead[storeCode] = Date.now();
+    if (s.ok) saveBusinessStatus(storeCode, s);
+    else markStatusReadFailed(storeCode);
+  } catch (e) {
+    log(storeCode, `syncBusinessStatus error: ${e.message}`);
+    try { markStatusReadFailed(storeCode); } catch (_) {}
+  }
+}
+
 // ── Main loop ────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -575,6 +638,12 @@ async function main() {
       }
     }
     await processStockQueue();
+
+    // Apply any pending open/close command + refresh live status for the toggle UI.
+    for (const storeCode of SHANGOU_STORES) {
+      if (inVerifyCooldown(storeCode)) continue;
+      await syncBusinessStatus(storeCode);
+    }
 
     // On-demand "Fetch from Meituan" jobs (admin tab) + hourly auto-map so newly
     // listed products self-activate without the manual seed script.

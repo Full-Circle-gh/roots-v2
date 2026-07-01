@@ -363,4 +363,70 @@ router.get('/api/retail-admin/meituan/listings', requireRetailAdmin, (req, res) 
   }
 });
 
+// ── Store open/closed (Meituan 营业/休息) ──────────────────────────────────
+// The daemon that owns each store's logged-in session reads the live status into
+// store_business_status and applies target_open. The web server can't drive
+// Playwright, so this just reads that row and (for the toggle) writes target_open.
+
+// GET current open/closed status for every active store.
+router.get('/api/retail-admin/meituan/business-status', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const stores = db.prepare(
+      `SELECT code, COALESCE(name_cn, name_en, code) AS name FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id`
+    ).all();
+    const rows = db.prepare('SELECT * FROM store_business_status').all();
+    const byCode = {};
+    for (const r of rows) byCode[r.store_code] = r;
+    const data = stores.map((s) => {
+      const r = byCode[s.code] || {};
+      let lastResult = null;
+      try { lastResult = r.last_result ? JSON.parse(r.last_result) : null; } catch (_) {}
+      return {
+        storeCode: s.code, name: s.name,
+        isOpen: r.is_open === 1,
+        mtStatus: r.mt_status != null ? r.mt_status : null,
+        subStatus: r.sub_status != null ? r.sub_status : null,
+        statusDesc: r.status_desc || null,
+        detailDesc: r.detail_desc || null,
+        hoursDesc: r.hours_desc || null,
+        readOk: r.read_ok === 1,
+        readAt: r.read_at || null,
+        pending: r.target_open != null,
+        targetOpen: r.target_open === 1 ? true : (r.target_open === 0 ? false : null),
+        lastResult,
+        updatedAt: r.updated_at || null,
+      };
+    });
+    res.json({ success: true, data });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// POST a target: { storeCode, open }. Queues the flip for the daemon to apply.
+router.post('/api/retail-admin/meituan/business-status', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const { storeCode, open } = req.body || {};
+  if (!storeCode || typeof open !== 'boolean') {
+    return res.status(400).json({ success: false, error: 'storeCode and open (boolean) are required' });
+  }
+  try {
+    const st = db.prepare('SELECT code FROM retail_stores WHERE code = ? AND is_active = 1').get(storeCode);
+    if (!st) return res.status(404).json({ success: false, error: 'unknown store' });
+    const by = (req.backendUser && (req.backendUser.username || req.backendUser.name)) || 'backend';
+    db.prepare(`
+      INSERT INTO store_business_status (store_code, target_open, target_by, target_at, updated_at)
+      VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(store_code) DO UPDATE SET
+        target_open = excluded.target_open, target_by = excluded.target_by,
+        target_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    `).run(storeCode, open ? 1 : 0, by);
+    res.json({ success: true, storeCode, target: open ? 'open' : 'closed',
+      note: 'Queued — the sync daemon applies it within ~1 min and refreshes the live status.' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;
