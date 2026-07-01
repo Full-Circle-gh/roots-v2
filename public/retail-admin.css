@@ -764,11 +764,17 @@
   #tab-sales .fc-kpis + .sales-eyebrow { margin-top: var(--s6); }
   .sales-of { font-size: 16px; color: var(--text-3); font-weight: 400; }
 
-  .sales-grid { display: flex; flex-direction: column; gap: var(--s3); }
+  /* Compact cube grid — packs 2–3 channels per row so the whole channel list
+     fits without deep scrolling; collapses to 1 column on narrow screens. */
+  .sales-grid {
+    display: grid; gap: var(--s3);
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    align-items: start;
+  }
   .sales-ch {
     background: var(--bg-pane);
     border: 1px solid var(--line); border-radius: var(--r-lg);
-    padding: 16px 18px;
+    padding: 13px 14px;
     box-shadow: 0 1px 2px rgba(18,22,26,.05), 0 8px 22px rgba(18,22,26,.07);
     transition: opacity var(--t-fast) ease, box-shadow .35s var(--ease-calm), transform .35s var(--ease-calm);
   }
@@ -778,22 +784,22 @@
   }
   /* A disabled (off / not-connected) channel reads dimmer. */
   .sales-ch[data-on="0"] { opacity: .62; }
-  .sales-ch-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-  .sales-ch-id { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .sales-ch-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .sales-ch-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .sales-ch-ico {
-    width: 32px; height: 32px; border-radius: var(--r-md); flex: none;
+    width: 28px; height: 28px; border-radius: var(--r-md); flex: none;
     display: flex; align-items: center; justify-content: center;
     background: var(--bg-elev-1); color: var(--text-2);
   }
-  .sales-ch-ico svg { width: 17px; height: 17px; }
+  .sales-ch-ico svg { width: 16px; height: 16px; }
   .sales-ch-ico.wc { background: #E1F0E4; color: #2E7D46; }
   .sales-ch-ico.wb { background: #E8ECF1; color: #33506E; }
   .sales-ch-ico.mt { background: #FBE7D6; color: #C2410C; }
   .sales-ch-ico.gy { background: #E2EBDA; color: #3B6D11; }
   .sales-ch-ico.el { background: #E4ECF5; color: #185FA5; }
-  .sales-ch-name { font-size: 15px; font-weight: 500; color: var(--text-1); }
-  .sales-ch-stat { font-size: 11.5px; color: var(--text-3); margin-top: 2px; display: flex; align-items: center; gap: 6px; }
-  .sales-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; display: inline-block; }
+  .sales-ch-name { font-size: 14px; font-weight: 500; color: var(--text-1); line-height: 1.2; }
+  .sales-ch-stat { font-size: 11px; color: var(--text-3); margin-top: 1px; display: flex; align-items: center; gap: 5px; }
+  .sales-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; display: inline-block; }
   .sales-dot.ok { background: var(--ok, #3B6D11); }
   .sales-dot.off { background: var(--text-4, #b4b2a9); }
 
@@ -801,31 +807,29 @@
      Rendered so the control's place and intent are visible; not-allowed cursor
      + a tooltip make the "coming soon" state clear. */
   .sales-toggle {
-    width: 40px; height: 23px; border-radius: 999px; flex: none;
+    width: 34px; height: 20px; border-radius: 999px; flex: none;
     background: var(--line); border: 0; position: relative; padding: 0;
     cursor: not-allowed; transition: background var(--t-fast) ease;
   }
   .sales-toggle.on { background: #6B8E6F; }
   .sales-toggle .knob {
-    position: absolute; top: 2.5px; left: 2.5px; width: 18px; height: 18px;
+    position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
     border-radius: 50%; background: #fff; transition: left var(--t-fast) ease;
     box-shadow: 0 1px 2px rgba(0,0,0,.2);
   }
-  .sales-toggle.on .knob { left: 19.5px; }
+  .sales-toggle.on .knob { left: 16px; }
   .sales-toggle.is-locked { opacity: .55; }
 
+  /* 2×2 metric block — fits the narrow cube; a wide single row would overflow. */
   .sales-ch-metrics {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
-    margin: 14px 0; padding: 12px 0;
+    display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 12px;
+    margin: 11px 0; padding: 10px 0;
     border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
   }
-  .sales-ch-metrics .m-l { font-size: 10.5px; color: var(--text-3); }
-  .sales-ch-metrics .m-n { font-size: 17px; font-weight: 500; color: var(--text-1); margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .sales-ch-metrics .m-l { font-size: 10px; color: var(--text-3); }
+  .sales-ch-metrics .m-n { font-size: 15px; font-weight: 500; color: var(--text-1); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .sales-ch-foot { display: flex; gap: 8px; flex-wrap: wrap; }
   .sales-ch-foot .btn { display: inline-flex; align-items: center; gap: 6px; }
-  @media (max-width: 720px) {
-    .sales-ch-metrics { grid-template-columns: repeat(2, 1fr); }
-  }
 
   /* Clickable catalogue-health tiles double as quick status filters. The
      cursor + a slightly firmer hover say "press me"; .pa-kpi-on is the
