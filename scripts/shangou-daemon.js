@@ -556,6 +556,20 @@ function markStatusReadFailed(storeCode) {
     ON CONFLICT(store_code) DO UPDATE SET read_ok=0, updated_at=CURRENT_TIMESTAMP
   `).run(storeCode);
 }
+// Reflect a just-applied flip immediately (trust the write). Meituan's status READ
+// can trail the change_status write, so a read-back right after a flip may return
+// the OLD state — this keeps the toggle UI correct meanwhile. Only touches
+// is_open/mt_status/status_desc; sub_status/hours_desc reconcile on the next read.
+function saveAppliedStatus(storeCode, open, newDesc) {
+  db.prepare(`
+    INSERT INTO store_business_status (store_code, is_open, mt_status, status_desc, read_ok, read_at, updated_at)
+    VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    ON CONFLICT(store_code) DO UPDATE SET
+      is_open=excluded.is_open, mt_status=excluded.mt_status,
+      status_desc=COALESCE(excluded.status_desc, status_desc),
+      read_ok=1, read_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
+  `).run(storeCode, open ? 1 : 0, open ? 1 : 3, newDesc || (open ? '营业中' : '停业中'));
+}
 
 async function syncBusinessStatus(storeCode) {
   let cmd = null;
@@ -571,6 +585,7 @@ async function syncBusinessStatus(storeCode) {
       markStatusReadFailed(storeCode);
       return; // don't clear a pending command — retry once logged back in
     }
+    let appliedTarget = null;
     if (cmd) {
       const targetOpen = cmd.target_open === 1;
       const r = await browser.setBusinessStatus(targetOpen);
@@ -579,11 +594,23 @@ async function syncBusinessStatus(storeCode) {
       logSync(storeCode, 'business_status_set', r.ok ? 'ok' : 'error',
         { targetOpen, code: r.code, newDesc: r.newDesc, hadToken: r.hadToken }, r.ok ? null : (r.msg || r.error || 'change_status failed'));
       log(storeCode, `business status → ${targetOpen ? 'OPEN' : 'CLOSED'}: ${r.ok ? 'ok' : 'FAILED ' + (r.msg || r.error || '')}`);
+      // Trust the write: reflect the new state at once (the READ below can lag it).
+      if (r.ok) { appliedTarget = targetOpen; saveAppliedStatus(storeCode, targetOpen, r.newDesc); }
     }
     const s = await browser.getBusinessStatus();
     lastStatusRead[storeCode] = Date.now();
-    if (s.ok) saveBusinessStatus(storeCode, s);
-    else markStatusReadFailed(storeCode);
+    if (s.ok) {
+      if (appliedTarget !== null && s.open !== appliedTarget) {
+        // Read replica still trailing the just-applied flip — keep the applied state
+        // (don't clobber with stale data) and re-read soon to reconcile sub_status.
+        lastStatusRead[storeCode] = Date.now() - (STATUS_READ_MS - 30_000);
+        log(storeCode, `status read lag after flip (read=${s.open ? 'open' : 'closed'} vs applied ${appliedTarget ? 'open' : 'closed'}) — keeping applied state, re-reading soon`);
+      } else {
+        saveBusinessStatus(storeCode, s);
+      }
+    } else if (appliedTarget === null) {
+      markStatusReadFailed(storeCode);
+    }
   } catch (e) {
     log(storeCode, `syncBusinessStatus error: ${e.message}`);
     try { markStatusReadFailed(storeCode); } catch (_) {}
