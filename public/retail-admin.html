@@ -1079,9 +1079,10 @@
       /* Order # cell — fixed-width digit alignment so the live-poll refresh
          doesn't jitter the column when a row swaps in. */
       #orders-table td:first-child { font-variant-numeric: tabular-nums; }
-      /* Read-only channel rows (Meituan) — a mirrored ledger, not a worklist
-         item. No pointer/hover affordance since they don't open a drawer. */
-      #orders-table tr.order-row--ro { cursor: default; }
+      /* Read-only channel rows (Meituan / gzgrocery) — a mirrored ledger, not a
+         worklist item. They open a view-only detail drawer (product / SKU / qty)
+         but carry no fulfilment actions; keep the pointer affordance, italicise
+         the channel tag to signal "view only". */
       #orders-table tr.order-row--ro .ord-chan { font-style: italic; }
 
       /* Channel chips carry a leading glyph (mockup parity), not the status dot. */
@@ -8023,7 +8024,12 @@
     // Tap the card → toggle the inline peek (Combined: keep the queue in view).
     var card = e.target.closest('.rm-ocard');
     if (!card || justSwiped) return;
-    if (card.hasAttribute('data-ro')) return;   // read-only channel (Meituan) — inert
+    if (card.hasAttribute('data-ro')) {   // read-only channel (Meituan / gzgrocery)
+      // No inline peek (no fulfilment to preview) — tap opens the view-only
+      // drawer directly, showing product / SKU / qty.
+      if (typeof openOrder === 'function') openOrder(+card.getAttribute('data-id'));
+      return;
+    }
     if (card.classList.contains('swiped')) { card.classList.remove('swiped'); card.style.transform = ''; return; }
     var open = !card.classList.contains('open');
     card.classList.toggle('open', open);

@@ -123,11 +123,14 @@ router.post('/ingest-order', (req, res) => {
       `).run(orderNo, total, total, storeId);
       const oid = r.lastInsertRowid;
       for (const it of items) {
+        // Snapshot the Meituan 货号 (SKU token) so the view-only order drawer can
+        // show it per line — including UNMATCHED lines (productId null), which
+        // have no store_products row for the detail route to pull a SKU from.
         db.prepare(`
           INSERT INTO retail_order_items
-            (order_id, product_id, name_cn, name_en, qty, unit_price, line_total)
-          VALUES (?, ?, ?, ?, ?, 0, 0)
-        `).run(oid, it.productId, it.nameCn, it.nameEn, it.qty);
+            (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total)
+          VALUES (?, ?, ?, ?, ?, ?, 0, 0)
+        `).run(oid, it.productId, it.nameCn, it.nameEn, it.sku || null, it.qty);
       }
       return oid;
     })();

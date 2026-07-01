@@ -15517,7 +15517,8 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   // beside each line item. A data: URI here is the raw base64 photo; swap it
   // for the public streamed-image URL so the drawer payload stays small.
   o.items = tdb().prepare(
-    `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn, oi.sku, oi.size,
+    `SELECT oi.id, oi.product_id, oi.name_en, oi.name_cn,
+            COALESCE(NULLIF(oi.sku, ''), NULLIF(p.sku, '')) AS sku, oi.size,
             COALESCE(NULLIF(oi.image_url, ''), NULLIF(p.image_url, ''), p.image_data) AS image_url,
             oi.qty, oi.unit_price, oi.line_total, oi.options_json,
             oi.ship_modes, oi.needs_ice_pack, oi.ship_from_supplier, oi.shipment_id,
