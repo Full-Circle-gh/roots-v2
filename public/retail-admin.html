@@ -6628,7 +6628,7 @@
       </div>
       <div class="fc-kpi">
         <div class="lbl">Active channels · 启用渠道</div>
-        <div class="val" id="sales-sum-active">2 <span class="sales-of">/ 3</span></div>
+        <div class="val" id="sales-sum-active">4 <span class="sales-of">/ 5</span></div>
         <div class="sub">live now · 当前在线</div>
       </div>
     </div>
@@ -6636,6 +6636,62 @@
     <!-- CHANNELS — one card each -->
     <div class="sales-eyebrow">Channels · 渠道</div>
     <div class="sales-grid">
+
+      <!-- Mini app (WeChat) -->
+      <div class="sales-ch" data-on="1">
+        <div class="sales-ch-top">
+          <div class="sales-ch-id">
+            <span class="sales-ch-ico wc">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M10.5 18h3"/></svg>
+            </span>
+            <div>
+              <div class="sales-ch-name">Mini app · 小程序</div>
+              <div class="sales-ch-stat"><span class="sales-dot ok"></span>Connected · 已连接</div>
+            </div>
+          </div>
+          <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
+        </div>
+        <div class="sales-ch-metrics">
+          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-wc-rev">—</div></div>
+          <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-wc-orders">—</div></div>
+          <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-wc-aov">—</div></div>
+          <div><div class="m-l">Items sold · 售出件数</div><div class="m-n" id="sales-wc-extra">—</div></div>
+        </div>
+        <div class="sales-ch-foot">
+          <button class="btn btn-sm" type="button" onclick="openMiniAppEditor()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Configure · 配置
+          </button>
+        </div>
+      </div>
+
+      <!-- Web shop -->
+      <div class="sales-ch" data-on="1">
+        <div class="sales-ch-top">
+          <div class="sales-ch-id">
+            <span class="sales-ch-ico wb">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20 15.3 15.3 0 0 1 0-20"/></svg>
+            </span>
+            <div>
+              <div class="sales-ch-name">Web shop · 网页商店</div>
+              <div class="sales-ch-stat"><span class="sales-dot ok"></span>Connected · 已连接</div>
+            </div>
+          </div>
+          <button class="sales-toggle on is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
+        </div>
+        <div class="sales-ch-metrics">
+          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-wb-rev">—</div></div>
+          <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-wb-orders">—</div></div>
+          <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-wb-aov">—</div></div>
+          <div><div class="m-l">Items sold · 售出件数</div><div class="m-n" id="sales-wb-extra">—</div></div>
+        </div>
+        <div class="sales-ch-foot">
+          <button class="btn btn-sm" type="button" onclick="openMiniAppEditor()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Configure · 配置
+          </button>
+        </div>
+      </div>
 
       <!-- Meituan -->
       <div class="sales-ch" data-on="1">

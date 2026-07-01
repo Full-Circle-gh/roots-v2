@@ -295,6 +295,8 @@ async function salesInit() {
       set('sales-' + k + '-aov', money(ch.aov));
       set('sales-' + k + '-extra', num(ch.extra));
     };
+    fill('wc', c.wechat);
+    fill('wb', c.web);
     fill('mt', c.meituan);
     fill('gy', c.gzgrocery);
     fill('el', c.eleme);

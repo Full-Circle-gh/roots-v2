@@ -786,6 +786,8 @@
     background: var(--bg-elev-1); color: var(--text-2);
   }
   .sales-ch-ico svg { width: 17px; height: 17px; }
+  .sales-ch-ico.wc { background: #E1F0E4; color: #2E7D46; }
+  .sales-ch-ico.wb { background: #E8ECF1; color: #33506E; }
   .sales-ch-ico.mt { background: #FBE7D6; color: #C2410C; }
   .sales-ch-ico.gy { background: #E2EBDA; color: #3B6D11; }
   .sales-ch-ico.el { background: #E4ECF5; color: #185FA5; }

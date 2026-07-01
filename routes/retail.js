@@ -9955,11 +9955,40 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
       `).get(today)?.n || 0;
     } catch (e) { /* no sync-log table for this tenant */ }
 
+    // Owned storefronts — the mini app and the web shop sell straight from
+    // retail_orders. Mini-app orders carry no explicit channel, so they default
+    // to 'wechat' (same convention as order-channel-counts); the web shop tags
+    // its orders channel='web'.
+    const storeAgg = (whereChan) => tdb().prepare(`
+      SELECT COUNT(*) AS orders, COALESCE(SUM(total),0) AS revenue, COALESCE(AVG(total),0) AS aov
+        FROM retail_orders
+       WHERE ${whereChan} AND ${PAID} AND ${PDATE} = ?
+    `).get(today) || { orders: 0, revenue: 0, aov: 0 };
+    // Units sold today for a channel — the card's 4th metric for owned stores.
+    const storeItems = (whereChanO) => {
+      try {
+        return tdb().prepare(`
+          SELECT COALESCE(SUM(oi.qty),0) AS n
+            FROM retail_order_items oi
+            JOIN retail_orders o ON o.id = oi.order_id
+           WHERE ${whereChanO}
+             AND o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
+             AND date(COALESCE(o.paid_at, o.placed_at), '${TZ}') = ?
+        `).get(today)?.n || 0;
+      } catch (e) { return 0; }
+    };
+    const wc = storeAgg("COALESCE(NULLIF(channel,''),'wechat')='wechat'");
+    const wb = storeAgg("channel='web'");
+    const wcItems = storeItems("COALESCE(NULLIF(o.channel,''),'wechat')='wechat'");
+    const wbItems = storeItems("o.channel='web'");
+
     // gzgrocery — wholesale pickup channel (revenue + order count from the ledger).
     const gy = guanyiPickupSales(tdb(), today, today);
     const gyAov = gy.orders ? +(gy.revenue / gy.orders).toFixed(2) : 0;
 
     const channels = {
+      wechat:    { connected: true,  revenue: +Number(wc.revenue || 0).toFixed(2), orders: wc.orders || 0, aov: +Number(wc.aov || 0).toFixed(2), extra: wcItems },
+      web:       { connected: true,  revenue: +Number(wb.revenue || 0).toFixed(2), orders: wb.orders || 0, aov: +Number(wb.aov || 0).toFixed(2), extra: wbItems },
       meituan:   { connected: true,  revenue: +Number(mt.revenue || 0).toFixed(2), orders: mt.orders || 0, aov: +Number(mt.aov || 0).toFixed(2), extra: mtPushes },
       gzgrocery: { connected: true,  revenue: gy.revenue || 0, orders: gy.orders || 0, aov: gyAov, extra: gy.orders || 0 },
       eleme:     { connected: false, revenue: 0, orders: 0, aov: 0, extra: 0 },
@@ -9971,7 +10000,7 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     }
     revenue = +revenue.toFixed(2);
     const aov = orders ? +(revenue / orders).toFixed(2) : 0;
-    res.json({ success: true, channels, summary: { revenue, orders, aov, active, total: 3 } });
+    res.json({ success: true, channels, summary: { revenue, orders, aov, active, total: Object.keys(channels).length } });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
