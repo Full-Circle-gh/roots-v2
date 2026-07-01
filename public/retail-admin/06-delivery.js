@@ -169,6 +169,21 @@ async function loadDeliveryZones() {
         if (lbl) lbl.textContent = cb.checked ? 'ON · 开启' : 'OFF · 关闭';
       });
     }
+    // Bulk attach tracking — opt-in Orders toolbar button (delivery.bulkTracking).
+    if ($('#dlv-bulk-trk')) {
+      const on = !!dlv.bulkTracking;
+      $('#dlv-bulk-trk').checked = on;
+      const blbl = $('#dlv-bulk-trk-status-label');
+      if (blbl) blbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+    }
+    const btcb = $('#dlv-bulk-trk');
+    if (btcb && !btcb._wired) {
+      btcb._wired = true;
+      btcb.addEventListener('change', () => {
+        const blbl = $('#dlv-bulk-trk-status-label');
+        if (blbl) blbl.textContent = btcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+      });
+    }
     // Fresh batch schedule
     const batch = (cfg?.data && cfg.data.batch && cfg.data.batch.schedule) || {};
     if ($('#batch-enabled')) {
@@ -241,6 +256,17 @@ async function saveHolidayMode() {
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
+    toast('Saved · 已保存');
+  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+// Bulk attach tracking — persist the on/off flag and flip the Orders toolbar
+// button live via the same body class loadConfig() sets on boot.
+async function saveBulkTrackingSetting() {
+  const on = !!$('#dlv-bulk-trk').checked;
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'delivery.bulkTracking': on } });
+    document.body.classList.toggle('ord-bulk-tracking', on);
     toast('Saved · 已保存');
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }

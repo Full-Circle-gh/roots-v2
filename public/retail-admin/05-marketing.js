@@ -967,6 +967,9 @@ async function loadConfig() {
     applyFeatureGates(c);
     _cfgCache = c;
     syncFeatureToggles();
+    // Bulk attach tracking is an opt-in Orders tool — the toolbar button only
+    // shows when the operator enabled it under Settings → Delivery.
+    document.body.classList.toggle('ord-bulk-tracking', !!c.delivery?.bulkTracking);
     // Store-wide low-stock threshold (drives the amber dot + Low-stock tile).
     { const lt = parseInt(c.inventory?.lowStockThreshold, 10); const nv = Number.isFinite(lt) && lt >= 0 ? lt : 5;
       const changed = nv !== PA_LOW_STOCK; PA_LOW_STOCK = nv; paSyncLowStockUi();

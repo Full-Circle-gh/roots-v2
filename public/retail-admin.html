@@ -958,12 +958,12 @@
 
     <!-- Channel chip strip — orthogonal to status. Filters the combined order
          list by origin. Meituan rows ride the list read-only (view only). -->
-    <div class="status-chips" id="orders-channel-chips" style="margin-bottom: var(--s3)">
-      <div class="status-chip st-all active" data-channel=""        onclick="setOrderChannel(this)"><span class="dot"></span>All channels<span class="chip-ct" id="occ-all"></span></div>
-      <div class="status-chip"               data-channel="wechat"  onclick="setOrderChannel(this)"><span class="dot"></span>Mini app<span class="chip-ct" id="occ-wechat"></span></div>
-      <div class="status-chip"               data-channel="web"     onclick="setOrderChannel(this)"><span class="dot"></span>Web<span class="chip-ct" id="occ-web"></span></div>
-      <div class="status-chip"               data-channel="meituan" onclick="setOrderChannel(this)"><span class="dot"></span>Meituan<span class="chip-ct" id="occ-meituan"></span></div>
-      <div class="status-chip"               data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="dot"></span>gzgrocery<span class="chip-ct" id="occ-gzgrocery"></span></div>
+    <div class="status-chips ch-chips" id="orders-channel-chips" style="margin-bottom: var(--s3)">
+      <div class="status-chip st-all active" data-channel=""        onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels<span class="chip-ct" id="occ-all"></span></div>
+      <div class="status-chip"               data-channel="wechat"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></span>Mini app<span class="chip-ct" id="occ-wechat"></span></div>
+      <div class="status-chip"               data-channel="web"     onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web<span class="chip-ct" id="occ-web"></span></div>
+      <div class="status-chip"               data-channel="meituan" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan<span class="chip-ct" id="occ-meituan"></span></div>
+      <div class="status-chip"               data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>gzgrocery<span class="chip-ct" id="occ-gzgrocery"></span></div>
     </div>
     <input type="hidden" id="orders-channel" value="">
     <!-- Hidden source-of-truth for existing loadOrders() reads -->
@@ -989,7 +989,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
         Refresh
       </button>
-      <button class="btn btn-primary" onclick="openBulkTracking()">
+      <button class="btn btn-primary ord-bulk-trk-btn" id="ord-bulk-trk-btn" onclick="openBulkTracking()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
         Bulk attach tracking
       </button>
@@ -1083,6 +1083,16 @@
          item. No pointer/hover affordance since they don't open a drawer. */
       #orders-table tr.order-row--ro { cursor: default; }
       #orders-table tr.order-row--ro .ord-chan { font-style: italic; }
+
+      /* Channel chips carry a leading glyph (mockup parity), not the status dot. */
+      #orders-channel-chips .chan-ico {
+        display: inline-flex; align-items: center; margin-right: 6px;
+      }
+      #orders-channel-chips .chan-ico svg { width: 15px; height: 15px; display: block; }
+      /* Per-row / per-card channel label: icon + text on one baseline. */
+      .ord-chan { display: inline-flex; align-items: center; gap: 4px; }
+      .ord-chan svg { width: 13px; height: 13px; flex: none; }
+      .rm-oc-meta .chan-ico svg { width: 12px; height: 12px; vertical-align: -2px; }
 
       /* ── View options (tweaks) popover ── */
       .ovp-wrap { position: relative; display: inline-flex; }
@@ -3692,6 +3702,26 @@
       <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
       <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
     </div>
+    <!-- ── Bulk attach tracking — opt-in Orders tool ── -->
+    <div class="card" style="margin-bottom: var(--s4);">
+      <h3 class="fc-sec" style="margin-bottom: 4px;">
+        Bulk attach tracking · 批量绑定运单号
+        <span class="help-i" data-tip="Adds a 'Bulk attach tracking' button to the Orders page so you can paste a list of order numbers + waybill numbers and attach them in one go. Off by default — turn it on only if you enter tracking numbers by hand. · 在订单页添加「批量绑定运单号」按钮,可粘贴订单号+运单号一次性绑定。默认关闭,仅在手动录入运单号时开启。">?</span>
+      </h3>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When on, a button appears in the Orders toolbar. When off, the button is hidden — the tool stays available but out of the way. · 开启后订单页工具栏会显示该按钮;关闭后按钮隐藏,不占据界面。</div>
+      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Status · 状态</label>
+          <label class="fc-switch">
+            <input type="checkbox" id="dlv-bulk-trk">
+            <span class="fc-switch-track"></span>
+            <span id="dlv-bulk-trk-status-label" style="font-size: 12px;">OFF · 关闭</span>
+          </label>
+        </div>
+        <button class="btn btn-primary" onclick="saveBulkTrackingSetting()" style="align-self: flex-end;">Save · 保存</button>
+      </div>
+    </div>
+
     <!-- ── Logistics integration: 快递100 tracking + 京东物流 LOP waybill ── -->
     <div class="group-card">
       <div class="group-card-head">
@@ -7691,7 +7721,7 @@
             '</div>' +
             '<div class="rm-oc-foot">' +
               '<span class="rm-oc-meta">' +
-                '<span>' + esc(chanLabel(o)) + '</span>' +
+                '<span><span class="chan-ico">' + chanIcon(o.channel) + '</span>' + esc(chanLabel(o)) + '</span>' +
                 '<span class="sep">·</span><span>' + items + (items === 1 ? ' item' : ' items') + '</span>' +
                 (o.store_code ? '<span class="sep">·</span><span>' + esc(o.store_name_en || o.store_code) + '</span>' : '') +
                 (o.ship_pickup

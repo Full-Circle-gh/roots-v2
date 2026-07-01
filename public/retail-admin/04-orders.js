@@ -746,7 +746,7 @@ async function loadOrders(opts = {}) {
       // Read-only channels (Meituan) show a channel tag + "view only" and are
       // inert — the click/keyboard openers below bail on data-readonly.
       const ro = ordIsReadonlyChannel(o);
-      const chanSub = `<div class="muted ord-chan" style="font-size: 11px; margin-top: 2px">${ordChannelLabel(o)}${ro ? ' · view only' : ''}</div>`;
+      const chanSub = `<div class="muted ord-chan" style="font-size: 11px; margin-top: 2px">${chanIcon(o.channel)}${ordChannelLabel(o)}${ro ? ' · view only' : ''}</div>`;
       return `
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}"${ro ? ' data-readonly="1"' : ' tabindex="0"'}>
         <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span>${chanSub}</td>

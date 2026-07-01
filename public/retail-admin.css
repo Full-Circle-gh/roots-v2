@@ -3323,6 +3323,12 @@
     transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease, transform var(--t-fast) ease;
     user-select: none;
   }
+
+  /* Bulk attach tracking is an opt-in tool — hidden from the Orders toolbar
+     until the operator switches it on in Settings → Delivery. The body gains
+     .ord-bulk-tracking from loadConfig() / the delivery toggle. */
+  .ord-bulk-trk-btn { display: none; }
+  body.ord-bulk-tracking .ord-bulk-trk-btn { display: inline-flex; }
   .btn:hover { background: var(--bg-elev-2); border-color: var(--line-strong); }
   .btn:active { transform: translateY(1px); }
   .btn:disabled { opacity: .4; cursor: not-allowed; }
