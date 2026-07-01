@@ -394,8 +394,14 @@ function recoverOrphanedProcessing() {
 async function main() {
   console.log('[eleme-daemon] starting');
   if (!eleme.isConfigured()) {
-    console.error('[eleme-daemon] ELEME_APP_KEY / ELEME_APP_SECRET not set — exiting');
-    process.exit(1);
+    // ELEME_APP_KEY / ELEME_APP_SECRET are unset (Eleme ships off-by-default).
+    // Do NOT process.exit(1): under pm2 autorestart a non-zero exit triggers a
+    // restart STORM, and every boot re-runs require('../database') (full
+    // schema + migrations on load) — that churn burns CPU + memory box-wide and
+    // can starve the storefront. Park cheaply instead and wait for a restart
+    // once the keys are configured.
+    console.error('[eleme-daemon] ELEME_APP_KEY / ELEME_APP_SECRET not set — idling (set the keys and restart to activate).');
+    for (;;) { await sleep(60_000); }
   }
   recoverOrphanedProcessing();
 

@@ -38,6 +38,48 @@ const zlib = require('zlib');
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
+// ── Last-line crash guards ───────────────────────────────────────────
+// Historically this process had NO uncaughtException/unhandledRejection
+// handlers and NO global Express error middleware. On Node 18+ an
+// unhandled promise rejection TERMINATES the process by default — so a
+// single async route handler that rejected without an internal try/catch
+// would take the whole storefront down for EVERY user, not just that one
+// request. That is the crash→pm2-restart loop the health-watchdog kept
+// self-healing (see scripts/health-watchdog.js). These guards do two
+// things the old setup couldn't: (1) log a full stack so the NEXT fall is
+// diagnosable instead of a silent death, and (2) page ops via the same
+// System-Alerts WeCom channel the watchdog uses.
+function alertCrash(kind, err) {
+  const stack = (err && err.stack) || String(err);
+  console.error(`[FATAL] ${kind}:`, stack);
+  // Best-effort page. Lazily required so a load-order issue here can never
+  // itself crash boot; sendOpsAlert already no-ops when alerts are off.
+  try {
+    require('./lib/ops-alert')
+      .sendOpsAlert(`🔴 roots-v2 ${kind}: ${(err && err.message) || err}. App stayed UP; check logs for the stack.`)
+      .catch(() => {});
+  } catch (_) { /* alerting must never block or throw here */ }
+}
+// A rejected promise almost never corrupts shared server state, so we log,
+// page, and KEEP SERVING — this is what actually stops the falls: one bad
+// request no longer kills the box for everyone.
+process.on('unhandledRejection', (reason) => {
+  alertCrash('unhandledRejection', reason instanceof Error ? reason : new Error(String(reason)));
+});
+// An uncaughtException can leave the process in an undefined state, so we
+// still exit and let pm2 restart — but now with a logged stack + a page,
+// instead of dying dark the way the pre-guard process did.
+process.on('uncaughtException', (err) => {
+  console.error('[FATAL] uncaughtException — exiting for a clean pm2 restart:', err && err.stack);
+  try {
+    require('./lib/ops-alert')
+      .sendOpsAlert(`🔴 roots-v2 uncaughtException: ${(err && err.message) || err} — restarting.`)
+      .catch(() => {});
+  } catch (_) { /* ignore */ }
+  // Give the async page ~1s to flush, then exit non-zero so pm2 restarts us.
+  setTimeout(() => process.exit(1), 1000).unref?.();
+});
+
 const app = express();
 
 // Trust the first reverse proxy in front of us (nginx terminates TLS and
@@ -699,6 +741,18 @@ app.use((req, res) => {
     return serveShop(req, res);
   }
   res.redirect('/');
+});
+
+// Global error handler (4-arg). Catches anything a route threw synchronously
+// or forwarded via next(err) so it becomes a clean 500 instead of an
+// unhandled error. Must be registered LAST, after all routes and the 404.
+// (Async rejections that never reach next() are caught by the
+// process-level unhandledRejection guard above.)
+app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
+  console.error(`[route-error] ${req.method} ${req.originalUrl}:`, err && err.stack);
+  if (res.headersSent) return next(err);
+  if (req.path.startsWith('/api/')) return res.status(500).json({ error: 'server_error' });
+  res.status(500).send('Server error');
 });
 
 const PORT = process.env.PORT || 4000;

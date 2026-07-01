@@ -320,26 +320,15 @@ router.patch('/api/retail-admin/stores/:storeId/stock/:productId', requireInvent
       FROM retail_store_stock WHERE store_id = ? AND product_id = ?
   `).get(storeId, productId);
 
-  // Queue a Meituan stock push whenever physical_qty changes (either an
-  // absolute set or a kitchen delta add) and this (store, product) pair is
-  // mapped in meituan_product_map.
-  if (out.adjust && row) {
-    try {
-      const map = db.prepare(
-        'SELECT store_code FROM meituan_product_map WHERE retail_store_id=? AND product_id=? AND sync_enabled=1'
-      ).get(storeId, productId);
-      if (map) {
-        db.prepare(`
-          INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
-          VALUES (?, ?, ?, ?, 'pending')
-        `).run(storeId, productId, map.store_code, row.physical_qty);
-      }
-      // Re-push any Meituan-only bundles this product is a component of, so the
-      // bundle auto-drops when an ingredient runs out (independent of whether the
-      // component itself is individually mapped/sold on Meituan).
-      require('../lib/meituan-bundles').enqueueBundlesForProduct(db, storeId, productId);
-    } catch (e) { console.error('[meituan-sync-queue] enqueue error:', e.message); }
-  }
+  // NOTE: the Meituan (and Eleme/Guanyi) stock-push enqueue is handled INSIDE
+  // inventory.adjustStock() → enqueueChannelSync() (tenant-scoped via tdb()),
+  // which already enqueues this mapped product AND any Meituan bundle it is a
+  // component of (see lib/meituan-bundles.enqueueProductStock). A second manual
+  // enqueue used to live here on the shared `db` handle; it was removed because
+  // it (a) duplicated the queue row and (b) would write a non-Roots tenant's
+  // stock change into Roots' meituan_sync_queue once TENANT_DATA_ISOLATION is on.
+  // Do NOT re-add a direct enqueue here — route physical_qty changes through
+  // inventory.adjustStock so the channel fan-out stays tenant-correct.
 
   res.json({ success: true, data: { ...row, ...out } });
 });
