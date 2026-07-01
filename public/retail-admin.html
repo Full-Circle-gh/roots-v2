@@ -955,6 +955,16 @@
       <div class="status-chip st-refunded"               data-status="refunded"         onclick="setOrderStatus(this)"><span class="dot"></span>Refunded</div>
       <div class="status-chip st-refunded"               data-status="refunds_open"     onclick="setOrderStatus(this)" title="Pending refund requests · 待处理退款"><span class="dot"></span>Refund queue<span class="chip-ct alert" id="refund-queue-count"></span></div>
     </div>
+
+    <!-- Channel chip strip — orthogonal to status. Filters the combined order
+         list by origin. Meituan rows ride the list read-only (view only). -->
+    <div class="status-chips" id="orders-channel-chips" style="margin-bottom: var(--s3)">
+      <div class="status-chip st-all active" data-channel=""        onclick="setOrderChannel(this)"><span class="dot"></span>All channels<span class="chip-ct" id="occ-all"></span></div>
+      <div class="status-chip"               data-channel="wechat"  onclick="setOrderChannel(this)"><span class="dot"></span>Mini app<span class="chip-ct" id="occ-wechat"></span></div>
+      <div class="status-chip"               data-channel="web"     onclick="setOrderChannel(this)"><span class="dot"></span>Web<span class="chip-ct" id="occ-web"></span></div>
+      <div class="status-chip"               data-channel="meituan" onclick="setOrderChannel(this)"><span class="dot"></span>Meituan<span class="chip-ct" id="occ-meituan"></span></div>
+    </div>
+    <input type="hidden" id="orders-channel" value="">
     <!-- Hidden source-of-truth for existing loadOrders() reads -->
     <select id="orders-status" style="display: none">
       <option value="" selected></option>
@@ -1068,6 +1078,10 @@
       /* Order # cell — fixed-width digit alignment so the live-poll refresh
          doesn't jitter the column when a row swaps in. */
       #orders-table td:first-child { font-variant-numeric: tabular-nums; }
+      /* Read-only channel rows (Meituan) — a mirrored ledger, not a worklist
+         item. No pointer/hover affordance since they don't open a drawer. */
+      #orders-table tr.order-row--ro { cursor: default; }
+      #orders-table tr.order-row--ro .ord-chan { font-style: italic; }
 
       /* ── View options (tweaks) popover ── */
       .ovp-wrap { position: relative; display: inline-flex; }
@@ -7616,6 +7630,16 @@
     syncSortBtn();
   };
 
+  // Read-only channel (Meituan) — mirrored ledger, not a worklist item. Mirrors
+  // ordIsReadonlyChannel() in 04-orders.js. No swipe/advance/open, no NEW mark.
+  function roChan(o) { return String((o && o.channel) || '').toLowerCase() === 'meituan'; }
+  function chanLabel(o) {
+    var c = String((o && o.channel) || 'wechat').toLowerCase();
+    if (c === 'meituan') return 'Meituan';
+    if (c === 'web')     return 'Web';
+    return 'Mini app';
+  }
+
   function paint() {
     var wrap = el(WRAP_ID);
     if (!wrap) return;
@@ -7626,7 +7650,8 @@
     var html = '';
     for (var i = 0; i < data.length; i++) {
       var o = data[i];
-      var fwd = forwardAction(o);
+      var ro = roChan(o);
+      var fwd = ro ? null : forwardAction(o);
       var phone = o.recipient_phone || '';
       var sb = shipBy(o);
       var items = o.item_count || 0;
@@ -7637,7 +7662,7 @@
             ? '<div class="rm-oc-hint done">' + ICON_CHECK + 'Completed — no action needed · 已完成 — 无需操作</div>'
             : '');
 
-      var swipeable = !!(fwd || phone);
+      var swipeable = !ro && !!(fwd || phone);
       var actions = swipeable
         ? '<div class="rm-ocard-actions">'
           + (fwd ? '<button type="button" class="rm-act-advance" data-act="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + 'Advance · 推进</button>' : '')
@@ -7647,10 +7672,10 @@
 
       html +=
         '<div class="rm-ocard-wrap">' + actions +
-          '<div class="rm-ocard' + (swipeable ? '' : ' no-swipe') + '" data-id="' + o.id + '">' +
+          '<div class="rm-ocard' + (swipeable ? '' : ' no-swipe') + (ro ? ' ro' : '') + '" data-id="' + o.id + '"' + (ro ? ' data-ro="1"' : '') + '>' +
             '<div class="rm-oc-top">' +
-              '<span class="rm-oc-no">' + ((!o.seen_at && o.status !== 'pending_payment' && o.status !== 'cancelled') ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
-              '<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + '</span>' +
+              '<span class="rm-oc-no">' + ((!ro && !o.seen_at && o.status !== 'pending_payment' && o.status !== 'cancelled') ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
+              '<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + (ro ? ' · view only' : '') + '</span>' +
             '</div>' +
             '<div class="rm-oc-mid">' +
               '<div class="rm-oc-cust">' +
@@ -7661,7 +7686,8 @@
             '</div>' +
             '<div class="rm-oc-foot">' +
               '<span class="rm-oc-meta">' +
-                '<span>' + items + (items === 1 ? ' item' : ' items') + '</span>' +
+                '<span>' + esc(chanLabel(o)) + '</span>' +
+                '<span class="sep">·</span><span>' + items + (items === 1 ? ' item' : ' items') + '</span>' +
                 (o.store_code ? '<span class="sep">·</span><span>' + esc(o.store_name_en || o.store_code) + '</span>' : '') +
                 (o.ship_pickup
                   ? '<span class="sep">·</span><span data-lang-block="en">Pickup</span><span data-lang-block="cn">自提</span>'
@@ -7892,6 +7918,7 @@
     // Tap the card → toggle the inline peek (Combined: keep the queue in view).
     var card = e.target.closest('.rm-ocard');
     if (!card || justSwiped) return;
+    if (card.hasAttribute('data-ro')) return;   // read-only channel (Meituan) — inert
     if (card.classList.contains('swiped')) { card.classList.remove('swiped'); card.style.transform = ''; return; }
     var open = !card.classList.contains('open');
     card.classList.toggle('open', open);

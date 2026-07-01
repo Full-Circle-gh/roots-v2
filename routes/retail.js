@@ -7294,6 +7294,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // token so a double-tap / network retry returns the SAME order instead of
   // creating a duplicate (which, for points payment, would double-spend).
   const idempotencyKey = body.idempotency_key ? String(body.idempotency_key).slice(0, 80) : null;
+  // Order channel — the web storefront (shop.html) tags its checkout 'web' so
+  // the combined orders view can split it from the WeChat mini-app. The mini
+  // app leaves it unset → defaults to 'wechat'. Whitelisted so a client can't
+  // stamp an arbitrary/foreign channel (e.g. 'meituan', which is daemon-only).
+  const orderChannel = body.channel === 'web' ? 'web' : 'wechat';
   // Voucher resolution + points redemption happen further down, after pricing:
   // vouchers at the "Resolve voucher" block (ownership/eligibility checked
   // before any discount/free-shipping effect is applied), points just after.
@@ -8062,7 +8067,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       pointsUsed, pointsAmount, total,
       customerNote, needsCutlery, needsInvoice, invoiceTitle, invoiceTaxId,
       invoiceType, invoiceEmail,
-      fulfillingStore.id, routingReason, 'wechat',
+      fulfillingStore.id, routingReason, orderChannel,
       fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null,
       idempotencyKey,
       isPickup ? 'pickup' : 'delivery',
@@ -15150,6 +15155,11 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
 
 router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   const { status, q, from, to, store_id } = req.query;
+  // Combined-channel view: an explicit ?channel filters to one channel; absent
+  // (or 'all') returns every channel, including the read-only Meituan mirror
+  // rows the storefront doesn't fulfil (the UI renders those view-only).
+  const channel = ['wechat', 'web', 'meituan'].includes(String(req.query.channel || '').toLowerCase())
+    ? String(req.query.channel).toLowerCase() : '';
   const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
 
@@ -15206,13 +15216,12 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
           LEFT JOIN retail_customers c ON c.id = o.customer_id
           LEFT JOIN retail_stores    s ON s.id = o.store_id
           LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
-              WHERE 1=1
-                -- Meituan orders are mirrored in only as a stock-deducting record
-                -- (see routes/meituan-internal.js). The storefront doesn't fulfil
-                -- or print them, so they're kept out of this worklist and shown
-                -- read-only in the Meituan tab instead.
-                AND COALESCE(o.channel,'') != 'meituan'`;
+              WHERE 1=1`;
   const params = [];
+  // Channel facet. Meituan mirror rows (see routes/meituan-internal.js) now ride
+  // this combined list read-only instead of being excluded; an explicit
+  // ?channel narrows to one. Mini-app orders carry the 'wechat' default.
+  if (channel) { sql += ` AND COALESCE(NULLIF(o.channel,''),'wechat') = ?`; params.push(channel); }
   // `refunds_open` is a pseudo-status that pulls every order currently in
   // the refund pipeline regardless of primary status — so open requests
   // are reachable from the main orders table, not only the chip view.
@@ -15304,6 +15313,35 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
       WHERE refund_status IN ('pending','reviewing','approved')${where}`
   ).get(...args).n;
 
+  res.json({ success: true, data: out });
+});
+
+// Per-channel order counts for the combined orders view's channel chips.
+// Deliberately orthogonal to the status filter (channel is a separate axis —
+// a Meituan order is always 'paid', so folding status in would zero its chip
+// on every other status tab). Honours the store + search + date filters so the
+// chip counts track the current view. Mini-app orders default to 'wechat'.
+router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, res) => {
+  const { q, from, to, store_id } = req.query;
+  let sql = `SELECT COALESCE(NULLIF(o.channel,''),'wechat') AS ch, COUNT(*) AS n
+               FROM retail_orders o
+          LEFT JOIN retail_customers c ON c.id = o.customer_id
+              WHERE 1=1`;
+  const params = [];
+  if (store_id) { sql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
+  if (q) {
+    sql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
+    const s = `%${q}%`; params.push(s, s, s, s);
+  }
+  if (from) { sql += ' AND o.placed_at >= ?'; params.push(from); }
+  if (to)   { sql += ' AND o.placed_at <= ?'; params.push(to); }
+  sql += ' GROUP BY ch';
+
+  const out = { all: 0, wechat: 0, web: 0, meituan: 0 };
+  for (const r of tdb().prepare(sql).all(...params)) {
+    if (r.ch in out) out[r.ch] += r.n;
+    out.all += r.n;
+  }
   res.json({ success: true, data: out });
 });
 

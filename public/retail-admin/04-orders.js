@@ -14,6 +14,25 @@ function setOrderStatus(chip) {
   $$('#orders-status-chips .status-chip').forEach(el => el.classList.toggle('active', el === chip));
   loadOrders();
 }
+// Channel facet — orthogonal to status. Filters the combined list by origin
+// (mini app / web / Meituan); '' = all channels.
+function setOrderChannel(chip) {
+  const value = chip.dataset.channel || '';
+  const hid = document.getElementById('orders-channel');
+  if (hid) hid.value = value;
+  $$('#orders-channel-chips .status-chip').forEach(el => el.classList.toggle('active', el === chip));
+  loadOrders();
+}
+// Which non-storefront channels are shown read-only in the combined list — the
+// storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For
+// now just Meituan (mirrored in to deduct stock); gzgrocery joins in phase 2.
+function ordIsReadonlyChannel(o) { return String(o.channel || '').toLowerCase() === 'meituan'; }
+function ordChannelLabel(o) {
+  const c = String(o.channel || 'wechat').toLowerCase();
+  if (c === 'meituan') return 'Meituan';
+  if (c === 'web')     return 'Web';
+  return 'Mini app';
+}
 let _ordersSearchTimer = null;
 function debouncedLoadOrders() {
   clearTimeout(_ordersSearchTimer);
@@ -63,6 +82,7 @@ function _ordersFp(rows) {
 function _ordersFilterKey() {
   return [
     $('#orders-status').value,
+    (document.getElementById('orders-channel') || {}).value || '',
     $('#orders-q').value.trim(),
     (document.getElementById('orders-store') || {}).value || '',
   ].join('|');
@@ -613,6 +633,7 @@ async function loadOrders(opts = {}) {
 
   try {
     const status   = $('#orders-status').value;
+    const channel  = (document.getElementById('orders-channel') || {}).value || '';
     const q        = $('#orders-q').value.trim();
     const storeSel = document.getElementById('orders-store');
     const storeId  = storeSel ? storeSel.value : '';
@@ -624,6 +645,7 @@ async function loadOrders(opts = {}) {
 
     const qs = new URLSearchParams();
     if (status)  qs.set('status', status);
+    if (channel) qs.set('channel', channel);
     if (q)       qs.set('q', q);
     if (storeId) qs.set('store_id', storeId);
     const tbody = $('#orders-table tbody');
@@ -635,6 +657,7 @@ async function loadOrders(opts = {}) {
     // Background-refresh the open-work count badges on the chip strip — staff
     // should always see what's queued without clicking through each chip.
     refreshOrderStatusCounts();
+    refreshOrderChannelCounts();
 
     let j;
     try {
@@ -697,7 +720,9 @@ async function loadOrders(opts = {}) {
     // mark, or chime for unpaid orders (pending_payment) or dead ones
     // (cancelled); those just show their status pill and sit quiet. The mark
     // + chime kick in when there's actually something to fulfil.
-    const isActionable = o => o.status !== 'pending_payment' && o.status !== 'cancelled';
+    // Read-only channel rows (Meituan) never count as actionable: no NEW mark,
+    // no unread bold, no arrival chime — they're a mirrored ledger, not work.
+    const isActionable = o => o.status !== 'pending_payment' && o.status !== 'cancelled' && !ordIsReadonlyChannel(o);
     const actionableIds = new Set(j.data.filter(isActionable).map(o => o.id));
     const prevNotified = _ORDERS_NOTIFIED_IDS;
     // Arrival = an order that's actionable now and we haven't chimed for yet.
@@ -714,9 +739,13 @@ async function loadOrders(opts = {}) {
       // bold + lit across reloads/devices, unlike the transient arrival flash.
       const isUnread = !o.seen_at && isActionable(o);
       const unread = isUnread ? ' is-unread' : '';
+      // Read-only channels (Meituan) show a channel tag + "view only" and are
+      // inert — the click/keyboard openers below bail on data-readonly.
+      const ro = ordIsReadonlyChannel(o);
+      const chanSub = `<div class="muted ord-chan" style="font-size: 11px; margin-top: 2px">${ordChannelLabel(o)}${ro ? ' · view only' : ''}</div>`;
       return `
-      <tr class="order-row${fresh}${unread}" data-order-id="${o.id}" tabindex="0">
-        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span></td>
+      <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}"${ro ? ' data-readonly="1"' : ' tabindex="0"'}>
+        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span>${chanSub}</td>
         <td>
           <div class="ord-cust">${escapeHtml(o.nickname || o.recipient_name || '—')}</div>
           <div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(o.recipient_phone || '')}</div>
@@ -2711,6 +2740,7 @@ onDrawerClose('#order-drawer', () => {
 document.addEventListener('click', (e) => {
   const row = e.target.closest('tr.order-row');
   if (!row) return;
+  if (row.dataset.readonly) return;   // read-only channel (Meituan) — no drawer
   if (e.target.closest('button, a, input, select, textarea, label')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
@@ -2722,6 +2752,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const row = document.activeElement && document.activeElement.closest && document.activeElement.closest('tr.order-row');
   if (!row) return;
+  if (row.dataset.readonly) return;   // read-only channel (Meituan) — no drawer
   e.preventDefault();
   const id = row.dataset.orderId;
   if (id) openOrder(Number(id));
@@ -5025,6 +5056,27 @@ async function refreshOrderStatusCounts() {
     set('oc-dispatched',      d.dispatched);
     set('oc-awaiting_restock',d.awaiting_restock);
     set('refund-queue-count', d.refunds_open);
+  } catch {}
+}
+
+// Live counts for the channel chip strip. Mirrors the store/search/date filters
+// (not status — channel is a separate axis) so each chip shows how many orders
+// that channel holds in the current view.
+async function refreshOrderChannelCounts() {
+  if (!document.getElementById('orders-channel-chips')) return;
+  const qs = new URLSearchParams();
+  const storeId = (document.getElementById('orders-store') || {}).value || '';
+  const q = ($('#orders-q') || {}).value ? $('#orders-q').value.trim() : '';
+  if (storeId) qs.set('store_id', storeId);
+  if (q)       qs.set('q', q);
+  try {
+    const j = await api('/api/retail-admin/order-channel-counts' + (qs.toString() ? '?' + qs : ''));
+    const d = j.data || {};
+    const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n > 0 ? String(n) : ''; };
+    set('occ-all',     d.all);
+    set('occ-wechat',  d.wechat);
+    set('occ-web',     d.web);
+    set('occ-meituan', d.meituan);
   } catch {}
 }
 

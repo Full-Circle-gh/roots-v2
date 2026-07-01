@@ -2592,7 +2592,7 @@ async function coPlace(){
   const body={items:coItems(),address_id:co.addrId,delivery_mode:co.mode,delivery_slot_id:co.slotId,delivery_slot_kind:co.slotKind||'',payment_method:co.payment,points_to_use:co.usePoints?99999999:0,use_balance:!!co.useBalance,voucher_code:co.voucher||null,customer_note:co.note||null,
     needs_cutlery:co.needsCutlery?1:0,needs_invoice:co.needsInvoice?1:0,
     invoice_type:co.needsInvoice?co.invoiceType:null,invoice_title:co.needsInvoice?(co.invoiceTitle||null):null,invoice_tax_id:(co.needsInvoice&&co.invoiceType==='company')?(co.invoiceTaxId||null):null,invoice_email:co.needsInvoice?(co.invoiceEmail||null):null,
-    idempotency_key:co.idem};
+    idempotency_key:co.idem,channel:'web'};
   if(co.fallback)body.fallback_choice=co.fallback;
   let r,j;
   try{ r=await fetch('/api/retail/orders',{method:'POST',headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),body:JSON.stringify(body)}); j=await r.json().catch(()=>({})); }
