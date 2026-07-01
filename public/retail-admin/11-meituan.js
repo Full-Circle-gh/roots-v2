@@ -56,63 +56,83 @@
     }, 12000);
   }
 
-  // ── Store open/closed (Meituan 营业/休息) ─────────────────────────────────────
-  // Per-store switch. The daemon owns the live status (store_business_status); a
-  // flip just queues target_open, applied within ~1 min. Meituan's own status desc
-  // (营业中/停业中/…) is Chinese — shown verbatim under data-no-i18n.
+  // ── Store status · all sales channels ────────────────────────────────────────
+  // One panel over every closable channel: MASTER (everything at once), the ONLINE
+  // store (mini-app + web — one storefront_config flag, enforced at checkout), and
+  // each STORE (Meituan POI 置休 + online-fulfillment reroute, via /store-status/
+  // store/:code). Meituan's live status desc is Chinese → data-no-i18n. Fed by GET
+  // /api/retail-admin/store-status. (fn name kept — init + the 12s poll call it.)
+  function ssDot(open) { return '<span style="width:10px;height:10px;border-radius:50%;flex:none;background:' + (open ? '#1a9d5a' : 'var(--danger,#d33)') + '"></span>'; }
+  function ssRow(dotHtml, title, sub, ctrl) {
+    return '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--line)">'
+      + dotHtml
+      + '<div style="flex:1;min-width:0"><div style="font-weight:600">' + title + '</div>'
+      + (sub ? '<div style="color:var(--text-3);font-size:12px">' + sub + '</div>' : '') + '</div>'
+      + ctrl + '</div>';
+  }
   window.mtLoadBusinessStatus = async function () {
     const box = document.getElementById('mt-business-status');
     if (!box) return;
-    let data;
-    try { data = (await api('/api/retail-admin/meituan/business-status')).data || []; }
+    let d;
+    try { d = await api('/api/retail-admin/store-status'); }
     catch (_) { return; }
-    if (!data.length) { box.innerHTML = ''; return; }
-    const rows = data.map(function (s) {
-      const known = s.readOk;
-      const open  = s.isOpen;
-      const dot   = !known ? 'var(--text-3)' : (open ? '#1a9d5a' : 'var(--danger,#d33)');
-      const state = !known ? cuT('Status unknown', '状态未知') : (open ? cuT('Open', '营业中') : cuT('Closed', '已停业'));
-      const mtDesc = s.statusDesc
-        ? '<span data-no-i18n style="color:var(--text-3);font-size:12px">' + escapeHtml(s.statusDesc)
-            + (s.hoursDesc ? ' · ' + escapeHtml(s.hoursDesc) : '') + '</span>'
-        : '';
+    const online = d.online || {}, meituan = d.meituan || [], master = d.master;
+
+    const masterOpen  = master === 'open';
+    const masterState = master === 'open' ? cuT('All channels open', '所有渠道营业')
+                      : master === 'closed' ? cuT('All channels closed', '所有渠道停业')
+                      : cuT('Partly closed', '部分渠道停业');
+    const masterCtrl = masterOpen
+      ? '<button class="btn btn-sm" onclick="mtStoreMaster(false)">' + cuT('Close all', '全部停业') + '</button>'
+      : '<button class="btn btn-sm btn-primary" onclick="mtStoreMaster(true)">' + cuT('Open all', '全部营业') + '</button>';
+
+    const onlineOpen = online.online_open !== false;
+    const onlineCtrl = onlineOpen
+      ? '<button class="btn btn-sm" onclick="mtStoreOnline(false)">' + cuT('Close', '关闭') + '</button>'
+      : '<button class="btn btn-sm btn-primary" onclick="mtStoreOnline(true)">' + cuT('Open', '开启') + '</button>';
+
+    const storeRows = meituan.map(function (s) {
+      const storeOpen = s.isOpen && s.fulfillmentOpen;
+      const mt  = !s.readOk ? cuT('Meituan status unknown', '美团状态未知') : (s.isOpen ? cuT('Meituan open', '美团营业') : cuT('Meituan closed', '美团停业'));
+      const ful = s.fulfillmentOpen ? cuT('fulfilling online', '线上发货中') : cuT('online paused', '线上已停发');
+      const desc = s.statusDesc ? ' · <span data-no-i18n>' + escapeHtml(s.statusDesc) + '</span>' : '';
       const ctrl = s.pending
         ? '<span class="muted" style="font-size:12px">' + cuT('Applying…', '处理中…') + '</span>'
-        : '<button class="btn btn-sm' + (open ? '' : ' btn-primary')
-            + '" onclick="mtToggleStore(\'' + s.storeCode + '\',' + (open ? 'false' : 'true') + ')">'
-            + (open ? cuT('Close store', '停止营业') : cuT('Reopen', '恢复营业')) + '</button>';
-      return ''
-        + '<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-bottom:1px solid var(--line)">'
-        +   '<span style="width:10px;height:10px;border-radius:50%;background:' + dot + ';flex:none"></span>'
-        +   '<div style="flex:1;min-width:0">'
-        +     '<div style="font-weight:600"><span data-no-i18n>' + escapeHtml(s.name) + '</span> — ' + state + '</div>'
-        +     mtDesc
-        +   '</div>'
-        +   ctrl
-        + '</div>';
+        : (storeOpen
+            ? '<button class="btn btn-sm" onclick="mtStoreWhole(\'' + s.storeCode + '\',false)">' + cuT('Close store', '关闭门店') + '</button>'
+            : '<button class="btn btn-sm btn-primary" onclick="mtStoreWhole(\'' + s.storeCode + '\',true)">' + cuT('Open store', '开启门店') + '</button>');
+      return ssRow(ssDot(storeOpen), '<span data-no-i18n>' + escapeHtml(s.name) + '</span>', mt + ' · ' + ful + desc, ctrl);
     }).join('');
+
     box.innerHTML =
       '<div style="border:1px solid var(--line);border-radius:8px;overflow:hidden">'
-      + '<div style="padding:10px 12px;border-bottom:1px solid var(--line);background:var(--bg-elev-1);font-weight:600;font-size:14px">'
-      +   cuT('Store open / closed', '门店营业状态') + '</div>'
-      + rows + '</div>';
+      + '<div style="padding:10px 12px;border-bottom:1px solid var(--line);background:var(--bg-elev-1);font-weight:600;font-size:14px">' + cuT('Store status · sales channels', '门店状态 · 销售渠道') + '</div>'
+      + ssRow(ssDot(masterOpen), cuT('All channels', '所有渠道'), masterState, masterCtrl)
+      + ssRow(ssDot(onlineOpen), cuT('Online store (app + web)', '线上商城(小程序+网页)'), onlineOpen ? cuT('taking orders', '正常接单') : cuT('not taking orders', '暂停接单'), onlineCtrl)
+      + storeRows
+      + '</div>';
   };
 
-  window.mtToggleStore = async function (storeCode, open) {
-    const msg = open
-      ? cuT('Reopen this store on Meituan? It will start accepting orders again.',
-            '在美团恢复营业?门店将重新开始接单。')
-      : cuT('Close this store on Meituan? It will STOP accepting orders until you reopen it.',
-            '在美团停止营业?门店将停止接单,直到你重新营业。');
-    if (!window.confirm(msg)) return;
-    try {
-      await api('/api/retail-admin/meituan/business-status', { method: 'POST', body: { storeCode: storeCode, open: open } });
-      if (window.toast) toast(cuT('Queued — applying on Meituan…', '已提交,美团处理中…'));
-      await mtLoadBusinessStatus();
-    } catch (e) {
-      if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
-      else alert('Failed: ' + e.message);
-    }
+  window.mtStoreMaster = async function (open) {
+    if (!window.confirm(open ? cuT('Open ALL sales channels (online + both Meituan stores)?', '开启所有销售渠道(线上+两家美团门店)?')
+                             : cuT('Close ALL sales channels? Online checkout is blocked and both Meituan stores go 停业.', '关闭所有销售渠道?线上停止下单,两家美团门店停业。'))) return;
+    try { await api('/api/retail-admin/store-status/master', { method: 'POST', body: { open: open } });
+      if (window.toast) toast(cuT('Done — Meituan applies within ~1 min', '完成 — 美团约1分钟内生效')); await mtLoadBusinessStatus();
+    } catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
+  };
+  window.mtStoreOnline = async function (open) {
+    if (!window.confirm(open ? cuT('Reopen the online store (app + web)?', '重新开启线上商城(小程序+网页)?')
+                             : cuT('Close the online store (app + web)? Customers can browse but cannot order.', '关闭线上商城(小程序+网页)?顾客可浏览但不能下单。'))) return;
+    try { await api('/api/retail-admin/store-status/online', { method: 'POST', body: { open: open } });
+      if (window.toast) toast(cuT('Saved', '已保存')); await mtLoadBusinessStatus();
+    } catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
+  };
+  window.mtStoreWhole = async function (code, open) {
+    if (!window.confirm(open ? cuT('Open this store? Meituan reopens and it resumes fulfilling online orders.', '开启该门店?美团恢复营业并恢复线上发货。')
+                             : cuT('Close this store? Meituan goes 停业 and its online orders reroute to the other store.', '关闭该门店?美团停业,其线上订单改由另一家门店发货。'))) return;
+    try { await api('/api/retail-admin/store-status/store/' + encodeURIComponent(code), { method: 'POST', body: { open: open } });
+      if (window.toast) toast(cuT('Done — reroute immediate, Meituan ~1 min', '完成 — 发货立即改道,美团约1分钟')); await mtLoadBusinessStatus();
+    } catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
   };
 
   // ── Incoming orders (read-only) ──────────────────────────────────────────────

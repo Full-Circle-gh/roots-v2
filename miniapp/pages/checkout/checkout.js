@@ -2139,6 +2139,17 @@ Page({
   // Swallow the tap on the inner card so it doesn't dismiss-via-backdrop.
   noop() {},
 
+  // Operator-set "we're closed" message (store_status.message_*), falling back to
+  // the server-rejection body, then a default. Used by the placeOrder pre-empt and
+  // the store_closed submit-error handler.
+  _storeClosedMsg(err) {
+    const cn = this.data.lang === 'cn';
+    const ss = config.get('store_status', {}) || {};
+    const fromCfg = cn ? ss.message_cn : ss.message_en;
+    const fromErr = err && err.body && (cn ? err.body.message_cn : err.body.message);
+    return fromCfg || fromErr || (cn ? '本店当前已打烊,暂停接单,敬请谅解。' : 'We’re currently closed and not taking new orders. Please check back soon.');
+  },
+
   async placeOrder() {
     // Stale-flag self-heal: a real submitOrder() takes at most a few seconds
     // round-trip. If `placing` has been true for >5s, it's almost certainly
@@ -2155,6 +2166,14 @@ Page({
       } else {
         return;
       }
+    }
+    // Store closed (online storefront)? Block with the operator's message. The
+    // server also rejects at /api/retail/orders (store_closed, handled below) —
+    // this is the friendly pre-empt so they don't reach the pay sheet.
+    if (config.get('store_status.online_open', true) === false) {
+      const cn = this.data.lang === 'cn';
+      wx.showModal({ title: cn ? '暂停接单' : 'Closed', content: this._storeClosedMsg(), showCancel: false, confirmText: cn ? '我知道了' : 'OK' });
+      return;
     }
     // Bind-on-action also gates pickup — checkout needs a WeChat identity.
     if (!this.data.isBound) {
@@ -2762,6 +2781,13 @@ Page({
       wx.redirectTo({ url: '/pages/order/order?id=' + orderId });
     } catch (e) {
       console.error('[checkout] place order failed:', e);
+      // Store closed between opening checkout and submitting — server rejected it.
+      if (e?.message === 'store_closed') {
+        this.setData({ placing: false });
+        const cn = this.data.lang === 'cn';
+        wx.showModal({ title: cn ? '暂停接单' : 'Closed', content: this._storeClosedMsg(e), showCancel: false, confirmText: cn ? '我知道了' : 'OK' });
+        return;
+      }
       // Race-on-pay: stock changed between quote and Pay tap. Re-fetch the
       // quote and react automatically — the old behaviour just toasted and
       // left the customer to figure out what to do next (the warning banner
