@@ -496,13 +496,6 @@ try {
     console.log(`[migration backfill_supplier_documents_v1] migrated ${n} legacy supplier docs`);
   }
 } catch (e) { console.error('[migration backfill_supplier_documents_v1]', e); }
-// Markets table widens to a generic "locations" table — same row shape,
-// new `kind` column says what each row is. Existing rows default to
-// 'market' (POS stalls); add new ones with kind='retail' for stores
-// and kind='warehouse' / kind='kitchen' for the other physical sites.
-// Used by restock notification routing — events fan out only to users
-// whose users.market_id matches the destination location.
-addColumn('markets', 'kind', "TEXT DEFAULT 'market'");   // base64 data URI — WeChat add-friend QR code
 // Sprout's long-term business memory. Free-form key/value notes that get
 // re-injected as system context on every chat, so the agent doesn't have
 // to re-discover basic facts ("what's our margin target?", "main suppliers")
@@ -581,6 +574,14 @@ db.exec(`CREATE TABLE IF NOT EXISTS markets (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME
 )`);
+// Markets table doubles as a generic "locations" table — the `kind` column
+// says what each row is: 'market' (POS stalls, the default) / 'retail' /
+// 'warehouse' / 'kitchen'. Used by restock notification routing (events fan
+// out to users whose users.market_id matches the destination location).
+// NOTE: this addColumn must run AFTER the CREATE above — it was moved here
+// from before it so a from-scratch boot on an empty DB doesn't crash with
+// "no such table: markets".
+addColumn('markets', 'kind', "TEXT DEFAULT 'market'");
 // GPS coords captured by the POS "📍 Use my location" feature. Optional —
 // markets can also be created with just a typed address. Used for the
 // admin-side map view and for spotting accidentally-duplicated stalls.
