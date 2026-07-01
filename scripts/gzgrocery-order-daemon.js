@@ -213,7 +213,12 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
     const owed = gzUnitPrice(it.product_id);
     const line = +(owed * it.qty).toFixed(2);
     subtotal += line;
-    return { product_id: it.product_id, name_cn: it.name_cn || null, name_en: it.name_en || null, qty: it.qty, unit_price: owed, line_total: line };
+    // Persist the SKU we matched on (from the OpenCart model), not just
+    // product_id. The order-detail drawer coalesces oi.sku → p.sku, but that
+    // join returns nothing once a product is deleted or re-SKU'd — so a mirror
+    // that only stored product_id shows "no SKU". oi.sku is the SKU that was
+    // actually ordered and survives catalogue churn.
+    return { product_id: it.product_id, sku: it.sku || null, name_cn: it.name_cn || null, name_en: it.name_en || null, qty: it.qty, unit_price: owed, line_total: line };
   });
   subtotal = +subtotal.toFixed(2);
   const placedAt = gzPlacedAt(dateAdded);
@@ -227,8 +232,8 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
       .run(roNo, subtotal, subtotal, (customer || '').slice(0, 200) || null, storeId, placedAt, placedAt);
     const oid = r.lastInsertRowid;
     const ins = db.prepare(`INSERT INTO retail_order_items
-      (order_id, product_id, name_cn, name_en, qty, unit_price, line_total) VALUES (?,?,?,?,?,?,?)`);
-    for (const l of lines) ins.run(oid, l.product_id, l.name_cn, l.name_en, l.qty, l.unit_price, l.line_total);
+      (order_id, product_id, sku, name_cn, name_en, qty, unit_price, line_total) VALUES (?,?,?,?,?,?,?,?)`);
+    for (const l of lines) ins.run(oid, l.product_id, l.sku, l.name_cn, l.name_en, l.qty, l.unit_price, l.line_total);
   })();
   log(`mirrored ${roNo} → retail_orders (channel=gzgrocery, ¥${subtotal}, ${lines.length} line(s))`);
 }
@@ -250,6 +255,35 @@ function backfillGzMirrors(storeId) {
     if (!had) made++;
   }
   if (made) log(`backfill: mirrored ${made} existing gzgrocery order(s) into retail_orders`);
+}
+
+// One-time (idempotent) repair for mirrors created before we persisted oi.sku.
+// Those rows left retail_order_items.sku NULL and leaned on the detail-drawer's
+// p.sku join, which shows "no SKU" whenever the product was later deleted or
+// re-SKU'd. Refill the blanks from the SKU we recorded in gzgrocery_orders.
+// items_json (matched by product_id) — the SKU that was actually ordered.
+function backfillGzMirrorSkus() {
+  if (!GZ_MIRROR || MODE !== 'live') return;
+  let fixed = 0;
+  const upd = db.prepare(
+    `UPDATE retail_order_items SET sku=? WHERE order_id=? AND product_id=? AND COALESCE(sku,'')=''`
+  );
+  const rows = db.prepare(`SELECT order_id, items_json FROM gzgrocery_orders WHERE our_units>0`).all();
+  const tx = db.transaction(() => {
+    for (const row of rows) {
+      let ours = [];
+      try { ours = JSON.parse(row.items_json || '[]'); } catch { ours = []; }
+      if (!ours.length) continue;
+      const mirror = db.prepare('SELECT id FROM retail_orders WHERE order_no=?').get(gzMirrorOrderNo(row.order_id));
+      if (!mirror) continue;
+      // Best SKU per product_id from the stored line items.
+      const bySku = new Map();
+      for (const it of ours) { if (it.product_id && it.sku && !bySku.has(it.product_id)) bySku.set(it.product_id, it.sku); }
+      for (const [pid, sku] of bySku) fixed += upd.run(sku, mirror.id, pid).changes;
+    }
+  });
+  tx();
+  if (fixed) log(`backfill: filled SKU on ${fixed} mirrored gzgrocery line item(s)`);
 }
 
 // Match an order's line items against our catalogue → the OUR-product units.
@@ -358,7 +392,11 @@ async function runCycle() {
   if (MODE === 'off') { if (ONCE) log('MODE=off — nothing to do'); return; }
   const storeId = resolveStoreId();
   // One-time backfill so pre-existing gzgrocery orders appear in the list.
-  if (!_backfilledMirrors) { _backfilledMirrors = true; try { backfillGzMirrors(storeId); } catch (e) { log(`backfill failed: ${e.message}`); } }
+  if (!_backfilledMirrors) {
+    _backfilledMirrors = true;
+    try { backfillGzMirrors(storeId); } catch (e) { log(`backfill failed: ${e.message}`); }
+    try { backfillGzMirrorSkus(); } catch (e) { log(`sku backfill failed: ${e.message}`); }
+  }
   const skuMap  = loadSkuMap();
   _client = _client || new GzGroceryAdmin();
   const orders = await _client.fetchOrders({ maxPages: MAX_PAGES, sinceDays: SINCE_DAYS });
