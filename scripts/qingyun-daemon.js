@@ -57,6 +57,20 @@ function logSync(storeCode, eventType, status, detail, errorMsg) {
       .run(storeCode, eventType, status, detail ? JSON.stringify(detail) : null, errorMsg || null);
   } catch { /* logging must never throw */ }
 }
+// Per-store heartbeat so the admin Delivery card shows a truthful status even when
+// a connected store simply has no active deliveries (which log no polls). One row
+// per store, upserted each poll — bounded.
+function heartbeat(storeCode, loggedIn) {
+  try {
+    db.prepare(`INSERT INTO qingyun_status (store_code, logged_in, last_ok, updated_at)
+                VALUES (@s, @li, CASE WHEN @li = 1 THEN CURRENT_TIMESTAMP ELSE NULL END, CURRENT_TIMESTAMP)
+                ON CONFLICT(store_code) DO UPDATE SET
+                  logged_in  = @li,
+                  last_ok    = CASE WHEN @li = 1 THEN CURRENT_TIMESTAMP ELSE qingyun_status.last_ok END,
+                  updated_at = CURRENT_TIMESTAMP`)
+      .run({ s: storeCode, li: loggedIn ? 1 : 0 });
+  } catch { /* heartbeat must never throw */ }
+}
 
 // ── Proxy health gate (mirrors shangou-daemon) ────────────────────────────────
 // The genuine Chrome reaches Meituan through the same GZ proxy. If that proxy
@@ -187,10 +201,12 @@ async function pollStore(storeCode) {
         log(storeCode, 'not logged in — skipping poll');
         sendOpsAlert(`🔴 青云聚信 ${storeCode} 未登录，配送跟踪已停止，需要扫码重新登录\nQingyun ${storeCode} not logged in — tracking stopped, scan QR to re-login`);
       }
+      heartbeat(storeCode, false);
       return;
     }
     const wasDown = downFlagged[storeCode];
     downFlagged[storeCode] = false;
+    heartbeat(storeCode, true);
     if (wasDown) sendOpsAlert(`✅ 青云聚信 ${storeCode} 重新登录成功，配送跟踪继续\nQingyun ${storeCode} logged back in — tracking resumed`);
     noteVerifyResult(storeCode, false);
 

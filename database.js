@@ -3910,6 +3910,19 @@ db.exec(`
   );
 `);
 
+// Per-store heartbeat + login state for the qingyun-daemon, so the admin Delivery
+// card can show a truthful "connected / not set up" status per store WITHOUT
+// depending on delivery volume (an idle-but-connected store logs no polls). One
+// row per store, upserted every poll — bounded, never grows.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS qingyun_status (
+    store_code  TEXT PRIMARY KEY,
+    logged_in   INTEGER DEFAULT 0,   -- 1 = Chrome session valid on last poll
+    last_ok     DATETIME,            -- last successful (logged-in) poll
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Meituan-only bundles (套餐/combos) that have no single roots product. Each is
 // defined as a set of component products; its sellable stock is computed as the
 // minimum of what its components can make, and pushed to the bundle's Meituan

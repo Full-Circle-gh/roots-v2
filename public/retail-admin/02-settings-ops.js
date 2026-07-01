@@ -438,17 +438,65 @@ async function loadShippingIntegrations() {
     if (fChip) fChip.innerHTML = f.enabled
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
       : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ NOT CONFIGURED · 未配置</span>';
+    loadQingyunStores();  // same-city (Qingyun) per-store status + tab dot
   } catch (e) { console.warn('[integrations] load failed', e); }
 }
 
-// Logistics card: toggle between the 快递100 and 京东物流 panels (both stay configurable).
+// Logistics card: toggle between the 快递100 / 京东物流 / 同城配送 panels.
 function _logTab(which) {
-  ['kd100', 'jd'].forEach(k => {
+  ['kd100', 'jd', 'qy'].forEach(k => {
     const panel = document.getElementById('logpanel-' + k);
     const tab   = document.getElementById('logtab-' + k);
     if (panel) panel.style.display = (k === which) ? '' : 'none';
     if (tab)   tab.classList.toggle('active', k === which);
   });
+  if (which === 'qy') loadQingyunStores();
+}
+
+// Same-city (青云聚信) tab: render one row per store with a live status pill.
+// Qingyun is ops-provisioned per store (fingerprint-gated login, no API key), so
+// un-connected stores get a "Request setup" button that pages ops.
+async function loadQingyunStores() {
+  const box = document.getElementById('qy-stores');
+  if (!box) return;
+  try {
+    const r = await fetch('/api/retail-admin/integrations/qingyun');
+    if (!r.ok) { box.innerHTML = ''; return; }
+    const stores = (await r.json()).data || [];
+    const qDot = document.getElementById('qy-dot');
+    if (qDot) qDot.style.background = stores.some(s => s.connected) ? '#10b981' : 'var(--text-3)';
+    if (!stores.length) { box.innerHTML = '<div class="muted">No active stores yet. · 暂无门店。</div>'; return; }
+    box.innerHTML = stores.map(s => {
+      const nm = [s.name_en || s.code, s.name_cn].filter(Boolean).join(' · ');
+      const pill = s.connected
+        ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ Connected · 已连接</span>'
+        : '<span style="background:#fee2e2;color:#991b1b;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✗ Not set up · 未开通</span>';
+      const btn = s.connected ? ''
+        : `<button class="btn" onclick="_requestQingyun('${s.code}', this)">Request setup · 申请开通</button>`;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line)">
+        <div style="font-weight:600">${nm}</div>
+        <div style="display:flex;align-items:center;gap:10px">${pill}${btn}</div>
+      </div>`;
+    }).join('');
+  } catch (e) { box.innerHTML = ''; }
+}
+
+// Ask ops to connect same-city tracking for one store.
+async function _requestQingyun(storeCode, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending… · 提交中…'; }
+  try {
+    const r = await fetch('/api/retail-admin/integrations/qingyun/request', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_code: storeCode }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.error || 'HTTP ' + r.status);
+    toast('Request sent — we will set it up · 已收到申请,我们会为你开通', 'success');
+    if (btn) btn.textContent = 'Requested · 已申请';
+  } catch (e) {
+    toast('Failed · 操作失败: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Request setup · 申请开通'; }
+  }
 }
 
 // Printer card: switch between per-store printer panels (all stay configurable & save together).

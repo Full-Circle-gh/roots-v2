@@ -3731,6 +3731,7 @@
       <div class="dz-subtabs" role="tablist" style="margin-bottom:18px">
         <button type="button" class="dz-subtab active" id="logtab-kd100" onclick="_logTab('kd100')"><span id="kd100-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Kuaidi100 · 快递100</button>
         <button type="button" class="dz-subtab" id="logtab-jd" onclick="_logTab('jd')"><span id="jd-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>JD Logistics · 京东物流</button>
+        <button type="button" class="dz-subtab" id="logtab-qy" onclick="_logTab('qy')"><span id="qy-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Same-city · 同城配送</button>
       </div>
 
       <!-- 快递100 tracking push -->
@@ -3797,6 +3798,13 @@
           <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD · 保存并测试 JD</button>
         </div>
         <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved. · 保存后,完整推单还需对照你的 JD 商家配置做一次性字段确认 —— 凭证保存后请告知你的开发人员。</div>
+      </div>
+
+      <!-- 青云聚信 same-city live delivery (per-store, ops-provisioned) -->
+      <div id="logpanel-qy" style="display:none">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>Same-city delivery tracking · 同城配送实时追踪</strong></div>
+        <div class="muted" style="margin-bottom:14px">Shows the live courier on a map in the customer's order page for same-city (e-bike) deliveries via 青云聚信. Each store needs a one-time login, so we connect it for you — request it below and we'll set it up. · 同城配送(电动车)在顾客端订单页显示骑手实时位置。每家门店需一次性登录,由我们协助开通 —— 点击申请,我们会为你连接。</div>
+        <div id="qy-stores" class="muted">Loading… · 加载中…</div>
       </div>
     </div>
   </section>

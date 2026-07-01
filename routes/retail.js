@@ -16385,6 +16385,59 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: out });
 });
 
+// ── Same-city delivery (Qingyun 青云聚信) — per-store live-rider tracking ──────
+// Unlike kd100/JD (global API keys), Qingyun is a per-store browser+daemon that
+// OPS provisions (fingerprint-gated login, no public API), so the Delivery card
+// only shows per-store status + lets a store REQUEST setup. "Connected" = the
+// daemon's last poll (within QY_FRESH_MS) reported a logged-in session, read from
+// the qingyun_status heartbeat so an idle store (no deliveries) still reads true.
+const QY_FRESH_MS = 5 * 60 * 1000;
+router.get('/api/retail-admin/integrations/qingyun', requireRetailAdmin, (req, res) => {
+  const stores = tdb().prepare(
+    'SELECT code, name_en, name_cn FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id'
+  ).all();
+  const hb = {};
+  try {
+    for (const r of tdb().prepare('SELECT store_code, logged_in, updated_at FROM qingyun_status').all()) {
+      hb[r.store_code] = r;
+    }
+  } catch (_) { /* table missing pre-migration — all read as not-connected */ }
+  const now = Date.now();
+  const data = stores.map(s => {
+    const h = hb[s.code];
+    const fresh = h && h.updated_at &&
+      (now - Date.parse(String(h.updated_at).replace(' ', 'T') + 'Z')) < QY_FRESH_MS;
+    return { code: s.code, name_en: s.name_en, name_cn: s.name_cn, connected: !!(fresh && h.logged_in) };
+  });
+  res.json({ success: true, data });
+});
+
+// A store owner asks us to connect same-city tracking for their store. We can't
+// self-serve it (Meituan fingerprint-gates the login), so this pages ops to
+// provision it, and leaves a durable trace in qingyun_sync_log in case the ops
+// webhook is off.
+router.post('/api/retail-admin/integrations/qingyun/request', requireRetailAdmin, express.json(), async (req, res) => {
+  const storeCode = String(req.body?.store_code || '').trim();
+  if (!storeCode) return res.status(400).json({ success: false, error: 'store_code required' });
+  const store = tdb().prepare(
+    'SELECT code, name_en, name_cn FROM retail_stores WHERE code = ? AND is_active = 1'
+  ).get(storeCode);
+  if (!store) return res.status(404).json({ success: false, error: 'unknown store' });
+  const who = (req.backendUser && (req.backendUser.name || req.backendUser.username)) || 'admin';
+  const tid = currentTenantId();
+  try {
+    tdb().prepare(
+      "INSERT INTO qingyun_sync_log (store_code, event_type, status, detail) VALUES (?, 'setup_request', 'ok', ?)"
+    ).run(storeCode, JSON.stringify({ by: who, tenant: tid }));
+  } catch (_) { /* trace is best-effort */ }
+  await sendOpsAlert(
+    `📦 同城配送开通申请 · Same-city tracking setup request\n` +
+    `门店 Store: ${store.name_cn || ''} ${store.name_en || ''} (${store.code})\n` +
+    `租户 Tenant: ${tid}\n申请人 By: ${who}`
+  );
+  res.json({ success: true });
+});
+
 // Send a test card so the operator can confirm new-order alerts are wired up
 // without waiting for a real order. Prefers the self-built app (uses saved
 // corp_id/agent_id/secret); else falls back to the group-bot webhook (accepts a
