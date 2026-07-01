@@ -127,8 +127,11 @@ jobs:
           APP=/root/roots-v2
           STAGE="$APP/__stage__"
           ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
-          # Recreate the directory tree for any nested files.
-          DIRS=$(sed 's@/[^/]*$@@' /tmp/files.txt | grep '/' | sort -u || true)
+          # Recreate the directory tree for any nested files. Grep the files
+          # that HAVE a slash first, THEN strip to their dir — doing it the
+          # other way (sed then grep '/') drops single-level dirs like
+          # public/ and routes/, so scp of nested files fails on a fresh stage.
+          DIRS=$(grep '/' /tmp/files.txt | sed 's@/[^/]*$@@' | sort -u || true)
           for d in $DIRS; do ssh prod "mkdir -p '$STAGE/$d'"; done
           # Upload each file to its matching relative path under __stage__.
           while IFS= read -r f; do
