@@ -758,12 +758,14 @@ async function loadOrders(opts = {}) {
       // bold + lit across reloads/devices, unlike the transient arrival flash.
       const isUnread = !o.seen_at && isActionable(o);
       const unread = isUnread ? ' is-unread' : '';
-      // Read-only channels (Meituan) show a channel tag + "view only" and are
-      // inert — the click/keyboard openers below bail on data-readonly.
+      // Read-only channels (Meituan / gzgrocery) show a channel tag + "view
+      // only". They still open a view-only detail drawer (product / SKU / qty) —
+      // renderOpenOrder branches to renderReadonlyOrder for these, with no
+      // fulfilment actions. data-readonly is kept as the branch signal.
       const ro = ordIsReadonlyChannel(o);
       const chanSub = `<div class="muted ord-chan" style="font-size: 11px; margin-top: 2px">${chanIcon(o.channel)}${ordChannelLabel(o)}${ro ? ' · view only' : ''}</div>`;
       return `
-      <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}"${ro ? ' data-readonly="1"' : ' tabindex="0"'}>
+      <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}" tabindex="0"${ro ? ' data-readonly="1"' : ''}>
         <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span>${chanSub}</td>
         <td>
           <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
@@ -1412,6 +1414,10 @@ function shipByUrgency(p, actionable) {
 }
 
 function renderShipByCell(o) {
+  // Read-only channels (Meituan, gzgrocery) are mirrored ledgers — we don't
+  // fulfil them, so there's no ship-by deadline we own. "As soon as possible"
+  // reads as a to-do we'll never action; blank it out.
+  if (ordIsReadonlyChannel(o)) return '<span class="muted">—</span>';
   const actionable = (o.status === 'paid' || o.status === 'preparing');
   const p = shipByPlan(o);
   const u = shipByUrgency(p, actionable);
@@ -2759,7 +2765,6 @@ onDrawerClose('#order-drawer', () => {
 document.addEventListener('click', (e) => {
   const row = e.target.closest('tr.order-row');
   if (!row) return;
-  if (row.dataset.readonly) return;   // read-only channel (Meituan) — no drawer
   if (e.target.closest('button, a, input, select, textarea, label')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
@@ -2771,7 +2776,6 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' && e.key !== ' ') return;
   const row = document.activeElement && document.activeElement.closest && document.activeElement.closest('tr.order-row');
   if (!row) return;
-  if (row.dataset.readonly) return;   // read-only channel (Meituan) — no drawer
   e.preventDefault();
   const id = row.dataset.orderId;
   if (id) openOrder(Number(id));
@@ -2945,7 +2949,88 @@ function renderOrderTotalFooter(o, transitionsHtml) {
     </div>`;
 }
 
+// One line of the VIEW-ONLY manifest (Meituan / gzgrocery). Product name + its
+// type (the second-language name / size), SKU chip, and quantity — no prices
+// (Meituan lines carry ¥0 per-line; the real figure is the order total up top)
+// and no pack/fulfilment badges, since we don't ship these from here.
+function renderReadonlyItemRow(it, i) {
+  const nm = orderItemNames(it);
+  const name = `<span class="mf-name">${escapeHtml(nm.primary)}</span>`;
+  const href = productHref(it.product_id);
+  const nameCell = href
+    ? `<a href="${href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
+    : name;
+  const type = (nm.secondary || it.size)
+    ? `<span class="mf-zh">${escapeHtml(nm.secondary)}${it.size ? (nm.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
+    : '';
+  return `
+    <div class="mf-row" data-fk="${it.id}">
+      <span class="mf-num">${String(i + 1).padStart(2, '0')}</span>
+      ${itemThumb(it)}
+      <div class="mf-body">
+        <div class="mf-top">${nameCell}</div>
+        <div class="mf-meta" data-no-i18n>${type}${itemSkuHtml(it)}${itemQtyHtml(it)}</div>
+      </div>
+    </div>`;
+}
+
+// View-only order detail for read-only channels (Meituan / gzgrocery). These are
+// mirrored in for visibility — we don't fulfil, print, refund or edit them — so
+// the drawer shows just the essentials plus a per-line product / SKU / qty
+// manifest, and none of the mutating controls the full renderOpenOrder carries.
+function renderReadonlyOrder(o) {
+  const mount = $('#order-detail-mount');
+  const items = o.items || [];
+  const cust = (typeof ordCustomerLines === 'function') ? ordCustomerLines(o) : { name: o.nickname || o.recipient_name || '—', phone: o.recipient_phone || '' };
+  const chan = ordChannelLabel(o);
+  const hasCust = (cust.name && cust.name !== '—') || cust.phone;
+  mount.innerHTML = `
+    <div class="order-card odd-${ODV.density}">
+      <div class="order-head">
+        <div class="od-head-main">
+          <div class="title-row">
+            <b>${escapeHtml(o.order_no)}</b>
+            <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
+            <span class="pill" style="background: var(--bg-elev-1); color: var(--text-2);" title="${escapeHtml(chan)} orders are mirrored in for visibility — fulfil them in ${escapeHtml(chan)}">${escapeHtml(chan)} · ${cuT('view only', '只读')}</span>
+          </div>
+          <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
+        </div>
+      </div>
+
+      <div class="order-detail">
+        ${o.store_code ? `<div>
+          <div class="kicker">Store · 门店</div>
+          <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
+        </div>` : ''}
+        ${hasCust ? `<div>
+          <div class="kicker">Customer · 顾客</div>
+          <div class="val" data-no-i18n><b>${escapeHtml(cust.name)}</b></div>
+          ${cust.phone ? `<div class="sub" data-no-i18n>${escapeHtml(cust.phone)}</div>` : ''}
+        </div>` : ''}
+        <div>
+          <div class="kicker">Total · 合计</div>
+          <div class="val"><b>¥${fmt(o.total)}</b></div>
+          <div class="sub">${cuT(`${items.length} line${items.length === 1 ? '' : 's'}`, `${items.length} 项`)}</div>
+        </div>
+      </div>
+
+      <div>
+        <div class="kicker" style="margin: 14px 0 6px;">Items · 商品</div>
+        <div class="manifest">
+          ${items.length
+            ? items.map((it, i) => renderReadonlyItemRow(it, i)).join('')
+            : `<div class="muted" style="padding: 8px 0;">${cuT('No line items captured', '未记录商品明细')}</div>`}
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderOpenOrder(o) {
+  // Read-only channels (Meituan / gzgrocery) get a stripped view-only panel —
+  // no fulfilment, refund or edit controls, which don't apply to a mirrored order.
+  if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
+    return renderReadonlyOrder(o);
+  }
   const mount = $('#order-detail-mount');
   const multiParcel = (o.shipments?.length || 0) > 1;
   // Split the status actions: the green "go forward" ones stay as plain
