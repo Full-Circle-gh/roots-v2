@@ -37,6 +37,21 @@ function ordChannelLabel(o) {
   if (c === 'web')       return 'Web';
   return 'Mini app';
 }
+// Clean {name, phone} for the customer column. gzgrocery mirrors the whole
+// OpenCart customer cell — "Name (phone) address…" — into recipient_name (its
+// phone/ship fields stay null), so the raw blob would spill the address into
+// this column. Split it back into name + phone; the address belongs in SHIP TO.
+// Every other channel already has structured fields, so it passes straight
+// through. Shared with the mobile card renderer in retail-admin.html.
+function ordCustomerLines(o) {
+  if (o && String(o.channel || '').toLowerCase() === 'gzgrocery' && !o.recipient_phone) {
+    const blob = String(o.recipient_name || o.nickname || '');
+    const m = /\((\d{6,})\)/.exec(blob);
+    if (m) return { name: blob.slice(0, m.index).trim() || '—', phone: m[1] };
+  }
+  return { name: (o && (o.nickname || o.recipient_name)) || '—', phone: (o && o.recipient_phone) || '' };
+}
+window.ordCustomerLines = ordCustomerLines;
 let _ordersSearchTimer = null;
 function debouncedLoadOrders() {
   clearTimeout(_ordersSearchTimer);
@@ -751,8 +766,8 @@ async function loadOrders(opts = {}) {
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}"${ro ? ' data-readonly="1"' : ' tabindex="0"'}>
         <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span>${chanSub}</td>
         <td>
-          <div class="ord-cust">${escapeHtml(o.nickname || o.recipient_name || '—')}</div>
-          <div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(o.recipient_phone || '')}</div>
+          <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
+          <div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(ordCustomerLines(o).phone)}</div>
         </td>
         <td class="oc-store">
           ${o.store_code ? `<div>${escapeHtml(o.store_name_en || o.store_code)}</div>

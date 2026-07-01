@@ -7747,7 +7747,9 @@
       var o = data[i];
       var ro = roChan(o);
       var fwd = ro ? null : forwardAction(o);
-      var phone = o.recipient_phone || '';
+      var cust = window.ordCustomerLines ? window.ordCustomerLines(o)
+               : { name: o.nickname || o.recipient_name || '—', phone: o.recipient_phone || '' };
+      var phone = cust.phone;
       var sb = shipBy(o);
       var items = o.item_count || 0;
 
@@ -7774,7 +7776,7 @@
             '</div>' +
             '<div class="rm-oc-mid">' +
               '<div class="rm-oc-cust">' +
-                '<div class="rm-oc-name">' + esc(o.nickname || o.recipient_name || '—') + '</div>' +
+                '<div class="rm-oc-name">' + esc(cust.name) + '</div>' +
                 (phone ? '<div class="rm-oc-phone">' + esc(phone) + '</div>' : '') +
               '</div>' +
               '<div class="rm-oc-total">¥' + money(o.total) + '</div>' +
