@@ -736,6 +736,7 @@ router.get('/api/retail/pickup-stores', (req, res) => {
       `SELECT id, code, name_en, name_cn, address, city, district, lat, lng, phone
          FROM retail_stores
         WHERE is_active = 1 AND pickup_enabled = 1
+          AND code NOT IN (SELECT store_code FROM store_business_status WHERE fulfillment_open = 0)
         ORDER BY sort_order ASC, id ASC`
     ).all();
     const window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
@@ -7370,7 +7371,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     if (!pickupStoreId)            return res.status(400).json({ success: false, error: 'pickup_store_required' });
     if (!pickupName || !pickupPhone) return res.status(400).json({ success: false, error: 'pickup_contact_required' });
     pickupStore = tdb().prepare(
-      'SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1'
+      `SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1
+          AND code NOT IN (SELECT store_code FROM store_business_status WHERE fulfillment_open = 0)`
     ).get(pickupStoreId);
     if (!pickupStore) return res.status(400).json({ success: false, error: 'pickup_store_unavailable' });
     const pk = resolvePickupTime(body.pickup_time, new Date());
@@ -7805,7 +7807,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   if (!isPickup && (!inGz || scheduledShipDistrict)) {
     const oocId = loadPrinterPrefs().out_of_city_store_id;
     if (oocId != null && oocId !== fulfillingStore.id) {
-      const oocStore = inventory.listStores({ activeOnly: true }).find(s => s.id === oocId);
+      // Don't pin to the out-of-city shipper if it's closed for fulfillment — keep
+      // the open store routeOrder already picked so the parcel ships from somewhere.
+      const oocClosed = inventory.fulfillmentClosedCodes();
+      const oocStore = inventory.listStores({ activeOnly: true }).find(s => s.id === oocId && !oocClosed.has(s.code));
       if (oocStore) {
         fulfillingStore = oocStore;
         routingReason   = scheduledShipDistrict ? 'scheduled_ship_district' : 'out_of_city';

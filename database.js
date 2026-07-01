@@ -3853,6 +3853,13 @@ db.exec(`
     updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+// fulfillment_open (Phase 2): whether this store still FULFILLS online orders,
+// SEPARATE from the Meituan-POI sales close (target_open/is_open above). When 0,
+// the store is dropped from routeOrder's candidate pool + the pickup list + the
+// out-of-city shipper, so its online orders reroute to the other store (stock-only
+// model). Default 1 = fulfilling.
+addColumn('store_business_status', 'fulfillment_open', 'INTEGER DEFAULT 1');
+try { db.prepare('UPDATE store_business_status SET fulfillment_open = 1 WHERE fulfillment_open IS NULL').run(); } catch {}
 
 // ── 青云聚信 (Qingyun, Meituan's delivery AGGREGATOR) courier-tracking ─────────
 // Mirrors a delivery dispatched through saas.cyanclouds.com back to a roots order so

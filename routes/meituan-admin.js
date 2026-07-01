@@ -472,6 +472,7 @@ router.get('/api/retail-admin/store-status', requireRetailAdmin, (req, res) => {
         storeCode: s.code, name: s.name,
         isOpen: r.is_open === 1, readOk: r.read_ok === 1,
         pending: r.target_open != null, statusDesc: r.status_desc || null,
+        fulfillmentOpen: r.fulfillment_open !== 0, // whether it still ships online orders
       };
     });
     // Master reflects the union: open only if EVERYTHING is open, closed only if
@@ -515,18 +516,50 @@ router.post('/api/retail-admin/store-status/master', requireRetailAdmin, express
     const cur = readOnlineStatus(db);
     const val = { online_open: open, message_en: cur.message_en, message_cn: cur.message_cn };
     const stores = db.prepare('SELECT code FROM retail_stores WHERE is_active = 1').all();
+    // Master flips the whole store: Meituan POI (target_open, daemon-applied) AND
+    // online fulfillment (fulfillment_open, immediate) together.
     const queueMeituan = db.prepare(`
-      INSERT INTO store_business_status (store_code, target_open, target_by, target_at, updated_at)
-        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      INSERT INTO store_business_status (store_code, target_open, fulfillment_open, target_by, target_at, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
       ON CONFLICT(store_code) DO UPDATE SET
-        target_open = excluded.target_open, target_by = excluded.target_by,
-        target_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        target_open = excluded.target_open, fulfillment_open = excluded.fulfillment_open,
+        target_by = excluded.target_by, target_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
     `);
     db.transaction(() => {
       writeOnlineStatus(db, val, by);
-      for (const s of stores) queueMeituan.run(s.code, open ? 1 : 0, by);
+      for (const s of stores) queueMeituan.run(s.code, open ? 1 : 0, open ? 1 : 0, by);
     })();
     res.json({ success: true, online: val, meituanQueued: stores.map((s) => s.code), target: open ? 'open' : 'closed' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Close/open a WHOLE store: its Meituan POI (置休, daemon-applied within ~1 min)
+// AND its online fulfillment (fulfillment_open, effective immediately — reroutes
+// its pickup + deliveries + out-of-city shipping to the other store). This is the
+// per-store "the shop isn't operating" switch, distinct from the Meituan-channel-
+// only toggle on the Meituan tab.
+router.post('/api/retail-admin/store-status/store/:code', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const code = req.params.code;
+  const { open } = req.body || {};
+  if (typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'open (boolean) is required' });
+  try {
+    const st = db.prepare('SELECT code FROM retail_stores WHERE code = ? AND is_active = 1').get(code);
+    if (!st) return res.status(404).json({ success: false, error: 'unknown store' });
+    const by = (req.backendUser && (req.backendUser.username || req.backendUser.name)) || 'backend';
+    db.prepare(`
+      INSERT INTO store_business_status (store_code, target_open, fulfillment_open, target_by, target_at, updated_at)
+        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      ON CONFLICT(store_code) DO UPDATE SET
+        target_open = excluded.target_open, fulfillment_open = excluded.fulfillment_open,
+        target_by = excluded.target_by, target_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    `).run(code, open ? 1 : 0, open ? 1 : 0, by);
+    res.json({
+      success: true, storeCode: code, target: open ? 'open' : 'closed',
+      note: 'Fulfillment reroute is immediate; the Meituan close applies within ~1 min.',
+    });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
