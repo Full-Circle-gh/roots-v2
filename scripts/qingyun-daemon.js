@@ -95,6 +95,10 @@ function proxyHealthy(timeoutSec = 8) {
 }
 function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
 let proxyDownFlagged = false;
+// Residential VPN links blip for well under a minute; only page ops after the
+// proxy fails this many consecutive probes (mirrors shangou-daemon).
+let proxyFailStreak = 0;
+const PROXY_DOWN_GRACE = Number(process.env.MEITUAN_PROXY_DOWN_GRACE || 3);
 
 // ── 验证中心 / login backoff (mirrors shangou-daemon) ──────────────────────────
 const VERIFY_COOLDOWN_BASE_MS = 30 * 60_000;
@@ -274,7 +278,8 @@ async function main() {
     const now = Date.now();
 
     if (!(await proxyHealthy())) {
-      if (!proxyDownFlagged) {
+      proxyFailStreak++;
+      if (!proxyDownFlagged && proxyFailStreak >= PROXY_DOWN_GRACE) {
         proxyDownFlagged = true;
         console.log(`[qingyun-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(PROXY)}) — pausing (session NOT logged out)`);
         for (const s of STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — tracking paused');
@@ -283,6 +288,7 @@ async function main() {
       await sleep(jitter(POLL_MS));
       continue;
     }
+    proxyFailStreak = 0;
     if (proxyDownFlagged) {
       proxyDownFlagged = false;
       console.log(`[qingyun-daemon] ${new Date().toISOString()} proxy recovered — resuming`);
