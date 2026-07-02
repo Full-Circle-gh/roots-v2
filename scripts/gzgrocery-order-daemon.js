@@ -199,7 +199,10 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
   if (!ours || !ours.length) return;
   const roNo = gzMirrorOrderNo(orderId);
   const existing = db.prepare('SELECT id, status FROM retail_orders WHERE order_no=?').get(roNo);
-  const mStatus = voided ? 'cancelled' : 'paid';
+  // gzgrocery orders are already fulfilled (picked/collected) by the time we
+  // mirror them — this channel is read-only for us — so show them as delivered,
+  // not merely paid.
+  const mStatus = voided ? 'cancelled' : 'delivered';
   if (existing) {
     if (existing.status !== mStatus) {
       db.prepare('UPDATE retail_orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(mStatus, existing.id);
@@ -227,7 +230,7 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
     const r = db.prepare(`INSERT INTO retail_orders
         (order_no, status, payment_method, subtotal, total, recipient_name,
          store_id, channel, fulfillment_type, placed_at, paid_at)
-      VALUES (?, 'paid', 'gzgrocery', ?, ?, ?, ?, 'gzgrocery', 'delivery',
+      VALUES (?, 'delivered', 'gzgrocery', ?, ?, ?, ?, 'gzgrocery', 'delivery',
               COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`)
       .run(roNo, subtotal, subtotal, (customer || '').slice(0, 200) || null, storeId, placedAt, placedAt);
     const oid = r.lastInsertRowid;
