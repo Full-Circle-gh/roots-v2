@@ -38,8 +38,15 @@ function requireDelete(req, res, next) {
 
 function logActivity(userId, username, action, entityType, entityId, details, ip) {
   try {
+    // activity_log.user_id has a FK to users(id). Kitchen users have a real
+    // users row; backend/tenant operators (session.backendUserId) do NOT — their
+    // id would violate the FK and the whole insert would be dropped, losing the
+    // audit trail for everything they do. Store NULL for the id in that case but
+    // keep the username string, so the actor is still recorded.
+    let uid = userId || null;
+    if (uid != null && !db.prepare('SELECT 1 FROM users WHERE id = ?').get(uid)) uid = null;
     db.prepare('INSERT INTO activity_log (user_id,username,action,entity_type,entity_id,details,ip_address) VALUES (?,?,?,?,?,?,?)')
-      .run(userId, username, action, entityType||null, entityId||null, details?JSON.stringify(details):null, ip||null);
+      .run(uid, username, action, entityType||null, entityId||null, details?JSON.stringify(details):null, ip||null);
   } catch(e) { console.error('Log error:', e.message); }
 }
 
