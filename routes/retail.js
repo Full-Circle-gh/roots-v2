@@ -15273,7 +15273,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
-                    o.channel_status, o.channel_status_at,
+                    o.channel_status, o.channel_status_at, o.channel_eta,
                     o.fulfillment_short_pids,
                     (SELECT COUNT(*) FROM retail_order_addons ad
                        WHERE ad.order_id = o.id AND ad.status = 'success') AS addon_count,

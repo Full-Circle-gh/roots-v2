@@ -1857,6 +1857,16 @@ function renderTrackingCell(o) {
   if (o.fulfillment_type === 'pickup') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
   }
+  // Read-only channels (Meituan): Meituan owns the rider, so we have no waybill —
+  // show the platform's delivery ETA instead, and never the "missing waybill"
+  // warning below (which doesn't apply). Hide once the order is done/void.
+  if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
+    if (o.channel_eta && !['delivered', 'cancelled', 'refunded'].includes(o.status)) {
+      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#5a8c2a;">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(o.channel_eta))}</span></div>
+              <div class="muted" style="font-size:10px; margin-top:2px;">${cuT('arrival','预计送达')}</div>`;
+    }
+    return '<span class="muted">—</span>';
+  }
   // Local (same-city) delivery has no waybill — it carries an operator-set ETA
   // instead. Show that here, and never the red "missing waybill" warning, which
   // doesn't apply to local delivery.
@@ -1992,6 +2002,12 @@ function formatDate(iso) {
   return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
 }
 
+// Clock-only (HH:MM, store-local) for a UTC datetime — used for the Meituan
+// delivery ETA. Reuses formatDate's UTC→Asia/Shanghai handling.
+function formatEtaClock(iso) {
+  const s = formatDate(iso);
+  return s ? s.slice(11) : '';
+}
 // Date-only normalizer for fields like coupon expiry, where values may be
 // stored in mixed formats ("2026-06-09", "2026/10/6"). Always renders a
 // padded YYYY-MM-DD; falls back to the raw first-10 chars if unparseable.
@@ -3065,6 +3081,11 @@ function renderReadonlyOrder(o) {
           <div class="kicker">${escapeHtml(chan)} status · 平台状态</div>
           <div class="val" data-no-i18n><b>${escapeHtml((typeof cuT === 'function') ? cuT(meta.en, meta.cn) : meta.en)}</b></div>
         </div>` : ''; })()}
+        ${o.channel_eta ? `<div>
+          <div class="kicker">ETA · 预计送达</div>
+          <div class="val"><b>${escapeHtml(formatEtaClock(o.channel_eta))}</b></div>
+          <div class="sub">${formatDate(o.channel_eta)}</div>
+        </div>` : ''}
         ${hasCust ? `<div>
           <div class="kicker">Customer · 顾客</div>
           <div class="val" data-no-i18n><b>${escapeHtml(cust.name)}</b></div>

@@ -370,7 +370,7 @@ async function refreshOrderStatus(storeCode, order) {
     const res = await fetch(`${INTERNAL_BASE}/api/internal/meituan/update-order-status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
-      body: JSON.stringify({ meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc }),
+      body: JSON.stringify({ meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc, eta: order.eta }),
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));

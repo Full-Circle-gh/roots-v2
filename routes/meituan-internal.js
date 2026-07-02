@@ -134,6 +134,7 @@ router.post('/ingest-order', (req, res) => {
     // the true state instead of a fixed "Paid". Refreshed on later polls via
     // /update-order-status.
     const channelStatus = (order.statusDesc && String(order.statusDesc).trim()) || null;
+    const channelEta    = (order.eta && String(order.eta).trim()) || null;
     // A terminal Meituan label (已完成/已取消/退款…) maps to the matching internal
     // status so the order lands in the right tab; anything in-progress → 'paid'.
     const internalStatus = internalStatusForChannel(channelStatus) || 'paid';
@@ -144,11 +145,11 @@ router.post('/ingest-order', (req, res) => {
         INSERT INTO retail_orders (
           order_no, status, payment_method, subtotal, total,
           store_id, channel, fulfillment_type, placed_at, paid_at,
-          channel_status, channel_status_at
+          channel_status, channel_status_at, channel_eta
         ) VALUES (?, ?, 'meituan', ?, ?, ?, 'meituan', 'delivery',
                   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
-                  ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
-      `).run(orderNo, internalStatus, total, total, storeId, channelStatus, channelStatus);
+                  ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?)
+      `).run(orderNo, internalStatus, total, total, storeId, channelStatus, channelStatus, channelEta);
       const oid = r.lastInsertRowid;
       for (const it of items) {
         // Snapshot the Meituan 货号 (SKU token) so the view-only order drawer can
@@ -217,8 +218,9 @@ router.post('/ingest-order', (req, res) => {
 // only writes when the label actually changed, and returns { changed }. Looked up
 // by Meituan order no via meituan_order_import → retail_order_id.
 router.post('/update-order-status', (req, res) => {
-  const { meituanOrderNo, statusDesc } = req.body || {};
+  const { meituanOrderNo, statusDesc, eta } = req.body || {};
   const desc = (statusDesc && String(statusDesc).trim()) || null;
+  const etaVal = (eta && String(eta).trim()) || null;
   if (!meituanOrderNo || !desc) return res.status(400).json({ error: 'meituanOrderNo and statusDesc required' });
 
   try {
@@ -233,10 +235,13 @@ router.post('/update-order-status', (req, res) => {
     const r = db.prepare(`
       UPDATE retail_orders
          SET channel_status = ?, channel_status_at = CURRENT_TIMESTAMP,
-             status = COALESCE(?, status)
+             status = COALESCE(?, status),
+             channel_eta = COALESCE(?, channel_eta)
        WHERE id = ?
-         AND (COALESCE(channel_status,'') != ? OR status != COALESCE(?, status))
-    `).run(desc, internal, imp.retail_order_id, desc, internal);
+         AND (COALESCE(channel_status,'') != ?
+              OR status != COALESCE(?, status)
+              OR (? IS NOT NULL AND COALESCE(channel_eta,'') != ?))
+    `).run(desc, internal, etaVal, imp.retail_order_id, desc, internal, etaVal, etaVal);
 
     res.json({ ok: true, changed: r.changes > 0 });
   } catch (err) {

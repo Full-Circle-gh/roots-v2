@@ -2552,6 +2552,10 @@ addColumn('retail_orders', 'channel',         "TEXT DEFAULT 'wechat'");
 // channel_status = the platform's Chinese status desc; refreshed each daemon poll.
 addColumn('retail_orders', 'channel_status',    'TEXT');
 addColumn('retail_orders', 'channel_status_at', 'DATETIME');
+// Platform-promised delivery ETA (Meituan estimateArrivalTime), stored UTC
+// 'YYYY-MM-DD HH:MM:SS' like the other timestamps so the admin renders it in
+// store-local time. Read-only channels have no waybill/rider ETA of our own.
+addColumn('retail_orders', 'channel_eta',       'DATETIME');
 
 // Store pickup: a store is offered as a pickup point at checkout only when
 // this flag is on (admin toggles it per store in the mini-app backend).
