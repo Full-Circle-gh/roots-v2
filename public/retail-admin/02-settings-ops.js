@@ -237,6 +237,10 @@ function _opsStoreForm(s) {
           <label class="field-label">Street address · 详细地址 <span style="color:var(--text-3);font-weight:400">— sets the store GPS, auto-geocoded on save · 决定门店 GPS,保存时自动定位</span></label>
           <input type="text" id="osf_address" value="${val(s?.address)}" placeholder="新塘大街3号新塘科创园2栋">
         </div>
+        <div style="display:flex;gap:10px">
+          <div style="flex:1"><label class="field-label">Opens · 开门</label><input type="time" id="osf_open" value="${val(s?.open_time)}"></div>
+          <div style="flex:1"><label class="field-label">Closes · 关门</label><input type="time" id="osf_close" value="${val(s?.close_time)}"></div>
+        </div>
         <div><label class="field-label">Sort priority · 排序 <span style="color:var(--text-3);font-weight:400">(lower = preferred)</span></label><input type="number" id="osf_sort" value="${s?.sort_order ?? 0}"></div>
         <div style="display:flex;align-items:flex-end;padding-bottom:6px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-1)">
@@ -268,6 +272,7 @@ async function _opsStoreSave(id) {
     address: v('osf_address'), phone: v('osf_phone'),
     sort_order: +document.getElementById('osf_sort').value || 0,
     pickup_enabled: document.getElementById('osf_pickup').checked,
+    open_time: v('osf_open') || null, close_time: v('osf_close') || null,
   };
   const latRaw = v('osf_lat'), lngRaw = v('osf_lng');
   if (latRaw && lngRaw) {

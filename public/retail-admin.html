@@ -7064,6 +7064,16 @@
       #tab-integrations .ig-foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);padding-top:11px;margin-top:auto}
       #tab-integrations .ig-spacer{flex:1}
       #tab-integrations .ig-meta{font-family:var(--f-mono,monospace);font-size:10.5px;color:var(--text-4,#56544f)}
+      #tab-integrations .ig-todo{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--brass,#B08D4A);background:rgba(176,141,74,.08);border:1px dashed rgba(176,141,74,.35);border-radius:6px;padding:5px 9px}
+      #tab-integrations .ig-todo .ig-x{margin-left:auto;background:none;border:none;color:var(--text-3,#7d7a72);cursor:pointer;font-size:13px;padding:0 2px}
+      #tab-integrations .ig-todo .ig-x:hover{color:var(--text-1,#E8E5DC)}
+      #tab-integrations .ig-wiz{background:var(--bg-pane,#1A1F24);border:1px solid var(--line-strong,rgba(232,229,220,.16));border-radius:10px;padding:18px;margin:4px 0 16px}
+      #tab-integrations .ig-wiz-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+      #tab-integrations .ig-wiz-grid .wide{grid-column:1 / -1}
+      #tab-integrations .ig-linkrow{display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--line);font-size:13px}
+      #tab-integrations .ig-linkrow:last-child{border-bottom:none}
+      #tab-integrations .ig-linkrow .grow{flex:1}
+      @media (max-width:760px){#tab-integrations .ig-wiz-grid{grid-template-columns:1fr}}
     </style>
     <h2>Channels &amp; Delivery · 渠道与配送</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
@@ -7073,12 +7083,17 @@
     <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
       接入您的销售渠道与物流。每个卡片都可自助设置 — 若遇到困难,点击“获取帮助”,我们的团队可为您完成。
     </p>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:2px">
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-bottom:2px">
+      <button class="btn btn-sm btn-primary" onclick="igAddLocation()" title="Add a new store location">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
+        Add location · 新增门店
+      </button>
       <button class="btn btn-sm" onclick="igHelp('general')" title="Ask our team for help">
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         Get help · 获取帮助
       </button>
     </div>
+    <div id="ig-locwiz" style="display:none"></div>
     <div id="ig-cards" class="ig-grid"></div>
   </section>
 

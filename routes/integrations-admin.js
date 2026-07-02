@@ -75,4 +75,19 @@ router.post('/api/retail-admin/integrations/help', requireRetailAdmin, express.j
   }
 });
 
+// ── Dismiss a card to-do ─────────────────────────────────────────────────────
+// POST /api/retail-admin/integrations/:kind/todos/dismiss  { todoId }
+// e.g. after the operator linked a new store by hand outside the wizard.
+router.post('/api/retail-admin/integrations/:kind/todos/dismiss', requireRetailAdmin, express.json(), (req, res) => {
+  try {
+    const { todoId } = req.body || {};
+    if (!todoId) return res.status(400).json({ success: false, error: 'todo_id_required' });
+    const ok = registry.dismissTodo(tenantId(req), req.params.kind, String(todoId));
+    if (!ok) return res.status(404).json({ success: false, error: 'todo_not_found' });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 module.exports = router;

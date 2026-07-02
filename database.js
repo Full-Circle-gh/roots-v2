@@ -2564,6 +2564,12 @@ addColumn('retail_orders', 'channel_eta',       'DATETIME');
 // accepting walk-in pickup, and vice versa.
 addColumn('retail_stores', 'pickup_enabled', 'INTEGER DEFAULT 0');
 
+// Per-store opening hours ('HH:MM' local, both set or both NULL = always open).
+// Captured by the Add-location wizard; replaces meituan-daemon's hardcoded
+// STORE_HOURS map once the daemon is migrated to read these (worker phase).
+addColumn('retail_stores', 'open_time', 'TEXT');
+addColumn('retail_stores', 'close_time', 'TEXT');
+
 // Staff "seen" timestamp — stamped the first time ANY operator opens the
 // order detail (shared across devices). NULL = unread; powers the bold + dot
 // "unread until opened" treatment in the backend Orders list. On the deploy

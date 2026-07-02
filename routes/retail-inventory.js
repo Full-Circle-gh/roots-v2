@@ -78,8 +78,8 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
 
   const info = tdb().prepare(`
     INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, lat, lng, phone,
-                               meituan_account_id, is_active, pickup_enabled, sort_order)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               meituan_account_id, is_active, pickup_enabled, sort_order, open_time, close_time)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     b.code.trim(),
     b.name_en || null, b.name_cn || null,
@@ -91,18 +91,28 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
     b.is_active === false ? 0 : 1,
     b.pickup_enabled ? 1 : 0,
     Number.isFinite(b.sort_order) ? b.sort_order : 0,
+    b.open_time || null, b.close_time || null,
   );
   // Background geocode the new store unless the admin provided coords.
   if (b.lat == null || b.lng == null) geocodeStoreAsync(info.lastInsertRowid, tdb());
   logActivity(req.user.id, req.user.username, 'create', 'retail_store', info.lastInsertRowid, b, req.ip);
-  res.json({ success: true, data: inventory.getStore(info.lastInsertRowid) });
+  const store = inventory.getStore(info.lastInsertRowid);
+  // Channel-linking prompts: give every already-set-up channel/logistics
+  // integration a "link this store" to-do on its hub card. Best-effort — a
+  // registry hiccup must never fail store creation.
+  let channelTodos = [];
+  try {
+    channelTodos = require('../lib/integrations/registry')
+      .notifyStoreAdded((req.tenant && req.tenant.id) || 1, store);
+  } catch (_) {}
+  res.json({ success: true, data: store, channelTodos });
 });
 
 router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = inventory.getStore(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order'];
+  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time'];
   const sets = [];
   const vals = [];
   for (const k of allowed) {
