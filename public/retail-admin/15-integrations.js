@@ -34,7 +34,7 @@
     const box = document.getElementById('ig-cards');
     if (box && !box.children.length) box.innerHTML = igMuted(cuT('Loading…', '加载中…'));
     try {
-      const r = await api('/api/retail-admin/integrations');
+      const r = await api('/api/retail-admin/channel-hub');
       _cards = r.data || [];
       _stores = r.stores || [];
       igRender();
@@ -109,7 +109,7 @@
 
   window.igDismissTodo = async function (kind, todoId) {
     try {
-      await api(`/api/retail-admin/integrations/${encodeURIComponent(kind)}/todos/dismiss`, {
+      await api(`/api/retail-admin/channel-hub/${encodeURIComponent(kind)}/todos/dismiss`, {
         method: 'POST', body: { todoId },
       });
       igLoad();
@@ -141,7 +141,7 @@
       `请告诉我们您在${label}遇到的问题(可选):`), '');
     if (note === null) return; // cancelled
     try {
-      await api('/api/retail-admin/integrations/help', {
+      await api('/api/retail-admin/channel-hub/help', {
         method: 'POST',
         body: { kind: kind || 'general', note: note || '' },
       });

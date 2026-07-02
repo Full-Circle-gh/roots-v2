@@ -5,7 +5,8 @@
 // Powers the "Channels · 渠道" section of the Mini App Backend: a card per sales
 // channel / logistics plugin, each with status, health, and a "Get help" escape
 // hatch. The registry (lib/integrations/registry.js) is the source of truth;
-// this router just exposes it to the admin UI under /api/retail-admin/integrations.
+// this router just exposes it to the admin UI under /api/retail-admin/channel-hub
+// (a distinct prefix from retail.js's existing /integrations credential config).
 //
 // Phase 1 is intentionally read-mostly: cards render live from the registry, and
 // help requests are captured. The per-plugin setup wizards (connect, map, verify)
@@ -27,7 +28,7 @@ function tenantId(req) { return (req.tenant && req.tenant.id) || 1; }
 // GET /api/retail-admin/integrations
 // → { success, data: [cards], stores: [{code,name}] }
 // `stores` feeds the per-store status pills on channel/logistics cards.
-router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
+router.get('/api/retail-admin/channel-hub', requireRetailAdmin, (req, res) => {
   try {
     const cards = registry.listForTenant(tenantId(req));
     let stores = [];
@@ -43,8 +44,8 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
 });
 
 // ── One plugin's detail (wizard skeleton + saved progress) ──────────────────
-// GET /api/retail-admin/integrations/:kind
-router.get('/api/retail-admin/integrations/:kind', requireRetailAdmin, (req, res) => {
+// GET /api/retail-admin/channel-hub/:kind
+router.get('/api/retail-admin/channel-hub/:kind', requireRetailAdmin, (req, res) => {
   try {
     const detail = registry.detailForTenant(tenantId(req), req.params.kind);
     if (!detail) return res.status(404).json({ success: false, error: 'unknown_integration' });
@@ -55,9 +56,9 @@ router.get('/api/retail-admin/integrations/:kind', requireRetailAdmin, (req, res
 });
 
 // ── "Get help" — the assisted-self-service escape hatch ─────────────────────
-// POST /api/retail-admin/integrations/help  { kind, stepKey?, note?, lastError?, attempts? }
+// POST /api/retail-admin/channel-hub/help  { kind, stepKey?, note?, lastError?, attempts? }
 // Records the request (with the tenant's context) and best-effort pages platform ops.
-router.post('/api/retail-admin/integrations/help', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/channel-hub/help', requireRetailAdmin, express.json(), (req, res) => {
   try {
     const id = tenantId(req);
     const { kind, stepKey, note, lastError, attempts } = req.body || {};
@@ -76,9 +77,9 @@ router.post('/api/retail-admin/integrations/help', requireRetailAdmin, express.j
 });
 
 // ── Dismiss a card to-do ─────────────────────────────────────────────────────
-// POST /api/retail-admin/integrations/:kind/todos/dismiss  { todoId }
+// POST /api/retail-admin/channel-hub/:kind/todos/dismiss  { todoId }
 // e.g. after the operator linked a new store by hand outside the wizard.
-router.post('/api/retail-admin/integrations/:kind/todos/dismiss', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/channel-hub/:kind/todos/dismiss', requireRetailAdmin, express.json(), (req, res) => {
   try {
     const { todoId } = req.body || {};
     if (!todoId) return res.status(400).json({ success: false, error: 'todo_id_required' });
