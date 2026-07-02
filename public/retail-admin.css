@@ -787,11 +787,11 @@
   .sales-ch-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .sales-ch-id { display: flex; align-items: center; gap: 10px; min-width: 0; }
   .sales-ch-ico {
-    width: 28px; height: 28px; border-radius: var(--r-md); flex: none;
+    width: 38px; height: 38px; border-radius: 11px; flex: none;
     display: flex; align-items: center; justify-content: center;
     background: var(--bg-elev-1); color: var(--text-2);
   }
-  .sales-ch-ico svg { width: 16px; height: 16px; }
+  .sales-ch-ico svg { width: 20px; height: 20px; }
   .sales-ch-ico.wc { background: #E1F0E4; color: #2E7D46; }
   .sales-ch-ico.wb { background: #E8ECF1; color: #33506E; }
   .sales-ch-ico.mt { background: #FBE7D6; color: #C2410C; }
@@ -807,17 +807,21 @@
      Rendered so the control's place and intent are visible; not-allowed cursor
      + a tooltip make the "coming soon" state clear. */
   .sales-toggle {
-    width: 34px; height: 20px; border-radius: 999px; flex: none;
+    width: 44px; height: 26px; border-radius: 999px; flex: none;
     background: var(--line); border: 0; position: relative; padding: 0;
     cursor: pointer; transition: background var(--t-fast) ease;
   }
   .sales-toggle.on { background: #6B8E6F; }
+  /* Mixed state: open in some locations, closed in others. */
+  .sales-toggle.partial { background: linear-gradient(90deg, #6B8E6F 50%, var(--line) 50%); }
   .sales-toggle .knob {
-    position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    position: absolute; top: 3px; left: 3px; width: 20px; height: 20px;
     border-radius: 50%; background: #fff; transition: left var(--t-fast) ease;
     box-shadow: 0 1px 2px rgba(0,0,0,.2);
   }
-  .sales-toggle.on .knob { left: 16px; }
+  .sales-toggle.on .knob { left: 21px; }
+  .sales-toggle.partial .knob { left: 12px; }
+  /* Locked = channel-status API not yet loaded; unlocked at runtime by csRender. */
   .sales-toggle.is-locked,
   .sales-toggle:disabled { opacity: .55; cursor: not-allowed; }
 
@@ -831,6 +835,34 @@
   .sales-ch-metrics .m-n { font-size: 15px; font-weight: 500; color: var(--text-1); margin-top: 2px; font-variant-numeric: tabular-nums; }
   .sales-ch-foot { display: flex; gap: 8px; flex-wrap: wrap; }
   .sales-ch-foot .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+  /* "Close a whole location" bar — injected by csRenderLocations(). A soft card
+     holding one pill per location; the pill fills brass when that location is
+     fully closed. */
+  .sales-locbar {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--bg-pane); border: 1px solid var(--line);
+    border-radius: var(--r-xl); padding: 13px 16px; margin: 0 0 var(--s4);
+    box-shadow: 0 1px 2px rgba(18,22,26,.05);
+  }
+  .sales-locbar-lead {
+    font-weight: 600; font-size: 13px; color: var(--text-1);
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .sales-locbar-lead svg { width: 17px; height: 17px; color: var(--brass); }
+  .sales-locbar-pills { display: flex; gap: 10px; flex-wrap: wrap; margin-left: auto; }
+  .sales-locpill {
+    display: inline-flex; align-items: center; gap: 9px;
+    border: 1px solid var(--line); background: var(--bg-elev-1);
+    border-radius: 999px; padding: 8px 15px; cursor: pointer;
+    font: inherit; font-size: 13px; color: var(--text-1);
+    transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
+  }
+  .sales-locpill:hover { border-color: var(--text-3); }
+  .sales-locpill .nm { font-weight: 600; }
+  .sales-locpill .act { color: var(--text-3); }
+  .sales-locpill.closed { background: var(--brass); border-color: var(--brass); color: #fff; }
+  .sales-locpill.closed .act { color: rgba(255,255,255,.85); }
 
   /* Clickable catalogue-health tiles double as quick status filters. The
      cursor + a slightly firmer hover say "press me"; .pa-kpi-on is the

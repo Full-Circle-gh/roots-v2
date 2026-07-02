@@ -335,7 +335,12 @@ function csRender() {
     if (!info || !btn) return;
     btn.disabled = false; btn.removeAttribute('disabled'); btn.classList.remove('is-locked');
     btn.title = cuT('Open / close by location', '按门店开关');
-    btn.classList.toggle('on', !!info.cardOpen);
+    // Mixed state: open in some locations, closed in others → half-lit toggle.
+    const cells = info.cells || [];
+    const openCount = cells.filter(c => c.open).length;
+    const partial = cells.length > 1 && openCount > 0 && openCount < cells.length;
+    btn.classList.toggle('partial', partial);
+    btn.classList.toggle('on', !partial && !!info.cardOpen);
     btn.onclick = () => { if (ch === 'gzgrocery') csToggleGz(info); else csPopup(ch); };
   });
   csRenderLocations();
@@ -348,12 +353,15 @@ function csRenderLocations() {
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'cs-locations';
-    bar.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 14px';
+    bar.className = 'sales-locbar';
     grid.parentNode.insertBefore(bar, grid);
   }
   const locs = (_csData && _csData.locations) || [];
-  bar.innerHTML = '<span style="font-weight:600;font-size:13px;margin-right:2px">' + cuT('Close a whole location', '关闭整个门店') + ':</span>'
-    + locs.map((l) => '<button class="btn btn-sm' + (l.allOpen ? '' : ' btn-primary') + '" onclick="csLocation(\'' + l.storeCode + '\',' + (l.allOpen ? 'false' : 'true') + ')"><span data-no-i18n>' + escapeHtml(l.name) + '</span> — ' + (l.allOpen ? cuT('Close all', '全部关闭') : cuT('Open all', '全部开启')) + '</button>').join('');
+  const storeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>';
+  bar.innerHTML = '<span class="sales-locbar-lead">' + storeIcon + '<span>' + cuT('Close a whole location', '关闭整个门店') + '</span></span>'
+    + '<span class="sales-locbar-pills">'
+    + locs.map((l) => '<button class="sales-locpill' + (l.allOpen ? '' : ' closed') + '" onclick="csLocation(\'' + l.storeCode + '\',' + (l.allOpen ? 'false' : 'true') + ')"><span class="nm" data-no-i18n>' + escapeHtml(l.name) + '</span><span class="act">' + (l.allOpen ? cuT('Close all', '全部关闭') : cuT('Open all', '全部开启')) + '</span></button>').join('')
+    + '</span>';
 }
 
 function csToggleGz(info) {
@@ -384,7 +392,7 @@ function csPopup(ch) {
       + '<button class="btn btn-sm' + (c.open ? '' : ' btn-primary') + '" onclick="csCell(\'' + ch + '\',\'' + c.storeCode + '\',' + (c.open ? 'false' : 'true') + ')">' + (c.open ? cuT('Close', '关闭') : cuT('Open', '开启')) + '</button>'
       + '</div>';
   }).join('');
-  ov.innerHTML = '<div style="background:var(--bg-elev-0,var(--bg,#fff));border:1px solid var(--line);border-radius:10px;max-width:400px;width:100%;padding:16px 18px" onclick="event.stopPropagation()">'
+  ov.innerHTML = '<div style="background:var(--bg-pane,#fff);border:1px solid var(--line);border-radius:16px;max-width:400px;width:100%;padding:18px 20px;box-shadow:0 20px 60px rgba(18,22,26,.28)" onclick="event.stopPropagation()">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:15px">' + csName(ch) + ' — ' + cuT('by location', '按门店') + '</b><button class="btn btn-sm" onclick="csClosePopup()">✕</button></div>'
     + (ch === 'eleme' ? '<div class="muted" style="font-size:12px;margin-bottom:8px">' + cuT('Eleme isn’t connected yet — placeholder.', '饿了么尚未接入 — 仅占位。') + '</div>' : '')
     + rows
