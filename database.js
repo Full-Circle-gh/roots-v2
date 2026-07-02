@@ -34,6 +34,17 @@ addColumn('ingredients', 'image_data',        'TEXT');
 addColumn('recipes',     'is_favorite',       'INTEGER DEFAULT 0');
 addColumn('po_line_items', 'lot_number',      'TEXT');
 addColumn('po_line_items', 'expiry_date',     'DATE');
+// Retail purchasing (online store buying dept) shares the kitchen PO engine.
+// scope splits the two worlds' lists ('kitchen' | 'retail'); retail POs pin a
+// retail_stores.id they restock into, and their lines reference store_products
+// (kitchen lines keep using ingredient_id — one of the two is always NULL).
+// stock_applied_qty tracks how much of a retail line has already been pushed
+// into retail_store_stock, so repeated receive edits apply only the delta.
+addColumn('purchase_orders', 'scope',    "TEXT DEFAULT 'kitchen'");
+addColumn('purchase_orders', 'store_id', 'INTEGER');
+addColumn('po_line_items', 'store_product_id',  'INTEGER');
+addColumn('po_line_items', 'stock_applied_qty', 'REAL DEFAULT 0');
+try { db.prepare('CREATE INDEX IF NOT EXISTS idx_po_line_items_store_product ON po_line_items(store_product_id)').run(); } catch {}
 addColumn('recipes',       'image_data',      'TEXT');
 addColumn('recipe_ingredients', 'substitutes', 'TEXT');
 addColumn('ingredients', 'pack_contents_qty',  'REAL');

@@ -373,6 +373,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
         Categories · 分类
       </button>
+      <button data-tab="purchasing" onclick="puInit()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+        Purchasing · 采购
+      </button>
     </div>
   </div>
 
@@ -6971,6 +6975,105 @@
     </div>
   </section>
 
+  <section id="tab-purchasing">
+    <h2>Purchasing · 采购</h2>
+    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      The store's buying department. Keep supplier records, raise purchase orders, and receive goods — received quantities go straight into store stock and sync out to every sales channel. Order costs post to Finance automatically.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
+      门店采购部。管理供应商档案、创建采购单、收货入库 —— 收货数量直接计入门店库存并同步到各销售渠道。采购金额自动记入财务支出。
+    </p>
+
+    <!-- Sub-view switch: purchase orders ↔ suppliers -->
+    <div class="row" style="gap:8px;margin-bottom:var(--s4);flex-wrap:wrap">
+      <button id="pu-nav-pos" class="btn btn-sm btn-primary" onclick="puShowView('pos')">Purchase orders · 采购单</button>
+      <button id="pu-nav-suppliers" class="btn btn-sm" onclick="puShowView('suppliers')">Suppliers · 供应商</button>
+    </div>
+
+    <!-- ── Purchase orders ── -->
+    <div id="pu-view-pos">
+      <div class="fc-kpis" id="pu-kpis">
+        <div class="fc-kpi accent">
+          <div class="lbl">Open POs · 进行中</div>
+          <div class="val" id="pu-kpi-open">—</div>
+          <div class="sub">requested + ordered · 待订+已订</div>
+        </div>
+        <div class="fc-kpi">
+          <div class="lbl">Awaiting goods · 待收货</div>
+          <div class="val" id="pu-kpi-awaiting">—</div>
+          <div class="sub">ordered, not received · 已下单未到货</div>
+        </div>
+        <div class="fc-kpi">
+          <div class="lbl">This month · 本月采购</div>
+          <div class="val" id="pu-kpi-month">—</div>
+          <div class="sub" id="pu-kpi-month-sub">posted to Finance · 已记入财务</div>
+        </div>
+        <div class="fc-kpi">
+          <div class="lbl">Suppliers · 供应商</div>
+          <div class="val" id="pu-kpi-suppliers">—</div>
+          <div class="sub">active · 启用中</div>
+        </div>
+      </div>
+
+      <div id="pu-pos-list">
+        <div class="pa-toolbar">
+          <input id="pu-search" type="text" placeholder="Search PO / supplier / product · 搜索采购单/供应商/商品" oninput="puFilterPOs()">
+          <select id="pu-filter-status" onchange="puFilterPOs()">
+            <option value="">All statuses · 全部状态</option>
+            <option value="Requested">Requested · 待下单</option>
+            <option value="Ordered">Ordered · 已下单</option>
+            <option value="Delivered">Delivered · 已到货</option>
+            <option value="Cancelled">Cancelled · 已取消</option>
+          </select>
+          <select id="pu-filter-store" onchange="puFilterPOs()" hidden></select>
+          <div id="pu-count" class="pa-count"></div>
+          <button class="btn btn-sm btn-primary" data-cap="purchasing:edit" onclick="puNewPO()">+ New PO · 新建采购单</button>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="data-table" style="min-width:760px;font-size:13px">
+            <thead><tr>
+              <th>PO · 单号</th><th>Date · 日期</th><th>Supplier · 供应商</th><th>Store · 门店</th>
+              <th style="text-align:right">Lines · 行</th><th style="text-align:right">Total · 金额</th><th>Status · 状态</th>
+            </tr></thead>
+            <tbody id="pu-pos-body">
+              <tr><td colspan="7" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- One PO — create/edit/receive; rendered by 15-purchasing.js -->
+      <div id="pu-po-page" style="display:none"></div>
+    </div>
+
+    <!-- ── Suppliers ── -->
+    <div id="pu-view-suppliers" style="display:none">
+      <div id="pu-sup-list">
+      <div class="pa-toolbar">
+        <input id="pu-sup-search" type="text" placeholder="Search suppliers · 搜索供应商" oninput="puRenderSuppliers()">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="pu-sup-inactive" onchange="puLoadSuppliers(true)"> Show disabled · 显示停用
+        </label>
+        <div id="pu-sup-count" class="pa-count"></div>
+        <button class="btn btn-sm btn-primary" data-cap="purchasing:edit" onclick="puNewSupplier()">+ New supplier · 新建供应商</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table" style="min-width:720px;font-size:13px">
+          <thead><tr>
+            <th>Supplier · 供应商</th><th>Contact · 联系人</th><th>Terms · 付款条件</th>
+            <th>Channel · 渠道</th><th style="text-align:right">POs · 采购单</th><th>Rating · 评分</th>
+          </tr></thead>
+          <tbody id="pu-sup-body">
+            <tr><td colspan="6" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+      </div>
+      <!-- One supplier — edit form + documents; rendered by 15-purchasing.js -->
+      <div id="pu-sup-page" style="display:none"></div>
+    </div>
+  </section>
+
   <section id="tab-guanyi">
     <h2>gzgrocery 同步 · Guanyi Sync</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
@@ -7253,6 +7356,7 @@
 <script src="/assets/retail-admin/13-activity.js"></script>
 <script src="/assets/retail-admin/14-eleme.js"></script>
 <script src="/assets/retail-admin/15-integrations.js"></script>
+<script src="/assets/retail-admin/16-purchasing.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">

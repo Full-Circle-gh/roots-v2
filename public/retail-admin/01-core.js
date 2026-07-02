@@ -129,7 +129,7 @@ const TAB_CAP = {
   media: 'media:view', reviews: 'reviews:view', feedback: 'feedback:view',
   delivery: 'delivery:view', meituan: 'meituan:view', guanyi: 'guanyi:view',
   integrations: 'integrations:view', eleme: 'eleme:view',
-  activity: 'activity:view',
+  activity: 'activity:view', purchasing: 'purchasing:view',
   config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
 };
 // Hide nav sections + any [data-cap]-tagged control the operator can't use, then

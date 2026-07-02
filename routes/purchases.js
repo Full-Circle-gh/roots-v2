@@ -136,7 +136,10 @@ function postPOExpenses(poId) {
 // GET all POs
 router.get('/api/purchases', requireAuth, requirePermission('purchases'), (req, res) => {
   const { status, search, month } = req.query;
-  let q = 'SELECT * FROM purchase_orders WHERE 1=1';
+  // Retail (online store) POs live in the same table with scope='retail' and
+  // their own admin at /api/retail-admin/purchases — keep them out of the
+  // kitchen buying list so the two departments don't see each other's noise.
+  let q = "SELECT * FROM purchase_orders WHERE COALESCE(scope,'kitchen') = 'kitchen'";
   const params = [];
   if (status) { q += ' AND status = ?'; params.push(status); }
   if (month)  { q += " AND substr(date, 1, 7) = ?"; params.push(String(month).slice(0,7)); }
