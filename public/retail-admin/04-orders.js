@@ -92,16 +92,10 @@ function channelStatusMeta(desc) {
   else if (/待支付|未支付|待付款/.test(d))  tone = 'pending_payment';
   return { en: d, cn: d, tone };
 }
-// Pill for a read-only channel order's real platform status, or '' when there's
-// no mirrored status (older imports) so the caller falls back to the internal
-// status pill. data-no-i18n: the label is dynamic platform text already localized
-// here, so the runtime i18n walker must leave it alone.
-function channelStatusPill(o) {
-  const meta = o && channelStatusMeta(o.channel_status);
-  if (!meta) return '';
-  const label = (typeof cuT === 'function') ? cuT(meta.en, meta.cn) : meta.en;
-  return `<span class="pill st-${meta.tone}" data-no-i18n><span class="dot"></span>${escapeHtml(label)}</span>`;
-}
+// channelStatusMeta is used by the read-only order drawer to show the EXACT
+// Meituan label (e.g. "Rider heading over") as a detail field. The list/card
+// status pill now uses OUR internal status (mapped server-side in
+// routes/meituan-internal.js internalStatusForChannel), so the pill + tab agree.
 // Clean {name, phone} for the customer column. gzgrocery mirrors the whole
 // OpenCart customer cell — "Name (phone) address…" — into recipient_name (its
 // phone/ship fields stay null), so the raw blob would spill the address into
@@ -844,7 +838,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack">${channelStatusPill(o) || `<span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>`}${refundBadge(o)}${addonBadge(o)}</div></td>
+        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div></td>
         <td>${renderTrackingCell(o)}</td>
         <td>${renderShipByCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
@@ -3055,7 +3049,7 @@ function renderReadonlyOrder(o) {
         <div class="od-head-main">
           <div class="title-row">
             <b>${escapeHtml(o.order_no)}</b>
-            ${channelStatusPill(o) || `<span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>`}
+            <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
             <span class="pill" style="background: var(--bg-elev-1); color: var(--text-2);" title="${escapeHtml(chan)} orders are mirrored in for visibility — fulfil them in ${escapeHtml(chan)}">${escapeHtml(chan)} · ${cuT('view only', '只读')}</span>
           </div>
           <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
@@ -3067,6 +3061,10 @@ function renderReadonlyOrder(o) {
           <div class="kicker">Store · 门店</div>
           <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
         </div>` : ''}
+        ${(() => { const meta = channelStatusMeta(o.channel_status); return meta ? `<div>
+          <div class="kicker">${escapeHtml(chan)} status · 平台状态</div>
+          <div class="val" data-no-i18n><b>${escapeHtml((typeof cuT === 'function') ? cuT(meta.en, meta.cn) : meta.en)}</b></div>
+        </div>` : ''; })()}
         ${hasCust ? `<div>
           <div class="kicker">Customer · 顾客</div>
           <div class="val" data-no-i18n><b>${escapeHtml(cust.name)}</b></div>

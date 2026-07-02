@@ -94,18 +94,21 @@ function resolveProduct(item, storeId) {
   return out;
 }
 
-// Map a Meituan platform status label → our coarse internal `status` so the
-// order lands in the right Orders tab (Paid worklist vs Delivered/terminal).
-// A read-only mirror is never fulfilled by us, so an in-progress order just
-// stays 'paid'; only a TERMINAL Meituan state moves it out of the worklist.
-// Returns null for non-terminal labels (caller keeps the existing status).
+// Map a Meituan platform status label → our internal `status` so the order
+// shows OUR lifecycle vocabulary (Paid/Preparing/Dispatched/Delivered) and
+// lands in the matching Orders tab, exactly like mini-app/web orders. The exact
+// Meituan label is still kept in channel_status for the detail drawer. Ordered
+// so pre-dispatch labels that happen to contain 配送 (待发起配送/待配送) classify
+// as preparing, not dispatched. Returns null for unpaid/unknown → keep 'paid'.
 function internalStatusForChannel(desc) {
   const d = String(desc || '');
   if (!d) return null;
-  if (/退款|退货/.test(d))                       return 'refunded';
-  if (/已取消|订单取消|已关闭|交易关闭/.test(d)) return 'cancelled';
-  if (/已完成|交易完成|已送达|已收货|订单完成/.test(d)) return 'delivered';
-  return null; // in-progress (拣货中 / 配送中 / 待…) → leave as-is
+  if (/退款|退货/.test(d))                                        return 'refunded';
+  if (/取消|已关闭|交易关闭/.test(d))                             return 'cancelled';
+  if (/已完成|交易完成|已送达|已收货|订单完成|已签收/.test(d))     return 'delivered';
+  if (/待发起配送|待配送|待接单|已接单|待拣货|拣货|备货|待发货|制作/.test(d)) return 'preparing';
+  if (/配送|派送|骑手|取货/.test(d))                              return 'dispatched';
+  return null; // 待支付 / unknown → keep 'paid'
 }
 
 // POST /api/internal/meituan/ingest-order

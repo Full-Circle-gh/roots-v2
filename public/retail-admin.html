@@ -7761,12 +7761,10 @@
       var phone = cust.phone;
       var sb = shipBy(o);
       var items = o.item_count || 0;
-      // Read-only channels (Meituan) show their real platform status label
-      // (拣货中 / 配送中 / 已完成 …) mirrored into channel_status; fall back to the
-      // internal status pill (+ "view only" tag) when there's no mirrored status.
-      var chanPill = (typeof channelStatusPill === 'function') ? channelStatusPill(o) : '';
-      var statusPill = chanPill
-        || ('<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + (ro ? ' · view only' : '') + '</span>');
+      // Read-only channels (Meituan) use OUR lifecycle label (the daemon maps the
+      // platform status → internal status); the exact Meituan label shows in the
+      // detail drawer, not the list.
+      var statusPill = '<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + (ro ? ' · view only' : '') + '</span>';
 
       var hint = fwd
         ? '<button type="button" class="rm-oc-hint" data-hintact data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + esc(en(fwd[1])) + '</button>'
