@@ -809,7 +809,7 @@
   .sales-toggle {
     width: 34px; height: 20px; border-radius: 999px; flex: none;
     background: var(--line); border: 0; position: relative; padding: 0;
-    cursor: not-allowed; transition: background var(--t-fast) ease;
+    cursor: pointer; transition: background var(--t-fast) ease;
   }
   .sales-toggle.on { background: #6B8E6F; }
   .sales-toggle .knob {
@@ -818,7 +818,8 @@
     box-shadow: 0 1px 2px rgba(0,0,0,.2);
   }
   .sales-toggle.on .knob { left: 16px; }
-  .sales-toggle.is-locked { opacity: .55; }
+  .sales-toggle.is-locked,
+  .sales-toggle:disabled { opacity: .55; cursor: not-allowed; }
 
   /* 2×2 metric block — fits the narrow cube; a wide single row would overflow. */
   .sales-ch-metrics {
