@@ -5784,6 +5784,13 @@ async function retryWeChatShippingForTenant() {
           AND (wx_shipping_status IS NULL OR wx_shipping_status NOT LIKE 'perm:%')
           AND COALESCE(wx_shipping_attempts, 0) < ${WX_SHIPPING_MAX_ATTEMPTS}
           AND COALESCE(delivered_at, updated_at) >= datetime('now', '-${WX_SHIPPING_SWEEP_LOOKBACK_DAYS} days')
+          -- Must have a real WeChat 支付订单号 to attach shipping to; orders with a
+          -- blank transaction_id (balance/comp-paid, or txn never captured) can't
+          -- be virtual-shipped and would otherwise be re-selected every tick as a no-op.
+          AND EXISTS (SELECT 1 FROM retail_payments p
+                       WHERE p.order_id = retail_orders.id AND p.method = 'wechat'
+                         AND p.status = 'success'
+                         AND p.transaction_id IS NOT NULL AND p.transaction_id != '')
         ORDER BY delivered_at DESC
         LIMIT ${WX_SHIPPING_SWEEP_BATCH}`
     ).all();
