@@ -132,6 +132,11 @@ function noteVerifyResult(storeCode, challenged) {
   }
 }
 const downFlagged = {};
+// Bootstrap = logged in but no captured order/list to replay (page reloaded).
+// 2026-07-02: yuexiu sat in this state 10h unnoticed — alert once it persists.
+const bootstrapSince = {};
+const bootstrapFlagged = {};
+const BOOTSTRAP_ALERT_MS = Number(process.env.QINGYUN_BOOTSTRAP_ALERT_MS || 10 * 60_000);
 
 // ── Match a Qingyun delivery to a roots order ──────────────────────────────────
 // Primary: the roots order_no (e.g. R2026...) stamped into the 备注/userRemark at
@@ -217,10 +222,23 @@ async function pollStore(storeCode) {
     const { ok, bootstrap, orders } = await br.getActiveDeliveries();
     if (br.verificationRequired) { noteVerifyResult(storeCode, true); return; }
     if (bootstrap) {
+      // A page reload wipes the captured order/list body (window.__qy) and tracking
+      // silently stops until a human reopens the 配送中 view. Page ops once it has
+      // clearly persisted — a fresh login/redirect settles well inside the grace.
+      if (!bootstrapSince[storeCode]) bootstrapSince[storeCode] = Date.now();
+      if (!bootstrapFlagged[storeCode] && Date.now() - bootstrapSince[storeCode] >= BOOTSTRAP_ALERT_MS) {
+        bootstrapFlagged[storeCode] = true;
+        sendOpsAlert(`🔴 青云聚信 ${storeCode} 页面丢失订单列表（可能页面被刷新），配送跟踪已停止 — 请在盒子上打开订单页的配送中标签\nQingyun ${storeCode} lost the captured order list (page likely reloaded) — tracking stopped; open the 配送中 tab on the box`);
+      }
       log(storeCode, 'no order/list captured yet — open the order page in the genuine Chrome (待取货/配送中 view)');
       logSync(storeCode, 'bootstrap', 'ok', null, 'waiting for the app to issue an order/list (open the order page)');
       return;
     }
+    if (bootstrapFlagged[storeCode]) {
+      sendOpsAlert(`✅ 青云聚信 ${storeCode} 订单列表已恢复，配送跟踪继续\nQingyun ${storeCode} order list recaptured — tracking resumed`);
+    }
+    bootstrapSince[storeCode] = 0;
+    bootstrapFlagged[storeCode] = false;
     if (!ok) return;
 
     let tracked = 0;
