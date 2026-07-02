@@ -94,6 +94,20 @@ function resolveProduct(item, storeId) {
   return out;
 }
 
+// Map a Meituan platform status label → our coarse internal `status` so the
+// order lands in the right Orders tab (Paid worklist vs Delivered/terminal).
+// A read-only mirror is never fulfilled by us, so an in-progress order just
+// stays 'paid'; only a TERMINAL Meituan state moves it out of the worklist.
+// Returns null for non-terminal labels (caller keeps the existing status).
+function internalStatusForChannel(desc) {
+  const d = String(desc || '');
+  if (!d) return null;
+  if (/退款|退货/.test(d))                       return 'refunded';
+  if (/已取消|订单取消|已关闭|交易关闭/.test(d)) return 'cancelled';
+  if (/已完成|交易完成|已送达|已收货|订单完成/.test(d)) return 'delivered';
+  return null; // in-progress (拣货中 / 配送中 / 待…) → leave as-is
+}
+
 // POST /api/internal/meituan/ingest-order
 // Mirrors a parsed Meituan order into roots: creates a retail_order and deducts
 // store stock (ledgered, which re-pushes the corrected number to Meituan +
@@ -117,6 +131,9 @@ router.post('/ingest-order', (req, res) => {
     // the true state instead of a fixed "Paid". Refreshed on later polls via
     // /update-order-status.
     const channelStatus = (order.statusDesc && String(order.statusDesc).trim()) || null;
+    // A terminal Meituan label (已完成/已取消/退款…) maps to the matching internal
+    // status so the order lands in the right tab; anything in-progress → 'paid'.
+    const internalStatus = internalStatusForChannel(channelStatus) || 'paid';
 
     // 1. Create the order + its line items in one transaction.
     const orderId = db.transaction(() => {
@@ -125,10 +142,10 @@ router.post('/ingest-order', (req, res) => {
           order_no, status, payment_method, subtotal, total,
           store_id, channel, fulfillment_type, placed_at, paid_at,
           channel_status, channel_status_at
-        ) VALUES (?, 'paid', 'meituan', ?, ?, ?, 'meituan', 'delivery',
+        ) VALUES (?, ?, 'meituan', ?, ?, ?, 'meituan', 'delivery',
                   CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
                   ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
-      `).run(orderNo, total, total, storeId, channelStatus, channelStatus);
+      `).run(orderNo, internalStatus, total, total, storeId, channelStatus, channelStatus);
       const oid = r.lastInsertRowid;
       for (const it of items) {
         // Snapshot the Meituan 货号 (SKU token) so the view-only order drawer can
@@ -207,11 +224,16 @@ router.post('/update-order-status', (req, res) => {
     ).get(String(meituanOrderNo));
     if (!imp || !imp.retail_order_id) return res.json({ ok: true, changed: false, reason: 'not_mirrored' });
 
+    // A terminal label also advances the internal status so the order leaves the
+    // Paid worklist for Delivered/Cancelled/Refunded; in-progress leaves it alone.
+    const internal = internalStatusForChannel(desc);
     const r = db.prepare(`
       UPDATE retail_orders
-         SET channel_status = ?, channel_status_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND COALESCE(channel_status,'') != ?
-    `).run(desc, imp.retail_order_id, desc);
+         SET channel_status = ?, channel_status_at = CURRENT_TIMESTAMP,
+             status = COALESCE(?, status)
+       WHERE id = ?
+         AND (COALESCE(channel_status,'') != ? OR status != COALESCE(?, status))
+    `).run(desc, internal, imp.retail_order_id, desc, internal);
 
     res.json({ ok: true, changed: r.changes > 0 });
   } catch (err) {
