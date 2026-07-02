@@ -781,7 +781,7 @@ async function loadOrders(opts = {}) {
            <p class="muted">No open refund requests right now. · 当前无待处理退款。</p>`
         : `<h3>No orders yet · 暂无订单</h3>
            <p class="muted">Orders appear here as customers place them on the mini app. · 顾客在小程序下单后,订单将显示在这里。</p>`;
-      tbody.innerHTML = `<tr><td colspan="9">
+      tbody.innerHTML = `<tr><td colspan="11">
         <div class="empty-state">
           <div class="icon">${ICONS.empty}</div>
           ${emptyMsg}
@@ -822,10 +822,12 @@ async function loadOrders(opts = {}) {
       // renderOpenOrder branches to renderReadonlyOrder for these, with no
       // fulfilment actions. data-readonly is kept as the branch signal.
       const ro = ordIsReadonlyChannel(o);
-      const chanSub = `<div class="muted ord-chan" style="font-size: 11px; margin-top: 2px">${chanIcon(o.channel)}${ordChannelLabel(o)}${ro ? ' · view only' : ''}</div>`;
+      // Sales channel now has its own column (was a sub-line under the order #).
+      const chanCell = `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>${ro ? `<div class="muted" style="font-size: 11px; margin-top: 2px; font-style: italic">${cuT('view only', '只读')}</div>` : ''}`;
       return `
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}" tabindex="0"${ro ? ' data-readonly="1"' : ''}>
-        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span>${chanSub}</td>
+        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span></td>
+        <td class="oc-chan">${chanCell}</td>
         <td>
           <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
           <div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(ordCustomerLines(o).phone)}</div>
