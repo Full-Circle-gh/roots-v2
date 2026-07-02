@@ -128,6 +128,7 @@ const TAB_CAP = {
   snippets: 'content:view', about: 'content:view', legal: 'content:view', faq: 'content:view',
   media: 'media:view', reviews: 'reviews:view', feedback: 'feedback:view',
   delivery: 'delivery:view', meituan: 'meituan:view', guanyi: 'guanyi:view',
+  integrations: 'integrations:view', eleme: 'eleme:view',
   activity: 'activity:view',
   config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
 };
