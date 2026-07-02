@@ -1,0 +1,594 @@
+<title>Channels &amp; Delivery — UI Mockups · 渠道与配送界面稿</title>
+<style>
+  /* ── Full Circle admin tokens (mirrors public/retail-admin.css) ─────────── */
+  :root{
+    --bg-app:#12161A; --bg-pane:#1A1F24; --bg-elev-1:#1F252B; --bg-elev-2:#262E35;
+    --line:rgba(232,229,220,.10); --line-strong:rgba(232,229,220,.16);
+    --text-1:#E8E5DC; --text-2:#AEABA2; --text-3:#7d7a72; --text-4:#56544f;
+    --tea:#6B8E6F; --brass:#B08D4A; --danger:#e8556a;
+    --r-lg:10px; --r-md:6px; --r-xl:14px;
+    --f-sans:'IBM Plex Sans','IBM Plex Sans SC','PingFang SC','Microsoft YaHei',system-ui,sans-serif;
+    --f-mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0C0F12;color:var(--text-1);font-family:var(--f-sans);font-size:14px;line-height:1.5;
+       -webkit-font-smoothing:antialiased;padding:0 0 64px}
+
+  /* ── Mockup chrome (not part of the admin UI) ───────────────────────────── */
+  .mock-head{max-width:1160px;margin:0 auto;padding:28px 24px 18px}
+  .mock-head h1{font-size:19px;font-weight:600;letter-spacing:-.01em;text-wrap:balance}
+  .mock-head p{color:var(--text-2);font-size:13px;margin-top:4px;max-width:64ch}
+  .mock-tabs{max-width:1160px;margin:14px auto 20px;padding:0 24px;display:flex;gap:8px;flex-wrap:wrap}
+  .mock-tab{font-family:var(--f-mono);font-size:11px;letter-spacing:.05em;color:var(--text-2);
+    background:var(--bg-pane);border:1px solid var(--line);border-radius:999px;padding:7px 14px;cursor:pointer}
+  .mock-tab:hover{color:var(--text-1);border-color:var(--line-strong)}
+  .mock-tab.on{color:#12161A;background:var(--text-1);border-color:var(--text-1);font-weight:600}
+  .mock-tab:focus-visible,.btn:focus-visible,select:focus-visible,input:focus-visible{
+    outline:2px solid var(--brass);outline-offset:2px}
+  .screen{display:none;max-width:1160px;margin:0 auto;padding:0 24px}
+  .screen.on{display:block}
+  .caption{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;color:var(--text-3);
+    text-transform:uppercase;margin:0 0 10px 2px}
+
+  /* ── App frame ──────────────────────────────────────────────────────────── */
+  .frame{display:grid;grid-template-columns:216px 1fr;background:var(--bg-app);
+    border:1px solid var(--line-strong);border-radius:var(--r-xl);overflow:hidden;min-height:620px}
+  .side{background:var(--bg-pane);border-right:1px solid var(--line);padding:16px 10px;display:flex;flex-direction:column;gap:2px}
+  .side .brand{font-family:var(--f-mono);font-size:11px;font-weight:700;letter-spacing:.10em;
+    text-transform:uppercase;color:var(--text-2);padding:6px 12px 14px}
+  .side .brand b{color:var(--tea)}
+  .nav{display:flex;align-items:center;gap:9px;padding:8px 12px;border-radius:var(--r-md);
+    color:var(--text-2);font-size:13px;white-space:nowrap}
+  .nav .ic{width:14px;height:14px;flex:none;opacity:.8}
+  .nav.on{background:var(--bg-elev-1);color:var(--text-1);box-shadow:inset 2px 0 0 var(--tea)}
+  .navgap{flex:1}
+  .main{display:flex;flex-direction:column;min-width:0}
+  .topbar{display:flex;align-items:center;gap:12px;padding:12px 24px;border-bottom:1px solid var(--line);
+    background:var(--bg-pane);font-size:12px;color:var(--text-3)}
+  .topbar .who{margin-left:auto;font-family:var(--f-mono);font-size:11px}
+  .content{padding:22px 24px 30px;overflow-x:auto}
+  .pagehead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  .pagehead h2{font-size:17px;font-weight:600;letter-spacing:-.01em}
+  .pagehead .sub{color:var(--text-3);font-size:12.5px}
+  .pagehead .spacer{flex:1}
+  .backlink{font-size:12.5px;color:var(--text-3);margin-bottom:10px}
+  .backlink span{color:var(--text-2)}
+
+  /* ── Shared components (fc-*) ───────────────────────────────────────────── */
+  .eyebrow{font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--text-2)}
+  .card{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);padding:20px}
+  .btn{display:inline-flex;align-items:center;gap:7px;font-family:var(--f-sans);font-size:12.5px;
+    font-weight:600;color:var(--text-1);background:var(--bg-elev-1);border:1px solid var(--line-strong);
+    border-radius:var(--r-md);padding:7px 14px;cursor:pointer;white-space:nowrap}
+  .btn:hover{background:var(--bg-elev-2)}
+  .btn.primary{background:var(--brass);border-color:var(--brass);color:#15100a}
+  .btn.primary:hover{filter:brightness(1.07)}
+  .btn.primary[disabled]{opacity:.45;cursor:default;filter:none}
+  .btn.ghost{background:transparent;border-color:var(--line);color:var(--text-2)}
+  .btn.ghost:hover{color:var(--text-1);border-color:var(--line-strong);background:transparent}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;flex:none}
+  .dot.tea{background:var(--tea)} .dot.brass{background:var(--brass)}
+  .dot.red{background:var(--danger)} .dot.grey{background:var(--text-4)}
+  .pill{display:inline-flex;align-items:center;gap:6px;font-family:var(--f-mono);font-size:10.5px;
+    font-weight:600;letter-spacing:.04em;border-radius:999px;padding:3px 10px;white-space:nowrap}
+  .pill.tea{color:#a9c8ac;background:rgba(107,142,111,.14);border:1px solid rgba(107,142,111,.35)}
+  .pill.brass{color:#d9bd8a;background:rgba(176,141,74,.13);border:1px solid rgba(176,141,74,.38)}
+  .pill.red{color:#f0a0ad;background:rgba(232,85,106,.12);border:1px solid rgba(232,85,106,.35)}
+  .pill.grey{color:var(--text-3);background:var(--bg-elev-1);border:1px solid var(--line)}
+  .storepill{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--text-2);
+    background:var(--bg-elev-1);border:1px solid var(--line);border-radius:999px;padding:3px 11px}
+  .helpbar{display:flex;align-items:center;gap:10px;margin-top:18px}
+  .helpbar .spacer{flex:1}
+  .helplink{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-3);
+    background:none;border:none;cursor:pointer;padding:6px 2px}
+  .helplink:hover{color:var(--brass)}
+  .helplink .q{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;
+    border-radius:50%;border:1px solid var(--text-3);font-family:var(--f-mono);font-size:10px;flex:none}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  .pulse{animation:pulse 1.6s ease-in-out infinite}
+  @media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+
+  /* ── Screen 1 · hub ─────────────────────────────────────────────────────── */
+  .cardgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:12px;margin-top:16px}
+  .plug{display:flex;flex-direction:column;gap:12px}
+  .plug .head{display:flex;align-items:center;gap:11px}
+  .plug .glyph{width:34px;height:34px;border-radius:8px;background:var(--bg-elev-1);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-size:12px;
+    font-weight:700;color:var(--text-2);flex:none}
+  .plug .name{font-size:14px;font-weight:600}
+  .plug .head .pill{margin-left:auto}
+  .plug .health{font-size:12.5px;color:var(--text-2);min-height:36px}
+  .plug .health em{font-style:normal;color:var(--text-3)}
+  .plug .health .err{color:var(--danger)}
+  .plug .health .warn{color:var(--brass)}
+  .plug .stores{display:flex;gap:6px;flex-wrap:wrap}
+  .plug .foot{display:flex;align-items:center;gap:8px;border-top:1px solid var(--line);
+    padding-top:12px;margin-top:auto}
+  .plug .foot .meta{font-family:var(--f-mono);font-size:10.5px;color:var(--text-4);margin-left:auto}
+
+  /* ── Wizard layout (screens 2–4) ────────────────────────────────────────── */
+  .wiz{display:grid;grid-template-columns:230px 1fr;gap:16px;margin-top:16px;align-items:start}
+  .rail{display:flex;flex-direction:column;gap:2px}
+  .step{display:flex;gap:11px;padding:10px 12px;border-radius:var(--r-md);font-size:13px;color:var(--text-3)}
+  .step .n{width:20px;height:20px;border-radius:50%;border:1px solid var(--line-strong);flex:none;
+    display:flex;align-items:center;justify-content:center;font-family:var(--f-mono);font-size:10.5px}
+  .step.done{color:var(--text-2)}
+  .step.done .n{border-color:var(--tea);color:var(--tea)}
+  .step.act{background:var(--bg-elev-1);color:var(--text-1)}
+  .step.act .n{border-color:var(--brass);color:var(--brass);font-weight:700}
+  .wizbody h3{font-size:15px;font-weight:600;margin-bottom:4px;text-wrap:balance}
+  .wizbody .lede{color:var(--text-2);font-size:13px;max-width:60ch}
+  .maprow{display:grid;grid-template-columns:1fr 26px 200px;gap:12px;align-items:center;
+    padding:13px 0;border-bottom:1px solid var(--line)}
+  .maprow:last-of-type{border-bottom:none}
+  .maprow .shop b{display:block;font-weight:600;font-size:13.5px}
+  .maprow .shop span{font-family:var(--f-mono);font-size:11px;color:var(--text-3)}
+  .maprow .arr{color:var(--text-4);text-align:center}
+  select,input[type=text]{width:100%;background:var(--bg-elev-1);border:1px solid var(--line-strong);
+    border-radius:var(--r-md);color:var(--text-1);font-family:var(--f-sans);font-size:13px;padding:8px 10px}
+  input.mono{font-family:var(--f-mono);font-size:12.5px}
+  .assist{display:flex;gap:14px;align-items:center;background:var(--bg-elev-1);
+    border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:var(--r-md);
+    padding:14px 16px;margin-top:16px}
+  .assist p{font-size:12.5px;color:var(--text-2);max-width:52ch}
+  .assist p b{color:var(--text-1);font-weight:600}
+  .assist .btn{margin-left:auto;flex:none}
+
+  /* screen 3 · sms */
+  .smsrow{display:flex;gap:9px;margin:18px 0 10px}
+  .smsbox{width:44px;height:52px;border-radius:var(--r-md);border:1px solid var(--line-strong);
+    background:var(--bg-elev-1);display:flex;align-items:center;justify-content:center;
+    font-family:var(--f-mono);font-size:20px;font-weight:600}
+  .smsbox.cur{border-color:var(--brass)}
+  .statusline{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text-2);margin-top:6px}
+
+  /* screen 4 · box */
+  .boxwrap{display:flex;gap:26px;align-items:center;margin:18px 0 6px;flex-wrap:wrap}
+  .device{width:150px;height:96px;border-radius:12px;background:linear-gradient(160deg,#242B31,#191F24);
+    border:1px solid var(--line-strong);position:relative;flex:none;box-shadow:0 10px 24px rgba(0,0,0,.35)}
+  .device::after{content:"FULL CIRCLE";position:absolute;left:14px;bottom:11px;font-family:var(--f-mono);
+    font-size:8px;letter-spacing:.14em;color:var(--text-4)}
+  .led{position:absolute;top:13px;right:14px;width:9px;height:9px;border-radius:50%;
+    background:var(--tea);box-shadow:0 0 10px 2px rgba(107,142,111,.55)}
+  .checklist{display:flex;flex-direction:column;gap:9px}
+  .checklist .row{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--text-2)}
+  .checklist .row .tick{width:17px;height:17px;border-radius:50%;flex:none;display:flex;align-items:center;
+    justify-content:center;font-size:10px;background:rgba(107,142,111,.15);color:var(--tea);
+    border:1px solid rgba(107,142,111,.4)}
+  .checklist .row em{font-style:normal;font-family:var(--f-mono);font-size:10.5px;color:var(--text-4);margin-left:auto}
+
+  /* screen 5 · location */
+  .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:14px 16px;margin-top:14px}
+  .field label{display:block;font-size:11.5px;color:var(--text-3);margin-bottom:5px}
+  .field.wide{grid-column:1 / -1}
+  .field .hint{font-family:var(--f-mono);font-size:10.5px;color:var(--text-4);margin-top:4px}
+  .switch{display:inline-flex;align-items:center;gap:10px;font-size:13px;color:var(--text-2)}
+  .knob{width:34px;height:19px;border-radius:999px;background:var(--tea);position:relative;flex:none}
+  .knob::after{content:"";position:absolute;top:2px;right:2px;width:15px;height:15px;border-radius:50%;background:#E8E5DC}
+  .linkrow{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .linkrow:last-child{border-bottom:none}
+  .linkrow .what b{display:block;font-weight:600;font-size:13px}
+  .linkrow .what span{font-size:12px;color:var(--text-3)}
+  .linkrow .btn,.linkrow .pill{margin-left:auto;flex:none}
+
+  /* screen 6 · ops */
+  .kpis{display:grid;grid-template-columns:repeat(3,minmax(140px,220px));gap:12px;margin:16px 0}
+  .kpi{background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 16px}
+  .kpi .v{font-family:var(--f-mono);font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+  .kpi .v.red{color:var(--danger)} .kpi .v.brass{color:var(--brass)} .kpi .v.tea{color:var(--tea)}
+  .kpi .l{font-size:11.5px;color:var(--text-3);margin-top:2px}
+  .tablewrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:720px}
+  th{font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--text-3);text-align:left;padding:10px 12px;border-bottom:1px solid var(--line-strong)}
+  td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle;color:var(--text-2)}
+  td b{color:var(--text-1);font-weight:600}
+  td .mono{font-family:var(--f-mono);font-size:11.5px}
+  .helpitem{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .helpitem:last-child{border-bottom:none;padding-bottom:2px}
+  .helpitem .txt{font-size:13px;color:var(--text-2)}
+  .helpitem .txt b{color:var(--text-1)}
+  .helpitem .txt .quote{color:var(--text-1);background:var(--bg-elev-1);border:1px solid var(--line);
+    border-radius:var(--r-md);padding:2px 8px;font-size:12.5px}
+  .helpitem .meta{font-family:var(--f-mono);font-size:10.5px;color:var(--text-4);margin-top:5px}
+  .helpitem .acts{margin-left:auto;display:flex;gap:8px;flex:none}
+  .opsnote{font-size:12px;color:var(--text-3);margin-top:14px;max-width:72ch}
+
+  @media (max-width:860px){
+    .frame{grid-template-columns:1fr}
+    .side{flex-direction:row;overflow-x:auto;border-right:none;border-bottom:1px solid var(--line)}
+    .side .brand{padding:6px 12px}
+    .navgap{display:none}
+    .wiz{grid-template-columns:1fr}
+    .rail{flex-direction:row;overflow-x:auto}
+    .formgrid{grid-template-columns:1fr}
+    .kpis{grid-template-columns:1fr 1fr 1fr}
+  }
+</style>
+
+<header class="mock-head">
+  <h1>Channels &amp; Delivery — UI mockups · 渠道与配送界面稿</h1>
+  <p>Six key screens from CHANNELS-LOGISTICS-PLUGINS-PLAN.md, drawn in the existing Full Circle admin
+     system (Ink Charcoal, Tea&nbsp;Green = live, Aged&nbsp;Brass = primary action, IBM&nbsp;Plex, EN·中文 labels).</p>
+</header>
+
+<nav class="mock-tabs" aria-label="Mockup screens">
+  <button class="mock-tab on" data-s="s1">1 · Hub 渠道中心</button>
+  <button class="mock-tab" data-s="s2">2 · Eleme wizard 饿了么</button>
+  <button class="mock-tab" data-s="s3">3 · Meituan SMS 登录验证</button>
+  <button class="mock-tab" data-s="s4">4 · Store box 门店盒子</button>
+  <button class="mock-tab" data-s="s5">5 · Add location 新增门店</button>
+  <button class="mock-tab" data-s="s6">6 · Platform ops 平台运维</button>
+</nav>
+
+<!-- ══ 1 · HUB ═══════════════════════════════════════════════════════════ -->
+<section class="screen on" id="s1">
+  <p class="caption">Tenant admin → new top-level section · card per plugin, status at a glance</p>
+  <div class="frame">
+    <aside class="side">
+      <div class="brand"><b>●</b> Full Circle</div>
+      <div class="nav"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>Dashboard · 概览</div>
+      <div class="nav"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M3 4h10l-1 8H4L3 4z"/><path d="M6 4a2 2 0 1 1 4 0"/></svg>Orders · 订单</div>
+      <div class="nav"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M2 12l4-6 3 4 2-2 3 4"/></svg>Sales · 销售</div>
+      <div class="nav"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor"><rect x="3" y="3" width="10" height="10" rx="2"/><path d="M6 7h4M6 10h2"/></svg>Products · 产品</div>
+      <div class="nav on"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M8 2v3M8 11v3M2 8h3M11 8h3"/><circle cx="8" cy="8" r="2.5"/></svg>Channels · 渠道</div>
+      <div class="nav"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor"><path d="M2 6l6-3 6 3-6 3-6-3z"/><path d="M2 6v4l6 3 6-3V6"/></svg>Delivery · 配送</div>
+      <div class="navgap"></div>
+      <div class="nav"><svg class="ic" viewBox="0 0 16 16" fill="none" stroke="currentColor"><circle cx="8" cy="8" r="2.5"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2M4 4l1.4 1.4M10.6 10.6L12 12M12 4l-1.4 1.4M5.4 10.6L4 12"/></svg>Settings · 设置</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">Mini App Backend · 小程序后台 <span class="who">owner@rootsfan.cn</span></div>
+      <div class="content">
+        <div class="pagehead">
+          <h2>Channels &amp; Delivery · 渠道与配送</h2>
+          <span class="sub">Connect sales channels and logistics · 接入销售渠道与物流</span>
+          <span class="spacer"></span>
+          <button class="btn ghost">Open / close matrix · 渠道开关矩阵</button>
+        </div>
+
+        <div class="cardgrid">
+          <div class="card plug">
+            <div class="head"><span class="glyph">WX</span><span class="name">Mini App · 小程序</span><span class="pill tea"><span class="dot tea"></span>Connected 已连接</span></div>
+            <div class="health">Orders flowing · 订单正常 <em>— last order 12:41 · WeChat Pay OK</em></div>
+            <div class="stores"><span class="storepill"><span class="dot tea"></span>Tianhe 天河</span><span class="storepill"><span class="dot tea"></span>Yuexiu 越秀</span></div>
+            <div class="foot"><button class="btn ghost">Manage · 管理</button><span class="meta">synced 1 min ago</span></div>
+          </div>
+
+          <div class="card plug">
+            <div class="head"><span class="glyph">EL</span><span class="name">Eleme · 饿了么</span><span class="pill grey"><span class="dot grey"></span>Not set up 未配置</span></div>
+            <div class="health">Official API — connect with your Eleme merchant login. <em>官方接口，用饿了么商家账号授权，约 15 分钟</em></div>
+            <div class="stores"><span class="storepill"><span class="dot grey"></span>Tianhe 天河</span><span class="storepill"><span class="dot grey"></span>Yuexiu 越秀</span></div>
+            <div class="foot"><button class="btn primary">Set up · 开始设置</button><span class="meta">est. 15 min</span></div>
+          </div>
+
+          <div class="card plug">
+            <div class="head"><span class="glyph">MT</span><span class="name">Meituan · 美团</span><span class="pill red"><span class="dot red"></span>Error 需处理</span></div>
+            <div class="health"><span class="err">Session expired 2 h ago — stock sync paused.</span> <em>会话已过期 2 小时，库存同步已暂停</em></div>
+            <div class="stores"><span class="storepill"><span class="dot tea"></span>Tianhe 天河</span><span class="storepill"><span class="dot red"></span>Yuexiu 越秀</span></div>
+            <div class="foot"><button class="btn primary">Fix · 重新验证</button><button class="btn ghost">Details</button><span class="meta">incl. 闪购</span></div>
+          </div>
+
+          <div class="card plug">
+            <div class="head"><span class="glyph">JD</span><span class="name">JD Logistics · 京东物流</span><span class="pill tea"><span class="dot tea"></span>Connected 已连接</span></div>
+            <div class="health">Waybill test passed · 面单测试通过 <em>— 2 days ago · kd100 tracking on</em></div>
+            <div class="stores"><span class="storepill"><span class="dot tea"></span>All stores 全部门店</span></div>
+            <div class="foot"><button class="btn ghost">Manage · 管理</button><span class="meta">31 waybills this week</span></div>
+          </div>
+
+          <div class="card plug">
+            <div class="head"><span class="glyph">QY</span><span class="name">Qingyun riders · 青云配送</span><span class="pill brass"><span class="dot brass pulse"></span>Degraded 降级</span></div>
+            <div class="health"><span class="warn">Store box offline — using Guangzhou backup line.</span> <em>门店盒子离线，已自动切换备用线路</em></div>
+            <div class="stores"><span class="storepill"><span class="dot brass"></span>Tianhe 天河 · box</span></div>
+            <div class="foot"><button class="btn ghost">Check box · 检查盒子</button><span class="meta">fallback for 6 h</span></div>
+          </div>
+
+          <div class="card plug">
+            <div class="head"><span class="glyph">WB</span><span class="name">Web store · 网页商店</span><span class="pill tea"><span class="dot tea"></span>Connected 已连接</span></div>
+            <div class="health">Storefront live at <em>shop.rootsfan.cn</em> · 商店已上线</div>
+            <div class="stores"><span class="storepill"><span class="dot tea"></span>All stores 全部门店</span></div>
+            <div class="foot"><button class="btn ghost">Manage · 管理</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 2 · ELEME WIZARD ══════════════════════════════════════════════════ -->
+<section class="screen" id="s2">
+  <p class="caption">Reference plugin wizard · OAuth done, mapping Eleme shops → locations</p>
+  <div class="frame">
+    <aside class="side">
+      <div class="brand"><b>●</b> Full Circle</div>
+      <div class="nav">Dashboard · 概览</div><div class="nav">Orders · 订单</div>
+      <div class="nav">Sales · 销售</div><div class="nav">Products · 产品</div>
+      <div class="nav on">Channels · 渠道</div><div class="nav">Delivery · 配送</div>
+      <div class="navgap"></div><div class="nav">Settings · 设置</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">Mini App Backend · 小程序后台 <span class="who">owner@rootsfan.cn</span></div>
+      <div class="content">
+        <div class="backlink">← <span>Channels · 渠道</span></div>
+        <div class="pagehead"><h2>Set up Eleme · 设置饿了么</h2></div>
+        <div class="wiz">
+          <div class="rail">
+            <div class="step done"><span class="n">✓</span>Authorize · 授权</div>
+            <div class="step act"><span class="n">2</span>Link shops · 关联门店</div>
+            <div class="step"><span class="n">3</span>Map products · 商品映射</div>
+            <div class="step"><span class="n">4</span>Verify &amp; enable · 验证并开启</div>
+          </div>
+          <div class="card wizbody">
+            <h3>Link your Eleme shops to your locations · 将饿了么店铺关联到门店</h3>
+            <p class="lede">We found 2 shops on your Eleme account. Orders and stock will sync per location.
+               在您的饿了么账号下找到 2 家店铺，订单与库存将按门店同步。</p>
+            <div style="margin-top:8px">
+              <div class="maprow">
+                <div class="shop"><b>Roots 轻食沙拉（天河店）</b><span>ele.me shop · id 1824 5017</span></div>
+                <div class="arr">→</div>
+                <select aria-label="Link to location"><option>Tianhe · 天河</option><option>Yuexiu · 越秀</option><option>— don't sync 不同步 —</option></select>
+              </div>
+              <div class="maprow">
+                <div class="shop"><b>Roots 轻食沙拉（越秀店）</b><span>ele.me shop · id 1824 5018</span></div>
+                <div class="arr">→</div>
+                <select aria-label="Link to location"><option>Yuexiu · 越秀</option><option>Tianhe · 天河</option><option>— don't sync 不同步 —</option></select>
+              </div>
+            </div>
+            <div class="helpbar">
+              <button class="helplink"><span class="q">?</span>Get help · 获取帮助</button>
+              <span class="spacer"></span>
+              <button class="btn ghost">Back · 上一步</button>
+              <button class="btn primary">Continue · 继续</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 3 · MEITUAN SMS RELAY ═════════════════════════════════════════════ -->
+<section class="screen" id="s3">
+  <p class="caption">The login relay · tenant types the SMS code, Playwright logs in on a worker through their store box</p>
+  <div class="frame">
+    <aside class="side">
+      <div class="brand"><b>●</b> Full Circle</div>
+      <div class="nav">Dashboard · 概览</div><div class="nav">Orders · 订单</div>
+      <div class="nav">Sales · 销售</div><div class="nav">Products · 产品</div>
+      <div class="nav on">Channels · 渠道</div><div class="nav">Delivery · 配送</div>
+      <div class="navgap"></div><div class="nav">Settings · 设置</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">Mini App Backend · 小程序后台 <span class="who">owner@rootsfan.cn</span></div>
+      <div class="content">
+        <div class="backlink">← <span>Channels · 渠道</span></div>
+        <div class="pagehead"><h2>Set up Meituan · 设置美团</h2></div>
+        <div class="wiz">
+          <div class="rail">
+            <div class="step done"><span class="n">✓</span>Store box · 门店盒子</div>
+            <div class="step done"><span class="n">✓</span>Credentials · 商家账号</div>
+            <div class="step act"><span class="n">3</span>Verify login · 登录验证</div>
+            <div class="step"><span class="n">4</span>Link stores · 关联门店</div>
+            <div class="step"><span class="n">5</span>Map products · 商品映射</div>
+            <div class="step"><span class="n">6</span>Verify &amp; enable · 验证并开启</div>
+          </div>
+          <div class="card wizbody">
+            <h3>Meituan sent you a code · 美团已发送验证码</h3>
+            <p class="lede">Enter the 6-digit code sent to <b>138&nbsp;****&nbsp;2214</b> — the phone on your
+               Meituan merchant account. 请输入发送至您美团商家账号绑定手机的 6 位验证码。</p>
+            <div class="smsrow" role="group" aria-label="SMS code">
+              <div class="smsbox">7</div><div class="smsbox">3</div><div class="smsbox">9</div>
+              <div class="smsbox cur"></div><div class="smsbox"></div><div class="smsbox"></div>
+            </div>
+            <div class="statusline"><span class="dot tea pulse"></span>
+              Logging in from your store box (Tianhe) · 正在通过您的门店盒子登录（天河）</div>
+            <div class="assist">
+              <p><b>Having trouble? We can connect Meituan for you.</b><br>
+                 Usually done within one business day — you'll see every step here.
+                 遇到困难？我们可以为您代为接入，通常 1 个工作日内完成。</p>
+              <button class="btn ghost">Ask us to do it · 请平台代办</button>
+            </div>
+            <div class="helpbar">
+              <button class="helplink"><span class="q">?</span>Get help · 获取帮助</button>
+              <span class="spacer"></span>
+              <button class="btn ghost">Resend code · 重发验证码</button>
+              <button class="btn primary" disabled>Continue · 继续</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 4 · STORE BOX ═════════════════════════════════════════════════════ -->
+<section class="screen" id="s4">
+  <p class="caption">Hardware step · reverse tunnel from the merchant's own store broadband</p>
+  <div class="frame">
+    <aside class="side">
+      <div class="brand"><b>●</b> Full Circle</div>
+      <div class="nav">Dashboard · 概览</div><div class="nav">Orders · 订单</div>
+      <div class="nav">Sales · 销售</div><div class="nav">Products · 产品</div>
+      <div class="nav on">Channels · 渠道</div><div class="nav">Delivery · 配送</div>
+      <div class="navgap"></div><div class="nav">Settings · 设置</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">Mini App Backend · 小程序后台 <span class="who">owner@rootsfan.cn</span></div>
+      <div class="content">
+        <div class="backlink">← <span>Channels · 渠道</span></div>
+        <div class="pagehead"><h2>Set up Meituan · 设置美团</h2></div>
+        <div class="wiz">
+          <div class="rail">
+            <div class="step act"><span class="n">1</span>Store box · 门店盒子</div>
+            <div class="step"><span class="n">2</span>Credentials · 商家账号</div>
+            <div class="step"><span class="n">3</span>Verify login · 登录验证</div>
+            <div class="step"><span class="n">4</span>Link stores · 关联门店</div>
+            <div class="step"><span class="n">5</span>Map products · 商品映射</div>
+            <div class="step"><span class="n">6</span>Verify &amp; enable · 验证并开启</div>
+          </div>
+          <div class="card wizbody">
+            <h3>Your store box is online · 您的门店盒子已上线</h3>
+            <p class="lede">Meituan will see logins coming from your own store's internet — the safest, most
+               natural setup. 美团将看到来自您门店自有网络的登录，这是最安全、最自然的接入方式。</p>
+            <div class="boxwrap">
+              <div class="device"><span class="led pulse"></span></div>
+              <div class="checklist">
+                <div class="row"><span class="tick">✓</span>Shipped · 已寄出 <em>SF 顺丰 4451…80</em></div>
+                <div class="row"><span class="tick">✓</span>Plugged in at Tianhe · 已在天河门店通电 <em>yesterday</em></div>
+                <div class="row"><span class="tick">✓</span>Secure tunnel connected · 安全隧道已连接 <em>just now</em></div>
+              </div>
+            </div>
+            <p style="font-size:12px;color:var(--text-3);margin-top:10px">
+              Box not arrived yet? You can continue on our Guangzhou backup line (degraded mode) and switch
+              automatically when the box comes online. · 盒子未到？可先使用广州备用线路（降级模式），盒子上线后自动切换。
+              <button class="helplink" style="display:inline-flex;padding:0 2px">Use backup line · 使用备用线路</button>
+            </p>
+            <div class="helpbar">
+              <button class="helplink"><span class="q">?</span>Get help · 获取帮助</button>
+              <span class="spacer"></span>
+              <button class="btn primary">Continue · 继续</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 5 · ADD LOCATION ══════════════════════════════════════════════════ -->
+<section class="screen" id="s5">
+  <p class="caption">Locations wizard · form (exists today in Settings) + the new channel-linking prompts</p>
+  <div class="frame">
+    <aside class="side">
+      <div class="brand"><b>●</b> Full Circle</div>
+      <div class="nav">Dashboard · 概览</div><div class="nav">Orders · 订单</div>
+      <div class="nav">Sales · 销售</div><div class="nav">Products · 产品</div>
+      <div class="nav on">Channels · 渠道</div><div class="nav">Delivery · 配送</div>
+      <div class="navgap"></div><div class="nav">Settings · 设置</div>
+    </aside>
+    <div class="main">
+      <div class="topbar">Mini App Backend · 小程序后台 <span class="who">owner@rootsfan.cn</span></div>
+      <div class="content">
+        <div class="backlink">← <span>Locations · 门店</span></div>
+        <div class="pagehead"><h2>Add location · 新增门店</h2></div>
+
+        <div class="card" style="margin-top:14px">
+          <div class="eyebrow">Store details · 门店信息</div>
+          <div class="formgrid">
+            <div class="field"><label>Code · 编码</label><input class="mono" type="text" value="haizhu"></div>
+            <div class="field"><label>Phone · 电话</label><input class="mono" type="text" value="020 8765 4321"></div>
+            <div class="field"><label>Name (EN)</label><input type="text" value="Haizhu Store"></div>
+            <div class="field"><label>名称（中文）</label><input type="text" value="海珠店"></div>
+            <div class="field"><label>City · 城市</label><select><option>广州 Guangzhou</option></select></div>
+            <div class="field"><label>District · 行政区</label><select><option>海珠区 Haizhu</option><option>天河区 Tianhe</option><option>越秀区 Yuexiu</option></select></div>
+            <div class="field wide"><label>Street address · 街道地址</label><input type="text" value="海珠区江南西路 88 号"></div>
+            <div class="field"><label>GPS lat / lng</label><input class="mono" type="text" value="23.0946, 113.2765">
+              <div class="hint">auto from address · 依地址自动定位</div></div>
+            <div class="field" style="align-self:end"><span class="switch"><span class="knob" role="switch" aria-checked="true" tabindex="0"></span>Pickup enabled · 支持自提</span></div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="eyebrow">After saving — wire into your channels · 保存后接入渠道</div>
+          <div style="margin-top:6px">
+            <div class="linkrow"><div class="what"><b>Mini App · 小程序</b><span>appears in store picker automatically · 自动加入门店选择</span></div><span class="pill tea"><span class="dot tea"></span>Ready 自动就绪</span></div>
+            <div class="linkrow"><div class="what"><b>Meituan · 美团</b><span>which Meituan 门店 is this? · 关联对应的美团门店</span></div><button class="btn ghost">Link POI · 关联门店</button></div>
+            <div class="linkrow"><div class="what"><b>Eleme · 饿了么</b><span>link the matching Eleme shop · 关联对应的饿了么店铺</span></div><button class="btn ghost">Link shop · 关联店铺</button></div>
+            <div class="linkrow"><div class="what"><b>Stock quotas · 渠道库存配额</b><span>per-channel quotas &amp; safety buffer · 各渠道配额与安全库存</span></div><button class="btn ghost">Set defaults · 设置默认</button></div>
+            <div class="linkrow"><div class="what"><b>Delivery zones · 配送区域</b><span>start from an existing store's zones · 可复制现有门店</span></div><button class="btn ghost">Copy from Tianhe · 从天河复制</button></div>
+          </div>
+          <div class="helpbar">
+            <button class="helplink"><span class="q">?</span>Get help · 获取帮助</button>
+            <span class="spacer"></span>
+            <button class="btn ghost">Cancel · 取消</button>
+            <button class="btn primary">Save location · 保存门店</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 6 · PLATFORM OPS ══════════════════════════════════════════════════ -->
+<section class="screen" id="s6">
+  <p class="caption">saas-admin · stuck-tenant dashboard + help requests + take-over</p>
+  <div class="frame">
+    <aside class="side">
+      <div class="brand"><b>●</b> FC · Platform</div>
+      <div class="nav">Tenants · 租户</div>
+      <div class="nav">Onboarding · 开通进度</div>
+      <div class="nav on">Integrations · 接入监控</div>
+      <div class="nav">Billing · 账务</div>
+      <div class="navgap"></div>
+      <div class="nav">Workers · 采集节点</div>
+    </aside>
+    <div class="main">
+      <div class="topbar" style="box-shadow:inset 0 2px 0 var(--brass)">Platform Ops · 平台运维 <span class="who">asher@fullcircle</span></div>
+      <div class="content">
+        <div class="pagehead"><h2>Integration setup — all tenants · 各租户接入进度</h2></div>
+
+        <div class="kpis">
+          <div class="kpi"><div class="v red">2</div><div class="l">stuck &gt; 48 h · 卡住超 48 小时</div></div>
+          <div class="kpi"><div class="v brass">1</div><div class="l">open help request · 待处理求助</div></div>
+          <div class="kpi"><div class="v tea">14</div><div class="l">connected integrations · 已连接</div></div>
+        </div>
+
+        <div class="card">
+          <div class="eyebrow">Needs attention · 需要关注</div>
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Tenant · 租户</th><th>Plugin</th><th>Step · 步骤</th><th>State · 状态</th><th>Stuck · 停留</th><th></th></tr></thead>
+              <tbody>
+                <tr>
+                  <td><b>绿野轻食 GreenField</b><div class="mono" style="color:var(--text-4)">tenant #7 · self</div></td>
+                  <td>Meituan</td><td>3 · Verify login 登录验证</td>
+                  <td><span class="pill red"><span class="dot red"></span>failed ×2</span><div class="mono" style="color:var(--text-4);margin-top:4px">SMS timeout</div></td>
+                  <td class="mono">2 d</td>
+                  <td><button class="btn primary">Take over · 代办</button></td>
+                </tr>
+                <tr>
+                  <td><b>陈记甜品 Chan's Desserts</b><div class="mono" style="color:var(--text-4)">tenant #9 · self</div></td>
+                  <td>Eleme</td><td>2 · Link shops 关联门店</td>
+                  <td><span class="pill grey"><span class="dot grey"></span>in progress</span></td>
+                  <td class="mono">4 h</td>
+                  <td><button class="btn ghost">View · 查看</button></td>
+                </tr>
+                <tr>
+                  <td><b>Roots</b><div class="mono" style="color:var(--text-4)">tenant #1 · self</div></td>
+                  <td>Qingyun</td><td>— connected</td>
+                  <td><span class="pill brass"><span class="dot brass"></span>box offline → fallback</span></td>
+                  <td class="mono">6 h</td>
+                  <td><button class="btn ghost">View · 查看</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="eyebrow">Open help requests · 待处理求助</div>
+          <div class="helpitem">
+            <div class="txt">
+              <b>绿野轻食 GreenField</b> — Meituan · step 3 Verify login:
+              <span class="quote">"SMS never arrives 收不到验证码"</span>
+              <div class="meta">attempts: 2 · last error: sms_timeout · 25 min ago · phone on file 138****2214</div>
+            </div>
+            <div class="acts"><button class="btn primary">Take over · 代办</button><button class="btn ghost">Resolve · 已解决</button></div>
+          </div>
+          <p class="opsnote">Take-over opens the tenant's own wizard as this operator (audited). Steps finished this way
+             show in the tenant's checklist as “✅ Completed by Full Circle support · 由平台协助完成”. Stored secrets are
+             used server-side, never displayed.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  const tabs = document.querySelectorAll('.mock-tab');
+  const screens = document.querySelectorAll('.screen');
+  tabs.forEach(t => t.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.toggle('on', x === t));
+    screens.forEach(s => s.classList.toggle('on', s.id === t.dataset.s));
+  }));
+</script>
