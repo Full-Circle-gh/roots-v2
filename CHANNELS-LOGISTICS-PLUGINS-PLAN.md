@@ -13,6 +13,8 @@ hatch on every step.
 | Holding merchants' Meituan credentials / running scraper sessions on their behalf | Yes — acceptable. |
 | Guanyi / gzgrocery (管易) | **Roots-only.** Stays out of the tenant-facing plugin list; never generalized. |
 | Shangou (美团闪购) | **Folds into the Meituan plugin** — one "Meituan" card covers waimai + shangou. |
+| Where scraper daemons run | **Platform-operated worker hosts** (never tenant-run servers — that would kill Model A). Scraper compute moves OFF the main Roots server onto dedicated Playwright worker VPSes. |
+| Egress / ban risk | **Per-tenant egress IPs**: a residential **store box** (small ARM device on the merchant's own store broadband, reverse tunnel) as the primary route; a GZ proxy server with per-tenant IPs as the degraded fallback. No commercial residential-proxy services. |
 
 ## What exists today (and what's wrong with it for new tenants)
 
@@ -104,6 +106,51 @@ machinery **once** (`lib/integration-session.js`):
   that signal into `health_json` so the card flips to "⚠️ session expired — re-verify"
   and the same login relay re-runs. Session health is a first-class feature —
   it is the *recurring* pain, more important than first-time setup.
+- **Session hibernation**: between polls, persist the browser storage-state and
+  close the context — idle tenants cost ~0 RAM; pay a few seconds of restore per
+  poll. Only the login relay (setup / re-auth) holds a continuously live browser.
+- **One Chromium, many contexts**: Playwright supports per-context proxy settings,
+  so one browser process serves multiple tenants, each context routed through that
+  tenant's own egress (below).
+
+### 3b. Scraper workers + per-tenant egress (phases 6–7 prerequisite)
+
+Two separate risks, two separate mechanisms — neither means tenant-run servers
+(a shop owner who needs a help button for an SMS code cannot operate a server;
+tenant-run daemons would kill Model A and put credentials on unpatched machines):
+
+**Compute — dedicated worker hosts.** Chromium is heavy (~150–300 MB RAM per live
+logged-in context + CPU spikes); the main Node/SQLite box must never run it. The
+scraper daemons (meituan / shangou / qingyun) move to cheap platform-operated
+worker VPSes, ~10–20 tenants per worker, scaled horizontally. The daemons already
+talk through queue tables (`meituan_sync_queue`, `qingyun_sync_log`, …), so the
+split is "run the daemon loop on another box + a small authenticated internal API
+back to the platform," not a rewrite. Roots' two stores become tenant #1's entries
+on worker #1.
+
+**Egress — what Meituan sees is the IP + fingerprint, not the server.** N merchant
+accounts logging in from one datacenter IP is the ban pattern; per-tenant egress is
+non-negotiable:
+
+1. **Store box (primary, default).** Small ARM device (~¥200–400) on the merchant's
+   own store broadband. To Meituan the merchant logs in from their own shop — right
+   city, right district, genuinely residential — the most natural fingerprint
+   possible, and it auto-solves geo-match for future non-GZ tenants. China store
+   broadband is NATed with no public IP, so the box **dials out** (WireGuard/frp
+   reverse tunnel) and the worker routes that tenant's browser context back through
+   the tunnel as SOCKS. Shipped as a Meituan-plugin onboarding step ("plug it in,
+   the light turns green") and honestly chargeable as a hardware add-on; can later
+   host other in-store roles (print relay, POS failover).
+2. **GZ proxy server with per-tenant static IPs (fallback only).** Datacenter IPs
+   are more detectable and only geo-match GZ merchants; used automatically when a
+   tenant's box goes offline — sync limps instead of dying, card shows the warning.
+3. **Commercial residential-proxy services: rejected.** Legally murky in China,
+   often botnet-sourced — unacceptable while holding merchants' credentials.
+
+Egress health feeds `health_json` with explicit states:
+`box_online | box_offline_fallback | session_expired`, each with its own card
+badge + re-auth / "check the box" guidance. Per-tenant fingerprint stays
+consistent (UA, timezone, viewport) across restores.
 
 ### 4. Assisted self-service (help + take-over)
 
@@ -179,26 +226,31 @@ The only channel with a real OAuth API; the flow is genuinely 100 % self-service
 No official API; it's the session-based scraper. Self-service flow, with help
 expected and designed-in:
 
-1. Wizard collects the merchant's 美团商家版 credentials per store → encrypted
+1. **Store box onboarding step**: we ship the box; merchant plugs it into store
+   power + network; wizard waits for the reverse tunnel to come up ("light turns
+   green" → step done). Support escape hatch: proceed on the GZ fallback proxy
+   with a visible "degraded" note if the box is delayed.
+2. Wizard collects the merchant's 美团商家版 credentials per store → encrypted
    per-tenant, per-store (`meituan.<store_code>.user/pass` after the tenant-creds fix).
-2. **Login relay** (shared session manager): server Playwright logs in; tenant types
-   the SMS code into the wizard; on success the session persists and the daemon
-   adopts the tenant.
-3. Map Meituan POIs (门店) → `retail_stores`; map products → `meituan_product_map`;
+3. **Login relay** (shared session manager, running on a scraper worker, egressing
+   through that tenant's box): worker Playwright logs in; tenant types the SMS code
+   into the wizard; on success the session persists and the daemon adopts the tenant.
+4. Map Meituan POIs (门店) → `retail_stores`; map products → `meituan_product_map`;
    enable stock push + order mirroring. Shangou rides along as a toggle inside the
    same card (same session family, `lib/shangou-browser.js`).
-4. If login relay fails twice → prominent **"We can connect Meituan for you"**
+5. If login relay fails twice → prominent **"We can connect Meituan for you"**
    handoff → help request with full context; support finishes via take-over.
    That's the plan working, not failing.
-5. Multi-tenant daemon: `scripts/meituan-daemon.js` loops tenants × stores with
-   per-tenant sessions instead of the fixed two.
+6. Multi-tenant daemon: `scripts/meituan-daemon.js` loops tenants × stores with
+   per-tenant sessions on the worker fleet instead of the fixed two on the main box.
 
 ### Qingyun (rider tracking)
 
-Same shape as Meituan — reuses the session manager and login relay wholesale.
-Wizard: credentials → session → map stores → daemon adopts tenant →
-`delivery_jobs` rows become tenant-scoped. Build only after Meituan proves the
-session machinery.
+Same shape as Meituan — reuses the session manager, worker fleet, per-tenant
+egress (same store box/tunnel — one box serves all of that tenant's scraper
+sessions), and login relay wholesale. Wizard: credentials → session → map stores →
+daemon adopts tenant → `delivery_jobs` rows become tenant-scoped. Build only after
+Meituan proves the session machinery.
 
 ### Mini app (WeChat) — make the existing checklist interactive
 
@@ -233,24 +285,35 @@ Each phase ships alone and is useful alone:
    operator-acting-as-tenant with audit trail. (Deliberately after one real wizard
    exists to take over.)
 5. **JD** — unblock waybill, credential form + live test.
-6. **Session manager + Meituan** — login relay, per-tenant sessions, multi-tenant
-   daemon, POI/product mapping, Shangou toggle.
-7. **Qingyun** — reuse session manager.
+6. **Scraper workers + egress layer, then Meituan** — worker-host split (daemons
+   off the main server), store-box provisioning + reverse tunnel + per-context
+   proxy routing + GZ fallback, THEN login relay, per-tenant sessions,
+   multi-tenant daemon, POI/product mapping, Shangou toggle. Prototype the box
+   tunnel + login relay first — they are the two hard unknowns.
+7. **Qingyun** — reuse workers, egress, and session manager.
 8. **Mini app checklist interactive** — credential forms + live verification +
    waiting_external states, surfaced as a hub card.
 
 ## Risks / notes
 
 - **Meituan/Qingyun ToS + account safety**: scraping merchant portals on customers'
-  behalf risks captchas, device checks, account flags. Mitigate: per-tenant isolated
-  browser profiles, human-paced automation, and the assisted fallback as the
-  documented degraded mode. (Decision to accept this risk: made.)
-- **Login relay is the hardest new component** — SMS/captcha round-trips through a
-  web UI with a headless browser holding state. Prototype early in phase 6; nothing
-  else depends on it before then.
-- **Daemons are single-tenant today** (meituan/eleme/qingyun): each needs a
-  tenant-loop refactor; keep Roots on its env carve-out to guarantee zero behaviour
-  change during rollout.
+  behalf risks captchas, device checks, account flags. Mitigate: per-tenant egress
+  IPs (store box §3b — the merchant appears to log in from their own shop),
+  per-tenant isolated browser profiles + consistent fingerprints, human-paced
+  automation, and the assisted fallback as the documented degraded mode.
+  (Decision to accept this risk: made.)
+- **The two hard unknowns are the login relay and the box tunnel** — SMS/captcha
+  round-trips through a web UI with a headless browser holding state, and reliable
+  reverse tunnels over NATed store broadband. Prototype both early in phase 6;
+  nothing else depends on them before then.
+- **Store-box operational load**: hardware shipping/provisioning, boxes unplugged
+  by staff, store ISP changes. Mitigate: auto-fallback to the GZ proxy + explicit
+  `box_offline_fallback` health state + "check the box" guidance on the card; keep
+  a provisioning image so replacement = swap and plug in.
+- **Daemons are single-tenant today** (meituan/eleme/qingyun) and run on the main
+  server: each needs a tenant-loop refactor AND the move to worker hosts; keep
+  Roots on its env carve-out (and migrate Roots to a worker last) to guarantee
+  zero behaviour change during rollout.
 - **`eleme_tokens` / `delivery_jobs` / `meituan_*` tables** need tenant scoping
   review before phase 3/6/7 — some predate multi-tenancy.
 - **Commits deploy to production** (post-commit hook) — every phase must be dark
