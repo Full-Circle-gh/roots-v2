@@ -1559,7 +1559,8 @@ addColumn('retail_orders', 'idempotency_key', 'TEXT');
 // (logistics_type=3) upload when the order is marked delivered. These columns
 // give us idempotency (never double-upload) + a record of the last attempt.
 addColumn('retail_orders', 'wx_shipping_uploaded_at', 'DATETIME'); // set on a confirmed upload; NULL = not yet
-addColumn('retail_orders', 'wx_shipping_status',      'TEXT');     // last result, e.g. 'ok' or 'err:<code> <msg>'
+addColumn('retail_orders', 'wx_shipping_status',      'TEXT');     // last result, e.g. 'ok' | 'err:<code> <msg>' | 'perm:<code> <msg>' (won't retry)
+addColumn('retail_orders', 'wx_shipping_attempts',    'INTEGER DEFAULT 0'); // upload tries so far; the retry sweeper stops after a cap
 
 try {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_orders_idem
