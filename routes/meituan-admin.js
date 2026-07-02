@@ -565,4 +565,98 @@ router.post('/api/retail-admin/store-status/store/:code', requireRetailAdmin, ex
   }
 });
 
+// ── Channel × location status matrix (Sales grid) ─────────────────────────────
+// The sales grid is channel × location. mini_app/web/eleme/gzgrocery live in
+// channel_status (absent row = open); meituan uses store_business_status (the
+// daemon applies 置休). gzgrocery is tianhe-only. This drives the Sales-page cards:
+// per-channel popup (Yuexiu/Tianhe/close-all) + the two location masters.
+const GRID_CHANNELS = ['mini_app', 'web', 'meituan', 'eleme', 'gzgrocery'];
+function csStores(db, channel) {
+  const all = db.prepare("SELECT code, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
+  return channel === 'gzgrocery' ? all.filter(s => s.code === 'tianhe') : all;
+}
+function csCellOpen(db, channel, storeCode) {
+  if (channel === 'meituan') {
+    const r = db.prepare('SELECT is_open FROM store_business_status WHERE store_code=?').get(storeCode);
+    return r && r.is_open != null ? r.is_open === 1 : true; // unknown → assume open
+  }
+  const r = db.prepare('SELECT is_open FROM channel_status WHERE channel=? AND store_code=?').get(channel, storeCode);
+  return r ? r.is_open === 1 : true; // absent = open
+}
+function csSetCell(db, channel, storeCode, open, by) {
+  if (channel === 'meituan') {
+    db.prepare(`INSERT INTO store_business_status (store_code, target_open, target_by, target_at, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT(store_code) DO UPDATE SET target_open=excluded.target_open, target_by=excluded.target_by, target_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP`)
+      .run(storeCode, open ? 1 : 0, by);
+  } else {
+    db.prepare(`INSERT INTO channel_status (channel, store_code, is_open, updated_at, updated_by)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
+                ON CONFLICT(channel, store_code) DO UPDATE SET is_open=excluded.is_open, updated_at=CURRENT_TIMESTAMP, updated_by=excluded.updated_by`)
+      .run(channel, storeCode, open ? 1 : 0, by);
+  }
+}
+function csBy(req) { return (req.backendUser && (req.backendUser.username || req.backendUser.name)) || 'backend'; }
+
+// GET the whole matrix: each channel's per-location cells + card state, plus the
+// two location masters.
+router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const stores = db.prepare("SELECT code, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
+    const mt = {}; for (const r of db.prepare('SELECT * FROM store_business_status').all()) mt[r.store_code] = r;
+    const channels = GRID_CHANNELS.map((ch) => {
+      const cells = csStores(db, ch).map((s) => {
+        const cell = { storeCode: s.code, name: s.name, open: csCellOpen(db, ch, s.code) };
+        if (ch === 'meituan') { const r = mt[s.code] || {}; cell.readOk = r.read_ok === 1; cell.pending = r.target_open != null; cell.statusDesc = r.status_desc || null; }
+        return cell;
+      });
+      return { channel: ch, integrated: ch !== 'eleme', single: ch === 'gzgrocery' ? 'tianhe' : null,
+               cells, cardOpen: cells.some((c) => c.open) };
+    });
+    const locations = stores.map((s) => {
+      const applies = GRID_CHANNELS.filter((ch) => ch !== 'gzgrocery' || s.code === 'tianhe');
+      return { storeCode: s.code, name: s.name, allOpen: applies.every((ch) => csCellOpen(db, ch, s.code)) };
+    });
+    res.json({ success: true, stores, channels, locations });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Set one cell (channel × store).
+router.post('/api/retail-admin/channel-status/cell', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const { channel, storeCode, open } = req.body || {};
+  if (!GRID_CHANNELS.includes(channel) || !storeCode || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'channel, storeCode, open (boolean) required' });
+  if (channel === 'gzgrocery' && storeCode !== 'tianhe') return res.status(400).json({ success: false, error: 'gzgrocery is tianhe-only' });
+  try { csSetCell(db, channel, storeCode, open, csBy(req)); res.json({ success: true }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Set every location of one channel (the popup's "close all").
+router.post('/api/retail-admin/channel-status/channel', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const { channel, open } = req.body || {};
+  if (!GRID_CHANNELS.includes(channel) || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'channel, open (boolean) required' });
+  try {
+    const by = csBy(req); const stores = csStores(db, channel);
+    db.transaction(() => { for (const s of stores) csSetCell(db, channel, s.code, open, by); })();
+    res.json({ success: true, stores: stores.map((s) => s.code) });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Location master: set EVERY channel for one location.
+router.post('/api/retail-admin/channel-status/location', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const { storeCode, open } = req.body || {};
+  if (!storeCode || typeof open !== 'boolean') return res.status(400).json({ success: false, error: 'storeCode, open (boolean) required' });
+  try {
+    const st = db.prepare('SELECT code FROM retail_stores WHERE code=? AND is_active=1').get(storeCode);
+    if (!st) return res.status(404).json({ success: false, error: 'unknown store' });
+    const by = csBy(req);
+    const applies = GRID_CHANNELS.filter((ch) => ch !== 'gzgrocery' || storeCode === 'tianhe');
+    db.transaction(() => { for (const ch of applies) csSetCell(db, ch, storeCode, open, by); })();
+    res.json({ success: true, channels: applies });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 module.exports = router;

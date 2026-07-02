@@ -2545,6 +2545,13 @@ db.exec(`
 addColumn('retail_orders', 'store_id',        'INTEGER');
 addColumn('retail_orders', 'routing_reason',  'TEXT');   // 'nearest' | 'fallback_no_stock' | 'manual' | 'only_store' | 'customer_pickup'
 addColumn('retail_orders', 'channel',         "TEXT DEFAULT 'wechat'");
+// Read-only channels (Meituan 外卖/闪购) carry their OWN order lifecycle that we
+// don't own — the merchant fulfils on Meituan's side. We mirror the platform's
+// current status label verbatim (e.g. 拣货中 / 配送中 / 已完成 / 已取消) so the
+// combined Orders list shows the real Meituan status instead of a fixed "Paid".
+// channel_status = the platform's Chinese status desc; refreshed each daemon poll.
+addColumn('retail_orders', 'channel_status',    'TEXT');
+addColumn('retail_orders', 'channel_status_at', 'DATETIME');
 
 // Store pickup: a store is offered as a pickup point at checkout only when
 // this flag is on (admin toggles it per store in the mini-app backend).
@@ -3860,6 +3867,26 @@ db.exec(`
 // model). Default 1 = fulfilling.
 addColumn('store_business_status', 'fulfillment_open', 'INTEGER DEFAULT 1');
 try { db.prepare('UPDATE store_business_status SET fulfillment_open = 1 WHERE fulfillment_open IS NULL').run(); } catch {}
+
+// ── channel_status: per-(channel, store) open/closed matrix ───────────────────
+// The sales grid is channel × location. This holds the closable cells for the
+// OWNED / aggregator channels — mini_app + web (online storefront; per-store
+// FULFILLMENT: an order for that channel won't route to a store whose cell is 0,
+// and independently per channel — Tianhe can fulfill web but not mini_app), eleme
+// (placeholder until integrated), and gzgrocery (tianhe-only). Meituan is NOT here
+// — its per-POI 置休 lives in store_business_status (daemon-applied). A MISSING row
+// means OPEN (default): we only store closures / explicit sets, and routeOrder +
+// the admin matrix treat absent as open. Supersedes store_business_status.fulfillment_open.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS channel_status (
+    channel     TEXT NOT NULL,   -- 'mini_app' | 'web' | 'eleme' | 'gzgrocery'
+    store_code  TEXT NOT NULL,   -- retail_stores.code (gzgrocery: 'tianhe' only)
+    is_open     INTEGER DEFAULT 1,
+    updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_by  TEXT,
+    PRIMARY KEY (channel, store_code)
+  );
+`);
 
 // ── 青云聚信 (Qingyun, Meituan's delivery AGGREGATOR) courier-tracking ─────────
 // Mirrors a delivery dispatched through saas.cyanclouds.com back to a roots order so

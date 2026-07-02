@@ -393,6 +393,12 @@ let _client = null;
 let _backfilledMirrors = false;
 async function runCycle() {
   if (MODE === 'off') { if (ONCE) log('MODE=off — nothing to do'); return; }
+  // gzgrocery channel closed from the Sales grid (channel_status, tianhe-only)?
+  // Pause — don't import/decrement its orders until reopened. Absent row = open.
+  try {
+    const cs = db.prepare("SELECT is_open FROM channel_status WHERE channel='gzgrocery' AND store_code='tianhe'").get();
+    if (cs && cs.is_open === 0) { if (ONCE) log('gzgrocery channel closed — paused'); return; }
+  } catch (e) { /* table missing on older DB → treat as open */ }
   const storeId = resolveStoreId();
   // One-time backfill so pre-existing gzgrocery orders appear in the list.
   if (!_backfilledMirrors) {

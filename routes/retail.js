@@ -606,6 +606,13 @@ router.get('/api/retail/config', (req, res) => {
     // POST /api/retail/orders, so a stale client can't slip an order through.
     cfg.store_status = cfg.store_status || {};
     if (cfg.store_status.online_open == null) cfg.store_status.online_open = true;
+    // Per-channel open flags for the customer UIs. A channel is closed only when
+    // EVERY store is closed for it (channel_status); the mini-app reads mini_app_open,
+    // the web shop reads web_open, to show a "we're closed" banner + block checkout.
+    cfg.channel_status = {
+      mini_app_open: !inventory.channelFullyClosed('mini_app'),
+      web_open: !inventory.channelFullyClosed('web'),
+    };
 
     // Always surface review tags so the mini app's review form + product
     // cards have labels + colours even on fresh installs (before staff
@@ -736,7 +743,10 @@ router.get('/api/retail/pickup-stores', (req, res) => {
       `SELECT id, code, name_en, name_cn, address, city, district, lat, lng, phone
          FROM retail_stores
         WHERE is_active = 1 AND pickup_enabled = 1
-          AND code NOT IN (SELECT store_code FROM store_business_status WHERE fulfillment_open = 0)
+          AND code NOT IN (
+            SELECT store_code FROM channel_status
+             WHERE channel IN ('mini_app','web') AND is_open = 0
+             GROUP BY store_code HAVING COUNT(DISTINCT channel) = 2)
         ORDER BY sort_order ASC, id ASC`
     ).all();
     const window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
@@ -7302,16 +7312,18 @@ function nextOrderNo() {
 router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req, res, next) => {
   try {
   const body = req.body || {};
-  // Store closed (online storefront)? Reject every new order — delivery AND
-  // pickup, mini-app AND web — server-side, so a client that already had the app
-  // open (or a stale cached config) still can't slip an order through. This is the
-  // authoritative gate; the customer banner/disabled button is only cosmetic.
-  const _storeStatus = loadStoreStatus();
-  if (!_storeStatus.online_open) {
+  // This channel closed everywhere? Reject the order server-side — delivery AND
+  // pickup — so a stale client can't slip one through. Authoritative gate; the
+  // customer banner is cosmetic. A channel (mini_app/web) is "closed" only when
+  // EVERY store is closed for it (channel_status); a single-store close just
+  // reroutes (routeOrder). Closed message stays operator-editable (store_status).
+  const _chanKey = inventory.orderChannelKey(body.channel);
+  if (inventory.channelFullyClosed(_chanKey)) {
+    const _m = loadStoreStatus();
     return res.status(403).json({
       success: false, error: 'store_closed',
-      message: _storeStatus.message_en || 'The store is currently closed and not accepting new orders.',
-      message_cn: _storeStatus.message_cn || '本店当前已打烊,暂停接单,敬请谅解。',
+      message: _m.message_en || 'This store is currently closed and not accepting new orders.',
+      message_cn: _m.message_cn || '本店当前已打烊,暂停接单,敬请谅解。',
     });
   }
   const items       = Array.isArray(body.items) ? body.items : [];
@@ -7372,7 +7384,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     if (!pickupName || !pickupPhone) return res.status(400).json({ success: false, error: 'pickup_contact_required' });
     pickupStore = tdb().prepare(
       `SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1
-          AND code NOT IN (SELECT store_code FROM store_business_status WHERE fulfillment_open = 0)`
+          AND code NOT IN (
+            SELECT store_code FROM channel_status
+             WHERE channel IN ('mini_app','web') AND is_open = 0
+             GROUP BY store_code HAVING COUNT(DISTINCT channel) = 2)`
     ).get(pickupStoreId);
     if (!pickupStore) return res.status(400).json({ success: false, error: 'pickup_store_unavailable' });
     const pk = resolvePickupTime(body.pickup_time, new Date());
@@ -7807,9 +7822,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   if (!isPickup && (!inGz || scheduledShipDistrict)) {
     const oocId = loadPrinterPrefs().out_of_city_store_id;
     if (oocId != null && oocId !== fulfillingStore.id) {
-      // Don't pin to the out-of-city shipper if it's closed for fulfillment — keep
-      // the open store routeOrder already picked so the parcel ships from somewhere.
-      const oocClosed = inventory.fulfillmentClosedCodes();
+      // Don't pin to the out-of-city shipper if it's closed for THIS channel —
+      // keep the open store routeOrder already picked so the parcel ships from somewhere.
+      const oocClosed = inventory.channelClosedStores(inventory.orderChannelKey(orderChannel));
       const oocStore = inventory.listStores({ activeOnly: true }).find(s => s.id === oocId && !oocClosed.has(s.code));
       if (oocStore) {
         fulfillingStore = oocStore;
@@ -15258,6 +15273,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
+                    o.channel_status, o.channel_status_at,
                     o.fulfillment_short_pids,
                     (SELECT COUNT(*) FROM retail_order_addons ad
                        WHERE ad.order_id = o.id AND ad.status = 'success') AS addon_count,
