@@ -7761,6 +7761,12 @@
       var phone = cust.phone;
       var sb = shipBy(o);
       var items = o.item_count || 0;
+      // Read-only channels (Meituan) show their real platform status label
+      // (拣货中 / 配送中 / 已完成 …) mirrored into channel_status; fall back to the
+      // internal status pill (+ "view only" tag) when there's no mirrored status.
+      var chanPill = (typeof channelStatusPill === 'function') ? channelStatusPill(o) : '';
+      var statusPill = chanPill
+        || ('<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + (ro ? ' · view only' : '') + '</span>');
 
       var hint = fwd
         ? '<button type="button" class="rm-oc-hint" data-hintact data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + esc(en(fwd[1])) + '</button>'
@@ -7781,7 +7787,7 @@
           '<div class="rm-ocard' + (swipeable ? '' : ' no-swipe') + (ro ? ' ro' : '') + '" data-id="' + o.id + '"' + (ro ? ' data-ro="1"' : '') + '>' +
             '<div class="rm-oc-top">' +
               '<span class="rm-oc-no">' + ((!ro && !o.seen_at && o.status !== 'pending_payment' && o.status !== 'cancelled') ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
-              '<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + (ro ? ' · view only' : '') + '</span>' +
+              statusPill +
             '</div>' +
             '<div class="rm-oc-mid">' +
               '<div class="rm-oc-cust">' +

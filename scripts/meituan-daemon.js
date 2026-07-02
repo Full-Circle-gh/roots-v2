@@ -296,11 +296,15 @@ async function pollOrders(storeConfig) {
     for (const order of orders) {
       if (!order.meituanOrderNo) continue;
 
-      // Skip already-imported orders
+      // Already-imported orders: keep the platform status label current
+      // (配送中 → 已完成 …) so the Orders list tracks the real state, then skip.
       const existing = db.prepare(
         'SELECT id FROM meituan_order_import WHERE meituan_order_no = ?'
       ).get(order.meituanOrderNo);
-      if (existing) continue;
+      if (existing) {
+        await refreshOrderStatus(storeCode, order);
+        continue;
+      }
 
       log(storeCode, `new order ${order.meituanOrderNo}`);
 
@@ -356,6 +360,23 @@ async function ingestOrder(storeId, storeCode, meituanOrder) {
     log(storeCode, `ingestOrder fetch error: ${err.message}`);
     return null;
   }
+}
+
+// Refresh an already-mirrored order's Meituan status label (server-side no-op
+// when unchanged). Best-effort: a failed refresh must never break the poll.
+async function refreshOrderStatus(storeCode, order) {
+  if (!order.statusDesc) return;
+  try {
+    const res = await fetch(`${INTERNAL_BASE}/api/internal/meituan/update-order-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
+      body: JSON.stringify({ meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc }),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.changed) log(storeCode, `order ${order.meituanOrderNo} status → ${order.statusDesc}`);
+    }
+  } catch (err) { log(storeCode, `refreshOrderStatus error: ${err.message}`); }
 }
 
 // ── Stock push queue ──────────────────────────────────────────────────────────

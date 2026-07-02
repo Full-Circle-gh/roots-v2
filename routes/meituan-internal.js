@@ -111,16 +111,24 @@ router.post('/ingest-order', (req, res) => {
 
     const items = (order.items || []).map(it => resolveProduct(it, storeId)).filter(i => i.qty > 0);
     const total = parseFloat(order.total) || 0;
+    // Real platform status label (拣货中 / 配送中 / 已完成 / 已取消 …). The internal
+    // `status` stays 'paid' — this is a read-only mirror we never fulfil ourselves
+    // — but channel_status carries Meituan's own lifecycle so the Orders list shows
+    // the true state instead of a fixed "Paid". Refreshed on later polls via
+    // /update-order-status.
+    const channelStatus = (order.statusDesc && String(order.statusDesc).trim()) || null;
 
     // 1. Create the order + its line items in one transaction.
     const orderId = db.transaction(() => {
       const r = db.prepare(`
         INSERT INTO retail_orders (
           order_no, status, payment_method, subtotal, total,
-          store_id, channel, fulfillment_type, placed_at, paid_at
+          store_id, channel, fulfillment_type, placed_at, paid_at,
+          channel_status, channel_status_at
         ) VALUES (?, 'paid', 'meituan', ?, ?, ?, 'meituan', 'delivery',
-                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-      `).run(orderNo, total, total, storeId);
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+                  ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END)
+      `).run(orderNo, total, total, storeId, channelStatus, channelStatus);
       const oid = r.lastInsertRowid;
       for (const it of items) {
         // Snapshot the Meituan 货号 (SKU token) so the view-only order drawer can
@@ -179,6 +187,35 @@ router.post('/ingest-order', (req, res) => {
     res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved });
   } catch (err) {
     console.error('[meituan-internal] ingest-order error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/internal/meituan/update-order-status
+// Refresh the mirrored order's platform status label on later polls (an order
+// moves 拣货中 → 配送中 → 已完成 while it stays in Meituan's hands). Idempotent:
+// only writes when the label actually changed, and returns { changed }. Looked up
+// by Meituan order no via meituan_order_import → retail_order_id.
+router.post('/update-order-status', (req, res) => {
+  const { meituanOrderNo, statusDesc } = req.body || {};
+  const desc = (statusDesc && String(statusDesc).trim()) || null;
+  if (!meituanOrderNo || !desc) return res.status(400).json({ error: 'meituanOrderNo and statusDesc required' });
+
+  try {
+    const imp = db.prepare(
+      'SELECT retail_order_id FROM meituan_order_import WHERE meituan_order_no = ?'
+    ).get(String(meituanOrderNo));
+    if (!imp || !imp.retail_order_id) return res.json({ ok: true, changed: false, reason: 'not_mirrored' });
+
+    const r = db.prepare(`
+      UPDATE retail_orders
+         SET channel_status = ?, channel_status_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND COALESCE(channel_status,'') != ?
+    `).run(desc, imp.retail_order_id, desc);
+
+    res.json({ ok: true, changed: r.changes > 0 });
+  } catch (err) {
+    console.error('[meituan-internal] update-order-status error:', err.message);
     res.status(500).json({ error: err.message });
   }
 });

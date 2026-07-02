@@ -37,6 +37,62 @@ function ordChannelLabel(o) {
   if (c === 'web')       return 'Web';
   return 'Mini app';
 }
+// Read-only channels (Meituan) carry their OWN order lifecycle we don't fulfil.
+// The daemon mirrors the platform's current status label into channel_status
+// (拣货中 / 配送中 / 已完成 / 已取消 …); we show it verbatim instead of a fixed
+// "Paid". Map the common labels to English + a pill tone that reuses the existing
+// st-* status colours; unknown labels fall back to the raw Chinese, coloured by
+// keyword so the tone still reads right.
+const MT_STATUS = {
+  '待支付':     { en: 'Unpaid',           tone: 'pending_payment' },
+  '待付款':     { en: 'Unpaid',           tone: 'pending_payment' },
+  '待接单':     { en: 'To accept',        tone: 'paid' },
+  '已接单':     { en: 'Accepted',         tone: 'paid' },
+  '商家已接单': { en: 'Accepted',         tone: 'paid' },
+  '待拣货':     { en: 'To pick',          tone: 'preparing' },
+  '拣货中':     { en: 'Picking',          tone: 'preparing' },
+  '待发货':     { en: 'To dispatch',      tone: 'preparing' },
+  '待发起配送': { en: 'Awaiting dispatch', tone: 'preparing' },
+  '待配送':     { en: 'Awaiting delivery', tone: 'preparing' },
+  '待取货':     { en: 'Awaiting pickup',  tone: 'dispatched' },
+  '骑手已取货': { en: 'Rider en route',   tone: 'dispatched' },
+  '配送中':     { en: 'Delivering',       tone: 'dispatched' },
+  '派送中':     { en: 'Delivering',       tone: 'dispatched' },
+  '已送达':     { en: 'Delivered',        tone: 'delivered' },
+  '已完成':     { en: 'Completed',        tone: 'delivered' },
+  '订单完成':   { en: 'Completed',        tone: 'delivered' },
+  '已取消':     { en: 'Cancelled',        tone: 'cancelled' },
+  '订单取消':   { en: 'Cancelled',        tone: 'cancelled' },
+  '已退款':     { en: 'Refunded',         tone: 'refunded' },
+  '退款中':     { en: 'Refunding',        tone: 'refunded' },
+  '部分退款':   { en: 'Partial refund',   tone: 'refunded' },
+  '退货退款':   { en: 'Refund / return',  tone: 'refunded' },
+};
+function channelStatusMeta(desc) {
+  const d = String(desc || '').trim();
+  if (!d) return null;
+  if (MT_STATUS[d]) return { en: MT_STATUS[d].en, cn: d, tone: MT_STATUS[d].tone };
+  // Keyword fallback for labels not in the table — colour sensibly, show the raw
+  // Chinese for both languages (it's dynamic platform text we can't pre-translate).
+  let tone = 'paid';
+  if (/退款|退货/.test(d))                tone = 'refunded';
+  else if (/取消/.test(d))                tone = 'cancelled';
+  else if (/完成|送达|签收|已收货/.test(d)) tone = 'delivered';
+  else if (/配送|派送|骑手|取货/.test(d))   tone = 'dispatched';
+  else if (/拣货|备货|发货|制作/.test(d))   tone = 'preparing';
+  else if (/待支付|未支付|待付款/.test(d))  tone = 'pending_payment';
+  return { en: d, cn: d, tone };
+}
+// Pill for a read-only channel order's real platform status, or '' when there's
+// no mirrored status (older imports) so the caller falls back to the internal
+// status pill. data-no-i18n: the label is dynamic platform text already localized
+// here, so the runtime i18n walker must leave it alone.
+function channelStatusPill(o) {
+  const meta = o && channelStatusMeta(o.channel_status);
+  if (!meta) return '';
+  const label = (typeof cuT === 'function') ? cuT(meta.en, meta.cn) : meta.en;
+  return `<span class="pill st-${meta.tone}" data-no-i18n><span class="dot"></span>${escapeHtml(label)}</span>`;
+}
 // Clean {name, phone} for the customer column. gzgrocery mirrors the whole
 // OpenCart customer cell — "Name (phone) address…" — into recipient_name (its
 // phone/ship fields stay null), so the raw blob would spill the address into
@@ -779,7 +835,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div></td>
+        <td class="status-cell"><div class="stack">${channelStatusPill(o) || `<span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>`}${refundBadge(o)}${addonBadge(o)}</div></td>
         <td>${renderTrackingCell(o)}</td>
         <td>${renderShipByCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
@@ -2990,7 +3046,7 @@ function renderReadonlyOrder(o) {
         <div class="od-head-main">
           <div class="title-row">
             <b>${escapeHtml(o.order_no)}</b>
-            <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
+            ${channelStatusPill(o) || `<span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>`}
             <span class="pill" style="background: var(--bg-elev-1); color: var(--text-2);" title="${escapeHtml(chan)} orders are mirrored in for visibility — fulfil them in ${escapeHtml(chan)}">${escapeHtml(chan)} · ${cuT('view only', '只读')}</span>
           </div>
           <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>

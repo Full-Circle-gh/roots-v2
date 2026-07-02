@@ -422,7 +422,12 @@ async function pollOrders(storeCode) {
         continue;
       }
       const existing = db.prepare('SELECT id FROM meituan_order_import WHERE meituan_order_no = ?').get(order.meituanOrderNo);
-      if (existing) continue;
+      if (existing) {
+        // Already mirrored — just keep its platform status label current
+        // (拣货中 → 配送中 → 已完成) so the Orders list tracks the real state.
+        await refreshOrderStatus(storeCode, order);
+        continue;
+      }
 
       log(storeCode, `new order ${order.meituanOrderNo}`);
       const rootsOrderId = await ingestOrder(storeId, storeCode, order);
@@ -450,6 +455,23 @@ async function ingestOrder(storeId, storeCode, order) {
     const data = await res.json();
     return data.orderId || null;
   } catch (err) { log(storeCode, `ingestOrder fetch error: ${err.message}`); return null; }
+}
+
+// Refresh an already-mirrored order's Meituan status label (no-op server-side
+// when unchanged). Best-effort: a failed refresh must never break the poll.
+async function refreshOrderStatus(storeCode, order) {
+  if (!order.statusDesc) return;
+  try {
+    const res = await fetch(`${INTERNAL_BASE}/api/internal/meituan/update-order-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
+      body: JSON.stringify({ meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc }),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.changed) log(storeCode, `order ${order.meituanOrderNo} status → ${order.statusDesc}`);
+    }
+  } catch (err) { log(storeCode, `refreshOrderStatus error: ${err.message}`); }
 }
 
 // ── Auto-map (闪购 is mapped by 货号) ────────────────────────────────────────────
