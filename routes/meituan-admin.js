@@ -572,7 +572,7 @@ router.post('/api/retail-admin/store-status/store/:code', requireRetailAdmin, ex
 // per-channel popup (Yuexiu/Tianhe/close-all) + the two location masters.
 const GRID_CHANNELS = ['mini_app', 'web', 'meituan', 'eleme', 'gzgrocery'];
 function csStores(db, channel) {
-  const all = db.prepare("SELECT code, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
+  const all = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
   return channel === 'gzgrocery' ? all.filter(s => s.code === 'tianhe') : all;
 }
 function csCellOpen(db, channel, storeCode) {
@@ -603,11 +603,11 @@ function csBy(req) { return (req.backendUser && (req.backendUser.username || req
 router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) => {
   const db = tdb();
   try {
-    const stores = db.prepare("SELECT code, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
+    const stores = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
     const mt = {}; for (const r of db.prepare('SELECT * FROM store_business_status').all()) mt[r.store_code] = r;
     const channels = GRID_CHANNELS.map((ch) => {
       const cells = csStores(db, ch).map((s) => {
-        const cell = { storeCode: s.code, name: s.name, open: csCellOpen(db, ch, s.code) };
+        const cell = { storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name, open: csCellOpen(db, ch, s.code) };
         if (ch === 'meituan') { const r = mt[s.code] || {}; cell.readOk = r.read_ok === 1; cell.pending = r.target_open != null; cell.statusDesc = r.status_desc || null; }
         return cell;
       });
@@ -616,7 +616,7 @@ router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) =>
     });
     const locations = stores.map((s) => {
       const applies = GRID_CHANNELS.filter((ch) => ch !== 'gzgrocery' || s.code === 'tianhe');
-      return { storeCode: s.code, name: s.name, allOpen: applies.every((ch) => csCellOpen(db, ch, s.code)) };
+      return { storeCode: s.code, name: s.name, nameEn: s.name_en || s.name, nameCn: s.name_cn || s.name, allOpen: applies.every((ch) => csCellOpen(db, ch, s.code)) };
     });
     res.json({ success: true, stores, channels, locations });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }

@@ -318,6 +318,14 @@ function csName(ch) {
 }
 let _csData = null;
 function csChannel(key) { return ((_csData && _csData.channels) || []).find(c => c.channel === key); }
+// Store name that follows the EN/中文 toggle. Falls back to data-no-i18n when
+// only one name exists (or both are identical) so the walker leaves it alone.
+function csStoreName(o) {
+  const en = o.nameEn || o.name || '';
+  const cn = o.nameCn || o.name || '';
+  if (!en || !cn || en === cn) return '<span data-no-i18n>' + escapeHtml(en || cn) + '</span>';
+  return '<span data-lang-block="en">' + escapeHtml(en) + '</span><span data-lang-block="cn">' + escapeHtml(cn) + '</span>';
+}
 
 async function csLoad() {
   try { _csData = await api('/api/retail-admin/channel-status'); csRender(); }
@@ -360,7 +368,7 @@ function csRenderLocations() {
   const storeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>';
   bar.innerHTML = '<span class="sales-locbar-lead">' + storeIcon + '<span>' + cuT('Close a whole location', '关闭整个门店') + '</span></span>'
     + '<span class="sales-locbar-pills">'
-    + locs.map((l) => '<button class="sales-locpill' + (l.allOpen ? '' : ' closed') + '" onclick="csLocation(\'' + l.storeCode + '\',' + (l.allOpen ? 'false' : 'true') + ')"><span class="nm" data-no-i18n>' + escapeHtml(l.name) + '</span><span class="act">' + (l.allOpen ? cuT('Close all', '全部关闭') : cuT('Open all', '全部开启')) + '</span></button>').join('')
+    + locs.map((l) => '<button class="sales-locpill' + (l.allOpen ? '' : ' closed') + '" onclick="csLocation(\'' + l.storeCode + '\',' + (l.allOpen ? 'false' : 'true') + ')"><span class="nm">' + csStoreName(l) + '</span><span class="act">' + (l.allOpen ? cuT('Close all', '全部关闭') : cuT('Open all', '全部开启')) + '</span></button>').join('')
     + '</span>';
 }
 
@@ -388,7 +396,7 @@ function csPopup(ch) {
     const note = (ch === 'meituan' && c.pending) ? ' <span class="muted" style="font-size:11px">' + cuT('applying…', '处理中…') + '</span>' : '';
     return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)">'
       + '<span style="width:9px;height:9px;border-radius:50%;flex:none;background:' + (c.open ? '#1a9d5a' : 'var(--danger,#d33)') + '"></span>'
-      + '<div style="flex:1;min-width:0"><span data-no-i18n>' + escapeHtml(c.name) + '</span>' + note + '</div>'
+      + '<div style="flex:1;min-width:0">' + csStoreName(c) + note + '</div>'
       + '<button class="btn btn-sm' + (c.open ? '' : ' btn-primary') + '" onclick="csCell(\'' + ch + '\',\'' + c.storeCode + '\',' + (c.open ? 'false' : 'true') + ')">' + (c.open ? cuT('Close', '关闭') : cuT('Open', '开启')) + '</button>'
       + '</div>';
   }).join('');
