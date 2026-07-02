@@ -5784,7 +5784,7 @@ async function retryWeChatShippingForTenant() {
           AND (wx_shipping_status IS NULL OR wx_shipping_status NOT LIKE 'perm:%')
           AND COALESCE(wx_shipping_attempts, 0) < ${WX_SHIPPING_MAX_ATTEMPTS}
           AND COALESCE(delivered_at, updated_at) >= datetime('now', '-${WX_SHIPPING_SWEEP_LOOKBACK_DAYS} days')
-        ORDER BY delivered_at ASC
+        ORDER BY delivered_at DESC
         LIMIT ${WX_SHIPPING_SWEEP_BATCH}`
     ).all();
   } catch (e) {
