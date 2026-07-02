@@ -1615,7 +1615,7 @@ function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
 // Online storefront closed (server flag store_status.online_open=false). Browse
 // still works; checkout is blocked here AND server-side at POST /api/retail/orders,
 // so this UI is only a courtesy — the server is the real gate.
-function storeIsClosed(){ const s=state.config&&state.config.store_status; return !!(s&&s.online_open===false); }
+function storeIsClosed(){ const cs=state.config&&state.config.channel_status; return !!(cs&&cs.web_open===false); }
 function storeClosedMsg(){ const s=(state.config&&state.config.store_status)||{}; return state.lang==='cn'?(s.message_cn||'本店当前已打烊,暂停接单,敬请谅解。'):(s.message_en||'We’re currently closed and not taking new orders. Please check back soon.'); }
 function coErrMsg(code){
   if(code==='store_closed')return storeClosedMsg();

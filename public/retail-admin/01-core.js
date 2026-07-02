@@ -301,7 +301,113 @@ async function salesInit() {
     fill('gy', c.gzgrocery);
     fill('el', c.eleme);
   } catch (e) { /* keep placeholders on error */ }
+  csLoad();  // unlock + wire the channel-close toggles (channel × location)
 }
+
+// ── Sales channel × location close controls ──────────────────────────────────
+// The Sales-page channel cards ship with a LOCKED toggle. We unlock + wire the
+// close behaviour here WITHOUT editing the HTML (that file is co-edited):
+//   • a channel toggle opens a popup with a per-location toggle + "close all"
+//   • gzgrocery (tianhe-only) toggles directly, no popup
+//   • two injected location-master buttons close every channel of a location
+// Backend: /api/retail-admin/channel-status (+ /cell, /channel, /location).
+const CS_KEY2CH = { wc: 'mini_app', wb: 'web', mt: 'meituan', gy: 'gzgrocery', el: 'eleme' };
+function csName(ch) {
+  return ({ mini_app: cuT('Mini app', '小程序'), web: cuT('Web shop', '网页商店'),
+            meituan: cuT('Meituan', '美团'), eleme: cuT('Eleme', '饿了么'), gzgrocery: 'gzgrocery' })[ch] || ch;
+}
+let _csData = null;
+function csChannel(key) { return ((_csData && _csData.channels) || []).find(c => c.channel === key); }
+
+async function csLoad() {
+  try { _csData = await api('/api/retail-admin/channel-status'); csRender(); }
+  catch (e) { /* leave the cards untouched on error */ }
+}
+
+function csRender() {
+  if (!_csData) return;
+  document.querySelectorAll('.sales-ch').forEach((card) => {
+    const m = card.querySelector('[id^="sales-"][id$="-rev"]');
+    const mm = m && m.id.match(/^sales-(\w+)-rev$/);
+    const ch = mm && CS_KEY2CH[mm[1]];
+    const info = ch && csChannel(ch);
+    const btn = card.querySelector('.sales-toggle');
+    if (!info || !btn) return;
+    btn.disabled = false; btn.removeAttribute('disabled'); btn.classList.remove('is-locked');
+    btn.title = cuT('Open / close by location', '按门店开关');
+    btn.classList.toggle('on', !!info.cardOpen);
+    btn.onclick = () => { if (ch === 'gzgrocery') csToggleGz(info); else csPopup(ch); };
+  });
+  csRenderLocations();
+}
+
+function csRenderLocations() {
+  const grid = document.querySelector('.sales-grid');
+  if (!grid) return;
+  let bar = document.getElementById('cs-locations');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'cs-locations';
+    bar.style.cssText = 'display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:0 0 14px';
+    grid.parentNode.insertBefore(bar, grid);
+  }
+  const locs = (_csData && _csData.locations) || [];
+  bar.innerHTML = '<span style="font-weight:600;font-size:13px;margin-right:2px">' + cuT('Close a whole location', '关闭整个门店') + ':</span>'
+    + locs.map((l) => '<button class="btn btn-sm' + (l.allOpen ? '' : ' btn-primary') + '" onclick="csLocation(\'' + l.storeCode + '\',' + (l.allOpen ? 'false' : 'true') + ')"><span data-no-i18n>' + escapeHtml(l.name) + '</span> — ' + (l.allOpen ? cuT('Close all', '全部关闭') : cuT('Open all', '全部开启')) + '</button>').join('');
+}
+
+function csToggleGz(info) {
+  const open = !info.cardOpen;
+  if (!window.confirm(open ? cuT('Open gzgrocery?', '开启 gzgrocery?')
+                           : cuT('Close gzgrocery? It will stop importing new orders.', '关闭 gzgrocery?将停止导入新订单。'))) return;
+  api('/api/retail-admin/channel-status/cell', { method: 'POST', body: { channel: 'gzgrocery', storeCode: 'tianhe', open } })
+    .then(() => { if (window.toast) toast(cuT('Saved', '已保存')); return csLoad(); })
+    .catch((e) => { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); });
+}
+
+function csPopup(ch) {
+  const info = csChannel(ch);
+  if (!info) return;
+  let ov = document.getElementById('cs-popup');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'cs-popup';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    document.body.appendChild(ov);
+    ov.onclick = () => csClosePopup();
+  }
+  const rows = (info.cells || []).map((c) => {
+    const note = (ch === 'meituan' && c.pending) ? ' <span class="muted" style="font-size:11px">' + cuT('applying…', '处理中…') + '</span>' : '';
+    return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)">'
+      + '<span style="width:9px;height:9px;border-radius:50%;flex:none;background:' + (c.open ? '#1a9d5a' : 'var(--danger,#d33)') + '"></span>'
+      + '<div style="flex:1;min-width:0"><span data-no-i18n>' + escapeHtml(c.name) + '</span>' + note + '</div>'
+      + '<button class="btn btn-sm' + (c.open ? '' : ' btn-primary') + '" onclick="csCell(\'' + ch + '\',\'' + c.storeCode + '\',' + (c.open ? 'false' : 'true') + ')">' + (c.open ? cuT('Close', '关闭') : cuT('Open', '开启')) + '</button>'
+      + '</div>';
+  }).join('');
+  ov.innerHTML = '<div style="background:var(--bg-elev-0,var(--bg,#fff));border:1px solid var(--line);border-radius:10px;max-width:400px;width:100%;padding:16px 18px" onclick="event.stopPropagation()">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:15px">' + csName(ch) + ' — ' + cuT('by location', '按门店') + '</b><button class="btn btn-sm" onclick="csClosePopup()">✕</button></div>'
+    + (ch === 'eleme' ? '<div class="muted" style="font-size:12px;margin-bottom:8px">' + cuT('Eleme isn’t connected yet — placeholder.', '饿了么尚未接入 — 仅占位。') + '</div>' : '')
+    + rows
+    + '<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">'
+    + '<button class="btn btn-sm" onclick="csChannelAll(\'' + ch + '\',false)">' + cuT('Close all', '全部关闭') + '</button>'
+    + '<button class="btn btn-sm btn-primary" onclick="csChannelAll(\'' + ch + '\',true)">' + cuT('Open all', '全部开启') + '</button>'
+    + '</div></div>';
+}
+window.csClosePopup = function () { const ov = document.getElementById('cs-popup'); if (ov) ov.remove(); };
+window.csCell = async function (ch, storeCode, open) {
+  try { await api('/api/retail-admin/channel-status/cell', { method: 'POST', body: { channel: ch, storeCode, open } }); await csLoad(); csPopup(ch); }
+  catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
+};
+window.csChannelAll = async function (ch, open) {
+  try { await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } }); await csLoad(); csPopup(ch); }
+  catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
+};
+window.csLocation = async function (storeCode, open) {
+  if (!window.confirm(open ? cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道?')
+                           : cuT('Close ALL sales channels for this location?', '关闭该门店的所有销售渠道?'))) return;
+  try { await api('/api/retail-admin/channel-status/location', { method: 'POST', body: { storeCode, open } }); if (window.toast) toast(cuT('Done', '完成')); await csLoad(); }
+  catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
+};
 // Embedded editor — lazy-load the Mini App Editor iframe the first time the
 // Editor tab is opened, so the big editor app doesn't download until needed.
 (function () {

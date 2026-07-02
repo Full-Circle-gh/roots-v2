@@ -2170,7 +2170,7 @@ Page({
     // Store closed (online storefront)? Block with the operator's message. The
     // server also rejects at /api/retail/orders (store_closed, handled below) —
     // this is the friendly pre-empt so they don't reach the pay sheet.
-    if (config.get('store_status.online_open', true) === false) {
+    if (config.get('channel_status.mini_app_open', true) === false) {
       const cn = this.data.lang === 'cn';
       wx.showModal({ title: cn ? '暂停接单' : 'Closed', content: this._storeClosedMsg(), showCancel: false, confirmText: cn ? '我知道了' : 'OK' });
       return;
