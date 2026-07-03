@@ -429,4 +429,29 @@ router.post('/api/saas-admin/help-requests/:id/status', requirePlatformAdmin('su
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// Update a tenant's store-box shipment (Meituan/Qingyun assisted setup).
+// requested → shipped (with tracking info) → delivered. The merchant's setup
+// wizard reads the same config.box, so their step 1 updates to match.
+router.post('/api/saas-admin/integrations/:tenantId/:kind/box', requirePlatformAdmin('support.write'), express.json(), (req, res) => {
+  try {
+    const tenantId = Number(req.params.tenantId);
+    const kind = String(req.params.kind);
+    if (kind !== 'meituan' && kind !== 'qingyun') return res.status(400).json({ error: 'no_box_for_kind' });
+    const cur = registry.detailForTenant(tenantId, kind);
+    if (!cur) return res.status(404).json({ error: 'not_found' });
+    const status = String((req.body || {}).status || '');
+    if (!['requested', 'shipped', 'delivered'].includes(status)) return res.status(400).json({ error: 'bad_status' });
+    const config = cur.config || {};
+    const box = config.box || { requested_at: new Date().toISOString() };
+    box.status = status;
+    if (req.body.tracking != null) box.tracking = String(req.body.tracking).slice(0, 120);
+    if (status === 'shipped' && !box.shipped_at) box.shipped_at = new Date().toISOString();
+    if (status === 'delivered' && !box.delivered_at) box.delivered_at = new Date().toISOString();
+    config.box = box;
+    registry.upsertStatus(tenantId, kind, { config });
+    logAudit(req, { action: 'integration.box.' + status, targetType: 'tenant', targetId: tenantId, meta: { kind, tracking: box.tracking || null } });
+    res.json({ success: true, box });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 module.exports = router;

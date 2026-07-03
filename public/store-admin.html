@@ -772,6 +772,29 @@
         }
         html += '</tbody></table></div>';
       }
+      // Store-box shipments (Meituan/Qingyun assisted setup): requested → shipped → delivered.
+      const boxes = j.integrations.filter(i => i.box && i.box.status);
+      html += '<div style="font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px">Store boxes · 门店盒子</div>';
+      if (!boxes.length) html += '<div class="empty" style="padding:14px 0">No box requests. · 暂无盒子申请。</div>';
+      else {
+        const boxPill = s => s==='delivered' ? '<span class="pill active">delivered · 已送达</span>'
+          : s==='shipped' ? '<span class="pill trialing">shipped · 已寄出</span>'
+          : '<span class="pill suspended">requested · 待寄送</span>';
+        html += '<div class="card"><table><thead><tr><th>Tenant · 租户</th><th>Plugin</th><th>Status · 状态</th><th>Tracking · 快递</th><th></th></tr></thead><tbody>';
+        for (const i of boxes){
+          const b = i.box;
+          const when = (b.delivered_at || b.shipped_at || b.requested_at || '').slice(0, 10);
+          html += '<tr><td><b>'+esc(i.tenantName)+'</b>'+chSub('#'+i.tenantId)+'</td>'
+            + '<td>'+esc(i.labelEn+' · '+i.labelCn)+'</td>'
+            + '<td>'+boxPill(b.status)+chSub(when)+'</td>'
+            + '<td>'+esc(b.tracking||'—')+'</td>'
+            + '<td style="white-space:nowrap;text-align:right">'
+            + (can('support.write') && b.status==='requested' ? '<button class="btn btn-sm btn-brass" data-boxship="'+i.tenantId+'|'+esc(i.kind)+'">Mark shipped · 已寄出</button>' : '')
+            + (can('support.write') && b.status==='shipped' ? '<button class="btn btn-sm" data-boxdeliver="'+i.tenantId+'|'+esc(i.kind)+'">Mark delivered · 已送达</button>' : '')
+            + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
       // Integrations needing attention (errors / mid-setup).
       html += '<div style="font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px">Integrations needing attention · 需关注的接入</div>';
       if (!attention.length) html += '<div class="empty" style="padding:14px 0">All healthy. · 一切正常。</div>';
@@ -789,7 +812,24 @@
       v.querySelectorAll('[data-take]').forEach(b => b.addEventListener('click', () =>
         doImpersonate({ id: b.getAttribute('data-take'), brand: b.getAttribute('data-name'), name: b.getAttribute('data-name') })));
       v.querySelectorAll('[data-resolve]').forEach(b => b.addEventListener('click', () => resolveHelp(b.getAttribute('data-resolve'))));
+      v.querySelectorAll('[data-boxship]').forEach(b => b.addEventListener('click', () => {
+        const [tid, kind] = b.getAttribute('data-boxship').split('|');
+        const tracking = window.prompt('Tracking info (courier + number) · 快递信息(公司+单号)', '');
+        if (tracking === null) return;   // cancelled
+        boxUpdate(tid, kind, 'shipped', tracking.trim());
+      }));
+      v.querySelectorAll('[data-boxdeliver]').forEach(b => b.addEventListener('click', () => {
+        const [tid, kind] = b.getAttribute('data-boxdeliver').split('|');
+        boxUpdate(tid, kind, 'delivered');
+      }));
     }).catch(() => { v.innerHTML = '<div class="empty">Failed to load · 加载失败</div>'; });
+  }
+  function boxUpdate(tenantId, kind, status, tracking){
+    const body = { status };
+    if (tracking !== undefined) body.tracking = tracking;
+    api('/api/saas-admin/integrations/'+tenantId+'/'+encodeURIComponent(kind)+'/box',{method:'POST',body:JSON.stringify(body)})
+      .then(j => { if (j && j.success){ toast('Saved · 已保存'); viewChannels(); } else toast((j&&j.error)||'Failed'); })
+      .catch(()=>toast('Failed · 失败'));
   }
   function resolveHelp(id){
     api('/api/saas-admin/help-requests/'+id+'/status',{method:'POST',body:JSON.stringify({status:'resolved'})})

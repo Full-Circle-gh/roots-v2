@@ -353,12 +353,26 @@
       // Step 1 is a real physical box we ship. The request is remembered on the
       // integration row (config.box) so this screen stays truthful across visits.
       const boxSt = (c.config && c.config.box) || null;
-      if (boxSt && boxSt.status === 'requested') {
-        const when = String(boxSt.requested_at || '').slice(0, 10);
-        body = `<div style="font-size:14px;color:var(--accent,#6B8E6F);font-weight:600">✓ ${cuT('Box requested', '已申请盒子')}${when ? ` <span style="color:var(--text-3);font-weight:400">${esc(when)}</span>` : ''}</div>
-          <p class="muted" style="font-size:13px;max-width:56ch;margin-top:6px">${cuT(
-            'We got your request. Our team will contact you to arrange delivery and any cost. Once the box arrives, plug it into your shop’s internet and continue below.',
-            '我们已收到申请。团队会联系您安排寄送及费用。盒子到货后,请接入门店网络,然后点击继续。')}</p>
+      if (boxSt && (boxSt.status === 'requested' || boxSt.status === 'shipped' || boxSt.status === 'delivered')) {
+        const st = boxSt.status;
+        const when = String((st === 'delivered' ? boxSt.delivered_at : st === 'shipped' ? boxSt.shipped_at : boxSt.requested_at) || '').slice(0, 10);
+        const head = st === 'delivered' ? cuT('Box delivered', '盒子已送达')
+          : st === 'shipped' ? cuT('Box shipped — on its way', '盒子已寄出 — 在路上')
+          : cuT('Box requested', '已申请盒子');
+        const copy = st === 'delivered'
+          ? cuT('Your box has arrived. Plug it into your shop’s internet, then continue below.',
+                '盒子已送达。请接入门店网络,然后点击继续。')
+          : st === 'shipped'
+            ? cuT('Your box is on the way. When it arrives, plug it into your shop’s internet and continue below.',
+                  '盒子已在路上。到货后请接入门店网络,然后点击继续。')
+            : cuT('We got your request. Our team will contact you to arrange delivery and any cost. Once the box arrives, plug it into your shop’s internet and continue below.',
+                  '我们已收到申请。团队会联系您安排寄送及费用。盒子到货后,请接入门店网络,然后点击继续。');
+        const tracking = boxSt.tracking
+          ? `<div style="font-size:12.5px;margin-top:8px;color:var(--text-2)">${cuT('Tracking', '快递')}: <span style="font-family:var(--f-mono,monospace)">${esc(boxSt.tracking)}</span></div>`
+          : '';
+        body = `<div style="font-size:14px;color:var(--accent,#6B8E6F);font-weight:600">✓ ${head}${when ? ` <span style="color:var(--text-3);font-weight:400">${esc(when)}</span>` : ''}</div>
+          <p class="muted" style="font-size:13px;max-width:56ch;margin-top:6px">${copy}</p>
+          ${tracking}
           <div style="display:flex;gap:10px;margin-top:16px;align-items:center">
             <button class="btn btn-primary" onclick="igRelayStep('creds')">${cuT('Box is plugged in — continue', '盒子已接入 — 继续')}</button>
             <button class="btn" onclick="igRelayClose()">${cuT('Close', '关闭')}</button>
