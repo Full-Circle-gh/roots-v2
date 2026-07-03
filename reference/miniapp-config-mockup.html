@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mini App configuration — mockup</title>
+<style>
+  :root{
+    --ink:#20242b; --ink-2:#5b616b; --ink-3:#8b919b;
+    --brass:#b08d3f; --brass-d:#8f6f2c; --brass-bg:#f7f1e2;
+    --line:#e7e3da; --line-2:#efece5;
+    --bg:#f4f2ec; --card:#ffffff; --card-2:#faf8f3;
+    --ok:#1a9d5a; --ok-bg:#e9f6ef;
+    --r:14px; --r-sm:10px;
+    --mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,monospace;
+    --shadow:0 1px 2px rgba(32,36,43,.04), 0 8px 24px rgba(32,36,43,.06);
+    --shadow-lg:0 24px 70px rgba(32,36,43,.25);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:28px 20px 80px}
+  .wrap{max-width:860px;margin:0 auto}
+
+  /* lang visibility: default English */
+  [data-cn]{display:none}
+  html.cn [data-en]{display:none}
+  html.cn [data-cn]{display:inline}
+
+  /* page chrome behind the modal */
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brass)}
+  .langtog{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px;box-shadow:var(--shadow)}
+  .langtog button{border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--ink-2);
+       padding:6px 16px;border-radius:999px;cursor:pointer}
+  .langtog button.act{background:var(--ink);color:#fff}
+
+  /* ---------- modal ---------- */
+  .modal{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden}
+
+  .m-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:24px 28px 0}
+  .m-head h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .m-head .sub{margin:5px 0 0;font-size:13.5px;color:var(--ink-2)}
+  .x{border:1px solid var(--line);background:var(--card);border-radius:10px;width:34px;height:34px;flex:none;
+     display:grid;place-items:center;color:var(--ink-2);cursor:pointer;transition:.15s}
+  .x:hover{border-color:var(--ink-3);color:var(--ink)}
+  .x svg{width:15px;height:15px}
+
+  /* readiness strip */
+  .ready{display:flex;gap:8px;flex-wrap:wrap;padding:16px 28px 22px;border-bottom:1px solid var(--line-2)}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
+        border:1px solid var(--line);border-radius:999px;padding:6px 13px 6px 9px;color:var(--ink-2);background:var(--card-2)}
+  .chip.on{background:var(--ok-bg);border-color:#cfe9db;color:#14713f}
+  .chip svg{width:14px;height:14px;flex:none}
+  .chip.on svg{color:var(--ok)}
+
+  /* sections */
+  .sec{padding:22px 28px 26px}
+  .sec + .sec{border-top:1px solid var(--line-2)}
+  .sec-head{display:flex;align-items:center;gap:11px;margin-bottom:4px}
+  .sec-ico{width:36px;height:36px;border-radius:10px;background:var(--brass-bg);color:var(--brass-d);
+           display:grid;place-items:center;flex:none}
+  .sec-ico svg{width:18px;height:18px}
+  .sec-head b{font-size:15px;font-weight:700}
+  .sec-head .st{margin-left:auto}
+  .sec-sub{font-size:12.5px;color:var(--ink-3);margin:0 0 18px 47px}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 18px}
+  .full{grid-column:1 / -1}
+
+  .f label{display:block;font-size:12.5px;font-weight:700;color:var(--ink-2);margin-bottom:6px}
+  .f label .opt{font-weight:600;color:var(--ink-3);font-size:11.5px;margin-left:6px;
+                border:1px solid var(--line);border-radius:999px;padding:1px 8px;vertical-align:1px}
+  .f .hint{font-size:11.5px;color:var(--ink-3);margin-top:6px;line-height:1.45}
+  .f .hint code{font-family:var(--mono);font-size:10.5px;background:var(--card-2);border:1px solid var(--line-2);
+                border-radius:5px;padding:1px 5px}
+
+  input[type=text], textarea{width:100%;border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);
+        font-family:var(--mono);font-size:13px;color:var(--ink);padding:10px 12px;transition:.15s;outline:none}
+  input[type=text]:focus, textarea:focus{border-color:var(--brass);box-shadow:0 0 0 3px rgba(176,141,63,.14)}
+  textarea{min-height:88px;resize:vertical;line-height:1.5}
+  ::placeholder{color:var(--ink-3)}
+
+  /* saved secret */
+  .saved{display:flex;align-items:center;gap:10px;border:1px solid var(--line);border-radius:var(--r-sm);
+         background:var(--card-2);padding:8px 8px 8px 12px;min-height:41px}
+  .saved .lk{width:14px;height:14px;flex:none;color:var(--ok)}
+  .saved .tx{font-size:13px;font-weight:600;color:var(--ink-2);flex:1;display:flex;align-items:center;gap:8px}
+  .saved .dots{font-family:var(--mono);letter-spacing:2px;color:var(--ink-3)}
+  .rep{border:1px solid var(--line);background:var(--card);border-radius:8px;font:inherit;font-size:12px;font-weight:700;
+       color:var(--ink-2);padding:6px 12px;cursor:pointer;transition:.15s;flex:none}
+  .rep:hover{border-color:var(--ink-3);color:var(--ink)}
+  .editing{display:none}
+  .f.open .saved{display:none}
+  .f.open .editing{display:block}
+  .cancel-row{display:flex;justify-content:flex-end;margin-top:6px}
+  .cancel{border:0;background:none;font:inherit;font-size:12px;font-weight:700;color:var(--ink-3);cursor:pointer;padding:2px 4px}
+  .cancel:hover{color:var(--ink)}
+
+  /* footer */
+  .m-foot{display:flex;align-items:center;gap:14px;padding:18px 28px;background:var(--card-2);border-top:1px solid var(--line-2)}
+  .src-note{font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:7px}
+  .src-note svg{width:13px;height:13px;flex:none}
+  .foot-btns{margin-left:auto;display:flex;gap:10px;align-items:center}
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:var(--r-sm);font:inherit;font-size:13.5px;font-weight:700;
+       color:var(--ink);padding:10px 18px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.15s}
+  .btn:hover{border-color:var(--ink-3)}
+  .btn svg{width:15px;height:15px}
+  .btn.pri{background:var(--brass);border-color:var(--brass);color:#fff;min-width:150px;justify-content:center}
+  .btn.pri:hover{background:var(--brass-d)}
+  .btn.pri.done{background:var(--ok);border-color:var(--ok)}
+
+  .spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;
+        animation:sp .7s linear infinite;flex:none}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){.spin{animation:none}}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(8px);background:var(--ink);color:#fff;
+         font-size:13px;font-weight:600;border-radius:999px;padding:10px 20px;display:flex;align-items:center;gap:9px;
+         opacity:0;pointer-events:none;transition:.25s;box-shadow:var(--shadow-lg)}
+  .toast.show{opacity:1;transform:translateX(-50%)}
+  .toast svg{width:15px;height:15px;color:#5ad08f}
+
+  @media (max-width:640px){
+    .grid{grid-template-columns:1fr}
+    .sec, .m-head, .ready, .m-foot{padding-left:18px;padding-right:18px}
+    .sec-sub{margin-left:0}
+    .m-foot{flex-wrap:wrap}
+    .foot-btns{margin-left:0;width:100%;justify-content:flex-end}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <span class="eyebrow"><span data-en>Sales channels · Mini App</span><span data-cn>销售渠道 · 小程序</span></span>
+    <div class="langtog">
+      <button id="lgEn" class="act" onclick="setLang('en')">EN</button>
+      <button id="lgCn" onclick="setLang('cn')">中文</button>
+    </div>
+  </div>
+
+  <div class="modal">
+
+    <div class="m-head">
+      <div>
+        <h1><span data-en>Mini App configuration</span><span data-cn>小程序配置</span></h1>
+        <p class="sub"><span data-en>WeChat credentials for this account's storefront and payments.</span><span data-cn>本账户店面与收款所需的微信凭证。</span></p>
+      </div>
+      <button class="x" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="ready">
+      <span class="chip on">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/></svg>
+        <span data-en>Mini program linked</span><span data-cn>小程序已绑定</span>
+      </span>
+      <span class="chip on">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/></svg>
+        <span data-en>Customer login ready</span><span data-cn>顾客登录可用</span>
+      </span>
+      <span class="chip on">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/></svg>
+        <span data-en>WeChat Pay ready</span><span data-cn>微信支付可用</span>
+      </span>
+    </div>
+
+    <!-- ============ Mini Program ============ -->
+    <div class="sec">
+      <div class="sec-head">
+        <span class="sec-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>
+        </span>
+        <b><span data-en>WeChat Mini Program</span><span data-cn>微信小程序</span></b>
+      </div>
+      <p class="sec-sub"><span data-en>Runs the storefront and signs customers in.</span><span data-cn>用于店面展示和顾客登录。</span></p>
+
+      <div class="grid">
+        <div class="f">
+          <label>AppID</label>
+          <input type="text" value="wxba58433954562887" spellcheck="false">
+          <div class="hint"><span data-en>WeChat MP console → Development → Development settings.</span><span data-cn>微信公众平台 → 开发 → 开发设置。</span></div>
+        </div>
+        <div class="f" id="fSecret">
+          <label>AppSecret</label>
+          <div class="saved">
+            <svg class="lk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+            <span class="tx"><span class="dots">••••••••</span><span data-en>Saved</span><span data-cn>已保存</span></span>
+            <button class="rep" onclick="openEdit('fSecret')"><span data-en>Replace</span><span data-cn>更换</span></button>
+          </div>
+          <div class="editing">
+            <input type="text" placeholder="" data-ph-en="Paste the new AppSecret" data-ph-cn="粘贴新的 AppSecret" spellcheck="false">
+            <div class="cancel-row"><button class="cancel" onclick="closeEdit('fSecret')"><span data-en>Keep saved value</span><span data-cn>保留已保存的值</span></button></div>
+          </div>
+          <div class="hint"><span data-en>Leave as is unless WeChat issued a new secret.</span><span data-cn>除非微信重置了密钥，否则保持原样。</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ WeChat Pay ============ -->
+    <div class="sec">
+      <div class="sec-head">
+        <span class="sec-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6.5 14.5h4"/></svg>
+        </span>
+        <b><span data-en>WeChat Pay</span><span data-cn>微信支付</span></b>
+      </div>
+      <p class="sec-sub"><span data-en>Takes payment inside the mini app.</span><span data-cn>在小程序内向顾客收款。</span></p>
+
+      <div class="grid">
+        <div class="f">
+          <label><span data-en>Merchant ID</span><span data-cn>商户号</span></label>
+          <input type="text" value="1489207522" spellcheck="false">
+          <div class="hint"><span data-en>WeChat Pay merchant platform → Account center.</span><span data-cn>微信支付商户平台 → 账户中心。</span></div>
+        </div>
+        <div class="f">
+          <label><span data-en>Certificate serial</span><span data-cn>证书序列号</span></label>
+          <input type="text" value="4F4AC8ECC436307ABB14F" spellcheck="false">
+          <div class="hint"><span data-en>Shown next to the API certificate in API security.</span><span data-cn>在 API 安全页的 API 证书旁显示。</span></div>
+        </div>
+
+        <div class="f" id="fV3">
+          <label><span data-en>API v3 key</span><span data-cn>APIv3 密钥</span></label>
+          <div class="saved">
+            <svg class="lk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+            <span class="tx"><span class="dots">••••••••</span><span data-en>Saved</span><span data-cn>已保存</span></span>
+            <button class="rep" onclick="openEdit('fV3')"><span data-en>Replace</span><span data-cn>更换</span></button>
+          </div>
+          <div class="editing">
+            <input type="text" placeholder="" data-ph-en="Paste the new API v3 key" data-ph-cn="粘贴新的 APIv3 密钥" spellcheck="false">
+            <div class="cancel-row"><button class="cancel" onclick="closeEdit('fV3')"><span data-en>Keep saved value</span><span data-cn>保留已保存的值</span></button></div>
+          </div>
+        </div>
+        <div class="f"></div>
+
+        <div class="f full" id="fPriv">
+          <label><span data-en>Merchant private key</span><span data-cn>商户私钥</span> <code style="font-family:var(--mono);font-weight:500;font-size:11px;color:var(--ink-3)">apiclient_key.pem</code></label>
+          <div class="saved">
+            <svg class="lk" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+            <span class="tx"><span class="dots">••••••••</span><span data-en>Saved</span><span data-cn>已保存</span></span>
+            <button class="rep" onclick="openEdit('fPriv')"><span data-en>Replace</span><span data-cn>更换</span></button>
+          </div>
+          <div class="editing">
+            <textarea placeholder="" data-ph-en="Paste the full PEM, including the BEGIN and END lines" data-ph-cn="粘贴完整 PEM，包含 BEGIN 与 END 行" spellcheck="false"></textarea>
+            <div class="cancel-row"><button class="cancel" onclick="closeEdit('fPriv')"><span data-en>Keep saved value</span><span data-cn>保留已保存的值</span></button></div>
+          </div>
+        </div>
+
+        <div class="f full">
+          <label><span data-en>WeChat platform public key</span><span data-cn>微信平台公钥</span>
+            <span class="opt"><span data-en>Optional</span><span data-cn>选填</span></span></label>
+          <textarea placeholder="" data-ph-en="Paste PEM contents" data-ph-cn="粘贴 PEM 内容" spellcheck="false"></textarea>
+          <div class="hint"><span data-en>Only needed if your merchant account uses platform public keys instead of platform certificates.</span><span data-cn>仅当商户账号使用平台公钥（而非平台证书）时需要。</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="m-foot">
+      <span class="src-note">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><path d="M12 8v.01"/></svg>
+        <span data-en>Filled from the server config for this account.</span><span data-cn>已从本账户的服务器配置读取。</span>
+      </span>
+      <div class="foot-btns">
+        <button class="btn"><span data-en>Close</span><span data-cn>关闭</span></button>
+        <button class="btn pri" id="saveBtn" onclick="saveVerify()">
+          <svg id="saveIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span id="saveTx"><span data-en>Save &amp; verify</span><span data-cn>保存并验证</span></span>
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+  <span data-en>Verified — mini program and WeChat Pay both respond.</span><span data-cn>验证通过 — 小程序与微信支付均正常。</span>
+</div>
+
+<!-- interactions (mockup only) -->
+<script>
+  function setLang(l){
+    document.documentElement.classList.toggle('cn', l === 'cn');
+    document.getElementById('lgEn').classList.toggle('act', l === 'en');
+    document.getElementById('lgCn').classList.toggle('act', l === 'cn');
+    applyPlaceholders();
+  }
+  function applyPlaceholders(){
+    var cn = document.documentElement.classList.contains('cn');
+    document.querySelectorAll('[data-ph-en]').forEach(function(el){
+      el.placeholder = cn ? el.getAttribute('data-ph-cn') : el.getAttribute('data-ph-en');
+    });
+  }
+  function openEdit(id){
+    var f = document.getElementById(id);
+    f.classList.add('open');
+    var inp = f.querySelector('.editing input, .editing textarea');
+    if (inp) inp.focus();
+  }
+  function closeEdit(id){ document.getElementById(id).classList.remove('open'); }
+  function saveVerify(){
+    var btn = document.getElementById('saveBtn'), ico = document.getElementById('saveIco'), tx = document.getElementById('saveTx');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    ico.outerHTML = '<span class="spin" id="saveIco"></span>';
+    tx.innerHTML = '<span data-en>Verifying…</span><span data-cn>验证中…</span>';
+    setTimeout(function(){
+      btn.classList.add('done');
+      document.getElementById('saveIco').outerHTML =
+        '<svg id="saveIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      tx.innerHTML = '<span data-en>Verified</span><span data-cn>已验证</span>';
+      var t = document.getElementById('toast');
+      t.classList.add('show');
+      setTimeout(function(){ t.classList.remove('show'); }, 3200);
+      setTimeout(function(){
+        btn.disabled = false; btn.classList.remove('done');
+        document.getElementById('saveIco').outerHTML =
+          '<svg id="saveIco" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>';
+        tx.innerHTML = '<span data-en>Save &amp; verify</span><span data-cn>保存并验证</span>';
+      }, 4200);
+    }, 1400);
+  }
+  applyPlaceholders();
+</script>
+</body>
+</html>

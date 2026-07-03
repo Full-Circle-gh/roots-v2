@@ -545,58 +545,115 @@
   // (Roots) everything shows already filled from the server config, so it reads
   // as done. (The China business-registration checklist deliberately does NOT
   // live here — this page is only about entering credentials.)
+  // Monochrome line icons for the config page (mockup: reference/miniapp-config-mockup.html).
+  const MC_SVG = {
+    check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/></svg>',
+    circle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/></svg>',
+    lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
+    phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg>',
+    card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6.5 14.5h4"/></svg>',
+    shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>',
+    tick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  };
+  function mcSaveBtnHtml() { return `${MC_SVG.shield}<span>${cuT('Save & verify', '保存并验证')}</span>`; }
+
   window.igMiniappConfig = async function () {
     const box = igHostEl(); if (!box) return;
-    box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Mini App config… · 加载小程序配置…', '加载小程序配置…'));
+    box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Mini App config…', '加载小程序配置…'));
     let cfg;
     try { cfg = await api('/api/retail-admin/channel-hub/miniapp/wechat-config'); }
-    catch (e) { box.innerHTML = igMuted(cuT('Failed to load · 加载失败', '加载失败')); return; }
+    catch (e) { box.innerHTML = igMuted(cuT('Failed to load', '加载失败')); return; }
     const st = cfg.status || {};
     const pay = cfg.pay || {};
-    const credLine = (ok, en, cn) => `<span style="color:${ok ? 'var(--accent,#6B8E6F)' : 'var(--text-3)'};font-size:12px">${ok ? '✓' : '○'} ${cuT(en, cn)}</span>`;
-    // Field builders.
-    const txt = (id, label, val, mono) => `<div><label class="field-label">${label}</label><input type="text" id="${id}" value="${esc(val || '')}"${mono ? ' style="font-family:var(--f-mono,monospace)"' : ''}></div>`;
-    const sec = (id, label, isSet) => `<div><label class="field-label">${label}</label><input type="password" id="${id}" autocomplete="new-password" placeholder="${isSet ? '•••••••• ✓ ' + cuT('set — leave blank to keep', '已设置 — 留空保持') : cuT('not set', '未设置')}"></div>`;
-    const pem = (id, label, isSet) => `<div style="grid-column:1 / -1"><label class="field-label">${label}</label><textarea id="${id}" rows="3" placeholder="${isSet ? '•••• ✓ ' + cuT('saved — paste to replace', '已保存 — 粘贴以替换') : cuT('paste PEM contents…', '粘贴 PEM 内容…')}" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea></div>`;
+    const env = cfg.source === 'env';   // env-managed account (Roots): read-only view
+
+    const chip = (ok, en, cn) => `<span class="mc-chip${ok ? ' on' : ''}">${ok ? MC_SVG.check : MC_SVG.circle}<span>${cuT(en, cn)}</span></span>`;
+    const txt = (id, label, val, hint) => `<div class="mc-f"><label class="field-label">${label}</label>
+      <input type="text" id="${id}" value="${esc(val || '')}" spellcheck="false" autocapitalize="off" style="font-family:var(--f-mono,monospace)"${env ? ' readonly' : ''}>
+      ${hint ? `<div class="mc-hint">${hint}</div>` : ''}</div>`;
+    // Secret field: saved secrets show a locked "Saved" row; Replace reveals an
+    // empty input (blank on save = keep the stored value, matching the API).
+    const sec = (id, label, isSet, o) => {
+      o = o || {};
+      const cls = 'mc-f' + (o.wide ? ' wide' : '');
+      const optTag = o.optional ? `<span class="mc-opt">${cuT('Optional', '选填')}</span>` : '';
+      const field = o.pem
+        ? `<textarea id="${id}" rows="3" placeholder="${o.ph || ''}" spellcheck="false" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea>`
+        : `<input type="password" id="${id}" autocomplete="new-password" placeholder="${o.ph || ''}">`;
+      const hint = o.hint ? `<div class="mc-hint">${o.hint}</div>` : '';
+      if (!isSet) return `<div class="${cls}"><label class="field-label">${label}${optTag}</label>${field}${hint}</div>`;
+      return `<div class="${cls}" id="${id}_f"><label class="field-label">${label}${optTag}</label>
+        <div class="mc-saved">${MC_SVG.lock}<span class="tx"><span class="dots">••••••••</span><span>${cuT('Saved', '已保存')}</span></span>
+          ${env ? '' : `<button type="button" class="btn btn-sm" onclick="igMcReplace('${id}_f')">${cuT('Replace', '更换')}</button>`}</div>
+        <div class="mc-edit">${field}<div class="mc-keep-row"><button type="button" class="mc-keep" onclick="igMcKeep('${id}_f')">${cuT('Keep saved value', '保留已保存的值')}</button></div></div>
+        ${hint}</div>`;
+    };
 
     box.innerHTML = `<div class="ig-wiz">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <strong>${cuT('Mini App configuration · 小程序配置', '小程序配置')}</strong>
+      <div class="mc-head">
+        <div>
+          <strong style="font-size:16px">${cuT('Mini App configuration', '小程序配置')}</strong>
+          <div class="mc-subtitle">${cuT('WeChat credentials for this account’s storefront and payments.', '本账户店面与收款所需的微信凭证。')}</div>
+        </div>
         <button class="btn btn-sm" onclick="igLocClose()">✕</button>
       </div>
-      <div style="background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">
-        ${credLine(st.wxAppIdSet, 'AppID set', 'AppID 已填')}
-        ${credLine(st.wechatLoginReady, 'Login ready', '登录就绪')}
-        ${credLine(st.payReady, 'WeChat Pay ready', '微信支付就绪')}
+      <div class="mc-chips">
+        ${chip(st.wxAppIdSet, 'Mini program linked', '小程序已绑定')}
+        ${chip(st.wechatLoginReady, 'Customer login ready', '顾客登录可用')}
+        ${chip(st.payReady, 'WeChat Pay ready', '微信支付可用')}
       </div>
 
-      <div style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass,#B08D4A);margin:14px 0 8px">${cuT('WeChat Mini Program · 微信小程序', '微信小程序')}</div>
-      <div class="ig-wiz-grid">
-        ${txt('mc_appid', 'AppID', cfg.appId, true)}
-        ${sec('mc_secret', 'AppSecret', cfg.appSecretSet)}
+      <div class="mc-sec">
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.phone}</span><b>${cuT('WeChat Mini Program', '微信小程序')}</b></div>
+        <div class="mc-purpose">${cuT('Runs the storefront and signs customers in.', '用于店面展示和顾客登录。')}</div>
+        <div class="ig-wiz-grid">
+          ${txt('mc_appid', 'AppID', cfg.appId, cuT('WeChat MP console → Development → Development settings.', '微信公众平台 → 开发 → 开发设置。'))}
+          ${sec('mc_secret', 'AppSecret', cfg.appSecretSet, { ph: cuT('Paste the AppSecret', '粘贴 AppSecret'), hint: cuT('Leave as is unless WeChat issued a new secret.', '除非微信重置了密钥，否则保持原样。') })}
+        </div>
       </div>
 
-      <div style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass,#B08D4A);margin:16px 0 8px">${cuT('WeChat Pay · 微信支付', '微信支付')}</div>
-      <div class="ig-wiz-grid">
-        ${txt('mc_mchid', cuT('Merchant ID · 商户号', '商户号'), pay.mchId, true)}
-        ${sec('mc_v3', cuT('API v3 key · APIv3 密钥', 'APIv3 密钥'), pay.apiV3KeySet)}
-        ${txt('mc_serial', cuT('Cert serial · 证书序列号', '证书序列号'), pay.serialNo, true)}
-        <div></div>
-        ${pem('mc_pkey', cuT('Merchant private key (apiclient_key.pem) · 商户私钥', '商户私钥'), pay.privateKeySet)}
-        ${pem('mc_pubkey', cuT('WeChat platform public key · 微信平台公钥', '微信平台公钥'), pay.platformPubKeySet)}
+      <div class="mc-sec">
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('WeChat Pay', '微信支付')}</b></div>
+        <div class="mc-purpose">${cuT('Takes payment inside the mini app.', '在小程序内向顾客收款。')}</div>
+        <div class="ig-wiz-grid">
+          ${txt('mc_mchid', cuT('Merchant ID', '商户号'), pay.mchId, cuT('WeChat Pay merchant platform → Account center.', '微信支付商户平台 → 账户中心。'))}
+          ${txt('mc_serial', cuT('Certificate serial', '证书序列号'), pay.serialNo, cuT('Shown next to the API certificate in API security.', '在 API 安全页的 API 证书旁显示。'))}
+          ${sec('mc_v3', cuT('API v3 key', 'APIv3 密钥'), pay.apiV3KeySet, { ph: cuT('Paste the API v3 key', '粘贴 APIv3 密钥') })}
+          <div></div>
+          ${sec('mc_pkey', cuT('Merchant private key', '商户私钥') + '<span class="mc-file">apiclient_key.pem</span>', pay.privateKeySet,
+            { pem: true, wide: true, ph: cuT('Paste the full PEM, including the BEGIN and END lines', '粘贴完整 PEM，包含 BEGIN 与 END 行') })}
+          ${sec('mc_pubkey', cuT('WeChat platform public key', '微信平台公钥'), pay.platformPubKeySet,
+            { pem: true, wide: true, optional: true, ph: cuT('Paste PEM contents', '粘贴 PEM 内容'),
+              hint: cuT('Only needed if your merchant account uses platform public keys instead of platform certificates.', '仅当商户账号使用平台公钥（而非平台证书）时需要。') })}
+        </div>
       </div>
 
-      <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
-        <button class="btn btn-primary" id="mc_save" onclick="igSaveMiniappCreds()">${cuT('Save & verify · 保存并验证', '保存并验证')}</button>
+      <div class="mc-foot">
+        <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px;padding:0" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help', '获取帮助')}</button>
+        ${env ? `<span class="mc-note">${cuT('Filled from the server config for this account.', '本账号由服务器配置填充。')}</span>` : ''}
+        <span class="ig-spacer"></span>
         <span id="mc_result" style="font-size:12.5px"></span>
+        <button class="btn" onclick="igLocClose()">${cuT('Close', '关闭')}</button>
+        <button class="btn btn-primary" id="mc_save" onclick="igSaveMiniappCreds()">${mcSaveBtnHtml()}</button>
       </div>
-      ${cfg.source === 'env' ? `<div style="font-size:11.5px;color:var(--text-4);margin-top:6px">${cuT('Filled from the server config for this account.', '本账号由服务器配置填充。')}</div>` : ''}
-      <div class="helpbar" style="margin-top:16px"><button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help · 获取帮助', '获取帮助')}</button><span class="ig-spacer" style="flex:1"></span><button class="btn" onclick="igLocClose()">${cuT('Close · 关闭', '关闭')}</button></div>
     </div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   };
   // Back-compat alias (older callers used igMiniappWizard).
   window.igMiniappWizard = function () { return igMiniappConfig(); };
+
+  window.igMcReplace = function (fid) {
+    const f = document.getElementById(fid); if (!f) return;
+    f.classList.add('open');
+    const inp = f.querySelector('.mc-edit input, .mc-edit textarea');
+    if (inp) inp.focus();
+  };
+  window.igMcKeep = function (fid) {
+    const f = document.getElementById(fid); if (!f) return;
+    f.classList.remove('open');
+    const inp = f.querySelector('.mc-edit input, .mc-edit textarea');
+    if (inp) inp.value = '';   // typed-then-cancelled must not be submitted
+  };
 
   window.igSaveMiniappCreds = async function () {
     const v = id => { const el = document.getElementById(id); return el && el.value ? el.value.trim() : ''; };
@@ -606,18 +663,25 @@
       privateKey: v('mc_pkey'), platformPubKey: v('mc_pubkey'),
     };
     const out = document.getElementById('mc_result'), btn = document.getElementById('mc_save');
-    if (btn) btn.disabled = true;
-    if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Saving & verifying…', '保存并验证…'); }
+    if (btn) {
+      if (btn.disabled) return;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="mc-spin"></span><span>${cuT('Verifying…', '验证中…')}</span>`;
+    }
+    if (out) { out.textContent = ''; }
     try {
       const r = await api('/api/retail-admin/channel-hub/miniapp/wechat-creds', { method: 'POST', body });
-      if (out) {
-        if (r.verified) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = '✓ ' + cuT('Verified & saved', '验证通过,已保存'); }
-        else { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = '⚠ ' + cuT('Saved — WeChat check: ', '已保存 — 微信校验:') + (r.error || ''); }
+      if (r.verified) {
+        if (btn) { btn.classList.add('mc-ok'); btn.innerHTML = `${MC_SVG.tick}<span>${cuT('Verified', '已验证')}</span>`; }
+        if (out) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = cuT('Saved — WeChat accepted the credentials.', '已保存 — 微信验证通过。'); }
+      } else {
+        if (btn) { btn.disabled = false; btn.innerHTML = mcSaveBtnHtml(); }
+        if (out) { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = cuT('Saved, but WeChat rejected the login pair: ', '已保存，但微信校验未通过：') + (r.error || ''); }
       }
       igLoad();
-      setTimeout(igMiniappConfig, 1200);
+      setTimeout(igMiniappConfig, 1600);
     } catch (e) {
-      if (btn) btn.disabled = false;
+      if (btn) { btn.disabled = false; btn.innerHTML = mcSaveBtnHtml(); }
       if (out) { out.style.color = 'var(--danger)'; out.textContent = (e && e.code === 'appid_taken') ? cuT('That AppID is already in use.', '该 AppID 已被占用。') : (e && e.code === 'bad_appid' ? cuT('AppID must look like wx + 16 chars.', 'AppID 格式应为 wx + 16 位。') : cuT('Save failed', '保存失败')); }
     }
   };
