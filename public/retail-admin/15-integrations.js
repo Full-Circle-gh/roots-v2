@@ -44,7 +44,11 @@
     if (kind === 'wechat_miniapp') { igMiniappConfig(); return; }
     if (kind === 'web') { igWebConfig(); return; }
     if (kind === 'eleme') { igElemeWizard(); return; }                                       // guided connect → shops → products → verify
-    if (kind === 'jd' && typeof salesGo === 'function') { salesGo('config'); return; }      // JD keys + Save & test in Settings
+    if (kind === 'jd') {                                                                    // JD keys + Save & test — Delivery tab's JD page
+      if (typeof salesGo === 'function') salesGo('delivery');
+      if (typeof dlvGo === 'function') dlvGo('jd');
+      return;
+    }
     igOpenPlaceholder(kind, 'setup');
   };
 

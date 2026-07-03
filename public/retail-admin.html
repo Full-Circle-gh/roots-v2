@@ -3421,24 +3421,225 @@
     </div>
   </section>
 
-  <!-- ─── DELIVERY ZONES ─── -->
-  <section id="tab-delivery">
-    <h2>Delivery zones · 配送区</h2>
-    <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); line-height: 1.6;">
-      <div style="margin-bottom: 8px;">
-        One row per area you deliver to. <b>Pricing</b> shows the ¥ a customer pays; <b>Scheduling</b> shows when they can pick. Click any row to edit. An address that matches no active zone fails at checkout.
+  <!-- ─── DELIVERY — card hub ───
+       Redesigned 2026-07-03 (mockup: design-handoff/18-delivery-hub-mockup.html).
+       The tab opens on a HUB of cards — one card per topic, each with a live
+       status line and one button — and every dense form lives on its own
+       sub-view behind that button. All input IDs and save functions are
+       unchanged; this is a re-layout, not a rewrite. View switching = dlvGo()
+       in 06-delivery.js toggling [hidden] on the .dlv-view wrappers; the
+       section's data-dlv attribute drives the desktop-only CSS that shows
+       #dz-kpis only on the zones view. The phone hub (#rm-dlv-hub, ≤720px)
+       is untouched — .dlv-view wrappers are direct children, so the existing
+       "hide every desktop child" rule swallows them on phones. -->
+  <section id="tab-delivery" data-dlv="hub">
+
+    <!-- ══ HUB VIEW ══ -->
+    <div class="dlv-view" data-dlv="hub">
+      <h2>Delivery · 配送</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+        How orders reach your customers — one card per topic. · 订单如何送达顾客 — 每张卡片一个主题。
       </div>
-      <div>
-        每个配送区一行。<b>定价</b>显示顾客支付的 ¥;<b>时间</b>显示顾客可选时段。点击任意行编辑。未匹配任何启用配送区的地址将在结账时被拒。
+
+      <!-- New-store strip: visible only while no zone exists (dlvHubRender). -->
+      <div class="dlv-setup" id="dlv-setup-strip" hidden>
+        <div class="lead">Start delivering · 开始配送<span class="m">2 required steps · 两个必要步骤</span></div>
+        <div class="dlv-step"><span class="n">1</span><span class="t">Add a delivery zone<small>where you deliver · 配送到哪里</small></span></div>
+        <svg class="dlv-step-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <div class="dlv-step"><span class="n">2</span><span class="t">Set your fees<small>what customers pay · 顾客付多少</small></span></div>
+        <svg class="dlv-step-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+        <div class="dlv-step"><span class="n">3</span><span class="t">Pickup &amp; carriers<small>optional · 可选</small></span></div>
       </div>
-      <div style="margin-top: 10px; font-size: 11px; color: var(--text-4);">
-        Hover the <span class="help-i" data-tip="Each column header has a ? icon — hover it to see what that field does. · 每个列标题旁的 ? 图标:鼠标悬停查看字段说明。">?</span> on any column header or drawer field for a plain-language explanation. · 鼠标悬停 ? 图标查看字段说明。
+
+      <div class="sales-eyebrow" style="margin-top: 0;">Coverage &amp; pricing · 配送范围与费用</div>
+      <div class="sales-grid">
+
+        <!-- Delivery zones -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(107,142,111,.14);color:#4d7052">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">Delivery zones · 配送区</div>
+                <div class="sales-ch-stat" id="dlv-st-zones"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">Where you deliver and the fee for each area. Start with one city — add more anytime. · 你配送到哪些地区、每区收多少运费。先加一个城市即可。</div>
+          <div class="sales-ch-foot">
+            <button class="btn btn-sm" type="button" id="dlv-btn-zones" onclick="dlvGo('zones')">Manage · 管理</button>
+            <span class="meta" id="dlv-meta-zones"></span>
+          </div>
+        </div>
+
+        <!-- Fees & minimum -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(176,141,74,.16);color:#8a6c33">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3l6 7 6-7"/><path d="M12 10v11"/><path d="M7 14h10M7 18h10"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">Fees &amp; minimum · 费用与起送</div>
+                <div class="sales-ch-stat" id="dlv-st-fees"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">What customers pay at checkout — shipping fees, the free-shipping bar, minimum order. · 顾客结账支付的运费、包邮门槛与起送金额。</div>
+          <div class="sales-ch-foot">
+            <button class="btn btn-sm" type="button" onclick="dlvGo('fees')">Edit · 编辑</button>
+          </div>
+        </div>
+
+        <!-- Store pickup -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(18,22,26,.07);color:var(--text-2)">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l1 4H5l1-4Z"/><path d="M5 11v9h14v-9"/><path d="M9 20v-5h6v5"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">Store pickup · 到店自提</div>
+                <div class="sales-ch-stat" id="dlv-st-pickup"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">Customers collect orders at your stores — set the daily window and an optional packing fee. · 顾客到店取货 — 设置每日时间窗与包装费。</div>
+          <div class="sales-ch-foot">
+            <button class="btn btn-sm" type="button" onclick="dlvGo('pickup')">Edit · 编辑</button>
+            <span class="meta">per-store switch in Kitchen app · 门店开关在厨房端</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sales-eyebrow">Scheduling · 排期</div>
+      <div class="sales-grid">
+
+        <!-- Holiday mode — the switch flips right here; text lives one level in. -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(122,90,140,.13);color:#71557f">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M10 15l4 4M14 15l-4 4"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">Holiday mode · 假期模式</div>
+                <div class="sales-ch-stat" id="dlv-st-holiday"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">Going away? Flip this on — same-day delivery pauses, orders keep coming with a notice. · 放假时开启:当日达暂停,顾客仍可下单并看到提示。</div>
+          <div class="sales-ch-foot">
+            <label class="fc-switch" style="margin-right: 2px;">
+              <input type="checkbox" id="dlv-hub-holiday" onchange="dlvHubHolidayToggle(this)">
+              <span class="fc-switch-track"></span>
+            </label>
+            <button class="btn btn-sm" type="button" onclick="dlvGo('holiday')">Edit notice · 编辑提示</button>
+          </div>
+        </div>
+
+        <!-- Fresh batches -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(107,142,111,.14);color:#4d7052">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">Fresh batches · 新鲜现做</div>
+                <div class="sales-ch-stat" id="dlv-st-fresh"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">Make products in batches? Set the rhythm so far-away orders ship fresh on batch day. · 分批现做的商品:设置制作周期,远途订单按批次新鲜发货。</div>
+          <div class="sales-ch-foot">
+            <button class="btn btn-sm" type="button" onclick="dlvGo('fresh')">Edit · 编辑</button>
+            <span class="meta">only if you batch-make · 仅现做商家需要</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sales-eyebrow">Carriers &amp; tracking · 承运商与追踪</div>
+      <div class="sales-grid">
+
+        <!-- Package tracking (Kuaidi100) -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(107,142,111,.14);color:#4d7052">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M7 19h7a4 4 0 0 0 0-8H9a4 4 0 0 1 0-8h8"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">Package tracking · 快递轨迹</div>
+                <div class="sales-ch-stat" id="dlv-st-kd100"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">Live parcel tracking inside the customer's order page — works with every China carrier. · 顾客订单页显示实时快递轨迹,支持全部国内快递。</div>
+          <div class="sales-ch-foot">
+            <button class="btn btn-sm" type="button" id="dlv-btn-kd100" onclick="dlvGo('tracking')">Set up · 设置</button>
+            <span class="meta">Kuaidi100 · 快递100</span>
+          </div>
+        </div>
+
+        <!-- JD Logistics — moved here from the Sales page (one JD home). -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(200,60,50,.14);color:#c1493f">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="14" height="10" rx="1"/><path d="M16 10h4l2 3v4h-6"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">JD Logistics · 京东物流</div>
+                <div class="sales-ch-stat" id="dlv-st-jd"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">Create waybills for delivery orders. Enter your JD app keys and test. · 为配送订单生成运单,填入京东应用密钥并测试。</div>
+          <div class="sales-ch-foot">
+            <button class="btn btn-sm" type="button" id="dlv-btn-jd" onclick="dlvGo('jd')">Set up · 设置</button>
+          </div>
+        </div>
+
+        <!-- Qingyun riders — moved here from the Sales page. -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(90,120,150,.14);color:#5a7896">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">Qingyun riders · 青云配送</div>
+                <div class="sales-ch-stat" id="dlv-st-qy"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">Live rider tracking for delivery orders. We connect it for you — one login per store. · 骑手实时追踪,由我们协助开通,每店一次登录。</div>
+          <div class="sales-ch-foot">
+            <button class="btn btn-sm" type="button" id="dlv-btn-qy" onclick="dlvGo('qy')">Set up · 设置</button>
+            <span class="meta">assisted · 协助式</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ ZONES VIEW — head (the #dz-kpis strip slots between head and body;
+         it must stay a DIRECT child of the section for the phone-hub CSS) ══ -->
+    <div class="dlv-view" data-dlv="zones" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>Delivery zones · 配送区</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); line-height: 1.6;">
+        One row per area you deliver to. <b>Pricing</b> shows the ¥ a customer pays; <b>Scheduling</b> shows when they can pick. Click any row to edit. An address that matches no active zone (and no default below) fails at checkout. · 每个配送区一行:<b>定价</b>显示顾客支付的 ¥,<b>时间</b>显示可选时段,点击任意行编辑。未匹配任何启用配送区(且无下方默认值)的地址将在结账时被拒。
       </div>
     </div>
 
     <!-- Coverage at a glance — shared fc-* KPI strip, computed in-browser from the
          already-loaded zone list (no extra fetch). The Disabled tile flips to
-         .alert because a turned-off zone silently rejects every address there. -->
+         .alert because a turned-off zone silently rejects every address there.
+         Desktop: visible only on the zones view (CSS keyed off data-dlv);
+         phone: always the strip above the mobile hub, as before. -->
     <div class="fc-kpis" id="dz-kpis">
       <div class="fc-kpi accent">
         <div class="lbl">Active zones · 启用配送区</div>
@@ -3463,457 +3664,409 @@
     </div>
 
     <!-- Mobile Delivery hub (Variant A "settings hub"). Phone-only (≤720px):
-         the dense desktop cards/table below are CSS-hidden and this renders
-         the SAME live config as grouped value rows. Populated by rmDlvRenderHub
-         (reads the desktop inputs / _zones, saves through the existing save fns). -->
+         the dense desktop views are CSS-hidden and this renders the SAME live
+         config as grouped value rows. Populated by rmDlvRenderHub (reads the
+         desktop inputs / _zones, saves through the existing save fns). -->
     <div id="rm-dlv-hub"></div>
 
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 class="fc-sec" style="margin-bottom: 12px;">Global defaults · 全局默认</h3>
-      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
-          <label class="stacked">Kitchen address (customer-facing) · 厨房地址(顾客可见) <span class="help-i" data-tip="Shown on the mini-app checkout when a customer's address doesn't match any zone — so they know where you ship from. Not used for distance calculations. · 当顾客地址不在任何配送区时,在小程序结账页显示给顾客,告知厨房位置。不用于距离计算。">?</span></label>
-          <input type="text" id="dlv-kitchen-address" placeholder="广州市天河区 (Roots Kitchen)" style="width: 100%;">
+    <!-- ══ ZONES VIEW — body ══ -->
+    <div class="dlv-view" data-dlv="zones" hidden>
+
+      <!-- Toolbar: sub-tab pills, search, + Add zone -->
+      <div class="row dz-toolbar">
+        <div class="dz-subtabs" role="tablist">
+          <button type="button" class="dz-subtab active" data-view="pricing" onclick="setZoneView('pricing')">Pricing · 定价</button>
+          <button type="button" class="dz-subtab"        data-view="scheduling" onclick="setZoneView('scheduling')">Scheduling · 时间</button>
         </div>
-        <button class="btn btn-primary" onclick="saveDeliveryDefaults()">Save defaults · 保存默认值</button>
+        <input type="text" id="dz-search" data-ph-en="Search zone" data-ph-cn="搜索配送区…" placeholder="Search zone" oninput="renderZoneTable()">
+        <button class="btn btn-primary" onclick="openZoneDrawer()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add zone · 添加配送区
+        </button>
+        <div class="ovp-wrap">
+          <button class="btn btn-sm" id="dzv-btn" onclick="dzvToggle()" aria-haspopup="true" title="Display options · 显示选项">View · 视图</button>
+          <div id="dzv-pop" class="ovp" hidden>
+            <div class="ovp-head">Display options · 显示选项</div>
+            <div class="ovp-group">
+              <div class="ovp-label">Row density · 行密度</div>
+              <div class="ovp-seg" data-dzv="density">
+                <button data-v="comfortable" onclick="dzvSet('density','comfortable')">Comfortable · 舒适</button>
+                <button data-v="compact"     onclick="dzvSet('density','compact')">Compact · 紧凑</button>
+              </div>
+            </div>
+            <div class="ovp-group">
+              <div class="ovp-label">Zone badge · 区域徽章</div>
+              <div class="ovp-seg" data-dzv="badge">
+                <button data-v="pill"      onclick="dzvSet('badge','pill')">Pill · 胶囊</button>
+                <button data-v="square"    onclick="dzvSet('badge','square')">Square · 方形</button>
+                <button data-v="underline" onclick="dzvSet('badge','underline')">Underline · 下划线</button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <!-- ────── DELIVERY & PICKUP FEES ────── (single home, consolidated 2026-06-02 —
-         these previously lived in Settings → Checkout & fees. The server reads the
-         same fees.* / pickup.window keys for all pricing, so this is a UI move only;
-         a zone's own Base fee / Free-over / packing still overrides the globals below. -->
-    <h2 style="margin-top: var(--s5);">Delivery &amp; pickup fees · 配送与自提费用</h2>
-    <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); line-height: 1.6;">
-      The ¥ customers pay across delivery methods and store pickup. A zone's own <b>Base fee</b> / <b>Free-over</b> / packing (set on each zone above) overrides these global values for that area. · 各配送方式与到店自提收取的费用。各配送区自设的基础运费 / 免运门槛 / 包装费会覆盖此处的全局值。
-    </div>
-
-          <!-- FREE SHIPPING THRESHOLD -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Free-shipping threshold · 包邮门槛</h3>
-              <div class="muted">When a customer's subtotal reaches this number AND they pick Standard delivery, shipping is free. The Cart shows a progress bar — "¥XX more for free shipping" — that fills up as they add items. · 当顾客小计达到该金额且选择标准配送时,运费免除。购物车会显示"再凑 ¥XX 包邮"的进度条,随加购上涨。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-2); border-radius: 3px; padding: 4px;">
-                  <div style="font-size: 7px; color: var(--text-1); font-weight: 600; margin-bottom: 3px">¥<span id="pv-free-rem">85</span> more for free shipping</div>
-                  <div style="height: 4px; background: #1a1a1f; border-radius: 2px; overflow: hidden">
-                    <div style="height: 100%; width: 78%; background: var(--accent); border-radius: 2px"></div>
-                  </div>
-                </div>
-                <div class="ms-tile" style="left: 4px; top: 60px; right: 4px; height: 12px"></div>
-                <div class="ms-tile" style="left: 4px; top: 76px; right: 4px; height: 12px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Threshold · 门槛</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery. · 设得高可以拉高客单价,设得低（或为 0）则更慷慨。设为 <b>0</b> 表示标准配送"始终包邮"。<br>
-                  This is the <b>global default</b> — it applies to any address whose delivery zone leaves "Free-over" blank, and powers the Cart's "¥XX more for free shipping" bar. A zone with its own <b>Free-over</b> (edit a zone above) overrides this for that area. · 这是<b>全局默认值</b>——适用于配送区"满额免运"留空的任意地址,并驱动购物车里"再买 ¥XX 即可免运"的提示条。某个配送区若设有自己的<b>满额免运</b>（在上方编辑该区）则会覆盖此默认值。<br>
-                  Same-day delivery never qualifies for free shipping — it always charges its own fee. · 当日达永远不享受包邮,始终按自身费用收取。
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- STANDARD SHIPPING FEE -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Standard shipping fee · 标准运费</h3>
-              <div class="muted">What customers pay for the default delivery method (1–3 day SF Express). Shown next to the "Standard delivery" radio on the Checkout page. Free when subtotal hits the threshold above. · 顾客选择默认配送(1–3 天顺丰)时支付的运费;显示在结算页"标准配送"旁。小计达到上方门槛即免。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-1); border: 1.5px solid var(--accent); border-radius: 3px; padding: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-1); font-weight: 600">
-                    <span>Standard</span><span>¥<span id="pv-std-fee">12</span></span>
-                  </div>
-                  <div style="font-size: 6px; color: var(--text-3); margin-top: 2px">1–3 day SF Express</div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 56px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 3px; padding: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-3)">
-                    <span>Same-day</span><span>¥18</span>
-                  </div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Standard fee · 标准费</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-standardShipping"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold. · 每笔标准配送订单都会收取,除非小计达到包邮门槛。
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- SAME-DAY FEE -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Same-day delivery fee · 当日达运费</h3>
-              <div class="muted">Premium rush option for the GZ delivery radius. Always charges the full amount — does NOT qualify for the free-shipping threshold even if the order is large. · 广州配送范围内的当日达加急;无论订单多大都按全额收取,不享受包邮门槛。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 22px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 3px; padding: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-3)">
-                    <span>Standard</span><span>¥12</span>
-                  </div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 50px; background: var(--bg-elev-1); border: 1.5px solid var(--accent); border-radius: 3px; padding: 4px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 7px; color: var(--text-1); font-weight: 600">
-                    <span>Same-day</span><span>¥<span id="pv-sameday-fee">18</span></span>
-                  </div>
-                  <div style="font-size: 6px; color: var(--text-3); margin-top: 2px">Within GZ, 2hr</div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: var(--accent); border-radius: 3px"></div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Same-day fee · 当日达费用</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-sameDayDelivery"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout. · 每笔当日达订单都会收取,与购物车大小无关。顾客会在结算页选项旁看到此费用。
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- STORE PICKUP PACKING FEE -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Store pickup packing fee · 自提包装费</h3>
-              <div class="muted">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items. Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee. · 每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。设为 <b>0</b> 则不收。</div>
-            </div>
-            <div class="illus-row">
-              <div class="ctrl" style="flex: 1;">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Packing fee · 包装费</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones). · 在自提结算明细中显示为"包装费"一行。配送订单仍使用各自配送区的包装费(在"配送区"中设置)。
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- STORE PICKUP HOURS -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Store pickup hours · 到店自提时间</h3>
-              <div class="muted">The daily window customers can choose to collect an order at checkout when they pick <b>Store pickup</b>. Times outside this window are blocked. Pickup itself is turned on per store (Kitchen app → Products → Stock view → ✏️ edit a store → "Offer store pickup"). · 顾客在结算选择"到店自提"时可选的每日取货时间窗,窗口之外不可选。自提开关在每个门店单独设置(厨房端 → 产品 → 库存视图 → ✏️ 编辑门店 → "提供到店自提")。</div>
-            </div>
-            <div class="illus-row">
-              <div class="ctrl" style="flex: 1;">
-                <div style="display: flex; gap: 14px; flex-wrap: wrap;">
-                  <div class="field" style="margin: 0;">
-                    <label class="stacked">Opens · 开始</label>
-                    <input type="time" id="cfg-pickup-open">
-                  </div>
-                  <div class="field" style="margin: 0;">
-                    <label class="stacked">Closes · 结束</label>
-                    <input type="time" id="cfg-pickup-close">
-                  </div>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure. · 所有开通自提的门店共用一个全局时间窗。不确定时保留默认值(10:00–20:00)即可。
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- MINIMUM ORDER — moved here from Settings → Checkout & fees (2026-06-08)
-               so every cart-level money rule lives in one place. Saves with the fee
-               keys above via saveDeliveryFees → fees.minOrder. -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Minimum order · 起送金额</h3>
-              <div class="muted">Blocks checkout below this subtotal. Set to <b>0</b> to disable. When triggered, the Pay button is disabled and shows "Order minimum ¥X — add ¥Y more". · 低于该小计时阻止结算;设为 0 关闭。</div>
-            </div>
-            <div class="illus-row">
-              <div class="mini-phone">
-                <div class="mp-notch"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 10px; height: 6px; background: var(--accent); border-radius: 1px"></div>
-                <div class="ms-tile" style="left: 4px; top: 22px; right: 4px; height: 12px"></div>
-                <div class="ms-tile" style="left: 4px; top: 38px; right: 4px; height: 12px"></div>
-                <div style="position: absolute; left: 4px; right: 4px; top: 56px; padding: 3px 4px; background: rgba(232,85,106,.14); border: 1px solid var(--danger); border-radius: 3px;">
-                  <div style="font-size: 7px; color: var(--danger); font-weight: 600">Order min ¥<span id="pv-min-order">50</span></div>
-                  <div style="font-size: 6px; color: var(--text-2); margin-top: 1px">Add ¥18 more</div>
-                </div>
-                <div style="position: absolute; left: 4px; right: 4px; bottom: 4px; height: 14px; background: #56544f; border-radius: 3px; opacity: .55"></div>
-              </div>
-              <div class="ctrl">
-                <div class="field" style="margin: 0;">
-                  <label class="stacked">Minimum subtotal · 起送金额</label>
-                  <span class="yen-input"><input type="number" id="cfg-fees-minOrder"></span>
-                </div>
-                <div class="helper" style="margin-top: 10px;">
-                  Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item. · 有助于避免亏本的小额订单;若想让尝鲜顾客只买一件,可保持为 0。
-                </div>
-              </div>
-            </div>
-          </div>
-
-    <div class="row" style="gap: 12px; margin-bottom: var(--s4);">
-      <button class="btn btn-primary" onclick="saveDeliveryFees()">Save fees · 保存费用</button>
-      <span id="dlv-fees-status" style="font-size: 12px; align-self: center;"></span>
-    </div>
-
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 class="fc-sec" style="margin-bottom: 4px;">
-        Holiday mode · 假期模式
-        <span class="help-i" data-tip="Turn ON when the kitchen is closed for a holiday. Customers can still place orders — same-day delivery is suppressed, the calendar still works, and a banner with your message appears on checkout. · 厨房放假时开启。顾客仍可下单,即时配送被禁用,日历选择仍可用,结账页将显示您设置的提示横幅。">?</span>
-      </h3>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When ON, same-day delivery is hidden and the message below appears on mini-app checkout. Orders are still accepted; the calendar lets customers pick a future ship date. · 开启后,即时配送被隐藏,小程序结账页显示下方提示。订单仍可接收,顾客可通过日历选择未来发货日期。</div>
-      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Status · 状态</label>
-          <label class="fc-switch">
-            <input type="checkbox" id="dlv-holiday-mode">
-            <span class="fc-switch-track"></span>
-            <span id="dlv-holiday-status-label" style="font-size: 12px;">OFF · 关闭</span>
-          </label>
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
-          <label class="stacked">Message (English) · 英文消息</label>
-          <textarea id="dlv-holiday-msg-en" rows="2" style="width: 100%;" placeholder="We're closed for a short holiday — your order will ship as soon as we're back."></textarea>
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
-          <label class="stacked">消息(中文)· Message (Chinese)</label>
-          <textarea id="dlv-holiday-msg-cn" rows="2" style="width: 100%;" placeholder="我们短暂休假中 — 订单将在我们回来后第一时间发货。"></textarea>
-        </div>
-        <button class="btn btn-primary" onclick="saveHolidayMode()" style="align-self: flex-end;">Save · 保存</button>
+      <div class="table-wrap">
+        <table id="dz-table">
+          <thead id="dz-thead"></thead>
+          <tbody id="dz-tbody"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+        </table>
       </div>
-    </div>
 
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 class="fc-sec" style="margin-bottom: 4px;">
-        Fresh batch schedule · 新鲜现做排期
-        <span class="help-i" data-tip="For products flagged 'Made fresh in batches'. Outside-Guangzhou orders that hold one can't ship until the next batch day, then ship same-day so they arrive fresh. Sets the cadence and tells the customer the exact ship + arrival dates. · 用于标记为「分批新鲜现做」的商品。含此类商品的广州以外订单需等到下一制作日才发货,当天发出以保证新鲜。此处设置制作周期,并告知顾客确切的发货与送达日期。">?</span>
-      </h3>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Only affects outside-Guangzhou orders containing a batch-made product. In-Guangzhou orders are unaffected. · 仅影响含「分批现做」商品的广州以外订单,广州市内订单不受影响。</div>
-      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Status · 状态</label>
-          <label class="fc-switch">
-            <input type="checkbox" id="batch-enabled">
-            <span class="fc-switch-track"></span>
-            <span id="batch-status-label" style="font-size: 12px;">OFF · 关闭</span>
-          </label>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">A batch day · 某个制作日 <span class="help-i" data-tip="Any one date the kitchen makes a batch. The rhythm repeats out from this date in both directions. Move it only to permanently re-time the whole rhythm. · 厨房制作的任意一个日期。制作周期以此日期为基准向前后重复。仅在需要永久调整整个周期时才更改。">?</span></label>
-          <input type="date" id="batch-anchor" style="width: 170px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Make every · 每隔 <span class="help-i" data-tip="Days between batches. 'Every other day' = 2. · 两次制作之间相隔的天数。「每隔一天」= 2。">?</span></label>
-          <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-interval" min="1" step="1" value="2" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
-          <label class="stacked">Skip these dates (vacations) · 跳过这些日期(假期) <span class="help-i" data-tip="One date per line (YYYY-MM-DD). A batch that would land on a skipped date rolls forward to the next batch day. · 每行一个日期(YYYY-MM-DD)。原本落在跳过日期的制作批次将顺延到下一个制作日。">?</span></label>
-          <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>
-        </div>
-        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-          <div class="muted" style="font-size: 11px; margin-bottom: 8px;">The checkout popup the customer sees. Leave any field blank to use the default wording. · 顾客在结账页看到的弹窗。任意字段留空则使用默认文案。</div>
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-          <label class="stacked">Popup eyebrow — English · 弹窗小标题(英文) <span class="help-i" data-tip="The small uppercase label above the title (default: FRESHLY MADE). · 标题上方的小号大写标签(默认:FRESHLY MADE)。">?</span></label>
-          <input id="batch-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Freshly made">
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-          <label class="stacked">弹窗小标题(中文)· Popup eyebrow — Chinese</label>
-          <input id="batch-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="新鲜现做">
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-          <label class="stacked">Popup title — English · 弹窗标题(英文) <span class="help-i" data-tip="The big heading in the popup (default: Made fresh for you). · 弹窗中的大标题(默认:Made fresh for you)。">?</span></label>
-          <input id="batch-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh for you">
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-          <label class="stacked">弹窗标题(中文)· Popup title — Chinese</label>
-          <input id="batch-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="为您新鲜现做">
-        </div>
-        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-          <label class="stacked">Checkout notice — English · 结账提示(英文) <span class="help-i" data-tip="The popup body. Shown when a cart holds a batch-made item shipping outside Guangzhou OR to a far GZ district (Panyu, Huadu, Nansha, Conghua, Zengcheng). Use {ship_date} and {delivery_date} as placeholders — they're replaced with the real dates. Leave blank to use the default. · 弹窗正文。当订单含「分批现做」商品且配送至广州以外或较远的广州城区(番禺、花都、南沙、从化、增城)时显示。可用 {ship_date} 与 {delivery_date} 占位符,系统会替换为真实日期。留空则使用默认。">?</span></label>
-          <textarea id="batch-msg-en" rows="2" style="width: 100%;" placeholder="Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}."></textarea>
-        </div>
-        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-          <label class="stacked">结账提示(中文)· Checkout notice — Chinese</label>
-          <textarea id="batch-msg-cn" rows="2" style="width: 100%;" placeholder="您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。"></textarea>
-        </div>
-        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-          <label class="stacked">Freshness tip — English · 新鲜提示(英文) <span class="help-i" data-tip="A small reminder line shown below the dates in the popup (e.g. enjoy within 48 hours). Plain text — no date placeholders. Leave blank to use the default. · 弹窗日期下方的小提示(例如建议尽快享用)。纯文本,无日期占位符。留空则使用默认。">?</span></label>
-          <textarea id="batch-tip-en" rows="2" style="width: 100%;" placeholder="We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness."></textarea>
-        </div>
-        <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-          <label class="stacked">新鲜提示(中文)· Freshness tip — Chinese</label>
-          <textarea id="batch-tip-cn" rows="2" style="width: 100%;" placeholder="我们建议在收到后 48 小时内享用这些新鲜现做的商品,以获得最佳口感与新鲜度。"></textarea>
-        </div>
-        <button class="btn btn-primary" onclick="saveBatchSchedule()" style="align-self: flex-end;">Save · 保存</button>
-      </div>
-    </div>
+      <!-- Cached datalist used by the drawer city search -->
+      <datalist id="china-cities-datalist"></datalist>
 
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 class="fc-sec" style="margin-bottom: 4px;">
-        Fresh order reschedule cutoff · 新鲜订单改期截止
-        <span class="help-i" data-tip="For an order that contains a 'Made fresh in batches' product: how late the customer may still change their own delivery/pickup time. The time locks at this hour the evening BEFORE the scheduled day, and also locks the moment staff start preparing. Default 20 = 8pm the night before. Non-fresh orders are unaffected — they stay changeable until they leave. · 含「分批新鲜现做」商品的订单:顾客最晚可在配送日「前一天」的此时间点之前自助修改配送/取货时间;开始备货后也会锁定。默认 20 = 前一晚 20:00。非新鲜订单不受影响,发货前始终可改。">?</span>
-      </h3>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Only affects orders containing a batch-made product. A same-day slot can never be chosen for a fresh order. · 仅影响含「分批现做」商品的订单。新鲜订单不可改为当日时段。</div>
-      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Lock at hour, evening before · 前一晚锁定时间</label>
-          <span style="display:inline-flex;align-items:center;gap:6px;">
-            <input type="number" id="fresh-resched-cutoff" min="0" max="23" step="1" value="20" style="width: 80px;">
-            <span style="font-size:12px;">:00 &nbsp;(0–23)</span>
-          </span>
-        </div>
-        <button class="btn btn-primary" onclick="saveRescheduleSettings()" style="align-self: flex-end;">Save · 保存</button>
-      </div>
-    </div>
-
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 class="fc-sec" style="margin-bottom: 4px;">
-        Default delivery — rest of China · 默认配送 — 中国其他地区
-        <span class="help-i" data-tip="One flat fee for any mainland address not covered by a zone below. Turn this on and you only need to add zones for the exceptions (cheaper provinces, same-day Guangzhou, Hong Kong). Off = addresses with no matching zone can't check out. · 适用于下方未单独设置区域的任何中国大陆地址的统一运费。开启后,您只需为「例外」添加区域(更便宜的省份、广州当日达、香港)。关闭时,无匹配区域的地址将无法结账。">?</span>
-      </h3>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">A zone below always wins over this default. Guangzhou same-day and Hong Kong are unaffected. · 下方任何区域都优先于此默认值。广州当日达与香港不受影响。</div>
-      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Status · 状态</label>
-          <label class="fc-switch">
-            <input type="checkbox" id="dlv-default-enabled">
-            <span class="fc-switch-track"></span>
-            <span id="dlv-default-status-label" style="font-size: 12px;">OFF · 关闭</span>
-          </label>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Flat fee · 统一运费</label>
-          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-fee" min="0" step="0.01" value="25" style="width: 90px;"></span>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Free over · 满额免运 <span class="help-i" data-tip="Order subtotal at or above this ships free. Leave blank for never free. · 订单小计达到或超过此金额时免运费。留空表示不免运。">?</span></label>
-          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-free" min="0" step="0.01" placeholder="329" style="width: 90px;"></span>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Packing / item · 每件包装费 <span class="help-i" data-tip="Added per item, capped below. 0 = no packing fee. · 按每件商品加收,上限见右侧。0 = 不收包装费。">?</span></label>
-          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack" min="0" step="0.01" value="0" style="width: 80px;"></span>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Packing cap · 包装费上限</label>
-          <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack-cap" min="0" step="0.01" placeholder="—" style="width: 80px;"></span>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Lead time · 备货天数 <span class="help-i" data-tip="Earliest fulfilment is this many days out. These addresses ship by date (no same-day time slots). · 最早可在此天数后发货。这些地址按日期发货(无当日时段)。">?</span></label>
-          <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="dlv-default-lead" min="0" step="1" value="3" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
-        </div>
-        <button class="btn btn-primary" onclick="saveDefaultZone()" style="align-self: flex-end;">Save · 保存</button>
-      </div>
-    </div>
-
-    <!-- Toolbar: sub-tab pills, search, + Add zone -->
-    <div class="row dz-toolbar">
-      <div class="dz-subtabs" role="tablist">
-        <button type="button" class="dz-subtab active" data-view="pricing" onclick="setZoneView('pricing')">Pricing · 定价</button>
-        <button type="button" class="dz-subtab"        data-view="scheduling" onclick="setZoneView('scheduling')">Scheduling · 时间</button>
-      </div>
-      <input type="text" id="dz-search" data-ph-en="Search zone" data-ph-cn="搜索配送区…" placeholder="Search zone" oninput="renderZoneTable()">
-      <button class="btn btn-primary" onclick="openZoneDrawer()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Add zone · 添加配送区
-      </button>
-      <div class="ovp-wrap">
-        <button class="btn btn-sm" id="dzv-btn" onclick="dzvToggle()" aria-haspopup="true" title="Display options · 显示选项">View · 视图</button>
-        <div id="dzv-pop" class="ovp" hidden>
-          <div class="ovp-head">Display options · 显示选项</div>
-          <div class="ovp-group">
-            <div class="ovp-label">Row density · 行密度</div>
-            <div class="ovp-seg" data-dzv="density">
-              <button data-v="comfortable" onclick="dzvSet('density','comfortable')">Comfortable · 舒适</button>
-              <button data-v="compact"     onclick="dzvSet('density','compact')">Compact · 紧凑</button>
-            </div>
+      <div class="card" style="margin: var(--s4) 0;">
+        <h3 class="fc-sec" style="margin-bottom: 4px;">
+          Everywhere else — default delivery · 其他地区 — 默认配送
+          <span class="help-i" data-tip="One flat fee for any mainland address not covered by a zone above. Turn this on and you only need to add zones for the exceptions (cheaper provinces, same-day Guangzhou, Hong Kong). Off = addresses with no matching zone can't check out. · 适用于上方未单独设置区域的任何中国大陆地址的统一运费。开启后,您只需为「例外」添加区域(更便宜的省份、广州当日达、香港)。关闭时,无匹配区域的地址将无法结账。">?</span>
+        </h3>
+        <div class="muted" style="font-size: 11px; margin-bottom: 12px;">A zone above always wins over this default. Guangzhou same-day and Hong Kong are unaffected. · 上方任何区域都优先于此默认值。广州当日达与香港不受影响。</div>
+        <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Status · 状态</label>
+            <label class="fc-switch">
+              <input type="checkbox" id="dlv-default-enabled">
+              <span class="fc-switch-track"></span>
+              <span id="dlv-default-status-label" style="font-size: 12px;">OFF · 关闭</span>
+            </label>
           </div>
-          <div class="ovp-group">
-            <div class="ovp-label">Zone badge · 区域徽章</div>
-            <div class="ovp-seg" data-dzv="badge">
-              <button data-v="pill"      onclick="dzvSet('badge','pill')">Pill · 胶囊</button>
-              <button data-v="square"    onclick="dzvSet('badge','square')">Square · 方形</button>
-              <button data-v="underline" onclick="dzvSet('badge','underline')">Underline · 下划线</button>
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Flat fee · 统一运费</label>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-fee" min="0" step="0.01" value="25" style="width: 90px;"></span>
+          </div>
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Free over · 满额免运 <span class="help-i" data-tip="Order subtotal at or above this ships free. Leave blank for never free. · 订单小计达到或超过此金额时免运费。留空表示不免运。">?</span></label>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-free" min="0" step="0.01" placeholder="329" style="width: 90px;"></span>
+          </div>
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Packing / item · 每件包装费 <span class="help-i" data-tip="Added per item, capped below. 0 = no packing fee. · 按每件商品加收,上限见右侧。0 = 不收包装费。">?</span></label>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack" min="0" step="0.01" value="0" style="width: 80px;"></span>
+          </div>
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Packing cap · 包装费上限</label>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack-cap" min="0" step="0.01" placeholder="—" style="width: 80px;"></span>
+          </div>
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Lead time · 备货天数 <span class="help-i" data-tip="Earliest fulfilment is this many days out. These addresses ship by date (no same-day time slots). · 最早可在此天数后发货。这些地址按日期发货(无当日时段)。">?</span></label>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="dlv-default-lead" min="0" step="1" value="3" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
+          </div>
+          <button class="btn btn-primary" onclick="saveDefaultZone()" style="align-self: flex-end;">Save · 保存</button>
+        </div>
+      </div>
+
+      <!-- Rarely-touched settings, collapsed out of the way. -->
+      <details class="dlv-adv">
+        <summary>Advanced · 高级 — kitchen address, excluded districts · 厨房地址、排除区</summary>
+
+        <div class="card" style="margin: var(--s3) 0 var(--s4);">
+          <h3 class="fc-sec" style="margin-bottom: 12px;">Kitchen address (customer-facing) · 厨房地址(顾客可见)</h3>
+          <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+            <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
+              <label class="stacked">Address · 地址 <span class="help-i" data-tip="Shown on the mini-app checkout when a customer's address doesn't match any zone — so they know where you ship from. Not used for distance calculations. · 当顾客地址不在任何配送区时,在小程序结账页显示给顾客,告知厨房位置。不用于距离计算。">?</span></label>
+              <input type="text" id="dlv-kitchen-address" placeholder="广州市天河区 (Roots Kitchen)" style="width: 100%;">
+            </div>
+            <button class="btn btn-primary" onclick="saveDeliveryDefaults()">Save · 保存</button>
+          </div>
+        </div>
+
+        <!-- ── Guangzhou same-day: excluded districts ── (IDs unchanged; rendered
+             by _loadGzExcludedDistricts on init.) -->
+        <div class="card" style="margin-bottom: var(--s4);">
+          <h3 class="fc-sec" style="margin-bottom: 4px;">Guangzhou delivery zones · 广州配送区 — excluded districts · 排除区</h3>
+          <div class="muted" style="font-size: 11px; margin-bottom: 12px; line-height: 1.6;">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback. · 仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</div>
+          <div class="muted" style="font-size: 11px; margin-bottom: 8px;">Tap a district to exclude it. · 点击区名将其加入排除列表。</div>
+          <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+          <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
+        </div>
+      </details>
+    </div>
+
+    <!-- ══ FEES VIEW ══ (fees.* keys; a zone's own Base fee / Free-over overrides
+         these globals for that area. Mini-phone previews dropped 2026-07-03.) -->
+    <div class="dlv-view" data-dlv="fees" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>Fees &amp; minimum · 费用与起送</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4); line-height: 1.6;">
+        The ¥ customers pay at checkout. A zone's own <b>Base fee</b> / <b>Free-over</b> (set on each zone) overrides these global values for that area. · 顾客结账支付的费用。各配送区自设的基础运费 / 免运门槛会覆盖此处的全局值。
+      </div>
+
+      <!-- FREE SHIPPING THRESHOLD -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Free-shipping threshold · 包邮门槛</h3>
+          <div class="muted">When a customer's subtotal reaches this number AND they pick Standard delivery, shipping is free. The Cart shows a progress bar — "¥XX more for free shipping" — that fills up as they add items. · 当顾客小计达到该金额且选择标准配送时,运费免除。购物车会显示"再凑 ¥XX 包邮"的进度条,随加购上涨。</div>
+        </div>
+        <div class="illus-row">
+          <div class="ctrl" style="flex: 1;">
+            <div class="field" style="margin: 0;">
+              <label class="stacked">Threshold · 门槛</label>
+              <span class="yen-input"><input type="number" id="cfg-fees-freeShippingThreshold"></span>
+            </div>
+            <div class="helper" style="margin-top: 10px;">
+              Set high to push average-order-value up; set low (or 0) to be more generous. Set to <b>0</b> for "always free shipping" on standard delivery. Same-day delivery never qualifies — it always charges its own fee. · 设得高可以拉高客单价,设得低（或为 0）则更慷慨。设为 <b>0</b> 表示标准配送"始终包邮"。当日达永远不享受包邮。
             </div>
           </div>
         </div>
       </div>
-    </div>
 
-    <div class="table-wrap">
-      <table id="dz-table">
-        <thead id="dz-thead"></thead>
-        <tbody id="dz-tbody"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
-      </table>
-    </div>
-
-    <!-- Cached datalist used by the drawer city search -->
-    <datalist id="china-cities-datalist"></datalist>
-
-    <!-- ── Guangzhou same-day: excluded districts ── (moved here from
-         Settings → Operations 2026-06-09 — it tunes the Guangzhou same-day
-         delivery fallback, so it lives with Delivery. IDs unchanged; rendered
-         by _loadGzExcludedDistricts on init.) -->
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 class="fc-sec" style="margin-bottom: 4px;">Guangzhou delivery zones · 广州配送区 — excluded districts · 排除区</h3>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px; line-height: 1.6;">The 5-option in-stock fallback (cancel item / replace / ship farther / wait / cancel order) only shows for <b>广州市 right-away orders</b> in districts NOT listed here. Excluded districts (and non-Guangzhou) keep the simple yes/no fallback. · 仅广州市 + 立即配送 + 不在排除清单内的区才看 5 选项弹窗。</div>
-      <div class="muted" style="font-size: 11px; margin-bottom: 8px;">Tap a district to exclude it. · 点击区名将其加入排除列表。</div>
-      <div id="gz-excl-chips" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
-      <div id="gz-excl-summary" class="muted" style="font-size:12px"></div>
-    </div>
-    <!-- ── Bulk attach tracking — opt-in Orders tool ── -->
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 class="fc-sec" style="margin-bottom: 4px;">
-        Bulk attach tracking · 批量绑定运单号
-        <span class="help-i" data-tip="Adds a 'Bulk attach tracking' button to the Orders page so you can paste a list of order numbers + waybill numbers and attach them in one go. Off by default — turn it on only if you enter tracking numbers by hand. · 在订单页添加「批量绑定运单号」按钮,可粘贴订单号+运单号一次性绑定。默认关闭,仅在手动录入运单号时开启。">?</span>
-      </h3>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When on, a button appears in the Orders toolbar. When off, the button is hidden — the tool stays available but out of the way. · 开启后订单页工具栏会显示该按钮;关闭后按钮隐藏,不占据界面。</div>
-      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Status · 状态</label>
-          <label class="fc-switch">
-            <input type="checkbox" id="dlv-bulk-trk">
-            <span class="fc-switch-track"></span>
-            <span id="dlv-bulk-trk-status-label" style="font-size: 12px;">OFF · 关闭</span>
-          </label>
+      <!-- STANDARD SHIPPING FEE -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Standard shipping fee · 标准运费</h3>
+          <div class="muted">What customers pay for the default delivery method (1–3 day SF Express). Shown next to the "Standard delivery" radio on the Checkout page. Free when subtotal hits the threshold above. · 顾客选择默认配送(1–3 天顺丰)时支付的运费;显示在结算页"标准配送"旁。小计达到上方门槛即免。</div>
         </div>
-        <button class="btn btn-primary" onclick="saveBulkTrackingSetting()" style="align-self: flex-end;">Save · 保存</button>
+        <div class="illus-row">
+          <div class="ctrl" style="flex: 1;">
+            <div class="field" style="margin: 0;">
+              <label class="stacked">Standard fee · 标准费</label>
+              <span class="yen-input"><input type="number" id="cfg-fees-standardShipping"></span>
+            </div>
+            <div class="helper" style="margin-top: 10px;">
+              Charged on every standard-delivery order unless the subtotal hits the free-shipping threshold. · 每笔标准配送订单都会收取,除非小计达到包邮门槛。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SAME-DAY FEE -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Same-day delivery fee · 当日达运费</h3>
+          <div class="muted">Premium rush option for the GZ delivery radius. Always charges the full amount — does NOT qualify for the free-shipping threshold even if the order is large. · 广州配送范围内的当日达加急;无论订单多大都按全额收取,不享受包邮门槛。</div>
+        </div>
+        <div class="illus-row">
+          <div class="ctrl" style="flex: 1;">
+            <div class="field" style="margin: 0;">
+              <label class="stacked">Same-day fee · 当日达费用</label>
+              <span class="yen-input"><input type="number" id="cfg-fees-sameDayDelivery"></span>
+            </div>
+            <div class="helper" style="margin-top: 10px;">
+              Charged on every same-day order regardless of cart size. Customers see this fee next to the radio at checkout. · 每笔当日达订单都会收取,与购物车大小无关。顾客会在结算页选项旁看到此费用。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MINIMUM ORDER — saves with the fee keys via saveDeliveryFees → fees.minOrder. -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Minimum order · 起送金额</h3>
+          <div class="muted">Blocks checkout below this subtotal. Set to <b>0</b> to disable. When triggered, the Pay button is disabled and shows "Order minimum ¥X — add ¥Y more". · 低于该小计时阻止结算;设为 0 关闭。</div>
+        </div>
+        <div class="illus-row">
+          <div class="ctrl" style="flex: 1;">
+            <div class="field" style="margin: 0;">
+              <label class="stacked">Minimum subtotal · 起送金额</label>
+              <span class="yen-input"><input type="number" id="cfg-fees-minOrder"></span>
+            </div>
+            <div class="helper" style="margin-top: 10px;">
+              Useful to avoid loss-making tiny orders, or leave at 0 if you want trial customers to buy one item. · 有助于避免亏本的小额订单;若想让尝鲜顾客只买一件,可保持为 0。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="gap: 12px; margin-bottom: var(--s4);">
+        <button class="btn btn-primary" onclick="saveDeliveryFees()">Save fees · 保存费用</button>
+        <span id="dlv-fees-status" style="font-size: 12px; align-self: center;"></span>
       </div>
     </div>
 
-    <!-- ── Logistics integration: 快递100 tracking + 京东物流 LOP waybill ── -->
-    <div class="group-card">
-      <div class="group-card-head">
-        <h3>Logistics integration · 物流集成</h3>
-        <div class="muted">Connect carriers so Orders can stream live tracking into the customer mini app and push waybills to JD. Set up either or both — they work independently. · 物流集成:轨迹回传与一键推单,两者可单独或同时配置。</div>
-      </div>
-      <div class="dz-subtabs" role="tablist" style="margin-bottom:18px">
-        <button type="button" class="dz-subtab active" id="logtab-kd100" onclick="_logTab('kd100')"><span id="kd100-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Kuaidi100 · 快递100</button>
-        <button type="button" class="dz-subtab" id="logtab-jd" onclick="_logTab('jd')"><span id="jd-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>JD Logistics · 京东物流</button>
-        <button type="button" class="dz-subtab" id="logtab-qy" onclick="_logTab('qy')"><span id="qy-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--text-3);margin-right:7px;vertical-align:middle"></span>Same-city · 同城配送</button>
+    <!-- ══ STORE PICKUP VIEW ══ (same saveDeliveryFees writer — pickup fields
+         share the fees.* / pickup.window config keys) -->
+    <div class="dlv-view" data-dlv="pickup" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>Store pickup · 到店自提</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+        Customers collect orders at your stores. Pickup is turned on per store in the Kitchen app (Products → Stock view → edit a store → "Offer store pickup"). · 顾客到店取货。自提开关在每个门店单独设置(厨房端 → 产品 → 库存视图 → 编辑门店 → "提供到店自提")。
       </div>
 
-      <!-- 快递100 tracking push -->
-      <div id="logpanel-kd100">
+      <!-- STORE PICKUP HOURS -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Pickup hours · 取货时间</h3>
+          <div class="muted">The daily window customers can choose to collect an order at checkout when they pick <b>Store pickup</b>. Times outside this window are blocked. · 顾客在结算选择"到店自提"时可选的每日取货时间窗,窗口之外不可选。</div>
+        </div>
+        <div class="illus-row">
+          <div class="ctrl" style="flex: 1;">
+            <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Opens · 开始</label>
+                <input type="time" id="cfg-pickup-open">
+              </div>
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Closes · 结束</label>
+                <input type="time" id="cfg-pickup-close">
+              </div>
+            </div>
+            <div class="helper" style="margin-top: 10px;">
+              One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure. · 所有开通自提的门店共用一个全局时间窗。不确定时保留默认值(10:00–20:00)即可。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STORE PICKUP PACKING FEE -->
+      <div class="group-card">
+        <div class="group-card-head">
+          <h3>Packing fee · 包装费</h3>
+          <div class="muted">A flat fee added to every <b>Store pickup</b> order so the store is paid for boxing the items. Charged once per order regardless of item count. Set to <b>0</b> for no pickup packing fee. · 每笔"到店自提"订单收取的固定包装费,按单收取一次,与件数无关。设为 <b>0</b> 则不收。</div>
+        </div>
+        <div class="illus-row">
+          <div class="ctrl" style="flex: 1;">
+            <div class="field" style="margin: 0;">
+              <label class="stacked">Packing fee · 包装费</label>
+              <span class="yen-input"><input type="number" id="cfg-fees-pickupPackingFee"></span>
+            </div>
+            <div class="helper" style="margin-top: 10px;">
+              Shows as a "Packing fee" line on the pickup checkout breakdown. Delivery orders keep their own per-zone packing fee (set under Delivery zones). · 在自提结算明细中显示为"包装费"一行。配送订单仍使用各自配送区的包装费(在"配送区"中设置)。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row" style="gap: 12px; margin-bottom: var(--s4);">
+        <button class="btn btn-primary" onclick="saveDeliveryFees()">Save · 保存</button>
+      </div>
+    </div>
+
+    <!-- ══ HOLIDAY VIEW ══ -->
+    <div class="dlv-view" data-dlv="holiday" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>Holiday mode · 假期模式</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+        Turn ON when the kitchen is closed for a holiday. Customers can still place orders — same-day delivery is hidden, the calendar still works, and your message appears on checkout. · 厨房放假时开启。顾客仍可下单 — 当日达被隐藏,日历仍可选,结账页显示您的提示。
+      </div>
+
+      <div class="card" style="margin-bottom: var(--s4);">
+        <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Status · 状态</label>
+            <label class="fc-switch">
+              <input type="checkbox" id="dlv-holiday-mode">
+              <span class="fc-switch-track"></span>
+              <span id="dlv-holiday-status-label" style="font-size: 12px;">OFF · 关闭</span>
+            </label>
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
+            <label class="stacked">Message (English) · 英文消息</label>
+            <textarea id="dlv-holiday-msg-en" rows="2" style="width: 100%;" placeholder="We're closed for a short holiday — your order will ship as soon as we're back."></textarea>
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
+            <label class="stacked">消息(中文)· Message (Chinese)</label>
+            <textarea id="dlv-holiday-msg-cn" rows="2" style="width: 100%;" placeholder="我们短暂休假中 — 订单将在我们回来后第一时间发货。"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="saveHolidayMode()" style="align-self: flex-end;">Save · 保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ FRESH BATCHES VIEW ══ (batch schedule + the reschedule cutoff — two
+         cards about the same made-fresh products, now one page) -->
+    <div class="dlv-view" data-dlv="fresh" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>Fresh batches · 新鲜现做</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+        For products flagged "Made fresh in batches". Only affects outside-Guangzhou orders containing one — they wait for the next batch day, then ship same-day so they arrive fresh. · 用于标记为「分批新鲜现做」的商品。仅影响含此类商品的广州以外订单 — 等到下一制作日当天发货,保证新鲜。
+      </div>
+
+      <div class="card" style="margin-bottom: var(--s4);">
+        <h3 class="fc-sec" style="margin-bottom: 4px;">
+          Batch schedule · 制作排期
+          <span class="help-i" data-tip="Sets the cadence and tells the customer the exact ship + arrival dates. · 设置制作周期,并告知顾客确切的发货与送达日期。">?</span>
+        </h3>
+        <div class="muted" style="font-size: 11px; margin-bottom: 12px;">In-Guangzhou orders are unaffected. · 广州市内订单不受影响。</div>
+        <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Status · 状态</label>
+            <label class="fc-switch">
+              <input type="checkbox" id="batch-enabled">
+              <span class="fc-switch-track"></span>
+              <span id="batch-status-label" style="font-size: 12px;">OFF · 关闭</span>
+            </label>
+          </div>
+          <div class="field" style="margin: 0;">
+            <label class="stacked">A batch day · 某个制作日 <span class="help-i" data-tip="Any one date the kitchen makes a batch. The rhythm repeats out from this date in both directions. Move it only to permanently re-time the whole rhythm. · 厨房制作的任意一个日期。制作周期以此日期为基准向前后重复。仅在需要永久调整整个周期时才更改。">?</span></label>
+            <input type="date" id="batch-anchor" style="width: 170px;">
+          </div>
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Make every · 每隔 <span class="help-i" data-tip="Days between batches. 'Every other day' = 2. · 两次制作之间相隔的天数。「每隔一天」= 2。">?</span></label>
+            <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-interval" min="1" step="1" value="2" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
+            <label class="stacked">Skip these dates (vacations) · 跳过这些日期(假期) <span class="help-i" data-tip="One date per line (YYYY-MM-DD). A batch that would land on a skipped date rolls forward to the next batch day. · 每行一个日期(YYYY-MM-DD)。原本落在跳过日期的制作批次将顺延到下一个制作日。">?</span></label>
+            <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>
+          </div>
+          <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+            <div class="muted" style="font-size: 11px; margin-bottom: 8px;">The checkout popup the customer sees. Leave any field blank to use the default wording. · 顾客在结账页看到的弹窗。任意字段留空则使用默认文案。</div>
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+            <label class="stacked">Popup eyebrow — English · 弹窗小标题(英文) <span class="help-i" data-tip="The small uppercase label above the title (default: FRESHLY MADE). · 标题上方的小号大写标签(默认:FRESHLY MADE)。">?</span></label>
+            <input id="batch-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Freshly made">
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+            <label class="stacked">弹窗小标题(中文)· Popup eyebrow — Chinese</label>
+            <input id="batch-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="新鲜现做">
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+            <label class="stacked">Popup title — English · 弹窗标题(英文) <span class="help-i" data-tip="The big heading in the popup (default: Made fresh for you). · 弹窗中的大标题(默认:Made fresh for you)。">?</span></label>
+            <input id="batch-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh for you">
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
+            <label class="stacked">弹窗标题(中文)· Popup title — Chinese</label>
+            <input id="batch-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="为您新鲜现做">
+          </div>
+          <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+            <label class="stacked">Checkout notice — English · 结账提示(英文) <span class="help-i" data-tip="The popup body. Shown when a cart holds a batch-made item shipping outside Guangzhou OR to a far GZ district (Panyu, Huadu, Nansha, Conghua, Zengcheng). Use {ship_date} and {delivery_date} as placeholders — they're replaced with the real dates. Leave blank to use the default. · 弹窗正文。当订单含「分批现做」商品且配送至广州以外或较远的广州城区(番禺、花都、南沙、从化、增城)时显示。可用 {ship_date} 与 {delivery_date} 占位符,系统会替换为真实日期。留空则使用默认。">?</span></label>
+            <textarea id="batch-msg-en" rows="2" style="width: 100%;" placeholder="Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}."></textarea>
+          </div>
+          <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+            <label class="stacked">结账提示(中文)· Checkout notice — Chinese</label>
+            <textarea id="batch-msg-cn" rows="2" style="width: 100%;" placeholder="您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。"></textarea>
+          </div>
+          <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+            <label class="stacked">Freshness tip — English · 新鲜提示(英文) <span class="help-i" data-tip="A small reminder line shown below the dates in the popup (e.g. enjoy within 48 hours). Plain text — no date placeholders. Leave blank to use the default. · 弹窗日期下方的小提示(例如建议尽快享用)。纯文本,无日期占位符。留空则使用默认。">?</span></label>
+            <textarea id="batch-tip-en" rows="2" style="width: 100%;" placeholder="We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness."></textarea>
+          </div>
+          <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
+            <label class="stacked">新鲜提示(中文)· Freshness tip — Chinese</label>
+            <textarea id="batch-tip-cn" rows="2" style="width: 100%;" placeholder="我们建议在收到后 48 小时内享用这些新鲜现做的商品,以获得最佳口感与新鲜度。"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="saveBatchSchedule()" style="align-self: flex-end;">Save · 保存</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: var(--s4);">
+        <h3 class="fc-sec" style="margin-bottom: 4px;">
+          Reschedule cutoff · 改期截止
+          <span class="help-i" data-tip="For an order that contains a 'Made fresh in batches' product: how late the customer may still change their own delivery/pickup time. The time locks at this hour the evening BEFORE the scheduled day, and also locks the moment staff start preparing. Default 20 = 8pm the night before. Non-fresh orders are unaffected — they stay changeable until they leave. · 含「分批新鲜现做」商品的订单:顾客最晚可在配送日「前一天」的此时间点之前自助修改配送/取货时间;开始备货后也会锁定。默认 20 = 前一晚 20:00。非新鲜订单不受影响,发货前始终可改。">?</span>
+        </h3>
+        <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Only affects orders containing a batch-made product. A same-day slot can never be chosen for a fresh order. · 仅影响含「分批现做」商品的订单。新鲜订单不可改为当日时段。</div>
+        <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Lock at hour, evening before · 前一晚锁定时间</label>
+            <span style="display:inline-flex;align-items:center;gap:6px;">
+              <input type="number" id="fresh-resched-cutoff" min="0" max="23" step="1" value="20" style="width: 80px;">
+              <span style="font-size:12px;">:00 &nbsp;(0–23)</span>
+            </span>
+          </div>
+          <button class="btn btn-primary" onclick="saveRescheduleSettings()" style="align-self: flex-end;">Save · 保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ PACKAGE TRACKING VIEW ══ (Kuaidi100 + the bulk attach-tracking tool) -->
+    <div class="dlv-view" data-dlv="tracking" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>Package tracking · 快递轨迹</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+        Live parcel tracking inside the customer's order page, via Kuaidi100 — works with every China carrier (JD, SF, YTO, ZTO…). · 顾客订单页的实时快递轨迹,通过快递100 — 支持全部国内快递。
+      </div>
+
+      <div class="card" style="margin-bottom: var(--s4);" id="logpanel-kd100">
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>Kuaidi100 tracking push · 快递100轨迹订阅</strong> <span id="kd100-chip"></span></div>
-        <div class="muted" style="margin-bottom:14px">Free subscribe-push API aggregating live tracking from every Chinese carrier (JD, SF, YTO, ZTO…). Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
+        <div class="muted" style="margin-bottom:14px">Free subscribe-push API. Paste a waybill on a shipped order and live updates flow into the customer's mini app. Sign up at <a href="https://api.kuaidi100.com" target="_blank" style="color:var(--accent)">api.kuaidi100.com</a>. · 免费物流轨迹订阅,适配全部国内快递。</div>
         <div class="ops-grid">
           <div>
             <label class="field-label">Customer ID · 客户编号</label>
@@ -3935,15 +4088,44 @@
           </div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="_saveIntegration('kd100')">💾 Save · 保存</button>
-          <button class="btn" onclick="_testKd100()">⚡ Save &amp; test · 保存并测试</button>
+          <button class="btn btn-primary" onclick="_saveIntegration('kd100')">Save · 保存</button>
+          <button class="btn" onclick="_testKd100()">Save &amp; test · 保存并测试</button>
         </div>
       </div>
 
-      <!-- 京东物流 LOP direct waybill -->
-      <div id="logpanel-jd" style="display:none">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>JD Logistics LOP direct waybill · 京东物流直连推单</strong> <span id="jd-chip"></span></div>
-        <div class="muted" style="margin-bottom:14px">Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. Request LOP API access from your JD account manager. · 京东物流直连,一键推单、运单号自动回传。</div>
+      <!-- ── Bulk attach tracking — opt-in Orders tool (it's a tracking tool,
+           so it's filed with tracking) ── -->
+      <div class="card" style="margin-bottom: var(--s4);">
+        <h3 class="fc-sec" style="margin-bottom: 4px;">
+          Bulk attach tracking · 批量绑定运单号
+          <span class="help-i" data-tip="Adds a 'Bulk attach tracking' button to the Orders page so you can paste a list of order numbers + waybill numbers and attach them in one go. Off by default — turn it on only if you enter tracking numbers by hand. · 在订单页添加「批量绑定运单号」按钮,可粘贴订单号+运单号一次性绑定。默认关闭,仅在手动录入运单号时开启。">?</span>
+        </h3>
+        <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When on, a button appears in the Orders toolbar. When off, the button is hidden — the tool stays available but out of the way. · 开启后订单页工具栏会显示该按钮;关闭后按钮隐藏,不占据界面。</div>
+        <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Status · 状态</label>
+            <label class="fc-switch">
+              <input type="checkbox" id="dlv-bulk-trk">
+              <span class="fc-switch-track"></span>
+              <span id="dlv-bulk-trk-status-label" style="font-size: 12px;">OFF · 关闭</span>
+            </label>
+          </div>
+          <button class="btn btn-primary" onclick="saveBulkTrackingSetting()" style="align-self: flex-end;">Save · 保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ JD LOGISTICS VIEW ══ (京东物流 LOP direct waybill) -->
+    <div class="dlv-view" data-dlv="jd" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>JD Logistics · 京东物流</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+        Direct integration with 京东物流开放平台 (<a href="https://lop.jd.com" target="_blank" style="color:var(--accent)">lop.jd.com</a>). Once configured, Orders gains a <b>"Push to JD"</b> bulk action — paid orders push to JD and waybill numbers flow back automatically. · 京东物流直连,一键推单、运单号自动回传。
+      </div>
+
+      <div class="card" style="margin-bottom: var(--s4);" id="logpanel-jd">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>App keys · 应用密钥</strong> <span id="jd-chip"></span></div>
+        <div class="muted" style="margin-bottom:14px">Request LOP API access from your JD account manager. · 请向您的京东客户经理申请 LOP API 权限。</div>
         <div class="ops-grid">
           <div>
             <label class="field-label">app_key</label>
@@ -3970,19 +4152,27 @@
           </div>
         </div>
         <div style="display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="_saveIntegration('jd')">💾 Save · 保存</button>
-          <button class="btn" onclick="_testJd()">⚡ Save &amp; ping JD · 保存并测试 JD</button>
+          <button class="btn btn-primary" onclick="_saveIntegration('jd')">Save · 保存</button>
+          <button class="btn" onclick="_testJd()">Save &amp; ping JD · 保存并测试 JD</button>
         </div>
         <div class="muted" style="font-size:11px;margin-top:10px">After saving, full waybill push needs a one-time field-set confirmation against your JD merchant config — tell your developer once credentials are saved. · 保存后,完整推单还需对照你的 JD 商家配置做一次性字段确认 —— 凭证保存后请告知你的开发人员。</div>
       </div>
+    </div>
 
-      <!-- 青云聚信 same-city live delivery (per-store, ops-provisioned) -->
-      <div id="logpanel-qy" style="display:none">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px"><strong>Same-city delivery tracking · 同城配送实时追踪</strong></div>
-        <div class="muted" style="margin-bottom:14px">Shows the live courier on a map in the customer's order page for same-city (e-bike) deliveries via 青云聚信. Each store needs a one-time login, so we connect it for you — request it below and we'll set it up. · 同城配送(电动车)在顾客端订单页显示骑手实时位置。每家门店需一次性登录,由我们协助开通 —— 点击申请,我们会为你连接。</div>
+    <!-- ══ QINGYUN RIDERS VIEW ══ (青云聚信 same-city live delivery, per-store,
+         ops-provisioned) -->
+    <div class="dlv-view" data-dlv="qy" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>Qingyun riders · 青云配送</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+        Shows the live courier on a map in the customer's order page for same-city (e-bike) deliveries via 青云聚信. Each store needs a one-time login, so we connect it for you — request it below and we'll set it up. · 同城配送(电动车)在顾客端订单页显示骑手实时位置。每家门店需一次性登录,由我们协助开通 —— 点击申请,我们会为你连接。
+      </div>
+
+      <div class="card" style="margin-bottom: var(--s4);" id="logpanel-qy">
         <div id="qy-stores" class="muted">Loading… · 加载中…</div>
       </div>
     </div>
+
   </section>
 
   <!-- Zone edit / add drawer (slide-in side drawer) -->
@@ -6977,50 +7167,9 @@
 
     </div>
 
-    <!-- DELIVERY & LOGISTICS — merged from the Channels hub. No live sales stats
-         (these are carriers, not sales channels); Set up launches their flow. -->
-    <div class="sales-eyebrow">Delivery &amp; logistics · 配送与物流</div>
-    <div class="sales-grid">
-
-      <!-- JD Logistics -->
-      <div class="sales-ch" id="sales-ch-jd" data-on="1">
-        <div class="sales-ch-top">
-          <div class="sales-ch-id">
-            <span class="sales-ch-ico" style="background:rgba(200,60,50,.14);color:#c1493f">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="14" height="10" rx="1"/><path d="M16 10h4l2 3v4h-6"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-            </span>
-            <div>
-              <div class="sales-ch-name">JD Logistics · 京东物流</div>
-              <div class="sales-ch-stat"><span class="sales-dot off"></span>Not set up · 未配置</div>
-            </div>
-          </div>
-        </div>
-        <div class="sales-ch-blurb" style="font-size:13px;color:var(--text-2);padding:2px 0 6px">Create waybills for delivery orders. Enter your JD app keys and test. · 为配送订单生成运单,填入京东应用密钥并测试。</div>
-        <div class="sales-ch-foot">
-          <button class="btn btn-sm btn-primary" type="button" onclick="igLaunchSetup('jd')">Set up · 设置</button>
-        </div>
-      </div>
-
-      <!-- Qingyun riders -->
-      <div class="sales-ch" id="sales-ch-qy" data-on="1">
-        <div class="sales-ch-top">
-          <div class="sales-ch-id">
-            <span class="sales-ch-ico" style="background:rgba(90,120,150,.14);color:#5a7896">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
-            </span>
-            <div>
-              <div class="sales-ch-name">Qingyun riders · 青云配送</div>
-              <div class="sales-ch-stat"><span class="sales-dot off"></span>Not set up · 未配置</div>
-            </div>
-          </div>
-        </div>
-        <div class="sales-ch-blurb" style="font-size:13px;color:var(--text-2);padding:2px 0 6px">Live rider tracking for delivery orders. Same store box as Meituan. · 骑手实时追踪,与美团共用门店盒子。</div>
-        <div class="sales-ch-foot">
-          <button class="btn btn-sm btn-primary" type="button" onclick="igLaunchSetup('qingyun')">Set up · 设置</button>
-        </div>
-      </div>
-
-    </div>
+    <!-- The "Delivery & logistics" row (JD Logistics + Qingyun riders) moved to
+         the Delivery tab's card hub (2026-07-03) — carriers live where delivery
+         lives. One home per carrier: dlvGo('jd') / dlvGo('qy'). -->
   </section>
 
   <!-- ── Meituan Sync ── -->

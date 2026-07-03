@@ -429,6 +429,8 @@ function dzRenderKpis(animate) {
   // same signal the desktop KPI strip uses (load, is_active toggle, add/del).
   if (typeof rmDlvRenderHub === 'function') rmDlvRenderHub();
   if (typeof rmDlvRenderZones === 'function' && document.getElementById('rm-dlv-zones')?.classList.contains('open')) rmDlvRenderZones();
+  // …and the desktop hub cards (zones status + setup strip) off the same signal.
+  if (typeof dlvHubRender === 'function') dlvHubRender();
 }
 
 function renderZoneTable() {
@@ -1308,4 +1310,139 @@ function rmDlvRenderZones() {
     `<div class="rm-zglab"><span class="g">${escapeHtml(g.en || g.cn || '')}</span><span class="c">${g.rows.length}</span></div>` +
     `<div class="rm-zlist">${g.rows.map(rowHtml).join('')}</div>`).join('');
 }
+
+// ════════════════════════════════════════════════════════════════
+// DELIVERY HUB (desktop) — card hub + sub-views (dlv*)
+// ════════════════════════════════════════════════════════════════
+// Redesign 2026-07-03 (mockup: design-handoff/18-delivery-hub-mockup.html).
+// The Delivery tab opens on a grid of status cards; each card's button opens
+// one sub-view holding the existing form (same input IDs, same save fns).
+// dlvGo() flips [hidden] on the .dlv-view wrappers + the section's data-dlv
+// attribute (CSS shows #dz-kpis only on the zones view, desktop-only).
+// dlvHubRender() paints every card's status line from data that's already in
+// the DOM / globals: _zones, the live inputs, window._shipStatus (stashed by
+// loadShippingIntegrations), window._qyConnected (stashed by loadQingyunStores).
+
+function dlvGo(view) {
+  const sec = document.getElementById('tab-delivery');
+  if (!sec) return;
+  sec.setAttribute('data-dlv', view);
+  sec.querySelectorAll(':scope > .dlv-view').forEach(v => { v.hidden = v.getAttribute('data-dlv') !== view; });
+  if (view === 'hub') dlvHubRender();
+  if (view === 'qy' && typeof loadQingyunStores === 'function') loadQingyunStores();
+  window.scrollTo({ top: 0 });
+}
+
+// One card's status line: dot + text (mirrors the Sales-page pattern).
+function _dlvStat(id, dot, text) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = '<span class="sales-dot ' + dot + '"></span>' + text;
+}
+// A card's button: primary "Set up" while unconfigured, quiet label after.
+function _dlvBtn(id, configured, doneEn, doneCn) {
+  const b = document.getElementById(id);
+  if (!b) return;
+  b.textContent = configured ? cuT(doneEn, doneCn) : cuT('Set up', '设置');
+  b.classList.toggle('btn-primary', !configured);
+}
+
+let _DLV_HUB_LANG_HOOKED = false;
+function dlvHubRender() {
+  if (!document.getElementById('dlv-st-zones')) return;
+  // Lazy lang hook — window.onLangChange is defined after the part files load.
+  if (!_DLV_HUB_LANG_HOOKED && window.onLangChange) {
+    _DLV_HUB_LANG_HOOKED = true;
+    onLangChange(function () { dlvHubRender(); });
+  }
+  const val = (sel) => { const el = document.querySelector(sel); return el ? el.value : ''; };
+
+  // Zones — the one true blocker for a new store.
+  const rows = Array.isArray(_zones) ? _zones : [];
+  const act = rows.filter(z => z.is_active);
+  const off = rows.length - act.length;
+  const sameday = act.filter(z => z.zone_type === 'gz_district' && (z.same_day_allowed || Number(z.same_day_surcharge) > 0)).length;
+  const defOn = !!document.getElementById('dlv-default-enabled')?.checked;
+  const zonesReady = act.length > 0 || defOn;
+  if (!zonesReady) {
+    _dlvStat('dlv-st-zones', 'off', cuT("Not set up — delivery addresses can't check out", '未设置 — 配送地址无法结账'));
+  } else {
+    _dlvStat('dlv-st-zones', 'ok',
+      cuT(act.length + ' zone' + (act.length === 1 ? '' : 's') + ' live' + (sameday ? ' · same-day in ' + sameday : ''),
+          act.length + ' 个配送区' + (sameday ? ' · ' + sameday + ' 区当日达' : '')));
+  }
+  _dlvBtn('dlv-btn-zones', zonesReady, 'Manage', '管理');
+  const zm = document.getElementById('dlv-meta-zones');
+  if (zm) zm.textContent = off > 0 ? cuT(off + ' disabled', off + ' 区停用') : '';
+  const strip = document.getElementById('dlv-setup-strip');
+  if (strip) strip.hidden = zonesReady;
+
+  // Fees & minimum — read the live inputs (loadConfig fills them).
+  const std = val('#cfg-fees-standardShipping'), free = val('#cfg-fees-freeShippingThreshold'), min = Number(val('#cfg-fees-minOrder')) || 0;
+  if (std === '' && free === '') {
+    _dlvStat('dlv-st-fees', 'off', cuT('Using defaults', '使用默认值'));
+  } else {
+    const freeEn = Number(free) > 0 ? ' · free over ¥' + free : ' · always free over ¥0';
+    const freeCn = Number(free) > 0 ? ' · 满 ¥' + free + ' 免运' : ' · 始终包邮';
+    _dlvStat('dlv-st-fees', 'ok',
+      cuT('Standard ¥' + (std || 0) + freeEn + (min > 0 ? ' · min ¥' + min : ''),
+          '标准 ¥' + (std || 0) + freeCn + (min > 0 ? ' · 起送 ¥' + min : '')));
+  }
+
+  // Store pickup — global window + packing fee.
+  const po = val('#cfg-pickup-open') || '10:00', pc = val('#cfg-pickup-close') || '20:00';
+  const pack = Number(val('#cfg-fees-pickupPackingFee')) || 0;
+  _dlvStat('dlv-st-pickup', 'ok',
+    cuT(po + '–' + pc + (pack > 0 ? ' · packing ¥' + pack : ''),
+        '每日 ' + po + '–' + pc + (pack > 0 ? ' · 包装费 ¥' + pack : '')));
+
+  // Holiday mode — mirror the real checkbox onto the hub switch.
+  const hol = !!document.getElementById('dlv-holiday-mode')?.checked;
+  const hubSw = document.getElementById('dlv-hub-holiday');
+  if (hubSw) hubSw.checked = hol;
+  if (hol) _dlvStat('dlv-st-holiday', 'warn', cuT('On — same-day delivery paused', '已开启 — 当日达暂停'));
+  else _dlvStat('dlv-st-holiday', 'off', cuT('Off — everything running normally', '关闭 — 一切正常'));
+
+  // Fresh batches.
+  const bOn = !!document.getElementById('batch-enabled')?.checked;
+  const iv = Number(val('#batch-interval')) || 2;
+  if (bOn) _dlvStat('dlv-st-fresh', 'ok', cuT('Every ' + iv + ' day' + (iv === 1 ? '' : 's'), '每 ' + iv + ' 天制作一批'));
+  else _dlvStat('dlv-st-fresh', 'off', cuT('Off', '关闭'));
+
+  // Carriers — status stashed by loadShippingIntegrations / loadQingyunStores.
+  const ship = window._shipStatus || {};
+  if (ship.kd100) _dlvStat('dlv-st-kd100', 'ok', cuT('Connected', '已连接'));
+  else _dlvStat('dlv-st-kd100', 'off', cuT('Not set up', '未设置'));
+  _dlvBtn('dlv-btn-kd100', !!ship.kd100, 'Configure', '配置');
+
+  if (ship.jd) _dlvStat('dlv-st-jd', 'ok', cuT('Connected', '已连接'));
+  else if (ship.jdKeys) _dlvStat('dlv-st-jd', 'warn', cuT('In setup — keys saved, test pending', '配置中 — 密钥已存,待测试'));
+  else _dlvStat('dlv-st-jd', 'off', cuT('Not set up', '未配置'));
+  const jb = document.getElementById('dlv-btn-jd');
+  if (jb) {
+    jb.textContent = ship.jd ? cuT('Configure', '配置') : (ship.jdKeys ? cuT('Continue setup', '继续设置') : cuT('Set up', '设置'));
+    jb.classList.toggle('btn-primary', !ship.jd);
+  }
+
+  const qn = Number(window._qyConnected) || 0;
+  if (qn > 0) _dlvStat('dlv-st-qy', 'ok', cuT('Connected · ' + qn + ' store' + (qn === 1 ? '' : 's'), '已连接 · ' + qn + ' 家门店'));
+  else _dlvStat('dlv-st-qy', 'off', cuT('Not set up', '未开通'));
+  _dlvBtn('dlv-btn-qy', qn > 0, 'Configure', '配置');
+}
+
+// The hub card's switch — writes through to the real checkbox and saves.
+async function dlvHubHolidayToggle(el) {
+  const cb = document.getElementById('dlv-holiday-mode');
+  if (!cb) return;
+  cb.checked = el.checked;
+  cb.dispatchEvent(new Event('change'));   // keeps the sub-view's ON/OFF label in sync
+  try { await saveHolidayMode(); } finally { dlvHubRender(); }
+}
+
+// Clicking the Delivery nav item always lands on the hub with fresh statuses.
+// (The EN/CN repaint hook registers lazily inside dlvHubRender — onLangChange
+// isn't defined yet when this part loads.)
+(function () {
+  const btn = document.querySelector('.tabs [data-tab="delivery"]');
+  if (btn) btn.addEventListener('click', () => dlvGo('hub'));
+})();
 

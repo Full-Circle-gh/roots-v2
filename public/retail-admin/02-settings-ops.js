@@ -434,6 +434,10 @@ async function loadShippingIntegrations() {
     const jDot = document.getElementById('jd-dot');
     if (jDot) jDot.style.background = d.enabled ? '#10b981' : '#f59e0b';
 
+    // Stash the carrier states for the Delivery hub cards (06-delivery.js).
+    window._shipStatus = { kd100: !!k.enabled, jd: !!d.enabled, jdKeys: !!d.app_key };
+    if (typeof dlvHubRender === 'function') dlvHubRender();
+
     const f = j.data?.feie || {};
     const fUser = document.getElementById('feie-user');
     const fUkey = document.getElementById('feie-ukey');
@@ -470,6 +474,9 @@ async function loadQingyunStores() {
     const stores = (await r.json()).data || [];
     const qDot = document.getElementById('qy-dot');
     if (qDot) qDot.style.background = stores.some(s => s.connected) ? '#10b981' : 'var(--text-3)';
+    // Stash for the Delivery hub's Qingyun card status line.
+    window._qyConnected = stores.filter(s => s.connected).length;
+    if (typeof dlvHubRender === 'function') dlvHubRender();
     if (!stores.length) { box.innerHTML = '<div class="muted">No active stores yet. · 暂无门店。</div>'; return; }
     box.innerHTML = stores.map(s => {
       const nm = [s.name_en || s.code, s.name_cn].filter(Boolean).join(' · ');

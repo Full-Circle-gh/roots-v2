@@ -322,8 +322,7 @@ async function salesWireSetup() {
     mt: { kind: 'meituan',        open: () => (window.igMeituanConfig ? igMeituanConfig() : salesGo('meituan')) },  // Configure = clean Meituan page (summary when connected, box-first setup when new)
     gy: { kind: 'gzgrocery',      open: () => salesGo('guanyi'), alwaysConfigure: true },
     el: { kind: 'eleme',          open: () => salesGo('eleme') },
-    jd: { kind: 'jd',             open: () => salesGo('config') },
-    qy: { kind: 'qingyun',        open: () => window.igLaunchSetup && igLaunchSetup('qingyun') },
+    // jd / qy cards moved to the Delivery tab's card hub (2026-07-03).
   };
   const cardByKey = (key) => {
     const direct = document.getElementById('sales-ch-' + key);
