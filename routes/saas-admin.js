@@ -385,4 +385,48 @@ router.post('/api/saas-admin/provision', requireTenantManage, express.json(), (r
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+// ── Channels & Delivery — cross-tenant support view (Phase 4) ──────────────
+// The stuck-tenant dashboard: which tenants have integrations needing attention,
+// and every open "Get help" request, in one place. Take-over reuses the existing
+// impersonation flow (store-admin.js /impersonate) — support opens the tenant's
+// own Channels hub as them and finishes the wizard. Resolving a help request is
+// the one write here, gated on support.write like the tickets desk.
+const registry = require('../lib/integrations/registry');
+
+router.get('/api/saas-admin/integrations', requireSaasAdmin, (req, res) => {
+  try {
+    const nameById = {};
+    for (const t of db.prepare('SELECT id, name, brand_name FROM tenants').all()) {
+      nameById[t.id] = t.brand_name || t.name || ('Tenant #' + t.id);
+    }
+    const integrations = registry.listAllIntegrations().map(r => ({ ...r, tenantName: nameById[r.tenantId] || ('Tenant #' + r.tenantId) }));
+    const help = registry.listHelpRequests({}).map(h => ({
+      id: h.id, tenantId: h.tenant_id, tenantName: nameById[h.tenant_id] || ('Tenant #' + h.tenant_id),
+      kind: h.kind, stepKey: h.step_key, status: h.status, attempts: h.attempts,
+      lastError: h.last_error, note: h.note, createdAt: h.created_at,
+    }));
+    res.json({
+      success: true,
+      integrations,
+      help,
+      summary: {
+        needsAttention: integrations.filter(i => i.needsAttention).length,
+        openHelp: help.filter(h => h.status !== 'resolved').length,
+        connected: integrations.filter(i => i.status === 'connected').length,
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Flip a help request status (open → in_progress → resolved).
+router.post('/api/saas-admin/help-requests/:id/status', requirePlatformAdmin('support.write'), express.json(), (req, res) => {
+  const status = String((req.body || {}).status || '');
+  try {
+    const row = registry.setHelpRequestStatus(req.params.id, status);
+    if (!row) return res.status(404).json({ error: 'not_found' });
+    logAudit(req, { action: 'integration.help.' + status, targetType: 'tenant', targetId: row.tenant_id, meta: { helpId: row.id, kind: row.kind } });
+    res.json({ success: true, request: row });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 module.exports = router;

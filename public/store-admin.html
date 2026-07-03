@@ -120,6 +120,8 @@
 
   /* ── Dashboard ── */
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px,1fr)); gap: 12px; margin-bottom: 22px; }
+  .stat.bad { border-color: rgba(232,85,106,.4); } .stat.bad .v { color: #f0a3ae; }
+  .stat.warn { border-color: rgba(176,141,74,.4); } .stat.warn .v { color: #d8b676; }
   .stat { background: var(--pane); border: 1px solid var(--line); border-radius: 12px; padding: 15px 16px; }
   .stat .k { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   .stat .v { font-size: 26px; font-weight: 600; margin-top: 7px; font-variant-numeric: tabular-nums; }
@@ -318,13 +320,14 @@
     { id:'lookup',    en:'Lookup',    cn:'查询', cap:'view' },
     { id:'signups',   en:'Signups',   cn:'申请', cap:'view', badge:'leads' },
     { id:'support',   en:'Support',   cn:'工单', cap:'view', badge:'tickets' },
+    { id:'channels',  en:'Channels',  cn:'渠道', cap:'view', badge:'chelp' },
     { id:'billing',   en:'Billing',   cn:'账单', cap:'view' },
     { id:'payouts',   en:'Payouts',   cn:'结算', cap:'view' },
     { id:'broadcasts',en:'Broadcasts',cn:'广播', cap:'view' },
     { id:'staff',     en:'Staff',     cn:'团队', cap:'staff.manage' },
     { id:'audit',     en:'Audit',     cn:'日志', cap:'view' },
   ];
-  let BADGES = { leads: 0, tickets: 0 };
+  let BADGES = { leads: 0, tickets: 0, chelp: 0 };
 
   function enterApp(){
     showApp();
@@ -341,6 +344,7 @@
   function seedBadges(){
     api('/api/store-admin/tickets').then(j => { if (j && j.success){ BADGES.tickets = j.openCount || 0; refreshBadges(); } }).catch(()=>{});
     api('/api/store-admin/summary').then(j => { if (j && j.success){ BADGES.leads = j.leads.new || 0; refreshBadges(); } }).catch(()=>{});
+    api('/api/saas-admin/integrations').then(j => { if (j && j.success){ BADGES.chelp = j.summary.openHelp || 0; refreshBadges(); } }).catch(()=>{});
   }
 
   function renderTabs(){
@@ -371,7 +375,7 @@
     }
     document.querySelectorAll('#tabs [data-tab]').forEach(b => b.classList.toggle('on', b.getAttribute('data-tab')===tab));
     const v = $('#view'); v.innerHTML = '<div class="empty">Loading… · 加载中…</div>';
-    ({ dashboard:viewDashboard, stores:viewStores, lookup:viewLookup, signups:viewSignups, support:viewSupport, billing:viewBilling, payouts:viewPayouts, broadcasts:viewBroadcasts, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
+    ({ dashboard:viewDashboard, stores:viewStores, lookup:viewLookup, signups:viewSignups, support:viewSupport, channels:viewChannels, billing:viewBilling, payouts:viewPayouts, broadcasts:viewBroadcasts, staff:viewStaff, audit:viewAudit }[tab] || viewDashboard)();
   }
   window.addEventListener('hashchange', () => { const h=(location.hash||'#dashboard').slice(1); if (h!==CUR && ME) go(h); });
 
@@ -727,6 +731,70 @@
       if (j && j.success && j.url){ toast('Opening '+(j.store||'store')+'… · 正在打开'); if (w) w.location.href = j.url; else window.location.href = j.url; }
       else { if (w) w.close(); toast((j&&j.error)||'Failed · 失败'); }
     }).catch(()=>{ if (w) w.close(); });
+  }
+
+  // ════════════════ CHANNELS (integration support) ════════════════
+  // Cross-tenant view of channel/logistics setup: integrations needing
+  // attention + open "Get help" requests. Take-over reuses impersonation —
+  // support opens the tenant's own Channels hub as them and finishes the wizard.
+  const CH_STATUS = {
+    error:{t:'Error · 需处理',cls:'suspended'}, connecting:{t:'Connecting · 连接中',cls:'open'},
+    in_setup:{t:'In setup · 设置中',cls:'open'}, connected:{t:'Connected · 已连接',cls:'active'},
+    paused:{t:'Paused · 已暂停',cls:'open'}, not_configured:{t:'Not set up · 未配置',cls:'internal'},
+  };
+  function chStatusPill(s){ const m = CH_STATUS[s] || {t:s,cls:'internal'}; return '<span class="pill '+m.cls+'">'+esc(m.t)+'</span>'; }
+  const chSub = txt => '<div style="color:var(--faint);font-size:11px;margin-top:2px">'+esc(txt)+'</div>';
+  function viewChannels(){
+    const v = $('#view');
+    api('/api/saas-admin/integrations').then(j => {
+      if (!j || !j.success){ v.innerHTML = '<div class="empty">Failed to load · 加载失败</div>'; return; }
+      const attention = j.integrations.filter(i => i.needsAttention);
+      const openHelp = j.help.filter(h => h.status !== 'resolved');
+      const stat = (k,vv,cls) => '<div class="stat '+(cls||'')+'"><div class="k">'+k+'</div><div class="v">'+vv+'</div></div>';
+      let html = '<div class="stat-grid" style="margin-bottom:18px">'
+        + stat('Needs attention · 需关注', j.summary.needsAttention, j.summary.needsAttention?'bad':'')
+        + stat('Open help · 待处理求助', j.summary.openHelp, j.summary.openHelp?'warn':'')
+        + stat('Connected · 已连接', j.summary.connected)
+        + '</div>';
+      // Open help requests — the priority queue.
+      html += '<div style="font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:6px 0 8px">Open help requests · 待处理求助</div>';
+      if (!openHelp.length) html += '<div class="empty" style="padding:14px 0">Nobody is stuck. · 暂无求助。</div>';
+      else {
+        html += '<div class="card"><table><thead><tr><th>Tenant · 租户</th><th>Plugin</th><th>Step · 步骤</th><th>Note / error</th><th></th></tr></thead><tbody>';
+        for (const h of openHelp){
+          html += '<tr><td><b>'+esc(h.tenantName)+'</b>'+chSub('#'+h.tenantId)+'</td>'
+            + '<td>'+esc(h.kind)+'</td><td>'+esc(h.stepKey||'—')+(h.attempts?' ×'+h.attempts:'')+'</td>'
+            + '<td>'+esc(h.note||h.lastError||'—')+chSub(h.createdAt||'')+'</td>'
+            + '<td style="white-space:nowrap;text-align:right">'
+            + (can('impersonate')?'<button class="btn btn-sm btn-brass" data-take="'+h.tenantId+'" data-name="'+esc(h.tenantName)+'">Take over · 代办</button> ':'')
+            + (can('support.write')?'<button class="btn btn-sm" data-resolve="'+h.id+'">Resolve · 已解决</button>':'')
+            + '</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      // Integrations needing attention (errors / mid-setup).
+      html += '<div style="font-family:var(--f-mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:22px 0 8px">Integrations needing attention · 需关注的接入</div>';
+      if (!attention.length) html += '<div class="empty" style="padding:14px 0">All healthy. · 一切正常。</div>';
+      else {
+        html += '<div class="card"><table><thead><tr><th>Tenant · 租户</th><th>Plugin</th><th>Status · 状态</th><th>Last error</th><th></th></tr></thead><tbody>';
+        for (const i of attention){
+          html += '<tr><td><b>'+esc(i.tenantName)+'</b>'+chSub('#'+i.tenantId)+'</td>'
+            + '<td>'+esc(i.labelEn+' · '+i.labelCn)+'</td><td>'+chStatusPill(i.status)+'</td>'
+            + '<td>'+esc(i.lastError||'—')+chSub(i.updatedAt||'')+'</td>'
+            + '<td style="text-align:right">'+(can('impersonate')?'<button class="btn btn-sm btn-brass" data-take="'+i.tenantId+'" data-name="'+esc(i.tenantName)+'">Take over · 代办</button>':'')+'</td></tr>';
+        }
+        html += '</tbody></table></div>';
+      }
+      v.innerHTML = html;
+      v.querySelectorAll('[data-take]').forEach(b => b.addEventListener('click', () =>
+        doImpersonate({ id: b.getAttribute('data-take'), brand: b.getAttribute('data-name'), name: b.getAttribute('data-name') })));
+      v.querySelectorAll('[data-resolve]').forEach(b => b.addEventListener('click', () => resolveHelp(b.getAttribute('data-resolve'))));
+    }).catch(() => { v.innerHTML = '<div class="empty">Failed to load · 加载失败</div>'; });
+  }
+  function resolveHelp(id){
+    api('/api/saas-admin/help-requests/'+id+'/status',{method:'POST',body:JSON.stringify({status:'resolved'})})
+      .then(j => { if (j && j.success){ toast('Resolved · 已标记'); viewChannels(); seedBadges(); } else toast((j&&j.error)||'Failed'); })
+      .catch(()=>toast('Failed · 失败'));
   }
 
   // ── Domains (tenant_domains) ──
