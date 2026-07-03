@@ -4609,6 +4609,243 @@ function handleWechatPayCallback(req, res, tid) {
     res.status(500).json({ code: 'FAIL', message: 'internal_error' });
   }
 }
+// ═══════════════════════════════════════════════════════════════════
+// GUEST PAY — a customer WITHOUT an app account pays a single manual order
+// by QR at /pay/:token. Un-authed (the unguessable pay_token IS the
+// capability) but tenant-scoped by host/appid (publicTenantScope is mounted
+// on /pay + /api/pay in server.js), so tdb() reads the right tenant's order.
+// Reuses the exact QR generators + settle path as the in-app checkout.
+// ═══════════════════════════════════════════════════════════════════
+function loadPayableOrder(token) {
+  const t = String(token || '');
+  if (!/^[a-f0-9]{16,64}$/i.test(t)) return null;
+  return tdb().prepare(
+    'SELECT id, order_no, status, payment_method, total, pay_token FROM retail_orders WHERE pay_token = ?'
+  ).get(t);
+}
+
+// Order summary + which rails are payable right now.
+router.get('/api/pay/:token', (req, res) => {
+  const order = loadPayableOrder(req.params.token);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  const ctx = payContext();
+  const items = tdb().prepare(
+    'SELECT name_en, name_cn, qty, line_total FROM retail_order_items WHERE order_id = ?'
+  ).all(order.id);
+  const alipayAvailable = !!getAlipayManual() || (currentTenantId() === ROOTS_TENANT_ID && !ALIPAY_DEV_MODE);
+  res.json({ success: true, data: {
+    order_no: order.order_no, total: order.total, status: order.status, items,
+    brand: tenantBrandName(),
+    methods: { wechat: true, alipay: alipayAvailable, dev: !!ctx.devMode },
+  } });
+});
+
+// Generate the code for the chosen rail. Mirrors /api/retail/payment/create's
+// Native-QR (WeChat) and precreate/manual (Alipay) branches — the only ones a
+// guest (no openid, no in-WeChat context) can use.
+router.post('/api/pay/:token/create', express.json(), async (req, res) => {
+  const order = loadPayableOrder(req.params.token);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (order.status !== 'pending_payment') return res.json({ success: true, data: { status: order.status } });
+  if (Number(order.total) <= 0) { markOrderPaid(order.id); return res.json({ success: true, data: { status: 'paid' } }); }
+
+  const method = String(req.body?.method || '').toLowerCase();
+  if (!['wechat', 'alipay'].includes(method)) return res.status(400).json({ success: false, error: 'bad_method' });
+  const ctx = payContext();
+
+  // Point the order + its pending payment row at the rail the guest chose.
+  const setRail = (m) => {
+    tdb().prepare('UPDATE retail_orders SET payment_method = ? WHERE id = ?').run(m, order.id);
+    tdb().prepare("UPDATE retail_payments SET method = ? WHERE order_id = ? AND status = 'pending'").run(m, order.id);
+  };
+
+  if (method === 'wechat') {
+    setRail('wechat');
+    if (ctx.devMode) { markOrderPaid(order.id); return res.json({ success: true, data: { status: 'paid', dev: true } }); }
+    try {
+      const codeUrl = await wechatNativePrepare({
+        outTradeNo: wxOutTradeNo(order.order_no),
+        description: payDescription(order.order_no),
+        amountCents: Math.round(Number(order.total) * 100),
+      }, ctx);
+      let qrPng = null;
+      try { qrPng = qrpng.qrPngDataUrl(codeUrl, { scale: 10, quiet: 4 }); } catch (e) { console.error('[guest-pay/qr]', e.message); }
+      tdb().prepare("UPDATE retail_payments SET out_trade_no = ? WHERE order_id = ? AND status = 'pending'").run(wxOutTradeNo(order.order_no), order.id);
+      return res.json({ success: true, data: { method: 'wechat', mode: 'native', qr_png: qrPng, total: order.total, status: 'pending_payment' } });
+    } catch (e) { console.error('[guest-pay/wechat]', e); return res.status(502).json({ success: false, error: e.code || 'wechat_pay_failed' }); }
+  }
+
+  // Alipay — manual 收款码 first (per-tenant, always safe), else Roots 当面付.
+  setRail('alipay');
+  const manual = getAlipayManual();
+  if (manual) {
+    return res.json({ success: true, data: {
+      method: 'alipay', mode: 'manual', qr_png: manual.qr, account: manual.account || '',
+      total: order.total, status: 'pending_payment',
+      pay_window_min: Number(manual.timeWindowMin) > 0 ? Number(manual.timeWindowMin) : 0,
+    } });
+  }
+  if (currentTenantId() !== ROOTS_TENANT_ID || ALIPAY_DEV_MODE) {
+    return res.status(501).json({ success: false, error: 'alipay_not_configured' });
+  }
+  try {
+    const qrCode = await alipayPrecreate(order);
+    if (!qrCode) return res.status(502).json({ success: false, error: 'alipay_no_qr' });
+    let qrPng = null;
+    try { qrPng = qrpng.qrPngDataUrl(qrCode, { scale: 10, quiet: 4 }); } catch (e) { console.error('[guest-pay/qr]', e.message); }
+    tdb().prepare("UPDATE retail_payments SET out_trade_no = ?, qr_image_url = ? WHERE order_id = ? AND status = 'pending'").run(alipayOutTradeNo(order.order_no), qrCode, order.id);
+    return res.json({ success: true, data: { method: 'alipay', mode: 'precreate', qr_png: qrPng, total: order.total, status: 'pending_payment' } });
+  } catch (e) { console.error('[guest-pay/alipay]', e); return res.status(502).json({ success: false, error: e.code || 'alipay_failed' }); }
+});
+
+// Poll — settles a delayed/missed async callback via a trade-state query, same
+// idempotent markOrderPaid() fallback the in-app status poll uses.
+router.get('/api/pay/:token/status', async (req, res) => {
+  let order = loadPayableOrder(req.params.token);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (order.status === 'pending_payment' && order.payment_method === 'alipay' && !ALIPAY_DEV_MODE && currentTenantId() === ROOTS_TENANT_ID) {
+    try {
+      const pay = tdb().prepare("SELECT out_trade_no FROM retail_payments WHERE order_id = ? AND status = 'pending'").get(order.id);
+      if (pay?.out_trade_no) {
+        const st = await alipayTradeQuery(pay.out_trade_no);
+        if (st === 'TRADE_SUCCESS' || st === 'TRADE_FINISHED') { markOrderPaid(order.id); order = loadPayableOrder(req.params.token); }
+      }
+    } catch (e) { console.warn('[guest-pay/alipay-poll]', e.message); }
+  }
+  if (order.status === 'pending_payment' && order.payment_method === 'wechat') {
+    const ctx = payContext();
+    if (!ctx.devMode) {
+      try {
+        const pay = tdb().prepare("SELECT out_trade_no FROM retail_payments WHERE order_id = ? AND status = 'pending'").get(order.id);
+        if (pay?.out_trade_no) {
+          const st = await wechatTradeState(pay.out_trade_no, ctx);
+          if (st === 'SUCCESS') { markOrderPaid(order.id); order = loadPayableOrder(req.params.token); }
+        }
+      } catch (e) { console.warn('[guest-pay/wechat-poll]', e.message); }
+    }
+  }
+  res.json({ success: true, data: { status: order.status } });
+});
+
+// The public pay page itself. Self-contained (no app bundle) — reads its token
+// from the URL and drives the JSON API above. Served for any token string; a
+// bad/spent token surfaces as a friendly "not found / already paid" in-page.
+const GUEST_PAY_PAGE = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex">
+<title>Pay · 付款</title>
+<style>
+  :root { --bg:#f6f7f5; --card:#fff; --ink:#1c2b22; --muted:#6b7a70; --line:#e3e8e2; --accent:#2f855a; --wx:#07c160; --ali:#1677ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:420px; margin:0 auto; padding:22px 16px 40px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .brand { font-size:13px; color:var(--muted); margin-bottom:4px; }
+  .amt { font-size:34px; font-weight:800; letter-spacing:-.02em; margin:2px 0 2px; }
+  .ono { font-size:12px; color:var(--muted); font-family:ui-monospace,Menlo,monospace; }
+  .items { margin:16px 0 4px; border-top:1px solid var(--line); padding-top:12px; }
+  .item { display:flex; justify-content:space-between; font-size:13px; padding:3px 0; color:#33453a; }
+  .item .q { color:var(--muted); }
+  .btn { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:14px; border:0; border-radius:12px; font-size:15px; font-weight:700; color:#fff; cursor:pointer; margin-top:10px; }
+  .btn.wx { background:var(--wx); } .btn.ali { background:var(--ali); }
+  .btn:disabled { opacity:.55; }
+  .qrbox { text-align:center; margin-top:6px; }
+  .qrbox img { width:230px; height:230px; object-fit:contain; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  .hint { font-size:13px; color:var(--muted); text-align:center; margin-top:10px; line-height:1.5; }
+  .paid { text-align:center; padding:12px 0; }
+  .paid .tick { width:64px; height:64px; border-radius:50%; background:var(--accent); color:#fff; font-size:34px; line-height:64px; margin:0 auto 12px; }
+  .paid h2 { margin:0 0 4px; font-size:20px; }
+  .muted { color:var(--muted); font-size:13px; }
+  .back { display:block; text-align:center; margin-top:10px; }
+  .foot { text-align:center; font-size:11px; color:var(--muted); margin-top:22px; }
+</style></head>
+<body><div class="wrap"><div class="card" id="card">
+  <div class="muted" style="text-align:center; padding:24px 0;">Loading… · 加载中…</div>
+</div>
+<div class="foot" id="foot"></div></div>
+<script>
+(function(){
+  var token = location.pathname.split('/').filter(Boolean).pop();
+  var card = document.getElementById('card');
+  var polling = null, DATA = null;
+  function esc(s){ var d=document.createElement('div'); d.textContent=(s==null?'':String(s)); return d.innerHTML; }
+  function yuan(n){ return '¥' + (Number(n)||0).toFixed(2); }
+  function api(path, opts){ return fetch(path, opts).then(function(r){ return r.json().catch(function(){ return {success:false,error:'bad_response'}; }); }); }
+
+  function render(){
+    var d = DATA;
+    if (!d){ card.innerHTML = '<div class="paid"><h2>Not found · 未找到</h2><p class="muted">This payment link is invalid or has expired. · 此付款链接无效或已过期。</p></div>'; return; }
+    if (d.status && d.status !== 'pending_payment'){ return renderClosed(d.status); }
+    var itemsHtml = (d.items||[]).map(function(it){
+      var nm = it.name_en || it.name_cn || '';
+      return '<div class="item"><span>'+esc(nm)+' <span class="q">×'+esc(it.qty)+'</span></span><span>'+yuan(it.line_total)+'</span></div>';
+    }).join('');
+    var btns = '';
+    if (d.methods && d.methods.wechat) btns += '<button class="btn wx" id="b-wx" onclick="PAY(\\'wechat\\')">'+ (d.methods.dev ? 'Pay (test) · 测试支付' : 'Pay with WeChat · 微信支付') +'</button>';
+    if (d.methods && d.methods.alipay) btns += '<button class="btn ali" id="b-ali" onclick="PAY(\\'alipay\\')">Pay with Alipay · 支付宝</button>';
+    if (!btns) btns = '<p class="hint">No online payment is configured — please pay the staff directly. · 未开通在线支付,请直接向店员付款。</p>';
+    card.innerHTML =
+      '<div class="brand">'+esc(d.brand||'')+'</div>'+
+      '<div class="amt">'+yuan(d.total)+'</div>'+
+      '<div class="ono">'+esc(d.order_no||'')+'</div>'+
+      (itemsHtml ? '<div class="items">'+itemsHtml+'</div>' : '')+
+      '<div id="pay-area">'+btns+'</div>';
+  }
+  function renderClosed(status){
+    var paid = (status==='paid'||status==='preparing'||status==='dispatched'||status==='delivered'||status==='awaiting_restock');
+    if (paid){
+      card.innerHTML = '<div class="paid"><div class="tick">✓</div><h2>Paid · 已付款</h2><p class="muted">Thank you! Your order is confirmed. · 感谢!订单已确认。</p></div>';
+    } else {
+      var lbl = status==='cancelled' ? 'Cancelled · 已取消' : (status==='refunded' ? 'Refunded · 已退款' : status);
+      card.innerHTML = '<div class="paid"><h2>'+esc(lbl)+'</h2><p class="muted">This order is no longer open for payment. · 此订单已不可支付。</p></div>';
+    }
+    stopPoll();
+  }
+  function startPoll(){
+    stopPoll();
+    polling = setInterval(function(){
+      api('/api/pay/'+token+'/status').then(function(j){
+        if (j && j.success && j.data && j.data.status !== 'pending_payment'){ renderClosed(j.data.status); }
+      });
+    }, 3000);
+  }
+  function stopPoll(){ if (polling){ clearInterval(polling); polling=null; } }
+
+  window.PAY = function(method){
+    var wx=document.getElementById('b-wx'), ali=document.getElementById('b-ali');
+    if (wx) wx.disabled=true; if (ali) ali.disabled=true;
+    var area = document.getElementById('pay-area');
+    area.innerHTML = '<p class="hint">Preparing… · 生成中…</p>';
+    api('/api/pay/'+token+'/create', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ method:method }) })
+      .then(function(j){
+        if (!j || !j.success){ area.innerHTML = '<p class="hint">Could not start payment ('+esc(j&&j.error||'error')+'). Please ask the staff. · 无法发起支付,请联系店员。</p>'; return; }
+        var d = j.data||{};
+        if (d.status === 'paid'){ renderClosed('paid'); return; }
+        if (d.qr_png){
+          var isWx = method==='wechat';
+          var appLabel = isWx ? 'WeChat · 微信' : 'Alipay · 支付宝';
+          area.innerHTML =
+            '<div class="qrbox"><img src="'+d.qr_png+'" alt="Pay QR"></div>'+
+            '<p class="hint">Scan with '+appLabel+' to pay '+yuan(d.total)+'.<br>用'+appLabel+'扫码支付 '+yuan(d.total)+'。'+
+            (d.account ? '<br>'+esc(d.account) : '')+'</p>'+
+            '<p class="hint" id="watch">Waiting for payment… · 等待支付确认…</p>';
+          startPoll();
+        } else {
+          area.innerHTML = '<p class="hint">Payment could not be prepared. Please ask the staff. · 无法生成支付,请联系店员。</p>';
+        }
+      });
+  };
+
+  api('/api/pay/'+token).then(function(j){ DATA = (j && j.success) ? j.data : null; render(); });
+})();
+</script>
+</body></html>`;
+
+router.get('/pay/:token', (req, res) => {
+  res.type('html').send(GUEST_PAY_PAGE);
+});
+
 // Roots keeps the legacy unsuffixed path (env creds, mainDb). Tenants POST to
 // /callback/:tid — the id is validated against the tenants table.
 router.post('/api/retail/payment/wechat/callback', wxPayJson, (req, res) => handleWechatPayCallback(req, res, ROOTS_TENANT_ID));
@@ -11478,6 +11715,65 @@ router.delete('/api/retail-admin/vouchers/:id', requireRetailAdmin, (req, res) =
   res.json({ success: true });
 });
 
+// Manual customer create — staff key in a walk-in / phone-order customer that
+// never signed up through the app. There's no WeChat/web identity, so we mint a
+// synthetic `manual:<hex>` openid (keeps the UNIQUE NOT NULL constraint happy,
+// same trick the web-auth flows use with 'web:'/'email:' prefixes).
+//
+// Reuse-by-phone: if the phone already belongs to a customer we return THAT
+// record (reused:true) instead of creating a duplicate — and opportunistically
+// backfill a blank name/email. This is also why a manual record unifies cleanly
+// later: the phone-OTP login (upsert unifies by phone) lands the person on this
+// same row when they first sign in themselves.
+router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const nickname = b.nickname == null ? '' : String(b.nickname).trim().slice(0, 60);
+  const email    = normEmail(b.email);
+  const phone    = b.phone == null ? '' : String(b.phone).replace(/\s+/g, '').slice(0, 20);
+
+  if (phone && !/^\+?[0-9]{7,15}$/.test(phone)) {
+    return res.status(400).json({ success: false, error: 'bad_phone' });
+  }
+  if (b.email && !email) return res.status(400).json({ success: false, error: 'bad_email' });
+  // Need at least one way to identify the person — a phone or a name.
+  if (!phone && !nickname) return res.status(400).json({ success: false, error: 'name_or_phone_required' });
+
+  // Reuse-by-phone — link to the existing record rather than duplicate it.
+  if (phone) {
+    const existing = tdb().prepare(
+      'SELECT * FROM retail_customers WHERE phone = ? ORDER BY id LIMIT 1'
+    ).get(phone);
+    if (existing) {
+      // Backfill only blanks — never overwrite what the customer set themselves.
+      tdb().prepare(
+        `UPDATE retail_customers
+            SET nickname = COALESCE(NULLIF(nickname, ''), ?),
+                email    = COALESCE(NULLIF(email, ''), ?)
+          WHERE id = ?`
+      ).run(nickname || null, email || null, existing.id);
+      const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(existing.id);
+      logActivity(req.user.id, req.user.username, 'link_manual', 'retail_customer', existing.id, { phone }, req.ip);
+      return res.json({ success: true, reused: true, data: publicCustomer(fresh) });
+    }
+  }
+
+  const synthetic = 'manual:' + crypto.randomBytes(12).toString('hex');
+  const info = tdb().prepare(
+    `INSERT INTO retail_customers (openid, nickname, phone, email, source, created_by, last_login_at)
+     VALUES (?, ?, ?, ?, 'manual', ?, NULL)`
+  ).run(synthetic, nickname || null, phone || null, email || null, req.user.id);
+  const id = info.lastInsertRowid;
+  // Same post-create hooks the self-service flows run — apply any migration
+  // credit / signup vouchers keyed to this phone. Best-effort.
+  if (phone) {
+    try { claimMigrationCredit(id); } catch (e) { console.warn('[retail-admin/customer create] migration claim failed:', e.message); }
+    try { reconcileSignupVouchers(id); } catch (e) { console.warn('[retail-admin/customer create] voucher reconcile failed:', e.message); }
+  }
+  const customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
+  logActivity(req.user.id, req.user.username, 'create_manual', 'retail_customer', id, { phone, nickname }, req.ip);
+  res.json({ success: true, reused: false, data: publicCustomer(customer) });
+});
+
 // Customer search — used by the voucher-grant modal in /retail-admin.
 // Matches name, phone, or openid prefix. Returns 20 most recent matches.
 // Customers list — used by both the voucher autocomplete (simple ?q) and the
@@ -15376,12 +15672,165 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
 });
 
+// Manual order create — staff key in an order on a customer's behalf (phone
+// order, walk-in, wholesale). Sits alongside the customer checkout at
+// POST /api/retail/orders but is deliberately simpler and staff-trusted: no
+// vouchers/points/stock-gate/live-payment machinery. It prices from the live
+// catalog by default, but staff may override any line price AND the grand total
+// (negotiated / wholesale). The order is tagged channel='manual' + source='manual'.
+//
+// Customer is optional: pass customer_id to attach to a real account (the order
+// then shows in their app), or omit it for a GUEST walk-in (customer_id null —
+// the schema allows it; only the name/phone snapshot is kept).
+//
+// Status defaults to 'pending_payment'. Staff may set 'paid' for money already
+// collected offline — we route that through the shared markOrderPaid() so the
+// payment row, points, and referral credit settle exactly like a real payment.
+router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+
+  // ── Customer: an existing account, or a guest walk-in (customer_id null) ──
+  let customer = null;
+  if (b.customer_id != null && b.customer_id !== '') {
+    const cid = parseInt(b.customer_id, 10);
+    if (!cid) return res.status(400).json({ success: false, error: 'bad_customer_id' });
+    customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(cid);
+    if (!customer) return res.status(404).json({ success: false, error: 'customer_not_found' });
+  }
+
+  // Recipient/contact snapshot. Defaults to the account's own name/phone for an
+  // attached order; staff can override. A name is always required (guests too).
+  const recipientName  = String(b.recipient_name  || (customer && customer.nickname) || '').trim().slice(0, 80);
+  const recipientPhone = String(b.recipient_phone || (customer && customer.phone)    || '').replace(/\s+/g, '').slice(0, 20);
+  if (!recipientName) return res.status(400).json({ success: false, error: 'recipient_name_required' });
+  if (recipientPhone && !/^\+?[0-9]{7,15}$/.test(recipientPhone)) {
+    return res.status(400).json({ success: false, error: 'bad_phone' });
+  }
+
+  // ── Items — resolve each against the live catalog. unit_price defaults to the
+  // catalog sell_price; staff may override per line (negotiated/wholesale). ──
+  const items = Array.isArray(b.items) ? b.items : [];
+  if (!items.length) return res.status(400).json({ success: false, error: 'no_items' });
+  const resolved = [];
+  for (const it of items) {
+    const pid = parseInt(it.product_id, 10);
+    const qty = Number(it.qty);
+    if (!pid || !(qty > 0)) return res.status(400).json({ success: false, error: 'invalid_item' });
+    const p = tdb().prepare(
+      `SELECT id, name_en, name_cn, sku, weight AS size, sell_price
+         FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
+    ).get(pid);
+    if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
+    let unitPrice = Number(p.sell_price) || 0;
+    if (it.unit_price != null && it.unit_price !== '') {
+      const up = Number(it.unit_price);
+      if (!Number.isFinite(up) || up < 0) return res.status(400).json({ success: false, error: 'bad_unit_price', product_id: pid });
+      unitPrice = up;
+    }
+    unitPrice = Math.round(unitPrice * 100) / 100;
+    const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+    resolved.push({ p, qty, unitPrice, lineTotal });
+  }
+
+  // ── Money. Subtotal = Σ line totals; shipping optional; total defaults to
+  // subtotal + shipping but staff may override the grand total outright. ──
+  const subtotal = Math.round(resolved.reduce((s, r) => s + r.lineTotal, 0) * 100) / 100;
+  let shippingFee = 0;
+  if (b.shipping_fee != null && b.shipping_fee !== '') {
+    const sf = Number(b.shipping_fee);
+    if (!Number.isFinite(sf) || sf < 0) return res.status(400).json({ success: false, error: 'bad_shipping_fee' });
+    shippingFee = Math.round(sf * 100) / 100;
+  }
+  let total = Math.round((subtotal + shippingFee) * 100) / 100;
+  if (b.total_override != null && b.total_override !== '') {
+    const to = Number(b.total_override);
+    if (!Number.isFinite(to) || to < 0) return res.status(400).json({ success: false, error: 'bad_total' });
+    total = Math.round(to * 100) / 100;
+  }
+
+  // ── Status + payment method. Default pending; staff may mark paid offline. ──
+  const status = b.status === 'paid' ? 'paid' : 'pending_payment';
+  const ALLOWED_PAY = ['offline', 'wechat', 'alipay', 'points', 'balance', 'other'];
+  const paymentMethod = ALLOWED_PAY.includes(String(b.payment_method)) ? String(b.payment_method) : 'offline';
+  const staffNote    = b.staff_note    == null ? null : String(b.staff_note).slice(0, 2000);
+  const customerNote = b.customer_note == null ? null : String(b.customer_note).slice(0, 2000);
+
+  // Optional delivery address snapshot (else it's a counter order with just a
+  // contact). Structured + one-line, mirroring the customer checkout snapshot.
+  const addr = b.address && typeof b.address === 'object' ? b.address : null;
+  const addrPart = (x) => (x == null ? '' : String(x).trim());
+  const addressFull = addr
+    ? [addr.province, addr.city, addr.district, addr.address, addr.detail].map(addrPart).filter(Boolean).join(' ')
+    : null;
+  const addressJson = addr ? JSON.stringify({
+    province: addr.province || null, city: addr.city || null, district: addr.district || null,
+    address: addr.address || null, detail: addr.detail || null, postal_code: addr.postal_code || null,
+  }) : null;
+
+  // Guest-pay handle — lets a customer without an app account pay this one
+  // order by QR at /pay/:token. Minted for every manual order (harmless on
+  // ones staff mark paid straight away).
+  const payToken = crypto.randomBytes(18).toString('hex');
+
+  let orderId, orderNo;
+  const tx = tdb().transaction(() => {
+    // Order-no minted inside the tx so the uniqueness check + INSERT serialize.
+    orderNo = nextOrderNo();
+    const info = tdb().prepare(
+      `INSERT INTO retail_orders (
+         order_no, customer_id, status, payment_method,
+         recipient_name, recipient_phone, address_full, address_json,
+         subtotal, shipping_fee, total,
+         customer_note, staff_note, channel, source, created_by, fulfillment_type, pay_token
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      // Always inserted as pending_payment first; markOrderPaid() flips it below
+      // when staff chose 'paid', keeping the settle logic in one place.
+      orderNo, customer ? customer.id : null, 'pending_payment', paymentMethod,
+      recipientName, recipientPhone || null, addressFull, addressJson,
+      subtotal, shippingFee, total,
+      customerNote, staffNote, 'manual', 'manual', req.user.id, 'delivery', payToken
+    );
+    orderId = info.lastInsertRowid;
+    const insItem = tdb().prepare(
+      `INSERT INTO retail_order_items (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total)
+       VALUES (?,?,?,?,?,?,?,?,?)`
+    );
+    for (const r of resolved) {
+      insItem.run(orderId, r.p.id, r.p.name_en, r.p.name_cn, r.p.sku, r.p.size, r.qty, r.unitPrice, r.lineTotal);
+    }
+    tdb().prepare(
+      `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no)
+       VALUES (?, ?, ?, 'pending', ?)`
+    ).run(orderId, paymentMethod, total, orderNo);
+  });
+  tx();
+
+  // Money already collected offline → settle through the shared path (flips to
+  // paid, completes the payment row, awards points, credits referral — all
+  // idempotent + guest-safe). Manual orders hold no stock reservation, so the
+  // inventory commit inside is a harmless no-op.
+  if (status === 'paid') {
+    try { markOrderPaid(orderId); }
+    catch (e) { console.error('[retail-admin/order create markPaid]', e); }
+  }
+
+  logActivity(req.user.id, req.user.username, 'create_manual', 'retail_order', orderId,
+              { order_no: orderNo, total, status, guest: !customer }, req.ip);
+  // Pay link is only meaningful while unpaid. Built on this request's origin so
+  // it works on whichever storefront host the operator is on (tenant-correct).
+  const payUrl = (status === 'pending_payment' && total > 0)
+    ? `${req.protocol}://${req.get('host')}/pay/${payToken}`
+    : null;
+  res.json({ success: true, data: { id: orderId, order_no: orderNo, status, total, pay_token: payToken, pay_url: payUrl } });
+});
+
 router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   const { status, q, from, to, store_id } = req.query;
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
   // rows the storefront doesn't fulfil (the UI renders those view-only).
-  const channel = ['wechat', 'web', 'meituan', 'gzgrocery'].includes(String(req.query.channel || '').toLowerCase())
+  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual'].includes(String(req.query.channel || '').toLowerCase())
     ? String(req.query.channel).toLowerCase() : '';
   const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
@@ -15562,7 +16011,7 @@ router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, r
   if (to)   { sql += ' AND o.placed_at <= ?'; params.push(to); }
   sql += ' GROUP BY ch';
 
-  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0 };
+  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0, manual: 0 };
   for (const r of tdb().prepare(sql).all(...params)) {
     if (r.ch in out) out[r.ch] += r.n;
     out.all += r.n;
