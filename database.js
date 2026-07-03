@@ -1541,6 +1541,12 @@ addColumn('retail_orders', 'refund_payer_id',         'INTEGER');
 // the durable audit marker (channel can be re-derived, source never changes).
 addColumn('retail_orders', 'source',                  'TEXT');
 addColumn('retail_orders', 'created_by',              'INTEGER');
+// Guest-pay token — an unguessable handle that lets a customer WITHOUT an app
+// account open a public pay page (/pay/:token) for a single manual order and
+// pay by QR. Minted for manual orders at creation; NULL for app orders (those
+// pay in-app). Unique so the public lookup is exact.
+addColumn('retail_orders', 'pay_token',              'TEXT');
+try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_orders_pay_token ON retail_orders(pay_token) WHERE pay_token IS NOT NULL'); } catch {}
 
 // Any rows mislabeled 'requested' from the prior migration version snap
 // back to 'pending'. Safe no-op if no such rows exist.

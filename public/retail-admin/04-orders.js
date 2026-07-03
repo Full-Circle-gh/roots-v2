@@ -5477,15 +5477,44 @@ async function omSubmit() {
       url: '/api/retail-admin/orders', method: 'POST', body,
       errLabelEn: 'Order create failed', errLabelCn: '订单创建失败',
     });
-    omClose();
-    toast(cuT('Order created · 已创建订单', '已创建订单') + ' ' + (j?.data?.order_no || ''));
+    const d = j?.data || {};
     if (typeof loadOrders === 'function') loadOrders();
     if (typeof refreshOrderChannelCounts === 'function') refreshOrderChannelCounts();
-    // Jump straight into the new order's drawer if the opener exists.
-    const id = j?.data?.id;
-    if (id != null && typeof openOrder === 'function') openOrder(id);
+    // Pending order with a pay link → show it so staff can share the QR/link.
+    // Paid (offline) order → nothing to collect, jump straight to the drawer.
+    if (d.pay_url) {
+      omClose();
+      omShowPayResult(d);
+    } else {
+      omClose();
+      toast(cuT('Order created · 已创建订单', '已创建订单') + ' ' + (d.order_no || ''));
+      if (d.id != null && typeof openOrder === 'function') openOrder(d.id);
+    }
   } catch { /* already toasted */ }
   finally { if (btn) { btn.disabled = false; if (oldTxt != null) btn.textContent = oldTxt; } }
+}
+
+// ── Post-create pay-link result (guest pay) ────────────────────────
+let OM_DONE = null;   // { id, order_no, pay_url }
+function omShowPayResult(d) {
+  OM_DONE = d;
+  $('#om-done-sub').textContent = cuT('Order ', '订单 ') + (d.order_no || '') + cuT(' · awaiting payment', ' · 待付款');
+  $('#om-pay-url').value = d.pay_url || '';
+  cuShowModal('#om-done-bg');
+}
+function omCopyPayLink() {
+  const el = $('#om-pay-url'); if (!el) return;
+  el.select();
+  const ok = () => toast(cuT('Copied · 已复制', '已复制'));
+  try { if (document.execCommand('copy')) return ok(); } catch (e) { /* fall through */ }
+  try { navigator.clipboard.writeText(el.value).then(ok); } catch (e) { /* ignore */ }
+}
+function omOpenQr() { if (OM_DONE && OM_DONE.pay_url) window.open(OM_DONE.pay_url, '_blank'); }
+function omDone() {
+  $('#om-done-bg').classList.remove('show');
+  const id = OM_DONE && OM_DONE.id;
+  OM_DONE = null;
+  if (id != null && typeof openOrder === 'function') openOrder(id);
 }
 
 // Products are managed entirely from the main /products page on the

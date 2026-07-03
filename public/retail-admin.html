@@ -1184,6 +1184,31 @@
         </div>
       </div>
     </div>
+
+    <!-- NEW ORDER result — shown after a pending order is created so staff can
+         hand the customer a pay link or show the QR (guest pay). -->
+    <div id="om-done-bg" class="pu-editor-bg">
+      <div class="pu-editor" style="width: 460px;">
+        <div class="pu-editor-head">
+          <h3 style="margin: 0; font-size: 14px;">Order created · 已创建订单</h3>
+          <button class="btn" onclick="omDone()">Close · 关闭</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display:block;">
+          <div id="om-done-sub" class="muted" style="font-size:12px; margin-bottom:14px;"></div>
+          <div class="field" style="margin:0 0 6px;"><label class="stacked">Payment link · 付款链接</label>
+            <div class="row" style="gap:6px;">
+              <input type="text" id="om-pay-url" readonly style="flex:1; font-size:12px;">
+              <button class="btn" onclick="omCopyPayLink()">Copy · 复制</button>
+            </div>
+          </div>
+          <div class="helper" style="margin-bottom:12px;">Send this to the customer, or open the QR below and show it for them to scan. · 发给顾客,或打开下方二维码让其扫码支付。</div>
+          <button class="btn btn-primary" style="width:100%;" id="om-open-qr" onclick="omOpenQr()">Open pay page (QR) · 打开付款页(二维码)</button>
+        </div>
+        <div class="pu-editor-foot">
+          <button class="btn btn-primary" onclick="omDone()">Done · 完成</button>
+        </div>
+      </div>
+    </div>
     <style>
       .om-sec-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); margin: 4px 0 8px; }
       .om-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.16); max-height: 260px; overflow-y: auto; margin-top: 2px; }

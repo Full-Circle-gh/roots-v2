@@ -338,6 +338,11 @@ app.use(require('./routes/feedback'));
 // the retail routes run. Path-scoped to /api/retail (does NOT match the
 // segment-distinct /api/retail-admin, which has its own gate). No-op for Roots.
 app.use('/api/retail', require('./middleware/public-tenant').publicTenantScope);
+// Guest-pay surface (public pay page + its JSON API) is un-authed but keyed by
+// an unguessable order token; tenant-scope it by host/appid just like /api/retail
+// so tdb() reads the right tenant's order.
+app.use('/pay', require('./middleware/public-tenant').publicTenantScope);
+app.use('/api/pay', require('./middleware/public-tenant').publicTenantScope);
 app.use(require('./routes/retail'));
 app.use(require('./routes/retail-inventory'));
 app.use(require('./routes/retail-purchasing')); // online store buying dept: suppliers + retail POs
