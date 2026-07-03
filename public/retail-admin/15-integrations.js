@@ -512,7 +512,6 @@
 
     const box = igHostEl(); if (!box) return;
     box.style.display = '';
-    const c = _cards.find(x => x.kind === 'meituan') || {};
     const bag = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>';
     const paused = status === 'paused';
     const storePills = (_stores || []).map(s =>
