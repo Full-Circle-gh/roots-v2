@@ -422,6 +422,25 @@
     .cp-empty-btn{display:inline-block;margin-top:26px;font-family:var(--bf-toni);font-weight:700;letter-spacing:.1em;text-transform:uppercase;font-size:15px;background:var(--ink);color:var(--oat);border-radius:999px;padding:15px 36px;text-decoration:none;}
     /* No tab bar on desktop — drop the bar flush to the bottom there. */
     @media(min-width:768px){.cp-foot{bottom:0;}}
+    /* ── Cart, PC-native (≥1024): items column left, sticky order-summary card
+         right — the phone's fixed bottom bar becomes a proper summary rail. ── */
+    @media(min-width:1024px){
+      .cp{max-width:1120px;padding:0 32px 70px;display:grid;
+        grid-template-columns:minmax(0,1fr) 380px;column-gap:52px;
+        align-items:start;grid-auto-rows:min-content;}
+      .cp-head,.cp-prog,.cp-itemsbar,#cpItems{grid-column:1;}
+      .cp-head{padding-left:0;padding-right:0;}
+      .cp-title{font-size:48px;}
+      .cp-prog{margin-left:0;margin-right:0;}
+      .cp-itemsbar{padding-left:0;padding-right:0;}
+      .cp-row{padding-left:0;padding-right:0;}
+      .cp-row .ph{width:84px;height:96px;}
+      .cp-row .nm{font-size:19px;}
+      .cp-foot{grid-column:2;grid-row:2/span 3;position:sticky;top:96px;
+        left:auto;right:auto;bottom:auto;max-width:none;margin:0;z-index:1;
+        border:2px solid var(--ink);padding:24px 26px;}
+      .cp-empty{grid-column:1/-1;}
+    }
 
     /* ── Mobile chrome: hide the desktop top nav, show a slim title bar (the
          mini-app has no top nav — search lives inside the Shop page). ── */
@@ -1640,6 +1659,16 @@ function coInjectCheckoutStyle(){
   const s=document.createElement('style'); s.id='cxStyle';
   s.textContent=`
   .cox{max-width:520px;margin:0 auto;background:var(--oat);padding-bottom:120px;}
+  /* Phone: the two PC column wrappers dissolve, and per-section order rules
+     reproduce the pre-wrapper visual sequence exactly (items right after the
+     header, summary after coupons). */
+  .cox{display:flex;flex-direction:column;}
+  .cx-col-main,.cx-col-side{display:contents;}
+  .cx-header{order:0;} #coBatch{order:1;} #coPreorder{order:2;}
+  .cx-sec--items{order:3;}
+  .cx-sec--addr{order:4;} .cx-sec--when{order:5;} .cx-sec--pay{order:6;}
+  .cx-sec--addons{order:7;} .cx-sec--coupons{order:8;}
+  .cx-sec--summary{order:9;} .cx-msg{order:10;} .cx-sticky{order:11;}
   .cx-header{padding:26px 22px 14px;}
   .cx-kicker{font-family:var(--bf-gothic);font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:var(--olive);}
   .cx-title{font-family:var(--bf-bear);font-size:40px;line-height:.95;color:var(--ink);margin-top:4px;}
@@ -1731,7 +1760,22 @@ function coInjectCheckoutStyle(){
   .cx-total-a{font-family:var(--bf-gothic);font-size:30px;line-height:1;color:var(--ink);}
   .cx-place{flex:1;background:var(--ink);color:var(--lime);border:0;padding:16px 0;font-family:var(--bf-gothic);font-size:16px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;}
   .cx-place:disabled{opacity:.5;color:rgba(204,217,0,.6);cursor:default;}
-  @media(min-width:560px){.cx-sticky{max-width:520px;margin:0 auto;}}`;
+  @media(min-width:560px){.cx-sticky{max-width:520px;margin:0 auto;}}
+  /* ── Checkout, PC-native (≥1024): the form (address / when / pay / add-ons /
+       coupons) in an oat panel left; a sticky order rail right holding the
+       receipt, totals and the Place-order button — no more fixed phone bar. ── */
+  @media(min-width:1024px){
+    .cox{display:grid;max-width:1140px;padding:26px 32px 70px;background:transparent;
+      grid-template-columns:minmax(0,1fr) 420px;column-gap:52px;align-items:start;}
+    .cx-col-main{display:block;grid-column:1;min-width:0;background:var(--oat);border:2px solid var(--ink);}
+    .cx-col-side{display:block;grid-column:2;min-width:0;position:sticky;top:96px;background:var(--oat);border:2px solid var(--ink);}
+    .cx-header{padding:30px 30px 16px;}
+    .cx-title{font-size:44px;}
+    .cx-sec{padding:20px 30px;}
+    .cx-col-side .cx-sec--first{border-top:0;}
+    .cx-msg{padding:0 30px;}
+    .cx-sticky{position:static;max-width:none;margin:0;padding:18px 24px 22px;}
+  }`;
   document.head.appendChild(s);
 }
 async function renderCheckout(){
@@ -1745,49 +1789,56 @@ async function renderCheckout(){
   co.batchSeen=false;      // fresh-batch popup auto-shows once per checkout visit
   co.addrPickerOpen=false;
   const n=coItems().reduce((a,l)=>a+(Number(l.qty)||0),0);
+  // Two wrappers for the PC 2-column layout (form left, order rail right).
+  // On phones both are display:contents and per-section `order` rules keep
+  // today's exact visual sequence, so the mobile flow is byte-identical.
   v.innerHTML=`<div class="cox">
+    <div class="cx-col-main">
     <div class="cx-header">
       <div class="cx-kicker">${cn?'下单 · 02/03':'WHERE & HOW · 02/03'}</div>
       <div class="cx-title">${cn?'去哪里、怎么送':'Where &amp; how.'}</div>
     </div>
     <div id="coBatch" style="padding:0 22px"></div>
     <div id="coPreorder" style="padding:0 22px"></div>
-    <section class="cx-sec cx-sec--first">
-      <div class="cx-seclabel">${cn?'你的订单':'YOUR ORDER'} · ${n} ${cn?'件':'ITEMS'}</div>
-      <div id="coItems"></div>
-    </section>
-    <section class="cx-sec">
+    <section class="cx-sec cx-sec--addr">
       <div class="cx-sectitle">${cn?'配送至':'Deliver to'}</div>
       <div id="coAddr">…</div>
     </section>
-    <section class="cx-sec">
+    <section class="cx-sec cx-sec--when">
       <div class="cx-sectitle">${cn?'什么时候送':'When'}</div>
       <div id="coSlots">…</div>
     </section>
-    <section class="cx-sec">
+    <section class="cx-sec cx-sec--pay">
       <div class="cx-sectitle">${cn?'支付方式':'Pay with'}</div>
       <div id="coPointsSec" hidden><div id="coPoints"></div></div>
       <div id="coBalanceSec" hidden><div id="coBalance"></div></div>
       <div id="coPay"></div>
     </section>
-    <section class="cx-sec">
+    <section class="cx-sec cx-sec--addons">
       <div class="cx-sectitle">${cn?'附加项':'Add-ons'}</div>
       <div class="cx-check-row"><label class="cx-sw"><input type="checkbox" id="coCutlery" ${co.needsCutlery?'checked':''}><span class="tr"></span><span class="kn"></span></label><span class="cx-check-label">${cn?'附餐具':'Include cutlery'}</span></div>
       <div class="cx-check-row"><label class="cx-sw"><input type="checkbox" id="coInvoice" ${co.needsInvoice?'checked':''}><span class="tr"></span><span class="kn"></span></label><span class="cx-check-label">${cn?'需要发票':'Need an invoice'}</span></div>
       <div id="coInvoiceForm"></div>
       <div style="margin-top:10px"><textarea id="coNote" class="cx-input" placeholder="${cn?'备注（选填）':'Note for the kitchen (optional)'}"></textarea></div>
     </section>
-    <section class="cx-sec">
+    <section class="cx-sec cx-sec--coupons">
       <div class="cx-sectitle">${cn?'优惠券':'Coupons'}</div>
       <div id="coCoupon"></div>
     </section>
-    <section class="cx-sec">
+    </div>
+    <div class="cx-col-side">
+    <section class="cx-sec cx-sec--first cx-sec--items">
+      <div class="cx-seclabel">${cn?'你的订单':'YOUR ORDER'} · ${n} ${cn?'件':'ITEMS'}</div>
+      <div id="coItems"></div>
+    </section>
+    <section class="cx-sec cx-sec--summary">
       <div id="coSummary">…</div>
     </section>
     <div class="cx-msg" id="coMsg"></div>
     <div class="cx-sticky">
       <div class="cx-total"><div class="cx-total-l">${cn?'支付':'Pay'}</div><div class="cx-total-a" id="coStickyTotal">${money(0)}</div></div>
       <button class="cx-place" id="coPlace" disabled>${cn?'提交订单 →':'Place order →'}</button>
+    </div>
     </div>
   </div>`;
   document.title=(cn?'结算':'Checkout')+' · '+state.brand;
