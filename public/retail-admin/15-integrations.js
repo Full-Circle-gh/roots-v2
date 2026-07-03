@@ -322,15 +322,15 @@
     let body = '';
     if (_relay.step === 'box') {
       body = `<p class="muted" style="font-size:13px;max-width:56ch">${cuT(
-        'Meituan will see logins from your own store’s internet — the safest setup. Plug in the store box we shipped; until it’s online we use a Guangzhou backup line (degraded).',
-        '美团将看到来自您门店自有网络的登录,这是最安全的方式。请接入我们寄送的门店盒子;盒子上线前使用广州备用线路(降级)。')}</p>
+        `${label} will see logins from your own store’s internet — the safest setup. Plug in the store box we shipped; until it’s online we use a Guangzhou backup line (degraded).`,
+        `${label}将看到来自您门店自有网络的登录,这是最安全的方式。请接入我们寄送的门店盒子;盒子上线前使用广州备用线路(降级)。`)}</p>
         <div style="display:flex;gap:10px;margin-top:16px">
           <button class="btn btn-primary" onclick="igRelayStep('creds')">${cuT('Continue · 继续', '继续')}</button>
           <button class="btn" onclick="igRelayClose()">${cuT('Cancel · 取消', '取消')}</button>
         </div>`;
     } else if (_relay.step === 'creds') {
       const opts = _stores.map(s => `<option value="${esc(s.code)}">${esc(cuT(s.name || s.code, s.name || s.code))}</option>`).join('');
-      body = `<p class="muted" style="font-size:13px">${cuT('Enter your Meituan 商家版 login for a store. We log in on your behalf through your store box.', '请输入某门店的美团商家版账号。我们将通过您的门店盒子代为登录。')}</p>
+      body = `<p class="muted" style="font-size:13px">${cuT(`Enter your ${label} merchant login for a store. We log in on your behalf through your store box.`, `请输入某门店的${label}商家账号。我们将通过您的门店盒子代为登录。`)}</p>
         <div style="display:grid;gap:10px;max-width:420px;margin-top:12px">
           <div><label class="field-label">${cuT('Store · 门店', '门店')}</label><select id="rl_store">${opts}</select></div>
           <div><label class="field-label">${cuT('Username · 账号', '账号')}</label><input type="text" id="rl_user" autocomplete="off"></div>
@@ -344,7 +344,7 @@
         </div>`;
     } else if (_relay.step === 'sms') {
       const s = _relay.session || {};
-      body = `<p class="muted" style="font-size:13px">${cuT('Meituan sent a code to', '美团已发送验证码至')} <b>${esc(s.phoneHint || '—')}</b>. ${cuT('Enter it below.', '请在下方输入。')}</p>
+      body = `<p class="muted" style="font-size:13px">${cuT(`${label} sent a code to`, `${label}已发送验证码至`)} <b>${esc(s.phoneHint || '—')}</b>. ${cuT('Enter it below.', '请在下方输入。')}</p>
         <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
           <input type="text" id="rl_code" inputmode="numeric" maxlength="8" placeholder="000000" style="width:140px;font-family:var(--f-mono,monospace);font-size:18px;letter-spacing:.2em;text-align:center">
           <button class="btn btn-primary" id="rl_sms" onclick="igRelaySms()">${cuT('Verify · 验证', '验证')}</button>
@@ -352,15 +352,25 @@
         <div id="rl_status" style="font-size:12.5px;color:var(--text-2);margin-top:12px">${cuT('Logging in through your store box…', '正在通过门店盒子登录…')}</div>
         ${s.lastError ? `<div style="color:var(--danger);font-size:12.5px;margin-top:6px">${esc(s.lastError)}</div>` : ''}
         <div style="background:var(--bg-elev-1);border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:6px;padding:12px 14px;margin-top:16px;display:flex;gap:12px;align-items:center">
-          <div style="font-size:12.5px;color:var(--text-2);max-width:48ch">${cuT('Having trouble? We can connect Meituan for you.', '遇到困难?我们可以为您代为接入。')}</div>
+          <div style="font-size:12.5px;color:var(--text-2);max-width:48ch">${cuT(`Having trouble? We can connect ${label} for you.`, `遇到困难?我们可以为您代为接入${label}。`)}</div>
           <button class="btn" style="margin-left:auto;flex:none" onclick="igHelp('${escJs(_relay.kind)}')">${cuT('Ask us · 请代办', '请代办')}</button>
         </div>`;
     } else if (_relay.step === 'done') {
+      // Meituan has a mapping tab (门店/products); Qingyun is rider-tracking only.
+      const nextEn = _relay.kind === 'meituan'
+        ? 'This store is now logged in. Next: map your Meituan 门店 and products from the Meituan tab.'
+        : 'This store is now logged in. Rider tracking will start syncing automatically.';
+      const nextCn = _relay.kind === 'meituan'
+        ? '该门店已登录。接下来在美团页面关联门店与商品。'
+        : '该门店已登录。骑手追踪将自动开始同步。';
+      const openBtn = _relay.kind === 'meituan'
+        ? `<button class="btn btn-primary" onclick="igRelayClose();goTab('meituan')">${cuT('Open Meituan · 打开美团', '打开美团')}</button>`
+        : '';
       body = `<div style="font-size:14px;color:var(--accent,#6B8E6F);font-weight:600">✓ ${cuT('Connected · 已连接', '已连接')}</div>
-        <p class="muted" style="font-size:13px;margin-top:6px">${cuT('This store is now logged in. Next: map your Meituan 门店 and products from the Meituan tab.', '该门店已登录。接下来在美团页面关联门店与商品。')}</p>
+        <p class="muted" style="font-size:13px;margin-top:6px">${cuT(nextEn, nextCn)}</p>
         <div style="display:flex;gap:10px;margin-top:14px">
-          <button class="btn btn-primary" onclick="igRelayClose();goTab('meituan')">${cuT('Open Meituan · 打开美团', '打开美团')}</button>
-          <button class="btn" onclick="igRelayClose()">${cuT('Done · 完成', '完成')}</button>
+          ${openBtn}
+          <button class="btn ${openBtn ? '' : 'btn-primary'}" onclick="igRelayClose()">${cuT('Done · 完成', '完成')}</button>
         </div>`;
     }
     box.innerHTML = `<div class="ig-wiz">
