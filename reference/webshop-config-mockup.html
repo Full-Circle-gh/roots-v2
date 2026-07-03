@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web store configuration — mockup</title>
+<style>
+  :root{
+    --ink:#20242b; --ink-2:#5b616b; --ink-3:#8b919b;
+    --brass:#b08d3f; --brass-d:#8f6f2c; --brass-bg:#f7f1e2;
+    --line:#e7e3da; --line-2:#efece5;
+    --bg:#f4f2ec; --card:#ffffff; --card-2:#faf8f3;
+    --ok:#1a9d5a; --ok-bg:#e9f6ef; --amber:#b0842f; --amber-bg:#f8f0dd;
+    --r:14px; --r-sm:10px;
+    --mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,monospace;
+    --shadow:0 1px 2px rgba(32,36,43,.04), 0 8px 24px rgba(32,36,43,.06);
+    --shadow-lg:0 24px 70px rgba(32,36,43,.25);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:28px 20px 80px}
+  .wrap{max-width:860px;margin:0 auto}
+
+  [data-cn]{display:none}
+  html.cn [data-en]{display:none}
+  html.cn [data-cn]{display:inline}
+
+  .top{display:flex;align-items:center;justify-content:space-between;margin-bottom:22px}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brass)}
+  .langtog{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px;box-shadow:var(--shadow)}
+  .langtog button{border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--ink-2);
+       padding:6px 16px;border-radius:999px;cursor:pointer}
+  .langtog button.act{background:var(--ink);color:#fff}
+
+  .modal{background:var(--card);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow-lg);overflow:hidden}
+  .m-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:24px 28px 0}
+  .m-head h1{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em}
+  .m-head .sub{margin:5px 0 0;font-size:13.5px;color:var(--ink-2)}
+  .x{border:1px solid var(--line);background:var(--card);border-radius:10px;width:34px;height:34px;flex:none;
+     display:grid;place-items:center;color:var(--ink-2);cursor:pointer;transition:.15s}
+  .x:hover{border-color:var(--ink-3);color:var(--ink)}
+  .x svg{width:15px;height:15px}
+
+  .ready{display:flex;gap:8px;flex-wrap:wrap;padding:16px 28px 22px;border-bottom:1px solid var(--line-2)}
+  .chip{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:600;
+        border:1px solid var(--line);border-radius:999px;padding:6px 13px 6px 9px;color:var(--ink-2);background:var(--card-2)}
+  .chip.on{background:var(--ok-bg);border-color:#cfe9db;color:#14713f}
+  .chip svg{width:14px;height:14px;flex:none}
+  .chip.on svg{color:var(--ok)}
+
+  .sec{padding:22px 28px 26px}
+  .sec + .sec{border-top:1px solid var(--line-2)}
+  .sec-head{display:flex;align-items:center;gap:11px;margin-bottom:4px}
+  .sec-ico{width:36px;height:36px;border-radius:10px;background:var(--brass-bg);color:var(--brass-d);
+           display:grid;place-items:center;flex:none}
+  .sec-ico svg{width:18px;height:18px}
+  .sec-head b{font-size:15px;font-weight:700}
+  .sec-sub{font-size:12.5px;color:var(--ink-3);margin:0 0 18px 47px}
+
+  /* live shop address row */
+  .addr{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:var(--r-sm);
+        background:var(--card-2);padding:12px 14px}
+  .addr .live{width:9px;height:9px;border-radius:50%;background:var(--ok);flex:none;box-shadow:0 0 0 4px var(--ok-bg)}
+  .addr .url{flex:1;min-width:0;font-family:var(--mono);font-size:13.5px;font-weight:600;color:var(--ink);
+             overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .addr .url .pre{color:var(--ink-3)}
+  .addr .abtn{border:1px solid var(--line);background:var(--card);border-radius:8px;font:inherit;font-size:12px;font-weight:700;
+              color:var(--ink-2);padding:7px 12px;cursor:pointer;transition:.15s;display:inline-flex;align-items:center;gap:6px;flex:none}
+  .addr .abtn:hover{border-color:var(--ink-3);color:var(--ink)}
+  .addr .abtn svg{width:13px;height:13px}
+  .addr-note{font-size:11.5px;color:var(--ink-3);margin-top:8px;line-height:1.5}
+
+  /* custom domain — collapsed row that expands to a stepper */
+  .custom{margin-top:14px;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+  .custom-head{display:flex;align-items:center;gap:11px;padding:13px 15px;cursor:pointer;background:var(--card)}
+  .custom-head:hover{background:var(--card-2)}
+  .custom-head .ci{width:15px;height:15px;color:var(--ink-3);flex:none}
+  .custom-head .ct{flex:1}
+  .custom-head .ct b{font-size:13.5px;font-weight:700}
+  .custom-head .ct .cs{font-size:11.5px;color:var(--ink-3);display:block;margin-top:1px}
+  .custom-head .chev{width:16px;height:16px;color:var(--ink-3);transition:.2s}
+  .custom.open .chev{transform:rotate(90deg)}
+  .custom-body{display:none;padding:4px 15px 16px;border-top:1px solid var(--line-2)}
+  .custom.open .custom-body{display:block}
+
+  .dstep{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line-2)}
+  .dstep:last-child{border-bottom:none}
+  .dstep .num{width:22px;height:22px;border-radius:50%;flex:none;display:grid;place-items:center;
+              font-size:11px;font-weight:700;font-family:var(--mono);
+              background:var(--card-2);border:1px solid var(--line);color:var(--ink-3)}
+  .dstep.done .num{background:var(--ok);border-color:var(--ok);color:#fff}
+  .dstep.now .num{background:var(--brass);border-color:var(--brass);color:#fff}
+  .dstep .db{flex:1;min-width:0}
+  .dstep .db .dt{font-size:13px;font-weight:700}
+  .dstep .db .dd{font-size:11.5px;color:var(--ink-3);margin-top:2px;line-height:1.5}
+  .dstep .stat{font-size:11px;font-weight:700;flex:none;align-self:center}
+  .dstep.done .stat{color:var(--ok)}
+  .dstep.now .stat{color:var(--brass-d)}
+  .dstep.wait .stat{color:var(--ink-3)}
+  .dns-rec{margin-top:8px;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-family:var(--mono);font-size:11.5px}
+  .dns-rec table{width:100%;border-collapse:collapse}
+  .dns-rec th{text-align:left;font-weight:600;color:var(--ink-3);font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+              padding:7px 10px;background:var(--card-2);border-bottom:1px solid var(--line-2)}
+  .dns-rec td{padding:8px 10px;color:var(--ink);border-bottom:1px solid var(--line-2)}
+  .dns-rec tr:last-child td{border-bottom:none}
+  .di{display:flex;gap:8px;margin-top:12px}
+  .di input{flex:1;border:1px solid var(--line);border-radius:8px;font-family:var(--mono);font-size:12.5px;padding:9px 11px;outline:none;transition:.15s}
+  .di input:focus{border-color:var(--brass);box-shadow:0 0 0 3px rgba(176,141,63,.14)}
+
+  /* sign-in method rows */
+  .methods{display:flex;flex-direction:column;gap:0}
+  .method{display:flex;align-items:center;gap:13px;padding:14px 0;border-bottom:1px solid var(--line-2)}
+  .method:last-child{border-bottom:none}
+  .m-ico{width:34px;height:34px;border-radius:9px;flex:none;display:grid;place-items:center;background:var(--card-2);border:1px solid var(--line-2);color:var(--ink-2)}
+  .m-ico svg{width:17px;height:17px}
+  .m-main{flex:1;min-width:0}
+  .m-main .mn{font-size:13.5px;font-weight:700}
+  .m-main .md{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+  .m-stat{font-size:11px;font-weight:700;flex:none}
+  .m-stat.ok{color:var(--ok)}
+  .m-stat.byo{color:var(--ink-3)}
+  .lnk{color:var(--brass-d);font-weight:700;text-decoration:none;border-bottom:1px solid rgba(143,111,44,.3)}
+
+  /* toggle */
+  .tog{width:42px;height:25px;border-radius:999px;border:0;background:#d8d4ca;position:relative;cursor:pointer;flex:none;transition:.18s;padding:0}
+  .tog .knob{position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.18s}
+  .tog.on{background:var(--brass)}
+  .tog.on .knob{left:20px}
+
+  /* payments rows */
+  .pay{display:flex;align-items:center;gap:13px;padding:14px 0;border-bottom:1px solid var(--line-2)}
+  .pay:last-child{border-bottom:none}
+  .pay .p-main{flex:1}
+  .pay .p-main .pn{font-size:13.5px;font-weight:700}
+  .pay .p-main .pd{font-size:11.5px;color:var(--ink-3);margin-top:2px}
+  .pay .pbtn{border:1px solid var(--line);background:var(--card);border-radius:8px;font:inherit;font-size:12px;font-weight:700;color:var(--ink-2);padding:7px 13px;cursor:pointer;transition:.15s;flex:none}
+  .pay .pbtn:hover{border-color:var(--ink-3);color:var(--ink)}
+
+  .opt{font-weight:600;color:var(--ink-3);font-size:10.5px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:1px}
+
+  .m-foot{display:flex;align-items:center;gap:14px;padding:18px 28px;background:var(--card-2);border-top:1px solid var(--line-2)}
+  .helplink{background:none;border:0;font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-3);cursor:pointer}
+  .helplink:hover{color:var(--ink)}
+  .foot-sp{flex:1}
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:var(--r-sm);font:inherit;font-size:13.5px;font-weight:700;
+       color:var(--ink);padding:10px 18px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.15s}
+  .btn:hover{border-color:var(--ink-3)}
+  .btn.pri{background:var(--brass);border-color:var(--brass);color:#fff}
+  .btn.pri:hover{background:var(--brass-d)}
+
+  @media (max-width:640px){
+    .sec,.m-head,.ready,.m-foot{padding-left:18px;padding-right:18px}
+    .sec-sub{margin-left:0}
+    .m-foot{flex-wrap:wrap}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <span class="eyebrow"><span data-en>Sales channels · Web store</span><span data-cn>销售渠道 · 网页商店</span></span>
+    <div class="langtog">
+      <button id="lgEn" class="act" onclick="setLang('en')">EN</button>
+      <button id="lgCn" onclick="setLang('cn')">中文</button>
+    </div>
+  </div>
+
+  <div class="modal">
+
+    <div class="m-head">
+      <div>
+        <h1><span data-en>Web store configuration</span><span data-cn>网页商店配置</span></h1>
+        <p class="sub"><span data-en>Your browser storefront — the address customers visit, how they sign in, and how they pay.</span><span data-cn>浏览器版商店 — 顾客访问的网址、登录方式与付款方式。</span></p>
+      </div>
+      <button class="x" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <div class="ready">
+      <span class="chip on">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/></svg>
+        <span data-en>Store online</span><span data-cn>商店在线</span>
+      </span>
+      <span class="chip on">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/></svg>
+        <span data-en>Sign-in ready</span><span data-cn>登录可用</span>
+      </span>
+      <span class="chip on">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.2l2.3 2.3 4.7-4.9"/></svg>
+        <span data-en>Payments ready</span><span data-cn>收款可用</span>
+      </span>
+    </div>
+
+    <!-- ============ Shop address ============ -->
+    <div class="sec">
+      <div class="sec-head">
+        <span class="sec-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19"/><path d="M12 2.5c2.7 2.8 4.2 6 4.2 9.5S14.7 18.7 12 21.5C9.3 18.7 7.8 15.5 7.8 12S9.3 5.3 12 2.5z"/></svg>
+        </span>
+        <b><span data-en>Shop address</span><span data-cn>商店网址</span></b>
+      </div>
+      <p class="sec-sub"><span data-en>Where customers reach your store. A free address is live now — add your own domain any time.</span><span data-cn>顾客访问商店的网址。已自动分配免费网址,可随时接入自有域名。</span></p>
+
+      <div class="addr">
+        <span class="live" title="Live"></span>
+        <span class="url"><span class="pre">https://</span>roots<span class="pre">.shop.rootskitchenchina.com</span></span>
+        <button class="abtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>
+          <span data-en>Copy</span><span data-cn>复制</span>
+        </button>
+        <button class="abtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="6" height="6" rx="1"/><rect x="14" y="4" width="6" height="6" rx="1"/><rect x="4" y="14" width="6" height="6" rx="1"/><path d="M14 14h3v3M20 20v.01M17 20v.01M20 17v.01"/></svg>
+          <span data-en>QR code</span><span data-cn>二维码</span>
+        </button>
+      </div>
+      <div class="addr-note"><span data-en>This address works immediately and never needs setup.</span><span data-cn>该网址即刻可用,无需任何设置。</span></div>
+
+      <div class="custom" id="cust">
+        <div class="custom-head" onclick="document.getElementById('cust').classList.toggle('open')">
+          <svg class="ci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
+          <span class="ct"><b><span data-en>Use your own domain</span><span data-cn>使用自有域名</span></b><span class="cs"><span data-en>e.g. shop.yourbrand.com — optional</span><span data-cn>例如 shop.yourbrand.com — 选填</span></span></span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </div>
+        <div class="custom-body">
+          <div class="dstep done">
+            <span class="num">1</span>
+            <div class="db"><div class="dt"><span data-en>Enter your domain</span><span data-cn>填写域名</span></div>
+              <div class="dd"><span data-en>The address you own and want customers to use.</span><span data-cn>您拥有并希望顾客使用的网址。</span></div>
+              <div class="di"><input type="text" value="shop.yourbrand.com" spellcheck="false"></div>
+            </div>
+            <span class="stat"><span data-en>Set</span><span data-cn>已填</span></span>
+          </div>
+
+          <div class="dstep now">
+            <span class="num">2</span>
+            <div class="db"><div class="dt"><span data-en>Point it to us</span><span data-cn>解析到本平台</span></div>
+              <div class="dd"><span data-en>Add this one record at your domain provider, then check below.</span><span data-cn>在您的域名服务商处添加以下一条记录,然后点击检测。</span></div>
+              <div class="dns-rec">
+                <table>
+                  <tr><th><span data-en>Type</span><span data-cn>类型</span></th><th><span data-en>Name</span><span data-cn>主机记录</span></th><th><span data-en>Value</span><span data-cn>记录值</span></th></tr>
+                  <tr><td>CNAME</td><td>shop</td><td>hosting.rootskitchenchina.com</td></tr>
+                </table>
+              </div>
+            </div>
+            <span class="stat"><span data-en>Waiting for DNS</span><span data-cn>等待解析</span></span>
+          </div>
+
+          <div class="dstep wait">
+            <span class="num">3</span>
+            <div class="db"><div class="dt"><span data-en>Secure it</span><span data-cn>启用 HTTPS</span></div>
+              <div class="dd"><span data-en>We issue the HTTPS certificate automatically once DNS points here.</span><span data-cn>解析生效后,我们会自动签发 HTTPS 证书。</span></div>
+            </div>
+            <span class="stat"><span data-en>Automatic</span><span data-cn>自动</span></span>
+          </div>
+
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn pri" style="padding:9px 16px"><span data-en>Check DNS</span><span data-cn>检测解析</span></button>
+            <button class="btn" style="padding:9px 16px"><span data-en>Remove</span><span data-cn>移除</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Customer sign-in ============ -->
+    <div class="sec">
+      <div class="sec-head">
+        <span class="sec-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg>
+        </span>
+        <b><span data-en>Customer sign-in</span><span data-cn>顾客登录</span></b>
+      </div>
+      <p class="sec-sub"><span data-en>How shoppers sign in on the web. Turn on the ones you want — nothing to set up.</span><span data-cn>顾客在网页端的登录方式。按需开启即可,无需配置。</span></p>
+
+      <div class="methods">
+        <div class="method">
+          <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></span>
+          <div class="m-main"><div class="mn"><span data-en>Phone number</span><span data-cn>手机号</span></div><div class="md"><span data-en>Six-digit code by SMS</span><span data-cn>短信验证码</span></div></div>
+          <span class="m-stat ok">✓ <span data-en>Ready</span><span data-cn>就绪</span></span>
+          <button class="tog on"><span class="knob"></span></button>
+        </div>
+
+        <div class="method">
+          <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg></span>
+          <div class="m-main"><div class="mn"><span data-en>Email</span><span data-cn>邮箱</span></div><div class="md"><span data-en>Six-digit code by email</span><span data-cn>邮件验证码</span></div></div>
+          <span class="m-stat ok">✓ <span data-en>Ready</span><span data-cn>就绪</span></span>
+          <button class="tog on"><span class="knob"></span></button>
+        </div>
+
+        <div class="method">
+          <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg></span>
+          <div class="m-main"><div class="mn"><span data-en>Google</span><span data-cn>谷歌</span></div><div class="md"><span data-en>One-tap sign-in with a Google account</span><span data-cn>使用谷歌账号一键登录</span></div></div>
+          <span class="m-stat ok">✓ <span data-en>Ready</span><span data-cn>就绪</span></span>
+          <button class="tog on"><span class="knob"></span></button>
+        </div>
+
+        <div class="method">
+          <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 13c0-2 1.5-3 1.6-3.1C16.8 8.6 15.5 8.5 15 8.5c-1.2-.1-2.3.7-2.9.7-.6 0-1.5-.7-2.5-.7C7.5 8.6 6 9.9 6 12.5c0 1 .4 2.6 1.2 3.9.6.9 1.2 1.8 2 1.8.8 0 1.1-.5 2.1-.5s1.3.5 2.1.5c.9 0 1.4-.9 2-1.8.3-.5.5-1 .6-1.2-1.4-.5-2-1.6-2-2.9z"/><path d="M13.5 6.5c.5-.6.8-1.4.7-2.2-.7 0-1.5.5-2 1-.4.5-.8 1.3-.7 2.1.8.1 1.5-.4 2-.9z"/></svg></span>
+          <div class="m-main"><div class="mn"><span data-en>Apple</span><span data-cn>苹果</span></div><div class="md"><span data-en>Sign in with an Apple ID</span><span data-cn>使用 Apple ID 登录</span></div></div>
+          <span class="m-stat ok">✓ <span data-en>Ready</span><span data-cn>就绪</span></span>
+          <button class="tog"><span class="knob"></span></button>
+        </div>
+
+        <div class="method">
+          <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4C5 4 2 6.7 2 10c0 1.9 1 3.5 2.6 4.6L4 17l2.6-1.3c.8.2 1.5.3 2.4.3h.6"/><path d="M22 15c0-2.8-2.7-5-6-5s-6 2.2-6 5 2.7 5 6 5c.7 0 1.4-.1 2-.3L20 21l-.5-1.8C21 18.3 22 16.8 22 15z"/></svg></span>
+          <div class="m-main"><div class="mn"><span data-en>WeChat</span><span data-cn>微信</span></div><div class="md"><span data-en>Sign in by scanning with WeChat</span><span data-cn>微信扫码登录</span></div></div>
+          <span class="m-stat ok">✓ <span data-en>Ready</span><span data-cn>就绪</span></span>
+          <button class="tog"><span class="knob"></span></button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ Payments ============ -->
+    <div class="sec">
+      <div class="sec-head">
+        <span class="sec-ico">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6.5 14.5h4"/></svg>
+        </span>
+        <b><span data-en>Payments</span><span data-cn>收款</span></b>
+      </div>
+      <p class="sec-sub"><span data-en>How customers pay on the web. WeChat Pay uses the merchant setup from your Mini App.</span><span data-cn>顾客在网页端的付款方式。微信支付沿用小程序中的商户配置。</span></p>
+
+      <div class="pay">
+        <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4C5 4 2 6.7 2 10c0 1.9 1 3.5 2.6 4.6L4 17l2.6-1.3c.8.2 1.5.3 2.4.3h.6"/><path d="M22 15c0-2.8-2.7-5-6-5s-6 2.2-6 5 2.7 5 6 5c.7 0 1.4-.1 2-.3L20 21l-.5-1.8C21 18.3 22 16.8 22 15z"/></svg></span>
+        <div class="p-main"><div class="pn"><span data-en>WeChat Pay</span><span data-cn>微信支付</span></div><div class="pd"><span data-en>Uses your Mini App merchant setup — nothing to enter again.</span><span data-cn>沿用小程序的商户配置,无需重复填写。</span></div></div>
+        <span class="m-stat ok" style="margin-right:6px">✓ <span data-en>Ready</span><span data-cn>就绪</span></span>
+        <button class="pbtn"><span data-en>Open Mini App config</span><span data-cn>打开小程序配置</span></button>
+      </div>
+
+      <div class="pay">
+        <span class="m-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M7 14c3 1.5 7 1.5 10-1M9.5 8.5h5"/></svg></span>
+        <div class="p-main"><div class="pn"><span data-en>Alipay</span><span data-cn>支付宝</span> <span class="opt"><span data-en>Optional</span><span data-cn>选填</span></span></div><div class="pd"><span data-en>Show your Alipay collection QR at checkout; staff confirm the transfer.</span><span data-cn>结账时展示收款码,由店员核实到账。</span></div></div>
+        <button class="pbtn"><span data-en>Upload QR</span><span data-cn>上传收款码</span></button>
+      </div>
+    </div>
+
+    <div class="m-foot">
+      <button class="helplink">? <span data-en>Get help</span><span data-cn>获取帮助</span></button>
+      <span class="foot-sp"></span>
+      <button class="btn"><span data-en>Close</span><span data-cn>关闭</span></button>
+      <button class="btn pri"><span data-en>Save changes</span><span data-cn>保存更改</span></button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  function setLang(l){
+    document.documentElement.classList.toggle('cn', l === 'cn');
+    document.getElementById('lgEn').classList.toggle('act', l === 'en');
+    document.getElementById('lgCn').classList.toggle('act', l === 'cn');
+  }
+  document.querySelectorAll('.tog').forEach(function(t){
+    t.addEventListener('click', function(){ t.classList.toggle('on'); });
+  });
+</script>
+</body>
+</html>

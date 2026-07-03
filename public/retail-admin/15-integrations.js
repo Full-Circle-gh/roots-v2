@@ -42,6 +42,7 @@
   window.igLaunchSetup = function (kind) {
     if (kind === 'meituan' || kind === 'qingyun') { igRelayWizard(kind); return; }
     if (kind === 'wechat_miniapp') { igMiniappConfig(); return; }
+    if (kind === 'web') { igWebConfig(); return; }
     if (kind === 'eleme') { igElemeWizard(); return; }                                       // guided connect → shops → products → verify
     if (kind === 'jd' && typeof salesGo === 'function') { salesGo('config'); return; }      // JD keys + Save & test in Settings
     igOpenPlaceholder(kind, 'setup');
@@ -160,7 +161,7 @@
     if (!igGo(kind)) igOpenPlaceholder(kind, 'setup');
   };
   window.igManage = function (kind) {
-    if (kind === 'web') { if (window.toast) toast(cuT('Web store is always on — nothing to configure.', '网页商店常开 — 无需配置。')); return; }
+    if (kind === 'web') { igWebConfig(); return; }
     if (kind === 'wechat_miniapp') { igMiniappWizard(); return; }
     // Meituan management (product mapping etc.) has its own tab; Qingyun re-opens
     // the relay wizard to re-verify a session.
@@ -684,6 +685,246 @@
       if (btn) { btn.disabled = false; btn.innerHTML = mcSaveBtnHtml(); }
       if (out) { out.style.color = 'var(--danger)'; out.textContent = (e && e.code === 'appid_taken') ? cuT('That AppID is already in use.', '该 AppID 已被占用。') : (e && e.code === 'bad_appid' ? cuT('AppID must look like wx + 16 chars.', 'AppID 格式应为 wx + 16 位。') : cuT('Save failed', '保存失败')); }
     }
+  };
+
+  // ── Web store configuration — sibling of the Mini App page ──────────────────
+  // Shop address (free subdomain + optional custom domain with a DNS stepper),
+  // which sign-in methods the shop shows (platform-provided creds → toggles, not
+  // key entry), and payment readiness (WeChat Pay reuses the Mini App merchant
+  // setup; Alipay is the manual QR). Design source: reference/webshop-config-mockup.html
+  const WC_SVG = {
+    globe: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19"/><path d="M12 2.5c2.7 2.8 4.2 6 4.2 9.5S14.7 18.7 12 21.5C9.3 18.7 7.8 15.5 7.8 12S9.3 5.3 12 2.5z"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-3.5 3.6-6 8-6s8 2.5 8 6"/></svg>',
+    mail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>',
+    google: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+    apple: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 13c0-2 1.5-3 1.6-3.1C16.8 8.6 15.5 8.5 15 8.5c-1.2-.1-2.3.7-2.9.7-.6 0-1.5-.7-2.5-.7C7.5 8.6 6 9.9 6 12.5c0 1 .4 2.6 1.2 3.9.6.9 1.2 1.8 2 1.8.8 0 1.1-.5 2.1-.5s1.3.5 2.1.5c.9 0 1.4-.9 2-1.8.3-.5.5-1 .6-1.2-1.4-.5-2-1.6-2-2.9z"/><path d="M13.5 6.5c.5-.6.8-1.4.7-2.2-.7 0-1.5.5-2 1-.4.5-.8 1.3-.7 2.1.8.1 1.5-.4 2-.9z"/></svg>',
+    wechat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4C5 4 2 6.7 2 10c0 1.9 1 3.5 2.6 4.6L4 17l2.6-1.3c.8.2 1.5.3 2.4.3h.6"/><path d="M22 15c0-2.8-2.7-5-6-5s-6 2.2-6 5 2.7 5 6 5c.7 0 1.4-.1 2-.3L20 21l-.5-1.8C21 18.3 22 16.8 22 15z"/></svg>',
+    alipay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M6 14c3.5 1.6 8 1.6 11-1M9.5 8.5h5"/></svg>',
+    copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h8"/></svg>',
+    open: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>',
+    link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>',
+    chev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>',
+  };
+  const SIGNIN_META = {
+    phone:  { ico: MC_SVG.phone, en: 'Phone number', cn: '手机号', dEn: 'Six-digit code by SMS', dCn: '短信验证码' },
+    email:  { ico: WC_SVG.mail,  en: 'Email', cn: '邮箱', dEn: 'Six-digit code by email', dCn: '邮件验证码' },
+    google: { ico: WC_SVG.google, en: 'Google', cn: '谷歌', dEn: 'One-tap sign-in with a Google account', dCn: '谷歌账号一键登录' },
+    apple:  { ico: WC_SVG.apple, en: 'Apple', cn: '苹果', dEn: 'Sign in with an Apple ID', dCn: '使用 Apple ID 登录' },
+    wechat: { ico: WC_SVG.wechat, en: 'WeChat', cn: '微信', dEn: 'Sign in by scanning with WeChat', dCn: '微信扫码登录' },
+  };
+  const SIGNIN_ORDER = ['phone', 'email', 'google', 'apple', 'wechat'];
+  let _webCfg = null;
+
+  window.igWebConfig = async function () {
+    const box = igHostEl(); if (!box) return;
+    box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Web store config…', '加载网页商店配置…'));
+    let cfg;
+    try { cfg = await api('/api/retail-admin/channel-hub/web/config'); }
+    catch (e) { box.innerHTML = igMuted(cuT('Failed to load', '加载失败')); return; }
+    _webCfg = cfg;
+
+    const domains = cfg.domains || [];
+    const activeD = domains.filter(d => d.status === 'active');
+    const primary = activeD.find(d => d.isPrimary) || activeD[0] || null;
+    const custom = domains.filter(d => d.kind !== 'subdomain');
+    const av = (cfg.signin && cfg.signin.available) || {};
+    const en = (cfg.signin && cfg.signin.enabled) || {};
+    const anySignin = SIGNIN_ORDER.some(m => en[m]);
+    const payReady = !!(cfg.pay && (cfg.pay.wechatReady || cfg.pay.alipayConfigured));
+
+    const chip = (ok, enT, cnT) => `<span class="mc-chip${ok ? ' on' : ''}">${ok ? MC_SVG.check : MC_SVG.circle}<span>${cuT(enT, cnT)}</span></span>`;
+
+    // Shop address block.
+    let addrHtml;
+    if (primary) {
+      const parts = primary.host.split('.');
+      const head = parts.shift();
+      addrHtml = `<div class="wc-addr">
+        <span class="live" title="Live"></span>
+        <span class="url"><span class="pre">https://</span>${esc(head)}<span class="pre">.${esc(parts.join('.'))}</span></span>
+        <button class="btn btn-sm" onclick="igWebCopy('${escJs('https://' + primary.host)}')">${WC_SVG.copy}<span style="margin-left:5px">${cuT('Copy', '复制')}</span></button>
+        <button class="btn btn-sm" onclick="window.open('${escJs('https://' + primary.host)}','_blank')">${WC_SVG.open}<span style="margin-left:5px">${cuT('Open', '打开')}</span></button>
+      </div>
+      <div class="wc-note">${cuT('This address works immediately and never needs setup.', '该网址即刻可用,无需任何设置。')}</div>`;
+    } else if (cfg.suggestedSub) {
+      addrHtml = `<div class="wc-addr">
+        <span class="live off" title="Reserved"></span>
+        <span class="url"><span class="pre">https://</span>${esc(cfg.suggestedSub)}</span>
+      </div>
+      <div class="wc-note">${cuT('Your free address is reserved and will go live shortly.', '免费网址已预留,即将上线。')}</div>`;
+    } else {
+      addrHtml = `<div class="wc-note">${cuT('No web address yet — add your own domain below.', '尚无网页地址 — 请在下方接入自有域名。')}</div>`;
+    }
+
+    // Existing custom domains + the add/stepper flow.
+    const target = cfg.cnameTarget || cfg.baseDomain || '';
+    const domRows = custom.map(d => {
+      const isLive = d.status === 'active';
+      return `<div class="wc-dstep ${isLive ? 'done' : 'now'}" id="wcd_${d.id}">
+        <span class="num">${isLive ? '✓' : '!'}</span>
+        <div class="db"><div class="dt">${esc(d.host)}</div>
+          <div class="dd">${isLive ? cuT('Live and secured.', '已上线并启用 HTTPS。')
+            : cuT('Add a CNAME record for this name pointing to ', '为该域名添加 CNAME 记录,指向 ') + esc(target) + cuT(', then check DNS.', ',然后检测解析。')}</div>
+          ${isLive ? '' : `<div class="wc-dns"><table>
+            <tr><th>${cuT('Type', '类型')}</th><th>${cuT('Name', '主机记录')}</th><th>${cuT('Value', '记录值')}</th></tr>
+            <tr><td>CNAME</td><td>${esc(d.host.split('.')[0])}</td><td>${esc(target)}</td></tr></table></div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <button class="btn btn-sm btn-primary" onclick="igWebCheckDns('${d.id}')">${cuT('Check DNS', '检测解析')}</button>
+            <button class="btn btn-sm" onclick="igWebRemoveDomain('${d.id}','${escJs(d.host)}')">${cuT('Remove', '移除')}</button>
+          </div>`}
+        </div>
+        <span class="stat">${isLive ? cuT('Live', '已上线') : cuT('Waiting for DNS', '等待解析')}</span>
+      </div>`;
+    }).join('');
+
+    const customHtml = `<div class="wc-custom" id="wc_custom">
+      <div class="wc-custom-head" onclick="document.getElementById('wc_custom').classList.toggle('open')">
+        ${WC_SVG.link}
+        <span class="ct"><b>${cuT('Use your own domain', '使用自有域名')}</b><span class="cs">${cuT('e.g. shop.yourbrand.com — optional', '例如 shop.yourbrand.com — 选填')}</span></span>
+        ${WC_SVG.chev}
+      </div>
+      <div class="wc-custom-body">
+        ${domRows}
+        <div class="wc-di">
+          <input type="text" id="wc_newdomain" placeholder="shop.yourbrand.com" spellcheck="false" autocapitalize="off">
+          <button class="btn btn-primary" onclick="igWebAddDomain()">${cuT('Add domain', '添加域名')}</button>
+        </div>
+        <div id="wc_domain_msg" style="font-size:12px;margin-top:8px"></div>
+      </div>
+    </div>`;
+
+    // Sign-in method rows.
+    const methodRows = SIGNIN_ORDER.map(m => {
+      const meta = SIGNIN_META[m];
+      const avail = !!av[m];
+      const on = !!en[m];
+      const stat = avail
+        ? `<span class="wc-mstat ok">✓ ${cuT('Ready', '就绪')}</span>`
+        : `<span class="wc-mstat byo">${cuT('Not available yet', '暂不可用')}</span>`;
+      return `<div class="wc-method">
+        <span class="wc-mico">${meta.ico}</span>
+        <div class="wc-mmain"><div class="mn">${cuT(meta.en, meta.cn)}</div><div class="md">${cuT(meta.dEn, meta.dCn)}</div></div>
+        ${stat}
+        <button class="wc-tog${on ? ' on' : ''}" data-method="${m}"${avail ? '' : ' disabled'} onclick="this.classList.toggle('on')"><span class="knob"></span></button>
+      </div>`;
+    }).join('');
+
+    // Payments rows.
+    const wcReady = !!(cfg.pay && cfg.pay.wechatReady);
+    const aliOn = !!(cfg.pay && cfg.pay.alipayConfigured);
+    const payHtml = `
+      <div class="wc-pay">
+        <span class="wc-mico">${WC_SVG.wechat}</span>
+        <div class="wc-mmain"><div class="mn">${cuT('WeChat Pay', '微信支付')}</div><div class="md">${cuT('Uses your Mini App merchant setup — nothing to enter again.', '沿用小程序的商户配置,无需重复填写。')}</div></div>
+        <span class="wc-mstat ${wcReady ? 'ok' : 'byo'}" style="margin-right:6px">${wcReady ? '✓ ' + cuT('Ready', '就绪') : cuT('Not set up', '未配置')}</span>
+        <button class="btn btn-sm" onclick="igMiniappConfig()">${cuT('Open Mini App config', '打开小程序配置')}</button>
+      </div>
+      <div class="wc-pay">
+        <span class="wc-mico">${WC_SVG.alipay}</span>
+        <div class="wc-mmain"><div class="mn">${cuT('Alipay', '支付宝')}</div><div class="md">${cuT('Show your Alipay collection QR at checkout; staff confirm the transfer.', '结账时展示收款码,由店员核实到账。')}</div></div>
+        <span class="wc-mstat ${aliOn ? 'ok' : 'byo'}" style="margin-right:6px">${aliOn ? '✓ ' + cuT('On', '已开启') : cuT('Optional', '选填')}</span>
+        <button class="btn btn-sm" onclick="salesGo('config')">${cuT('Set up', '设置')}</button>
+      </div>`;
+
+    box.innerHTML = `<div class="ig-wiz">
+      <div class="mc-head">
+        <div>
+          <strong style="font-size:16px">${cuT('Web store configuration', '网页商店配置')}</strong>
+          <div class="mc-subtitle">${cuT('Your browser storefront — the address customers visit, how they sign in, and how they pay.', '浏览器版商店 — 顾客访问的网址、登录与付款方式。')}</div>
+        </div>
+        <button class="btn btn-sm" onclick="igLocClose()">✕</button>
+      </div>
+      <div class="mc-chips">
+        ${chip(!!primary, 'Store online', '商店在线')}
+        ${chip(anySignin, 'Sign-in ready', '登录可用')}
+        ${chip(payReady, 'Payments ready', '收款可用')}
+      </div>
+
+      <div class="mc-sec">
+        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.globe}</span><b>${cuT('Shop address', '商店网址')}</b></div>
+        <div class="mc-purpose">${cuT('Where customers reach your store. A free address is included — add your own domain any time.', '顾客访问商店的网址。已含免费网址,可随时接入自有域名。')}</div>
+        ${addrHtml}
+        ${customHtml}
+      </div>
+
+      <div class="mc-sec">
+        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.user}</span><b>${cuT('Customer sign-in', '顾客登录')}</b></div>
+        <div class="mc-purpose">${cuT('How shoppers sign in on the web. Turn on the ones you want — nothing to set up.', '顾客在网页端的登录方式。按需开启即可,无需配置。')}</div>
+        ${methodRows}
+      </div>
+
+      <div class="mc-sec">
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Payments', '收款')}</b></div>
+        <div class="mc-purpose">${cuT('How customers pay on the web. WeChat Pay uses the merchant setup from your Mini App.', '顾客在网页端的付款方式。微信支付沿用小程序的商户配置。')}</div>
+        ${payHtml}
+      </div>
+
+      <div class="mc-foot">
+        <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px;padding:0" onclick="igHelp('web')">? ${cuT('Get help', '获取帮助')}</button>
+        <span class="ig-spacer"></span>
+        <span id="wc_result" style="font-size:12.5px"></span>
+        <button class="btn" onclick="igLocClose()">${cuT('Close', '关闭')}</button>
+        <button class="btn btn-primary" id="wc_save" onclick="igWebSaveSignin()">${cuT('Save changes', '保存更改')}</button>
+      </div>
+    </div>`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  window.igWebCopy = function (url) {
+    try { navigator.clipboard.writeText(url); if (window.toast) toast(cuT('Copied', '已复制')); }
+    catch (_) { if (window.toast) toast(url); }
+  };
+
+  window.igWebSaveSignin = async function () {
+    const body = {};
+    document.querySelectorAll('.wc-tog[data-method]').forEach(t => { body[t.getAttribute('data-method')] = t.classList.contains('on'); });
+    const btn = document.getElementById('wc_save'), out = document.getElementById('wc_result');
+    if (btn) btn.disabled = true;
+    if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Saving…', '保存中…'); }
+    try {
+      await api('/api/retail-admin/channel-hub/web/signin', { method: 'POST', body });
+      if (out) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = '✓ ' + cuT('Saved', '已保存'); }
+    } catch (e) {
+      if (out) { out.style.color = 'var(--danger)'; out.textContent = cuT('Save failed', '保存失败'); }
+    } finally { if (btn) btn.disabled = false; }
+  };
+
+  window.igWebAddDomain = async function () {
+    const inp = document.getElementById('wc_newdomain'), msg = document.getElementById('wc_domain_msg');
+    const host = inp ? inp.value.trim().toLowerCase() : '';
+    if (!host) return;
+    if (msg) { msg.style.color = 'var(--text-3)'; msg.textContent = cuT('Adding…', '添加中…'); }
+    try {
+      await api('/api/retail-admin/channel-hub/web/domain', { method: 'POST', body: { host } });
+      igWebConfig();
+      setTimeout(() => { const c = document.getElementById('wc_custom'); if (c) c.classList.add('open'); }, 60);
+    } catch (e) {
+      const map = { bad_domain: cuT('Enter a valid domain (e.g. shop.example.com).', '请输入有效域名。'),
+        reserved: cuT('That is a platform address — it is managed for you.', '这是平台地址,由系统托管。'),
+        taken: cuT('That domain is already registered.', '该域名已被登记。'),
+        already_yours: cuT('You have already added that domain.', '您已添加该域名。') };
+      if (msg) { msg.style.color = 'var(--danger)'; msg.textContent = map[e && e.code] || cuT('Could not add that domain.', '无法添加该域名。'); }
+    }
+  };
+
+  window.igWebCheckDns = async function (domainId) {
+    const out = document.getElementById('wc_domain_msg');
+    if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Checking DNS…', '检测解析中…'); }
+    try {
+      const r = await api(`/api/retail-admin/channel-hub/web/domain/${domainId}/check`, { method: 'POST' });
+      if (out) {
+        if (r.pointing) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = '✓ ' + cuT('DNS is pointing here. We’ll issue HTTPS and turn it on — usually within a few minutes.', 'DNS 已指向本平台。我们会签发 HTTPS 并开启,通常几分钟内完成。'); }
+        else { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = cuT('Not pointing here yet. DNS can take a while to update — try again shortly.', '尚未指向本平台。DNS 生效可能需要一些时间,请稍后重试。'); }
+      }
+    } catch (e) {
+      if (out) { out.style.color = 'var(--danger)'; out.textContent = cuT('Check failed', '检测失败'); }
+    }
+  };
+
+  window.igWebRemoveDomain = async function (domainId, host) {
+    if (!window.confirm(cuT('Remove ' + host + '? Customers using it will no longer reach your store.', '移除 ' + host + '?使用该域名的顾客将无法访问您的商店。'))) return;
+    try { await api(`/api/retail-admin/channel-hub/web/domain/${domainId}`, { method: 'DELETE' }); igWebConfig(); }
+    catch (e) { if (window.toast) toast(cuT('Could not remove', '无法移除')); }
   };
 
   // ── util ────────────────────────────────────────────────────────────────────

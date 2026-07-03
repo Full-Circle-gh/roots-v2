@@ -376,4 +376,148 @@ router.post('/api/retail-admin/channel-hub/miniapp/wechat-creds', requireRetailA
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ═══════════════ Web store configuration ═══════════════════════════════════
+// The browser storefront's own config page (sibling of the Mini App one): shop
+// address (free subdomain + optional custom domain), which sign-in methods the
+// shop shows, and payment readiness. Sign-in credentials are platform-provided,
+// so this page is toggles, not key entry. Domains live in the CONTROL plane
+// (tenant_domains, mainDb); sign-in prefs live in the tenant DATA plane
+// (storefront_config 'web.signin'), read by the customer /auth/methods endpoint.
+const dnsp = require('dns').promises;
+const webSocial = require('../lib/social-auth');
+const webEmail = require('../lib/email-sender');
+const { registerTenantDomain, slugify: webSlugify } = require('../lib/provision-tenant');
+const { normalizeHost: webNormalizeHost } = require('../middleware/public-tenant');
+
+const WEB_BASE_DOMAIN = String(process.env.STOREFRONT_BASE_DOMAIN || '').trim().toLowerCase();
+const WEB_DOMAIN_RE = /^(?=.{4,253}$)([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$/;
+const WEB_SIGNIN_METHODS = ['phone', 'email', 'google', 'apple', 'wechat'];
+
+function webCfgGet(key, fallback) {
+  try {
+    const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+    return row ? JSON.parse(row.value_json) : fallback;
+  } catch (_) { return fallback; }
+}
+function webCfgSet(key, val) {
+  tdb().prepare(
+    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+       VALUES (?, ?, CURRENT_TIMESTAMP, 'web-config')
+     ON CONFLICT(key) DO UPDATE SET
+       value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+  ).run(key, JSON.stringify(val));
+}
+
+// Which sign-in methods have working credentials (platform env, or a tenant
+// override). Mirrors retail.js /auth/methods so availability is consistent.
+function webSigninAvailability(id) {
+  const ig = getTenantCreds(id).integrations || {};
+  return {
+    phone: true,                                       // Aliyun SMS baseline
+    email: !!webEmail.isConfigured(ig.email),
+    google: !!webSocial.isEnabled('google', ig),
+    apple: !!webSocial.isEnabled('apple', ig),
+    wechat: !!webSocial.isEnabled('wechat', ig),
+  };
+}
+
+function webDomainRows(id) {
+  try {
+    return mainDb.prepare(
+      'SELECT id, host, kind, status, is_primary FROM tenant_domains WHERE tenant_id = ? ORDER BY is_primary DESC, id ASC'
+    ).all(id).map(d => ({ id: d.id, host: d.host, kind: d.kind, status: d.status, isPrimary: !!d.is_primary }));
+  } catch (_) { return []; }
+}
+
+// The whole picture for the config page.
+router.get('/api/retail-admin/channel-hub/web/config', requireRetailAdmin, (req, res) => {
+  try {
+    const id = tenantId(req);
+    const domains = webDomainRows(id);
+    // The free platform subdomain we would assign, shown as a hint when the
+    // tenant has no address yet (needs the one-time wildcard DNS+TLS to serve).
+    let suggestedSub = null;
+    if (WEB_BASE_DOMAIN) {
+      const t = mainDb.prepare('SELECT brand_name, name FROM tenants WHERE id = ?').get(id) || {};
+      suggestedSub = `${webSlugify(t.brand_name || t.name || 'shop')}.${WEB_BASE_DOMAIN}`;
+    }
+    const available = webSigninAvailability(id);
+    const pref = webCfgGet('web.signin', null);
+    const enabled = {};
+    for (const m of WEB_SIGNIN_METHODS) enabled[m] = pref ? (!!pref[m] && available[m]) : available[m];
+    const cs = credsStatus(id);
+    const alipay = webCfgGet('integrations.alipayManual', null);
+    res.json({
+      success: true,
+      baseDomain: WEB_BASE_DOMAIN,
+      cnameTarget: WEB_BASE_DOMAIN,   // custom domains CNAME to the platform base
+      domains, suggestedSub,
+      signin: { available, enabled },
+      pay: { wechatReady: !!cs.payReady, alipayConfigured: !!(alipay && alipay.enabled && alipay.qr) },
+    });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Save which sign-in methods the web storefront shows. An unavailable method
+// (no creds) can never be turned on, so the stored pref stays truthful.
+router.post('/api/retail-admin/channel-hub/web/signin', requireRetailAdmin, express.json(), (req, res) => {
+  try {
+    const id = tenantId(req);
+    const available = webSigninAvailability(id);
+    const b = req.body || {};
+    const next = {};
+    for (const m of WEB_SIGNIN_METHODS) next[m] = !!b[m] && !!available[m];
+    webCfgSet('web.signin', next);
+    res.json({ success: true, enabled: next });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Register a custom (BYO) domain — starts 'pending' until DNS points here and
+// TLS is issued. Reserved: our own platform subdomains (those are auto-managed).
+router.post('/api/retail-admin/channel-hub/web/domain', requireRetailAdmin, express.json(), (req, res) => {
+  try {
+    const id = tenantId(req);
+    const host = webNormalizeHost(req.body && req.body.host);
+    if (!host || !WEB_DOMAIN_RE.test(host)) return res.status(400).json({ success: false, error: 'bad_domain' });
+    if (WEB_BASE_DOMAIN && (host === WEB_BASE_DOMAIN || host.endsWith('.' + WEB_BASE_DOMAIN))) {
+      return res.status(400).json({ success: false, error: 'reserved' });
+    }
+    const clash = mainDb.prepare('SELECT tenant_id FROM tenant_domains WHERE host = ?').get(host);
+    if (clash) return res.status(409).json({ success: false, error: clash.tenant_id === id ? 'already_yours' : 'taken' });
+    registerTenantDomain(id, host, { kind: 'custom', status: 'pending', primary: false });
+    const row = mainDb.prepare('SELECT id FROM tenant_domains WHERE host = ?').get(host);
+    res.json({ success: true, id: row && row.id, host });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Check whether a pending domain now resolves to us. "Pointing" = the domain's
+// A records overlap our base domain's A records (survives an IP change, and
+// handles both CNAME-to-base and direct A setups). We record the DNS result but
+// do NOT flip the domain to 'active' here: serving a host before its TLS cert
+// exists would break HTTPS at the edge. Activation happens when the cert is
+// issued (see the custom-domain TLS runbook).
+router.post('/api/retail-admin/channel-hub/web/domain/:domainId/check', requireRetailAdmin, async (req, res) => {
+  try {
+    const id = tenantId(req);
+    const d = mainDb.prepare('SELECT * FROM tenant_domains WHERE id = ? AND tenant_id = ?').get(req.params.domainId, id);
+    if (!d) return res.status(404).json({ success: false, error: 'not_found' });
+    const ourHost = WEB_BASE_DOMAIN || webNormalizeHost(req.hostname);
+    const ours = await dnsp.resolve4(ourHost).catch(() => []);
+    const theirs = await dnsp.resolve4(d.host).catch(() => []);
+    const pointing = theirs.length > 0 && ours.length > 0 && theirs.some(ip => ours.includes(ip));
+    res.json({ success: true, pointing, resolved: theirs, host: d.host, status: d.status });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+router.delete('/api/retail-admin/channel-hub/web/domain/:domainId', requireRetailAdmin, (req, res) => {
+  try {
+    const id = tenantId(req);
+    const d = mainDb.prepare('SELECT * FROM tenant_domains WHERE id = ? AND tenant_id = ?').get(req.params.domainId, id);
+    if (!d) return res.status(404).json({ success: false, error: 'not_found' });
+    if (d.kind === 'subdomain') return res.status(400).json({ success: false, error: 'platform_subdomain' });
+    mainDb.prepare('DELETE FROM tenant_domains WHERE id = ?').run(d.id);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 module.exports = router;

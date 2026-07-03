@@ -2994,13 +2994,27 @@ function oauthRedirectUri(req, provider) {
 // storefront renders. phone is always on; email/social light up with creds.
 router.get('/api/retail/auth/methods', (req, res) => {
   const ig = integ();
-  res.json({ success: true, data: {
+  const avail = {
     phone:  true,
     email:  _emailSender.isConfigured(ig && ig.email) || OTP_DEV_ECHO,
     google: _socialAuth.isEnabled('google', ig),
     apple:  _socialAuth.isEnabled('apple', ig),
     wechat: _socialAuth.isEnabled('wechat', ig),
-  } });
+  };
+  // The backend Web-store config lets a tenant HIDE an available method from
+  // their storefront (storefront_config 'web.signin'). A method the tenant
+  // hasn't set a preference for defaults to shown; one it can't run (no creds)
+  // is never shown regardless of the pref.
+  let pref = null;
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'web.signin'").get();
+    if (row) pref = JSON.parse(row.value_json);
+  } catch (_) { /* no pref → defaults */ }
+  const data = {};
+  for (const k of Object.keys(avail)) {
+    data[k] = (pref && Object.prototype.hasOwnProperty.call(pref, k)) ? (avail[k] && !!pref[k]) : avail[k];
+  }
+  res.json({ success: true, data });
 });
 
 router.get('/api/retail/auth/oauth/:provider/start', (req, res) => {

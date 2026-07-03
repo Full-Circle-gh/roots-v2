@@ -7423,6 +7423,61 @@
              animation:mcsp .7s linear infinite;flex:none}
     @keyframes mcsp{to{transform:rotate(360deg)}}
     @media (prefers-reduced-motion:reduce){.mc-spin{animation:none}}
+
+    /* Web store configuration (wc-*) — design source: reference/webshop-config-mockup.html.
+       Reuses the mc-* section/chip/foot classes; adds address, domain-stepper,
+       sign-in method rows, and a toggle. */
+    .wc-addr{display:flex;align-items:center;gap:12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-elev-1);padding:11px 13px;flex-wrap:wrap}
+    .wc-addr .live{width:9px;height:9px;border-radius:50%;background:var(--accent);flex:none;box-shadow:0 0 0 4px rgba(107,142,111,.18)}
+    .wc-addr .live.off{background:var(--text-4);box-shadow:0 0 0 4px rgba(86,84,79,.14)}
+    .wc-addr .url{flex:1;min-width:180px;font-family:var(--f-mono,monospace);font-size:13px;font-weight:600;color:var(--text-1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .wc-addr .url .pre{color:var(--text-3)}
+    .wc-note{font-size:11.5px;color:var(--text-4);margin-top:8px;line-height:1.5}
+    .wc-custom{margin-top:14px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+    .wc-custom-head{display:flex;align-items:center;gap:11px;padding:12px 14px;cursor:pointer}
+    .wc-custom-head:hover{background:var(--bg-elev-1)}
+    .wc-custom-head .ct{flex:1}
+    .wc-custom-head .ct b{font-size:13px;font-weight:700}
+    .wc-custom-head .ct .cs{font-size:11.5px;color:var(--text-3);display:block;margin-top:1px}
+    .wc-custom-head .chev{width:15px;height:15px;color:var(--text-3);transition:.2s;flex:none}
+    .wc-custom.open .chev{transform:rotate(90deg)}
+    .wc-custom-body{display:none;padding:2px 14px 14px;border-top:1px solid var(--line)}
+    .wc-custom.open .wc-custom-body{display:block}
+    .wc-dstep{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+    .wc-dstep:last-child{border-bottom:none}
+    .wc-dstep .num{width:22px;height:22px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;font-family:var(--f-mono,monospace);background:var(--bg-elev-1);border:1px solid var(--line);color:var(--text-3)}
+    .wc-dstep.done .num{background:var(--accent);border-color:var(--accent);color:#fff}
+    .wc-dstep.now .num{background:var(--brass);border-color:var(--brass);color:#fff}
+    .wc-dstep .db{flex:1;min-width:0}
+    .wc-dstep .db .dt{font-size:13px;font-weight:700}
+    .wc-dstep .db .dd{font-size:11.5px;color:var(--text-3);margin-top:2px;line-height:1.5}
+    .wc-dstep .stat{font-size:11px;font-weight:700;flex:none;align-self:center}
+    .wc-dstep.done .stat{color:var(--accent)}
+    .wc-dstep.now .stat{color:var(--brass)}
+    .wc-dstep.wait .stat{color:var(--text-4)}
+    .wc-dns{margin-top:8px;border:1px solid var(--line);border-radius:6px;overflow-x:auto;font-family:var(--f-mono,monospace);font-size:11.5px}
+    .wc-dns table{width:100%;border-collapse:collapse;min-width:340px}
+    .wc-dns th{text-align:left;font-weight:600;color:var(--text-3);font-size:10px;letter-spacing:.05em;text-transform:uppercase;padding:6px 10px;background:var(--bg-elev-1);border-bottom:1px solid var(--line)}
+    .wc-dns td{padding:7px 10px;color:var(--text-1);border-bottom:1px solid var(--line)}
+    .wc-dns tr:last-child td{border-bottom:none}
+    .wc-di{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap}
+    .wc-di input{flex:1;min-width:180px;border:1px solid var(--line);border-radius:8px;font-family:var(--f-mono,monospace);font-size:12.5px;padding:9px 11px;outline:none;background:var(--bg-pane);color:var(--text-1);transition:.15s}
+    .wc-di input:focus{border-color:var(--brass);box-shadow:0 0 0 3px rgba(176,141,74,.16)}
+    .wc-method,.wc-pay{display:flex;align-items:center;gap:13px;padding:13px 0;border-bottom:1px solid var(--line)}
+    .wc-method:last-child,.wc-pay:last-child{border-bottom:none}
+    .wc-mico{width:34px;height:34px;border-radius:9px;flex:none;display:grid;place-items:center;background:var(--bg-elev-1);border:1px solid var(--line);color:var(--text-2)}
+    .wc-mico svg{width:17px;height:17px}
+    .wc-mmain{flex:1;min-width:0}
+    .wc-mmain .mn{font-size:13px;font-weight:700}
+    .wc-mmain .md{font-size:11.5px;color:var(--text-3);margin-top:2px}
+    .wc-mstat{font-size:11px;font-weight:700;flex:none}
+    .wc-mstat.ok{color:var(--accent)}
+    .wc-mstat.byo{color:var(--text-4)}
+    .wc-tog{width:42px;height:25px;border-radius:999px;border:0;background:var(--bg-elev-2);position:relative;cursor:pointer;flex:none;transition:.18s;padding:0}
+    .wc-tog .knob{position:absolute;top:3px;left:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:.18s}
+    .wc-tog.on{background:var(--brass)}
+    .wc-tog.on .knob{left:20px}
+    .wc-tog:disabled{opacity:.5;cursor:not-allowed}
   </style>
 
   <!-- ── Eleme Sync ── -->
