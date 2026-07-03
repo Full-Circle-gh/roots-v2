@@ -781,7 +781,7 @@
       <div class="wc-custom-head" onclick="document.getElementById('wc_custom').classList.toggle('open')">
         ${WC_SVG.link}
         <span class="ct"><b>${cuT('Use your own domain', '使用自有域名')}</b><span class="cs">${cuT('e.g. shop.yourbrand.com — optional', '例如 shop.yourbrand.com — 选填')}</span></span>
-        ${WC_SVG.chev}
+        ${WC_SVG.chev.replace('<svg ', '<svg class="chev" ')}
       </div>
       <div class="wc-custom-body">
         ${domRows}
