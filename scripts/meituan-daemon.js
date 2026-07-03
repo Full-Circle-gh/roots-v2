@@ -72,10 +72,32 @@ const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 // (OPEN_GRACE_MIN) widens the window so trailing/pre-orders still import and the
 // on/off edge doesn't land exactly on the hour (also more human-looking).
 const OPEN_GRACE_MIN = 15;
+// Per-store opening hours (minutes since midnight, Asia/Shanghai). Seeded with
+// Roots' legacy defaults for backward compatibility, but any store that has
+// open_time/close_time set on its retail_stores row OVERRIDES these at boot
+// (see loadStoreHours) — so a new tenant's hours come from the Add-location
+// wizard, not this file. A store with neither is treated as always-open.
 const STORE_HOURS = {
   yuexiu: { open: 11 * 60 + 0,  close: 20 * 60 + 15 }, // 11:00–20:15
   tianhe: { open: 10 * 60 + 0,  close: 20 * 60 + 0  }, // 10:00–20:00
 };
+
+// Parse 'HH:MM' → minutes since midnight, or null if malformed/blank.
+function parseHm(v) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim());
+  if (!m) return null;
+  const mins = Number(m[1]) * 60 + Number(m[2]);
+  return mins >= 0 && mins < 24 * 60 ? mins : null;
+}
+
+// Merge per-store hours from retail_stores.open_time/close_time into STORE_HOURS.
+// Called at boot with the store rows; both columns must be set for an override.
+function loadStoreHours(rows) {
+  for (const s of rows || []) {
+    const open = parseHm(s.open_time), close = parseHm(s.close_time);
+    if (open != null && close != null && close > open) STORE_HOURS[s.code] = { open, close };
+  }
+}
 
 // Minutes-since-midnight in Asia/Shanghai (UTC+8), independent of server TZ.
 function shanghaiMinutes(now = new Date()) {
@@ -252,8 +274,11 @@ function noteVerifyResult(storeCode, challenged) {
 // from environment variables.
 function getStoreConfigs() {
   const stores = db.prepare(`
-    SELECT id, code, name_en FROM retail_stores WHERE is_active = 1 ORDER BY sort_order
+    SELECT id, code, name_en, open_time, close_time FROM retail_stores WHERE is_active = 1 ORDER BY sort_order
   `).all();
+  // Adopt per-store opening hours captured by the Add-location wizard, overriding
+  // the hardcoded defaults for any store that has them set.
+  loadStoreHours(stores);
 
   return stores.map(s => ({
     storeId:   s.id,

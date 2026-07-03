@@ -20,7 +20,7 @@ const { requireRetailAdmin } = require('./retail');
 const { tdb } = require('../lib/tenant-db');
 const registry = require('../lib/integrations/registry');
 const { sendPlatformAlert } = require('../lib/platform-alert');
-const { getTenantCreds, credsStatus } = require('../lib/tenant-creds');
+const { getTenantCreds, credsStatus, setTenantSecret, invalidate: invalidateCreds, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 const relay = require('../lib/integrations/session-relay');
 const onboarding = require('../lib/onboarding-steps');
 const mainDb = require('../database');
@@ -190,7 +190,6 @@ router.post('/api/retail-admin/channel-hub/:kind/todos/dismiss', requireRetailAd
 // are stored per-store via tenant-creds (never in the session table); the worker
 // reads them there. In dev without a worker, INTEGRATION_RELAY_SIM=1 enables a
 // simulation driver so the whole flow is demoable (code 000000).
-const { setTenantSecret } = require('../lib/tenant-creds');
 
 function assertRelayKind(kind) { if (!relay.RELAY_KINDS.has(kind)) { const e = new Error('not_a_relay_integration'); e.http = 400; throw e; } }
 
@@ -292,6 +291,40 @@ router.patch('/api/retail-admin/channel-hub/miniapp/step', requireRetailAdmin, e
       ON CONFLICT(tenant_id, step_key) DO UPDATE SET status = excluded.status, value = COALESCE(excluded.value, tenant_onboarding.value), updated_at = CURRENT_TIMESTAMP
     `).run(id, stepKey, status, value != null ? String(value) : null);
     res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Save the tenant's WeChat Mini Program AppID + AppSecret, then LIVE-VERIFY them
+// against WeChat (minting a stable_token = the creds are valid). Self-service
+// equivalent of the platform PUT /credentials for the login half. Roots is
+// configured from server env, so it's read-only here. Pay certs (cert files)
+// stay on the managed/platform path — this covers login readiness.
+router.post('/api/retail-admin/channel-hub/miniapp/wechat-creds', requireRetailAdmin, express.json(), async (req, res) => {
+  try {
+    const id = tenantId(req);
+    if (getTenantCreds(id).source === 'env') return res.status(400).json({ success: false, error: 'managed_via_env' });
+    const appId = String((req.body || {}).appId || '').trim();
+    const appSecret = String((req.body || {}).appSecret || '').trim();
+    if (!/^wx[0-9a-zA-Z]{16}$/.test(appId)) return res.status(400).json({ success: false, error: 'bad_appid' });
+    if (!appSecret) return res.status(400).json({ success: false, error: 'app_secret_required' });
+    const clash = mainDb.prepare('SELECT id FROM tenants WHERE wx_appid = ? AND id != ?').get(appId, id);
+    if (clash) return res.status(409).json({ success: false, error: 'appid_taken' });
+    // Persist: AppID on the tenant row, secret encrypted in tenant_secrets.
+    mainDb.prepare('UPDATE tenants SET wx_appid = ? WHERE id = ?').run(appId, id);
+    setTenantSecret(id, CRED_KEYS.WX_APP_SECRET, appSecret);
+    invalidateCreds(id);
+    // Live-verify: a successful token mint proves the AppID+secret pair.
+    let verified = false, verr = null;
+    try {
+      const r = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grant_type: 'client_credential', appid: appId, secret: appSecret, force_refresh: false }),
+      });
+      const j = await r.json().catch(() => ({}));
+      verified = !!j.access_token;
+      if (!verified) verr = j.errmsg || ('errcode ' + j.errcode);
+    } catch (e) { verr = e.message; }
+    res.json({ success: true, verified, error: verr, creds: credsStatus(id) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 

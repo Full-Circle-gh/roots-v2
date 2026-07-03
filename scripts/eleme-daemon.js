@@ -37,6 +37,7 @@ try {
 const db = require('../database');
 const eleme = require('../lib/eleme-client');
 const { sendOpsAlert } = require('../lib/ops-alert');
+const { channelClosedStores } = require('../lib/inventory');
 
 const ORDER_POLL_MS  = 300_000; // ~5 min (jittered) — order timing isn't critical
 const QUEUE_CHECK_MS = 10_000;  // stock push cadence
@@ -316,8 +317,16 @@ async function processStockQueue(configsByCode, tokens) {
   const byStore = {};
   for (const row of rows) (byStore[row.store_code] = byStore[row.store_code] || []).push(row);
 
+  // Stores the operator has CLOSED for the Eleme channel (Sales-page close
+  // matrix, channel_status.channel='eleme'). Honour it like Meituan honours its
+  // opening hours: skip the push and leave rows pending so stock re-syncs the
+  // moment the store is reopened — never silently drops the update.
+  let elemeClosed = new Set();
+  try { elemeClosed = channelClosedStores('eleme'); } catch (_) {}
+
   for (const [storeCode, items] of Object.entries(byStore)) {
     if (SKIP_STORES.includes(storeCode)) continue;
+    if (elemeClosed.has(storeCode)) continue; // channel closed for this store — hold
     const cfg = configsByCode[storeCode];
     const token = tokens[storeCode];
     if (!cfg || !token) continue; // store not authorised — leave rows pending

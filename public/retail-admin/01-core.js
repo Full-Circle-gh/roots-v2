@@ -460,7 +460,7 @@ function csPopup(ch) {
   }).join('');
   ov.innerHTML = '<div style="background:var(--bg-pane,#fff);border:1px solid var(--line);border-radius:16px;max-width:400px;width:100%;padding:18px 20px;box-shadow:0 20px 60px rgba(18,22,26,.28)" onclick="event.stopPropagation()">'
     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:15px">' + csName(ch) + ' — ' + cuT('by location', '按门店') + '</b><button class="btn btn-sm" onclick="csClosePopup()">✕</button></div>'
-    + (ch === 'eleme' ? '<div class="muted" style="font-size:12px;margin-bottom:8px">' + cuT('Eleme isn’t connected yet — placeholder.', '饿了么尚未接入 — 仅占位。') + '</div>' : '')
+    + ''
     + rows
     + '<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">'
     + '<button class="btn btn-sm" onclick="csChannelAll(\'' + ch + '\',false)">' + cuT('Close all', '全部关闭') + '</button>'

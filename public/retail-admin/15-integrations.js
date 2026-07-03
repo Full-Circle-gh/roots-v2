@@ -488,6 +488,7 @@
         ${credLine(creds.wechatLoginReady, 'Login ready (AppID+secret)', '登录就绪')}
         ${credLine(creds.payReady, 'WeChat Pay ready', '微信支付就绪')}
       </div>
+      ${igWechatCredForm(creds)}
       ${phasesHtml}
       <div class="helpbar" style="margin-top:16px"><button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help · 获取帮助', '获取帮助')}</button><span class="ig-spacer" style="flex:1"></span><button class="btn btn-primary" onclick="igLocClose()">${cuT('Done · 完成', '完成')}</button></div>
     </div>`;
@@ -496,6 +497,47 @@
   window.igMiniStep = async function (stepKey, status) {
     try { await api('/api/retail-admin/channel-hub/miniapp/step', { method: 'PATCH', body: { stepKey, status } }); igMiniappWizard(); igLoad(); }
     catch (e) { /* surfaced by api() */ }
+  };
+
+  // AppID + AppSecret entry with a live WeChat verify. Hidden for the env-managed
+  // tenant (Roots), whose creds come from the server .env.
+  function igWechatCredForm(creds) {
+    if (creds && creds.source === 'env') {
+      return `<div style="background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-top:10px;font-size:12.5px;color:var(--text-3)">${cuT('WeChat credentials are managed from the server config for this account.', '本账号的微信凭证由服务器配置管理。')}</div>`;
+    }
+    return `<div style="background:var(--bg-pane);border:1px solid var(--line);border-radius:8px;padding:14px;margin-top:10px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:2px">${cuT('WeChat Mini Program credentials · 微信小程序凭证', '微信小程序凭证')}</div>
+      <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">${cuT('From the WeChat Mini Program console → Development → Dev settings. We verify them live with WeChat.', '来自微信公众平台 → 开发 → 开发设置。我们会实时向微信验证。')}</div>
+      <div style="display:grid;gap:9px;max-width:440px">
+        <div><label class="field-label">AppID</label><input type="text" id="wx_appid" placeholder="wx0123456789abcdef" style="font-family:var(--f-mono,monospace)"></div>
+        <div><label class="field-label">AppSecret</label><input type="password" id="wx_secret" autocomplete="new-password" placeholder="••••••••••••••••"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
+        <button class="btn btn-sm btn-primary" id="wx_save" onclick="igSaveWechatCreds()">${cuT('Save & verify · 保存并验证', '保存并验证')}</button>
+        <span id="wx_result" style="font-size:12.5px"></span>
+      </div>
+    </div>`;
+  }
+  window.igSaveWechatCreds = async function () {
+    const appId = (document.getElementById('wx_appid') || {}).value;
+    const appSecret = (document.getElementById('wx_secret') || {}).value;
+    const out = document.getElementById('wx_result');
+    const btn = document.getElementById('wx_save');
+    if (!appId || !appSecret) { if (out) { out.style.color = 'var(--danger)'; out.textContent = cuT('Enter both fields · 请填写两项', '请填写两项'); } return; }
+    if (btn) btn.disabled = true;
+    if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Verifying with WeChat…', '正在向微信验证…'); }
+    try {
+      const r = await api('/api/retail-admin/channel-hub/miniapp/wechat-creds', { method: 'POST', body: { appId, appSecret } });
+      if (out) {
+        if (r.verified) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = '✓ ' + cuT('Verified & saved', '验证通过,已保存'); }
+        else { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = '⚠ ' + cuT('Saved, but WeChat rejected them: ', '已保存,但微信校验失败:') + (r.error || ''); }
+      }
+      igLoad();
+      setTimeout(igMiniappWizard, 1200);   // refresh the credential-status line
+    } catch (e) {
+      if (btn) btn.disabled = false;
+      if (out) { out.style.color = 'var(--danger)'; out.textContent = (e && e.code === 'appid_taken') ? cuT('That AppID is already in use.', '该 AppID 已被占用。') : cuT('Save failed', '保存失败'); }
+    }
   };
 
   // ── util ────────────────────────────────────────────────────────────────────
