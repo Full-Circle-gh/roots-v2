@@ -117,10 +117,21 @@
   };
 
   // ── Actions ─────────────────────────────────────────────────────────────────
-  // Phase 1: the per-plugin wizards arrive in later phases. For now Set up /
-  // Manage opens the help-aware placeholder so the flow (and Get help) is real.
-  window.igSetup = function (kind) { igOpenPlaceholder(kind, 'setup'); };
-  window.igManage = function (kind) { igOpenPlaceholder(kind, 'manage'); };
+  // Each card is a front door: Set up / Manage deep-links into the plugin's own
+  // admin where one already exists (Eleme, Meituan, JD lives in Settings).
+  // Plugins whose dedicated flow lands in a later phase (Qingyun) keep the
+  // help-aware placeholder so the flow — and Get help — is always real.
+  const TAB_FOR = { eleme: 'eleme', meituan: 'meituan', jd: 'config', wechat_miniapp: 'config' };
+  function igGo(kind) {
+    const tab = TAB_FOR[kind];
+    if (tab && typeof goTab === 'function') { goTab(tab); return true; }
+    return false;
+  }
+  window.igSetup = function (kind) { if (!igGo(kind)) igOpenPlaceholder(kind, 'setup'); };
+  window.igManage = function (kind) {
+    if (kind === 'web') { if (window.toast) toast(cuT('Web store is always on — nothing to configure.', '网页商店常开 — 无需配置。')); return; }
+    if (!igGo(kind)) igOpenPlaceholder(kind, 'manage');
+  };
 
   function igOpenPlaceholder(kind, mode) {
     const c = _cards.find(x => x.kind === kind);
@@ -169,7 +180,7 @@
         <div><label class="field-label">Name (EN)</label><input type="text" id="igl_name_en" placeholder="Roots — Haizhu"></div>
         <div><label class="field-label">名称 (CN)</label><input type="text" id="igl_name_cn" placeholder="Roots · 海珠店"></div>
         <div><label class="field-label">City · 城市</label>
-          <input type="text" id="igl_city" value="广州" onchange="igLocDistricts()"></div>
+          <input type="text" id="igl_city" value="广州市" onchange="igLocDistricts()"></div>
         <div><label class="field-label">District · 区</label>
           <select id="igl_district"></select></div>
         <div class="wide"><label class="field-label">${cuT('Street address · 详细地址', '详细地址')} <span style="color:var(--text-3);font-weight:400">${cuT('— GPS auto-locates from this on save · 保存时按地址自动定位', '— 保存时按地址自动定位')}</span></label>

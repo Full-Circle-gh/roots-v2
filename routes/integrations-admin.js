@@ -24,13 +24,41 @@ const { sendPlatformAlert } = require('../lib/platform-alert');
 // Resolve the current tenant id from the auth context (Roots → 1).
 function tenantId(req) { return (req.tenant && req.tenant.id) || 1; }
 
+// Live status derivation for plugins whose truth lives in the tenant DATA plane
+// (eleme_tokens, storefront_config, …) — which the control-plane registry can't
+// see. Runs here where tdb() resolves the right connection. Only overrides a
+// card that has no explicit lifecycle row (not_configured / configured); a
+// wizard-set status (in_setup / connecting / connected / error / paused) wins.
+function deriveStatuses(cards) {
+  const db = tdb();
+  const isBaseline = s => s === 'not_configured' || s === 'configured';
+  const readBool = (key) => {
+    try {
+      const row = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+      return row ? JSON.parse(row.value_json) === true : false;
+    } catch (_) { return false; }
+  };
+  for (const c of cards) {
+    if (!isBaseline(c.status)) continue;
+    try {
+      if (c.kind === 'eleme') {
+        // Connected once any store has an Eleme access token; the channel is
+        // "live" only when the operator has also switched it on.
+        const tokens = db.prepare("SELECT COUNT(*) AS n FROM eleme_tokens WHERE access_token IS NOT NULL").get()?.n || 0;
+        if (tokens > 0) c.status = readBool('eleme.enabled') ? 'connected' : 'paused';
+      }
+    } catch (_) { /* fresh/older DB — leave baseline */ }
+  }
+  return cards;
+}
+
 // ── Card grid ──────────────────────────────────────────────────────────────
 // GET /api/retail-admin/integrations
 // → { success, data: [cards], stores: [{code,name}] }
 // `stores` feeds the per-store status pills on channel/logistics cards.
 router.get('/api/retail-admin/channel-hub', requireRetailAdmin, (req, res) => {
   try {
-    const cards = registry.listForTenant(tenantId(req));
+    const cards = deriveStatuses(registry.listForTenant(tenantId(req)));
     let stores = [];
     try {
       stores = tdb().prepare(
