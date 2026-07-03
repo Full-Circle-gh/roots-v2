@@ -489,6 +489,23 @@ app.get('/impersonate/exit', (req, res) => {
   return res.redirect('https://' + STORE_ADMIN_HOST + '/');
 });
 
+// Cache-busting stamp for the admin's static assets. Computed once per process,
+// so it changes on every deploy (each deploy pm2-restarts the app) but stays
+// stable within a running process — assets cache normally BETWEEN deploys, and a
+// deploy invalidates them for free by minting new ?v= URLs. This is what stops
+// operators from being pinned to old JavaScript by the browser / service-worker
+// cache after a deploy (the shell HTML is already no-store, so it always carries
+// the newest stamp and points the browser at the fresh asset URLs).
+const ASSET_VER = Date.now().toString(36);
+let _retailAdminHtmlCache = null;
+function retailAdminShell() {
+  if (_retailAdminHtmlCache) return _retailAdminHtmlCache;
+  const raw = fs.readFileSync(path.join(__dirname, 'public', 'retail-admin.html'), 'utf8');
+  // Append ?v=<stamp> to every local /assets/*.js and /assets/*.css URL.
+  _retailAdminHtmlCache = raw.replace(/(\/assets\/[^"'?]+?\.(?:js|css))(["'])/g, `$1?v=${ASSET_VER}$2`);
+  return _retailAdminHtmlCache;
+}
+
 // Serve the Mini App Backend (retail-admin) shell. Page self-auths via
 // /api/auth/me. Shared by the /retail-admin path and the store.* subdomain root.
 function serveRetailAdmin(req, res) {
@@ -512,7 +529,9 @@ function serveRetailAdmin(req, res) {
   // always be fresh, so forbid storing it anywhere.
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'retail-admin.html'));
+  // Serve the shell with per-deploy versioned asset URLs so a deploy's new JS/CSS
+  // is fetched immediately instead of being masked by the browser/SW cache.
+  res.type('html').send(retailAdminShell());
 }
 
 // Customer-facing web storefront shell (public). Served for any host registered
