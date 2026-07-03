@@ -303,6 +303,63 @@ async function salesInit() {
     fill('el', c.eleme);
   } catch (e) { /* keep placeholders on error */ }
   csLoad();  // unlock + wire the channel-close toggles (channel × location)
+  salesWireSetup();  // merge: Set up / Configure per card from the integrations hub
+}
+
+// Merge of the old "Channels & Delivery" hub into this Sales page: each card's
+// footer button becomes "Set up" (launches the plugin's wizard) when the channel
+// isn't connected yet, or "Configure" (opens its admin) when it is. Driven by the
+// integrations registry status (window.igStatusFor). Degrades to the static
+// Configure buttons if the hub JS/endpoint isn't available.
+async function salesWireSetup() {
+  if (typeof window.igEnsureLoaded !== 'function') return;
+  try { await window.igEnsureLoaded(); } catch (_) { return; }
+  // key → { hub kind, what Configure opens }. gzgrocery is Roots-only (not a hub
+  // plugin) so it stays always-Configure.
+  const MAP = {
+    wc: { kind: 'wechat_miniapp', open: () => (typeof openMiniAppEditor === 'function' ? openMiniAppEditor() : salesGo('config')) },
+    wb: { kind: 'web',            open: () => (typeof openMiniAppEditor === 'function' ? openMiniAppEditor() : salesGo('config')) },
+    mt: { kind: 'meituan',        open: () => salesGo('meituan') },
+    gy: { kind: 'gzgrocery',      open: () => salesGo('guanyi'), alwaysConfigure: true },
+    el: { kind: 'eleme',          open: () => salesGo('eleme') },
+    jd: { kind: 'jd',             open: () => goTab('config') },
+    qy: { kind: 'qingyun',        open: () => window.igLaunchSetup && igLaunchSetup('qingyun') },
+  };
+  const cardByKey = (key) => {
+    const direct = document.getElementById('sales-ch-' + key);
+    if (direct) return direct;
+    const m = document.getElementById('sales-' + key + '-rev');
+    return m ? m.closest('.sales-ch') : null;
+  };
+  for (const [key, cfg] of Object.entries(MAP)) {
+    const card = cardByKey(key);
+    if (!card) continue;
+    const status = cfg.alwaysConfigure ? 'connected' : (window.igStatusFor ? igStatusFor(cfg.kind) : 'connected');
+    const connected = cfg.alwaysConfigure || status === 'connected' || status === 'paused';
+    const isError = status === 'error';
+    // Status line.
+    const statEl = card.querySelector('.sales-ch-stat');
+    if (statEl) {
+      let dot = 'ok', txt = cuT('Connected', '已连接');
+      if (!connected) {
+        if (isError) { dot = 'err'; txt = cuT('Needs attention', '需处理'); }
+        else if (status === 'in_setup' || status === 'connecting' || status === 'configured') { dot = 'warn'; txt = cuT('In setup', '设置中'); }
+        else { dot = 'off'; txt = cuT('Not set up', '未配置'); }
+      }
+      statEl.innerHTML = '<span class="sales-dot ' + dot + '"></span>' + txt;
+    }
+    // Footer button.
+    const foot = card.querySelector('.sales-ch-foot');
+    if (!foot) continue;
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-sm' + (connected ? '' : ' btn-primary');
+    if (connected) { b.textContent = cuT('Configure · 配置', '配置'); b.onclick = cfg.open; }
+    else if (isError) { b.textContent = cuT('Fix · 修复', '修复'); b.onclick = () => igLaunchSetup(cfg.kind); }
+    else { b.textContent = cuT('Set up · 设置', '设置'); b.onclick = () => igLaunchSetup(cfg.kind); }
+    foot.innerHTML = '';
+    foot.appendChild(b);
+  }
 }
 
 // ── Sales channel × location close controls ──────────────────────────────────

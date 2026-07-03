@@ -21,6 +21,30 @@
     not_configured: { en: 'Not set up',  cn: '未配置',   dot: 'var(--text-4,#56544f)', cls: 'muted' },
   };
 
+  // Where the wizards (setup / add-location / help) render. The channels UI now
+  // lives ON the Sales page (#sales-setup-host); the legacy #ig-locwiz is a
+  // fallback so the functions keep working if that host isn't present.
+  function igHostEl() { return document.getElementById('sales-setup-host') || document.getElementById('ig-locwiz'); }
+
+  // The current status of a plugin from the last igLoad() (used by the Sales
+  // page to decide Set up vs Configure). Returns 'not_configured' if unknown.
+  window.igStatusFor = function (kind) {
+    const c = _cards.find(x => x.kind === kind);
+    return c ? c.status : 'not_configured';
+  };
+  // Ensure the hub data (_cards/_stores) is loaded before a wizard that needs it
+  // (the Sales page calls this on init). Safe to call repeatedly.
+  window.igEnsureLoaded = async function () { if (!_cards.length) { try { await igLoad(); } catch (_) {} } return _cards; };
+
+  // Launch the right setup flow for a plugin from a Sales-page "Set up" button.
+  window.igLaunchSetup = function (kind) {
+    if (kind === 'meituan' || kind === 'qingyun') { igRelayWizard(kind); return; }
+    if (kind === 'wechat_miniapp') { igMiniappWizard(); return; }
+    if (kind === 'eleme' && typeof goTab === 'function') { goTab('eleme'); return; }   // OAuth connect lives in the Eleme tab
+    if (kind === 'jd' && typeof goTab === 'function') { goTab('config'); return; }      // JD keys + Save & test in Settings
+    igOpenPlaceholder(kind, 'setup');
+  };
+
   // ── Entry point ────────────────────────────────────────────────────────────
   window.igAdminInit = async function () {
     if (_initiated) return;
@@ -175,7 +199,7 @@
   // pickup). Step 2 (after save): "wire into your channels" — which connected
   // integrations got a link-this-store to-do, plus quota/zone pointers.
   window.igAddLocation = function () {
-    const box = document.getElementById('ig-locwiz');
+    const box = igHostEl();
     if (!box) return;
     box.style.display = '';
     box.innerHTML = `<div class="ig-wiz">
@@ -217,7 +241,7 @@
   };
 
   window.igLocClose = function () {
-    const box = document.getElementById('ig-locwiz');
+    const box = igHostEl();
     if (box) { box.style.display = 'none'; box.innerHTML = ''; }
   };
 
@@ -266,7 +290,7 @@
   // Step 2: what to wire up next. Honest per-channel state: connected channels
   // got a to-do on their card; everything else is a pointer, not magic.
   function igLocDone(store, channelTodos) {
-    const box = document.getElementById('ig-locwiz');
+    const box = igHostEl();
     if (!box) return;
     const name = esc(store.name_en || store.name_cn || store.code);
     const rows = [];
@@ -309,11 +333,11 @@
     _relay = { kind, step: 'box', store: null, poll: null };
     igRelayRender();
   };
-  window.igRelayClose = function () { igRelayStop(); const b = document.getElementById('ig-locwiz'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } };
+  window.igRelayClose = function () { igRelayStop(); const b = igHostEl(); if (b) { b.style.display = 'none'; b.innerHTML = ''; } };
   function igRelayStop() { if (_relay.poll) { clearInterval(_relay.poll); _relay.poll = null; } }
 
   function igRelayRender() {
-    const box = document.getElementById('ig-locwiz'); if (!box) return;
+    const box = igHostEl(); if (!box) return;
     box.style.display = '';
     const c = _cards.find(x => x.kind === _relay.kind) || {};
     const label = cuT(c.labelEn || _relay.kind, c.labelCn || _relay.kind);
@@ -426,7 +450,7 @@
   // a Mark-done toggle on the steps the tenant owns. Steps we / WeChat drive are
   // read-only with a "waiting" hint (the honest whose-move-is-it view).
   window.igMiniappWizard = async function () {
-    const box = document.getElementById('ig-locwiz'); if (!box) return;
+    const box = igHostEl(); if (!box) return;
     box.style.display = ''; box.innerHTML = igMuted(cuT('Loading checklist… · 加载清单…', '加载清单…'));
     let d;
     try { d = await api('/api/retail-admin/channel-hub/miniapp/checklist'); }

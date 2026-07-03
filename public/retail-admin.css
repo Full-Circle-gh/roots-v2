@@ -802,6 +802,8 @@
   .sales-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; display: inline-block; }
   .sales-dot.ok { background: var(--ok, #3B6D11); }
   .sales-dot.off { background: var(--text-4, #b4b2a9); }
+  .sales-dot.warn { background: var(--brass, #B08D4A); }
+  .sales-dot.err { background: var(--danger, #e8556a); }
 
   /* On/off switch — DISABLED for now (channel open/close API not yet wired).
      Rendered so the control's place and intent are visible; not-allowed cursor
