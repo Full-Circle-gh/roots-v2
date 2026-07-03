@@ -319,7 +319,7 @@ async function salesWireSetup() {
   const MAP = {
     wc: { kind: 'wechat_miniapp', open: () => (window.igMiniappConfig ? igMiniappConfig() : salesGo('config')) },  // Configure = the all-in-one Mini App config page
     wb: { kind: 'web',            open: () => (window.igWebConfig ? igWebConfig() : salesGo('config')) },  // Configure = the Web store config page
-    mt: { kind: 'meituan',        open: () => salesGo('meituan') },
+    mt: { kind: 'meituan',        open: () => (window.igMeituanConfig ? igMeituanConfig() : salesGo('meituan')) },  // Configure = clean Meituan page (summary when connected, box-first setup when new)
     gy: { kind: 'gzgrocery',      open: () => salesGo('guanyi'), alwaysConfigure: true },
     el: { kind: 'eleme',          open: () => salesGo('eleme') },
     jd: { kind: 'jd',             open: () => salesGo('config') },

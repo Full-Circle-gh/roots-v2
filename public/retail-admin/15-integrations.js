@@ -499,6 +499,54 @@
     else { _relay.step = 'sms'; igRelayRender(); }
   }
 
+  // ── Meituan "Configure" — one clean front door (sibling of Mini App / Web) ──
+  // A new store (not connected) gets the box-first setup wizard. A connected
+  // store gets a tidy summary + a button into the full Meituan management tab,
+  // so Configure is consistent with the other channels instead of dumping the
+  // operator straight into the raw management screen.
+  window.igMeituanConfig = async function () {
+    await igEnsureLoaded();
+    const status = igStatusFor('meituan');
+    const connected = status === 'connected' || status === 'paused';
+    if (!connected) { igRelayWizard('meituan'); return; }   // new store → box-first setup
+
+    const box = igHostEl(); if (!box) return;
+    box.style.display = '';
+    const c = _cards.find(x => x.kind === 'meituan') || {};
+    const bag = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>';
+    const paused = status === 'paused';
+    const storePills = (_stores || []).map(s =>
+      `<span class="mc-chip on" style="font-weight:600">${MC_SVG.check}<span>${esc(cuT(s.name || s.code, s.name || s.code))}</span></span>`
+    ).join('');
+
+    box.innerHTML = `<div class="ig-wiz">
+      <div class="mc-head">
+        <div>
+          <strong style="font-size:16px">${cuT('Meituan', '美团')}</strong>
+          <div class="mc-subtitle">${cuT('Waimai + Shangou — stock sync and order import.', '外卖 + 闪购 — 库存同步与订单导入。')}</div>
+        </div>
+        <button class="btn btn-sm" onclick="igLocClose()">✕</button>
+      </div>
+      <div class="mc-chips">
+        <span class="mc-chip${paused ? '' : ' on'}">${paused ? MC_SVG.circle : MC_SVG.check}<span>${paused ? cuT('Paused', '已暂停') : cuT('Connected', '已连接')}</span></span>
+      </div>
+
+      <div class="mc-sec">
+        <div class="mc-sec-head"><span class="mc-ico">${bag}</span><b>${cuT('Your stores', '您的门店')}</b></div>
+        <div class="mc-purpose">${cuT('Meituan keeps stock in sync and imports new orders for these stores.', '美团为这些门店同步库存并导入新订单。')}</div>
+        <div class="mc-chips" style="margin-top:2px">${storePills || `<span class="mc-note">${cuT('No stores linked yet.', '尚未关联门店。')}</span>`}</div>
+      </div>
+
+      <div class="mc-foot">
+        <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px;padding:0" onclick="igHelp('meituan')">? ${cuT('Get help', '获取帮助')}</button>
+        <span class="ig-spacer"></span>
+        <button class="btn" onclick="igRelayWizard('meituan')">${cuT('Connect another store', '连接其他门店')}</button>
+        <button class="btn btn-primary" onclick="igLocClose();goTab('meituan')">${cuT('Manage products & orders', '管理商品与订单')}</button>
+      </div>
+    </div>`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
   // ── Eleme guided setup wizard ───────────────────────────────────────────────
   // Authorize (OAuth per store) → Link shops → Map products → Verify & enable.
   // Reuses the existing Eleme endpoints (/api/retail-admin/eleme/*). When the
