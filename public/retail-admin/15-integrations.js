@@ -41,7 +41,7 @@
   // their init to run — goTab only switches the section, leaving the page blank.
   window.igLaunchSetup = function (kind) {
     if (kind === 'meituan' || kind === 'qingyun') { igRelayWizard(kind); return; }
-    if (kind === 'wechat_miniapp') { igMiniappWizard(); return; }
+    if (kind === 'wechat_miniapp') { igMiniappConfig(); return; }
     if (kind === 'eleme') { igElemeWizard(); return; }                                       // guided connect → shops → products → verify
     if (kind === 'jd' && typeof salesGo === 'function') { salesGo('config'); return; }      // JD keys + Save & test in Settings
     igOpenPlaceholder(kind, 'setup');
@@ -538,97 +538,113 @@
     catch (e) { /* surfaced by api() */ }
   };
 
-  // ── Mini App onboarding checklist (interactive) ─────────────────────────────
-  // The same A-to-Z the platform tracks, surfaced tenant-facing: phases + steps,
-  // who owns each ("You" / "Full Circle" / "WeChat"), live credential checks, and
-  // a Mark-done toggle on the steps the tenant owns. Steps we / WeChat drive are
-  // read-only with a "waiting" hint (the honest whose-move-is-it view).
-  window.igMiniappWizard = async function () {
+  // ── Mini App configuration — everything to set up the mini-app, one page ─────
+  // Credentials first (WeChat Mini Program + WeChat Pay, all editable here), then
+  // the A-to-Z setup checklist. Non-secret values (AppID, merchant id, serial)
+  // pre-fill; secrets show as "set" and stay masked — you paste a new value only
+  // to replace one. For the env-managed account (Roots) everything shows already
+  // filled from the server config, so it reads as done.
+  window.igMiniappConfig = async function () {
     const box = igHostEl(); if (!box) return;
-    box.style.display = ''; box.innerHTML = igMuted(cuT('Loading checklist… · 加载清单…', '加载清单…'));
-    let d;
-    try { d = await api('/api/retail-admin/channel-hub/miniapp/checklist'); }
+    box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Mini App config… · 加载小程序配置…', '加载小程序配置…'));
+    let d, cfg;
+    try { [d, cfg] = await Promise.all([api('/api/retail-admin/channel-hub/miniapp/checklist'), api('/api/retail-admin/channel-hub/miniapp/wechat-config')]); }
     catch (e) { box.innerHTML = igMuted(cuT('Failed to load · 加载失败', '加载失败')); return; }
-    const creds = d.creds || {};
-    const ownerLabel = o => o === 'tenant' ? cuT('You · 您', '您') : cuT('Full Circle · 平台', '平台');
-    const stDot = st => (st === 'done' || st === 'verified') ? 'var(--accent,#6B8E6F)' : (st === 'provided' ? 'var(--brass,#B08D4A)' : 'var(--text-4,#56544f)');
+    const st = cfg.status || d.creds || {};
+    const pay = cfg.pay || {};
     const credLine = (ok, en, cn) => `<span style="color:${ok ? 'var(--accent,#6B8E6F)' : 'var(--text-3)'};font-size:12px">${ok ? '✓' : '○'} ${cuT(en, cn)}</span>`;
+    // Field builders.
+    const txt = (id, label, val, mono) => `<div><label class="field-label">${label}</label><input type="text" id="${id}" value="${esc(val || '')}"${mono ? ' style="font-family:var(--f-mono,monospace)"' : ''}></div>`;
+    const sec = (id, label, isSet) => `<div><label class="field-label">${label}</label><input type="password" id="${id}" autocomplete="new-password" placeholder="${isSet ? '•••••••• ✓ ' + cuT('set — leave blank to keep', '已设置 — 留空保持') : cuT('not set', '未设置')}"></div>`;
+    const pem = (id, label, isSet) => `<div style="grid-column:1 / -1"><label class="field-label">${label}</label><textarea id="${id}" rows="3" placeholder="${isSet ? '•••• ✓ ' + cuT('saved — paste to replace', '已保存 — 粘贴以替换') : cuT('paste PEM contents…', '粘贴 PEM 内容…')}" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea></div>`;
+
+    // Setup checklist (unchanged behaviour).
+    const ownerLabel = o => o === 'tenant' ? cuT('You · 您', '您') : cuT('Full Circle · 平台', '平台');
+    const stDot = s => (s === 'done' || s === 'verified') ? 'var(--accent,#6B8E6F)' : (s === 'provided' ? 'var(--brass,#B08D4A)' : 'var(--text-4,#56544f)');
     let phasesHtml = '';
-    for (const p of d.phases) {
-      phasesHtml += `<div style="margin-top:14px"><div class="ig-eyebrow" style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:6px">${esc(cuT(p.en, p.cn))}</div>`;
+    for (const p of (d.phases || [])) {
+      phasesHtml += `<div style="margin-top:12px"><div style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:6px">${esc(cuT(p.en, p.cn))}</div>`;
       for (const s of p.steps) {
         const done = s.status === 'done' || s.status === 'verified';
         const isTenant = s.owner === 'tenant';
-        const waiting = !done && !isTenant;
-        phasesHtml += `<div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)">
+        phasesHtml += `<div style="display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--line)">
           <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${stDot(s.status)}"></span>
           <div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text-1)">${esc(cuT(s.en, s.cn))}</div>
-            <div style="font-size:11px;color:var(--text-3)">${ownerLabel(s.owner)}${waiting ? ' · ' + cuT('in progress', '处理中') : ''}${s.note ? ' · ' + esc(s.note) : ''}</div></div>
-          ${isTenant ? `<button class="btn btn-sm ${done ? '' : 'btn-primary'}" onclick="igMiniStep('${escJs(s.key)}','${done ? 'pending' : 'done'}')">${done ? cuT('Undo · 撤销', '撤销') : cuT('Mark done · 标记完成', '标记完成')}</button>` : `<span style="font-size:11px;color:var(--text-4)">${done ? '✓' : cuT('waiting · 等待', '等待')}</span>`}
+            <div style="font-size:11px;color:var(--text-3)">${ownerLabel(s.owner)}${(!done && !isTenant) ? ' · ' + cuT('in progress', '处理中') : ''}</div></div>
+          ${isTenant ? `<button class="btn btn-sm ${done ? '' : 'btn-primary'}" onclick="igMiniStep('${escJs(s.key)}','${done ? 'pending' : 'done'}')">${done ? cuT('Undo · 撤销', '撤销') : cuT('Mark done · 完成', '完成')}</button>` : `<span style="font-size:11px;color:var(--text-4)">${done ? '✓' : cuT('waiting · 等待', '等待')}</span>`}
         </div>`;
       }
       phasesHtml += `</div>`;
     }
+
     box.innerHTML = `<div class="ig-wiz">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <strong>${cuT('Mini App setup · 小程序设置', '小程序设置')}</strong>
+        <strong>${cuT('Mini App configuration · 小程序配置', '小程序配置')}</strong>
         <button class="btn btn-sm" onclick="igLocClose()">✕</button>
       </div>
-      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:10px">${cuT('Progress', '进度')}: <b>${d.progress.done}/${d.progress.total}</b></div>
-      <div style="background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;gap:16px;flex-wrap:wrap">
-        ${credLine(creds.wxAppIdSet, 'AppID set', 'AppID 已填')}
-        ${credLine(creds.wechatLoginReady, 'Login ready (AppID+secret)', '登录就绪')}
-        ${credLine(creds.payReady, 'WeChat Pay ready', '微信支付就绪')}
+      <div style="background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;gap:16px;flex-wrap:wrap;margin-bottom:6px">
+        ${credLine(st.wxAppIdSet, 'AppID set', 'AppID 已填')}
+        ${credLine(st.wechatLoginReady, 'Login ready', '登录就绪')}
+        ${credLine(st.payReady, 'WeChat Pay ready', '微信支付就绪')}
       </div>
-      ${igWechatCredForm(creds)}
+
+      <div style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass,#B08D4A);margin:14px 0 8px">${cuT('WeChat Mini Program · 微信小程序', '微信小程序')}</div>
+      <div class="ig-wiz-grid">
+        ${txt('mc_appid', 'AppID', cfg.appId, true)}
+        ${sec('mc_secret', 'AppSecret', cfg.appSecretSet)}
+      </div>
+
+      <div style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--brass,#B08D4A);margin:16px 0 8px">${cuT('WeChat Pay · 微信支付', '微信支付')}</div>
+      <div class="ig-wiz-grid">
+        ${txt('mc_mchid', cuT('Merchant ID · 商户号', '商户号'), pay.mchId, true)}
+        ${sec('mc_v3', cuT('API v3 key · APIv3 密钥', 'APIv3 密钥'), pay.apiV3KeySet)}
+        ${txt('mc_serial', cuT('Cert serial · 证书序列号', '证书序列号'), pay.serialNo, true)}
+        <div></div>
+        ${pem('mc_pkey', cuT('Merchant private key (apiclient_key.pem) · 商户私钥', '商户私钥'), pay.privateKeySet)}
+        ${pem('mc_pubkey', cuT('WeChat platform public key · 微信平台公钥', '微信平台公钥'), pay.platformPubKeySet)}
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+        <button class="btn btn-primary" id="mc_save" onclick="igSaveMiniappCreds()">${cuT('Save & verify · 保存并验证', '保存并验证')}</button>
+        <span id="mc_result" style="font-size:12.5px"></span>
+      </div>
+      ${cfg.source === 'env' ? `<div style="font-size:11.5px;color:var(--text-4);margin-top:6px">${cuT('Filled from the server config for this account.', '本账号由服务器配置填充。')}</div>` : ''}
+
+      <div style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin:20px 0 4px">${cuT('Setup checklist · 开通清单', '开通清单')} · ${d.progress ? d.progress.done + '/' + d.progress.total : ''}</div>
       ${phasesHtml}
-      <div class="helpbar" style="margin-top:16px"><button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help · 获取帮助', '获取帮助')}</button><span class="ig-spacer" style="flex:1"></span><button class="btn btn-primary" onclick="igLocClose()">${cuT('Done · 完成', '完成')}</button></div>
+      <div class="helpbar" style="margin-top:16px"><button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help · 获取帮助', '获取帮助')}</button><span class="ig-spacer" style="flex:1"></span><button class="btn" onclick="igLocClose()">${cuT('Close · 关闭', '关闭')}</button></div>
     </div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   };
+  // Back-compat alias (older callers used igMiniappWizard).
+  window.igMiniappWizard = function () { return igMiniappConfig(); };
+
   window.igMiniStep = async function (stepKey, status) {
-    try { await api('/api/retail-admin/channel-hub/miniapp/step', { method: 'PATCH', body: { stepKey, status } }); igMiniappWizard(); igLoad(); }
+    try { await api('/api/retail-admin/channel-hub/miniapp/step', { method: 'PATCH', body: { stepKey, status } }); igMiniappConfig(); igLoad(); }
     catch (e) { /* surfaced by api() */ }
   };
 
-  // AppID + AppSecret entry with a live WeChat verify. Hidden for the env-managed
-  // tenant (Roots), whose creds come from the server .env.
-  function igWechatCredForm(creds) {
-    if (creds && creds.source === 'env') {
-      return `<div style="background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin-top:10px;font-size:12.5px;color:var(--text-3)">${cuT('WeChat credentials are managed from the server config for this account.', '本账号的微信凭证由服务器配置管理。')}</div>`;
-    }
-    return `<div style="background:var(--bg-pane);border:1px solid var(--line);border-radius:8px;padding:14px;margin-top:10px">
-      <div style="font-weight:600;font-size:13px;margin-bottom:2px">${cuT('WeChat Mini Program credentials · 微信小程序凭证', '微信小程序凭证')}</div>
-      <div style="font-size:12px;color:var(--text-3);margin-bottom:10px">${cuT('From the WeChat Mini Program console → Development → Dev settings. We verify them live with WeChat.', '来自微信公众平台 → 开发 → 开发设置。我们会实时向微信验证。')}</div>
-      <div style="display:grid;gap:9px;max-width:440px">
-        <div><label class="field-label">AppID</label><input type="text" id="wx_appid" placeholder="wx0123456789abcdef" style="font-family:var(--f-mono,monospace)"></div>
-        <div><label class="field-label">AppSecret</label><input type="password" id="wx_secret" autocomplete="new-password" placeholder="••••••••••••••••"></div>
-      </div>
-      <div style="display:flex;align-items:center;gap:10px;margin-top:12px">
-        <button class="btn btn-sm btn-primary" id="wx_save" onclick="igSaveWechatCreds()">${cuT('Save & verify · 保存并验证', '保存并验证')}</button>
-        <span id="wx_result" style="font-size:12.5px"></span>
-      </div>
-    </div>`;
-  }
-  window.igSaveWechatCreds = async function () {
-    const appId = (document.getElementById('wx_appid') || {}).value;
-    const appSecret = (document.getElementById('wx_secret') || {}).value;
-    const out = document.getElementById('wx_result');
-    const btn = document.getElementById('wx_save');
-    if (!appId || !appSecret) { if (out) { out.style.color = 'var(--danger)'; out.textContent = cuT('Enter both fields · 请填写两项', '请填写两项'); } return; }
+  window.igSaveMiniappCreds = async function () {
+    const v = id => { const el = document.getElementById(id); return el && el.value ? el.value.trim() : ''; };
+    const body = {
+      appId: v('mc_appid'), appSecret: v('mc_secret'),
+      mchId: v('mc_mchid'), apiV3Key: v('mc_v3'), serialNo: v('mc_serial'),
+      privateKey: v('mc_pkey'), platformPubKey: v('mc_pubkey'),
+    };
+    const out = document.getElementById('mc_result'), btn = document.getElementById('mc_save');
     if (btn) btn.disabled = true;
-    if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Verifying with WeChat…', '正在向微信验证…'); }
+    if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Saving & verifying…', '保存并验证…'); }
     try {
-      const r = await api('/api/retail-admin/channel-hub/miniapp/wechat-creds', { method: 'POST', body: { appId, appSecret } });
+      const r = await api('/api/retail-admin/channel-hub/miniapp/wechat-creds', { method: 'POST', body });
       if (out) {
         if (r.verified) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = '✓ ' + cuT('Verified & saved', '验证通过,已保存'); }
-        else { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = '⚠ ' + cuT('Saved, but WeChat rejected them: ', '已保存,但微信校验失败:') + (r.error || ''); }
+        else { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = '⚠ ' + cuT('Saved — WeChat check: ', '已保存 — 微信校验:') + (r.error || ''); }
       }
       igLoad();
-      setTimeout(igMiniappWizard, 1200);   // refresh the credential-status line
+      setTimeout(igMiniappConfig, 1200);
     } catch (e) {
       if (btn) btn.disabled = false;
-      if (out) { out.style.color = 'var(--danger)'; out.textContent = (e && e.code === 'appid_taken') ? cuT('That AppID is already in use.', '该 AppID 已被占用。') : cuT('Save failed', '保存失败'); }
+      if (out) { out.style.color = 'var(--danger)'; out.textContent = (e && e.code === 'appid_taken') ? cuT('That AppID is already in use.', '该 AppID 已被占用。') : (e && e.code === 'bad_appid' ? cuT('AppID must look like wx + 16 chars.', 'AppID 格式应为 wx + 16 位。') : cuT('Save failed', '保存失败')); }
     }
   };
 

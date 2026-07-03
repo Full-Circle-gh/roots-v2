@@ -294,37 +294,85 @@ router.patch('/api/retail-admin/channel-hub/miniapp/step', requireRetailAdmin, e
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// Save the tenant's WeChat Mini Program AppID + AppSecret, then LIVE-VERIFY them
-// against WeChat (minting a stable_token = the creds are valid). Self-service
-// equivalent of the platform PUT /credentials for the login half. Roots is
-// configured from server env, so it's read-only here. Pay certs (cert files)
-// stay on the managed/platform path — this covers login readiness.
+// GET the Mini App credential picture for the config page. Non-secret values
+// (AppID, merchant id, cert serial) come back as plain text so the fields
+// pre-fill; secrets come back only as booleans (set / not set) — never their
+// values. For the env-managed tenant (Roots) this is populated from the server
+// env, so the page looks the same as a self-serve tenant's, just already filled.
+router.get('/api/retail-admin/channel-hub/miniapp/wechat-config', requireRetailAdmin, (req, res) => {
+  try {
+    const id = tenantId(req);
+    const c = getTenantCreds(id);
+    res.json({
+      success: true,
+      source: c.source,
+      appId: c.wechat.appId || '',
+      appSecretSet: !!c.wechat.appSecret,
+      pay: {
+        mchId: c.pay.mchId || '',
+        serialNo: c.pay.serialNo || '',
+        apiV3KeySet: !!c.pay.apiV3Key,
+        privateKeySet: !!c.pay.privateKey,
+        platformPubKeySet: !!c.pay.platformPubKey,
+      },
+      status: credsStatus(id),
+    });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Save Mini App credentials — Mini Program (AppID + AppSecret) AND WeChat Pay
+// (merchant id, API v3 key, merchant private key [pasted PEM], cert serial,
+// platform public key). Only fields actually provided are written, so a blank
+// (masked) secret means "keep the existing one". After saving, the login pair is
+// LIVE-VERIFIED against WeChat (a stable_token mint == valid AppID+secret).
+//
+// The env-managed tenant (Roots) reads its creds from the server .env, so we
+// don't persist edits here (that would silently no-op against the env carve-out);
+// instead we live-verify the existing env creds and report success — the page
+// already shows everything filled in, so nothing needs changing.
 router.post('/api/retail-admin/channel-hub/miniapp/wechat-creds', requireRetailAdmin, express.json(), async (req, res) => {
   try {
     const id = tenantId(req);
-    if (getTenantCreds(id).source === 'env') return res.status(400).json({ success: false, error: 'managed_via_env' });
-    const appId = String((req.body || {}).appId || '').trim();
-    const appSecret = String((req.body || {}).appSecret || '').trim();
-    if (!/^wx[0-9a-zA-Z]{16}$/.test(appId)) return res.status(400).json({ success: false, error: 'bad_appid' });
-    if (!appSecret) return res.status(400).json({ success: false, error: 'app_secret_required' });
-    const clash = mainDb.prepare('SELECT id FROM tenants WHERE wx_appid = ? AND id != ?').get(appId, id);
-    if (clash) return res.status(409).json({ success: false, error: 'appid_taken' });
-    // Persist: AppID on the tenant row, secret encrypted in tenant_secrets.
-    mainDb.prepare('UPDATE tenants SET wx_appid = ? WHERE id = ?').run(appId, id);
-    setTenantSecret(id, CRED_KEYS.WX_APP_SECRET, appSecret);
-    invalidateCreds(id);
-    // Live-verify: a successful token mint proves the AppID+secret pair.
+    const b = req.body || {};
+    const isEnv = getTenantCreds(id).source === 'env';
+    const str = (k) => String(b[k] == null ? '' : b[k]).trim();
+
+    if (!isEnv) {
+      const appId = str('appId');
+      if (appId) {
+        if (!/^wx[0-9a-zA-Z]{16}$/.test(appId)) return res.status(400).json({ success: false, error: 'bad_appid' });
+        const clash = mainDb.prepare('SELECT id FROM tenants WHERE wx_appid = ? AND id != ?').get(appId, id);
+        if (clash) return res.status(409).json({ success: false, error: 'appid_taken' });
+        mainDb.prepare('UPDATE tenants SET wx_appid = ? WHERE id = ?').run(appId, id);
+      }
+      // Persist each provided secret; blank = leave the stored one alone.
+      const setIf = (key, val) => { if (val) setTenantSecret(id, key, val); };
+      setIf(CRED_KEYS.WX_APP_SECRET, str('appSecret'));
+      setIf(CRED_KEYS.PAY_MCH_ID, str('mchId'));
+      setIf(CRED_KEYS.PAY_API_V3_KEY, str('apiV3Key'));
+      setIf(CRED_KEYS.PAY_PRIVATE_KEY, str('privateKey'));
+      setIf(CRED_KEYS.PAY_SERIAL_NO, str('serialNo'));
+      setIf(CRED_KEYS.PAY_PLATFORM_PUB_KEY, str('platformPubKey'));
+      invalidateCreds(id);
+    }
+
+    // Live-verify the login pair (appid+secret) currently in effect.
+    const eff = getTenantCreds(id).wechat;
     let verified = false, verr = null;
-    try {
-      const r = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grant_type: 'client_credential', appid: appId, secret: appSecret, force_refresh: false }),
-      });
-      const j = await r.json().catch(() => ({}));
-      verified = !!j.access_token;
-      if (!verified) verr = j.errmsg || ('errcode ' + j.errcode);
-    } catch (e) { verr = e.message; }
-    res.json({ success: true, verified, error: verr, creds: credsStatus(id) });
+    if (eff.appId && eff.appSecret) {
+      try {
+        const r = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grant_type: 'client_credential', appid: eff.appId, secret: eff.appSecret, force_refresh: false }),
+        });
+        const j = await r.json().catch(() => ({}));
+        verified = !!j.access_token;
+        if (!verified) verr = j.errmsg || ('errcode ' + j.errcode);
+      } catch (e) { verr = e.message; }
+    } else {
+      verr = 'app_id_or_secret_missing';
+    }
+    res.json({ success: true, verified, error: verr, envManaged: isEnv, creds: credsStatus(id) });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
