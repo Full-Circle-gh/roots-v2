@@ -317,12 +317,12 @@ async function salesWireSetup() {
   // key → { hub kind, what Configure opens }. gzgrocery is Roots-only (not a hub
   // plugin) so it stays always-Configure.
   const MAP = {
-    wc: { kind: 'wechat_miniapp', open: () => (typeof openMiniAppEditor === 'function' ? openMiniAppEditor() : salesGo('config')) },
-    wb: { kind: 'web',            open: () => (typeof openMiniAppEditor === 'function' ? openMiniAppEditor() : salesGo('config')) },
+    wc: { kind: 'wechat_miniapp', open: () => salesGo('config') },   // Configure = shop settings, not the visual editor
+    wb: { kind: 'web',            open: () => salesGo('config') },
     mt: { kind: 'meituan',        open: () => salesGo('meituan') },
     gy: { kind: 'gzgrocery',      open: () => salesGo('guanyi'), alwaysConfigure: true },
     el: { kind: 'eleme',          open: () => salesGo('eleme') },
-    jd: { kind: 'jd',             open: () => goTab('config') },
+    jd: { kind: 'jd',             open: () => salesGo('config') },
     qy: { kind: 'qingyun',        open: () => window.igLaunchSetup && igLaunchSetup('qingyun') },
   };
   const cardByKey = (key) => {

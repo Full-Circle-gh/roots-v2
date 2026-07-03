@@ -37,11 +37,13 @@
   window.igEnsureLoaded = async function () { if (!_cards.length) { try { await igLoad(); } catch (_) {} } return _cards; };
 
   // Launch the right setup flow for a plugin from a Sales-page "Set up" button.
+  // Use salesGo() (clicks the nav button) rather than goTab() for tabs that need
+  // their init to run — goTab only switches the section, leaving the page blank.
   window.igLaunchSetup = function (kind) {
     if (kind === 'meituan' || kind === 'qingyun') { igRelayWizard(kind); return; }
     if (kind === 'wechat_miniapp') { igMiniappWizard(); return; }
-    if (kind === 'eleme' && typeof goTab === 'function') { goTab('eleme'); return; }   // OAuth connect lives in the Eleme tab
-    if (kind === 'jd' && typeof goTab === 'function') { goTab('config'); return; }      // JD keys + Save & test in Settings
+    if (kind === 'eleme' && typeof salesGo === 'function') { salesGo('eleme'); return; }   // OAuth connect lives in the Eleme tab (runs elAdminInit)
+    if (kind === 'jd' && typeof salesGo === 'function') { salesGo('config'); return; }      // JD keys + Save & test in Settings
     igOpenPlaceholder(kind, 'setup');
   };
 

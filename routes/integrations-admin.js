@@ -33,6 +33,32 @@ function tenantId(req) { return (req.tenant && req.tenant.id) || 1; }
 // see. Runs here where tdb() resolves the right connection. Only overrides a
 // card that has no explicit lifecycle row (not_configured / configured); a
 // wizard-set status (in_setup / connecting / connected / error / paused) wins.
+// Is a session-based channel already live via the LEGACY path (env credentials
+// + the standing scraper daemon), i.e. set up before the self-service relay
+// existed? Roots is the case that matters: its Meituan/Qingyun run off env creds
+// and write daemon activity, but have no integration_sessions row. Signals, any
+// of which means "connected": daemon sync activity in this tenant's DB, or the
+// channel's credentials being present. All reads are defensive (older/fresh DBs
+// may lack a table).
+function legacyChannelLive(db, tenantId, kind) {
+  const count = (sql) => { try { return db.prepare(sql).get()?.n || 0; } catch (_) { return 0; } };
+  if (kind === 'meituan') {
+    if (count('SELECT COUNT(*) AS n FROM store_business_status') > 0) return true;
+    if (count("SELECT COUNT(*) AS n FROM meituan_sync_log WHERE status = 'ok'") > 0) return true;
+    try {
+      const m = (getTenantCreds(tenantId).integrations || {}).meituan || {};
+      if ((m.tianhe && m.tianhe.user) || (m.yuexiu && m.yuexiu.user)) return true;
+    } catch (_) {}
+    return false;
+  }
+  if (kind === 'qingyun') {
+    if (count('SELECT COUNT(*) AS n FROM qingyun_status WHERE logged_in = 1') > 0) return true;
+    if (count('SELECT COUNT(*) AS n FROM delivery_jobs') > 0) return true;
+    return false;
+  }
+  return false;
+}
+
 function deriveStatuses(cards, cardsTenant) {
   const db = tdb();
   const isBaseline = s => s === 'not_configured' || s === 'configured';
@@ -67,8 +93,9 @@ function deriveStatuses(cards, cardsTenant) {
           else if (cs.wxAppIdSet || miniappStarted(cardsTenant)) c.status = 'in_setup';
         } catch (_) {}
       } else if (c.kind === 'meituan' || c.kind === 'qingyun') {
-        // Session-based: derive from the login-relay per-store sessions.
-        // any ok → connected; any expired → error; mid-flow → connecting.
+        // Session-based: derive from the login-relay per-store sessions (new
+        // self-service flow). any ok → connected; any expired → error;
+        // mid-flow → connecting.
         try {
           const sess = relay.summary(cardsTenant, c.kind);
           if (sess.length) {
@@ -76,6 +103,11 @@ function deriveStatuses(cards, cardsTenant) {
             else if (sess.some(s => s.status === 'ok')) c.status = 'connected';
             else if (sess.some(s => ['connecting', 'awaiting_sms', 'captcha'].includes(s.status))) c.status = 'connecting';
             else if (sess.some(s => s.status === 'failed')) c.status = 'error';
+          } else if (legacyChannelLive(db, cardsTenant, c.kind)) {
+            // No relay session, but the tenant already runs this channel the
+            // LEGACY way (env creds + the standing daemon — e.g. Roots). Reflect
+            // that it's connected rather than falsely inviting a re-setup.
+            c.status = 'connected';
           }
         } catch (_) {}
       }
