@@ -450,6 +450,35 @@ router.post('/api/saas-admin/integrations/:tenantId/:kind/box', requirePlatformA
     config.box = box;
     registry.upsertStatus(tenantId, kind, { config });
     logAudit(req, { action: 'integration.box.' + status, targetType: 'tenant', targetId: tenantId, meta: { kind, tracking: box.tracking || null } });
+
+    // Tell the merchant in their backend inbox (per-tenant broadcast). Each new
+    // box update replaces the previous box notice so the inbox never stacks
+    // stale ones. Best-effort — a notice failure never fails the box update.
+    if (status === 'shipped' || status === 'delivered') {
+      try {
+        const d = registry.getDescriptor(kind) || {};
+        const chEn = d.labelEn || kind, chCn = d.labelCn || kind;
+        const tk = box.tracking ? ` Tracking: ${box.tracking}.` : '';
+        const tkCn = box.tracking ? ` 快递单号:${box.tracking}。` : '';
+        const msg = status === 'shipped'
+          ? {
+              tEn: `Your ${chEn} store box has shipped`, tCn: `您的${chCn}门店盒子已寄出`,
+              bEn: `It is on the way.${tk} When it arrives, plug it into your shop’s internet, then continue setup in Sales channels.`,
+              bCn: `盒子已在路上。${tkCn}到货后请接入门店网络,然后在销售渠道页继续设置。`,
+            }
+          : {
+              tEn: `Your ${chEn} store box was delivered`, tCn: `您的${chCn}门店盒子已送达`,
+              bEn: 'Plug it into your shop’s internet, then continue setup in Sales channels.',
+              bCn: '请接入门店网络,然后在销售渠道页继续设置。',
+            };
+        const tag = 'box:' + kind;
+        db.prepare("UPDATE platform_broadcasts SET active = 0 WHERE audience = 'tenant' AND tenant_id = ? AND created_by = ?")
+          .run(tenantId, tag);
+        db.prepare(`INSERT INTO platform_broadcasts (title_en,title_cn,body_en,body_cn,level,audience,tenant_id,active,created_by)
+                    VALUES (?,?,?,?,'info','tenant',?,1,?)`)
+          .run(msg.tEn, msg.tCn, msg.bEn, msg.bCn, tenantId, tag);
+      } catch (_) { /* notices table absent or insert failed → box update still stands */ }
+    }
     res.json({ success: true, box });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
