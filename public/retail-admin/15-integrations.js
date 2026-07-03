@@ -345,18 +345,41 @@
     const c = _cards.find(x => x.kind === _relay.kind) || {};
     const label = cuT(c.labelEn || _relay.kind, c.labelCn || _relay.kind);
     const rail = ['box', 'creds', 'sms', 'done'];
-    const railLabels = { box: cuT('Store box · 门店盒子', '门店盒子'), creds: cuT('Credentials · 商家账号', '商家账号'), sms: cuT('Verify login · 登录验证', '登录验证'), done: cuT('Done · 完成', '完成') };
+    const railLabels = { box: cuT('Get the box', '获取盒子'), creds: cuT('Your login', '商家账号'), sms: cuT('Text code', '短信验证'), done: cuT('Done', '完成') };
     const cur = rail.indexOf(_relay.step);
     const railHtml = rail.map((k, i) => `<span style="font-size:12px;color:${i === cur ? 'var(--text-1)' : 'var(--text-3)'};font-weight:${i === cur ? 600 : 400}">${i < cur ? '✓ ' : (i + 1) + '. '}${railLabels[k]}</span>`).join('<span style="color:var(--text-4)"> › </span>');
     let body = '';
     if (_relay.step === 'box') {
-      body = `<p class="muted" style="font-size:13px;max-width:56ch">${cuT(
-        `${label} will see logins from your own store’s internet — the safest setup. Plug in the store box we shipped; until it’s online we use a Guangzhou backup line (degraded).`,
-        `${label}将看到来自您门店自有网络的登录,这是最安全的方式。请接入我们寄送的门店盒子;盒子上线前使用广州备用线路(降级)。`)}</p>
-        <div style="display:flex;gap:10px;margin-top:16px">
-          <button class="btn btn-primary" onclick="igRelayStep('creds')">${cuT('Continue · 继续', '继续')}</button>
-          <button class="btn" onclick="igRelayClose()">${cuT('Cancel · 取消', '取消')}</button>
+      // Step 1 is a real physical box we ship. The request is remembered on the
+      // integration row (config.box) so this screen stays truthful across visits.
+      const boxSt = (c.config && c.config.box) || null;
+      if (boxSt && boxSt.status === 'requested') {
+        const when = String(boxSt.requested_at || '').slice(0, 10);
+        body = `<div style="font-size:14px;color:var(--accent,#6B8E6F);font-weight:600">✓ ${cuT('Box requested', '已申请盒子')}${when ? ` <span style="color:var(--text-3);font-weight:400">${esc(when)}</span>` : ''}</div>
+          <p class="muted" style="font-size:13px;max-width:56ch;margin-top:6px">${cuT(
+            'We got your request. Our team will contact you to arrange delivery and any cost. Once the box arrives, plug it into your shop’s internet and continue below.',
+            '我们已收到申请。团队会联系您安排寄送及费用。盒子到货后,请接入门店网络,然后点击继续。')}</p>
+          <div style="display:flex;gap:10px;margin-top:16px;align-items:center">
+            <button class="btn btn-primary" onclick="igRelayStep('creds')">${cuT('Box is plugged in — continue', '盒子已接入 — 继续')}</button>
+            <button class="btn" onclick="igRelayClose()">${cuT('Close', '关闭')}</button>
+            <span class="ig-spacer" style="flex:1"></span>
+            <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('${escJs(_relay.kind)}')">? ${cuT('Get help', '获取帮助')}</button>
+          </div>`;
+      } else {
+        body = `<p class="muted" style="font-size:13px;max-width:56ch">${cuT(
+          `${label} setup starts with a small box we ship to you. Plug it into your shop’s internet — it makes your ${label} logins come from your own shop, which keeps your account safe. We set this up together and help at every step.`,
+          `${label}设置的第一步是我们寄给您的小盒子。将它接入门店网络后,${label}的登录都来自您自己的门店,账号更安全。我们会全程协助您完成设置。`)}</p>
+        <p class="muted" style="font-size:12px;max-width:56ch;margin-top:6px;color:var(--text-3)">${cuT(
+          'After you request it, our team contacts you to arrange delivery and any cost.',
+          '提交申请后,团队会联系您安排寄送及费用。')}</p>
+        <div style="display:flex;gap:10px;margin-top:16px;align-items:center;flex-wrap:wrap">
+          <button class="btn btn-primary" id="rl_boxreq" onclick="igRelayBoxRequest()">${cuT('Request the box', '申请盒子')}</button>
+          <button class="btn" onclick="igRelayStep('creds')">${cuT('I already have it — continue', '已有盒子 — 继续')}</button>
+          <button class="btn" onclick="igRelayClose()">${cuT('Cancel', '取消')}</button>
+          <span class="ig-spacer" style="flex:1"></span>
+          <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('${escJs(_relay.kind)}')">? ${cuT('Get help', '获取帮助')}</button>
         </div>`;
+      }
     } else if (_relay.step === 'creds') {
       const opts = _stores.map(s => `<option value="${esc(s.code)}">${esc(cuT(s.name || s.code, s.name || s.code))}</option>`).join('');
       body = `<p class="muted" style="font-size:13px">${cuT(`Enter your ${label} merchant login for a store. We log in on your behalf through your store box.`, `请输入某门店的${label}商家账号。我们将通过您的门店盒子代为登录。`)}</p>
@@ -413,6 +436,21 @@
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
   window.igRelayStep = function (step) { _relay.step = step; igRelayRender(); };
+
+  // Request the physical store box: remember it + page ops, then repaint step 1
+  // in its "requested" state (igLoad refreshes _cards so the state sticks).
+  window.igRelayBoxRequest = async function () {
+    const btn = document.getElementById('rl_boxreq'); if (btn) btn.disabled = true;
+    try {
+      await api(`/api/retail-admin/channel-hub/${encodeURIComponent(_relay.kind)}/box-request`, { method: 'POST', body: {} });
+      await igLoad();
+      igRelayRender();
+      if (window.toast) toast(cuT('Box requested — we’ll contact you', '已申请 — 我们会联系您'));
+    } catch (e) {
+      if (btn) btn.disabled = false;
+      if (window.toast) toast(cuT('Request failed — try again', '申请失败,请重试'), 'error');
+    }
+  };
 
   window.igRelayStart = async function () {
     const store = (document.getElementById('rl_store') || {}).value;

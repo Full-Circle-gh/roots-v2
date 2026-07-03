@@ -168,6 +168,35 @@ router.post('/api/retail-admin/channel-hub/help', requireRetailAdmin, express.js
   }
 });
 
+// ── Store-box request (Meituan / Qingyun assisted setup) ────────────────────
+// POST /api/retail-admin/channel-hub/:kind/box-request
+// Step 1 of Meituan setup is a real physical box we ship to the merchant (it
+// makes their channel logins come from their own shop's internet). This records
+// the request on the integration row (config.box) so the wizard remembers it
+// across reloads, moves the card to in_setup, and pages platform ops to arrange
+// shipping + any cost with the merchant. Idempotent: repeat clicks don't re-page.
+router.post('/api/retail-admin/channel-hub/:kind/box-request', requireRetailAdmin, express.json(), (req, res) => {
+  try {
+    const kind = req.params.kind;
+    if (kind !== 'meituan' && kind !== 'qingyun') return res.status(400).json({ success: false, error: 'no_box_for_kind' });
+    const id = tenantId(req);
+    const cur = registry.detailForTenant(id, kind);
+    if (!cur) return res.status(400).json({ success: false, error: 'unknown_integration' });
+    const config = cur.config || {};
+    if (config.box && config.box.status) return res.json({ success: true, box: config.box, already: true });
+    config.box = { status: 'requested', requested_at: new Date().toISOString() };
+    // Only nudge the lifecycle forward from the untouched states — never yank a
+    // connected/paused channel back to in_setup.
+    const status = (cur.status === 'not_configured' || cur.status === 'configured') ? 'in_setup' : cur.status;
+    registry.upsertStatus(id, kind, { status, config });
+    const tName = (req.tenant && (req.tenant.name || req.tenant.slug)) || `tenant #${id}`;
+    const note = String((req.body || {}).note || '').slice(0, 200);
+    sendPlatformAlert(`📦 Store-box request — ${tName} · ${kind}${note ? ` — "${note}"` : ''} (arrange shipping + cost)`)
+      .catch(() => {});
+    res.json({ success: true, box: config.box });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 // ── Dismiss a card to-do ─────────────────────────────────────────────────────
 // POST /api/retail-admin/channel-hub/:kind/todos/dismiss  { todoId }
 // e.g. after the operator linked a new store by hand outside the wizard.
