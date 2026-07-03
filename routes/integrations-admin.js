@@ -20,6 +20,7 @@ const { requireRetailAdmin } = require('./retail');
 const { tdb } = require('../lib/tenant-db');
 const registry = require('../lib/integrations/registry');
 const { sendPlatformAlert } = require('../lib/platform-alert');
+const { getTenantCreds } = require('../lib/tenant-creds');
 
 // Resolve the current tenant id from the auth context (Roots → 1).
 function tenantId(req) { return (req.tenant && req.tenant.id) || 1; }
@@ -29,7 +30,7 @@ function tenantId(req) { return (req.tenant && req.tenant.id) || 1; }
 // see. Runs here where tdb() resolves the right connection. Only overrides a
 // card that has no explicit lifecycle row (not_configured / configured); a
 // wizard-set status (in_setup / connecting / connected / error / paused) wins.
-function deriveStatuses(cards) {
+function deriveStatuses(cards, cardsTenant) {
   const db = tdb();
   const isBaseline = s => s === 'not_configured' || s === 'configured';
   const readBool = (key) => {
@@ -46,6 +47,14 @@ function deriveStatuses(cards) {
         // "live" only when the operator has also switched it on.
         const tokens = db.prepare("SELECT COUNT(*) AS n FROM eleme_tokens WHERE access_token IS NOT NULL").get()?.n || 0;
         if (tokens > 0) c.status = readBool('eleme.enabled') ? 'connected' : 'paused';
+      } else if (c.kind === 'jd') {
+        // JD app keys present (env for Roots, tenant_secrets otherwise) → the
+        // form is filled but untested. A passing "Save & test" writes a
+        // connected row (which wins over this baseline); until then: configured.
+        try {
+          const jc = (getTenantCreds(cardsTenant).integrations || {}).jd || {};
+          if (jc.appKey && jc.appSecret) c.status = 'configured';
+        } catch (_) {}
       }
     } catch (_) { /* fresh/older DB — leave baseline */ }
   }
@@ -58,7 +67,7 @@ function deriveStatuses(cards) {
 // `stores` feeds the per-store status pills on channel/logistics cards.
 router.get('/api/retail-admin/channel-hub', requireRetailAdmin, (req, res) => {
   try {
-    const cards = deriveStatuses(registry.listForTenant(tenantId(req)));
+    const cards = deriveStatuses(registry.listForTenant(tenantId(req)), tenantId(req));
     let stores = [];
     try {
       stores = tdb().prepare(

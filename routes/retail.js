@@ -16720,6 +16720,15 @@ router.post('/api/retail-admin/integrations/jd/test', requireRetailAdmin, async 
   const jc = integ().jd;
   if (!jd.jdEnabled(jc)) return res.json({ ok: false, error: 'not_configured' });
   const r = await jd.pingJd(jc);
+  // Reflect the outcome on the Channels hub JD card: a passing test flips it to
+  // connected, a failing one to error with the message. Best-effort — never let
+  // a registry hiccup change the test's own result. Lazy require avoids the
+  // integrations-admin ↔ retail circular import at module load.
+  try {
+    const reg = require('../lib/integrations/registry');
+    if (r.ok) reg.upsertStatus(currentTenantId() || ROOTS_TENANT_ID, 'jd', { status: 'connected', health: { verified_at: new Date().toISOString(), last_error: null } });
+    else reg.upsertStatus(currentTenantId() || ROOTS_TENANT_ID, 'jd', { status: 'error', health: { last_error: r.error || 'test_failed' } });
+  } catch (_) {}
   if (r.ok) return res.json({ ok: true, note: r.note || null });
   return res.json({ ok: false, error: r.error });
 });
