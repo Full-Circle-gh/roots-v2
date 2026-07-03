@@ -971,6 +971,7 @@
       <div class="status-chip"               data-channel="web"     onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web<span class="chip-ct" id="occ-web"></span></div>
       <div class="status-chip"               data-channel="meituan" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan<span class="chip-ct" id="occ-meituan"></span></div>
       <div class="status-chip"               data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>gzgrocery<span class="chip-ct" id="occ-gzgrocery"></span></div>
+      <div class="status-chip"               data-channel="manual"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>Manual · 手动<span class="chip-ct" id="occ-manual"></span></div>
     </div>
     <input type="hidden" id="orders-channel" value="">
     <!-- Hidden source-of-truth for existing loadOrders() reads -->
@@ -995,6 +996,10 @@
       <button class="btn" onclick="loadOrders(); ordLoadKpis(true)" title="Refresh now · 立即刷新">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
         Refresh
+      </button>
+      <button class="btn btn-primary" onclick="omOpen()" title="Create an order on a customer's behalf · 代客下单">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New order · 新建订单
       </button>
       <button class="btn btn-primary ord-bulk-trk-btn" id="ord-bulk-trk-btn" onclick="openBulkTracking()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
@@ -1076,6 +1081,117 @@
         </div>
       </div>
     </div>
+
+    <!-- NEW ORDER (manual) modal — staff create an order on a customer's behalf.
+         Prices from the live catalog with per-line + grand-total overrides.
+         Attach to an existing customer or leave as a guest (name+phone only). -->
+    <div id="om-bg" class="pu-editor-bg">
+      <div class="pu-editor" style="width: 640px; max-width: 94vw;">
+        <div class="pu-editor-head">
+          <div>
+            <h3 style="margin: 0; font-size: 14px;">New order · 新建订单</h3>
+            <div class="muted" style="font-size: 11px; margin-top: 2px;">Create an order on a customer's behalf — phone order, walk-in, or wholesale. · 代客下单——电话订单、到店或批发。</div>
+          </div>
+          <button class="btn" onclick="omClose()">Close · 关闭</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display:block; max-height: 74vh; overflow-y: auto;">
+
+          <!-- Customer / recipient -->
+          <div class="om-sec-lbl">Customer · 顾客</div>
+          <div id="om-cust-selected" class="muted" style="font-size:12px; margin-bottom:8px; display:none;"></div>
+          <div class="field" style="margin:0 0 8px; position:relative;">
+            <input type="text" id="om-cust-q" oninput="omCustSearch()" autocomplete="off" data-ph-en="Search existing customer by name / phone…" data-ph-cn="按姓名/电话搜索现有顾客…" placeholder="Search existing customer by name / phone…">
+            <div id="om-cust-results" class="om-dropdown" hidden></div>
+          </div>
+          <div class="muted" style="font-size:11px; margin-bottom:10px;">
+            Or leave unlinked for a <b>guest</b> — just fill the name/phone below. · 或留空作为<b>访客</b>订单——仅填写下方姓名/电话。
+          </div>
+          <div class="row" style="gap:8px;">
+            <div class="field" style="flex:1; margin:0 0 8px;"><label class="stacked">Name · 姓名</label><input type="text" id="om-recipient-name" maxlength="80"></div>
+            <div class="field" style="flex:1; margin:0 0 8px;"><label class="stacked">Phone · 电话</label><input type="text" id="om-recipient-phone" maxlength="20" placeholder="+86…"></div>
+          </div>
+          <label id="om-save-cust-row" style="font-size:12px; display:inline-flex; align-items:center; gap:6px; color:var(--text-2); margin-bottom:12px;">
+            <input type="checkbox" id="om-save-customer" style="width:15px; height:15px;">
+            Also save as a customer (not just this order) · 同时存为顾客(不止本单)
+          </label>
+
+          <!-- Items -->
+          <div class="om-sec-lbl">Items · 商品</div>
+          <div class="field" style="margin:0 0 8px; position:relative;">
+            <input type="text" id="om-prod-q" oninput="omProdSearch()" autocomplete="off" data-ph-en="Search product to add…" data-ph-cn="搜索要添加的商品…" placeholder="Search product to add…">
+            <div id="om-prod-results" class="om-dropdown" hidden></div>
+          </div>
+          <table id="om-lines-tbl" style="width:100%; border-collapse:collapse; font-size:12px; margin-bottom:6px;">
+            <thead><tr style="text-align:left; color:var(--text-2);">
+              <th style="padding:4px 6px;">Product · 商品</th>
+              <th style="padding:4px 6px; width:64px;">Qty · 数量</th>
+              <th style="padding:4px 6px; width:92px;">Price · 单价</th>
+              <th style="padding:4px 6px; width:84px; text-align:right;">Total · 小计</th>
+              <th style="width:28px;"></th>
+            </tr></thead>
+            <tbody id="om-lines"><tr><td colspan="5" class="muted" style="padding:8px 6px;">No items yet — search above to add. · 暂无商品——在上方搜索添加。</td></tr></tbody>
+          </table>
+
+          <!-- Money -->
+          <div class="row" style="gap:8px; align-items:flex-end;">
+            <div style="flex:1; font-size:12px; color:var(--text-2);">
+              Subtotal · 小计: <b id="om-subtotal" style="color:var(--text-1);">¥0.00</b>
+            </div>
+            <div class="field" style="width:120px; margin:0 0 12px;"><label class="stacked">Shipping · 运费</label><input type="number" id="om-shipping" min="0" step="0.01" value="0" oninput="omRecalc()"></div>
+            <div class="field" style="width:130px; margin:0 0 12px;"><label class="stacked">Total · 合计</label><input type="number" id="om-total" min="0" step="0.01" oninput="omTotalEdited()"></div>
+          </div>
+          <div class="muted" style="font-size:11px; margin:-4px 0 12px;">Total auto-fills from subtotal + shipping. Edit it to override (deposits / negotiated). · 合计由小计+运费自动计算,可手动修改(定金/议价)。</div>
+
+          <!-- Status + payment -->
+          <div class="row" style="gap:8px;">
+            <div class="field" style="flex:1; margin:0 0 12px;"><label class="stacked">Status · 状态</label>
+              <select id="om-status">
+                <option value="pending_payment">Pending payment · 待付款</option>
+                <option value="paid">Paid (collected offline) · 已付款(线下收款)</option>
+              </select>
+            </div>
+            <div class="field" style="flex:1; margin:0 0 12px;"><label class="stacked">Payment · 付款方式</label>
+              <select id="om-pay">
+                <option value="offline">Offline / cash · 线下/现金</option>
+                <option value="wechat">WeChat · 微信</option>
+                <option value="alipay">Alipay · 支付宝</option>
+                <option value="balance">Wallet · 余额</option>
+                <option value="other">Other · 其他</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Optional delivery address -->
+          <details style="margin-bottom:12px;">
+            <summary style="cursor:pointer; font-size:12px; color:var(--text-2);">Delivery address · 收货地址 <span class="muted">(optional · 选填)</span></summary>
+            <div class="row" style="gap:8px; margin-top:8px;">
+              <div class="field" style="flex:1; margin:0 0 8px;"><label class="stacked">Province · 省</label><input type="text" id="om-addr-province" maxlength="40"></div>
+              <div class="field" style="flex:1; margin:0 0 8px;"><label class="stacked">City · 市</label><input type="text" id="om-addr-city" maxlength="40"></div>
+              <div class="field" style="flex:1; margin:0 0 8px;"><label class="stacked">District · 区</label><input type="text" id="om-addr-district" maxlength="40"></div>
+            </div>
+            <div class="field" style="margin:0 0 8px;"><label class="stacked">Street address · 详细地址</label><input type="text" id="om-addr-address" maxlength="200"></div>
+            <div class="row" style="gap:8px;">
+              <div class="field" style="flex:2; margin:0;"><label class="stacked">Detail (unit/floor) · 门牌</label><input type="text" id="om-addr-detail" maxlength="120"></div>
+              <div class="field" style="flex:1; margin:0;"><label class="stacked">Postcode · 邮编</label><input type="text" id="om-addr-postal" maxlength="12"></div>
+            </div>
+          </details>
+
+          <div class="field" style="margin:0 0 4px;"><label class="stacked">Staff note · 员工备注 <span class="muted">(internal · 内部)</span></label><textarea id="om-staff-note" rows="2" maxlength="2000"></textarea></div>
+        </div>
+        <div class="pu-editor-foot">
+          <button class="btn" onclick="omClose()">Cancel · 取消</button>
+          <button class="btn btn-primary" id="om-create-btn" onclick="omSubmit()">Create order · 创建订单</button>
+        </div>
+      </div>
+    </div>
+    <style>
+      .om-sec-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); margin: 4px 0 8px; }
+      .om-dropdown { position: absolute; top: 100%; left: 0; right: 0; z-index: 30; background: var(--surface, #fff); border: 1px solid var(--border, #ddd); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.16); max-height: 260px; overflow-y: auto; margin-top: 2px; }
+      .om-opt { padding: 8px 10px; cursor: pointer; font-size: 12px; display: flex; justify-content: space-between; gap: 8px; }
+      .om-opt:hover { background: var(--hover, rgba(0,0,0,.05)); }
+      .om-opt .om-sub { color: var(--text-2); font-size: 11px; }
+      .lnk-btn { background: none; border: none; color: var(--accent, #2f855a); cursor: pointer; font-size: 11px; padding: 0 0 0 6px; text-decoration: underline; }
+    </style>
     <style>
       /* Bilingual EN · 中文 headers were wrapping mid-word in narrow columns
          ("ORDER # · 订单 / 号", "SHIP BY · 截止 / 发货"). Force the header
@@ -1588,6 +1704,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
           Refresh
         </button>
+        <button class="btn btn-primary" onclick="cuOpenCreate()" title="Add a walk-in / phone-order customer · 添加到店或电话下单的顾客">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New customer · 新增顾客
+        </button>
         <!-- View options (tweaks) — tier badge, recent-login highlight, empty
              values. Per-operator, persisted to localStorage. -->
         <div class="ovp-wrap">
@@ -1682,6 +1802,29 @@
         <div class="pu-editor-foot">
           <button class="btn" onclick="cuCloseEdit()">Cancel · 取消</button>
           <button class="btn btn-primary" onclick="cuSaveEdit()">Save changes · 保存修改</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CREATE CUSTOMER MODAL — key in a walk-in / phone-order customer who never
+         signed up through the app. A synthetic 'manual:' identity is minted
+         server-side; a matching phone links to the existing record instead. -->
+    <div id="cu-create-bg" class="pu-editor-bg">
+      <div class="pu-editor" style="width: 480px;">
+        <div class="pu-editor-head">
+          <h3 style="margin: 0; font-size: 14px;">New customer · 新增顾客</h3>
+          <button class="btn" onclick="cuCloseCreate()">Close · 关闭</button>
+        </div>
+        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
+          <div class="field"><label class="stacked">Name · 姓名</label><input type="text" id="cu-new-nickname" maxlength="60" placeholder="e.g. 王小姐 / Ms Wang"></div>
+          <div class="field"><label class="stacked">Phone · 电话</label><input type="text" id="cu-new-phone" maxlength="20" placeholder="+86…"></div>
+          <div class="field" style="margin-bottom: 0;"><label class="stacked">Email · 邮箱 <span class="muted">(optional · 选填)</span></label><input type="text" id="cu-new-email" maxlength="120" placeholder="name@example.com">
+            <div class="helper">Enter a name or a phone (or both). If the phone already belongs to a customer, we link to that record instead of creating a duplicate. · 填写姓名或电话(可都填)。若该电话已有顾客,将关联到现有记录而非新建。</div>
+          </div>
+        </div>
+        <div class="pu-editor-foot">
+          <button class="btn" onclick="cuCloseCreate()">Cancel · 取消</button>
+          <button class="btn btn-primary" id="cu-new-save" onclick="cuCreateCustomer()">Create · 创建</button>
         </div>
       </div>
     </div>

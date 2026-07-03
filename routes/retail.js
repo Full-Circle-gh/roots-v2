@@ -11478,6 +11478,65 @@ router.delete('/api/retail-admin/vouchers/:id', requireRetailAdmin, (req, res) =
   res.json({ success: true });
 });
 
+// Manual customer create — staff key in a walk-in / phone-order customer that
+// never signed up through the app. There's no WeChat/web identity, so we mint a
+// synthetic `manual:<hex>` openid (keeps the UNIQUE NOT NULL constraint happy,
+// same trick the web-auth flows use with 'web:'/'email:' prefixes).
+//
+// Reuse-by-phone: if the phone already belongs to a customer we return THAT
+// record (reused:true) instead of creating a duplicate — and opportunistically
+// backfill a blank name/email. This is also why a manual record unifies cleanly
+// later: the phone-OTP login (upsert unifies by phone) lands the person on this
+// same row when they first sign in themselves.
+router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const nickname = b.nickname == null ? '' : String(b.nickname).trim().slice(0, 60);
+  const email    = normEmail(b.email);
+  const phone    = b.phone == null ? '' : String(b.phone).replace(/\s+/g, '').slice(0, 20);
+
+  if (phone && !/^\+?[0-9]{7,15}$/.test(phone)) {
+    return res.status(400).json({ success: false, error: 'bad_phone' });
+  }
+  if (b.email && !email) return res.status(400).json({ success: false, error: 'bad_email' });
+  // Need at least one way to identify the person — a phone or a name.
+  if (!phone && !nickname) return res.status(400).json({ success: false, error: 'name_or_phone_required' });
+
+  // Reuse-by-phone — link to the existing record rather than duplicate it.
+  if (phone) {
+    const existing = tdb().prepare(
+      'SELECT * FROM retail_customers WHERE phone = ? ORDER BY id LIMIT 1'
+    ).get(phone);
+    if (existing) {
+      // Backfill only blanks — never overwrite what the customer set themselves.
+      tdb().prepare(
+        `UPDATE retail_customers
+            SET nickname = COALESCE(NULLIF(nickname, ''), ?),
+                email    = COALESCE(NULLIF(email, ''), ?)
+          WHERE id = ?`
+      ).run(nickname || null, email || null, existing.id);
+      const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(existing.id);
+      logActivity(req.user.id, req.user.username, 'link_manual', 'retail_customer', existing.id, { phone }, req.ip);
+      return res.json({ success: true, reused: true, data: publicCustomer(fresh) });
+    }
+  }
+
+  const synthetic = 'manual:' + crypto.randomBytes(12).toString('hex');
+  const info = tdb().prepare(
+    `INSERT INTO retail_customers (openid, nickname, phone, email, source, created_by, last_login_at)
+     VALUES (?, ?, ?, ?, 'manual', ?, NULL)`
+  ).run(synthetic, nickname || null, phone || null, email || null, req.user.id);
+  const id = info.lastInsertRowid;
+  // Same post-create hooks the self-service flows run — apply any migration
+  // credit / signup vouchers keyed to this phone. Best-effort.
+  if (phone) {
+    try { claimMigrationCredit(id); } catch (e) { console.warn('[retail-admin/customer create] migration claim failed:', e.message); }
+    try { reconcileSignupVouchers(id); } catch (e) { console.warn('[retail-admin/customer create] voucher reconcile failed:', e.message); }
+  }
+  const customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
+  logActivity(req.user.id, req.user.username, 'create_manual', 'retail_customer', id, { phone, nickname }, req.ip);
+  res.json({ success: true, reused: false, data: publicCustomer(customer) });
+});
+
 // Customer search — used by the voucher-grant modal in /retail-admin.
 // Matches name, phone, or openid prefix. Returns 20 most recent matches.
 // Customers list — used by both the voucher autocomplete (simple ?q) and the
@@ -15376,12 +15435,155 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
   res.json({ success: true, data: { count: row.n || 0, latest: row.latest || null } });
 });
 
+// Manual order create — staff key in an order on a customer's behalf (phone
+// order, walk-in, wholesale). Sits alongside the customer checkout at
+// POST /api/retail/orders but is deliberately simpler and staff-trusted: no
+// vouchers/points/stock-gate/live-payment machinery. It prices from the live
+// catalog by default, but staff may override any line price AND the grand total
+// (negotiated / wholesale). The order is tagged channel='manual' + source='manual'.
+//
+// Customer is optional: pass customer_id to attach to a real account (the order
+// then shows in their app), or omit it for a GUEST walk-in (customer_id null —
+// the schema allows it; only the name/phone snapshot is kept).
+//
+// Status defaults to 'pending_payment'. Staff may set 'paid' for money already
+// collected offline — we route that through the shared markOrderPaid() so the
+// payment row, points, and referral credit settle exactly like a real payment.
+router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+
+  // ── Customer: an existing account, or a guest walk-in (customer_id null) ──
+  let customer = null;
+  if (b.customer_id != null && b.customer_id !== '') {
+    const cid = parseInt(b.customer_id, 10);
+    if (!cid) return res.status(400).json({ success: false, error: 'bad_customer_id' });
+    customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(cid);
+    if (!customer) return res.status(404).json({ success: false, error: 'customer_not_found' });
+  }
+
+  // Recipient/contact snapshot. Defaults to the account's own name/phone for an
+  // attached order; staff can override. A name is always required (guests too).
+  const recipientName  = String(b.recipient_name  || (customer && customer.nickname) || '').trim().slice(0, 80);
+  const recipientPhone = String(b.recipient_phone || (customer && customer.phone)    || '').replace(/\s+/g, '').slice(0, 20);
+  if (!recipientName) return res.status(400).json({ success: false, error: 'recipient_name_required' });
+  if (recipientPhone && !/^\+?[0-9]{7,15}$/.test(recipientPhone)) {
+    return res.status(400).json({ success: false, error: 'bad_phone' });
+  }
+
+  // ── Items — resolve each against the live catalog. unit_price defaults to the
+  // catalog sell_price; staff may override per line (negotiated/wholesale). ──
+  const items = Array.isArray(b.items) ? b.items : [];
+  if (!items.length) return res.status(400).json({ success: false, error: 'no_items' });
+  const resolved = [];
+  for (const it of items) {
+    const pid = parseInt(it.product_id, 10);
+    const qty = Number(it.qty);
+    if (!pid || !(qty > 0)) return res.status(400).json({ success: false, error: 'invalid_item' });
+    const p = tdb().prepare(
+      `SELECT id, name_en, name_cn, sku, weight AS size, sell_price
+         FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
+    ).get(pid);
+    if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
+    let unitPrice = Number(p.sell_price) || 0;
+    if (it.unit_price != null && it.unit_price !== '') {
+      const up = Number(it.unit_price);
+      if (!Number.isFinite(up) || up < 0) return res.status(400).json({ success: false, error: 'bad_unit_price', product_id: pid });
+      unitPrice = up;
+    }
+    unitPrice = Math.round(unitPrice * 100) / 100;
+    const lineTotal = Math.round(unitPrice * qty * 100) / 100;
+    resolved.push({ p, qty, unitPrice, lineTotal });
+  }
+
+  // ── Money. Subtotal = Σ line totals; shipping optional; total defaults to
+  // subtotal + shipping but staff may override the grand total outright. ──
+  const subtotal = Math.round(resolved.reduce((s, r) => s + r.lineTotal, 0) * 100) / 100;
+  let shippingFee = 0;
+  if (b.shipping_fee != null && b.shipping_fee !== '') {
+    const sf = Number(b.shipping_fee);
+    if (!Number.isFinite(sf) || sf < 0) return res.status(400).json({ success: false, error: 'bad_shipping_fee' });
+    shippingFee = Math.round(sf * 100) / 100;
+  }
+  let total = Math.round((subtotal + shippingFee) * 100) / 100;
+  if (b.total_override != null && b.total_override !== '') {
+    const to = Number(b.total_override);
+    if (!Number.isFinite(to) || to < 0) return res.status(400).json({ success: false, error: 'bad_total' });
+    total = Math.round(to * 100) / 100;
+  }
+
+  // ── Status + payment method. Default pending; staff may mark paid offline. ──
+  const status = b.status === 'paid' ? 'paid' : 'pending_payment';
+  const ALLOWED_PAY = ['offline', 'wechat', 'alipay', 'points', 'balance', 'other'];
+  const paymentMethod = ALLOWED_PAY.includes(String(b.payment_method)) ? String(b.payment_method) : 'offline';
+  const staffNote    = b.staff_note    == null ? null : String(b.staff_note).slice(0, 2000);
+  const customerNote = b.customer_note == null ? null : String(b.customer_note).slice(0, 2000);
+
+  // Optional delivery address snapshot (else it's a counter order with just a
+  // contact). Structured + one-line, mirroring the customer checkout snapshot.
+  const addr = b.address && typeof b.address === 'object' ? b.address : null;
+  const addrPart = (x) => (x == null ? '' : String(x).trim());
+  const addressFull = addr
+    ? [addr.province, addr.city, addr.district, addr.address, addr.detail].map(addrPart).filter(Boolean).join(' ')
+    : null;
+  const addressJson = addr ? JSON.stringify({
+    province: addr.province || null, city: addr.city || null, district: addr.district || null,
+    address: addr.address || null, detail: addr.detail || null, postal_code: addr.postal_code || null,
+  }) : null;
+
+  let orderId, orderNo;
+  const tx = tdb().transaction(() => {
+    // Order-no minted inside the tx so the uniqueness check + INSERT serialize.
+    orderNo = nextOrderNo();
+    const info = tdb().prepare(
+      `INSERT INTO retail_orders (
+         order_no, customer_id, status, payment_method,
+         recipient_name, recipient_phone, address_full, address_json,
+         subtotal, shipping_fee, total,
+         customer_note, staff_note, channel, source, created_by, fulfillment_type
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+    ).run(
+      // Always inserted as pending_payment first; markOrderPaid() flips it below
+      // when staff chose 'paid', keeping the settle logic in one place.
+      orderNo, customer ? customer.id : null, 'pending_payment', paymentMethod,
+      recipientName, recipientPhone || null, addressFull, addressJson,
+      subtotal, shippingFee, total,
+      customerNote, staffNote, 'manual', 'manual', req.user.id, 'delivery'
+    );
+    orderId = info.lastInsertRowid;
+    const insItem = tdb().prepare(
+      `INSERT INTO retail_order_items (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total)
+       VALUES (?,?,?,?,?,?,?,?,?)`
+    );
+    for (const r of resolved) {
+      insItem.run(orderId, r.p.id, r.p.name_en, r.p.name_cn, r.p.sku, r.p.size, r.qty, r.unitPrice, r.lineTotal);
+    }
+    tdb().prepare(
+      `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no)
+       VALUES (?, ?, ?, 'pending', ?)`
+    ).run(orderId, paymentMethod, total, orderNo);
+  });
+  tx();
+
+  // Money already collected offline → settle through the shared path (flips to
+  // paid, completes the payment row, awards points, credits referral — all
+  // idempotent + guest-safe). Manual orders hold no stock reservation, so the
+  // inventory commit inside is a harmless no-op.
+  if (status === 'paid') {
+    try { markOrderPaid(orderId); }
+    catch (e) { console.error('[retail-admin/order create markPaid]', e); }
+  }
+
+  logActivity(req.user.id, req.user.username, 'create_manual', 'retail_order', orderId,
+              { order_no: orderNo, total, status, guest: !customer }, req.ip);
+  res.json({ success: true, data: { id: orderId, order_no: orderNo, status, total } });
+});
+
 router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   const { status, q, from, to, store_id } = req.query;
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
   // rows the storefront doesn't fulfil (the UI renders those view-only).
-  const channel = ['wechat', 'web', 'meituan', 'gzgrocery'].includes(String(req.query.channel || '').toLowerCase())
+  const channel = ['wechat', 'web', 'meituan', 'gzgrocery', 'manual'].includes(String(req.query.channel || '').toLowerCase())
     ? String(req.query.channel).toLowerCase() : '';
   const limit  = Math.min(parseInt(req.query.limit  || '100', 10) || 100, 200);
   const offset = Math.max(parseInt(req.query.offset || '0',   10) || 0, 0);
@@ -15562,7 +15764,7 @@ router.get('/api/retail-admin/order-channel-counts', requireRetailAdmin, (req, r
   if (to)   { sql += ' AND o.placed_at <= ?'; params.push(to); }
   sql += ' GROUP BY ch';
 
-  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0 };
+  const out = { all: 0, wechat: 0, web: 0, meituan: 0, gzgrocery: 0, manual: 0 };
   for (const r of tdb().prepare(sql).all(...params)) {
     if (r.ch in out) out[r.ch] += r.n;
     out.all += r.n;

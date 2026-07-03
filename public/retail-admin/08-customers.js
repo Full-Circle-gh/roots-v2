@@ -758,6 +758,44 @@ function cuOpenEdit() {
 }
 function cuCloseEdit() { $('#cu-edit-bg').classList.remove('show'); }
 
+// ── Create a customer by hand — walk-in / phone order that never used the app.
+// The server mints a synthetic 'manual:' identity and reuses-by-phone, so this
+// is safe to call even when the person later signs in themselves.
+function cuOpenCreate() {
+  $('#cu-new-nickname').value = '';
+  $('#cu-new-phone').value    = '';
+  $('#cu-new-email').value    = '';
+  cuShowModal('#cu-create-bg');
+  setTimeout(() => { const el = $('#cu-new-nickname'); if (el) el.focus(); }, 60);
+}
+function cuCloseCreate() { $('#cu-create-bg').classList.remove('show'); }
+
+async function cuCreateCustomer() {
+  const body = {
+    nickname: $('#cu-new-nickname').value.trim(),
+    phone:    $('#cu-new-phone').value.trim(),
+    email:    $('#cu-new-email').value.trim(),
+  };
+  if (!body.nickname && !body.phone) {
+    toast(cuT('Enter a name or a phone · 请填写姓名或电话', '请填写姓名或电话'), 'err');
+    return;
+  }
+  try {
+    const j = await adminWrite({
+      btnId: 'cu-new-save', url: '/api/retail-admin/customers', method: 'POST',
+      body, errLabelEn: 'Create failed', errLabelCn: '创建失败',
+    });
+    cuCloseCreate();
+    toast(j.reused
+      ? cuT('Linked to existing customer · 已关联到现有顾客', '已关联到现有顾客')
+      : cuT('Customer created · 已创建顾客', '已创建顾客'));
+    cuLoad();
+    cuLoadKpis(true);
+    const id = j?.data?.id;
+    if (id != null) cuOpenDetail(id);
+  } catch {}
+}
+
 // ── Direct message — operator opens a conversation with this customer ───────
 // Reuses the feedback thread tables (POST .../customers/:id/message creates an
 // admin-initiated thread + notifies the customer). After sending we jump into

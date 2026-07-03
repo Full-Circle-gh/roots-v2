@@ -1534,6 +1534,14 @@ addColumn('retail_orders', 'refund_paid_at',          'DATETIME');
 addColumn('retail_orders', 'refund_reviewer_id',      'INTEGER');
 addColumn('retail_orders', 'refund_payer_id',         'INTEGER');
 
+// Provenance — how this order was created. NULL/'app' = customer checkout
+// (mini app / web storefront); 'manual' = keyed in by staff via the Mini App
+// Backend. created_by is the staff user id for manual orders. Manual orders
+// also carry channel='manual' so they get their own filter chip; `source` is
+// the durable audit marker (channel can be re-derived, source never changes).
+addColumn('retail_orders', 'source',                  'TEXT');
+addColumn('retail_orders', 'created_by',              'INTEGER');
+
 // Any rows mislabeled 'requested' from the prior migration version snap
 // back to 'pending'. Safe no-op if no such rows exist.
 try {
@@ -3179,6 +3187,12 @@ try {
 addColumn('retail_customers', 'referral_code',            'TEXT');
 addColumn('retail_customers', 'referred_by_customer_id',  'INTEGER');
 addColumn('retail_customers', 'referral_applied_at',      'DATETIME');
+// Provenance — how this customer record was born. NULL/'app' = self-service
+// signup (WeChat / web OAuth / phone-OTP); 'manual' = keyed in by staff via
+// the Mini App Backend (walk-ins, phone orders). created_by is the staff
+// user id that created a manual record. Reporting treats NULL as 'app'.
+addColumn('retail_customers', 'source',                   'TEXT');
+addColumn('retail_customers', 'created_by',               'INTEGER');
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_customers_refcode ON retail_customers(referral_code) WHERE referral_code IS NOT NULL'); } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_customers_refby ON retail_customers(referred_by_customer_id)'); } catch {}
 

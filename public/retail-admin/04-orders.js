@@ -35,6 +35,7 @@ function ordChannelLabel(o) {
   if (c === 'meituan')   return 'Meituan';
   if (c === 'gzgrocery') return 'gzgrocery';
   if (c === 'web')       return 'Web';
+  if (c === 'manual')    return cuT('Manual', '手动');
   return 'Mini app';
 }
 // Read-only channels (Meituan) carry their OWN order lifecycle we don't fulfil.
@@ -5268,7 +5269,223 @@ async function refreshOrderChannelCounts() {
     set('occ-web',       d.web);
     set('occ-meituan',   d.meituan);
     set('occ-gzgrocery', d.gzgrocery);
+    set('occ-manual',    d.manual);
   } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// NEW ORDER (manual) — staff create an order on a customer's behalf.
+// Prices from the live catalog with per-line + grand-total overrides;
+// attach to an existing customer or leave as a guest. POSTs to
+// /api/retail-admin/orders (channel/source = 'manual').
+// ═══════════════════════════════════════════════════════════════════
+let OM_LINES = [];            // [{ product_id, name_en, name_cn, sku, size, qty, unit_price }]
+let OM_CUSTOMER = null;       // { id, nickname, phone } when linked to an account
+let OM_TOTAL_EDITED = false;  // true once staff hand-edit the grand total
+let omCustTimer = null, omProdTimer = null;
+let OM_CUST_RESULTS = [];     // last customer search hits (index-addressed by the dropdown)
+let OM_PROD_RESULTS = [];     // last product search hits
+
+function omOpen() {
+  OM_LINES = [];
+  OM_CUSTOMER = null;
+  OM_TOTAL_EDITED = false;
+  ['om-cust-q', 'om-recipient-name', 'om-recipient-phone', 'om-prod-q', 'om-staff-note',
+   'om-addr-province', 'om-addr-city', 'om-addr-district', 'om-addr-address', 'om-addr-detail', 'om-addr-postal']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const sh = $('#om-shipping'); if (sh) sh.value = '0';
+  const tot = $('#om-total'); if (tot) tot.value = '';
+  const sc = $('#om-save-customer'); if (sc) sc.checked = false;
+  const st = $('#om-status'); if (st) st.value = 'pending_payment';
+  const pay = $('#om-pay'); if (pay) pay.value = 'offline';
+  omRenderCustSelected();
+  omRenderLines();
+  omHide('#om-cust-results'); omHide('#om-prod-results');
+  cuShowModal('#om-bg');
+  setTimeout(() => { const el = $('#om-cust-q'); if (el) el.focus(); }, 60);
+}
+function omClose() { $('#om-bg').classList.remove('show'); }
+function omHide(sel) { const el = $(sel); if (el) { el.hidden = true; el.innerHTML = ''; } }
+
+// ── Customer link ──────────────────────────────────────────────────
+function omCustSearch() {
+  clearTimeout(omCustTimer);
+  const q = $('#om-cust-q').value.trim();
+  if (!q) { omHide('#om-cust-results'); return; }
+  omCustTimer = setTimeout(async () => {
+    try {
+      const j = await api('/api/retail-admin/customers?pageSize=8&q=' + encodeURIComponent(q));
+      OM_CUST_RESULTS = (j.data || []).slice(0, 8);
+      const box = $('#om-cust-results');
+      if (!OM_CUST_RESULTS.length) { box.innerHTML = '<div class="om-opt muted">No matches · 无匹配</div>'; box.hidden = false; return; }
+      // Index-addressed onclick (omPickCustomer(i)) — never interpolate names
+      // into the attribute, so apostrophes/quotes in a nickname can't break it.
+      box.innerHTML = OM_CUST_RESULTS.map((c, i) => {
+        const nm = omEsc(c.nickname || cuT('(no name)', '(无名)'));
+        const sub = omEsc([c.phone, '#' + c.id].filter(Boolean).join(' · '));
+        return `<div class="om-opt" onclick="omPickCustomer(${i})"><span>${nm}</span><span class="om-sub">${sub}</span></div>`;
+      }).join('');
+      box.hidden = false;
+    } catch { omHide('#om-cust-results'); }
+  }, 220);
+}
+function omEsc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function omPickCustomer(i) {
+  const c = OM_CUST_RESULTS[i];
+  if (!c) return;
+  OM_CUSTOMER = { id: c.id, nickname: c.nickname || '', phone: c.phone || '' };
+  if (!$('#om-recipient-name').value.trim())  $('#om-recipient-name').value  = c.nickname || '';
+  if (!$('#om-recipient-phone').value.trim()) $('#om-recipient-phone').value = c.phone || '';
+  $('#om-cust-q').value = '';
+  omHide('#om-cust-results');
+  omRenderCustSelected();
+}
+function omClearCustomer() { OM_CUSTOMER = null; omRenderCustSelected(); }
+function omRenderCustSelected() {
+  const el = $('#om-cust-selected');
+  const row = $('#om-save-cust-row');
+  if (OM_CUSTOMER) {
+    const sub = omEsc([OM_CUSTOMER.phone, '#' + OM_CUSTOMER.id].filter(Boolean).join(' · '));
+    el.innerHTML = cuT('Linked: ', '已关联:') + '<b>' + omEsc(OM_CUSTOMER.nickname || ('#' + OM_CUSTOMER.id)) + '</b> '
+      + '<span class="muted">' + sub + '</span> '
+      + '<button type="button" class="lnk-btn" onclick="omClearCustomer()">' + cuT('clear · 取消关联', '取消关联') + '</button>';
+    el.style.display = '';
+    if (row) row.style.display = 'none';   // already a saved customer
+  } else {
+    el.style.display = 'none';
+    if (row) row.style.display = '';
+  }
+}
+
+// ── Product lines ──────────────────────────────────────────────────
+function omProdSearch() {
+  clearTimeout(omProdTimer);
+  const q = $('#om-prod-q').value.trim();
+  if (!q) { omHide('#om-prod-results'); return; }
+  omProdTimer = setTimeout(async () => {
+    try {
+      const j = await api('/api/retail-admin/products?limit=10&q=' + encodeURIComponent(q));
+      OM_PROD_RESULTS = (j.data || []).slice(0, 10);
+      const box = $('#om-prod-results');
+      if (!OM_PROD_RESULTS.length) { box.innerHTML = '<div class="om-opt muted">No matches · 无匹配</div>'; box.hidden = false; return; }
+      box.innerHTML = OM_PROD_RESULTS.map((p, i) => {
+        const nm = omEsc(p.name_en || p.name_cn || ('#' + p.id));
+        const price = '¥' + (Number(p.sell_price) || 0).toFixed(2);
+        const sub = omEsc([p.sku, price].filter(Boolean).join(' · '));
+        return `<div class="om-opt" onclick="omAddLine(${i})"><span>${nm}</span><span class="om-sub">${sub}</span></div>`;
+      }).join('');
+      box.hidden = false;
+    } catch { omHide('#om-prod-results'); }
+  }, 220);
+}
+function omAddLine(i) {
+  const p = OM_PROD_RESULTS[i];
+  if (!p) return;
+  const existing = OM_LINES.find(l => l.product_id === p.id);
+  if (existing) { existing.qty += 1; }
+  else {
+    OM_LINES.push({ product_id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku, size: p.size, qty: 1, unit_price: Number(p.sell_price) || 0 });
+  }
+  $('#om-prod-q').value = '';
+  omHide('#om-prod-results');
+  omRenderLines();
+}
+function omRemoveLine(i) { OM_LINES.splice(i, 1); omRenderLines(); }
+function omLineQty(i, v)   { const n = Number(v); OM_LINES[i].qty = n > 0 ? n : 0; omRecalc(); }
+function omLinePrice(i, v) { const n = Number(v); OM_LINES[i].unit_price = (Number.isFinite(n) && n >= 0) ? n : 0; omRecalc(); }
+function omRenderLines() {
+  const tb = $('#om-lines');
+  if (!OM_LINES.length) {
+    tb.innerHTML = '<tr><td colspan="5" class="muted" style="padding:8px 6px;">' + cuT('No items yet — search above to add.', '暂无商品——在上方搜索添加。') + '</td></tr>';
+    omRecalc(); return;
+  }
+  tb.innerHTML = OM_LINES.map((l, i) => {
+    const isCn = (typeof cuLang === 'function') && cuLang() === 'cn';
+    const nm = (isCn ? (l.name_cn || l.name_en) : (l.name_en || l.name_cn)) || ('#' + l.product_id);
+    const lineTotal = (Number(l.qty) || 0) * (Number(l.unit_price) || 0);
+    return `<tr>
+      <td style="padding:4px 6px;">${omEsc(nm)}${l.sku ? '<div class="muted" style="font-size:10px;">' + omEsc(l.sku) + '</div>' : ''}</td>
+      <td style="padding:4px 6px;"><input type="number" min="0" step="1" value="${l.qty}" style="width:56px;" oninput="omLineQty(${i}, this.value)"></td>
+      <td style="padding:4px 6px;"><input type="number" min="0" step="0.01" value="${l.unit_price}" style="width:84px;" oninput="omLinePrice(${i}, this.value)"></td>
+      <td style="padding:4px 6px; text-align:right;">¥${lineTotal.toFixed(2)}</td>
+      <td style="text-align:center;"><button type="button" class="lnk-btn" style="padding:0;" onclick="omRemoveLine(${i})" title="Remove · 移除">✕</button></td>
+    </tr>`;
+  }).join('');
+  omRecalc();
+}
+function omSubtotal() {
+  return Math.round(OM_LINES.reduce((s, l) => s + (Number(l.qty) || 0) * (Number(l.unit_price) || 0), 0) * 100) / 100;
+}
+function omRecalc() {
+  const sub = omSubtotal();
+  const ship = Number($('#om-shipping').value) || 0;
+  $('#om-subtotal').textContent = '¥' + sub.toFixed(2);
+  if (!OM_TOTAL_EDITED) {
+    $('#om-total').value = (Math.round((sub + ship) * 100) / 100).toFixed(2);
+  }
+}
+function omTotalEdited() { OM_TOTAL_EDITED = true; }
+
+// ── Submit ─────────────────────────────────────────────────────────
+async function omSubmit() {
+  const name  = $('#om-recipient-name').value.trim();
+  const phone = $('#om-recipient-phone').value.trim();
+  if (!OM_LINES.length) { toast(cuT('Add at least one item · 请至少添加一个商品', '请至少添加一个商品'), 'err'); return; }
+  if (OM_LINES.some(l => !(Number(l.qty) > 0))) { toast(cuT('Every line needs a qty > 0 · 每行数量需大于0', '每行数量需大于0'), 'err'); return; }
+  if (!name) { toast(cuT('Enter a customer / recipient name · 请填写顾客/收件人姓名', '请填写姓名'), 'err'); return; }
+
+  const btn = $('#om-create-btn');
+  const oldTxt = btn ? btn.textContent : null;
+  if (btn) { btn.disabled = true; btn.textContent = '…'; }
+  try {
+    // Optionally save a guest as a real customer first, then attach it.
+    let customerId = OM_CUSTOMER ? OM_CUSTOMER.id : null;
+    if (!customerId && $('#om-save-customer') && $('#om-save-customer').checked && (name || phone)) {
+      const cj = await adminWrite({
+        url: '/api/retail-admin/customers', method: 'POST',
+        body: { nickname: name, phone }, errLabelEn: 'Customer save failed', errLabelCn: '顾客保存失败',
+      });
+      customerId = cj?.data?.id || null;
+    }
+
+    const addr = {
+      province: $('#om-addr-province').value.trim(),
+      city:     $('#om-addr-city').value.trim(),
+      district: $('#om-addr-district').value.trim(),
+      address:  $('#om-addr-address').value.trim(),
+      detail:   $('#om-addr-detail').value.trim(),
+      postal_code: $('#om-addr-postal').value.trim(),
+    };
+    const hasAddr = Object.values(addr).some(Boolean);
+
+    const body = {
+      customer_id: customerId,
+      recipient_name: name,
+      recipient_phone: phone,
+      items: OM_LINES.map(l => ({ product_id: l.product_id, qty: Number(l.qty), unit_price: Number(l.unit_price) })),
+      shipping_fee: Number($('#om-shipping').value) || 0,
+      status: $('#om-status').value,
+      payment_method: $('#om-pay').value,
+      staff_note: $('#om-staff-note').value.trim() || null,
+    };
+    // Only send total_override when staff actually edited it (else let the
+    // server compute subtotal + shipping authoritatively).
+    if (OM_TOTAL_EDITED) body.total_override = Number($('#om-total').value) || 0;
+    if (hasAddr) body.address = addr;
+
+    const j = await adminWrite({
+      url: '/api/retail-admin/orders', method: 'POST', body,
+      errLabelEn: 'Order create failed', errLabelCn: '订单创建失败',
+    });
+    omClose();
+    toast(cuT('Order created · 已创建订单', '已创建订单') + ' ' + (j?.data?.order_no || ''));
+    if (typeof loadOrders === 'function') loadOrders();
+    if (typeof refreshOrderChannelCounts === 'function') refreshOrderChannelCounts();
+    // Jump straight into the new order's drawer if the opener exists.
+    const id = j?.data?.id;
+    if (id != null && typeof openOrder === 'function') openOrder(id);
+  } catch { /* already toasted */ }
+  finally { if (btn) { btn.disabled = false; if (oldTxt != null) btn.textContent = oldTxt; } }
 }
 
 // Products are managed entirely from the main /products page on the
