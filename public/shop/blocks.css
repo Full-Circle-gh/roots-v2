@@ -1040,3 +1040,1538 @@
     padding-left: 36px; border-left: 2px solid rgba(0,0,0,.12);
   }
 }
+
+/* ── ANNOUNCEMENT BAR (ported from block-renderer.sb-wxss 3-90) ── */
+/* ── Announcement bar ─────────────────────────────────────────────────── */
+.shop-blocks .sb-announce {
+  padding: calc(20 * var(--u)) calc(32 * var(--u));
+  font-family: var(--f-toni);
+  font-size: calc(calc(24 * var(--u)) * var(--font-scale));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+  overflow: hidden;
+}
+.shop-blocks .sb-announce-linked {
+  display: flex; align-items: center; justify-content: center; gap: calc(12 * var(--u));
+}
+.shop-blocks .sb-announce-chev {
+  font-size: calc(calc(28 * var(--u)) * var(--font-scale));
+  opacity: 0.75;
+  line-height: 1;
+}
+
+/* ── Announcement animations ──────────────────────────────────────────── */
+/* Marquee — horizontal scroll. Track is 2× the text (padded first copy +
+   bare second copy) so translateX(-50%) loops seamlessly. */
+.shop-blocks .sb-announce.sb-anim-marquee_rtl,
+.shop-blocks .sb-announce.sb-anim-marquee_ltr { display: flex; align-items: center; justify-content: center; gap: calc(12 * var(--u)); }
+.shop-blocks .sb-announce .sb-anim-clip { flex: 1; min-width: 0; overflow: hidden; }
+.shop-blocks .sb-announce .sb-anim-track { display: inline-flex; flex-wrap: nowrap; white-space: nowrap; will-change: transform; }
+.shop-blocks .sb-announce .sb-anim-track > .sb-announce-text:first-child { padding-right: calc(96 * var(--u)); }
+.shop-blocks .sb-announce.sb-anim-marquee_rtl .sb-anim-track { animation: sb-a-marquee-rtl var(--anim-dur, 14s) linear infinite; }
+.shop-blocks .sb-announce.sb-anim-marquee_ltr .sb-anim-track { animation: sb-a-marquee-ltr var(--anim-dur, 14s) linear infinite; }
+@keyframes sb-a-marquee-rtl { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes sb-a-marquee-ltr { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+
+/* Vertical scroll — fixed-height clip with 2 stacked copies. */
+.shop-blocks .sb-announce.sb-anim-scroll_up,
+.shop-blocks .sb-announce.sb-anim-scroll_down { padding: 0 calc(32 * var(--u)); display: flex; align-items: center; justify-content: center; gap: calc(12 * var(--u)); }
+.shop-blocks .sb-announce .sb-anim-vclip { height: calc(64 * var(--u)); overflow: hidden; }
+.shop-blocks .sb-announce .sb-anim-vtrack { display: flex; flex-direction: column; align-items: center; line-height: calc(64 * var(--u)); }
+.shop-blocks .sb-announce.sb-anim-scroll_up .sb-anim-vtrack   { animation: sb-a-scroll-up var(--anim-dur, 14s) linear infinite; }
+.shop-blocks .sb-announce.sb-anim-scroll_down .sb-anim-vtrack { animation: sb-a-scroll-down var(--anim-dur, 14s) linear infinite; }
+@keyframes sb-a-scroll-up   { from { transform: translateY(0); } to { transform: translateY(-50%); } }
+@keyframes sb-a-scroll-down { from { transform: translateY(-50%); } to { transform: translateY(0); } }
+
+/* Per-letter — stagger via inline --i */
+.shop-blocks .sb-announce .sb-letters { display: inline-block; }
+.shop-blocks .sb-announce .sb-letters .sb-ch { display: inline-block; }
+.shop-blocks .sb-announce.sb-anim-typewriter .sb-letters .sb-ch {
+  opacity: 0;
+  animation: sb-a-type-in var(--anim-dur, 6s) infinite;
+  animation-delay: calc(var(--i) * var(--step, 0.08s));
+}
+@keyframes sb-a-type-in { 0%, 100% { opacity: 0; } 8%, 92% { opacity: 1; } }
+.shop-blocks .sb-announce.sb-anim-fade_in_letters .sb-letters .sb-ch {
+  opacity: 0;
+  animation: sb-a-fade-in var(--anim-dur, 5s) infinite;
+  animation-delay: calc(var(--i) * var(--step, 0.06s));
+}
+@keyframes sb-a-fade-in { 0%, 100% { opacity: 0; } 25%, 80% { opacity: 1; } }
+.shop-blocks .sb-announce.sb-anim-wave .sb-letters .sb-ch {
+  animation: sb-a-wave var(--anim-dur, 2.2s) ease-in-out infinite;
+  animation-delay: calc(var(--i) * var(--step, 0.07s));
+}
+@keyframes sb-a-wave { 0%, 60%, 100% { transform: translateY(0); } 25% { transform: translateY(calc(-8 * var(--u))); } }
+
+.shop-blocks /* Flicker — whole-text neon flicker, no per-letter split */
+.shop-blocks .sb-announce.sb-anim-flicker { animation: sb-a-flicker var(--anim-dur, 2.4s) infinite; }
+@keyframes sb-a-flicker {
+  0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% { opacity: 1; text-shadow: 0 0 calc(8 * var(--u)) currentColor; }
+  20%, 24%, 55% { opacity: 0.35; text-shadow: none; }
+}
+
+/* Speed presets — override --anim-dur (overall) and --step (per-letter delay).
+   Per-letter animations want shorter total durations so the cycle doesn't drag. */
+.shop-blocks .sb-announce.sb-speed-slow   { --anim-dur: 22s; --step: 0.12s; }
+.shop-blocks .sb-announce.sb-speed-normal { --anim-dur: 14s; --step: 0.08s; }
+.shop-blocks .sb-announce.sb-speed-fast   { --anim-dur: 8s;  --step: 0.05s; }
+.shop-blocks .sb-announce.sb-anim-typewriter.sb-speed-slow   { --anim-dur: 9s; }
+.shop-blocks .sb-announce.sb-anim-typewriter.sb-speed-normal { --anim-dur: 6s; }
+.shop-blocks .sb-announce.sb-anim-typewriter.sb-speed-fast   { --anim-dur: 3.5s; }
+.shop-blocks .sb-announce.sb-anim-fade_in_letters.sb-speed-slow   { --anim-dur: 7s; }
+.shop-blocks .sb-announce.sb-anim-fade_in_letters.sb-speed-normal { --anim-dur: 5s; }
+.shop-blocks .sb-announce.sb-anim-fade_in_letters.sb-speed-fast   { --anim-dur: 3s; }
+.shop-blocks .sb-announce.sb-anim-wave.sb-speed-slow   { --anim-dur: 3.4s; }
+.shop-blocks .sb-announce.sb-anim-wave.sb-speed-normal { --anim-dur: 2.2s; }
+.shop-blocks .sb-announce.sb-anim-wave.sb-speed-fast   { --anim-dur: 1.3s; }
+.shop-blocks .sb-announce.sb-anim-flicker.sb-speed-slow   { --anim-dur: 3.6s; }
+.shop-blocks .sb-announce.sb-anim-flicker.sb-speed-normal { --anim-dur: 2.4s; }
+.shop-blocks .sb-announce.sb-anim-flicker.sb-speed-fast   { --anim-dur: 1.4s; }
+
+
+/* ── FEATURED ITEM (ported from block-renderer.sb-wxss 466-565) ── */
+/* ── Featured item ────────────────────────────────────────────────────── */
+/* Three layouts (driven by CMS `view`):
+   • card    — square image on top, kicker / name / price stacked below
+   • split   — image left, copy right (legacy default)
+   • banner  — wide image with copy floated bottom-left on top of it
+   Card surface (`background:{...}` inline) + text colour come from
+   `card_bg_color` / `card_fg_color`; the outer block bg comes from
+   `bg_color` (transparent by default). */
+.shop-blocks .sb-featured { padding: 0 calc(44 * var(--u)); }
+.shop-blocks .sb-featured .sb-ft-card {
+  padding: calc(36 * var(--u));
+  border-radius: calc(4 * var(--u));
+  overflow: hidden;
+}
+.shop-blocks .sb-featured .sb-ft-img { background: rgba(0,0,0,.15); overflow: hidden; border-radius: calc(4 * var(--u)); }
+.shop-blocks .sb-featured .sb-img-full { width: 100%; height: 100%; }
+.shop-blocks .sb-featured .sb-ft-meta { min-width: 0; }
+.shop-blocks .sb-featured .sb-ft-kicker {
+  font-family: var(--f-toni);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  /* Card-fg via inline style; fall back to lime if unspecified */
+}
+.shop-blocks .sb-featured .sb-ft-name {
+  font-family: var(--f-bear);
+  font-size: calc(calc(40 * var(--u)) * var(--font-scale));
+  font-weight: 500;
+  line-height: 1.05;
+  margin-top: calc(8 * var(--u));
+}
+.shop-blocks .sb-featured .sb-ft-price {
+  font-family: var(--f-gothic);
+  font-size: calc(calc(36 * var(--u)) * var(--font-scale));
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.shop-blocks .sb-featured .sb-ft-price.sb-ft-flash { color: #FF8FA1; }
+.shop-blocks .sb-featured .sb-ft-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: calc(14 * var(--u));
+  margin-top: calc(12 * var(--u));
+}
+.shop-blocks .sb-featured .sb-ft-price-was {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(24 * var(--u)) * var(--font-scale));
+  text-decoration: line-through;
+}
+.shop-blocks .sb-featured .sb-ft-empty {
+  color: rgba(0, 0, 0, 0.3);
+  text-align: center;
+  padding: calc(40 * var(--u)) 0;
+  font-size: calc(calc(24 * var(--u)) * var(--font-scale));
+}
+
+.shop-blocks /* CARD view — image on top, copy below. */
+.shop-blocks .sb-featured-view-card .sb-ft-card {
+  display: flex;
+  flex-direction: column;
+  gap: calc(24 * var(--u));
+}
+.shop-blocks .sb-featured-view-card .sb-ft-img { width: 100%; height: calc(420 * var(--u)); }
+.shop-blocks .sb-featured-view-card .sb-ft-meta { width: 100%; }
+
+.shop-blocks /* SPLIT view (legacy default) — image left, copy right. */
+.shop-blocks .sb-featured-view-split .sb-ft-card {
+  display: flex;
+  gap: calc(32 * var(--u));
+  align-items: center;
+}
+.shop-blocks .sb-featured-view-split .sb-ft-img {
+  width: calc(168 * var(--u));
+  height: calc(208 * var(--u));
+  flex-shrink: 0;
+}
+.shop-blocks .sb-featured-view-split .sb-ft-meta { flex: 1; }
+
+/* BANNER view — wide image with copy floated bottom-left as an overlay. */
+.shop-blocks .sb-featured-view-banner .sb-ft-card {
+  position: relative;
+  padding: 0;
+  min-height: calc(360 * var(--u));
+}
+.shop-blocks .sb-featured-view-banner .sb-ft-img {
+  width: 100%;
+  height: calc(360 * var(--u));
+  border-radius: calc(4 * var(--u));
+}
+.shop-blocks .sb-featured-view-banner .sb-ft-meta {
+  position: absolute;
+  left: calc(32 * var(--u));
+  right: calc(32 * var(--u));
+  bottom: calc(28 * var(--u));
+  padding: calc(18 * var(--u)) calc(22 * var(--u));
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: calc(4 * var(--u));
+  backdrop-filter: blur(calc(8 * var(--u)));
+}
+
+
+/* ── COUNTDOWN TIMER (ported from block-renderer.sb-wxss 1069-1143) ── */
+/* ── Countdown timer (flash-sale / 秒杀) ─────────────────────────────── */
+.shop-blocks .sb-countdown {
+  padding: calc(40 * var(--u)) calc(44 * var(--u)) calc(44 * var(--u));
+  text-align: center;
+}
+.shop-blocks .sb-cd-kicker {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.18em;
+  opacity: 0.75;
+  text-transform: uppercase;
+}
+.shop-blocks .sb-cd-title {
+  font-family: var(--f-bear);
+  font-weight: 500;
+  font-size: calc(calc(36 * var(--u)) * var(--font-scale));
+  line-height: 1.15;
+  margin-top: calc(8 * var(--u));
+}
+.shop-blocks .sb-cd-clock {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  gap: calc(12 * var(--u));
+  margin-top: calc(24 * var(--u));
+}
+.shop-blocks .sb-cd-cell {
+  min-width: calc(96 * var(--u));
+  padding: calc(16 * var(--u)) calc(8 * var(--u));
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: calc(12 * var(--u));
+}
+.shop-blocks .sb-cd-num {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(44 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.shop-blocks .sb-cd-lbl {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(16 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.14em;
+  margin-top: calc(8 * var(--u));
+  opacity: 0.7;
+}
+.shop-blocks .sb-cd-sep {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(44 * var(--u)) * var(--font-scale));
+  line-height: 1;
+  padding-top: calc(16 * var(--u));
+  opacity: 0.55;
+}
+.shop-blocks .sb-cd-cta {
+  display: inline-block;
+  margin-top: calc(28 * var(--u));
+  padding: calc(18 * var(--u)) calc(44 * var(--u));
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.16em;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a17;
+  border-radius: calc(999 * var(--u));
+}
+.shop-blocks .sb-cd-ended {
+  margin-top: calc(32 * var(--u));
+  font-family: var(--f-aleo);
+  font-size: calc(calc(26 * var(--u)) * var(--font-scale));
+  opacity: 0.8;
+}
+
+
+/* ── POINTS WIDGET (ported from block-renderer.sb-wxss 1639-1693) ── */
+/* ── Points widget ────────────────────────────────────────────────────── */
+.shop-blocks .sb-points-blk {
+  padding: calc(40 * var(--u)) calc(36 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(28 * var(--u));
+}
+.shop-blocks .sb-pt-star {
+  flex: 0 0 calc(100 * var(--u));
+  height: calc(100 * var(--u));
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.shop-blocks .sb-pt-star-glyph {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(56 * var(--u)) * var(--font-scale));
+  line-height: 1;
+}
+.shop-blocks .sb-pt-body { flex: 1; min-width: 0; }
+.shop-blocks .sb-pt-kicker {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.14em;
+  opacity: 0.85;
+}
+.shop-blocks .sb-pt-title {
+  font-family: var(--f-bear);
+  font-weight: 500;
+  font-size: calc(calc(32 * var(--u)) * var(--font-scale));
+  line-height: 1.15;
+  margin-top: calc(4 * var(--u));
+}
+.shop-blocks .sb-pt-sub {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  margin-top: calc(8 * var(--u));
+  opacity: 0.85;
+}
+.shop-blocks .sb-pt-cta {
+  flex: 0 0 auto;
+  padding: calc(14 * var(--u)) calc(28 * var(--u));
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.14em;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a17;
+  border-radius: calc(999 * var(--u));
+}
+
+
+/* ── TOP UP (ported from block-renderer.sb-wxss 1694-1944) ── */
+/* ── Top up (tier teaser — A card row · B receipt · C hero+strip) ─────── */
+.shop-blocks .sb-topup-blk {
+  padding: calc(36 * var(--u)) 0;
+  border-top: calc(3 * var(--u)) solid rgba(26, 26, 23, 0.14);
+  border-bottom: calc(3 * var(--u)) solid rgba(26, 26, 23, 0.14);
+}
+.shop-blocks .sb-tu-head { padding: 0 calc(36 * var(--u)); }
+.shop-blocks .sb-tu-kicker {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.18em;
+  color: var(--olive);
+}
+.shop-blocks .sb-tu-title {
+  font-family: var(--f-bear);
+  font-weight: 700;
+  font-size: calc(calc(46 * var(--u)) * var(--font-scale));
+  line-height: 1.04;
+  margin-top: calc(10 * var(--u));
+  letter-spacing: -0.01em;
+}
+.shop-blocks .sb-tu-hl {
+  background: var(--tu-accent, var(--lime));
+  color: var(--ink);
+  padding: 0 calc(12 * var(--u));
+  border-radius: calc(6 * var(--u));
+}
+
+/* shared card paint + content bits */
+.shop-blocks .sb-tu-card--cream { background: #FFFCF7; }
+.shop-blocks .sb-tu-card--amber { background: var(--papaya); }
+.shop-blocks .sb-tu-card--ink   { background: var(--ink); color: #fff; }
+.shop-blocks .sb-tu-num {
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(21 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.06em;
+  color: var(--olive);
+}
+.shop-blocks .sb-tu-card--ink .sb-tu-num,
+.shop-blocks .sb-tu-hero .sb-tu-num { color: var(--tu-accent, var(--lime)); }
+.shop-blocks .sb-tu-amt {
+  font-family: var(--f-bear);
+  font-weight: 700;
+  font-size: calc(calc(64 * var(--u)) * var(--font-scale));
+  line-height: 0.86;
+  margin-top: calc(12 * var(--u));
+  letter-spacing: -0.02em;
+}
+.shop-blocks .sb-tu-pts {
+  display: inline-block;
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(24 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.04em;
+  background: var(--ink);
+  color: var(--tu-accent, var(--lime));
+  padding: calc(7 * var(--u)) calc(16 * var(--u));
+  border-radius: calc(8 * var(--u));
+}
+.shop-blocks .sb-tu-card--ink .sb-tu-pts,
+.shop-blocks .sb-tu-hero .sb-tu-pts { background: var(--tu-accent, var(--lime)); color: var(--ink); }
+.shop-blocks .sb-tu-meta {
+  font-family: var(--f-toni);
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.02em;
+  color: var(--olive);
+  white-space: nowrap;
+}
+.shop-blocks .sb-tu-card--ink .sb-tu-meta,
+.shop-blocks .sb-tu-hero .sb-tu-meta { color: rgba(255, 255, 255, 0.62); }
+.shop-blocks .sb-tu-best {
+  position: absolute;
+  top: calc(-18 * var(--u));
+  right: calc(-10 * var(--u));
+  transform: rotate(6deg);
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(19 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.04em;
+  background: var(--berry);
+  color: #fff;
+  padding: calc(7 * var(--u)) calc(16 * var(--u));
+  border: calc(3 * var(--u)) solid var(--ink);
+  box-shadow: calc(4 * var(--u)) calc(4 * var(--u)) 0 var(--ink);
+  white-space: nowrap;
+  z-index: 2;
+}
+
+/* link-out row (A + B) — block links out to the full Top-up page */
+.shop-blocks .sb-tu-linkout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(24 * var(--u));
+  padding: calc(28 * var(--u)) calc(36 * var(--u)) 0;
+}
+.shop-blocks .sb-tu-sub {
+  font-family: var(--f-toni);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  color: rgba(26, 26, 23, 0.62);
+}
+.shop-blocks .sb-tu-cta {
+  flex: 0 0 auto;
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(28 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.04em;
+  background: var(--ink);
+  color: var(--tu-accent, var(--lime));
+  padding: calc(20 * var(--u)) calc(36 * var(--u));
+  border-radius: calc(4 * var(--u));
+}
+
+.shop-blocks /* A · card row — swipeable, ink best-value card peeks to signal scroll */
+.shop-blocks .sb-tu-row {
+  display: flex;
+  white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(38 * var(--u)) calc(36 * var(--u)) calc(18 * var(--u));
+}
+.shop-blocks .sb-tu-row .sb-tu-card {
+  flex: 0 0 auto;
+  width: calc(300 * var(--u));
+  box-sizing: border-box;
+  position: relative;
+  margin-right: calc(24 * var(--u));
+  background-clip: padding-box;
+  border: calc(4 * var(--u)) solid var(--ink);
+  border-radius: calc(4 * var(--u));
+  box-shadow: calc(6 * var(--u)) calc(6 * var(--u)) 0 var(--ink);
+  padding: calc(26 * var(--u)) calc(26 * var(--u)) calc(30 * var(--u));
+}
+.shop-blocks .sb-tu-row .sb-tu-card:last-child { margin-right: 0; }
+.shop-blocks .sb-tu-row .sb-tu-pts { margin-top: calc(22 * var(--u)); }
+.shop-blocks .sb-tu-row .sb-tu-meta { margin-top: calc(22 * var(--u)); }
+
+.shop-blocks /* B · receipt list — full-bleed bands, perforated dashed dividers */
+.shop-blocks .sb-tu-receipt {
+  margin: calc(30 * var(--u)) calc(36 * var(--u)) 0;
+  border-top: calc(4 * var(--u)) solid var(--ink);
+  border-bottom: calc(4 * var(--u)) solid var(--ink);
+}
+.shop-blocks .sb-tu-band {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(28 * var(--u)) calc(28 * var(--u));
+}
+.shop-blocks .sb-tu-band + .sb-tu-band { border-top: calc(3 * var(--u)) dashed rgba(26, 26, 23, 0.26); }
+.shop-blocks .sb-tu-notch {
+  position: absolute;
+  top: 50%;
+  width: calc(26 * var(--u));
+  height: calc(26 * var(--u));
+  border-radius: 50%;
+  background: var(--tu-bg, var(--oat));
+  transform: translateY(-50%);
+}
+.shop-blocks .sb-tu-notch--l { left: calc(-13 * var(--u)); }
+.shop-blocks .sb-tu-notch--r { right: calc(-13 * var(--u)); }
+.shop-blocks .sb-tu-band-l { display: flex; flex-direction: column; }
+.shop-blocks .sb-tu-band .sb-tu-amt {
+  font-size: calc(calc(58 * var(--u)) * var(--font-scale));
+  margin-top: calc(6 * var(--u));
+  line-height: 0.9;
+}
+.shop-blocks .sb-tu-band-r {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(12 * var(--u));
+}
+.shop-blocks .sb-tu-best--band { top: calc(-46 * var(--u)); right: calc(-4 * var(--u)); }
+
+/* C · hero tier + strip — push one best-value pack big */
+.shop-blocks .sb-tu-hero {
+  position: relative;
+  margin: calc(30 * var(--u)) calc(36 * var(--u)) 0;
+  background: var(--ink);
+  color: #fff;
+  border: calc(4 * var(--u)) solid var(--ink);
+  box-shadow: calc(8 * var(--u)) calc(8 * var(--u)) 0 var(--ink);
+  border-radius: calc(4 * var(--u));
+  padding: calc(30 * var(--u)) calc(32 * var(--u)) calc(32 * var(--u));
+}
+.shop-blocks .sb-tu-best--hero { top: calc(-18 * var(--u)); right: calc(28 * var(--u)); }
+.shop-blocks .sb-tu-hero-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.shop-blocks .sb-tu-amt--hero {
+  font-size: calc(calc(96 * var(--u)) * var(--font-scale));
+  line-height: 0.82;
+  margin-top: calc(12 * var(--u));
+  letter-spacing: -0.03em;
+}
+.shop-blocks .sb-tu-hero-r {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: calc(16 * var(--u));
+  padding-top: calc(8 * var(--u));
+}
+.shop-blocks .sb-tu-hero-cta {
+  margin-top: calc(28 * var(--u));
+  text-align: center;
+  background: var(--tu-accent, var(--lime));
+  color: var(--ink);
+  font-family: var(--f-gothic);
+  font-weight: 700;
+  font-size: calc(calc(30 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.04em;
+  padding: calc(22 * var(--u)) 0;
+  border-radius: calc(4 * var(--u));
+}
+.shop-blocks .sb-tu-strip {
+  display: flex;
+  white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
+  padding: calc(26 * var(--u)) calc(36 * var(--u)) calc(4 * var(--u));
+}
+.shop-blocks .sb-tu-strip .sb-tu-chipcard {
+  flex: 0 0 auto;
+  width: calc(224 * var(--u));
+  box-sizing: border-box;
+  margin-right: calc(20 * var(--u));
+  border: calc(4 * var(--u)) solid var(--ink);
+  border-radius: calc(4 * var(--u));
+  padding: calc(20 * var(--u)) calc(22 * var(--u)) calc(22 * var(--u));
+}
+.shop-blocks .sb-tu-strip .sb-tu-chipcard:last-child { margin-right: 0; }
+.shop-blocks .sb-tu-amt--sm {
+  font-size: calc(calc(48 * var(--u)) * var(--font-scale));
+  margin-top: calc(8 * var(--u));
+}
+.shop-blocks .sb-tu-pts--sm {
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  margin-top: calc(14 * var(--u));
+}
+.shop-blocks .sb-tu-meta--sm {
+  margin-top: calc(12 * var(--u));
+  font-size: calc(calc(16 * var(--u)) * var(--font-scale));
+}
+
+
+/* ── STORE INFO (ported from block-renderer.sb-wxss 2166-2244) ── */
+/* ── Store info ───────────────────────────────────────────────────────── */
+.shop-blocks .sb-store-blk {
+  margin: 0 calc(36 * var(--u));
+  padding: calc(36 * var(--u)) calc(36 * var(--u)) calc(40 * var(--u));
+  border-radius: calc(12 * var(--u));
+}
+.shop-blocks .sb-st-kicker {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.14em;
+  opacity: 0.8;
+}
+.shop-blocks .sb-st-title {
+  font-family: var(--f-bear);
+  font-weight: 500;
+  font-size: calc(calc(34 * var(--u)) * var(--font-scale));
+  line-height: 1.15;
+  margin-top: calc(10 * var(--u));
+}
+.shop-blocks .sb-st-row {
+  margin-top: calc(18 * var(--u));
+  display: flex;
+  align-items: flex-start;
+  gap: calc(16 * var(--u));
+}
+.shop-blocks .sb-st-icon {
+  font-size: calc(calc(24 * var(--u)) * var(--font-scale));
+  line-height: 1.4;
+  opacity: 0.85;
+}
+.shop-blocks .sb-st-val {
+  flex: 1;
+  font-family: var(--f-aleo);
+  font-size: calc(calc(24 * var(--u)) * var(--font-scale));
+  line-height: 1.4;
+}
+.shop-blocks .sb-st-phone {
+  text-decoration: underline;
+}
+.shop-blocks .sb-st-cta {
+  display: inline-block;
+  margin-top: calc(24 * var(--u));
+  padding: calc(14 * var(--u)) calc(28 * var(--u));
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.14em;
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a1a17;
+  border-radius: calc(8 * var(--u));
+}
+.shop-blocks .sb-st-cards { display: flex; flex-direction: column; }
+.shop-blocks .sb-st-card + .sb-st-card {
+  margin-top: calc(24 * var(--u));
+  padding-top: calc(24 * var(--u));
+  border-top: calc(1 * var(--u)) solid rgba(0, 0, 0, 0.08);
+}
+.shop-blocks .sb-st-status {
+  margin-top: calc(14 * var(--u));
+  display: flex;
+  align-items: center;
+  gap: calc(10 * var(--u));
+  font-family: var(--f-aleo);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+}
+.shop-blocks .sb-st-dot {
+  width: calc(14 * var(--u)); height: calc(14 * var(--u)); border-radius: 50%;
+  box-shadow: 0 0 0 calc(6 * var(--u)) rgba(255, 255, 255, 0.25);
+}
+.shop-blocks .sb-st-status-lbl { font-weight: 600; }
+.shop-blocks .sb-st-hours { opacity: 0.7; }
+.shop-blocks .sb-st-eta {
+  margin-top: calc(6 * var(--u));
+  font-family: var(--f-aleo);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  opacity: 0.8;
+}
+
+
+/* ── AFFILIATE (ported from block-renderer.sb-wxss 2454-2812) ── */
+/* ─── Affiliate block ─────────────────────────────────────────── */
+.shop-blocks .sb-aff-blk {
+  margin: 0 calc(36 * var(--u));
+  padding: calc(32 * var(--u)) calc(32 * var(--u)) calc(28 * var(--u));
+  border-radius: calc(8 * var(--u));
+}
+.shop-blocks .sb-aff-head { margin-bottom: calc(22 * var(--u)); }
+.shop-blocks .sb-aff-kicker {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.22em;
+  opacity: 0.7;
+}
+.shop-blocks .sb-aff-title {
+  font-family: var(--f-bear);
+  font-weight: 500;
+  font-size: calc(calc(40 * var(--u)) * var(--font-scale));
+  line-height: 1.0;
+  padding-top: calc(4 * var(--u));
+  margin-top: calc(6 * var(--u));
+  letter-spacing: -0.01em;
+  margin-top: calc(6 * var(--u));
+}
+.shop-blocks .sb-aff-sub {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  line-height: 1.4;
+  margin-top: calc(12 * var(--u));
+  opacity: 0.85;
+}
+.shop-blocks .sb-aff-code-row {
+  display: flex;
+  align-items: stretch;
+  gap: calc(12 * var(--u));
+}
+.shop-blocks .sb-aff-code-pill {
+  flex: 1;
+  background: rgba(0,0,0,0.08);
+  border: calc(2 * var(--u)) solid var(--ink);
+  padding: calc(14 * var(--u)) calc(20 * var(--u));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+.shop-blocks .sb-aff-code-lbl {
+  display: block;
+  font-family: var(--f-toni);
+  font-size: calc(calc(16 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.22em;
+  opacity: 0.7;
+}
+.shop-blocks .sb-aff-code-val {
+  display: block;
+  font-family: var(--f-bear);
+  font-size: calc(calc(34 * var(--u)) * var(--font-scale));
+  line-height: 1;
+  letter-spacing: -0.01em;
+  margin-top: calc(4 * var(--u));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shop-blocks .sb-aff-copy {
+  background: var(--ink);
+  color: #fff;
+  padding: 0 calc(24 * var(--u));
+  font-family: var(--f-gothic);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.12em;
+  display: flex;
+  align-items: center;
+  text-transform: uppercase;
+}
+.shop-blocks .sb-aff-actions {
+  display: flex;
+  align-items: center;
+  gap: calc(16 * var(--u));
+  margin-top: calc(18 * var(--u));
+}
+.shop-blocks .sb-aff-share {
+  flex: 0 0 auto;
+  background: #1AAD19;
+  color: #fff;
+  font-family: var(--f-gothic);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.12em;
+  padding: calc(12 * var(--u)) calc(26 * var(--u));
+  border: calc(2 * var(--u)) solid var(--ink);
+  border-radius: 0;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+.shop-blocks .sb-aff-share::after { border: none; }
+.shop-blocks .sb-aff-stats {
+  flex: 1;
+  font-family: var(--f-toni);
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+  text-align: right;
+}
+.shop-blocks .sb-aff-signin {
+  font-family: var(--f-toni);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.12em;
+  padding: calc(16 * var(--u)) calc(20 * var(--u));
+  background: rgba(0,0,0,0.08);
+  border: calc(2 * var(--u)) dashed var(--ink);
+  text-align: center;
+}
+.shop-blocks .sb-aff-disabled {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  padding: calc(18 * var(--u)) calc(20 * var(--u));
+  border: calc(2 * var(--u)) dashed var(--ink);
+  text-align: center;
+  opacity: 0.7;
+}
+
+/* ─── Affiliate · STRIP view (compact horizontal) ─── */
+.shop-blocks .sb-aff-strip {
+  display: flex;
+  align-items: center;
+  gap: calc(16 * var(--u));
+  padding: calc(20 * var(--u)) calc(24 * var(--u));
+}
+.shop-blocks .sb-aff-strip-left { flex: 1; min-width: 0; }
+.shop-blocks .sb-aff-strip-kicker {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(16 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.22em;
+  opacity: 0.7;
+}
+.shop-blocks .sb-aff-strip-code-row {
+  display: flex;
+  align-items: baseline;
+  gap: calc(8 * var(--u));
+  margin-top: calc(4 * var(--u));
+  min-width: 0;
+}
+.shop-blocks .sb-aff-strip-code {
+  font-family: var(--f-bear);
+  font-size: calc(calc(30 * var(--u)) * var(--font-scale));
+  line-height: 1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.shop-blocks .sb-aff-strip-stats {
+  font-family: var(--f-toni);
+  font-size: calc(calc(16 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+  white-space: nowrap;
+}
+.shop-blocks .sb-aff-strip-copy,
+.shop-blocks .sb-aff-strip-share,
+.shop-blocks .sb-aff-strip-cta {
+  flex: 0 0 auto;
+  background: var(--ink);
+  color: #fff;
+  padding: calc(12 * var(--u)) calc(18 * var(--u));
+  font-family: var(--f-gothic);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.1em;
+  border: none;
+  border-radius: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+.shop-blocks .sb-aff-strip-share { background: #1AAD19; }
+.shop-blocks .sb-aff-strip-share::after { border: none; }
+.shop-blocks .sb-aff-strip-disabled {
+  font-family: var(--f-toni);
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+}
+
+/* ─── Affiliate · STAT view (big earned-¥ hero) ─── */
+.shop-blocks .sb-aff-stat {
+  text-align: center;
+  padding: calc(40 * var(--u)) calc(32 * var(--u)) calc(32 * var(--u));
+}
+.shop-blocks .sb-aff-stat-kicker {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.28em;
+  opacity: 0.75;
+}
+.shop-blocks .sb-aff-stat-num {
+  font-family: var(--f-bear);
+  font-size: calc(calc(120 * var(--u)) * var(--font-scale));
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  margin-top: calc(12 * var(--u));
+}
+.shop-blocks .sb-aff-stat-sub {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  line-height: 1.4;
+  margin-top: calc(8 * var(--u));
+  opacity: 0.8;
+}
+.shop-blocks .sb-aff-stat-code-pill {
+  display: inline-block;
+  margin-top: calc(24 * var(--u));
+  background: rgba(255,255,255,0.12);
+  border: calc(2 * var(--u)) dashed currentColor;
+  padding: calc(12 * var(--u)) calc(22 * var(--u));
+  font-family: var(--f-bear);
+  font-size: calc(calc(30 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.02em;
+  line-height: 1;
+}
+.shop-blocks .sb-aff-stat-actions {
+  display: flex;
+  justify-content: center;
+  gap: calc(12 * var(--u));
+  margin-top: calc(22 * var(--u));
+}
+.shop-blocks .sb-aff-stat-copy,
+.shop-blocks .sb-aff-stat-share,
+.shop-blocks .sb-aff-stat-cta {
+  background: currentColor;
+  padding: calc(14 * var(--u)) calc(24 * var(--u));
+  font-family: var(--f-gothic);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: none;
+  border-radius: 0;
+  line-height: 1.3;
+}
+/* For stat-view we paint the button text in the card's bg colour so it
+   reads as inverse-on-currentColor without needing extra wiring. */
+.shop-blocks .sb-aff-stat-copy { color: #1a1a17; opacity: .92; }
+.shop-blocks .sb-aff-stat-share {
+  background: #1AAD19;
+  color: #fff;
+}
+.shop-blocks .sb-aff-stat-share::after { border: none; }
+.shop-blocks .sb-aff-stat-cta {
+  display: inline-block;
+  margin-top: calc(20 * var(--u));
+  color: #1a1a17;
+}
+.shop-blocks .sb-aff-stat-disabled {
+  margin-top: calc(16 * var(--u));
+  font-family: var(--f-aleo);
+  opacity: 0.7;
+}
+
+/* ─── Affiliate · RECEIPT view (paper / dashed-edges) ─── */
+.shop-blocks .sb-aff-receipt {
+  margin: calc(28 * var(--u)) calc(60 * var(--u));
+  padding: calc(28 * var(--u)) calc(28 * var(--u)) calc(32 * var(--u));
+  border: calc(2 * var(--u)) dashed var(--ink);
+  border-radius: 0;
+  position: relative;
+  box-shadow: calc(8 * var(--u)) calc(8 * var(--u)) 0 var(--ink);
+}
+.shop-blocks .sb-aff-receipt-stub {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(16 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.3em;
+  text-align: center;
+  padding-bottom: calc(12 * var(--u));
+  border-bottom: calc(2 * var(--u)) solid var(--ink);
+  opacity: 0.75;
+}
+.shop-blocks .sb-aff-receipt-kicker {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.22em;
+  margin-top: calc(18 * var(--u));
+  opacity: 0.7;
+}
+.shop-blocks .sb-aff-receipt-title {
+  font-family: var(--f-bear);
+  font-size: calc(calc(34 * var(--u)) * var(--font-scale));
+  line-height: 1.05;
+  letter-spacing: -0.01em;
+  margin-top: calc(4 * var(--u));
+}
+.shop-blocks .sb-aff-receipt-sep {
+  font-family: var(--f-gothic);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  text-align: center;
+  margin: calc(16 * var(--u)) 0;
+  opacity: 0.55;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.shop-blocks .sb-aff-receipt-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: calc(16 * var(--u));
+  margin: calc(6 * var(--u)) 0;
+}
+.shop-blocks .sb-aff-receipt-row-muted { opacity: 0.7; }
+.shop-blocks .sb-aff-receipt-lbl {
+  font-family: var(--f-toni);
+  font-weight: 700;
+  font-size: calc(calc(16 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.22em;
+  opacity: 0.75;
+}
+.shop-blocks .sb-aff-receipt-val {
+  font-family: var(--f-bear);
+  font-size: calc(calc(26 * var(--u)) * var(--font-scale));
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+.shop-blocks .sb-aff-receipt-actions {
+  display: flex;
+  gap: calc(12 * var(--u));
+  margin-top: calc(8 * var(--u));
+}
+.shop-blocks .sb-aff-receipt-copy,
+.shop-blocks .sb-aff-receipt-share {
+  flex: 1;
+  background: var(--ink);
+  color: #fff;
+  padding: calc(14 * var(--u)) 0;
+  text-align: center;
+  font-family: var(--f-gothic);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.12em;
+  border: none;
+  border-radius: 0;
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+.shop-blocks .sb-aff-receipt-share { background: #1AAD19; }
+.shop-blocks .sb-aff-receipt-share::after { border: none; }
+.shop-blocks .sb-aff-receipt-signin,
+.shop-blocks .sb-aff-receipt-disabled {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  text-align: center;
+  padding: calc(12 * var(--u)) 0;
+  opacity: 0.7;
+}
+
+
+/* ── FAVORITES (ported from block-renderer.sb-wxss 4045-4158) ── */
+/* ─── Favorites block — "your saved" rail / grid ─────────────────────── */
+.shop-blocks .sb-fav-blk {
+  padding: 0 calc(44 * var(--u));
+}
+.shop-blocks .sb-fav-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: calc(24 * var(--u));
+}
+.shop-blocks .sb-fav-head-text { flex: 1; min-width: 0; }
+.shop-blocks .sb-fav-kicker {
+  font-family: var(--f-toni);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.25em;
+  opacity: 0.7;
+}
+.shop-blocks .sb-fav-title {
+  font-family: var(--f-bear);
+  font-size: calc(calc(52 * var(--u)) * var(--font-scale));
+  line-height: 1.0;
+  padding-top: calc(6 * var(--u));
+  margin-top: calc(8 * var(--u));
+}
+.shop-blocks .sb-fav-see-all {
+  font-family: var(--f-toni);
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.15em;
+  opacity: 0.7;
+  flex-shrink: 0;
+  margin-left: calc(16 * var(--u));
+}
+.shop-blocks .sb-fav-empty {
+  padding: calc(60 * var(--u)) 0 calc(20 * var(--u));
+  text-align: center;
+}
+.shop-blocks .sb-fav-empty-title {
+  font-family: var(--f-bear);
+  font-size: calc(calc(36 * var(--u)) * var(--font-scale));
+  opacity: 0.7;
+}
+.shop-blocks .sb-fav-empty-sub {
+  font-family: var(--f-aleo);
+  font-size: calc(calc(24 * var(--u)) * var(--font-scale));
+  opacity: 0.55;
+  margin-top: calc(8 * var(--u));
+}
+
+.shop-blocks .sb-fav-rail {
+  white-space: nowrap;
+  margin: 0 calc(-8 * var(--u));
+  padding: 0 calc(8 * var(--u));
+}
+.shop-blocks .sb-fav-rail-card {
+  display: inline-block;
+  width: calc(280 * var(--u));
+  margin-right: calc(20 * var(--u));
+  vertical-align: top;
+  white-space: normal;
+}
+.shop-blocks .sb-fav-rail-card:last-child { margin-right: 0; }
+
+.shop-blocks .sb-fav-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: calc(24 * var(--u));
+}
+.shop-blocks .sb-fav-card { min-width: 0; }
+
+.shop-blocks .sb-fav-img {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  background: var(--oat);
+  border: calc(2 * var(--u)) solid var(--ink);
+  overflow: hidden;
+}
+.shop-blocks .sb-fav-img .sb-img-full { width: 100%; height: 100%; }
+.shop-blocks .sb-fav-out .sb-fav-img .sb-img-full { filter: grayscale(0.6); opacity: 0.55; }
+.shop-blocks .sb-fav-out-tag {
+  position: absolute;
+  bottom: calc(10 * var(--u));
+  left: calc(10 * var(--u));
+  background: var(--ink);
+  color: #fff;
+  padding: calc(4 * var(--u)) calc(10 * var(--u));
+  font-family: var(--f-gothic);
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  letter-spacing: 0.1em;
+}
+.shop-blocks .sb-fav-name {
+  font-family: var(--f-bear);
+  font-size: calc(calc(28 * var(--u)) * var(--font-scale));
+  line-height: 1.15;
+  margin-top: calc(12 * var(--u));
+}
+.shop-blocks .sb-fav-price-row {
+  margin-top: calc(6 * var(--u));
+  display: flex;
+  align-items: baseline;
+  gap: calc(12 * var(--u));
+}
+.shop-blocks .sb-fav-price {
+  font-family: var(--f-gothic);
+  font-size: calc(calc(30 * var(--u)) * var(--font-scale));
+}
+.shop-blocks .sb-fav-price.sb-is-flash { color: var(--berry, #E96174); }
+.shop-blocks .sb-fav-price-was {
+  font-family: var(--f-gothic);
+  font-size: calc(calc(22 * var(--u)) * var(--font-scale));
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+
+/* ── CROSS-CUTTING (corner/enter/badge subset) (ported from block-renderer.sb-wxss 4159-4264) ── */
+/* ── 2026-05-20 cross-cutting enhancements ────────────────────────────────
+   Shared classes used across multiple blocks: corner-radius presets,
+   entrance animations, hero-banner scrim, spacer divider, countdown
+   urgency pulse, featured sale badge. */
+
+/* Corner radius presets — `corner-{sharp|subtle|bold}` on a block's outer
+   class. Each block's existing border-radius wins via more specific
+   selectors; these are global overrides for the wrapper card surfaces. */
+.shop-blocks .sb-featured.sb-corner-sharp .sb-ft-card,
+.shop-blocks .sb-grid-block.sb-corner-sharp .sb-card,
+.shop-blocks .sb-fav-blk.sb-corner-sharp .sb-fav-card,
+.shop-blocks .sb-bun-blk.sb-corner-sharp,
+.shop-blocks .sb-recipe-blk.sb-corner-sharp .sb-recipe-img,
+.shop-blocks .sb-recipe-blk.sb-corner-sharp,
+.shop-blocks .sb-ot-card.sb-corner-sharp,
+.shop-blocks .sb-ot-banner.sb-corner-sharp,
+.shop-blocks .sb-countdown.sb-corner-sharp { border-radius: 0 !important; }
+.shop-blocks .sb-featured.sb-corner-bold .sb-ft-card,
+.shop-blocks .sb-grid-block.sb-corner-bold .sb-card,
+.shop-blocks .sb-fav-blk.sb-corner-bold .sb-fav-card,
+.shop-blocks .sb-bun-blk.sb-corner-bold,
+.shop-blocks .sb-recipe-blk.sb-corner-bold .sb-recipe-img,
+.shop-blocks .sb-recipe-blk.sb-corner-bold,
+.shop-blocks .sb-ot-card.sb-corner-bold,
+.shop-blocks .sb-ot-banner.sb-corner-bold,
+.shop-blocks .sb-countdown.sb-corner-bold { border-radius: calc(28 * var(--u)) !important; }
+.shop-blocks /* Self-framed blocks (poll, .shop-blocks referral, .shop-blocks store, .shop-blocks coupon, .shop-blocks greeting, .shop-blocks WeCom) don't
+   carry the corner class on their own element, so reach them via the
+   .sb-blk-outer corner class. Subtle keeps each block's native radius. */
+.shop-blocks .sb-blk-outer.sb-corner-sharp > .sb-voting-blk,
+.shop-blocks .sb-blk-outer.sb-corner-sharp > .sb-aff-blk,
+.shop-blocks .sb-blk-outer.sb-corner-sharp > .sb-store-blk,
+.shop-blocks .sb-blk-outer.sb-corner-sharp > .sb-coupon-blk,
+.shop-blocks .sb-blk-outer.sb-corner-sharp > .sb-greet-blk,
+.shop-blocks .sb-blk-outer.sb-corner-sharp > .sb-wc-blk { border-radius: 0 !important; }
+.shop-blocks .sb-blk-outer.sb-corner-bold > .sb-voting-blk,
+.shop-blocks .sb-blk-outer.sb-corner-bold > .sb-aff-blk,
+.shop-blocks .sb-blk-outer.sb-corner-bold > .sb-store-blk,
+.shop-blocks .sb-blk-outer.sb-corner-bold > .sb-coupon-blk,
+.shop-blocks .sb-blk-outer.sb-corner-bold > .sb-greet-blk,
+.shop-blocks .sb-blk-outer.sb-corner-bold > .sb-wc-blk { border-radius: calc(28 * var(--u)) !important; }
+/* corner-subtle = legacy default, no override. */
+
+/* Entrance animations — keep them subtle. The class is applied on the
+   block root from JS via the `entrance_anim` CMS field. */
+@keyframes sb-blk-fade-in    { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sb-blk-slide-up   { from { opacity: 0; transform: translateY(calc(20 * var(--u))); } to { opacity: 1; transform: translateY(0); } }
+.shop-blocks .sb-hero.sb-enter-fade,
+.shop-blocks .sb-featured.sb-enter-fade,
+.shop-blocks .sb-cattabs.sb-enter-fade,
+.shop-blocks .sb-greet-blk.sb-enter-fade,
+.shop-blocks .sb-bun-blk.sb-enter-fade        { animation: sb-blk-fade-in   .4s ease-out both; }
+.shop-blocks .sb-hero.sb-enter-slide_up,
+.shop-blocks .sb-featured.sb-enter-slide_up,
+.shop-blocks .sb-cattabs.sb-enter-slide_up,
+.shop-blocks .sb-greet-blk.sb-enter-slide_up,
+.shop-blocks .sb-bun-blk.sb-enter-slide_up    { animation: sb-blk-slide-up .45s ease-out both; }
+/* `enter-none` is the legacy instant render. */
+
+
+/* Featured-item SALE ribbon — top-right corner of the card image. */
+.shop-blocks .sb-featured .sb-img { position: relative; }
+.shop-blocks .sb-featured .sb-feat-badge {
+  position: absolute; top: calc(14 * var(--u)); right: calc(14 * var(--u));
+  padding: calc(6 * var(--u)) calc(16 * var(--u));
+  background: var(--berry, #E96174);
+  color: #fff;
+  font-family: var(--f-toni);
+  font-size: calc(calc(18 * var(--u)) * var(--font-scale));
+  font-weight: 700;
+  letter-spacing: .12em;
+  border-radius: calc(999 * var(--u));
+  z-index: 2;
+}
+
+
+/* Countdown urgency — pulse the clock cells when remaining time crosses
+   the configured threshold. Mirrors the CMS preview. */
+@keyframes sb-cd-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1;   }
+  50%      { transform: scale(1.06); opacity: .85; }
+}
+.shop-blocks .sb-countdown.sb-urgent .sb-cd-cell { animation: sb-cd-pulse .9s ease-in-out infinite; }
+.shop-blocks .sb-countdown.sb-urgent .sb-cd-cell:nth-child(2) { animation-delay: .12s; }
+.shop-blocks .sb-countdown.sb-urgent .sb-cd-cell:nth-child(4) { animation-delay: .24s; }
+.shop-blocks .sb-countdown.sb-urgent .sb-cd-cell:nth-child(6) { animation-delay: .36s; }
+
+
+/* ── VIDEO BANNER (ported from block-renderer.sb-wxss 4272-4293) ── */
+/* Video banner — autoplaying muted loop clip */
+.shop-blocks .sb-video-blk {
+  width: 100%;
+  overflow: hidden;
+  background: #000;
+}
+.shop-blocks .sb-video-el {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+/* Full-screen splash — covers the whole device (onboarding intro video) */
+.shop-blocks .sb-video-blk.sb-video-fs {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  margin: 0;
+  z-index: 1;
+}
+
+
+/* ── LEADERBOARD (ported from block-renderer.sb-wxss 4294-4377) ── */
+.shop-blocks .sb-lb-blk {
+  margin: calc(16 * var(--u)) calc(24 * var(--u));
+  padding: calc(32 * var(--u)) calc(36 * var(--u)) calc(28 * var(--u));
+  border-radius: calc(28 * var(--u));
+}
+.shop-blocks .sb-lb-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: calc(16 * var(--u));
+  margin-bottom: calc(20 * var(--u));
+}
+.shop-blocks .sb-lb-head-main { min-width: 0; flex: 1; }
+.shop-blocks .sb-lb-kicker {
+  font-size: calc(20 * var(--u));
+  font-weight: 700;
+  letter-spacing: calc(2 * var(--u));
+  text-transform: uppercase;
+  margin-bottom: calc(6 * var(--u));
+}
+.shop-blocks .sb-lb-ttl {
+  font-size: calc(38 * var(--u));
+  font-weight: 800;
+  line-height: 1.15;
+}
+.shop-blocks .sb-lb-sub {
+  font-size: calc(24 * var(--u));
+  opacity: .7;
+  margin-top: calc(6 * var(--u));
+}
+.shop-blocks .sb-lb-period {
+  flex-shrink: 0;
+  font-size: calc(20 * var(--u));
+  font-weight: 700;
+  letter-spacing: calc(1 * var(--u));
+  text-transform: uppercase;
+  opacity: .55;
+  padding-top: calc(6 * var(--u));
+}
+.shop-blocks .sb-lb-list { display: flex; flex-direction: column; }
+.shop-blocks .sb-lb-row {
+  display: flex;
+  align-items: center;
+  gap: calc(18 * var(--u));
+  padding: calc(16 * var(--u)) 0;
+  border-bottom: calc(2 * var(--u)) solid rgba(26, 26, 23, .08);
+}
+.shop-blocks .sb-lb-row:last-child { border-bottom: none; }
+.shop-blocks .sb-lb-medal { font-size: calc(32 * var(--u)); line-height: 1; width: calc(44 * var(--u)); text-align: center; }
+.shop-blocks .sb-lb-rank {
+  width: calc(44 * var(--u));
+  text-align: center;
+  font-size: calc(26 * var(--u));
+  font-weight: 700;
+  opacity: .55;
+}
+.shop-blocks .sb-lb-name {
+  flex: 1;
+  min-width: 0;
+  font-size: calc(28 * var(--u));
+  font-weight: 600;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.shop-blocks .sb-lb-value {
+  flex-shrink: 0;
+  font-size: calc(28 * var(--u));
+  font-weight: 800;
+}
+.shop-blocks .sb-lb-footer {
+  margin-top: calc(18 * var(--u));
+  font-size: calc(22 * var(--u));
+  opacity: .65;
+  line-height: 1.4;
+}
+.shop-blocks .sb-lb-cta {
+  margin-top: calc(18 * var(--u));
+  font-size: calc(24 * var(--u));
+  font-weight: 700;
+  letter-spacing: calc(1 * var(--u));
+  text-transform: uppercase;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   PC-NATIVE (new blocks) — desktop compositions for the 10 freshly-ported
+   types. Same rules as the rest of the engine: phone base above uses --u
+   units; here sizes are FIXED px on a desktop type scale, and each type
+   opts into the band width that suits the object it represents
+   (strip → full-bleed · card → 680 · panel → 880/1040 · grid → 1240).
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ① ANNOUNCEMENT — a real ticker strip: full-bleed, taller, fixed type. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="announcement_bar"] { max-width: none; }
+  .shop-blocks .sb-announce { padding: 12px 32px; font-size: 13px; letter-spacing: .08em; }
+  .shop-blocks .sb-announce .sb-anim-vclip { height: 22px; }
+  .shop-blocks .sb-announce .sb-anim-vtrack { line-height: 22px; }
+  .shop-blocks .sb-announce-chev { font-size: 15px; }
+}
+
+/* ② FEATURED ITEM — editorial 2-col: photo left, meta right, Bear headline.
+   The phone stacked card becomes a magazine spread; banner/split views keep
+   their own aspect but pick up the same wide band. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="featured_item"] {
+    width: 100vw; max-width: 1040px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-featured { padding: 0; }
+  .shop-blocks .sb-featured .sb-ft-card {
+    display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+    align-items: stretch; border-radius: 22px; overflow: hidden;
+    transition: transform .18s ease, box-shadow .18s ease; cursor: pointer;
+  }
+  .shop-blocks .sb-featured .sb-ft-card:hover { transform: translateY(-4px); box-shadow: 0 18px 44px rgba(0,0,0,.16); }
+  .shop-blocks .sb-featured .sb-ft-img { aspect-ratio: 4 / 3; height: auto; min-height: 300px; }
+  .shop-blocks .sb-featured .sb-ft-img .sb-img-full { width: 100%; height: 100%; object-fit: cover; }
+  .shop-blocks .sb-featured .sb-ft-meta {
+    display: flex; flex-direction: column; justify-content: center; gap: 14px;
+    padding: 44px 48px;
+  }
+  .shop-blocks .sb-featured .sb-ft-kicker { font-size: 13px; letter-spacing: .22em; }
+  .shop-blocks .sb-featured .sb-ft-name { font-family: var(--f-bear); font-size: 38px; line-height: 1.05; }
+  .shop-blocks .sb-featured .sb-ft-price { font-size: 22px; }
+  .shop-blocks .sb-featured .sb-ft-price-was { font-size: 16px; }
+  .shop-blocks .sb-featured .sb-feat-badge { font-size: 12px; top: 14px; right: 14px; padding: 5px 12px; }
+}
+@media (min-width: 1024px) {
+  .shop-blocks .sb-featured .sb-ft-name { font-size: 46px; }
+}
+
+/* ③ COUNTDOWN — centered event band: big Bear title, roomy clock cells. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="countdown_timer"] {
+    width: 100vw; max-width: 880px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-countdown { padding: 44px 48px; border-radius: 22px; text-align: center; }
+  .shop-blocks .sb-cd-kicker { font-size: 13px; letter-spacing: .24em; }
+  .shop-blocks .sb-cd-title { font-family: var(--f-bear); font-size: 34px; margin-top: 8px; }
+  .shop-blocks .sb-cd-clock { justify-content: center; gap: 14px; margin-top: 22px; }
+  .shop-blocks .sb-cd-cell { min-width: 76px; padding: 14px 10px; border-radius: 14px; }
+  .shop-blocks .sb-cd-num { font-size: 40px; }
+  .shop-blocks .sb-cd-lbl { font-size: 11px; letter-spacing: .18em; }
+  .shop-blocks .sb-cd-sep { font-size: 32px; }
+  .shop-blocks .sb-cd-cta { display: inline-block; margin-top: 26px; padding: 14px 34px; font-size: 14px; letter-spacing: .14em; border-radius: 999px; cursor: pointer; }
+  .shop-blocks .sb-cd-ended { font-size: 20px; padding: 18px 0 6px; }
+}
+
+/* ④ VIDEO — full-bleed cinema band, same treatment as the hero. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="video_banner"] { max-width: none; }
+  .shop-blocks .sb-video-blk { min-height: 380px; }
+  .shop-blocks .sb-video-el { object-fit: cover; }
+}
+
+/* ⑤ POINTS — one confident promo band: star seal left, copy centre, CTA right. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="points_widget"] {
+    width: 100vw; max-width: 1040px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-points-blk {
+    display: flex; align-items: center; gap: 28px;
+    padding: 34px 44px; border-radius: 22px; margin: 0;
+  }
+  .shop-blocks .sb-pt-star { width: 74px; height: 74px; flex: none; }
+  .shop-blocks .sb-pt-star-glyph { font-size: 40px; line-height: 74px; }
+  .shop-blocks .sb-pt-kicker { font-size: 12px; letter-spacing: .22em; }
+  .shop-blocks .sb-pt-title { font-family: var(--f-bear); font-size: 30px; line-height: 1.1; }
+  .shop-blocks .sb-pt-sub { font-size: 15px; opacity: .85; }
+  .shop-blocks .sb-pt-cta { margin-left: auto; flex: none; padding: 14px 30px; font-size: 13px; letter-spacing: .14em; border-radius: 999px; cursor: pointer; }
+}
+
+/* ⑥ TOP-UP — tier cards sit centred; receipt stays a narrow paper object. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="top_up"] {
+    width: 100vw; max-width: 1040px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-topup-blk { padding: 40px 44px; border-radius: 22px; margin: 0; }
+  .shop-blocks .sb-tu-kicker { font-size: 12px; letter-spacing: .22em; }
+  .shop-blocks .sb-tu-title { font-family: var(--f-bear); font-size: 32px; }
+  .shop-blocks .sb-tu-row { display: flex; justify-content: center; gap: 18px; overflow: visible; flex-wrap: wrap; }
+  .shop-blocks .sb-tu-card { flex: 0 0 218px; width: 218px; cursor: pointer; transition: transform .16s ease; }
+  .shop-blocks .sb-tu-card:hover { transform: translateY(-4px); }
+  .shop-blocks .sb-tu-amt { font-size: 34px; }
+  .shop-blocks .sb-tu-meta { font-size: 12px; }
+  .shop-blocks .sb-topup-blk--b { max-width: 680px; margin: 0 auto; }
+  .shop-blocks .sb-tu-strip { display: flex; justify-content: center; gap: 14px; overflow: visible; flex-wrap: wrap; }
+  .shop-blocks .sb-tu-chipcard { cursor: pointer; }
+  .shop-blocks .sb-tu-linkout { cursor: pointer; }
+}
+
+/* ⑦ STORES — location cards side-by-side on the wide band. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="store_info"] {
+    width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-store-blk { padding: 36px 40px; border-radius: 22px; margin: 0; }
+  .shop-blocks .sb-st-kicker { font-size: 13px; letter-spacing: .22em; margin-bottom: 18px; }
+  .shop-blocks .sb-st-cards {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px;
+  }
+  .shop-blocks .sb-st-card {
+    margin: 0; padding: 26px 28px; border-radius: 16px;
+    background: rgba(255,255,255,.55);
+  }
+  .shop-blocks .sb-st-title { font-family: var(--f-bear); font-size: 24px; }
+  .shop-blocks .sb-st-status-lbl, .shop-blocks .sb-st-hours { font-size: 14px; }
+  .shop-blocks .sb-st-val { font-size: 14px; }
+  .shop-blocks .sb-st-eta { font-size: 13px; }
+  .shop-blocks .sb-st-cta { display: inline-block; margin-top: 14px; padding: 11px 24px; font-size: 13px; border-radius: 999px; cursor: pointer; }
+}
+
+/* ⑧ FAVORITES — saved items reflow into the wide auto-fill grid (the phone
+   rail's horizontal scroll makes no sense with a mouse). */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="favorites_block"] {
+    width: 100vw; max-width: 1240px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-fav-blk { padding: 36px 40px; border-radius: 22px; margin: 0; }
+  .shop-blocks .sb-fav-kicker { font-size: 13px; letter-spacing: .22em; }
+  .shop-blocks .sb-fav-title { font-family: var(--f-bear); font-size: 32px; }
+  .shop-blocks .sb-fav-see-all { font-size: 13px; letter-spacing: .12em; cursor: pointer; }
+  .shop-blocks .sb-fav-rail,
+  .shop-blocks .sb-fav-blk .sb-fav-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 18px; overflow: visible; white-space: normal;
+  }
+  .shop-blocks .sb-fav-rail-card, .shop-blocks .sb-fav-card {
+    width: auto; margin: 0; cursor: pointer; transition: transform .16s ease;
+  }
+  .shop-blocks .sb-fav-rail-card:hover, .shop-blocks .sb-fav-card:hover { transform: translateY(-4px); }
+  .shop-blocks .sb-fav-name { font-size: 16px; }
+  .shop-blocks .sb-fav-price { font-size: 16px; }
+}
+
+/* ⑨ AFFILIATE — card/stat are compact centred tickets (a referral card is a
+   small object, like the coupon); strip spans the mid band. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="affiliate_block"] {
+    width: 100vw; max-width: 680px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-aff-blk { margin: 0; border-radius: 22px; }
+  .shop-blocks .sb-aff-card { padding: 40px 44px; }
+  .shop-blocks .sb-aff-kicker { font-size: 12px; letter-spacing: .22em; }
+  .shop-blocks .sb-aff-title { font-family: var(--f-bear); font-size: 32px; }
+  .shop-blocks .sb-aff-sub { font-size: 15px; }
+  .shop-blocks .sb-aff-copy, .shop-blocks .sb-aff-share,
+  .shop-blocks .sb-aff-strip-copy, .shop-blocks .sb-aff-strip-share,
+  .shop-blocks .sb-aff-stat-copy, .shop-blocks .sb-aff-stat-share,
+  .shop-blocks .sb-aff-receipt-copy, .shop-blocks .sb-aff-receipt-share,
+  .shop-blocks .sb-aff-signin, .shop-blocks .sb-aff-strip-cta,
+  .shop-blocks .sb-aff-stat-cta, .shop-blocks .sb-aff-receipt-signin { cursor: pointer; }
+  .shop-blocks .sb-aff-stat-num { font-size: 56px; }
+  .shop-blocks .sb-blk-outer[data-block-type="affiliate_block"] .sb-aff-strip {
+    width: 100%; }
+}
+
+/* ⑩ LEADERBOARD — a ranking is a list object: narrow centred card, roomy rows. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="leaderboard"] {
+    width: 100vw; max-width: 680px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+  .shop-blocks .sb-lb-blk { margin: 0; padding: 36px 40px; border-radius: 22px; }
+  .shop-blocks .sb-lb-kicker { font-size: 12px; letter-spacing: .22em; }
+  .shop-blocks .sb-lb-ttl { font-family: var(--f-bear); font-size: 30px; }
+  .shop-blocks .sb-lb-sub { font-size: 14px; }
+  .shop-blocks .sb-lb-period { font-size: 12px; }
+  .shop-blocks .sb-lb-row { padding: 13px 0; }
+  .shop-blocks .sb-lb-name { font-size: 16px; }
+  .shop-blocks .sb-lb-value { font-size: 15px; }
+  .shop-blocks .sb-lb-medal { font-size: 20px; }
+}
+
+/* Order tracker (existing type, previously left on the default column) —
+   give it the mid band so a live order reads like a status console. */
+@media (min-width: 768px) {
+  .shop-blocks .sb-blk-outer[data-block-type="order_tracker"] {
+    width: 100vw; max-width: 880px; position: relative; left: 50%; transform: translateX(-50%);
+  }
+}
+
+/* <picture> wrapper (desktop hero art variant) must not break the fill chain */
+.shop-blocks .sb-hero picture { display: contents; }

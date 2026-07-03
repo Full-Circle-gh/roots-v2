@@ -1279,7 +1279,9 @@ async function postJson(path,body){
 function setAuth(token,customer){state.token=token||'';state.customer=customer||null;
   try{token?localStorage.setItem('shop_token',token):localStorage.removeItem('shop_token');}catch{}
   renderAcct();}
-function clearAuth(){setAuth('',null);}
+function clearAuth(){setAuth('',null);
+  // customer-scoped home-block data must not survive a sign-out
+  delete state.favorites; delete state.affiliate;}
 async function loadCustomer(){if(!state.token)return;
   try{state.customer=await api('/api/retail/customer');}catch(e){/* 401 already cleared */}
   renderAcct();}
@@ -4190,7 +4192,21 @@ async function renderHome(){
   // actually uses one (via the public endpoint so anonymous visitors see them
   // too), and cache on state.polls. Generic: works for every tenant's storefront.
   if(state.polls===undefined && layoutNeedsPolls(layout)){ state.polls = await loadPolls(); }
-  const homeConfig = Object.assign({}, state.config, { customer: state.customer||null, polls: state.polls||[] });
+  // favorites_block / affiliate_block read the signed-in customer's own data
+  // (wishlist, referral code + stats). Auth-gated, so fetch only with a token
+  // and only when the layout actually shows the block; signed-out visitors get
+  // the same hide/sign-in-hint fallbacks as the mini-app. (top_up + leaderboard
+  // ride PUBLIC storefront endpoints the block engine warms itself.)
+  if(state.token && state.favorites===undefined && layout.some(b=>b&&b.type==='favorites_block')){
+    try{ state.favorites=(await api('/api/retail/favorites'))||[]; }catch(e){ state.favorites=[]; }
+  }
+  if(state.token && state.affiliate===undefined && layout.some(b=>b&&b.type==='affiliate_block')){
+    try{ state.affiliate=await api('/api/retail/affiliate'); }catch(e){ state.affiliate=null; }
+  }
+  const homeConfig = Object.assign({}, state.config, {
+    customer: state.customer||null, polls: state.polls||[],
+    favorites: state.favorites||[], affiliate: state.affiliate||null,
+  });
   ShopBlocks.stopTimers();
   ShopBlocks.setContext({ lang:state.lang, products:state.homeProducts||[], categories:state.cats, flashSales:state.flash||[], config:homeConfig });
   const view=$('#view');
@@ -5118,8 +5134,25 @@ function ctaRoute(t){
 }
 
 (async function boot(){
+  // ?draft=1 (CMS preview drawer) swaps the public config for the admin-only
+  // preview-config, which overlays the unpublished draft layouts — same
+  // contract as /storefront. Falls back to the live config when the staff
+  // session has lapsed, so the preview stays useful.
+  const DRAFT_MODE=new URLSearchParams(location.search).get('draft')==='1';
   // config first (theme + brand), then categories — both tenant-scoped by Host.
-  try{ state.config=await api('/api/retail/config')||{}; }catch(e){ state.config={}; }
+  state.config={};
+  if(DRAFT_MODE){ try{ state.config=await api('/api/retail-admin/storefront/preview-config')||{}; }catch(e){} }
+  if(!state.config||!Object.keys(state.config).length){
+    try{ state.config=await api('/api/retail/config')||{}; }catch(e){ state.config={}; }
+  }
+  if(DRAFT_MODE){
+    // The CMS pings this iframe after each draft save — refetch + re-render.
+    window.addEventListener('message',async ev=>{
+      if(ev.origin!==location.origin||!ev.data||ev.data.type!=='cms:reload') return;
+      try{ state.config=await api('/api/retail-admin/storefront/preview-config')||state.config; }catch(e){}
+      state.homeProducts=null; route();
+    });
+  }
   try{ state.lang=localStorage.getItem('shop_lang')||'en'; }catch{}
   try{ state.token=localStorage.getItem('shop_token')||''; }catch{}
   // Finish any OAuth round-trip first (sets state.token from the handoff code).

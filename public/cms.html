@@ -11104,6 +11104,15 @@ function buildHeroForm(m, b) {
     imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))
   ));
 
+  // Wide-screen variant for the web storefront. The phone image is authored
+  // for a narrow canvas; a full-bleed desktop banner wants wide art. Optional —
+  // when empty, desktop browsers use the picture above.
+  secContent.appendChild(field(
+    T('Desktop image (optional)', '电脑端图片(可选)'),
+    T('Used on the web store on wide screens. Upload a wide picture (about 3:1). Phones keep the picture above.', '仅网页版宽屏使用。请上传较宽的图片(约 3:1)。手机仍显示上面的图片。'),
+    imgPicker(b.image_desktop_url, ({ url }) => updateBlock(b.id, { image_desktop_url: url }))
+  ));
+
   secContent.appendChild(field(
     T('Video (optional)', '视频(可选)'),
     T('Plays on a loop with no sound and fills the banner. If you add a video, it shows instead of the picture (the picture is shown while the video is loading). Keep videos small — under 20MB, MP4.', '视频会无声循环播放,铺满横幅。添加后会代替图片显示(视频加载时会先显示图片)。请使用较小的视频 — 小于 20MB 的 MP4。'),
@@ -14560,14 +14569,34 @@ function _lpClose() { const d = document.getElementById('live-preview-drawer'); 
 // see right now. Defaults to draft because that's what the office is
 // actively editing.
 let _lpMode = 'draft';
+// 'phone' = the /storefront mini-app-faithful phone frame (existing);
+// 'desktop' = the REAL web storefront (shop.html via /shop-preview) at PC
+// width, so the operator sees each block's desktop composition while editing.
+let _lpDevice = 'phone';
 function _lpUrl() {
   const page = (typeof state === 'object' && state?.page) || 'home';
+  if (_lpDevice === 'desktop') {
+    const params = new URLSearchParams();
+    if (_lpMode === 'draft') params.set('draft', '1');
+    const q = params.toString();
+    return '/shop-preview' + (q ? '?' + q : '');
+  }
   const params = new URLSearchParams({ page, preview: '1' });
   if (_lpMode === 'draft') params.set('draft', '1');
   // Inherit the canvas's language toggle so the iframe doesn't drift from
   // what the user is currently editing. (state.lang is the EN/中 setting.)
   if (state?.lang) params.set('lang', state.lang);
   return '/storefront?' + params.toString();
+}
+
+// Drawer Phone/Desktop toggle. Recreates the iframe src + widens the drawer
+// so the desktop rendering gets a genuinely desktop-sized viewport.
+function setLivePreviewDevice(device) {
+  _lpDevice = (device === 'desktop') ? 'desktop' : 'phone';
+  const d = document.getElementById('live-preview-drawer');
+  if (d) d.classList.toggle('lp-desktop', _lpDevice === 'desktop');
+  reloadLivePreview();
+  _lpRefreshChrome();
 }
 
 function openLivePreview() {
@@ -14624,11 +14653,19 @@ function _lpRefreshChrome() {
   if (seg) {
     seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === _lpMode));
   }
+  const dev = document.getElementById('lp-device-seg');
+  if (dev) {
+    dev.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.device === _lpDevice));
+  }
   const sub = document.getElementById('lp-mode-sub');
   if (sub) {
-    sub.textContent = _lpMode === 'draft'
-      ? T('Draft — what customers will see once you publish', '草稿:发布后顾客所见')
-      : T('Published — what customers see right now', '已发布:顾客当前所见');
+    sub.textContent = _lpDevice === 'desktop'
+      ? (_lpMode === 'draft'
+        ? T('Draft — the web store on a PC screen', '草稿:电脑屏幕上的网页商店')
+        : T('Published — the web store on a PC screen', '已发布:电脑屏幕上的网页商店'))
+      : (_lpMode === 'draft'
+        ? T('Draft — what customers will see once you publish', '草稿:发布后顾客所见')
+        : T('Published — what customers see right now', '已发布:顾客当前所见'));
   }
 }
 
@@ -14854,6 +14891,10 @@ document.addEventListener('keydown', (e) => {
         <button class="active" data-mode="draft" onclick="setLivePreviewMode('draft')"><span class="i18n-en">Draft</span><span class="i18n-cn">草稿</span></button>
         <button data-mode="live" onclick="setLivePreviewMode('live')"><span class="i18n-en">Published</span><span class="i18n-cn">已发布</span></button>
       </div>
+      <div class="lp-mode-seg" id="lp-device-seg" style="margin-top: 10px; margin-left: 8px;">
+        <button class="active" data-device="phone" onclick="setLivePreviewDevice('phone')"><span class="i18n-en">Phone</span><span class="i18n-cn">手机</span></button>
+        <button data-device="desktop" onclick="setLivePreviewDevice('desktop')"><span class="i18n-en">Desktop</span><span class="i18n-cn">电脑</span></button>
+      </div>
     </div>
     <!-- Header actions — icon-only so the row stays one line regardless of
          which language the title renders in. Each has a title attribute
@@ -14953,6 +14994,17 @@ document.addEventListener('keydown', (e) => {
     background: var(--bg-1, #1f1f24);
     display: block;
   }
+  /* Desktop device: widen the drawer and swap the phone bezel for a plain
+     browser-like frame so shop.html gets a real PC-width viewport. */
+  .lp-drawer.lp-desktop { width: min(94vw, 1480px); }
+  .lp-drawer.lp-desktop .lp-frame {
+    width: calc(100% - 36px);
+    max-height: none;
+    border-radius: 10px;
+    padding: 0;
+    background: #fff;
+  }
+  .lp-drawer.lp-desktop .lp-frame iframe { border-radius: 10px; background: #fff; }
   @media (max-width: 720px) {
     .lp-drawer { width: 100vw; min-width: 0; border-left: 0; }
     .lp-frame {

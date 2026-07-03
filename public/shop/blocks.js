@@ -32,6 +32,8 @@
     top: {},      // `${channel}|${window}|${limit}` -> products[]
     newA: {},     // `${limit}` -> products[]
     catGrid: {},  // `${category_id||'all'}|${limit}` -> products[]
+    topup: null,  // storefront top-up packages (public endpoint)
+    lb: {},       // `${metric}|${period}|${topN}|${reveal}` -> leaderboard rows
   };
   var BASE = '';    // same-origin; absUrl prefixes only protocol-relative roots
 
@@ -134,7 +136,9 @@
   var FULL_BG_TYPES = {
     notification_bar: 1, flash_sale_strip: 1, coupon_block: 1, review_card: 1,
     voting_block: 1, greeting: 1, recipe_story: 1, bundle: 1, wecom_contact: 1,
-    order_tracker: 1,
+    order_tracker: 1, announcement_bar: 1, points_widget: 1, top_up: 1,
+    favorites_block: 1, affiliate_block: 1, store_info: 1, countdown_timer: 1,
+    leaderboard: 1,
   };
 
   // ── Per-type renderers ──────────────────────────────────────────────────
@@ -172,7 +176,15 @@
           '" autoplay loop muted playsinline style="object-fit:' + objFit + '"></video>';
       }
       if (imageUrl) {
-        return '<img class="sb-hero-img" src="' + attr(imageUrl) + '" style="object-fit:' + objFit + '" alt="">';
+        var img = '<img class="sb-hero-img" src="' + attr(imageUrl) + '" style="object-fit:' + objFit + '" alt="">';
+        // Optional wide-screen art: the phone image is authored for a 750rpx
+        // canvas and looks soft blown up to a full-bleed desktop banner. When
+        // the CMS provides a desktop variant, browsers ≥768px use it instead.
+        var desk = absUrl(b.image_desktop_url);
+        if (desk) {
+          return '<picture><source media="(min-width: 768px)" srcset="' + attr(desk) + '">' + img + '</picture>';
+        }
+        return img;
       }
       return '<div class="sb-hero-placeholder">No image</div>';
     }
@@ -1320,6 +1332,463 @@
       '</div></div></div>';
   };
 
+  // ═══ 2026-07 PC-native port — the 10 block types the web engine was missing
+  // (announcement_bar, featured_item, countdown_timer, video_banner,
+  //  points_widget, top_up, store_info, favorites_block, affiliate_block,
+  //  leaderboard). Faithful ports of miniapp/components/block-renderer with
+  //  sb- class names; PC layouts live in blocks.css. ═══
+
+  // announcement_bar ---------------------------------------------------------
+  renderers.announcement_bar = function (b) {
+    var label = pick(b.text_en, b.text_cn);
+    if (!label) return '';
+    var anim = b.animation || 'static', speed = b.speed || 'normal';
+    var bg = color(b.bg_color || 'lime-leaf'), fg = color(b.fg_color || 'ink');
+    var link = b.link_target || '';
+    var t = '<span class="sb-announce-text">' + escapeHtml(label) + '</span>';
+    var inner;
+    if (anim === 'marquee_rtl' || anim === 'marquee_ltr') {
+      inner = '<div class="sb-anim-clip"><div class="sb-anim-track">' + t + t + '</div></div>';
+    } else if (anim === 'scroll_up' || anim === 'scroll_down') {
+      inner = '<div class="sb-anim-vclip"><div class="sb-anim-vtrack">' + t + t + '</div></div>';
+    } else if (anim === 'typewriter' || anim === 'wave' || anim === 'fade_in_letters') {
+      // Array.from handles surrogate pairs (emoji / CJK = one element).
+      inner = '<div class="sb-letters">' + Array.from(label).map(function (c, i) {
+        return '<span class="sb-ch" style="--i:' + i + '">' + (c === ' ' ? '&nbsp;' : escapeHtml(c)) + '</span>';
+      }).join('') + '</div>';
+    } else {
+      inner = t;
+    }
+    var html = '<div class="sb-announce sb-anim-' + attr(anim) + ' sb-speed-' + attr(speed) +
+      (link ? ' sb-announce-linked' : '') + '" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
+      inner + (link ? '<span class="sb-announce-chev">›</span>' : '') + '</div>';
+    return link ? ctaWrap(link, html) : html;
+  };
+
+  // featured_item ------------------------------------------------------------
+  renderers.featured_item = function (b) {
+    var p = findProductById(b.product_id);
+    var view = b.view || 'card';
+    var bg = b.bg_color ? color(b.bg_color) : 'transparent';
+    var cardBg = color(b.card_bg_color || 'ink'), cardFg = color(b.card_fg_color || 'oat-milk');
+    var corner = b.corner_radius || 'subtle';
+    var enter = b.entrance_anim || 'none';
+    var kicker = pick(b.kicker_en != null ? b.kicker_en : b.kicker, b.kicker_cn);
+    var inner;
+    if (p) {
+      var m = moneyEff(p);
+      var img = prodImg(p);
+      var priceMode = b.price_mode || 'both';
+      var showSale = (b.sale_badge || 'auto') === 'auto' && !!p.is_on_flash;
+      var priceWas = m.isFlash ? '¥' + m.regular.toFixed(2) : '';
+      var price = m.eff > 0 ? '¥' + m.eff.toFixed(2) : '—';
+      inner = ctaWrap('product:' + p.id,
+        '<div class="sb-ft-card" style="background:' + attr(cardBg) + ';color:' + attr(cardFg) + '">' +
+        '<div class="sb-ft-img">' + (img ? '<img class="sb-img-full" src="' + attr(img) + '" alt="" loading="lazy">' : '') +
+        (showSale ? '<div class="sb-feat-badge">' + (CN() ? '秒杀' : 'SALE') + '</div>' : '') + '</div>' +
+        '<div class="sb-ft-meta">' +
+        (kicker ? '<div class="sb-ft-kicker" style="color:' + attr(cardFg) + '">' + escapeHtml(kicker) + '</div>' : '') +
+        '<div class="sb-ft-name">' + escapeHtml(pick(p.name_en, p.name_cn)) + '</div>' +
+        (priceMode !== 'hide_price'
+          ? '<div class="sb-ft-price-row">' +
+            (priceMode === 'both' && priceWas ? '<span class="sb-ft-price-was" style="color:' + attr(cardFg) + ';opacity:.55">' + priceWas + '</span>' : '') +
+            '<span class="sb-ft-price' + (m.isFlash ? ' sb-ft-flash' : '') + '">' + price + '</span></div>'
+          : '') +
+        '</div></div>');
+    } else {
+      inner = '<div class="sb-ft-empty">' + (CN() ? '暂无精选商品' : 'No featured product') + '</div>';
+    }
+    return '<div class="sb-featured sb-featured-view-' + attr(view) + ' sb-corner-' + attr(corner) +
+      (enter !== 'none' ? ' sb-enter-' + attr(enter) : '') + '" style="background:' + attr(bg) + '">' + inner + '</div>';
+  };
+
+  // countdown_timer ----------------------------------------------------------
+  function cdSplit(ms) {
+    var s = Math.floor(ms / 1000);
+    var d = Math.floor(s / 86400); s -= d * 86400;
+    var h = Math.floor(s / 3600); s -= h * 3600;
+    var m = Math.floor(s / 60); s -= m * 60;
+    return [pad2(d), pad2(h), pad2(m), pad2(s)];
+  }
+  renderers.countdown_timer = function (b) {
+    var bg = color(b.bg_color || 'ink'), fg = color(b.fg_color || 'lime-leaf');
+    var kicker = pick(b.kicker_en, b.kicker_cn), title = pick(b.title_en, b.title_cn);
+    var ctaLabel = pick(b.cta_label_en, b.cta_label_cn);
+    var endsMs = b.ends_at ? new Date(b.ends_at).getTime() : 0;
+    var ms = endsMs - Date.now();
+    var corner = b.corner_radius || 'subtle';
+    var urgAnim = b.urgency_anim || 'pulse';
+    var urgent = ms > 0 && urgAnim !== 'off' && ms < (urgAnim === 'pulse_hour' ? 3600000 : 600000);
+    var head = (kicker ? '<div class="sb-cd-kicker">' + escapeHtml(kicker) + '</div>' : '') +
+      (title ? '<div class="sb-cd-title">' + escapeHtml(title) + '</div>' : '');
+    var body;
+    if (ms <= 0) {
+      var ended = pick(b.ended_text_en, b.ended_text_cn) || (CN() ? '本场已结束' : "That's a wrap");
+      body = '<div class="sb-cd-ended">' + escapeHtml(ended) + '</div>';
+    } else {
+      var cells = cdSplit(ms);
+      var labels = CN() ? ['天', '时', '分', '秒'] : ['DAYS', 'HRS', 'MIN', 'SEC'];
+      body = '<div class="sb-cd-clock">' + cells.map(function (n, i) {
+        return '<div class="sb-cd-cell"><div class="sb-cd-num">' + n + '</div><div class="sb-cd-lbl">' + labels[i] + '</div></div>' +
+          (i < 3 ? '<div class="sb-cd-sep">:</div>' : '');
+      }).join('') + '</div>' +
+        (ctaLabel ? ctaWrap(b.cta_target || '', '<div class="sb-cd-cta" style="' +
+          (b.btn_color ? 'background:' + attr(color(b.btn_color)) + ';color:' + attr(btnText(b.btn_color)) : '') + '">' +
+          escapeHtml(ctaLabel) + '</div>') : '');
+    }
+    return '<div class="sb-countdown sb-corner-' + attr(corner) + (urgent ? ' sb-urgent' : '') +
+      '" data-cd-ends="' + endsMs + '" data-cd-urg="' + attr(urgAnim) +
+      '" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' + head + body + '</div>';
+  };
+
+  // video_banner -------------------------------------------------------------
+  renderers.video_banner = function (b) {
+    var url = absUrl(b.video_url);
+    if (!url) return '';
+    var poster = absUrl(b.poster_url);
+    var h = b.height_px || 420;
+    // 'fullscreen' is a device splash on the mini-app; on the web home it
+    // becomes a tall in-page band instead of hijacking the viewport.
+    var style = b.display === 'fullscreen' ? 'height:70vh' : 'height:calc(' + (h * 2) + ' * var(--u))';
+    var html = '<div class="sb-video-blk" style="' + style + '">' +
+      '<video class="sb-video-el" src="' + attr(url) + '"' + (poster ? ' poster="' + attr(poster) + '"' : '') +
+      ' autoplay loop muted playsinline></video></div>';
+    return b.link_target ? ctaWrap(b.link_target, html) : html;
+  };
+
+  // points_widget ------------------------------------------------------------
+  renderers.points_widget = function (b) {
+    var bg = color(b.bg_color || 'forest-kale'), fg = color(b.fg_color || 'lime-leaf');
+    var kicker = pick(b.kicker_en, b.kicker_cn), title = pick(b.title_en, b.title_cn);
+    var sub = pick(b.subtitle_en, b.subtitle_cn), ctaLabel = pick(b.cta_label_en, b.cta_label_cn);
+    return '<div class="sb-points-blk" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
+      '<div class="sb-pt-star"><div class="sb-pt-star-glyph">★</div></div>' +
+      '<div class="sb-pt-body">' +
+      (kicker ? '<div class="sb-pt-kicker">' + escapeHtml(kicker) + '</div>' : '') +
+      (title ? '<div class="sb-pt-title">' + escapeHtml(title) + '</div>' : '') +
+      (sub ? '<div class="sb-pt-sub">' + escapeHtml(sub) + '</div>' : '') + '</div>' +
+      (ctaLabel ? ctaWrap(b.cta_target || 'me', '<div class="sb-pt-cta" style="' +
+        (b.btn_color ? 'background:' + attr(color(b.btn_color)) + ';color:' + attr(btnText(b.btn_color)) : '') + '">' +
+        escapeHtml(ctaLabel) + '</div>') : '') + '</div>';
+  };
+
+  // top_up ---------------------------------------------------------------
+  // Tiers come from the host (ctx.config.topupPackages, authed) or the public
+  // storefront endpoint warmed lazily below — signed-out visitors see them too.
+  renderers.top_up = function (b) {
+    var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
+    var layout = b.layout || 'a';
+    var accent = b.accent_color ? color(b.accent_color) : '#CCD900';
+    var kicker = pick(b.kicker_en, b.kicker_cn), title = pick(b.title_en, b.title_cn);
+    var titleHl = pick(b.title_hl_en, b.title_hl_cn);
+    var target = b.cta_target || 'topup';
+    var pkgs = (ctx.config && Array.isArray(ctx.config.topupPackages) && ctx.config.topupPackages.length)
+      ? ctx.config.topupPackages
+      : (Array.isArray(caches.topup) ? caches.topup : []);
+    var entries = pkgs.map(function (p, idx) { return { p: p, idx: idx }; });
+    if (entries.length > 4) entries = [entries[0], entries[1], entries[2], entries[entries.length - 1]];
+    var n = entries.length;
+    var tiers = entries.map(function (e, i) {
+      var amount = Number(e.p.amount || 0), bonus = Number(e.p.bonus_points || 0);
+      var pointValue = Number(e.p.point_value_yuan) > 0 ? Number(e.p.point_value_yuan) : 0.01;
+      var bonusYuan = bonus * pointValue;
+      var best = i === n - 1 && n > 1;
+      return {
+        numLabel: 'NO.' + String(e.idx + 1).padStart(2, '0'),
+        amountDisplay: amount.toLocaleString(),
+        valueDisplay: Number((amount + bonusYuan).toFixed(2)).toLocaleString(),
+        bonus: bonus,
+        pct: amount > 0 ? Math.round((bonusYuan / amount) * 100) : 0,
+        best: best,
+        kind: best ? 'ink' : (['cream', 'amber'][i % 2]),
+      };
+    });
+    var bestLbl = CN() ? '超值首选' : 'BEST VALUE';
+    var ptsLbl = CN() ? '积分' : 'PTS', bonusLbl = CN() ? '加赠' : 'BONUS', valueLbl = CN() ? '价值' : 'VALUE';
+    function meta(t) { return t.pct + '% ' + bonusLbl + ' · ≈¥' + t.valueDisplay + ' ' + valueLbl; }
+    var head = '<div class="sb-tu-head">' +
+      (kicker ? '<div class="sb-tu-kicker">' + escapeHtml(kicker) + '</div>' : '') +
+      (title ? '<div class="sb-tu-title">' + escapeHtml(title) +
+        (titleHl ? '<span class="sb-tu-hl"> ' + escapeHtml(titleHl) + '</span>' : '') + '</div>' : '') + '</div>';
+    var linkout = ctaWrap(target, '<div class="sb-tu-linkout"><span class="sb-tu-sub">' +
+      (CN() ? '在钱包中选择套餐' : 'Pick a pack in the wallet') + '</span><div class="sb-tu-cta">' +
+      (CN() ? '立即充值' : 'Top up now') + ' →</div></div>');
+    var body;
+    if (layout === 'b') {
+      body = (tiers.length ? '<div class="sb-tu-receipt">' + tiers.map(function (t) {
+        return ctaWrap(target, '<div class="sb-tu-band sb-tu-card--' + t.kind + '">' +
+          '<div class="sb-tu-notch sb-tu-notch--l"></div><div class="sb-tu-notch sb-tu-notch--r"></div>' +
+          '<div class="sb-tu-band-l"><div class="sb-tu-num">' + t.numLabel + '</div><div class="sb-tu-amt">¥' + t.amountDisplay + '</div></div>' +
+          '<div class="sb-tu-band-r">' + (t.best ? '<div class="sb-tu-best sb-tu-best--band">' + bestLbl + '</div>' : '') +
+          '<div class="sb-tu-pts">+' + t.bonus + ' ' + ptsLbl + '</div>' +
+          '<div class="sb-tu-meta">' + meta(t) + '</div></div></div>');
+      }).join('') + '</div>' : '') + linkout;
+    } else if (layout === 'c') {
+      var hero = tiers[n - 1] || null, rest = tiers.slice(0, Math.max(0, n - 1));
+      body = (hero ? ctaWrap(target, '<div class="sb-tu-hero">' +
+        '<div class="sb-tu-best sb-tu-best--hero">' + bestLbl + '</div>' +
+        '<div class="sb-tu-hero-top"><div class="sb-tu-hero-l"><div class="sb-tu-num">' + hero.numLabel + '</div>' +
+        '<div class="sb-tu-amt sb-tu-amt--hero">¥' + hero.amountDisplay + '</div></div>' +
+        '<div class="sb-tu-hero-r"><div class="sb-tu-pts">+' + hero.bonus + ' ' + ptsLbl + '</div>' +
+        '<div class="sb-tu-meta">' + meta(hero) + '</div></div></div>' +
+        '<div class="sb-tu-hero-cta">' + (CN() ? '立即充值' : 'Top up now') + ' →</div></div>') : '') +
+        (rest.length ? '<div class="sb-tu-strip">' + rest.map(function (t) {
+          return ctaWrap(target, '<div class="sb-tu-chipcard sb-tu-card--' + t.kind + '">' +
+            '<div class="sb-tu-num">' + t.numLabel + '</div>' +
+            '<div class="sb-tu-amt sb-tu-amt--sm">¥' + t.amountDisplay + '</div>' +
+            '<div class="sb-tu-pts sb-tu-pts--sm">+' + t.bonus + ' ' + ptsLbl + '</div>' +
+            '<div class="sb-tu-meta sb-tu-meta--sm">≈¥' + t.valueDisplay + ' ' + valueLbl + '</div></div>');
+        }).join('') + '</div>' : '');
+    } else {
+      body = (tiers.length ? '<div class="sb-tu-row">' + tiers.map(function (t) {
+        return ctaWrap(target, '<div class="sb-tu-card sb-tu-card--' + t.kind + '">' +
+          (t.best ? '<div class="sb-tu-best">' + bestLbl + '</div>' : '') +
+          '<div class="sb-tu-num">' + t.numLabel + '</div>' +
+          '<div class="sb-tu-amt">¥' + t.amountDisplay + '</div>' +
+          '<div class="sb-tu-pts">+' + t.bonus + ' ' + ptsLbl + '</div>' +
+          '<div class="sb-tu-meta">' + meta(t) + '</div></div>');
+      }).join('') + '</div>' : '') + linkout;
+    }
+    return '<div class="sb-topup-blk sb-topup-blk--' + attr(layout) + '" style="background:' + attr(bg) +
+      ';color:' + attr(fg) + ';--tu-accent:' + attr(accent) + ';--tu-bg:' + attr(bg) + '">' + head + body + '</div>';
+  };
+
+  // store_info -----------------------------------------------------------
+  renderers.store_info = function (b) {
+    var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
+    var btnBg = color(b.btn_color || ''), btnFg = b.btn_color ? btnText(b.btn_color) : '';
+    var openCol = color(b.open_color || 'pea-sprout'), closedCol = color(b.closed_color || 'berry-punch');
+    var raw = Array.isArray(b.stores) && b.stores.length ? b.stores : null;
+    if (!raw && (b.title_en || b.title_cn || b.address_en || b.address_cn || b.phone)) {
+      raw = [{
+        name_en: b.title_en, name_cn: b.title_cn,
+        address_en: b.address_en, address_cn: b.address_cn,
+        hours_en: b.hours_en, hours_cn: b.hours_cn,
+        phone: b.phone, open_hour: b.open_hour, close_hour: b.close_hour,
+        eta_minutes: b.eta_minutes,
+        cta_label_en: b.cta_label_en, cta_label_cn: b.cta_label_cn, cta_target: b.cta_target,
+      }];
+    }
+    if (!raw || !raw.length) return '';
+    var now = new Date();
+    var hr = now.getHours() + now.getMinutes() / 60;
+    var kicker = pick(b.kicker_en, b.kicker_cn);
+    var cards = raw.map(function (s) {
+      var openH = Number(s.open_hour), closeH = Number(s.close_hour);
+      var hasHours = isFinite(openH) && isFinite(closeH) && s.open_hour !== null && s.open_hour !== '' && s.open_hour !== undefined;
+      var isOpen = hasHours
+        ? (closeH > openH ? (hr >= openH && hr < closeH) : (hr >= openH || hr < closeH))
+        : null;
+      var eta = Number(s.eta_minutes) || 0;
+      var name = pick(s.name_en, s.name_cn), addressV = pick(s.address_en, s.address_cn);
+      var hours = pick(s.hours_en, s.hours_cn), ctaLabel = pick(s.cta_label_en, s.cta_label_cn);
+      var out = '<div class="sb-st-card">';
+      if (name) out += '<div class="sb-st-title">' + escapeHtml(name) + '</div>';
+      if (isOpen !== null) {
+        out += '<div class="sb-st-status"><div class="sb-st-dot" style="background:' + attr(isOpen ? openCol : closedCol) + '"></div>' +
+          '<span class="sb-st-status-lbl">' + (isOpen ? (CN() ? '营业中' : 'Open now') : (CN() ? '已打烊' : 'Closed')) + '</span>' +
+          (hours ? '<span class="sb-st-hours"> · ' + escapeHtml(hours) + '</span>' : '') + '</div>';
+      } else if (hours) {
+        out += '<div class="sb-st-row"><span class="sb-st-icon">🕒</span><span class="sb-st-val">' + escapeHtml(hours) + '</span></div>';
+      }
+      if (eta > 0 && isOpen === true) {
+        out += '<div class="sb-st-eta">' + (CN() ? '约 ' + eta + ' 分钟送达' : '~' + eta + ' min delivery') + '</div>';
+      }
+      if (addressV) out += '<div class="sb-st-row"><span class="sb-st-icon">📍</span><span class="sb-st-val">' + escapeHtml(addressV) + '</span></div>';
+      if (s.phone) out += '<a class="sb-st-row" href="tel:' + attr(s.phone) + '"><span class="sb-st-icon">📞</span><span class="sb-st-val sb-st-phone">' + escapeHtml(s.phone) + '</span></a>';
+      if (ctaLabel && s.cta_target) {
+        out += ctaWrap(s.cta_target, '<div class="sb-st-cta" style="' +
+          (btnBg ? 'background:' + attr(btnBg) + ';color:' + attr(btnFg) : '') + '">' + escapeHtml(ctaLabel) + '</div>');
+      }
+      return out + '</div>';
+    }).join('');
+    return '<div class="sb-store-blk" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
+      (kicker ? '<div class="sb-st-kicker">' + escapeHtml(kicker) + '</div>' : '') +
+      '<div class="sb-st-cards">' + cards + '</div></div>';
+  };
+
+  // favorites_block --------------------------------------------------------
+  // Items come from the host (ctx.config.favorites — customer's wishlist).
+  renderers.favorites_block = function (b) {
+    var favs = (ctx.config && Array.isArray(ctx.config.favorites)) ? ctx.config.favorites : [];
+    var hideEmpty = b.hide_when_empty !== false;
+    if (!favs.length && hideEmpty) return '';
+    var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
+    var view = b.view || 'scroll';
+    var limit = Math.max(1, Math.min(12, b.limit || 6));
+    var corner = b.corner_radius || 'subtle';
+    var kicker = pick(b.kicker_en, b.kicker_cn) || (CN() ? '你的收藏' : 'YOUR SAVED');
+    var title = pick(b.title_en, b.title_cn) || (CN() ? '继续看看' : 'Pick up where you left off.');
+    var head = '<div class="sb-fav-head"><div class="sb-fav-head-text">' +
+      '<div class="sb-fav-kicker">' + escapeHtml(kicker) + '</div>' +
+      '<div class="sb-fav-title">' + escapeHtml(title) + '</div></div>' +
+      (favs.length ? ctaWrap('shop', '<div class="sb-fav-see-all">' + (CN() ? '查看全部' : 'SEE ALL') + ' →</div>') : '') + '</div>';
+    var body;
+    if (!favs.length) {
+      body = '<div class="sb-fav-empty"><div class="sb-fav-empty-title">' + (CN() ? '暂无收藏' : 'Nothing saved yet.') + '</div>' +
+        '<div class="sb-fav-empty-sub">' + (CN() ? '点心形图标即可收藏。' : 'Tap the heart on a product to save it.') + '</div></div>';
+    } else {
+      var cards = favs.slice(0, limit).map(function (p) {
+        var regular = Number(p.price != null ? p.price : p.sell_price) || 0;
+        var eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
+        var isFlash = !!p.is_on_flash && eff < regular;
+        var soldOut = p.stock != null && Number(p.stock) <= 0;
+        var img = prodImg(p);
+        return ctaWrap('product:' + p.id,
+          '<div class="' + (view === 'grid' ? 'sb-fav-card' : 'sb-fav-rail-card') + (soldOut ? ' sb-fav-out' : '') + '">' +
+          '<div class="sb-fav-img">' + (img ? '<img class="sb-img-full" src="' + attr(img) + '" alt="" loading="lazy">' : '') +
+          (soldOut ? '<div class="sb-fav-out-tag">' + (CN() ? '已售罄' : 'SOLD OUT') + '</div>' : '') + '</div>' +
+          '<div class="sb-fav-name">' + escapeHtml(pick(p.name_en, p.name_cn)) + '</div>' +
+          '<div class="sb-fav-price-row">' +
+          (isFlash ? '<span class="sb-fav-price-was">¥' + Math.round(regular) + '</span>' : '') +
+          '<span class="sb-fav-price' + (isFlash ? ' sb-is-flash' : '') + '">' + (eff > 0 ? '¥' + Math.round(eff) : '—') + '</span>' +
+          '</div></div>');
+      }).join('');
+      body = view === 'grid' ? '<div class="sb-fav-grid">' + cards + '</div>' : '<div class="sb-fav-rail">' + cards + '</div>';
+    }
+    return '<div class="sb-fav-blk sb-fav-' + attr(view) + ' sb-corner-' + attr(corner) +
+      '" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' + head + body + '</div>';
+  };
+
+  // affiliate_block --------------------------------------------------------
+  // Live data (code / stats) comes from the host via ctx.config.affiliate;
+  // signed-out visitors get the sign-in hint variant, same as the mini-app.
+  renderers.affiliate_block = function (b) {
+    var view = b.view || 'card';
+    var bgDefault = view === 'stat' ? 'ink' : view === 'receipt' ? 'oat-milk' : 'lime-leaf';
+    var fgDefault = view === 'stat' ? 'lime-leaf' : 'ink';
+    var bg = color(b.bg_color || bgDefault), fg = color(b.fg_color || fgDefault);
+    var af = (ctx.config && ctx.config.affiliate) || {};
+    var reward = Number(af.reward_per_order) || 30;
+    var stats = af.stats || {};
+    var code = af.code || '';
+    var en = !CN();
+    var earned = Number(stats.earned) || 0, invited = Number(stats.total_invites) || 0;
+    var hasActivity = invited > 0 || earned > 0;
+    var statsLabel = (b.show_stats !== false && hasActivity)
+      ? (en ? '¥' + earned.toFixed(0) + ' earned · ' + invited + ' invited' : '已赚 ¥' + earned.toFixed(0) + ' · 已邀请 ' + invited)
+      : '';
+    var kicker = pick(b.kicker_en, b.kicker_cn) || (en ? 'REFER A FRIEND' : '推广计划');
+    var title = pick(b.title_en, b.title_cn) || (en ? 'Get ¥' + reward + '. Give ¥' + reward + '.' : '各得 ¥' + reward + '。');
+    var subtitle = pick(b.subtitle_en, b.subtitle_cn) || (en ? 'Share your code — when a friend orders, you both win.' : '分享邀请码,好友下单后双方各得奖励。');
+    var accent = color(b.accent_color || 'ink');
+    var copyLabel = en ? 'COPY' : '复制', shareLabel = en ? 'SHARE' : '分享';
+    var codeLabel = en ? 'YOUR CODE' : '邀请码';
+    var enabled = af.enabled !== false;
+    var disabledMsg = en ? 'Refer-a-friend is paused.' : '推广计划暂停中。';
+    var signinHint = en ? 'Tap to open and get your code →' : '点击获取你的邀请码 →';
+    // On the web COPY copies the code and SHARE copies a ready ?ref= link.
+    var shareLink = (typeof location !== 'undefined' ? location.origin + location.pathname : '') + '?ref=' + encodeURIComponent(code);
+    var copyBtn = function (cls, style) {
+      return ctaWrap('copy:' + code, '<div class="' + cls + '"' + (style ? ' style="' + style + '"' : '') + '>' + copyLabel + '</div>');
+    };
+    var shareBtn = function (cls) {
+      return ctaWrap('copy:' + shareLink, '<div class="' + cls + '">' + shareLabel + ' →</div>');
+    };
+    if (view === 'strip') {
+      return '<div class="sb-aff-blk sb-aff-strip" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
+        '<div class="sb-aff-strip-left"><div class="sb-aff-strip-kicker">' + escapeHtml(kicker) + '</div>' +
+        '<div class="sb-aff-strip-code-row"><span class="sb-aff-strip-code">' + escapeHtml(code || '——') + '</span>' +
+        (statsLabel ? '<div class="sb-aff-strip-stats">· ' + escapeHtml(statsLabel) + '</div>' : '') + '</div></div>' +
+        (!enabled ? '<div class="sb-aff-strip-disabled">' + disabledMsg + '</div>'
+          : code ? copyBtn('sb-aff-strip-copy', 'background:' + attr(accent)) + shareBtn('sb-aff-strip-share')
+          : ctaWrap('login', '<div class="sb-aff-strip-cta">' + (pick(b.cta_label_en, b.cta_label_cn) || (en ? 'OPEN' : '查看详情')) + ' →</div>')) +
+        '</div>';
+    }
+    if (view === 'stat') {
+      return '<div class="sb-aff-blk sb-aff-stat" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
+        '<div class="sb-aff-stat-kicker">' + escapeHtml(kicker) + '</div>' +
+        '<div class="sb-aff-stat-num">¥' + earned.toFixed(0) + '</div>' +
+        '<div class="sb-aff-stat-sub">' + escapeHtml(hasActivity
+          ? (en ? 'from ' + invited + ' friend' + (invited === 1 ? '' : 's') : '来自 ' + invited + ' 位好友')
+          : (en ? '¥' + reward + ' per friend who orders' : '每位下单的好友 ¥' + reward)) + '</div>' +
+        (!enabled ? '<div class="sb-aff-stat-disabled">' + disabledMsg + '</div>'
+          : code ? '<div class="sb-aff-stat-code-pill">' + escapeHtml(code) + '</div>' +
+            '<div class="sb-aff-stat-actions">' + copyBtn('sb-aff-stat-copy') + shareBtn('sb-aff-stat-share') + '</div>'
+          : ctaWrap('login', '<div class="sb-aff-stat-cta">' + (en ? 'INVITE A FRIEND →' : '邀请好友 →') + '</div>')) +
+        '</div>';
+    }
+    if (view === 'receipt') {
+      var sep = '<div class="sb-aff-receipt-sep">- - - - - - - - - - - - - - - - - -</div>';
+      return '<div class="sb-aff-blk sb-aff-receipt" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
+        '<div class="sb-aff-receipt-stub">' + (en ? 'REFER · REWARD' : '推广 · 有礼') + '</div>' +
+        '<div class="sb-aff-receipt-kicker">' + escapeHtml(kicker) + '</div>' +
+        '<div class="sb-aff-receipt-title">' + escapeHtml(title) + '</div>' + sep +
+        (!enabled ? '<div class="sb-aff-receipt-disabled">' + disabledMsg + '</div>'
+          : code ? '<div class="sb-aff-receipt-row"><span class="sb-aff-receipt-lbl">' + codeLabel + '</span>' +
+            '<span class="sb-aff-receipt-val">' + escapeHtml(code) + '</span></div>' +
+            (statsLabel ? '<div class="sb-aff-receipt-row sb-aff-receipt-row-muted"><span class="sb-aff-receipt-lbl">STATS</span><span class="sb-aff-receipt-val">' + escapeHtml(statsLabel) + '</span></div>' : '') +
+            sep + '<div class="sb-aff-receipt-actions">' + copyBtn('sb-aff-receipt-copy', 'background:' + attr(accent)) + shareBtn('sb-aff-receipt-share') + '</div>'
+          : ctaWrap('login', '<div class="sb-aff-receipt-signin">' + signinHint + '</div>')) +
+        '</div>';
+    }
+    // card (default)
+    return '<div class="sb-aff-blk sb-aff-card" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
+      '<div class="sb-aff-head"><div class="sb-aff-kicker">' + escapeHtml(kicker) + '</div>' +
+      '<div class="sb-aff-title">' + escapeHtml(title) + '</div>' +
+      '<div class="sb-aff-sub">' + escapeHtml(subtitle) + '</div></div>' +
+      (!enabled ? '<div class="sb-aff-disabled">' + disabledMsg + '</div>'
+        : code ? '<div class="sb-aff-code-row"><div class="sb-aff-code-pill">' +
+          '<span class="sb-aff-code-lbl">' + codeLabel + '</span>' +
+          '<span class="sb-aff-code-val">' + escapeHtml(code) + '</span></div>' +
+          copyBtn('sb-aff-copy', 'background:' + attr(accent)) + '</div>' +
+          '<div class="sb-aff-actions">' + shareBtn('sb-aff-share') +
+          (statsLabel ? '<div class="sb-aff-stats">' + escapeHtml(statsLabel) + '</div>' : '') + '</div>'
+        : ctaWrap('login', '<div class="sb-aff-signin">' + signinHint + '</div>')) +
+      '</div>';
+  };
+
+  // leaderboard --------------------------------------------------------------
+  // Rows come from the public storefront endpoint (pre-masked server-side),
+  // warmed lazily like top-sellers; the host may also thread them via
+  // ctx.config.leaderboards keyed metric|period|topN|reveal.
+  renderers.leaderboard = function (b) {
+    var metric = b.metric || 'lifetime_spend';
+    var period = b.period || 'month';
+    var topN = Math.max(3, Math.min(10, b.top_n || 5));
+    var reveal = b.reveal_mode || 'first_char';
+    var key = metric + '|' + period + '|' + topN + '|' + reveal;
+    var hostBoards = (ctx.config && ctx.config.leaderboards) || {};
+    var entries = Array.isArray(hostBoards[key]) ? hostBoards[key]
+      : Array.isArray(caches.lb[key]) ? caches.lb[key] : [];
+    var hideUnder = Number(b.hide_when_under) || 0;
+    if (!entries.length || (hideUnder && entries.length < hideUnder)) return '';
+    var bg = color(b.bg_color || 'oat-milk'), fg = color(b.fg_color || 'ink');
+    var accent = color(b.accent_color || 'forest-kale');
+    var showValue = b.show_value !== false;
+    var medals = ['🥇', '🥈', '🥉'];
+    function fmtValue(v) {
+      var n = Number(v) || 0;
+      if (metric === 'lifetime_spend') return '¥' + Math.round(n).toLocaleString();
+      if (metric === 'points_balance') return n.toLocaleString() + (CN() ? ' 分' : ' pts');
+      return n.toLocaleString() + (CN() ? ' 单' : ' orders');
+    }
+    var periodLabel = period === 'week' ? (CN() ? '本周' : 'This week')
+      : period === 'month' ? (CN() ? '本月' : 'This month')
+      : period === 'year' ? (CN() ? '今年' : 'This year')
+      : (CN() ? '累计' : 'All time');
+    var kicker = pick(b.kicker_en, b.kicker_cn);
+    var title = pick(b.title_en, b.title_cn) || (CN() ? '本月铁粉' : 'Top customers');
+    var subhead = pick(b.subhead_en, b.subhead_cn), footer = pick(b.footer_en, b.footer_cn);
+    var rows = entries.slice(0, topN).map(function (e, i) {
+      var rank = Number(e.rank) || (i + 1);
+      return '<div class="sb-lb-row">' +
+        (i < 3 ? '<span class="sb-lb-medal">' + medals[i] + '</span>' : '<span class="sb-lb-rank">' + rank + '</span>') +
+        '<span class="sb-lb-name">' + escapeHtml(e.name || (CN() ? '会员' : 'Member')) + '</span>' +
+        (showValue ? '<span class="sb-lb-value" style="color:' + attr(accent) + '">' + escapeHtml(fmtValue(e.value)) + '</span>' : '') +
+        '</div>';
+    }).join('');
+    return '<div class="sb-lb-blk" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
+      '<div class="sb-lb-head"><div class="sb-lb-head-main">' +
+      (kicker ? '<div class="sb-lb-kicker" style="color:' + attr(accent) + '">' + escapeHtml(kicker) + '</div>' : '') +
+      '<div class="sb-lb-ttl">' + escapeHtml(title) + '</div>' +
+      (subhead ? '<div class="sb-lb-sub">' + escapeHtml(subhead) + '</div>' : '') + '</div>' +
+      '<div class="sb-lb-period">' + periodLabel + '</div></div>' +
+      '<div class="sb-lb-list">' + rows + '</div>' +
+      (footer ? '<div class="sb-lb-footer">' + escapeHtml(footer) + '</div>' : '') +
+      '</div>';
+  };
+
   // ── CTA wrapper ──────────────────────────────────────────────────────────
   // Wrap clickable markup with the data-cta-target attribute the host delegates.
   function ctaWrap(target, html) {
@@ -1397,6 +1866,30 @@
           .catch(function () {});
       }
     });
+    // top_up tiers + leaderboard rows ride PUBLIC storefront endpoints, so the
+    // engine warms them itself (host-threaded ctx.config data wins when present).
+    blocks.forEach(function (b) {
+      if (!b) return;
+      if (b.type === 'top_up' && caches.topup === null &&
+          !(ctx.config && Array.isArray(ctx.config.topupPackages) && ctx.config.topupPackages.length)) {
+        caches.topup = [];   // mark in-flight
+        fetchJson('/api/retail/storefront/topup-packages')
+          .then(function (d) { caches.topup = listOf(d); fireRerender(); })
+          .catch(function () {});
+      }
+      if (b.type === 'leaderboard') {
+        var key = (b.metric || 'lifetime_spend') + '|' + (b.period || 'month') + '|' +
+          Math.max(3, Math.min(10, b.top_n || 5)) + '|' + (b.reveal_mode || 'first_char');
+        var hostBoards = (ctx.config && ctx.config.leaderboards) || {};
+        if (Array.isArray(hostBoards[key]) || caches.lb[key]) return;
+        caches.lb[key] = [];   // mark in-flight
+        var q = key.split('|');
+        fetchJson('/api/retail/storefront/leaderboard?metric=' + encodeURIComponent(q[0]) +
+          '&period=' + encodeURIComponent(q[1]) + '&top_n=' + q[2] + '&reveal_mode=' + encodeURIComponent(q[3]))
+          .then(function (d) { caches.lb[key] = listOf(d); fireRerender(); })
+          .catch(function () {});
+      }
+    });
   }
   function listOf(d) {
     if (Array.isArray(d)) return d;
@@ -1432,6 +1925,25 @@
   }
 
   function tick(rootEl) {
+    // countdown_timer blocks: update digits in place every second, toggle the
+    // urgency pulse when the threshold is crossed, re-render once at zero so
+    // the ended-text state appears.
+    var cds = rootEl.querySelectorAll('[data-cd-ends]');
+    for (var ci = 0; ci < cds.length; ci++) {
+      var node = cds[ci];
+      var ends = Number(node.getAttribute('data-cd-ends')) || 0;
+      var msLeft = ends - Date.now();
+      if (msLeft <= 0) {
+        if (!node._cdDone) { node._cdDone = true; fireRerender(); }
+        continue;
+      }
+      setText(node, '.sb-cd-num', cdSplit(msLeft));
+      var urg = node.getAttribute('data-cd-urg') || 'pulse';
+      if (urg !== 'off') {
+        var thr = urg === 'pulse_hour' ? 3600000 : 600000;
+        node.classList.toggle('sb-urgent', msLeft < thr);
+      }
+    }
     // Recompute the soonest flash end across active sales; update digits in
     // place; fire onRerender when a clock crosses zero.
     var all = ctx.flashSales || [];
