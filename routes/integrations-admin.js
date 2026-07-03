@@ -20,8 +20,10 @@ const { requireRetailAdmin } = require('./retail');
 const { tdb } = require('../lib/tenant-db');
 const registry = require('../lib/integrations/registry');
 const { sendPlatformAlert } = require('../lib/platform-alert');
-const { getTenantCreds } = require('../lib/tenant-creds');
+const { getTenantCreds, credsStatus } = require('../lib/tenant-creds');
 const relay = require('../lib/integrations/session-relay');
+const onboarding = require('../lib/onboarding-steps');
+const mainDb = require('../database');
 
 // Resolve the current tenant id from the auth context (Roots → 1).
 function tenantId(req) { return (req.tenant && req.tenant.id) || 1; }
@@ -55,6 +57,14 @@ function deriveStatuses(cards, cardsTenant) {
         try {
           const jc = (getTenantCreds(cardsTenant).integrations || {}).jd || {};
           if (jc.appKey && jc.appSecret) c.status = 'configured';
+        } catch (_) {}
+      } else if (c.kind === 'wechat_miniapp') {
+        // Mini App truth = WeChat login + Pay readiness (credsStatus booleans),
+        // falling back to onboarding progress for the "started but not live" state.
+        try {
+          const cs = credsStatus(cardsTenant);
+          if (cs.wechatLoginReady && cs.payReady) c.status = 'connected';
+          else if (cs.wxAppIdSet || miniappStarted(cardsTenant)) c.status = 'in_setup';
         } catch (_) {}
       } else if (c.kind === 'meituan' || c.kind === 'qingyun') {
         // Session-based: derive from the login-relay per-store sessions.
@@ -192,5 +202,65 @@ function publicSession(s) {
   if (!s) return null;
   return { storeCode: s.store_code, status: s.status, phoneHint: s.phone_hint, lastError: s.last_error };
 }
+
+// ── Mini App (WeChat) — interactive onboarding checklist — Phase 8 ─────────
+// The A-to-Z a tenant completes before their mini app takes live orders is
+// already modelled in lib/onboarding-steps + tenant_onboarding (platform-driven
+// via saas-admin). This surfaces the SAME checklist tenant-facing as the Mini
+// App card so a self-service (Model A) tenant sees one place for everything,
+// with live credential verification (credsStatus booleans) — no duplicate model.
+
+// Any onboarding progress recorded for a tenant → the checklist has been started.
+function miniappStarted(tenantId) {
+  try {
+    const n = mainDb.prepare("SELECT COUNT(*) AS n FROM tenant_onboarding WHERE tenant_id = ? AND status NOT IN ('pending','na')").get(Number(tenantId))?.n || 0;
+    return n > 0;
+  } catch (_) { return false; }
+}
+
+function tenantOnboarding(tenantId) {
+  const t = mainDb.prepare('SELECT id, onboarding_model, business_category FROM tenants WHERE id = ?').get(Number(tenantId)) || {};
+  const rows = mainDb.prepare('SELECT step_key, status, value FROM tenant_onboarding WHERE tenant_id = ?').all(Number(tenantId));
+  const state = {};
+  for (const r of rows) state[r.step_key] = { status: r.status, value: r.value };
+  const model = t.onboarding_model === 'managed' ? 'managed' : 'self';
+  const phases = onboarding.resolveChecklist(model, t.business_category, state);
+  return { model, phases, progress: onboarding.progress(phases) };
+}
+
+// GET the tenant's own mini-app checklist + live credential status.
+router.get('/api/retail-admin/channel-hub/miniapp/checklist', requireRetailAdmin, (req, res) => {
+  try {
+    const id = tenantId(req);
+    const ob = tenantOnboarding(id);
+    let creds = null;
+    try { creds = credsStatus(id); } catch (_) {}
+    res.json({ success: true, model: ob.model, progress: ob.progress, phases: ob.phases, creds });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Advance one checklist step the tenant OWNS (owner resolves to 'tenant'). Steps
+// owned by us / WeChat are read-only here — platform / external process drives
+// them (preserves the managed-model + waiting-external semantics).
+router.patch('/api/retail-admin/channel-hub/miniapp/step', requireRetailAdmin, express.json(), (req, res) => {
+  try {
+    const id = tenantId(req);
+    const { stepKey, status, value } = req.body || {};
+    if (!stepKey) return res.status(400).json({ success: false, error: 'step_key_required' });
+    if (!onboarding.STATUSES.includes(status)) return res.status(400).json({ success: false, error: 'bad_status' });
+    // Confirm the step exists AND is tenant-owned in this tenant's resolved checklist.
+    const ob = tenantOnboarding(id);
+    let step = null;
+    for (const p of ob.phases) for (const s of p.steps) if (s.key === stepKey) step = s;
+    if (!step) return res.status(404).json({ success: false, error: 'unknown_step' });
+    if (step.owner !== 'tenant') return res.status(403).json({ success: false, error: 'step_not_tenant_owned' });
+    mainDb.prepare(`
+      INSERT INTO tenant_onboarding (tenant_id, step_key, status, value, updated_at)
+      VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(tenant_id, step_key) DO UPDATE SET status = excluded.status, value = COALESCE(excluded.value, tenant_onboarding.value), updated_at = CURRENT_TIMESTAMP
+    `).run(id, stepKey, status, value != null ? String(value) : null);
+    res.json({ success: true });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
 
 module.exports = router;

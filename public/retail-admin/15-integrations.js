@@ -121,7 +121,7 @@
   // admin where one already exists (Eleme, Meituan, JD lives in Settings).
   // Plugins whose dedicated flow lands in a later phase (Qingyun) keep the
   // help-aware placeholder so the flow — and Get help — is always real.
-  const TAB_FOR = { eleme: 'eleme', jd: 'config', wechat_miniapp: 'config' };
+  const TAB_FOR = { eleme: 'eleme', jd: 'config' };
   const RELAY_KINDS = { meituan: 1, qingyun: 1 };
   function igGo(kind) {
     const tab = TAB_FOR[kind];
@@ -129,11 +129,13 @@
     return false;
   }
   window.igSetup = function (kind) {
+    if (kind === 'wechat_miniapp') { igMiniappWizard(); return; }
     if (RELAY_KINDS[kind]) { igRelayWizard(kind); return; }
     if (!igGo(kind)) igOpenPlaceholder(kind, 'setup');
   };
   window.igManage = function (kind) {
     if (kind === 'web') { if (window.toast) toast(cuT('Web store is always on — nothing to configure.', '网页商店常开 — 无需配置。')); return; }
+    if (kind === 'wechat_miniapp') { igMiniappWizard(); return; }
     // Meituan management (product mapping etc.) has its own tab; Qingyun re-opens
     // the relay wizard to re-verify a session.
     if (kind === 'meituan' && typeof goTab === 'function') { goTab('meituan'); return; }
@@ -417,6 +419,58 @@
     else if (s.status === 'failed') { _relay.step = 'sms'; igRelayRender(); }
     else { _relay.step = 'sms'; igRelayRender(); }
   }
+
+  // ── Mini App onboarding checklist (interactive) ─────────────────────────────
+  // The same A-to-Z the platform tracks, surfaced tenant-facing: phases + steps,
+  // who owns each ("You" / "Full Circle" / "WeChat"), live credential checks, and
+  // a Mark-done toggle on the steps the tenant owns. Steps we / WeChat drive are
+  // read-only with a "waiting" hint (the honest whose-move-is-it view).
+  window.igMiniappWizard = async function () {
+    const box = document.getElementById('ig-locwiz'); if (!box) return;
+    box.style.display = ''; box.innerHTML = igMuted(cuT('Loading checklist… · 加载清单…', '加载清单…'));
+    let d;
+    try { d = await api('/api/retail-admin/channel-hub/miniapp/checklist'); }
+    catch (e) { box.innerHTML = igMuted(cuT('Failed to load · 加载失败', '加载失败')); return; }
+    const creds = d.creds || {};
+    const ownerLabel = o => o === 'tenant' ? cuT('You · 您', '您') : cuT('Full Circle · 平台', '平台');
+    const stDot = st => (st === 'done' || st === 'verified') ? 'var(--accent,#6B8E6F)' : (st === 'provided' ? 'var(--brass,#B08D4A)' : 'var(--text-4,#56544f)');
+    const credLine = (ok, en, cn) => `<span style="color:${ok ? 'var(--accent,#6B8E6F)' : 'var(--text-3)'};font-size:12px">${ok ? '✓' : '○'} ${cuT(en, cn)}</span>`;
+    let phasesHtml = '';
+    for (const p of d.phases) {
+      phasesHtml += `<div style="margin-top:14px"><div class="ig-eyebrow" style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:6px">${esc(cuT(p.en, p.cn))}</div>`;
+      for (const s of p.steps) {
+        const done = s.status === 'done' || s.status === 'verified';
+        const isTenant = s.owner === 'tenant';
+        const waiting = !done && !isTenant;
+        phasesHtml += `<div style="display:flex;align-items:center;gap:11px;padding:9px 0;border-bottom:1px solid var(--line)">
+          <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${stDot(s.status)}"></span>
+          <div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text-1)">${esc(cuT(s.en, s.cn))}</div>
+            <div style="font-size:11px;color:var(--text-3)">${ownerLabel(s.owner)}${waiting ? ' · ' + cuT('in progress', '处理中') : ''}${s.note ? ' · ' + esc(s.note) : ''}</div></div>
+          ${isTenant ? `<button class="btn btn-sm ${done ? '' : 'btn-primary'}" onclick="igMiniStep('${escJs(s.key)}','${done ? 'pending' : 'done'}')">${done ? cuT('Undo · 撤销', '撤销') : cuT('Mark done · 标记完成', '标记完成')}</button>` : `<span style="font-size:11px;color:var(--text-4)">${done ? '✓' : cuT('waiting · 等待', '等待')}</span>`}
+        </div>`;
+      }
+      phasesHtml += `</div>`;
+    }
+    box.innerHTML = `<div class="ig-wiz">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <strong>${cuT('Mini App setup · 小程序设置', '小程序设置')}</strong>
+        <button class="btn btn-sm" onclick="igLocClose()">✕</button>
+      </div>
+      <div style="font-size:12.5px;color:var(--text-2);margin-bottom:10px">${cuT('Progress', '进度')}: <b>${d.progress.done}/${d.progress.total}</b></div>
+      <div style="background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;gap:16px;flex-wrap:wrap">
+        ${credLine(creds.wxAppIdSet, 'AppID set', 'AppID 已填')}
+        ${credLine(creds.wechatLoginReady, 'Login ready (AppID+secret)', '登录就绪')}
+        ${credLine(creds.payReady, 'WeChat Pay ready', '微信支付就绪')}
+      </div>
+      ${phasesHtml}
+      <div class="helpbar" style="margin-top:16px"><button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help · 获取帮助', '获取帮助')}</button><span class="ig-spacer" style="flex:1"></span><button class="btn btn-primary" onclick="igLocClose()">${cuT('Done · 完成', '完成')}</button></div>
+    </div>`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+  window.igMiniStep = async function (stepKey, status) {
+    try { await api('/api/retail-admin/channel-hub/miniapp/step', { method: 'PATCH', body: { stepKey, status } }); igMiniappWizard(); igLoad(); }
+    catch (e) { /* surfaced by api() */ }
+  };
 
   // ── util ────────────────────────────────────────────────────────────────────
   function igMuted(s) { return `<div class="muted" style="font-size:13px;padding:10px 2px">${s}</div>`; }
