@@ -54,8 +54,17 @@ commit, and never bypass the hook (`--no-verify`) to dodge a failing check.
 
 ## Conventions
 
-- **Bilingual UI:** operator strings render **one** live language via `cuT('en', '中文')` —
-  never stack EN+CN both shown at once.
+- **Bilingual UI:** English and 中文 are **two separate versions** of every operator
+  string — the user sees **one** live language, never both stacked or shown together.
+  In JS use `cuT('English', '中文')`. In static HTML write a single text node as
+  `English · 中文` (full English, ` · `, full Chinese); a global pass splits on ` · `
+  and shows one side.
+  - **Gotcha:** the ` · ` split runs **per text node**. Interleaving inline markup
+    (`<b>`, `<span>`, `<code>`) *between* the EN and CN fragments the node, the ` · `
+    no longer separates full-EN from full-CN, and **both languages leak through**.
+    Keep each `English · 中文` pair in one clean text node (a trailing
+    `<span>(optional · 选填)</span>` is its own clean pair and is fine); drop the
+    inline tag if it would split a pair.
 - **Migrations:** add columns through `addColumn(...)` in `database.js` (idempotent); don't
   hand-edit the live DB schema.
 - **Multi-tenant:** catalog/data writes are tenant-scoped — use the tenant-scoped DB handle,
