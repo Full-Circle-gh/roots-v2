@@ -121,15 +121,23 @@
   // admin where one already exists (Eleme, Meituan, JD lives in Settings).
   // Plugins whose dedicated flow lands in a later phase (Qingyun) keep the
   // help-aware placeholder so the flow — and Get help — is always real.
-  const TAB_FOR = { eleme: 'eleme', meituan: 'meituan', jd: 'config', wechat_miniapp: 'config' };
+  const TAB_FOR = { eleme: 'eleme', jd: 'config', wechat_miniapp: 'config' };
+  const RELAY_KINDS = { meituan: 1, qingyun: 1 };
   function igGo(kind) {
     const tab = TAB_FOR[kind];
     if (tab && typeof goTab === 'function') { goTab(tab); return true; }
     return false;
   }
-  window.igSetup = function (kind) { if (!igGo(kind)) igOpenPlaceholder(kind, 'setup'); };
+  window.igSetup = function (kind) {
+    if (RELAY_KINDS[kind]) { igRelayWizard(kind); return; }
+    if (!igGo(kind)) igOpenPlaceholder(kind, 'setup');
+  };
   window.igManage = function (kind) {
     if (kind === 'web') { if (window.toast) toast(cuT('Web store is always on — nothing to configure.', '网页商店常开 — 无需配置。')); return; }
+    // Meituan management (product mapping etc.) has its own tab; Qingyun re-opens
+    // the relay wizard to re-verify a session.
+    if (kind === 'meituan' && typeof goTab === 'function') { goTab('meituan'); return; }
+    if (RELAY_KINDS[kind]) { igRelayWizard(kind); return; }
     if (!igGo(kind)) igOpenPlaceholder(kind, 'manage');
   };
 
@@ -287,6 +295,117 @@
       </div>
     </div>`;
     igLoad(); // refresh cards so the new to-dos show
+  }
+
+  // ── Login-relay wizard (Meituan / Qingyun) ──────────────────────────────────
+  // Session-based channels have no API: the worker drives the portal login and,
+  // when it SMS-challenges, the merchant types the code here and we relay it.
+  // Steps: store box → credentials → verify login (SMS) → done.
+  let _relay = { kind: null, step: 'box', store: null, poll: null };
+  window.igRelayWizard = function (kind) {
+    igRelayStop();
+    _relay = { kind, step: 'box', store: null, poll: null };
+    igRelayRender();
+  };
+  window.igRelayClose = function () { igRelayStop(); const b = document.getElementById('ig-locwiz'); if (b) { b.style.display = 'none'; b.innerHTML = ''; } };
+  function igRelayStop() { if (_relay.poll) { clearInterval(_relay.poll); _relay.poll = null; } }
+
+  function igRelayRender() {
+    const box = document.getElementById('ig-locwiz'); if (!box) return;
+    box.style.display = '';
+    const c = _cards.find(x => x.kind === _relay.kind) || {};
+    const label = cuT(c.labelEn || _relay.kind, c.labelCn || _relay.kind);
+    const rail = ['box', 'creds', 'sms', 'done'];
+    const railLabels = { box: cuT('Store box · 门店盒子', '门店盒子'), creds: cuT('Credentials · 商家账号', '商家账号'), sms: cuT('Verify login · 登录验证', '登录验证'), done: cuT('Done · 完成', '完成') };
+    const cur = rail.indexOf(_relay.step);
+    const railHtml = rail.map((k, i) => `<span style="font-size:12px;color:${i === cur ? 'var(--text-1)' : 'var(--text-3)'};font-weight:${i === cur ? 600 : 400}">${i < cur ? '✓ ' : (i + 1) + '. '}${railLabels[k]}</span>`).join('<span style="color:var(--text-4)"> › </span>');
+    let body = '';
+    if (_relay.step === 'box') {
+      body = `<p class="muted" style="font-size:13px;max-width:56ch">${cuT(
+        'Meituan will see logins from your own store’s internet — the safest setup. Plug in the store box we shipped; until it’s online we use a Guangzhou backup line (degraded).',
+        '美团将看到来自您门店自有网络的登录,这是最安全的方式。请接入我们寄送的门店盒子;盒子上线前使用广州备用线路(降级)。')}</p>
+        <div style="display:flex;gap:10px;margin-top:16px">
+          <button class="btn btn-primary" onclick="igRelayStep('creds')">${cuT('Continue · 继续', '继续')}</button>
+          <button class="btn" onclick="igRelayClose()">${cuT('Cancel · 取消', '取消')}</button>
+        </div>`;
+    } else if (_relay.step === 'creds') {
+      const opts = _stores.map(s => `<option value="${esc(s.code)}">${esc(cuT(s.name || s.code, s.name || s.code))}</option>`).join('');
+      body = `<p class="muted" style="font-size:13px">${cuT('Enter your Meituan 商家版 login for a store. We log in on your behalf through your store box.', '请输入某门店的美团商家版账号。我们将通过您的门店盒子代为登录。')}</p>
+        <div style="display:grid;gap:10px;max-width:420px;margin-top:12px">
+          <div><label class="field-label">${cuT('Store · 门店', '门店')}</label><select id="rl_store">${opts}</select></div>
+          <div><label class="field-label">${cuT('Username · 账号', '账号')}</label><input type="text" id="rl_user" autocomplete="off"></div>
+          <div><label class="field-label">${cuT('Password · 密码', '密码')}</label><input type="password" id="rl_pass" autocomplete="new-password"></div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:16px;align-items:center">
+          <button class="btn btn-primary" id="rl_start" onclick="igRelayStart()">${cuT('Log in · 登录', '登录')}</button>
+          <button class="btn" onclick="igRelayClose()">${cuT('Cancel · 取消', '取消')}</button>
+          <span class="ig-spacer" style="flex:1"></span>
+          <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('${escJs(_relay.kind)}')">? ${cuT('Get help · 获取帮助', '获取帮助')}</button>
+        </div>`;
+    } else if (_relay.step === 'sms') {
+      const s = _relay.session || {};
+      body = `<p class="muted" style="font-size:13px">${cuT('Meituan sent a code to', '美团已发送验证码至')} <b>${esc(s.phoneHint || '—')}</b>. ${cuT('Enter it below.', '请在下方输入。')}</p>
+        <div style="display:flex;gap:10px;align-items:center;margin-top:12px">
+          <input type="text" id="rl_code" inputmode="numeric" maxlength="8" placeholder="000000" style="width:140px;font-family:var(--f-mono,monospace);font-size:18px;letter-spacing:.2em;text-align:center">
+          <button class="btn btn-primary" id="rl_sms" onclick="igRelaySms()">${cuT('Verify · 验证', '验证')}</button>
+        </div>
+        <div id="rl_status" style="font-size:12.5px;color:var(--text-2);margin-top:12px">${cuT('Logging in through your store box…', '正在通过门店盒子登录…')}</div>
+        ${s.lastError ? `<div style="color:var(--danger);font-size:12.5px;margin-top:6px">${esc(s.lastError)}</div>` : ''}
+        <div style="background:var(--bg-elev-1);border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:6px;padding:12px 14px;margin-top:16px;display:flex;gap:12px;align-items:center">
+          <div style="font-size:12.5px;color:var(--text-2);max-width:48ch">${cuT('Having trouble? We can connect Meituan for you.', '遇到困难?我们可以为您代为接入。')}</div>
+          <button class="btn" style="margin-left:auto;flex:none" onclick="igHelp('${escJs(_relay.kind)}')">${cuT('Ask us · 请代办', '请代办')}</button>
+        </div>`;
+    } else if (_relay.step === 'done') {
+      body = `<div style="font-size:14px;color:var(--accent,#6B8E6F);font-weight:600">✓ ${cuT('Connected · 已连接', '已连接')}</div>
+        <p class="muted" style="font-size:13px;margin-top:6px">${cuT('This store is now logged in. Next: map your Meituan 门店 and products from the Meituan tab.', '该门店已登录。接下来在美团页面关联门店与商品。')}</p>
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button class="btn btn-primary" onclick="igRelayClose();goTab('meituan')">${cuT('Open Meituan · 打开美团', '打开美团')}</button>
+          <button class="btn" onclick="igRelayClose()">${cuT('Done · 完成', '完成')}</button>
+        </div>`;
+    }
+    box.innerHTML = `<div class="ig-wiz">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <strong>${cuT('Set up', '设置')} ${esc(label)}</strong>
+        <button class="btn btn-sm" onclick="igRelayClose()">✕</button>
+      </div>
+      <div style="margin-bottom:14px">${railHtml}</div>
+      ${body}
+    </div>`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+  window.igRelayStep = function (step) { _relay.step = step; igRelayRender(); };
+
+  window.igRelayStart = async function () {
+    const store = (document.getElementById('rl_store') || {}).value;
+    const username = (document.getElementById('rl_user') || {}).value;
+    const password = (document.getElementById('rl_pass') || {}).value;
+    if (!store || !username || !password) { if (window.toast) toast(cuT('Fill in all fields · 请填写所有字段', '请填写所有字段'), 'error'); return; }
+    const btn = document.getElementById('rl_start'); if (btn) btn.disabled = true;
+    try {
+      const r = await api(`/api/retail-admin/channel-hub/${encodeURIComponent(_relay.kind)}/session/start`, { method: 'POST', body: { storeCode: store, username, password } });
+      _relay.store = store; _relay.session = r.session;
+      igRelayAfter(r.session);
+    } catch (e) { if (btn) btn.disabled = false; }
+  };
+
+  window.igRelaySms = async function () {
+    const code = (document.getElementById('rl_code') || {}).value;
+    if (!code) return;
+    const btn = document.getElementById('rl_sms'); if (btn) btn.disabled = true;
+    try {
+      const r = await api(`/api/retail-admin/channel-hub/${encodeURIComponent(_relay.kind)}/session/sms`, { method: 'POST', body: { storeCode: _relay.store, code } });
+      _relay.session = r.session;
+      igRelayAfter(r.session);
+    } catch (e) { if (btn) btn.disabled = false; const el = document.getElementById('rl_status'); if (el) el.textContent = cuT('Verification failed — try again.', '验证失败,请重试。'); }
+  };
+
+  // Advance the wizard from a session snapshot.
+  function igRelayAfter(s) {
+    if (!s) return;
+    if (s.status === 'awaiting_sms' || s.status === 'captcha') { _relay.step = 'sms'; igRelayRender(); }
+    else if (s.status === 'ok') { _relay.step = 'done'; igRelayStop(); igRelayRender(); igLoad(); }
+    else if (s.status === 'failed') { _relay.step = 'sms'; igRelayRender(); }
+    else { _relay.step = 'sms'; igRelayRender(); }
   }
 
   // ── util ────────────────────────────────────────────────────────────────────
