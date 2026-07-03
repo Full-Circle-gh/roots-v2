@@ -318,7 +318,7 @@ async function salesWireSetup() {
   // plugin) so it stays always-Configure.
   const MAP = {
     wc: { kind: 'wechat_miniapp', open: () => (window.igMiniappConfig ? igMiniappConfig() : salesGo('config')) },  // Configure = the all-in-one Mini App config page
-    wb: { kind: 'web',            open: () => salesGo('config') },
+    wb: { kind: 'web',            open: () => (window.igWebConfig ? igWebConfig() : salesGo('config')) },  // Configure = the Web store config page
     mt: { kind: 'meituan',        open: () => salesGo('meituan') },
     gy: { kind: 'gzgrocery',      open: () => salesGo('guanyi'), alwaysConfigure: true },
     el: { kind: 'eleme',          open: () => salesGo('eleme') },
