@@ -377,6 +377,11 @@ function processOrder(o, items, skuMap, storeId) {
     upsert({ reversed: 1, note: `${MODE}: reversed (${o.status}) ${applied.join(', ')}` });
     auditLog(o, MODE === 'live' ? 'reversed' : 'would_reverse', applied.join(', '));
     log(`order ${o.orderNo || o.orderId} [${o.status}] ${MODE === 'live' ? 'REVERSED' : 'would reverse'}: ${applied.join(', ')}`);
+    // Push a WeCom card for the cancellation/refund too (fire-and-forget). The
+    // group already gets the sale notification on decrement; without this a later
+    // cancellation/refund would go unannounced.
+    notifyOrder(o, ours.map((it) => ({ name_en: it.name_en, name_cn: it.name_cn, sku: it.sku, qty: it.qty })), 'refund')
+      .catch((e) => console.error('[gzgrocery-orders] refund notify failed:', e.message));
     // Flip the display mirror to cancelled so the list reflects the void.
     try { ensureGzMirror({ orderId: o.orderId, status: o.status, customer: o.customer, dateAdded: o.dateAdded, ours, storeId, voided: true }); }
     catch (e) { log(`mirror-void ${o.orderNo || o.orderId} failed: ${e.message}`); }
