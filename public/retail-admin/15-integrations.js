@@ -538,44 +538,26 @@
     catch (e) { /* surfaced by api() */ }
   };
 
-  // ── Mini App configuration — everything to set up the mini-app, one page ─────
-  // Credentials first (WeChat Mini Program + WeChat Pay, all editable here), then
-  // the A-to-Z setup checklist. Non-secret values (AppID, merchant id, serial)
-  // pre-fill; secrets show as "set" and stay masked — you paste a new value only
-  // to replace one. For the env-managed account (Roots) everything shows already
-  // filled from the server config, so it reads as done.
+  // ── Mini App configuration — the credentials, one clean page ────────────────
+  // WeChat Mini Program (AppID + AppSecret) and WeChat Pay. Non-secret values
+  // (AppID, merchant id, serial) pre-fill; secrets show as "set" and stay masked
+  // — you paste a new value only to replace one. For the env-managed account
+  // (Roots) everything shows already filled from the server config, so it reads
+  // as done. (The China business-registration checklist deliberately does NOT
+  // live here — this page is only about entering credentials.)
   window.igMiniappConfig = async function () {
     const box = igHostEl(); if (!box) return;
     box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Mini App config… · 加载小程序配置…', '加载小程序配置…'));
-    let d, cfg;
-    try { [d, cfg] = await Promise.all([api('/api/retail-admin/channel-hub/miniapp/checklist'), api('/api/retail-admin/channel-hub/miniapp/wechat-config')]); }
+    let cfg;
+    try { cfg = await api('/api/retail-admin/channel-hub/miniapp/wechat-config'); }
     catch (e) { box.innerHTML = igMuted(cuT('Failed to load · 加载失败', '加载失败')); return; }
-    const st = cfg.status || d.creds || {};
+    const st = cfg.status || {};
     const pay = cfg.pay || {};
     const credLine = (ok, en, cn) => `<span style="color:${ok ? 'var(--accent,#6B8E6F)' : 'var(--text-3)'};font-size:12px">${ok ? '✓' : '○'} ${cuT(en, cn)}</span>`;
     // Field builders.
     const txt = (id, label, val, mono) => `<div><label class="field-label">${label}</label><input type="text" id="${id}" value="${esc(val || '')}"${mono ? ' style="font-family:var(--f-mono,monospace)"' : ''}></div>`;
     const sec = (id, label, isSet) => `<div><label class="field-label">${label}</label><input type="password" id="${id}" autocomplete="new-password" placeholder="${isSet ? '•••••••• ✓ ' + cuT('set — leave blank to keep', '已设置 — 留空保持') : cuT('not set', '未设置')}"></div>`;
     const pem = (id, label, isSet) => `<div style="grid-column:1 / -1"><label class="field-label">${label}</label><textarea id="${id}" rows="3" placeholder="${isSet ? '•••• ✓ ' + cuT('saved — paste to replace', '已保存 — 粘贴以替换') : cuT('paste PEM contents…', '粘贴 PEM 内容…')}" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea></div>`;
-
-    // Setup checklist (unchanged behaviour).
-    const ownerLabel = o => o === 'tenant' ? cuT('You · 您', '您') : cuT('Full Circle · 平台', '平台');
-    const stDot = s => (s === 'done' || s === 'verified') ? 'var(--accent,#6B8E6F)' : (s === 'provided' ? 'var(--brass,#B08D4A)' : 'var(--text-4,#56544f)');
-    let phasesHtml = '';
-    for (const p of (d.phases || [])) {
-      phasesHtml += `<div style="margin-top:12px"><div style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin-bottom:6px">${esc(cuT(p.en, p.cn))}</div>`;
-      for (const s of p.steps) {
-        const done = s.status === 'done' || s.status === 'verified';
-        const isTenant = s.owner === 'tenant';
-        phasesHtml += `<div style="display:flex;align-items:center;gap:11px;padding:8px 0;border-bottom:1px solid var(--line)">
-          <span style="width:8px;height:8px;border-radius:50%;flex:none;background:${stDot(s.status)}"></span>
-          <div style="flex:1;min-width:0"><div style="font-size:13px;color:var(--text-1)">${esc(cuT(s.en, s.cn))}</div>
-            <div style="font-size:11px;color:var(--text-3)">${ownerLabel(s.owner)}${(!done && !isTenant) ? ' · ' + cuT('in progress', '处理中') : ''}</div></div>
-          ${isTenant ? `<button class="btn btn-sm ${done ? '' : 'btn-primary'}" onclick="igMiniStep('${escJs(s.key)}','${done ? 'pending' : 'done'}')">${done ? cuT('Undo · 撤销', '撤销') : cuT('Mark done · 完成', '完成')}</button>` : `<span style="font-size:11px;color:var(--text-4)">${done ? '✓' : cuT('waiting · 等待', '等待')}</span>`}
-        </div>`;
-      }
-      phasesHtml += `</div>`;
-    }
 
     box.innerHTML = `<div class="ig-wiz">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
@@ -609,20 +591,12 @@
         <span id="mc_result" style="font-size:12.5px"></span>
       </div>
       ${cfg.source === 'env' ? `<div style="font-size:11.5px;color:var(--text-4);margin-top:6px">${cuT('Filled from the server config for this account.', '本账号由服务器配置填充。')}</div>` : ''}
-
-      <div style="font-family:var(--f-mono,monospace);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-2);margin:20px 0 4px">${cuT('Setup checklist · 开通清单', '开通清单')} · ${d.progress ? d.progress.done + '/' + d.progress.total : ''}</div>
-      ${phasesHtml}
       <div class="helpbar" style="margin-top:16px"><button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help · 获取帮助', '获取帮助')}</button><span class="ig-spacer" style="flex:1"></span><button class="btn" onclick="igLocClose()">${cuT('Close · 关闭', '关闭')}</button></div>
     </div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   };
   // Back-compat alias (older callers used igMiniappWizard).
   window.igMiniappWizard = function () { return igMiniappConfig(); };
-
-  window.igMiniStep = async function (stepKey, status) {
-    try { await api('/api/retail-admin/channel-hub/miniapp/step', { method: 'PATCH', body: { stepKey, status } }); igMiniappConfig(); igLoad(); }
-    catch (e) { /* surfaced by api() */ }
-  };
 
   window.igSaveMiniappCreds = async function () {
     const v = id => { const el = document.getElementById(id); return el && el.value ? el.value.trim() : ''; };
