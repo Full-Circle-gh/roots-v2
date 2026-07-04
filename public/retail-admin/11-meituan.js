@@ -208,8 +208,11 @@
       mtAlertTile('mt-kpi-daemon-tile', false);
       document.getElementById('mt-dot')?.classList.remove('off');
 
-      // Mapped (the "N live" sub is filled by mtRenderProducts)
-      mtSetKpi('mt-kpi-mapped', s.mappedCount != null ? s.mappedCount : '—');
+      // "Live on Meituan" tile — the value (live count) and sub (N not matched)
+      // are both owned by mtRenderProducts, which counts distinct products the
+      // same way the banner does. mappedCount (sync-toggle rows, both stores
+      // summed) is deliberately NOT shown as the headline — it double-counts and
+      // conflates "sync on" with "actually live".
 
       // Waiting to push — alert when anything pending or failed
       mtSetKpi('mt-kpi-queue', s.queuePending != null ? s.queuePending : '—');
@@ -320,8 +323,14 @@
     if (cnt) cnt.textContent = cuT(`${list.length} of ${total} shown · ${live} live`, `显示 ${list.length} / ${total} · ${live} 已上架`);
     const tabn = document.getElementById('mt-tabn-products');
     if (tabn) tabn.textContent = total || '';
+    // "Live on Meituan" KPI: headline = products actually live (matched on a
+    // store), sub = how many are still stuck. Reconciles with the banner (att)
+    // and with total: live + att = active products.
+    mtSetKpi('mt-kpi-mapped', live);
     const msub = document.getElementById('mt-kpi-mapped-sub');
-    if (msub) msub.textContent = cuT(`products · ${live} live`, `商品 · ${live} 已上架`);
+    if (msub) msub.textContent = att
+      ? cuT(`${att} not matched`, `${att} 个未匹配`)
+      : cuT('all matched', '全部已匹配');
 
     // Attention banner — the only home of the Match-names flow; hidden the
     // moment every active product is live somewhere.
