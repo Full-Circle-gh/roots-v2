@@ -862,39 +862,40 @@ body { font-family: var(--f-sans); background: var(--bg-app); color: var(--text-
 
 input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
 
-/* ── Home launcher — a tile grid where the user picks a tool. Only the
-   tools their account can use appear. One language at a time. ── */
-.home-wrap { padding: 14px 14px calc(var(--sa-bot) + 28px); }
-.home-bar { display: flex; align-items: center; gap: 10px; margin: 2px 2px 16px; }
-.home-user { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
-.home-ava { width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 15px; display: grid; place-items: center; flex: none; }
-.home-name { font-size: 15px; font-weight: 700; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* ── Home launcher — a designed tile grid where the user picks a tool.
+   Greeting header on top, one language at a time, live counts. ── */
+.home-wrap { display: flex; flex-direction: column; min-height: 100%; padding: 18px 14px calc(var(--sa-bot) + 16px); }
+.home-top { display: flex; align-items: flex-start; gap: 12px; margin: 2px 2px 20px; }
+.home-greet { flex: 1; min-width: 0; }
+.home-greet .g1 { font-size: 24px; font-weight: 900; color: var(--text-1); letter-spacing: -.02em; line-height: 1.1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-greet .g2 { font-size: 13px; color: var(--muted); font-weight: 600; margin-top: 5px; }
 .home-actions { display: flex; align-items: center; gap: 8px; flex: none; }
 .home-lang { width: 42px; height: 38px; border-radius: 11px; border: 1px solid var(--border); background: var(--card); color: var(--text-1); font-weight: 800; font-size: 14px; }
 .home-lang:active { transform: scale(.95); }
 .home-logout { height: 38px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--border); background: var(--card); color: var(--text-2); font-weight: 700; font-size: 14px; }
 .home-logout:active { transform: scale(.96); }
-.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.home-grid { display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 12px; flex: 1; }
 .home-tile {
-  position: relative; display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
-  text-align: left; min-height: 126px; padding: 18px 16px;
-  background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 12px;
+  text-align: left; min-height: 138px; padding: 18px 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 20px;
   box-shadow: var(--sh-1); color: var(--text-1); transition: transform .12s ease, border-color .15s ease;
 }
 .home-tile:active { transform: scale(.97); }
-.home-tile:hover { border-color: rgba(204,217,0,.5); }
+.home-tile:hover { border-color: rgba(204,217,0,.55); }
 .home-tile .ht-ico {
-  width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
-  background: rgba(204,217,0,.14); border: 1px solid rgba(204,217,0,.28); color: var(--lime-text);
+  width: 54px; height: 54px; border-radius: 16px; display: grid; place-items: center;
+  background: var(--accent); color: var(--accent-ink); box-shadow: 0 4px 12px rgba(204,217,0,.25);
 }
-.home-tile .ht-ico svg { width: 25px; height: 25px; }
+.home-tile .ht-ico svg { width: 28px; height: 28px; }
+.home-tile .ht-text { display: flex; flex-direction: column; gap: 3px; }
 .home-tile .ht-name { font-size: 18px; font-weight: 800; color: var(--text-1); line-height: 1.15; letter-spacing: -.01em; }
 .home-tile .ht-desc { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
-.home-tile .ht-badge {
-  position: absolute; top: 12px; right: 12px; min-width: 20px; height: 20px; padding: 0 6px;
-  border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 800;
-  display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--card);
+.home-tile .ht-count {
+  margin-top: auto; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 800; color: var(--lime-text);
 }
+.home-tile .ht-count::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--lime-text); box-shadow: 0 0 8px currentColor; }
 
 </style>
 </head>
@@ -1448,12 +1449,14 @@ function _homeTools() {
   if (admin || perms.restock) tools.push({
     key: 'restock', en: 'Restock', cn: '补货',
     dEn: 'Ask the warehouse for stock', dCn: '向仓库要货',
-    badge: () => (_notiUnseen?.prepared || 0), go: () => setAppMode('restock'),
+    count: () => (_notiUnseen?.prepared || 0), cEn: 'ready to receive', cCn: '待收货',
+    go: () => setAppMode('restock'),
   });
   if (admin || perms.warehouse_inbox) tools.push({
     key: 'fulfill', en: 'Fulfill', cn: '处理订单',
     dEn: 'Pack requests from stores', dCn: '处理门店订单',
-    badge: () => (typeof _inboxActiveCount === 'number' ? _inboxActiveCount : 0), go: () => setAppMode('inbox'),
+    count: () => (typeof _inboxActiveCount === 'number' ? _inboxActiveCount : 0), cEn: 'to pack', cCn: '待处理',
+    go: () => setAppMode('inbox'),
   });
   if (_qsHomeAvailable) tools.push({
     key: 'quick', en: 'Quick Stock', cn: '快速库存',
@@ -1476,13 +1479,20 @@ function _renderHome() {
   if (_qsHomeAvailable === null) _probeQuickStock().then(() => { if (_appMode === 'home') _renderHome(); });
   const tools = _homeTools();
   const who = _user?.displayName || _user?.username || '';
-  const initial = (who || '?').trim().charAt(0).toUpperCase();
+  // Friendly greeting with the day — computed in the browser (client-side
+  // Date is fine here). Localised to the active language.
+  const now = new Date();
+  const wd = _L(['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][now.getDay()],
+                ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'][now.getDay()]);
+  const dateStr = _L(['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][now.getMonth()] + ' ' + now.getDate(),
+                     (now.getMonth() + 1) + '月' + now.getDate() + '日');
+  const greet = who ? _L('Hi ' + who, who + '，你好') : _L('Welcome', '欢迎');
   body.innerHTML =
     '<div class="home-wrap">' +
-      '<div class="home-bar">' +
-        '<div class="home-user">' +
-          '<span class="home-ava">' + esc(initial) + '</span>' +
-          '<span class="home-name">' + esc(who) + '</span>' +
+      '<div class="home-top">' +
+        '<div class="home-greet">' +
+          '<div class="g1">' + esc(greet) + '</div>' +
+          '<div class="g2">' + esc(wd + ' · ' + dateStr) + '</div>' +
         '</div>' +
         '<div class="home-actions">' +
           '<button class="home-lang" id="homeLangBtn" title="' + _L('Switch to Chinese', '切换到英文') + '">' + (_lang === 'cn' ? 'EN' : '中') + '</button>' +
@@ -1491,12 +1501,17 @@ function _renderHome() {
       '</div>' +
       '<div class="home-grid">' +
         tools.map(function (tt) {
-          const b = tt.badge ? (tt.badge() || 0) : 0;
+          const n = tt.count ? (tt.count() || 0) : 0;
+          const countLine = n > 0
+            ? '<span class="ht-count">' + (n > 99 ? '99+' : n) + ' ' + esc(_L(tt.cEn, tt.cCn)) + '</span>'
+            : '';
           return '<button class="home-tile" data-tool="' + tt.key + '">' +
-            (b > 0 ? '<span class="ht-badge">' + (b > 99 ? '99+' : b) + '</span>' : '') +
             '<span class="ht-ico">' + (_HOME_ICO[tt.key] || '') + '</span>' +
-            '<span class="ht-name">' + esc(_L(tt.en, tt.cn)) + '</span>' +
-            '<span class="ht-desc">' + esc(_L(tt.dEn, tt.dCn)) + '</span>' +
+            '<span class="ht-text">' +
+              '<span class="ht-name">' + esc(_L(tt.en, tt.cn)) + '</span>' +
+              '<span class="ht-desc">' + esc(_L(tt.dEn, tt.dCn)) + '</span>' +
+            '</span>' +
+            countLine +
           '</button>';
         }).join('') +
       '</div>' +
