@@ -542,7 +542,13 @@
       : '';
     const facts = [];
     if (s.account) facts.push(`${cuT('Account', '账号')} <span style="font-family:var(--f-mono,monospace)">${esc(s.account)}</span>`);
-    facts.push(`${Number(s.mappedProducts || 0)} ${cuT('products syncing', '个商品同步中')}`);
+    // "Live" = matched + pushing stock (same meaning as the Meituan tab's "N
+    // live"). Unmatched rows are frozen, so call them out separately, never as
+    // "syncing".
+    const liveN = Number(s.liveProducts || 0);
+    const unmatched = Number(s.notMatched || 0);
+    facts.push(`${liveN} ${cuT('live on Meituan', '个已上架美团')}`);
+    if (unmatched) facts.push(`<span style="color:var(--brass,#B08D4A)">${unmatched} ${cuT('not matched', '个未匹配')}</span>`);
     if (s.open === true) facts.push(cuT('Open on Meituan', '美团营业中'));
     else if (s.open === false) facts.push(cuT('Closed on Meituan', '美团已置休'));
     const live = [
@@ -574,7 +580,7 @@
     // to the plain store list if the endpoint isn't reachable.
     let detail = [];
     try { const r = await api('/api/retail-admin/channel-hub/meituan/stores'); detail = r.data || []; } catch (_) {}
-    if (!detail.length) detail = (_stores || []).map(s => ({ code: s.code, name: s.name || s.code, nameCn: s.name || s.code, signedIn: null, mappedProducts: 0, ordersToday: 0 }));
+    if (!detail.length) detail = (_stores || []).map(s => ({ code: s.code, name: s.name || s.code, nameCn: s.name || s.code, signedIn: null, liveProducts: 0, notMatched: 0, ordersToday: 0 }));
     const bag = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>';
     const paused = status === 'paused';
     const storeRows = detail.map(igMtStoreRow).join('');

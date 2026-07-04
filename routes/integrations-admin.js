@@ -310,7 +310,12 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
       const lastLoginErr = get1("SELECT event_type, created_at FROM meituan_sync_log WHERE store_code = ? AND status = 'error' AND event_type IN ('needs_login','verify_required') ORDER BY id DESC LIMIT 1", code);
       const lastOrder = get1('SELECT imported_at FROM meituan_order_import WHERE store_code = ? ORDER BY id DESC LIMIT 1', code);
       const ordersToday = get1("SELECT COUNT(*) AS n FROM meituan_order_import WHERE store_code = ? AND date(imported_at) = date('now')", code);
-      const mapped = get1('SELECT COUNT(*) AS n FROM meituan_product_map WHERE store_code = ? AND sync_enabled = 1', code);
+      // "Live" = matched to a real Meituan listing (meituan_name present) AND
+      // sync on — the only rows whose stock actually pushes. Rows with the sync
+      // toggle on but no match are frozen, so they count as "not matched", not
+      // as syncing. Same ruler as the Meituan tab's "N live".
+      const live = get1("SELECT COUNT(*) AS n FROM meituan_product_map WHERE store_code = ? AND sync_enabled = 1 AND meituan_name IS NOT NULL AND TRIM(meituan_name) <> ''", code);
+      const enabled = get1('SELECT COUNT(*) AS n FROM meituan_product_map WHERE store_code = ? AND sync_enabled = 1', code);
 
       // Signed in? A relay session is authoritative when present; otherwise a
       // needs_login/verify error NEWER than the last ok event means signed out.
@@ -339,7 +344,8 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
         lastStockPush: lastPush ? lastPush.created_at : null,
         lastOrder: lastOrder ? lastOrder.imported_at : null,
         ordersToday: ordersToday ? ordersToday.n : 0,
-        mappedProducts: mapped ? mapped.n : 0,
+        liveProducts: live ? live.n : 0,
+        notMatched: Math.max(0, (enabled ? enabled.n : 0) - (live ? live.n : 0)),
       };
     });
     res.json({ success: true, data });
