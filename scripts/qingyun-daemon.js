@@ -248,6 +248,26 @@ async function buildCreatePayload(order, shop, br) {
 }
 async function drainPushQueue(storeCode, br) {
   if (cfg('delivery.qingyunAutoPush', false) !== true) return;
+
+  // Reconcile: an order can reach 'paid' via several paths (online gateway, cash /
+  // COD, admin "Mark paid") and only the gateway one runs the enqueue hook. So we
+  // also sweep here for paid DELIVERY orders (this store) that have no queue row.
+  // Bounded to orders paid AFTER auto-push was switched on (qingyunAutoPushSince),
+  // so enabling never floods historical orders. Idempotent (UNIQUE + NOT EXISTS).
+  const since = cfg('delivery.qingyunAutoPushSince', null);
+  if (since) {
+    try {
+      db.prepare(`INSERT OR IGNORE INTO qingyun_push_queue (retail_order_id, store_code, status)
+        SELECT o.id, @sc, 'pending'
+          FROM retail_orders o JOIN retail_stores rs ON rs.id = o.store_id
+         WHERE rs.code = @sc AND o.fulfillment_type = 'delivery'
+           AND o.status IN ('paid','preparing','dispatched')
+           AND o.paid_at IS NOT NULL AND o.paid_at > @since
+           AND NOT EXISTS (SELECT 1 FROM qingyun_push_queue q WHERE q.retail_order_id = o.id)`)
+        .run({ sc: storeCode, since });
+    } catch (e) { log(storeCode, `push reconcile error: ${e.message}`); }
+  }
+
   let rows = [];
   try {
     rows = db.prepare(

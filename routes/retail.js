@@ -17106,11 +17106,19 @@ router.get('/api/retail-admin/integrations/qingyun', requireRetailAdmin, (req, r
 router.post('/api/retail-admin/integrations/qingyun/autopush', requireRetailAdmin, express.json(), (req, res) => {
   const on = req.body?.enabled === true;
   const who = (req.backendUser && (req.backendUser.name || req.backendUser.username)) || 'admin';
-  tdb().prepare(
+  const up = tdb().prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
-     VALUES ('delivery.qingyunAutoPush', ?, CURRENT_TIMESTAMP, ?)
+     VALUES (?, ?, CURRENT_TIMESTAMP, ?)
      ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
-  ).run(JSON.stringify(on), who);
+  );
+  up.run('delivery.qingyunAutoPush', JSON.stringify(on), who);
+  // Stamp WHEN it was switched on so the daemon's reconciler only sweeps orders
+  // paid from now forward — turning it on never floods historical orders. Only
+  // moves the cutoff FORWARD on a fresh enable (a re-enable after off resets it).
+  if (on) {
+    const nowStr = tdb().prepare("SELECT datetime('now') AS t").get().t;
+    up.run('delivery.qingyunAutoPushSince', JSON.stringify(nowStr), who);
+  }
   res.json({ success: true, enabled: on });
 });
 
