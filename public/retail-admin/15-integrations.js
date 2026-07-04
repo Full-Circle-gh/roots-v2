@@ -724,12 +724,45 @@
   };
   function mcSaveBtnHtml() { return `${MC_SVG.shield}<span>${cuT('Save & verify', '保存并验证')}</span>`; }
 
+  // Router: a brand-new account gets the step-by-step setup wizard; an account
+  // that finished setup (or the env-managed Roots) gets the one-page summary.
+  // "Finished" = login pair set AND payments set-or-skipped ("Skip for now"
+  // remembers in localStorage so the wizard doesn't nag on every open).
+  const MW_SKIP_KEY = 'fc_miniapp_pay_skip';
+  let _mwCfg = null;   // last-loaded credential picture, shared by the wizard steps
+  function mwPaySkipped() { try { return localStorage.getItem(MW_SKIP_KEY) === '1'; } catch (_) { return false; } }
+  function mwResumeStep() {
+    const st = (_mwCfg && _mwCfg.status) || {};
+    if (!st.wechatLoginReady) return 1;
+    if (!(_mwCfg && _mwCfg.pay && _mwCfg.pay.mchId)) return 2;
+    return 3;
+  }
   window.igMiniappConfig = async function () {
     const box = igHostEl(); if (!box) return;
     box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Mini App config…', '加载小程序配置…'));
     let cfg;
     try { cfg = await api('/api/retail-admin/channel-hub/miniapp/wechat-config'); }
     catch (e) { box.innerHTML = igMuted(cuT('Failed to load', '加载失败')); return; }
+    _mwCfg = cfg;
+    const st = cfg.status || {};
+    if (cfg.source === 'env' || (st.wechatLoginReady && (st.payReady || mwPaySkipped()))) return igMiniappConfigFull(cfg);
+    igMiniappSetup(mwResumeStep());
+  };
+  // Re-enter the wizard from the summary page ("Setup guide" button).
+  window.igMiniappSetupStart = function () {
+    try { localStorage.removeItem(MW_SKIP_KEY); } catch (_) {}
+    igMiniappSetup(mwResumeStep());
+  };
+
+  window.igMiniappConfigFull = async function (preloaded) {
+    const box = igHostEl(); if (!box) return;
+    let cfg = preloaded;
+    if (!cfg) {
+      box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Mini App config…', '加载小程序配置…'));
+      try { cfg = await api('/api/retail-admin/channel-hub/miniapp/wechat-config'); }
+      catch (e) { box.innerHTML = igMuted(cuT('Failed to load', '加载失败')); return; }
+      _mwCfg = cfg;
+    }
     const st = cfg.status || {};
     const pay = cfg.pay || {};
     const env = cfg.source === 'env';   // env-managed account (Roots): read-only view
@@ -762,7 +795,10 @@
           <strong style="font-size:16px">${cuT('Mini App configuration', '小程序配置')}</strong>
           <div class="mc-subtitle">${cuT('WeChat credentials for this account’s storefront and payments.', '本账户店面与收款所需的微信凭证。')}</div>
         </div>
-        <button class="btn btn-sm" onclick="igLocClose()">✕</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          ${env ? '' : `<button class="btn btn-sm" onclick="igMiniappSetupStart()">${cuT('Setup guide', '设置向导')}</button>`}
+          <button class="btn btn-sm" onclick="igLocClose()">✕</button>
+        </div>
       </div>
       <div class="mc-chips">
         ${chip(st.wxAppIdSet, 'Mini program linked', '小程序已绑定')}
@@ -846,11 +882,266 @@
         if (out) { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = cuT('Saved, but WeChat rejected the login pair: ', '已保存，但微信校验未通过：') + (r.error || ''); }
       }
       igLoad();
-      setTimeout(igMiniappConfig, 1600);
+      setTimeout(igMiniappConfigFull, 1600);
     } catch (e) {
       if (btn) { btn.disabled = false; btn.innerHTML = mcSaveBtnHtml(); }
       if (out) { out.style.color = 'var(--danger)'; out.textContent = (e && e.code === 'appid_taken') ? cuT('That AppID is already in use.', '该 AppID 已被占用。') : (e && e.code === 'bad_appid' ? cuT('AppID must look like wx + 16 chars.', 'AppID 格式应为 wx + 16 位。') : cuT('Save failed', '保存失败')); }
     }
+  };
+
+  // ── Mini App setup wizard — the first-run flow ──────────────────────────────
+  // New accounts see this instead of the credentials form: three short steps
+  // (link the mini program → merchant account → payment keys), each with a
+  // "where do I find this" walkthrough, a direct link to the right WeChat
+  // console, and a live check against WeChat before moving on. When it's done
+  // (or payments are skipped) the account sees the normal one-page summary.
+  const MW_OPEN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>';
+  const MW_STEPS = () => [
+    { n: 1, en: 'Link mini program', cn: '绑定小程序', ico: MC_SVG.phone },
+    { n: 2, en: 'Merchant account', cn: '商户号', ico: MC_SVG.card },
+    { n: 3, en: 'Payment keys', cn: '支付密钥', ico: MC_SVG.shield },
+  ];
+  function mwNextHtml(step) {
+    if (step === 1) return `${MC_SVG.shield}<span>${cuT('Verify & continue', '验证并继续')}</span>`;
+    if (step === 2) return `<span>${cuT('Continue', '继续')}</span>`;
+    return `${MC_SVG.shield}<span>${cuT('Verify & finish', '验证并完成')}</span>`;
+  }
+  function mwOpenBtn(url, en, cn) {
+    return `<button type="button" class="btn btn-sm mw-open" onclick="window.open('${url}','_blank')">${MW_OPEN}<span>${cuT(en, cn)}</span></button>`;
+  }
+  function mwSay(t, bad) {
+    const out = document.getElementById('mw_msg');
+    if (out) { out.style.color = bad ? 'var(--danger)' : 'var(--accent,#6B8E6F)'; out.textContent = t; }
+  }
+  function mwBusy(on, step) {
+    const btn = document.getElementById('mw_next'); if (!btn) return false;
+    if (on) {
+      if (btn.disabled) return false;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="mc-spin"></span><span>${cuT('Checking with WeChat…', '正在向微信验证…')}</span>`;
+    } else { btn.disabled = false; btn.innerHTML = mwNextHtml(step); }
+    return true;
+  }
+  const mwV = id => { const el = document.getElementById(id); return el && el.value ? el.value.trim() : ''; };
+
+  window.igMiniappSetup = function (step) {
+    const box = igHostEl(); if (!box) return;
+    const cfg = _mwCfg || {};
+    const rail = MW_STEPS().map(s => `<span class="mw-step${s.n < step ? ' done' : s.n === step ? ' now' : ''}">
+      <span class="n">${s.n < step ? MC_SVG.tick : s.n}</span><span>${cuT(s.en, s.cn)}</span></span>`).join('');
+
+    let body = '';
+    if (step === 1) {
+      body = `
+      <div class="mc-sec" style="border-top:none;padding-top:6px">
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.phone}</span><b>${cuT('Link your mini program', '绑定你的小程序')}</b></div>
+        <div class="mc-purpose">${cuT('The mini program is your storefront inside WeChat. Two values connect it: AppID and AppSecret.', '小程序是你在微信里的店面。绑定需要两项：AppID 和 AppSecret。')}</div>
+        <div class="mw-help">
+          <div class="mw-help-head"><span>${cuT('Where do I find these?', '在哪里找到它们？')}</span><span class="ig-spacer"></span>
+            ${mwOpenBtn('https://mp.weixin.qq.com', 'Open the mini program console', '打开小程序后台')}</div>
+          <ol>
+            <li>${cuT('Sign in with the WeChat account that owns your mini program.', '用拥有该小程序的微信账号登录。')}</li>
+            <li>${cuT('In the left menu open “开发管理”, then the “开发设置” tab (Development management → Development settings).', '在左侧菜单打开「开发管理」，再选「开发设置」。')}</li>
+            <li>${cuT('AppID is the first item on that page — copy it here.', 'AppID 是页面上的第一项 — 复制到这里。')}</li>
+            <li>${cuT('For AppSecret press “生成” (Generate). WeChat shows it only once — copy it right away. Lost an old one? Press “重置” (Reset) to get a new one.', 'AppSecret 点「生成」。微信只显示一次 — 立即复制。旧的丢了就点「重置」换新的。')}</li>
+          </ol>
+        </div>
+        <div class="ig-wiz-grid">
+          <div class="mc-f"><label class="field-label">AppID</label>
+            <input type="text" id="mw_appid" value="${esc(cfg.appId || '')}" placeholder="wx0000000000000000" spellcheck="false" autocapitalize="off" style="font-family:var(--f-mono,monospace)"></div>
+          <div class="mc-f"><label class="field-label">AppSecret</label>
+            <input type="password" id="mw_secret" autocomplete="new-password" placeholder="${cfg.appSecretSet ? cuT('Saved — leave blank to keep it', '已保存 — 留空即保留') : cuT('Paste the AppSecret', '粘贴 AppSecret')}"></div>
+        </div>
+      </div>`;
+    } else if (step === 2) {
+      body = `
+      <div class="mc-sec" style="border-top:none;padding-top:6px">
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Your WeChat Pay merchant account', '你的微信支付商户号')}</b></div>
+        <div class="mc-purpose">${cuT('This is what lets the mini app take payment. You only need one number here.', '有了它，小程序才能收款。这一步只需要一个号码。')}</div>
+        <div class="mw-help">
+          <div class="mw-help-head"><span>${cuT('Where do I find it?', '在哪里找？')}</span><span class="ig-spacer"></span>
+            ${mwOpenBtn('https://pay.weixin.qq.com', 'Open the merchant console', '打开商户平台')}</div>
+          <ol>
+            <li>${cuT('Sign in to the WeChat Pay merchant console.', '登录微信支付商户平台。')}</li>
+            <li>${cuT('Open “账户中心” (Account center).', '打开「账户中心」。')}</li>
+            <li>${cuT('Your merchant ID (商户号) is the number shown at the top — usually 10 digits.', '商户号显示在页面顶部 — 通常是 10 位数字。')}</li>
+          </ol>
+        </div>
+        <div class="ig-wiz-grid">
+          <div class="mc-f"><label class="field-label">${cuT('Merchant ID', '商户号')}</label>
+            <input type="text" id="mw_mchid" value="${esc((cfg.pay && cfg.pay.mchId) || '')}" placeholder="1230000109" spellcheck="false" inputmode="numeric" style="font-family:var(--f-mono,monospace)"></div>
+        </div>
+        <div class="mw-skip"><span>${cuT('No WeChat Pay merchant account yet? Skip this — your storefront still works, and you can add payments here any time.', '还没有微信支付商户号？可以先跳过 — 店面照常运行，之后随时回来补上。')}</span>
+          <button type="button" class="btn btn-sm" onclick="igMwSkipPay()">${cuT('Skip for now', '暂时跳过')}</button></div>
+      </div>`;
+    } else {
+      body = `
+      <div class="mc-sec" style="border-top:none;padding-top:6px">
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.shield}</span><b>${cuT('Payment keys', '支付密钥')}</b></div>
+        <div class="mc-purpose">${cuT('Three items, all from one page of the merchant console. When you press Verify we make a real test call to WeChat Pay.', '三项内容都在商户平台的同一个页面。点「验证」后我们会向微信支付发起一次真实测试请求。')}</div>
+        <div class="mw-help">
+          <div class="mw-help-head"><span>${cuT('Where do I find these?', '在哪里找到它们？')}</span><span class="ig-spacer"></span>
+            ${mwOpenBtn('https://pay.weixin.qq.com', 'Open the merchant console', '打开商户平台')}</div>
+          <ol>
+            <li>${cuT('In the merchant console open “账户中心” → “API安全” (Account center → API security).', '在商户平台打开「账户中心」→「API安全」。')}</li>
+            <li>${cuT('Certificate serial: shown next to your API certificate (API证书). Never made one? Press “申请证书” and follow the little tool it gives you.', '证书序列号：显示在 API 证书旁边。还没申请过就点「申请证书」，按工具提示操作。')}</li>
+            <li>${cuT('API v3 key: a 32-character key you set yourself under “设置APIv3密钥”. If you never set one, set it there now and paste the same value here.', 'APIv3 密钥：在「设置APIv3密钥」里由你自己设定的 32 位密钥。没设过就现在设一个，并把相同的值粘贴到这里。')}</li>
+            <li>${cuT('Merchant private key: the certificate tool saved a folder with a file called apiclient_key.pem. Open it with any text editor and paste everything.', '商户私钥：申请证书时工具保存的文件夹里有 apiclient_key.pem。用任意文本编辑器打开，全部复制粘贴到这里。')}</li>
+          </ol>
+        </div>
+        <div class="ig-wiz-grid">
+          <div class="mc-f"><label class="field-label">${cuT('Certificate serial', '证书序列号')}</label>
+            <input type="text" id="mw_serial" value="${esc((cfg.pay && cfg.pay.serialNo) || '')}" spellcheck="false" autocapitalize="off" style="font-family:var(--f-mono,monospace)"></div>
+          <div class="mc-f"><label class="field-label">${cuT('API v3 key', 'APIv3 密钥')}</label>
+            <input type="password" id="mw_v3" autocomplete="new-password" placeholder="${(cfg.pay && cfg.pay.apiV3KeySet) ? cuT('Saved — leave blank to keep it', '已保存 — 留空即保留') : cuT('The 32-character key', '32 位密钥')}"></div>
+          <div class="mc-f wide"><label class="field-label">${cuT('Merchant private key', '商户私钥')}<span class="mc-file">apiclient_key.pem</span></label>
+            <textarea id="mw_pkey" rows="3" placeholder="${(cfg.pay && cfg.pay.privateKeySet) ? cuT('Saved — leave blank to keep it', '已保存 — 留空即保留') : cuT('Paste the full PEM, including the BEGIN and END lines', '粘贴完整 PEM，包含 BEGIN 与 END 行')}" spellcheck="false" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea></div>
+        </div>
+        <div class="mw-escape" style="text-align:left;margin-top:8px">
+          <button type="button" onclick="igMwTogglePub()">${cuT('My account uses platform public keys (rare)', '我的商户号使用平台公钥（少见）')}</button>
+        </div>
+        <div class="ig-wiz-grid" id="mw_pub_wrap" style="display:none;margin-top:8px">
+          <div class="mc-f wide"><label class="field-label">${cuT('WeChat platform public key', '微信平台公钥')}<span class="mc-opt">${cuT('Optional', '选填')}</span></label>
+            <textarea id="mw_pubkey" rows="3" placeholder="${cuT('Paste PEM contents', '粘贴 PEM 内容')}" spellcheck="false" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea></div>
+        </div>
+      </div>`;
+    }
+
+    box.style.display = '';
+    box.innerHTML = `<div class="ig-wiz">
+      <div class="mc-head">
+        <div>
+          <strong style="font-size:16px">${cuT('Set up your Mini App', '设置你的小程序')}</strong>
+          <div class="mc-subtitle">${cuT('Three short steps. We show you exactly where to find each thing.', '三个小步骤。每一项我们都会告诉你去哪里找。')}</div>
+        </div>
+        <button class="btn btn-sm" onclick="igLocClose()">✕</button>
+      </div>
+      <div class="mw-steps">${rail}</div>
+      ${body}
+      <div class="mc-foot">
+        <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px;padding:0" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help', '获取帮助')}</button>
+        <span class="ig-spacer"></span>
+        <span id="mw_msg" style="font-size:12.5px;max-width:420px"></span>
+        <button type="button" class="btn" id="mw_finish_anyway" style="display:none" onclick="igMwFinish(false, true)">${cuT('Finish anyway', '仍然完成')}</button>
+        ${step > 1 ? `<button class="btn" onclick="igMiniappSetup(${step - 1})">${cuT('Back', '上一步')}</button>` : ''}
+        <button class="btn btn-primary" id="mw_next" onclick="${step === 1 ? 'igMwVerifyLogin()' : step === 2 ? 'igMwSaveMch()' : 'igMwVerifyPay()'}">${mwNextHtml(step)}</button>
+      </div>
+      <div class="mw-escape"><button type="button" onclick="igMiniappConfigFull()">${cuT('Prefer a plain form? Open the full configuration page', '想直接填表？打开完整配置页')}</button></div>
+    </div>`;
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  };
+
+  window.igMwTogglePub = function () {
+    const w = document.getElementById('mw_pub_wrap');
+    if (w) w.style.display = w.style.display === 'none' ? '' : 'none';
+  };
+
+  // Step 1: save AppID + AppSecret, then WeChat itself confirms the pair.
+  window.igMwVerifyLogin = async function () {
+    const appId = mwV('mw_appid'), secret = mwV('mw_secret');
+    if (!/^wx[0-9a-zA-Z]{16}$/.test(appId)) return mwSay(cuT('AppID should be “wx” followed by 16 letters or numbers.', 'AppID 应为 wx 加 16 位字母数字。'), true);
+    if (!secret && !(_mwCfg && _mwCfg.appSecretSet)) return mwSay(cuT('Paste the AppSecret too.', '请同时粘贴 AppSecret。'), true);
+    if (!mwBusy(true, 1)) return;
+    try {
+      const r = await api('/api/retail-admin/channel-hub/miniapp/wechat-creds', { method: 'POST', body: { appId, appSecret: secret } });
+      if (r.verified) {
+        _mwCfg = _mwCfg || {};
+        _mwCfg.appId = appId;
+        if (secret) _mwCfg.appSecretSet = true;
+        if (r.creds) _mwCfg.status = r.creds;
+        igMiniappSetup(2);
+        return;
+      }
+      mwSay(cuT('WeChat did not accept this pair — check both values and try again. WeChat said: ', '微信未通过校验 — 请核对两项后重试。微信返回：') + (r.error || ''), true);
+    } catch (e) {
+      mwSay(e && e.code === 'appid_taken' ? cuT('That AppID is already used by another account here.', '该 AppID 已被其他账户使用。')
+        : cuT('Could not save — try again.', '保存失败 — 请重试。'), true);
+    }
+    mwBusy(false, 1);
+  };
+
+  // Step 2: merchant id only — a number, no live check possible on its own.
+  window.igMwSaveMch = async function () {
+    const mchId = mwV('mw_mchid');
+    if (!/^\d{8,12}$/.test(mchId)) return mwSay(cuT('The merchant ID is a number, usually 10 digits.', '商户号是数字，通常 10 位。'), true);
+    if (!mwBusy(true, 2)) return;
+    try {
+      await api('/api/retail-admin/channel-hub/miniapp/wechat-creds', { method: 'POST', body: { mchId } });
+      _mwCfg = _mwCfg || {}; _mwCfg.pay = _mwCfg.pay || {}; _mwCfg.pay.mchId = mchId;
+      igMiniappSetup(3);
+      return;
+    } catch (e) { mwSay(cuT('Could not save — try again.', '保存失败 — 请重试。'), true); }
+    mwBusy(false, 2);
+  };
+
+  window.igMwSkipPay = function () {
+    try { localStorage.setItem(MW_SKIP_KEY, '1'); } catch (_) {}
+    igMwFinish(true, false);
+  };
+
+  // Step 3: save the keys, then a real signed test call to WeChat Pay.
+  window.igMwVerifyPay = async function () {
+    const p = (_mwCfg && _mwCfg.pay) || {};
+    const body = { serialNo: mwV('mw_serial'), apiV3Key: mwV('mw_v3'), privateKey: mwV('mw_pkey'), platformPubKey: mwV('mw_pubkey') };
+    if (!body.serialNo && !p.serialNo) return mwSay(cuT('Fill in the certificate serial.', '请填写证书序列号。'), true);
+    if (!body.apiV3Key && !p.apiV3KeySet) return mwSay(cuT('Fill in the API v3 key.', '请填写 APIv3 密钥。'), true);
+    if (body.apiV3Key && body.apiV3Key.length !== 32) return mwSay(cuT('The API v3 key is exactly 32 characters — this one isn’t.', 'APIv3 密钥应为 32 位 — 当前长度不对。'), true);
+    if (!body.privateKey && !p.privateKeySet) return mwSay(cuT('Paste the private key file’s contents.', '请粘贴私钥文件内容。'), true);
+    if (body.privateKey && body.privateKey.indexOf('PRIVATE KEY') === -1) return mwSay(cuT('That doesn’t look like the key file — paste all of apiclient_key.pem, including the BEGIN and END lines.', '内容不像私钥文件 — 请粘贴完整的 apiclient_key.pem，包含 BEGIN 与 END 行。'), true);
+    if (!mwBusy(true, 3)) return;
+    try {
+      const r = await api('/api/retail-admin/channel-hub/miniapp/wechat-pay-verify', { method: 'POST', body });
+      if (r.verified && r.v3KeyOk !== false) {
+        try { localStorage.removeItem(MW_SKIP_KEY); } catch (_) {}
+        igMwFinish(false, false);
+        return;
+      }
+      const fa = document.getElementById('mw_finish_anyway'); if (fa) fa.style.display = '';
+      if (r.verified && r.v3KeyOk === false) {
+        mwSay(cuT('Almost: WeChat accepted the merchant ID, serial and private key, but the API v3 key is wrong — check the 32-character key and try again.', '差一点：商户号、序列号和私钥都通过了，但 APIv3 密钥不对 — 请核对那串 32 位密钥后重试。'), true);
+      } else if (r.error === 'bad_private_key') {
+        mwSay(cuT('The private key doesn’t look right — paste the whole apiclient_key.pem, including the BEGIN and END lines.', '私钥内容不对 — 请粘贴完整的 apiclient_key.pem，包含 BEGIN 与 END 行。'), true);
+      } else if (r.error === 'missing_fields') {
+        mwSay(cuT('Fill in the serial, the v3 key and the private key first.', '请先填写序列号、APIv3 密钥和私钥。'), true);
+      } else {
+        mwSay(cuT('WeChat Pay did not accept the keys. WeChat said: ', '微信支付未通过校验。微信返回：') + (r.error || ''), true);
+      }
+    } catch (e) { mwSay(cuT('Could not save — try again.', '保存失败 — 请重试。'), true); }
+    mwBusy(false, 3);
+  };
+
+  // Finish screen. paySkipped = chose "Skip for now"; unverified = keys saved
+  // but WeChat Pay's test call didn't pass (finish anyway).
+  window.igMwFinish = function (paySkipped, unverified) {
+    const box = igHostEl(); if (!box) return;
+    const payChip = paySkipped
+      ? `<span class="mc-chip">${MC_SVG.circle}<span>${cuT('WeChat Pay — add later', '微信支付 — 稍后添加')}</span></span>`
+      : unverified
+        ? `<span class="mc-chip">${MC_SVG.circle}<span>${cuT('WeChat Pay saved — not verified yet', '微信支付已保存 — 尚未验证')}</span></span>`
+        : `<span class="mc-chip on">${MC_SVG.check}<span>${cuT('WeChat Pay ready', '微信支付可用')}</span></span>`;
+    const note = paySkipped
+      ? cuT('You can add WeChat Pay any time — open this page and press Setup guide.', '随时可以补上微信支付 — 打开本页点「设置向导」即可。')
+      : unverified
+        ? cuT('Your keys are saved. Fix the failing one later from the configuration page and press Save & verify.', '密钥已保存。之后可在配置页修正并点「保存并验证」。')
+        : cuT('Everything checked out with WeChat. Your storefront can sign customers in and take payment.', '所有项目均通过微信验证。店面已可登录顾客并收款。');
+    box.style.display = '';
+    box.innerHTML = `<div class="ig-wiz">
+      <div class="mw-done">
+        <div class="big">${MC_SVG.tick}</div>
+        <strong style="font-size:16px">${paySkipped || unverified ? cuT('Mini program linked', '小程序已绑定') : cuT('Your mini app is connected', '你的小程序已接入')}</strong>
+        <div class="mc-subtitle" style="margin-top:6px">${note}</div>
+        <div class="mc-chips" style="justify-content:center;margin-top:14px">
+          <span class="mc-chip on">${MC_SVG.check}<span>${cuT('Mini program linked', '小程序已绑定')}</span></span>
+          <span class="mc-chip on">${MC_SVG.check}<span>${cuT('Customer login ready', '顾客登录可用')}</span></span>
+          ${payChip}
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;margin-top:20px">
+          <button class="btn" onclick="igLocClose()">${cuT('Close', '关闭')}</button>
+          <button class="btn btn-primary" onclick="igMiniappConfigFull()">${cuT('View configuration', '查看配置')}</button>
+        </div>
+      </div>
+    </div>`;
+    igLoad();
   };
 
   // ── Web store configuration — sibling of the Mini App page ──────────────────

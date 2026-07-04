@@ -494,6 +494,80 @@ router.post('/api/retail-admin/channel-hub/miniapp/wechat-creds', requireRetailA
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// Save + live-verify the WeChat Pay credentials — the setup wizard's step-3
+// check. Persists any provided pay fields (same keep-if-blank semantics as
+// wechat-creds), then makes a REAL signed request to WeChat Pay
+// (GET /v3/certificates): if WeChat accepts the signature, the merchant id,
+// certificate serial and private key are all correct together. When the
+// response carries an encrypted platform certificate we also try to decrypt it
+// with the API v3 key, which proves that key too (v3KeyOk: true/false/null —
+// null = nothing to decrypt, e.g. platform-public-key accounts).
+const wxpCrypto = require('crypto');
+router.post('/api/retail-admin/channel-hub/miniapp/wechat-pay-verify', requireRetailAdmin, express.json(), async (req, res) => {
+  try {
+    const id = tenantId(req);
+    const b = req.body || {};
+    const isEnv = getTenantCreds(id).source === 'env';
+    const str = (k) => String(b[k] == null ? '' : b[k]).trim();
+
+    if (!isEnv) {
+      const setIf = (key, val) => { if (val) setTenantSecret(id, key, val); };
+      setIf(CRED_KEYS.PAY_MCH_ID, str('mchId'));
+      setIf(CRED_KEYS.PAY_API_V3_KEY, str('apiV3Key'));
+      setIf(CRED_KEYS.PAY_PRIVATE_KEY, str('privateKey'));
+      setIf(CRED_KEYS.PAY_SERIAL_NO, str('serialNo'));
+      setIf(CRED_KEYS.PAY_PLATFORM_PUB_KEY, str('platformPubKey'));
+      invalidateCreds(id);
+    }
+
+    const pay = getTenantCreds(id).pay;
+    const missing = [];
+    if (!pay.mchId) missing.push('mchId');
+    if (!pay.serialNo) missing.push('serialNo');
+    if (!pay.privateKey) missing.push('privateKey');
+    if (missing.length) return res.json({ success: true, verified: false, v3KeyOk: null, error: 'missing_fields', missing });
+
+    // Sign GET /v3/certificates per the v3 spec (empty body for GET).
+    const urlPath = '/v3/certificates';
+    let auth;
+    try {
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const nonceStr = wxpCrypto.randomBytes(16).toString('hex');
+      const message = ['GET', urlPath, timestamp, nonceStr, ''].join('\n') + '\n';
+      const signature = wxpCrypto.createSign('RSA-SHA256').update(message).sign(pay.privateKey, 'base64');
+      auth = 'WECHATPAY2-SHA256-RSA2048 ' +
+        `mchid="${pay.mchId}",nonce_str="${nonceStr}",timestamp="${timestamp}",serial_no="${pay.serialNo}",signature="${signature}"`;
+    } catch (_) {
+      return res.json({ success: true, verified: false, v3KeyOk: null, error: 'bad_private_key' });
+    }
+
+    let verified = false, verr = null, v3KeyOk = null;
+    try {
+      const resp = await fetch('https://api.mch.weixin.qq.com' + urlPath, {
+        headers: { 'Accept': 'application/json', 'Authorization': auth, 'User-Agent': 'roots-v2-pay-verify' },
+      });
+      const j = await resp.json().catch(() => ({}));
+      verified = resp.status === 200;
+      if (!verified) verr = (j.message || j.code || ('HTTP ' + resp.status));
+      // Prove the API v3 key by decrypting the first platform certificate.
+      const enc = verified && Array.isArray(j.data) && j.data[0] && j.data[0].encrypt_certificate;
+      if (enc && enc.ciphertext && pay.apiV3Key) {
+        try {
+          const buf = Buffer.from(enc.ciphertext, 'base64');
+          const d = wxpCrypto.createDecipheriv('aes-256-gcm', Buffer.from(pay.apiV3Key, 'utf8'), Buffer.from(enc.nonce || '', 'utf8'));
+          d.setAuthTag(buf.subarray(buf.length - 16));
+          d.setAAD(Buffer.from(enc.associated_data || '', 'utf8'));
+          d.update(buf.subarray(0, buf.length - 16));
+          d.final();
+          v3KeyOk = true;
+        } catch (_) { v3KeyOk = false; }
+      }
+    } catch (e) { verr = e.message; }
+
+    res.json({ success: true, verified, v3KeyOk, error: verr, creds: credsStatus(id) });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 // ═══════════════ Web store configuration ═══════════════════════════════════
 // The browser storefront's own config page (sibling of the Mini App one): shop
 // address (free subdomain + optional custom domain), which sign-in methods the
