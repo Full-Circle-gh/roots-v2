@@ -4043,6 +4043,19 @@
   .mt-seg button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
   .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
   .mt-sub { font-size: 11px; line-height: 1.35; margin-top: 3px; }
+  /* Product identity cell — photo + names + SKU chip */
+  .mt-pcell { display: flex; align-items: center; gap: 11px; min-width: 0; }
+  .mt-thumb { width: 40px; height: 40px; border-radius: 8px; flex: none; object-fit: cover;
+              background: var(--bg-elev-2); border: 1px solid var(--line-soft); }
+  .mt-thumb-ph { display: flex; align-items: center; justify-content: center; color: var(--text-4); }
+  .mt-thumb-ph svg { width: 18px; height: 18px; }
+  .mt-pmeta { min-width: 0; }
+  .mt-psku { display: inline-block; font-family: var(--f-mono, ui-monospace, monospace); font-size: 11px;
+             line-height: 1; color: var(--text-3); background: var(--bg-elev-1);
+             border: 1px solid var(--line-soft); border-radius: 5px; padding: 2.5px 6px;
+             margin-top: 4px; letter-spacing: .02em; }
+  /* Live on neither store — brass edge stripe so problem rows pop while scrolling */
+  tr.mt-unmapped td:first-child { box-shadow: inset 3px 0 0 var(--brass, #B08D4A); }
 
   /* ── Meituan tab redesign (2026-07): status strip + sub-views ─────────────── */
   .mt-how { margin: 0 0 var(--s4); font-size: 12.5px; color: var(--text-3); }

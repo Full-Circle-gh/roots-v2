@@ -32,7 +32,10 @@ router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) 
     // bundle picker.
     const products = db.prepare(`
       SELECT p.id, p.name_cn, p.name_en, p.category, p.is_active,
-             p.variant_label, p.variant_group_id
+             p.variant_label, p.variant_group_id, p.sku, p.updated_at,
+             CASE WHEN (p.image_data IS NOT NULL AND p.image_data != '')
+                    OR (p.image_url  IS NOT NULL AND p.image_url  != '')
+                  THEN 1 ELSE 0 END AS has_image
         FROM store_products p
        ${includeInactive ? '' : 'WHERE p.is_active = 1'}
        ORDER BY p.name_cn, p.variant_group_id, p.id
@@ -53,7 +56,16 @@ router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) 
 
     res.json({
       success: true,
-      data: products.map(p => ({ ...p, stores: mapIndex[p.id] || {} })),
+      // image = small lazy thumbnail URL, never the blob (list-image footgun);
+      // the public /image route serves store_products images on demand.
+      data: products.map(p => ({
+        ...p,
+        has_image: undefined,
+        image: p.has_image
+          ? `/api/retail/products/${p.id}/image?v=${encodeURIComponent(p.updated_at || '')}&w=96`
+          : null,
+        stores: mapIndex[p.id] || {},
+      })),
     });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -345,6 +357,24 @@ router.get('/api/retail-admin/meituan/listings', requireRetailAdmin, (req, res) 
     const listings = {};
     for (const r of rows) (listings[r.store_code] = listings[r.store_code] || []).push(r.listing_name);
 
+    // 货号 → listing name per store, from the captured specs, so Match names can
+    // link by SKU before falling back to name similarity. A 货号 that appears on
+    // more than one listing is ambiguous and left out (name matching handles it).
+    const skus = {};
+    try {
+      const specRows = db.prepare(`
+        SELECT store_code, sku_code, MIN(listing_name) AS listing_name,
+               COUNT(DISTINCT listing_name) AS names
+          FROM meituan_listing_specs
+         WHERE sku_code IS NOT NULL AND TRIM(sku_code) <> ''
+         GROUP BY store_code, sku_code
+      `).all();
+      for (const r of specRows) {
+        if (r.names !== 1) continue;
+        (skus[r.store_code] = skus[r.store_code] || {})[r.sku_code.trim()] = r.listing_name;
+      }
+    } catch (_) { /* specs table may predate this feature on old boxes */ }
+
     // Latest job per store
     const jobs = db.prepare(`
       SELECT j.store_code, j.status, j.result_count, j.error, j.created_at, j.completed_at
@@ -357,7 +387,7 @@ router.get('/api/retail-admin/meituan/listings', requireRetailAdmin, (req, res) 
       `SELECT COUNT(*) AS n FROM meituan_listing_jobs WHERE status IN ('pending','processing')`
     ).get()?.n || 0;
 
-    res.json({ success: true, listings, jobs, running });
+    res.json({ success: true, listings, skus, jobs, running });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

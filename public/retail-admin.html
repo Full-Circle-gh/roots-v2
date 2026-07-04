@@ -7370,11 +7370,11 @@
     <details class="mt-how">
       <summary>How matching works · 匹配原理</summary>
       <div data-lang-block="en">
-        <b>Tianhe</b> (delivery) matches by listing name — use Match names when the banner asks.
+        <b>Tianhe</b> (delivery) matches by listing name — Match names links by SKU (货号) first when the Meituan listing has one, then by name.
         <b>Yuexiu</b> (instant) matches automatically by SKU (货号) and is read-only.
       </div>
       <div data-lang-block="cn">
-        <b>天河</b>(外卖)按商品名称匹配 —— 出现提示时点「匹配名称」。
+        <b>天河</b>(外卖)按商品名称匹配 —— 「匹配名称」会优先按货号关联,其次按名称。
         <b>越秀</b>(闪购)按货号自动匹配,只读。
       </div>
     </details>
@@ -7392,7 +7392,7 @@
         <span class="v"><span id="mt-kpi-mapped">—</span> <small id="mt-kpi-mapped-sub">products · 商品</small></span>
       </div>
       <div class="mt-cell" id="mt-kpi-queue-tile">
-        <span class="k">Waiting to push · 待推送</span>
+        <span class="k">Stock updates · 库存更新</span>
         <span class="v"><span id="mt-kpi-queue">—</span> <small id="mt-kpi-queue-sub"></small></span>
       </div>
       <div class="mt-cell" id="mt-kpi-order-tile">
@@ -7411,8 +7411,6 @@
     <div class="mt-tabs" role="tablist">
       <button id="mt-tab-products" class="mt-tab active" role="tab" onclick="mtView('products')">
         Products · 商品 <span class="n" id="mt-tabn-products" data-no-i18n></span></button>
-      <button id="mt-tab-orders" class="mt-tab" role="tab" onclick="mtView('orders')">
-        Orders · 订单 <span class="n" id="mt-tabn-orders" data-no-i18n></span></button>
       <button id="mt-tab-bundles" class="mt-tab" role="tab" onclick="mtView('bundles')">
         Bundles · 套餐 <span class="n" id="mt-tabn-bundles" data-no-i18n></span></button>
     </div>
@@ -7444,8 +7442,8 @@
         <thead>
           <tr>
             <th style="width:38%">Product · 商品</th>
-            <th id="mt-th-store-0" style="width:31%">Tianhe delivery · 天河外卖</th>
-            <th id="mt-th-store-1" style="width:31%">Yuexiu instant · 越秀闪购</th>
+            <th id="mt-th-store-0" style="width:31%">Tianhe delivery — by name · 天河外卖 — 按名称</th>
+            <th id="mt-th-store-1" style="width:31%">Yuexiu instant — auto by SKU · 越秀闪购 — 货号自动</th>
           </tr>
         </thead>
         <tbody id="mt-products-body" data-no-i18n>
@@ -7455,16 +7453,8 @@
     </div>
     </div><!-- /mt-view-products -->
 
-    <!-- ══ Orders view — read-only record, one line per order ══ -->
-    <div id="mt-view-orders" class="mt-view" hidden>
-      <div class="mt-card">
-        <div class="mt-note">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-          <span>Record only — these orders are managed and printed on Meituan, not here. · 仅记录 —— 订单在美团端处理和打印。</span>
-        </div>
-        <div id="mt-orders-list" data-no-i18n></div>
-      </div>
-    </div>
+    <!-- Orders view removed — Meituan orders appear on the main Orders page
+         like every other channel; a second ledger here was duplicate noise. -->
 
     <!-- ══ Bundles view — Meituan-only combos (套餐) ══ -->
     <div id="mt-view-bundles" class="mt-view" hidden>

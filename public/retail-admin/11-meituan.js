@@ -10,6 +10,7 @@
   let _storeA    = null; // 天河
   let _storeB    = null; // 越秀
   let _listings  = {};   // { store_code: [real Meituan listing names] }
+  let _listingSkus = {}; // { store_code: { 货号: listing_name } } — from the scrape only
   let _review    = { ambiguous: [], unmatched: [] };  // post-fetch manual-review queue
   let _bundles   = [];   // meituan-only bundles with components + computed stock
   let _bundleDraft = null; // working copy while the bundle editor modal is open
@@ -24,25 +25,22 @@
     await Promise.all([mtLoadStores(), mtLoadStatus(), mtLoadBusinessStatus()]);
     await mtLoadProducts();
     mtLoadBundles();
-    mtLoadOrders();
     mtStartPolling();
-    // The product table, orders ledger and bundles list are rendered in ONE
-    // language (cuT) under data-no-i18n containers, so the auto-translator
-    // never touches them — repaint ourselves when the operator flips EN/CN.
+    // The product table and bundles list are rendered in ONE language (cuT)
+    // under data-no-i18n containers, so the auto-translator never touches
+    // them — repaint ourselves when the operator flips EN/CN.
     // Static chrome (headers, buttons) is handled by the "EN · CN" splitter.
     if (window.onLangChange) onLangChange(function () {
       mtFilterProducts();
-      mtRenderOrders();
       mtRenderBundles();
     });
   };
 
   // ── Live refresh ─────────────────────────────────────────────────────────────
-  // The daemon pushes stock every 10s and pulls orders every 60s, but the admin
-  // view used to be a one-shot snapshot — the sync log looked frozen ("dead").
-  // Poll status + incoming orders on an interval while the Meituan tab is the
-  // active, visible tab; pause when it's backgrounded or another tab is showing
-  // so we don't hammer the API in the background.
+  // The daemon pushes stock every 10s, but the admin view used to be a one-shot
+  // snapshot — the sync log looked frozen ("dead"). Poll status on an interval
+  // while the Meituan tab is the active, visible tab; pause when it's
+  // backgrounded or another tab is showing so we don't hammer the API.
   let _pollTimer = null;
   let _pollBusy  = false;
   function mtTabVisible() {
@@ -54,7 +52,7 @@
     _pollTimer = setInterval(async () => {
       if (_pollBusy || !mtTabVisible()) return;
       _pollBusy = true;
-      try { await Promise.all([mtLoadStatus(), mtLoadOrders(true), mtLoadBusinessStatus()]); }
+      try { await Promise.all([mtLoadStatus(), mtLoadBusinessStatus()]); }
       catch (_) { /* transient — next tick retries */ }
       finally { _pollBusy = false; }
     }, 12000);
@@ -70,94 +68,13 @@
     if (box && box.innerHTML) box.innerHTML = '';
   };
 
-  // ── Incoming orders (read-only) ──────────────────────────────────────────────
-  // A plain ledger of orders mirrored in from Meituan: one compact line per
-  // order (when · store · no · items · total), grouped by day, click to expand
-  // the full item list + recipient. No status, no actions — the store doesn't
-  // manage or print these; it just shows that they came in.
-  let _orders = [];
-  window.mtLoadOrders = async function (silent) {
-    const list = document.getElementById('mt-orders-list');
-    if (!list) return;
-    // Background polls pass silent=true so the list doesn't flash "Loading…"
-    // on every tick; only show the placeholder on the first/manual load.
-    if (!silent || !list.children.length) {
-      list.innerHTML = `<div class="muted" style="font-size:13px;padding:12px 14px">${cuT('Loading…', '加载中…')}</div>`;
-    }
-    try {
-      const res = await api('/api/retail-admin/meituan/orders');
-      _orders = res.data || [];
-      mtRenderOrders();
-    } catch (e) {
-      list.innerHTML = `<div class="muted" style="font-size:13px;padding:12px 14px">Error: ${esc(e.message)}</div>`;
-    }
-  };
+  // Orders ledger removed — Meituan orders show on the main Orders page like
+  // every other channel; keeping a second read-only copy here was duplicate
+  // noise. The "Last order" KPI (from /status) stays as the health signal.
 
-  // Local-calendar day header for the orders ledger (SQLite hands naive UTC).
-  function mtDayLabel(iso) {
-    if (!iso) return '';
-    const hasZone = /[zZ]|[+-]\d\d:?\d\d$/.test(iso);
-    const d = new Date(hasZone ? iso : String(iso).replace(' ', 'T') + 'Z');
-    if (isNaN(d)) return '';
-    const day = new Date(d); day.setHours(0, 0, 0, 0);
-    const today = new Date(); today.setHours(0, 0, 0, 0);
-    const diff = Math.round((today - day) / 86400000);
-    if (diff === 0) return cuT('Today', '今天');
-    if (diff === 1) return cuT('Yesterday', '昨天');
-    const cn = document.documentElement.dataset.uiLang === 'cn';
-    return d.toLocaleDateString(cn ? 'zh-CN' : 'en-GB', { day: 'numeric', month: cn ? 'numeric' : 'short' });
-  }
-
-  function mtRenderOrders() {
-    const list = document.getElementById('mt-orders-list');
-    const tabn = document.getElementById('mt-tabn-orders');
-    if (tabn) tabn.textContent = _orders.length || '';
-    if (!list) return;
-    if (!_orders.length) {
-      list.innerHTML = `<div class="muted" style="font-size:13px;padding:12px 14px">${cuT('No Meituan orders yet.', '暂无美团订单。')}</div>`;
-      return;
-    }
-    const cn = document.documentElement.dataset.uiLang === 'cn';
-    let html = '', lastDay = null;
-    _orders.forEach((o, i) => {
-      const day = mtDayLabel(o.placed_at);
-      if (day && day !== lastDay) { html += `<div class="mt-dayhd">${esc(day)}</div>`; lastDay = day; }
-      const store = mtStoreName(o.store_code, cn)
-        || o.store_name_cn || o.store_name_en || o.store_code || '';
-      const items = (o.items || []).map(it =>
-        `${esc([it.name_cn, it.name_en].filter(Boolean).join(' '))}${it.qty > 1 ? ` ×${it.qty}` : ''}`
-      ).join(', ');
-      const amount = o.total != null ? '¥' + Number(o.total).toFixed(2) : '—';
-      const ago = (fmtAgo(o.placed_at) || '').replace(' ago', '');
-      const no = String(o.order_no || '');
-      // Name/address only exist when Meituan exposed them (often masked).
-      const who = [o.recipient_name, o.recipient_phone].filter(Boolean).map(esc).join(' · ');
-      const addr = o.address_full ? esc(o.address_full) : '';
-      const meta = [who, addr].filter(Boolean).join(' — ');
-      html += `<div class="mt-orow" onclick="mtOrderToggle(${i})" title="${esc(no)}">
-        <span class="mt-oago">${esc(ago)}</span>
-        <span class="mt-ostore">${esc(store)}</span>
-        <span class="mt-ono">…${esc(no.slice(-6))}</span>
-        <span class="mt-oitems">${items || '<span class="muted">—</span>'}</span>
-        <span class="mt-oamt">${amount}</span>
-      </div>
-      <div class="mt-odetail" id="mt-od-${i}" hidden>
-        <div class="mt-ono" style="margin-bottom:4px">${esc(no)}</div>
-        <div>${items || '—'}</div>
-        ${meta ? `<div class="muted" style="margin-top:4px">${meta}</div>` : ''}
-      </div>`;
-    });
-    list.innerHTML = html;
-  }
-
-  window.mtOrderToggle = function (i) {
-    const d = document.getElementById('mt-od-' + i);
-    if (d) d.hidden = !d.hidden;
-  };
-
-  // ── Sub-views: Products / Orders / Bundles ──────────────────────────────────
+  // ── Sub-views: Products / Bundles ────────────────────────────────────────────
   window.mtView = function (v) {
-    ['products', 'orders', 'bundles'].forEach(k => {
+    ['products', 'bundles'].forEach(k => {
       const view = document.getElementById('mt-view-' + k);
       const tab  = document.getElementById('mt-tab-' + k);
       if (view) view.hidden = k !== v;
@@ -214,12 +131,22 @@
       // summed) is deliberately NOT shown as the headline — it double-counts and
       // conflates "sync on" with "actually live".
 
-      // Waiting to push — alert when anything pending or failed
-      mtSetKpi('mt-kpi-queue', s.queuePending != null ? s.queuePending : '—');
-      mtSetKpi('mt-kpi-queue-sub', s.queueFailed
-        ? cuT(`· ${s.queueFailed} failed`, `· ${s.queueFailed} 失败`)
-        : (s.queuePending > 0 ? '' : cuT('· all sent', '· 已全部推送')));
-      mtAlertTile('mt-kpi-queue-tile', s.queuePending > 0 || s.queueFailed > 0);
+      // Stock updates — plain state words, not queue mechanics: "All sent ✓" is
+      // the healthy resting state; "N sending…" is a queue mid-drain (normal,
+      // clears in seconds); "N failed" is the only state that needs a human.
+      const pending = Number(s.queuePending || 0), qfailed = Number(s.queueFailed || 0);
+      if (qfailed > 0) {
+        mtSetKpi('mt-kpi-queue', qfailed);
+        mtSetKpi('mt-kpi-queue-sub', cuT('failed', '推送失败')
+          + (pending > 0 ? cuT(` · ${pending} sending…`, ` · ${pending} 发送中…`) : ''));
+      } else if (pending > 0) {
+        mtSetKpi('mt-kpi-queue', pending);
+        mtSetKpi('mt-kpi-queue-sub', cuT('sending…', '发送中…'));
+      } else {
+        mtSetKpi('mt-kpi-queue', cuT('All sent', '已全部发送'));
+        mtSetKpi('mt-kpi-queue-sub', '✓');
+      }
+      mtAlertTile('mt-kpi-queue-tile', pending > 0 || qfailed > 0);
 
       // Last order — short tail of the order no; the full no lives in Orders
       const lo = (s.lastOrder && s.lastOrder[0]) || null;
@@ -369,8 +296,17 @@
         ? ` <span class="muted" style="font-weight:400;font-size:11px">· ${esc(p.variant_label)}</span>`
         : (dupNames[(p.name_cn || '') + '|' + (p.name_en || '')] > 1
             ? ` <span class="muted" style="font-weight:400;font-size:11px">· #${p.id}</span>` : '');
-      const nameCell = `<div style="font-weight:600;line-height:1.3">${esc(nm1)}${tag}</div>`
-        + (nm2 && nm2 !== nm1 ? `<div class="muted" style="font-size:11px;margin-top:1px">${esc(nm2)}</div>` : '');
+      // Identity cell: photo + names + SKU chip, so a product is recognisable at
+      // a glance and the SKU that drives the Yuexiu auto-match is visible. The
+      // image is a lazy thumbnail URL (never a blob — see the list-image footgun).
+      const thumb = p.image
+        ? `<img class="mt-thumb" loading="lazy" src="${esc(p.image)}" alt="">`
+        : `<span class="mt-thumb mt-thumb-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></span>`;
+      const skuChip = p.sku ? `<span class="mt-psku">${esc(p.sku)}</span>` : '';
+      const nameCell = `<div class="mt-pcell">${thumb}<div class="mt-pmeta">
+        <div style="font-weight:600;line-height:1.3">${esc(nm1)}${tag}</div>`
+        + (nm2 && nm2 !== nm1 ? `<div class="muted" style="font-size:11px;margin-top:1px">${esc(nm2)}</div>` : '')
+        + skuChip + `</div></div>`;
 
       // Tianhe (delivery) — matches by name, so this column stays editable.
       let colA;
@@ -556,6 +492,7 @@
           if (!data.running) break;
         }
         _listings = (data && data.listings) || {};
+        _listingSkus = (data && data.skus) || {};
         const errs = ((data && data.jobs) || []).filter(j => j.status === 'error');
         if (errs.length && !Object.values(_listings).some(l => l.length)) {
           throw new Error(errs[0].error || cuT('could not read the listings — is the sync service logged in?', '无法读取商品 —— 同步服务是否已登录?'));
@@ -573,6 +510,11 @@
   function mtMatchListing(p, storeCode) {
     const list = _listings[storeCode] || [];
     if (!list.length) return { name: '', reason: 'no-listings' };
+    // 货号 first — exact and typo-proof. When the operator filled the SKU on the
+    // Meituan listing, that beats any name similarity; names are the fallback.
+    const psku = (p.sku || '').trim();
+    const bySku = psku && (_listingSkus[storeCode] || {})[psku];
+    if (bySku) return { name: bySku, reason: 'sku' };
     const cn = (p.name_cn || '').trim();
     const en = (p.name_en || '').trim().toLowerCase();
 
