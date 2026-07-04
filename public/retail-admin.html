@@ -7175,67 +7175,74 @@
   <!-- ── Meituan Sync ── -->
   <section id="tab-meituan">
     <h2>美团同步 · Meituan Sync</h2>
-    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      See which products are live on each Meituan store and whether their stock is current. Stock auto-pushes every 10 s.
-      <br><b>Tianhe</b> (delivery) matches by name — set the name below. <b>Yuexiu</b> (instant) matches automatically by SKU (货号) and is read-only.
+    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s3);">
+      Stock pushes to both Meituan stores automatically, every 10 seconds.
     </p>
-    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      查看每个商品在各美团门店是否上架、库存是否最新。库存每 10 秒自动推送。
-      <br><b>天河</b>(外卖)按名称匹配,在下方填写名称;<b>越秀</b>(闪购)按货号自动匹配,只读。
+    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s3);">
+      库存每 10 秒自动推送到两家美团门店。
     </p>
+    <details class="mt-how">
+      <summary>How matching works · 匹配原理</summary>
+      <div data-lang-block="en">
+        <b>Tianhe</b> (delivery) matches by listing name — use Match names when the banner asks.
+        <b>Yuexiu</b> (instant) matches automatically by SKU (货号) and is read-only.
+      </div>
+      <div data-lang-block="cn">
+        <b>天河</b>(外卖)按商品名称匹配 —— 出现提示时点「匹配名称」。
+        <b>越秀</b>(闪购)按货号自动匹配,只读。
+      </div>
+    </details>
 
-    <!-- Sync health — same fc-* KPI strip as the Products catalogue, fed by
-         mtLoadStatus(). Queue / failed tiles flip to .alert when work backs up. -->
-    <div class="fc-kpis" id="mt-kpis">
-      <div class="fc-kpi accent" id="mt-kpi-daemon-tile">
-        <div class="lbl">Daemon · 同步服务</div>
-        <div class="val" id="mt-kpi-daemon-val">—</div>
-        <div class="sub" id="mt-kpi-daemon-sub">auto every 10s · 每 10 秒</div>
+    <!-- Status strip — one compact row fed by mtLoadStatus(); a cell flips to
+         .alert (brass) when the daemon is down or pushes back up. -->
+    <div class="mt-strip" id="mt-kpis">
+      <div class="mt-cell" id="mt-kpi-daemon-tile">
+        <span class="k">Sync · 同步</span>
+        <span class="v"><span class="mt-dot" id="mt-dot"></span><span id="mt-kpi-daemon-val">—</span>
+          <small id="mt-kpi-daemon-sub">every 10 s · 每 10 秒</small></span>
       </div>
-      <div class="fc-kpi" id="mt-kpi-mapped-tile">
-        <div class="lbl">Mapped · 已映射</div>
-        <div class="val" id="mt-kpi-mapped">—</div>
-        <div class="sub">products mapped · 已映射商品</div>
+      <div class="mt-cell" id="mt-kpi-mapped-tile">
+        <span class="k">Mapped · 已匹配</span>
+        <span class="v"><span id="mt-kpi-mapped">—</span> <small id="mt-kpi-mapped-sub">products · 商品</small></span>
       </div>
-      <div class="fc-kpi" id="mt-kpi-queue-tile">
-        <div class="lbl">Queue · 待推送</div>
-        <div class="val" id="mt-kpi-queue">—</div>
-        <div class="sub" id="mt-kpi-queue-sub">pending push · 待推送</div>
+      <div class="mt-cell" id="mt-kpi-queue-tile">
+        <span class="k">Waiting to push · 待推送</span>
+        <span class="v"><span id="mt-kpi-queue">—</span> <small id="mt-kpi-queue-sub"></small></span>
       </div>
-      <div class="fc-kpi" id="mt-kpi-order-tile">
-        <div class="lbl">Last order · 最近订单</div>
-        <div class="val" id="mt-kpi-order">—</div>
-        <div class="sub" id="mt-kpi-order-sub">no orders yet · 暂无订单</div>
+      <div class="mt-cell" id="mt-kpi-order-tile">
+        <span class="k">Last order · 最近订单</span>
+        <span class="v"><span id="mt-kpi-order">—</span> <small id="mt-kpi-order-sub">no orders yet · 暂无订单</small></span>
+      </div>
+      <span class="mt-strip-grow"></span>
+      <div class="mt-strip-act">
+        <span class="mt-upd" id="mt-upd" data-no-i18n></span>
+        <button class="btn btn-sm" id="mt-pushall-btn" onclick="mtPushAll()"
+          title="Queue a fresh stock push for every mapped product · 立即为所有已匹配商品排队推送库存">Sync now · 立即同步</button>
       </div>
     </div>
 
-    <!-- Recent sync log removed — the full cross-channel timeline now lives in the
-         Activity tab (Inventory activity). -->
-
-    <!-- Store open/closed (Meituan 营业/休息). Per-store switch fed by
-         mtLoadBusinessStatus(); a flip queues target_open for the sync daemon. -->
-    <div id="mt-business-status" style="margin-bottom:18px"></div>
-
-    <!-- Incoming Meituan orders — read-only record. These don't print and aren't
-         managed here; the store just shows what came in. -->
-    <div id="mt-orders-card" style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--bg-elev-1)">
-        <b style="font-size:14px">Incoming Meituan orders · 美团订单
-          <span id="mt-orders-count" class="muted" style="font-weight:400"></span></b>
-        <button class="btn btn-sm" onclick="mtLoadOrders()" title="Refresh">↻ Refresh</button>
-      </div>
-      <p class="muted" style="font-size:12px;margin:0;padding:8px 14px 0">
-        Record only — these orders are managed on Meituan and the store does not print them.
-      </p>
-      <div id="mt-orders-list" style="padding:6px 14px 12px"></div>
+    <!-- Sub-tabs: one job per view. Counts are filled in by JS. -->
+    <div class="mt-tabs" role="tablist">
+      <button id="mt-tab-products" class="mt-tab active" role="tab" onclick="mtView('products')">
+        Products · 商品 <span class="n" id="mt-tabn-products" data-no-i18n></span></button>
+      <button id="mt-tab-orders" class="mt-tab" role="tab" onclick="mtView('orders')">
+        Orders · 订单 <span class="n" id="mt-tabn-orders" data-no-i18n></span></button>
+      <button id="mt-tab-bundles" class="mt-tab" role="tab" onclick="mtView('bundles')">
+        Bundles · 套餐 <span class="n" id="mt-tabn-bundles" data-no-i18n></span></button>
     </div>
 
-    <!-- Review panel — ambiguous / unmatched products after a Meituan fetch -->
-    <div id="mt-review-panel" style="display:none;margin:14px 0;border:1px solid var(--line);border-radius:8px;overflow:hidden"></div>
+    <!-- ══ Products view — the tab's real work: the mapping table ══ -->
+    <div id="mt-view-products" class="mt-view">
 
-    <!-- Toolbar — search + status filter on the left, one primary action plus an
-         overflow menu on the right. Occasional name-setup tools live in the
-         collapsible drawer below (Tianhe only — Yuexiu auto-maps by 货号). -->
+    <!-- Shown ONLY while active products are live on neither store; the single
+         home of the guided Match-names flow (fetch → match → review picks). -->
+    <div id="mt-attn" class="mt-attn" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex:none"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+      <div class="atxt" id="mt-attn-txt" data-no-i18n></div>
+      <button class="btn btn-sm btn-primary" onclick="mtOpenMatch()">Match names · 匹配名称</button>
+    </div>
+
+    <!-- Toolbar — search + status filter only; setup actions live in the banner -->
     <div class="pa-toolbar">
       <input id="mt-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="mtFilterProducts()">
       <div class="mt-seg" role="tablist" aria-label="Filter products">
@@ -7243,44 +7250,7 @@
         <button id="mt-seg-att" role="tab" onclick="mtSetFilter('att')">Needs attention · 待处理</button>
       </div>
       <div id="mt-count" class="pa-count" data-no-i18n></div>
-      <span style="flex:1 1 auto"></span>
-      <button class="btn btn-sm btn-primary" id="mt-pushall-btn" onclick="mtPushAll()">Push all stock · 推送全部库存</button>
-      <div class="mt-more">
-        <button class="btn btn-sm" id="mt-more-btn" aria-haspopup="true" aria-expanded="false" onclick="mtToggleMore(event)">More · 更多</button>
-        <div class="mt-more-menu" id="mt-more-menu" hidden>
-          <button onclick="mtCloseMore();mtLoadStatus()">Refresh status · 刷新状态</button>
-          <button id="mt-force-push-btn" class="danger" onclick="mtCloseMore();mtPushAll(true)" title="Push stock even while the store is closed (outside opening hours). Use sparingly. · 即使门店打烊也推送库存,谨慎使用。">Push while closed · 打烊时推送</button>
-          <button id="mt-clear-btn" class="danger" onclick="mtCloseMore();mtClearAll()" title="Delete every saved Tianhe delivery name. Yuexiu (auto by 货号) is left untouched. · 删除所有天河外卖名称,越秀(按货号自动)不受影响。">Clear Tianhe names · 清除天河名称</button>
-        </div>
-      </div>
     </div>
-
-    <!-- Tianhe name tools — occasional setup; delivery matches by listing name -->
-    <details id="mt-name-tools" style="margin:0 0 14px;border:1px solid var(--line);border-radius:8px;padding:8px 14px">
-      <summary style="cursor:pointer;font-size:13px;color:var(--fg-muted)">Tianhe name tools · 天河名称工具 <span class="muted" style="font-weight:400">— delivery only, matched by name · 仅外卖,按名称匹配</span></summary>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        <button id="mt-fetch-btn" class="btn btn-sm" onclick="mtFetchListings()" title="Read the live product titles from your Meituan delivery backend (via the sync daemon) and fill empty names. · 通过同步服务读取美团外卖后台的真实商品名并填充空缺。">Fetch from Meituan · 从美团获取</button>
-        <button id="mt-autofill-btn" class="btn btn-sm" onclick="mtAutofill()" title="Fill every empty Tianhe delivery name with the product's Chinese name (variant size appended). Existing entries are kept. · 用商品中文名填充天河外卖空缺名称(附规格),已有的保留。">Auto-fill names · 自动填充名称</button>
-        <button id="mt-paste-btn" class="btn btn-sm" onclick="mtOpenPaste()" title="Paste the exact Meituan titles (one per line), pick a store, and fill empty fields by matching on the Chinese name. · 粘贴美团商品名(每行一个),选门店,按中文名匹配填充。">Paste Meituan names · 粘贴美团名称</button>
-      </div>
-    </details>
-
-    <!-- Meituan-only bundles (套餐/combos with no single roots product) -->
-    <details id="mt-bundles" style="margin:14px 0;border:1px solid var(--line);border-radius:8px;padding:0 14px 12px">
-      <summary style="cursor:pointer;font-size:14px;font-weight:600;padding:12px 0">
-        Meituan-only bundles · 美团套餐 <span id="mt-bundles-count" class="muted" style="font-weight:400"></span>
-      </summary>
-      <p class="muted" style="font-size:12px;margin:0 0 10px">
-        For combos sold on Meituan but not in your store. Link each to its component products;
-        stock auto-syncs as the minimum the components can make, and drops to 0 when any ingredient runs out.
-      </p>
-      <div style="margin-bottom:10px;display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-primary" onclick="mtEditBundle()">+ Add bundle</button>
-        <button class="btn btn-sm" onclick="mtSuggestBundles()" title="Scan the Meituan titles you pasted/fetched for combo-looking entries and create bundles from them.">✨ Suggest from pasted names</button>
-      </div>
-      <div id="mt-bundle-suggest"></div>
-      <div id="mt-bundles-list"></div>
-    </details>
 
     <!-- Product mapping table -->
     <div id="mt-products-wrap" style="overflow-x:auto">
@@ -7296,6 +7266,34 @@
           <tr><td colspan="3" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
         </tbody>
       </table>
+    </div>
+    </div><!-- /mt-view-products -->
+
+    <!-- ══ Orders view — read-only record, one line per order ══ -->
+    <div id="mt-view-orders" class="mt-view" hidden>
+      <div class="mt-card">
+        <div class="mt-note">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+          <span>Record only — these orders are managed and printed on Meituan, not here. · 仅记录 —— 订单在美团端处理和打印。</span>
+        </div>
+        <div id="mt-orders-list" data-no-i18n></div>
+      </div>
+    </div>
+
+    <!-- ══ Bundles view — Meituan-only combos (套餐) ══ -->
+    <div id="mt-view-bundles" class="mt-view" hidden>
+      <div class="pa-toolbar">
+        <span class="muted" style="font-size:12.5px;max-width:56ch">
+          Combos sold on Meituan that use up your products. Stock syncs as the most the components can still make. · 美团套餐:库存按组成商品可做的最大份数自动同步。
+        </span>
+        <span style="flex:1 1 auto"></span>
+        <button class="btn btn-sm" onclick="mtSuggestBundles()" title="Scan the Meituan titles read during Match names for combo-looking entries. · 从匹配名称时读取的美团标题中找出套餐。">Suggest bundles · 套餐建议</button>
+        <button class="btn btn-sm btn-primary" onclick="mtEditBundle()">+ Add bundle · 新增套餐</button>
+      </div>
+      <div id="mt-bundle-suggest"></div>
+      <div class="mt-card" id="mt-bundles-card">
+        <div id="mt-bundles-list" data-no-i18n></div>
+      </div>
     </div>
   </section>
 

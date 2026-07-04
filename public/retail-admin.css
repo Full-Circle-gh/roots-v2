@@ -3982,13 +3982,90 @@
   .mt-seg button { border: 0; background: transparent; color: var(--text-2); font-size: 12px; padding: 5px 12px; cursor: pointer; }
   .mt-seg button + button { border-left: 1px solid var(--line); }
   .mt-seg button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-  .mt-more { position: relative; }
-  .mt-more-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 210px; background: var(--bg-pane); border: 1px solid var(--line-strong); border-radius: 8px; box-shadow: 0 12px 30px rgba(0,0,0,.25); padding: 5px; }
-  .mt-more-menu button { display: block; width: 100%; text-align: left; border: 0; background: transparent; color: var(--text-1); font-size: 13px; padding: 8px 10px; border-radius: 6px; cursor: pointer; }
-  .mt-more-menu button:hover { background: var(--bg-elev-1); }
-  .mt-more-menu button.danger { color: var(--danger); }
   .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
   .mt-sub { font-size: 11px; line-height: 1.35; margin-top: 3px; }
+
+  /* ── Meituan tab redesign (2026-07): status strip + sub-views ─────────────── */
+  .mt-how { margin: 0 0 var(--s4); font-size: 12.5px; color: var(--text-3); }
+  .mt-how summary { cursor: pointer; }
+  .mt-how > div { margin-top: 8px; padding: 10px 14px; background: var(--bg-elev-1); border: 1px solid var(--line-soft); border-radius: 8px; max-width: 70ch; color: var(--text-2); }
+
+  /* status strip — one compact row instead of the four fc-kpi tiles */
+  .mt-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 0; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: 12px 6px; margin: 0 0 18px; }
+  .mt-cell { display: flex; flex-direction: column; gap: 2px; padding: 2px 18px; border-right: 1px solid var(--line-soft); min-width: 0; }
+  #mt-kpi-order-tile { border-right: none; }
+  .mt-cell .k { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
+  .mt-cell .v { font-size: 14px; font-weight: 600; color: var(--text-1); display: flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mt-cell .v small { font-weight: 400; color: var(--text-3); font-size: 11.5px; }
+  .mt-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(107,142,111,.18); flex: none; }
+  .mt-dot.off { background: var(--danger); box-shadow: 0 0 0 3px rgba(232,85,106,.18); }
+  .mt-cell.alert .k, .mt-cell.alert .v { color: var(--warn); }
+  .mt-strip-grow { flex: 1 1 auto; }
+  .mt-strip-act { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
+  .mt-upd { font-size: 11px; color: var(--text-4); white-space: nowrap; }
+
+  /* sub-tabs: Products / Orders / Bundles */
+  .mt-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 0 0 16px; }
+  .mt-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 14px 9px; font: 600 13.5px var(--f-sans); color: var(--text-3); cursor: pointer; display: flex; align-items: center; gap: 7px; }
+  .mt-tab:hover { color: var(--text-1); }
+  .mt-tab.active { color: var(--text-1); border-bottom-color: var(--brass); }
+  .mt-tab .n { font: 600 11px var(--f-mono); color: var(--text-3); background: var(--bg-elev-2); border-radius: 99px; padding: 1px 7px; }
+  .mt-tab .n:empty { display: none; }
+  .mt-tab.active .n { background: rgba(176,141,74,.16); color: var(--brass); }
+
+  /* attention banner — only home of the Match-names flow */
+  .mt-attn { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; background: rgba(176,141,74,.12); border: 1px solid rgba(176,141,74,.35); border-radius: 10px; padding: 11px 16px; margin: 0 0 12px; color: var(--brass); }
+  .mt-attn .atxt { flex: 1; min-width: 200px; color: var(--text-2); font-size: 13px; }
+  .mt-attn .atxt b { color: var(--text-1); }
+
+  /* orders / bundles cards */
+  .mt-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .mt-note { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12px; padding: 10px 14px; background: var(--bg-elev-1); border-bottom: 1px solid var(--line-soft); }
+  .mt-dayhd { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); padding: 11px 14px 5px; }
+  .mt-orow { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
+  .mt-orow:hover { background: var(--bg-elev-1); }
+  .mt-oago { color: var(--text-4); font-size: 11.5px; flex: none; width: 58px; }
+  .mt-ostore { font-size: 10.5px; font-weight: 600; color: var(--text-3); background: var(--bg-elev-2); border-radius: 99px; padding: 2px 8px; flex: none; min-width: 44px; text-align: center; }
+  .mt-ono { font-family: var(--f-mono); font-size: 11.5px; color: var(--text-3); flex: none; }
+  .mt-oitems { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 12.5px; }
+  .mt-oamt { font-family: var(--f-mono); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; flex: none; min-width: 64px; text-align: right; color: var(--text-1); }
+  .mt-odetail { padding: 4px 14px 12px 84px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; color: var(--text-2); }
+
+  /* mapping-table sync toggle: hidden until the row is hovered so rows read as
+     name + status; stays visible when OFF (a paused product is never hidden)
+     or when reached by keyboard */
+  #mt-products-table .toggle-label { opacity: 0; transition: opacity .12s; }
+  #mt-products-table tr:hover .toggle-label,
+  #mt-products-table .toggle-label:focus-within,
+  #mt-products-table .toggle-label:has(input:not(:checked)) { opacity: 1; }
+
+  /* Match-names dialog */
+  .mt-ovl { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .mt-dlg { background: var(--bg-pane); color: var(--text-1); width: min(540px, 100%); max-height: 86vh; overflow: auto; border-radius: 12px; border: 1px solid var(--line-strong); box-shadow: 0 18px 50px rgba(0,0,0,.4); }
+  .mt-dlg-hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .mt-dlg-hd b { font-size: 15px; }
+  .mt-dlg-bd { padding: 16px; }
+  .mt-dlg-bd p { margin: 0 0 14px; color: var(--text-2); font-size: 13px; max-width: 52ch; }
+  .mt-okline { display: flex; align-items: center; gap: 9px; background: rgba(107,142,111,.14); color: var(--accent); border-radius: 8px; padding: 10px 13px; font-weight: 600; margin-bottom: 6px; font-size: 13px; }
+  .mt-pickhd { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 12px 0 8px; }
+  .mt-pick { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+  .mt-pick .pn { font-weight: 600; margin-bottom: 6px; font-size: 13px; }
+  .mt-pick .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .mt-chip { border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); border-radius: 99px; padding: 4px 12px; font: 12.5px var(--f-sans); cursor: pointer; }
+  .mt-chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(107,142,111,.12); }
+  .mt-dlg-ft { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
+  .mt-tinylink { background: none; border: none; padding: 0; font: 12px var(--f-sans); color: var(--text-4); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+  .mt-tinylink:hover { color: var(--text-2); }
+
+  @media (max-width: 720px) {
+    .mt-cell { padding: 2px 12px; border-right: none; }
+    .mt-strip-act { width: 100%; justify-content: flex-end; padding-top: 6px; }
+    .mt-odetail { padding-left: 14px; }
+    .mt-oago { width: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #mt-products-table .toggle-label { transition: none; }
+  }
   /* Brass = needs-action / in-flight; Tea = money-in / done; neutral = closed. */
   .pill.st-pending_payment { background: rgba(176, 141, 74, .12); color: var(--st-pending_payment); border-color: rgba(176, 141, 74, .30); }
   .pill.st-pending_payment .dot { background: var(--st-pending_payment); }

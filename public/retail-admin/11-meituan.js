@@ -26,11 +26,15 @@
     mtLoadBundles();
     mtLoadOrders();
     mtStartPolling();
-    // The product table is rendered in ONE language (cuT) under a data-no-i18n
-    // tbody, so the auto-translator never touches it — repaint it ourselves when
-    // the operator flips EN/CN. Static chrome (headers, buttons) is handled by
-    // the translator's "EN · CN" splitter, so it doesn't need re-rendering.
-    if (window.onLangChange) onLangChange(function () { mtFilterProducts(); });
+    // The product table, orders ledger and bundles list are rendered in ONE
+    // language (cuT) under data-no-i18n containers, so the auto-translator
+    // never touches them — repaint ourselves when the operator flips EN/CN.
+    // Static chrome (headers, buttons) is handled by the "EN · CN" splitter.
+    if (window.onLangChange) onLangChange(function () {
+      mtFilterProducts();
+      mtRenderOrders();
+      mtRenderBundles();
+    });
   };
 
   // ── Live refresh ─────────────────────────────────────────────────────────────
@@ -67,57 +71,99 @@
   };
 
   // ── Incoming orders (read-only) ──────────────────────────────────────────────
-  // A plain ledger of orders mirrored in from Meituan: when, amount, products,
-  // and (when Meituan exposes it) recipient. No status, no actions — the store
-  // doesn't manage or print these; it just shows that they came in.
+  // A plain ledger of orders mirrored in from Meituan: one compact line per
+  // order (when · store · no · items · total), grouped by day, click to expand
+  // the full item list + recipient. No status, no actions — the store doesn't
+  // manage or print these; it just shows that they came in.
+  let _orders = [];
   window.mtLoadOrders = async function (silent) {
     const list = document.getElementById('mt-orders-list');
-    const cnt  = document.getElementById('mt-orders-count');
     if (!list) return;
     // Background polls pass silent=true so the list doesn't flash "Loading…"
     // on every tick; only show the placeholder on the first/manual load.
     if (!silent || !list.children.length) {
-      list.innerHTML = '<div class="muted" style="font-size:13px;padding:10px 0">Loading…</div>';
+      list.innerHTML = `<div class="muted" style="font-size:13px;padding:12px 14px">${cuT('Loading…', '加载中…')}</div>`;
     }
     try {
       const res = await api('/api/retail-admin/meituan/orders');
-      const orders = res.data || [];
-      if (cnt) cnt.textContent = orders.length ? `(${orders.length})` : '';
-      if (!orders.length) {
-        list.innerHTML = '<div class="muted" style="font-size:13px;padding:10px 0">No Meituan orders yet · 暂无美团订单</div>';
-        return;
-      }
-      list.innerHTML = orders.map(mtOrderRow).join('');
+      _orders = res.data || [];
+      mtRenderOrders();
     } catch (e) {
-      list.innerHTML = `<div class="muted" style="font-size:13px;padding:10px 0">Error: ${esc(e.message)}</div>`;
+      list.innerHTML = `<div class="muted" style="font-size:13px;padding:12px 14px">Error: ${esc(e.message)}</div>`;
     }
   };
 
-  function mtOrderRow(o) {
-    // Use the EN store label (Tianhe / Yuexiu) in the English view; the store
-    // record only carries a Chinese name (天河店 / 越秀店).
+  // Local-calendar day header for the orders ledger (SQLite hands naive UTC).
+  function mtDayLabel(iso) {
+    if (!iso) return '';
+    const hasZone = /[zZ]|[+-]\d\d:?\d\d$/.test(iso);
+    const d = new Date(hasZone ? iso : String(iso).replace(' ', 'T') + 'Z');
+    if (isNaN(d)) return '';
+    const day = new Date(d); day.setHours(0, 0, 0, 0);
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const diff = Math.round((today - day) / 86400000);
+    if (diff === 0) return cuT('Today', '今天');
+    if (diff === 1) return cuT('Yesterday', '昨天');
     const cn = document.documentElement.dataset.uiLang === 'cn';
-    const store = mtStoreName(o.store_code, cn)
-      || o.store_name_cn || o.store_name_en || o.store_code || '';
-    const items = (o.items || []).map(it =>
-      `${esc([it.name_cn, it.name_en].filter(Boolean).join(' '))}${it.qty > 1 ? ` ×${it.qty}` : ''}`
-    ).join(', ') || '<span class="muted">—</span>';
-    // Name/address are only shown when Meituan exposed them (often masked).
-    const who = [o.recipient_name, o.recipient_phone].filter(Boolean).map(esc).join(' · ');
-    const addr = o.address_full ? esc(o.address_full) : '';
-    const meta = [who, addr].filter(Boolean).join(' — ');
-    const amount = o.total != null ? '¥' + Number(o.total).toFixed(2) : '—';
-
-    return `<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:flex-start">
-      <div style="min-width:240px;flex:1">
-        <div style="font-weight:600;font-size:13px">${esc(o.order_no || '')}
-          <span class="muted" style="font-weight:400;font-size:11px">· ${esc(store)} · ${fmtAgo(o.placed_at) || ''}</span></div>
-        <div style="font-size:12px;margin-top:3px">${items}</div>
-        ${meta ? `<div class="muted" style="font-size:11px;margin-top:3px">${meta}</div>` : ''}
-      </div>
-      <div style="font-weight:700;font-size:14px;white-space:nowrap">${amount}</div>
-    </div>`;
+    return d.toLocaleDateString(cn ? 'zh-CN' : 'en-GB', { day: 'numeric', month: cn ? 'numeric' : 'short' });
   }
+
+  function mtRenderOrders() {
+    const list = document.getElementById('mt-orders-list');
+    const tabn = document.getElementById('mt-tabn-orders');
+    if (tabn) tabn.textContent = _orders.length || '';
+    if (!list) return;
+    if (!_orders.length) {
+      list.innerHTML = `<div class="muted" style="font-size:13px;padding:12px 14px">${cuT('No Meituan orders yet.', '暂无美团订单。')}</div>`;
+      return;
+    }
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    let html = '', lastDay = null;
+    _orders.forEach((o, i) => {
+      const day = mtDayLabel(o.placed_at);
+      if (day && day !== lastDay) { html += `<div class="mt-dayhd">${esc(day)}</div>`; lastDay = day; }
+      const store = mtStoreName(o.store_code, cn)
+        || o.store_name_cn || o.store_name_en || o.store_code || '';
+      const items = (o.items || []).map(it =>
+        `${esc([it.name_cn, it.name_en].filter(Boolean).join(' '))}${it.qty > 1 ? ` ×${it.qty}` : ''}`
+      ).join(', ');
+      const amount = o.total != null ? '¥' + Number(o.total).toFixed(2) : '—';
+      const ago = (fmtAgo(o.placed_at) || '').replace(' ago', '');
+      const no = String(o.order_no || '');
+      // Name/address only exist when Meituan exposed them (often masked).
+      const who = [o.recipient_name, o.recipient_phone].filter(Boolean).map(esc).join(' · ');
+      const addr = o.address_full ? esc(o.address_full) : '';
+      const meta = [who, addr].filter(Boolean).join(' — ');
+      html += `<div class="mt-orow" onclick="mtOrderToggle(${i})" title="${esc(no)}">
+        <span class="mt-oago">${esc(ago)}</span>
+        <span class="mt-ostore">${esc(store)}</span>
+        <span class="mt-ono">…${esc(no.slice(-6))}</span>
+        <span class="mt-oitems">${items || '<span class="muted">—</span>'}</span>
+        <span class="mt-oamt">${amount}</span>
+      </div>
+      <div class="mt-odetail" id="mt-od-${i}" hidden>
+        <div class="mt-ono" style="margin-bottom:4px">${esc(no)}</div>
+        <div>${items || '—'}</div>
+        ${meta ? `<div class="muted" style="margin-top:4px">${meta}</div>` : ''}
+      </div>`;
+    });
+    list.innerHTML = html;
+  }
+
+  window.mtOrderToggle = function (i) {
+    const d = document.getElementById('mt-od-' + i);
+    if (d) d.hidden = !d.hidden;
+  };
+
+  // ── Sub-views: Products / Orders / Bundles ──────────────────────────────────
+  window.mtView = function (v) {
+    ['products', 'orders', 'bundles'].forEach(k => {
+      const view = document.getElementById('mt-view-' + k);
+      const tab  = document.getElementById('mt-tab-' + k);
+      if (view) view.hidden = k !== v;
+      if (tab) tab.classList.toggle('active', k === v);
+    });
+  };
 
   // ── Stores ─────────────────────────────────────────────────────────────────
   async function mtLoadStores() {
@@ -137,14 +183,6 @@
   // ── Status ─────────────────────────────────────────────────────────────────
   // Populates the fc-kpis strip (matches the Products catalogue's KPI tiles).
   function mtSetKpi(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
-  // SQLite stores created_at as UTC ("YYYY-MM-DD HH:MM:SS", no zone). Slicing it
-  // raw showed UTC times (e.g. 02:05 for a 10:05-local event), making fresh logs
-  // look hours stale. Parse as UTC and render in the browser's local zone.
-  function mtLogTime(s) {
-    if (!s) return '';
-    const d = new Date(s.replace(' ', 'T') + 'Z');
-    return isNaN(d) ? String(s).slice(11, 19) : d.toTimeString().slice(0, 8);
-  }
   function mtAlertTile(id, on) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('alert', !!on);
@@ -159,125 +197,54 @@
     return (_stores.find(s => s.code === code) || {}).name || code;
   }
 
-  // Turn one raw sync-log row into a plain, human-readable line.
-  // detail is {name_en, name_cn, name, sku, qty, bundle}; we never print raw JSON.
-  //
-  // For a stock push we LEAD with what changed — "+2 → 28 in stock" — so the
-  // number (the whole point) sits near the left edge and never gets lost at the
-  // end of a long product name. The direction (▲ added / ▼ sold) is derived by
-  // diffing against the previous push for the same product within this window,
-  // so no daemon change is needed. The product name comes last.
-  // `arr`/`idx` are the full recentLogs array + this row's index (DESC order).
-  function mtFmtLogLine(l, arr, idx) {
-    let d = {};
-    try { d = l.detail ? JSON.parse(l.detail) : {}; } catch { d = {}; }
-    const cn = document.documentElement.dataset.uiLang === 'cn';
-    const glyph = l.status === 'ok' ? '✓' : l.status === 'error' ? '✗' : '·';
-    const store = mtStoreName(l.store_code, cn);
-    const time = mtLogTime(l.created_at);
-    // Language-aware name; fall back across fields for older rows with a single `name`.
-    const nm = cn ? (d.name_cn || d.name_en || d.name)
-                  : (d.name_en || d.name_cn || d.name);
-
-    if (l.event_type === 'stock_push' && d.qty != null) {
-      // Previous push for the same store + product, to show the change. DESC
-      // order means older rows have a HIGHER index.
-      let prev = null;
-      if (arr && d.sku) {
-        for (let j = idx + 1; j < arr.length; j++) {
-          const o = arr[j];
-          if (o.store_code !== l.store_code || o.event_type !== 'stock_push') continue;
-          let od = {}; try { od = o.detail ? JSON.parse(o.detail) : {}; } catch { od = {}; }
-          if (od.sku === d.sku && od.qty != null) { prev = od.qty; break; }
-        }
-      }
-      let change;
-      if (prev == null || prev === d.qty) {
-        change = cn ? `库存 ${d.qty}` : `${d.qty} in stock`;
-      } else {
-        const delta = d.qty - prev;
-        const arrow = delta > 0 ? '▲' : '▼';
-        const sign  = delta > 0 ? `+${delta}` : `${delta}`;   // −1, +2…
-        change = cn ? `${arrow}${sign} → 库存 ${d.qty}` : `${arrow}${sign} → ${d.qty} in stock`;
-      }
-      const bundleTag = d.bundle ? (cn ? '(套餐)' : '(bundle)') : '';
-      // Always lead with the product so the line never reads as a bare number.
-      // Older rows that lack a name fall back to the SKU, then a clear placeholder.
-      const named = nm || (d.sku ? '' : (cn ? '(未命名商品)' : '(unnamed product)'));
-      const prod = [named, d.sku ? `(${d.sku})` : '', bundleTag].filter(Boolean).join(' ');
-      const err = l.status === 'error' ? `  ✗ ${l.error_msg || (cn ? '失败' : 'failed')}` : '';
-      return `${time}  ${glyph} ${store}  ${prod}  ·  ${change}${err}`.replace(/\s+$/, '');
-    }
-
-    // Other events (proxy up/down, order import/poll, needs_login…): name + reason.
-    const who = nm ? '  ' + nm + (d.sku ? ' · ' + d.sku : '') : '';
-    const reason = l.error_msg ? '  — ' + l.error_msg : '';
-    return `${time}  ${glyph} ${store}${who}${reason}`.replace(/\s+$/, '');
-  }
-
   window.mtLoadStatus = async function () {
-    const log = document.getElementById('mt-log');
+    const cn = document.documentElement.dataset.uiLang === 'cn';
     try {
       const s = await api('/api/retail-admin/meituan/status');
 
-      // Daemon tile (accent) — active/offline
-      mtSetKpi('mt-kpi-daemon-val', '● Active');
-      mtSetKpi('mt-kpi-daemon-sub', 'auto every 10s · 每 10 秒');
+      // Sync cell — green dot + Active; flips to alert when unreachable
+      mtSetKpi('mt-kpi-daemon-val', cuT('Active', '运行中'));
+      mtSetKpi('mt-kpi-daemon-sub', cuT('· every 10 s', '· 每 10 秒'));
       mtAlertTile('mt-kpi-daemon-tile', false);
-      document.getElementById('mt-kpi-daemon-tile')?.classList.add('accent');
+      document.getElementById('mt-dot')?.classList.remove('off');
 
-      // Mapped
+      // Mapped (the "N live" sub is filled by mtRenderProducts)
       mtSetKpi('mt-kpi-mapped', s.mappedCount != null ? s.mappedCount : '—');
 
-      // Queue — alert when anything pending or failed
+      // Waiting to push — alert when anything pending or failed
       mtSetKpi('mt-kpi-queue', s.queuePending != null ? s.queuePending : '—');
       mtSetKpi('mt-kpi-queue-sub', s.queueFailed
-        ? `${s.queueFailed} failed · ${s.queueFailed} 失败`
-        : 'pending push · 待推送');
+        ? cuT(`· ${s.queueFailed} failed`, `· ${s.queueFailed} 失败`)
+        : (s.queuePending > 0 ? '' : cuT('· all sent', '· 已全部推送')));
       mtAlertTile('mt-kpi-queue-tile', s.queuePending > 0 || s.queueFailed > 0);
 
-      // Last order
+      // Last order — short tail of the order no; the full no lives in Orders
       const lo = (s.lastOrder && s.lastOrder[0]) || null;
       if (lo) {
         mtSetKpi('mt-kpi-order', fmtAgo(lo.imported_at) || '—');
-        mtSetKpi('mt-kpi-order-sub', `${lo.meituan_order_no} · ${lo.store_code}`);
+        mtSetKpi('mt-kpi-order-sub', `· ${mtStoreName(lo.store_code, cn)}`);
       } else {
         mtSetKpi('mt-kpi-order', '—');
-        mtSetKpi('mt-kpi-order-sub', 'no orders yet · 暂无订单');
+        mtSetKpi('mt-kpi-order-sub', cuT('no orders yet', '暂无订单'));
       }
 
-      if (log) {
-        // Main log = stock changes only (name + SKU + in/out), so the numbers the
-        // operator cares about never get buried under system noise. Fall back to
-        // the combined list for older daemons that don't return recentStock.
-        const stock = s.recentStock || s.recentLogs.filter(l => l.event_type === 'stock_push');
-        const cn = document.documentElement.dataset.uiLang === 'cn';
-        log.textContent = stock.length
-          ? stock.map((l, i, arr) => mtFmtLogLine(l, arr, i)).join('\n')
-          : (cn ? '暂无库存推送。' : 'No stock pushes yet.');
-        // System/status events go to a small grey line below, out of the way.
-        const sys = document.getElementById('mt-log-sys');
-        if (sys) {
-          const ev = s.recentSystem || [];
-          sys.textContent = ev.length
-            ? ev.map((l, i, arr) => mtFmtLogLine(l, arr, i)).join('\n')
-            : '';
-        }
-      }
+      mtSetKpi('mt-upd', cuT('Updated just now', '刚刚更新'));
     } catch (e) {
-      // Daemon unreachable — show on the accent tile, flip it to alert.
-      document.getElementById('mt-kpi-daemon-tile')?.classList.remove('accent');
+      // Daemon unreachable — red dot + brass alert on the sync cell.
       mtAlertTile('mt-kpi-daemon-tile', true);
-      mtSetKpi('mt-kpi-daemon-val', '● Offline');
-      mtSetKpi('mt-kpi-daemon-sub', "can't reach status API · 无法连接");
+      document.getElementById('mt-dot')?.classList.add('off');
+      mtSetKpi('mt-kpi-daemon-val', cuT('Offline', '离线'));
+      mtSetKpi('mt-kpi-daemon-sub', cuT("can't reach the sync service", '无法连接同步服务'));
     }
   };
 
-  // ── Push all ───────────────────────────────────────────────────────────────
+  // ── Sync now (push all) ──────────────────────────────────────────────────────
   // force=true is the "push while closed" path: it forwards a force flag so a
-  // daemon that gates pushes to opening hours runs them anyway. The label is
-  // restored to the bilingual literal so the EN/CN splitter re-localizes it.
-  const MT_PUSH_IDLE = 'Push all stock · 推送全部库存';
+  // daemon that gates pushes to opening hours runs them anyway. It has no UI
+  // anymore (ops can run mtPushAll(true) from the console in an emergency).
+  // The label is restored to the bilingual literal so the EN/CN splitter
+  // re-localizes it.
+  const MT_PUSH_IDLE = 'Sync now · 立即同步';
   window.mtPushAll = async function (force) {
     const btn = document.getElementById('mt-pushall-btn');
     if (btn) { btn.disabled = true; btn.textContent = cuT('Queuing…', '排队中…'); }
@@ -296,7 +263,7 @@
     }
   };
 
-  // ── Toolbar: segmented filter + overflow menu ────────────────────────────────
+  // ── Toolbar: segmented filter ────────────────────────────────────────────────
   window.mtSetFilter = function (f) {
     _mtFilter = f === 'att' ? 'att' : 'all';
     const all = document.getElementById('mt-seg-all');
@@ -305,28 +272,6 @@
     if (att) att.classList.toggle('active', _mtFilter === 'att');
     mtFilterProducts();
   };
-  window.mtToggleMore = function (ev) {
-    if (ev) ev.stopPropagation();
-    const menu = document.getElementById('mt-more-menu');
-    const btn  = document.getElementById('mt-more-btn');
-    if (!menu) return;
-    const show = menu.hasAttribute('hidden');
-    if (show) {
-      menu.removeAttribute('hidden');
-      if (btn) btn.setAttribute('aria-expanded', 'true');
-      setTimeout(() => document.addEventListener('click', mtMoreOutside), 0);
-    } else { mtCloseMore(); }
-  };
-  window.mtCloseMore = function () {
-    const menu = document.getElementById('mt-more-menu');
-    const btn  = document.getElementById('mt-more-btn');
-    if (menu) menu.setAttribute('hidden', '');
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-    document.removeEventListener('click', mtMoreOutside);
-  };
-  function mtMoreOutside(e) {
-    if (!e.target.closest('.mt-more')) mtCloseMore();
-  }
 
   // ── Products ───────────────────────────────────────────────────────────────
   async function mtLoadProducts() {
@@ -368,11 +313,25 @@
     const storeB = _storeB;
 
     // Toolbar count — N shown of the active total, plus how many are live.
+    const total = _products.filter(p => p.is_active).length;
+    const live  = _products.filter(p => p.is_active && Object.values(p.stores || {}).some(m => m.meituan_name)).length;
+    const att   = _products.filter(p => p.is_active && mtNeedsAttention(p)).length;
     const cnt = document.getElementById('mt-count');
-    if (cnt) {
-      const total = _products.filter(p => p.is_active).length;
-      const live  = _products.filter(p => p.is_active && Object.values(p.stores || {}).some(m => m.meituan_name)).length;
-      cnt.textContent = cuT(`${list.length} of ${total} shown · ${live} live`, `显示 ${list.length} / ${total} · ${live} 已上架`);
+    if (cnt) cnt.textContent = cuT(`${list.length} of ${total} shown · ${live} live`, `显示 ${list.length} / ${total} · ${live} 已上架`);
+    const tabn = document.getElementById('mt-tabn-products');
+    if (tabn) tabn.textContent = total || '';
+    const msub = document.getElementById('mt-kpi-mapped-sub');
+    if (msub) msub.textContent = cuT(`products · ${live} live`, `商品 · ${live} 已上架`);
+
+    // Attention banner — the only home of the Match-names flow; hidden the
+    // moment every active product is live somewhere.
+    const attn  = document.getElementById('mt-attn');
+    const attxt = document.getElementById('mt-attn-txt');
+    if (attn) attn.hidden = !att;
+    if (attxt && att) {
+      attxt.innerHTML = cuT(
+        `<b>${att} product${att > 1 ? "s aren't" : " isn't"} matched on Meituan yet.</b> Their stock stays frozen on Meituan until they're matched.`,
+        `<b>${att} 个商品尚未匹配美团。</b>匹配前它们在美团上的库存不会更新。`);
     }
 
     if (!list.length) {
@@ -442,7 +401,7 @@
           ${lastB ? `<div class="muted mt-sub">${esc(lastB)}</div>` : ''}`;
       } else {
         colB = `<div>${mtPill('mt-off', cuT('Not on Meituan', '未上架'))}</div>
-          <div class="muted mt-sub">${cuT('No 货号 match — list it on Meituan with this SKU, then click Fetch from Meituan', '无货号匹配 — 请在美团用此货号上架，然后点「从美团获取」')}</div>`;
+          <div class="muted mt-sub">${cuT('No 货号 match — list it on Meituan with this SKU and it links up on its own', '无货号匹配 — 请在美团用此货号上架,系统会自动关联')}</div>`;
       }
 
       return `<tr data-pid="${p.id}" class="mt-product-row${anyMapped ? '' : ' mt-unmapped'}">
@@ -453,12 +412,12 @@
     }).join('');
   }
 
-  // ── Auto-fill names ──────────────────────────────────────────────────────────
-  // Suggest a Meituan listing name for a product. On a Chinese marketplace the
-  // listing is the Chinese name; the variant label is appended (full-width parens)
-  // so products that share a name_cn — the size variants — stay distinguishable.
-  // The push daemon matches by name_cn substring (lib/meituan-browser.js), so a
-  // name_cn-prefixed value still matches.
+  // ── Suggested listing name ───────────────────────────────────────────────────
+  // On a Chinese marketplace the listing is the Chinese name; the variant label
+  // is appended (full-width parens) so products that share a name_cn — the size
+  // variants — stay distinguishable. The push daemon matches by name_cn
+  // substring (lib/meituan-browser.js), so a name_cn-prefixed value still
+  // matches. Used as the per-product fallback chip in the Match-names dialog.
   function mtSuggestName(p) {
     const base = (p.name_cn || p.name_en || '').trim();
     if (!base) return '';
@@ -466,114 +425,139 @@
     return v ? `${base}（${v}）` : base;
   }
 
-  // Fill every EMPTY 天河 外卖 Meituan-name field with the suggested name.
-  // Never clobbers a value the operator already entered. Saves straight through
-  // the map API, then re-renders.
-  window.mtAutofill = async function () {
-    const stores = mtOutletStores();   // 天河 外卖 only — 越秀 闪购 is auto by 货号
-    if (!stores.length) { toast('No stores detected to map.', 'error'); return; }
-
-    const targets = [];
-    for (const p of _products) {
-      const name = mtSuggestName(p);
-      if (!name) continue;
-      for (const store of stores) {
-        const existing = (p.stores?.[store.code]?.meituan_name || '').trim();
-        if (existing) continue;               // keep what the operator typed
-        targets.push({ p, store, name });
-      }
-    }
-
-    if (!targets.length) {
-      toast('Nothing to fill — every product already has a Meituan name.');
-      return;
-    }
-    if (!confirm(
-      `Auto-fill ${targets.length} empty 天河 外卖 Meituan name field(s) using each product's Chinese name `
-      + `(variant size appended where needed)?\n\n`
-      + `越秀 闪购 is auto-mapped by 货号 and left untouched. `
-      + `Existing entries are left untouched, and you can edit any field afterwards.`
-    )) return;
-
-    const btn = document.getElementById('mt-autofill-btn');
-    if (btn) { btn.disabled = true; }
-    let done = 0, failed = 0;
-    for (const t of targets) {
-      try {
-        await api(`/api/retail-admin/meituan/products/${t.p.id}/map`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ storeId: t.store.id, storeCode: t.store.code, meituanName: t.name, syncEnabled: 1 }),
-        });
-        if (!t.p.stores) t.p.stores = {};
-        t.p.stores[t.store.code] = { ...(t.p.stores[t.store.code] || {}), meituan_name: t.name, sync_enabled: 1 };
-        done++;
-      } catch (e) {
-        failed++;
-      }
-      if (btn) btn.textContent = `Filling… ${done + failed}/${targets.length}`;
-    }
-    mtFilterProducts();
-    mtLoadStatus();
-    if (btn) { btn.disabled = false; btn.textContent = 'Auto-fill names · 自动填充名称'; }
-    toast(`Filled ${done} field(s)${failed ? `, ${failed} failed` : ''}. Review and tweak as needed.`);
-  };
-
-  // ── Fetch real listing names from Meituan ────────────────────────────────────
-  // Enqueue a daemon scrape job per store, poll until done, then fill empty
-  // fields with the matched real Meituan titles. Unlike Auto-fill (which copies
-  // name_cn), this uses the actual listing names read from the Meituan backend.
   function mtUniqueStores() {
     return [_storeA, _storeB].filter((s, i, arr) => s && arr.findIndex(x => x && x.id === s.id) === i);
   }
 
-  window.mtFetchListings = async function () {
-    const stores = mtOutletStores();   // fill 天河 外卖 only; 越秀 is on 闪购
-    if (!stores.length) { toast('No stores detected.', 'error'); return; }
-    if (!confirm(
-      `Ask the sync daemon to read the live product names from your Meituan backend(s)?\n\n`
-      + `This drives the logged-in browser session and can take ~30–60s per store. `
-      + `Then I'll fill empty fields with the matched real names.`
-    )) return;
+  // ── Match names — ONE guided flow ────────────────────────────────────────────
+  // Replaces the old Fetch / Auto-fill / Paste buttons. The dialog reads the
+  // live Tianhe listing titles via the sync daemon, auto-fills every confident
+  // match, then shows only what needs a human: ambiguous titles as tappable
+  // chips, unmatched products with a suggested-name fallback. Paste stays as
+  // the escape hatch when the scrape can't reach Meituan.
+  let _match = { stage: 'intro', applied: 0, failed: 0, running: false };
 
-    const btn = document.getElementById('mt-fetch-btn');
-    if (btn) { btn.disabled = true; btn.textContent = 'Requesting…'; }
-    try {
-      const r = await api('/api/retail-admin/meituan/listings/refresh', { method: 'POST' });
-      if (!(r.queued || []).length && !(r.alreadyRunning || []).length) {
-        toast('No active stores to fetch.');
-        return mtResetFetchBtn(btn);
-      }
-
-      // Poll until no jobs are running (cap ~3 min).
-      const t0 = Date.now();
-      let data = null;
-      while (Date.now() - t0 < 180000) {
-        await new Promise(res => setTimeout(res, 3000));
-        data = await api('/api/retail-admin/meituan/listings');
-        const total = Object.values(data.listings || {}).reduce((a, b) => a + b.length, 0);
-        if (btn) btn.textContent = `Fetching… (${total})`;
-        if (!data.running) break;
-      }
-      _listings = (data && data.listings) || {};
-
-      const errs = ((data && data.jobs) || []).filter(j => j.status === 'error');
-      if (errs.length) {
-        toast(`Fetch error on ${errs.map(e => e.store_code).join(', ')}: ${errs[0].error || 'unknown'}. Is the daemon logged in?`, 'error');
-      }
-      const counts = stores.map(s => `${s.name || s.code}: ${(_listings[s.code] || []).length}`).join(' · ');
-      toast(`Fetched — ${counts}`);
-
-      await mtFillFromListings(stores);
-    } catch (e) {
-      toast('Fetch failed: ' + e.message, 'error');
-    }
-    mtResetFetchBtn(btn);
+  window.mtOpenMatch = function () {
+    if (document.getElementById('mt-match-overlay')) return;
+    _match = { stage: 'intro', applied: 0, failed: 0, running: false };
+    const ov = document.createElement('div');
+    ov.id = 'mt-match-overlay';
+    ov.className = 'mt-ovl';
+    ov.innerHTML = '<div class="mt-dlg" role="dialog" data-no-i18n><div id="mt-match-body"></div></div>';
+    ov.addEventListener('click', e => { if (e.target === ov && !_match.running) mtMatchClose(); });
+    document.body.appendChild(ov);
+    mtMatchRender();
   };
 
-  function mtResetFetchBtn(btn) {
-    if (btn) { btn.disabled = false; btn.textContent = 'Fetch from Meituan · 从美团获取'; }
+  window.mtMatchClose = function () {
+    const ov = document.getElementById('mt-match-overlay');
+    if (ov) ov.remove();
+  };
+
+  function mtMatchHead() {
+    return `<div class="mt-dlg-hd"><b>${cuT('Match names with Meituan', '与美团匹配商品名')}</b>
+      <button class="btn btn-sm" onclick="mtMatchClose()" aria-label="Close">✕</button></div>`;
   }
+
+  function mtMatchRender() {
+    const body = document.getElementById('mt-match-body');
+    if (!body) return;
+
+    if (_match.stage === 'intro') {
+      body.innerHTML = mtMatchHead() + `
+        <div class="mt-dlg-bd">
+          <p>${cuT(
+            "I'll read your product names from the Meituan Tianhe store and match them to your products here. Takes about a minute — nothing changes on Meituan.",
+            '我会从美团天河店读取商品名称,并与这里的商品自动匹配。大约一分钟,不会改动美团上的任何内容。')}</p>
+          <button class="btn btn-sm btn-primary" onclick="mtMatchStart()">${cuT('Start matching', '开始匹配')}</button>
+        </div>
+        <div class="mt-dlg-ft">
+          <span style="flex:1"></span>
+          <button class="mt-tinylink" onclick="mtMatchClose();mtOpenPaste()">${cuT("Can't connect? Paste the names yourself", '无法连接?自己粘贴名称')}</button>
+        </div>`;
+      return;
+    }
+
+    if (_match.stage === 'working') {
+      body.innerHTML = mtMatchHead() + `
+        <div class="mt-dlg-bd">
+          <p id="mt-match-prog">${cuT('Reading your Meituan listings…', '正在读取美团商品…')}</p>
+        </div>`;
+      return;
+    }
+
+    // Results — matched count up top; only the leftovers ask for anything.
+    const amb = _review.ambiguous, unm = _review.unmatched;
+    let html = mtMatchHead() + '<div class="mt-dlg-bd">';
+    html += `<div class="mt-okline">✓ ${cuT(
+      `${_match.applied} matched automatically`, `已自动匹配 ${_match.applied} 个`)}</div>`;
+    if (_match.failed) {
+      html += `<p class="muted">${cuT(`${_match.failed} failed to save — try again in a minute.`, `${_match.failed} 个保存失败,请稍后重试。`)}</p>`;
+    }
+    if (amb.length) {
+      html += `<div class="mt-pickhd">${cuT(
+        `${amb.length} need your pick — tap the right Meituan listing:`,
+        `${amb.length} 个需要你选择 —— 点正确的美团名称:`)}</div>`;
+      html += amb.map((it, i) => `<div class="mt-pick">
+        <div class="pn">${esc(it.label)}</div>
+        <div class="chips">${it.candidates.map((c, j) =>
+          `<button class="mt-chip" onclick="mtMatchPick(${i},${j})">${esc(c)}</button>`).join('')}</div>
+      </div>`).join('');
+    }
+    if (unm.length) {
+      html += `<div class="mt-pickhd">${cuT(
+        `${unm.length} not found on Meituan — stock won't sync until they're listed there:`,
+        `${unm.length} 个在美团上未找到 —— 上架前库存不会同步:`)}</div>`;
+      html += unm.map((it, i) => `<div class="mt-pick">
+        <div class="pn">${esc(it.label)}</div>
+        ${it.suggestion ? `<div class="chips"><button class="mt-chip" onclick="mtMatchFallback(${i})">${cuT('Use', '使用')} “${esc(it.suggestion)}”</button></div>` : ''}
+      </div>`).join('');
+      if (unm.filter(u => u.suggestion).length > 1) {
+        html += `<button class="btn btn-sm" style="margin-top:6px" onclick="mtMatchFallbackAll()">${cuT('Use suggested names for all', '全部使用建议名称')}</button>`;
+      }
+    }
+    if (!amb.length && !unm.length) {
+      html += `<p class="muted">${cuT('Everything is matched.', '全部匹配完成。')}</p>`;
+    }
+    html += `</div><div class="mt-dlg-ft">
+      <button class="mt-tinylink" onclick="mtMatchStartOver()">${cuT('Start over — clear all matched names', '重新开始 —— 清除所有已匹配名称')}</button>
+      <span style="flex:1"></span>
+      <button class="btn btn-sm btn-primary" onclick="mtMatchClose()">${cuT('Done', '完成')}</button>
+    </div>`;
+    body.innerHTML = html;
+  }
+
+  window.mtMatchStart = async function () {
+    if (_match.running) return;
+    const stores = mtOutletStores();   // 天河 外卖 only; 越秀 is auto by 货号
+    if (!stores.length) { toast(cuT('No stores detected.', '未检测到门店。'), 'error'); return; }
+    _match.running = true; _match.stage = 'working'; mtMatchRender();
+    try {
+      const r = await api('/api/retail-admin/meituan/listings/refresh', { method: 'POST' });
+      if ((r.queued || []).length || (r.alreadyRunning || []).length) {
+        // Poll until no scrape jobs are running (cap ~3 min).
+        const t0 = Date.now();
+        let data = null;
+        while (Date.now() - t0 < 180000) {
+          await new Promise(res => setTimeout(res, 3000));
+          data = await api('/api/retail-admin/meituan/listings');
+          const total = Object.values(data.listings || {}).reduce((a, b) => a + b.length, 0);
+          const p = document.getElementById('mt-match-prog');
+          if (p) p.textContent = cuT(`Reading your Meituan listings… ${total} found`, `正在读取美团商品… 已读取 ${total} 个`);
+          if (!data.running) break;
+        }
+        _listings = (data && data.listings) || {};
+        const errs = ((data && data.jobs) || []).filter(j => j.status === 'error');
+        if (errs.length && !Object.values(_listings).some(l => l.length)) {
+          throw new Error(errs[0].error || cuT('could not read the listings — is the sync service logged in?', '无法读取商品 —— 同步服务是否已登录?'));
+        }
+      }
+      await mtMatchApply(stores);
+    } catch (e) {
+      _match.running = false; _match.stage = 'intro'; mtMatchRender();
+      toast(cuT('Match failed: ', '匹配失败:') + e.message, 'error');
+    }
+  };
 
   // Match one product to a store's scraped listing names. Confident match → the
   // exact Meituan title; otherwise classified so it can be left for manual review.
@@ -606,11 +590,18 @@
     return { name: '', reason: 'unmatched' };
   }
 
-  async function mtFillFromListings(stores) {
+  // Match + auto-apply. Called from mtMatchStart (after the scrape) and from
+  // mtPasteApply (with pasted titles already in _listings). Confident matches
+  // save straight away — the dialog itself is the confirmation; the leftovers
+  // render as picks in the results stage.
+  async function mtMatchApply(stores) {
+    _match.running = true;
+    if (_match.stage !== 'working') { _match.stage = 'working'; mtMatchRender(); }
+
     const targets = [];
     _review = { ambiguous: [], unmatched: [] };       // reset for this run
-
     for (const p of _products) {
+      if (!p.is_active) continue;                     // paused products don't nag
       for (const store of stores) {
         const existing = (p.stores?.[store.code]?.meituan_name || '').trim();
         if (existing) continue;                       // keep operator entries
@@ -624,21 +615,6 @@
         // reason 'no-listings' = store wasn't fetched; don't flag those
       }
     }
-
-    const a = _review.ambiguous.length, u = _review.unmatched.length;
-
-    if (!targets.length) {
-      mtRenderReview();
-      toast(a + u
-        ? `No confident matches. ${a} ambiguous, ${u} unmatched — see the review panel below.`
-        : 'No empty fields to fill (everything already mapped).');
-      return;
-    }
-    if (!confirm(
-      `Fill ${targets.length} field(s) with matched Meituan names?\n\n`
-      + `${a} ambiguous (multiple Meituan titles match) and ${u} unmatched `
-      + `will be listed in the review panel below for you to resolve.`
-    )) { mtRenderReview(); return; }
 
     let done = 0, failed = 0;
     for (const t of targets) {
@@ -654,71 +630,20 @@
       } catch (e) {
         failed++;
       }
+      const p = document.getElementById('mt-match-prog');
+      if (p) p.textContent = cuT(`Matching… ${done + failed}/${targets.length}`, `匹配中… ${done + failed}/${targets.length}`);
     }
+
+    _match.applied = done; _match.failed = failed;
+    _match.running = false; _match.stage = 'done';
     mtFilterProducts();
     mtLoadStatus();
-    mtRenderReview();
-    toast(`Filled ${done} matched name(s)${failed ? `, ${failed} failed` : ''}. `
-      + (a + u ? `${a} ambiguous, ${u} unmatched — resolve below.` : 'All matched!'));
+    mtMatchRender();
   }
 
   function mtProductLabel(p) {
     const main = [p.name_cn, p.name_en].filter(Boolean).join('  ');
     return p.variant_label ? `${main} · ${p.variant_label}` : main;
-  }
-
-  // ── Review panel ─────────────────────────────────────────────────────────────
-  // On-screen list of products the Meituan fetch couldn't confidently map.
-  // Ambiguous → pick one of the matching Meituan titles. Unmatched → no Meituan
-  // listing contained the name (won't sync) — offer the Chinese-name fallback.
-  function mtRenderReview() {
-    const panel = document.getElementById('mt-review-panel');
-    if (!panel) return;
-    const { ambiguous, unmatched } = _review;
-
-    if (!ambiguous.length && !unmatched.length) {
-      panel.style.display = 'none';
-      panel.innerHTML = '';
-      return;
-    }
-
-    const ambHtml = ambiguous.map((it, i) => `
-      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--line)">
-        <div style="font-weight:600;margin-bottom:6px">${esc(it.label)}
-          <span class="muted" style="font-weight:400;font-size:11px">· ${esc(it.storeName)}</span></div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-          <span class="muted" style="font-size:12px">Pick the Meituan title:</span>
-          ${it.candidates.map((c, j) =>
-            `<button class="btn btn-sm" style="font-size:12px" onclick="mtPickListing(${i},${j})">${esc(c)}</button>`
-          ).join('')}
-        </div>
-      </div>`).join('');
-
-    const unmHtml = unmatched.map((it, i) => `
-      <div class="mt-rev-item" style="padding:10px 14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap">
-        <div>
-          <div style="font-weight:600">${esc(it.label)}
-            <span class="muted" style="font-weight:400;font-size:11px">· ${esc(it.storeName)}</span></div>
-          <div class="muted" style="font-size:11px">No Meituan listing contains this name — it won't sync until mapped.</div>
-        </div>
-        ${it.suggestion ? `<button class="btn btn-sm" style="font-size:12px" onclick="mtUseFallback(${i})" title="Fill with the product's Chinese name">Use “${esc(it.suggestion)}”</button>` : ''}
-      </div>`).join('');
-
-    panel.style.display = 'block';
-    panel.style.maxHeight = '60vh';
-    panel.style.overflow = 'auto';
-    panel.innerHTML = `
-      <div style="position:sticky;top:0;z-index:2;display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 14px;background:var(--bg-elev-1);border-bottom:1px solid var(--line)">
-        <b style="font-size:13px">Needs your attention · 需手动确认
-          <span class="muted" style="font-weight:400">(${ambiguous.length} ambiguous · ${unmatched.length} unmatched)</span></b>
-        <button class="btn btn-sm" onclick="mtDismissReview()" title="Clear this whole list">Dismiss all ✕</button>
-      </div>
-      ${ambiguous.length ? `<div style="padding:8px 14px 0;font-size:12px;color:var(--text-2)">Multiple Meituan titles matched — choose the right one:</div>${ambHtml}` : ''}
-      ${unmatched.length ? `<div style="padding:10px 14px 0;font-size:12px;color:var(--text-2)">Not found on Meituan:</div>${unmHtml}` : ''}
-      <div style="position:sticky;bottom:0;display:flex;justify-content:flex-end;padding:10px 14px;background:var(--bg-elev-1);border-top:1px solid var(--line)">
-        <button class="btn btn-sm" onclick="mtDismissReview()" title="Clear this whole list">Dismiss all ✕</button>
-      </div>
-    `;
   }
 
   async function mtApplyReviewName(pid, storeId, storeCode, name) {
@@ -740,30 +665,48 @@
     }
   }
 
-  window.mtPickListing = async function (i, j) {
+  window.mtMatchPick = async function (i, j) {
     const it = _review.ambiguous[i];
     if (!it) return;
-    const name = it.candidates[j];
-    if (await mtApplyReviewName(it.pid, it.storeId, it.storeCode, name)) {
+    if (await mtApplyReviewName(it.pid, it.storeId, it.storeCode, it.candidates[j])) {
       _review.ambiguous.splice(i, 1);
+      _match.applied++;
       mtFilterProducts();
-      mtRenderReview();
+      mtMatchRender();
     }
   };
 
-  window.mtUseFallback = async function (i) {
+  window.mtMatchFallback = async function (i) {
     const it = _review.unmatched[i];
     if (!it || !it.suggestion) return;
     if (await mtApplyReviewName(it.pid, it.storeId, it.storeCode, it.suggestion)) {
       _review.unmatched.splice(i, 1);
+      _match.applied++;
       mtFilterProducts();
-      mtRenderReview();
+      mtMatchRender();
     }
   };
 
-  window.mtDismissReview = function () {
+  window.mtMatchFallbackAll = async function () {
+    const items = _review.unmatched.filter(it => it.suggestion);
+    for (const it of items) {
+      if (await mtApplyReviewName(it.pid, it.storeId, it.storeCode, it.suggestion)) {
+        const idx = _review.unmatched.indexOf(it);
+        if (idx >= 0) _review.unmatched.splice(idx, 1);
+        _match.applied++;
+      }
+    }
+    mtFilterProducts();
+    mtMatchRender();
+  };
+
+  // "Start over" — wipe the Tianhe mappings (existing confirm inside
+  // mtClearAll), then land back on the dialog's intro stage.
+  window.mtMatchStartOver = async function () {
+    await mtClearAll();
+    _match = { stage: 'intro', applied: 0, failed: 0, running: false };
     _review = { ambiguous: [], unmatched: [] };
-    mtRenderReview();
+    mtMatchRender();
   };
 
   // ── Clear all mappings ───────────────────────────────────────────────────────
@@ -790,8 +733,6 @@
       + `This deletes the 天河 mappings (you can re-fill afterwards). Continue?`
     )) return;
 
-    const btn = document.getElementById('mt-clear-btn');
-    if (btn) btn.disabled = true;
     let done = 0, failed = 0;
     for (const t of targets) {
       try {
@@ -805,14 +746,12 @@
       } catch (e) {
         failed++;
       }
-      if (btn) btn.textContent = `Clearing… ${done + failed}/${targets.length}`;
     }
     _review = { ambiguous: [], unmatched: [] };
     mtFilterProducts();
-    mtRenderReview();
     mtLoadStatus();
-    if (btn) { btn.disabled = false; btn.textContent = 'Clear Tianhe names · 清除天河名称'; }
-    toast(`Cleared ${done} mapping(s)${failed ? `, ${failed} failed` : ''}.`);
+    toast(cuT(`Cleared ${done} mapping(s)${failed ? `, ${failed} failed` : ''}.`,
+              `已清除 ${done} 个映射${failed ? `,${failed} 个失败` : ''}。`));
   };
 
   // ── Paste listing names (manual, no scrape) ──────────────────────────────────
@@ -877,10 +816,11 @@
     // de-dupe while preserving order
     _listings[code] = Array.from(new Set(names));
 
-    if (!_listings[code].length) { toast('Paste at least one title.', 'error'); return; }
+    if (!_listings[code].length) { toast(cuT('Paste at least one title.', '请至少粘贴一个名称。'), 'error'); return; }
     mtClosePaste();
-    toast(`Loaded ${_listings[code].length} title(s) for ${store.name || code}. Matching…`);
-    await mtFillFromListings([store]);
+    // Feed the pasted titles through the same match flow the dialog uses.
+    if (!document.getElementById('mt-match-overlay')) mtOpenMatch();
+    await mtMatchApply([store]);
   };
 
   // ── Save mapping ────────────────────────────────────────────────────────────
@@ -970,19 +910,19 @@
 
   function mtRenderBundles() {
     const wrap = document.getElementById('mt-bundles-list');
-    const cnt  = document.getElementById('mt-bundles-count');
-    if (cnt) cnt.textContent = _bundles.length ? `(${_bundles.length})` : '';
+    const tabn = document.getElementById('mt-tabn-bundles');
+    if (tabn) tabn.textContent = _bundles.length || '';
     if (!wrap) return;
     if (!_bundles.length) {
-      wrap.innerHTML = '<div class="muted" style="font-size:13px;padding:6px 0">No bundles yet.</div>';
+      wrap.innerHTML = `<div class="muted" style="font-size:13px;padding:12px 14px">${cuT('No bundles yet.', '暂无套餐。')}</div>`;
       return;
     }
-    wrap.innerHTML = _bundles.map(b => {
+    wrap.innerHTML = _bundles.map((b, bi) => {
       const comps = (b.components || []).map(c =>
         `${esc([c.name_cn, c.name_en].filter(Boolean).join(' '))}${c.variant_label ? ` (${esc(c.variant_label)})` : ''}${c.qty > 1 ? ` ×${c.qty}` : ''}`
       ).join(', ');
       const storeName = (_stores.find(s => s.code === b.store_code) || {}).name || b.store_code;
-      return `<div style="border-top:1px solid var(--line);padding:10px 0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
+      return `<div style="${bi ? 'border-top:1px solid var(--line-soft);' : ''}padding:12px 14px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
         <div style="min-width:240px;flex:1">
           <div style="font-weight:600">${esc(b.meituan_name)} <span class="muted" style="font-weight:400;font-size:11px">· ${esc(storeName)}</span></div>
           <div class="muted" style="font-size:12px;margin-top:2px">${comps || '<span style="color:var(--warn)">no components — add some</span>'}</div>
@@ -1139,7 +1079,9 @@
       }
     }
     if (!_bundleSuggest.length) {
-      box.innerHTML = `<div class="muted" style="font-size:12px;padding:6px 0">No combo-looking titles found. Use 📋 Paste Meituan names first (this session), then try again.</div>`;
+      box.innerHTML = `<div class="muted" style="font-size:12px;padding:6px 0">${cuT(
+        'No combo-looking titles found. Run Match names first (this session), then try again.',
+        '未发现疑似套餐的名称。请先运行「匹配名称」(本次会话内),再试一次。')}</div>`;
       return;
     }
     box.innerHTML = `<div style="border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:8px 0">
