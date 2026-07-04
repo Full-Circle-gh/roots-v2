@@ -7,14 +7,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="format-detection" content="telephone=no">
-<title>Restock · 补货</title>
+<title>Stock · 库存</title>
 <link rel="manifest" href="/restock-manifest.webmanifest">
 <link rel="icon" type="image/png" sizes="192x192" href="/restock-icon-192.png">
 <link rel="icon" type="image/png" sizes="512x512" href="/restock-icon-512.png">
 <link rel="apple-touch-icon" href="/restock-icon-192.png">
 <link rel="apple-touch-icon" sizes="512x512" href="/restock-icon-512.png">
-<meta name="application-name" content="Restock">
-<meta name="apple-mobile-web-app-title" content="Restock">
+<meta name="application-name" content="Stock">
+<meta name="apple-mobile-web-app-title" content="Stock">
 <script>
   (function () {
     try {
@@ -858,6 +858,33 @@ body { font-family: var(--f-sans); background: var(--bg-app); color: var(--text-
 
 input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
 
+/* ── Home launcher — a tile grid where the user picks a tool. Only the
+   tools their account can use appear. ── */
+.home-wrap { padding: 16px 14px calc(var(--sa-bot) + 28px); }
+.home-hi { font-size: 14px; color: var(--muted); font-weight: 600; margin: 2px 4px 16px; }
+.home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.home-tile {
+  position: relative; display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+  text-align: left; min-height: 128px; padding: 18px 16px;
+  background: var(--card); border: 1px solid var(--border); border-radius: 18px;
+  box-shadow: var(--sh-1); color: var(--text-1); transition: transform .12s ease, border-color .15s ease;
+}
+.home-tile:active { transform: scale(.97); }
+.home-tile:hover { border-color: rgba(204,217,0,.5); }
+.home-tile .ht-ico {
+  width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
+  background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--accent);
+}
+.home-tile .ht-ico svg { width: 25px; height: 25px; }
+.home-tile .ht-name { font-size: 17px; font-weight: 800; color: var(--text-1); line-height: 1.15; letter-spacing: -.01em; }
+.home-tile .ht-name .cn { color: var(--muted); font-weight: 600; font-size: 13px; }
+.home-tile .ht-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.home-tile .ht-badge {
+  position: absolute; top: 12px; right: 12px; min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--bg);
+}
+
 </style>
 </head>
 <body>
@@ -872,6 +899,9 @@ input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
         </div>
       </div>
       <div class="icons">
+        <!-- Home launcher — back to the tool picker. Hidden while already
+             on Home. Shown for anyone who has more than one tool. -->
+        <button id="modeHomeBtn" title="Home · 主页" style="display:none"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M9.5 21v-6h5v6"/></svg></button>
         <!-- Persistent mode switchers — always visible regardless of which
              mode is active. Each shows a red dot in the corner when its
              flow has new activity, so you can see at a glance "I'm in
@@ -1014,7 +1044,7 @@ window.addEventListener('appinstalled', () => {
   // hear "installed" and then can't find the icon. A loud, persistent
   // alert tells them exactly where to look.
   setTimeout(() => {
-    alert('✓ App installed!\n应用已安装\n\nWhere to find it:\n• Swipe up on your home screen to open the App Drawer · 主屏幕上滑打开应用抽屉\n• Look for "Restock 补货"\n• Long-press the icon to drag it to your home screen · 长按图标可拖动到主屏幕');
+    alert('✓ App installed!\n应用已安装\n\nWhere to find it:\n• Swipe up on your home screen to open the App Drawer · 主屏幕上滑打开应用抽屉\n• Look for "Stock 库存"\n• Long-press the icon to drag it to your home screen · 长按图标可拖动到主屏幕');
   }, 200);
 });
 
@@ -1047,6 +1077,7 @@ window.addEventListener('appinstalled', () => {
   document.getElementById('voiceBtn').addEventListener('click', openVoice);
   document.getElementById('headerDraftsBtn').addEventListener('click', openDrafts);
   document.getElementById('moreBtn').addEventListener('click', openMore);
+  document.getElementById('modeHomeBtn')?.addEventListener('click', () => setAppMode('home'));
   document.getElementById('modeRestockBtn')?.addEventListener('click', () => setAppMode('restock'));
   document.getElementById('modeInboxBtn')?.addEventListener('click', () => setAppMode('inbox'));
   const _fabEl = document.getElementById('addFab');
@@ -1193,6 +1224,7 @@ function _modeAllowed(m) {
   if (!_user) return false;
   const perms = _user.permissions || {};
   const isAdmin = _user.role === 'admin';
+  if (m === 'home')    return true;   // the launcher is always reachable
   if (m === 'restock') return isAdmin || !!perms.restock;
   if (m === 'waste')   return isAdmin || !!perms.waste;
   // Inbox is gated only by the explicit `warehouse_inbox` permission
@@ -1209,14 +1241,22 @@ function _paintModeTabs() {
     else if (_modeAllowed('inbox'))   _appMode = 'inbox';
     else if (_modeAllowed('waste'))   _appMode = 'waste';
   }
-  // First-time-this-session: warehouse_inbox users land on the Inbox.
-  // The fulfilment queue is their daily flow.
+  // First-time-this-session landing. If the user has 2+ tools, drop them
+  // on the Home launcher so they pick what they want. If they only have a
+  // single tool, skip the picker and open it directly — no wasted tap.
   if (!window._wmInitDone) {
     window._wmInitDone = true;
     const perms = _user.permissions || {};
-    if (_user.role !== 'admin' && !!perms.warehouse_inbox) {
+    const isAdmin = _user.role === 'admin';
+    const toolCount = [isAdmin || perms.restock, isAdmin || perms.warehouse_inbox, isAdmin || perms.waste]
+      .filter(Boolean).length;
+    if (toolCount >= 2) {
+      _appMode = 'home';
+    } else if (!isAdmin && !!perms.warehouse_inbox) {
+      // Sole tool is fulfilment — their daily queue.
       _appMode = 'inbox';
     }
+    // else: leave the coerced single-tool default (restock / waste).
   }
   // Brand block reflects the active mode so users know where they are
   // without needing a tab strip. Each mode gets its own color identity:
@@ -1226,7 +1266,10 @@ function _paintModeTabs() {
   const h1   = document.getElementById('brandH1');
   const sub  = document.getElementById('brandSub');
   if (h1 && sub) {
-    if (_appMode === 'waste') {
+    if (_appMode === 'home') {
+      h1.innerHTML  = 'Stock <span class="cn-tag">库存</span>';
+      sub.textContent = 'Pick a tool · 选择工具';
+    } else if (_appMode === 'waste') {
       h1.innerHTML  = 'Waste <span class="cn-tag" style="color:#fbb1b1">损耗</span>';
       sub.textContent = 'Log spoiled / expired stock · 记录损耗';
     } else if (_appMode === 'inbox') {
@@ -1255,6 +1298,8 @@ function _paintModeTabs() {
 function _paintStatusRow() {
   const row = document.getElementById('statusRow');
   if (!row || !_user) return;
+  // The Home launcher has no cart / queue pills — keep the row clean.
+  if (_appMode === 'home') { row.style.display = 'none'; row.innerHTML = ''; return; }
   // Inbox shows ACTIVE queue depth (truly pending work). We deliberately
   // ignore _inboxOrders here — that array holds whichever tab is on
   // screen, so when the user is on the History tab it would mislabel
@@ -1294,7 +1339,7 @@ function _paintStatusRow() {
   }
 }
 function setAppMode(mode) {
-  if (mode !== 'restock' && mode !== 'waste' && mode !== 'inbox') return;
+  if (mode !== 'restock' && mode !== 'waste' && mode !== 'inbox' && mode !== 'home') return;
   if (_appMode === mode) return;
   // NB: pollers run by PERMISSION for the whole session (started once
   // in init), so switching modes here only changes the VIEW. The mode
@@ -1318,8 +1363,24 @@ function _paintHeaderModeBtns() {
   const isAdmin = _user?.role === 'admin';
   const hasRestock = isAdmin || !!perms.restock;
   const hasInbox   = isAdmin || !!perms.warehouse_inbox;
+  const onHome = _appMode === 'home';
+  // Home button: a way back to the launcher. Shown everywhere EXCEPT the
+  // launcher itself, and only for users who have more than one tool (a
+  // single-tool user has nothing to pick, so no Home button).
+  const toolCount = [hasRestock, hasInbox, isAdmin || !!perms.waste].filter(Boolean).length
+    + (_qsHomeAvailable ? 1 : 0);
+  const hBtn = document.getElementById('modeHomeBtn');
+  if (hBtn) hBtn.style.display = (!onHome && toolCount >= 2) ? 'inline-flex' : 'none';
   const rBtn = document.getElementById('modeRestockBtn');
   const iBtn = document.getElementById('modeInboxBtn');
+  // On the launcher the little mode buttons are redundant (the tiles do
+  // the switching) — hide them there to keep the header clean.
+  if (onHome) {
+    if (rBtn) rBtn.style.display = 'none';
+    if (iBtn) iBtn.style.display = 'none';
+    _paintHeaderModeDots();
+    return;
+  }
   // Show each button independently based on its own perm. A user with
   // only one of the two flows still gets its button (highlighted as
   // active) so the layout is consistent and they can later be granted
@@ -1373,9 +1434,85 @@ function _paintHeaderModeDots() {
 }
 
 // ─── Render ────────────────────────────────────────────────────────
+// ─── Home launcher ─────────────────────────────────────────────────
+// A tile grid — each tool the account can use gets a card. Restock /
+// Fulfill / Waste switch the view in-app; Quick Stock opens the stock
+// tool (a sibling page in the same app). The Quick Stock tile only shows
+// when the server confirms this user can use it (the same context the
+// /stock page reads), so there's never a dead tile.
+let _qsHomeAvailable = null;   // null = not probed yet; true/false after
+function _probeQuickStock() {
+  return fetch('/api/retail-admin/quick-stock/context', { credentials: 'same-origin' })
+    .then(r => (r.ok ? r.json() : null))
+    .then(j => { const d = j && j.data; _qsHomeAvailable = !!(d && d.enabled && (d.stores || []).length); })
+    .catch(() => { _qsHomeAvailable = false; });
+}
+const _HOME_ICO = {
+  restock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>',
+  fulfill: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+  quick:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1.5" y1="14" x2="6.5" y2="14"/><line x1="9.5" y1="8" x2="14.5" y2="8"/><line x1="17.5" y1="16" x2="22.5" y2="16"/></svg>',
+  waste:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
+};
+function _homeTools() {
+  const perms = _user?.permissions || {};
+  const admin = _user?.role === 'admin';
+  const tools = [];
+  if (admin || perms.restock) tools.push({
+    key: 'restock', name: 'Restock', cn: '补货',
+    desc: 'Ask the warehouse for stock · 向仓库要货',
+    badge: () => (_notiUnseen?.prepared || 0), go: () => setAppMode('restock'),
+  });
+  if (admin || perms.warehouse_inbox) tools.push({
+    key: 'fulfill', name: 'Fulfill', cn: '处理订单',
+    desc: 'Pack requests from stores · 处理门店订单',
+    badge: () => (typeof _inboxActiveCount === 'number' ? _inboxActiveCount : 0), go: () => setAppMode('inbox'),
+  });
+  if (_qsHomeAvailable) tools.push({
+    key: 'quick', name: 'Quick Stock', cn: '快速库存',
+    desc: 'Adjust store counts · 调整门店库存', go: () => { location.href = '/stock?from=home'; },
+  });
+  if (admin || perms.waste) tools.push({
+    key: 'waste', name: 'Waste', cn: '损耗',
+    desc: 'Log spoiled / expired · 记录损耗', go: () => setAppMode('waste'),
+  });
+  return tools;
+}
+function _renderHome() {
+  const body = document.getElementById('body');
+  if (!body) return;
+  body.classList.remove('tappable');
+  const foot = document.getElementById('foot'); if (foot) foot.innerHTML = '';
+  const statusRow = document.getElementById('statusRow'); if (statusRow) { statusRow.style.display = 'none'; statusRow.innerHTML = ''; }
+  // Probe Quick Stock once, then repaint so its tile can appear — without
+  // blocking the rest of the launcher on the network round-trip.
+  if (_qsHomeAvailable === null) _probeQuickStock().then(() => { if (_appMode === 'home') _renderHome(); });
+  const tools = _homeTools();
+  const who = _user?.displayName || _user?.username || '';
+  body.innerHTML =
+    '<div class="home-wrap">' +
+      '<div class="home-hi">' + (who ? esc(who) + ' · ' : '') + 'Pick a tool · 选择工具</div>' +
+      '<div class="home-grid">' +
+        tools.map(function (tt) {
+          const b = tt.badge ? (tt.badge() || 0) : 0;
+          return '<button class="home-tile" data-tool="' + tt.key + '">' +
+            (b > 0 ? '<span class="ht-badge">' + (b > 99 ? '99+' : b) + '</span>' : '') +
+            '<span class="ht-ico">' + (_HOME_ICO[tt.key] || '') + '</span>' +
+            '<span class="ht-name">' + tt.name + ' <span class="cn">' + tt.cn + '</span></span>' +
+            '<span class="ht-desc">' + tt.desc + '</span>' +
+          '</button>';
+        }).join('') +
+      '</div>' +
+    '</div>';
+  tools.forEach(function (tt) {
+    const el = body.querySelector('[data-tool="' + tt.key + '"]');
+    if (el) el.addEventListener('click', tt.go);
+  });
+}
+
 function render() {
   _paintModeTabs();
   _paintHeaderModeBtns();
+  if (_appMode === 'home')  return _renderHome();
   if (_appMode === 'inbox') return _renderInbox();
   if (_appMode === 'waste') return _renderWaste();
   const body = document.getElementById('body');
