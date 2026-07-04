@@ -34,6 +34,7 @@ catch {
 const db = require('../database');
 const { getQingyunBrowser, closeAllQingyun } = require('../lib/qingyun-browser');
 const { sendOpsAlert } = require('../lib/ops-alert');
+const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
 
 const STORES = (process.env.QINGYUN_STORES || 'tianhe')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -218,13 +219,32 @@ async function buildCreatePayload(order, shop, br) {
   const text  = norm(addr.address || addr.detail || [addr.city, addr.district, addr.address, addr.detail].filter(Boolean).join(''));
   if (!name || !phone || !text) throw new Error('missing recipient name/phone/address');
 
+  // Resolve the drop-off pin (Qingyun wants GCJ-02 ×1e6; the app's geocoders + the
+  // mini-app map picker are all GCJ-02, so datums match). Chain, most-reliable first:
+  //   1) the order's own coords (customer picked a pin) — best, language-agnostic;
+  //   2) the app's Tencent/AMap geocoder over the Chinese 省/市/区 + street — resolves
+  //      even an English-typed street, since the region anchors it;
+  //   3) Qingyun's own POI search (weak on English) as a last automatic try;
+  //   4) give up → the row retries then ops-alerts (never guesses a wrong spot).
   let lng = null, lat = null, cityId = shop.cityId;
   const dLng = Number(addr.lng), dLat = Number(addr.lat);
   if (Number.isFinite(dLng) && Number.isFinite(dLat) && dLng !== 0 && dLat !== 0) {
     lng = Math.round(dLng * 1e6); lat = Math.round(dLat * 1e6);
   } else {
-    const g = await br.geocode(text, shop.cityId);
-    if (!g) throw new Error('geocode failed for address');
+    let g = null;
+    try {
+      if (geocode.configured()) {
+        const c = await geocode.geocodeAddress({
+          province: norm(addr.province), city: norm(addr.city), district: norm(addr.district),
+          address: [norm(addr.address), norm(addr.detail)].filter(Boolean).join(' ') || text,
+        });
+        if (c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng))) {
+          g = { lng: Math.round(Number(c.lng) * 1e6), lat: Math.round(Number(c.lat) * 1e6), cityId: shop.cityId };
+        }
+      }
+    } catch (e) { log('push', `maps geocode failed for ${norm(order.order_no)}: ${e.message}`); }
+    if (!g) g = await br.geocode(text, shop.cityId);   // Qingyun POI search fallback
+    if (!g) throw new Error('geocode failed for address (no pin, unresolved text)');
     lng = g.lng; lat = g.lat; cityId = g.cityId || shop.cityId;
   }
 
