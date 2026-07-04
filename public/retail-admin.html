@@ -4214,6 +4214,13 @@
       </div>
 
       <div class="card" style="margin-bottom: var(--s4);" id="logpanel-qy">
+        <div id="qy-autopush-row" style="display:none;align-items:center;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line);margin-bottom:12px">
+          <div style="max-width:78%">
+            <div style="font-weight:600">Auto-send paid orders to Qingyun · 付款后自动发到青云</div>
+            <div class="muted" style="font-size:11px;margin-top:2px">When on, every paid delivery order appears in your Qingyun 待配送 list, ready to pick a courier — no re-typing. · 开启后,已付款的配送订单自动出现在青云"待配送",直接选运力发单,无需手动录入。</div>
+          </div>
+          <input type="checkbox" id="qy-autopush" onchange="_setQingyunAutoPush(this.checked)" style="width:20px;height:20px;flex-shrink:0;cursor:pointer">
+        </div>
         <div id="qy-stores" class="muted">Loading… · 加载中…</div>
       </div>
     </div>

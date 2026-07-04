@@ -4008,6 +4008,28 @@ db.exec(`
   );
 `);
 
+// Auto-push queue: a paid mini-app/web DELIVERY order to create in Qingyun as a
+// 待配送 order (no courier — staff still pick the carrier). The main app enqueues
+// on payment (markOrderPaid); the qingyun-daemon (which holds the signed browser)
+// drains it, calling order/create and stamping the roots order_no into 备注 so the
+// existing tracking match links the rider back. One row per retail order (UNIQUE) =
+// idempotent; never double-creates. status: pending → processing → done | error.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS qingyun_push_queue (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_order_id  INTEGER NOT NULL UNIQUE,
+    store_code       TEXT NOT NULL,
+    status           TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|done|error
+    qingyun_order_id TEXT,                             -- the created Qingyun order id
+    attempts         INTEGER NOT NULL DEFAULT 0,
+    last_error       TEXT,
+    created_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (retail_order_id) REFERENCES retail_orders(id) ON DELETE CASCADE
+  );
+`);
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_qingyun_push_pending ON qingyun_push_queue(store_code, status)"); } catch {}
+
 // Meituan-only bundles (套餐/combos) that have no single roots product. Each is
 // defined as a set of component products; its sellable stock is computed as the
 // minimum of what its components can make, and pushed to the bundle's Meituan

@@ -46,6 +46,7 @@ function jitter(baseMs, frac = 0.3) {
   return Math.round(baseMs - spread + Math.random() * spread * 2);
 }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+const norm = (s) => String(s == null ? '' : s).trim();
 
 function log(storeCode, msg) {
   console.log(`[qingyun-daemon:${storeCode}] ${new Date().toISOString()} ${msg}`);
@@ -197,6 +198,96 @@ const upsert = db.prepare(`
     updated_at       = CURRENT_TIMESTAMP
 `);
 
+// ── Phase 2: auto-push paid delivery orders into Qingyun (drain the queue) ─────
+// The main app enqueues qingyun_push_queue rows on payment; here we hold the signed
+// browser, so we build the create payload from the roots order and call order/create.
+// The order lands 待配送 (no courier). We stamp order_no into 备注 so the existing
+// tracking match links the rider back. Idempotent per row; retries with backoff.
+const MAX_PUSH_ATTEMPTS = Number(process.env.QINGYUN_PUSH_MAX_ATTEMPTS || 5);
+function cfg(key, fallback) {
+  try { const r = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+    return r ? JSON.parse(r.value_json) : fallback; } catch { return fallback; }
+}
+// Turn a roots order into the createOrder() field bag. Throws (→ retry) if it lacks
+// the essentials (recipient name/phone/address). Coords: the mini-app/web capture the
+// customer's GCJ-02 pin — Qingyun's datum — so we pass them ×1e6; else geocode.
+async function buildCreatePayload(order, shop, br) {
+  let addr = {}; try { addr = JSON.parse(order.address_json || '{}') || {}; } catch { addr = {}; }
+  const name  = norm(order.recipient_name || addr.name || addr.contact);
+  const phone = norm(order.recipient_phone || addr.phone || addr.mobile);
+  const text  = norm(addr.address || addr.detail || [addr.city, addr.district, addr.address, addr.detail].filter(Boolean).join(''));
+  if (!name || !phone || !text) throw new Error('missing recipient name/phone/address');
+
+  let lng = null, lat = null, cityId = shop.cityId;
+  const dLng = Number(addr.lng), dLat = Number(addr.lat);
+  if (Number.isFinite(dLng) && Number.isFinite(dLat) && dLng !== 0 && dLat !== 0) {
+    lng = Math.round(dLng * 1e6); lat = Math.round(dLat * 1e6);
+  } else {
+    const g = await br.geocode(text, shop.cityId);
+    if (!g) throw new Error('geocode failed for address');
+    lng = g.lng; lat = g.lat; cityId = g.cityId || shop.cityId;
+  }
+
+  // Delivery time: a chosen slot → its epoch; else ASAP (~1h out). 待配送 only, so
+  // this is informational until staff dispatch.
+  const slotEpoch = order.scheduled_for ? Math.floor(Date.parse(order.scheduled_for) / 1000) : 0;
+  const target = (slotEpoch && slotEpoch > Math.floor(Date.now() / 1000)) ? slotEpoch : Math.floor(Date.now() / 1000) + 3600;
+
+  const slot = norm(order.delivery_slot_label);
+  const remark = (norm(order.order_no) + (slot ? ` · ${slot}` : '')).slice(0, 200);
+  const doorInfo = norm(addr.detail && addr.detail !== text ? addr.detail : '');
+
+  return {
+    shopId: shop.shopId,
+    recipientName: name, recipientPhone: phone, recipientAddress: text, doorInfo,
+    recipientLng: lng, recipientLat: lat, cityId,
+    goods: [{ name: `Roots ${norm(order.order_no)}`, price: 0, count: 1 }],
+    goodsPicUrl: norm(cfg('delivery.qingyunGoodsPicUrl', 'https://s3plus.meituan.net/dap-orderdetail/qy/1783175410205_goods.png')),
+    remark, expectFrom: target, expectTo: target,
+  };
+}
+async function drainPushQueue(storeCode, br) {
+  if (cfg('delivery.qingyunAutoPush', false) !== true) return;
+  let rows = [];
+  try {
+    rows = db.prepare(
+      "SELECT * FROM qingyun_push_queue WHERE store_code = ? AND status IN ('pending') ORDER BY id LIMIT 3"
+    ).all(storeCode);
+  } catch { return; }
+  if (!rows.length) return;
+  const shop = await br.getShop();
+  if (!shop || !shop.shopId) { log(storeCode, 'push: shop lookup failed — will retry'); return; }
+
+  for (const row of rows) {
+    db.prepare("UPDATE qingyun_push_queue SET status='processing', attempts=attempts+1, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
+    try {
+      const order = db.prepare(
+        'SELECT id, order_no, recipient_name, recipient_phone, address_json, scheduled_for, delivery_slot_label FROM retail_orders WHERE id = ?'
+      ).get(row.retail_order_id);
+      if (!order) { db.prepare("UPDATE qingyun_push_queue SET status='error', last_error='order gone', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id); continue; }
+      const payload = await buildCreatePayload(order, shop, br);
+      const res = await br.createOrder(payload);
+      if (res.ok) {
+        db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
+        log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}`);
+        logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId });
+      } else {
+        throw new Error(`create failed (code ${res.code}, ${res.msg})`);
+      }
+    } catch (e) {
+      const attempts = row.attempts + 1;
+      const done = attempts >= MAX_PUSH_ATTEMPTS;
+      db.prepare("UPDATE qingyun_push_queue SET status=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+        .run(done ? 'error' : 'pending', String(e.message).slice(0, 300), row.id);
+      log(storeCode, `push: order ${row.retail_order_id} failed (attempt ${attempts}${done ? ', giving up' : ''}): ${e.message}`);
+      if (done) {
+        logSync(storeCode, 'push', 'error', null, e.message);
+        sendOpsAlert(`🔴 青云聚信 ${storeCode} 自动发单失败（订单#${row.retail_order_id}）：${e.message}\nQingyun ${storeCode} auto-create failed for order #${row.retail_order_id} — push it by hand`);
+      }
+    }
+  }
+}
+
 async function pollStore(storeCode) {
   if (inVerifyCooldown(storeCode)) return;
   let br;
@@ -216,6 +307,11 @@ async function pollStore(storeCode) {
     const wasDown = downFlagged[storeCode];
     downFlagged[storeCode] = false;
     heartbeat(storeCode, true);
+
+    // Phase 2: create any queued paid delivery orders in Qingyun (no-op unless the
+    // toggle is on and rows are pending). Runs while logged in, before tracking, so
+    // a push isn't held up by the tracking bootstrap. Never blocks the poll.
+    try { await drainPushQueue(storeCode, br); } catch (e) { log(storeCode, `push drain error: ${e.message}`); }
     if (wasDown) sendOpsAlert(`✅ 青云聚信 ${storeCode} 重新登录成功，配送跟踪继续\nQingyun ${storeCode} logged back in — tracking resumed`);
     noteVerifyResult(storeCode, false);
 

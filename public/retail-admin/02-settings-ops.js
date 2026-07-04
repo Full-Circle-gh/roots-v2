@@ -471,9 +471,15 @@ async function loadQingyunStores() {
   try {
     const r = await fetch('/api/retail-admin/integrations/qingyun');
     if (!r.ok) { box.innerHTML = ''; return; }
-    const stores = (await r.json()).data || [];
+    const j = await r.json();
+    const stores = j.data || [];
     const qDot = document.getElementById('qy-dot');
     if (qDot) qDot.style.background = stores.some(s => s.connected) ? '#10b981' : 'var(--text-3)';
+    // Auto-push toggle — only meaningful (shown) once at least one store is connected.
+    const apRow = document.getElementById('qy-autopush-row');
+    const apBox = document.getElementById('qy-autopush');
+    if (apRow) apRow.style.display = j.anyConnected ? 'flex' : 'none';
+    if (apBox) apBox.checked = j.autoPush === true;
     // Stash for the Delivery hub's Qingyun card status line.
     window._qyConnected = stores.filter(s => s.connected).length;
     if (typeof dlvHubRender === 'function') dlvHubRender();
@@ -508,6 +514,24 @@ async function _requestQingyun(storeCode, btn) {
   } catch (e) {
     toast('Failed · 操作失败: ' + e.message, 'error');
     if (btn) { btn.disabled = false; btn.textContent = 'Request setup · 申请开通'; }
+  }
+}
+
+// Turn auto-send-to-Qingyun on/off. When on, paid delivery orders auto-create in
+// the store's Qingyun 待配送 list (staff still pick the carrier).
+async function _setQingyunAutoPush(on) {
+  try {
+    const r = await fetch('/api/retail-admin/integrations/qingyun/autopush', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: !!on }),
+    });
+    const j = await r.json();
+    if (!r.ok || !j.success) throw new Error(j.error || 'HTTP ' + r.status);
+    toast(on ? 'Auto-send on · 已开启自动发单' : 'Auto-send off · 已关闭', 'success');
+  } catch (e) {
+    toast('Failed · 操作失败: ' + e.message, 'error');
+    const apBox = document.getElementById('qy-autopush');
+    if (apBox) apBox.checked = !on;  // revert on failure
   }
 }
 

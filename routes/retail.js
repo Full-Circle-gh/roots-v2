@@ -3985,6 +3985,29 @@ async function maybeAutoIssueInvoice(orderId) {
   }
 }
 
+// Auto-push a paid DELIVERY order into Qingyun (Phase 2, same-city live tracking) —
+// ENQUEUE ONLY. The qingyun-daemon holds the signed browser, so it drains the queue
+// and calls order/create; here we just record intent. Gated by the
+// delivery.qingyunAutoPush toggle (default off). Skips pickup orders and any store
+// that hasn't been set up on Qingyun (no qingyun_status row). Idempotent — the queue
+// row is UNIQUE per retail order, so wechat retry callbacks never double-enqueue.
+function maybeEnqueueQingyunPush(orderId) {
+  try {
+    if (cfgValue('delivery.qingyunAutoPush', false) !== true) return;
+    const o = tdb().prepare('SELECT id, fulfillment_type, store_id FROM retail_orders WHERE id = ?').get(orderId);
+    if (!o || o.fulfillment_type === 'pickup' || !o.store_id) return;
+    const store = tdb().prepare('SELECT code FROM retail_stores WHERE id = ?').get(o.store_id);
+    if (!store || !store.code) return;
+    // Only stores with a Qingyun session set up (a qingyun_status row exists). The
+    // daemon retries until that store's session is logged in, so a momentary blip
+    // doesn't drop the order.
+    if (!tdb().prepare('SELECT 1 FROM qingyun_status WHERE store_code = ?').get(store.code)) return;
+    tdb().prepare(
+      "INSERT OR IGNORE INTO qingyun_push_queue (retail_order_id, store_code, status) VALUES (?, ?, 'pending')"
+    ).run(orderId, store.code);
+  } catch (e) { console.warn('[qingyun enqueue]', e.message); }
+}
+
 function markOrderPaid(orderId) {
   // "wait_for_restock" orders transition to 'awaiting_restock' on payment,
   // not 'paid'. The kitchen waits, and checkAwaitingRestockForRestock()
@@ -4101,6 +4124,11 @@ function markOrderPaid(orderId) {
     // (may arrive separately / take longer). One-time in-app notice; no-op when
     // the order holds no drop-ship item. Best-effort.
     try { notifySupplierDirectItems(orderId); } catch (e) { console.warn('[markOrderPaid supplier]', e.message); }
+
+    // Auto-push a paid delivery order into Qingyun so it appears in the merchant's
+    // 待配送 list ready for a courier (Phase 2). Enqueue-only + best-effort; the
+    // qingyun-daemon does the actual create. No-op unless the toggle is on.
+    try { maybeEnqueueQingyunPush(orderId); } catch (e) { console.warn('[markOrderPaid qingyun]', e.message); }
   }
 }
 
@@ -17068,7 +17096,22 @@ router.get('/api/retail-admin/integrations/qingyun', requireRetailAdmin, (req, r
       (now - Date.parse(String(h.updated_at).replace(' ', 'T') + 'Z')) < QY_FRESH_MS;
     return { code: s.code, name_en: s.name_en, name_cn: s.name_cn, connected: !!(fresh && h.logged_in) };
   });
-  res.json({ success: true, data });
+  const autoPush = cfgValue('delivery.qingyunAutoPush', false) === true;
+  const anyConnected = data.some(s => s.connected);
+  res.json({ success: true, data, autoPush, anyConnected });
+});
+
+// Toggle auto-push: when on, a paid mini-app/web delivery order is auto-created in
+// Qingyun (待配送) ready for a courier. Only meaningful once a store is connected.
+router.post('/api/retail-admin/integrations/qingyun/autopush', requireRetailAdmin, express.json(), (req, res) => {
+  const on = req.body?.enabled === true;
+  const who = (req.backendUser && (req.backendUser.name || req.backendUser.username)) || 'admin';
+  tdb().prepare(
+    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+     VALUES ('delivery.qingyunAutoPush', ?, CURRENT_TIMESTAMP, ?)
+     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+  ).run(JSON.stringify(on), who);
+  res.json({ success: true, enabled: on });
 });
 
 // A store owner asks us to connect same-city tracking for their store. We can't
