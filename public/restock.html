@@ -133,7 +133,10 @@ input:focus, textarea:focus { outline: none; }
 /* ── Header — confident dark band with subtle lime tinted shadow.
    Two rows visually: (1) brand + icons, (2) live cart status. ── */
 .head {
-  background: linear-gradient(180deg, var(--dk2) 0%, var(--dk) 100%);
+  /* Always a dark band, independent of the light/dark theme — the header
+     text and icons are white, so the background must stay dark or they
+     vanish (which is what happened in light mode). */
+  background: linear-gradient(180deg, #262a31 0%, #191b20 100%);
   color: #fff;
   padding: 14px 16px 12px;
   display: flex; flex-direction: column; gap: 10px;
@@ -859,13 +862,21 @@ body { font-family: var(--f-sans); background: var(--bg-app); color: var(--text-
 input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
 
 /* ── Home launcher — a tile grid where the user picks a tool. Only the
-   tools their account can use appear. ── */
-.home-wrap { padding: 16px 14px calc(var(--sa-bot) + 28px); }
-.home-hi { font-size: 14px; color: var(--muted); font-weight: 600; margin: 2px 4px 16px; }
+   tools their account can use appear. One language at a time. ── */
+.home-wrap { padding: 14px 14px calc(var(--sa-bot) + 28px); }
+.home-bar { display: flex; align-items: center; gap: 10px; margin: 2px 2px 16px; }
+.home-user { display: flex; align-items: center; gap: 9px; min-width: 0; flex: 1; }
+.home-ava { width: 34px; height: 34px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 15px; display: grid; place-items: center; flex: none; }
+.home-name { font-size: 15px; font-weight: 700; color: var(--text-1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.home-lang { width: 42px; height: 38px; border-radius: 11px; border: 1px solid var(--border); background: var(--card); color: var(--text-1); font-weight: 800; font-size: 14px; }
+.home-lang:active { transform: scale(.95); }
+.home-logout { height: 38px; padding: 0 14px; border-radius: 11px; border: 1px solid var(--border); background: var(--card); color: var(--text-2); font-weight: 700; font-size: 14px; }
+.home-logout:active { transform: scale(.96); }
 .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .home-tile {
   position: relative; display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
-  text-align: left; min-height: 128px; padding: 18px 16px;
+  text-align: left; min-height: 126px; padding: 18px 16px;
   background: var(--card); border: 1px solid var(--border); border-radius: 18px;
   box-shadow: var(--sh-1); color: var(--text-1); transition: transform .12s ease, border-color .15s ease;
 }
@@ -873,16 +884,15 @@ input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
 .home-tile:hover { border-color: rgba(204,217,0,.5); }
 .home-tile .ht-ico {
   width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
-  background: var(--bg-elev-1); border: 1px solid var(--border); color: var(--accent);
+  background: rgba(204,217,0,.14); border: 1px solid rgba(204,217,0,.28); color: var(--lime-text);
 }
 .home-tile .ht-ico svg { width: 25px; height: 25px; }
-.home-tile .ht-name { font-size: 17px; font-weight: 800; color: var(--text-1); line-height: 1.15; letter-spacing: -.01em; }
-.home-tile .ht-name .cn { color: var(--muted); font-weight: 600; font-size: 13px; }
-.home-tile .ht-desc { font-size: 12px; color: var(--muted); line-height: 1.4; }
+.home-tile .ht-name { font-size: 18px; font-weight: 800; color: var(--text-1); line-height: 1.15; letter-spacing: -.01em; }
+.home-tile .ht-desc { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
 .home-tile .ht-badge {
   position: absolute; top: 12px; right: 12px; min-width: 20px; height: 20px; padding: 0 6px;
   border-radius: 999px; background: var(--danger); color: #fff; font-size: 11px; font-weight: 800;
-  display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--bg);
+  display: flex; align-items: center; justify-content: center; border: 1.5px solid var(--card);
 }
 
 </style>
@@ -1267,8 +1277,8 @@ function _paintModeTabs() {
   const sub  = document.getElementById('brandSub');
   if (h1 && sub) {
     if (_appMode === 'home') {
-      h1.innerHTML  = 'Stock <span class="cn-tag">库存</span>';
-      sub.textContent = 'Pick a tool · 选择工具';
+      h1.textContent  = _L('Stock', '库存');
+      sub.textContent = _L('Pick a tool', '选择工具');
     } else if (_appMode === 'waste') {
       h1.innerHTML  = 'Waste <span class="cn-tag" style="color:#fbb1b1">损耗</span>';
       sub.textContent = 'Log spoiled / expired stock · 记录损耗';
@@ -1453,27 +1463,37 @@ const _HOME_ICO = {
   quick:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1.5" y1="14" x2="6.5" y2="14"/><line x1="9.5" y1="8" x2="14.5" y2="8"/><line x1="17.5" y1="16" x2="22.5" y2="16"/></svg>',
   waste:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>',
 };
+// Display language for the launcher — 'en' | 'cn'. Shared with the rest
+// of the admin suite (localStorage 'roots-admin-lang'). The Home screen
+// shows ONE language at a time (never glued EN+CN).
+let _lang = (() => { try { const s = localStorage.getItem('roots-admin-lang'); return (s === 'en' || s === 'cn') ? s : 'en'; } catch { return 'en'; } })();
+function _L(en, cn) { return _lang === 'cn' ? cn : en; }
+function _setLang(l) {
+  _lang = (l === 'cn') ? 'cn' : 'en';
+  try { localStorage.setItem('roots-admin-lang', _lang); } catch {}
+  if (_appMode === 'home') { _paintModeTabs(); _renderHome(); }
+}
 function _homeTools() {
   const perms = _user?.permissions || {};
   const admin = _user?.role === 'admin';
   const tools = [];
   if (admin || perms.restock) tools.push({
-    key: 'restock', name: 'Restock', cn: '补货',
-    desc: 'Ask the warehouse for stock · 向仓库要货',
+    key: 'restock', en: 'Restock', cn: '补货',
+    dEn: 'Ask the warehouse for stock', dCn: '向仓库要货',
     badge: () => (_notiUnseen?.prepared || 0), go: () => setAppMode('restock'),
   });
   if (admin || perms.warehouse_inbox) tools.push({
-    key: 'fulfill', name: 'Fulfill', cn: '处理订单',
-    desc: 'Pack requests from stores · 处理门店订单',
+    key: 'fulfill', en: 'Fulfill', cn: '处理订单',
+    dEn: 'Pack requests from stores', dCn: '处理门店订单',
     badge: () => (typeof _inboxActiveCount === 'number' ? _inboxActiveCount : 0), go: () => setAppMode('inbox'),
   });
   if (_qsHomeAvailable) tools.push({
-    key: 'quick', name: 'Quick Stock', cn: '快速库存',
-    desc: 'Adjust store counts · 调整门店库存', go: () => { location.href = '/stock?from=home'; },
+    key: 'quick', en: 'Quick Stock', cn: '快速库存',
+    dEn: 'Adjust store counts', dCn: '调整门店库存', go: () => { location.href = '/stock?from=home'; },
   });
   if (admin || perms.waste) tools.push({
-    key: 'waste', name: 'Waste', cn: '损耗',
-    desc: 'Log spoiled / expired · 记录损耗', go: () => setAppMode('waste'),
+    key: 'waste', en: 'Waste', cn: '损耗',
+    dEn: 'Log spoiled / expired', dCn: '记录损耗', go: () => setAppMode('waste'),
   });
   return tools;
 }
@@ -1488,17 +1508,27 @@ function _renderHome() {
   if (_qsHomeAvailable === null) _probeQuickStock().then(() => { if (_appMode === 'home') _renderHome(); });
   const tools = _homeTools();
   const who = _user?.displayName || _user?.username || '';
+  const initial = (who || '?').trim().charAt(0).toUpperCase();
   body.innerHTML =
     '<div class="home-wrap">' +
-      '<div class="home-hi">' + (who ? esc(who) + ' · ' : '') + 'Pick a tool · 选择工具</div>' +
+      '<div class="home-bar">' +
+        '<div class="home-user">' +
+          '<span class="home-ava">' + esc(initial) + '</span>' +
+          '<span class="home-name">' + esc(who) + '</span>' +
+        '</div>' +
+        '<div class="home-actions">' +
+          '<button class="home-lang" id="homeLangBtn" title="' + _L('Switch to Chinese', '切换到英文') + '">' + (_lang === 'cn' ? 'EN' : '中') + '</button>' +
+          '<button class="home-logout" id="homeLogoutBtn">' + _L('Sign out', '退出登录') + '</button>' +
+        '</div>' +
+      '</div>' +
       '<div class="home-grid">' +
         tools.map(function (tt) {
           const b = tt.badge ? (tt.badge() || 0) : 0;
           return '<button class="home-tile" data-tool="' + tt.key + '">' +
             (b > 0 ? '<span class="ht-badge">' + (b > 99 ? '99+' : b) + '</span>' : '') +
             '<span class="ht-ico">' + (_HOME_ICO[tt.key] || '') + '</span>' +
-            '<span class="ht-name">' + tt.name + ' <span class="cn">' + tt.cn + '</span></span>' +
-            '<span class="ht-desc">' + tt.desc + '</span>' +
+            '<span class="ht-name">' + esc(_L(tt.en, tt.cn)) + '</span>' +
+            '<span class="ht-desc">' + esc(_L(tt.dEn, tt.dCn)) + '</span>' +
           '</button>';
         }).join('') +
       '</div>' +
@@ -1506,6 +1536,13 @@ function _renderHome() {
   tools.forEach(function (tt) {
     const el = body.querySelector('[data-tool="' + tt.key + '"]');
     if (el) el.addEventListener('click', tt.go);
+  });
+  const lb = document.getElementById('homeLangBtn');
+  if (lb) lb.addEventListener('click', () => _setLang(_lang === 'cn' ? 'en' : 'cn'));
+  const lo = document.getElementById('homeLogoutBtn');
+  if (lo) lo.addEventListener('click', async () => {
+    try { await fetch('/api/auth/logout', { method: 'POST' }); } catch (e) {}
+    location.href = '/login';
   });
 }
 
