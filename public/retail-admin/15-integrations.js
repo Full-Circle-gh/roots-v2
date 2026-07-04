@@ -335,9 +335,11 @@
   // when it SMS-challenges, the merchant types the code here and we relay it.
   // Steps: store box → credentials → verify login (SMS) → done.
   let _relay = { kind: null, step: 'box', store: null, poll: null };
-  window.igRelayWizard = function (kind) {
+  // opts: { step: 'creds', store: 'yuexiu' } — re-login jumps straight to the
+  // login step with the store preselected (the box is already installed).
+  window.igRelayWizard = function (kind, opts) {
     igRelayStop();
-    _relay = { kind, step: 'box', store: null, poll: null };
+    _relay = { kind, step: (opts && opts.step) || 'box', store: (opts && opts.store) || null, poll: null };
     igRelayRender();
   };
   window.igRelayClose = function () { igRelayStop(); const b = igHostEl(); if (b) { b.style.display = 'none'; b.innerHTML = ''; } };
@@ -399,7 +401,7 @@
         </div>`;
       }
     } else if (_relay.step === 'creds') {
-      const opts = _stores.map(s => `<option value="${esc(s.code)}">${esc(cuT(s.name || s.code, s.name || s.code))}</option>`).join('');
+      const opts = _stores.map(s => `<option value="${esc(s.code)}"${s.code === _relay.store ? ' selected' : ''}>${esc(cuT(s.name || s.code, s.name || s.code))}</option>`).join('');
       body = `<p class="muted" style="font-size:13px">${cuT(`Enter your ${label} merchant login for a store. We log in on your behalf through your store box.`, `请输入某门店的${label}商家账号。我们将通过您的门店盒子代为登录。`)}</p>
         <div style="display:grid;gap:10px;max-width:420px;margin-top:12px">
           <div><label class="field-label">${cuT('Store · 门店', '门店')}</label><select id="rl_store">${opts}</select></div>
@@ -508,6 +510,57 @@
   // store gets a tidy summary + a button into the full Meituan management tab,
   // so Configure is consistent with the other channels instead of dumping the
   // operator straight into the raw management screen.
+  // "3 min ago" for the daemon-written UTC timestamps ("YYYY-MM-DD HH:MM:SS").
+  function igAgo(ts) {
+    if (!ts) return cuT('never', '从未');
+    const t = Date.parse(String(ts).replace(' ', 'T') + (String(ts).includes('Z') ? '' : 'Z'));
+    if (!t) return '—';
+    const m = Math.floor((Date.now() - t) / 60000);
+    if (m < 1) return cuT('just now', '刚刚');
+    if (m < 60) return cuT(`${m} min ago`, `${m}分钟前`);
+    const h = Math.floor(m / 60);
+    if (h < 24) return cuT(`${h} h ago`, `${h}小时前`);
+    const d = Math.floor(h / 24);
+    return cuT(`${d} d ago`, `${d}天前`);
+  }
+
+  // One store's connection row on the Meituan page: signed-in state, which
+  // account (masked), and the live proof it's working. "Sign in again" only
+  // appears when the session actually needs it.
+  function igMtStoreRow(s) {
+    const name = esc(cuT(s.name, s.nameCn || s.name));
+    let chip;
+    if (s.signedIn === true) {
+      chip = `<span class="mc-chip on">${MC_SVG.check}<span>${cuT('Signed in', '已登录')}</span></span>`;
+    } else if (s.signedIn === false) {
+      chip = `<span class="mc-chip" style="color:var(--danger,#e8556a)">${MC_SVG.circle}<span>${cuT('Needs sign-in', '需重新登录')}</span></span>`;
+    } else {
+      chip = `<span class="mc-chip">${MC_SVG.circle}<span>${cuT('No activity yet', '暂无活动')}</span></span>`;
+    }
+    const relogin = s.signedIn === false
+      ? `<button class="btn btn-sm btn-primary" onclick="igRelayWizard('meituan',{step:'creds',store:'${escJs(s.code)}'})">${cuT('Sign in again', '重新登录')}</button>`
+      : '';
+    const facts = [];
+    if (s.account) facts.push(`${cuT('Account', '账号')} <span style="font-family:var(--f-mono,monospace)">${esc(s.account)}</span>`);
+    facts.push(`${Number(s.mappedProducts || 0)} ${cuT('products syncing', '个商品同步中')}`);
+    if (s.open === true) facts.push(cuT('Open on Meituan', '美团营业中'));
+    else if (s.open === false) facts.push(cuT('Closed on Meituan', '美团已置休'));
+    const live = [
+      `${cuT('Last stock push', '最近库存推送')} ${igAgo(s.lastStockPush)}`,
+      `${cuT('last order', '最近订单')} ${igAgo(s.lastOrder)}`,
+      `${cuT('orders today', '今日订单')} ${Number(s.ordersToday || 0)}`,
+    ].join(' · ');
+    return `<div style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:8px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <b style="font-size:13.5px">${name}</b>
+        <span style="flex:1"></span>
+        ${chip}${relogin}
+      </div>
+      <div style="font-size:12.5px;color:var(--text-2);margin-top:6px">${facts.join(' · ')}</div>
+      <div style="font-size:12.5px;color:var(--text-3);margin-top:3px">${live}</div>
+    </div>`;
+  }
+
   window.igMeituanConfig = async function () {
     await igEnsureLoaded();
     const status = igStatusFor('meituan');
@@ -516,11 +569,15 @@
 
     const box = igHostEl(); if (!box) return;
     box.style.display = '';
+    box.innerHTML = igMuted(cuT('Loading…', '加载中…'));
+    // Per-store connection detail (signed-in, last sync, last order). Falls back
+    // to the plain store list if the endpoint isn't reachable.
+    let detail = [];
+    try { const r = await api('/api/retail-admin/channel-hub/meituan/stores'); detail = r.data || []; } catch (_) {}
+    if (!detail.length) detail = (_stores || []).map(s => ({ code: s.code, name: s.name || s.code, nameCn: s.name || s.code, signedIn: null, mappedProducts: 0, ordersToday: 0 }));
     const bag = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>';
     const paused = status === 'paused';
-    const storePills = (_stores || []).map(s =>
-      `<span class="mc-chip on" style="font-weight:600">${MC_SVG.check}<span>${esc(cuT(s.name || s.code, s.name || s.code))}</span></span>`
-    ).join('');
+    const storeRows = detail.map(igMtStoreRow).join('');
 
     box.innerHTML = `<div class="ig-wiz">
       <div class="mc-head">
@@ -537,7 +594,7 @@
       <div class="mc-sec">
         <div class="mc-sec-head"><span class="mc-ico">${bag}</span><b>${cuT('Your stores', '您的门店')}</b></div>
         <div class="mc-purpose">${cuT('Meituan keeps stock in sync and imports new orders for these stores.', '美团为这些门店同步库存并导入新订单。')}</div>
-        <div class="mc-chips" style="margin-top:2px">${storePills || `<span class="mc-note">${cuT('No stores linked yet.', '尚未关联门店。')}</span>`}</div>
+        ${storeRows || `<div class="mc-note">${cuT('No stores linked yet.', '尚未关联门店。')}</div>`}
       </div>
 
       <div class="mc-foot">

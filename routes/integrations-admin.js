@@ -68,8 +68,14 @@ function deriveStatuses(cards, cardsTenant) {
       return row ? JSON.parse(row.value_json) === true : false;
     } catch (_) { return false; }
   };
+  // Session-based channels (meituan/qingyun): a wizard-set in_setup/connecting
+  // row must not mask a channel that is demonstrably LIVE (e.g. Roots requested
+  // a box while its daemons were already syncing the legacy way). Those two
+  // states re-enter derivation; explicit connected/paused/error still win.
+  const wizardStale = s => s === 'in_setup' || s === 'connecting';
   for (const c of cards) {
-    if (!isBaseline(c.status)) continue;
+    const sessionKind = c.kind === 'meituan' || c.kind === 'qingyun';
+    if (!isBaseline(c.status) && !(sessionKind && wizardStale(c.status))) continue;
     try {
       if (c.kind === 'eleme') {
         // Connected once any store has an Eleme access token; the channel is
@@ -262,6 +268,83 @@ function publicSession(s) {
   if (!s) return null;
   return { storeCode: s.store_code, status: s.status, phoneHint: s.phone_hint, lastError: s.last_error };
 }
+
+// ── Meituan per-store connection detail ──────────────────────────────────────
+// GET /api/retail-admin/channel-hub/meituan/stores
+// Feeds the Meituan "Configure" page: for each active store, is the Meituan
+// session signed in, which account it uses (masked — never the secret), and the
+// live proof it's working (last stock push, last order import, mapped products).
+// Signals come from what the daemons already write: meituan_sync_log (ok events
+// vs needs_login/verify_required errors), store_business_status (read_ok/read_at),
+// meituan_order_import, meituan_product_map — plus relay sessions for
+// self-service tenants. Infra internals (proxy, cookies, daemons) deliberately
+// stay platform-side; this endpoint only reports outcomes.
+router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (req, res) => {
+  try {
+    const id = tenantId(req);
+    const db = tdb();
+    const get1 = (sql, ...args) => { try { return db.prepare(sql).get(...args) || null; } catch (_) { return null; } };
+    let stores = [];
+    try {
+      stores = db.prepare(
+        'SELECT code, name_en AS name, name_cn AS nameCn FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id'
+      ).all();
+    } catch (_) {}
+    let mtCreds = {};
+    try { mtCreds = (getTenantCreds(id).integrations || {}).meituan || {}; } catch (_) {}
+    const sessions = {};
+    try { for (const s of relay.summary(id, 'meituan')) sessions[s.storeCode] = s; } catch (_) {}
+    // "138****56" — enough to recognise which Meituan account, never the secret.
+    const mask = (u) => {
+      const s = String(u || '').trim();
+      if (!s) return null;
+      return s.length <= 4 ? s.slice(0, 1) + '***' : s.slice(0, 3) + '****' + s.slice(-2);
+    };
+    const utc = (t) => (t ? Date.parse(String(t).replace(' ', 'T') + (String(t).includes('Z') ? '' : 'Z')) || 0 : 0);
+
+    const data = stores.map((s) => {
+      const code = s.code;
+      const biz = get1('SELECT is_open, status_desc, read_ok, read_at FROM store_business_status WHERE store_code = ?', code);
+      const lastPush = get1("SELECT created_at FROM meituan_sync_log WHERE store_code = ? AND event_type = 'stock_push' AND status = 'ok' ORDER BY id DESC LIMIT 1", code);
+      const lastOkAny = get1("SELECT created_at FROM meituan_sync_log WHERE store_code = ? AND status = 'ok' ORDER BY id DESC LIMIT 1", code);
+      const lastLoginErr = get1("SELECT event_type, created_at FROM meituan_sync_log WHERE store_code = ? AND status = 'error' AND event_type IN ('needs_login','verify_required') ORDER BY id DESC LIMIT 1", code);
+      const lastOrder = get1('SELECT imported_at FROM meituan_order_import WHERE store_code = ? ORDER BY id DESC LIMIT 1', code);
+      const ordersToday = get1("SELECT COUNT(*) AS n FROM meituan_order_import WHERE store_code = ? AND date(imported_at) = date('now')", code);
+      const mapped = get1('SELECT COUNT(*) AS n FROM meituan_product_map WHERE store_code = ? AND sync_enabled = 1', code);
+
+      // Signed in? A relay session is authoritative when present; otherwise a
+      // needs_login/verify error NEWER than the last ok event means signed out.
+      // null = no activity either way (store never connected).
+      let signedIn = null;
+      const sess = sessions[code];
+      if (sess && sess.status === 'ok') signedIn = true;
+      else if (sess && (sess.status === 'expired' || sess.status === 'failed')) signedIn = false;
+      else {
+        const errAt = lastLoginErr ? utc(lastLoginErr.created_at) : 0;
+        const okAt = Math.max(lastOkAny ? utc(lastOkAny.created_at) : 0, (biz && biz.read_ok) ? utc(biz.read_at) : 0);
+        if (errAt && errAt > okAt) signedIn = false;
+        else if (okAt) signedIn = true;
+      }
+      const creds = mtCreds[code] || {};
+      return {
+        code,
+        name: s.name || code,
+        nameCn: s.nameCn || s.name || code,
+        account: mask(creds.user),
+        signedIn,
+        issue: signedIn === false && lastLoginErr ? lastLoginErr.event_type : null,
+        checkedAt: (biz && biz.read_at) || null,
+        open: biz && biz.read_ok ? biz.is_open === 1 : null,
+        statusDesc: biz ? biz.status_desc : null,
+        lastStockPush: lastPush ? lastPush.created_at : null,
+        lastOrder: lastOrder ? lastOrder.imported_at : null,
+        ordersToday: ordersToday ? ordersToday.n : 0,
+        mappedProducts: mapped ? mapped.n : 0,
+      };
+    });
+    res.json({ success: true, data });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
 
 // ── Mini App (WeChat) — interactive onboarding checklist — Phase 8 ─────────
 // The A-to-Z a tenant completes before their mini app takes live orders is
