@@ -556,6 +556,10 @@ Page({
       if (!d || !d.tracking) { if (this.data.deliveryTrack) this.setData({ deliveryTrack: null }); return; }
 
       const STAGE = {
+        // 'scheduled' = the order is queued for its slot but NO courier is being
+        // sought yet — show the map (store → you) with a calm label, never
+        // "finding a courier".
+        scheduled:         cn ? '等待配送'      : 'Delivery scheduled',
         awaiting_dispatch: cn ? '正在为您找骑手' : 'Finding a courier',
         in_transit:        cn ? '骑手配送中'    : 'On the way',
         delivered:         cn ? '已送达'        : 'Delivered',
@@ -583,22 +587,26 @@ Page({
       const parts = [];
       if (d.rider && d.rider.name) parts.push(d.rider.name);
       if (d.rider_to_cust_m != null) parts.push((d.rider_to_cust_m / 1000).toFixed(1) + (cn ? 'km' : ' km'));
-      if (d.eta_seconds != null && d.stage !== 'delivered') {
+      if (d.eta_seconds != null && d.stage !== 'delivered' && d.stage !== 'scheduled') {
         const min = Math.max(1, Math.round(d.eta_seconds / 60));
         parts.push(cn ? ('约 ' + min + ' 分钟') : ('~' + min + ' min'));
       }
+      // Pre-dispatch: no rider/ETA — the sub-line shows the chosen slot instead.
+      const subLine = d.stage === 'scheduled'
+        ? (d.slot_label || (cn ? '按预约时间送达' : 'At your scheduled time'))
+        : parts.join(cn ? ' · ' : ' · ');
 
       this.setData({
         deliveryTrack: {
           stage: d.stage,
           stageLabel: STAGE[d.stage] || (cn ? '配送中' : 'On the way'),
-          carrier: d.carrier || '',
+          carrier: d.stage === 'scheduled' ? '' : (d.carrier || ''),
           waybill: d.waybill_id || '',
           rider: d.rider || null,
-          subLine: parts.join(cn ? ' · ' : ' · '),
+          subLine,
           hasMap: !!center && d.stage !== 'delivered',
           center, markers, polyline, includePoints,
-          mapLabel: cn ? '配送追踪' : 'LIVE TRACKING',
+          mapLabel: d.stage === 'scheduled' ? (cn ? '配送信息' : 'DELIVERY') : (cn ? '配送追踪' : 'LIVE TRACKING'),
           callLabel: cn ? '联系骑手' : 'Call rider',
         },
       });

@@ -9680,7 +9680,7 @@ router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
 router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
-    'SELECT id, recipient_phone FROM retail_orders WHERE id = ? AND customer_id = ?'
+    'SELECT id, recipient_phone, delivery_slot_label FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
 
@@ -9725,7 +9725,7 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
   if (os != null && os >= 50) stage = 'delivered';
   else if (job.rider_name || (os != null && os >= 30)) stage = 'in_transit';
   else if (dispatched) stage = 'awaiting_dispatch';   // dispatched → genuinely finding a rider
-  else return res.json({ success: true, data: { tracking: false } }); // created 待配送, not dispatched → no live card yet
+  else stage = 'scheduled';                           // created 待配送, not dispatched → preview map + calm label (no "finding a courier", no rider/ETA)
   const coord = (lat, lng) => (lat != null && lng != null) ? { lat: lat / 1e6, lng: lng / 1e6 } : null;
 
   let route = [];
@@ -9755,9 +9755,12 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
     shop_position: shopPos,
     recipient_position: recipientPos || coord(job.recipient_lat, job.recipient_lng),
     route,
-    eta_seconds: job.eta_seconds ?? null,
-    rider_to_cust_m: job.rider_to_cust_m ?? null,
+    // No ETA/distance before an actual courier is on it — suppress for 'scheduled'
+    // so the pre-dispatch preview never shows a bogus "~N min".
+    eta_seconds: stage === 'scheduled' ? null : (job.eta_seconds ?? null),
+    rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? null),
     expected_delivery_at: job.expected_delivery_at || null,
+    slot_label: order.delivery_slot_label || null,   // human slot for the 'scheduled' sub-line
     updated_at: job.updated_at,
   }});
 });
