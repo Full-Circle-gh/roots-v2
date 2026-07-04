@@ -242,9 +242,16 @@ function salesGo(channel) {
   if (btn) btn.click();
 }
 // Activate a tab/section by name from OUTSIDE the rail (e.g. the topbar Inbox
-// dropdown, whose Reviews/Feedback items no longer live in .tabs so the rail
-// click-handler can't see them). Mirrors that handler's section + group state.
+// dropdown, or in-page buttons like the Sales channel cards). When the tab has
+// a rail button, CLICK it — that's the one source of truth that both activates
+// the section and fires the tab's init (mtAdminInit / gyAdminInit / …) via the
+// button's own onclick. Toggling classes by hand here skipped the init, which
+// left data tabs opened this way stuck on their static "Loading…" placeholders.
+// The manual path stays as the fallback for sections with no rail button
+// (Inbox: Reviews / Feedback).
 function goTab(tab) {
+  const btn = document.querySelector('.tabs [data-tab="' + tab + '"]');
+  if (btn) { btn.click(); return; }
   $$('.side-drawer.open').forEach(d => closeDrawer(d));
   $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   $$('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));

@@ -22,8 +22,16 @@
   window.mtAdminInit = async function () {
     if (_initiated) return;
     _initiated = true;
-    await Promise.all([mtLoadStores(), mtLoadStatus(), mtLoadBusinessStatus()]);
-    await mtLoadProducts();
+    // If the first load dies (flaky network, expired session), release the
+    // guard so the next click on the tab retries instead of showing the static
+    // "Loading…" shell until a full page reload.
+    try {
+      await Promise.all([mtLoadStores(), mtLoadStatus(), mtLoadBusinessStatus()]);
+      await mtLoadProducts();
+    } catch (e) {
+      _initiated = false;
+      throw e;
+    }
     mtLoadBundles();
     mtStartPolling();
     // The product table and bundles list are rendered in ONE language (cuT)
