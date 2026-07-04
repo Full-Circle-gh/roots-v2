@@ -48,11 +48,16 @@ function resolveProduct(item, storeId) {
   const out = { name: item.name, sku: item.sku || null, qty, productId: null, nameCn: item.name, nameEn: item.name, matchBy: null };
   const apply = (p, by) => { out.productId = p.id; out.nameCn = p.name_cn; out.nameEn = p.name_en; out.matchBy = by; };
 
-  // 1. Inline SKU token.
-  if (item.sku) {
-    const p = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ? AND is_active = 1').get(item.sku)
-           || db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ?').get(item.sku);
-    if (p) { apply(p, 'sku'); return out; }
+  // 1. Inline SKU token. Prefer the explicit skuCode Meituan sends; fall back to a
+  // "(\d+-\d+)" token the merchant encodes in the listing/spec name. Meituan
+  // sometimes drops skuCode and mangles foodName down to just the token tail
+  // (e.g. "1-440)"), which used to strand the line as unmatched — no product, no
+  // image, and no stock deduction. Extracting the token here recovers it.
+  const skuToken = item.sku || (String(item.name || '').match(/\d+-\d+/) || [])[0] || null;
+  if (skuToken) {
+    const p = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ? AND is_active = 1').get(skuToken)
+           || db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ?').get(skuToken);
+    if (p) { apply(p, 'sku'); out.sku = skuToken; return out; }
     // Token didn't resolve — fall through to the map/name strategies rather than
     // stranding the line on a stale or mistyped SKU code.
     out.matchBy = 'sku_unknown';
