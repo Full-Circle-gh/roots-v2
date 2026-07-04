@@ -836,13 +836,16 @@ input:focus, textarea:focus { outline: none; }
 body { font-family: var(--f-sans); background: var(--bg-app); color: var(--text-1); }
 
 .head {
-  background: var(--bg-pane) !important;
-  color: var(--text-1) !important;
-  border-bottom: 1px solid var(--line-soft-tok);
-  box-shadow: none !important;
+  /* Always a dark band — the header text/icons are white, so it must stay
+     dark in BOTH themes (this override previously forced it light, hiding
+     the title, subtitle and menu icons). */
+  background: linear-gradient(180deg, #262a31 0%, #191b20 100%) !important;
+  color: #fff !important;
+  border-bottom: none;
+  box-shadow: 0 4px 18px rgba(0,0,0,.22) !important;
 }
 .head::after {
-  background: linear-gradient(90deg, transparent, rgba(204,217,0,.5) 30%, rgba(204,217,0,.5) 70%, transparent) !important;
+  background: linear-gradient(90deg, transparent, rgba(204,217,0,.55) 30%, rgba(204,217,0,.55) 70%, transparent) !important;
 }
 
 /* Catch white surfaces in inline-styled chrome bits. */
@@ -1220,22 +1223,12 @@ function _paintModeTabs() {
     else if (_modeAllowed('inbox'))   _appMode = 'inbox';
     else if (_modeAllowed('waste'))   _appMode = 'waste';
   }
-  // First-time-this-session landing. If the user has 2+ tools, drop them
-  // on the Home launcher so they pick what they want. If they only have a
-  // single tool, skip the picker and open it directly — no wasted tap.
+  // First-time-this-session landing: always open on the Home launcher so
+  // the app has a consistent, designed front door. From there the user
+  // picks a tool (or the Home button brings them back any time).
   if (!window._wmInitDone) {
     window._wmInitDone = true;
-    const perms = _user.permissions || {};
-    const isAdmin = _user.role === 'admin';
-    const toolCount = [isAdmin || perms.restock, isAdmin || perms.warehouse_inbox, isAdmin || perms.waste]
-      .filter(Boolean).length;
-    if (toolCount >= 2) {
-      _appMode = 'home';
-    } else if (!isAdmin && !!perms.warehouse_inbox) {
-      // Sole tool is fulfilment — their daily queue.
-      _appMode = 'inbox';
-    }
-    // else: leave the coerced single-tool default (restock / waste).
+    _appMode = 'home';
   }
   // Brand block reflects the active mode so users know where they are
   // without needing a tab strip. Each mode gets its own color identity:
@@ -1349,7 +1342,7 @@ function _paintHeaderModeBtns() {
   const toolCount = [hasRestock, hasInbox, isAdmin || !!perms.waste].filter(Boolean).length
     + (_qsHomeAvailable ? 1 : 0);
   const hBtn = document.getElementById('modeHomeBtn');
-  if (hBtn) hBtn.style.display = (!onHome && toolCount >= 2) ? 'inline-flex' : 'none';
+  if (hBtn) hBtn.style.display = onHome ? 'none' : 'inline-flex';
   const rBtn = document.getElementById('modeRestockBtn');
   const iBtn = document.getElementById('modeInboxBtn');
   // On the launcher the little mode buttons are redundant (the tiles do
