@@ -151,6 +151,10 @@ async function loadDeliveryZones() {
   try {
     const cfg = await api('/api/retail-admin/config');
     const dlv = cfg?.data?.delivery || {};
+    // Stash the delivery config so the new-tenant coverage render can read the
+    // wizard's own keys (enabled/coverage/pricingMode/speed) — these live under
+    // delivery.* alongside the legacy holiday/batch settings.
+    window._deliveryCfg = dlv;
     if ($('#dlv-kitchen-address')) $('#dlv-kitchen-address').value = dlv.kitchenAddress ?? '';
     const hMode = !!dlv.holidayMode;
     const hMsg = dlv.holidayMessage || {};
@@ -460,7 +464,7 @@ function renderZoneTable() {
     body.innerHTML = groupedZoneBodyHtml(rows, 6, z => `
       <tr class="dz-row" onclick="openZoneDrawer(${z.id})">
         <td>${zoneCellHtml(z)}</td>
-        <td class="numeric">¥${z.base_fee ?? 0}</td>
+        <td class="numeric">${zonePriceCellHtml(z)}</td>
         <td class="numeric">${z.free_threshold == null ? '<span class="muted">default · 默认</span>' : '¥'+z.free_threshold}</td>
         <td>${zoneExtrasHtml(z)}</td>
         <td style="text-align: center;" onclick="event.stopPropagation()">
@@ -531,8 +535,23 @@ function zoneCellHtml(z) {
   return `<div class="dz-zone-cell">${chip}<div class="dz-zone-text"><span>${cn}</span>${en ? `<span class="sub">${en}</span>` : ''}</div></div>`;
 }
 
+// Does this zone price by weight? Needs the first-kg fee set (extra can be 0).
+function zoneIsWeightPriced(z) {
+  return z && z.weight_first_kg_fee != null && z.weight_first_kg_fee !== '';
+}
+// The Base-fee cell text: a flat ¥ normally, or the courier rate when the zone
+// prices by weight (e.g. "¥10 +¥3/kg"). base_fee stays the no-weight fallback.
+function zonePriceCellHtml(z) {
+  if (zoneIsWeightPriced(z)) {
+    const x = Number(z.weight_extra_kg_fee) || 0;
+    return `<span class="dz-wprice">¥${z.weight_first_kg_fee}${x ? ' +¥'+x+'/kg' : ''}</span>`;
+  }
+  return `¥${z.base_fee ?? 0}`;
+}
+
 function zoneExtrasHtml(z) {
   const bits = [];
+  if (zoneIsWeightPriced(z)) bits.push('by weight · 按重量');
   if (z.zone_type === 'gz_district' && z.max_fee != null && z.max_fee !== '') bits.push(`MAX ¥${z.max_fee}`);
   if (z.zone_type === 'city') {
     if (z.packing_fee_per_item) bits.push(`Pack ¥${z.packing_fee_per_item}/ea`);
@@ -616,7 +635,7 @@ function openZoneDrawer(id) {
 
   // Clear all fields first
   ['dz-gz-name-en','dz-gz-name-cn','dz-gz-base','dz-gz-max','dz-gz-free',
-   'dz-city-pack','dz-city-pack-cap',
+   'dz-city-pack','dz-city-pack-cap','dz-gz-w1','dz-gz-wx',
    'dz-edit-lead','dz-edit-maxlead','dz-edit-hours-start','dz-edit-hours-end','dz-edit-slot','dz-edit-sd-fee']
     .forEach(k => { const e = $('#'+k); if (e) e.value = ''; });
   $('#dz-edit-sd').checked = false;
@@ -640,6 +659,8 @@ function openZoneDrawer(id) {
     $('#dz-gz-base').value    = z.base_fee ?? '';
     $('#dz-gz-free').value    = z.free_threshold ?? '';
     $('#dz-gz-max').value     = z.max_fee ?? '';
+    $('#dz-gz-w1').value      = z.weight_first_kg_fee ?? '';
+    $('#dz-gz-wx').value      = z.weight_extra_kg_fee ?? '';
     $('#dz-city-pack').value     = z.packing_fee_per_item ?? '';
     $('#dz-city-pack-cap').value = z.packing_fee_cap ?? '';
     $('#dz-edit-lead').value    = z.min_lead_days ?? '';
@@ -681,6 +702,10 @@ async function saveZoneDrawer() {
     base_fee: Number($('#dz-gz-base').value) || 0,
     free_threshold: numOrNull($('#dz-gz-free').value),
     max_fee: isGz ? numOrNull($('#dz-gz-max').value) : null,
+    // Per-area weight rule (首重/续重). Only prices by weight when BOTH are set;
+    // either blank → the server stores NULL and the zone falls back to flat.
+    weight_first_kg_fee: numOrNull($('#dz-gz-w1').value),
+    weight_extra_kg_fee: numOrNull($('#dz-gz-wx').value),
     packing_fee_per_item: isGz ? 0 : (Number($('#dz-city-pack').value) || 0),
     packing_fee_cap:      isGz ? null : numOrNull($('#dz-city-pack-cap').value),
     min_lead_days:  numOrNull($('#dz-edit-lead').value) ?? (isGz ? 0 : 3),
@@ -1295,7 +1320,10 @@ function rmDlvRenderZones() {
   const feeHtml = (z) => {
     if (view === 'pricing') {
       const free = z.free_threshold == null ? 'default · 默认' : '免 ¥' + z.free_threshold;
-      return `<div class="b">¥${z.base_fee ?? 0}</div><div class="f">${free}</div>`;
+      const price = zoneIsWeightPriced(z)
+        ? '¥' + z.weight_first_kg_fee + (Number(z.weight_extra_kg_fee) ? ' +¥' + z.weight_extra_kg_fee + '/kg' : '')
+        : '¥' + (z.base_fee ?? 0);
+      return `<div class="b">${price}</div><div class="f">${free}</div>`;
     }
     const mode = z.day_only ? 'Day · 按日' : 'Slots · 时段';
     return `<div class="b">${mode}</div><div class="f">${(z.min_lead_days ?? 0)}–${(z.max_lead_days ?? 14)}d</div>`;
@@ -1427,6 +1455,172 @@ function dlvHubRender() {
   if (qn > 0) _dlvStat('dlv-st-qy', 'ok', cuT('Connected · ' + qn + ' store' + (qn === 1 ? '' : 's'), '已连接 · ' + qn + ' 家门店'));
   else _dlvStat('dlv-st-qy', 'off', cuT('Not set up', '未开通'));
   _dlvBtn('dlv-btn-qy', qn > 0, 'Configure', '配置');
+
+  // New-tenant vs configured coverage — pickup-first landing until delivery is
+  // actually set up (see dlvCoverageRender).
+  dlvCoverageRender();
+}
+
+// ════════════════════════════════════════════════════════════════
+// NEW-TENANT COVERAGE + DELIVERY SET-UP WIZARD
+// ════════════════════════════════════════════════════════════════
+// A brand-new store shouldn't be dropped into Roots' per-location zone table.
+// Until delivery is genuinely configured, the Delivery tab opens on a
+// pickup-first landing (pickup on, delivery off) with a 3-question wizard that
+// writes real config. Once set up — or for any store that already has zones
+// (Roots) — the existing configured hub shows instead. Nothing here is
+// store-specific: no hardcoded city, ¥ amount, region or strategy.
+
+// Is delivery genuinely set up? True when the store has any active zone
+// (Roots), an enabled national default, or has completed the wizard
+// (delivery.enabled). A fresh tenant has none of these → pickup-first landing.
+function dlvIsConfigured() {
+  const zones = Array.isArray(window._zones) ? window._zones : (typeof _zones !== 'undefined' ? _zones : []);
+  if (zones.some(z => z.is_active)) return true;
+  if (document.getElementById('dlv-default-enabled')?.checked) return true;
+  const cfg = window._deliveryCfg || {};
+  return cfg.enabled === true;
+}
+
+// Swap the coverage section between the pickup-first landing and the configured
+// hub grid. Also fills the pickup card's hours line from the live inputs.
+function dlvCoverageRender() {
+  const neu = document.getElementById('dlv-coverage-new');
+  const std = document.getElementById('dlv-coverage-std');
+  if (!neu || !std) return;                       // markup not on this build
+  const configured = dlvIsConfigured();
+  neu.hidden = configured;
+  std.hidden = !configured;
+
+  // Pickup hours line — same source the configured pickup card reads.
+  const po = (document.getElementById('cfg-pickup-open')?.value) || '10:00';
+  const pc = (document.getElementById('cfg-pickup-close')?.value) || '20:00';
+  const pack = Number(document.getElementById('cfg-fees-pickupPackingFee')?.value) || 0;
+  const hoursTxt = cuT(po + '–' + pc + (pack > 0 ? ' · packing ¥' + pack : ''),
+                       '每日 ' + po + '–' + pc + (pack > 0 ? ' · 包装费 ¥' + pack : ''));
+  const nm = document.getElementById('dlv-new-pickup-meta');
+  if (nm) nm.textContent = hoursTxt;
+  const pm = document.getElementById('dlv-pickup-meta');
+  if (pm) pm.textContent = hoursTxt;
+}
+
+// ── Wizard state ────────────────────────────────────────────────────────────
+let _dlvWizStep = 1;
+const _dlvWizPick = { where: null, price: 'flat', when: 'nextday' };
+
+function dlvWizOpen(step) {
+  _dlvWizStep = step || 1;
+  _dlvWizPick.where = null; _dlvWizPick.price = 'flat'; _dlvWizPick.when = 'nextday';
+  const ov = document.getElementById('dlvwiz');
+  if (!ov) return;
+  ov.classList.add('open');
+  ov.setAttribute('aria-hidden', 'false');
+  // Reflect the defaults (flat / nextday pre-selected; where forces a choice).
+  dlvWizSyncSelected();
+  dlvWizPaint();
+}
+function dlvWizClose() {
+  const ov = document.getElementById('dlvwiz');
+  if (ov) { ov.classList.remove('open'); ov.setAttribute('aria-hidden', 'true'); }
+}
+
+// Mark the .dlvwiz-choice matching each remembered pick as selected.
+function dlvWizSyncSelected() {
+  document.querySelectorAll('#dlvwiz .dlvwiz-choice').forEach(c => {
+    const k = c.getAttribute('data-k'), v = c.getAttribute('data-v');
+    c.classList.toggle('sel', _dlvWizPick[k] === v);
+  });
+}
+
+function dlvWizPick(el) {
+  const k = el.getAttribute('data-k'), v = el.getAttribute('data-v');
+  _dlvWizPick[k] = v;
+  // Clear the other choices for THIS step only (same data-k), then select.
+  document.querySelectorAll('#dlvwiz .dlvwiz-choice[data-k="' + k + '"]').forEach(c => c.classList.remove('sel'));
+  el.classList.add('sel');
+  dlvWizPaint();
+}
+
+function dlvWizPaint() {
+  for (let i = 1; i <= 3; i++) {
+    const body = document.querySelector('#dlvwiz .dlvwiz-body[data-step="' + i + '"]');
+    if (body) body.hidden = i !== _dlvWizStep;
+    const dot = document.querySelector('#dlvwiz .dlvwiz-steps i[data-s="' + i + '"]');
+    if (dot) dot.classList.toggle('done', i <= _dlvWizStep);
+  }
+  const back = document.getElementById('dlvwiz-back');
+  if (back) back.style.visibility = _dlvWizStep > 1 ? 'visible' : 'hidden';
+  const next = document.getElementById('dlvwiz-next');
+  if (next) {
+    const key = ['where', 'price', 'when'][_dlvWizStep - 1];
+    next.disabled = !_dlvWizPick[key];             // step 1 forces a pick
+    next.textContent = _dlvWizStep === 3 ? cuT('Turn delivery on', '开启配送') : cuT('Continue', '继续');
+  }
+}
+
+function dlvWizBack() { if (_dlvWizStep > 1) { _dlvWizStep--; dlvWizPaint(); } }
+function dlvWizNext() {
+  if (_dlvWizStep < 3) { _dlvWizStep++; dlvWizPaint(); return; }
+  dlvWizFinish();
+}
+
+// Write the wizard's answers as real config. flat / free / city / country all
+// resolve through delivery.defaultZone (which the server materializes into a
+// live zone), so checkout prices them immediately with no server change.
+// 'areas' and 'zones' hand off to the existing zone editor. 'weight' stores a
+// weight rule on the default zone for the server to price (see routes/retail).
+async function dlvWizFinish() {
+  const num = (id, fb) => { const v = parseFloat(document.getElementById(id)?.value); return Number.isFinite(v) ? v : fb; };
+  const where = _dlvWizPick.where, price = _dlvWizPick.price, when = _dlvWizPick.when;
+
+  // Build the national default-zone rule from the price answer.
+  const dz = { enabled: true, day_only: 1 };
+  if (price === 'flat') {
+    dz.base_fee = num('dlvwiz-flat', 8);
+    dz.free_threshold = num('dlvwiz-free', 0) || null;
+  } else if (price === 'free') {
+    dz.base_fee = 0; dz.free_threshold = null;
+  } else if (price === 'weight') {
+    dz.base_fee = num('dlvwiz-w1', 10);          // first-kg fee doubles as the floor
+    dz.free_threshold = null;
+    dz.weight = { first_kg_fee: num('dlvwiz-w1', 10), extra_kg_fee: num('dlvwiz-wx', 3) };
+  } else {
+    // 'zones' — per-area pricing; the default zone is a safety net, keep a small flat.
+    dz.base_fee = num('dlvwiz-flat', 8);
+    dz.free_threshold = null;
+  }
+  // Lead time + same-day follow the speed answer.
+  dz.min_lead_days = (when === 'sameday') ? 0 : (when === 'nextday') ? 1 : (when === 'courier') ? 1 : 0;
+  dz.same_day_allowed = (when === 'sameday') ? 1 : 0;
+  // "Customer picks a time" wants real time-slots, not the day-only calendar.
+  dz.day_only = (when === 'slots') ? 0 : 1;
+
+  const body = {
+    'delivery.enabled': true,
+    'delivery.coverage': where,                    // city | areas | country
+    'delivery.pricingMode': price,                 // flat | weight | free | zones
+    'delivery.speed': when,                         // sameday | nextday | courier | slots
+  };
+  // Only seed the national default zone when the store wants blanket coverage
+  // (city / country) with a simple price. Per-area ('areas'/'zones') leaves the
+  // default off so unmatched addresses fall to the zone table the user fills in.
+  if (where !== 'areas' && price !== 'zones') {
+    body['delivery.defaultZone'] = dz;
+  }
+  // Same-day cutoff + speed labels the customer apps can show.
+  if (when === 'sameday') body['delivery.sameDayCutoff'] = (document.getElementById('dlvwiz-cutoff')?.value) || '16:00';
+
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    dlvWizClose();
+    toast(cuT('Delivery is on', '配送已开启'));
+    await loadDeliveryZones();                     // re-read config → flips to configured view
+    dlvGo('hub');
+    // Route the user straight to the follow-up screen their answer implies.
+    if (where === 'areas' || price === 'zones') dlvGo('zones');
+  } catch (e) {
+    toast(cuT('Save failed', '保存失败') + ': ' + e.message, 'err');
+  }
 }
 
 // The hub card's switch — writes through to the real checkbox and saves.

@@ -613,6 +613,11 @@ router.get('/api/retail/config', (req, res) => {
       mini_app_open: !inventory.channelFullyClosed('mini_app'),
       web_open: !inventory.channelFullyClosed('web'),
     };
+    // Home-delivery availability. A fresh store hasn't set up delivery, so the
+    // apps show pickup only (delivery.available=false) instead of offering a
+    // delivery option that would fail at checkout. Roots/any set-up store = true.
+    cfg.delivery = cfg.delivery || {};
+    cfg.delivery.available = deliveryIsAvailable();
 
     // Always surface review tags so the mini app's review form + product
     // cards have labels + colours even on fresh installs (before staff
@@ -8265,7 +8270,14 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // store is paid for boxing the items. delivery_mode='pickup' marks it in admin.
     packingFee = Number(cfgValue('fees.pickupPackingFee', 0)) || 0;
   } else if (zone) {
-    const fees = computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty);
+    // Total cart weight (grams) for weight-priced zones. Products carry a
+    // freeform weight string in `size`; unparseable ones (counts/volumes)
+    // contribute 0 so the fee degrades to the zone's flat base_fee.
+    const cartGrams = resolved.reduce((s, r) => {
+      const g = parseWeightToGrams(r.product && r.product.size);
+      return s + (g ? g * (Number(r.qty) || 0) : 0);
+    }, 0);
+    const fees = computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty, cartGrams);
     if (fees.error) return res.status(400).json({ success: false, error: fees.error });
     shippingFee    = fees.deliveryFee;
     packingFee     = fees.packingFee;
@@ -20581,6 +20593,10 @@ function defaultDeliveryZone() {
     match_district: null,
     base_fee:              Number(c.base_fee ?? 25),
     free_threshold:        c.free_threshold == null ? null : Number(c.free_threshold),
+    // Courier-style weight rule ({ first_kg_fee, extra_kg_fee }) set by the
+    // delivery wizard's "By weight" option. Present → computeDeliveryAndPacking
+    // prices by cart weight; absent → the flat base_fee is used as before.
+    weight:                (c.weight && c.weight.first_kg_fee != null) ? c.weight : null,
     max_fee:               null,
     packing_fee_per_item:  Number(c.packing_fee_per_item ?? 0),
     packing_fee_cap:       c.packing_fee_cap == null ? null : Number(c.packing_fee_cap),
@@ -20594,6 +20610,22 @@ function defaultDeliveryZone() {
     slot_duration_minutes: Number(c.slot_duration_minutes ?? 0),
     day_only:              c.day_only == null ? 1 : (c.day_only ? 1 : 0),
   };
+}
+
+// Is home delivery genuinely available to customers? True when the store
+// completed the delivery wizard (delivery.enabled), has an enabled national
+// default, or has any active delivery zone (the Roots case — predates the
+// wizard). A fresh tenant has none → the customer apps show pickup only rather
+// than offering a delivery option that fails at checkout. Mirrors the admin's
+// dlvIsConfigured() so the two never disagree.
+function deliveryIsAvailable() {
+  if (cfgValue('delivery.enabled', false) === true) return true;
+  const def = cfgValue('delivery.defaultZone', null);
+  if (def && def.enabled) return true;
+  try {
+    const row = tdb().prepare('SELECT 1 FROM retail_delivery_zones WHERE is_active = 1 LIMIT 1').get();
+    return !!row;
+  } catch { return true; }   // fail-open — never hide delivery on a lookup error
 }
 
 function matchDeliveryZone(address) {
@@ -20631,18 +20663,28 @@ function matchDeliveryZone(address) {
 
   const inGuangzhou = isGuangzhou(address.city) || /广州/.test(blob) || /guangzhou/i.test(blob);
 
+  // Guangzhou district-level matching applies ONLY when this store actually
+  // configures GZ districts (the Roots case). A tenant with no gz_district
+  // zones — e.g. a store elsewhere in China that just picked "anywhere in the
+  // country" — must treat Guangzhou as an ordinary city and fall through to the
+  // city / province / national-default matching below; otherwise every
+  // Guangzhou address would be refused. When districts ARE configured, keep the
+  // exact prior behaviour: match a district or refuse (return null).
   if (inGuangzhou) {
     const rows = tdb().prepare(
       `SELECT * FROM retail_delivery_zones WHERE zone_type = 'gz_district' AND is_active = 1`
     ).all();
-    for (const r of rows) {
-      if (wantDistrict && normalizeAreaName(r.match_district) === wantDistrict) return r;
-      const full = r.match_district || '';
-      if (full && blob.includes(full)) return r;
-      const stripped = stripSuffix(full);
-      if (stripped && stripped.length >= 2 && blob.includes(stripped)) return r;
+    if (rows.length) {
+      for (const r of rows) {
+        if (wantDistrict && normalizeAreaName(r.match_district) === wantDistrict) return r;
+        const full = r.match_district || '';
+        if (full && blob.includes(full)) return r;
+        const stripped = stripSuffix(full);
+        if (stripped && stripped.length >= 2 && blob.includes(stripped)) return r;
+      }
+      return null;
     }
-    return null;
+    // else: no GZ districts configured → fall through to generic matching.
   }
   const rows = tdb().prepare(
     `SELECT * FROM retail_delivery_zones WHERE zone_type = 'city' AND is_active = 1`
@@ -21332,7 +21374,21 @@ function resolveDeliverySlot(zone, slotId, now) {
 //   • 'standard' — base_fee (free if subtotal hits threshold)
 //   • 'max'      — flat max_fee (Guangzhou only). free_threshold does NOT apply.
 // Packing fee applies to any zone that configures one (per-item × qty, capped).
-function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty) {
+// Courier-style weight fee: a price for the first kilogram, then a price for
+// each additional STARTED kilogram (首重/续重). Falls back to `fallback` (the
+// zone's flat base_fee) when the cart weight can't be computed — no product has
+// a parseable weight — so a weight-priced store never blocks checkout or
+// silently charges ¥0 for a heavy parcel.
+function weightDeliveryFee(rule, grams, fallback) {
+  const first = Number(rule && rule.first_kg_fee);
+  const extra = Number(rule && rule.extra_kg_fee) || 0;
+  if (!Number.isFinite(first)) return Number(fallback) || 0;
+  if (!(grams > 0)) return first;                       // no weight info → first-kg (== base_fee)
+  const extraKg = Math.max(0, Math.ceil((grams - 1000) / 1000));
+  return Math.round((first + extra * extraKg) * 100) / 100;
+}
+
+function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty, cartGrams) {
   if (!zone) {
     return { error: 'no_zone_match', deliveryFee: 0, packingFee: 0, freeShipping: false };
   }
@@ -21349,10 +21405,28 @@ function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty) {
     freeEligible = globalFree <= 0 || subtotal >= globalFree;
   }
 
+  // Resolve a weight rule from either the config default zone (zone.weight
+  // object) or a database zone row (weight_first_kg_fee / weight_extra_kg_fee
+  // columns — the per-area rate table). Absent → flat pricing.
+  const weightRule = (zone.weight && zone.weight.first_kg_fee != null)
+    ? zone.weight
+    : (zone.weight_first_kg_fee != null
+        ? { first_kg_fee: zone.weight_first_kg_fee, extra_kg_fee: zone.weight_extra_kg_fee }
+        : null);
+
   let deliveryFee = 0;
   if (zone.zone_type === 'gz_district' && deliveryMode === 'max') {
     if (zone.max_fee == null) return { error: 'max_not_offered', deliveryFee: 0, packingFee: 0, freeShipping: false };
     deliveryFee = Number(zone.max_fee);
+  } else if (weightRule && Number(weightRule.first_kg_fee) >= 0) {
+    // Weight-priced zone (wizard's national default, or a per-area rate on a
+    // zone row). The zone's own Free-over still waives it; the global free
+    // fallback does NOT apply to weight pricing — a courier rate is meant to be
+    // charged, so it stays predictable.
+    const zoneFreeWaives = zone.free_threshold != null
+      && Number(zone.free_threshold) > 0
+      && subtotal >= Number(zone.free_threshold);
+    deliveryFee = zoneFreeWaives ? 0 : weightDeliveryFee(weightRule, cartGrams, zone.base_fee);
   } else {
     deliveryFee = freeEligible ? 0 : Number(zone.base_fee || 0);
   }
@@ -21365,10 +21439,14 @@ function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty) {
     }
   }
 
+  const isGzMax = zone.zone_type === 'gz_district' && deliveryMode === 'max';
   return {
     deliveryFee: Math.round(deliveryFee * 100) / 100,
     packingFee:  Math.round(packingFee  * 100) / 100,
-    freeShipping: freeEligible && !(zone.zone_type === 'gz_district' && deliveryMode === 'max'),
+    // Free-shipping badge reflects the actual outcome: a ¥0 delivery line (via
+    // threshold, free mode, or a zone-waived weight fee) reads as free, except
+    // the GZ any-distance MAX flat which is never "free".
+    freeShipping: deliveryFee === 0 && !isGzMax,
   };
 }
 
@@ -21379,14 +21457,14 @@ function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty) {
 function priceCart(items, customerId) {
   if (!Array.isArray(items) || !items.length) return { error: 'no_items', subtotal: 0, totalQty: 0 };
   const now = Date.now();
-  let subtotal = 0, totalQty = 0;
+  let subtotal = 0, totalQty = 0, totalGrams = 0;
   const lines = [];
   for (const it of items) {
     const pid = parseInt(it.product_id, 10);
     const qty = Number(it.qty);
     if (!pid || !(qty > 0)) return { error: 'invalid_item', subtotal: 0, totalQty: 0 };
     const p = tdb().prepare(
-      `SELECT id, sell_price AS price, compare_at_price,
+      `SELECT id, sell_price AS price, compare_at_price, weight AS size,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold, no_coupon_on_flash, ship_from_supplier
          FROM store_products
@@ -21411,6 +21489,8 @@ function priceCart(items, customerId) {
     const unit = eff.price + optionDelta;
     subtotal += unit * qty;
     totalQty += qty;
+    const g = parseWeightToGrams(p.size);            // weight-priced zones sum this
+    if (g) totalGrams += g * qty;
     // Per-line breakdown so the checkout page can re-price its cart display
     // to the CURRENT effective price (flash sales that started/ended while
     // an item sat in the cart). choice_ids is normalised (numeric, sorted)
@@ -21438,7 +21518,7 @@ function priceCart(items, customerId) {
       ship_from_supplier: !!p.ship_from_supplier,
     });
   }
-  return { subtotal: Math.round(subtotal * 100) / 100, totalQty, lines };
+  return { subtotal: Math.round(subtotal * 100) / 100, totalQty, totalGrams, lines };
 }
 
 // POST /api/retail/cart/price — lightweight cart re-pricing with NO address
@@ -21891,7 +21971,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
   }
 
   const zone = matchDeliveryZone(address);
-  const fees = computeDeliveryAndPacking(zone, priced.subtotal, deliveryMode, priced.totalQty);
+  const fees = computeDeliveryAndPacking(zone, priced.subtotal, deliveryMode, priced.totalQty, priced.totalGrams);
   if (fees.error) {
     return res.json({
       success: false,
@@ -22769,8 +22849,9 @@ router.post('/api/retail-admin/delivery-zones', requireRetailAdmin, express.json
        (zone_type, name_en, name_cn, match_city, match_district, base_fee, max_fee,
         free_threshold, packing_fee_per_item, packing_fee_cap, is_active, sort_order,
         same_day_allowed, same_day_surcharge, min_lead_days, max_lead_days,
-        slot_start_hour, slot_end_hour, slot_duration_minutes, day_only)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        slot_start_hour, slot_end_hour, slot_duration_minutes, day_only,
+        weight_first_kg_fee, weight_extra_kg_fee)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(
     b.zone_type, b.name_en || null, b.name_cn || null,
     b.match_city || null, b.match_district || null,
@@ -22790,6 +22871,9 @@ router.post('/api/retail-admin/delivery-zones', requireRetailAdmin, express.json
     Number(b.slot_duration_minutes) || 120,
     // Cities default to day-only; GZ districts default to time-slots unless flipped.
     b.day_only === 1 ? 1 : (b.zone_type === 'city' ? 1 : 0),
+    // Weight rule — NULL unless the operator filled BOTH fields (flat otherwise).
+    b.weight_first_kg_fee != null && b.weight_first_kg_fee !== '' ? Number(b.weight_first_kg_fee) : null,
+    b.weight_extra_kg_fee  != null && b.weight_extra_kg_fee  !== '' ? Number(b.weight_extra_kg_fee)  : null,
   );
   logActivity(req.user.id, req.user.username, 'create', 'delivery_zone', info.lastInsertRowid, b, req.ip);
   res.json({ success: true, data: { id: info.lastInsertRowid } });
@@ -22801,10 +22885,14 @@ router.patch('/api/retail-admin/delivery-zones/:id', requireRetailAdmin, express
   const fields = ['name_en','name_cn','match_city','match_district','base_fee','max_fee',
                   'free_threshold','packing_fee_per_item','packing_fee_cap','is_active','sort_order',
                   'same_day_allowed','same_day_surcharge','min_lead_days','max_lead_days',
-                  'slot_start_hour','slot_end_hour','slot_duration_minutes','day_only'];
+                  'slot_start_hour','slot_end_hour','slot_duration_minutes','day_only',
+                  'weight_first_kg_fee','weight_extra_kg_fee'];
+  // weight_* stay in numericFields but NOT in the "default to 0 when null" list
+  // below — clearing a field must revert the zone to flat pricing (NULL), not ¥0.
   const numericFields = ['base_fee','max_fee','free_threshold','packing_fee_per_item','packing_fee_cap',
                          'sort_order','same_day_surcharge','min_lead_days','max_lead_days',
-                         'slot_start_hour','slot_end_hour','slot_duration_minutes'];
+                         'slot_start_hour','slot_end_hour','slot_duration_minutes',
+                         'weight_first_kg_fee','weight_extra_kg_fee'];
   const sets = [], params = [];
   for (const f of fields) {
     if (!(f in b)) continue;

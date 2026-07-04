@@ -893,6 +893,64 @@
   .dlv-step .t small { display: block; font-size: 11px; color: var(--text-4); }
   .dlv-step-arrow { color: var(--text-4); margin: 0 14px; flex: none; }
 
+  /* Delivery hub card in its "off / not set up" state — dimmed so the pickup
+     card reads as the live one and delivery as the opt-in. */
+  .dlv-hc.dlv-hc-off { background: var(--bg-elev-1); }
+  .dlv-hc.dlv-hc-off .sales-ch-blurb { color: var(--text-3); }
+
+  /* ── Delivery set-up wizard (dlvWiz*) ── */
+  .dlvwiz-ov {
+    position: fixed; inset: 0; z-index: 4200; display: none;
+    align-items: center; justify-content: center; padding: 20px;
+    background: rgba(10,12,14,.55);
+  }
+  .dlvwiz-ov.open { display: flex; }
+  .dlvwiz {
+    background: var(--bg-pane); border: 1px solid var(--line);
+    border-radius: var(--r-xl, 14px); width: 100%; max-width: 480px;
+    box-shadow: 0 24px 70px rgba(0,0,0,.4); overflow: hidden;
+    animation: dlvwiz-in .18s ease;
+  }
+  @keyframes dlvwiz-in { from { transform: translateY(8px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+  .dlvwiz-head { padding: 18px 20px 0; }
+  .dlvwiz-head b { font-size: 16px; color: var(--text-1); display: block; }
+  .dlvwiz-steps { display: flex; gap: 6px; margin-top: 14px; }
+  .dlvwiz-steps i { height: 4px; border-radius: 99px; flex: 1; background: var(--line-strong, var(--line)); transition: background .2s; }
+  .dlvwiz-steps i.done { background: var(--brass); }
+  .dlvwiz-body { padding: 16px 20px 4px; }
+  .dlvwiz-q { font-size: 15px; font-weight: 700; color: var(--text-1); margin: 0 0 4px; }
+  .dlvwiz-sub { font-size: 12.5px; color: var(--text-3); margin: 0 0 14px; line-height: 1.5; }
+  .dlvwiz-choice {
+    display: flex; align-items: flex-start; gap: 12px; width: 100%; text-align: left;
+    border: 1.5px solid var(--line); border-radius: 12px; padding: 13px 14px;
+    background: var(--bg-pane); cursor: pointer; margin-bottom: 10px;
+    font: inherit; color: var(--text-1); transition: border-color .13s, background .13s;
+  }
+  .dlvwiz-choice:hover { border-color: var(--text-3); }
+  .dlvwiz-choice.sel { border-color: var(--brass); background: color-mix(in srgb, var(--brass) 8%, var(--bg-pane)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brass) 18%, transparent); }
+  .dlvwiz-radio {
+    width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line-strong, var(--line));
+    flex: none; margin-top: 1px; position: relative; transition: border-color .13s;
+  }
+  .dlvwiz-choice.sel .dlvwiz-radio { border-color: var(--brass); }
+  .dlvwiz-choice.sel .dlvwiz-radio::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--brass); }
+  .dlvwiz-cl { flex: 1; min-width: 0; }
+  .dlvwiz-ct { font-size: 14px; font-weight: 700; color: var(--text-1); }
+  .dlvwiz-cs { font-size: 12px; color: var(--text-3); margin-top: 2px; line-height: 1.45; }
+  .dlvwiz-inl { display: none; margin-top: 10px; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12.5px; font-weight: 600; color: var(--text-2); }
+  .dlvwiz-choice.sel .dlvwiz-inl { display: flex; }
+  .dlvwiz-in {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg-elev-1);
+    color: var(--text-1); font: inherit; font-size: 13.5px; font-weight: 700;
+    padding: 6px 8px; width: 66px;
+  }
+  .dlvwiz-in.wide { width: 150px; font-weight: 600; }
+  .dlvwiz-in:focus { outline: none; border-color: var(--brass); }
+  .dlvwiz-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: 14px 20px 18px; margin-top: 6px; border-top: 1px solid var(--line);
+  }
+
   /* "Advanced" pocket on the zones view — rare settings, collapsed. */
   .dlv-adv { margin: var(--s3) 0 var(--s4); }
   .dlv-adv > summary {
@@ -3785,6 +3843,7 @@
   /* Province-wide (全省/全市) — earthy tan, distinct from GZ green + CITY ink */
   .dz-type-chip.prov { background: rgba(176, 137, 104, .14); color: #8a6a44; border-color: rgba(176, 137, 104, .4); }
   .dz-extras { color: var(--text-3); font-size: 11px; }
+  .dz-wprice { color: var(--brass); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .dz-sd-yes { color: var(--st-delivered); font-weight: 600; }
   .dz-sd-no  { color: var(--text-4); }
 

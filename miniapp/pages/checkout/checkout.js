@@ -80,6 +80,10 @@ Page({
     // The Delivery/Pickup toggle only renders when at least one store opted
     // in (pickupStores non-empty); otherwise checkout stays delivery-only.
     fulfillment: 'delivery',
+    // Home delivery set up for this store? From /api/retail/config delivery.available.
+    // Fail-open (true) so a config hiccup never blocks a store that does deliver.
+    // When false (fresh store, delivery not set up) checkout runs pickup-only.
+    deliveryEnabled: true,
     pickupStores: [],            // [{id, code, name_en, name_cn, address, city, district, phone}]
     pickupWindow: { open: '10:00', close: '20:00' },
     pickupPackingFee: 0,         // flat per-order packing fee for pickup (¥)
@@ -331,12 +335,21 @@ Page({
     // Stash the kitchen address for the "we don't deliver here" message.
     try {
       const cfg = await config.load();
-      this.setData({
+      // Delivery available? Only false when the server explicitly says so, so an
+      // older server (no flag) or a load error leaves delivery on.
+      const deliveryEnabled = !(cfg && cfg.delivery && cfg.delivery.available === false);
+      const patch = {
         kitchenAddress: cfg?.delivery?.kitchenAddress || '',
         // Alipay is selectable only when the server says it'll work (manual
         // 收款码 configured or auto 当面付 live); otherwise it stays greyed.
         alipayEnabled: !!(cfg && cfg.payments && cfg.payments.alipay),
-      });
+        deliveryEnabled,
+      };
+      // Delivery not set up → this store is pickup-only; start on the pickup
+      // fulfillment so the customer never fills a delivery address that can't
+      // be served.
+      if (!deliveryEnabled) patch.fulfillment = 'pickup';
+      this.setData(patch);
     } catch {}
 
     // Unbound customer — skip the address/quote/coupon loads. They'll run
@@ -992,6 +1005,9 @@ Page({
   setFulfillment(e) {
     const mode = e.currentTarget.dataset.mode;
     if (mode === this.data.fulfillment) return;
+    // Defensive: never let the UI switch to delivery when the store hasn't set
+    // it up (the toggle is hidden in that case, but guard the handler too).
+    if (mode === 'delivery' && !this.data.deliveryEnabled) return;
     this.setData({ fulfillment: mode });
     if (mode === 'pickup') this.applyDefaultPickupSlot();
     this.refreshQuote();

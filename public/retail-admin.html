@@ -3441,16 +3441,60 @@
         How orders reach your customers — one card per topic. · 订单如何送达顾客 — 每张卡片一个主题。
       </div>
 
-      <!-- New-store strip: visible only while no zone exists (dlvHubRender). -->
-      <div class="dlv-setup" id="dlv-setup-strip" hidden>
-        <div class="lead">Start delivering · 开始配送<span class="m">2 required steps · 两个必要步骤</span></div>
-        <button type="button" class="dlv-step" onclick="dlvGo('zones')"><span class="n">1</span><span class="t">Add a delivery zone<small>where you deliver · 配送到哪里</small></span></button>
-        <svg class="dlv-step-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        <button type="button" class="dlv-step" onclick="dlvGo('fees')"><span class="n">2</span><span class="t">Set your fees<small>what customers pay · 顾客付多少</small></span></button>
-        <svg class="dlv-step-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        <button type="button" class="dlv-step" onclick="dlvGo('pickup')"><span class="n">3</span><span class="t">Pickup &amp; carriers<small>optional · 可选</small></span></button>
+      <!-- ══ NEW-TENANT COVERAGE — pickup-first, delivery off until the wizard
+           runs. dlvCoverageRender() shows this OR the configured grid below,
+           never both. Plain-words, tenant-neutral (no zones/¥/region baked in). ══ -->
+      <div id="dlv-coverage-new" hidden>
+        <div class="sales-eyebrow" style="margin-top: 0;">How customers get orders · 顾客如何拿到订单</div>
+        <div class="sales-grid">
+
+          <!-- Pickup — on from day one -->
+          <div class="sales-ch dlv-hc">
+            <div class="sales-ch-top">
+              <div class="sales-ch-id">
+                <span class="sales-ch-ico" style="background:rgba(107,142,111,.14);color:#4d7052">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l1 4H5l1-4Z"/><path d="M5 11v9h14v-9"/><path d="M9 20v-5h6v5"/></svg>
+                </span>
+                <div>
+                  <div class="sales-ch-name">Pickup at your store · 到店自提</div>
+                  <div class="sales-ch-stat" id="dlv-new-st-pickup"><span class="sales-dot ok"></span>On — works from day one · 已开启,开店即可用</div>
+                </div>
+              </div>
+            </div>
+            <div class="sales-ch-blurb">Customers order online and come get it themselves. No courier, no delivery fee — just set your pickup hours. · 顾客网上下单,自己到店取货。无需骑手、不收运费,只需设置取货时间。</div>
+            <div class="sales-ch-foot">
+              <button class="btn btn-sm" type="button" onclick="dlvGo('pickup')">Set hours · 设置时间</button>
+              <span class="meta" id="dlv-new-pickup-meta"></span>
+            </div>
+          </div>
+
+          <!-- Delivery — off until the wizard runs -->
+          <div class="sales-ch dlv-hc dlv-hc-off">
+            <div class="sales-ch-top">
+              <div class="sales-ch-id">
+                <span class="sales-ch-ico" style="background:rgba(18,22,26,.07);color:var(--text-3)">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M1 8h13v9H1z"/><path d="M14 11h4l3 3v3h-7z"/><circle cx="5.5" cy="19" r="1.8"/><circle cx="17.5" cy="19" r="1.8"/></svg>
+                </span>
+                <div>
+                  <div class="sales-ch-name">Delivery to their door · 送货上门</div>
+                  <div class="sales-ch-stat"><span class="sales-dot off"></span>Off — not set up yet · 未开启,尚未设置</div>
+                </div>
+              </div>
+            </div>
+            <div class="sales-ch-blurb">You send orders to the customer's address. Answer 3 quick questions and it's on — you can change any answer later. · 把订单送到顾客地址。回答 3 个小问题即可开启,之后随时可改。</div>
+            <div class="sales-ch-foot">
+              <button class="btn btn-sm btn-primary" type="button" onclick="dlvWizOpen(1)">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                Set up delivery · 设置配送
+              </button>
+              <span class="meta">about 1 minute · 约 1 分钟</span>
+            </div>
+          </div>
+        </div>
       </div>
 
+      <!-- ══ CONFIGURED COVERAGE — the existing hub (Roots & any set-up store) ══ -->
+      <div id="dlv-coverage-std">
       <div class="sales-eyebrow" style="margin-top: 0;">Coverage &amp; pricing · 配送范围与费用</div>
       <div class="sales-grid">
 
@@ -3509,10 +3553,11 @@
           <div class="sales-ch-blurb">Customers collect orders at your stores — set the daily window and an optional packing fee. · 顾客到店取货 — 设置每日时间窗与包装费。</div>
           <div class="sales-ch-foot">
             <button class="btn btn-sm" type="button" onclick="dlvGo('pickup')">Edit · 编辑</button>
-            <span class="meta">per-store switch in Kitchen app · 门店开关在厨房端</span>
+            <span class="meta" id="dlv-pickup-meta"></span>
           </div>
         </div>
       </div>
+      </div><!-- /#dlv-coverage-std -->
 
       <div class="sales-eyebrow">Scheduling · 排期</div>
       <div class="sales-grid">
@@ -4173,6 +4218,139 @@
       </div>
     </div>
 
+    <!-- ══ DELIVERY SET-UP WIZARD — 3 plain questions, writes real config.
+         Where → Price → When. Tenant-neutral: nothing store-specific baked in. ══ -->
+    <div class="dlvwiz-ov" id="dlvwiz" aria-hidden="true">
+      <div class="dlvwiz" role="dialog" aria-modal="true" aria-labelledby="dlvwiz-title">
+        <div class="dlvwiz-head">
+          <b id="dlvwiz-title">Set up delivery · 设置配送</b>
+          <div class="dlvwiz-steps"><i data-s="1"></i><i data-s="2"></i><i data-s="3"></i></div>
+        </div>
+
+        <!-- STEP 1 · WHERE (forced pick, nothing preselected) -->
+        <div class="dlvwiz-body" data-step="1">
+          <p class="dlvwiz-q">Where do you deliver? · 你们送到哪里?</p>
+          <p class="dlvwiz-sub">Pick one. Customers outside this area only see pickup. · 选择一项。范围之外的顾客只会看到自提。</p>
+
+          <button type="button" class="dlvwiz-choice" data-k="where" data-v="city" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">Just my city · 只送本市</span>
+              <span class="dlvwiz-cs">The city your store is in. · 门店所在的城市。</span>
+              <span class="dlvwiz-inl"><input type="text" id="dlvwiz-city" class="dlvwiz-in wide" placeholder="Your city · 你的城市" onclick="event.stopPropagation()"></span>
+            </span>
+          </button>
+
+          <button type="button" class="dlvwiz-choice" data-k="where" data-v="areas" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">A few areas I choose · 我指定的几个地区</span>
+              <span class="dlvwiz-cs">Add cities or districts one by one, after this. · 之后逐个添加城市或区。</span>
+            </span>
+          </button>
+
+          <button type="button" class="dlvwiz-choice" data-k="where" data-v="country" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">Anywhere in the country · 全国配送</span>
+              <span class="dlvwiz-cs">You ship by courier to any address. · 通过快递寄送到任何地址。</span>
+            </span>
+          </button>
+        </div>
+
+        <!-- STEP 2 · PRICE -->
+        <div class="dlvwiz-body" data-step="2" hidden>
+          <p class="dlvwiz-q">What does delivery cost the customer? · 顾客要付多少运费?</p>
+          <p class="dlvwiz-sub">Most stores start with one flat price. You can fine-tune later. · 大多数商家先用统一运费,之后可再细调。</p>
+
+          <button type="button" class="dlvwiz-choice" data-k="price" data-v="flat" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">One flat price · 统一运费</span>
+              <span class="dlvwiz-inl">
+                Charge · 每单收 ¥<input type="number" inputmode="decimal" id="dlvwiz-flat" class="dlvwiz-in" value="8" onclick="event.stopPropagation()">
+                &nbsp;· free over · 满 ¥<input type="number" inputmode="decimal" id="dlvwiz-free" class="dlvwiz-in" value="99" onclick="event.stopPropagation()">
+              </span>
+            </span>
+          </button>
+
+          <button type="button" class="dlvwiz-choice" data-k="price" data-v="weight" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">By weight · 按重量计费</span>
+              <span class="dlvwiz-cs">Courier-style: a price for the first kg, then per extra kg. · 快递式:首重一个价,续重每公斤加价。</span>
+              <span class="dlvwiz-inl">
+                First kg · 首重 ¥<input type="number" inputmode="decimal" id="dlvwiz-w1" class="dlvwiz-in" value="10" onclick="event.stopPropagation()">
+                &nbsp;· each extra kg · 续重每公斤 ¥<input type="number" inputmode="decimal" id="dlvwiz-wx" class="dlvwiz-in" value="3" onclick="event.stopPropagation()">
+              </span>
+            </span>
+          </button>
+
+          <button type="button" class="dlvwiz-choice" data-k="price" data-v="free" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">Always free · 全部免运费</span>
+              <span class="dlvwiz-cs">You cover the delivery cost. · 运费由你承担。</span>
+            </span>
+          </button>
+
+          <button type="button" class="dlvwiz-choice" data-k="price" data-v="zones" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">A different price per area · 不同地区不同价</span>
+              <span class="dlvwiz-cs">Each area gets its own price — flat or by weight, like a courier rate table. You'll fill in the table after setup. · 每个地区单独定价 —— 固定价或按重量,如同快递运费模板。完成后填写价格表。</span>
+            </span>
+          </button>
+        </div>
+
+        <!-- STEP 3 · WHEN -->
+        <div class="dlvwiz-body" data-step="3" hidden>
+          <p class="dlvwiz-q">When does the order arrive? · 订单什么时候送到?</p>
+          <p class="dlvwiz-sub">This is what customers are promised at checkout. · 这是顾客在结账时看到的承诺。</p>
+
+          <button type="button" class="dlvwiz-choice" data-k="when" data-v="sameday" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">Same day · 当日达</span>
+              <span class="dlvwiz-inl">if they order before · 需在此时间前下单 <input type="time" id="dlvwiz-cutoff" class="dlvwiz-in wide" value="16:00" onclick="event.stopPropagation()"></span>
+            </span>
+          </button>
+
+          <button type="button" class="dlvwiz-choice" data-k="when" data-v="nextday" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">Next day · 次日达</span>
+              <span class="dlvwiz-cs">Order today, arrives tomorrow. · 今天下单,明天送到。</span>
+            </span>
+          </button>
+
+          <button type="button" class="dlvwiz-choice" data-k="when" data-v="courier" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">A few days — by courier · 几天内,快递寄送</span>
+              <span class="dlvwiz-cs">Customers see "ships within 24h" and get a tracking number. · 顾客看到「24 小时内发货」并获得快递单号。</span>
+            </span>
+          </button>
+
+          <button type="button" class="dlvwiz-choice" data-k="when" data-v="slots" onclick="dlvWizPick(this)">
+            <span class="dlvwiz-radio"></span>
+            <span class="dlvwiz-cl">
+              <span class="dlvwiz-ct">Customer picks a time · 顾客自选时间</span>
+              <span class="dlvwiz-cs">They choose a date and a time window at checkout. · 顾客在结账时选择日期和时间段。</span>
+            </span>
+          </button>
+        </div>
+
+        <div class="dlvwiz-foot">
+          <button type="button" class="btn btn-sm" id="dlvwiz-back" onclick="dlvWizBack()">Back · 上一步</button>
+          <span style="display:flex;gap:8px">
+            <button type="button" class="btn btn-sm" onclick="dlvWizClose()">Cancel · 取消</button>
+            <button type="button" class="btn btn-sm btn-primary" id="dlvwiz-next" onclick="dlvWizNext()" disabled>Continue · 继续</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
   </section>
 
   <!-- Zone edit / add drawer (slide-in side drawer) -->
@@ -4249,6 +4427,14 @@
             <div class="field dz-only-city" style="margin: 0; display: none;">
               <label class="stacked">Packing cap ¥ · 包装费上限 <span class="help-i" data-tip="Upper limit on the per-item packing fee — protects large carts from runaway packing charges. e.g. ¥1/item × 100 items capped at ¥20. · 单笔包装费上限,防止大单包装费过高。">?</span></label>
               <input type="number" id="dz-city-pack-cap" placeholder="20">
+            </div>
+            <div class="field" style="margin: 0; grid-column: 1 / -1;">
+              <label class="stacked">By weight (optional) · 按重量计费(可选) <span class="help-i" data-tip="Courier-style rate for THIS area: a price for the first kilogram, then a price per extra kg (首重/续重). Fill BOTH to charge this zone by cart weight instead of the flat Base fee above. Leave blank for flat pricing. Products need a weight (e.g. 500g) filled in; items without one fall back to the Base fee. · 此区的快递式运费:首重一个价,续重每公斤加价。两项都填则此区按购物车重量计费(覆盖上方基础运费);留空则用固定运费。商品需填写重量(如 500g),未填的按基础运费计。">?</span></label>
+              <span class="dz-hours-pair">
+                <input type="number" id="dz-gz-w1" placeholder="First kg ¥ · 首重">
+                <span class="dash">+</span>
+                <input type="number" id="dz-gz-wx" placeholder="Extra/kg ¥ · 续重">
+              </span>
             </div>
           </div>
 

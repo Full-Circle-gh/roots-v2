@@ -1638,6 +1638,11 @@ function coMsg(m){const e=$('#coMsg');if(e)e.textContent=m||'';}
 // so this UI is only a courtesy — the server is the real gate.
 function storeIsClosed(){ const cs=state.config&&state.config.channel_status; return !!(cs&&cs.web_open===false); }
 function storeClosedMsg(){ const s=(state.config&&state.config.store_status)||{}; return state.lang==='cn'?(s.message_cn||'本店当前已打烊,暂停接单,敬请谅解。'):(s.message_en||'We’re currently closed and not taking new orders. Please check back soon.'); }
+// Home delivery not set up yet (fresh store — /api/retail/config delivery.available===false).
+// The web storefront is delivery-only (no pickup flow here), so we block checkout with a
+// plain message rather than let it fail at payment. Only false when the server says so.
+function deliveryNotSetUp(){ const d=state.config&&state.config.delivery; return !!(d&&d.available===false); }
+function deliveryNotSetUpMsg(){ return state.lang==='cn'?'本店暂未开通网上配送。':'Online delivery isn’t set up for this store yet.'; }
 function coErrMsg(code){
   if(code==='store_closed')return storeClosedMsg();
   const map={
@@ -1782,6 +1787,7 @@ async function renderCheckout(){
   const v=$('#view'); const cn=state.lang==='cn';
   if(!state.token){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(cn?'请先登录后结算':'Please sign in to check out')+'</div></div></div>'; openLogin(); return; }
   if(storeIsClosed()){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+storeClosedMsg()+'<br><a class="more" href="#/shop">'+(cn?'继续浏览':'Keep browsing')+'</a></div></div></div>'; return; }
+  if(deliveryNotSetUp()){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+deliveryNotSetUpMsg()+'<br><a class="more" href="#/shop">'+(cn?'继续浏览':'Keep browsing')+'</a></div></div></div>'; return; }
   if(!coItems().length){ v.innerHTML='<div class="wrap"><div class="co"><div class="empty">'+(cn?'购物车是空的 🌱':'Your cart is empty 🌱')+'<br><a class="more" href="#/shop">'+(cn?'去购物':'Browse products')+'</a></div></div></div>'; return; }
   coInjectCheckoutStyle();
   co.idem=co.idem||('web-'+Date.now()+'-'+Math.random().toString(36).slice(2,8));
@@ -3282,6 +3288,8 @@ function renderCartPage(){
       <div class="cp-sub"><span class="l">${cn?'合计':'Total'}</span><span class="v">${money(sub)}</span></div>
       ${storeIsClosed()
         ? `<div style="margin-top:12px;padding:12px 14px;background:var(--ink);color:var(--oat);font-size:13px;line-height:1.5">${storeClosedMsg()}</div><button class="cp-checkout" id="cpCheckout" disabled aria-disabled="true" style="margin-top:8px;opacity:.45;cursor:not-allowed">${cn?'暂停接单':'CLOSED'}</button>`
+        : deliveryNotSetUp()
+        ? `<div style="margin-top:12px;padding:12px 14px;background:var(--ink);color:var(--oat);font-size:13px;line-height:1.5">${deliveryNotSetUpMsg()}</div><button class="cp-checkout" id="cpCheckout" disabled aria-disabled="true" style="margin-top:8px;opacity:.45;cursor:not-allowed">${cn?'暂未开通':'UNAVAILABLE'}</button>`
         : `<button class="cp-checkout" id="cpCheckout">${cn?'结账':'CHECK OUT'} →</button>`}
     </div></div>`;
   $('#cpItems').addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;

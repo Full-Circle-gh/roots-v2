@@ -2371,6 +2371,15 @@ addColumn('retail_delivery_zones', 'slot_duration_minutes', 'INTEGER DEFAULT 120
 //   • Tomorrow / +2 / +3 → base_fee only
 addColumn('retail_delivery_zones', 'day_only', 'INTEGER DEFAULT 0');
 
+// Per-area courier weight pricing (首重/续重). When BOTH are set, this zone
+// charges weight_first_kg_fee for the first kilogram + weight_extra_kg_fee per
+// additional started kg, instead of the flat base_fee — the standard rate-table
+// model where each area prices by parcel weight. NULL (default) = flat pricing,
+// so every existing zone is unchanged. base_fee stays the fallback when a cart's
+// products have no parseable weight.
+addColumn('retail_delivery_zones', 'weight_first_kg_fee', 'REAL');
+addColumn('retail_delivery_zones', 'weight_extra_kg_fee', 'REAL');
+
 // Non-GZ default: 3-day lead AND day-only. Bump existing rows once so admins
 // don't have to touch every city. Idempotent.
 try {

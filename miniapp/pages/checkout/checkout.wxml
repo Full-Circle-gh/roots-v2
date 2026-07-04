@@ -48,8 +48,10 @@
       <view class="section-title f-bear">{{fulfillment === 'pickup' ? copy.pickupAtTitle : copy.shipToTitle}}</view>
     </view>
 
-    <!-- Delivery ⇄ Pickup toggle — only when at least one store offers pickup. -->
-    <view wx:if="{{isBound && pickupStores.length}}" class="fulfill-toggle">
+    <!-- Delivery ⇄ Pickup toggle — only when at least one store offers pickup
+         AND the store actually delivers. Delivery not set up → pickup only, no
+         toggle (fulfillment is forced to pickup in onLoad). -->
+    <view wx:if="{{isBound && pickupStores.length && deliveryEnabled}}" class="fulfill-toggle">
       <view class="ft-opt {{fulfillment === 'delivery' ? 'on' : ''}} f-bear" data-mode="delivery" bindtap="setFulfillment">
         🛵 {{copy.deliveryTab}}
       </view>
