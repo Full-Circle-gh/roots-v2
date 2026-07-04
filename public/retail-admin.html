@@ -3444,11 +3444,11 @@
       <!-- New-store strip: visible only while no zone exists (dlvHubRender). -->
       <div class="dlv-setup" id="dlv-setup-strip" hidden>
         <div class="lead">Start delivering · 开始配送<span class="m">2 required steps · 两个必要步骤</span></div>
-        <div class="dlv-step"><span class="n">1</span><span class="t">Add a delivery zone<small>where you deliver · 配送到哪里</small></span></div>
+        <button type="button" class="dlv-step" onclick="dlvGo('zones')"><span class="n">1</span><span class="t">Add a delivery zone<small>where you deliver · 配送到哪里</small></span></button>
         <svg class="dlv-step-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        <div class="dlv-step"><span class="n">2</span><span class="t">Set your fees<small>what customers pay · 顾客付多少</small></span></div>
+        <button type="button" class="dlv-step" onclick="dlvGo('fees')"><span class="n">2</span><span class="t">Set your fees<small>what customers pay · 顾客付多少</small></span></button>
         <svg class="dlv-step-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
-        <div class="dlv-step"><span class="n">3</span><span class="t">Pickup &amp; carriers<small>optional · 可选</small></span></div>
+        <button type="button" class="dlv-step" onclick="dlvGo('pickup')"><span class="n">3</span><span class="t">Pickup &amp; carriers<small>optional · 可选</small></span></button>
       </div>
 
       <div class="sales-eyebrow" style="margin-top: 0;">Coverage &amp; pricing · 配送范围与费用</div>
