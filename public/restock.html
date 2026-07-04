@@ -124,11 +124,12 @@ input:focus, textarea:focus { outline: none; }
 .shell {
   display: grid;
   grid-template-rows: auto 1fr auto;
-  height: 100dvh;
-  height: 100vh;
+  height: 100vh;          /* fallback for old browsers */
+  height: 100svh;         /* small viewport height — always fits, even with the
+                             browser toolbar showing, so the page never scrolls */
+  overflow: hidden;       /* the page itself never scrolls; the body row does */
   padding-top: var(--sa-top);
 }
-@supports (height: 100dvh) { .shell { height: 100dvh; } }
 
 /* ── Header — confident dark band with subtle lime tinted shadow.
    Two rows visually: (1) brand + icons, (2) live cart status. ── */
@@ -220,7 +221,7 @@ input:focus, textarea:focus { outline: none; }
 .body {
   background: var(--bg);
   overflow-y: auto;
-  padding: 14px 14px 110px;
+  padding: 14px 14px 20px;
   min-height: 0;
 }
 .body.tappable { cursor: pointer; }
@@ -919,7 +920,6 @@ input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
              switches. Waste stays in the ⋯ More menu (less frequent). -->
         <button id="modeRestockBtn" class="mode-btn" title="Restock · 补货" style="position:relative;display:none">🔄<span class="mode-dot" id="modeRestockDot" style="display:none"></span></button>
         <button id="modeInboxBtn"   class="mode-btn" title="Fulfill · 处理订单" style="position:relative;display:none">📥<span class="mode-dot" id="modeInboxDot" style="display:none"></span></button>
-        <button id="voiceBtn"  title="Voice · 语音">🎤</button>
         <button id="headerDraftsBtn" title="Drafts · 草稿" style="position:relative">📋<span id="draftBadge" style="display:none;position:absolute;top:-2px;right:-2px;background:var(--danger);color:#fff;font-size:10px;font-weight:800;line-height:1;min-width:16px;height:16px;border-radius:999px;padding:0 4px;display:none;align-items:center;justify-content:center;border:1.5px solid var(--bg)">0</span></button>
         <button id="moreBtn"   title="Settings · 设置">⋯</button>
       </div>
@@ -962,35 +962,7 @@ input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
   </div>
 </div>
 
-<!-- Voice overlay -->
-<div class="ov" id="voiceOv">
-  <div class="ov-head">
-    <div class="ov-title">🎤 Voice Restock · 语音补货</div>
-    <button class="ov-close" data-close>✕</button>
-  </div>
-  <div class="ov-body">
-    <div class="voice-lang-toggle" id="voiceLangToggle">
-      <button id="voiceLangEN">EN · English</button>
-      <button id="voiceLangCN">中文</button>
-    </div>
-    <div style="text-align:center;margin-bottom:8px">
-      <button id="voiceMicBtn" class="voice-mic">🎤</button>
-      <div id="voiceStatus" style="font-size:12px;color:var(--muted);margin-top:10px;min-height:18px"></div>
-    </div>
-    <div class="voice-transcript">
-      <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:4px">Heard · 听到</div>
-      <div id="voiceTranscript" style="font-family:inherit;color:var(--dk);min-height:20px"><span style="color:var(--muted);font-style:italic">—</span></div>
-    </div>
-    <div id="voicePreview" style="margin-top:12px"></div>
-    <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="submit-btn draft" style="flex:1" onclick="closeAllOv()">Cancel · 取消</button>
-      <button class="submit-btn" style="flex:2" id="voiceApplyBtn" onclick="parseAndApplyVoice()" disabled>Parse + Apply · 识别应用</button>
-    </div>
-    <div style="margin-top:10px;font-size:11px;color:var(--muted);line-height:1.5;text-align:center">
-      Format · 格式: name/SKU number, name/SKU number…
-    </div>
-  </div>
-</div>
+<!-- Voice restock removed — feature retired. -->
 
 <!-- More menu -->
 <div class="ov" id="moreOv">
@@ -1084,7 +1056,6 @@ window.addEventListener('appinstalled', () => {
   // big "+ Add Item" button in the body, which is more discoverable.
   const _searchBtnEl = document.getElementById('searchBtn');
   if (_searchBtnEl) _searchBtnEl.addEventListener('click', openSearch);
-  document.getElementById('voiceBtn').addEventListener('click', openVoice);
   document.getElementById('headerDraftsBtn').addEventListener('click', openDrafts);
   document.getElementById('moreBtn').addEventListener('click', openMore);
   document.getElementById('modeHomeBtn')?.addEventListener('click', () => setAppMode('home'));
@@ -1098,9 +1069,6 @@ window.addEventListener('appinstalled', () => {
   document.getElementById('searchInput').addEventListener('keydown', e => {
     if (e.key === 'Enter') { const top = document.querySelector('#searchList .search-row'); if (top) top.click(); }
   });
-  document.getElementById('voiceLangEN').addEventListener('click', () => setVoiceLang('en-US'));
-  document.getElementById('voiceLangCN').addEventListener('click', () => setVoiceLang('zh-CN'));
-  document.getElementById('voiceMicBtn').addEventListener('click', toggleVoice);
 
   // Document-level keystroke capture for barcode gun input.
   document.addEventListener('keydown', (e) => {
