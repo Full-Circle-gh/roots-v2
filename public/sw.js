@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v240-meituan-live-kpi';
+const CACHE = 'roots-v2-shell-v241-meituan-page-title';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
