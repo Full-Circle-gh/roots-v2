@@ -547,10 +547,10 @@
     // "syncing".
     const liveN = Number(s.liveProducts || 0);
     const unmatched = Number(s.notMatched || 0);
-    facts.push(`${liveN} ${cuT('live on Meituan', '个已上架美团')}`);
+    facts.push(`${liveN} ${cuT('products live', '个商品已上架')}`);
     if (unmatched) facts.push(`<span style="color:var(--brass,#B08D4A)">${unmatched} ${cuT('not matched', '个未匹配')}</span>`);
-    if (s.open === true) facts.push(cuT('Open on Meituan', '美团营业中'));
-    else if (s.open === false) facts.push(cuT('Closed on Meituan', '美团已置休'));
+    if (s.open === true) facts.push(cuT('Store open on Meituan', '门店美团营业中'));
+    else if (s.open === false) facts.push(cuT('Store closed on Meituan', '门店美团已置休'));
     const live = [
       `${cuT('Last stock push', '最近库存推送')} ${igAgo(s.lastStockPush)}`,
       `${cuT('last order', '最近订单')} ${igAgo(s.lastOrder)}`,
@@ -721,6 +721,7 @@
     card: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19"/><path d="M6.5 14.5h4"/></svg>',
     shield: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8.5-7 10-4-1.5-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-4"/></svg>',
     tick: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/></svg>',
   };
   function mcSaveBtnHtml() { return `${MC_SVG.shield}<span>${cuT('Save & verify', '保存并验证')}</span>`; }
 
@@ -952,6 +953,8 @@
           <div class="mc-f"><label class="field-label">AppSecret</label>
             <input type="password" id="mw_secret" autocomplete="new-password" placeholder="${cfg.appSecretSet ? cuT('Saved — leave blank to keep it', '已保存 — 留空即保留') : cuT('Paste the AppSecret', '粘贴 AppSecret')}"></div>
         </div>
+        <div class="mw-skip"><span>${cuT('Don’t have these on hand? Set this up later — the rest of your backend keeps working, and the Mini app card will remind you what’s left.', '手头没有这些资料？可以稍后再设置 — 后台其他功能照常使用，小程序卡片会提醒你还差什么。')}</span>
+          <button type="button" class="btn btn-sm" onclick="igMwLater()">${cuT('Do it later', '稍后再做')}</button></div>
       </div>`;
     } else if (step === 2) {
       body = `
@@ -972,7 +975,7 @@
             <input type="text" id="mw_mchid" value="${esc((cfg.pay && cfg.pay.mchId) || '')}" placeholder="1230000109" spellcheck="false" inputmode="numeric" style="font-family:var(--f-mono,monospace)"></div>
         </div>
         <div class="mw-skip"><span>${cuT('No WeChat Pay merchant account yet? Skip this — your storefront still works, and you can add payments here any time.', '还没有微信支付商户号？可以先跳过 — 店面照常运行，之后随时回来补上。')}</span>
-          <button type="button" class="btn btn-sm" onclick="igMwSkipPay()">${cuT('Skip for now', '暂时跳过')}</button></div>
+          <button type="button" class="btn btn-sm" onclick="igMwSkipPay()">${cuT('Do it later', '稍后再做')}</button></div>
       </div>`;
     } else {
       body = `
@@ -1004,6 +1007,8 @@
           <div class="mc-f wide"><label class="field-label">${cuT('WeChat platform public key', '微信平台公钥')}<span class="mc-opt">${cuT('Optional', '选填')}</span></label>
             <textarea id="mw_pubkey" rows="3" placeholder="${cuT('Paste PEM contents', '粘贴 PEM 内容')}" spellcheck="false" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea></div>
         </div>
+        <div class="mw-skip"><span>${cuT('Keys not ready? Skip this — everything you entered stays saved, and the finish page shows a shortcut back here.', '密钥还没准备好？可以先跳过 — 已填内容都会保存，完成页有快捷入口回到这里。')}</span>
+          <button type="button" class="btn btn-sm" onclick="igMwSkipPay()">${cuT('Do it later', '稍后再做')}</button></div>
       </div>`;
     }
 
@@ -1012,7 +1017,7 @@
       <div class="mc-head">
         <div>
           <strong style="font-size:16px">${cuT('Set up your Mini App', '设置你的小程序')}</strong>
-          <div class="mc-subtitle">${cuT('Three short steps. We show you exactly where to find each thing.', '三个小步骤。每一项我们都会告诉你去哪里找。')}</div>
+          <div class="mc-subtitle">${cuT('Three short steps. Skip any of them and come back later.', '三个小步骤。任何一步都可以先跳过，之后再回来。')}</div>
         </div>
         <button class="btn btn-sm" onclick="igLocClose()">✕</button>
       </div>
@@ -1023,6 +1028,7 @@
         <span class="ig-spacer"></span>
         <span id="mw_msg" style="font-size:12.5px;max-width:420px"></span>
         <button type="button" class="btn" id="mw_finish_anyway" style="display:none" onclick="igMwFinish(false, true)">${cuT('Finish anyway', '仍然完成')}</button>
+        <button type="button" class="mw-later" onclick="${step === 1 ? 'igMwLater()' : 'igMwSkipPay()'}">${cuT('Skip this step', '跳过这一步')}</button>
         ${step > 1 ? `<button class="btn" onclick="igMiniappSetup(${step - 1})">${cuT('Back', '上一步')}</button>` : ''}
         <button class="btn btn-primary" id="mw_next" onclick="${step === 1 ? 'igMwVerifyLogin()' : step === 2 ? 'igMwSaveMch()' : 'igMwVerifyPay()'}">${mwNextHtml(step)}</button>
       </div>
@@ -1079,6 +1085,10 @@
     igMwFinish(true, false);
   };
 
+  // Step 1 "Do it later": nothing works without the AppID pair, so deferring
+  // step 1 just closes the wizard — the channel card keeps saying "Set up".
+  window.igMwLater = function () { igLocClose(); };
+
   // Step 3: save the keys, then a real signed test call to WeChat Pay.
   window.igMwVerifyPay = async function () {
     const p = (_mwCfg && _mwCfg.pay) || {};
@@ -1114,27 +1124,42 @@
   // but WeChat Pay's test call didn't pass (finish anyway).
   window.igMwFinish = function (paySkipped, unverified) {
     const box = igHostEl(); if (!box) return;
+    const mchSet = !!(_mwCfg && _mwCfg.pay && _mwCfg.pay.mchId);
     const payChip = paySkipped
-      ? `<span class="mc-chip">${MC_SVG.circle}<span>${cuT('WeChat Pay — add later', '微信支付 — 稍后添加')}</span></span>`
+      ? `<span class="mc-chip later">${MC_SVG.clock}<span>${cuT('WeChat Pay — later', '微信支付 — 稍后')}</span></span>`
       : unverified
-        ? `<span class="mc-chip">${MC_SVG.circle}<span>${cuT('WeChat Pay saved — not verified yet', '微信支付已保存 — 尚未验证')}</span></span>`
+        ? `<span class="mc-chip later">${MC_SVG.clock}<span>${cuT('WeChat Pay saved — not verified yet', '微信支付已保存 — 尚未验证')}</span></span>`
         : `<span class="mc-chip on">${MC_SVG.check}<span>${cuT('WeChat Pay ready', '微信支付可用')}</span></span>`;
     const note = paySkipped
-      ? cuT('You can add WeChat Pay any time — open this page and press Setup guide.', '随时可以补上微信支付 — 打开本页点「设置向导」即可。')
+      ? cuT('Nothing is lost — everything you entered is saved, and the steps you skipped are waiting below.', '不会丢失任何内容 — 已填的都保存了，跳过的步骤列在下面。')
       : unverified
-        ? cuT('Your keys are saved. Fix the failing one later from the configuration page and press Save & verify.', '密钥已保存。之后可在配置页修正并点「保存并验证」。')
+        ? cuT('Your keys are saved. Fix the failing one below and verify again whenever you’re ready.', '密钥已保存。可在下面修正后随时重新验证。')
         : cuT('Everything checked out with WeChat. Your storefront can sign customers in and take payment.', '所有项目均通过微信验证。店面已可登录顾客并收款。');
+    // What's still waiting, each with a shortcut straight back to its step.
+    const todoRow = (en, cn, step) => `<div class="t">${MC_SVG.clock}<span>${cuT(en, cn)}</span>
+      <button type="button" class="btn btn-sm b" onclick="igMiniappSetup(${step})">${cuT('Finish now', '现在完成')}</button></div>`;
+    let todos = '';
+    if (paySkipped) {
+      if (!mchSet) todos += todoRow('Add your WeChat Pay merchant ID', '补上微信支付商户号', 2);
+      todos += todoRow('Add the payment keys so the store can take money', '补上支付密钥，店面才能收款', mchSet ? 3 : 2);
+    } else if (unverified) {
+      todos += todoRow('Fix the payment keys and verify again', '修正支付密钥并重新验证', 3);
+    }
+    const pending = paySkipped || unverified;
     box.style.display = '';
     box.innerHTML = `<div class="ig-wiz">
       <div class="mw-done">
-        <div class="big">${MC_SVG.tick}</div>
-        <strong style="font-size:16px">${paySkipped || unverified ? cuT('Mini program linked', '小程序已绑定') : cuT('Your mini app is connected', '你的小程序已接入')}</strong>
+        <div class="big${pending ? ' later' : ''}">${pending ? MC_SVG.clock : MC_SVG.tick}</div>
+        <strong style="font-size:16px">${pending ? cuT('Saved — a couple of things left for later', '已保存 — 还有几项留到之后') : cuT('Your mini app is connected', '你的小程序已接入')}</strong>
         <div class="mc-subtitle" style="margin-top:6px">${note}</div>
         <div class="mc-chips" style="justify-content:center;margin-top:14px">
           <span class="mc-chip on">${MC_SVG.check}<span>${cuT('Mini program linked', '小程序已绑定')}</span></span>
           <span class="mc-chip on">${MC_SVG.check}<span>${cuT('Customer login ready', '顾客登录可用')}</span></span>
+          ${paySkipped && !mchSet ? `<span class="mc-chip later">${MC_SVG.clock}<span>${cuT('Merchant account — later', '商户号 — 稍后')}</span></span>` : ''}
           ${payChip}
         </div>
+        ${todos ? `<div class="mw-todo">${todos}</div>
+        <div class="mc-subtitle" style="margin-top:10px">${cuT('Until payments are set up, customers can browse and sign in but not pay.', '在设置好收款前，顾客可以浏览和登录，但不能付款。')}</div>` : ''}
         <div style="display:flex;gap:10px;justify-content:center;margin-top:20px">
           <button class="btn" onclick="igLocClose()">${cuT('Close', '关闭')}</button>
           <button class="btn btn-primary" onclick="igMiniappConfigFull()">${cuT('View configuration', '查看配置')}</button>
