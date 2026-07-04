@@ -307,6 +307,13 @@
 </div>
 
 <div class="tabs">
+  <!-- New-tenant setup guide — pinned at the very top with a live % badge while
+       setup is unfinished; JS (part 17) hides it for good once the store is
+       open. Nothing else in the rail changes. -->
+  <button id="setup-nav" data-tab="setup" class="tabs-setup" style="order:0;display:none">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.2L21 9l-5 4.4L17.5 21 12 17.3 6.5 21 8 13.4 3 9l6.6-.8z"/></svg>
+    Open your store · 开店引导<span id="setup-nav-badge" class="tab-badge setup-badge"></span>
+  </button>
   <!-- Daily-essentials always visible -->
   <button data-tab="dashboard" class="active" style="order:1">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
@@ -533,8 +540,18 @@
 
 <main>
 
+  <!-- ─── SETUP GUIDE (new tenant) ─── -->
+  <!-- Filled by part 17 (suRenderGuide). A router-style checklist that opens the
+       real pages/wizards; steps tick themselves off from live data. -->
+  <section id="tab-setup">
+    <div id="setup-guide"></div>
+  </section>
+
   <!-- ─── DASHBOARD ─── -->
   <section id="tab-dashboard" class="active">
+    <!-- Continue-setup card — shown on top of the dashboard while setup is
+         unfinished (part 17), gone at 100%. -->
+    <div id="setup-dash-card" style="display:none"></div>
     <div class="db-head">
       <h2 style="margin:0">Dashboard · 概览</h2>
       <!-- Date range lives below the live hero now (see #db-rangebar), so the
@@ -8012,6 +8029,7 @@
 <script src="/assets/retail-admin/14-eleme.js"></script>
 <script src="/assets/retail-admin/15-integrations.js"></script>
 <script src="/assets/retail-admin/16-purchasing.js"></script>
+<script src="/assets/retail-admin/17-setup-guide.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">

@@ -1487,6 +1487,11 @@ let ENTITLEMENTS = {};
     const _dlPid = parseInt(new URLSearchParams(location.search).get('product'), 10);
     if (_dlPid > 0 && typeof dashOpenProductFromFeed === 'function') dashOpenProductFromFeed(_dlPid);
   } catch {}
+  // New-tenant "Open your store" guide (part 17). Safe to call here — the awaits
+  // above yield past every script part's synchronous load, so suInit is defined.
+  // On genuine first login it lands the operator on the guide; otherwise it just
+  // paints the sidebar badge + dashboard card (both gone once setup hits 100%).
+  try { if (typeof suInit === 'function') suInit(); } catch (e) {}
 })();
 
 // ── Account menu — Google-style profile circle + dropdown ────────────────

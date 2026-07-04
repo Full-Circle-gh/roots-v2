@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New tenant setup guide — all pages mockup</title>
+<style>
+  :root{
+    --ink:#2b2b28; --ink-2:#6b6b64; --ink-3:#95948b;
+    --brass:#a8853b; --brass-d:#8f6f2c; --brass-bg:#f3ead7;
+    --line:#e8e4da; --line-2:#efece4;
+    --bg:#e9e6de; --card:#ffffff; --card-2:#f7f5ef;
+    --ok:#3a8f4f; --ok-bg:#eaf4ec;
+    --amber:#a97c1f; --amber-bg:#f9f1de;
+    --r:16px; --r-sm:11px;
+    --mono:'IBM Plex Mono',ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,monospace;
+    --shadow:0 1px 2px rgba(43,43,40,.03), 0 6px 18px rgba(43,43,40,.05);
+    --shadow-lg:0 2px 6px rgba(43,43,40,.04), 0 18px 50px rgba(43,43,40,.10);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'IBM Plex Sans','Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:28px 20px 90px}
+  .wrap{max-width:880px;margin:0 auto}
+
+  /* lang visibility: default English */
+  [data-cn]{display:none}
+  html.cn [data-en]{display:none}
+  html.cn [data-cn]{display:inline}
+
+  .top{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:10px;flex-wrap:wrap}
+  .eyebrow{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--brass)}
+  .langtog{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px;box-shadow:var(--shadow)}
+  .langtog button{border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--ink-2);
+       padding:6px 16px;border-radius:999px;cursor:pointer}
+  .langtog button.act{background:var(--ink);color:#fff}
+
+  .scrnnav{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 20px}
+  .scrnnav button{border:1px solid var(--line);background:var(--card);border-radius:999px;font:inherit;font-size:12.5px;
+       font-weight:600;color:var(--ink-2);padding:7px 14px;cursor:pointer;box-shadow:var(--shadow);transition:.15s}
+  .scrnnav button:hover{border-color:var(--ink-3);color:var(--ink)}
+  .scrnnav button.act{background:var(--ink);border-color:var(--ink);color:#fff}
+
+  .note{font-size:12.5px;color:var(--ink-3);margin:0 0 18px;line-height:1.55}
+  .note b{color:var(--ink-2)}
+
+  .scrn{display:none}
+  .scrn.act{display:block}
+
+  /* ---------- shared card ---------- */
+  .modal{background:var(--card);border:1px solid rgba(43,43,40,.05);border-radius:20px;box-shadow:var(--shadow-lg);overflow:hidden}
+  .m-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding:26px 30px 0}
+  .m-head h1{margin:0;font-size:21px;font-weight:700;letter-spacing:-.01em}
+  .m-head .sub{margin:6px 0 0;font-size:13.5px;color:var(--ink-2);line-height:1.55}
+  .m-body{padding:20px 30px 26px}
+  .x{border:1px solid var(--line);background:var(--card);border-radius:10px;width:34px;height:34px;flex:none;
+     display:grid;place-items:center;color:var(--ink-2);cursor:pointer;transition:.15s}
+  .x:hover{border-color:var(--ink-3);color:var(--ink)}
+  .x svg{width:15px;height:15px}
+
+  .btn{border:1px solid var(--line);background:var(--card-2);border-radius:var(--r-sm);font:inherit;font-size:13.5px;
+       font-weight:700;color:var(--ink);padding:10px 18px;cursor:pointer;display:inline-flex;align-items:center;gap:8px;transition:.15s}
+  .btn:hover{border-color:var(--ink-3);background:var(--card)}
+  .btn svg{width:14px;height:14px}
+  .btn.pri{background:var(--brass);border-color:var(--brass);color:#fff}
+  .btn.pri:hover{background:var(--brass-d);border-color:var(--brass-d)}
+  .btn.sm{font-size:12.5px;padding:7px 13px}
+  .btn.ghost{background:none;border:0;color:var(--ink-3);text-decoration:underline;text-underline-offset:3px;padding:6px 4px}
+  .btn.ghost:hover{color:var(--ink-2)}
+
+  /* ---------- progress ring ---------- */
+  .ringwrap{display:flex;align-items:center;gap:16px}
+  .ring{width:64px;height:64px;flex:none;position:relative}
+  .ring svg{width:64px;height:64px;transform:rotate(-90deg)}
+  .ring .lbl{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--mono);font-size:13px;font-weight:700;color:var(--ink)}
+
+  /* ---------- welcome ---------- */
+  .promise{display:flex;gap:14px;align-items:flex-start;background:var(--ok-bg);border:1px solid #cfe9db;
+       border-radius:14px;padding:15px 18px;margin:18px 0 4px}
+  .promise svg{width:19px;height:19px;color:var(--ok);flex:none;margin-top:1px}
+  .promise p{margin:0;font-size:13.5px;color:#14713f;line-height:1.55;font-weight:600}
+  .wsteps{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:20px 0 6px}
+  .wstep{background:var(--card-2);border:1px solid var(--line-2);border-radius:14px;padding:14px 12px;text-align:center}
+  .wstep .ico{width:36px;height:36px;border-radius:11px;background:var(--brass-bg);color:var(--brass-d);
+       display:grid;place-items:center;margin:0 auto 9px}
+  .wstep .ico svg{width:17px;height:17px}
+  .wstep b{display:block;font-size:12.5px;line-height:1.35}
+  .wstep span.t{display:block;font-family:var(--mono);font-size:10.5px;color:var(--ink-3);margin-top:5px}
+  .m-foot{display:flex;align-items:center;justify-content:space-between;gap:14px;border-top:1px solid var(--line-2);
+       padding:16px 30px;background:var(--card-2)}
+  .m-foot .sp{flex:1}
+
+  /* ---------- guide checklist ---------- */
+  .g-head{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:26px 30px 20px;border-bottom:1px solid var(--line-2)}
+  .g-head h1{margin:0;font-size:20px;font-weight:700}
+  .g-head .sub{margin:5px 0 0;font-size:13px;color:var(--ink-2)}
+  .task{display:flex;align-items:center;gap:16px;padding:17px 30px;border-bottom:1px solid var(--line-2);cursor:pointer;transition:.12s}
+  .task:hover{background:var(--card-2)}
+  .task:last-child{border-bottom:0}
+  .task .st{width:30px;height:30px;border-radius:999px;flex:none;display:grid;place-items:center;
+       border:2px solid var(--line);color:var(--ink-3);font-size:12.5px;font-weight:700;background:var(--card)}
+  .task .st svg{width:13px;height:13px}
+  .task.done .st{background:var(--ok);border-color:var(--ok);color:#fff}
+  .task.now .st{border-color:var(--brass);color:var(--brass)}
+  .task.skip .st{background:var(--amber-bg);border-color:#e8cf9d;color:var(--amber)}
+  .task .tx{flex:1;min-width:0}
+  .task .tx b{display:block;font-size:14.5px}
+  .task.done .tx b{color:var(--ink-3);text-decoration:line-through;text-decoration-color:rgba(43,43,40,.28);text-decoration-thickness:1px}
+  .task .tx span{display:block;font-size:12.5px;color:var(--ink-3);margin-top:3px;line-height:1.45}
+  .task .time{font-family:var(--mono);font-size:11px;color:var(--ink-3);background:var(--card-2);
+       border:1px solid var(--line-2);border-radius:999px;padding:3px 10px;flex:none}
+  .task .go{flex:none}
+  .task .donechip{font-size:12px;font-weight:700;color:var(--ok);display:inline-flex;align-items:center;gap:5px}
+  .task .donechip svg{width:12px;height:12px}
+  .task .skipchip{font-size:12px;font-weight:700;color:var(--amber)}
+  .divider{padding:13px 30px 5px;font-family:var(--mono);font-size:10.5px;font-weight:700;letter-spacing:.13em;
+       text-transform:uppercase;color:var(--ink-3);background:var(--card-2);border-bottom:1px solid var(--line-2)}
+
+  /* ---------- dashboard card ---------- */
+  .dash-mock{background:var(--card-2);border:1px dashed #d9d4c7;border-radius:20px;padding:18px}
+  .dash-cap{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 12px}
+  .setupcard{background:var(--card);border:1px solid rgba(43,43,40,.05);border-radius:16px;box-shadow:var(--shadow);
+       display:flex;align-items:center;gap:18px;padding:16px 20px}
+  .setupcard .tx{flex:1;min-width:0}
+  .setupcard .tx b{font-size:14.5px;display:block}
+  .setupcard .tx span{font-size:12.5px;color:var(--ink-2);display:block;margin-top:3px}
+  .fake-tiles{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:14px;opacity:.45}
+  .fake-tiles div{background:var(--card);border:1px solid var(--line-2);border-radius:14px;height:74px}
+
+  /* ---------- return strip ---------- */
+  .pagestrip{display:flex;align-items:center;gap:13px;background:var(--brass-bg);border:1px solid #e2d3ac;
+       border-radius:14px;padding:12px 17px;margin-bottom:16px}
+  .pagestrip svg{width:16px;height:16px;color:var(--brass-d);flex:none}
+  .pagestrip .tx{flex:1;font-size:13px;color:#6d5620;font-weight:600;line-height:1.45}
+  .fake-page{background:var(--card);border:1px solid rgba(43,43,40,.05);border-radius:20px;box-shadow:var(--shadow);
+       padding:22px 26px;min-height:180px}
+  .fake-page h2{margin:0 0 6px;font-size:17px}
+  .fake-page p{margin:0;font-size:13px;color:var(--ink-3)}
+  .emptybox{border:1.5px dashed var(--line);border-radius:14px;padding:34px 20px;text-align:center;margin-top:18px}
+  .emptybox .ico{width:42px;height:42px;border-radius:13px;background:var(--card-2);color:var(--ink-3);
+       display:grid;place-items:center;margin:0 auto 12px}
+  .emptybox .ico svg{width:19px;height:19px}
+  .emptybox b{display:block;font-size:14.5px;margin-bottom:5px}
+  .emptybox span{display:block;font-size:12.5px;color:var(--ink-3);margin-bottom:15px}
+
+  /* ---------- done screen ---------- */
+  .done-hero{text-align:center;padding:38px 30px 8px}
+  .done-hero .big{width:64px;height:64px;border-radius:999px;background:var(--ok);color:#fff;display:grid;place-items:center;margin:0 auto 16px}
+  .done-hero .big svg{width:28px;height:28px}
+  .done-hero h1{margin:0 0 7px;font-size:22px}
+  .done-hero p{margin:0;font-size:13.5px;color:var(--ink-2);line-height:1.6}
+  .linkrow{display:flex;align-items:center;gap:10px;justify-content:center;margin:20px auto 4px;max-width:460px;
+       background:var(--card-2);border:1px solid var(--line-2);border-radius:12px;padding:11px 16px}
+  .linkrow code{font-family:var(--mono);font-size:12.5px;color:var(--ink);flex:1;text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pend{margin:22px 30px 0;background:var(--amber-bg);border:1px solid #ecd9b4;border-radius:14px;padding:16px 19px}
+  .pend b{font-size:13.5px;color:#7c5a17}
+  .pend .row{display:flex;align-items:center;gap:11px;margin-top:11px}
+  .pend .row svg{width:14px;height:14px;color:var(--amber);flex:none}
+  .pend .row span{flex:1;font-size:12.8px;color:#6d5620}
+
+  /* sidebar mock */
+  .sidebar-mock{display:flex;gap:18px}
+  .sb{width:210px;flex:none;background:var(--card);border:1px solid rgba(43,43,40,.05);border-radius:16px;box-shadow:var(--shadow);padding:12px 10px}
+  .sb .it{display:flex;align-items:center;gap:10px;font-size:13px;font-weight:600;color:var(--ink-2);
+       padding:9px 12px;border-radius:10px}
+  .sb .it svg{width:15px;height:15px;flex:none;color:var(--ink-3)}
+  .sb .it.hl{background:var(--brass-bg);color:var(--ink);border:1px solid #e2d3ac}
+  .sb .it.hl svg{color:var(--brass-d)}
+  .sb .it .mini-ring{margin-left:auto;font-family:var(--mono);font-size:10px;font-weight:700;color:var(--brass-d);
+       background:#fff;border:1px solid #e2d3ac;border-radius:999px;padding:2px 7px}
+  .sb-note{flex:1;font-size:12.8px;color:var(--ink-2);line-height:1.65;padding-top:8px}
+  .sb-note b{color:var(--ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <div class="eyebrow">Mockup · Setup guide 新手引导</div>
+    </div>
+    <div class="langtog">
+      <button class="act" onclick="setLang('en',this)">EN</button>
+      <button onclick="setLang('cn',this)">中文</button>
+    </div>
+  </div>
+
+  <div class="scrnnav">
+    <button class="act" onclick="show('s1',this)"><span data-en>1 · Welcome (first login)</span><span data-cn>1 · 欢迎（首次登录）</span></button>
+    <button onclick="show('s2',this)"><span data-en>2 · Setup guide page</span><span data-cn>2 · 开店引导页</span></button>
+    <button onclick="show('s3',this)"><span data-en>3 · Inside a step</span><span data-cn>3 · 步骤内页</span></button>
+    <button onclick="show('s4',this)"><span data-en>4 · Dashboard card + sidebar</span><span data-cn>4 · 仪表板卡片与侧栏</span></button>
+    <button onclick="show('s5',this)"><span data-en>5 · Store is open</span><span data-cn>5 · 开店完成</span></button>
+  </div>
+
+  <p class="note"><b data-en>How it works:</b><b data-cn>说明：</b>
+    <span data-en>the guide is a router, not a new form. Every step opens the real page or wizard that already exists, with a "back to guide" strip on top. Steps tick themselves off from real data — the tenant never checks a box.</span>
+    <span data-cn>引导只负责带路，不是新表单。每一步都打开已有的真实页面或向导，页面顶部有"返回引导"提示条。步骤根据真实数据自动打勾，商家无需手动勾选。</span>
+  </p>
+
+  <!-- ============ SCREEN 1 · WELCOME ============ -->
+  <div class="scrn act" id="s1">
+    <div class="modal">
+      <div class="m-head">
+        <div>
+          <h1><span data-en>Welcome — let's open your store</span><span data-cn>欢迎 — 一起把店开起来</span></h1>
+          <p class="sub"><span data-en>Five short steps. You can stop anytime and pick up where you left off.</span>
+            <span data-cn>五个小步骤。随时可以暂停，下次接着做。</span></p>
+        </div>
+        <button class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="m-body">
+        <div class="wsteps">
+          <div class="wstep">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M3 9l9-6 9 6v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21V12h6v9"/></svg></div>
+            <b><span data-en>Your store</span><span data-cn>店铺信息</span></b><span class="t">2 min</span>
+          </div>
+          <div class="wstep">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 7l-8-4-8 4v10l8 4 8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg></div>
+            <b><span data-en>Products</span><span data-cn>商品</span></b><span class="t">5 min</span>
+          </div>
+          <div class="wstep">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></div>
+            <b><span data-en>Get paid</span><span data-cn>收款</span></b><span class="t">3 min</span>
+          </div>
+          <div class="wstep">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M5 8h11v9H5z"/><path d="M16 11h3l2 3v3h-5"/><circle cx="8" cy="19" r="1.6"/><circle cx="18" cy="19" r="1.6"/></svg></div>
+            <b><span data-en>Hand over orders</span><span data-cn>交付方式</span></b><span class="t">2 min</span>
+          </div>
+          <div class="wstep">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M3.5 9h17M3.5 15h17M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg></div>
+            <b><span data-en>Open the doors</span><span data-cn>正式开店</span></b><span class="t">1 min</span>
+          </div>
+        </div>
+        <div class="promise">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>
+          <p><span data-en>Your web store can take its first order today — no approvals needed. Selling inside WeChat takes longer and can be set up later.</span>
+             <span data-cn>网页商店今天就能接第一单，无需任何审批。微信小程序需要更长时间，可以以后再设置。</span></p>
+        </div>
+      </div>
+      <div class="m-foot">
+        <button class="btn ghost"><span data-en>I'll look around first</span><span data-cn>我先随便看看</span></button>
+        <div class="sp"></div>
+        <button class="btn pri"><span data-en>Start — step 1</span><span data-cn>开始 — 第 1 步</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px">
+      <span data-en>Shows once, on first login only. "I'll look around first" closes it — the guide stays reachable from the sidebar and the dashboard card.</span>
+      <span data-cn>仅首次登录显示一次。"先随便看看"会关闭弹窗 — 引导始终可以从侧栏和仪表板卡片进入。</span>
+    </p>
+  </div>
+
+  <!-- ============ SCREEN 2 · GUIDE PAGE ============ -->
+  <div class="scrn" id="s2">
+    <div class="modal">
+      <div class="g-head">
+        <div>
+          <h1><span data-en>Open your store</span><span data-cn>把店开起来</span></h1>
+          <p class="sub"><span data-en>2 of 5 done. Next: choose how customers pay.</span><span data-cn>已完成 2 / 5。下一步：选择收款方式。</span></p>
+        </div>
+        <div class="ring">
+          <svg viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="27" fill="none" stroke="var(--line-2)" stroke-width="6"/>
+            <circle cx="32" cy="32" r="27" fill="none" stroke="var(--brass)" stroke-width="6"
+                    stroke-dasharray="169.6" stroke-dashoffset="101.8" stroke-linecap="round"/>
+          </svg>
+          <div class="lbl">40%</div>
+        </div>
+      </div>
+
+      <div class="task done">
+        <div class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l5 5L20 7"/></svg></div>
+        <div class="tx">
+          <b><span data-en>Tell us about your store</span><span data-cn>填写店铺信息</span></b>
+          <span><span data-en>Address, phone, opening hours</span><span data-cn>地址、电话、营业时间</span></span>
+        </div>
+        <span class="donechip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l5 5L20 7"/></svg><span data-en>Done</span><span data-cn>已完成</span></span>
+      </div>
+
+      <div class="task done">
+        <div class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l5 5L20 7"/></svg></div>
+        <div class="tx">
+          <b><span data-en>Add your products</span><span data-cn>上架商品</span></b>
+          <span><span data-en>3 products added — add more anytime</span><span data-cn>已上架 3 个商品 — 随时可以继续添加</span></span>
+        </div>
+        <span class="donechip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l5 5L20 7"/></svg><span data-en>Done</span><span data-cn>已完成</span></span>
+      </div>
+
+      <div class="task now">
+        <div class="st">3</div>
+        <div class="tx">
+          <b><span data-en>Choose how customers pay</span><span data-cn>选择收款方式</span></b>
+          <span><span data-en>Alipay QR works today. WeChat Pay needs a merchant account — you can add it later.</span>
+                <span data-cn>支付宝收款码今天就能用。微信支付需要商户号 — 可以以后再加。</span></span>
+        </div>
+        <span class="time">3 min</span>
+        <button class="btn pri sm go"><span data-en>Set up</span><span data-cn>去设置</span></button>
+      </div>
+
+      <div class="task">
+        <div class="st">4</div>
+        <div class="tx">
+          <b><span data-en>How customers get their order</span><span data-cn>顾客如何拿到货</span></b>
+          <span><span data-en>Pickup at your store is already on. Deliver too? Three quick questions.</span>
+                <span data-cn>到店自取已开启。也送货？只需回答三个小问题。</span></span>
+        </div>
+        <span class="time">2 min</span>
+        <button class="btn sm go"><span data-en>Open</span><span data-cn>打开</span></button>
+      </div>
+
+      <div class="task">
+        <div class="st">5</div>
+        <div class="tx">
+          <b><span data-en>Open the doors</span><span data-cn>正式开店</span></b>
+          <span><span data-en>Your web store goes live at your free address. Share the link anywhere.</span>
+                <span data-cn>网页商店在免费网址上线，链接随处可分享。</span></span>
+        </div>
+        <span class="time">1 min</span>
+        <button class="btn sm go"><span data-en>Open</span><span data-cn>打开</span></button>
+      </div>
+
+      <div class="divider"><span data-en>Nice to have — do these anytime</span><span data-cn>锦上添花 — 随时可做</span></div>
+
+      <div class="task skip">
+        <div class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+        <div class="tx">
+          <b><span data-en>Sell inside WeChat</span><span data-cn>入驻微信小程序</span></b>
+          <span><span data-en>Needs WeChat accounts and approval — takes days, not minutes. Skipped for now.</span>
+                <span data-cn>需要微信账号和审核 — 以天计，不是几分钟。暂时跳过。</span></span>
+        </div>
+        <span class="skipchip"><span data-en>Later</span><span data-cn>稍后</span></span>
+        <button class="btn sm go"><span data-en>Start</span><span data-cn>开始</span></button>
+      </div>
+
+      <div class="task">
+        <div class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 3a9 9 0 1 0 9 9c0-1.1-.9-2-2-2h-2a2 2 0 0 1-2-2V6a2 2 0 0 0-2-2z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7.5" r="1"/><circle cx="14.5" cy="7.5" r="1"/></svg></div>
+        <div class="tx">
+          <b><span data-en>Make it look like you</span><span data-cn>换上你的品牌形象</span></b>
+          <span><span data-en>Logo, brand colour, home page. A neutral look is already in place.</span>
+                <span data-cn>Logo、品牌色、首页。默认已有一套中性外观。</span></span>
+        </div>
+        <span class="time">10 min</span>
+        <button class="btn sm go"><span data-en>Open</span><span data-cn>打开</span></button>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px">
+      <span data-en>Steps 1–5 tick off automatically from real data (store row exists, product count ≥ 1, a payment method verified, delivery on or pickup confirmed, store opened). "Nice to have" items never block the store from opening.</span>
+      <span data-cn>第 1–5 步根据真实数据自动打勾（已有门店、商品数 ≥ 1、收款方式已验证、配送已开或确认自取、店铺已开张）。"锦上添花"项目不会阻止开店。</span>
+    </p>
+  </div>
+
+  <!-- ============ SCREEN 3 · INSIDE A STEP ============ -->
+  <div class="scrn" id="s3">
+    <div class="pagestrip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M21 12v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h11"/></svg>
+      <div class="tx"><span data-en>Step 2 of 5 — add at least one product, then this step ticks itself off.</span>
+        <span data-cn>第 2 / 5 步 — 上架至少一个商品，此步骤会自动完成。</span></div>
+      <button class="btn sm"><span data-en>Back to guide</span><span data-cn>返回引导</span></button>
+    </div>
+    <div class="fake-page">
+      <h2><span data-en>Products</span><span data-cn>商品</span></h2>
+      <p><span data-en>(the real Products page, unchanged)</span><span data-cn>（真实商品页，无改动）</span></p>
+      <div class="emptybox">
+        <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M20 7l-8-4-8 4v10l8 4 8-4z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg></div>
+        <b><span data-en>No products yet</span><span data-cn>还没有商品</span></b>
+        <span><span data-en>Add your first product — name, price and a photo is enough to start.</span>
+              <span data-cn>上架第一个商品 — 名称、价格和一张照片就够了。</span></span>
+        <button class="btn pri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+          <span data-en>Add first product</span><span data-cn>上架第一个商品</span></button>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px">
+      <span data-en>The strip only appears when the tenant arrived from the guide. The empty state with the big button appears for everyone — it stays useful even after setup.</span>
+      <span data-cn>提示条只在从引导进入时显示。带大按钮的空状态对所有人显示 — 开店后依然有用。</span>
+    </p>
+  </div>
+
+  <!-- ============ SCREEN 4 · DASHBOARD + SIDEBAR ============ -->
+  <div class="scrn" id="s4">
+    <div class="sidebar-mock">
+      <div class="sb">
+        <div class="it hl">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 6.2L21 9l-5 4.4L17.5 21 12 17.3 6.5 21 8 13.4 3 9l6.6-.8z"/></svg>
+          <span data-en>Open your store</span><span data-cn>开店引导</span>
+          <span class="mini-ring">40%</span>
+        </div>
+        <div class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span data-en>Dashboard</span><span data-cn>仪表板</span></div>
+        <div class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h12v20l-2-1.5L14 22l-2-1.5L10 22l-2-1.5L6 22z"/><path d="M9 7h6M9 11h6"/></svg><span data-en>Orders</span><span data-cn>订单</span></div>
+        <div class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7l-8-4-8 4v10l8 4 8-4z"/></svg><span data-en>Products</span><span data-cn>商品</span></div>
+        <div class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.2 3.4-5 6.5-5s5.7 1.8 6.5 5"/><circle cx="17" cy="9" r="2.5"/><path d="M16 15c2.4.2 4.6 1.7 5.5 4.5"/></svg><span data-en>Customers</span><span data-cn>顾客</span></div>
+        <div class="it"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M19 12a7 7 0 0 0-.15-1.44l2.12-1.65-2-3.46-2.49 1a7 7 0 0 0-2.48-1.44L13.6 2.4h-3.2l-.4 2.61A7 7 0 0 0 7.52 6.45l-2.49-1-2 3.46 2.12 1.65a7 7 0 0 0 0 2.88l-2.12 1.65 2 3.46 2.49-1a7 7 0 0 0 2.48 1.44l.4 2.61h3.2l.4-2.61a7 7 0 0 0 2.48-1.44l2.49 1 2-3.46-2.12-1.65c.1-.47.15-.95.15-1.44z"/></svg><span data-en>Settings</span><span data-cn>设置</span></div>
+      </div>
+      <div class="sb-note">
+        <span data-en><b>Sidebar:</b> a pinned "Open your store" entry sits at the very top with a live % badge, until setup reaches 100% — then it disappears for good. The rest of the sidebar stays exactly as it is; nothing is hidden or locked.</span>
+        <span data-cn><b>侧栏：</b>"开店引导"固定在最顶部，带实时百分比徽章，完成 100% 后永久消失。其余侧栏保持原样，不隐藏、不锁定。</span>
+      </div>
+    </div>
+
+    <div class="dash-mock" style="margin-top:18px">
+      <p class="dash-cap"><span data-en>Dashboard — while setup is unfinished</span><span data-cn>仪表板 — 开店未完成时</span></p>
+      <div class="setupcard">
+        <div class="ring" style="width:52px;height:52px">
+          <svg viewBox="0 0 64 64" style="width:52px;height:52px">
+            <circle cx="32" cy="32" r="27" fill="none" stroke="var(--line-2)" stroke-width="7"/>
+            <circle cx="32" cy="32" r="27" fill="none" stroke="var(--brass)" stroke-width="7"
+                    stroke-dasharray="169.6" stroke-dashoffset="101.8" stroke-linecap="round"/>
+          </svg>
+          <div class="lbl" style="font-size:11px">40%</div>
+        </div>
+        <div class="tx">
+          <b><span data-en>Your store isn't open yet</span><span data-cn>你的店还没开张</span></b>
+          <span><span data-en>Next: choose how customers pay · about 3 minutes</span><span data-cn>下一步：选择收款方式 · 约 3 分钟</span></span>
+        </div>
+        <button class="btn pri"><span data-en>Continue setup</span><span data-cn>继续设置</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+      </div>
+      <div class="fake-tiles"><div></div><div></div><div></div></div>
+    </div>
+    <p class="note" style="margin-top:14px">
+      <span data-en>New tenants land on the dashboard as usual — but this card sits on top and names the exact next step. One click resumes the guide. When setup hits 100% the card is gone.</span>
+      <span data-cn>新商家照常进入仪表板 — 但这张卡片置顶显示，写明下一步是什么。一键回到引导。100% 后卡片消失。</span>
+    </p>
+  </div>
+
+  <!-- ============ SCREEN 5 · DONE ============ -->
+  <div class="scrn" id="s5">
+    <div class="modal">
+      <div class="done-hero">
+        <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M5 13l5 5L20 7"/></svg></div>
+        <h1><span data-en>Your store is open</span><span data-cn>你的店开张了</span></h1>
+        <p><span data-en>Customers can browse, order and pay right now. Share your store link:</span>
+           <span data-cn>顾客现在就能浏览、下单、付款。分享你的店铺链接：</span></p>
+        <div class="linkrow">
+          <code>https://sunrise.shop.fullcircle.app</code>
+          <button class="btn sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+            <span data-en>Copy</span><span data-cn>复制</span></button>
+        </div>
+      </div>
+      <div class="pend">
+        <b><span data-en>Still waiting for you — whenever you're ready</span><span data-cn>还差这些 — 你随时可以补上</span></b>
+        <div class="row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <span><span data-en>Sell inside WeChat — mini program credentials</span><span data-cn>入驻微信小程序 — 小程序凭证</span></span>
+          <button class="btn sm"><span data-en>Finish now</span><span data-cn>现在完成</span></button>
+        </div>
+        <div class="row">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+          <span><span data-en>WeChat Pay — merchant account and payment keys</span><span data-cn>微信支付 — 商户号与支付密钥</span></span>
+          <button class="btn sm"><span data-en>Finish now</span><span data-cn>现在完成</span></button>
+        </div>
+      </div>
+      <div class="m-foot" style="margin-top:22px">
+        <button class="btn"><span data-en>View my store</span><span data-cn>查看我的店</span></button>
+        <div class="sp"></div>
+        <button class="btn pri"><span data-en>Go to dashboard</span><span data-cn>前往仪表板</span></button>
+      </div>
+    </div>
+    <p class="note" style="margin-top:14px">
+      <span data-en>Same pattern as the Mini App wizard finish page: celebrate what's done, list what's pending with a "Finish now" shortcut each. The pending list feeds from the same auto-detection as the checklist.</span>
+      <span data-cn>与小程序向导完成页同一套路：庆祝已完成的，列出待办的，每项都有"现在完成"快捷入口。待办列表与清单共用同一套自动检测。</span>
+    </p>
+  </div>
+</div>
+
+<script>
+function show(id,btn){
+  document.querySelectorAll('.scrn').forEach(function(s){s.classList.remove('act')});
+  document.getElementById(id).classList.add('act');
+  document.querySelectorAll('.scrnnav button').forEach(function(b){b.classList.remove('act')});
+  btn.classList.add('act');
+}
+function setLang(l,btn){
+  document.documentElement.classList.toggle('cn', l==='cn');
+  document.querySelectorAll('.langtog button').forEach(function(b){b.classList.remove('act')});
+  btn.classList.add('act');
+}
+</script>
+</body>
+</html>
