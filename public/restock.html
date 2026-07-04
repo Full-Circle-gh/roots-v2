@@ -900,6 +900,42 @@ input:focus, textarea:focus { box-shadow: 0 0 0 3px var(--ring); }
 }
 .home-tile .ht-count::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--lime-text); box-shadow: 0 0 8px currentColor; }
 
+/* ── Restock page — card-based, matches the Home design ── */
+.rk-search { width: 100%; height: 46px; display: flex; align-items: center; gap: 10px; padding: 0 14px; margin-bottom: 14px; background: var(--bg-input); border: 1px solid var(--border); border-radius: 13px; }
+.rk-search svg { width: 19px; height: 19px; flex: none; color: var(--muted); }
+.rk-search .rk-search-txt { flex: 1; text-align: left; color: var(--muted); font-size: 15px; font-weight: 500; }
+.rk-sec { display: flex; align-items: center; gap: 8px; padding: 0 2px; margin: 2px 0 10px; }
+.rk-sec .lbl { font-size: 11px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.rk-sec .rule { height: 1px; flex: 1; background: var(--border); }
+.rk-sec .cnt { font-size: 12px; font-weight: 800; color: var(--lime-text); }
+.rk-card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 14px; box-shadow: var(--sh-1); margin-bottom: 10px; }
+.rk-card.popped { animation: rkpop .2s ease; }
+@keyframes rkpop { 0% { transform: scale(.96); } 60% { transform: scale(1.02); } 100% { transform: scale(1); } }
+.rk-top { display: flex; align-items: flex-start; gap: 12px; }
+.rk-ico { width: 44px; height: 44px; border-radius: 13px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; flex: none; }
+.rk-ico svg { width: 23px; height: 23px; }
+.rk-name { font-size: 15px; font-weight: 800; color: var(--text-1); line-height: 1.2; }
+.rk-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.rk-rm { width: 28px; height: 28px; border-radius: 9px; background: transparent; border: 1px solid var(--border); color: var(--muted); display: grid; place-items: center; flex: none; }
+.rk-rm svg { width: 15px; height: 15px; }
+.rk-qtyrow { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--border-soft); }
+.rk-qtylbl { font-size: 12px; font-weight: 700; color: var(--muted); flex: 1; }
+.rk-step { display: flex; align-items: center; border: 1px solid var(--border); border-radius: 11px; overflow: hidden; }
+.rk-step button { width: 42px; height: 42px; background: var(--bg-input); border: none; display: grid; place-items: center; }
+.rk-step button:active { background: var(--bg-elev-2); }
+.rk-step button svg { width: 19px; height: 19px; }
+.rk-step .rk-minus { color: var(--danger); }
+.rk-step .rk-plus { color: var(--success); }
+.rk-step .rk-num { min-width: 46px; text-align: center; font-size: 19px; font-weight: 800; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.rk-note { width: 100%; margin-top: 10px; height: 40px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-input); padding: 0 12px; font-size: 13px; color: var(--text-1); }
+.rk-add { width: 100%; background: rgba(204,217,0,.12); border: 1.5px dashed rgba(204,217,0,.7); border-radius: 16px; padding: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--lime-text); font-size: 14px; font-weight: 800; }
+.rk-add svg { width: 19px; height: 19px; }
+.rk-empty { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 28px 20px; text-align: center; box-shadow: var(--sh-1); margin-bottom: 12px; }
+.rk-empty-ico { width: 56px; height: 56px; border-radius: 16px; background: rgba(204,217,0,.14); color: var(--lime-text); display: grid; place-items: center; margin: 0 auto 12px; }
+.rk-empty-ico svg { width: 28px; height: 28px; }
+.rk-empty h3 { margin: 0; font-size: 16px; font-weight: 800; color: var(--text-1); }
+.rk-empty p { margin: 6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+
 </style>
 </head>
 <body>
@@ -1101,6 +1137,7 @@ window.addEventListener('appinstalled', () => {
     // shouldn't pop the product picker.
     if (!e.currentTarget.classList.contains('tappable')) return;
     if (e.target.closest('.line')) return;
+    if (e.target.closest('.rk-card')) return;
     if (e.target.closest('button')) return;
     if (e.target.closest('input'))  return;
     if (e.target.closest('select')) return;
@@ -1242,17 +1279,17 @@ function _paintModeTabs() {
       h1.textContent  = _L('Stock', '库存');
       sub.textContent = _L('Pick a tool', '选择工具');
     } else if (_appMode === 'waste') {
-      h1.innerHTML  = 'Waste <span class="cn-tag" style="color:#fbb1b1">损耗</span>';
-      sub.textContent = 'Log spoiled / expired stock · 记录损耗';
+      h1.textContent  = _L('Waste', '损耗');
+      sub.textContent = _L('Log spoiled / expired stock', '记录损耗');
     } else if (_appMode === 'inbox') {
-      h1.innerHTML  = 'Fulfill <span class="cn-tag" style="color:#a5c2ff">处理订单</span>';
-      sub.textContent = 'Prepare requests from store · 处理来自门店的订单';
+      h1.textContent  = _L('Fulfill', '处理订单');
+      sub.textContent = _L('Prepare requests from store', '处理来自门店的订单');
     } else {
       const isWarehouse = (_user.permissions||{}).warehouse_inbox && (_user.permissions||{}).restock;
-      h1.innerHTML  = 'Restock <span class="cn-tag">补货</span>';
+      h1.textContent  = _L('Restock', '补货');
       sub.textContent = isWarehouse
-        ? 'Order from kitchen · 向厨房订货'
-        : 'Refill stock from warehouse · 仓库补货';
+        ? _L('Order from kitchen', '向厨房订货')
+        : _L('Refill stock from warehouse', '仓库补货');
     }
   }
   // Drafts and Voice only make sense for the vendor-side restock flow
@@ -1538,129 +1575,107 @@ function render() {
   if (_cart.length === 0) {
     body.innerHTML = `
       ${_renderPendingDeliveriesBanner()}
-      <div class="empty">
-        <div class="icon">🔄</div>
-        <div class="hint">Empty · 暂无</div>
+      ${_rkSearchBar()}
+      <div class="rk-empty">
+        <div class="rk-empty-ico">${_RK_ICO.restock}</div>
+        <h3>${esc(_L('No items yet', '暂无商品'))}</h3>
+        <p>${esc(_L('Search or scan a product to start your request.', '搜索或扫描商品，开始补货请求。'))}</p>
       </div>
-      <button id="rkEmptyAdd" class="add-item-btn">
-        <span class="plus">＋</span>
-        <span>Add Item · 添加商品</span>
-      </button>`;
+      <button id="rkEmptyAdd" class="rk-add">${_RK_ICO.plus}<span>${esc(_L('Add item', '添加商品'))}</span></button>`;
+    _wireRkSearch();
     const emptyAdd = document.getElementById('rkEmptyAdd');
     if (emptyAdd) emptyAdd.addEventListener('click', (e) => { e.stopPropagation(); openSearch(); });
   } else {
     const draftBanner = _draftId ? `
-      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(204,217,0,.12);border:1px solid rgba(204,217,0,.4);border-radius:10px;margin-bottom:10px">
-        <div style="font-size:16px">✏️</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:rgba(204,217,0,.12);border:1px solid rgba(204,217,0,.4);border-radius:12px;margin-bottom:12px">
         <div style="flex:1;min-width:0">
-          <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)">Editing draft · 编辑草稿</div>
-          <div style="font-size:13px;font-weight:700">${esc(_draftRsNumber || ('#' + _draftId))}</div>
+          <div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--muted)">${esc(_L('Editing draft', '编辑草稿'))}</div>
+          <div style="font-size:13px;font-weight:700;color:var(--text-1)">${esc(_draftRsNumber || ('#' + _draftId))}</div>
         </div>
-        <button onclick="discardDraftEditing()" title="Stop editing · 停止编辑" style="background:none;border:1px solid var(--border);border-radius:8px;font-size:12px;padding:4px 10px;cursor:pointer;color:var(--muted)">× Cancel 取消</button>
+        <button onclick="discardDraftEditing()" style="background:none;border:1px solid var(--border);border-radius:9px;font-size:12px;font-weight:700;padding:6px 12px;cursor:pointer;color:var(--muted)">${esc(_L('Cancel', '取消'))}</button>
       </div>` : '';
+    const count = _cart.filter(c => parseFloat(c.qty) > 0).length;
     body.innerHTML = `
       ${_renderPendingDeliveriesBanner()}
       ${draftBanner}
-      <div class="notes-bar">
-        <span style="font-size:18px">📝</span>
-        <input id="orderNotes" placeholder="Notes for warehouse · 给仓库的备注 (optional)"
-               value="${esc(_orderNotes)}" autocomplete="off">
+      ${_rkSearchBar()}
+      <div class="rk-sec">
+        <span class="lbl">${esc(_L('Your request', '补货清单'))}</span>
+        <span class="rule"></span>
+        <span class="cnt">${count} ${esc(_L(count === 1 ? 'item' : 'items', '项'))}</span>
       </div>
       ${_cart.map((entry, i) => renderLine(entry, i)).join('')}
-      <!-- Persistent "tap to add another" affordance below the last line.
-           Cart-tap-to-search still works on the empty space too; this
-           just makes the affordance visible after items are present. -->
-      <button id="addMoreHint" class="add-item-btn">
-        <span class="plus">＋</span>
-        <span>Add Item · 添加商品</span>
-      </button>
+      <button id="addMoreHint" class="rk-add">${_RK_ICO.plus}<span>${esc(_L('Add item', '添加商品'))}</span></button>
+      <input id="orderNotes" class="rk-note" style="height:46px;margin-top:12px"
+             placeholder="${esc(_L('Notes for warehouse (optional)', '给仓库的备注 (可选)'))}"
+             value="${esc(_orderNotes)}" autocomplete="off">
     `;
+    _wireRkSearch();
     document.getElementById('orderNotes').addEventListener('input', (e) => { _orderNotes = e.target.value; });
     document.getElementById('addMoreHint').addEventListener('click', openSearch);
-    body.querySelectorAll('[data-act]').forEach(el => {
-      el.addEventListener('click', () => {
-        const i = +el.dataset.i, a = el.dataset.act;
-        if (a === 'rm') removeLine(i);
-      });
+    // Remove a line.
+    body.querySelectorAll('[data-act="rm"]').forEach(el => {
+      el.addEventListener('click', (e) => { e.stopPropagation(); removeLine(+el.dataset.i); });
     });
-    // Qty dropdown: pick 0-5 directly, or "other" reveals a manual input.
-    body.querySelectorAll('[data-qty-sel]').forEach(sel => {
-      sel.addEventListener('change', () => {
-        const i = +sel.dataset.qtySel;
-        const v = sel.value;
-        const otherInp = body.querySelector(`[data-qty-other="${i}"]`);
-        if (v === 'other') {
-          if (otherInp) {
-            otherInp.style.display = 'inline-block';
-            // Default the manual input to 6 so it's > 5 (else it'd flip
-            // back to "5" on next render). User can change after.
-            if (!otherInp.value || +otherInp.value < 6) otherInp.value = '6';
-            _cart[i].qty = parseFloat(otherInp.value) || 6;
-            otherInp.focus();
-            otherInp.select();
-          }
-        } else {
-          if (otherInp) { otherInp.style.display = 'none'; otherInp.value = ''; }
-          _cart[i].qty = parseFloat(v) || 0;
-          if (_cart[i].qty === 0) {
-            // "—" selected → drop the line entirely.
-            removeLine(i);
-            return;
-          }
-        }
-        updateFooter();
-      });
+    // −/+ quantity stepper. changeQty removes the line when it hits 0.
+    body.querySelectorAll('[data-dec]').forEach(el => {
+      el.addEventListener('click', (e) => { e.stopPropagation(); changeQty(+el.dataset.dec, -1); });
     });
-    body.querySelectorAll('[data-qty-other]').forEach(inp => {
-      inp.addEventListener('input', () => {
-        const i = +inp.dataset.qtyOther;
-        let v = parseFloat(inp.value) || 0;
-        if (v < 6) v = 6;     // anything < 6 belongs in the dropdown
-        if (v > 999) v = 999;
-        _cart[i].qty = v;
-        updateFooter();
-      });
+    body.querySelectorAll('[data-inc]').forEach(el => {
+      el.addEventListener('click', (e) => { e.stopPropagation(); changeQty(+el.dataset.inc, +1); });
     });
-    body.querySelectorAll('[data-note]').forEach(inp => {
-      inp.addEventListener('input', () => {
-        const i = +inp.dataset.note;
-        _cart[i].notes = inp.value;
-      });
+    // Per-line note.
+    body.querySelectorAll('.rk-note[data-note]').forEach(inp => {
+      inp.addEventListener('input', () => { const i = +inp.dataset.note; if (_cart[i]) _cart[i].notes = inp.value; });
     });
   }
   updateFooter();
 }
 
+// Icons for the redesigned Restock page (monochrome line icons).
+const _RK_ICO = {
+  search:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+  scan:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5a1 1 0 0 1 1-1h2M17 4h2a1 1 0 0 1 1 1v2M20 17v2a1 1 0 0 1-1 1h-2M7 20H5a1 1 0 0 1-1-1v-2"/><path d="M4 12h16"/></svg>',
+  box:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>',
+  minus:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg>',
+  plus:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  x:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  restock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8h13l-3-3"/><path d="M21 16H8l3 3"/></svg>',
+};
+// Search bar — a field-styled button that opens the existing search /
+// scan overlay (which already handles typing, barcode-gun input, adding).
+function _rkSearchBar() {
+  return '<button id="rkSearchBar" class="rk-search" type="button">' +
+    _RK_ICO.search + '<span class="rk-search-txt">' + esc(_L('Search products', '搜索商品')) + '</span>' + _RK_ICO.scan +
+  '</button>';
+}
+function _wireRkSearch() {
+  const b = document.getElementById('rkSearchBar');
+  if (b) b.addEventListener('click', (e) => { e.stopPropagation(); openSearch(); });
+}
 function renderLine(entry, i) {
   const p = entry.product;
   const qtyNum = parseFloat(entry.qty) || 0;
-  const isOther = qtyNum > 5;
-  // Qty UX: dropdown 1-5 covers 95% of restock requests fast, plus an
-  // "Other 其他…" sentinel that reveals a manual number input for bulk
-  // asks. Same pattern used by the in-app Restock module.
-  return `<div class="line" data-line="${i}">
-    <div class="top">
-      <div class="info">
-        <div class="name">${esc(p.name_cn || p.name_en || '—')}${p.name_en && p.name_cn ? ` <span class="cn">· ${esc(p.name_en)}</span>` : ''}</div>
-        <div class="meta">${p.sku ? esc(p.sku) : ''}${p.category ? ' · ' + esc(p.category) : ''}</div>
+  const name = _L(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—');
+  const meta = [p.sku ? esc(p.sku) : '', p.category ? esc(p.category) : ''].filter(Boolean).join(' · ');
+  return `<div class="rk-card" data-line="${i}">
+    <div class="rk-top">
+      <div class="rk-ico">${_RK_ICO.box}</div>
+      <div style="flex:1;min-width:0">
+        <div class="rk-name">${esc(name)}</div>
+        <div class="rk-meta">${meta}</div>
       </div>
-      <button class="remove" data-act="rm" data-i="${i}">✕</button>
+      <button class="rk-rm" data-act="rm" data-i="${i}" aria-label="${esc(_L('Remove', '移除'))}">${_RK_ICO.x}</button>
     </div>
-    <div class="ctrl">
-      <select class="qty-select" data-qty-sel="${i}">
-        <option value="0"     ${qtyNum===0?'selected':''}>—</option>
-        <option value="1"     ${qtyNum===1?'selected':''}>1</option>
-        <option value="2"     ${qtyNum===2?'selected':''}>2</option>
-        <option value="3"     ${qtyNum===3?'selected':''}>3</option>
-        <option value="4"     ${qtyNum===4?'selected':''}>4</option>
-        <option value="5"     ${qtyNum===5?'selected':''}>5</option>
-        <option value="other" ${isOther?'selected':''}>Other 其他…</option>
-      </select>
-      <input class="qty-input-manual" type="number" min="6" step="1" inputmode="numeric"
-             placeholder="qty" data-qty-other="${i}" value="${isOther?qtyNum:''}"
-             style="display:${isOther?'inline-block':'none'}">
+    <div class="rk-qtyrow">
+      <span class="rk-qtylbl">${esc(_L('Quantity', '数量'))}</span>
+      <div class="rk-step">
+        <button class="rk-minus" data-dec="${i}" aria-label="${esc(_L('Minus', '减'))}">${_RK_ICO.minus}</button>
+        <span class="rk-num">${qtyNum}</span>
+        <button class="rk-plus" data-inc="${i}" aria-label="${esc(_L('Plus', '加'))}">${_RK_ICO.plus}</button>
+      </div>
     </div>
-    <input class="note-input" type="text" placeholder="Note · 备注 (optional)"
+    <input class="rk-note" type="text" placeholder="${esc(_L('Note (optional)', '备注 (可选)'))}"
            value="${esc(entry.notes || '')}" data-note="${i}">
   </div>`;
 }
@@ -1672,14 +1687,16 @@ function updateFooter() {
   // becomes calmer once items are present.
   const fab = document.getElementById('addFab');
   if (fab) fab.classList.toggle('has-items', count > 0);
+  const icoSave = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>';
+  const icoSend = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
   document.getElementById('foot').innerHTML = `
     <div class="info">
-      <span class="lbl">Items · 项目</span>
+      <span class="lbl">${esc(_L('Items', '项目'))}</span>
       <span class="val">${count}</span>
     </div>
     <div style="display:flex;gap:8px">
-      <button class="submit-btn draft" id="draftBtn" ${count===0?'disabled':''} onclick="submitRequest('draft')">💾 Draft · 草稿</button>
-      <button class="submit-btn" id="sendBtn" ${count===0?'disabled':''} onclick="submitRequest('sent')">📤 Send · 提交</button>
+      <button class="submit-btn draft" id="draftBtn" ${count===0?'disabled':''} onclick="submitRequest('draft')">${icoSave} ${esc(_L('Draft', '草稿'))}</button>
+      <button class="submit-btn" id="sendBtn" ${count===0?'disabled':''} onclick="submitRequest('sent')">${icoSend} ${esc(_L('Send', '提交'))}</button>
     </div>`;
 }
 
