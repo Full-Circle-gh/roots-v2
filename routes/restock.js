@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('../database');
+const inventory = require('../lib/inventory');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 const router = express.Router();
 
@@ -133,113 +134,124 @@ function _fireRestockPush(orderId, kind) {
 // Older code may produce orders that stop at `prepared` — both are valid.
 const STATUS_FLOW = ['draft', 'sent', 'received', 'prepared', 'delivered'];
 
-// ─── Auto-stock-update on delivery ──────────────────────────────────
-// When a restock order is confirmed delivered, the receiving store's
-// per-market inventory should auto-increment by the delivered items.
-// Direction matters:
-//   store→warehouse + delivered → store user confirmed the warehouse's
-//                                  shipment arrived → stock goes to
-//                                  THEIR store (resolved via store
-//                                  identity below).
-//   warehouse→store + delivered → same end-state; the store user
-//                                  confirms a warehouse-initiated push.
-// We deliberately ignore warehouse→kitchen here — that flow closes at
-// 'prepared' (no delivered event) and the kitchen has its own ingredient
-// inventory, not the per-market stock model.
-function _resolveReceivingMarketId(order, actorUser) {
-  // 1. The user who confirmed delivery wins if they have a market
-  //    assigned — they explicitly tapped "Mark Delivered" from their
-  //    store account, so their market is the destination.
-  if (actorUser?.market_id) return actorUser.market_id;
-  // 2. Some warehouse→store rows carry an explicit store_name; match it
-  //    against the markets table by name or name_cn.
+// ─── Auto inventory transfer on ship ────────────────────────────────
+// A restock order physically moves goods from the warehouse to a store.
+// When the warehouse packs it (status → 'prepared', the moment stock
+// actually leaves the shelf), we mirror that in the real sellable
+// inventory: DEDUCT what was sent from the warehouse's retail_store_stock
+// and ADD it to the receiving store's. Both sides go through
+// inventory.adjustStock so the movement is ledgered AND channel
+// availability (mini-app / web / Meituan) re-syncs for both locations.
+//
+// Notes:
+//   • Uses qty_sent (what actually shipped) and falls back to
+//     qty_requested when the warehouse didn't override the amount.
+//   • warehouse↔kitchen is excluded — the kitchen runs on its own
+//     ingredient inventory, not per-store retail stock.
+//   • Idempotent via restock_orders.stock_applied_at — 'prepared' applies
+//     it; a later 'delivered' is a no-op safety net.
+
+// Resolve the warehouse (source) retail_stores.id — the location goods
+// ship OUT of. Preference: explicit setting → a warehouse-role user's
+// bound store → the store holding the most stock. null if undeterminable.
+function _resolveWarehouseStoreId() {
+  // (1) optional explicit override, for a future multi-warehouse world.
+  try {
+    const s = db.prepare("SELECT value FROM settings WHERE key = 'restock.warehouseStoreId'").get();
+    const id = s && parseInt(s.value, 10);
+    if (id) return id;
+  } catch { /* no settings table / row — fall through */ }
+  // (2) the store a warehouse-role user is assigned to.
+  const wu = db.prepare(`
+    SELECT retail_store_id FROM users
+     WHERE role = 'warehouse' AND retail_store_id IS NOT NULL
+     ORDER BY id LIMIT 1`).get();
+  if (wu?.retail_store_id) return wu.retail_store_id;
+  // (3) fallback: whichever active store carries the most on-hand stock.
+  const top = db.prepare(`
+    SELECT rss.store_id AS id, SUM(rss.physical_qty) AS q
+      FROM retail_store_stock rss
+      JOIN retail_stores s ON s.id = rss.store_id AND COALESCE(s.is_active,1) = 1
+     GROUP BY rss.store_id ORDER BY q DESC LIMIT 1`).get();
+  return top?.id || null;
+}
+
+// Resolve the receiving (destination) retail_stores.id. Never returns the
+// warehouse itself. null → cannot resolve, caller skips + warns.
+function _resolveDestStoreId(order, warehouseStoreId) {
+  // 1. store_name / store_cn / code stamped on the order.
   if (order.store_name || order.store_cn) {
     const m = db.prepare(`
-      SELECT id FROM markets
+      SELECT id FROM retail_stores
        WHERE COALESCE(is_active,1) = 1
-         AND (LOWER(TRIM(name)) = LOWER(TRIM(?))
-              OR (name_cn IS NOT NULL AND TRIM(name_cn) = TRIM(?)))
-       LIMIT 1
-    `).get(order.store_name || '', order.store_cn || order.store_name || '');
-    if (m?.id) return m.id;
+         AND (LOWER(TRIM(name_en)) = LOWER(TRIM(?))
+              OR (name_cn IS NOT NULL AND TRIM(name_cn) = TRIM(?))
+              OR LOWER(TRIM(code)) = LOWER(TRIM(?)))
+       LIMIT 1`).get(order.store_name || '', order.store_cn || order.store_name || '', order.store_name || '');
+    if (m?.id && m.id !== warehouseStoreId) return m.id;
   }
-  // 3. Original requester's assigned market (store→warehouse case where
-  //    the actor confirming delivery is the same store user who created
-  //    the request — usually redundant with #1 but covers admins
-  //    confirming on behalf of a store).
-  if (order.created_by) {
-    const u = db.prepare('SELECT market_id FROM users WHERE id = ?').get(order.created_by);
-    if (u?.market_id) return u.market_id;
+  // 2. store→warehouse: the requester's bound store is the destination.
+  if (order.from_role === 'store' && order.created_by) {
+    const u = db.prepare('SELECT retail_store_id FROM users WHERE id = ?').get(order.created_by);
+    if (u?.retail_store_id && u.retail_store_id !== warehouseStoreId) return u.retail_store_id;
   }
-  // 4. Single-retail-store fallback — if exactly one active retail
-  //    market is configured, default to it. Lets the auto-update work
-  //    in the single-tenant world today (Yuexiu only) before the user
-  //    has wired up market_id assignments. Multiple retail markets =
-  //    skip rather than guess.
-  const retail = db.prepare(`
-    SELECT id FROM markets
-     WHERE COALESCE(is_active,1) = 1 AND kind = 'retail'
-  `).all();
-  if (retail.length === 1) return retail[0].id;
+  // 3. fallback: exactly one active store that isn't the warehouse.
+  const others = db.prepare(`
+    SELECT id FROM retail_stores
+     WHERE COALESCE(is_active,1) = 1 AND id != ?`).all(warehouseStoreId);
+  if (others.length === 1) return others[0].id;
   return null;
 }
-function _applyDeliveryToStock(orderId, actorUser) {
+
+function _applyRestockTransfer(orderId, actorUser) {
   try {
     const o = db.prepare('SELECT * FROM restock_orders WHERE id = ?').get(orderId);
     if (!o) return;
-    // Only store-receiving deliveries adjust per-market stock. Kitchen
-    // direction has no delivered event, but guard anyway.
-    if (o.to_role !== 'store' && o.from_role !== 'warehouse') {
-      // store→warehouse case is still valid (store IS receiving the
-      // delivered goods from warehouse), so fall through. Only the
-      // warehouse→kitchen direction is excluded.
-    }
+    // Kitchen direction uses ingredient inventory, not per-store retail stock.
     if (o.to_role === 'kitchen' || o.from_role === 'kitchen') return;
-    // Idempotency — never apply twice for the same order.
+    // Idempotency — never move stock twice for the same order.
     if (o.stock_applied_at) return;
-    const marketId = _resolveReceivingMarketId(o, actorUser);
-    if (!marketId) {
-      console.warn(`[stock] order ${o.id} delivered but no market resolved — stock not updated`);
+
+    const warehouseStoreId = _resolveWarehouseStoreId();
+    const destStoreId = _resolveDestStoreId(o, warehouseStoreId);
+    if (!warehouseStoreId || !destStoreId || warehouseStoreId === destStoreId) {
+      console.warn(`[restock-transfer] order ${o.id}: cannot resolve source/dest ` +
+        `(warehouse=${warehouseStoreId}, dest=${destStoreId}) — stock not moved`);
       return;
     }
+
     const items = db.prepare(`
       SELECT product_id, qty_requested, qty_sent
         FROM restock_items
        WHERE restock_id = ?
          AND product_id IS NOT NULL
-         AND COALESCE(qty_requested, 0) > 0
+         AND COALESCE(qty_sent, qty_requested, 0) > 0
     `).all(o.id);
-    if (items.length === 0) {
-      // Mark applied even if no items so we don't re-evaluate forever.
-      db.prepare('UPDATE restock_orders SET stock_applied_at = CURRENT_TIMESTAMP WHERE id = ?').run(o.id);
-      return;
+    const label = o.rs_number || ('RS#' + o.id);
+    let moved = 0;
+    for (const it of items) {
+      // Prefer qty_sent (what actually shipped); fall back to requested.
+      const qty = (it.qty_sent != null) ? Number(it.qty_sent) : Number(it.qty_requested);
+      if (!(qty > 0)) continue;
+      // − out of the warehouse
+      inventory.adjustStock({
+        storeId: warehouseStoreId, productId: it.product_id, deltaQty: -qty,
+        actorUserId: actorUser?.id || null, actorLabel: 'restock',
+        reason: 'restock_transfer_out', note: label,
+      });
+      // + into the receiving store
+      inventory.adjustStock({
+        storeId: destStoreId, productId: it.product_id, deltaQty: qty,
+        actorUserId: actorUser?.id || null, actorLabel: 'restock',
+        reason: 'restock_transfer_in', note: label,
+      });
+      moved++;
     }
-    const upsert = db.prepare(`
-      INSERT INTO market_stock (market_id, product_id, qty, updated_at)
-           VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(market_id, product_id) DO UPDATE SET
-           qty = qty + excluded.qty,
-           updated_at = CURRENT_TIMESTAMP
-    `);
-    const ledger = db.prepare(`
-      INSERT INTO market_stock_ledger
-        (market_id, product_id, delta, reason, ref_table, ref_id, user_id, notes)
-        VALUES (?, ?, ?, 'restock_delivered', 'restock_orders', ?, ?, ?)
-    `);
-    const tx = db.transaction(() => {
-      for (const it of items) {
-        // Prefer the warehouse-recorded qty_sent (what actually shipped);
-        // fall back to the requested qty if no sent qty was logged.
-        const delta = (it.qty_sent != null) ? Number(it.qty_sent) : Number(it.qty_requested);
-        if (!(delta > 0)) continue;
-        upsert.run(marketId, it.product_id, delta);
-        ledger.run(marketId, it.product_id, delta, o.id, actorUser?.id || null, o.rs_number || null);
-      }
-      db.prepare('UPDATE restock_orders SET stock_applied_at = CURRENT_TIMESTAMP WHERE id = ?').run(o.id);
-    });
-    tx();
+    // Stamp regardless of item count so we don't re-evaluate forever.
+    db.prepare('UPDATE restock_orders SET stock_applied_at = CURRENT_TIMESTAMP WHERE id = ?').run(o.id);
+    console.log(`[restock-transfer] ${label}: moved ${moved} line(s) store ${warehouseStoreId} → ${destStoreId}`);
   } catch (e) {
-    console.warn('[stock] applyDeliveryToStock failed:', e.message);
+    console.warn('[restock-transfer] failed:', e.message);
   }
 }
 
@@ -563,12 +575,14 @@ router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, 
   db.prepare(`UPDATE restock_orders SET status = ?, ${tsCol} = ? WHERE id = ?`).run(status, now, order.id);
 
   logActivity(req.user.id, req.user.username, 'status_change', 'restock', order.id, { from: order.status, to: status }, req.ip);
-  // Auto-stock-update — fires once per order when it first reaches
-  // 'delivered'. Increments the receiving store's per-market inventory
-  // with the items in the order. Idempotency is enforced inside via
-  // stock_applied_at, so retries can't double-count.
-  if (status === 'delivered') {
-    _applyDeliveryToStock(order.id, req.user);
+  // Auto inventory transfer — fires once per order when the warehouse
+  // packs it ('prepared' = stock physically leaves). Deducts what was
+  // sent from the warehouse and adds it to the receiving store, both in
+  // the real retail_store_stock. 'delivered' repeats the call as a safety
+  // net; stock_applied_at makes the second call a no-op, so it can never
+  // double-count.
+  if (status === 'prepared' || status === 'delivered') {
+    _applyRestockTransfer(order.id, req.user);
   }
   // Push fan-out — only for the cross-side transitions the other party
   // actually needs to act on. `received` is internal warehouse state.
