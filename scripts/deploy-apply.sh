@@ -139,5 +139,34 @@ if [ "$ST" != "online" ] || [ "$STABLE" != "1" ] || [ "$PROBE_BAD" = "1" ]; then
 fi
 
 echo "--- recent out log ---"; tail -n 6 /root/.pm2/logs/roots-v2-out.log
+
+# The qingyun-sync daemon is a SEPARATE pm2 process that runs
+# scripts/qingyun-daemon.js and require()s this same lib/ + database.js. The
+# `pm2 restart roots-v2` above does NOT reload it, so a change to the daemon or
+# to a shared lib it loads would otherwise keep running stale in that process
+# (e.g. the same-city/same-day auto-push gate lives in lib/inventory.js). Bounce
+# it too — but ONLY when this ship actually touched a file it loads, discover the
+# process by its script path so an alternate pm2 name still matches, and never
+# let a daemon hiccup fail an already-healthy app deploy (best-effort).
+DAEMON_TOUCHED=0
+for f in "${FILES[@]}"; do
+  case "$f" in
+    scripts/qingyun-daemon.js|lib/*|database.js) DAEMON_TOUCHED=1; break ;;
+  esac
+done
+if [ "$DAEMON_TOUCHED" = "1" ]; then
+  mapfile -t QY < <(pm2 jlist | node -e 'let d=JSON.parse(require("fs").readFileSync(0));for(const p of d){const s=(p.pm2_env&&p.pm2_env.pm_exec_path)||"";if(/qingyun-daemon\.js$/.test(s)||/qingyun/i.test(p.name||""))console.log(p.name)}' 2>/dev/null || true)
+  if [ ${#QY[@]} -gt 0 ]; then
+    echo "=== bounce qingyun daemon(s) (shipped a file it loads): ${QY[*]} ==="
+    for name in "${QY[@]}"; do
+      pm2 restart "$name" --update-env >/dev/null 2>&1 \
+        && echo "  restarted $name" \
+        || echo "  WARN: restart of $name failed — bounce it by hand (pm2 restart $name)"
+    done
+  else
+    echo "note: no qingyun daemon found in pm2 — nothing to bounce (start it with: pm2 start scripts/qingyun-daemon.js --name qingyun-sync)"
+  fi
+fi
+
 rm -rf "$STAGE"
 echo "RESULT=SUCCESS backup=$BK"
