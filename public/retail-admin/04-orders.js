@@ -2293,9 +2293,8 @@ function renderItemRow(it, opts = {}) {
   const nameCell = _href
     ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
     : name;
-  // One language at a time (brand rule): the other-language product name is
-  // never shown alongside — the meta line carries just the size.
-  const zh = it.size ? `<span class="mf-zh">${escapeHtml(it.size)}</span>` : '';
+  // Meta line is SKU · qty · unit cost only. Size/weight dropped — the SKU
+  // already pins the exact variant, so the weight was redundant.
   const refundPill = itemRefundHtml(it);
   const rowCls = `mf-row${itemFullyRefunded(it) ? ' refunded-row' : ''}`;
   return `
@@ -2308,7 +2307,6 @@ function renderItemRow(it, opts = {}) {
           <span class="mf-total">¥${fmt(it.line_total)}</span>
         </div>
         <div class="mf-meta" data-no-i18n>
-          ${zh}
           ${itemSkuHtml(it)}
           ${itemQtyHtml(it)}
           <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
@@ -2530,20 +2528,22 @@ function shipmentStatePill(s) {
 // Render one shipment block: header pill + items table + tracking row.
 function renderShipmentCard(o, s) {
   const mode = s.mode || 'local';
+  // Mode label is plain text — the card IS a shipment, so the ✈/🚚 glyphs were
+  // noise (dropped). Local/supplier keep their descriptive words.
   const labelMap = {
-    air:      shipGlyph('air')      + ' Air shipment · 空运',
-    land:     shipGlyph('land')     + ' Land shipment · 陆运',
-    local:    shipGlyph('local')    + ' Local delivery · 同城配送',
-    supplier: shipGlyph('supplier') + ' Supplier-direct · 供应商直发',
+    air:      'Air · 空运',
+    land:     'Land · 陆运',
+    local:    'Local delivery · 同城配送',
+    supplier: 'Supplier-direct · 供应商直发',
   };
-  // Line count vs. unit count: warehouse cross-checks the physical pick
+  // Product count vs. unit count: warehouse cross-checks the physical pick
   // against total units, so surface units whenever a multi-qty line makes
-  // them diverge from the line count (e.g. "4 lines · 6 units").
+  // them diverge from the product count (e.g. "4 products · 6 units").
   const lines = s.items.length;
   const units = (s.items || []).reduce((n, it) => n + (Number(it.qty) || 0), 0);
   const countLabel = units !== lines
-    ? `<span data-lang-block="en">${lines} line${lines === 1 ? '' : 's'} · ${units} units</span><span data-lang-block="cn">${lines} 项 · ${units} 件</span>`
-    : `<span data-lang-block="en">${lines} item${lines === 1 ? '' : 's'}</span><span data-lang-block="cn">${lines} 件商品</span>`;
+    ? `<span data-lang-block="en">${lines} product${lines === 1 ? '' : 's'} · ${units} units</span><span data-lang-block="cn">${lines} 款 · ${units} 件</span>`
+    : `<span data-lang-block="en">${lines} product${lines === 1 ? '' : 's'}</span><span data-lang-block="cn">${lines} 款</span>`;
   const state = s.state || 'pending';
   // Per-shipment dispatch is offered once the order is paid (or later) and this
   // parcel hasn't shipped. The order being 'dispatched' doesn't block it — a
@@ -3235,6 +3235,25 @@ function renderReadonlyOrder(o) {
     </div>`;
 }
 
+// Romanise a Chinese city name for the English view of the split note (the
+// stored shipping_city is Chinese, e.g. "上海市"). Strips the 省/市/区 suffix,
+// looks it up, and falls back to the original Chinese when the city isn't
+// mapped — never guesses a romanisation.
+const CITY_EN = {
+  '北京':'Beijing','上海':'Shanghai','广州':'Guangzhou','深圳':'Shenzhen','天津':'Tianjin','重庆':'Chongqing',
+  '成都':'Chengdu','杭州':'Hangzhou','武汉':'Wuhan','西安':'Xi’an','南京':'Nanjing','苏州':'Suzhou','郑州':'Zhengzhou',
+  '长沙':'Changsha','东莞':'Dongguan','佛山':'Foshan','宁波':'Ningbo','青岛':'Qingdao','沈阳':'Shenyang','济南':'Jinan',
+  '合肥':'Hefei','昆明':'Kunming','福州':'Fuzhou','厦门':'Xiamen','哈尔滨':'Harbin','大连':'Dalian','南宁':'Nanning',
+  '珠海':'Zhuhai','惠州':'Huizhou','中山':'Zhongshan','汕头':'Shantou','贵阳':'Guiyang','太原':'Taiyuan','石家庄':'Shijiazhuang',
+  '南昌':'Nanchang','长春':'Changchun','温州':'Wenzhou','无锡':'Wuxi','常州':'Changzhou','嘉兴':'Jiaxing','金华':'Jinhua',
+  '兰州':'Lanzhou','海口':'Haikou','三亚':'Sanya','乌鲁木齐':'Urumqi','呼和浩特':'Hohhot','银川':'Yinchuan','西宁':'Xining','拉萨':'Lhasa',
+};
+function cityEn(city) {
+  if (!city) return '';
+  const bare = String(city).replace(/(省|市|自治区|特别行政区|地区)$/, '').trim();
+  return CITY_EN[bare] || String(city);
+}
+
 function renderOpenOrder(o) {
   // Read-only channels (Meituan / gzgrocery) get a stripped view-only panel —
   // no fulfilment, refund or edit controls, which don't apply to a mirrored order.
@@ -3273,19 +3292,16 @@ function renderOpenOrder(o) {
       <div class="order-card odd-${ODV.density}">
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
-          <div class="od-head-main">
-            <div class="title-row">
-              <b>${escapeHtml(o.order_no)}</b>
-              <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
-              ${o.fulfillment?.rollup === 'partial' ? `<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>` : ''}
-              ${(o.addons && o.addons.length) ? `<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>` : ''}
-              ${refundBadge(o)}
-            </div>
-            <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
+          <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
+          <div class="title-row">
+            <b>${escapeHtml(o.order_no)}</b>
+            <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
+            ${o.fulfillment?.rollup === 'partial' ? `<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>` : ''}
+            ${(o.addons && o.addons.length) ? `<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>` : ''}
+            ${refundBadge(o)}
           </div>
-          <!-- Primary status actions (Mark delivered / Refund …) live up here by
-               the status pill — they used to be buried at the bottom of the
-               drawer past the items + reservations. -->
+          <!-- Eyebrow → order no + status → actions on their OWN row below (calm,
+               per Tacet). Forward actions are bordered; Refund/Cancel is a menu. -->
           ${transitions ? `<div class="transitions od-head-tx">${transitions}</div>` : ''}
         </div>
 
@@ -3315,16 +3331,28 @@ function renderOpenOrder(o) {
               ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" onclick="openAddressToChinese(${o.id})">${pinIcon(13)} ${cuT('Make address Chinese', '转为中文地址')}</button>` : ''}
             </div>
           </div>`}
-          <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
-            <div class="kicker">Customer · 顾客</div>
-            <div class="val"><b>${escapeHtml(o.nickname || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">›</span>` : ''}</div>
-            ${o.customer_id ? `<div class="sub">ID #${o.customer_id}</div>` : ''}
+          <!-- The one-line facts (Customer / Payment / Fulfilled by / Ship by)
+               were each a near-empty box — collapsed into one facts card of
+               label→value rows. Ship-to stays its own card (it earns the space). -->
+          <div class="od-facts">
+            <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
+              <div class="kicker">Customer · 顾客</div>
+              <div class="val"><b>${escapeHtml(o.nickname || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">› #${o.customer_id}</span>` : ''}</div>
+            </div>
+            ${(() => { const _pmt = primaryPayment(o); return `
+            <div>
+              <div class="kicker">Payment · 付款 ${_pmt?.transaction_id ? copyChip(_pmt.transaction_id, 'Txn ID') : ''}</div>
+              <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml(paymentStatusLabel(_pmt?.status))}</div>
+            </div>`; })()}
+            ${renderShipByTile(o)}
+            ${o.store_code ? `<div>
+              <div class="kicker">Fulfilled by · 出货门店</div>
+              <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
+              <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
+              ${o.routed_by_distance === 0 ? `<div class="sub" style="color: var(--warn); font-weight: 600;">⚠ ${cuT('routed by area — address not locatable, verify store','按区域派单 · 地址无法定位,请核对门店')}</div>` : ''}
+              ${fulfillmentShortNote(o)}
+            </div>` : ''}
           </div>
-          ${(() => { const _pmt = primaryPayment(o); return `
-          <div>
-            <div class="kicker">Payment · 付款 ${_pmt?.transaction_id ? copyChip(_pmt.transaction_id, 'Txn ID') : ''}</div>
-            <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml(paymentStatusLabel(_pmt?.status))}</div>
-          </div>`; })()}
           ${o.alipay_proof_image ? `<div class="full">
             <div class="kicker">Alipay payment proof · 支付宝付款截图${o.alipay_proof_at ? ' · ' + escapeHtml(o.alipay_proof_at) : ''}</div>
             <img src="${o.alipay_proof_image}" alt="Alipay payment proof" style="max-width: 220px; max-height: 300px; border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; display: block;" onclick="(function(s){var w=window.open();if(w)w.document.write('<img src=\\''+s+'\\' style=\\'max-width:100%\\'>');})(this.src)">
@@ -3332,31 +3360,31 @@ function renderOpenOrder(o) {
             ${o.status === 'pending_payment' ? `<div class="sub" style="margin-top: 6px; color: var(--brass); font-weight: 700;">${cuT('Verify the amount matches, then Mark paid below.', '核对金额一致后,点击下方“标记已付款”。')}</div>` : ''}
           </div>` : ''}
           ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
-          ${renderShipByTile(o)}
-          ${o.store_code ? `<div>
-            <div class="kicker">Fulfilled by · 出货门店</div>
-            <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
-            <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
-            ${o.routed_by_distance === 0 ? `<div class="sub" style="color: var(--warn); font-weight: 600;">⚠ ${cuT('routed by area — address not locatable, verify store','按区域派单 · 地址无法定位,请核对门店')}</div>` : ''}
-            ${fulfillmentShortNote(o)}
-          </div>` : ''}
-          ${printReceiptTile(o)}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
           ${o.needs_invoice ? renderInvoiceBlock(o) : ''}
         </div>
+        ${printReceiptRow(o)}
 
         <div class="order-items">
           <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Items &amp; shipments · 商品与发货</div>
           ${_DISMISSED_SPLIT.has(o.id) ? '' : splitSuggestionBanner(o)}
           ${o.outside_guangzhou && (o.shipments?.length > 1) ? `
             <div class="outside-gz-note">
-              <span data-lang-block="en">⚠ Destination outside Guangzhou (${escapeHtml(o.shipping_city || 'unknown city')}) — order split into ${o.shipments.length} shipments</span><span data-lang-block="cn">⚠ 目的地在广州以外 (${escapeHtml(o.shipping_city || '未知城市')}) — 订单已拆分为 ${o.shipments.length} 个包裹</span>
+              <span class="ogz-ico"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+              <span class="ogz-text">
+                <span class="ogz-h"><span data-lang-block="en">Split into ${o.shipments.length} parcels</span><span data-lang-block="cn">已拆分为 ${o.shipments.length} 个包裹</span></span>
+                <span class="ogz-sub"><span data-lang-block="en">Destination outside Guangzhou (${escapeHtml(cityEn(o.shipping_city) || 'unknown city')})</span><span data-lang-block="cn">目的地在广州以外 (${escapeHtml(o.shipping_city || '未知城市')})</span></span>
+              </span>
               ${shipmentMergeControls(o)}
             </div>` : ''}
           ${o.outside_guangzhou && (o.shipments?.length === 1) && (o.shipments[0].label || '').includes('合并') ? `
             <div class="outside-gz-note">
-              <span data-lang-block="en">Combined into one parcel — customer tracks a single shipment</span><span data-lang-block="cn">已合并为一个包裹 — 顾客只追踪一个包裹</span>
+              <span class="ogz-ico"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
+              <span class="ogz-text">
+                <span class="ogz-h"><span data-lang-block="en">Combined into one parcel</span><span data-lang-block="cn">已合并为一个包裹</span></span>
+                <span class="ogz-sub"><span data-lang-block="en">Customer tracks a single shipment</span><span data-lang-block="cn">顾客只追踪一个包裹</span></span>
+              </span>
               ${shipmentMergeControls(o)}
             </div>` : ''}
           <div id="odv-items-sortable">${renderSortableItems(o)}</div>
@@ -3571,32 +3599,20 @@ function askConfirm(opts) {
 // Receipt-print status tile in the order drawer. Hidden for orders that
 // can't have a receipt (unpaid / cancelled / refunded). Shows the last
 // auto-print outcome (printed / failed / not yet) plus a one-click reprint.
-function printReceiptTile(o) {
+// Receipt = just the option to (re)print. Print status / "printed at" is
+// omitted (operators only want the button). The per-MACHINE toggles that used
+// to sit here (auto-print JD waybill, box-label-auto) moved to Settings ·
+// Delivery — they weren't order-specific. A FAILED auto-print is the one status
+// still worth surfacing. The per-order "Box label" print button stays, gated by
+// the opt-in Delivery setting (delivery.boxLabel → body.ord-box-label).
+function printReceiptRow(o) {
   if (['pending_payment', 'cancelled', 'refunded'].includes(o.status)) return '';
-  let badge;
-  if (o.print_status === 'printed') {
-    badge = `<span class="sub" style="color:var(--text-3); font-weight:700;">✓ Printed · 已打印${o.printed_at ? ' ' + formatDate(o.printed_at) : ''}</span>`;
-  } else if (o.print_status === 'failed') {
-    badge = `<span class="pill danger" title="${escapeAttr(o.print_error || '')}"><span class="dot"></span>Print failed · 打印失败</span>`;
-  } else {
-    badge = `<span class="sub" style="color:var(--text-3); font-weight:700;">Not printed yet · 尚未打印</span>`;
-  }
-  // Compact tile: status + Reprint + the auto-JD toggle. Box-label controls
-  // are an opt-in Delivery setting (delivery.boxLabel → body.ord-box-label);
-  // hidden for tenants that don't print their own parcel stickers.
-  return `<div>
-    <div class="kicker">Receipt · 小票</div>
-    <div class="val" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-      ${badge}
-      <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Reprint · 补打小票</button>
-      <button class="btn btn-sm ord-boxlabel-ui" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label', '打印箱贴')}</button>
-      <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Only this PC (the one running 京东物流云打印组件). Auto-prints the JD waybill label the moment a waybill is created — no print dialog.', '仅本机(运行京东物流云打印组件的电脑)。生成运单时自动打印京东面单,无需弹窗。'))}">
-        <input type="checkbox" ${jdAutoPrintOn() ? 'checked' : ''} onchange="setJdAutoPrint(this.checked)"> ${cuT('Auto-print JD label', '运单后自动打印面单')}
-      </label>
-      <label class="ord-boxlabel-ui" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Optional — for stores that print their own parcel stickers instead of the JD waybill. Opens a print dialog for an order-no/name/phone sticker on this PC.', '可选 — 适用于自行打印箱贴而非京东面单的门店。在本机弹出打印订单号/姓名/电话箱贴。'))}">
-        <input type="checkbox" ${boxLabelAutoOn() ? 'checked' : ''} onchange="setBoxLabelAuto(this.checked)"> ${cuT('Box label too', '同时打印箱贴')}
-      </label>
-    </div>
+  const failed = o.print_status === 'failed'
+    ? `<span class="pill danger" title="${escapeAttr(o.print_error || '')}"><span class="dot"></span>Print failed · 打印失败</span>` : '';
+  return `<div class="receipt-row">
+    ${failed}
+    <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print receipt','打印小票')}</button>
+    <button class="btn btn-sm ord-boxlabel-ui" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label', '打印箱贴')}</button>
   </div>`;
 }
 

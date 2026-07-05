@@ -203,6 +203,23 @@ async function loadDeliveryZones() {
         if (xlbl) xlbl.textContent = xcb.checked ? 'ON · 开启' : 'OFF · 关闭';
       });
     }
+    // Label printing — per-MACHINE JD waybill auto-print (localStorage, via
+    // jdAutoPrintOn/setJdAutoPrint in 04-orders.js). Reflect current state; the
+    // inline onchange persists + prompts for the printer name once. Default ON.
+    if ($('#dlv-jd-autoprint') && typeof jdAutoPrintOn === 'function') {
+      const on = jdAutoPrintOn();
+      $('#dlv-jd-autoprint').checked = on;
+      const jlbl = $('#dlv-jd-autoprint-status-label');
+      if (jlbl) jlbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+    }
+    const jcb = $('#dlv-jd-autoprint');
+    if (jcb && !jcb._wired) {
+      jcb._wired = true;
+      jcb.addEventListener('change', () => {
+        const jlbl = $('#dlv-jd-autoprint-status-label');
+        if (jlbl) jlbl.textContent = jcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+      });
+    }
     // Fresh batch schedule
     const batch = (cfg?.data && cfg.data.batch && cfg.data.batch.schedule) || {};
     if ($('#batch-enabled')) {

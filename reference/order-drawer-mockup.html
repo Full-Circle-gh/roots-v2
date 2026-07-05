@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order drawer — Tacet redesign mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ── Tacet tokens (from retail-admin.html #tacet-orders-skin) ── */
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF; --graphite:#58606E;
+    --cream:#F6F3EC; --elev2:#EFEBE1;
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --dusk:#6E67AF;
+    --sage:#A3B49F; --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --amber:#C9954A; --amber-tint:#F7EEDE; --amber-ink:#8A6425;
+    --brick:#B4533E; --brick-tint:#F6E7E3;
+    --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
+    --f:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:28px 28px 80px;
+  }
+
+  /* ── CSS-only language toggle: radios first in <body>, siblings react ── */
+  .lang-input{ position:absolute; width:0; height:0; opacity:0; pointer-events:none; }
+  .zh{ display:none; }
+  #lang-zh:checked ~ .page-head .en,
+  #lang-zh:checked ~ .stage .en{ display:none; }
+  #lang-zh:checked ~ .page-head .zh,
+  #lang-zh:checked ~ .stage .zh{ display:inline; }
+
+  .langbar{ max-width:960px; margin:0 auto 16px; display:flex; justify-content:flex-end; }
+  .seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; background:var(--pane); padding:3px; gap:2px; }
+  .seg label{ font-size:12.5px; font-weight:500; color:var(--text-2); padding:5px 16px; border-radius:999px; cursor:pointer; }
+  #lang-en:checked ~ .langbar label[for="lang-en"],
+  #lang-zh:checked ~ .langbar label[for="lang-zh"]{ background:var(--ink); color:var(--paper); }
+
+  .page-head{max-width:960px; margin:0 auto 24px;}
+  .page-head h1{font-size:20px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em;}
+  .page-head p{margin:0; color:var(--text-2); font-size:13.5px; max-width:660px;}
+  .stage{ max-width:960px; margin:0 auto; display:flex; gap:28px; align-items:flex-start; }
+  @media (max-width:900px){ .stage{flex-direction:column;} }
+
+  /* ── Drawer shell ── */
+  .drawer{
+    flex:0 0 640px; max-width:640px; width:100%;
+    background:var(--paper); border:1px solid var(--line);
+    border-radius:18px; padding:24px 24px 20px;
+    box-shadow:0 24px 60px rgba(40,30,5,.10); position:relative;
+  }
+  @media (max-width:900px){ .drawer{flex:1 1 auto;} }
+  .close{ position:absolute; top:18px; right:18px; width:32px; height:32px;
+    border-radius:999px; background:var(--pane); border:1px solid var(--line);
+    color:var(--text-2); display:flex; align-items:center; justify-content:center; }
+  .close svg{width:16px;height:16px;}
+
+  .od-head{padding-right:46px; margin-bottom:20px;}
+  .od-head .eyebrow{font-size:14px; color:var(--text-2); margin:0 0 7px;}
+  .od-head .num{font-size:27px; font-weight:600; letter-spacing:.01em; font-variant-numeric:tabular-nums; display:flex; align-items:center; gap:14px; flex-wrap:wrap;}
+  .od-actions{display:flex; align-items:center; gap:10px; margin-top:17px; flex-wrap:wrap;}
+
+  .pill{display:inline-flex; align-items:center; gap:7px; font-size:14px; font-weight:500; border-radius:999px; padding:4px 13px;}
+  .pill .dot{width:8px; height:8px; border-radius:999px; flex:none;}
+  .pill.paid{background:var(--cream); color:var(--text-1);}
+  .pill.paid .dot{background:var(--graphite);}
+  .pill.notship{background:transparent; color:var(--text-2); padding:0; font-size:14px;}
+  .pill.notship .dot{background:var(--text-4);}
+
+  .btn{display:inline-flex; align-items:center; gap:7px; font-family:var(--f); font-size:15px; font-weight:500;
+    padding:9px 17px; border:1px solid var(--line); background:var(--pane); color:var(--text-1);
+    border-radius:var(--r-md); cursor:pointer; white-space:nowrap;}
+  .btn:hover{background:var(--cream);}
+  .btn svg{width:16px;height:16px;}
+  .btn-sm{padding:6px 13px; font-size:14px;}
+  .btn-ink{background:var(--ink); border-color:var(--ink); color:var(--paper);}
+  .btn-ink:hover{background:#2A3550; border-color:#2A3550; color:var(--paper);}
+  .btn-danger{background:transparent; color:var(--brick); border-color:var(--brick);}
+  .btn-danger:hover{background:var(--brick-tint);}
+  .btn-ghost{background:transparent; border-color:transparent; color:var(--text-2); padding-left:8px; padding-right:8px;}
+  .btn-ghost:hover{color:var(--text-1); background:transparent; text-decoration:underline; text-underline-offset:3px;}
+
+  .total{background:var(--cream); border-radius:var(--r-xl); padding:20px 22px; display:flex; justify-content:space-between; align-items:center; margin-bottom:18px;}
+  .total .lbl{font-size:13px; font-weight:500; color:var(--text-2); letter-spacing:.02em;}
+  .total .sub{font-size:13.5px; color:var(--text-2); margin-top:4px;}
+  .total .amt{font-size:40px; font-weight:600; letter-spacing:-.01em; font-variant-numeric:tabular-nums;}
+
+  .info-row{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px;}
+  @media (max-width:560px){ .info-row{grid-template-columns:1fr;} }
+  .card{background:var(--pane); border:1px solid var(--line); border-radius:var(--r-xl); padding:16px 18px;}
+  .kicker{font-size:14px; font-weight:500; color:var(--text-2); letter-spacing:.01em; margin-bottom:9px; display:flex; align-items:center; gap:8px;}
+  .copy{width:20px; height:20px; border:1px solid var(--line); border-radius:999px; background:var(--pane); color:var(--text-3); display:inline-flex; align-items:center; justify-content:center;}
+  .copy svg{width:11px;height:11px;}
+  .shipto .name{font-weight:600; font-size:16.5px;}
+  .shipto .addr{color:var(--text-2); font-size:14.5px; margin-top:4px; line-height:1.5;}
+  .shipto .acts{margin-top:13px;}
+
+  .facts{display:flex; flex-direction:column;}
+  .facts .kicker{margin-bottom:9px;}
+  .frow{display:grid; grid-template-columns:110px 1fr; gap:12px; padding:8px 0; border-top:1px solid var(--line-soft); align-items:baseline;}
+  .frow:first-of-type{border-top:none; padding-top:0;}
+  .frow .k{font-size:14px; color:var(--text-3);}
+  .frow .v{font-size:16.5px; color:var(--text-1); font-weight:600;}
+  .frow .v .muted{color:var(--text-3); font-weight:400;}
+  .frow .v .sub{display:block; font-size:13px; color:var(--text-3); font-weight:400; margin-top:3px;}
+  .chev{color:var(--text-3); font-weight:400;}
+
+  .receipt-act{margin-bottom:22px;}
+
+  .sec-lbl{font-size:12px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--graphite); margin:2px 0 14px;}
+  .sortbar{display:flex; align-items:center; gap:9px; margin-bottom:14px; font-size:13.5px; color:var(--text-3);}
+  .sort-chip{border:1px solid var(--line); border-radius:999px; padding:4px 14px; font-size:13.5px; color:var(--text-2); background:var(--pane);}
+  .sort-chip.active{background:var(--cream); color:var(--text-1); border-color:var(--line-strong);}
+
+  .route-note{display:flex; align-items:center; gap:13px; flex-wrap:wrap; background:var(--amber-tint); color:var(--amber-ink); border-radius:var(--r-lg); padding:13px 16px; margin-bottom:14px;}
+  .route-note .ico{flex:none; width:34px; height:34px; border-radius:999px; background:rgba(201,149,74,.20); display:flex; align-items:center; justify-content:center;}
+  .route-note .rn-text{flex:1 1 240px; min-width:0;}
+  .route-note .rn-h{display:block; font-size:15px; font-weight:500; line-height:1.35;}
+  .route-note .rn-sub{display:block; font-size:13px; opacity:.82; margin-top:2px; line-height:1.35;}
+  .route-note .btn{flex:none; background:transparent; border-color:rgba(138,100,37,.4); color:var(--amber-ink);}
+  .route-note .btn:hover{background:rgba(201,149,74,.14);}
+
+  .parcel{background:var(--pane); border:1px solid var(--line); border-radius:var(--r-xl); padding:16px 18px 14px; margin-bottom:13px;}
+  .parcel-head{display:flex; align-items:center; gap:12px; margin-bottom:6px;}
+  .mode{background:var(--cream); color:var(--text-1); font-weight:500; font-size:13.5px; border-radius:999px; padding:5px 14px; letter-spacing:.01em;}
+  .count{margin-left:auto; font-size:13px; font-weight:500; color:var(--text-2); font-variant-numeric:tabular-nums;}
+
+  .line{display:grid; grid-template-columns:26px 44px 1fr auto; gap:14px; align-items:center; padding:13px 0; border-top:1px solid var(--line-soft);}
+  .line .n{font-size:13px; color:var(--text-3); font-variant-numeric:tabular-nums;}
+  .thumb{width:44px; height:44px; border-radius:11px; background:var(--cream); border:1px solid var(--line-soft); display:flex; align-items:center; justify-content:center; color:var(--text-4); font-size:17px;}
+  .line .nm{font-size:16px; font-weight:500;}
+  .line .meta{font-size:13.5px; color:var(--text-2); margin-top:3px; font-variant-numeric:tabular-nums;}
+  .line .tot{font-size:16px; font-weight:500; font-variant-numeric:tabular-nums; text-align:right;}
+  .more{font-size:13px; color:var(--text-3); padding:11px 0 2px; border-top:1px solid var(--line-soft);}
+  .parcel-foot{display:flex; align-items:center; gap:10px; margin-top:14px;}
+
+  .notes{flex:1 1 280px; max-width:320px; position:sticky; top:28px;}
+  @media (max-width:900px){ .notes{position:static; max-width:596px;} }
+  .notes h2{font-size:12px; text-transform:uppercase; letter-spacing:.12em; color:var(--graphite); margin:0 0 14px;}
+  .note{background:var(--pane); border:1px solid var(--line); border-radius:var(--r-lg); padding:13px 15px; margin-bottom:12px;}
+  .note .tag{font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--dusk); margin-bottom:6px;}
+  .note h3{font-size:13.5px; font-weight:600; margin:0 0 5px;}
+  .note p{font-size:12.5px; color:var(--text-2); margin:0; line-height:1.55;}
+  .note p + p{margin-top:7px;}
+  .swatches{display:flex; gap:6px; margin-top:9px; flex-wrap:wrap;}
+  .sw{width:22px; height:22px; border-radius:6px; border:1px solid rgba(0,0,0,.08);}
+</style>
+</head>
+<body>
+
+<!-- Language radios must come FIRST so the ~ sibling rules reach everything -->
+<input type="radio" name="lang" id="lang-en" class="lang-input" checked>
+<input type="radio" name="lang" id="lang-zh" class="lang-input">
+
+<div class="langbar">
+  <div class="seg">
+    <label for="lang-en">EN</label>
+    <label for="lang-zh">中文</label>
+  </div>
+</div>
+
+<div class="page-head">
+  <h1>Order drawer — restructured</h1>
+  <p>Rebuilt on the existing <b>Tacet</b> system. Use the <b>EN / 中文</b> switch above — the two languages are never shown glued together (one at a time, as the live drawer does). Top half drops from 6 half-empty boxes to 2 cards + 1 slim strip; shipment icons removed; per-parcel actions calmed.</p>
+</div>
+
+<div class="stage">
+
+  <!-- ============ THE DRAWER ============ -->
+  <div class="drawer">
+    <div class="close" title="Close (Esc)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </div>
+
+    <!-- Header: eyebrow on top, big order no + pill, actions on their own row -->
+    <div class="od-head">
+      <div class="eyebrow"><span class="en">Order placed 2026-07-06 00:02</span><span class="zh">下单于 2026-07-06 00:02</span></div>
+      <div class="num">R260706515979
+        <span class="pill paid"><span class="dot"></span><span class="en">Paid</span><span class="zh">已付款</span></span>
+      </div>
+      <div class="od-actions">
+        <button class="btn"><span class="en">Start preparing</span><span class="zh">开始备货</span></button>
+        <button class="btn btn-ghost"><span class="en">Refund / Cancel</span><span class="zh">退款 / 取消</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Total -->
+    <div class="total">
+      <div>
+        <div class="lbl"><span class="en">Order total</span><span class="zh">订单总额</span></div>
+        <div class="sub"><span class="en">subtotal ¥856.00 · shipping ¥0.00 · packing ¥10.00</span><span class="zh">小计 ¥856.00 · 运费 ¥0.00 · 包装费 ¥10.00</span></div>
+      </div>
+      <div class="amt">¥866.00</div>
+    </div>
+
+    <!-- Info: one real card + a facts list -->
+    <div class="info-row">
+      <div class="card shipto">
+        <div class="kicker"><span class="en">Ship to</span><span class="zh">收货人</span>
+          <span class="copy" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+        </div>
+        <div class="name">Sarah · 17521628461</div>
+        <div class="addr">上海市 上海市 普陀区 江宁路1145弄5号（三天地服务公寓，近新会路） 4楼412室</div>
+        <div class="acts">
+          <button class="btn btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+            <span class="en">Edit ship-to</span><span class="zh">修改收货地址</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="card facts">
+        <div class="frow"><div class="k"><span class="en">Customer</span><span class="zh">顾客</span></div><div class="v">Sarita <span class="chev">›</span> <span class="muted">#540</span></div></div>
+        <div class="frow"><div class="k"><span class="en">Payment</span><span class="zh">付款</span></div><div class="v"><span class="en">WeChat <span class="muted">· paid</span></span><span class="zh">微信 <span class="muted">· 已付款</span></span></div></div>
+        <div class="frow"><div class="k"><span class="en">Fulfilled by</span><span class="zh">出货门店</span></div><div class="v"><span class="en">Tianhe</span><span class="zh">天河店</span></div></div>
+        <div class="frow"><div class="k"><span class="en">Ship by</span><span class="zh">最迟发货</span></div><div class="v"><span class="en">Earliest courier day<span class="sub">placed Jul 06 · no same-day paid</span></span><span class="zh">最早快递发出<span class="sub">7月6日下单 · 未购当日达</span></span></div></div>
+      </div>
+    </div>
+
+    <!-- Receipt: just the option to print. No status, no shipping-label text. -->
+    <div class="receipt-act">
+      <button class="btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        <span class="en">Print receipt</span><span class="zh">打印小票</span>
+      </button>
+    </div>
+
+    <!-- Items & shipments -->
+    <div class="sec-lbl"><span class="en">Items &amp; shipments</span><span class="zh">商品与发货</span></div>
+    <div class="sortbar">
+      <span><span class="en">Sort</span><span class="zh">排序</span></span>
+      <span class="sort-chip active">SKU</span>
+      <span class="sort-chip"><span class="en">As ordered</span><span class="zh">原顺序</span></span>
+    </div>
+
+    <div class="route-note">
+      <span class="ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+      <span class="rn-text">
+        <span class="rn-h"><span class="en">Split into 2 parcels</span><span class="zh">已拆分为 2 个包裹</span></span>
+        <span class="rn-sub"><span class="en">Destination outside Guangzhou (Shanghai)</span><span class="zh">目的地在广州以外 (上海市)</span></span>
+      </span>
+      <button class="btn btn-sm"><span class="en">Combine into one parcel</span><span class="zh">合并为一个包裹</span></button>
+    </div>
+
+    <!-- Air parcel -->
+    <div class="parcel">
+      <div class="parcel-head">
+        <span class="mode"><span class="en">Air</span><span class="zh">空运</span></span>
+        <span class="pill notship"><span class="dot"></span><span class="en">Not shipped</span><span class="zh">未发货</span></span>
+        <span class="count"><span class="en">3 products · 4 units</span><span class="zh">3 款 · 4 件</span></span>
+      </div>
+      <div class="line"><span class="n">01</span><span class="thumb">◐</span><div><div class="nm"><span class="en">Savoury Quinoa Patties</span><span class="zh">香煎藜麦饼</span></div><div class="meta">3-50 · ×2 · @ ¥43.00</div></div><span class="tot">¥86.00</span></div>
+      <div class="line"><span class="n">02</span><span class="thumb">◑</span><div><div class="nm"><span class="en">Black Soybean Tempeh</span><span class="zh">黑豆天贝</span></div><div class="meta">3-100 · ×1 · @ ¥38.00</div></div><span class="tot">¥38.00</span></div>
+      <div class="line"><span class="n">03</span><span class="thumb">◒</span><div><div class="nm"><span class="en">Three-Bean Tempeh</span><span class="zh">三豆天贝</span></div><div class="meta">3-110 · ×1 · @ ¥43.00</div></div><span class="tot">¥43.00</span></div>
+      <div class="parcel-foot">
+        <button class="btn btn-ink btn-sm"><span class="en">Mark dispatched</span><span class="zh">标记已发货</span></button>
+        <button class="btn btn-ghost btn-sm"><span class="en">Ship part later</span><span class="zh">分批发货</span></button>
+      </div>
+    </div>
+
+    <!-- Land parcel -->
+    <div class="parcel">
+      <div class="parcel-head">
+        <span class="mode"><span class="en">Land</span><span class="zh">陆运</span></span>
+        <span class="pill notship"><span class="dot"></span><span class="en">Not shipped</span><span class="zh">未发货</span></span>
+        <span class="count"><span class="en">11 products · 12 units</span><span class="zh">11 款 · 12 件</span></span>
+      </div>
+      <div class="line"><span class="n">01</span><span class="thumb">▦</span><div><div class="nm"><span class="en">Soy Protein Crumbles (TVP)</span><span class="zh">大豆蛋白碎（组织蛋白）</span></div><div class="meta">4-120 · ×1 · @ ¥21.00</div></div><span class="tot">¥21.00</span></div>
+      <div class="line"><span class="n">02</span><span class="thumb">▩</span><div><div class="nm"><span class="en">Organic Maca Powder</span><span class="zh">有机玛卡粉</span></div><div class="meta">4-380 · ×1 · @ ¥43.00</div></div><span class="tot">¥43.00</span></div>
+      <div class="line"><span class="n">03</span><span class="thumb">▩</span><div><div class="nm"><span class="en">Organic Kale Powder</span><span class="zh">有机羽衣甘蓝粉</span></div><div class="meta">4-390 · ×1 · @ ¥60.00</div></div><span class="tot">¥60.00</span></div>
+      <div class="line"><span class="n">04</span><span class="thumb">▩</span><div><div class="nm"><span class="en">Organic Matcha Powder</span><span class="zh">有机抹茶粉</span></div><div class="meta">4-400 · ×1 · @ ¥78.00</div></div><span class="tot">¥78.00</span></div>
+      <div class="more"><span class="en">+ 7 more lines</span><span class="zh">+ 还有 7 项</span></div>
+      <div class="parcel-foot">
+        <button class="btn btn-ink btn-sm"><span class="en">Mark dispatched</span><span class="zh">标记已发货</span></button>
+        <button class="btn btn-ghost btn-sm"><span class="en">Ship part later</span><span class="zh">分批发货</span></button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============ RATIONALE (design notes, kept in English) ============ -->
+  <div class="notes">
+    <h2>What changed &amp; why</h2>
+
+    <div class="note">
+      <div class="tag">Picture 1 · empty boxes</div>
+      <h3>6 boxes → 2 cards + 1 strip</h3>
+      <p>Customer, Payment, Fulfilled&nbsp;by and Ship&nbsp;by were each one short line in a full box — lots of empty rectangle. They collapse into one <b>facts list</b> (label → value rows).</p>
+      <p><b>Ship to</b> stays a real card (multi-line address + edit). Receipt drops to a slim strip instead of a whole box.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Picture 2 · shipment icons</div>
+      <h3>Icons removed</h3>
+      <p>The ✈ / 🚚 glyphs are dropped — the card <i>is</i> a shipment, so the word carries it. Label shortens to <b>Air / 空运</b> and <b>Land / 陆运</b>. “Not shipped” reads as a quiet dot.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Header · actions</div>
+      <h3>Own row, calm</h3>
+      <p>Eyebrow on top, big order no + status, then actions on their <b>own row</b> below (like the live drawer) — no cramped button top-right. Forward action = calm bordered; Refund = ghost. The one emphasised (ink) action is each parcel’s <b>Mark dispatched</b>, where the packer acts.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Item rows</div>
+      <h3>Weight dropped</h3>
+      <p>Meta line is now just <b>SKU · qty · unit cost</b> (e.g. <span style="font-variant-numeric:tabular-nums">4-450 · ×1 · @ ¥71.00</span>). The size was redundant — the SKU already pins the variant.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Printing · rethink</div>
+      <h3>Just a print button</h3>
+      <p>The receipt row is now a single <b>Print receipt</b> button — no “printed on…” status, no JD-waybill text.</p>
+      <p>The shipping label (JD waybill · 面单) and the auto-print toggle moved out: the label prints from the waybill in the tracking card, auto-print lives in <b>Settings · Printing</b>.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Languages</div>
+      <h3>Never glued</h3>
+      <p>Chrome, store name and item names all swap with the EN / 中文 switch — you only ever see one language, matching the brand rule and the live drawer.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">System</div>
+      <h3>Tacet palette</h3>
+      <p>Ink = the single strong action · Cream = quiet fills · Amber = attention · Sage = done · Brick = danger only.</p>
+      <div class="swatches">
+        <span class="sw" style="background:#111A2B" title="Ink"></span>
+        <span class="sw" style="background:#FBF9F4" title="Paper"></span>
+        <span class="sw" style="background:#F6F3EC" title="Cream"></span>
+        <span class="sw" style="background:#58606E" title="Graphite"></span>
+        <span class="sw" style="background:#C9954A" title="Amber"></span>
+        <span class="sw" style="background:#A3B49F" title="Sage"></span>
+        <span class="sw" style="background:#B4533E" title="Brick"></span>
+        <span class="sw" style="background:#6E67AF" title="Dusk (New order only)"></span>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
