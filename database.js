@@ -2603,6 +2603,10 @@ addColumn('retail_stores', 'pickup_enabled', 'INTEGER DEFAULT 0');
 // STORE_HOURS map once the daemon is migrated to read these (worker phase).
 addColumn('retail_stores', 'open_time', 'TEXT');
 addColumn('retail_stores', 'close_time', 'TEXT');
+// IANA timezone (e.g. 'Asia/Shanghai') the store's open/close hours are in, so
+// checkout validates a pickup time against the store's LOCAL clock rather than
+// the UTC+8 host. NULL = fall back to host-local (unchanged for China stores).
+addColumn('retail_stores', 'timezone', 'TEXT');
 
 // Staff "seen" timestamp — stamped the first time ANY operator opens the
 // order detail (shared across devices). NULL = unread; powers the bold + dot

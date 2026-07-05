@@ -7065,6 +7065,24 @@
     font-size: 12.3px; color: var(--text-3); line-height: 1.5;
   }
   .su-wiz-hint svg { width: 14px; height: 14px; color: var(--accent); flex: none; margin-top: 1px; }
+  .su-wiz-check {
+    display: flex; gap: 9px; align-items: flex-start; cursor: pointer;
+    margin-top: 6px; font-size: 13.5px; color: var(--text-1); line-height: 1.45;
+  }
+  .su-wiz-check input { width: 16px; height: 16px; margin-top: 1px; flex: none; }
+  .su-wiz-map {
+    position: relative; margin-top: 12px; height: 240px;
+    border: 1px solid var(--line-strong); border-radius: var(--r-md); overflow: hidden;
+  }
+  .su-wiz-map-canvas { position: absolute; inset: 0; }
+  .su-wiz-map-pin {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -100%);
+    width: 30px; height: 30px; color: var(--brass); pointer-events: none; z-index: 5;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,.35));
+  }
+  .su-wiz-map-pin svg { width: 30px; height: 30px; }
+  .su-wiz-tzline { font-size: 13.5px; color: var(--text-2); }
+  .su-wiz-tzline b { color: var(--text-1); font-weight: 600; }
 
   @media (max-width: 640px) {
     .su-wsteps { grid-template-columns: repeat(2, 1fr); }

@@ -187,6 +187,16 @@ function suStoreWizData(t) {
     city: t?.city || '', district: t?.district || '', address: t?.address || '',
     phone: t?.phone || '',
     open: t?.open_time || '', close: t?.close_time || '',
+    timezone: t?.timezone || '', onlineOnly: false,
+    lat: (t && t.lat != null) ? t.lat : null, lng: (t && t.lng != null) ? t.lng : null,
+    tzShown: !!(t && t.timezone),
+  };
+}
+function suNewWizState(stores) {
+  return {
+    step: 1, total: 4, targetId: null, stores,
+    existingCodes: stores.map(s => s.code), data: suStoreWizData(null),
+    showMap: false, mapCfg: undefined,
   };
 }
 
@@ -196,7 +206,7 @@ async function suStoreWizOpen() {
     const j = await api('/api/retail-admin/stores');
     stores = (j.data || []).filter(s => s.is_active !== 0 && s.is_active !== false);
   } catch (_) {}
-  STORE_WIZ = { step: 1, total: 4, targetId: null, stores, existingCodes: stores.map(s => s.code), data: suStoreWizData(null) };
+  STORE_WIZ = suNewWizState(stores);
   // Already run more than one location? Don't silently edit the first — ask
   // which store this is for (or add a new one).
   if (stores.length >= 2) return suStoreWizPicker();
@@ -205,6 +215,38 @@ async function suStoreWizOpen() {
   STORE_WIZ.targetId = t ? t.id : null;
   STORE_WIZ.data = suStoreWizData(t);
   suStoreWizRender();
+}
+
+// Common IANA timezones offered in the wizard. China first (the default).
+const SU_TZ = [
+  ['Asia/Shanghai', 'China · 中国 (UTC+8)'],
+  ['Asia/Hong_Kong', 'Hong Kong · 香港 (UTC+8)'],
+  ['Asia/Singapore', 'Singapore · 新加坡 (UTC+8)'],
+  ['Asia/Tokyo', 'Japan · 日本 (UTC+9)'],
+  ['Asia/Bangkok', 'Thailand · 泰国 (UTC+7)'],
+  ['Asia/Kolkata', 'India · 印度 (UTC+5:30)'],
+  ['Asia/Dubai', 'UAE · 阿联酋 (UTC+4)'],
+  ['Europe/London', 'UK · 英国 (UTC+0/1)'],
+  ['Europe/Paris', 'Central Europe · 欧洲中部 (UTC+1/2)'],
+  ['America/New_York', 'US Eastern · 美东 (UTC-5/4)'],
+  ['America/Los_Angeles', 'US Pacific · 美西 (UTC-8/7)'],
+  ['Australia/Sydney', 'Sydney · 悉尼 (UTC+10/11)'],
+];
+function suTzLabel(tz) {
+  const row = SU_TZ.find(r => r[0] === (tz || 'Asia/Shanghai'));
+  return row ? row[1] : (tz || 'Asia/Shanghai');
+}
+
+// Map config (provider + JS key) for the pin-confirm preview. Cached on the
+// wizard state; null when no maps JS key is set → the map preview stays hidden.
+async function suStoreWizMapCfg() {
+  const W = STORE_WIZ;
+  if (!W) return null;
+  if (W.mapCfg !== undefined) return W.mapCfg;
+  let cfg = null;
+  try { const j = await api('/api/retail/maps-config'); cfg = (j && j.data) || null; } catch (_) {}
+  W.mapCfg = cfg;
+  return cfg;
 }
 
 // Store picker — shown only when the tenant already has 2+ locations.
@@ -264,23 +306,41 @@ function suStoreWizStep(step) {
         onclick="document.getElementById('swz_name_cn_wrap').style.display='';this.style.display='none'">
         + ${cuT('Add a name in Chinese', '添加中文名')}</button>`}`,
   };
-  if (step === 2) return {
-    skippable: false,
-    q: cuT('Where is your store?', '你的店在哪里？'),
-    html: `
-      <p class="su-mnote">${cuT('We place you on the map automatically, so customers can find you and delivery works later.', '我们会自动帮你在地图上定位，方便顾客找到你，也为日后的配送做准备。')}</p>
-      <div style="display:flex;gap:10px">
-        <div style="flex:1"><label class="field-label">${cuT('City', '城市')}</label>
-          <input class="su-wiz-in" id="swz_city" value="${A(d.city)}" placeholder="${cuT('e.g. Guangzhou', '例如 广州')}"></div>
-        <div style="flex:1"><label class="field-label">${cuT('District', '区')}</label>
-          <input class="su-wiz-in" id="swz_district" value="${A(d.district)}" placeholder="${cuT('e.g. Tianhe', '例如 天河区')}"></div>
-      </div>
-      <label class="field-label" style="margin-top:12px">${cuT('Street address', '详细地址')}</label>
-      <input class="su-wiz-in" id="swz_address" value="${A(d.address)}"
-             placeholder="${cuT('Building, street and number', '门牌号、街道、楼栋')}">
-      <div class="su-wiz-hint">${SU_ICON.check}
-        <span>${cuT('The map pin is set from this address — fine-tune it later in Settings if needed.', '地图定位会根据地址自动生成，需要时可到设置里微调。')}</span></div>`,
-  };
+  if (step === 2) {
+    const online = d.onlineOnly;
+    const mapAvail = W.mapCfg && W.mapCfg.provider;   // undefined until first fetch → button shows, then self-hides
+    return {
+      skippable: false,
+      q: cuT('Where is your store?', '你的店在哪里？'),
+      html: `
+        <p class="su-mnote">${cuT('We place you on the map so customers can find you and delivery works later.', '我们会在地图上定位，方便顾客找到你，也为日后的配送做准备。')}</p>
+        <label class="su-wiz-check">
+          <input type="checkbox" id="swz_online" ${online ? 'checked' : ''} onchange="suStoreWizToggleOnline(this.checked)">
+          <span>${cuT('I don’t have a walk-in store (online / delivery only)', '我没有到店门店（仅线上/配送）')}</span>
+        </label>
+        <div id="swz_addr_block" style="${online ? 'display:none' : ''}">
+          <div style="display:flex;gap:10px;margin-top:12px">
+            <div style="flex:1"><label class="field-label">${cuT('City', '城市')}</label>
+              <input class="su-wiz-in" id="swz_city" value="${A(d.city)}" placeholder="${cuT('e.g. Guangzhou', '例如 广州')}"></div>
+            <div style="flex:1"><label class="field-label">${cuT('District', '区')}</label>
+              <input class="su-wiz-in" id="swz_district" value="${A(d.district)}" placeholder="${cuT('e.g. Tianhe', '例如 天河区')}"></div>
+          </div>
+          <label class="field-label" style="margin-top:12px">${cuT('Street address', '详细地址')}</label>
+          <input class="su-wiz-in" id="swz_address" value="${A(d.address)}"
+                 placeholder="${cuT('Building, street and number', '门牌号、街道、楼栋')}">
+          ${mapAvail && !W.showMap ? `<button type="button" class="su-wiz-link" onclick="suStoreWizShowMap()">
+            + ${cuT('Check the pin on a map', '在地图上核对位置')}</button>` : ''}
+          ${W.showMap ? `
+            <div class="su-wiz-map" id="swz_map">
+              <div class="su-wiz-map-canvas" id="swz_map_canvas"></div>
+              <div class="su-wiz-map-pin">${SU_ICON.store}</div>
+            </div>
+            <div class="su-wiz-hint">${SU_ICON.check}
+              <span>${cuT('Drag the map so the pin sits on your door.', '拖动地图，让图钉对准你的门店。')}
+              <button type="button" class="su-wiz-link" style="margin-top:4px" onclick="suStoreWizRelocate()">${cuT('Re-locate from the address', '按地址重新定位')}</button></span></div>` : ''}
+        </div>`,
+    };
+  }
   if (step === 3) return {
     skippable: true,
     q: cuT('A phone customers can call?', '顾客可以拨打的电话？'),
@@ -298,6 +358,15 @@ function suStoreWizStep(step) {
           <input class="su-wiz-in" type="time" id="swz_open" value="${A(d.open)}"></div>
         <div style="flex:1"><label class="field-label">${cuT('Closes at', '关门')}</label>
           <input class="su-wiz-in" type="time" id="swz_close" value="${A(d.close)}"></div>
+      </div>
+      <div id="swz_tz_wrap" style="margin-top:12px">
+        ${d.tzShown ? `
+          <label class="field-label">${cuT('Time zone', '时区')}</label>
+          <select class="su-wiz-in" id="swz_tz">
+            ${SU_TZ.map(r => `<option value="${r[0]}"${(d.timezone || 'Asia/Shanghai') === r[0] ? ' selected' : ''}>${escapeHtml(r[1])}</option>`).join('')}
+          </select>`
+        : `<div class="su-wiz-tzline">${cuT('Time zone', '时区')}: <b>${escapeHtml(suTzLabel(d.timezone))}</b>
+            <button type="button" class="su-wiz-link" onclick="suStoreWizShowTz()">${cuT('Change', '更改')}</button></div>`}
       </div>
       <div class="su-wiz-hint">${SU_ICON.check}
         <span>${cuT('Same hours every day for now — set different hours per day later in Settings.', '目前每天相同，之后可到设置里为每天单独设置。')}</span></div>`,
@@ -328,6 +397,13 @@ function suStoreWizRender() {
           ${last ? cuT('Save & finish', '保存并完成') : cuT('Next', '下一步')} ${SU_ICON.arrow}</button>
       </div>
     </div>`);
+  // On the "where" step, resolve whether a map key exists (once) so the
+  // "Check the pin on a map" button can appear; re-render when it lands.
+  if (W.step === 2 && W.mapCfg === undefined) {
+    suStoreWizMapCfg().then(() => { if (STORE_WIZ && STORE_WIZ.step === 2) suStoreWizRender(); });
+  }
+  // The map preview must init AFTER its container is in the DOM.
+  if (W.step === 2 && W.showMap && !W.data.onlineOnly) setTimeout(suStoreWizInitMap, 30);
   setTimeout(() => { const el = document.querySelector('#su-modal .su-wiz-in'); if (el) el.focus(); }, 60);
 }
 
@@ -341,13 +417,94 @@ function suStoreWizCollect() {
   set('name_en', 'swz_name'); set('name_cn', 'swz_name_cn');
   set('city', 'swz_city'); set('district', 'swz_district'); set('address', 'swz_address');
   set('phone', 'swz_phone'); set('open', 'swz_open'); set('close', 'swz_close');
+  const online = document.getElementById('swz_online'); if (online) W.data.onlineOnly = online.checked;
+  const tz = document.getElementById('swz_tz'); if (tz) W.data.timezone = tz.value;
+}
+
+// Step-2 controls.
+function suStoreWizToggleOnline(on) {
+  suStoreWizCollect();
+  STORE_WIZ.data.onlineOnly = !!on;
+  if (on) STORE_WIZ.showMap = false;
+  suStoreWizRender();
+}
+function suStoreWizShowMap() {
+  suStoreWizCollect();
+  STORE_WIZ.data.lat = null; STORE_WIZ.data.lng = null;   // geocode fresh from the typed address
+  STORE_WIZ.showMap = true;
+  suStoreWizRender();
+}
+function suStoreWizRelocate() {
+  suStoreWizCollect();
+  STORE_WIZ.data.lat = null; STORE_WIZ.data.lng = null;
+  suStoreWizRender();   // re-render re-inits the map → re-geocodes from the address
+}
+function suStoreWizShowTz() {
+  suStoreWizCollect();
+  STORE_WIZ.data.tzShown = true;
+  if (!STORE_WIZ.data.timezone) STORE_WIZ.data.timezone = 'Asia/Shanghai';
+  suStoreWizRender();
+}
+
+// Load the maps JS SDK once (amap or tencent), mirroring shop.html's picker.
+let _suMapSdkP = null;
+function suStoreWizLoadSdk(cfg) {
+  if (_suMapSdkP) return _suMapSdkP;
+  _suMapSdkP = new Promise((resolve, reject) => {
+    const cb = '__suMapReady';
+    window[cb] = () => resolve(cfg.provider);
+    let src;
+    if (cfg.provider === 'amap') {
+      if (cfg.security) window._AMapSecurityConfig = { securityJsCode: cfg.security };
+      src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(cfg.key) + '&callback=' + cb;
+    } else {
+      src = 'https://map.qq.com/api/gljs?v=1.exp&key=' + encodeURIComponent(cfg.key) + '&callback=' + cb;
+    }
+    const el = document.createElement('script'); el.src = src; el.async = true;
+    el.onerror = () => { _suMapSdkP = null; reject(new Error('sdk_load_failed')); };
+    document.head.appendChild(el);
+  });
+  return _suMapSdkP;
+}
+// Build the pin-confirm map: a fixed centre pin overlays the canvas, the map
+// pans under it, and the centre coords become the store's lat/lng. Degrades to
+// the auto-geocode-on-save fallback if anything is unavailable.
+async function suStoreWizInitMap() {
+  const W = STORE_WIZ;
+  if (!W || !document.getElementById('swz_map_canvas')) return;
+  const cfg = await suStoreWizMapCfg();
+  if (!cfg || !cfg.provider) { W.showMap = false; if (STORE_WIZ) suStoreWizRender(); return; }
+  let provider;
+  try { provider = await suStoreWizLoadSdk(cfg); } catch (_) { W.showMap = false; return; }
+  // The user may have navigated away while the SDK loaded.
+  if (!STORE_WIZ || STORE_WIZ.step !== 2) return;
+  let center = (W.data.lat != null && W.data.lng != null) ? { lat: +W.data.lat, lng: +W.data.lng } : null;
+  if (!center) {
+    try {
+      const j = await api('/api/retail-admin/geocode', { method: 'POST', body: { city: W.data.city, district: W.data.district, address: W.data.address } });
+      if (j && j.data && j.data.lat != null) center = { lat: j.data.lat, lng: j.data.lng };
+    } catch (_) {}
+  }
+  if (!center) center = { lat: 23.1291, lng: 113.2644 };   // Guangzhou fallback
+  W.data.lat = center.lat; W.data.lng = center.lng;
+  const el = document.getElementById('swz_map_canvas');
+  if (!el) return;
+  try {
+    if (provider === 'amap' && window.AMap) {
+      const map = new AMap.Map(el, { zoom: 16, center: [center.lng, center.lat], resizeEnable: true });
+      map.on('moveend', () => { const c = map.getCenter(); if (STORE_WIZ) { STORE_WIZ.data.lat = c.getLat(); STORE_WIZ.data.lng = c.getLng(); } });
+    } else if (window.TMap) {
+      const map = new TMap.Map(el, { zoom: 16, center: new TMap.LatLng(center.lat, center.lng) });
+      map.on('center_changed', () => { const c = map.getCenter(); if (STORE_WIZ) { STORE_WIZ.data.lat = c.getLat(); STORE_WIZ.data.lng = c.getLng(); } });
+    }
+  } catch (_) { /* leave the auto-geocode-on-save fallback in place */ }
 }
 
 function suStoreWizNext() {
   suStoreWizCollect();
   const W = STORE_WIZ;
   if (W.step === 1 && !(W.data.name_en || '').trim()) return toast(cuT('Please enter a store name', '请填写店铺名称'), 'error');
-  if (W.step === 2 && !(W.data.address || '').trim()) return toast(cuT('Please enter the street address', '请填写详细地址'), 'error');
+  if (W.step === 2 && !W.data.onlineOnly && !(W.data.address || '').trim()) return toast(cuT('Please enter the street address', '请填写详细地址'), 'error');
   W.step = Math.min(W.total, W.step + 1);
   suStoreWizRender();
 }
@@ -382,20 +539,31 @@ function suStoreWizCode() {
 async function suStoreWizFinish() {
   suStoreWizCollect();
   const W = STORE_WIZ, d = W.data;
-  // Safety: name + address are required; jump back to whichever is missing.
+  const online = !!d.onlineOnly;
+  // Safety: a name is always required; an address is required unless the seller
+  // has no walk-in store. Jump back to whichever is missing.
   if (!(d.name_en || '').trim()) { W.step = 1; return suStoreWizRender(); }
-  if (!(d.address || '').trim()) { W.step = 2; return suStoreWizRender(); }
+  if (!online && !(d.address || '').trim()) { W.step = 2; return suStoreWizRender(); }
   const body = {
     name_en: d.name_en.trim(),
     name_cn: (d.name_cn || '').trim() || null,
-    city: (d.city || '').trim() || null,
-    district: (d.district || '').trim() || null,
-    address: d.address.trim(),
+    city: online ? null : ((d.city || '').trim() || null),
+    district: online ? null : ((d.district || '').trim() || null),
+    address: online ? null : d.address.trim(),
     phone: (d.phone || '').trim() || null,
     open_time: d.open || null,
     close_time: d.close || null,
-    pickup_enabled: true,
+    // Per-store hours now drive checkout directly; store the timezone they're
+    // in so the pickup window validates against the store's local clock.
+    timezone: (d.timezone || '').trim() || null,
+    // Online/delivery-only sellers aren't a walk-in pickup point.
+    pickup_enabled: !online,
   };
+  // Only pin explicit coords when the operator actually confirmed them on the
+  // map; otherwise omit lat/lng so the backend geocodes from the address.
+  if (!online && W.showMap && d.lat != null && d.lng != null) {
+    body.lat = d.lat; body.lng = d.lng;
+  }
   try {
     if (W.targetId) {
       await api('/api/retail-admin/stores/' + W.targetId, { method: 'PATCH', body });
@@ -403,10 +571,8 @@ async function suStoreWizFinish() {
       body.code = suStoreWizCode();
       await api('/api/retail-admin/stores', { method: 'POST', body });
     }
-    // Opening hours also drive the pickup window shown at checkout.
-    if (d.open && d.close) {
-      try { await api('/api/retail-admin/config', { method: 'PUT', body: { 'pickup.window': { open: d.open, close: d.close } } }); } catch (_) {}
-    }
+    // No street address to detect → mark the step done explicitly.
+    if (online) { try { await api('/api/retail-admin/setup', { method: 'POST', body: { storeInfoDone: true } }); } catch (_) {} }
     toast(cuT('Store details saved', '店铺信息已保存'), 'ok');
     await suLoad();
     suRenderGuide();
@@ -440,7 +606,9 @@ async function suStoreWizAddAnother() {
     const j = await api('/api/retail-admin/stores');
     stores = (j.data || []).filter(s => s.is_active !== 0 && s.is_active !== false);
   } catch (_) {}
-  STORE_WIZ = { step: 1, total: 4, targetId: null, stores, existingCodes: stores.map(s => s.code), data: suStoreWizData(null) };
+  const prevCfg = STORE_WIZ ? STORE_WIZ.mapCfg : undefined;
+  STORE_WIZ = suNewWizState(stores);
+  STORE_WIZ.mapCfg = prevCfg;   // keep the resolved map config across passes
   suStoreWizRender();
 }
 function suGoProducts() {

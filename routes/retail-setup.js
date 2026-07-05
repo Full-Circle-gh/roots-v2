@@ -52,6 +52,10 @@ function readFlags(db) {
     welcomeSeen:     f.welcomeSeen === true,
     pickupConfirmed: f.pickupConfirmed === true,
     storeOpened:     f.storeOpened === true,
+    // An online-only / delivery-only seller has no walk-in address, so the
+    // store step can't tick from an address alone — the wizard sets this when
+    // the operator confirms they have no physical storefront.
+    storeInfoDone:   f.storeInfoDone === true,
   };
 }
 function writeFlags(db, next) {
@@ -93,7 +97,7 @@ function buildStatus(req) {
   const brandDone = !!footer.wordmark_image || (accent && accent !== 'forest-kale');
 
   const steps = [
-    { key: 'store',       done: storesWithAddr > 0, count: anyStore },
+    { key: 'store',       done: storesWithAddr > 0 || (flags.storeInfoDone && anyStore > 0), count: anyStore },
     { key: 'products',    done: productCount > 0,   count: productCount },
     { key: 'payment',     done: paymentReady,       method: paymentMethod },
     { key: 'fulfillment', done: fulfillmentReady,   delivery: deliveryOn, pickup: flags.pickupConfirmed },
@@ -134,7 +138,7 @@ router.post('/api/retail-admin/setup', requireRetailAdmin, express.json(), (req,
     const cur = readFlags(db);
     const body = req.body || {};
     const next = { ...cur };
-    for (const k of ['welcomeSeen', 'pickupConfirmed', 'storeOpened']) {
+    for (const k of ['welcomeSeen', 'pickupConfirmed', 'storeOpened', 'storeInfoDone']) {
       if (k in body) next[k] = body[k] === true;
     }
     writeFlags(db, next);

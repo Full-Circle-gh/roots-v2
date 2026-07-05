@@ -78,8 +78,8 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
 
   const info = tdb().prepare(`
     INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, lat, lng, phone,
-                               meituan_account_id, is_active, pickup_enabled, sort_order, open_time, close_time)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               meituan_account_id, is_active, pickup_enabled, sort_order, open_time, close_time, timezone)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     b.code.trim(),
     b.name_en || null, b.name_cn || null,
@@ -92,6 +92,7 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
     b.pickup_enabled ? 1 : 0,
     Number.isFinite(b.sort_order) ? b.sort_order : 0,
     b.open_time || null, b.close_time || null,
+    b.timezone || null,
   );
   // Background geocode the new store unless the admin provided coords.
   if (b.lat == null || b.lng == null) geocodeStoreAsync(info.lastInsertRowid, tdb());
@@ -112,7 +113,7 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
   const id = parseInt(req.params.id, 10);
   const existing = inventory.getStore(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time'];
+  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time','timezone'];
   const sets = [];
   const vals = [];
   for (const k of allowed) {
@@ -134,6 +135,20 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
   if (touchedAddr && !explicitLatLng) geocodeStoreAsync(id, tdb());
   logActivity(req.user.id, req.user.username, 'update', 'retail_store', id, req.body, req.ip);
   res.json({ success: true, data: inventory.getStore(id) });
+});
+
+// On-demand geocode for the setup wizard's map-pin confirmation: turn a typed
+// address into coords BEFORE the store is saved, so the operator can see and
+// drag the pin. Returns { success:false } (never 500) when no maps key is set
+// or the address can't be found — the wizard just skips the map in that case.
+router.post('/api/retail-admin/geocode', requireRetailAdmin, express.json(), async (req, res) => {
+  if (!geocode.configured()) return res.json({ success: false, error: 'geocode_unconfigured' });
+  const b = req.body || {};
+  try {
+    const c = await geocode.geocodeAddress({ city: b.city, district: b.district, address: b.address });
+    if (c && c.lat != null && c.lng != null) return res.json({ success: true, data: { lat: c.lat, lng: c.lng } });
+    return res.json({ success: false, error: 'not_found' });
+  } catch (e) { return res.json({ success: false, error: 'geocode_failed' }); }
 });
 
 router.delete('/api/retail-admin/stores/:id', requireRetailAdmin, (req, res) => {

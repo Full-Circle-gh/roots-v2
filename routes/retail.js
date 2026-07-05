@@ -7004,12 +7004,46 @@ function hhmmToMinutes(s) {
   return h * 60 + min;
 }
 
-// Validate a customer-chosen pickup time against the single global pickup
-// window (storefront_config 'pickup.window' = { open:'HH:MM', close:'HH:MM' }).
-// Server is the timezone authority (UTC+8 host). Returns { scheduled_for, label }
-// on success or { error } so the checkout handler can 400 cleanly. The chosen
-// time must be in the future and its time-of-day must fall inside the window.
-function resolvePickupTime(raw, now = new Date()) {
+// Local-time parts of a Date in an IANA timezone. When tz is falsy, fall back to
+// the host's local clock (UTC+8 in production) so existing China stores behave
+// EXACTLY as before. Never throws — a bad tz string degrades to host-local.
+function localPartsInTz(date, tz) {
+  if (!tz) {
+    return {
+      mins: date.getHours() * 60 + date.getMinutes(),
+      hh: String(date.getHours()).padStart(2, '0'),
+      mm: String(date.getMinutes()).padStart(2, '0'),
+      weekday: date.getDay(), day: date.getDate(), month: date.getMonth() + 1,
+      dateKey: date.toDateString(),
+    };
+  }
+  try {
+    const p = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, hour12: false, weekday: 'short',
+      year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+    }).formatToParts(date).reduce((a, x) => (a[x.type] = x.value, a), {});
+    let hour = parseInt(p.hour, 10); if (hour === 24) hour = 0;   // some engines emit 24:00
+    const min = parseInt(p.minute, 10);
+    const wmap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    return {
+      mins: hour * 60 + min,
+      hh: String(hour).padStart(2, '0'), mm: String(min).padStart(2, '0'),
+      weekday: wmap[p.weekday] != null ? wmap[p.weekday] : 0,
+      day: parseInt(p.day, 10), month: parseInt(p.month, 10),
+      dateKey: `${p.year}-${p.month}-${p.day}`,
+    };
+  } catch (_) {
+    return localPartsInTz(date, null);
+  }
+}
+
+// Validate a customer-chosen pickup time. Uses the chosen store's OWN hours +
+// timezone when given (storeHours = { open, close, timezone }); otherwise the
+// single global pickup window (storefront_config 'pickup.window'). Returns
+// { scheduled_for, label } on success or { error } so checkout can 400 cleanly.
+// The chosen time must be in the future and its local time-of-day must fall
+// inside the window.
+function resolvePickupTime(raw, now = new Date(), storeHours = null) {
   if (!raw) return { error: 'pickup_time_required' };
   const when = new Date(raw);
   if (isNaN(when.getTime())) return { error: 'invalid_pickup_time' };
@@ -7017,22 +7051,23 @@ function resolvePickupTime(raw, now = new Date()) {
   // Guard against garbage far-future dates (> 30 days out).
   if (when.getTime() > now.getTime() + 30 * 86_400_000) return { error: 'pickup_time_too_far' };
 
-  const win = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+  const tz = storeHours && storeHours.timezone ? storeHours.timezone : null;
+  const win = (storeHours && storeHours.open && storeHours.close)
+    ? { open: storeHours.open, close: storeHours.close }
+    : cfgValue('pickup.window', { open: '10:00', close: '20:00' });
   const open  = hhmmToMinutes(win.open);
   const close = hhmmToMinutes(win.close);
+  const parts = localPartsInTz(when, tz);
   if (open != null && close != null && close > open) {
-    const mins = when.getHours() * 60 + when.getMinutes();
-    if (mins < open || mins > close) return { error: 'pickup_time_outside_hours' };
+    if (parts.mins < open || parts.mins > close) return { error: 'pickup_time_outside_hours' };
   }
 
   const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const hh = String(when.getHours()).padStart(2, '0');
-  const mm = String(when.getMinutes()).padStart(2, '0');
-  const sameDay = when.toDateString() === now.toDateString();
-  const dayLabel = sameDay ? 'Today' : `${days[when.getDay()]} ${when.getDate()}/${when.getMonth() + 1}`;
+  const sameDay = parts.dateKey === localPartsInTz(now, tz).dateKey;
+  const dayLabel = sameDay ? 'Today' : `${days[parts.weekday]} ${parts.day}/${parts.month}`;
   return {
     scheduled_for: when.toISOString(),
-    label: `Pickup ${dayLabel} ${hh}:${mm}`,
+    label: `Pickup ${dayLabel} ${parts.hh}:${parts.mm}`,
   };
 }
 
@@ -7808,7 +7843,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
              GROUP BY store_code HAVING COUNT(DISTINCT channel) = 2)`
     ).get(pickupStoreId);
     if (!pickupStore) return res.status(400).json({ success: false, error: 'pickup_store_unavailable' });
-    const pk = resolvePickupTime(body.pickup_time, new Date());
+    // Validate against THIS store's own hours + timezone, not one global window,
+    // so two stores with different hours each enforce their own.
+    const pk = resolvePickupTime(body.pickup_time, new Date(), {
+      open: pickupStore.open_time, close: pickupStore.close_time, timezone: pickupStore.timezone,
+    });
     if (pk.error) return res.status(400).json({ success: false, error: pk.error });
     pickupScheduledFor = pk.scheduled_for;
     pickupSlotLabel    = pk.label;
