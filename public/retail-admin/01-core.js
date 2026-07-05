@@ -472,8 +472,25 @@ function csPopup(ch) {
     + '<button class="btn btn-sm" onclick="csChannelAll(\'' + ch + '\',false)">' + cuT('Close all', '全部关闭') + '</button>'
     + '<button class="btn btn-sm btn-primary" onclick="csChannelAll(\'' + ch + '\',true)">' + cuT('Open all', '全部开启') + '</button>'
     + '</div></div>';
+  // Meituan applies open/close asynchronously on the box (the daemon pushes 置休
+  // to Meituan, then clears the pending flag). Without this, the popup froze on
+  // "applying…" forever because it only rendered a one-shot snapshot. Poll while
+  // any cell is still pending so the row flips to its real state on its own.
+  csSchedulePoll(ch, (info.cells || []).some((c) => c.pending));
 }
-window.csClosePopup = function () { const ov = document.getElementById('cs-popup'); if (ov) ov.remove(); };
+let _csPollTimer = null;
+function csClearPoll() { if (_csPollTimer) { clearTimeout(_csPollTimer); _csPollTimer = null; } }
+function csSchedulePoll(ch, hasPending) {
+  csClearPoll();
+  if (!hasPending) return;
+  _csPollTimer = setTimeout(async () => {
+    _csPollTimer = null;
+    if (!document.getElementById('cs-popup')) return;   // operator closed it
+    await csLoad();
+    if (document.getElementById('cs-popup')) csPopup(ch); // re-render (re-arms poll if still pending)
+  }, 4000);
+}
+window.csClosePopup = function () { csClearPoll(); const ov = document.getElementById('cs-popup'); if (ov) ov.remove(); };
 window.csCell = async function (ch, storeCode, open) {
   try { await api('/api/retail-admin/channel-status/cell', { method: 'POST', body: { channel: ch, storeCode, open } }); await csLoad(); csPopup(ch); }
   catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
