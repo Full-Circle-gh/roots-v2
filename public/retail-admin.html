@@ -7676,67 +7676,109 @@
       将天河库存同步到 gzgrocery 的管易 ERP。通过管易商品名中的货号(如 “GVF 1-180”)匹配商品。库存变动每约 10 秒自动按差额生成入库/出库单进行对账。
     </p>
 
-    <div class="fc-kpis" id="gy-kpis">
-      <div class="fc-kpi accent">
-        <div class="lbl">Daemon · 同步服务</div>
-        <div class="val">auto</div>
-        <div class="sub">every ~10s · 每约 10 秒</div>
+    <!-- Redesign: the page split into three jobs so it's not one heavy scroll.
+         A calm health strip up top (was 4 hero tiles), then a sub-nav — Overview
+         (daily glance + decisions), Billing (analytics/statement), Mapping (setup).
+         Only one panel is mounted at a time; the heavy 189-row mapping table is
+         deferred until you open Mapping. -->
+    <style>
+      #tab-guanyi .gy-health{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);padding:12px 16px;margin:4px 0 18px}
+      #tab-guanyi .gy-pulse{display:inline-flex;align-items:center;gap:9px;font-weight:600;font-size:14px;color:var(--text-1)}
+      #tab-guanyi .gy-dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px rgba(107,142,111,.18)}
+      #tab-guanyi .gy-dot.warn{background:var(--warn);box-shadow:0 0 0 4px rgba(176,141,74,.18)}
+      #tab-guanyi .gy-facts{display:flex;align-items:center;flex-wrap:wrap;color:var(--text-2);font-size:13px}
+      #tab-guanyi .gy-facts .f{padding:0 14px;border-left:1px solid var(--line);white-space:nowrap}
+      #tab-guanyi .gy-facts .f:first-child{border-left:0;padding-left:2px}
+      #tab-guanyi .gy-facts .f b{color:var(--text-1);font-weight:700;font-variant-numeric:tabular-nums}
+      #tab-guanyi .gy-facts .f.warn b{color:var(--warn)}
+      #tab-guanyi .gy-spacer{flex:1}
+
+      #tab-guanyi .gy-subnav{display:flex;border-bottom:1px solid var(--line);margin-bottom:20px}
+      #tab-guanyi .gy-subnav button{border:0;background:none;font:inherit;font-size:14px;font-weight:600;color:var(--text-3);padding:9px 2px;margin-right:24px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px}
+      #tab-guanyi .gy-subnav button.active{color:var(--text-1);border-bottom-color:var(--brass)}
+      #tab-guanyi .gy-subnav button:hover{color:var(--text-1)}
+      #tab-guanyi .gy-subnav .c{font-size:12px;font-weight:600;color:var(--text-4);font-variant-numeric:tabular-nums}
+
+      #tab-guanyi .gy-panel{display:none}
+      #tab-guanyi .gy-panel.active{display:block}
+
+      #tab-guanyi .gy-eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--brass);margin:22px 0 12px}
+
+      #tab-guanyi .gy-teaser{display:flex;flex-wrap:wrap;align-items:center;background:var(--bg-pane);border:1px solid var(--line);border-radius:var(--r-lg);overflow:hidden}
+      #tab-guanyi .gy-teaser .cell{padding:15px 20px;border-left:1px solid var(--line);flex:1;min-width:120px}
+      #tab-guanyi .gy-teaser .cell:first-child{border-left:0}
+      #tab-guanyi .gy-teaser .cell .l{font-family:var(--f-mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text-3)}
+      #tab-guanyi .gy-teaser .cell .v{font-size:24px;font-weight:500;letter-spacing:-.02em;margin-top:4px;color:var(--text-1);font-variant-numeric:tabular-nums}
+      #tab-guanyi .gy-teaser .cell.owe .v{color:var(--brass)}
+      #tab-guanyi .gy-teaser .cell.go{flex:0 0 auto;border-left:0;margin-left:auto}
+    </style>
+
+    <!-- Health strip — calm one-liner when green; number turns Brass on queue error -->
+    <div class="gy-health">
+      <span class="gy-pulse"><span class="gy-dot" id="gy-h-dot"></span><span id="gy-h-state">Syncing · 同步中</span></span>
+      <div class="gy-facts">
+        <span class="f"><b id="gy-h-mapped">—</b> mapped · 已映射</span>
+        <span class="f" id="gy-h-queue-f"><b id="gy-h-queue">—</b> in queue · 待推送</span>
+        <span class="f">list · 商品表 <b id="gy-h-list">—</b> · <span id="gy-h-listsub">…</span></span>
       </div>
-      <div class="fc-kpi">
-        <div class="lbl">Mapped · 已映射</div>
-        <div class="val" id="gy-kpi-mapped">—</div>
-        <div class="sub">products mapped · 已映射商品</div>
-      </div>
-      <div class="fc-kpi" id="gy-kpi-queue-tile">
-        <div class="lbl">Queue · 待推送</div>
-        <div class="val" id="gy-kpi-queue">—</div>
-        <div class="sub" id="gy-kpi-queue-sub">pending · 待推送</div>
-      </div>
-      <div class="fc-kpi">
-        <div class="lbl">Guanyi list · 管易商品</div>
-        <div class="val" id="gy-kpi-listings">—</div>
-        <div class="sub" id="gy-kpi-listings-sub">never refreshed · 未刷新</div>
+      <span class="gy-spacer"></span>
+      <button id="gy-refresh-btn" class="btn btn-sm" onclick="gyRefreshListings()" title="Read the live product list from gzgrocery's Guanyi backend (via the sync daemon) and cache it for matching.">⟳ Refresh list · 刷新</button>
+    </div>
+
+    <!-- Sub-nav — three jobs, one panel mounted at a time -->
+    <div class="gy-subnav">
+      <button id="gy-nav-overview" class="active" onclick="gySubTab('overview')">Overview · 概览</button>
+      <button id="gy-nav-billing" onclick="gySubTab('billing')">Billing · 对账 <span class="c" id="gy-nav-bill-amt"></span></button>
+      <button id="gy-nav-mapping" onclick="gySubTab('mapping')">Mapping · 映射 <span class="c" id="gy-nav-map-amt"></span></button>
+    </div>
+
+    <!-- OVERVIEW — the daily glance: any pickup to decide + a billing snapshot -->
+    <div class="gy-panel active" id="gy-panel-overview">
+      <!-- gzgrocery pickup inference: flagged drops needing a decision + recent auto-applied -->
+      <div id="gy-pickups"></div>
+
+      <div class="gy-eyebrow">Billing snapshot · 对账速览</div>
+      <div class="gy-teaser">
+        <div class="cell owe"><div class="l">They owe you · 欠款</div><div class="v" id="gy-t-owed">—</div></div>
+        <div class="cell"><div class="l">Units ordered · 订货件数</div><div class="v" id="gy-t-units">—</div></div>
+        <div class="cell"><div class="l">Products · 商品数</div><div class="v" id="gy-t-products">—</div></div>
+        <div class="cell go"><button class="btn btn-sm" onclick="gySubTab('billing')">Open billing → · 查看对账</button></div>
       </div>
     </div>
 
-    <!-- gzgrocery pickup inference: flagged drops needing a decision + recent auto-applied -->
-    <div id="gy-pickups" style="margin-bottom:14px"></div>
-
-    <!-- gzgrocery order analytics & billing (derived from the pickup ledger) -->
-    <details id="gy-analytics-details" open style="margin-bottom:14px;border:1px solid var(--border,#e0ddd5);border-radius:8px;padding:10px 12px">
-      <summary style="cursor:pointer;font-size:14px;font-weight:600">📊 gzgrocery analytics &amp; billing · 订货统计与对账</summary>
-      <div id="gy-analytics" style="margin-top:10px"></div>
-    </details>
-
-    <!-- Recent sync log removed — the full cross-channel timeline now lives in the
-         Activity tab (Inventory activity). -->
-
-    <div class="pa-toolbar">
-      <input id="gy-search" type="text" placeholder="Search products · 搜索商品" oninput="gyFilterProducts()">
-      <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
-        <input type="checkbox" id="gy-show-unmapped" onchange="gyFilterProducts()"> Show unmapped only · 仅未映射
-      </label>
-      <div id="gy-count" class="pa-count"></div>
-      <button id="gy-refresh-btn" class="btn btn-sm" onclick="gyRefreshListings()" title="Read the live product list from gzgrocery's Guanyi backend (via the sync daemon) and cache it for matching.">⟳ Refresh Guanyi list</button>
-      <button class="btn btn-sm" onclick="gyAutoMatch()" title="Bind every Roots product to its Guanyi listing by the SKU embedded in the Guanyi product name.">✨ Auto-match by SKU</button>
-      <button class="btn btn-sm btn-primary" onclick="gyPushAll()">Push all stock now</button>
+    <!-- BILLING — analytics + statement CSV; rendered by gyRenderAnalytics -->
+    <div class="gy-panel" id="gy-panel-billing">
+      <div id="gy-analytics"></div>
     </div>
 
-    <div id="gy-products-wrap" style="overflow-x:auto">
-      <table id="gy-products-table" class="data-table" style="min-width:700px;font-size:13px">
-        <thead>
-          <tr>
-            <th style="width:34%">Product · 商品</th>
-            <th style="width:12%;text-align:center">天河 qty · 我方</th>
-            <th style="width:30%">Guanyi match · 管易商品</th>
-            <th style="width:14%;text-align:center">Guanyi qty · Δ</th>
-            <th style="width:10%;text-align:center">Sync</th>
-          </tr>
-        </thead>
-        <tbody id="gy-products-body">
-          <tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
-        </tbody>
-      </table>
+    <!-- MAPPING — setup surface; the 189-row table loads only when this opens -->
+    <div class="gy-panel" id="gy-panel-mapping">
+      <div class="pa-toolbar">
+        <input id="gy-search" type="text" placeholder="Search products · 搜索商品" oninput="gyFilterProducts()">
+        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
+          <input type="checkbox" id="gy-show-unmapped" onchange="gyFilterProducts()"> Show unmapped only · 仅未映射
+        </label>
+        <div id="gy-count" class="pa-count"></div>
+        <button class="btn btn-sm" onclick="gyAutoMatch()" title="Bind every Roots product to its Guanyi listing by the SKU embedded in the Guanyi product name.">✨ Auto-match by SKU</button>
+        <button class="btn btn-sm btn-primary" onclick="gyPushAll()">Push all stock now</button>
+      </div>
+
+      <div id="gy-products-wrap" style="overflow-x:auto">
+        <table id="gy-products-table" class="data-table" style="min-width:700px;font-size:13px">
+          <thead>
+            <tr>
+              <th style="width:34%">Product · 商品</th>
+              <th style="width:12%;text-align:center">天河 qty · 我方</th>
+              <th style="width:30%">Guanyi match · 管易商品</th>
+              <th style="width:14%;text-align:center">Guanyi qty · Δ</th>
+              <th style="width:10%;text-align:center">Sync</th>
+            </tr>
+          </thead>
+          <tbody id="gy-products-body">
+            <tr><td colspan="5" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </section>
 

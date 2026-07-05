@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>gzgrocery sync — redesign mockup</title>
+<style>
+  :root{
+    --ink:#20242b; --ink-2:#5b616b; --ink-3:#8b919b; --ink-4:#aab0b9;
+    --brass:#b08d3f; --brass-d:#8f6f2c;
+    --line:#e7e3da; --line-2:#efece5;
+    --bg:#f4f2ec; --card:#ffffff; --card-2:#faf8f3;
+    --ok:#1a9d5a; --ok-bg:#e9f6ee; --warn:#b8860b; --warn-bg:#fdf6e0; --danger:#d3453b;
+    --r:14px; --r-sm:10px;
+    --shadow:0 1px 2px rgba(32,36,43,.04), 0 8px 24px rgba(32,36,43,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;padding:28px 20px 90px}
+  .wrap{max-width:1060px;margin:0 auto}
+
+  /* lang visibility */
+  [data-cn]{display:none}
+  html.cn [data-en]{display:none}
+  html.cn [data-cn]{display:inline}
+  html.cn [data-cn].blk{display:block}
+
+  .top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:6px}
+  h1{font-size:21px;font-weight:700;letter-spacing:-.01em;margin:0}
+  .sub{font-size:12.5px;color:var(--ink-2);margin-top:4px;max-width:640px;line-height:1.5}
+  .langtog{display:inline-flex;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:3px;box-shadow:var(--shadow);flex:none}
+  .langtog button{border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--ink-2);padding:6px 15px;border-radius:999px;cursor:pointer}
+  .langtog button.act{background:var(--ink);color:#fff}
+
+  /* ── health strip: one calm line, exception-driven ── */
+  .health{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+          background:linear-gradient(180deg,var(--card),var(--card-2));border:1px solid var(--line);
+          border-radius:var(--r);padding:13px 18px;box-shadow:var(--shadow);margin:18px 0 22px}
+  .health .pulse{display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:14px}
+  .health .pulse .dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px var(--ok-bg)}
+  .health .facts{display:flex;align-items:center;gap:0;flex-wrap:wrap;color:var(--ink-2);font-size:13px}
+  .health .facts .f{padding:0 14px;border-left:1px solid var(--line);white-space:nowrap}
+  .health .facts .f:first-child{border-left:0;padding-left:4px}
+  .health .facts .f b{color:var(--ink);font-weight:700}
+  .health .facts .f.warn b{color:var(--warn)}
+  .health .spacer{flex:1}
+  .health .refresh{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:7px 13px;
+       font:inherit;font-size:12.5px;font-weight:600;color:var(--ink-2);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .health .refresh:hover{border-color:var(--ink-3)}
+  .health .refresh svg{width:13px;height:13px}
+
+  /* ── sub-nav ── */
+  .subnav{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:22px}
+  .subnav button{border:0;background:none;font:inherit;font-size:14px;font-weight:600;color:var(--ink-3);
+       padding:10px 4px;margin-right:22px;cursor:pointer;position:relative;border-bottom:2px solid transparent;margin-bottom:-1px;display:inline-flex;align-items:center;gap:8px}
+  .subnav button.act{color:var(--ink);border-bottom-color:var(--brass)}
+  .subnav button:hover{color:var(--ink)}
+  .subnav .badge{font-size:11px;font-weight:700;background:var(--warn-bg);color:var(--warn);border:1px solid #ecd9a0;border-radius:999px;padding:1px 7px}
+  .subnav .count{font-size:12px;font-weight:600;color:var(--ink-4)}
+
+  .panel{display:none}
+  .panel.act{display:block}
+
+  /* eyebrow */
+  .eyebrow{font-size:11px;font-weight:700;letter-spacing:.11em;text-transform:uppercase;color:var(--brass);margin:0 0 12px}
+
+  /* ── flagged pickups ── */
+  .flagbox{border:1px solid #ecd9a0;background:linear-gradient(180deg,#fefaf0,var(--warn-bg));border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow)}
+  .flagbox.calm{border-color:var(--line);background:var(--card);display:flex;align-items:center;gap:12px}
+  .flagbox.calm .ico{width:34px;height:34px;border-radius:9px;background:var(--ok-bg);color:var(--ok);display:grid;place-items:center;flex:none}
+  .flagbox.calm .ico svg{width:18px;height:18px}
+  .flagbox.calm .t{font-weight:700;font-size:14px}
+  .flagbox.calm .d{font-size:12.5px;color:var(--ink-2);margin-top:1px}
+  .flagbox .hd{font-weight:700;font-size:14px;color:#6b5410;display:flex;align-items:center;gap:9px;margin-bottom:4px}
+  .flagbox .hd svg{width:17px;height:17px}
+  .flagbox .hint{font-size:12px;color:var(--ink-2);margin-bottom:12px}
+  .drop{display:flex;align-items:center;gap:14px;padding:12px 0;border-top:1px solid #f0e2b8}
+  .drop .nm{flex:1;min-width:0}
+  .drop .nm .p{font-size:13.5px;font-weight:600}
+  .drop .nm .p .sku{font-size:11px;color:var(--ink-3);font-weight:600;margin-left:7px}
+  .drop .nm .meta{font-size:11.5px;color:var(--ink-2);margin-top:2px}
+  .drop .nm .meta b{color:var(--danger)}
+  .btn{border:1px solid var(--line);background:var(--card);border-radius:9px;padding:8px 14px;font:inherit;font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;white-space:nowrap}
+  .btn:hover{border-color:var(--ink-3)}
+  .btn.primary{background:var(--ink);border-color:var(--ink);color:#fff}
+  .btn.primary:hover{background:#000}
+  .btn.sm{padding:6px 12px;font-size:12.5px}
+
+  /* recent auto-applied */
+  .recent{margin-top:14px}
+  .recent summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-2);padding:6px 0;list-style:none;display:flex;align-items:center;gap:7px}
+  .recent summary::-webkit-details-marker{display:none}
+  .recent summary .chev{width:12px;height:12px;transition:.15s}
+  .recent[open] summary .chev{transform:rotate(90deg)}
+  .rrow{display:flex;align-items:center;gap:12px;font-size:12.5px;padding:4px 2px}
+  .rrow .q{color:var(--danger);font-weight:700;width:40px}
+  .rrow .rn{flex:1;color:var(--ink)}
+  .rrow .rt{color:var(--ink-3);font-size:11.5px}
+
+  /* ── billing teaser on overview ── */
+  .teaser{display:grid;grid-template-columns:1.3fr 1fr 1fr auto;gap:0;align-items:center;
+          background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);margin-top:20px;overflow:hidden}
+  .teaser .cell{padding:16px 20px;border-left:1px solid var(--line-2)}
+  .teaser .cell:first-child{border-left:0}
+  .teaser .cell .l{font-size:11px;font-weight:600;color:var(--ink-3);text-transform:uppercase;letter-spacing:.04em}
+  .teaser .cell .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:3px}
+  .teaser .cell.owe .v{color:var(--brass-d)}
+  .teaser .cell.go{padding-right:20px;text-align:right}
+
+  /* ── billing panel ── */
+  .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+  .seg{display:inline-flex;background:var(--card-2);border:1px solid var(--line);border-radius:999px;padding:3px}
+  .seg button{border:0;background:none;font:inherit;font-size:13px;font-weight:600;color:var(--ink-2);padding:6px 15px;border-radius:999px;cursor:pointer}
+  .seg button.act{background:var(--card);color:var(--ink);box-shadow:var(--shadow)}
+  .bar .right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .date{border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;color:var(--ink-2);background:var(--card)}
+
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px}
+  .kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow)}
+  .kpi .lbl{font-size:11.5px;color:var(--ink-2);font-weight:600}
+  .kpi .val{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:6px 0 2px}
+  .kpi.owe .val{color:var(--brass-d)}
+  .kpi .vsub{font-size:11px;color:var(--ink-3)}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  thead th{text-align:left;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);padding:0 14px 10px;border-bottom:1px solid var(--line)}
+  thead th.r{text-align:right}
+  tbody td{padding:12px 14px;border-bottom:1px solid var(--line-2)}
+  tbody td.r{text-align:right}
+  tbody tr:hover{background:var(--card-2)}
+  .pname{font-weight:600}
+  .pname .en{color:var(--ink-2);font-weight:500}
+  .pname .sku{color:var(--ink-4);font-weight:600;font-size:11.5px;margin-left:6px}
+  .u{font-weight:700}
+  .rv{color:var(--ink-3)}
+  .disc{font-weight:600}
+  .card-tbl{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:8px 8px 4px;overflow-x:auto}
+
+  /* ── mapping panel ── */
+  .maptools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .search{flex:1;min-width:200px;border:1px solid var(--line);border-radius:9px;padding:9px 13px;font:inherit;font-size:13px;background:var(--card)}
+  .chk{display:inline-flex;align-items:center;gap:7px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer;white-space:nowrap}
+  .mapstat{display:flex;gap:8px;margin-bottom:16px}
+  .pill{font-size:12px;font-weight:600;border:1px solid var(--line);border-radius:999px;padding:5px 12px;color:var(--ink-2);background:var(--card)}
+  .pill b{color:var(--ink)}
+  .pill.good{background:var(--ok-bg);border-color:#bfe6cd;color:var(--ok)}
+  .gy{font-size:12.5px}
+  .gy .code{font-size:11px;color:var(--ink-3);margin-top:2px}
+  .delta.ok{color:var(--ok);font-weight:700}
+  .delta.up{color:var(--warn);font-weight:700}
+  .tog{width:42px;height:24px;border-radius:999px;border:0;background:#d8d4ca;position:relative;cursor:pointer;flex:none;padding:0}
+  .tog .knob{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:.15s}
+  .tog.on{background:var(--brass)}.tog.on .knob{left:21px}
+  .muted{color:var(--ink-3)}
+
+  .note{font-size:11.5px;color:var(--ink-3);margin-top:14px;padding:12px 14px;background:var(--card-2);border:1px dashed var(--line);border-radius:var(--r-sm);line-height:1.6}
+  .note b{color:var(--brass-d)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div>
+      <h1><span data-en>gzgrocery sync</span><span data-cn>gzgrocery 同步</span></h1>
+      <div class="sub">
+        <span data-en>Mirror your Tianhe stock into gzgrocery's Guanyi ERP. Matched by the SKU in the Guanyi name; changes reconcile every ~10&nbsp;s.</span>
+        <span data-cn>将天河库存同步到 gzgrocery 的管易 ERP,按货号匹配,每约 10 秒自动对账。</span>
+      </div>
+    </div>
+    <div class="langtog">
+      <button class="act" onclick="setLang('en')">EN</button>
+      <button onclick="setLang('cn')">中文</button>
+    </div>
+  </div>
+
+  <!-- HEALTH STRIP: replaces the 4 hero tiles. Calm line when green. -->
+  <div class="health">
+    <span class="pulse"><span class="dot"></span><span data-en>Syncing</span><span data-cn>同步中</span></span>
+    <div class="facts">
+      <span class="f"><b>189</b> <span data-en>mapped</span><span data-cn>已映射</span></span>
+      <span class="f"><b>0</b> <span data-en>in queue</span><span data-cn>待推送</span></span>
+      <span class="f"><span data-en>list</span><span data-cn>商品表</span> <b>244</b> · <span data-en>fresh</span><span data-cn>已缓存</span></span>
+    </div>
+    <span class="spacer"></span>
+    <button class="refresh">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-3-6.7M21 4v4h-4"/></svg>
+      <span data-en>Refresh list</span><span data-cn>刷新商品表</span>
+    </button>
+  </div>
+
+  <!-- SUB-NAV: three jobs, one mounted at a time -->
+  <div class="subnav">
+    <button class="act" onclick="tab('overview',this)"><span data-en>Overview</span><span data-cn>概览</span></button>
+    <button onclick="tab('billing',this)"><span data-en>Billing</span><span data-cn>对账</span> <span class="count">¥4,122</span></button>
+    <button onclick="tab('mapping',this)"><span data-en>Mapping</span><span data-cn>映射</span> <span class="count">189</span></button>
+  </div>
+
+  <!-- ═══════════ OVERVIEW ═══════════ -->
+  <div class="panel act" id="p-overview">
+
+    <div class="eyebrow"><span data-en>Needs your decision</span><span data-cn>待你确认</span></div>
+
+    <!-- calm state (normal) -->
+    <div class="flagbox calm">
+      <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+      <div>
+        <div class="t"><span data-en>No flagged drops</span><span data-cn>无待确认</span></div>
+        <div class="d"><span data-en>2 pickups auto-applied · 3 units in the last 24h</span><span data-cn>过去 24 小时自动扣减 2 次 · 3 件</span></div>
+      </div>
+      <span class="spacer" style="flex:1"></span>
+      <button class="btn sm" onclick="toggleFlag()"><span data-en>Show example alert</span><span data-cn>示例</span></button>
+    </div>
+
+    <!-- alert state (hidden by default, toggled for demo) -->
+    <div class="flagbox" id="flagAlert" style="display:none;margin-top:0">
+      <div class="hd">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
+        <span data-en>1 flagged drop needs your decision</span><span data-cn>1 项待确认</span>
+      </div>
+      <div class="hint"><span data-en>gzgrocery's stock fell more than expected. Real sale, or a glitch?</span><span data-cn>gzgrocery 库存下降超预期。是真实销售,还是异常?</span></div>
+      <div class="drop">
+        <div class="nm">
+          <div class="p"><span data-cn>纯素椰子酸奶(大)</span><span class="en" data-en>Big Size Probiotic Coconut Yogurt</span><span class="sku">1-140</span></div>
+          <div class="meta"><span data-en>Guanyi 20→8 (<b>drop 12</b>) · your stock now 20 · 14:32</span><span data-cn>管易 20→8(<b>下降 12</b>)· 我方现 20 · 14:32</span></div>
+        </div>
+        <button class="btn primary sm"><span data-en>Apply −12</span><span data-cn>扣减 −12</span></button>
+        <button class="btn sm"><span data-en>Ignore</span><span data-cn>忽略</span></button>
+      </div>
+      <button class="btn sm" style="margin-top:12px" onclick="toggleFlag()"><span data-en>← back to calm state</span><span data-cn>← 返回</span></button>
+    </div>
+
+    <details class="recent">
+      <summary>
+        <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>
+        <span data-en>Recent auto-applied pickups (25)</span><span data-cn>最近自动扣减 (25)</span>
+      </summary>
+      <div style="padding:4px 0 4px 19px">
+        <div class="rrow"><span class="q">−2</span><span class="rn"><span data-cn>中东鹰嘴豆泥 </span>Hummus Asli <span class="muted">1-10</span></span><span class="rt">13:58</span></div>
+        <div class="rrow"><span class="q">−1</span><span class="rn"><span data-cn>甜菜根沙拉 </span>Beet Salad <span class="muted">1-310</span></span><span class="rt">12:04</span></div>
+      </div>
+    </details>
+
+    <!-- billing teaser: the number without the table -->
+    <div class="eyebrow" style="margin-top:26px"><span data-en>Billing · today</span><span data-cn>对账 · 今日</span></div>
+    <div class="teaser">
+      <div class="cell owe">
+        <div class="l"><span data-en>They owe you</span><span data-cn>对方欠款</span></div>
+        <div class="v">¥4,122.05</div>
+      </div>
+      <div class="cell">
+        <div class="l"><span data-en>Units ordered</span><span data-cn>订货件数</span></div>
+        <div class="v">112</div>
+      </div>
+      <div class="cell">
+        <div class="l"><span data-en>Products</span><span data-cn>商品数</span></div>
+        <div class="v">59</div>
+      </div>
+      <div class="cell go">
+        <button class="btn" onclick="tab('billing',document.querySelectorAll('.subnav button')[1])"><span data-en>Open billing →</span><span data-cn>查看对账 →</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ BILLING ═══════════ -->
+  <div class="panel" id="p-billing">
+    <div class="bar">
+      <div class="seg">
+        <button class="act"><span data-en>Day</span><span data-cn>日</span></button>
+        <button><span data-en>Week</span><span data-cn>周</span></button>
+        <button><span data-en>Month</span><span data-cn>月</span></button>
+      </div>
+      <div class="right">
+        <input class="date" type="date">
+        <span class="muted">→</span>
+        <input class="date" type="date">
+        <button class="btn sm"><span data-en>↓ Statement CSV</span><span data-cn>↓ 对账单</span></button>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi owe"><div class="lbl"><span data-en>They owe you</span><span data-cn>对方欠款</span></div><div class="val">¥4,122.05</div><div class="vsub"><span data-en>gzgrocery price</span><span data-cn>gzgrocery 价</span></div></div>
+      <div class="kpi"><div class="lbl"><span data-en>Units ordered</span><span data-cn>订货件数</span></div><div class="val">112</div><div class="vsub"><span data-en>59 products</span><span data-cn>59 个商品</span></div></div>
+      <div class="kpi"><div class="lbl"><span data-en>Retail value</span><span data-cn>零售价值</span></div><div class="val">¥5,226</div><div class="vsub"><span data-en>at full price</span><span data-cn>按原价</span></div></div>
+      <div class="kpi"><div class="lbl"><span data-en>Avg discount</span><span data-cn>平均折扣</span></div><div class="val">21.1%</div><div class="vsub"><span data-en>off retail</span><span data-cn>低于零售</span></div></div>
+    </div>
+
+    <div class="card-tbl">
+      <table>
+        <thead><tr>
+          <th><span data-en>Product</span><span data-cn>商品</span></th>
+          <th class="r"><span data-en>Units</span><span data-cn>件</span></th>
+          <th class="r"><span data-en>Owed</span><span data-cn>欠款</span></th>
+          <th class="r"><span data-en>Retail</span><span data-cn>零售</span></th>
+          <th class="r"><span data-en>Disc</span><span data-cn>折扣</span></th>
+        </tr></thead>
+        <tbody>
+          <tr><td class="pname"><span data-cn>纯素椰子酸奶(大)</span><span class="en" data-en>Big Size Probiotic Coconut Yogurt</span><span class="sku">1-140</span></td><td class="r u">5</td><td class="r">¥332.00</td><td class="r rv">¥415.00</td><td class="r disc">20%</td></tr>
+          <tr><td class="pname"><span data-cn>中东鹰嘴豆泥 </span><span class="en" data-en>Hummus Asli</span><span class="sku">1-10</span></td><td class="r u">9</td><td class="r">¥273.60</td><td class="r rv">¥342.00</td><td class="r disc">20%</td></tr>
+          <tr><td class="pname"><span data-cn>甜菜根沙拉 </span><span class="en" data-en>Beet Salad</span><span class="sku">1-310</span></td><td class="r u">5</td><td class="r">¥192.00</td><td class="r rv">¥240.00</td><td class="r disc">20%</td></tr>
+          <tr><td class="pname"><span data-cn>核桃(无盐,生)</span><span class="en" data-en>Walnuts (unsalted, raw)</span><span class="sku">2-330</span></td><td class="r u">4</td><td class="r">¥179.20</td><td class="r rv">¥224.00</td><td class="r disc">20%</td></tr>
+          <tr><td class="pname"><span data-cn>法拉费小饼 </span><span class="en" data-en>Baked Falafel</span><span class="sku">3-40</span></td><td class="r u">4</td><td class="r">¥159.00</td><td class="r rv">¥212.00</td><td class="r disc">25%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><span data-en>Top 5 shown of 59 · full itemized list in the <b>Statement CSV</b>. By-day breakdown one click away — off the critical path.</span><span data-cn>显示 59 中前 5 · 完整明细见对账单 CSV。</span></div>
+  </div>
+
+  <!-- ═══════════ MAPPING ═══════════ -->
+  <div class="panel" id="p-mapping">
+    <div class="mapstat">
+      <span class="pill good"><b>189</b> <span data-en>mapped</span><span data-cn>已映射</span></span>
+      <span class="pill"><b>0</b> <span data-en>in sync queue</span><span data-cn>待推送</span></span>
+      <span class="pill"><span data-en>Guanyi list</span><span data-cn>管易商品</span> <b>244</b></span>
+    </div>
+    <div class="maptools">
+      <input class="search" placeholder="Search products · 搜索商品">
+      <label class="chk"><input type="checkbox"> <span data-en>Unmapped only</span><span data-cn>仅未映射</span></label>
+      <button class="btn sm"><span data-en>✨ Auto-match by SKU</span><span data-cn>✨ 按货号匹配</span></button>
+      <button class="btn primary sm"><span data-en>Push all stock</span><span data-cn>全部推送</span></button>
+    </div>
+
+    <div class="card-tbl">
+      <table style="min-width:640px">
+        <thead><tr>
+          <th><span data-en>Product</span><span data-cn>商品</span></th>
+          <th class="r"><span data-en>Ours</span><span data-cn>我方</span></th>
+          <th><span data-en>Guanyi match</span><span data-cn>管易商品</span></th>
+          <th class="r">Δ</th>
+          <th class="r">Sync</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td class="pname"><span data-cn>纯素椰子酸奶(大)</span><span class="en" data-en>Coconut Yogurt</span><span class="sku">SKU 1-140</span></td>
+            <td class="r u">20</td>
+            <td><div class="gy"><span data-cn>纯素椰子酸奶大杯 </span>GVF 1-140</div><div class="code">G-88201</div></td>
+            <td class="r"><span class="delta ok">=</span></td>
+            <td class="r"><button class="tog on"><span class="knob"></span></button></td>
+          </tr>
+          <tr>
+            <td class="pname"><span data-cn>中东鹰嘴豆泥 </span><span class="en" data-en>Hummus Asli</span><span class="sku">SKU 1-10</span></td>
+            <td class="r u">34</td>
+            <td><div class="gy"><span data-cn>鹰嘴豆泥 </span>GVF 1-10</div><div class="code">G-88044</div></td>
+            <td class="r"><span class="delta up">+2</span></td>
+            <td class="r"><button class="tog on"><span class="knob"></span></button></td>
+          </tr>
+          <tr>
+            <td class="pname"><span data-cn>甜菜根沙拉 </span><span class="en" data-en>Beet Salad</span><span class="sku">SKU 1-310</span></td>
+            <td class="r u">12</td>
+            <td><span class="muted"><span data-en>no match</span><span data-cn>未匹配</span></span></td>
+            <td class="r muted">—</td>
+            <td class="r"><span class="muted">—</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note"><span data-en>Setup surface — mostly a one-time job. Lives on its own screen so the 189-row table never weighs on the daily Overview.</span><span data-cn>此为一次性设置,单独成屏,不再压在日常概览上。</span></div>
+  </div>
+
+</div>
+
+<script>
+  function setLang(l){document.documentElement.className=(l==='cn')?'cn':'';document.querySelectorAll('.langtog button').forEach((b,i)=>b.classList.toggle('act',(l==='cn')===(i===1)));}
+  function tab(id,el){
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('act'));
+    document.getElementById('p-'+id).classList.add('act');
+    document.querySelectorAll('.subnav button').forEach(b=>b.classList.remove('act'));
+    el.classList.add('act');
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  function toggleFlag(){
+    var a=document.getElementById('flagAlert');
+    var calm=document.querySelector('.flagbox.calm');
+    var show=a.style.display==='none';
+    a.style.display=show?'block':'none';
+    calm.style.display=show?'none':'flex';
+  }
+</script>
+</body>
+</html>

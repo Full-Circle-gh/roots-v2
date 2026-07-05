@@ -29,17 +29,28 @@
   let _products = [];   // products + map + suggestion (+ our_qty)
   let _storeCode = '';
   let _initiated = false;
+  let _productsLoaded = false;   // mapping table is deferred until its tab opens
 
   // ── Entry ────────────────────────────────────────────────────────────────
   window.gyAdminInit = async function () {
     if (_initiated) return;
     _initiated = true;
+    // Overview is the default panel: health strip + pickups + a billing snapshot.
     await Promise.all([gyLoadStatus(), gyLoadListings(), gyLoadPickups()]);
-    await gyLoadProducts();
+    gyLoadAnalytics(false);   // fetch summary for the teaser; don't build the table yet
     gyStartPolling();
-    // The analytics section is open by default, so its toggle event never fires —
-    // kick off the first load here. (When closed, wireAnalyticsToggle handles it.)
-    if (document.getElementById('gy-analytics-details')?.open) gyLoadAnalytics();
+    // Mapping's 189-row table stays unbuilt until the Mapping tab is opened.
+  };
+
+  // ── Sub-nav: Overview · Billing · Mapping (one panel mounted at a time) ───────
+  window.gySubTab = function (name) {
+    ['overview', 'billing', 'mapping'].forEach(n => {
+      document.getElementById('gy-panel-' + n)?.classList.toggle('active', n === name);
+      document.getElementById('gy-nav-' + n)?.classList.toggle('active', n === name);
+    });
+    // Lazy-build the heavy surfaces the first time they're needed.
+    if (name === 'mapping' && !_productsLoaded) { _productsLoaded = true; gyLoadProducts(); }
+    if (name === 'billing') { if (_gyAna.data) gyRenderAnalytics(_gyAna.data); else gyLoadAnalytics(); }
   };
 
   // ── Live refresh while the tab is visible ──────────────────────────────────
@@ -97,15 +108,19 @@
     return `${time}  ${glyph} ${l.store_code}  ${mid}${reason}`.replace(/\s+$/, '');
   }
 
-  // ── Status KPIs ─────────────────────────────────────────────────────────────
+  // ── Sync health strip (was 4 KPI tiles) ──────────────────────────────────────
+  // Calm one-liner when green; the queue count + dot turn Brass on a push error.
   window.gyLoadStatus = async function () {
     try {
       const r = await api('/api/retail-admin/guanyi/status');
-      setText('gy-kpi-mapped', r.mappedCount);
-      setText('gy-kpi-queue', r.queuePending);
-      const qTile = document.getElementById('gy-kpi-queue-tile');
-      if (qTile) qTile.classList.toggle('alert', (r.queueError || 0) > 0);
-      setText('gy-kpi-queue-sub', (r.queueError ? `${r.queueError} error · 出错` : 'pending · 待推送'));
+      setText('gy-h-mapped', r.mappedCount);
+      setText('gy-h-queue', r.queuePending);
+      setText('gy-nav-map-amt', r.mappedCount);
+      const qErr = (r.queueError || 0) > 0;
+      document.getElementById('gy-h-queue-f')?.classList.toggle('warn', qErr);
+      document.getElementById('gy-h-dot')?.classList.toggle('warn', qErr);
+      setText('gy-h-state', qErr ? `${r.queueError} queue error · 推送出错` : 'Syncing · 同步中');
+      // The sync log lives in the Activity tab now; keep the write conditional.
       const log = document.getElementById('gy-log');
       if (log) {
         log.textContent = (r.recentLogs || []).map(gyFmtLogLine).join('\n')
@@ -119,12 +134,13 @@
     try {
       const r = await api('/api/retail-admin/guanyi/listings');
       const n = (r.listings || []).length;
-      setText('gy-kpi-listings', n);
+      setText('gy-h-list', n);
       const job = r.job;
+      // The count already shows in the strip, so the sub is just freshness.
       const sub = job
-        ? (r.running ? 'refreshing… · 刷新中' : `${n} cached · ${job.completed_at ? (job.completed_at.replace('T', ' ').slice(0, 16)) : ''}`)
+        ? (r.running ? 'refreshing… · 刷新中' : (job.completed_at ? gyLocalTime(job.completed_at, false) : 'cached · 已缓存'))
         : 'never refreshed · 未刷新';
-      setText('gy-kpi-listings-sub', sub);
+      setText('gy-h-listsub', sub);
       const btn = document.getElementById('gy-refresh-btn');
       if (btn) btn.disabled = !!r.running;
       return r;
@@ -148,7 +164,7 @@
     } catch (e) {
       toast('Refresh failed: ' + e.message, 'error');
     } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh Guanyi list'; }
+      if (btn) { btn.disabled = false; btn.textContent = '⟳ Refresh list · 刷新'; }
     }
   };
 
@@ -394,20 +410,34 @@
     gyLoadAnalytics();
   };
 
-  window.gyLoadAnalytics = async function () {
+  // renderPanel=false → fetch just for the Overview teaser (skip building the
+  // billing table). Defaults to true so period/date changes still redraw the panel.
+  window.gyLoadAnalytics = async function (renderPanel) {
+    if (renderPanel === undefined) renderPanel = true;
     const wrap = document.getElementById('gy-analytics');
-    if (!wrap) return;
     const qs = new URLSearchParams({ period: _gyAna.period });
     if (_gyAna.from) qs.set('from', _gyAna.from);
     if (_gyAna.to) qs.set('to', _gyAna.to);
     try {
       const r = await api('/api/retail-admin/guanyi/analytics?' + qs.toString());
       _gyAna.data = r;
-      gyRenderAnalytics(r);
+      gyRenderTeaser(r);
+      if (renderPanel && wrap) gyRenderAnalytics(r);
     } catch (e) {
-      wrap.innerHTML = `<div class="muted">Analytics error: ${esc(e.message)}</div>`;
+      if (wrap) wrap.innerHTML = `<div class="muted">Analytics error: ${esc(e.message)}</div>`;
     }
   };
+
+  // The Overview "Billing snapshot" — headline numbers without the full table.
+  function gyRenderTeaser(r) {
+    const s = r.summary || {};
+    const yuan = (n) => '¥' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    setText('gy-t-owed', yuan(s.owed));
+    setText('gy-t-units', Number(s.units || 0).toLocaleString());
+    setText('gy-t-products', s.products || 0);
+    const amt = document.getElementById('gy-nav-bill-amt');
+    if (amt) amt.textContent = '¥' + Math.round(s.owed || 0).toLocaleString();
+  }
 
   function gyRenderAnalytics(r) {
     const wrap = document.getElementById('gy-analytics');
@@ -496,15 +526,7 @@
     document.body.appendChild(a); a.click(); a.remove();
   };
 
-  // Load analytics the first time the section is opened (it's heavier than the poll).
-  (function wireAnalyticsToggle() {
-    const det = document.getElementById('gy-analytics-details');
-    if (det) {
-      if (!det._gyWired) { det._gyWired = true; det.addEventListener('toggle', () => { if (det.open && !_gyAna.data) gyLoadAnalytics(); }); }
-    } else {
-      document.addEventListener('DOMContentLoaded', wireAnalyticsToggle, { once: true });
-    }
-  })();
+  // (Billing is now a sub-nav panel; gySubTab lazy-loads analytics on first open.)
 
   // ── tiny helpers ──────────────────────────────────────────────────────────────
   function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = (v == null ? '—' : v); }
