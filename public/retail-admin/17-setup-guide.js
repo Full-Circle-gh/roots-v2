@@ -180,26 +180,67 @@ function suGoStore() {
 // pin), and — when hours are given — the pickup.window checkout config too.
 let STORE_WIZ = null;
 
+// Prefill the wizard data from an existing store row, or blanks for a new one.
+function suStoreWizData(t) {
+  return {
+    name_en: t?.name_en || '', name_cn: t?.name_cn || '',
+    city: t?.city || '', district: t?.district || '', address: t?.address || '',
+    phone: t?.phone || '',
+    open: t?.open_time || '', close: t?.close_time || '',
+  };
+}
+
 async function suStoreWizOpen() {
-  // Edit the tenant's first store if one already exists, so we never make a
-  // duplicate; otherwise we'll create the first one on finish.
   let stores = [];
   try {
     const j = await api('/api/retail-admin/stores');
     stores = (j.data || []).filter(s => s.is_active !== 0 && s.is_active !== false);
   } catch (_) {}
+  STORE_WIZ = { step: 1, total: 4, targetId: null, stores, existingCodes: stores.map(s => s.code), data: suStoreWizData(null) };
+  // Already run more than one location? Don't silently edit the first — ask
+  // which store this is for (or add a new one).
+  if (stores.length >= 2) return suStoreWizPicker();
+  // Zero or one store: go straight in, editing the one that exists (if any).
   const t = stores[0] || null;
-  STORE_WIZ = {
-    step: 1, total: 4,
-    targetId: t ? t.id : null,
-    existingCodes: stores.map(s => s.code),
-    data: {
-      name_en: t?.name_en || '', name_cn: t?.name_cn || '',
-      city: t?.city || '', district: t?.district || '', address: t?.address || '',
-      phone: t?.phone || '',
-      open: t?.open_time || '', close: t?.close_time || '',
-    },
-  };
+  STORE_WIZ.targetId = t ? t.id : null;
+  STORE_WIZ.data = suStoreWizData(t);
+  suStoreWizRender();
+}
+
+// Store picker — shown only when the tenant already has 2+ locations.
+function suStoreWizPicker() {
+  const stores = STORE_WIZ.stores || [];
+  const rows = stores.map(s => `
+    <button class="su-choice" type="button" style="flex-direction:row;align-items:center;gap:12px" onclick="suStoreWizPick(${s.id})">
+      <span class="su-choice-ic" style="margin-bottom:0">${SU_ICON.store}</span>
+      <span style="flex:1;min-width:0;text-align:left">
+        <b style="display:block">${escapeHtml(s.name_en || s.name_cn || s.code)}</b>
+        <span>${escapeHtml(s.address || cuT('No address yet', '还没有地址'))}</span>
+      </span>
+    </button>`).join('');
+  suModal(`
+    <div class="su-mhead">
+      <div class="su-wiz-crumb">${cuT('Tell us about your store', '填写店铺信息')}</div>
+      <button class="su-x" type="button" onclick="suStoreWizClose()">✕</button>
+    </div>
+    <div class="su-wiz-q">${cuT('Which store do you want to set up?', '你想设置哪家店？')}</div>
+    <div class="su-choose" style="grid-template-columns:1fr;margin-top:12px">
+      ${rows}
+      <button class="su-choice" type="button" style="flex-direction:row;align-items:center;gap:12px" onclick="suStoreWizPick(null)">
+        <span class="su-choice-ic" style="margin-bottom:0">${SU_ICON.arrow}</span>
+        <span style="flex:1;min-width:0;text-align:left">
+          <b style="display:block">${cuT('Add a new location', '新增一家门店')}</b>
+          <span>${cuT('Set up another store', '设置另一家店')}</span>
+        </span>
+      </button>
+    </div>`);
+}
+function suStoreWizPick(id) {
+  const W = STORE_WIZ;
+  const t = id != null ? (W.stores || []).find(s => s.id === id) : null;
+  W.targetId = t ? t.id : null;
+  W.data = suStoreWizData(t);
+  W.step = 1;
   suStoreWizRender();
 }
 
@@ -366,15 +407,41 @@ async function suStoreWizFinish() {
     if (d.open && d.close) {
       try { await api('/api/retail-admin/config', { method: 'PUT', body: { 'pickup.window': { open: d.open, close: d.close } } }); } catch (_) {}
     }
-    STORE_WIZ = null;
-    suCloseModal();
     toast(cuT('Store details saved', '店铺信息已保存'), 'ok');
     await suLoad();
     suRenderGuide();
     suRefreshChrome();
+    // Multi-store tenants can add every location in one sitting.
+    suStoreWizSavedPrompt();
   } catch (e) {
     toast(cuT('Save failed', '保存失败') + ': ' + e.message, 'error');
   }
+}
+
+// After a save, offer to add another location (a store chain sets them all up
+// at once). "Done" just closes.
+function suStoreWizSavedPrompt() {
+  suModal(`
+    <div class="su-done-hero" style="padding:10px 8px 2px">
+      <div class="su-done-big">${SU_ICON.check}</div>
+      <h3>${cuT('Store saved', '门店已保存')}</h3>
+      <p>${cuT('Do you have another location to add?', '还有其他门店要添加吗？')}</p>
+    </div>
+    <div class="su-mfoot" style="justify-content:center">
+      <button class="btn" type="button" onclick="suStoreWizClose()">${cuT('No, I’m done', '不用了，完成')}</button>
+      <button class="btn btn-primary" type="button" onclick="suStoreWizAddAnother()">${cuT('Add another location', '再加一家')} ${SU_ICON.arrow}</button>
+    </div>`);
+}
+async function suStoreWizAddAnother() {
+  // Re-read the store list so the one just saved is in existingCodes (a new
+  // location must get a fresh unique code), then start a blank pass.
+  let stores = [];
+  try {
+    const j = await api('/api/retail-admin/stores');
+    stores = (j.data || []).filter(s => s.is_active !== 0 && s.is_active !== false);
+  } catch (_) {}
+  STORE_WIZ = { step: 1, total: 4, targetId: null, stores, existingCodes: stores.map(s => s.code), data: suStoreWizData(null) };
+  suStoreWizRender();
 }
 function suGoProducts() {
   // The Products tab already ships its own guided add-a-product wizard (pwOpen,
