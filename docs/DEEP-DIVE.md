@@ -167,7 +167,30 @@ tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
 - pm2 daemons drain the queues with **transient-vs-terminal** semantics (API rejection = terminal;
   nav hiccup = transient, ≤3 attempts), startup orphan-recovery re-enqueues crashed `processing` rows
   at *current* stock (prevents drift), and a proxy-health gate stops a dead proxy from cascading into
-  false "session expired" re-logins.
+  false "session expired" re-logins. The Meituan daemon reaches the app only through
+  `routes/meituan-internal.js` (mounted `/api/internal/meituan`, gated to `127.0.0.1` + `X-Internal-Secret`);
+  operator-facing sync config is `routes/meituan-admin.js`.
+
+### Qingyun same-city delivery (auto-push, Phase 2)
+- On payment, a paid order is enqueued **best-effort** into the merchant's Qingyun 待配送 (to-dispatch)
+  list as a `delivery_jobs` row (`routes/retail.js:~4129`). The trigger is reconciled across **every**
+  paid path (WeChat/Alipay callback, live trade-query, wait-for-restock promotion) so no paid order is
+  skipped; geocoding is hardened for pin-less / English addresses (`lib/geocode.js` failover).
+- The customer-facing rider tracker (`routes/retail.js:~9675`) is a **read-only mirror** of
+  `delivery_jobs`. **Stage gotcha:** Qingyun status `20 待配送` means the order was *created in the list*,
+  not *dispatched* — a scheduled order sits at 待配送 for a later slot. So "Finding a courier" must NOT
+  fire on 待配送 alone; the pre-dispatch view shows a preview map + calm "Delivery scheduled" label, and
+  only flips to a live rider/ETA once the order is grabbed (`30` in-flight).
+
+### Integrations registry (Channels hub, Platform-readiness Phase 1)
+- `lib/integrations/registry.js` is a **control-plane** status registry — one row per tenant ×
+  channel/logistics plugin (`not_configured / connected / error / last-sync`) — read by both the operator
+  "Channels · 渠道" hub and the saas-admin support dashboard. `routes/integrations-admin.js` exposes it at
+  `/api/retail-admin/channel-hub` (a distinct prefix from `retail.js`'s existing `/integrations`
+  credential config). Phase 1 is read-mostly: cards render live status + a "Get help" escape hatch;
+  per-plugin connect/map/verify wizards land later and POST transitions via `registry.upsertStatus()`.
+  Guanyi/gzgrocery stay Roots-only; Shangou folds into the Meituan plugin. Intent + audit in
+  `CHANNELS-LOGISTICS-PLUGINS-PLAN.md`.
 
 ### Signing schemes
 - JD JOS = MD5 `secret+sortedKV+secret`; JD JDL cloud-print = fixed-order MD5 with **separate app
@@ -227,9 +250,20 @@ tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
 
 ## 6. Operator front-end + SaaS billing
 
-- **retail-admin** = 10–14 numbered files in **one global scope, load-order-critical** (hence
+- **retail-admin** = **17** numbered files in **one global scope, load-order-critical** (hence
   `/* eslint-disable no-undef */`). `01-core.js` bootstraps `$`, `api()`, `toast`, `ICONS`, RBAC
   `can()`/`setCaps()`/`applyCapGates()`. **Bump `public/sw.js` cache version when admin JS changes.**
+  Beyond the original `01–14`: `15-integrations` (Channels & Delivery hub, `ig*` — the card grid over
+  the registry in §3), `16-purchasing` (online-store buying dept, `pu*` — suppliers + retail POs →
+  store stock + Finance expenses), `17-setup-guide` (new-tenant guide, **loads last** so every `goTab`
+  target it routes into already exists). `06-delivery` is now a card hub with JD + Qingyun folded in.
+- **New-tenant "Open your store" guide** (`17-setup-guide.js`) is a **router, not a form**: each step
+  opens the real page/wizard that already exists; the server reports which steps are satisfied from real
+  data, so steps **tick themselves off** (no manual checkboxes). It surfaces on first login (welcome
+  overlay → checklist), a pinned sidebar entry with a live % badge, and a dashboard "continue setup"
+  card — all gone at 100%; nothing is hidden or locked. The A-to-Z roadmap template lives in
+  `lib/onboarding-steps.js` (`self` vs `managed` model, per-tenant progress in `tenant_onboarding`);
+  in both models sales settle to the tenant's own WeChat Pay merchant, never through the platform.
 - **i18n engine** (`10-extras.js`): both languages live in the DOM as `EN · CN` text nodes /
   `data-lang-block` pairs; toggling rewrites `nodeValue` in place (no reflow), with an anti-FOUC
   `visibility:hidden` guard until `data-ui-lang` is stamped. A label **leaks** when JS injects

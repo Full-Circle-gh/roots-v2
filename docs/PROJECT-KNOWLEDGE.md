@@ -29,8 +29,8 @@ The multi-tenant machinery is **built and tested but gated** behind `TENANT_DATA
 Roots is the only live tenant. Server is HK-hosted (`47.239.89.63`), run under pm2.
 
 Scale markers: `routes/retail.js` ≈ 23k lines (the customer API), `routes/ai.js` ≈ 3.4k,
-`lib/inventory.js` ≈ 1.1k, ~36 route modules, ~47 `lib/` modules, ~230 miniapp files, ~146 scripts,
-~140 DB tables.
+`lib/inventory.js` ≈ 1.1k, ~39 route modules, ~48 `lib/` modules, ~230 miniapp files, ~195 scripts,
+~140 DB tables, 17 numbered `retail-admin/` JS parts.
 
 ---
 
@@ -60,8 +60,8 @@ syntax-gate → backup → `pm2 restart` → health-probe → **auto-rollback** 
 | `server.js` | App entry — sessions, host-based SPA routing, mounts all routes, boot hooks |
 | `database.js` | Loads `schema.sql` + ~85 idempotent `addColumn` migrations + one-shot seeds (runs on boot) |
 | `schema.sql` | Base kitchen/ERP tables (29 CREATE TABLEs) |
-| `routes/` | HTTP modules; `retail.js` is the storefront/mini-app API (huge) |
-| `lib/` | Domain logic (inventory, integrations, tenancy, secrets, AI gateway, brand, …) |
+| `routes/` | HTTP modules; `retail.js` is the storefront/mini-app API (huge). Newer splits: `retail-purchasing.js` (online-store buying dept), `integrations-admin.js` (Channels hub API), `meituan-admin.js` (sync config), `meituan-internal.js` (daemon-only, localhost + `X-Internal-Secret`) |
+| `lib/` | Domain logic (inventory, integrations, tenancy, secrets, AI gateway, brand, …). `lib/integrations/registry.js` = channel/logistics status registry; `lib/onboarding-steps.js` = tenant onboarding roadmap template |
 | `middleware/` | `auth.js`, `public-tenant.js` |
 | `public/` | Browser apps: storefront, `retail-admin/` (split JS), `cms.html`, kitchen `app.html`, POS/kitchen/restock/stock PWAs |
 | `miniapp/` | WeChat Mini App (pages, components, utils) |
@@ -232,12 +232,31 @@ the product + its bundles). Do enqueues **only** through `inventory.adjustStock`
 daemons drain queues with transient-vs-terminal retry semantics + startup orphan-recovery + a
 proxy-health gate. `scripts/health-watchdog.js` + `scripts/proxy-watchdog.js` keep the box alive.
 
+**Qingyun same-city delivery auto-push (Phase 2):** on payment, a paid order is enqueued
+best-effort into the merchant's Qingyun 待配送 list as a `delivery_jobs` row (`routes/retail.js:~4129`),
+reconciled across **all** paid paths (callback, trade-query, wait-for-restock promotion) so nothing
+is missed; geocoding hardened for pin-less / English addresses. The customer-facing rider tracker is a
+read-only mirror of `delivery_jobs` (`routes/retail.js:~9675`). **Stage gotcha:** status `20 待配送`
+means *created in the list*, not *dispatched* — a scheduled order sits at 待配送 for a later slot, so
+"Finding a courier" must NOT fire on 待配送 alone; the pre-dispatch UI shows a preview map + calm
+"Delivery scheduled" label, and only flips to rider/ETA once the order is actually grabbed (30 in-flight).
+
 **Others:** JD logistics (`lib/jd.js`: JOS waybill MD5 + JDL cloud-print HMAC, **separate app keys**);
 tracking (`lib/tracking.js`: Kuaidi100 free webhook subscription + ~40 ordered CN→EN regex rules);
 Feie thermal printer (`lib/feie.js`, SHA1); Nuonuo fapiao (`lib/nuonuo.js`, OAuth+HMAC, scaffold);
 Aliyun SMS (`lib/aliyun-sms.js`, POP HMAC-SHA1 with `secret&` key); geocode Amap→Tencent failover
 (`lib/geocode.js`); Alipay-screenshot OCR via Claude vision (`lib/alipay-ocr.js`); Eleme official
 OAuth2/JSON-RPC (`lib/eleme-client.js`, scaffold); WeCom ops alerts (`lib/ops-alert.js`).
+
+**Channels registry & tenant plugins (Platform-readiness, Phase 1):** `lib/integrations/registry.js`
+is a **control-plane** status registry (one row per tenant × channel/logistics plugin: `not_configured
+/ connected / error / last-sync`), read by both the operator "Channels · 渠道" hub and the saas-admin
+support dashboard. `routes/integrations-admin.js` exposes it under `/api/retail-admin/channel-hub`
+(distinct from `retail.js`'s existing `/integrations` credential config). Phase 1 is read-mostly: cards
+render live status + a "Get help" escape hatch (assisted-setup model); per-plugin connect/map/verify
+wizards land in later phases and will POST transitions via `registry.upsertStatus()`. Full intent +
+audit lives in `CHANNELS-LOGISTICS-PLUGINS-PLAN.md`. Guanyi (管易) and gzgrocery stay **Roots-only**,
+never generalized to the tenant plugin list; Shangou (美团闪购) folds into the Meituan plugin.
 
 ---
 
@@ -284,11 +303,24 @@ OAuth2/JSON-RPC (`lib/eleme-client.js`, scaffold); WeCom ops alerts (`lib/ops-al
 
 ## 11. Operator front-end + CMS + PWAs (`public/`)
 
-- **retail-admin** = 10–14 numbered files in **one global scope, load-order-critical** (hence
+- **retail-admin** = **17** numbered files in **one global scope, load-order-critical** (hence
   `/* eslint-disable no-undef */`). `01-core.js` bootstraps `$`, `api()`, `toast`, `ICONS`, RBAC
   `can()/setCaps()`. File map: `01-core` shell/nav, `02-settings-ops`, `03-dashboard`, `04-orders`,
-  `05-marketing`, `06-delivery`, `07-content-billing`, `08-customers`, `09-products`, `10-extras`
-  (i18n engine), `11-meituan`, `12-guanyi`, `13-activity`, `14-eleme`.
+  `05-marketing`, `06-delivery` (card hub — JD + Qingyun live here, moved in from Sales),
+  `07-content-billing`, `08-customers`, `09-products`, `10-extras` (i18n engine), `11-meituan`,
+  `12-guanyi`, `13-activity`, `14-eleme`, `15-integrations` (Channels & Delivery hub, `ig*`),
+  `16-purchasing` (online-store buying dept, `pu*`), `17-setup-guide` (new-tenant "Open your store"
+  guide — **loads last** so every `goTab` target it routes into already exists).
+- **New-tenant "Open your store" setup guide** (`17-setup-guide.js`): a **router, not a form** — each
+  step opens the real page/wizard that already exists (Products, Delivery wizard, payment config, …);
+  the server reports which steps are satisfied from real data so steps **tick themselves off** (the
+  operator never checks a box). Surfaces: first login → guide (welcome overlay + checklist), a pinned
+  sidebar entry with a live % badge (gone at 100%), and a "continue setup" card atop the dashboard
+  (gone at 100%). Nothing is hidden or locked; the rest of the backend is unchanged. The A-to-Z roadmap
+  template (business identity → banking → brand → WeChat/pay → channels) lives in `lib/onboarding-steps.js`,
+  per-tenant progress in `tenant_onboarding`. Two priced models: `self` (tenant registers their own Mini
+  Program + WeChat Pay) vs `managed` (we operate it as service-provider) — but in **both**, sales settle
+  to the tenant's own WeChat Pay merchant → their own bank; money never routes through the platform.
 - **Bilingual convention:** operator UI renders **one live language** via `cuT('en','中文')` (defined
   in `10-extras.js`); kitchen app.html uses a DOM text-node/`data-lang-block` splitter. A label
   **leaks** when JS injects bilingual text without `data-no-i18n`; `tagBlockPair` pairs adjacent
@@ -296,7 +328,10 @@ OAuth2/JSON-RPC (`lib/eleme-client.js`, scaffold); WeCom ops alerts (`lib/ops-al
 - **CMS** (`public/cms.html` + `public/shop/blocks.js`): block layouts stored as JSON in
   `storefront_config`; draft→live with a preview-token `postMessage` bridge.
 - **PWAs:** `sw.js` (network-first HTML, stale-while-revalidate assets, network-only API; bump cache
-  version on JS change); manifests for `/kitchen /pos /restock /stock`.
+  version on JS change); manifests for `/kitchen /pos /restock /stock`. The **Stock** app (formerly
+  "Restock") is now a Home launcher (`/stock`, tile grid) that folds in Quick Stock and Restock as
+  tools; Quick Stock only shows its Home button when arrived via `/stock?from=home` (no dead-end for
+  direct opens). Shipping a restock **auto-transfers** real store stock (deduct warehouse, add store).
 
 ---
 
@@ -410,3 +445,29 @@ stay on your radar:
   from-scratch boot on an empty DB works (verified serving).
 - **Docs:** added `docs/DEEP-DIVE.md` (mechanism-level, non-kitchen) and this file.
 - Verified all six risk classes above are already fixed in current code; booted the app end-to-end.
+
+## 17. Session changelog (2026-07-05, branch `claude/memory-github-storage-mwu6ur`)
+
+Doc refresh only — no code changes — bringing this handoff and `docs/DEEP-DIVE.md` up to date with
+the ~52 commits since the 2026-07-01 snapshot, so a fresh Claude (any account) inherits current state:
+
+- **Channels & Delivery hub** (`public/retail-admin/15-integrations.js` + `routes/integrations-admin.js`
+  + `lib/integrations/registry.js`): the Delivery/Sales tabs became a card hub; JD + Qingyun moved in
+  from Sales; a control-plane status registry backs both the operator hub (`/api/retail-admin/channel-hub`)
+  and saas-admin. Plan/audit in `CHANNELS-LOGISTICS-PLUGINS-PLAN.md`.
+- **Qingyun same-city delivery — Phase 2 auto-push**: paid orders enqueue into the merchant's 待配送
+  list as `delivery_jobs`, reconciled across all paid paths; customer rider-tracker mirrors it; the
+  "created 待配送 ≠ dispatched" stage fix (no premature "Finding a courier"; pre-dispatch preview map).
+- **New-tenant onboarding**: "Open your store" setup guide (`17-setup-guide.js`, a router that ticks
+  itself off from real data) + first-run Mini App setup wizard (every step skippable). Roadmap template
+  in `lib/onboarding-steps.js`; progress in `tenant_onboarding`.
+- **Meituan tab redesign**: status strip, sub-views, guided name-matching, per-store connection detail;
+  daemon now talks to `routes/meituan-internal.js` (localhost + `X-Internal-Secret`), config via
+  `routes/meituan-admin.js`.
+- **Purchasing tab** (`16-purchasing.js` + `routes/retail-purchasing.js`): the online store's buying
+  department — suppliers + retail POs (create → order → receive), received qty posts to store stock and
+  fans out to channel sync; costs auto-post to Finance → Expenses.
+- **Stock app** (formerly Restock): Home launcher at `/stock`, folds in Quick Stock; shipping a restock
+  auto-transfers real store stock (deduct warehouse, add store); viewport-fit, voice feature removed.
+- **Web storefront + config pages**: desktop cart/checkout (PC phase 2); real Mini App and Web-store
+  configuration pages (all credentials on one page); store-box shipped + tracking flow.
