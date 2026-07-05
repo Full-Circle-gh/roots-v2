@@ -61,7 +61,9 @@
     --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
     --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
     --accent:#58606E; --accent-hi:#58606E; --accent-ink:#FBF9F4;
-    --brass:#C9954A; --brass-hi:#C9954A; --warn:#C9954A;
+    /* --brass drove decorative section labels / chips; Tacet keeps those calm
+       (graphite). Genuine attention comes from --warn (amber) + the st-* map. */
+    --brass:#58606E; --brass-hi:#58606E; --warn:#C9954A;
     --danger:#B4533E; --danger-soft:rgba(180,83,62,.12); --success:#A3B49F;
     --st-pending_payment:#58606E; --st-paid:#58606E; --st-preparing:#58606E; --st-dispatched:#58606E;
     --st-delivered:#4A6249; --st-cancelled:#B4533E; --st-refunded:#B4533E; --st-awaiting_restock:#8A6425;
@@ -85,7 +87,7 @@
   .t-ord-eyebrow { font-family:var(--f-sans); font-size:11px; font-weight:500; letter-spacing:.14em;
     text-transform:uppercase; color:var(--text-3); margin:0 0 6px; }
   :is(#tab-orders, #tab-invoices) > h2 { font-family:var(--f-sans); font-weight:500;
-    font-size:24px; letter-spacing:-.01em; }
+    font-size:24px; letter-spacing:-.01em; color:var(--text-1); text-transform:none; }
   #tab-orders .t-ord-shown { font-size:12px; color:var(--text-2); margin-top:10px; }
 
   /* KPI tiles — plain paper card, no accent stripe (mockup). */
@@ -166,15 +168,22 @@
   :is(#tab-orders, #order-drawer) :is(.pill.refund-pending, .pill.refund-partial) {
     background:var(--tacet-brick-tint); color:var(--tacet-brick); border-color:transparent; }
 
-  /* Buttons — dusk primary (the one CTA), calm secondary/ghost, brick danger. */
+  /* Buttons — Dusk is SCARCE: only the "New order" CTA (.t-cta) is Dusk.
+     Every other primary (drawer/modal commit actions) is a calm ink-filled
+     button; secondary/ghost stay bordered; danger is brick. */
   :is(#tab-orders, #tab-invoices, #order-drawer) .btn-primary,
   :is(#tab-orders, #tab-invoices, #order-drawer) .db-btn.primary {
-    background:var(--tacet-dusk); border-color:var(--tacet-dusk); color:#fff; }
+    background:var(--text-1); border-color:var(--text-1); color:var(--bg-pane); }
   :is(#tab-orders, #tab-invoices, #order-drawer) .btn-primary:hover,
   :is(#tab-orders, #tab-invoices, #order-drawer) .db-btn.primary:hover {
-    background:#605AA0; border-color:#605AA0; }
-  :is(#tab-orders, #tab-invoices, #order-drawer) .btn-danger { color:var(--tacet-brick); border-color:var(--tacet-brick); }
+    background:var(--text-2); border-color:var(--text-2); color:var(--bg-pane); }
+  #tab-orders .btn-primary.t-cta { background:var(--tacet-dusk); border-color:var(--tacet-dusk); color:#fff; }
+  #tab-orders .btn-primary.t-cta:hover { background:#605AA0; border-color:#605AA0; color:#fff; }
+  :is(#tab-orders, #tab-invoices, #order-drawer) .btn-danger { background:transparent; color:var(--tacet-brick); border-color:var(--tacet-brick); }
   :is(#tab-orders, #tab-invoices, #order-drawer) .btn-danger:hover { background:var(--tacet-brick-tint); }
+  /* Form controls take a calm ink accent (not Dusk — checkboxes aren't automation). */
+  :is(#tab-orders, #tab-invoices, #order-drawer) input[type="checkbox"],
+  :is(#tab-orders, #tab-invoices, #order-drawer) input[type="radio"] { accent-color:var(--text-1); }
 
   /* Drawer — body on paper, individual Tacet cards; total on a raised card. */
   #order-drawer .order-card { background:transparent; border:none; padding:0; margin:0; box-shadow:none; }
@@ -183,7 +192,7 @@
   #order-drawer .od-eyebrow { font-family:var(--f-sans); font-size:12px; font-weight:400; letter-spacing:0;
     text-transform:none; color:var(--text-2); }
   #order-drawer .order-detail { background:transparent; border:none; box-shadow:none; padding:0;
-    gap:12px; margin-bottom:12px; }
+    gap:12px; margin-bottom:12px; align-items:start; }
   #order-drawer .order-detail > div { background:var(--bg-pane); border:1px solid var(--line);
     border-radius:14px; padding:13px 16px; }
   #order-drawer .order-detail .kicker { font-family:var(--f-sans); font-size:11.5px; font-weight:500;
@@ -197,6 +206,9 @@
   #order-drawer .order-total-banner .otb-amount { font-size:28px; }
   #order-drawer .shipment-card { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px; }
   #order-drawer .copy-mini { border-radius:999px; }
+  /* Neutralise stray tints: multi-qty chip + active sort chip read calm, not amber/green. */
+  #order-drawer .item-qty.qty-multi { color:var(--text-1); background:var(--tacet-cream); border-color:var(--line-strong); }
+  #order-drawer .sort-chip.active { background:var(--tacet-cream); color:var(--text-1); border-color:var(--line-strong); }
 
   /* Invoices — cards match the Tacet radius. */
   #tab-invoices .card { border-radius:14px; }
@@ -1188,7 +1200,7 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
         Refresh
       </button>
-      <button class="btn btn-primary" onclick="omOpen()" title="Create an order on a customer's behalf · 代客下单">
+      <button class="btn btn-primary t-cta" onclick="omOpen()" title="Create an order on a customer's behalf · 代客下单">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         New order · 新建订单
       </button>
