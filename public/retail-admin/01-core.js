@@ -159,37 +159,38 @@ function applyCapGates() {
 }
 window.can = can; window.canAny = canAny; window.applyCapGates = applyCapGates; window.setCaps = setCaps;
 
-// ── Payment-brand badge — small colored chip with the WeChat / Alipay
-// logo + bilingual label. Used in the order drawer Payment tile and in
-// the top-up history rows so admins can scan "what paid with what" at
-// a glance instead of reading the raw "wechat" / "alipay" string.
+// ── Payment-brand badge — small MONOCHROME chip with a WeChat / Alipay
+// mark + a single-language label. Used in the order drawer Payment tile and
+// in the top-up history rows so admins can scan "what paid with what" at a
+// glance instead of reading the raw "wechat" / "alipay" string.
+// The mark is drawn in currentColor (no brand green/blue) so it stays neutral
+// — "colour is status, not decoration" — and adapts to light/dark. The label
+// shows one language (cuT), never a glued "WeChat · 微信".
 // `size`: 'sm' (default, inline) | 'lg' (drawer hero treatment).
 function paymentBrandHTML(method, size) {
   const m = String(method || '').toLowerCase().trim();
   const isWeChat = (m === 'wechat' || m === 'weixin' || m === 'wechatpay' || m === 'wechat_pay' || m === '微信' || m === '微信支付');
   const isAlipay = (m === 'alipay' || m === 'zhifubao' || m === '支付宝');
   const big = size === 'lg';
-  const iconSize = big ? 22 : 18;
+  const iconSize = big ? 20 : 17;
+  const T = (typeof cuT === 'function') ? cuT : ((en) => en);
   if (isWeChat) {
-    // Simplified WeChat logo: rounded square in brand green with two
-    // chat-bubble glyphs (one slightly behind the other). Keeps the
-    // file inline-only — no external image fetch.
-    const svg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="7" fill="#1aad19"/>
-      <path d="M12.5 9.2c-3.6 0-6.5 2.4-6.5 5.4 0 1.7 1 3.2 2.5 4.2l-.6 1.9 2.3-1.2c.7.2 1.5.4 2.3.4.2 0 .4 0 .6-.1-.1-.4-.2-.9-.2-1.3 0-2.9 2.7-5.2 6-5.2.2 0 .4 0 .6.1-.4-2.4-3-4.2-6-4.2zm-2.4 2.9c.5 0 .9.3.9.8s-.4.8-.9.8-.9-.3-.9-.8.4-.8.9-.8zm5 0c.5 0 .9.3.9.8s-.4.8-.9.8-.9-.3-.9-.8.4-.8.9-.8z" fill="#fff"/>
-      <path d="M24.7 17.6c0-2.5-2.5-4.5-5.5-4.5s-5.5 2-5.5 4.5 2.5 4.5 5.5 4.5c.6 0 1.2-.1 1.7-.3l1.8 1-.5-1.6c1.3-.8 2.5-2.1 2.5-3.6zm-7.4-1c-.4 0-.7-.3-.7-.7s.3-.7.7-.7.7.3.7.7-.3.7-.7.7zm3.9 0c-.4 0-.7-.3-.7-.7s.3-.7.7-.7.7.3.7.7-.3.7-.7.7z" fill="#fff"/>
+    // Two overlapping speech bubbles, stroked in currentColor — recognisable
+    // as WeChat without the brand-green filled square.
+    const svg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M9 4.2C5.2 4.2 2 6.8 2 10.1c0 1.9 1.1 3.6 2.8 4.7L4.2 17l2.9-1.3c.5.1 1 .2 1.5.2"/>
+      <path d="M22 15.3c0-2.6-2.4-4.8-5.5-4.8s-5.5 2.1-5.5 4.8 2.4 4.8 5.5 4.8c.6 0 1.3-.1 1.8-.3L21 21l-.5-2c.9-.9 1.5-2.1 1.5-3.7z"/>
+      <circle cx="6.6" cy="9.4" r=".8" fill="currentColor" stroke="none"/><circle cx="10.6" cy="9.4" r=".8" fill="currentColor" stroke="none"/>
+      <circle cx="14.3" cy="14.4" r=".7" fill="currentColor" stroke="none"/><circle cx="18.3" cy="14.4" r=".7" fill="currentColor" stroke="none"/>
     </svg>`;
-    return `<span class="pay-brand pay-brand-wechat${big?' lg':''}">${svg}<span class="lbl">WeChat${big?' · 微信':''}</span></span>`;
+    return `<span class="pay-brand pay-brand-wechat${big?' lg':''}">${svg}<span class="lbl">${T('WeChat','微信')}</span></span>`;
   }
   if (isAlipay) {
-    // Simplified Alipay logo: rounded square in brand blue with a bold
-    // "支" character. Recognisable at small sizes; doesn't try to
-    // replicate the official wordmark.
-    const svg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 32 32" aria-hidden="true">
-      <rect width="32" height="32" rx="7" fill="#1677ff"/>
-      <text x="16" y="23" text-anchor="middle" font-size="20" font-weight="900" fill="#fff" font-family="Arial, 'PingFang SC', sans-serif">支</text>
+    // The "支" character in currentColor — recognisable, monochrome.
+    const svg = `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" aria-hidden="true">
+      <text x="12" y="18" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor" font-family="Arial, 'PingFang SC', sans-serif">支</text>
     </svg>`;
-    return `<span class="pay-brand pay-brand-alipay${big?' lg':''}">${svg}<span class="lbl">Alipay${big?' · 支付宝':''}</span></span>`;
+    return `<span class="pay-brand pay-brand-alipay${big?' lg':''}">${svg}<span class="lbl">${T('Alipay','支付宝')}</span></span>`;
   }
   // Off-app tender confirmed via "Mark paid" — friendly bilingual label, no
   // gateway badge (the operator didn't use the in-app gateway).
@@ -211,10 +212,12 @@ function primaryPayment(o) {
       || list[list.length - 1]
       || null;
 }
-// Friendly, bilingual label for a raw payment status.
+// Friendly, single-language label for a raw payment status (cuT picks the live
+// language — never a glued "paid · 已付").
 function paymentStatusLabel(s) {
-  return { success: 'paid · 已付', pending: 'pending · 待付', created: 'pending · 待付',
-           refunded: 'refunded · 已退', failed: 'failed · 失败' }[s] || (s || '—');
+  const T = (typeof cuT === 'function') ? cuT : ((en) => en);
+  return { success: T('paid', '已付'), pending: T('pending', '待付'), created: T('pending', '待付'),
+           refunded: T('refunded', '已退'), failed: T('failed', '失败') }[s] || (s || '—');
 }
 
 // ── Tab switcher — supports flat tabs AND dropdown groups ──

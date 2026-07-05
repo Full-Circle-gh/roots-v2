@@ -3787,8 +3787,10 @@
   .pay-brand svg { display: block; flex-shrink: 0; border-radius: 4px; }
   .pay-brand .lbl { white-space: nowrap; }
   .pay-brand.lg { font-size: 14px; gap: 8px; }
-  .pay-brand-wechat .lbl { color: #1aad19; }
-  .pay-brand-alipay .lbl { color: #1677ff; }
+  /* Monochrome: label inherits the surrounding text colour (the mark is drawn
+     in currentColor too) — payment brand is machine data, not a status colour. */
+  .pay-brand-wechat .lbl,
+  .pay-brand-alipay .lbl { color: inherit; }
   tbody tr:last-child td { border-bottom: 0; }
   td.muted { color: var(--text-3); }
   td.numeric { font-variant-numeric: tabular-nums; }
