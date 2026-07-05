@@ -2342,6 +2342,11 @@ addColumn('retail_orders', 'packing_fee',      'REAL DEFAULT 0');
 addColumn('retail_orders', 'delivery_mode',    "TEXT");                 // 'standard' | 'max' (GZ) | 'fixed' (city) | 'sameday' (legacy)
 addColumn('retail_orders', 'delivery_zone_id', 'INTEGER');
 addColumn('retail_orders', 'points_earned',    'INTEGER DEFAULT 0');
+// Routing transparency: 1 = fulfilling store chosen by real GPS distance,
+// 0 = coarse fallback (zone/district/sort_order) because the address had no
+// coordinates to measure, NULL = not applicable (pickup, out-of-city pin,
+// admin-created, or pre-feature orders). Ops surface the 0 case as a warning.
+addColumn('retail_orders', 'routed_by_distance', 'INTEGER');
 
 // Delivery scheduling. NULL scheduled_for = "right away" (deliver as soon as
 // the kitchen can). When set, contains the earliest time the customer wants

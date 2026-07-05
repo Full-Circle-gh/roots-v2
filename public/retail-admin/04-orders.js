@@ -3341,6 +3341,7 @@ function renderOpenOrder(o) {
             <div class="kicker">Fulfilled by · 出货门店</div>
             <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
             <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
+            ${o.routed_by_distance === 0 ? `<div class="sub" style="color: var(--warn); font-weight: 600;">⚠ ${cuT('routed by area — address not locatable, verify store','按区域派单 · 地址无法定位,请核对门店')}</div>` : ''}
             ${fulfillmentShortNote(o)}
           </div>` : ''}
           ${printReceiptTile(o)}

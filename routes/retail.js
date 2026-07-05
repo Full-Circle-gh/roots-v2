@@ -8204,7 +8204,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // scheduled-for-later delivery.
   const stockGate = isPickup ? true : inventory.requiresStockGate({ address, deliverySlotId });
 
-  let fulfillingStore, routingReason;
+  // routed_by_distance: 1 = store chosen by real GPS distance, 0 = coarse
+  // fallback (no address coords), null = N/A (pickup / out-of-city pin / etc.).
+  let fulfillingStore, routingReason, routedByDistance = null;
   if (isPickup) {
     // Customer picked the store explicitly — no routing. Stock availability
     // is enforced by reserveForOrder below (throws insufficient_stock).
@@ -8267,6 +8269,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     routingReason   = fallbackChoice === 'cancel_missing'  ? 'cancel_missing'
                     : fallbackChoice === 'replace_missing' ? 'replace_missing'
                     : routing.reason;
+    // Genuine proximity routing — record whether real distance drove it.
+    routedByDistance = routing.routed_by_distance ? 1 : 0;
   }
 
   // Out-of-Guangzhou orders all ship from the single out-of-city warehouse
@@ -8309,6 +8313,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       if (oocStore) {
         fulfillingStore = oocStore;
         routingReason   = scheduledShipDistrict ? 'scheduled_ship_district' : 'out_of_city';
+        // Deliberately pinned to the out-of-city shipper — distance is moot, so
+        // the distance/fallback flag no longer applies to this order.
+        routedByDistance = null;
       }
     }
   }
@@ -8586,10 +8593,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
          points_used, points_amount, total,
          customer_note, needs_cutlery, needs_invoice, invoice_title, invoice_tax_id,
          invoice_type, invoice_email,
-         store_id, routing_reason, channel,
+         store_id, routing_reason, routed_by_distance, channel,
          fallback_choice, awaiting_restock_pids, idempotency_key,
          fulfillment_type, fulfillment_short_pids, balance_used
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       orderNo, req.customer.id, 'pending_payment', paymentMethod,
       address.recipient_name, address.phone,
@@ -8612,7 +8619,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       pointsUsed, pointsAmount, total,
       customerNote, needsCutlery, needsInvoice, invoiceTitle, invoiceTaxId,
       invoiceType, invoiceEmail,
-      fulfillingStore.id, routingReason, orderChannel,
+      fulfillingStore.id, routingReason, routedByDistance, orderChannel,
       fallbackChoice, awaitingRestockPids ? JSON.stringify(awaitingRestockPids) : null,
       idempotencyKey,
       isPickup ? 'pickup' : 'delivery',
@@ -15986,7 +15993,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_amount_approved, o.refund_amount_paid,
                     o.refund_requested_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
-                    o.store_id, o.routing_reason, o.channel, o.fulfillment_type,
+                    o.store_id, o.routing_reason, o.routed_by_distance, o.channel, o.fulfillment_type,
                     o.channel_status, o.channel_status_at, o.channel_eta,
                     o.fulfillment_short_pids,
                     (SELECT COUNT(*) FROM retail_order_addons ad
