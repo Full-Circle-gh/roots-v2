@@ -7036,6 +7036,36 @@
   .su-pend-row svg { width: 14px; height: 14px; color: var(--brass); flex: none; }
   .su-pend-row span { flex: 1; font-size: 12.8px; color: var(--text-2); }
 
+  /* "Tell us about your store" wizard — one question per step */
+  .su-wiz-crumb {
+    font-family: var(--f-mono); font-size: 11px; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--text-3);
+  }
+  .su-wiz-dots { display: flex; gap: 7px; margin: 14px 0 4px; }
+  .su-wiz-dot {
+    height: 5px; flex: 1; border-radius: 999px; background: var(--line);
+    transition: background var(--t-fast) ease;
+  }
+  .su-wiz-dot.done { background: var(--accent); }
+  .su-wiz-dot.on { background: var(--brass); }
+  .su-wiz-q { margin: 16px 0 6px; font-size: 16.5px; font-weight: 650; color: var(--text-1); line-height: 1.4; }
+  .su-wiz-in {
+    width: 100%; box-sizing: border-box; margin-top: 5px;
+    background: var(--bg-elev-1); border: 1px solid var(--line-strong);
+    border-radius: var(--r-md); padding: 11px 13px; font-size: 14.5px; color: var(--text-1);
+  }
+  .su-wiz-in:focus { outline: none; border-color: var(--brass); }
+  .su-wiz-link {
+    display: inline-block; margin-top: 11px; background: none; border: none; padding: 0;
+    color: var(--brass); font-size: 13px; font-weight: 600; cursor: pointer;
+  }
+  .su-wiz-link:hover { text-decoration: underline; }
+  .su-wiz-hint {
+    display: flex; gap: 8px; align-items: flex-start; margin-top: 14px;
+    font-size: 12.3px; color: var(--text-3); line-height: 1.5;
+  }
+  .su-wiz-hint svg { width: 14px; height: 14px; color: var(--accent); flex: none; margin-top: 1px; }
+
   @media (max-width: 640px) {
     .su-wsteps { grid-template-columns: repeat(2, 1fr); }
     .su-choose { grid-template-columns: 1fr; }
