@@ -39,6 +39,17 @@ function cfg(db, key, dflt) {
     return row ? JSON.parse(row.value_json) : dflt;
   } catch (_) { return dflt; }
 }
+// Is home delivery genuinely available? Wizard flag, an enabled national
+// default, or any active delivery zone (the Roots case — predates the wizard).
+// Mirrors deliveryIsAvailable() in retail.js.
+function deliveryConfigured(db) {
+  if (cfg(db, 'delivery.enabled', false) === true) return true;
+  const def = cfg(db, 'delivery.defaultZone', null);
+  if (def && def.enabled) return true;
+  try {
+    return !!db.prepare('SELECT 1 FROM retail_delivery_zones WHERE is_active = 1 LIMIT 1').get();
+  } catch (_) { return false; }
+}
 function count(db, sql) {
   try { return db.prepare(sql).get()?.n || 0; } catch (_) { return 0; }
 }
@@ -88,7 +99,12 @@ function buildStatus(req) {
   const paymentMethod = payReady && alipayOn ? 'both' : payReady ? 'wechat' : alipayOn ? 'alipay' : null;
 
   // Handover: delivery switched on, OR the operator confirmed pickup-only.
-  const deliveryOn = cfg(db, 'delivery.enabled', false) === true;
+  // Delivery counts as on when the wizard flag is set, a national default zone
+  // is enabled, OR any delivery zone is active — the Roots case, which turned
+  // delivery on the old way (zones) long before the wizard existed and so never
+  // wrote delivery.enabled. Mirrors deliveryIsAvailable() in retail.js so the
+  // setup guide never disagrees with what customers actually see.
+  const deliveryOn = deliveryConfigured(db);
   const fulfillmentReady = deliveryOn || flags.pickupConfirmed;
 
   // Nice-to-have: brand touched (a logo uploaded or the accent changed off-seed).
