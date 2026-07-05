@@ -17,7 +17,7 @@
 - Add-on: `Updated · 加单`.
 - Routing: `rerouted · 改派(缺货)` / `manually routed · 手动改派` / `out-of-city warehouse · 外地仓发货`.
 - Tracking cell: pickup / local ETA / `⚠ missing · 缺运单号` / `{CARRIER} {waybill}` + sync state; multi-parcel rollup; live delivery-state chip (Delivered/Out for delivery/In transit/Picked up/Can't reach customer/Delivery issue/Returning/Returned/At pickup point/In a locker); **`⚠ AIR DELAYED · contact customer · 空运延误 · 联系客户`**.
-- Ship-by cell: kicker (`Pickup time · 取货时间` / `Deliver · 送达时间` / `Ship by · 最迟发货` / `Requested timing · 原定时间`); urgency grey/amber/red; `OVERDUE · 已逾期` / `today · 今天` / `tomorrow · 明天`; `🥗 made fresh · 现做`; `As soon as possible · 尽快发货` + `placed Nd ago · N天前下单`; `+¥ same-day · 当日`.
+- Ship-by cell: kicker (`Pickup time · 取货时间` / `Deliver · 送达时间` / `Ship by · 最迟发货` / `Requested timing · 原定时间`); urgency grey/amber/red; `OVERDUE · 已逾期` / `today · 今天` / `tomorrow · 明天`; `🥗 made fresh · 现做`; `Earliest courier day · 最早快递发出` + `placed Nd ago · N天前下单` + `no same-day paid · ship by courier · 未购当日达 · 快递发货`; `+¥ same-day · 当日`.
 - **Bulk attach tracking modal:** default carrier select; `order#  waybill#` lines (optional per-line carrier); process → results table (`✓ saved` / `✗ error`, `auto-dispatched · 自动发货`).
 - Empty: `No orders yet · 暂无订单` / `Inbox zero · 无待处理退款`.
 

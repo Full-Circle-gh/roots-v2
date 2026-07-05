@@ -1385,10 +1385,16 @@ function shipByPlan(o) {
   // for days is the real signal an operator should act on. Covers both the old
   // out-of-city express tag (ship_by_mode==='asap') and plain "nothing picked".
   if (o.ship_by_mode === 'asap' || !o.scheduled_for) {
+    // "As soon as possible" read on the floor as "rush a rider out today" — but
+    // this customer picked no delivery date and did NOT pay the same-day
+    // surcharge; they just want the earliest normal courier day. Say that
+    // plainly ("Earliest courier day / 最早快递发出") so nobody dispatches a
+    // same-city rider on a standard parcel. The clarifier sub-line in the tile
+    // spells out "no same-day paid" for the same reason.
     return {
       kind: 'asap',
       kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
-      headlineEn: 'As soon as possible', headlineCn: '尽快发货',
+      headlineEn: 'Earliest courier day', headlineCn: '最早快递发出',
       urgencyDate: o.placed_at || null, urgencyBasis: 'age',
     };
   }
@@ -1777,9 +1783,15 @@ function renderShipByTile(o) {
     ? `<div class="sub"${p.kind === 'batch' ? ' style="color: var(--warn); font-weight: 600;"' : ''}>${subMain}</div>` : '';
   // Order-level facts: delivery mode + same-day surcharge.
   const mode = deliveryModeNote(o.delivery_mode);
-  const surcharge = (Number(o.same_day_surcharge_fee) || 0) > 0
+  const paidSameDay = (Number(o.same_day_surcharge_fee) || 0) > 0;
+  const surcharge = paidSameDay
     ? `${mode ? ' · ' : ''}<span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
-  const modeLine = (mode || surcharge) ? `<div class="sub">${mode}${surcharge}</div>` : '';
+  // ASAP orders with nothing paid for same-day: state outright that this is a
+  // normal courier parcel, not a same-city rider run. Without this the "ship
+  // soon" tone made staff reach for a rider on orders that never bought one.
+  const asapStd = (p.kind === 'asap' && !paidSameDay)
+    ? `${mode ? ' · ' : ''}<span class="muted">${cuT('no same-day paid · ship by courier','未购当日达 · 快递发货')}</span>` : '';
+  const modeLine = (mode || surcharge || asapStd) ? `<div class="sub">${mode}${surcharge}${asapStd}</div>` : '';
   return `<div>
     <div class="kicker">${cuT(p.kickerEn, p.kickerCn)}</div>
     <div class="val"${usingRaw ? ' data-no-i18n' : ''}><b style="color: ${u.color};">${headline}</b>${badgeHtml}</div>
