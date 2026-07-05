@@ -5382,28 +5382,9 @@ async function refreshOrderStatusCounts() {
   } catch {}
 }
 
-// Live counts for the channel chip strip. Mirrors the store/search/date filters
-// (not status — channel is a separate axis) so each chip shows how many orders
-// that channel holds in the current view.
-async function refreshOrderChannelCounts() {
-  if (!document.getElementById('orders-channel-chips')) return;
-  const qs = new URLSearchParams();
-  const storeId = (document.getElementById('orders-store') || {}).value || '';
-  const q = ($('#orders-q') || {}).value ? $('#orders-q').value.trim() : '';
-  if (storeId) qs.set('store_id', storeId);
-  if (q)       qs.set('q', q);
-  try {
-    const j = await api('/api/retail-admin/order-channel-counts' + (qs.toString() ? '?' + qs : ''));
-    const d = j.data || {};
-    const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n > 0 ? String(n) : ''; };
-    set('occ-all',       d.all);
-    set('occ-wechat',    d.wechat);
-    set('occ-web',       d.web);
-    set('occ-meituan',   d.meituan);
-    set('occ-gzgrocery', d.gzgrocery);
-    set('occ-manual',    d.manual);
-  } catch {}
-}
+// Channel chips are a plain filter axis — no per-channel counts. The actionable
+// numbers live on the status counters (pending, paid, preparing, …) instead.
+function refreshOrderChannelCounts() {}
 
 // ═══════════════════════════════════════════════════════════════════
 // NEW ORDER (manual) — staff create an order on a customer's behalf.
