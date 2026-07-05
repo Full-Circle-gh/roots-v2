@@ -1751,8 +1751,8 @@ function fulfillmentShortNote(o) {
         + `<span style="font-weight:600; color: var(--text-2);">#${escapeHtml(String(pid))}</span></div>`;
     }
     const nm = orderItemNames(it);
-    const sub = (nm.secondary || it.size)
-      ? `<div class="sub" style="color: var(--text-3); font-size:11px;">${escapeHtml(nm.secondary || '')}${(nm.secondary && it.size) ? ' · ' : ''}${it.size ? escapeHtml(it.size) : ''}</div>`
+    const sub = it.size
+      ? `<div class="sub" style="color: var(--text-3); font-size:11px;">${escapeHtml(it.size)}</div>`
       : '';
     return `<div style="display:flex; align-items:center; gap:8px; margin-top:4px;">`
       + itemThumb(it)
@@ -2183,7 +2183,9 @@ function renderPackBadges(it) {
   // Local only = Guangzhou same-city item (never air/land). Surface it plainly
   // rather than falling through to the air/land restriction logic below.
   if (arr.length === 1 && arr[0] === 'local') {
-    return supplier + '<span class="pack-badge land" title="Guangzhou local delivery only · 仅广州同城配送">Local · 仅广州</span>';
+    // Inside a data-no-i18n block, so pick ONE language here (the runtime
+    // walker won't split a glued pair for us).
+    return supplier + `<span class="pack-badge land" title="${escapeAttr(cuT('Guangzhou local delivery only', '仅广州同城配送'))}">${cuT('Local only', '仅广州')}</span>`;
   }
   const hasAir  = arr.includes('air');
   const hasLand = arr.includes('land');
@@ -2199,9 +2201,9 @@ function renderPackBadges(it) {
   // packing warning (e.g. "Land only — airline rejected").
   if (hasAir && hasLand) return supplier;
   if (hasAir)
-    parts.push('<span class="pack-badge air" title="Air shipping only · 仅空运">✈︎ Air only · 仅空运</span>');
+    parts.push(`<span class="pack-badge air" title="${escapeAttr(cuT('Air shipping only', '仅空运'))}">${cuT('Air only', '仅空运')}</span>`);
   else
-    parts.push('<span class="pack-badge land" title="Land shipping only — airline rejected · 仅陆运">Land only · 仅陆运</span>');
+    parts.push(`<span class="pack-badge land" title="${escapeAttr(cuT('Land shipping only — airline rejected', '仅陆运 — 航空拒运'))}">${cuT('Land only', '仅陆运')}</span>`);
   return supplier + parts.join('');
 }
 
@@ -2294,9 +2296,9 @@ function renderItemRow(it, opts = {}) {
   const nameCell = _href
     ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
     : name;
-  const zh = (nm.secondary || it.size)
-    ? `<span class="mf-zh">${escapeHtml(nm.secondary)}${it.size ? (nm.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
-    : '';
+  // One language at a time (brand rule): the other-language product name is
+  // never shown alongside — the meta line carries just the size.
+  const zh = it.size ? `<span class="mf-zh">${escapeHtml(it.size)}</span>` : '';
   const refundPill = itemRefundHtml(it);
   const rowCls = `mf-row${itemFullyRefunded(it) ? ' refunded-row' : ''}`;
   return `
@@ -2452,8 +2454,7 @@ function renderItemsAsGrid(items, showPack = true) {
     const nameCell = _href
       ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
-    const zh = (nn.secondary || it.size)
-      ? `<div class="oi-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
+    const zh = it.size ? `<div class="oi-zh">${escapeHtml(it.size)}</div>` : '';
     const refundPill = itemRefundHtml(it);
     return `<div class="oi-row${itemFullyRefunded(it) ? ' refunded-row' : ''}" data-fk="${it.id}">
       <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
@@ -2478,8 +2479,7 @@ function renderItemsAsCards(items, showPack = true) {
     const nameCell = _href
       ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
       : nm;
-    const zh = (nn.secondary || it.size)
-      ? `<div class="oic-zh">${escapeHtml(nn.secondary)}${it.size ? (nn.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</div>` : '';
+    const zh = it.size ? `<div class="oic-zh">${escapeHtml(it.size)}</div>` : '';
     const refundPill = itemRefundHtml(it);
     return `<div class="oic${itemFullyRefunded(it) ? ' refunded-row' : ''}" data-fk="${it.id}">
       <div class="oic-top">
@@ -3166,9 +3166,7 @@ function renderReadonlyItemRow(it, i) {
   const nameCell = href
     ? `<a href="${href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${name}</a>`
     : name;
-  const type = (nm.secondary || it.size)
-    ? `<span class="mf-zh">${escapeHtml(nm.secondary)}${it.size ? (nm.secondary ? ' · ' : '') + escapeHtml(it.size) : ''}</span>`
-    : '';
+  const type = it.size ? `<span class="mf-zh">${escapeHtml(it.size)}</span>` : '';
   return `
     <div class="mf-row" data-fk="${it.id}">
       <span class="mf-num">${String(i + 1).padStart(2, '0')}</span>
@@ -3393,7 +3391,7 @@ function renderOpenOrder(o) {
               <tbody>${o.reservations.map(r => {
                 const rn = orderItemNames({ name_en: r.product_name_en, name_cn: r.product_name_cn });
                 const label = rn.primary
-                  ? `<div>${escapeHtml(rn.primary)}</div>${rn.secondary ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(rn.secondary)}</div>` : ''}`
+                  ? `<div>${escapeHtml(rn.primary)}</div>`
                   : `<span class="muted" style="font-family: var(--f-mono); font-size: 11px;">product_id ${r.product_id}</span>`;
                 const _href = productHref(r.product_id);
                 const cell = _href

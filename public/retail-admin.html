@@ -214,6 +214,39 @@
   #order-drawer .order-total-banner .otb-amount { font-size:28px; }
   #order-drawer .shipment-card { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px; }
   #order-drawer .copy-mini { border-radius:999px; }
+
+  /* Item manifest — calm Tacet reading. The boxed SKU / ×qty chips flatten
+     into ONE quiet graphite caption line (size · SKU · ×qty · @ unit) with
+     dot separators; the name and line total carry the weight (Inter 500),
+     everything else stays 400. */
+  :is(#order-drawer, .pu-editor-bg.tacet) .item-sku,
+  :is(#order-drawer, .pu-editor-bg.tacet) .item-qty,
+  :is(#order-drawer, .pu-editor-bg.tacet) .item-unit {
+    background:none; border:none; padding:0; border-radius:0; margin:0;
+    font-family:var(--f-sans); font-size:12.5px; font-weight:400;
+    color:var(--text-2); letter-spacing:0; font-variant-numeric:tabular-nums; }
+  :is(#order-drawer, .pu-editor-bg.tacet) .item-qty.qty-multi {
+    color:var(--text-1); font-weight:500; background:none; border:none; }
+  #order-drawer .manifest .mf-zh { font-family:var(--f-sans); font-size:12.5px; font-weight:400; color:var(--text-2); }
+  /* Dot separators between the caption pieces (skips the first piece). */
+  #order-drawer .mf-meta :is(.item-sku, .item-qty, .item-unit):not(:first-child)::before {
+    content:"·"; margin-right:8px; color:var(--text-4); }
+  #order-drawer .manifest .mf-meta { gap:8px; }
+  #order-drawer .manifest .mf-row { padding:12px 0; }
+  #order-drawer .manifest .mf-name { font-size:13.5px; font-weight:500; }
+  #order-drawer .manifest .mf-total { font-weight:500; font-variant-numeric:tabular-nums; }
+  #order-drawer .manifest .mf-num { font-family:var(--f-sans); font-size:11.5px; color:var(--text-3); font-variant-numeric:tabular-nums; }
+  #order-drawer .oi-thumb { border-radius:10px; }
+  /* Pack / refund badges stay pills but read calm (tinted, no border). */
+  #order-drawer .pack-badge { border:none; font-weight:500; letter-spacing:0; font-size:11.5px; padding:2px 10px; }
+  #order-drawer .pack-badge.air, #order-drawer .pack-badge.land {
+    background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
+  #order-drawer .pack-badge.supplier { background:var(--tacet-cream); color:var(--text-1); }
+  #order-drawer .pack-badge.refunded { background:var(--tacet-brick-tint); color:var(--tacet-brick); }
+  /* Shipment-card header: cream mode pill, quiet counts. */
+  #order-drawer .shipment-head .mode-pill { background:var(--tacet-cream); border:none;
+    color:var(--text-1); font-weight:500; border-radius:999px; }
+  #order-drawer .shipment-head .count { color:var(--text-2); font-variant-numeric:tabular-nums; }
   /* Neutralise stray tints: multi-qty chip + active sort chip read calm, not amber/green. */
   #order-drawer .item-qty.qty-multi { color:var(--text-1); background:var(--tacet-cream); border-color:var(--line-strong); }
   #order-drawer .sort-chip.active { background:var(--tacet-cream); color:var(--text-1); border-color:var(--line-strong); }
