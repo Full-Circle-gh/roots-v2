@@ -1823,16 +1823,13 @@ function renderShipByTile(o) {
   const paidSameDay = (Number(o.same_day_surcharge_fee) || 0) > 0;
   const surcharge = paidSameDay
     ? `${mode ? ' · ' : ''}<span style="color: var(--warn);">+¥${fmt(o.same_day_surcharge_fee)} ${cuT('same-day surcharge','当日加收')}</span>` : '';
-  // ASAP orders with nothing paid for same-day: state outright that this is a
-  // normal courier parcel, not a same-city rider run. Without this the "ship
-  // soon" tone made staff reach for a rider on orders that never bought one.
-  // Right-away is the exception: the customer DID ask for as-soon-as-possible,
-  // so the honest sub-line is "as soon as possible", not the courier caveat.
+  // Right-away ASAP orders: the customer DID ask for as-soon-as-possible, so
+  // surface that plainly. For the plain no-date case the headline already reads
+  // "Courier — ship when ready", so the old "no same-day paid · ship by courier"
+  // caveat was redundant (and stated the obvious for out-of-city parcels).
   const isRightAway = o.delivery_slot_kind === 'right_away';
-  const asapStd = (p.kind === 'asap' && !paidSameDay)
-    ? (isRightAway
-        ? `${mode ? ' · ' : ''}<span class="muted">${cuT('as soon as possible','尽快发货')}</span>`
-        : `${mode ? ' · ' : ''}<span class="muted">${cuT('no same-day paid · ship by courier','未购当日达 · 快递发货')}</span>`)
+  const asapStd = (p.kind === 'asap' && !paidSameDay && isRightAway)
+    ? `${mode ? ' · ' : ''}<span class="muted">${cuT('as soon as possible','尽快发货')}</span>`
     : '';
   const modeLine = (mode || surcharge || asapStd) ? `<div class="sub">${mode}${surcharge}${asapStd}</div>` : '';
   return `<div>
