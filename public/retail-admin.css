@@ -425,6 +425,39 @@
   /* Group/parent chevron sits at the far right of its row. */
   .tabs .tabs-chev { margin-left: auto; }
 
+  /* ── Collapsible rail ──────────────────────────────────────────────
+     A topbar toggle folds the rail down to an icon-only strip; the main
+     content reflows to fill the reclaimed width. State persists in
+     localStorage (restored pre-paint by an inline snippet in the page so
+     there's no flash). Collapsed, each label is zeroed to font-size:0 —
+     every rail button keeps its explicit svg size, so only the text
+     disappears — and the group chevrons + open accordions hide. The two
+     destination-less groups (Marketing / Loyalty) re-expand the rail on
+     click so their children stay reachable. Hidden on phones, where the
+     rail is already swapped for the fixed bottom nav. */
+  .nav-collapse-btn {
+    flex: none; width: 34px; height: 34px; padding: 0; margin-right: 2px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: 0; background: transparent; cursor: pointer;
+    color: var(--text-2); border-radius: var(--r-md);
+    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  }
+  .nav-collapse-btn:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  .nav-collapse-btn svg { width: 19px; height: 19px; }
+
+  .tabs { transition: width var(--t-fast) ease, padding var(--t-fast) ease; }
+  main  { transition: margin-left var(--t-fast) ease; }
+
+  body.nav-collapsed .tabs { width: 62px; padding-left: 8px; padding-right: 8px; }
+  body.nav-collapsed main  { margin-left: 62px; }
+  body.nav-collapsed .tabs button {
+    font-size: 0; gap: 0; justify-content: center;
+    padding-left: 0; padding-right: 0;
+  }
+  body.nav-collapsed .tabs .tabs-chev { display: none; }
+  body.nav-collapsed .tabs-group.open > .tabs-popover { display: none; }
+  @media (max-width: 720px) { .nav-collapse-btn { display: none; } }
+
   /* Unseen-orders notification on the Orders tab. Hidden by default;
      JS adds .has-unseen when the unseen-count > 0. The dot pulses to grab
      attention without being intrusive; if there's a count (>1) we show it

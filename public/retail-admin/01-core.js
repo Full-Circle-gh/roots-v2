@@ -562,11 +562,54 @@ window.addEventListener('message', (ev) => {
 // Group trigger toggles its popover; only one group open at a time.
 $$('.tabs-group-trigger').forEach(btn => btn.addEventListener('click', (ev) => {
   ev.stopPropagation();
+  // These groups (Marketing / Loyalty) have no destination of their own — the
+  // trigger only opens the accordion, which is hidden while the rail is folded.
+  // So un-fold the rail first, then reveal the children.
+  if (document.body.classList.contains('nav-collapsed')) setNavCollapsed(false);
   const group = btn.closest('.tabs-group');
   const wasOpen = group.classList.contains('open');
   $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
   if (!wasOpen) group.classList.add('open');
 }));
+
+// ── Collapsible rail ──────────────────────────────────────────────────────
+// A topbar toggle folds the left rail to an icon-only strip; the pre-paint
+// snippet in the page restores the last state, and this keeps it in sync.
+// While collapsed the CSS zeroes each label, so we mirror the label into a
+// native `title` — hovering an icon still names it — and clear those titles
+// again on expand so we don't double up with the visible text.
+const NAV_COLLAPSE_KEY = 'ra:navCollapsed';
+function _navRailLabel(b) {
+  return Array.prototype.filter.call(b.childNodes, n => n.nodeType === 3)
+    .map(n => n.textContent).join('').replace(/\s+/g, ' ').trim();
+}
+function _navRailButtons() {
+  return $$('.tabs > button, .tabs .nav-parent-link, .tabs .tabs-group-trigger');
+}
+function setNavCollapsed(on) {
+  on = !!on;
+  document.body.classList.toggle('nav-collapsed', on);
+  try { localStorage.setItem(NAV_COLLAPSE_KEY, on ? '1' : '0'); } catch (e) {}
+  const btn = document.getElementById('navCollapseBtn');
+  if (btn) {
+    const T = (typeof cuT === 'function') ? cuT : ((en) => en);
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    btn.title = on ? T('Expand menu', '展开菜单') : T('Collapse menu', '收起菜单');
+    btn.setAttribute('aria-label', btn.title);
+  }
+  _navRailButtons().forEach(b => {
+    const label = _navRailLabel(b);
+    if (on) { if (label) b.title = label; }
+    else if (b.title === label) b.removeAttribute('title');
+  });
+}
+function toggleNavCollapse() {
+  setNavCollapsed(!document.body.classList.contains('nav-collapsed'));
+}
+window.setNavCollapsed = setNavCollapsed;
+window.toggleNavCollapse = toggleNavCollapse;
+// Sync button state + tooltips to whatever the pre-paint snippet restored.
+setNavCollapsed(document.body.classList.contains('nav-collapsed'));
 // The vertical rail is an inline accordion — groups stay expanded while you
 // work in the content area, so the old click-outside-to-close handler is gone.
 // ── Categories editor ────────────────────────────────────────────────────
