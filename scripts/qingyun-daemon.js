@@ -1,4 +1,5 @@
-// 青云聚信 (Qingyun) delivery-tracking daemon — separate pm2 process.
+// 青云聚信 (Qingyun) delivery-tracking daemon — separate pm2 process. Restarted
+// by the deploy installer whenever a file it loads changes (see deploy-apply.sh).
 //
 // 青云聚信 is Meituan's delivery AGGREGATOR (saas.cyanclouds.com). This daemon ATTACHES
 // over CDP to a genuine Chrome (scripts/qingyun-chrome.js, headful under Xvfb, GZ
