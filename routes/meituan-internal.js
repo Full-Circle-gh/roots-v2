@@ -255,6 +255,33 @@ router.post('/update-order-status', (req, res) => {
   }
 });
 
+// POST /api/internal/meituan/auto-deliver-past-eta
+// Time-based fallback: Meituan only stamps 已完成 (→ Delivered) once the customer
+// confirms receipt / auto-confirm fires, often a day or more after the parcel has
+// actually arrived — so mirrored orders sit at Dispatched long after delivery. If
+// an order is still non-terminal one hour past its Meituan ETA (channel_eta), treat
+// it as delivered so the Orders list reflects reality. channel_eta and channel_status_at
+// are UTC (getPendingOrders stores the ETA as a UTC string; CURRENT_TIMESTAMP is UTC),
+// so the comparison is done in UTC via datetime('now'). Idempotent — a delivered order
+// is terminal and the daemon sweep never re-reads it, so this never fights the label.
+// Applies across every store (channel = 'meituan'); safe to call from either daemon.
+router.post('/auto-deliver-past-eta', (_req, res) => {
+  try {
+    const r = db.prepare(`
+      UPDATE retail_orders
+         SET status = 'delivered'
+       WHERE channel = 'meituan'
+         AND status IN ('paid','preparing','dispatched')
+         AND channel_eta IS NOT NULL AND channel_eta != ''
+         AND datetime(channel_eta, '+1 hour') <= datetime('now')
+    `).run();
+    res.json({ ok: true, delivered: r.changes });
+  } catch (err) {
+    console.error('[meituan-internal] auto-deliver-past-eta error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/internal/meituan/sync-status
 // Quick health check the daemon can call to verify the server is reachable.
 router.get('/sync-status', (_req, res) => {

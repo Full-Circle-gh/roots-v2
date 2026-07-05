@@ -480,6 +480,22 @@ async function refreshOrderStatus(storeCode, order) {
   } catch (err) { log(storeCode, `refreshOrderStatus error: ${err.message}`); }
 }
 
+// Time-based delivered flip: mark any mirrored order delivered once it is an hour
+// past its ETA (闪购's own 已完成 confirm can lag delivery by a day+). Pure server-side
+// DB rule — no browser — covering all stores in one call. Best-effort.
+async function autoDeliverPastEta() {
+  try {
+    const res = await fetch(`${INTERNAL_BASE}/api/internal/meituan/auto-deliver-past-eta`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.delivered) log('all', `auto-delivered ${data.delivered} order(s) past ETA+1h`);
+    }
+  } catch (err) { log('all', `autoDeliverPastEta error: ${err.message}`); }
+}
+
 // Trailing sweep: advance orders stuck at a non-terminal status because 闪购 marked
 // them 已完成 after they left the today window. Only touches the browser when at
 // least one such order exists (else no extra 闪购 traffic), reads a widened window
@@ -740,6 +756,7 @@ async function main() {
     // non-terminal order in the window — sweepStaleOrders guards on that.
     if (now - lastOrderSweep >= ORDER_SWEEP_MS) {
       lastOrderSweep = now;
+      await autoDeliverPastEta(); // time-based delivered flip (no browser)
       for (const storeCode of SHANGOU_STORES) await sweepStaleOrders(storeCode);
     }
 

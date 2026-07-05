@@ -410,6 +410,23 @@ async function refreshOrderStatus(storeCode, order) {
   } catch (err) { log(storeCode, `refreshOrderStatus error: ${err.message}`); }
 }
 
+// Time-based delivered flip: mark any mirrored Meituan order delivered once it is
+// an hour past its ETA (Meituan's own 已完成 confirm can lag delivery by a day+).
+// Pure server-side DB rule — no browser — so it runs cheaply every sweep cycle and
+// covers all stores in one call. Best-effort; a failure never breaks the loop.
+async function autoDeliverPastEta() {
+  try {
+    const res = await fetch(`${INTERNAL_BASE}/api/internal/meituan/auto-deliver-past-eta`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.delivered) log('all', `auto-delivered ${data.delivered} order(s) past ETA+1h`);
+    }
+  } catch (err) { log('all', `autoDeliverPastEta error: ${err.message}`); }
+}
+
 // Trailing sweep: advance orders stuck at a non-terminal status because Meituan
 // marked them 已完成 after they left the today window. Only touches the browser
 // when at least one such order exists (else no extra Meituan traffic), and reads
@@ -958,6 +975,7 @@ async function main() {
     // a non-terminal order in the window — sweepStaleOrders guards on that.
     if (now - lastOrderSweep >= ORDER_SWEEP_MS) {
       lastOrderSweep = now;
+      await autoDeliverPastEta(); // time-based delivered flip (no browser)
       const sweepStores = stores.filter(s => !inVerifyCooldown(s.storeCode));
       for (let i = 0; i < sweepStores.length; i++) {
         await sweepStaleOrders(sweepStores[i]);
