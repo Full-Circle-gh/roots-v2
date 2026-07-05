@@ -436,7 +436,7 @@ async function openAddressToChinese(orderId) {
     </div>`;
 
   const bg = document.createElement('div');
-  bg.className = 'pu-editor-bg';
+  bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
   bg.innerHTML = `
     <div class="pu-editor" style="width: 520px; max-width: 94vw;">
@@ -524,7 +524,7 @@ function openEditShipTo(orderId) {
     </div>`;
 
   const bg = document.createElement('div');
-  bg.className = 'pu-editor-bg';
+  bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
   bg.innerHTML = `
     <div class="pu-editor" style="width: 520px; max-width: 94vw;">
@@ -3438,7 +3438,7 @@ const PAY_METHOD_CHOICES = [
 function askPayMethod() {
   return new Promise((resolve) => {
     const bg = document.createElement('div');
-    bg.className = 'pm-pick-bg';
+    bg.className = 'pm-pick-bg tacet';
     bg.innerHTML = `
       <div class="pm-pick" role="dialog" aria-modal="true" aria-label="Paid how">
         <div class="pm-pick-head">
@@ -3486,7 +3486,7 @@ function askPayMethod() {
 function askReason(opts) {
   return new Promise((resolve) => {
     const bg = document.createElement('div');
-    bg.className = 'pu-editor-bg';
+    bg.className = 'pu-editor-bg tacet';
     bg.style.display = 'flex';
     bg.innerHTML = `
       <div class="pu-editor" style="width: 460px; max-width: 92vw;" role="dialog" aria-modal="true">
@@ -3533,7 +3533,7 @@ function askReason(opts) {
 function askConfirm(opts) {
   return new Promise((resolve) => {
     const bg = document.createElement('div');
-    bg.className = 'pu-editor-bg';
+    bg.className = 'pu-editor-bg tacet';
     bg.style.display = 'flex';
     bg.innerHTML = `
       <div class="pu-editor" style="width: 460px; max-width: 92vw;" role="dialog" aria-modal="true">
@@ -3730,7 +3730,7 @@ ${pages}
 function pickReprintStore(stores) {
   return new Promise((resolve) => {
     const bg = document.createElement('div');
-    bg.className = 'pu-editor-bg';
+    bg.className = 'pu-editor-bg tacet';
     bg.style.display = 'flex';
     const rows = stores.map(s => {
       const name = `${s.name_cn || s.name_en || s.code || ('Store ' + s.id)}`;
@@ -4441,7 +4441,7 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
   const preset = jdSuggestedService(mode, !!Number(isFresh));
   const services = JD_SERVICES.filter(s => s.code !== 'LL-SD-M');   // ground-only: fresh vs ambient
   const bg = document.createElement('div');
-  bg.className = 'pu-editor-bg';
+  bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
   bg.innerHTML = `
     <div class="pu-editor" style="width: 460px; max-width: 92vw;">
@@ -4677,7 +4677,7 @@ async function setShipmentMethod(orderId, shipmentId, method, ev) {
 // transition on the audit log); Cancel/Close simply aborts.
 function openRefundNoteDialog(opts) {
   const bg = document.createElement('div');
-  bg.className = 'pu-editor-bg';
+  bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
   bg.innerHTML = `
     <div class="pu-editor" style="width: 480px; max-width: 92vw;">
@@ -4902,7 +4902,7 @@ function openDirectRefundDialog(orderId) {
   const total = Number(o.total) || 0;
 
   const bg = document.createElement('div');
-  bg.className = 'pu-editor-bg';
+  bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
   bg.innerHTML = `
     <div class="pu-editor" style="width: 640px; max-width: 92vw;">
@@ -5062,7 +5062,7 @@ function openRefundApproveDialog(orderId) {
     : 'full';
 
   const bg = document.createElement('div');
-  bg.className = 'pu-editor-bg';
+  bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
   bg.innerHTML = `
     <div class="pu-editor" style="width: 640px; max-width: 92vw;">
@@ -5207,7 +5207,7 @@ function openRefundPayoutDialog(orderId) {
   const isWechatOrder = (o.payment_method || '').toLowerCase() === 'wechat';
 
   const bg = document.createElement('div');
-  bg.className = 'pu-editor-bg';
+  bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
   bg.innerHTML = `
     <div class="pu-editor" style="width: 520px; max-width: 92vw;">
@@ -5328,7 +5328,7 @@ function formatRefundMeta(meta) {
 
 async function openRefundEvents(orderId) {
   const bg = document.createElement('div');
-  bg.className = 'pu-editor-bg';
+  bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
   bg.innerHTML = `
     <div class="pu-editor" style="width: 540px; max-width: 92vw;">

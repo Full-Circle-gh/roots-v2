@@ -48,7 +48,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-orders, #tab-invoices, #order-drawer) {
+  :is(#tab-orders, #tab-invoices, #order-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -73,7 +73,7 @@
     color:var(--text-1);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer) {
+  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -219,6 +219,29 @@
     border-radius:14px; }
   #tab-orders #rm-orders-cards .rm-oc-new { background:var(--tacet-ink); color:var(--tacet-paper); }
   [data-theme="dark"] #tab-orders #rm-orders-cards .rm-oc-new { background:var(--tacet-paper); color:var(--tacet-ink); }
+
+  /* Order-flow pop-up dialogs (refund / payout / JD-label / pay-method /
+     confirm). These attach to <body>, so they sit outside the containers above;
+     the `.tacet` marker (added only by 04-orders.js call sites) scopes the skin
+     to Orders' modals — other tabs' pop-ups are untouched. Token remap above
+     already recolours their innards; here we set the card shape, backdrop and
+     the calm ink primary (Dusk stays reserved for "New order"). */
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) { background:rgba(17,26,43,.32); }
+  :is(.pu-editor-bg.tacet .pu-editor, .pm-pick-bg.tacet .pm-pick) {
+    background:var(--bg-pane); border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.08); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) :is(.pu-editor-head, .pu-editor-foot, .pu-editor-body, .pm-pick-head) { border-color:var(--line); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) .btn-primary {
+    background:var(--text-1); border-color:var(--text-1); color:var(--bg-pane); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) .btn-primary:hover {
+    background:var(--text-2); border-color:var(--text-2); color:var(--bg-pane); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) .btn-danger {
+    background:transparent; color:var(--tacet-brick); border-color:var(--tacet-brick); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) .btn-danger:hover { background:var(--tacet-brick-tint); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) input[type="checkbox"],
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) input[type="radio"] { accent-color:var(--text-1); }
+  .pm-pick-bg.tacet .pm-pick-opt { border-radius:10px; }
+  .pm-pick-bg.tacet .pm-pick-opt:hover { background:var(--surface-raised, var(--bg-elev-1)); }
 
   /* Toolbar buttons pick up the calm secondary look via token remap already. */
 </style>
