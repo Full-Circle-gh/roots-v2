@@ -3584,17 +3584,20 @@ function printReceiptTile(o) {
   } else {
     badge = `<span class="sub" style="color:var(--text-3); font-weight:700;">Not printed yet · 尚未打印</span>`;
   }
-  return `<div class="full">
+  // Compact tile: status + Reprint + the auto-JD toggle. Box-label controls
+  // are an opt-in Delivery setting (delivery.boxLabel → body.ord-box-label);
+  // hidden for tenants that don't print their own parcel stickers.
+  return `<div>
     <div class="kicker">Receipt · 小票</div>
-    <div class="val" style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+    <div class="val" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
       ${badge}
       <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>Reprint · 补打小票</button>
-      <button class="btn btn-sm" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label · 打印箱贴', '打印箱贴 · Box label')}</button>
+      <button class="btn btn-sm ord-boxlabel-ui" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label', '打印箱贴')}</button>
       <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Only this PC (the one running 京东物流云打印组件). Auto-prints the JD waybill label the moment a waybill is created — no print dialog.', '仅本机(运行京东物流云打印组件的电脑)。生成运单时自动打印京东面单,无需弹窗。'))}">
-        <input type="checkbox" ${jdAutoPrintOn() ? 'checked' : ''} onchange="setJdAutoPrint(this.checked)"> ${cuT('Auto-print JD label · 运单后自动打印面单', '运单后自动打印面单 · Auto JD label')}
+        <input type="checkbox" ${jdAutoPrintOn() ? 'checked' : ''} onchange="setJdAutoPrint(this.checked)"> ${cuT('Auto-print JD label', '运单后自动打印面单')}
       </label>
-      <label style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Optional — for stores that print their own parcel stickers instead of the JD waybill. Opens a print dialog for an order-no/name/phone sticker on this PC.', '可选 — 适用于自行打印箱贴而非京东面单的门店。在本机弹出打印订单号/姓名/电话箱贴。'))}">
-        <input type="checkbox" ${boxLabelAutoOn() ? 'checked' : ''} onchange="setBoxLabelAuto(this.checked)"> ${cuT('Box label too · 同时打印箱贴', '同时打印箱贴 · Box label too')}
+      <label class="ord-boxlabel-ui" style="display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-3); cursor:pointer;" title="${escapeAttr(cuT('Optional — for stores that print their own parcel stickers instead of the JD waybill. Opens a print dialog for an order-no/name/phone sticker on this PC.', '可选 — 适用于自行打印箱贴而非京东面单的门店。在本机弹出打印订单号/姓名/电话箱贴。'))}">
+        <input type="checkbox" ${boxLabelAutoOn() ? 'checked' : ''} onchange="setBoxLabelAuto(this.checked)"> ${cuT('Box label too', '同时打印箱贴')}
       </label>
     </div>
   </div>`;
@@ -3645,6 +3648,10 @@ async function reprintOrder(id) {
 // physically wired to the label printer should fire it — a global setting would
 // make every operator's browser try to print.
 function boxLabelAutoOn() {
+  // Tenant gate first: box-label printing is an opt-in Delivery setting
+  // (delivery.boxLabel → body.ord-box-label). When it's off, the per-machine
+  // localStorage flag is ignored so no auto-print can fire.
+  if (!document.body.classList.contains('ord-box-label')) return false;
   try { return localStorage.getItem('boxlabelAutoWaybill') === '1'; } catch (e) { return false; }
 }
 function setBoxLabelAuto(on) {

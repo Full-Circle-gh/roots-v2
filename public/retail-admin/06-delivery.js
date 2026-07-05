@@ -188,6 +188,21 @@ async function loadDeliveryZones() {
         if (blbl) blbl.textContent = btcb.checked ? 'ON · 开启' : 'OFF · 关闭';
       });
     }
+    // Box label — opt-in order-drawer sticker printing (delivery.boxLabel).
+    if ($('#dlv-box-label')) {
+      const on = !!dlv.boxLabel;
+      $('#dlv-box-label').checked = on;
+      const xlbl = $('#dlv-box-label-status-label');
+      if (xlbl) xlbl.textContent = on ? 'ON · 开启' : 'OFF · 关闭';
+    }
+    const xcb = $('#dlv-box-label');
+    if (xcb && !xcb._wired) {
+      xcb._wired = true;
+      xcb.addEventListener('change', () => {
+        const xlbl = $('#dlv-box-label-status-label');
+        if (xlbl) xlbl.textContent = xcb.checked ? 'ON · 开启' : 'OFF · 关闭';
+      });
+    }
     // Fresh batch schedule
     const batch = (cfg?.data && cfg.data.batch && cfg.data.batch.schedule) || {};
     if ($('#batch-enabled')) {
@@ -271,6 +286,17 @@ async function saveBulkTrackingSetting() {
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body: { 'delivery.bulkTracking': on } });
     document.body.classList.toggle('ord-bulk-tracking', on);
+    toast('Saved · 已保存');
+  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+// Box label — persist the on/off flag and flip the order-drawer sticker
+// controls live (same body-class pattern as bulk tracking).
+async function saveBoxLabelSetting() {
+  const on = !!$('#dlv-box-label').checked;
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'delivery.boxLabel': on } });
+    document.body.classList.toggle('ord-box-label', on);
     toast('Saved · 已保存');
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }

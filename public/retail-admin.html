@@ -199,8 +199,10 @@
     font-size:16px; letter-spacing:0; }
   #order-drawer .od-eyebrow { font-family:var(--f-sans); font-size:12px; font-weight:400; letter-spacing:0;
     text-transform:none; color:var(--text-2); }
+  /* Tiles stretch to the row height so each pair sits flush (aligned tops AND
+     bottoms) — content-sized tiles left ragged gaps in the second column. */
   #order-drawer .order-detail { background:transparent; border:none; box-shadow:none; padding:0;
-    gap:12px; margin-bottom:12px; align-items:start; }
+    gap:12px; margin-bottom:12px; }
   #order-drawer .order-detail > div { background:var(--bg-pane); border:1px solid var(--line);
     border-radius:14px; padding:13px 16px; }
   #order-drawer .order-detail .kicker { font-family:var(--f-sans); font-size:11.5px; font-weight:500;
@@ -283,6 +285,10 @@
   :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) input[type="radio"] { accent-color:var(--text-1); }
   .pm-pick-bg.tacet .pm-pick-opt { border-radius:10px; }
   .pm-pick-bg.tacet .pm-pick-opt:hover { background:var(--surface-raised, var(--bg-elev-1)); }
+
+  /* Box-label printing is an opt-in Delivery setting (delivery.boxLabel →
+     body.ord-box-label) — same pattern as bulk tracking. Hidden by default. */
+  body:not(.ord-box-label) .ord-boxlabel-ui { display:none !important; }
 
   /* Toolbar buttons pick up the calm secondary look via token remap already. */
 </style>
@@ -4390,6 +4396,28 @@
             </label>
           </div>
           <button class="btn btn-primary" onclick="saveBulkTrackingSetting()" style="align-self: flex-end;">Save · 保存</button>
+        </div>
+      </div>
+
+      <!-- ── Box label — opt-in order-drawer sticker printing (70×45mm parcel
+           stickers on a local label printer). Off by default: most stores ship
+           with the JD waybill label and never print their own stickers. ── -->
+      <div class="card" style="margin-bottom: var(--s4);">
+        <h3 class="fc-sec" style="margin-bottom: 4px;">
+          Box label · 箱贴打印
+          <span class="help-i" data-tip="Adds a 'Box label' button + an auto-print toggle to the order page for printing 70×45mm parcel stickers (order no / name / phone) on a local label printer. Off by default — turn it on only if your store packs with its own stickers instead of the JD waybill label. · 在订单页添加「打印箱贴」按钮和自动打印开关,用本地标签打印机打印 70×45mm 箱贴(订单号/姓名/电话)。默认关闭,仅在门店使用自有箱贴而非京东面单时开启。">?</span>
+        </h3>
+        <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When on, the order page shows the Box-label controls. When off, they're hidden — the tool stays available but out of the way. · 开启后订单页显示箱贴按钮;关闭后隐藏,不占据界面。</div>
+        <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Status · 状态</label>
+            <label class="fc-switch">
+              <input type="checkbox" id="dlv-box-label">
+              <span class="fc-switch-track"></span>
+              <span id="dlv-box-label-status-label" style="font-size: 12px;">OFF · 关闭</span>
+            </label>
+          </div>
+          <button class="btn btn-primary" onclick="saveBoxLabelSetting()" style="align-self: flex-end;">Save · 保存</button>
         </div>
       </div>
     </div>

@@ -1002,6 +1002,9 @@ async function loadConfig() {
     // Bulk attach tracking is an opt-in Orders tool — the toolbar button only
     // shows when the operator enabled it under Settings → Delivery.
     document.body.classList.toggle('ord-bulk-tracking', !!c.delivery?.bulkTracking);
+    // Box-label printing (parcel stickers) is likewise opt-in — the drawer's
+    // Box-label button + auto-print toggle only show when enabled in Delivery.
+    document.body.classList.toggle('ord-box-label', !!c.delivery?.boxLabel);
     // Store-wide low-stock threshold (drives the amber dot + Low-stock tile).
     { const lt = parseInt(c.inventory?.lowStockThreshold, 10); const nv = Number.isFinite(lt) && lt >= 0 ? lt : 5;
       const changed = nv !== PA_LOW_STOCK; PA_LOW_STOCK = nv; paSyncLowStockUi();
