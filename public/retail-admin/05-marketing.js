@@ -961,6 +961,38 @@ async function setFeatureEnabled(key, on) {
   }
 }
 
+// Display-currency presets for the Settings selector. Each carries the symbol,
+// decimal places and symbol position saved to config.currency. Charging stays
+// RMB (WeChat/Alipay); this only drives how amounts are shown.
+const CURRENCY_PRESETS = [
+  { code: 'CNY', symbol: '¥',   decimals: 2, position: 'before', label: 'Chinese Yuan · 人民币 (¥)' },
+  { code: 'USD', symbol: '$',   decimals: 2, position: 'before', label: 'US Dollar ($)' },
+  { code: 'EUR', symbol: '€',   decimals: 2, position: 'before', label: 'Euro (€)' },
+  { code: 'GBP', symbol: '£',   decimals: 2, position: 'before', label: 'British Pound (£)' },
+  { code: 'JPY', symbol: '¥',   decimals: 0, position: 'before', label: 'Japanese Yen (¥)' },
+  { code: 'HKD', symbol: 'HK$', decimals: 2, position: 'before', label: 'Hong Kong Dollar (HK$)' },
+  { code: 'SGD', symbol: 'S$',  decimals: 2, position: 'before', label: 'Singapore Dollar (S$)' },
+  { code: 'AUD', symbol: 'A$',  decimals: 2, position: 'before', label: 'Australian Dollar (A$)' },
+  { code: 'CAD', symbol: 'C$',  decimals: 2, position: 'before', label: 'Canadian Dollar (C$)' },
+  { code: 'THB', symbol: '฿',   decimals: 2, position: 'before', label: 'Thai Baht (฿)' },
+];
+function renderCurrencyControl(c) {
+  const sel = document.getElementById('cfg-currency');
+  if (!sel) return;
+  if (!sel.options.length) {
+    sel.innerHTML = CURRENCY_PRESETS.map(p => `<option value="${p.code}">${escapeHtml(p.label)}</option>`).join('');
+  }
+  sel.value = (c && c.currency && c.currency.code) || 'CNY';
+  // Auto-save on change (self-contained; not part of the shared settings save).
+  sel.onchange = async () => {
+    const p = CURRENCY_PRESETS.find(x => x.code === sel.value) || CURRENCY_PRESETS[0];
+    try {
+      await api('/api/retail-admin/config', { method: 'PUT', body: { currency: { code: p.code, symbol: p.symbol, decimals: p.decimals, position: p.position } } });
+      toast(cuT('Currency saved', '货币已保存'), 'ok');
+    } catch (e) { toast(cuT('Save failed', '保存失败') + ': ' + (e.message || ''), 'err'); }
+  };
+}
+
 async function loadConfig() {
   try {
     const { data: c } = await api('/api/retail-admin/config');
@@ -985,6 +1017,7 @@ async function loadConfig() {
     $('#cfg-pickup-open').value                = c.pickup?.window?.open  || '10:00';
     $('#cfg-pickup-close').value               = c.pickup?.window?.close || '20:00';
     if ($('#cfg-pickup-lead')) $('#cfg-pickup-lead').value = c.pickup?.leadMinutes ?? 0;
+    renderCurrencyControl(c);
     // Shop layout & filters
     const shopLayout = c.shop?.layout === 'grid' ? 'grid-2col' : (c.shop?.layout || 'list');
     $('#cfg-shop-layout').value             = shopLayout;

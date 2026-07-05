@@ -1270,7 +1270,15 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;',
 function escAttr(s){return esc(s);}
 function pick(en,cn){const a=(en||'').trim(),b=(cn||'').trim();return state.lang==='cn'?(b||a):(a||b);}
 function altLang(en,cn){return state.lang==='cn'?(en||'').trim():'';}  /* secondary line: EN page shows English only; CN page keeps EN subtitle */
-function money(n){return '¥'+(Number(n)||0).toFixed(2);}
+// Format an amount in the tenant's display currency (from /api/retail/config).
+// The stored numbers are already in the tenant's own currency units, so this is
+// a symbol + decimals + position swap. Defaults to ¥ when config isn't loaded.
+function money(n){
+  const c=(state.config&&state.config.currency)||{};
+  const dec=(c.decimals!=null?c.decimals:2), sym=c.symbol||'¥';
+  const v=(Number(n)||0).toFixed(dec);
+  return c.position==='after'?(v+sym):(sym+v);
+}
 function thumb(p){return p&&(p.image_url||p.image_data)||'';}
 function isFlash(p){return p&&p.flash&&p.flash.state==='active';}
 function nowPrice(p){return isFlash(p)?(Number(p.flash.price)||0):(Number(p.price)||0);}

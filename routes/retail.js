@@ -275,6 +275,18 @@ function setPath(obj, path, value) {
   cur[path[path.length - 1]] = value;
 }
 
+// Canonical display-currency object from a (possibly partial/absent) stored
+// value. Defaults to ¥/CNY so existing stores are unchanged. `decimals` and
+// `position` (symbol before/after the amount) let a tenant render $, £, €, etc.
+function normalizeCurrency(raw) {
+  const c = (raw && typeof raw === 'object') ? raw : {};
+  const code = typeof c.code === 'string' && c.code.trim() ? c.code.trim().toUpperCase().slice(0, 3) : 'CNY';
+  const symbol = typeof c.symbol === 'string' && c.symbol.trim() ? c.symbol.trim().slice(0, 4) : '¥';
+  const decimals = Number.isInteger(c.decimals) && c.decimals >= 0 && c.decimals <= 3 ? c.decimals : 2;
+  const position = c.position === 'after' ? 'after' : 'before';
+  return { code, symbol, decimals, position };
+}
+
 function parseJsonArray(s) {
   if (!s) return [];
   try { const v = JSON.parse(s); return Array.isArray(v) ? v : []; }
@@ -618,6 +630,13 @@ router.get('/api/retail/config', (req, res) => {
     // delivery option that would fail at checkout. Roots/any set-up store = true.
     cfg.delivery = cfg.delivery || {};
     cfg.delivery.available = deliveryIsAvailable();
+
+    // Display currency. Always surface a fully-defaulted object so every client
+    // can format money from one source of truth. Default ¥/CNY keeps existing
+    // stores unchanged. NOTE: WeChat Pay / Alipay still CHARGE in CNY — this is
+    // a display + accounting currency, meaningful for cash/manual/bank tenants
+    // until a non-China payment gateway exists.
+    cfg.currency = normalizeCurrency(cfg.currency);
 
     // Always surface review tags so the mini app's review form + product
     // cards have labels + colours even on fresh installs (before staff
