@@ -51,6 +51,12 @@ const SKIP_STORES = (process.env.MEITUAN_SKIP_STORES || '')
   .split(',').map(s => s.trim()).filter(Boolean);
 
 const ORDER_POLL_MS  = 300_000; // how often to check for new Meituan orders (jittered ±40%)
+// Trailing re-poll: Meituan flips an order to 已完成 late (after customer confirm /
+// auto-confirm, often the next day, outside the today window), so an order the
+// normal poll last saw as 配送中 freezes at "Dispatched" forever. On a slow cadence
+// re-read a widened window and advance any still-non-terminal mirrored order.
+const ORDER_SWEEP_MS  = 1_800_000;                                   // 30 min
+const ORDER_SWEEP_DAYS = Number(process.env.MEITUAN_SWEEP_DAYS) || 3; // window back
 // Import-only by default: pull orders into roots (records + stock) but do NOT
 // click "accept" on Meituan. Set MEITUAN_AUTO_ACCEPT=1 in .env to re-enable.
 const AUTO_ACCEPT    = process.env.MEITUAN_AUTO_ACCEPT === '1';
@@ -402,6 +408,49 @@ async function refreshOrderStatus(storeCode, order) {
       if (data.changed) log(storeCode, `order ${order.meituanOrderNo} status → ${order.statusDesc}`);
     }
   } catch (err) { log(storeCode, `refreshOrderStatus error: ${err.message}`); }
+}
+
+// Trailing sweep: advance orders stuck at a non-terminal status because Meituan
+// marked them 已完成 after they left the today window. Only touches the browser
+// when at least one such order exists (else no extra Meituan traffic), and reads
+// a widened date window once to refresh their status labels. Idempotent — the
+// update endpoint no-ops when the label is unchanged.
+async function sweepStaleOrders(storeConfig) {
+  const { storeCode } = storeConfig;
+  // Mirrored orders for this store still in a non-terminal internal status,
+  // placed within the sweep window. Terminal (delivered/cancelled/refunded)
+  // orders never move again, so skip them.
+  const stale = db.prepare(`
+    SELECT o.order_no, i.meituan_order_no
+      FROM meituan_order_import i
+      JOIN retail_orders o ON o.id = i.retail_order_id
+     WHERE i.store_code = ?
+       AND o.status IN ('paid','preparing','dispatched')
+       AND o.placed_at >= datetime('now', ?)
+  `).all(storeCode, `-${ORDER_SWEEP_DAYS} days`);
+  if (!stale.length) return;
+
+  let browser;
+  try {
+    browser = await getBrowser(storeCode);
+    const orders = await browser.getPendingOrders({ sinceDays: ORDER_SWEEP_DAYS, pageSize: 100 });
+    noteBrowserHealth(storeCode, true);
+    noteVerifyResult(storeCode, browser.verificationRequired);
+    if (!orders.length) return;
+
+    const want = new Set(stale.map(s => s.meituan_order_no));
+    let advanced = 0;
+    for (const order of orders) {
+      if (!want.has(order.meituanOrderNo)) continue; // only the stale ones
+      await refreshOrderStatus(storeCode, order);
+      advanced++;
+    }
+    log(storeCode, `stale-order sweep: ${stale.length} pending, refreshed ${advanced}`);
+  } catch (err) {
+    log(storeCode, `sweepStaleOrders error: ${err.message}`);
+    logSync(storeCode, 'order_sweep', 'error', null, err.message);
+    noteBrowserHealth(storeCode, false, err.message);
+  }
 }
 
 // ── Stock push queue ──────────────────────────────────────────────────────────
@@ -847,6 +896,7 @@ async function main() {
 
   let lastOrderPoll = 0;
   let orderPollGap  = jitter(ORDER_POLL_MS, 0.4);
+  let lastOrderSweep = 0;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -900,6 +950,18 @@ async function main() {
       for (let i = 0; i < openStores.length; i++) {
         await pollOrders(openStores[i]);
         if (i < openStores.length - 1) await sleep(jitter(8000, 0.5));
+      }
+    }
+
+    // Trailing sweep for late 已完成 flips. Runs regardless of open/closed (orders
+    // complete after close), but only touches a browser when a store actually has
+    // a non-terminal order in the window — sweepStaleOrders guards on that.
+    if (now - lastOrderSweep >= ORDER_SWEEP_MS) {
+      lastOrderSweep = now;
+      const sweepStores = stores.filter(s => !inVerifyCooldown(s.storeCode));
+      for (let i = 0; i < sweepStores.length; i++) {
+        await sweepStaleOrders(sweepStores[i]);
+        if (i < sweepStores.length - 1) await sleep(jitter(8000, 0.5));
       }
     }
 

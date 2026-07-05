@@ -41,6 +41,12 @@ const SHANGOU_STORES = (process.env.SHANGOU_STORES || 'yuexiu')
   .split(',').map(s => s.trim()).filter(Boolean);
 
 const ORDER_POLL_MS  = 120_000;  // poll new orders ~2 min (jittered)
+// Trailing re-poll: 闪购 flips an order to 已完成 late (customer confirm / auto-
+// confirm, often the next day, outside the today window), so an order last seen as
+// 配送中 freezes at "Dispatched" forever. On a slow cadence re-read a widened window
+// and advance any still-non-terminal mirrored order.
+const ORDER_SWEEP_MS  = 1_800_000;                                   // 30 min
+const ORDER_SWEEP_DAYS = Number(process.env.SHANGOU_SWEEP_DAYS) || 3; // window back
 const QUEUE_CHECK_MS = 10_000;   // process stock-push queue every ~10s
 const MAP_REFRESH_MS = 60 * 60_000; // re-map by 货号 hourly so new products self-activate
 const INTERNAL_PORT  = process.env.PORT || 3000;
@@ -474,6 +480,48 @@ async function refreshOrderStatus(storeCode, order) {
   } catch (err) { log(storeCode, `refreshOrderStatus error: ${err.message}`); }
 }
 
+// Trailing sweep: advance orders stuck at a non-terminal status because 闪购 marked
+// them 已完成 after they left the today window. Only touches the browser when at
+// least one such order exists (else no extra 闪购 traffic), reads a widened window
+// once, and refreshes their status labels (the update endpoint no-ops when
+// unchanged). Best-effort — never breaks the loop.
+async function sweepStaleOrders(storeCode) {
+  if (inVerifyCooldown(storeCode)) return;
+  const stale = db.prepare(`
+    SELECT i.meituan_order_no
+      FROM meituan_order_import i
+      JOIN retail_orders o ON o.id = i.retail_order_id
+     WHERE i.store_code = ?
+       AND o.status IN ('paid','preparing','dispatched')
+       AND o.placed_at >= datetime('now', ?)
+  `).all(storeCode, `-${ORDER_SWEEP_DAYS} days`);
+  if (!stale.length) return;
+
+  let browser;
+  try {
+    browser = await getShangouBrowser(storeCode);
+    if (!browser || !(await browser.isLoggedIn())) {
+      if (browser && browser.verificationRequired) noteVerifyResult(storeCode, true);
+      return;
+    }
+    const orders = await browser.getPendingOrders({ sinceDays: ORDER_SWEEP_DAYS, pageSize: 100 });
+    noteVerifyResult(storeCode, browser.verificationRequired);
+    if (!orders.length) return;
+
+    const want = new Set(stale.map(s => s.meituan_order_no));
+    let advanced = 0;
+    for (const order of orders) {
+      if (!want.has(order.meituanOrderNo)) continue; // only the stale ones
+      await refreshOrderStatus(storeCode, order);
+      advanced++;
+    }
+    log(storeCode, `stale-order sweep: ${stale.length} pending, refreshed ${advanced}`);
+  } catch (err) {
+    log(storeCode, `sweepStaleOrders error: ${err.message}`);
+    logSync(storeCode, 'order_sweep', 'error', null, err.message);
+  }
+}
+
 // ── Auto-map (闪购 is mapped by 货号) ────────────────────────────────────────────
 // 闪购 needs no per-product mapping UI: a roots product is "on 闪购" iff a 闪购 sku
 // carries the same 货号 (sourceFoodCode === store_products.sku). This reads the live
@@ -649,6 +697,7 @@ async function main() {
 
   let lastOrderPoll = 0;
   let orderPollGap = jitter(ORDER_POLL_MS, 0.4);
+  let lastOrderSweep = 0;
   const lastMapRefresh = {}; // store_code → ts of last auto-map pass
 
   // eslint-disable-next-line no-constant-condition
@@ -686,6 +735,14 @@ async function main() {
         if (isStoreOpen(storeCode) && !inVerifyCooldown(storeCode)) await pollOrders(storeCode);
       }
     }
+    // Trailing sweep for late 已完成 flips. Runs regardless of open/closed (orders
+    // complete after close), but only touches a browser when a store actually has a
+    // non-terminal order in the window — sweepStaleOrders guards on that.
+    if (now - lastOrderSweep >= ORDER_SWEEP_MS) {
+      lastOrderSweep = now;
+      for (const storeCode of SHANGOU_STORES) await sweepStaleOrders(storeCode);
+    }
+
     await processStockQueue();
 
     // Apply any pending open/close command + refresh live status for the toggle UI.
