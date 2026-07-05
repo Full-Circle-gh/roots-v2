@@ -3974,25 +3974,6 @@
         </div>
       </div>
 
-      <!-- DISPLAY CURRENCY -->
-      <div class="group-card">
-        <div class="group-card-head">
-          <h3>Currency · 货币</h3>
-          <div class="muted">The currency your prices, cart and balances show in. Enter your product prices in this currency. · 店铺价格、购物车和余额显示所用的货币。请以此货币填写商品价格。</div>
-        </div>
-        <div class="illus-row">
-          <div class="ctrl" style="flex: 1;">
-            <div class="field" style="margin: 0; max-width: 340px;">
-              <label class="stacked">Display currency · 显示货币</label>
-              <select id="cfg-currency"></select>
-            </div>
-            <div class="helper" style="margin-top: 10px;">
-              WeChat Pay and Alipay always charge in RMB — this only changes how amounts are shown, so it's for cash / bank / manual-payment stores until a matching payment method is added. · 微信支付和支付宝始终以人民币收款,此项仅改变金额的显示方式,适用于现金/银行/手动收款,直到接入对应的收款方式。
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- STORE PICKUP PACKING FEE -->
       <div class="group-card">
         <div class="group-card-head">
@@ -6220,6 +6201,22 @@
                   <b>3.</b> In that app → 企业可信IP (trusted IP), add this server's IP. (Send a test below — if the IP is missing, the result tells you exactly which IP to add.)<br>
                   <b>4.</b> Make sure the app's 可见范围 (visible range) includes you, then Save and Send a test.<br>
                   Clear all three fields to turn off. · 清空三项即关闭。
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- DISPLAY CURRENCY — sits with payment; tenant-wide price display. -->
+          <div class="group-card">
+            <div class="group-card-head">
+              <h3>Currency · 货币</h3>
+              <div class="muted">The currency your prices, cart and balances show in. Enter your product prices in this currency. WeChat Pay and Alipay always charge in RMB — this only changes how amounts are shown, so it's for cash / bank / manual-payment stores until a matching payment method is added. · 店铺价格、购物车和余额显示所用的货币。请以此货币填写商品价格。微信支付和支付宝始终以人民币收款,此项仅改变金额的显示方式。</div>
+            </div>
+            <div class="illus-row">
+              <div class="ctrl" style="flex: 1;">
+                <div class="field" style="margin: 0; max-width: 340px;">
+                  <label class="stacked">Display currency · 显示货币</label>
+                  <select id="cfg-currency"></select>
                 </div>
               </div>
             </div>

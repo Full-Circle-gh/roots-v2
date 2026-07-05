@@ -649,13 +649,23 @@ function suGoOpen() { suOpenDoors(); }
 // either method is actually ready.
 let PAY_WIZ = null;
 
-function suPayChooser() {
+async function suPayChooser() {
+  // Currency is surfaced here (not in the store step) because it pairs with how
+  // you get paid. Prefill from live config.
+  let curCode = 'CNY';
+  try { const j = await api('/api/retail-admin/config'); curCode = (j.data && j.data.currency && j.data.currency.code) || 'CNY'; } catch (_) {}
+  const presets = (typeof CURRENCY_PRESETS !== 'undefined' && CURRENCY_PRESETS) || [{ code: 'CNY', label: 'Chinese Yuan · 人民币 (¥)' }];
+  const opts = presets.map(p => `<option value="${p.code}"${p.code === curCode ? ' selected' : ''}>${escapeHtml(p.label)}</option>`).join('');
   suModal(`
     <div class="su-mhead">
       <h3>${cuT('How do you want to get paid?', '你想怎么收款？')}</h3>
       <button class="su-x" type="button" onclick="suCloseModal()">✕</button>
     </div>
-    <p class="su-mnote">${cuT('Pick one to start — you can add the other later.', '先选一种，另一种可以以后再加。')}</p>
+    <label class="field-label">${cuT('Currency you price in', '你的定价货币')}</label>
+    <select class="su-wiz-in" id="su_pay_currency" onchange="suSaveCurrency(this.value)">${opts}</select>
+    <div class="su-wiz-hint">${SU_ICON.check}
+      <span>${cuT('WeChat Pay & Alipay still charge in RMB — this only sets how prices are shown.', '微信/支付宝仍以人民币收款，此项仅设置价格显示方式。')}</span></div>
+    <p class="su-mnote" style="margin-top:16px">${cuT('Pick a payment method to start — you can add the other later.', '先选一种收款方式，另一种可以以后再加。')}</p>
     <div class="su-choose">
       <button class="su-choice" type="button" onclick="suPayAlipay()">
         <span class="su-choice-ic">${SU_ICON.payment}</span>
@@ -668,6 +678,17 @@ function suPayChooser() {
         <span>${cuT('Needs a merchant account and approval', '需要商户号和审核')}</span>
       </button>
     </div>`);
+}
+// Save the chosen display currency from the guide's payment step (mirrors the
+// Settings → Currency card; both write the same config.currency).
+async function suSaveCurrency(code) {
+  const presets = (typeof CURRENCY_PRESETS !== 'undefined' && CURRENCY_PRESETS) || [];
+  const p = presets.find(x => x.code === code);
+  if (!p) return;
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { currency: { code: p.code, symbol: p.symbol, decimals: p.decimals, position: p.position } } });
+    toast(cuT('Currency saved', '货币已保存'), 'ok');
+  } catch (e) { toast(cuT('Save failed', '保存失败') + ': ' + e.message, 'error'); }
 }
 
 function suPayAlipay() {
@@ -776,7 +797,10 @@ function suScrollTo(sel) {
 }
 
 // ── Fulfillment chooser ──────────────────────────────────────────────────────
-function suFulfillChooser() {
+async function suFulfillChooser() {
+  // Prefill the pickup prep buffer from live config so it can be set right here.
+  let lead = 0;
+  try { const j = await api('/api/retail-admin/config'); lead = Math.max(0, Number(j.data && j.data.pickup && j.data.pickup.leadMinutes) || 0); } catch (_) {}
   const ov = suModal(`
     <div class="su-mhead">
       <h3>${cuT('How customers get their order', '顾客如何拿到货')}</h3>
@@ -794,8 +818,27 @@ function suFulfillChooser() {
         <b>${cuT('Pickup only for now', '暂时只做自取')}</b>
         <span>${cuT('Customers collect at your store', '顾客到店自取')}</span>
       </button>
+    </div>
+    <div style="margin-top:14px;border-top:1px solid var(--line);padding-top:14px">
+      <label class="field-label">${cuT('Earliest pickup', '最早可取')}</label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input class="su-wiz-in" type="number" id="su_pickup_lead" min="0" step="5" value="${lead}" style="max-width:110px">
+        <span style="font-size:13px;color:var(--text-3)">${cuT('min after ordering', '分钟后可取')}</span>
+        <button class="btn btn-sm" type="button" onclick="suSavePickupLead()">${cuT('Save', '保存')}</button>
+      </div>
+      <div class="su-wiz-hint">${SU_ICON.check}
+        <span>${cuT('Gives staff time to pack. 0 = customers can collect right away.', '让员工有时间备货。填 0 表示可立即自取。')}</span></div>
     </div>`);
   return ov;
+}
+async function suSavePickupLead() {
+  const el = document.getElementById('su_pickup_lead');
+  if (!el) return;
+  const v = Math.max(0, Number(el.value) || 0);
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'pickup.leadMinutes': v } });
+    toast(cuT('Saved', '已保存'), 'ok');
+  } catch (e) { toast(cuT('Save failed', '保存失败') + ': ' + e.message, 'error'); }
 }
 function suStartDelivery() {
   suReturnHint('Finish the delivery questions, then this step ticks itself off.', '完成配送设置后，此步骤会自动完成。');
