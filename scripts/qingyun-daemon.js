@@ -35,6 +35,7 @@ const db = require('../database');
 const { getQingyunBrowser, closeAllQingyun } = require('../lib/qingyun-browser');
 const { sendOpsAlert } = require('../lib/ops-alert');
 const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
+const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
 
 const STORES = (process.env.QINGYUN_STORES || 'tianhe')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -274,17 +275,28 @@ async function drainPushQueue(storeCode, br) {
   // also sweep here for paid DELIVERY orders (this store) that have no queue row.
   // Bounded to orders paid AFTER auto-push was switched on (qingyunAutoPushSince),
   // so enabling never floods historical orders. Idempotent (UNIQUE + NOT EXISTS).
+  //
+  // Same eligibility gate as the app-side enqueue hook — isQingyunSameCityToday
+  // filters each candidate in JS (mirroring the routing/same-day rules) so the
+  // sweep never pulls in an out-of-city order, a later-day regular delivery, or a
+  // marketplace (Meituan/Eleme) order. SQL only narrows to fresh, unqueued rows.
   const since = cfg('delivery.qingyunAutoPushSince', null);
   if (since) {
     try {
-      db.prepare(`INSERT OR IGNORE INTO qingyun_push_queue (retail_order_id, store_code, status)
-        SELECT o.id, @sc, 'pending'
+      const enq = db.prepare(
+        "INSERT OR IGNORE INTO qingyun_push_queue (retail_order_id, store_code, status) VALUES (?, ?, 'pending')"
+      );
+      const candidates = db.prepare(`
+        SELECT o.id, o.channel, o.address_json, o.delivery_slot_kind, o.scheduled_for
           FROM retail_orders o JOIN retail_stores rs ON rs.id = o.store_id
          WHERE rs.code = @sc AND o.fulfillment_type = 'delivery'
            AND o.status IN ('paid','preparing','dispatched')
            AND o.paid_at IS NOT NULL AND o.paid_at > @since
            AND NOT EXISTS (SELECT 1 FROM qingyun_push_queue q WHERE q.retail_order_id = o.id)`)
-        .run({ sc: storeCode, since });
+        .all({ sc: storeCode, since });
+      for (const o of candidates) {
+        if (inventory.isQingyunSameCityToday(o)) enq.run(o.id, storeCode);
+      }
     } catch (e) { log(storeCode, `push reconcile error: ${e.message}`); }
   }
 
@@ -302,9 +314,17 @@ async function drainPushQueue(storeCode, br) {
     db.prepare("UPDATE qingyun_push_queue SET status='processing', attempts=attempts+1, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
     try {
       const order = db.prepare(
-        'SELECT id, order_no, recipient_name, recipient_phone, address_json, scheduled_for, delivery_slot_label FROM retail_orders WHERE id = ?'
+        'SELECT id, order_no, channel, recipient_name, recipient_phone, address_json, delivery_slot_kind, scheduled_for, delivery_slot_label FROM retail_orders WHERE id = ?'
       ).get(row.retail_order_id);
       if (!order) { db.prepare("UPDATE qingyun_push_queue SET status='error', last_error='order gone', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id); continue; }
+      // Final eligibility guard — a row queued before this gate existed (a stray
+      // out-of-city / later-day / marketplace order) must not create a Qingyun
+      // job. Retire it as 'skipped' instead of pushing it to 待配送.
+      if (!inventory.isQingyunSameCityToday(order)) {
+        db.prepare("UPDATE qingyun_push_queue SET status='skipped', last_error='not same-city same-day', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
+        log(storeCode, `push: skipped order ${order.order_no} — not same-city same-day`);
+        continue;
+      }
       const payload = await buildCreatePayload(order, shop, br);
       const res = await br.createOrder(payload);
       if (res.ok) {

@@ -3991,11 +3991,21 @@ async function maybeAutoIssueInvoice(orderId) {
 // delivery.qingyunAutoPush toggle (default off). Skips pickup orders and any store
 // that hasn't been set up on Qingyun (no qingyun_status row). Idempotent — the queue
 // row is UNIQUE per retail order, so wechat retry callbacks never double-enqueue.
+//
+// Qingyun is a Guangzhou SAME-CITY, SAME-DAY rider service, so we only enqueue an
+// order that isQingyunSameCityToday: a first-party (mini-app/web) order to a
+// Guangzhou address that routes to a same-city drop AND ships today. Out-of-city
+// orders (air/land waybill), later-day regular deliveries (incl. Panyu-style
+// ship-districts on their batch cadence), and marketplace orders (Meituan/Eleme
+// deliver themselves, and carry no recipient details) are all excluded.
 function maybeEnqueueQingyunPush(orderId) {
   try {
     if (cfgValue('delivery.qingyunAutoPush', false) !== true) return;
-    const o = tdb().prepare('SELECT id, fulfillment_type, store_id FROM retail_orders WHERE id = ?').get(orderId);
+    const o = tdb().prepare(
+      'SELECT id, fulfillment_type, store_id, channel, address_json, delivery_slot_kind, scheduled_for FROM retail_orders WHERE id = ?'
+    ).get(orderId);
     if (!o || o.fulfillment_type === 'pickup' || !o.store_id) return;
+    if (!inventory.isQingyunSameCityToday(o)) return;
     const store = tdb().prepare('SELECT code FROM retail_stores WHERE id = ?').get(o.store_id);
     if (!store || !store.code) return;
     // Only stores with a Qingyun session set up (a qingyun_status row exists). The

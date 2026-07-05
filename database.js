@@ -4013,7 +4013,10 @@ db.exec(`
 // on payment (markOrderPaid); the qingyun-daemon (which holds the signed browser)
 // drains it, calling order/create and stamping the roots order_no into 备注 so the
 // existing tracking match links the rider back. One row per retail order (UNIQUE) =
-// idempotent; never double-creates. status: pending → processing → done | error.
+// idempotent; never double-creates. Only first-party (mini-app/web) Guangzhou
+// same-city, same-day orders are eligible (inventory.isQingyunSameCityToday) —
+// out-of-city, later-day, and marketplace (Meituan/Eleme) orders are never queued.
+// status: pending → processing → done | error | skipped (ineligible at drain).
 db.exec(`
   CREATE TABLE IF NOT EXISTS qingyun_push_queue (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
