@@ -71,6 +71,11 @@
     --f-mono:'Inter','IBM Plex Sans SC',system-ui,sans-serif;
     --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
     color:var(--text-1);
+    /* Set font-family on the scope root so EVERY descendant inherits Inter —
+       remapping --f-sans alone only reaches elements that literally write
+       font-family:var(--f-sans); inherited font-family carries the body's
+       computed (IBM Plex) value otherwise. */
+    font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
   [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
@@ -187,6 +192,9 @@
 
   /* Drawer — body on paper, individual Tacet cards; total on a raised card. */
   #order-drawer .order-card { background:transparent; border:none; padding:0; margin:0; box-shadow:none; }
+  /* Reserve room for the floating close ✕ (top-right) so the header action
+     buttons never slide under it — the removed View button used to be this spacer. */
+  #order-drawer .order-head { padding-right:44px; }
   #order-drawer .order-head .title-row b { font-family:var(--f-sans); font-variant-numeric:tabular-nums;
     font-size:16px; letter-spacing:0; }
   #order-drawer .od-eyebrow { font-family:var(--f-sans); font-size:12px; font-weight:400; letter-spacing:0;
