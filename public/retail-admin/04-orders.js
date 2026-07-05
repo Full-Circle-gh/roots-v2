@@ -1400,6 +1400,23 @@ function shipByPlan(o) {
   // for days is the real signal an operator should act on. Covers both the old
   // out-of-city express tag (ship_by_mode==='asap') and plain "nothing picked".
   if (o.ship_by_mode === 'asap' || !o.scheduled_for) {
+    // "Right away" (立即配送) is a REAL customer pick — the ASAP/as-soon-as-possible
+    // default in the When step — not an absent date. It shares ship_by_mode==='asap'
+    // with the out-of-city express case, but reusing the "Earliest courier day"
+    // wording read wrong on an in-city Right-away order. Say what the customer
+    // actually chose so the floor isn't misled.
+    if (o.delivery_slot_kind === 'right_away') {
+      // Kicker is "Requested", not "Ship by" — Right-away is what the CUSTOMER
+      // asked for (as-soon-as-possible), not an operator dispatch deadline.
+      // "Ship by → Right away" read as a contradiction; "Requested → Right away"
+      // is what the customer actually chose.
+      return {
+        kind: 'asap',
+        kickerEn: done ? reqEn : 'Requested', kickerCn: done ? reqCn : '客户要求',
+        headlineEn: 'Right away', headlineCn: '立即配送',
+        urgencyDate: o.placed_at || null, urgencyBasis: 'age',
+      };
+    }
     // "As soon as possible" read on the floor as "rush a rider out today" — but
     // this customer picked no delivery date and did NOT pay the same-day
     // surcharge; they just want the earliest normal courier day. Say that
@@ -1810,8 +1827,14 @@ function renderShipByTile(o) {
   // ASAP orders with nothing paid for same-day: state outright that this is a
   // normal courier parcel, not a same-city rider run. Without this the "ship
   // soon" tone made staff reach for a rider on orders that never bought one.
+  // Right-away is the exception: the customer DID ask for as-soon-as-possible,
+  // so the honest sub-line is "as soon as possible", not the courier caveat.
+  const isRightAway = o.delivery_slot_kind === 'right_away';
   const asapStd = (p.kind === 'asap' && !paidSameDay)
-    ? `${mode ? ' · ' : ''}<span class="muted">${cuT('no same-day paid · ship by courier','未购当日达 · 快递发货')}</span>` : '';
+    ? (isRightAway
+        ? `${mode ? ' · ' : ''}<span class="muted">${cuT('as soon as possible','尽快发货')}</span>`
+        : `${mode ? ' · ' : ''}<span class="muted">${cuT('no same-day paid · ship by courier','未购当日达 · 快递发货')}</span>`)
+    : '';
   const modeLine = (mode || surcharge || asapStd) ? `<div class="sub">${mode}${surcharge}${asapStd}</div>` : '';
   return `<div>
     <div class="kicker">${cuT(p.kickerEn, p.kickerCn)}</div>
