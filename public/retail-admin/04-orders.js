@@ -1425,7 +1425,7 @@ function shipByPlan(o) {
     return {
       kind: 'asap',
       kickerEn: done ? reqEn : 'Ship by', kickerCn: done ? reqCn : '最迟发货',
-      headlineEn: 'Earliest courier day', headlineCn: '最早快递发出',
+      headlineEn: 'Courier — ship when ready', headlineCn: '快递 · 备好即发',
       urgencyDate: o.placed_at || null, urgencyBasis: 'age',
     };
   }
