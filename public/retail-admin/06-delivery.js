@@ -1042,6 +1042,7 @@ async function saveDeliveryFees() {
       open:  $('#cfg-pickup-open').value  || '10:00',
       close: $('#cfg-pickup-close').value || '20:00',
     },
+    'pickup.leadMinutes':          Math.max(0, Number($('#cfg-pickup-lead')?.value) || 0),
   };
   const status = $('#dlv-fees-status');
   try {

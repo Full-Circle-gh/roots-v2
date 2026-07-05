@@ -984,6 +984,7 @@ async function loadConfig() {
     $('#cfg-fees-pickupPackingFee').value      = c.fees?.pickupPackingFee ?? 0;
     $('#cfg-pickup-open').value                = c.pickup?.window?.open  || '10:00';
     $('#cfg-pickup-close').value               = c.pickup?.window?.close || '20:00';
+    if ($('#cfg-pickup-lead')) $('#cfg-pickup-lead').value = c.pickup?.leadMinutes ?? 0;
     // Shop layout & filters
     const shopLayout = c.shop?.layout === 'grid' ? 'grid-2col' : (c.shop?.layout || 'list');
     $('#cfg-shop-layout').value             = shopLayout;

@@ -7050,6 +7050,10 @@ function resolvePickupTime(raw, now = new Date(), storeHours = null) {
   if (when.getTime() < now.getTime() - 60_000) return { error: 'pickup_time_past' };
   // Guard against garbage far-future dates (> 30 days out).
   if (when.getTime() > now.getTime() + 30 * 86_400_000) return { error: 'pickup_time_too_far' };
+  // Prep buffer: earliest collectable time is now + leadMinutes, so staff aren't
+  // handed a same-second pickup with no time to pack it.
+  const leadMin = Math.max(0, parseInt(cfgValue('pickup.leadMinutes', 0), 10) || 0);
+  if (leadMin > 0 && when.getTime() < now.getTime() + leadMin * 60_000) return { error: 'pickup_too_soon' };
 
   const tz = storeHours && storeHours.timezone ? storeHours.timezone : null;
   const win = (storeHours && storeHours.open && storeHours.close)

@@ -3961,9 +3961,14 @@
                 <label class="stacked">Closes · 结束</label>
                 <input type="time" id="cfg-pickup-close">
               </div>
+              <div class="field" style="margin: 0;">
+                <label class="stacked">Earliest pickup · 最早可取</label>
+                <input type="number" id="cfg-pickup-lead" min="0" step="5" placeholder="0" style="width: 120px;">
+              </div>
             </div>
             <div class="helper" style="margin-top: 10px;">
-              One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure. · 所有开通自提的门店共用一个全局时间窗。不确定时保留默认值(10:00–20:00)即可。
+              One global window for all pickup-enabled stores. Leave the default (10:00–20:00) if unsure. · 所有开通自提的门店共用一个全局时间窗。不确定时保留默认值(10:00–20:00)即可。<br>
+              "Earliest pickup" is how many minutes after ordering the first slot opens, so staff have time to pack. 0 = customers can collect right away. · "最早可取"是下单后多少分钟才可取货,方便备货。填 0 表示可立即自取。
             </div>
           </div>
         </div>

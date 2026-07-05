@@ -1653,6 +1653,9 @@ function coErrMsg(code){
   voucher_exhausted:state.lang==='cn'?'优惠码已失效':'Voucher no longer valid',
   flash_stock_exceeded:state.lang==='cn'?'秒杀库存不足':'Flash stock exceeded',
   local_only_outside_gz:state.lang==='cn'?'部分商品仅限本地':'Some items are local-only',
+  pickup_too_soon:state.lang==='cn'?'请选择更晚的取货时间，让我们有时间备货':'Pick a later pickup time so we can pack it',
+  pickup_time_outside_hours:state.lang==='cn'?'请选择营业时间内的取货时间':'Pick a time within opening hours',
+  pickup_time_required:state.lang==='cn'?'请选择取货时间':'Choose a pickup time',
   no_zone_match:state.lang==='cn'?'该地址暂不支持配送':'We don’t deliver to this address yet'};
   return (state.lang==='cn'?'下单失败：':'Order failed: ')+(map[code]||code||'error');}
 
@@ -2961,6 +2964,7 @@ function rsErrText(j,cn){
   if(e==='fresh_no_sameday') return cn?'鲜食无法改到当天，请选择其他日期。':'Fresh items can’t move to a same-day slot — please pick a later date.';
   if(e==='not_reschedulable')return rsReasonText(reason,cn);
   if(/^slot_/.test(e))       return cn?'请选择有效的时间。':'Please pick a valid time.';
+  if(e==='pickup_too_soon')  return cn?'请选择更晚的取货时间，让我们有时间备货。':'Please pick a later time so we have time to pack your order.';
   if(/pickup_time/.test(e))  return cn?'请选择营业时间内的取货时间。':'Please pick a time within opening hours.';
   return cn?'修改失败，请重试。':'Could not change the time. Please try again.';
 }
