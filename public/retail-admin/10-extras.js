@@ -644,10 +644,20 @@ cuApplyUiScale(cuGetUiScale());
     _mo.observe(document.body, { childList: true, subtree: true });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
+  // Collapse the bilingual chrome as soon as THIS module executes rather than
+  // waiting for DOMContentLoaded. This script sits at the end of <body>, so all
+  // static markup above it is already parsed and present — we can stamp
+  // data-ui-lang, hide the second language, and reveal the page right now.
+  // Waiting for DOMContentLoaded meant waiting for the remaining parser-blocking
+  // modules (11-17) to download and run; on a slow/cold load that could exceed
+  // the 3s anti-FOUC failsafe, which then revealed the page in its raw EN · CN
+  // state — the flash of both languages before it settles to one. The
+  // MutationObserver started inside init() still catches anything the later
+  // modules inject.
+  if (document.body) {
     init();
+  } else {
+    document.addEventListener('DOMContentLoaded', init);
   }
 })();
 
