@@ -1272,15 +1272,31 @@ function parseSchedFor(s) {
 // window's END only lives in the free-text label, so parse it out and rebuild
 // the anchor on the scheduled date. Falls back to scheduled_for when the label
 // carries no end time (a bare date, a single-time slot, or an AM/PM label).
+// The store runs on Guangzhou wall-clock (UTC+8). Slot times are stored as
+// absolute instants — a day-only pick is GZ-midnight, which is 16:00 the PREVIOUS
+// day in UTC. Reading those back with the browser's own getDate()/getHours()
+// makes an operator logged in from another timezone see the day before (and a
+// false OVERDUE). These two helpers pin everything to GZ wall-clock regardless of
+// where staff sit: gzParts() → the y/mo/da/h/mi/s an operator in Guangzhou sees;
+// gzWall() → the absolute instant for a given GZ wall-clock time.
+function gzParts(d) {
+  const g = new Date(d.getTime() + 8 * 3600000);
+  return { y: g.getUTCFullYear(), mo: g.getUTCMonth(), da: g.getUTCDate(),
+           h: g.getUTCHours(), mi: g.getUTCMinutes(), s: g.getUTCSeconds() };
+}
+function gzWall(y, mo, da, h, mi) {
+  return new Date(Date.UTC(y, mo, da, h - 8, mi));
+}
 function slotEndAnchor(scheduledForIso, label) {
   const start = parseSchedFor(scheduledForIso);
   if (isNaN(start.getTime())) return scheduledForIso;
+  const g = gzParts(start);
   const lbl = String(label == null ? '' : label);
   const m = /(\d{1,2}):(\d{2})\s*(?:[-–—~]|to|至)\s*(\d{1,2}):(\d{2})/.exec(lbl);
   if (m) {
     const endH = Number(m[3]), endM = Number(m[4]);
     if (endH <= 23 && endM <= 59) {
-      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), endH, endM);
+      const end = gzWall(g.y, g.mo, g.da, endH, endM);
       if (end.getTime() >= start.getTime()) return end.toISOString(); // window END is the real deadline
     }
   }
@@ -1293,23 +1309,22 @@ function slotEndAnchor(scheduledForIso, label) {
     if (mer === 'pm' && endH < 12) endH += 12;
     else if (mer === 'am' && endH === 12) endH = 0;
     if (endH <= 23 && endM <= 59) {
-      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate(), endH, endM);
+      const end = gzWall(g.y, g.mo, g.da, endH, endM);
       if (end.getTime() >= start.getTime()) return end.toISOString(); // window END is the real deadline
     }
   }
   // No usable time window. A DAY-ONLY pick — the same-day "Today" chip or a
-  // schedule-for-later calendar date — is stored at LOCAL MIDNIGHT (the server's
+  // schedule-for-later calendar date — is stored at GZ MIDNIGHT (the server's
   // sentinel for "a day, no hour"; see resolveDeliverySlot). Anchoring urgency on
   // that midnight makes the order read OVERDUE from 00:00 on its OWN delivery day.
-  // Collapse it to a bare local date so urgency compares whole calendar days
+  // Collapse it to a bare GZ date so urgency compares whole calendar days
   // (today/tomorrow/overdue) instead of treating 00:00 as a missed deadline. A
   // genuinely timed slot/pickup (e.g. 14:30) isn't midnight, so it stays
   // hour-precise and still goes red as its time approaches.
-  if (start.getHours() === 0 && start.getMinutes() === 0 && start.getSeconds() === 0) {
-    const y = start.getFullYear();
-    const mo = String(start.getMonth() + 1).padStart(2, '0');
-    const d = String(start.getDate()).padStart(2, '0');
-    return `${y}-${mo}-${d}`;
+  if (g.h === 0 && g.mi === 0 && g.s === 0) {
+    const mo = String(g.mo + 1).padStart(2, '0');
+    const d = String(g.da).padStart(2, '0');
+    return `${g.y}-${mo}-${d}`;
   }
   return scheduledForIso;
 }
@@ -1449,9 +1464,11 @@ function shipByUrgency(p, actionable) {
   const dm = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(p.urgencyDate));
   if (dm) {
     r.dateOnly = true;
-    const target = new Date(+dm[1], +dm[2] - 1, +dm[3]);          // local midnight
-    const n = new Date();
-    const today = new Date(n.getFullYear(), n.getMonth(), n.getDate());
+    const target = new Date(+dm[1], +dm[2] - 1, +dm[3]);          // GZ calendar date
+    // "Today" is the STORE's today (Guangzhou, UTC+8), not the browser's — else an
+    // operator abroad, still on the previous GZ day, misreads the bucket.
+    const ng = gzParts(new Date());
+    const today = new Date(ng.y, ng.mo, ng.da);
     const days = Math.round((target.getTime() - today.getTime()) / 86400000);
     r.days = days;
     if (days < 0)       { r.level = 'overdue';  if (actionable) r.color = danger; }
@@ -1542,25 +1559,29 @@ function renderShipByCell(o) {
 }
 function fmtSlotShort(dt) {
   const pad = n => String(n).padStart(2, '0');
+  // Read the instant in Guangzhou wall-clock (UTC+8), not the browser's — an
+  // operator abroad must still see the day the customer actually chose.
+  const g = gzParts(dt);
   // Midnight (00:00) is never a real delivery time — it's how a DATE-ONLY pick
   // (schedule-for-later day / day-only zone) lands when parsed. Drop the fake
   // time tail so it reads "Jun 18" / "6月18日", not "Jun 18 · 00:00".
-  const dateOnly = (dt.getHours() === 0 && dt.getMinutes() === 0);
+  const dateOnly = (g.h === 0 && g.mi === 0);
   // In Chinese mode show "6月25日 · 14:30" instead of "Jun 25 · 14:30".
   if (typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn') {
-    return `${dt.getMonth() + 1}月${dt.getDate()}日${dateOnly ? '' : ` · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`}`;
+    return `${g.mo + 1}月${g.da}日${dateOnly ? '' : ` · ${pad(g.h)}:${pad(g.mi)}`}`;
   }
-  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
-  return `${M} ${pad(dt.getDate())}${dateOnly ? '' : ` · ${pad(dt.getHours())}:${pad(dt.getMinutes())}`}`;
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][g.mo];
+  return `${M} ${pad(g.da)}${dateOnly ? '' : ` · ${pad(g.h)}:${pad(g.mi)}`}`;
 }
 // Date only — "Jun 17" / "6月17日". A ship-by DEADLINE is a day, not a minute,
-// so we drop the time tail that fmtSlotShort carries.
+// so we drop the time tail that fmtSlotShort carries. GZ wall-clock (UTC+8).
 function fmtDateShort(dt) {
+  const g = gzParts(dt);
   if (typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn') {
-    return `${dt.getMonth() + 1}月${dt.getDate()}日`;
+    return `${g.mo + 1}月${g.da}日`;
   }
-  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
-  return `${M} ${String(dt.getDate()).padStart(2, '0')}`;
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][g.mo];
+  return `${M} ${String(g.da).padStart(2, '0')}`;
 }
 // A slot label captured at checkout can LEAD with a relative day word —
 // "Tomorrow 10:00–12:00" / "明天 10:00–12:00" — frozen at the moment the customer
@@ -2642,7 +2663,79 @@ function renderLocalEtaCard(o, s, hoisted) {
         ${eta ? `<button class="btn btn-sm" onclick="clearLocalEta(${o.id}, ${sid}, event)">Clear · 清除</button>` : ''}
       </div>
       <div class="muted" style="font-size:11px; margin-top:6px;">Same-city delivery — set when the rider should arrive; the customer sees this on their order. · 同城配送 — 设置骑手预计送达时间,顾客可在订单中查看。</div>
+      ${renderQyDispatch(o)}
     </div>`;
+}
+
+// Same-city courier dispatch (青云聚信) — compare live carrier prices and send a rider
+// straight from here, instead of the Qingyun app. Only meaningful once the order is in
+// Qingyun (auto-pushed as 待配送). Loads on demand (a click) so the drawer stays fast.
+function renderQyDispatch(o) {
+  return `
+    <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">
+      <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Same-city courier · 同城运力</div>
+      <button class="btn btn-sm" id="qy-get-${o.id}" onclick="qyLoadCarriers(${o.id}, this)">${cuT('Compare couriers', '查看运力比价')}</button>
+      <div id="qy-carriers-${o.id}" style="margin-top:8px;"></div>
+    </div>`;
+}
+
+// Fetch live carrier prices for one order and render a pick list (cheapest pre-selected).
+async function qyLoadCarriers(orderId, btn) {
+  const box = document.getElementById('qy-carriers-' + orderId);
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Loading…', '加载中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/carriers`);
+    const j = await r.json();
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Refresh prices', '刷新比价'); }
+    if (!j.success) { box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--danger)">${cuT('Could not load couriers — is the store connected to Qingyun?', '无法获取运力 — 门店是否已连接青云?')}</div>`; return; }
+    if (!j.data.available) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT("Not in Qingyun yet. Turn on auto-send, or this isn't a same-city order.", '订单尚未进入青云。请开启自动发送,或此单非同城配送。')}</div>`; return; }
+    const carriers = (j.data.carriers || []).filter(c => c.enabled);
+    if (!carriers.length) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('No couriers available right now.', '当前暂无可用运力。')}</div>`; return; }
+    const rows = carriers.map(c => `
+      <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px;cursor:pointer;">
+        <span style="display:flex;align-items:center;gap:8px;">
+          <input type="radio" name="qy-car-${orderId}" value="${c.carrierId}|${escapeAttr(c.serviceCode)}" ${c.cheapest ? 'checked' : ''}>
+          <span><b>${escapeHtml(c.serviceName || c.carrierName)}</b>${c.cheapest ? ` <span style="font-size:10px;color:var(--brand);">${cuT('cheapest', '最便宜')}</span>` : ''}<div class="muted" style="font-size:11px;">${escapeHtml(c.carrierName)}${c.distanceM ? ' · ' + (c.distanceM / 1000).toFixed(1) + 'km' : ''}</div></span>
+        </span>
+        <b style="font-family:var(--f-mono);white-space:nowrap;">¥${c.feeYuan}</b>
+      </label>`).join('');
+    box.innerHTML = rows +
+      `<button class="btn btn-primary btn-sm" onclick="qyDispatch(${orderId}, this)" style="margin-top:4px;">${cuT('Dispatch courier', '发起配送')}</button>` +
+      `<div class="muted" style="font-size:10px;margin-top:6px;">${cuT('The fee is deducted from your Qingyun balance.', '费用从青云余额中扣除。')}</div>`;
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Compare couriers', '查看运力比价'); }
+    if (box) box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--danger)">${cuT('Load failed', '加载失败')}</div>`;
+  }
+}
+
+// Dispatch the selected courier — real money (deducts the Qingyun wallet), so confirm.
+async function qyDispatch(orderId, btn) {
+  const sel = document.querySelector(`input[name="qy-car-${orderId}"]:checked`);
+  if (!sel) { toast(cuT('Pick a courier first', '请先选择运力'), 'err'); return; }
+  const [carrierId, serviceCode] = sel.value.split('|');
+  const label = sel.closest('label')?.querySelector('b')?.textContent || '';
+  if (!confirm(cuT(`Dispatch ${label}? A rider is called and your Qingyun balance is charged.`, `确认发起配送 ${label}?将呼叫骑手并从青云余额扣费。`))) return;
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Dispatching…', '发单中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/dispatch`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ carrierId: Number(carrierId), serviceCode }),
+    });
+    const j = await r.json();
+    if (j.success) {
+      toast(cuT('Courier dispatched', '已发起配送'), 'success');
+      const box = document.getElementById('qy-carriers-' + orderId);
+      if (box) box.innerHTML = `<div style="font-size:12px;color:var(--brand)">✓ ${cuT('Dispatched', '已发单')}: ${escapeHtml(j.carrier?.name || '')} ¥${j.carrier?.fee_yuan ?? ''}</div>`;
+      loadOrders();
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = cuT('Dispatch courier', '发起配送'); }
+      if (j.insufficient_balance) toast(cuT('Qingyun balance too low — top up first', '青云余额不足,请先充值'), 'err');
+      else toast(cuT('Dispatch failed', '发起配送失败'), 'err');
+    }
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Dispatch courier', '发起配送'); }
+    toast(cuT('Dispatch failed', '发起配送失败'), 'err');
+  }
 }
 
 // Supplier (drop-ship) parcel: no warehouse label, no courier booking — the

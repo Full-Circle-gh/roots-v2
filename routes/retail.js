@@ -17186,6 +17186,71 @@ router.post('/api/retail-admin/integrations/qingyun/autopush', requireRetailAdmi
   res.json({ success: true, enabled: on });
 });
 
+// ── Dispatch a courier from roots (live carrier compare + dispatch via Qingyun) ──
+// The signed browser lives per-store on the box; roots-v2 reaches the right store's
+// Chrome on demand (per-store QINGYUN_CDP_URL_<STORE>). Resolve the order's Qingyun
+// order id (created by auto-push) + its store, then quote / dispatch. Lazy-require the
+// browser lib so the main app doesn't load Playwright unless the picker is used.
+function _qingyunOrderRef(retailOrderId) {
+  try {
+    const q = tdb().prepare(
+      "SELECT qingyun_order_id, store_code FROM qingyun_push_queue WHERE retail_order_id = ? AND qingyun_order_id IS NOT NULL"
+    ).get(retailOrderId);
+    if (q && q.qingyun_order_id) return { qyOrderId: String(q.qingyun_order_id), storeCode: q.store_code };
+    const j = tdb().prepare(
+      "SELECT qingyun_order_id, store_code FROM delivery_jobs WHERE retail_order_id = ? AND qingyun_order_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1"
+    ).get(retailOrderId);
+    if (j && j.qingyun_order_id) return { qyOrderId: String(j.qingyun_order_id), storeCode: j.store_code };
+  } catch (_) { /* tables may be absent */ }
+  return null;
+}
+
+// Live carrier prices for one order (待配送 in Qingyun). available:false when the
+// order isn't in Qingyun yet (not a same-city delivery / not pushed).
+router.get('/api/retail-admin/orders/:id/qingyun/carriers', requireRetailAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const ref = _qingyunOrderRef(id);
+  if (!ref) return res.json({ success: true, data: { available: false, reason: 'not_in_qingyun' } });
+  try {
+    const { getQingyunBrowser } = require('../lib/qingyun-browser');
+    const br = await getQingyunBrowser(ref.storeCode);
+    const q = await br.quoteCarriers(ref.qyOrderId);
+    if (!q.ok) return res.json({ success: false, error: q.msg || 'quote failed' });
+    res.json({ success: true, data: { available: true, store_code: ref.storeCode, carriers: q.carriers } });
+  } catch (e) {
+    console.error('[qingyun carriers]', e.message);
+    res.json({ success: false, error: 'quote_failed' });
+  }
+});
+
+// Dispatch the chosen carrier. Re-quotes to get a FRESH waybill (they expire), then
+// delivery/create → deducts the fee from the Qingyun wallet + sends a courier.
+router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const carrierId = req.body?.carrierId;
+  const serviceCode = String(req.body?.serviceCode || '');
+  if (carrierId == null || !serviceCode) return res.status(400).json({ success: false, error: 'carrierId + serviceCode required' });
+  const ref = _qingyunOrderRef(id);
+  if (!ref) return res.status(400).json({ success: false, error: 'order_not_in_qingyun' });
+  try {
+    const { getQingyunBrowser } = require('../lib/qingyun-browser');
+    const br = await getQingyunBrowser(ref.storeCode);
+    const q = await br.quoteCarriers(ref.qyOrderId);  // fresh waybills
+    const carrier = (q.carriers || []).find(c =>
+      String(c.carrierId) === String(carrierId) && c.serviceCode === serviceCode && c.enabled);
+    if (!carrier) return res.status(409).json({ success: false, error: 'carrier_unavailable' });
+    const r = await br.dispatch(ref.qyOrderId, carrier);
+    if (!r.ok) {
+      const insufficient = /余额|余额不足|balance|充值/i.test(String(r.msg || ''));
+      return res.json({ success: false, error: r.msg || 'dispatch_failed', insufficient_balance: insufficient });
+    }
+    res.json({ success: true, carrier: { name: carrier.serviceName, fee_yuan: carrier.feeYuan } });
+  } catch (e) {
+    console.error('[qingyun dispatch]', e.message);
+    res.json({ success: false, error: 'dispatch_failed' });
+  }
+});
+
 // A store owner asks us to connect same-city tracking for their store. We can't
 // self-serve it (Meituan fingerprint-gates the login), so this pages ops to
 // provision it, and leaves a durable trace in qingyun_sync_log in case the ops
