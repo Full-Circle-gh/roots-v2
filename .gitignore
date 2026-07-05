@@ -35,7 +35,8 @@ data/roots-pre-*.db*
 .idea/
 .vscode/
 .claude/
-CLAUDE.md
+# CLAUDE.md is intentionally COMMITTED — it's the portable memory a fresh Claude
+# (any account) auto-loads; it points to docs/PROJECT-KNOWLEDGE.md for the full handoff.
 AGENTS.md
 .cursor/
 .aider*
