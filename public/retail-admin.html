@@ -37,6 +37,179 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/assets/retail-admin.css">
+<!-- Tacet type: Inter for the reskinned Orders surfaces (scoped below). -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<!-- ═══════════════════════════════════════════════════════════════════════
+     TACET SKIN — scoped to Orders, Invoices, and the order drawer ONLY.
+     Behaviour is untouched; this only restyles. It remaps the app's own CSS
+     variables to Tacet tokens *inside these three containers*, then overrides
+     the handful of classes whose tint/shape is hard-coded. Nothing here leaks
+     into the shared chrome or any other tab. (tacet-tokens.css is the source
+     of the values; inlined here so no new asset needs SW-cache wiring.)
+     ═══════════════════════════════════════════════════════════════════════ -->
+<style id="tacet-orders-skin">
+  :is(#tab-orders, #tab-invoices, #order-drawer) {
+    --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
+    --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
+    --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
+    --tacet-sage-tint:#EDF1EC; --tacet-amber-tint:#F7EEDE; --tacet-brick-tint:#F6E7E3; --tacet-dusk-tint:#EEEDF6;
+    --tacet-sage-ink:#4A6249; --tacet-amber-ink:#8A6425;
+
+    /* Remap the tokens the existing templates + inline styles already read. */
+    --bg-app:#FBF9F4; --bg-pane:#FFFFFF; --bg-elev-1:#F6F3EC; --bg-elev-2:#EFEBE1; --bg-input:#FFFFFF;
+    --bg-overlay:rgba(17,26,43,.32);
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --accent:#58606E; --accent-hi:#58606E; --accent-ink:#FBF9F4;
+    --brass:#C9954A; --brass-hi:#C9954A; --warn:#C9954A;
+    --danger:#B4533E; --danger-soft:rgba(180,83,62,.12); --success:#A3B49F;
+    --st-pending_payment:#58606E; --st-paid:#58606E; --st-preparing:#58606E; --st-dispatched:#58606E;
+    --st-delivered:#4A6249; --st-cancelled:#B4533E; --st-refunded:#B4533E; --st-awaiting_restock:#8A6425;
+    --f-sans:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --f-mono:'Inter','IBM Plex Sans SC',system-ui,sans-serif;
+    --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
+    color:var(--text-1);
+  }
+  /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
+  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer) {
+    --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
+    --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
+    --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
+    --tacet-cream:#1E2A44; --tacet-border:#2A3550;
+    --tacet-sage-tint:#1E2C26; --tacet-amber-tint:#33290F; --tacet-brick-tint:#351B14;
+    --tacet-sage-ink:#A3B49F; --tacet-amber-ink:#C9954A;
+    --st-delivered:#A3B49F; --st-awaiting_restock:#C9954A;
+  }
+
+  /* Page heading eyebrow (small, calm) + title. */
+  .t-ord-eyebrow { font-family:var(--f-sans); font-size:11px; font-weight:500; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--text-3); margin:0 0 6px; }
+  :is(#tab-orders, #tab-invoices) > h2 { font-family:var(--f-sans); font-weight:500;
+    font-size:24px; letter-spacing:-.01em; }
+  #tab-orders .t-ord-shown { font-size:12px; color:var(--text-2); margin-top:10px; }
+
+  /* KPI tiles — plain paper card, no accent stripe (mockup). */
+  :is(#tab-orders, #tab-invoices) .fc-kpi { background:var(--bg-pane); border:1px solid var(--line);
+    border-radius:14px; box-shadow:none; }
+  :is(#tab-orders, #tab-invoices) .fc-kpi:hover { transform:none; box-shadow:none; border-color:var(--line); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi .lbl { font-family:var(--f-sans); font-size:13px; font-weight:400;
+    letter-spacing:0; text-transform:none; color:var(--text-2); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi .val { font-size:30px; font-weight:500; color:var(--text-1); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi .sub { font-size:12px; color:var(--text-2); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi.accent::before,
+  :is(#tab-orders, #tab-invoices) .fc-kpi.alert::before { display:none; }
+  :is(#tab-orders, #tab-invoices) .fc-kpi.accent .val { color:var(--text-1); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi.alert { border-color:rgba(201,149,74,.5); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi.alert .val { color:var(--tacet-amber-ink); }
+  /* Deltas: up = sage-ink, down/flat = graphite — never red. */
+  :is(#tab-orders, #tab-invoices) .fc-delta.is-up { color:var(--tacet-sage-ink); }
+  :is(#tab-orders, #tab-invoices) .fc-delta.is-down { color:var(--text-2); }
+  :is(#tab-orders, #tab-invoices) .fc-delta.is-flat { color:var(--text-2); opacity:.75; }
+
+  /* Filter chips — white pill w/ hairline; active = ink fill, paper text. */
+  #tab-orders .status-chip { background:var(--bg-pane); border:1px solid var(--line); color:var(--text-2);
+    border-radius:999px; padding:6px 14px; font-size:13px; font-weight:500; }
+  #tab-orders .status-chip:hover { background:var(--bg-pane); border-color:var(--text-3); color:var(--text-1); }
+  #tab-orders .status-chip .dot { display:none; }
+  #tab-orders .status-chip.active,
+  #tab-orders .status-chip.active[class*="st-"] { background:var(--tacet-ink); border-color:var(--tacet-ink);
+    color:var(--tacet-paper); }
+  [data-theme="dark"] #tab-orders .status-chip.active,
+  [data-theme="dark"] #tab-orders .status-chip.active[class*="st-"] { background:var(--tacet-paper);
+    border-color:var(--tacet-paper); color:var(--tacet-ink); }
+  #tab-orders .status-chip .chip-ct { margin-left:6px; font-weight:400; color:var(--text-2); opacity:1;
+    font-variant-numeric:tabular-nums; }
+  #tab-orders .status-chip.active .chip-ct { color:rgba(251,249,244,.7); }
+  [data-theme="dark"] #tab-orders .status-chip.active .chip-ct { color:rgba(17,26,43,.6); }
+  #tab-orders .status-chip .chip-ct.alert { color:var(--tacet-amber-ink); }
+  #tab-orders .status-chip.active .chip-ct.alert { color:rgba(251,249,244,.85); }
+  #orders-channel-chips .chan-ico svg { width:15px; height:15px; }
+
+  /* Data table — paper card, hairline rows, calm hover. */
+  #tab-orders .table-wrap { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px;
+    overflow:hidden; overflow-x:auto; }
+  #orders-table { border-collapse:collapse; width:100%; }
+  #orders-table thead th { background:var(--bg-pane); color:var(--text-2); font-family:var(--f-sans);
+    font-weight:500; font-size:11.5px; letter-spacing:.02em; text-transform:none; padding:11px 10px;
+    border-bottom:1px solid var(--line); }
+  #orders-table tbody td { border-bottom:1px solid var(--line); padding:13px 10px; color:var(--text-1);
+    font-size:13.5px; vertical-align:top; }
+  #orders-table tbody tr.order-row { cursor:pointer; transition:background var(--t-med) var(--ease-out); }
+  #orders-table tbody tr.order-row:hover td { background:var(--bg-elev-1); }
+  #orders-table tbody tr.order-row:focus-visible { outline:none; }
+  #orders-table tbody tr.order-row:focus-visible td { background:var(--bg-elev-1);
+    box-shadow:inset 2px 0 0 var(--tacet-ink); }
+  #orders-table tbody tr.order-row:last-child td { border-bottom:none; }
+  #orders-table tbody tr.is-unread .ord-no { font-weight:500; }
+
+  /* NEW chip — small ink pill. */
+  #tab-orders .new-chip { background:var(--tacet-ink); color:var(--tacet-paper); border:none;
+    font-size:10px; font-weight:500; letter-spacing:.04em; border-radius:999px; padding:2px 7px; }
+  [data-theme="dark"] #tab-orders .new-chip { background:var(--tacet-paper); color:var(--tacet-ink); }
+
+  /* Status pills — tinted fill + matching text, small dot; health via colour. */
+  :is(#tab-orders, #order-drawer) .pill { border:none; font-weight:500; font-size:12.5px; letter-spacing:0;
+    padding:3px 11px; border-radius:999px; }
+  :is(#tab-orders, #order-drawer) .pill .dot { width:7px; height:7px; }
+  :is(#tab-orders, #order-drawer) :is(.pill.st-pending_payment, .pill.st-paid, .pill.st-preparing, .pill.st-dispatched) {
+    background:var(--tacet-cream); color:var(--text-1); border-color:transparent; }
+  :is(#tab-orders, #order-drawer) :is(.pill.st-pending_payment, .pill.st-paid, .pill.st-preparing, .pill.st-dispatched) .dot {
+    background:var(--tacet-graphite); }
+  :is(#tab-orders, #order-drawer) .pill.st-delivered { background:var(--tacet-sage-tint); color:var(--tacet-sage-ink); }
+  :is(#tab-orders, #order-drawer) .pill.st-delivered .dot { background:var(--tacet-sage); }
+  :is(#tab-orders, #order-drawer) .pill.st-awaiting_restock { background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
+  :is(#tab-orders, #order-drawer) .pill.st-awaiting_restock .dot { background:var(--tacet-amber); }
+  :is(#tab-orders, #order-drawer) :is(.pill.st-cancelled, .pill.st-refunded) {
+    background:var(--tacet-brick-tint); color:var(--tacet-brick); border-color:transparent; }
+  :is(#tab-orders, #order-drawer) :is(.pill.st-cancelled, .pill.st-refunded) .dot { background:var(--tacet-brick); }
+  /* Refund badges → brick tint; add-on "Updated" → neutral cream. */
+  :is(#tab-orders, #order-drawer) :is(.pill.refund-pending, .pill.refund-partial) {
+    background:var(--tacet-brick-tint); color:var(--tacet-brick); border-color:transparent; }
+
+  /* Buttons — dusk primary (the one CTA), calm secondary/ghost, brick danger. */
+  :is(#tab-orders, #tab-invoices, #order-drawer) .btn-primary,
+  :is(#tab-orders, #tab-invoices, #order-drawer) .db-btn.primary {
+    background:var(--tacet-dusk); border-color:var(--tacet-dusk); color:#fff; }
+  :is(#tab-orders, #tab-invoices, #order-drawer) .btn-primary:hover,
+  :is(#tab-orders, #tab-invoices, #order-drawer) .db-btn.primary:hover {
+    background:#605AA0; border-color:#605AA0; }
+  :is(#tab-orders, #tab-invoices, #order-drawer) .btn-danger { color:var(--tacet-brick); border-color:var(--tacet-brick); }
+  :is(#tab-orders, #tab-invoices, #order-drawer) .btn-danger:hover { background:var(--tacet-brick-tint); }
+
+  /* Drawer — body on paper, individual Tacet cards; total on a raised card. */
+  #order-drawer .order-card { background:transparent; border:none; padding:0; margin:0; box-shadow:none; }
+  #order-drawer .order-head .title-row b { font-family:var(--f-sans); font-variant-numeric:tabular-nums;
+    font-size:16px; letter-spacing:0; }
+  #order-drawer .od-eyebrow { font-family:var(--f-sans); font-size:12px; font-weight:400; letter-spacing:0;
+    text-transform:none; color:var(--text-2); }
+  #order-drawer .order-detail { background:transparent; border:none; box-shadow:none; padding:0;
+    gap:12px; margin-bottom:12px; }
+  #order-drawer .order-detail > div { background:var(--bg-pane); border:1px solid var(--line);
+    border-radius:14px; padding:13px 16px; }
+  #order-drawer .order-detail .kicker { font-family:var(--f-sans); font-size:11.5px; font-weight:500;
+    letter-spacing:.02em; text-transform:none; color:var(--text-2); }
+  #order-drawer .order-total-banner { background:var(--tacet-cream); border:none; box-shadow:none;
+    border-radius:14px; }
+  #order-drawer .order-total-banner .otb-label { font-family:var(--f-sans); font-size:11.5px; font-weight:500;
+    letter-spacing:.02em; text-transform:none; color:var(--text-2); }
+  #order-drawer .order-total-banner .otb-sub { font-family:var(--f-sans); font-size:12.5px; color:var(--text-2);
+    letter-spacing:0; }
+  #order-drawer .order-total-banner .otb-amount { font-size:28px; }
+  #order-drawer .shipment-card { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px; }
+  #order-drawer .copy-mini { border-radius:999px; }
+
+  /* Invoices — cards match the Tacet radius. */
+  #tab-invoices .card { border-radius:14px; }
+  #tab-invoices .seg button.active { color:var(--tacet-ink); }
+
+  /* Phone order cards — Tacet paper card. */
+  #tab-orders #rm-orders-cards .rm-ocard { background:var(--bg-pane); border:1px solid var(--line);
+    border-radius:14px; }
+  #tab-orders #rm-orders-cards .rm-oc-new { background:var(--tacet-ink); color:var(--tacet-paper); }
+  [data-theme="dark"] #tab-orders #rm-orders-cards .rm-oc-new { background:var(--tacet-paper); color:var(--tacet-ink); }
+
+  /* Toolbar buttons pick up the calm secondary look via token remap already. */
+</style>
 <!-- File split (2026-06-11): page CSS lives in /assets/retail-admin.css; the
      main app JS lives in /assets/retail-admin/*.js (10 files, loaded mid-body, same spot
      the inline block used to be). Smaller page-specific blocks remain inline. -->
@@ -933,7 +1106,8 @@
 
   <!-- ─── ORDERS ─── -->
   <section id="tab-orders">
-    <h2>Retail orders · 零售订单</h2>
+    <div class="t-ord-eyebrow">Operations · 运营</div>
+    <h2>Orders · 订单</h2>
 
     <!-- Today's pulse — KPI strip on the shared fc-* layer. Reuses the same
          /dashboard?from=today&to=today call the dashboard hero makes (no extra
@@ -1018,53 +1192,15 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         New order · 新建订单
       </button>
-      <button class="btn btn-primary ord-bulk-trk-btn" id="ord-bulk-trk-btn" onclick="openBulkTracking()">
+      <!-- Bulk attach tracking — hidden by default; a tenant turns it on from
+           Settings → Delivery (delivery.bulkTracking → body.ord-bulk-tracking).
+           Kept as a secondary button so it never competes with the one Dusk CTA. -->
+      <button class="btn ord-bulk-trk-btn" id="ord-bulk-trk-btn" onclick="openBulkTracking()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2"/><path d="M15 3h6v6"/><path d="M10 14L21 3"/></svg>
         Bulk attach tracking
       </button>
-
-      <!-- View options (tweaks) — reshape the table's surface, status signaling,
-           row rhythm and type character. Per-operator, persisted to localStorage. -->
-      <div class="ovp-wrap">
-        <button class="btn" id="ord-view-btn" onclick="ordTweakToggle()" aria-haspopup="true" title="Display options · 显示选项">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-          View · 视图
-        </button>
-        <div id="ord-view-pop" class="ovp" hidden>
-          <div class="ovp-head">Display options · 显示选项</div>
-          <div class="ovp-group">
-            <div class="ovp-label">Surface · 主题</div>
-            <div class="ovp-seg" data-tw="theme">
-              <button data-v="light" onclick="ordTweakSet('theme','light')">Light · 浅色</button>
-              <button data-v="dark"  onclick="ordTweakSet('theme','dark')">Dark · 深色</button>
-            </div>
-          </div>
-          <div class="ovp-group">
-            <div class="ovp-label">Status signaling · 状态样式</div>
-            <div class="ovp-seg" data-tw="statusStyle">
-              <button data-v="pill"  onclick="ordTweakSet('statusStyle','pill')">Pill · 胶囊</button>
-              <button data-v="bar"   onclick="ordTweakSet('statusStyle','bar')">Bar · 竖条</button>
-              <button data-v="glyph" onclick="ordTweakSet('statusStyle','glyph')">Glyph · 圆点</button>
-            </div>
-          </div>
-          <div class="ovp-group">
-            <div class="ovp-label">Row rhythm · 行样式</div>
-            <div class="ovp-seg" data-tw="rowTreat">
-              <button data-v="hairlines" onclick="ordTweakSet('rowTreat','hairlines')">Hairlines · 细线</button>
-              <button data-v="striped"   onclick="ordTweakSet('rowTreat','striped')">Striped · 斑马</button>
-              <button data-v="cards"     onclick="ordTweakSet('rowTreat','cards')">Cards · 卡片</button>
-            </div>
-          </div>
-          <div class="ovp-group">
-            <div class="ovp-label">Type character · 字体</div>
-            <div class="ovp-seg" data-tw="typeMode">
-              <button data-v="mixed"      onclick="ordTweakSet('typeMode','mixed')">Mixed · 混合</button>
-              <button data-v="mono-heavy" onclick="ordTweakSet('typeMode','mono-heavy')">Mono-heavy · 偏等宽</button>
-              <button data-v="all-mono"   onclick="ordTweakSet('typeMode','all-mono')">All-mono · 全等宽</button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- The per-operator "View" display-tweak popover was removed in the Tacet
+           port: Orders now has one clean, consistent table. -->
     </div>
 
     <!-- Bulk attach tracking modal -->
@@ -8665,23 +8801,16 @@
       // detail drawer, not the list.
       var statusPill = '<span class="pill st-' + o.status + '"><span class="dot"></span>' + esc(hstatus(o)) + (ro ? ' · view only' : '') + '</span>';
 
-      var hint = fwd
-        ? '<button type="button" class="rm-oc-hint" data-hintact data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + esc(en(fwd[1])) + '</button>'
-        : (o.status === 'delivered'
-            ? '<div class="rm-oc-hint done">' + ICON_CHECK + 'Completed — no action needed · 已完成 — 无需操作</div>'
-            : '');
-
-      var swipeable = !ro && !!(fwd || phone);
-      var actions = swipeable
-        ? '<div class="rm-ocard-actions">'
-          + (fwd ? '<button type="button" class="rm-act-advance" data-act="advance" data-id="' + o.id + '" data-to="' + fwd[0] + '">' + ICON_ADV + 'Advance · 推进</button>' : '')
-          + (phone ? '<button type="button" class="rm-act-call" data-act="call" data-phone="' + esc(phone) + '">' + ICON_CALL + 'Call · 拨打</button>' : '')
-          + '</div>'
-        : '';
+      // Tacet port: phone cards are simple tap-to-open (mockup). The swipe
+      // Advance/Call lane and the inline peek were removed — every action is
+      // still available inside the opened order. Cards carry `no-swipe` so the
+      // gesture handler bails.
+      var hint = '';
+      var actions = '';
 
       html +=
         '<div class="rm-ocard-wrap">' + actions +
-          '<div class="rm-ocard' + (swipeable ? '' : ' no-swipe') + (ro ? ' ro' : '') + '" data-id="' + o.id + '"' + (ro ? ' data-ro="1"' : '') + '>' +
+          '<div class="rm-ocard no-swipe' + (ro ? ' ro' : '') + '" data-id="' + o.id + '"' + (ro ? ' data-ro="1"' : '') + '>' +
             '<div class="rm-oc-top">' +
               '<span class="rm-oc-no">' + ((!ro && !o.seen_at && o.status !== 'pending_payment' && o.status !== 'cancelled') ? '<span class="rm-oc-new">NEW</span>' : '') + esc(o.order_no) + '</span>' +
               statusPill +
@@ -8710,7 +8839,6 @@
               '</span>' +
             '</div>' +
             hint +
-            '<div class="rm-oc-exp"><div class="inner"><div class="rm-oc-exp-pad" data-oexp></div></div></div>' +
           '</div>' +
         '</div>';
     }
@@ -8927,16 +9055,9 @@
     // Tap the card → toggle the inline peek (Combined: keep the queue in view).
     var card = e.target.closest('.rm-ocard');
     if (!card || justSwiped) return;
-    if (card.hasAttribute('data-ro')) {   // read-only channel (Meituan / gzgrocery)
-      // No inline peek (no fulfilment to preview) — tap opens the view-only
-      // drawer directly, showing product / SKU / qty.
-      if (typeof openOrder === 'function') openOrder(+card.getAttribute('data-id'));
-      return;
-    }
-    if (card.classList.contains('swiped')) { card.classList.remove('swiped'); card.style.transform = ''; return; }
-    var open = !card.classList.contains('open');
-    card.classList.toggle('open', open);
-    if (open) fillPeek(card);
+    // Tacet port: every card tap opens the full order drawer directly (the
+    // inline peek was removed). Read-only channels open the view-only drawer.
+    if (typeof openOrder === 'function') openOrder(+card.getAttribute('data-id'));
   }
 
   // ── Variant B blend: shared bottom sheet (Sort + Manage) ──

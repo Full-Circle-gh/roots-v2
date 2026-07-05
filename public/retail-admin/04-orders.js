@@ -316,7 +316,7 @@ function splitSuggestionBanner(o) {
     <div class="split-suggestion" data-order="${o.id}" role="status">
       <div class="ss-head">
         <div class="ss-title">
-          <span>📦 Suggested: split into 2 packages · 拆分为 2 个包裹</span>
+          <span><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Suggested: split into 2 packages · 拆分为 2 个包裹</span>
           <span class="save">save ¥${fmt(sug.savings)} · 节省 ¥${fmt(sug.savings)}</span>
         </div>
         <div class="ss-actions">
@@ -778,10 +778,9 @@ async function loadOrders(opts = {}) {
 
     if (!j.data.length) {
       const emptyMsg = (status === 'refunds_open')
-        ? `<h3>Inbox zero · 无待处理退款</h3>
-           <p class="muted">No open refund requests right now. · 当前无待处理退款。</p>`
+        ? `<h3>Nothing waiting. Enjoy it. · 无待处理退款</h3>`
         : `<h3>No orders yet · 暂无订单</h3>
-           <p class="muted">Orders appear here as customers place them on the mini app. · 顾客在小程序下单后,订单将显示在这里。</p>`;
+           <p class="muted">New orders settle in here from every channel. · 新订单会从各渠道汇聚到这里。</p>`;
       tbody.innerHTML = `<tr><td colspan="11">
         <div class="empty-state">
           <div class="icon">${ICONS.empty}</div>
@@ -949,7 +948,7 @@ function toggleOrdersLive() {
 // timestamp in localStorage so the badge survives reloads but clears as
 // soon as the user actually visits the Orders tab.
 const ORDERS_UNSEEN_POLL_MS = 15000;
-const ORDERS_LAST_SEEN_KEY  = 'roots-v2-orders-last-seen-at';
+const ORDERS_LAST_SEEN_KEY  = 'tacet-orders-last-seen-at';
 let _ORDERS_UNSEEN_TIMER = null;
 
 function _ordersLastSeen() {
@@ -991,7 +990,7 @@ function _paintOrdersBadge(count) {
 // Muteable; preference persists in localStorage. The AudioContext is
 // created lazily and resumed on the first operator gesture so browser
 // autoplay policy doesn't swallow the first ding.
-const ORDERS_SOUND_KEY = 'roots-v2-orders-sound-on';
+const ORDERS_SOUND_KEY = 'tacet-orders-sound-on';
 let _ordersAudioCtx = null;
 
 function _ordersSoundOn() {
@@ -1098,7 +1097,7 @@ async function _pollUnseenOrders() {
 // ── Unseen-invoice badge (red pulsing dot + chime on the Invoices tab) ──
 // Mirrors the new-order notification: a pending fapiao request should land
 // like a new order. Shares the same chime + sound toggle as orders.
-const INVOICES_LAST_SEEN_KEY = 'roots-v2-invoices-last-seen-at';
+const INVOICES_LAST_SEEN_KEY = 'tacet-invoices-last-seen-at';
 let _INVOICES_UNSEEN_TIMER = null;
 
 function _invoicesLastSeen() {
@@ -1155,8 +1154,8 @@ async function _pollUnseenInvoices() {
 // shows the combined count so it stays visible while the dropdown is collapsed.
 // Reuses the new-order chime + sound toggle. Feature-gated tabs are skipped.
 const _INBOX_CATS = [
-  { tab: 'reviews',  key: 'roots-v2-reviews-last-seen-at',  endpoint: '/api/retail-admin/reviews/unseen-count',  feat: 'feat-reviews',  prev: null, _count: 0 },
-  { tab: 'feedback', key: 'roots-v2-feedback-last-seen-at', endpoint: '/api/retail-admin/feedback/unseen-count', feat: 'feat-feedback', prev: null, _count: 0 },
+  { tab: 'reviews',  key: 'tacet-reviews-last-seen-at',  endpoint: '/api/retail-admin/reviews/unseen-count',  feat: 'feat-reviews',  prev: null, _count: 0 },
+  { tab: 'feedback', key: 'tacet-feedback-last-seen-at', endpoint: '/api/retail-admin/feedback/unseen-count', feat: 'feat-feedback', prev: null, _count: 0 },
 ];
 
 function _inboxLastSeen(cat) {
@@ -1246,7 +1245,7 @@ async function _pollUnseenInbox() {
 // Urgency highlight only fires for actionable statuses; once dispatched or
 // delivered it goes muted.
 // Line-style storefront glyph for pickup orders — matches the app's stroke
-// icon set (the 🏬 emoji clashed with the Full Circle chrome).
+// icon set (the 🏬 emoji clashed with the admin chrome).
 function pickupIcon(size = 12) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1.5px;margin-right:1px"><path d="M4 10.5V20h16v-9.5"/><path d="M3.5 6.5 5 3.5h14l1.5 3a3 3 0 0 1-5.7 1.3A3 3 0 0 1 12 7.5a3 3 0 0 1-2.8.3A3 3 0 0 1 3.5 6.5z"/><path d="M9.5 20v-5h5v5"/></svg>`;
 }
@@ -1856,23 +1855,23 @@ function renderShipByTile(o) {
 function deliveryStateInfo(o) {
   // Order-level status wins — admin clicking "Mark delivered" sets status but
   // not tracking_status, so without this guard delivered orders show "In transit".
-  if (o.status === 'delivered') return { icon: 'check', en: 'Delivered', cn: '已签收', color: '#5a8c2a', tone: 'ok' };
+  if (o.status === 'delivered') return { icon: 'check', en: 'Delivered', cn: '已签收', color: '#5C7A4E', tone: 'ok' };
   const st = o.tracking_status || '';
   const sc = o.tracking_scenario || '';
   // Problems first — these are what the operator must act on.
-  if (sc === 'no_contact')  return { icon: 'phone_off', en: "Can't reach customer",   cn: '联系不上客户', color: '#c0392b', tone: 'urgent' };
-  if (st === 'exception')   return { icon: 'alert',     en: 'Delivery issue',          cn: '配送异常',     color: '#c0392b', tone: 'urgent' };
-  if (st === 'returning')   return { icon: 'uturn',     en: 'Returning to sender',     cn: '退回中',       color: '#c0392b', tone: 'urgent' };
-  if (st === 'returned')    return { icon: 'uturn',     en: 'Returned',                cn: '已退回',       color: '#c0392b', tone: 'urgent' };
+  if (sc === 'no_contact')  return { icon: 'phone_off', en: "Can't reach customer",   cn: '联系不上客户', color: '#B4533E', tone: 'urgent' };
+  if (st === 'exception')   return { icon: 'alert',     en: 'Delivery issue',          cn: '配送异常',     color: '#B4533E', tone: 'urgent' };
+  if (st === 'returning')   return { icon: 'uturn',     en: 'Returning to sender',     cn: '退回中',       color: '#B4533E', tone: 'urgent' };
+  if (st === 'returned')    return { icon: 'uturn',     en: 'Returned',                cn: '已退回',       color: '#B4533E', tone: 'urgent' };
   // Waiting on the customer to collect — not a failure, but worth seeing.
-  if (sc === 'pickup_point') return { icon: 'store',    en: 'At pickup point',        cn: '已到驿站',     color: '#b9770e', tone: 'attn' };
-  if (sc === 'locker')       return { icon: 'locker',   en: 'In a locker',            cn: '已入快递柜',   color: '#b9770e', tone: 'attn' };
+  if (sc === 'pickup_point') return { icon: 'store',    en: 'At pickup point',        cn: '已到驿站',     color: '#9A6E2A', tone: 'attn' };
+  if (sc === 'locker')       return { icon: 'locker',   en: 'In a locker',            cn: '已入快递柜',   color: '#9A6E2A', tone: 'attn' };
   // Good / in-flight states.
-  if (st === 'delivered')        return { icon: 'check', en: 'Delivered',             cn: '已签收',       color: '#5a8c2a', tone: 'ok' };
+  if (st === 'delivered')        return { icon: 'check', en: 'Delivered',             cn: '已签收',       color: '#5C7A4E', tone: 'ok' };
   if (st === 'out_for_delivery' || sc === 'out_for_delivery')
-                                 return { icon: 'courier', en: 'Out for delivery',     cn: '派送中',       color: '#1d72b8', tone: 'transit' };
-  if (st === 'in_transit')       return { icon: 'transit', en: 'In transit',          cn: '运输中',       color: '#9aa0a6', tone: 'transit' };
-  if (st === 'picked_up')        return { icon: 'inbox',  en: 'Picked up',            cn: '已揽收',       color: '#9aa0a6', tone: 'transit' };
+                                 return { icon: 'courier', en: 'Out for delivery',     cn: '派送中',       color: '#6B7280', tone: 'transit' };
+  if (st === 'in_transit')       return { icon: 'transit', en: 'In transit',          cn: '运输中',       color: '#6B7280', tone: 'transit' };
+  if (st === 'picked_up')        return { icon: 'inbox',  en: 'Picked up',            cn: '已揽收',       color: '#6B7280', tone: 'transit' };
   return null;
 }
 
@@ -1921,7 +1920,7 @@ function renderTrackingCell(o) {
   // warning below (which doesn't apply). Hide once the order is done/void.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
     if (o.channel_eta && !['delivered', 'cancelled', 'refunded'].includes(o.status)) {
-      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#5a8c2a;">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(o.channel_eta))}</span></div>
+      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#5C7A4E;">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(o.channel_eta))}</span></div>
               <div class="muted" style="font-size:10px; margin-top:2px;">${cuT('arrival','预计送达')}</div>`;
     }
     return '<span class="muted">—</span>';
@@ -1931,7 +1930,7 @@ function renderTrackingCell(o) {
   // doesn't apply to local delivery.
   if (o.is_local) {
     if (o.local_eta) {
-      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#5a8c2a;">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaPretty(o.local_eta))}</span></div>
+      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#5C7A4E;">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaPretty(o.local_eta))}</span></div>
               <div class="muted" style="font-size:10px; margin-top:2px;">${cuT('arrival','预计送达')}</div>`;
     }
     if (o.status === 'dispatched') {
@@ -1946,7 +1945,7 @@ function renderTrackingCell(o) {
   }
   const carrier = (o.tracking_carrier || '').toUpperCase();
   const sync = (o.tracking_kd100_subscribed || o.jd_live)
-    ? `<span style="color:#5a8c2a; font-size:10px;">● ${cuT('live','实时')}</span>`
+    ? `<span style="color:#5C7A4E; font-size:10px;">● ${cuT('live','实时')}</span>`
     : `<span class="muted" style="font-size:10px;">${cuT('manual','手动')}</span>`;
   // Split delivery: the order-level tracking_status is just ONE parcel's state,
   // so a single line reads "Delivered" even when another parcel is still moving
@@ -1980,11 +1979,11 @@ function renderSplitRollupLine(o) {
   const moving    = Math.min(Number(o.shipment_moving)    || 0, total - delivered);
   const toShip    = Math.max(0, total - delivered - moving);
   const parts = [];
-  if (delivered) parts.push(`<span style="color:#5a8c2a; font-weight:700;">${delivered} ${cuT('delivered','已签收')}</span>`);
-  if (moving)    parts.push(`<span style="color:#1d72b8;">${moving} ${cuT('in transit','运输中')}</span>`);
+  if (delivered) parts.push(`<span style="color:#5C7A4E; font-weight:700;">${delivered} ${cuT('delivered','已签收')}</span>`);
+  if (moving)    parts.push(`<span style="color:#6B7280;">${moving} ${cuT('in transit','运输中')}</span>`);
   // Amber + bold (not muted grey): an unshipped parcel on an otherwise-dispatched
   // order is an open to-do — it's also why the order still sits in the Paid tab.
-  if (toShip)    parts.push(`<span style="color:#c47d12; font-weight:700;">${toShip} ${cuT('to ship','待发货')}</span>`);
+  if (toShip)    parts.push(`<span style="color:#9A6E2A; font-weight:700;">${toShip} ${cuT('to ship','待发货')}</span>`);
   const breakdown = parts.join(' · ');
   return `<div style="margin-top:3px; display:flex; align-items:center; gap:3px; font-size:10px; font-weight:600; color:var(--text-2);">`
        + `${deliveryIcon('parcels', 12)}<span>${total} ${cuT('parcels','个包裹')}</span></div>`
@@ -2354,7 +2353,7 @@ function renderSortableItems(o) {
   if (loose.length) {
     looseHtml = ships.length
       ? `<div class="shipment-card"><div class="shipment-head">
-           <span class="mode-pill">📦 Not yet in a parcel · 待分配</span>
+           <span class="mode-pill"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Not yet in a parcel · 待分配</span>
            <span class="count">${cuT(`${loose.length} item${loose.length === 1 ? '' : 's'}`, `${loose.length} 件商品`)}</span>
          </div>${renderItemsTable(loose, true)}</div>`
       : renderItemsTable(loose, true);   // pickup / no-parcel order: plain list
@@ -2988,7 +2987,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ── Order detail · per-operator View tweaks ───────────────────────────
-// The Full Circle Order Detail "Tweaks" panel, made operator-selectable:
+// Order-detail layout defaults (the per-operator "Tweaks" popover was removed
+// in the Tacet port; these fixed defaults now drive the one clean layout):
 // total placement (banner / inline / footer), items layout (manifest /
 // table / cards), and density. Persisted to localStorage; defaults match
 // the standard banner+manifest look so nothing changes until a pick.
@@ -3260,7 +3260,9 @@ function renderOpenOrder(o) {
       if (next === 'dispatched' && multiParcel && o.fulfillment_type !== 'pickup') {
         label = 'Mark all dispatched · 全部标记已发货';
       }
-      return `<button class="btn btn-primary btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
+      // Tacet: forward actions read as calm bordered buttons (not a second Dusk
+      // CTA) — the mockup keeps the drawer quiet; the one Dusk button is "New order".
+      return `<button class="btn btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
     }).join('')
     // A quiet "Undo" sits beside the forward actions when the order was
     // dispatched/delivered but nothing has truly gone out — the reverse for a
@@ -3290,7 +3292,6 @@ function renderOpenOrder(o) {
                the status pill — they used to be buried at the bottom of the
                drawer past the items + reservations. -->
           ${transitions ? `<div class="transitions od-head-tx">${transitions}</div>` : ''}
-          ${renderOrderViewPopover()}
         </div>
 
         ${hoistedTracking(o)}
@@ -3346,7 +3347,7 @@ function renderOpenOrder(o) {
           </div>` : ''}
           ${printReceiptTile(o)}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
-          ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;">🍴 Cutlery requested · 需要餐具</span></div>` : ''}
+          ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
           ${o.needs_invoice ? renderInvoiceBlock(o) : ''}
         </div>
 
@@ -4020,11 +4021,11 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   let kdBadge = '';
   if (has) {
     if (deadReuse) {
-      kdBadge = `<span style="font-size:11px; color:#b8860b;">● sync inactive · 同步未生效 (reused number · 重复运单号)</span>`;
+      kdBadge = `<span style="font-size:11px; color:#9A6E2A;">● sync inactive · 同步未生效 (reused number · 重复运单号)</span>`;
     } else if (s.jd_live) {
-      kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● JD live sync on · 京东实时同步中</span>`;
+      kdBadge = `<span class="muted" style="font-size:11px; color: #5C7A4E;">● JD live sync on · 京东实时同步中</span>`;
     } else if (s.tracking_kd100_subscribed) {
-      kdBadge = `<span class="muted" style="font-size:11px; color: #5a8c2a;">● kd100 live sync on · 快递100实时同步中</span>`;
+      kdBadge = `<span class="muted" style="font-size:11px; color: #5C7A4E;">● kd100 live sync on · 快递100实时同步中</span>`;
     } else if (s.tracking_last_error) {
       kdBadge = `<span style="font-size:11px; color: var(--danger);">⚠ ${escapeHtml(s.tracking_last_error)}</span>
         <button class="btn btn-sm" onclick="resubscribeTracking(${o.id}, ${sid})" style="margin-left:6px;">Retry sync · 重试同步</button>`;
@@ -4085,7 +4086,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
     <div style="display:flex; gap:10px; align-items:flex-start; padding:12px 14px; margin-bottom:12px;
                 background: var(--danger-soft, rgba(232,85,106,.14)); border:1px solid var(--danger, #e8556a);
                 border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.5;">
-      <span style="font-size:18px; line-height:1.1; flex-shrink:0;">🚨</span>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
       <div>
         <div style="font-weight:700; font-size:13px; color: var(--danger, #e8556a); margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em;">
           ${cuT(`Air shipment delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `空运延误 — 晚到 ${delayDays} 天`)}
@@ -4132,7 +4133,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       ${eventsBlock}
       ${(!has && s.mode !== 'supplier') ? `
         <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
-          <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)">📦 Create JD label · 生成京东运单</button>
+          <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Create JD label · 生成京东运单</button>
           <span class="muted" style="font-size:11px;">Free live tracking — JD bills the parcel. · 免费物流追踪。</span>
         </div>
         <div class="muted" style="font-size:11px; margin:8px 0 4px;">— or attach an existing waybill manually · 或手动填写已有运单 —</div>` : ''}
@@ -4206,7 +4207,7 @@ async function submitBulkTracking() {
         <tbody>${r.results.map(x => `
           <tr>
             <td style="font-family: var(--f-mono); font-variant-numeric: tabular-nums;">${escapeHtml(x.order_no)}</td>
-            <td>${x.ok ? '<span style="color: var(--st-dispatched, #5a8c2a);">✓ saved · 已保存</span>' : '<span class="err">✗ ' + escapeHtml(x.error || 'failed · 失败') + '</span>'}</td>
+            <td>${x.ok ? '<span style="color: var(--st-dispatched, #5C7A4E);">✓ saved · 已保存</span>' : '<span class="err">✗ ' + escapeHtml(x.error || 'failed · 失败') + '</span>'}</td>
             <td class="muted" style="font-size:11px;">${x.auto_dispatched ? 'auto-dispatched · 自动发货' : ''}</td>
           </tr>`).join('')}</tbody>
       </table>`;
@@ -4235,7 +4236,7 @@ async function resubscribeTracking(orderId, shipmentId, ev) {
   } catch {}
 }
 
-// The three real JD services Roots ships with. The operator picks one when
+// The three real JD services the store ships with. The operator picks one when
 // creating a label — a parcel's mode (air/land) and whether it holds a
 // fresh (ice-pack) item only PRE-SELECT the likely choice; staff can override.
 // Codes verified against JD's printed 时效产品 (2026-06-15):
@@ -4831,7 +4832,7 @@ function renderRefundPanel(o) {
           ${refundStepBadge(state)}
           <span class="muted" style="font-size: 11px;">${o.refund_requested_at ? cuT('requested', '申请于') + ' ' + formatDate(o.refund_requested_at) : ''}</span>
         </div>
-        <button class="btn btn-sm" onclick="openRefundEvents(${o.id})" title="Audit log · 审计记录">📜 History · 历史</button>
+        <button class="btn btn-sm" onclick="openRefundEvents(${o.id})" title="Audit log · 审计记录"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 12a9 9 0 1 0 2.6-6.3"/><path d="M3 4v4h4"/><path d="M12 7v5l3 2"/></svg>History · 历史</button>
       </div>
       ${o.refund_reason ? `<div style="margin-top: 10px; font-size: 13px;">${escapeHtml(o.refund_reason)}</div>` : ''}
       ${customerLinesBlock}
