@@ -105,6 +105,11 @@ function buildStatus(req) {
   // wrote delivery.enabled. Mirrors deliveryIsAvailable() in retail.js so the
   // setup guide never disagrees with what customers actually see.
   const deliveryOn = deliveryConfigured(db);
+
+  // A store that has ever taken a customer order is plainly already open —
+  // tick the "Open the doors" step for live stores (Roots) that predate the
+  // guide and so never clicked its Open button.
+  const storeIsLive = count(db, 'SELECT COUNT(*) AS n FROM retail_orders') > 0;
   const fulfillmentReady = deliveryOn || flags.pickupConfirmed;
 
   // Nice-to-have: brand touched (a logo uploaded or the accent changed off-seed).
@@ -117,7 +122,7 @@ function buildStatus(req) {
     { key: 'products',    done: productCount > 0,   count: productCount },
     { key: 'payment',     done: paymentReady,       method: paymentMethod },
     { key: 'fulfillment', done: fulfillmentReady,   delivery: deliveryOn, pickup: flags.pickupConfirmed },
-    { key: 'open',        done: flags.storeOpened === true },
+    { key: 'open',        done: flags.storeOpened === true || storeIsLive },
   ];
   const optional = [
     { key: 'wechat', done: wechatLoginReady && payReady },
