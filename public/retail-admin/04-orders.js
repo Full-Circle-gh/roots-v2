@@ -2685,15 +2685,17 @@ function renderGzMethodToggle(o, s) {
   if (!['local', 'land'].includes(mode)) return '';
   if ((s.state || 'pending') === 'delivered') return '';
   const isLocal = mode === 'local';
+  // Segmented control (not two buttons): one cream track, active side = ink pill.
+  // The active option is disabled so it can't be re-picked — CSS forces opacity:1
+  // so it never reads as a greyed-out/disabled slab.
   const seg = (active, target, icon, en, cn) =>
-    `<button type="button" class="btn btn-sm ${active ? 'btn-primary' : ''}"
-       ${active ? 'disabled' : `onclick="setShipmentMethod(${o.id}, ${s.id}, '${target}', event)"`}
-       style="flex:1; display:inline-flex; align-items:center; justify-content:center; gap:6px;">
+    `<button type="button" class="od-seg-opt ${active ? 'on' : ''}"
+       ${active ? 'aria-pressed="true" disabled' : `onclick="setShipmentMethod(${o.id}, ${s.id}, '${target}', event)"`}>
        ${deliveryIcon(icon, 14)}<span>${cuT(en, cn)}</span></button>`;
   return `
     <div style="margin-bottom: var(--s3);">
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">${cuT('Dispatch method', '配送方式')}</div>
-      <div class="row" style="gap:6px;">
+      <div class="od-seg">
         ${seg(isLocal, 'local', 'scooter', 'Rider', '骑手配送')}
         ${seg(!isLocal, 'land', 'van', 'JD logistics', '京东物流')}
       </div>
@@ -3464,7 +3466,7 @@ function renderOpenOrder(o) {
         </div>
 
         <div class="order-items">
-          <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Items &amp; shipments · 商品与发货</div>
+          <div class="kicker oi-head" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass);">Items &amp; shipments · 商品与发货</div>
           ${_DISMISSED_SPLIT.has(o.id) ? '' : splitSuggestionBanner(o)}
           ${o.outside_guangzhou && (o.shipments?.length > 1) ? `
             <div class="outside-gz-note">
@@ -4232,45 +4234,62 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Tracking · 物流</div>
       ${delayBanner}${reuseBanner}
       ${has ? `
-        <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
-          <div>
-            <div style="font-size:12px; color:var(--text-3);">${escapeHtml(t.carrier_name_en)} · ${escapeHtml(t.carrier_name_cn)}</div>
-            <div style="font-family: var(--f-mono); font-weight:600;">${escapeHtml(t.number)}</div>
+        <div class="od-trk-panel">
+          <div class="od-trk-top">
+            <div>
+              <div class="od-trk-num">${escapeHtml(t.number)}</div>
+              <div class="od-trk-carrier">${escapeHtml(t.carrier_name_en)} · ${escapeHtml(t.carrier_name_cn)}</div>
+            </div>
+            ${(() => {
+              // Live delivery state with its own icon + colour (courier, returning,
+              // exception …) so the operator sees WHERE the parcel is at a glance —
+              // not just a flat brown "In transit" chip. Falls back to the plain
+              // carrier label for states with no dedicated treatment.
+              const dl = deliveryStateInfo({ tracking_status: t.status_code, tracking_scenario: t.scenario && t.scenario.scenario });
+              if (dl) {
+                return `<span class="pill" style="display:inline-flex; align-items:center; gap:5px; color:${dl.color}; border-color:${dl.color}55; background:${dl.color}14; font-weight:${dl.tone === 'urgent' ? 700 : 600};">${deliveryIcon(dl.icon, 13)}<span>${cuT(dl.en, dl.cn)}</span></span>`;
+              }
+              return t.status_label_en ? `<span class="pill st-dispatched"><span class="dot"></span>${escapeHtml(t.status_label_en)} · ${escapeHtml(t.status_label_cn)}</span>` : '';
+            })()}
           </div>
-          ${(() => {
-            // Live delivery state with its own icon + colour (courier, returning,
-            // exception …) so the operator sees WHERE the parcel is at a glance —
-            // not just a flat brown "In transit" chip. Falls back to the plain
-            // carrier label for states with no dedicated treatment.
-            const dl = deliveryStateInfo({ tracking_status: t.status_code, tracking_scenario: t.scenario && t.scenario.scenario });
-            if (dl) {
-              return `<div><span class="pill" style="display:inline-flex; align-items:center; gap:5px; color:${dl.color}; border-color:${dl.color}55; background:${dl.color}14; font-weight:${dl.tone === 'urgent' ? 700 : 600};">${deliveryIcon(dl.icon, 13)}<span>${cuT(dl.en, dl.cn)}</span></span></div>`;
-            }
-            return t.status_label_en ? `<div><span class="pill st-dispatched"><span class="dot"></span>${escapeHtml(t.status_label_en)} · ${escapeHtml(t.status_label_cn)}</span></div>` : '';
-          })()}
-          ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" onclick="printJdLabel(${o.id}, ${sid})" title="${escapeAttr(cuT('Print this JD waybill label on the local label printer', '在本机标签打印机打印此京东面单'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print label · 打印面单', '打印面单 · Print label')}</button>` : ''}
-          <div style="flex:1; min-width:160px; text-align:right;">
-            <div class="muted" style="font-size:11px;">${synced}</div>
-            <div style="margin-top:2px;">${kdBadge}</div>
-            <div style="margin-top:2px;">${trackLink}</div>
+          <div class="od-trk-foot">
+            ${kdBadge}
+            <span class="od-trk-updated">${synced}</span>
+            <span class="od-trk-foot-actions">
+              ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" onclick="printJdLabel(${o.id}, ${sid})" title="${escapeAttr(cuT('Print this JD waybill label on the local label printer', '在本机标签打印机打印此京东面单'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print label · 打印面单', '打印面单 · Print label')}</button>` : ''}
+              ${trackLink}
+            </span>
           </div>
         </div>` : ''}
       ${eventsBlock}
-      ${(!has && s.mode !== 'supplier') ? `
+      ${has ? `
+        <details class="od-trk-edit">
+          <summary><span class="od-trk-chev" aria-hidden="true">▸</span>Change waybill · 修改运单</summary>
+          <div class="od-trk-edit-body">
+            <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+              <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
+              <input type="text" id="trk-number-${sid}" value="${escapeHtml(t.number)}" placeholder="Tracking / waybill number" data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" style="flex:1; min-width:200px; font-family: var(--f-mono);">
+              <button class="btn btn-primary btn-sm" onclick="saveTracking(${o.id}, ${sid})">Update · 更新</button>
+              ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" style="color:var(--danger);" onclick="cancelJdPickup(${o.id}, ${sid}, event)">Cancel JD pickup · 取消揽收</button>` : ''}
+              <button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">Clear · 清除</button>
+            </div>
+            ${t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes). · “取消揽收”会向京东取消上门;“清除”仅在本地移除运单号(快递仍会上门)。</div>` : ''}
+          </div>
+        </details>`
+      : `
+        ${s.mode !== 'supplier' ? `
+          <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+            <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Create JD label · 生成京东运单</button>
+            <span class="muted" style="font-size:11px;">Free live tracking — JD bills the parcel. · 免费物流追踪。</span>
+          </div>
+          <div class="muted" style="font-size:11px; margin:8px 0 4px;">— or attach an existing waybill manually · 或手动填写已有运单 —</div>` : ''}
         <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
-          <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Create JD label · 生成京东运单</button>
-          <span class="muted" style="font-size:11px;">Free live tracking — JD bills the parcel. · 免费物流追踪。</span>
+          <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
+          <input type="text" id="trk-number-${sid}" value="" placeholder="Tracking / waybill number" data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" style="flex:1; min-width:200px; font-family: var(--f-mono);">
+          <button class="btn btn-sm" onclick="saveTracking(${o.id}, ${sid})">Save tracking · 保存运单号</button>
         </div>
-        <div class="muted" style="font-size:11px; margin:8px 0 4px;">— or attach an existing waybill manually · 或手动填写已有运单 —</div>` : ''}
-      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap; margin-top: ${has ? '10px' : '0'};">
-        <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
-        <input type="text" id="trk-number-${sid}" value="${has ? escapeHtml(t.number) : ''}" placeholder="Tracking / waybill number" data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" style="flex:1; min-width:200px; font-family: var(--f-mono);">
-        <button class="btn ${has ? 'btn-primary' : ''} btn-sm" onclick="saveTracking(${o.id}, ${sid})">${has ? 'Update · 更新' : 'Save tracking · 保存运单号'}</button>
-        ${has && t.carrier_code === 'jd' ? `<button class="btn btn-sm" style="color:var(--danger);" onclick="cancelJdPickup(${o.id}, ${sid}, event)">Cancel JD pickup · 取消揽收</button>` : ''}
-        ${has ? `<button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">Clear · 清除</button>` : ''}
-      </div>
-      ${has && t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes). · “取消揽收”会向京东取消上门;“清除”仅在本地移除运单号(快递仍会上门)。</div>` : ''}
-      ${(!has && s.mode !== 'supplier') ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead. · 手动录入的运单号通过快递100(付费)追踪,含个人的京东 JDV0… 单号;如需免费京东追踪,请改用上方“生成京东运单”。</div>` : ''}
+        ${s.mode !== 'supplier' ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead. · 手动录入的运单号通过快递100(付费)追踪,含个人的京东 JDV0… 单号;如需免费京东追踪,请改用上方“生成京东运单”。</div>` : ''}
+      `}
     </div>`;
 }
 

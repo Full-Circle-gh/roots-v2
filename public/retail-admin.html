@@ -377,6 +377,52 @@
     font-variant-numeric:tabular-nums; white-space:nowrap; }
   #order-drawer .qy-cheap { font-size:10.5px; font-weight:600; letter-spacing:.03em; text-transform:uppercase;
     color:var(--tacet-sage-ink); background:var(--tacet-sage-tint); border-radius:999px; padding:2px 8px; }
+
+  /* ── Tracking card cleanup (2026-07-06) — the muddy grey toggle becomes a
+     segmented control, the crowded status box splits into two calm tiers, and
+     the waybill-editing controls tuck behind a disclosure once a number is on. ── */
+  /* Dispatch-method segmented control — one cream track, active = ink pill. */
+  #order-drawer .od-seg { display:flex; padding:3px; gap:2px; background:var(--tacet-cream);
+    border:1px solid var(--line); border-radius:999px; }
+  #order-drawer .od-seg-opt { flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    padding:8px 16px; border:0; border-radius:999px; background:transparent; font-family:var(--f-sans);
+    font-size:13.5px; font-weight:500; color:var(--text-2); cursor:pointer; transition:color .14s, background .14s; }
+  #order-drawer .od-seg-opt svg { flex:none; }
+  #order-drawer .od-seg-opt:not(.on):hover { color:var(--text-1); }
+  #order-drawer .od-seg-opt.on,
+  #order-drawer .od-seg-opt.on:disabled { background:var(--tacet-ink); color:var(--tacet-paper);
+    box-shadow:0 1px 2px rgba(17,26,43,.14); opacity:1; cursor:default; }
+  [data-theme="dark"] #order-drawer .od-seg-opt.on,
+  [data-theme="dark"] #order-drawer .od-seg-opt.on:disabled { background:var(--tacet-paper); color:var(--tacet-ink); }
+
+  /* Two-tier tracking panel: number + status on top, quiet meta footer below. */
+  #order-drawer .od-trk-panel { border:1px solid var(--line); border-radius:12px; background:var(--bg-pane);
+    overflow:hidden; margin-bottom:10px; }
+  #order-drawer .od-trk-top { display:flex; align-items:center; justify-content:space-between; gap:14px;
+    padding:12px 15px; }
+  #order-drawer .od-trk-num { font-family:var(--f-mono); font-size:16px; font-weight:600;
+    font-variant-numeric:tabular-nums; letter-spacing:.01em; color:var(--text-1); }
+  #order-drawer .od-trk-carrier { font-size:11.5px; color:var(--text-3); margin-top:2px; }
+  #order-drawer .od-trk-foot { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:9px 15px; border-top:1px solid var(--line-soft); background:var(--bg-app); }
+  #order-drawer .od-trk-updated { font-size:11.5px; color:var(--text-3); font-variant-numeric:tabular-nums; }
+  #order-drawer .od-trk-foot-actions { margin-left:auto; display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #order-drawer .od-trk-foot-actions .btn { padding:5px 11px; }
+
+  /* Change-waybill disclosure — closed by default when a waybill is attached. */
+  #order-drawer .od-trk-edit { border-top:1px dashed var(--line-soft); margin-top:14px; padding-top:12px; }
+  #order-drawer .od-trk-edit > summary { list-style:none; display:inline-flex; align-items:center; gap:7px;
+    cursor:pointer; font-size:12.5px; font-weight:500; color:var(--text-2); user-select:none; }
+  #order-drawer .od-trk-edit > summary::-webkit-details-marker { display:none; }
+  #order-drawer .od-trk-edit > summary:hover { color:var(--text-1); }
+  #order-drawer .od-trk-chev { color:var(--text-4); transition:transform .15s ease; }
+  #order-drawer .od-trk-edit[open] > summary .od-trk-chev { transform:rotate(90deg); }
+  #order-drawer .od-trk-edit-body { margin-top:12px; }
+
+  /* Items & shipments — let the title + sort chips breathe above the parcel cards. */
+  #order-drawer .order-items > .oi-head { margin-bottom:15px; padding-bottom:13px;
+    border-bottom:1px solid var(--line-soft); }
+  #order-drawer .order-items .sort-chips { margin:0 0 16px; }
 </style>
 <!-- File split (2026-06-11): page CSS lives in /assets/retail-admin.css; the
      main app JS lives in /assets/retail-admin/*.js (10 files, loaded mid-body, same spot
