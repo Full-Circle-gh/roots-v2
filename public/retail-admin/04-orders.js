@@ -2749,21 +2749,21 @@ function renderLocalEtaCard(o, s, hoisted) {
     <div style="${wrapStyle}" id="eta-card-${sid}">
       ${renderGzMethodToggle(o, s)}
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Delivery time · 送达时间</div>
-      ${eta ? `
+      ${isAuto ? `
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
           <div>
             <div style="font-size:12px; color:var(--text-3);">Estimated arrival · 预计送达</div>
             <div style="font-family: var(--f-mono); font-weight:600; font-size:15px;">${escapeHtml(pretty)}</div>
           </div>
           <div style="flex:1; min-width:120px; text-align:right;">
-            <span class="muted" style="font-size:11px;">${isAuto ? 'From the courier · 来自骑手,自动' : 'Shown to the customer · 已展示给顾客'}</span>
+            <span class="muted" style="font-size:11px;">From the courier · 来自骑手,自动</span>
           </div>
-        </div>` : ''}
-      ${isAuto ? `
+        </div>
         <details style="margin-bottom:4px;">
           <summary style="font-size:12px; cursor:pointer; color:var(--text-3);">Set a time manually · 手动设置时间</summary>
           <div style="margin-top:8px;">${picker}</div>
-        </details>` : picker}
+        </details>`
+      : `${picker}${eta ? `<div class="muted" style="font-size:11px; margin-top:8px;">Shown to the customer · 已展示给顾客</div>` : ''}`}
       ${renderQyDispatch(o)}
     </div>`;
 }
