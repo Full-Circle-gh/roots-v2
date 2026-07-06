@@ -48,7 +48,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, #db-activity-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -78,7 +78,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, #db-activity-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;

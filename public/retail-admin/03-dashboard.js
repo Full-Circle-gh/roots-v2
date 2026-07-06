@@ -1143,17 +1143,35 @@ function tdRecapShowWork() {
   if (title) title.textContent = cuT('While you were away', '您不在的这段时间');
   const evs = TD.recapEvents || [];
   if (body) {
-    const pad = n => String(n).padStart(2, '0');
-    body.innerHTML = evs.length ? evs.map(e => {
-      const m = dashFeedMeta(e);
-      const ts = new Date(e.ts);
-      const tstr = `${ts.getMonth() + 1}/${ts.getDate()} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
-      return `<div class="db-feed-row" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
-        <span class="db-feed-ts">${tstr}</span>
-        <span class="db-feed-icon db-fi-${m.tone || 'muted'}">${m.icon}</span>
-        <span class="db-feed-text">${m.text}</span>
-      </div>`;
-    }).join('') : `<div class="db-feed-empty">${cuT('Nothing in this window', '此时段无事件')}</div>`;
+    if (!evs.length) {
+      body.innerHTML = `<div class="td-drawer-empty">${cuT('Nothing in this window', '此时段无事件')}</div>`;
+    } else {
+      // Same clean prose rows as the Activity card (time · sentence · amount),
+      // grouped under a day header since the recap window can span days.
+      const pad = n => String(n).padStart(2, '0');
+      const cn = window.cuLang && cuLang() === 'cn';
+      const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+      let html = '', lastDay = '';
+      for (const e of evs) {
+        const ts = new Date(e.ts);
+        const dayKey = ts.toDateString();
+        if (dayKey !== lastDay) {
+          lastDay = dayKey;
+          const dayLbl = cn
+            ? `${ts.getMonth() + 1}月${ts.getDate()}日 ${DOW[ts.getDay()]}`
+            : ts.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+          html += `<div class="td-drawer-day">${escapeHtml(dayLbl)}</div>`;
+        }
+        const m = tdFeedMeta(e);
+        html += `<div class="td-feed-row" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
+          <span class="db-feed-ts">${pad(ts.getHours())}:${pad(ts.getMinutes())}</span>
+          <span class="td-feed-text">${m.text}</span>
+          ${m.badge || ''}
+          ${m.amount ? `<span class="td-feed-amt">${m.amount}</span>` : ''}
+        </div>`;
+      }
+      body.innerHTML = html;
+    }
   }
   drawer.classList.add('open');
   drawer.setAttribute('aria-hidden', 'false');
