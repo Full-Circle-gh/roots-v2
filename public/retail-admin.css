@@ -7198,20 +7198,24 @@
   body:has(#tab-reports.active) { background: var(--td-paper); }
 
   /* ── shared chrome ── */
-  #tab-dashboard .td-wrap { max-width: 1120px; }
-  #tab-reports #reports-body, #tab-reports .db-rangebar, #tab-reports .db-head { max-width: 1120px; }
-  .td-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  /* Content is a centered 1120px column (like the mockup's .page), so the
+     header date lines up with the cards' right edge instead of the screen edge. */
+  #tab-dashboard .td-head, #tab-dashboard .td-wrap,
+  #tab-reports .db-head, #tab-reports .db-rangebar, #tab-reports #reports-body {
+    max-width: 1120px; margin-left: auto; margin-right: auto;
+  }
+  .td-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 24px; }
   /* Tacet page title — a large sentence-case heading (like the reference
      mockups' h1), NOT the admin's tiny mono-uppercase eyebrow that the global
      `h2` rule would otherwise give it. */
   .td-head h2 {
-    font-family: var(--f-sans); font-size: 22px; font-weight: 600;
+    font-family: var(--f-sans); font-size: 21px; font-weight: 500;
     letter-spacing: -.01em; text-transform: none; color: var(--td-text);
   }
   .td-date { margin-left: auto; font-size: 13px; color: var(--td-text2, var(--text-3)); }
   .td-kicker {
-    font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--td-text2); margin: 26px 0 10px;
+    font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--td-text2); margin: 40px 0 14px;
   }
   #tab-dashboard .card.td-card,
   #tab-reports .card {
@@ -7223,11 +7227,11 @@
   /* The global `section { display:none }` (page-level tab switching) also
      catches these in-page <section> cards — give them their display back. */
   #tab-dashboard section.td-card { display: block; }
-  .td-card { padding: 20px 24px; }
-  .td-card-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
-  .td-card-head h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--td-text); }
+  .td-card { padding: 24px; }
+  .td-card-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .td-card-head h3 { margin: 0; font-size: 15px; font-weight: 500; color: var(--td-text); }
   .td-muted { font-size: 13px; color: var(--td-text2); }
-  .td-meta  { font-size: 12.5px; color: var(--td-text2); }
+  .td-meta  { font-size: 13px; color: var(--td-text2); }
 
   /* Cards settle in once on load — 8px rise, strong ease-out, no bounce. */
   @keyframes td-settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -7240,13 +7244,13 @@
   }
 
   /* ── The Recap ── */
-  .td-recap { margin-top: 14px; }
-  .td-recap-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
-  .td-recap-head h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--td-text); }
-  .td-recap-rows { display: grid; gap: 10px; margin-top: 14px; }
-  .td-recap-row { display: flex; align-items: baseline; gap: 12px; font-size: 14px; color: var(--td-text); }
-  .td-recap-row b { font-weight: 600; font-variant-numeric: tabular-nums; }
-  .td-recap-quiet { font-size: 14px; color: var(--td-text2); }
+  .td-recap { margin-top: 0; }
+  .td-recap-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
+  .td-recap-head h3 { margin: 0; font-size: 18px; font-weight: 500; color: var(--td-text); }
+  .td-recap-rows { display: grid; gap: 12px; }
+  .td-recap-row { display: flex; align-items: baseline; gap: 12px; font-size: 15px; color: var(--td-text); }
+  .td-recap-row b { font-weight: 500; font-variant-numeric: tabular-nums; }
+  .td-recap-quiet { font-size: 15px; color: var(--td-text2); }
   .td-dusk-dot {
     width: 8px; height: 8px; border-radius: 50%; flex: none; position: relative; top: -1px;
     background: var(--td-dusk);
@@ -7257,85 +7261,90 @@
     50%      { opacity: .45; transform: scale(.8); }
   }
   .td-recap-close {
-    margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--td-border);
-    font-size: 12.5px; color: var(--td-text2);
+    margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--td-border);
+    font-size: 13px; color: var(--td-text2);
   }
   .td-ghost {
     margin-left: auto; border: 0; background: transparent; cursor: pointer;
-    font-size: 12.5px; color: var(--td-text2); padding: 2px 4px; font-family: var(--f-sans);
+    font-size: 13px; color: var(--td-text2); padding: 2px 4px; font-family: var(--f-sans);
     border-bottom: 1px solid transparent; transition: color .2s cubic-bezier(.16,1,.3,1);
   }
   .td-ghost:hover { color: var(--td-text); border-bottom-color: var(--td-border); }
 
   /* ── Needs you — attention cards ── */
-  .td-attn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
-  .td-attn-card { padding: 18px 20px; }
-  .td-attn-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
-  .td-attn-head h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--td-text); }
+  .td-attn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .td-attn-card { padding: 20px 24px; }
+  .td-attn-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .td-attn-ic { display: inline-flex; flex: none; }
+  .td-attn-ic svg { display: block; }
+  .td-ic-amber { color: var(--td-amber-ink); }
+  .td-ic-brick { color: var(--td-brick-ink); }
+  .td-attn-head h3 { margin: 0; font-size: 15px; font-weight: 500; color: var(--td-text); }
   .td-pill {
-    margin-left: auto; font-size: 12.5px; font-weight: 600; padding: 1px 11px;
+    margin-left: auto; font-size: 13px; font-weight: 500; padding: 2px 12px;
     border-radius: 999px; font-variant-numeric: tabular-nums;
   }
   .td-pill-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
   .td-pill-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
-  .td-attn-rows { display: grid; gap: 2px; }
+  .td-attn-rows { display: grid; gap: 4px; }
   .td-attn-row {
     display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
-    border: 0; background: transparent; cursor: pointer; padding: 5px 8px; margin: 0 -8px;
-    border-radius: 6px; font-size: 13px; color: var(--td-text); font-family: var(--f-sans);
+    border: 0; background: transparent; cursor: pointer; padding: 4px 8px; margin: 0 -8px;
+    border-radius: 6px; font-size: 14px; color: var(--td-text); font-family: var(--f-sans);
   }
   .td-attn-row:hover { background: var(--td-raised); }
   .td-attn-row .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .td-attn-row .val { margin-left: auto; flex: none; font-size: 12.5px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
-  .td-attn-more { margin-top: 8px; font-size: 12.5px; color: var(--td-text2); }
+  .td-attn-row .val { margin-left: auto; flex: none; font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .td-attn-more { margin-top: 10px; font-size: 13px; color: var(--td-text2); }
   .td-attn-go {
-    margin-top: 12px; display: inline-block; cursor: pointer;
-    font-size: 12.5px; font-weight: 500; color: var(--td-text); background: transparent;
+    margin-top: 14px; display: inline-block; cursor: pointer;
+    font-size: 13.5px; font-weight: 500; color: var(--td-text); background: transparent;
     border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 14px;
     font-family: var(--f-sans); transition: border-color .2s cubic-bezier(.16,1,.3,1);
   }
   .td-attn-go:hover { border-color: var(--td-text2); }
 
   /* All clear — the empty state is a compliment, with the settled waveform. */
-  .td-clear { text-align: center; padding: 30px 24px 26px; background: var(--td-raised); border-color: transparent; }
-  .td-clear svg { width: 170px; height: 24px; color: var(--td-text2); margin-bottom: 6px; }
-  .td-clear p { margin: 0; font-size: 14.5px; color: var(--td-text); }
-  .td-clear p.sub { margin-top: 4px; font-size: 12.5px; color: var(--td-text2); }
+  .td-clear { text-align: center; padding: 40px 24px 36px; background: var(--td-raised); border-color: transparent; }
+  .td-clear svg { width: 180px; height: 24px; color: var(--td-text2); margin-bottom: 14px; }
+  .td-clear p { margin: 0; font-size: 15px; color: var(--td-text); }
+  .td-clear p.sub { margin-top: 4px; font-size: 13px; color: var(--td-text2); }
 
   /* ── Today — the pulse ── */
-  .td-pulse-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; align-items: stretch; }
+  .td-pulse-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: stretch; }
   @media (max-width: 1000px) { .td-pulse-grid { grid-template-columns: 1fr; } }
-  .td-live { display: inline-flex; align-items: baseline; gap: 7px; margin-left: auto; font-size: 12.5px; color: var(--td-text2); }
+  .td-live { display: inline-flex; align-items: baseline; gap: 8px; margin-left: auto; font-size: 13px; color: var(--td-text2); }
   .td-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--td-sage); align-self: center; opacity: .45; }
   .td-live.is-on .td-live-dot { opacity: 1; }
-  .td-live-num { font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-live-num { font-weight: 500; color: var(--td-text); font-variant-numeric: tabular-nums; }
   .td-live.is-zero .td-live-num { display: none; }
-  .td-today .td-card-head { margin-bottom: 2px; }
+  .td-today .td-card-head { margin-bottom: 4px; }
   .td-today .db-hero-sync[hidden] { display: none; }
-  .td-rev { display: flex; align-items: baseline; gap: 12px; margin-top: 8px; }
-  .td-rev-big { font-size: 38px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-rev { display: flex; align-items: baseline; gap: 14px; margin-top: 10px; }
+  .td-rev-big { font-size: 38px; font-weight: 500; letter-spacing: -.01em; line-height: 1.1; color: var(--td-text); font-variant-numeric: tabular-nums; }
   .td-rev .db-delta { font-size: 13px; }
   .td-rev-note { font-size: 13px; color: var(--td-text2); }
   /* Muted, unfilled revenue sparkline (the mockup's thin graphite line with an
      ink end-dot) — overrides the tea-green filled spark used elsewhere. */
-  .td-spark { height: 40px; margin-top: 16px; color: var(--td-text2); }
+  .td-spark { height: 48px; margin: 18px 0 8px; color: var(--td-text2); }
   .td-spark .db-spark-area { display: none; }
   .td-spark .db-spark-line { opacity: .7; }
   .td-spark .db-spark-dot { background: var(--td-text); }
   /* Three plain pulse cells — orders / new customers / refund requests. No
      mini-sparklines, no deltas: just the number and its label (the mockup). */
-  .td-cells { display: flex; gap: 48px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--td-border); }
-  .td-cell .v { font-size: 21px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .td-cell .k { font-size: 12.5px; color: var(--td-text2); margin-top: 3px; }
+  .td-cells { display: flex; gap: 48px; margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--td-border); }
+  .td-cell .v { font-size: 21px; font-weight: 500; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-cell .k { font-size: 13px; color: var(--td-text2); margin-top: 3px; }
 
   /* Activity strip — clean prose rows: time · sentence · right-aligned amount,
      no icon, first-order pill only. Toggle reveals the full day (scrolls inside
-     the card past ~340px so the page below stays reachable). */
-  .td-feed .db-feed-list { display: flex; flex-direction: column; gap: 1px; max-height: 340px; }
+     the card past ~360px so the page below stays reachable). */
+  .td-feed .td-card-head { margin-bottom: 14px; }
+  .td-feed .db-feed-list { display: flex; flex-direction: column; gap: 4px; max-height: 360px; }
   .td-feed .db-feed-empty { font-size: 13px; color: var(--td-text2); padding: 6px 0; }
-  .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 6px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 13.5px; line-height: 1.4; cursor: pointer; }
+  .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 14px; line-height: 1.4; cursor: pointer; }
   .td-feed-row:hover { background: var(--td-raised); }
-  .td-feed-row .db-feed-ts { flex: none; min-width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .td-feed-row .db-feed-ts { flex: none; width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
   .td-feed-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--td-text); }
   .td-feed-amt { margin-left: auto; flex: none; color: var(--td-text2); font-size: 13px; font-variant-numeric: tabular-nums; }
   .td-feed-badge { flex: none; font-size: 11.5px; font-weight: 500; padding: 1px 9px; border-radius: 999px; background: var(--td-sage-tint); color: var(--td-sage-ink); }
@@ -7346,10 +7355,10 @@
   .td-viewall { margin-left: auto; border: 0; background: transparent; cursor: pointer; font-family: var(--f-sans); font-size: 13px; color: var(--td-text2); padding: 2px 4px; transition: color .2s cubic-bezier(.16,1,.3,1); }
   .td-viewall:hover { color: var(--td-text); }
 
-  .td-foot { margin-top: 26px; text-align: center; }
+  .td-foot { margin-top: 40px; text-align: center; }
   .td-foot-link {
     border: 0; background: transparent; cursor: pointer; font-family: var(--f-sans);
-    font-size: 13px; color: var(--td-text2); padding: 4px 8px;
+    font-size: 13.5px; color: var(--td-text2); padding: 4px 8px;
     border-bottom: 1px solid var(--td-border); transition: color .2s cubic-bezier(.16,1,.3,1);
   }
   .td-foot-link:hover { color: var(--td-text); }

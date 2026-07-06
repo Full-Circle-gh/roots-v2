@@ -1131,9 +1131,17 @@ async function tdOpsLoad() {
   } catch (e) { /* silent — next tick retries */ }
 }
 
-function tdAttnCard(tone, title, count, rowsHtml, moreText, action) {
+// Tone-coloured line icons for the attention-card headers (24-box, currentColor
+// so the .td-ic-<tone> class tints them to the card's ink), matching the mockup.
+const TD_ATTN_ICON = {
+  box:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
+  truck: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>',
+  refund:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
+};
+function tdAttnCard(tone, icon, title, count, rowsHtml, moreText, action) {
   return `<section class="card td-card td-attn-card is-${tone}">
     <div class="td-attn-head">
+      <span class="td-attn-ic td-ic-${tone}" aria-hidden="true">${TD_ATTN_ICON[icon] || ''}</span>
       <h3>${title}</h3>
       <span class="td-pill td-pill-${tone}">${count}</span>
     </div>
@@ -1155,34 +1163,7 @@ function tdAttnRender() {
   if (refCell) refCell.textContent = String((DASH_OPS.refunds && DASH_OPS.refunds.count) || 0);
   const cards = [];
 
-  // Delivery problems — the carrier flagged something an operator must chase.
-  const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
-  if (da.count) {
-    const rows = (da.items || []).slice(0, 4).map(it => {
-      const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
-        || { en: 'Delivery issue', cn: '配送异常', color: 'var(--danger)' };
-      return `<button type="button" class="td-attn-row" onclick="openOrder(${Number(it.id)})">
-        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
-        <span class="val" style="color:${info.color}">${cuT(info.en, info.cn)}</span>
-      </button>`;
-    }).join('');
-    cards.push(tdAttnCard('brick', cuT('Delivery needs a call', '配送需要跟进'), da.count, rows,
-      da.count > 4 ? cuT(`and ${da.count - 4} more`, `另有 ${da.count - 4} 个`) : ''));
-  }
-
-  // Refund queue — pending / reviewing requests.
-  const rf = DASH_OPS.refunds || { count: 0, items: [] };
-  if (rf.count) {
-    const rows = (rf.items || []).slice(0, 4).map(it => `
-      <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
-        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
-        <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
-      </button>`).join('');
-    cards.push(tdAttnCard('amber', cuT('Refunds waiting', '退款待处理'), rf.count, rows,
-      rf.count > 4 ? cuT(`and ${rf.count - 4} more`, `另有 ${rf.count - 4} 笔`) : ''));
-  }
-
-  // Stock — out-of-stock rows first (harder problem), then the lowest counts.
+  // Stock first (left, like the mockup) — out-of-stock rows before the lowest counts.
   const low = DASH_OPS.low_stock || { count: 0, items: [] };
   const oos = DASH_OPS.out_of_stock || { count: 0, items: [] };
   if (low.count + oos.count) {
@@ -1196,10 +1177,46 @@ function tdAttnRender() {
       .map(it => prodRow(it, cuT(`${it.stock_qty} left`, `剩 ${it.stock_qty}`)));
     const shown = Math.min(2, (oos.items || []).length) + lowRows.length;
     const restN = low.count + oos.count - shown;
-    cards.push(tdAttnCard('amber', cuT('Running low', '库存告急'), low.count + oos.count,
+    cards.push(tdAttnCard('amber', 'box', cuT('Running low', '库存告急'), low.count + oos.count,
       oosRows.join('') + lowRows.join(''),
       restN > 0 ? cuT(`and ${restN} more`, `另有 ${restN} 项`) : '',
-      `<button type="button" class="td-attn-go" onclick="dashJumpTab('products')">${cuT('Open products', '查看产品')}</button>`));
+      `<button type="button" class="td-attn-go" onclick="dashJumpTab('products')">${cuT('Open restock', '前往补货')}</button>`));
+  }
+
+  // Delivery problems — the carrier flagged something an operator must chase.
+  // A single alert reads like the mockup: order+reason, a buyer sub-line, and an
+  // "Open the order" button; several stack as clickable rows.
+  const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
+  if (da.count) {
+    const reasonOf = it => {
+      const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
+        || { en: 'delivery issue', cn: '配送异常' };
+      return cuT(info.en, info.cn);
+    };
+    const rows = (da.items || []).slice(0, 4).map(it => `
+      <button type="button" class="td-attn-row" onclick="openOrder(${Number(it.id)})">
+        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(reasonOf(it))}</span>
+      </button>`).join('');
+    const first = (da.items || [])[0] || {};
+    const more = da.count === 1
+      ? escapeHtml(first.buyer || '')
+      : (da.count > 4 ? cuT(`and ${da.count - 4} more`, `另有 ${da.count - 4} 个`) : '');
+    const action = da.count === 1 && first.id
+      ? `<button type="button" class="td-attn-go" onclick="openOrder(${Number(first.id)})">${cuT('Open the order', '打开订单')}</button>`
+      : '';
+    cards.push(tdAttnCard('brick', 'truck', cuT('Delivery needs a call', '配送需要跟进'), da.count, rows, more, action));
+  }
+
+  // Refund queue — pending / reviewing requests.
+  const rf = DASH_OPS.refunds || { count: 0, items: [] };
+  if (rf.count) {
+    const rows = (rf.items || []).slice(0, 4).map(it => `
+      <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
+        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
+        <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
+      </button>`).join('');
+    cards.push(tdAttnCard('amber', 'refund', cuT('Refunds waiting', '退款待处理'), rf.count, rows,
+      rf.count > 4 ? cuT(`and ${rf.count - 4} more`, `另有 ${rf.count - 4} 笔`) : ''));
   }
 
   if (!cards.length) {
