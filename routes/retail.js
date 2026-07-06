@@ -16416,8 +16416,18 @@ router.get('/api/retail-admin/delivery-attention', requireRetailAdmin, (req, res
   let failedPushes = 0;
   const disconnected = [];
   try {
+    // Only count a failed hand-off that STILL needs a human: a first-party
+    // delivery order that hasn't reached the customer yet. Read-only mirror
+    // channels (Meituan / gzgrocery) run their OWN couriers, so a Qingyun push
+    // never applies to them — and any order already delivered/cancelled/refunded
+    // is done. Without this filter, a stale error on a long-delivered Meituan
+    // order would nag on the badge forever.
     failedPushes = tdb().prepare(
-      "SELECT COUNT(*) AS n FROM qingyun_push_queue WHERE status = 'error'"
+      `SELECT COUNT(*) AS n FROM qingyun_push_queue q
+         JOIN retail_orders o ON o.id = q.retail_order_id
+        WHERE q.status = 'error'
+          AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')
+          AND o.status NOT IN ('delivered','cancelled','refunded')`
     ).get().n;
   } catch (_) { /* table missing pre-migration — treat as none */ }
 
