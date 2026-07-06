@@ -463,13 +463,28 @@
     }).catch(function(){ mount(false); });
   }).catch(function(){});
   function mount(hidden){
-    var btn=el('button','position:fixed;right:18px;bottom:84px;z-index:99998;background:'+AC+';color:'+FG+';border:0;border-radius:999px;padding:11px 16px;font:600 13px/1 "IBM Plex Sans",system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:grab;visibility:visible;touch-action:none;user-select:none;-webkit-user-select:none','Support · 客服');
+    var ICO='<svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="display:block"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>';
+    // Label = two language blocks; the global html[data-ui-lang] CSS shows the
+    // one live language and swaps them the instant the operator toggles EN/中文,
+    // so the launcher never reads "Support · 客服" both at once. The .sp-lab
+    // wrapper collapses to width 0 in the idle "dot" state (see setExpanded).
+    var btn=el('button','position:fixed;right:18px;bottom:84px;z-index:99998;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;height:46px;padding:0;background:'+AC+';color:'+FG+';border:0;border-radius:999px;font:600 13px/1 "IBM Plex Sans","IBM Plex Sans SC",system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:grab;visibility:visible;touch-action:none;user-select:none;-webkit-user-select:none;overflow:hidden','<span style="width:46px;height:46px;display:flex;align-items:center;justify-content:center;flex:none">'+ICO+'</span><span class="sp-lab" style="max-width:0;opacity:0;overflow:hidden;white-space:nowrap;transition:max-width .2s ease,opacity .15s ease,margin-right .2s ease"><span data-lang-block="en">Support</span><span data-lang-block="cn">客服</span></span>');
     var panel=el('div','position:fixed;right:18px;bottom:84px;z-index:99999;width:340px;max-width:calc(100vw - 36px);max-height:72vh;background:'+PANEL+';color:'+FG+';border:1px solid '+LINE+';border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.3);display:none;flex-direction:column;overflow:hidden;font-family:"IBM Plex Sans","IBM Plex Sans SC",system-ui,sans-serif');
     document.body.appendChild(btn); document.body.appendChild(panel);
     if(hidden){ btn.style.display='none'; }
     // Let the Settings toggle AND the in-panel "Hide" link show/hide the
     // launcher live, without a reload.
     window.__fcSupportButton={ setHidden:function(h){ btn.style.display=h?'none':'block'; if(h)panel.style.display='none'; } };
+
+    // ── Collapse to a small dot when idle ───────────────────────────────
+    // At rest the launcher is just a 46px icon dot — unobtrusive. It grows to
+    // the full "Support" pill on hover (desktop); a tap opens the panel straight
+    // away (touch has no hover). The .sp-lab wrapper's max-width carries the
+    // grow/shrink, and the inline-flex button hugs it, so the pill slides open.
+    var lab=btn.querySelector('.sp-lab');
+    function setExpanded(on){ if(!lab)return; lab.style.maxWidth=on?'120px':'0'; lab.style.opacity=on?'1':'0'; lab.style.marginRight=on?'16px':'0'; }
+    btn.addEventListener('mouseenter',function(){ setExpanded(true); });
+    btn.addEventListener('mouseleave',function(){ setExpanded(false); });
 
     // ── Drag-to-move + remembered position ──────────────────────────────
     // The launcher isn't pinned to one corner: operators can drag it anywhere,
