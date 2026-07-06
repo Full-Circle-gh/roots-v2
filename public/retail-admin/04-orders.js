@@ -2720,11 +2720,28 @@ function renderLocalEtaCard(o, s, hoisted) {
   // Inline (under the items) it sits below a dashed divider; hoisted to the top
   // of the drawer it stands on its own, so drop the divider/top margin there.
   const wrapStyle = hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);';
-  // The manual picker markup — shown outright when there's no auto ETA, or
-  // collapsed inside a <details> under the auto display as the override path.
+  // The manual picker markup — a brand-native segmented time field (HH : MM +
+  // AM/PM toggle) instead of the raw OS <input type=time>. A hidden input keeps
+  // the stored "HH:MM" 24h value in sync (qyEtaSync), so saveLocalEta is untouched.
+  // Shown outright when there's no auto ETA, or collapsed inside a <details>
+  // under the auto display as the override path.
+  const h24n = eta ? parseInt(eta.slice(0, 2), 10) : null;
+  const etaMin = eta ? eta.slice(3, 5) : '';
+  const etaH12 = h24n == null ? '' : String((h24n % 12) || 12).padStart(2, '0');
+  const etaAp = h24n != null && h24n >= 12 ? 'PM' : 'AM';
   const picker = `
-      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
-        <input type="time" id="eta-time-${sid}" value="${escapeHtml(eta)}" style="min-width:140px; font-family: var(--f-mono);">
+      <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
+        <span class="eta-timefield">
+          <svg class="eta-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+          <input class="eta-seg" id="eta-h-${sid}" type="text" inputmode="numeric" maxlength="2" value="${etaH12}" placeholder="12" oninput="qyEtaSync(${sid})" aria-label="Hour · 时">
+          <span class="eta-colon">:</span>
+          <input class="eta-seg" id="eta-m-${sid}" type="text" inputmode="numeric" maxlength="2" value="${etaMin}" placeholder="00" oninput="qyEtaSync(${sid})" aria-label="Minute · 分">
+          <span class="eta-ampm" id="eta-ampm-${sid}" data-v="${etaAp}">
+            <button type="button" class="${etaAp === 'AM' ? 'on' : ''}" onclick="qyEtaAmpm(${sid}, 'AM')">AM</button>
+            <button type="button" class="${etaAp === 'PM' ? 'on' : ''}" onclick="qyEtaAmpm(${sid}, 'PM')">PM</button>
+          </span>
+        </span>
+        <input type="hidden" id="eta-time-${sid}" value="${escapeHtml(eta)}">
         <button class="btn ${eta ? 'btn-primary' : ''} btn-sm" onclick="saveLocalEta(${o.id}, ${sid}, event)">${eta ? 'Update time · 更新时间' : 'Set arrival time · 设置送达时间'}</button>
         ${eta ? `<button class="btn btn-sm" onclick="clearLocalEta(${o.id}, ${sid}, event)">Clear · 清除</button>` : ''}
       </div>`;
@@ -2747,9 +2764,6 @@ function renderLocalEtaCard(o, s, hoisted) {
           <summary style="font-size:12px; cursor:pointer; color:var(--text-3);">Set a time manually · 手动设置时间</summary>
           <div style="margin-top:8px;">${picker}</div>
         </details>` : picker}
-      <div class="muted" style="font-size:11px; margin-top:6px;">${isAuto
-        ? 'The courier reports the arrival time and it updates on its own — the customer sees it automatically. Set a time above only to override. · 骑手会自动上报送达时间并实时更新,顾客可直接查看。如需覆盖请在上方手动设置。'
-        : 'Same-city delivery — set when the rider should arrive; the customer sees this on their order. · 同城配送 — 设置骑手预计送达时间,顾客可在订单中查看。'}</div>
       ${renderQyDispatch(o)}
     </div>`;
 }
@@ -2779,18 +2793,17 @@ async function qyLoadCarriers(orderId, btn) {
     const carriers = (j.data.carriers || []).filter(c => c.enabled);
     if (!carriers.length) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('No couriers available right now.', '当前暂无可用运力。')}</div>`; return; }
     const rows = carriers.map(c => `
-      <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px;cursor:pointer;">
-        <span style="display:flex;align-items:center;gap:8px;">
-          <input type="checkbox" name="qy-car-${orderId}" value="${c.carrierId}|${escapeAttr(c.serviceCode)}" ${c.cheapest ? 'checked' : ''}>
-          <span><b>${escapeHtml(c.serviceName || c.carrierName)}</b>${c.cheapest ? ` <span style="font-size:10px;color:var(--brand);">${cuT('cheapest', '最便宜')}</span>` : ''}<div class="muted" style="font-size:11px;">${escapeHtml(c.carrierName)}${c.distanceM ? ' · ' + (c.distanceM / 1000).toFixed(1) + 'km' : ''}</div></span>
+      <label class="qy-row">
+        <input type="checkbox" name="qy-car-${orderId}" value="${c.carrierId}|${escapeAttr(c.serviceCode)}" ${c.cheapest ? 'checked' : ''}>
+        <span style="flex:1; min-width:0;">
+          <span class="qy-name"><b>${escapeHtml(c.serviceName || c.carrierName)}</b>${c.cheapest ? `<span class="qy-cheap">${cuT('cheapest', '最便宜')}</span>` : ''}</span>
+          <span class="qy-meta">${escapeHtml(c.carrierName)}${c.distanceM ? ' · ' + (c.distanceM / 1000).toFixed(1) + 'km' : ''}</span>
         </span>
-        <b style="font-family:var(--f-mono);white-space:nowrap;">¥${c.feeYuan}</b>
+        <span class="qy-fee">¥${c.feeYuan}</span>
       </label>`).join('');
     box.innerHTML =
-      `<div class="muted" style="font-size:11px;margin-bottom:6px;">${cuT('Tick one or more. Pick several and the first rider to accept takes the order — only that courier is charged.', '可勾选一个或多个。选多家时,谁先接单谁配送,仅对接单的那家扣费。')}</div>` +
       rows +
-      `<button class="btn btn-primary btn-sm" onclick="qyDispatch(${orderId}, this)" style="margin-top:4px;">${cuT('Dispatch courier', '发起配送')}</button>` +
-      `<div class="muted" style="font-size:10px;margin-top:6px;">${cuT('The fee is deducted from your Qingyun balance.', '费用从青云余额中扣除。')}</div>`;
+      `<button class="btn btn-primary btn-sm" onclick="qyDispatch(${orderId}, this)" style="margin-top:6px;">${cuT('Dispatch courier', '发起配送')}</button>`;
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = cuT('Compare couriers', '查看运力比价'); }
     if (box) box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--danger)">${cuT('Load failed', '加载失败')}</div>`;
@@ -2937,6 +2950,8 @@ async function openOrder(id, opts = {}) {
       // until the fresh data lands — no "Loading…" flash, no slide.
     } else {
       mount.innerHTML = '<div class="order-card muted">Loading order… · 正在加载订单…</div>';
+      const foot = $('#order-drawer-foot');
+      if (foot) foot.innerHTML = '';  // drop the previous order's print footer while loading
       openDrawer('#order-drawer');
     }
   }
@@ -3261,6 +3276,9 @@ function renderReadonlyItemRow(it, i) {
 // manifest, and none of the mutating controls the full renderOpenOrder carries.
 function renderReadonlyOrder(o) {
   const mount = $('#order-detail-mount');
+  // View-only channels can't (re)print a receipt — collapse the print footer.
+  const foot = $('#order-drawer-foot');
+  if (foot) foot.innerHTML = '';
   const items = o.items || [];
   const cust = (typeof ordCustomerLines === 'function') ? ordCustomerLines(o) : { name: o.nickname || o.recipient_name || '—', phone: o.recipient_phone || '' };
   const chan = ordChannelLabel(o);
@@ -3517,6 +3535,10 @@ function renderOpenOrder(o) {
 
         ${ODV.totalPlacement === 'footer' ? renderOrderTotalFooter(o) : ''}
       </div>`;
+  // Print controls live in a footer pinned to the bottom of the drawer (outside
+  // the scroll area) so a reprint is always one click, never buried mid-scroll.
+  const foot = $('#order-drawer-foot');
+  if (foot) foot.innerHTML = orderDrawerFoot(o);
   // Drawer body manages its own scroll position; reset to top on each
   // render so re-renders after a transition don't leave it mid-scroll.
   const body = $('#order-drawer .drawer-body');
@@ -3675,24 +3697,30 @@ function askConfirm(opts) {
   });
 }
 
-// Receipt-print status tile in the order drawer. Hidden for orders that
-// can't have a receipt (unpaid / cancelled / refunded). Shows the last
-// auto-print outcome (printed / failed / not yet) plus a one-click reprint.
-// Receipt = just the option to (re)print. Print status / "printed at" is
-// omitted (operators only want the button). The per-MACHINE toggles that used
-// to sit here (auto-print JD waybill, box-label-auto) moved to Settings ·
-// Delivery — they weren't order-specific. A FAILED auto-print is the one status
-// still worth surfacing. The per-order "Box label" print button stays, gated by
-// the opt-in Delivery setting (delivery.boxLabel → body.ord-box-label).
-function printReceiptRow(o) {
+// Print controls for the order drawer, rendered into the footer pinned at the
+// bottom of the drawer (#order-drawer-foot) rather than mid-scroll — so a
+// reprint is always one click, never hunted for in the items list. Returns ''
+// for orders that can't have a receipt (unpaid / cancelled / refunded); the
+// empty footer then collapses via `#order-drawer .drawer-foot:empty`.
+// Print receipt is the workhorse. Box label rides along only when Settings ·
+// Delivery turns it on (delivery.boxLabel → body.ord-box-label gates
+// .ord-boxlabel-ui). A FAILED auto-print is the one status still surfaced, and
+// a quiet "Prints at <store>" hint tells the operator which counter it goes to.
+// The per-MACHINE toggles (auto-print JD waybill, box-label-auto) live in
+// Settings · Delivery — they were never order-specific.
+function orderDrawerFoot(o) {
   if (['pending_payment', 'cancelled', 'refunded'].includes(o.status)) return '';
   const failed = o.print_status === 'failed'
     ? `<span class="pill danger" title="${escapeAttr(o.print_error || '')}"><span class="dot"></span>Print failed · 打印失败</span>` : '';
-  return `<div class="receipt-row">
-    ${failed}
+  const hint = o.store_code
+    ? `<span class="od-foot-hint">${cuT('Prints at ' + escapeHtml(o.store_name_en || o.store_code), '打印于 ' + escapeHtml(o.store_name_cn || o.store_code))}</span>`
+    : '';
+  return `
     <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print receipt','打印小票')}</button>
     <button class="btn btn-sm ord-boxlabel-ui" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label', '打印箱贴')}</button>
-  </div>`;
+    <span class="od-foot-spacer"></span>
+    ${failed}
+    ${hint}`;
 }
 
 async function reprintOrder(id) {
@@ -4703,6 +4731,31 @@ async function clearTracking(orderId, shipmentId, ev) {
     await openOrder(orderId);
     if (_mount) _mount.scrollTop = _scrollTop;
   } catch {}
+}
+
+// Brand ETA field helpers — the segmented HH:MM + AM/PM field (renderLocalEtaCard)
+// writes the stored 24h "HH:MM" into a hidden #eta-time-<sid> so saveLocalEta reads
+// it unchanged. qyEtaSync recomputes it from the parts; blank/invalid parts clear it.
+function qyEtaSync(sid) {
+  const hEl = document.getElementById('eta-h-' + sid);
+  const mEl = document.getElementById('eta-m-' + sid);
+  const apEl = document.getElementById('eta-ampm-' + sid);
+  const hidden = document.getElementById('eta-time-' + sid);
+  if (!hEl || !mEl || !hidden) return;
+  const h = parseInt(hEl.value, 10);
+  const m = parseInt(mEl.value, 10);
+  const ap = (apEl && apEl.dataset.v) || 'AM';
+  if (Number.isNaN(h) || Number.isNaN(m) || h < 1 || h > 12 || m < 0 || m > 59) { hidden.value = ''; return; }
+  const h24 = (h % 12) + (ap === 'PM' ? 12 : 0);   // 12AM→0, 12PM→12, 1PM→13…
+  hidden.value = String(h24).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+function qyEtaAmpm(sid, v) {
+  const apEl = document.getElementById('eta-ampm-' + sid);
+  if (apEl) {
+    apEl.dataset.v = v;
+    apEl.querySelectorAll('button').forEach(bn => bn.classList.toggle('on', bn.textContent.trim() === v));
+  }
+  qyEtaSync(sid);
 }
 
 // Local-delivery ETA (Guangzhou same-city). Saves the picked same-day arrival

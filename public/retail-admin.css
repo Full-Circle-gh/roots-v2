@@ -4396,6 +4396,13 @@
     border-top: 1px solid var(--line);
     flex-shrink: 0;
   }
+  /* Orders' print footer: buttons left, a quiet "Prints at <store>" hint pushed
+     right. Collapses entirely when orderDrawerFoot() returns '' (unpaid /
+     cancelled / refunded / view-only channels) so no empty bar lingers. */
+  #order-drawer .drawer-foot { justify-content: flex-start; flex-wrap: wrap; }
+  #order-drawer .drawer-foot:empty { display: none; }
+  #order-drawer .drawer-foot .od-foot-spacer { flex: 1 1 auto; }
+  #order-drawer .drawer-foot .od-foot-hint { font-size: 12.5px; color: var(--text-3); }
   /* The Orders drawer hosts the existing .order-card chrome unchanged
      — but reset the card's outer chrome since the drawer already
      frames it. */

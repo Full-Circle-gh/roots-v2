@@ -1005,6 +1005,19 @@ async function loadConfig() {
     // Box-label printing (parcel stickers) is likewise opt-in — the drawer's
     // Box-label button + auto-print toggle only show when enabled in Delivery.
     document.body.classList.toggle('ord-box-label', !!c.delivery?.boxLabel);
+    // Floating platform-Support launcher — operators can hide it (support.hidden).
+    { const sb = $('#cfg-support-btn'); if (sb) {
+        const show = !(c.support && c.support.hidden);
+        sb.checked = show;
+        if (!sb._wired) { sb._wired = true; sb.addEventListener('change', async () => {
+          const hidden = !sb.checked;
+          try {
+            await api('/api/retail-admin/config', { method: 'PUT', body: { 'support.hidden': hidden } });
+            if (window.__fcSupportButton) window.__fcSupportButton.setHidden(hidden);
+            toast(hidden ? cuT('Support button hidden', '已隐藏客服按钮') : cuT('Support button shown', '已显示客服按钮'), 'ok');
+          } catch (e) { sb.checked = !hidden; toast(cuT('Save failed', '保存失败') + ': ' + (e.message || ''), 'err'); }
+        }); }
+      } }
     // Store-wide low-stock threshold (drives the amber dot + Low-stock tile).
     { const lt = parseInt(c.inventory?.lowStockThreshold, 10); const nv = Number.isFinite(lt) && lt >= 0 ? lt : 5;
       const changed = nv !== PA_LOW_STOCK; PA_LOW_STOCK = nv; paSyncLowStockUi();
