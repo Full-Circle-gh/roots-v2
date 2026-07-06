@@ -815,6 +815,13 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
     Dashboard · 概览
   </button>
+  <!-- Reports — the historical analytics moved out of the Dashboard's
+       deep-dive fold into their own page. Same order value as Dashboard:
+       equal flex order falls back to DOM order, so this sits right below. -->
+  <button data-tab="reports" style="order:1" onclick="reportsInit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+    Reports · 报表
+  </button>
   <!-- Orders → Invoices (sub) -->
   <div class="tabs-group nav-parent" data-group="orders" style="order:2">
     <button class="nav-parent-link" data-tab="orders">
@@ -1048,316 +1055,82 @@
     <!-- Continue-setup card — shown on top of the dashboard while setup is
          unfinished (part 17), gone at 100%. -->
     <div id="setup-dash-card" style="display:none"></div>
-    <div class="db-head">
+
+    <div class="db-head td-head">
       <h2 style="margin:0">Dashboard · 概览</h2>
-      <!-- Date range lives below the live hero now (see #db-rangebar), so the
-           controls sit with the cards they drive instead of above the always-
-           live "Right now" panel. -->
+      <span class="td-date" id="td-date"></span>
     </div>
 
-    <!-- ── Mobile dashboard (Variant A — full-screen push) ──
-         Phone-only (≤720px). Rendered from the SAME live DASH_DATA the desktop
-         bento/deep-dive use (rmRenderDash, called at the end of dashRenderAll)
-         as a dark live hero + a grid of report tiles. Tap a tile → the
-         #rm-dash-report full-screen push below. The desktop bento + deep-dive
-         are hidden on phones via CSS; desktop is untouched.
-         Built to match design bundle: mobile/dashboard-a.html + fc-dash.css. -->
+    <!-- Mobile dashboard (Variant A) — untouched this pass. Rendered by
+         rmRenderDash from the same DASH_DATA; the desktop td-* surface below
+         is hidden ≤720px, this is hidden on desktop. -->
     <div id="rm-dash" aria-live="polite"></div>
 
-    <!-- Delivery alerts — a full-width banner that appears ONLY when a dispatched
-         order's carrier reported a problem (can't reach customer / exception /
-         returning). Populated from /dashboard/ops by deliveryBannerRender() on
-         each ops poll; stays hidden (and empty) when there's nothing to chase. -->
-    <div id="db-delivery-alerts" class="db-delivery-alerts" aria-live="polite" hidden></div>
+    <!-- ── Tacet dashboard — one question: is everything okay? ──
+         1. The Recap (what the system handled while the operator was away)
+         2. Needs you (attention cards, present only when non-empty)
+         3. Today (the pulse) + the trimmed activity strip.
+         All rendering in 03-dashboard.js (td* + dashHero*). -->
+    <div class="td-wrap">
 
-    <!-- Phase 3 bento — hero (live + today + activity) on the left
-         spanning 3 cols × 2 rows; 6 swappable tiles fill the rest above
-         the fold. Tile picks persist per-operator to localStorage
-         (retail-admin-dash-view, the existing key). -->
-    <div class="db-bento" id="db-bento">
-    <!-- Right-now hero (phase 2 of 3) — live presence, today's mini-KPIs,
-         activity feed. Polled independently of the historical date-range
-         picker above, since "right now" is always now. -->
-    <section class="card db-hero" id="db-hero">
-      <div class="db-hero-head">
-        <h3>Right now · 实时</h3>
-        <span class="db-hero-sync" id="db-hero-sync">syncing… · 同步中…</span>
+    <section class="card td-card td-recap" id="td-recap">
+      <div class="td-recap-head">
+        <h3>While you were away · 您不在的这段时间</h3>
+        <span class="td-meta" id="td-recap-meta"></span>
+        <button class="td-ghost" type="button" onclick="tdRecapShowWork()">Show the work · 查看明细</button>
       </div>
-      <div class="db-hero-grid">
-        <div class="db-hero-pane db-live">
-          <div class="db-hero-h">Live · 实时</div>
-          <div class="db-live-ring-wrap">
-            <svg class="db-live-ring" id="db-live-ring" viewBox="0 0 44 44" aria-hidden="true">
-              <!-- ensō-style wobble: low-freq turbulence displaces the stroke so
-                   the ring reads as a hand-inked brush circle, not a compass-
-                   perfect one. Geometry stays a true r=19 circle so the arc's
-                   dash-reveal math below is untouched. -->
-              <defs>
-                <filter id="db-enso-wobble" x="-25%" y="-25%" width="150%" height="150%">
-                  <feTurbulence type="fractalNoise" baseFrequency="0.026 0.032" numOctaves="2" seed="7" result="n"></feTurbulence>
-                  <feDisplacementMap in="SourceGraphic" in2="n" scale="2.8" xChannelSelector="R" yChannelSelector="G"></feDisplacementMap>
-                </filter>
-              </defs>
-              <g filter="url(#db-enso-wobble)">
-                <circle class="track" cx="22" cy="22" r="19"></circle>
-                <circle class="arc" cx="22" cy="22" r="19"></circle>
-              </g>
-            </svg>
-            <span class="db-live-num" id="db-live-num">—</span>
-          </div>
-          <div class="db-live-lbl">Viewing products · 浏览中</div>
-          <div class="db-live-sub" id="db-live-sub">—</div>
+      <div class="td-recap-rows" id="td-recap-rows"><div class="td-muted">Loading… · 加载中…</div></div>
+      <p class="td-recap-close" id="td-recap-close" hidden></p>
+    </section>
+
+    <div class="td-kicker">Needs you · 需要您处理</div>
+    <div id="td-attn" class="td-attn" aria-live="polite"></div>
+
+    <div class="td-kicker">Today · 今日</div>
+    <div class="td-pulse-grid">
+      <section class="card td-card td-today">
+        <div class="td-card-head">
+          <h3>Revenue · 营业额</h3>
+          <span class="db-hero-sync" id="db-hero-sync">syncing… · 同步中…</span>
+          <span class="td-live is-zero" id="td-live"><i class="td-live-dot" aria-hidden="true"></i><b class="td-live-num" id="db-live-num">0</b><span class="td-live-lbl" id="td-live-lbl"></span></span>
         </div>
-        <div class="db-hero-pane db-today-pane">
-          <div class="db-hero-h">Today · 今日</div>
-          <div class="db-today-grid">
-            <div class="db-today-cell hero">
-              <div class="val" id="db-today-rev">¥—</div>
-              <div class="db-today-lblrow"><span class="lbl">Revenue · 营收</span><span class="db-delta" id="db-today-rev-d"></span></div>
-              <div class="db-spark-wrap" id="db-today-spark"></div>
-            </div>
-            <div class="db-today-cell">
-              <div class="val" id="db-today-ord">—</div>
-              <div class="db-today-lblrow"><span class="lbl">Orders · 订单</span><span class="db-delta" id="db-today-ord-d"></span></div>
-              <div class="db-spark-wrap db-spark-sm" id="db-today-ord-spark"></div>
-            </div>
-            <div class="db-today-cell">
-              <div class="val" id="db-today-new">—</div>
-              <div class="db-today-lblrow"><span class="lbl">New customers · 新客</span><span class="db-delta" id="db-today-new-d"></span></div>
-              <div class="db-spark-wrap db-spark-sm" id="db-today-new-spark"></div>
-            </div>
+        <div class="td-rev">
+          <span class="td-rev-big" id="db-today-rev">¥—</span>
+          <span class="db-delta" id="db-today-rev-d"></span>
+        </div>
+        <div class="db-spark-wrap td-spark" id="db-today-spark"></div>
+        <div class="td-cells">
+          <div class="td-cell">
+            <div class="v" id="db-today-ord">—</div>
+            <div class="k"><span class="lbl">Orders · 订单</span><span class="db-delta" id="db-today-ord-d"></span></div>
+            <div class="db-spark-wrap db-spark-sm" id="db-today-ord-spark"></div>
+          </div>
+          <div class="td-cell">
+            <div class="v" id="db-today-new">—</div>
+            <div class="k"><span class="lbl">New customers · 新客</span><span class="db-delta" id="db-today-new-d"></span></div>
+            <div class="db-spark-wrap db-spark-sm" id="db-today-new-spark"></div>
           </div>
         </div>
-        <div class="db-hero-pane db-feed-pane" id="db-feed-pane">
-          <div class="db-hero-h">Activity · 动态</div>
-          <div class="db-feed-list" id="db-feed-list">
-            <div class="db-feed-empty">Loading… · 加载中…</div>
-          </div>
-          <button class="db-feed-toggle" type="button" id="db-feed-toggle" onclick="dashFeedToggleExpand()" hidden></button>
+      </section>
+
+      <section class="card td-card td-feed db-feed-pane" id="db-feed-pane">
+        <div class="td-card-head">
+          <h3>Activity · 动态</h3>
         </div>
-      </div>
-    </section>
-
-    <!-- Date range — relocated here from the page header so the controls sit
-         directly above the cards they drive, with the always-live hero above
-         them (operators were reading the live TODAY total as the range total).
-         Lives inside #db-bento as a full-width row so it spans above the tiles
-         and inherits the bento's mobile hide. -->
-    <div class="db-rangebar" id="db-rangebar">
-      <div class="db-range">
-        <div class="seg" id="db-range-seg">
-          <button data-range="today">Today · 今日</button>
-          <button data-range="7">7d</button>
-          <button data-range="30" class="active">30d</button>
-          <button data-range="90">90d</button>
-        </div>
-        <input type="date" id="db-from" aria-label="From date">
-        <span style="color:var(--text-3)">–</span>
-        <input type="date" id="db-to" aria-label="To date">
-        <!-- Per-store filter. Hidden until >1 store loads (single-store tenants
-             see no filter). Scopes every order/stock-derived card below. -->
-        <select id="db-store" class="db-select" hidden onchange="dashStoreChange()" aria-label="Store · 门店"></select>
-        <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
-        <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
-      </div>
-      <div class="db-range-note">Drives the cards &amp; Deep dive below · 作用于下方卡片与“详细”</div>
+        <div class="db-feed-list" id="db-feed-list"><div class="db-feed-empty">Loading… · 加载中…</div></div>
+        <button class="db-feed-toggle" type="button" id="db-feed-toggle" onclick="dashFeedToggleExpand()" hidden></button>
+      </section>
     </div>
 
-    <!-- 6 swappable bento tiles. Each cell has a generic chrome (title + ⋯
-         swap menu); JS dispatches to the registered render fn per tile type.
-         Slot positions a/b are stacked on the hero's right; c/d/e/f form
-         the row below. -->
-    <section class="card db-tile" data-slot="a" id="db-tile-a">
-      <div class="db-tile-head">
-        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
-        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'a')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
-      </div>
-      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
-    </section>
-    <section class="card db-tile" data-slot="b" id="db-tile-b">
-      <div class="db-tile-head">
-        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
-        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'b')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
-      </div>
-      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
-    </section>
-    <section class="card db-tile" data-slot="c" id="db-tile-c">
-      <div class="db-tile-head">
-        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
-        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'c')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
-      </div>
-      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
-    </section>
-    <section class="card db-tile" data-slot="d" id="db-tile-d">
-      <div class="db-tile-head">
-        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
-        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'd')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
-      </div>
-      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
-    </section>
-    <section class="card db-tile" data-slot="e" id="db-tile-e">
-      <div class="db-tile-head">
-        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
-        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'e')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
-      </div>
-      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
-    </section>
-    <section class="card db-tile" data-slot="f" id="db-tile-f">
-      <div class="db-tile-head">
-        <span class="db-tile-ttl"><span class="db-tile-ic" aria-hidden="true"></span><h4 class="db-tile-title">—</h4></span>
-        <button class="db-tile-menu" type="button" onclick="bentoMenuOpen(this, 'f')" title="Change tile · 更换" aria-label="Change tile">⋯</button>
-      </div>
-      <div class="db-tile-body"><div class="db-tile-empty">Loading… · 加载中…</div></div>
-    </section>
-    </div>
-    <!-- end #db-bento -->
-
-    <!-- Deep dive — the legacy KPI strip + 12 chart cards collapse here.
-         Starts closed so the dashboard's front door is the bento above. -->
-    <details class="db-deepdive" id="db-deepdive">
-      <summary>
-        Deep dive · 详细
-        <span class="db-deepdive-range" id="db-dd-range" role="button" tabindex="0" title="Change date range · 更改日期"></span>
-        <span class="db-deepdive-hint">8 KPIs + 12 charts · 历史详情</span>
-      </summary>
-      <div class="db-deepdive-body">
-    <!-- Display options — these tweaks (trend shape, heatmap shape, headline
-         numbers) only touch the cards below, so the control lives with them
-         rather than up in the date-range bar. -->
-    <div class="db-dd-bar">
-      <div class="ovp-wrap">
-        <button class="db-btn" id="dv-btn" onclick="dvToggle()" aria-haspopup="true" title="Display options · 显示选项">View · 视图</button>
-        <div id="dv-pop" class="ovp" hidden>
-          <div class="ovp-head">Display options · 显示选项</div>
-          <div class="ovp-group">
-            <div class="ovp-label">Trend chart · 趋势图</div>
-            <div class="ovp-seg" data-dv="chart">
-              <button data-v="curve" onclick="dvSet('chart','curve')">Curve · 曲线</button>
-              <button data-v="bars"  onclick="dvSet('chart','bars')">Bars · 柱状</button>
-              <button data-v="dots"  onclick="dvSet('chart','dots')">Dots · 散点</button>
-            </div>
-          </div>
-          <div class="ovp-group">
-            <div class="ovp-label">Demand heatmap · 热力图</div>
-            <div class="ovp-seg" data-dv="heat">
-              <button data-v="cells"  onclick="dvSet('heat','cells')">Cells · 方格</button>
-              <button data-v="dots"   onclick="dvSet('heat','dots')">Dots · 圆点</button>
-              <button data-v="dashes" onclick="dvSet('heat','dashes')">Dashes · 短条</button>
-            </div>
-          </div>
-          <div class="ovp-group">
-            <div class="ovp-label">Headline numbers · 数字</div>
-            <div class="ovp-seg" data-dv="numbers">
-              <button data-v="light"   onclick="dvSet('numbers','light')">Light · 轻</button>
-              <button data-v="display" onclick="dvSet('numbers','display')">Display · 大</button>
-              <button data-v="mono"    onclick="dvSet('numbers','mono')">Mono · 等宽</button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <div class="td-foot">
+      <button type="button" class="td-foot-link" onclick="goTab('reports')">The full numbers live in Reports · 完整数据请见「报表」</button>
     </div>
 
-    <!-- KPI strip -->
-    <div class="db-kpis" id="db-kpis"></div>
-
-    <!-- Revenue / orders / visits trend -->
-    <div class="card">
-      <div class="db-card-head">
-        <h3>Trend · 趋势 <span id="db-trend-window" style="color:var(--text-3);font-weight:400"></span></h3>
-        <div class="db-metric-btns" id="db-trend-metrics">
-          <button data-metric="revenue" class="active">Revenue · 营收</button>
-          <button data-metric="orders">Orders · 订单</button>
-          <button data-metric="visits">Visits · 访问</button>
-        </div>
-      </div>
-      <div id="db-trend"></div>
     </div>
+    <!-- end .td-wrap -->
 
-    <!-- Demand heatmap — when orders land, hour × day-of-week -->
-    <div class="card">
-      <div class="db-card-head">
-        <h3>Demand heatmap · 需求热力图 <span style="color:var(--text-3);font-weight:400">When orders land · 下单时段 — darker = busier · 颜色越深越繁忙</span></h3>
-      </div>
-      <div id="db-heatmap"></div>
-    </div>
-
-    <!-- Acquisition funnel — opened → signed up → checkout → paid (the drop-off story) -->
-    <div class="card">
-      <div class="db-card-head">
-        <h3>Acquisition funnel · 转化漏斗 <span style="color:var(--text-3);font-weight:400">Opened → signed up → checkout → paid · 从访问到下单</span></h3>
-      </div>
-      <div id="db-acqfunnel"></div>
-    </div>
-
-    <!-- Article views — Kitchen Notes editorial cards: how many saw each one and how many tapped READ MORE -->
-    <div class="card">
-      <div class="db-card-head">
-        <h3>Article views · 文章阅读 <span style="color:var(--text-3);font-weight:400">Kitchen Notes — seen → read · 看到 → 阅读</span></h3>
-      </div>
-      <div id="db-articleviews"></div>
-    </div>
-
-    <div class="db-grid-2">
-      <div class="card">
-        <div class="db-card-head"><h3>Order status · 订单状态</h3></div>
-        <div id="db-funnel"></div>
-      </div>
-      <div class="card">
-        <div class="db-card-head"><h3>Payment & delivery · 支付与配送</h3></div>
-        <div id="db-splits"></div>
-      </div>
-    </div>
-
-    <div class="db-grid-2">
-      <div class="card">
-        <div class="db-card-head"><h3>Top products · 热销产品</h3></div>
-        <div id="db-products"></div>
-      </div>
-      <div class="card">
-        <div class="db-card-head"><h3>Top customers · 顶级顾客</h3></div>
-        <div id="db-customers"></div>
-      </div>
-    </div>
-
-    <div class="db-grid-2">
-      <div class="card">
-        <div class="db-card-head"><h3>Customer mix · 顾客构成</h3></div>
-        <div id="db-tiers"></div>
-      </div>
-      <div class="card">
-        <div class="db-card-head"><h3>Geography · 地域</h3></div>
-        <div id="db-geo"></div>
-      </div>
-    </div>
-
-    <div class="db-grid-2">
-      <div class="card">
-        <div class="db-card-head"><h3>Marketing impact · 营销效果</h3></div>
-        <div id="db-marketing"></div>
-      </div>
-      <div class="card">
-        <div class="db-card-head"><h3>Traffic & sources · 流量与来源</h3></div>
-        <div id="db-traffic"></div>
-      </div>
-    </div>
-
-    <div class="db-grid-2">
-      <div class="card">
-        <div class="db-card-head"><h3>Revenue composition · 收入构成</h3></div>
-        <div id="db-composition"></div>
-      </div>
-      <div class="card">
-        <div class="db-card-head"><h3>Cohort retention · 客户留存</h3></div>
-        <div id="db-cohorts"></div>
-      </div>
-    </div>
-
-      </div>
-    </details>
-    <!-- end #db-deepdive -->
-
-    <!-- Activity drill-through drawer — populated by dashFeedClick.
-         Reuses the global .side-drawer chrome (CSS at top). -->
+    <!-- Activity drill-through drawer — populated by dashFeedClick and by
+         The Recap's "Show the work". Reuses the global .side-drawer chrome. -->
     <aside id="db-activity-drawer" class="side-drawer dw-compact" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#db-activity-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -1383,6 +1156,127 @@
       </div>
       <div class="rm-dh-rbody"></div>
     </section>
+  </section>
+
+  <!-- ─── REPORTS — historical analytics (formerly the Dashboard's deep-dive
+       fold). Date range + store scope drive the KPI strip and every chart
+       below; all container ids are unchanged so the chart renderers in
+       03-dashboard.js and the phone report clones keep working. -->
+  <section id="tab-reports">
+    <div class="db-head td-head">
+      <h2 style="margin:0">Reports · 报表</h2>
+    </div>
+
+    <div class="db-rangebar td-rangebar" id="db-rangebar">
+      <div class="db-range">
+        <div class="seg" id="db-range-seg">
+          <button data-range="today">Today · 今日</button>
+          <button data-range="7">7d</button>
+          <button data-range="30" class="active">30d</button>
+          <button data-range="90">90d</button>
+        </div>
+        <input type="date" id="db-from" aria-label="From date">
+        <span style="color:var(--text-3)">–</span>
+        <input type="date" id="db-to" aria-label="To date">
+        <!-- Per-store filter. Hidden until >1 store loads (single-store tenants
+             see no filter). Scopes every store-derived card below. -->
+        <select id="db-store" class="db-select" hidden onchange="dashStoreChange()" aria-label="Store · 门店"></select>
+        <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
+        <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
+      </div>
+    </div>
+
+    <div id="reports-body">
+      <!-- KPI strip -->
+      <div class="db-kpis" id="db-kpis"></div>
+
+      <!-- Revenue / orders / visits trend -->
+      <div class="card">
+        <div class="db-card-head">
+          <h3>Trend · 趋势 <span id="db-trend-window" style="color:var(--text-3);font-weight:400"></span></h3>
+          <div class="db-metric-btns" id="db-trend-metrics">
+            <button data-metric="revenue" class="active">Revenue · 营收</button>
+            <button data-metric="orders">Orders · 订单</button>
+            <button data-metric="visits">Visits · 访问</button>
+          </div>
+        </div>
+        <div id="db-trend"></div>
+      </div>
+
+      <div class="td-kicker">Sales · 销售</div>
+      <div class="db-grid-2">
+        <div class="card">
+          <div class="db-card-head"><h3>Order status · 订单状态</h3></div>
+          <div id="db-funnel"></div>
+        </div>
+        <div class="card">
+          <div class="db-card-head"><h3>Payment & delivery · 支付与配送</h3></div>
+          <div id="db-splits"></div>
+        </div>
+      </div>
+      <div class="db-grid-2">
+        <div class="card">
+          <div class="db-card-head"><h3>Revenue composition · 收入构成</h3></div>
+          <div id="db-composition"></div>
+        </div>
+        <div class="card">
+          <div class="db-card-head"><h3>Marketing impact · 营销效果</h3></div>
+          <div id="db-marketing"></div>
+        </div>
+      </div>
+
+      <div class="td-kicker">Customers · 客户</div>
+      <div class="db-grid-2">
+        <div class="card">
+          <div class="db-card-head"><h3>Top customers · 顶级顾客</h3></div>
+          <div id="db-customers"></div>
+        </div>
+        <div class="card">
+          <div class="db-card-head"><h3>Customer mix · 顾客构成</h3></div>
+          <div id="db-tiers"></div>
+        </div>
+      </div>
+      <div class="db-grid-2">
+        <div class="card">
+          <div class="db-card-head"><h3>Geography · 地域</h3></div>
+          <div id="db-geo"></div>
+        </div>
+        <div class="card">
+          <div class="db-card-head"><h3>Cohort retention · 客户留存</h3></div>
+          <div id="db-cohorts"></div>
+        </div>
+      </div>
+
+      <div class="td-kicker">Products & demand · 商品与需求</div>
+      <div class="card">
+        <div class="db-card-head">
+          <h3>Demand heatmap · 需求热力图 <span style="color:var(--text-3);font-weight:400">When orders land · 下单时段 — darker = busier · 颜色越深越繁忙</span></h3>
+        </div>
+        <div id="db-heatmap"></div>
+      </div>
+      <div class="db-grid-2">
+        <div class="card">
+          <div class="db-card-head"><h3>Top products · 热销产品</h3></div>
+          <div id="db-products"></div>
+        </div>
+        <div class="card">
+          <div class="db-card-head"><h3>Article views · 文章阅读</h3></div>
+          <div id="db-articleviews"></div>
+        </div>
+      </div>
+
+      <div class="td-kicker">Traffic · 流量</div>
+      <div class="db-grid-2">
+        <div class="card">
+          <div class="db-card-head"><h3>Acquisition funnel · 转化漏斗</h3></div>
+          <div id="db-acqfunnel"></div>
+        </div>
+        <div class="card">
+          <div class="db-card-head"><h3>Traffic & sources · 流量与来源</h3></div>
+          <div id="db-traffic"></div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- ─── INVOICES ─── -->

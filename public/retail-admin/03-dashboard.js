@@ -4,56 +4,19 @@
    retail-admin.html — LOAD ORDER MATTERS. Cross-file globals (cuT, cuLang,
    DASH_VIEW, rm* mobile renderers…) live in other parts or in the inline
    script blocks still in the HTML, hence the eslint no-undef opt-out.
-   Contents: Dashboard: KPIs/trend/cohorts (dash*), right-now hero, bento tiles, view popover (dv*) */
+   Contents: Tacet Dashboard (The Recap + attention + today pulse, td*) and
+   the Reports tab (KPIs/trend/charts, dash*). */
 // ════════════════════════════════════════════════════════════════
-// DASHBOARD — channel analytics overview (reads /api/retail-admin/dashboard,
-// which aggregates the live retail_orders / retail_customers / retail_visits
-// tables). All charts are hand-rolled SVG/CSS — no external libraries.
+// DASHBOARD (Tacet) + REPORTS — the Dashboard answers one question
+// ("is everything okay?"): The Recap, then anything needing attention,
+// then today's pulse. All historical analytics live in #tab-reports
+// (reads /api/retail-admin/dashboard). Charts are hand-rolled SVG/CSS.
 // ════════════════════════════════════════════════════════════════
 let DASH_DATA = null;
 let DASH_METRIC = 'revenue';
 // Set by the manual ↻ refresh so the KPI numbers roll up from zero (the
 // dramatic entrance) rather than drifting in place — cleared after one render.
 let DASH_FORCE_ROLLUP = false;
-
-// ── Dashboard View tweaks (per-operator) — Trend chart shape, demand-heatmap
-// shape, headline-number style. Persisted; defaults reproduce the base look.
-const DASH_VIEW_DEFAULTS = { chart: 'curve', heat: 'cells', numbers: 'light' };
-function dvLoad() {
-  try { return { ...DASH_VIEW_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-dash-view') || '{}')) }; }
-  catch (e) { return { ...DASH_VIEW_DEFAULTS }; }
-}
-window.DASH_VIEW = dvLoad();
-function dvApply() {
-  const sec = document.getElementById('tab-dashboard'); if (!sec) return;
-  sec.classList.remove('dv-num-display', 'dv-num-mono', 'dv-heat-dots', 'dv-heat-dashes');
-  if (DASH_VIEW.numbers === 'display') sec.classList.add('dv-num-display');
-  if (DASH_VIEW.numbers === 'mono')    sec.classList.add('dv-num-mono');
-  if (DASH_VIEW.heat === 'dots')       sec.classList.add('dv-heat-dots');
-  if (DASH_VIEW.heat === 'dashes')     sec.classList.add('dv-heat-dashes');
-  dvSyncPanel();
-}
-function dvSet(key, val) {
-  DASH_VIEW[key] = val;
-  try { localStorage.setItem('retail-admin-dash-view', JSON.stringify(DASH_VIEW)); } catch (e) {}
-  dvApply();
-  if (key === 'chart' && typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) dashRenderTrend();
-  dvClose();   // a pick is a one-shot choice — close the popover after it
-}
-function dvSyncPanel() {
-  const pop = document.getElementById('dv-pop'); if (!pop) return;
-  pop.querySelectorAll('.ovp-seg').forEach(seg => {
-    const key = seg.getAttribute('data-dv');
-    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === DASH_VIEW[key]));
-  });
-}
-function dvToggle() {
-  const pop = document.getElementById('dv-pop'); if (!pop) return;
-  if (pop.hidden) { pop.hidden = false; dvSyncPanel(); setTimeout(() => document.addEventListener('mousedown', dvOutside), 0); }
-  else dvClose();
-}
-function dvClose() { const pop = document.getElementById('dv-pop'); if (pop) pop.hidden = true; document.removeEventListener('mousedown', dvOutside); }
-function dvOutside(e) { if (!(e.target.closest && e.target.closest('.ovp-wrap'))) dvClose(); }
 
 function dashMoney(n, dp) { return '¥' + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: dp || 0, maximumFractionDigits: dp || 0 }); }
 function dashNum(n) { return Number(n || 0).toLocaleString(); }
@@ -261,9 +224,9 @@ function dashStoreQS() {
 }
 // A store pick re-pulls every store-scoped surface at once.
 function dashStoreChange() {
-  dashLoad();                       // deep-dive + bento data tiles
-  dashHeroLoadToday({ slow: false }); // Today hero KPIs/sparklines
-  if (typeof bentoLoadOps === 'function') bentoLoadOps(); // low-stock / refunds
+  dashLoad();                         // Reports KPIs + charts
+  dashHeroLoadToday({ slow: false }); // Today pulse KPIs/sparklines
+  if (typeof tdOpsLoad === 'function') tdOpsLoad(); // attention cards
 }
 // Populate the store dropdown once. Hidden for single-store tenants (no filter
 // value). Mirrors the Orders tab's ensureOrdersStoreFilter.
@@ -287,7 +250,8 @@ async function dashEnsureStoreFilter() {
 
 function dashInit() {
   dashEnsureStoreFilter();
-  // Wire range segment + metric buttons (once).
+  // Wire the Reports range segment + trend metric buttons (once). These live
+  // in #tab-reports but exist at boot, so wiring here is safe.
   $$('#db-range-seg button').forEach(b => b.addEventListener('click', () => dashSetRange(b.dataset.range)));
   $$('#db-trend-metrics button').forEach(b => b.addEventListener('click', () => {
     DASH_METRIC = b.dataset.metric;
@@ -300,106 +264,18 @@ function dashInit() {
       if (tr) { tr.classList.remove('is-swap'); void tr.offsetWidth; tr.classList.add('is-swap'); }
     }
   }));
-  dvApply();           // apply saved View tweaks (heatmap/number classes)
-  // Deep-dive reveal motion — replay the fade-up / bar-grow / line-draw /
-  // count-up each time the fold opens (gated behind .dd-open-anim so it plays
-  // on reveal, not invisibly while collapsed). Removing + re-adding the class
-  // with a reflow restarts the CSS animations on the already-rendered cards.
-  // Range chip in the deep-dive summary = a shortcut back up to the date bar.
-  // It lives inside <summary>, so swallow the click (otherwise it'd toggle the
-  // fold) and zen-glide up to the range controls to pick a different date.
-  const ddRange = document.getElementById('db-dd-range');
-  if (ddRange) {
-    const jumpToRange = (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const bar = document.querySelector('#tab-dashboard .db-head');
-      if (bar) dashZenScrollTo(bar, { top: true });
-    };
-    ddRange.addEventListener('click', jumpToRange);
-    ddRange.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') jumpToRange(e); });
-  }
+  // Initial 30d load — fills the Reports charts (hidden until visited) AND
+  // DASH_DATA, which the phone dashboard (rmRenderDash) renders from.
+  dashSetRange('30');
+  dashHeroInit();      // today pulse: presence + today KPIs + activity polling
+  tdInit();            // Tacet dashboard: The Recap + attention cards + date
+}
 
-  const dd = document.getElementById('db-deepdive');
-  if (dd) {
-    const ddBody = dd.querySelector('.db-deepdive-body');
-    const ddSummary = dd.querySelector('summary');
-    const ddReduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    let ddAnimating = false;
-
-    // Zen reveal — drift the page down so the summary sits near the top and the
-    // freshly-revealed charts come into view. Next frame so it measures against
-    // the (by now) expanded layout, not a collapsed one.
-    const ddZenToHead = () => {
-      const head = ddSummary || dd;
-      if (head) requestAnimationFrame(() => dashZenScrollTo(head, { margin: 72 }));
-    };
-
-    // Content reveal — fires whichever way the open attribute flips (native
-    // toggle, or our height-driven open/close below). On open: replay the
-    // fade-up / count-up. The scroll waits for the height tween to finish (see
-    // finish()) so it targets the full-height page; on the native / reduced-
-    // motion path there's no tween, so it's safe to scroll right away.
-    dd.addEventListener('toggle', () => {
-      if (dd.open) {
-        dd.classList.remove('dd-open-anim');
-        void dd.offsetWidth;
-        dd.classList.add('dd-open-anim');
-        dashKpiAnimate();
-        if (!ddAnimating) ddZenToHead();
-      } else {
-        dd.classList.remove('dd-open-anim');
-      }
-    });
-
-    // Symmetric height envelope — a native <details> snaps open/shut, so we
-    // intercept the summary click and ease the body height both ways. The
-    // open attribute is flipped at the right edge of each tween (open up
-    // front so the body renders to measure; close only once it's collapsed),
-    // which lets the toggle handler above run the reveal in step. Reduced
-    // motion (or a missing body) falls back to the native instant toggle.
-    if (ddSummary && ddBody) ddSummary.addEventListener('click', (e) => {
-      if (ddReduce) return;          // let the browser toggle instantly
-      e.preventDefault();            // we own the toggle from here
-      if (ddAnimating) return;       // ignore clicks mid-tween
-      ddAnimating = true;
-      dd.classList.add('dd-anim');
-      const finish = (close) => {
-        let settled = false;
-        const cleanup = () => {
-          if (settled) return; settled = true;
-          if (close) dd.open = false;
-          ddBody.style.height = '';
-          dd.classList.remove('dd-anim', 'dd-closing');
-          ddAnimating = false;
-          if (!close) ddZenToHead();   // page is now full height → glide into view
-        };
-        ddBody.addEventListener('transitionend', function done(ev) {
-          if (ev.propertyName !== 'height') return;
-          ddBody.removeEventListener('transitionend', done);
-          cleanup();
-        });
-        setTimeout(cleanup, 800);   // safety net (> the .62s close tween)
-      };
-      if (!dd.open) {
-        dd.open = true;                          // render body so we can measure
-        const full = ddBody.offsetHeight;
-        ddBody.style.height = '0px';
-        void ddBody.offsetWidth;                 // commit the start height
-        ddBody.style.height = full + 'px';       // → ease open
-        finish(false);
-      } else {
-        dd.classList.add('dd-closing');          // slower, gentler collapse
-        const full = ddBody.offsetHeight;
-        ddBody.style.height = full + 'px';
-        void ddBody.offsetWidth;                 // commit the start height
-        ddBody.style.height = '0px';             // → ease closed
-        finish(true);
-      }
-    });
-  }
-  dashSetRange('30');  // default window + initial load
-  dashHeroInit();      // right-now hero (phase 2): polling + drawer wiring
-  bentoInit();         // bento tiles (phase 3): layout + /ops polling
+// Reports rail-button init — everything is already loaded/rendered at boot by
+// dashInit (the charts render fine while the section is hidden); this only
+// covers the edge where the first load failed and a tab visit should retry.
+function reportsInit() {
+  if (!DASH_DATA) dashLoad();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -483,21 +359,21 @@ async function dashHeroLoadPresence() {
   try {
     const j = await api('/api/retail-admin/dashboard/presence');
     const d = j.data || {};
-    const num = $('#db-live-num'); const ring = $('#db-live-ring'); const sub = $('#db-live-sub');
-    if (num) { dashCountUp(num, Number(d.viewing || 0)); num.classList.toggle('live-on', !!d.viewing); }
-    if (window.rmDashSetLive) rmDashSetLive(Number(d.viewing || 0));   // mirror into the mobile hero
-
-    if (ring) ring.classList.toggle('live', !!d.viewing);
-    if (sub) {
-      const v = d.viewing || 0;
-      const p = d.products_with_viewers || 0;
-      // With a single viewer the product count is trivially 1 — redundant with
-      // the big number. Only surface "across N products" once it adds signal
-      // (multiple viewers: are they clustered on one product or spread out?).
-      sub.textContent = !v
-        ? 'No one browsing right now · 暂无浏览'
-        : (v > 1 ? `across ${p} ${p === 1 ? 'product' : 'products'} · ${p} 件商品` : '');
+    const v = Number(d.viewing || 0);
+    // Live presence is a quiet corner line now, not a hero ring: a sage dot,
+    // the count, and a label. At zero the count hides (CSS via .is-zero) and
+    // the label carries the whole sentence.
+    const num = $('#db-live-num');
+    if (num) dashCountUp(num, v);   // keep a plain number — rmRenderDash reads it
+    const wrap = $('#td-live');
+    if (wrap) { wrap.classList.toggle('is-on', v > 0); wrap.classList.toggle('is-zero', v === 0); }
+    const lbl = $('#td-live-lbl');
+    if (lbl) {
+      lbl.textContent = !v
+        ? cuT('no one browsing right now', '暂无人浏览')
+        : cuT('browsing now', '人正在浏览');
     }
+    if (window.rmDashSetLive) rmDashSetLive(v);   // mirror into the mobile hero
     dashHeroSyncStamp();
   } catch (e) { /* silent — next tick retries */ }
 }
@@ -746,11 +622,20 @@ function dashFeedRender(events) {
       <span class="db-feed-text">${meta.text}</span>
     </div>`;
   };
+  // The collapsed strip shows only the day's MEANINGFUL events (money moving,
+  // refunds, cancellations, feedback) — routine dispatch/delivery/new-customer
+  // rows are noise here; The Recap and the counters already carry them. The
+  // expand toggle still reveals the complete day, so nothing is lost.
+  const KEY_TYPES = new Set(['paid_order', 'order_cancelled', 'refund_request',
+    'refund_paid', 'refund_rejected', 'topup', 'feedback', 'gzgrocery_pickup']);
+  const keyEvents = events.filter(e => KEY_TYPES.has(e.type));
+  const previewEvents = (keyEvents.length ? keyEvents : events).slice(0, DASH_FEED_PREVIEW);
+  const shown = new Set(previewEvents);
   // Preview rows render directly; the overflow lives in a collapsible wrapper
   // that the toggle eases open/closed — all rows stay in the DOM so the
   // grid-rows transition has something to animate against.
-  const preview = events.slice(0, DASH_FEED_PREVIEW).map(rowHtml).join('');
-  const rest = events.slice(DASH_FEED_PREVIEW);
+  const preview = previewEvents.map(rowHtml).join('');
+  const rest = events.filter(e => !shown.has(e));
   const moreHtml = rest.length
     ? `<div class="db-feed-more"><div class="db-feed-more-inner">${rest.map((e, i) => rowHtml(e, i + DASH_FEED_PREVIEW)).join('')}</div></div>`
     : '';
@@ -990,311 +875,19 @@ function dashJumpTab(name) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// BENTO (phase 3/3) — 6 swappable tiles above the Deep-dive fold.
-// Per-operator layout persisted to localStorage under the existing
-// `retail-admin-dash-view` key (extends, doesn't replace, the View
-// popover's saved settings). Data sources:
-//   - DASH_DATA  : the historical date-range pull (already loaded)
-//   - DASH_OPS   : a tiny snapshot of low-stock + refunds queue,
-//                  refreshed every 60s by bentoLoadOps()
-// Tiles re-render automatically when either source updates — we
-// monkey-patch the existing dashRenderAll to trigger a bento refresh.
+// TACET DASHBOARD (td*) — the calm front door. In order:
+//   1. The Recap — "While you were away": what the system handled
+//      since the operator's last visit (client-side aggregate of
+//      /dashboard/activity?since=<last-seen>).
+//   2. Needs you — attention cards from /dashboard/ops (delivery
+//      problems / refund queue / low stock), rendered ONLY when
+//      non-empty; all-clear shows a quiet compliment instead.
+//   3. Today — the pulse (revenue/orders/new customers + presence)
+//      and the trimmed activity strip, both handled by dashHero*.
 // ════════════════════════════════════════════════════════════════
-const BENTO_SLOTS = ['a','b','c','d','e','f'];
-const BENTO_DEFAULT = ['low_stock','refunds','top_products','top_customers','geography','heatmap_mini'];
-
-// Thin-stroke header glyphs per tile (16-box viewBox, currentColor → tinted by
-// .db-tile-ic). A quiet visual anchor so the eye learns each tile by shape.
-const BENTO_ICONS = {
-  low_stock:        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5L8 2.2 13.5 5v6L8 13.8 2.5 11z"/><path d="M2.5 5L8 7.8 13.5 5"/><path d="M8 7.8v6"/></svg>',
-  refunds:          '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h6.5a3.5 3.5 0 0 1 0 7H5"/><path d="M5.2 3l-2.3 2.5L5.2 8"/></svg>',
-  top_products:     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6 2.2H13v4.4l-6.4 6.4a1 1 0 0 1-1.4 0L2.4 9.8a1 1 0 0 1 0-1.4z"/><circle cx="10.4" cy="4.6" r="0.9"/></svg>',
-  top_customers:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13.5a5 5 0 0 1 10 0"/></svg>',
-  geography:        '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 14s4.5-4.2 4.5-7.5a4.5 4.5 0 0 0-9 0C3.5 9.8 8 14 8 14z"/><circle cx="8" cy="6.4" r="1.6"/></svg>',
-  heatmap_mini:     '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="1.4"/><path d="M6 2.4v11.2M10 2.4v11.2M2.4 6h11.2M2.4 10h11.2"/></svg>',
-  customer_tiers:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2l5.5 3-5.5 3-5.5-3z"/><path d="M2.5 8L8 11l5.5-3"/><path d="M2.5 11L8 14l5.5-3"/></svg>',
-  payment_split:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.2" y="4" width="11.6" height="8" rx="1.4"/><path d="M2.2 6.6h11.6"/><path d="M5 9.6h2"/></svg>',
-  delivery_split:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.8 4.5h7.4v6H1.8z"/><path d="M9.2 6.5h2.6L14 8.6v1.9H9.2z"/><circle cx="4.4" cy="11.4" r="1.3"/><circle cx="11" cy="11.4" r="1.3"/></svg>',
-  checkout_abandon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 2.5h1.7l1.4 7.2a1 1 0 0 0 1 .8h5a1 1 0 0 0 1-.8l.9-4.5H4.3"/><circle cx="6.2" cy="13" r="0.9"/><circle cx="11.4" cy="13" r="0.9"/></svg>',
-};
-
-// Tile catalogue — { key → { title_en, title_cn, render(slot), source } }.
-// `source` ∈ {'ops','dash'} — bentoRefresh() filters by source so an
-// /ops refresh doesn't re-render dash-data tiles and vice versa.
-const BENTO_CATALOGUE = {
-  low_stock: {
-    title_en: 'Low stock', title_cn: '缺货预警', source: 'ops',
-    render: (body, tile) => {
-      const low = (DASH_OPS && DASH_OPS.low_stock)    || { count: 0, items: [] };
-      const oos = (DASH_OPS && DASH_OPS.out_of_stock) || { count: 0, items: [] };
-      const hasAlert = low.count > 0 || oos.count > 0;
-      if (tile) tile.classList.toggle('alert', hasAlert);
-
-      function renderTab(tab) {
-        const d    = tab === 'oos' ? oos : low;
-        const num  = tab === 'oos' ? oos.count : low.count;
-        const sub  = tab === 'oos' ? cuT('out of stock','售罄') : cuT('need restock','件需补货');
-        const numCls = num === 0 ? 'good' : 'warn';
-        const rows = d.items.slice(0, 6).map(it => {
-          const link = it.id ? ` role="button" tabindex="0" onclick="dashOpenProductFromFeed(${Number(it.id)})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();dashOpenProductFromFeed(${Number(it.id)})}"` : '';
-          const val  = tab === 'oos' ? '0' : String(it.stock_qty);
-          return `<div class="db-tile-list-row${it.id ? ' is-link' : ''}"${link}><span class="name">${escapeHtml(dbProdName(it))}</span><span class="val">${val}</span></div>`;
-        }).join('');
-        const emptyMsg = tab === 'oos' ? cuT('All in stock','无售罄') : cuT('All stocked','库存充足');
-        body.innerHTML = `
-          <div class="db-tile-tabs">
-            <button class="db-tile-tab${tab !== 'oos' ? ' active' : ''}" onclick="(function(el){el.closest('.db-tile-body').dataset.tab='low';BENTO_CATALOGUE.low_stock.render(el.closest('.db-tile-body'),el.closest('.db-tile'))})(this)">${cuT('Low','偏低')}</button>
-            <button class="db-tile-tab${tab === 'oos' ? ' active' : ''}" onclick="(function(el){el.closest('.db-tile-body').dataset.tab='oos';BENTO_CATALOGUE.low_stock.render(el.closest('.db-tile-body'),el.closest('.db-tile'))})(this)">${cuT('Out of stock','售罄')}</button>
-          </div>
-          <div class="db-tile-num ${numCls}">${num}</div>
-          <div class="db-tile-sub">${num === 0 ? emptyMsg : sub}</div>
-          ${num > 0 ? `<div class="db-tile-list" style="margin-top:10px">${rows}</div>` : ''}`;
-      }
-
-      const currentTab = body.dataset.tab || 'low';
-      renderTab(currentTab);
-    },
-  },
-  refunds: {
-    title_en: 'Refunds queue', title_cn: '退款队列', source: 'ops',
-    render: (body, tile) => {
-      const d = (DASH_OPS && DASH_OPS.refunds) || { count: 0, items: [] };
-      if (!d.count) return body.innerHTML = `<div class="db-tile-num good">0</div><div class="db-tile-sub">No open requests · 暂无</div>`;
-      if (tile) tile.classList.add('alert');
-      const rows = d.items.slice(0, 6).map(it => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
-        <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-num warn">${d.count}</div>
-        <div class="db-tile-sub">pending / reviewing · 待处理</div>
-        <div class="db-tile-list" style="margin-top:10px">${rows}</div>`;
-    },
-  },
-  top_products: {
-    title_en: 'Top products', title_cn: '热销产品', source: 'dash',
-    render: (body) => {
-      const list = (DASH_DATA && DASH_DATA.topProducts) || [];
-      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No sales in range · 区间内无销售</div>`;
-      // Rank by units so the magnitude bars descend cleanly (the backend list
-      // is revenue-ranked, which fought the units-based bars).
-      const ranked = list.slice().sort((a, b) => (Number(b.units) || 0) - (Number(a.units) || 0));
-      const rows = dashBarRows(ranked.slice(0, 6), {
-        name: p => dbProdName(p),
-        value: p => Number(p.units || 0),
-        display: p => String(p.units || 0),
-      });
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
-    },
-  },
-  top_customers: {
-    title_en: 'Top customers', title_cn: '顶级顾客', source: 'dash',
-    render: (body) => {
-      const list = (DASH_DATA && DASH_DATA.topCustomers) || [];
-      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No customers in range · 区间内无顾客</div>`;
-      const rows = dashBarRows(list.slice(0, 6), {
-        name: c => c.nickname || ('#' + c.customer_id),
-        value: c => Number(c.revenue || 0),
-        display: c => '¥' + Number(c.revenue || 0).toLocaleString(),
-        curve: 'sqrt',   // revenue is whale-skewed — spread the non-leaders out
-      });
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
-    },
-  },
-  geography: {
-    title_en: 'Top areas', title_cn: '热门地区', source: 'dash',
-    render: (body) => {
-      const list = (DASH_DATA && DASH_DATA.geoCities) || [];
-      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No delivery data · 暂无数据</div>`;
-      const en = !(window.cuLang && cuLang() === 'cn');
-      const rows = dashBarRows(list.slice(0, 6), {
-        name: g => (en ? (g.city_en || g.city) : (g.city || g.city_en)) || '—',
-        value: g => Number(g.orders || 0),
-        display: g => String(g.orders || 0),
-      });
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
-    },
-  },
-  heatmap_mini: {
-    title_en: 'Demand heatmap', title_cn: '需求热力图', source: 'dash',
-    render: (body) => {
-      const heat = (DASH_DATA && DASH_DATA.heat) || [];
-      if (!heat.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
-      // 7 rows (day of week, dow 0=Sun..6=Sat) × 24 cols (hour). Server
-      // returns a flat [{dow, hour, orders}] list. Build a 7×24 grid; cell
-      // intensity = orders / max. Track the single busiest cell for the caption.
-      const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
-      let max = 0, peak = null;
-      for (const r of heat) {
-        const d = Number(r.dow); const h = Number(r.hour); const n = Number(r.orders || 0);
-        if (d >= 0 && d < 7 && h >= 0 && h < 24) {
-          grid[d][h] = n;
-          if (n > max) max = n;
-          if (n > 0 && (!peak || n > peak.n)) peak = { n, dow: d, hour: h };
-        }
-      }
-      const DAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-      const rowsHtml = grid.map((row, d) => {
-        const cells = row.map(n => {
-          const t = max ? n / max : 0;
-          const op = t > 0 ? (0.18 + 0.72 * t).toFixed(2) : 0;
-          return `<i style="background: rgba(176,141,74,${op})"></i>`;
-        }).join('');
-        return `<span class="db-heat-day">${DAYS[d]}</span><div class="db-heat-cells">${cells}</div>`;
-      }).join('');
-      const axis = `<span></span><div class="db-heat-axis"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div>`;
-      // Caption keeps the English half free of " · " so the i18n splitter
-      // (first " · " = EN|CN divider) parses it correctly.
-      const EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-      const hh = peak ? String(peak.hour).padStart(2, '0') : '';
-      const cap = peak
-        ? `Busiest ${EN[peak.dow]} ${hh}:00 · 最忙 ${CN[peak.dow]} ${hh}:00`
-        : `7 days × 24 hours · 7天 × 24小时`;
-      body.innerHTML = `<div class="db-heat-mini">${rowsHtml}${axis}</div>
-        <div class="db-tile-sub" style="margin-top:8px">${cap}</div>`;
-    },
-  },
-  customer_tiers: {
-    title_en: 'Customer mix', title_cn: '顾客构成', source: 'dash',
-    render: (body) => {
-      const list = (DASH_DATA && DASH_DATA.tiers) || [];
-      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
-      const rows = dashBarRows(list.slice(0, 4), {
-        name: t => t.label || t.tier_key || '—',
-        value: t => Number(t.n || t.count || 0),
-        display: t => String(t.n || t.count || 0),
-      });
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
-    },
-  },
-  payment_split: {
-    title_en: 'Payment split', title_cn: '支付构成', source: 'dash',
-    render: (body) => {
-      const list = (DASH_DATA && DASH_DATA.payments) || [];
-      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
-      const total = list.reduce((s, r) => s + (r.revenue || 0), 0) || 1;
-      const rows = dashBarRows(list.slice(0, 4), {
-        name: p => p.method || '—',
-        value: p => Number(p.revenue || 0),
-        display: p => ((p.revenue || 0) / total * 100).toFixed(0) + '%',
-      });
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
-    },
-  },
-  delivery_split: {
-    title_en: 'Delivery split', title_cn: '配送构成', source: 'dash',
-    render: (body) => {
-      const list = (DASH_DATA && DASH_DATA.delivery) || [];
-      if (!list.length) return body.innerHTML = `<div class="db-tile-empty">No data · 暂无数据</div>`;
-      const total = list.reduce((s, r) => s + (r.orders || 0), 0) || 1;
-      const rows = dashBarRows(list.slice(0, 4), {
-        name: d => d.mode || '—',
-        value: d => Number(d.orders || 0),
-        display: d => ((d.orders || 0) / total * 100).toFixed(0) + '%',
-      });
-      body.innerHTML = `<div class="db-tile-list">${rows}</div>${dashRangeFoot()}`;
-    },
-  },
-  checkout_abandon: {
-    title_en: 'Abandoned checkouts', title_cn: '弃单分析', source: 'dash',
-    render: (body, tile) => {
-      const d = (DASH_DATA && DASH_DATA.checkout) || { started: 0, converted: 0, abandoned: 0, conversion_rate: null, products: [] };
-      if (!d.started) return body.innerHTML = `<div class="db-tile-num good">0</div><div class="db-tile-sub">No checkouts in range · 区间内无结算</div>`;
-      if (d.abandoned > 0 && tile) tile.classList.add('alert');
-      const conv = d.conversion_rate != null ? d.conversion_rate : 0;
-      const numClass = d.abandoned > 0 ? 'warn' : 'good';
-      // Top products left behind — value column is how many distinct customers
-      // walked away from that product (more telling than raw qty).
-      const rows = (d.products || []).slice(0, 6).map(p => `<div class="db-tile-list-row">
-        <span class="name">${escapeHtml(p.name_en || p.name_cn || ('#' + p.product_id))}</span>
-        <span class="val">${p.customers || 0}</span>
-      </div>`).join('');
-      body.innerHTML = `<div class="db-tile-num ${numClass}">${d.abandoned}</div>
-        <div class="db-tile-sub">${conv}% completed · 完成率 ${conv}%</div>
-        ${rows ? `<div class="db-tile-list" style="margin-top:10px">${rows}</div>` : ''}`;
-    },
-  },
-};
 
 let DASH_OPS = null;
 
-function bentoLoadLayout() {
-  // Merge with View popup saved state — same key, different sub-object.
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem('retail-admin-dash-view') || '{}'); } catch (e) {}
-  const layout = Array.isArray(saved.bento) && saved.bento.length === 6 ? saved.bento : BENTO_DEFAULT.slice();
-  // Sanitise: unknown keys → fall back to default for that slot.
-  const sane = layout.map((k, i) => BENTO_CATALOGUE[k] ? k : BENTO_DEFAULT[i]);
-  // De-dupe: no two slots should show the same tile (the eye shouldn't meet
-  // "Low stock" twice). A repeat is replaced by the first unused catalogue
-  // tile — fixes legacy saved layouts that doubled up.
-  const seen = new Set();
-  const allKeys = Object.keys(BENTO_CATALOGUE);
-  return sane.map(k => {
-    if (!seen.has(k)) { seen.add(k); return k; }
-    const repl = allKeys.find(c => !seen.has(c)) || k;
-    seen.add(repl); return repl;
-  });
-}
-function bentoSaveLayout(layout) {
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem('retail-admin-dash-view') || '{}'); } catch (e) {}
-  saved.bento = layout;
-  try { localStorage.setItem('retail-admin-dash-view', JSON.stringify(saved)); } catch (e) {}
-}
-
-function bentoInit() {
-  bentoRenderAll();
-  bentoLoadOps();
-  // /ops snapshot refreshes every 60s, but only while the tab is visible —
-  // the same visibility listener the hero uses gates this loop too.
-  if (!DASH_HERO._opsTimer) {
-    DASH_HERO._opsTimer = setInterval(() => { if (!document.hidden) bentoLoadOps(); }, 60000);
-  }
-}
-
-async function bentoLoadOps() {
-  try {
-    const j = await api(`/api/retail-admin/dashboard/ops?${dashStoreQS().replace(/^&/, '')}`);
-    DASH_OPS = j.data || null;
-    bentoRefresh('ops');
-    deliveryBannerRender();
-  } catch (e) { /* silent — next tick retries */ }
-}
-
-// Delivery-alerts banner — full-width strip above the bento that surfaces
-// dispatched orders the carrier flagged as a problem (can't-reach / exception /
-// returning). Hidden entirely when the queue is clear, so it reads as a real
-// alert, not a permanent panel. Each row links straight to the order drawer.
-// deliveryStateInfo() lives in 04-orders.js (one global scope at runtime).
-function deliveryBannerRender() {
-  const el = document.getElementById('db-delivery-alerts');
-  if (!el) return;
-  const d = (DASH_OPS && DASH_OPS.delivery_alerts) || { count: 0, items: [] };
-  if (!d.count) { el.hidden = true; el.innerHTML = ''; return; }
-  const dIcon = (typeof deliveryIcon === 'function') ? deliveryIcon : () => '';
-  const rows = (d.items || []).slice(0, 8).map(it => {
-    const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
-      || { icon: 'alert', en: 'Delivery issue', cn: '配送异常', color: '#c0392b' };
-    return `<button type="button" class="db-da-row" onclick="openOrder(${it.id})">
-        <span class="db-da-ic" style="color:${info.color}" aria-hidden="true">${dIcon(info.icon, 15)}</span>
-        <span class="db-da-no">${escapeHtml(it.order_no || '')}</span>
-        <span class="db-da-who">${escapeHtml(it.buyer || '')}</span>
-        <span class="db-da-state" style="color:${info.color}">${cuT(info.en, info.cn)}</span>
-      </button>`;
-  }).join('');
-  const more = d.count > 8
-    ? `<div class="db-da-more">+${d.count - 8} ${cuT('more','更多')}</div>`
-    : '';
-  el.innerHTML = `<div class="db-da-head"><span class="db-da-bell" style="color:var(--danger)" aria-hidden="true">${dIcon('alert', 15)}</span> ${cuT('Delivery alerts','配送异常提醒')} <b>${d.count}</b></div>
-    <div class="db-da-rows">${rows}${more}</div>`;
-  el.hidden = false;
-}
-
-function bentoRenderAll() {
-  const layout = bentoLoadLayout();
-  layout.forEach((key, idx) => bentoRenderSlot(BENTO_SLOTS[idx], key));
-}
 
 // Pick a product's name in the active UI language, falling back to the
 // other language when the preferred one is missing.
@@ -1303,117 +896,247 @@ function dbProdName(o) {
   return (cn ? (o.name_cn || o.name_en) : (o.name_en || o.name_cn)) || '—';
 }
 
-function bentoRefresh(sourceFilter) {
-  const layout = bentoLoadLayout();
-  layout.forEach((key, idx) => {
-    const entry = BENTO_CATALOGUE[key];
-    if (!entry) return;
-    if (sourceFilter && entry.source !== sourceFilter) return;
-    bentoRenderSlot(BENTO_SLOTS[idx], key);
-  });
-}
+const TD = { recapSince: 0, recapEvents: null };
+const TD_SEEN_KEY = 'retail-admin-last-seen';
 
-function bentoRenderSlot(slot, key) {
-  const tile = document.getElementById('db-tile-' + slot); if (!tile) return;
-  const entry = BENTO_CATALOGUE[key]; if (!entry) return;
-  const title = tile.querySelector('.db-tile-title');
-  const ic    = tile.querySelector('.db-tile-ic');
-  const body  = tile.querySelector('.db-tile-body');
-  if (title) title.textContent = `${entry.title_en} · ${entry.title_cn}`;
-  if (ic) ic.innerHTML = (BENTO_ICONS && BENTO_ICONS[key]) || '';
-  // Each render starts clean — only attention tiles re-flag .alert below.
-  tile.classList.remove('alert');
-  if (body) {
-    try { entry.render(body, tile); }
-    catch (e) { body.innerHTML = `<div class="db-tile-empty">Render failed · 渲染失败</div>`; }
+function tdInit() {
+  tdDateRender();
+  // Language toggle repaints the JS-built strings (date, recap, attention).
+  if (window.onLangChange) onLangChange(() => { tdDateRender(); tdRecapRender(); tdAttnRender(); });
+  tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
+  tdSeenInit();
+  tdOpsLoad();
+  if (!TD._opsTimer) {
+    TD._opsTimer = setInterval(() => { if (!document.hidden) tdOpsLoad(); }, 60000);
   }
 }
 
-// ── Tile swap popover ─────────────────────────────────────────────────────
-function bentoMenuOpen(buttonEl, slot) {
-  // Toggle: a second click on the same tile's ⋯ closes the open popover.
-  const existingPop = document.getElementById('db-tile-pop');
-  const wasOpenForThisSlot = existingPop && existingPop.dataset.slot === slot;
-  bentoMenuClose();
-  if (wasOpenForThisSlot) return;
-  const layout = bentoLoadLayout();
-  const currentKey = layout[BENTO_SLOTS.indexOf(slot)];
-  const pop = document.createElement('div');
-  pop.className = 'db-tile-pop';
-  pop.id = 'db-tile-pop';
-  pop.dataset.slot = slot;
-  const items = Object.entries(BENTO_CATALOGUE).map(([k, entry]) => {
-    const active = k === currentKey ? ' active' : '';
-    return `<button type="button" class="${active.trim()}" onclick="bentoSetTile('${slot}','${k}')">
-      ${escapeHtml(entry.title_en)} · ${escapeHtml(entry.title_cn)}
-    </button>`;
-  }).join('');
-  pop.innerHTML = `<div class="db-tile-pop-head">Show in this tile · 显示内容</div>${items}`;
-  document.body.appendChild(pop);
-  // Anchor to the button — fixed-position so scroll doesn't dislodge it.
-  const r = buttonEl.getBoundingClientRect();
-  const popRect = pop.getBoundingClientRect();
-  const margin = 8, gap = 6;
-  // Horizontal: align right edge with button, then clamp into the viewport.
-  let left = r.right - popRect.width;
-  if (left < margin) left = margin;
-  if (left + popRect.width > window.innerWidth - margin) left = window.innerWidth - popRect.width - margin;
-  // Vertical: open below when it fits, else flip to whichever side has more
-  // room. Cap height to the available space so a long list scrolls inside the
-  // popover instead of running off the bottom of the screen.
-  const spaceBelow = window.innerHeight - r.bottom - gap - margin;
-  const spaceAbove = r.top - gap - margin;
-  let top, maxH;
-  if (popRect.height <= spaceBelow || spaceBelow >= spaceAbove) {
-    maxH = spaceBelow;
-    top  = r.bottom + gap;
+// Today's date under the page title — the calm anchor for "Today" numbers.
+function tdDateRender() {
+  const el = document.getElementById('td-date'); if (!el) return;
+  const d = new Date();
+  if (window.cuLang && cuLang() === 'cn') {
+    const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    el.textContent = `${d.getMonth() + 1}月${d.getDate()}日 ${DOW[d.getDay()]}`;
   } else {
-    maxH = spaceAbove;
-    top  = r.top - gap - Math.min(popRect.height, maxH);
+    el.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
   }
-  pop.style.maxHeight = Math.max(120, maxH) + 'px';
-  pop.style.left = left + 'px';
-  pop.style.top  = Math.max(margin, top) + 'px';
-  // Outside-click closes; defer the listener so the opening click doesn't fire it.
-  setTimeout(() => document.addEventListener('mousedown', bentoMenuOutside), 0);
-}
-function bentoMenuClose() {
-  const pop = document.getElementById('db-tile-pop'); if (pop) pop.remove();
-  document.removeEventListener('mousedown', bentoMenuOutside);
-}
-function bentoMenuOutside(e) {
-  // Ignore clicks on a ⋯ button — its own onclick handles open/close (toggle).
-  if (e.target.closest && e.target.closest('.db-tile-menu')) return;
-  if (!e.target.closest || !e.target.closest('.db-tile-pop')) bentoMenuClose();
-}
-function bentoSetTile(slot, key) {
-  if (!BENTO_CATALOGUE[key]) return;
-  const layout = bentoLoadLayout();
-  const idx = BENTO_SLOTS.indexOf(slot);
-  // If this tile is already shown elsewhere, swap the two slots so all six
-  // stay unique rather than letting the same tile appear twice.
-  const existing = layout.indexOf(key);
-  if (existing !== -1 && existing !== idx) {
-    layout[existing] = layout[idx];
-    bentoRenderSlot(BENTO_SLOTS[existing], layout[existing]);
-  }
-  layout[idx] = key;
-  bentoSaveLayout(layout);
-  bentoRenderSlot(slot, key);
-  bentoMenuClose();
 }
 
-// Hook into the existing dashRenderAll so bento tiles that read from
-// DASH_DATA refresh whenever the date range loads. Wrap once.
-(function wireBentoToDashRender(){
-  if (typeof dashRenderAll !== 'function' || dashRenderAll._bentoWrapped) return;
-  const orig = dashRenderAll;
-  dashRenderAll = function() {
-    orig.apply(this, arguments);
-    try { bentoRefresh('dash'); } catch (e) {}
-  };
-  dashRenderAll._bentoWrapped = true;
-})();
+// ── Last-seen stamp — feeds The Recap's "while you were away" window. ──────
+// Stamped when the tab hides / unloads, plus a 60s heartbeat while visible so
+// a crash still leaves a recent mark. tdRecapLoad reads the PREVIOUS stamp at
+// boot before this starts writing, so the window is [last departure → now].
+function tdSeenInit() {
+  if (TD._seenWired) return;
+  TD._seenWired = true;
+  const stamp = () => { try { localStorage.setItem(TD_SEEN_KEY, String(Date.now())); } catch (e) {} };
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stamp(); });
+  window.addEventListener('pagehide', stamp);
+  setInterval(() => { if (!document.hidden) stamp(); }, 60000);
+  stamp();
+}
+
+// ── The Recap ──────────────────────────────────────────────────────────────
+async function tdRecapLoad() {
+  const host = document.getElementById('td-recap-rows'); if (!host) return;
+  let since = 0;
+  try { since = parseInt(localStorage.getItem(TD_SEEN_KEY) || '0', 10) || 0; } catch (e) {}
+  const now = Date.now();
+  const MAX_BACK = 7 * 86400000;   // server-friendly cap for a long absence
+  const MIN_BACK = 30 * 60000;     // a quick reload still gets a real window
+  if (!since || now - since > MAX_BACK) since = now - MAX_BACK;
+  if (now - since < MIN_BACK) since = now - MIN_BACK;
+  TD.recapSince = since;
+  try {
+    const j = await api(`/api/retail-admin/dashboard/activity?since=${since}&limit=500`);
+    TD.recapEvents = (j.data && j.data.events) || [];
+    tdRecapRender();
+  } catch (e) {
+    host.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
+  }
+}
+
+// "since yesterday 22:41" — the recap window's opening edge, in local time.
+function tdSinceLabel(ms) {
+  const d = new Date(ms);
+  const pad = n => String(n).padStart(2, '0');
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const now = new Date();
+  const dayMs = 86400000;
+  const dayDiff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / dayMs);
+  if (dayDiff <= 0) return cuT(`since ${hm}`, `自今天 ${hm}`);
+  if (dayDiff === 1) return cuT(`since yesterday ${hm}`, `自昨天 ${hm}`);
+  return cuT(`since ${d.getMonth() + 1}/${d.getDate()} ${hm}`, `自${d.getMonth() + 1}月${d.getDate()}日 ${hm}`);
+}
+
+// Aggregate the recap window's events into calm one-line rows, each with a
+// breathing Dusk dot — Dusk means "the system did this", and this card is the
+// only place on the dashboard that uses it.
+function tdRecapRender() {
+  const host = document.getElementById('td-recap-rows'); if (!host || !TD.recapEvents) return;
+  const meta = document.getElementById('td-recap-meta');
+  if (meta) meta.textContent = tdSinceLabel(TD.recapSince);
+  const ev = TD.recapEvents;
+  const of = type => ev.filter(e => e.type === type);
+  const sumAmt = (rows, k) => rows.reduce((s, e) => s + (Number(e.payload && e.payload[k]) || 0), 0);
+  const money = n => '¥' + Math.round(n).toLocaleString();
+
+  const paid       = of('paid_order');
+  const dispatched = of('order_dispatched');
+  const delivered  = of('order_delivered');
+  const autoCanc   = of('order_cancelled').filter(e => e.payload && e.payload.reason === 'auto_cancelled_unpaid');
+  const refunded   = of('refund_paid');
+  const newCust    = of('new_customer');
+  const topups     = of('topup');
+  const pickups    = of('gzgrocery_pickup').filter(e => !(e.payload && e.payload.is_return));
+
+  const rows = [];
+  const push = (en, cn) => rows.push(`<div class="td-recap-row"><span class="td-dusk-dot" aria-hidden="true"></span><span>${cuT(en, cn)}</span></div>`);
+  if (paid.length)       push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} paid — ${money(sumAmt(paid, 'total'))}`,
+                              `<b>${paid.length}</b> 笔订单已支付，共 ${money(sumAmt(paid, 'total'))}`);
+  if (dispatched.length) push(`<b>${dispatched.length}</b> ${dispatched.length === 1 ? 'order' : 'orders'} dispatched`,
+                              `<b>${dispatched.length}</b> 个订单已发货`);
+  if (delivered.length)  push(`<b>${delivered.length}</b> ${delivered.length === 1 ? 'order' : 'orders'} delivered`,
+                              `<b>${delivered.length}</b> 个订单已送达`);
+  if (autoCanc.length)   push(`<b>${autoCanc.length}</b> unpaid ${autoCanc.length === 1 ? 'order' : 'orders'} cancelled automatically`,
+                              `<b>${autoCanc.length}</b> 个未付款订单已自动取消`);
+  if (refunded.length)   push(`<b>${refunded.length}</b> ${refunded.length === 1 ? 'refund' : 'refunds'} settled — ${money(sumAmt(refunded, 'amount'))}`,
+                              `<b>${refunded.length}</b> 笔退款已完成，共 ${money(sumAmt(refunded, 'amount'))}`);
+  if (topups.length)     push(`<b>${topups.length}</b> wallet ${topups.length === 1 ? 'top-up' : 'top-ups'} — ${money(sumAmt(topups, 'amount'))}`,
+                              `<b>${topups.length}</b> 笔钱包充值，共 ${money(sumAmt(topups, 'amount'))}`);
+  if (newCust.length)    push(`<b>${newCust.length}</b> new ${newCust.length === 1 ? 'customer' : 'customers'} joined`,
+                              `新增 <b>${newCust.length}</b> 位客户`);
+  if (pickups.length)    push(`<b>${pickups.length}</b> wholesale ${pickups.length === 1 ? 'pickup' : 'pickups'} recorded`,
+                              `记录 <b>${pickups.length}</b> 笔批发提货`);
+
+  const close = document.getElementById('td-recap-close');
+  if (!rows.length) {
+    host.innerHTML = `<div class="td-recap-quiet">${cuT('All quiet while you were away.', '您不在时，一切平静。')}</div>`;
+    if (close) close.hidden = true;
+    return;
+  }
+  host.innerHTML = rows.join('');
+  if (close) {
+    close.textContent = cuT("Handled quietly. You're welcome.", '一切已悄然处理，不用谢。');
+    close.hidden = false;
+  }
+}
+
+// "Show the work" — the silent system is never secretive: list every event in
+// the recap window inside the activity drawer, each row drilling through to
+// its order / customer / product like the main feed does.
+function tdRecapShowWork() {
+  const drawer = document.getElementById('db-activity-drawer'); if (!drawer) return;
+  const title = document.getElementById('db-drawer-title');
+  const body  = document.getElementById('db-drawer-body');
+  if (title) title.textContent = cuT('While you were away', '您不在的这段时间');
+  const evs = TD.recapEvents || [];
+  if (body) {
+    const pad = n => String(n).padStart(2, '0');
+    body.innerHTML = evs.length ? evs.map(e => {
+      const m = dashFeedMeta(e);
+      const ts = new Date(e.ts);
+      const tstr = `${ts.getMonth() + 1}/${ts.getDate()} ${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
+      return `<div class="db-feed-row" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
+        <span class="db-feed-ts">${tstr}</span>
+        <span class="db-feed-icon db-fi-${m.tone || 'muted'}">${m.icon}</span>
+        <span class="db-feed-text">${m.text}</span>
+      </div>`;
+    }).join('') : `<div class="db-feed-empty">${cuT('Nothing in this window', '此时段无事件')}</div>`;
+  }
+  drawer.classList.add('open');
+  drawer.setAttribute('aria-hidden', 'false');
+}
+
+// ── Needs you — attention cards from /dashboard/ops ────────────────────────
+async function tdOpsLoad() {
+  try {
+    const j = await api(`/api/retail-admin/dashboard/ops?${dashStoreQS().replace(/^&/, '')}`);
+    DASH_OPS = j.data || null;
+    tdAttnRender();
+  } catch (e) { /* silent — next tick retries */ }
+}
+
+function tdAttnCard(tone, title, count, rowsHtml, moreText, action) {
+  return `<section class="card td-card td-attn-card is-${tone}">
+    <div class="td-attn-head">
+      <h3>${title}</h3>
+      <span class="td-pill td-pill-${tone}">${count}</span>
+    </div>
+    <div class="td-attn-rows">${rowsHtml}</div>
+    ${moreText ? `<div class="td-attn-more">${moreText}</div>` : ''}
+    ${action || ''}
+  </section>`;
+}
+
+function tdAttnRender() {
+  const host = document.getElementById('td-attn'); if (!host) return;
+  if (!DASH_OPS) {
+    host.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
+    return;
+  }
+  const cards = [];
+
+  // Delivery problems — the carrier flagged something an operator must chase.
+  const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
+  if (da.count) {
+    const rows = (da.items || []).slice(0, 4).map(it => {
+      const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
+        || { en: 'Delivery issue', cn: '配送异常', color: 'var(--danger)' };
+      return `<button type="button" class="td-attn-row" onclick="openOrder(${Number(it.id)})">
+        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
+        <span class="val" style="color:${info.color}">${cuT(info.en, info.cn)}</span>
+      </button>`;
+    }).join('');
+    cards.push(tdAttnCard('brick', cuT('Delivery needs a call', '配送需要跟进'), da.count, rows,
+      da.count > 4 ? cuT(`and ${da.count - 4} more`, `另有 ${da.count - 4} 个`) : ''));
+  }
+
+  // Refund queue — pending / reviewing requests.
+  const rf = DASH_OPS.refunds || { count: 0, items: [] };
+  if (rf.count) {
+    const rows = (rf.items || []).slice(0, 4).map(it => `
+      <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
+        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
+        <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
+      </button>`).join('');
+    cards.push(tdAttnCard('amber', cuT('Refunds waiting', '退款待处理'), rf.count, rows,
+      rf.count > 4 ? cuT(`and ${rf.count - 4} more`, `另有 ${rf.count - 4} 笔`) : ''));
+  }
+
+  // Stock — out-of-stock rows first (harder problem), then the lowest counts.
+  const low = DASH_OPS.low_stock || { count: 0, items: [] };
+  const oos = DASH_OPS.out_of_stock || { count: 0, items: [] };
+  if (low.count + oos.count) {
+    const prodRow = (it, val) => `
+      <button type="button" class="td-attn-row"${it.id ? ` onclick="dashOpenProductFromFeed(${Number(it.id)})"` : ''}>
+        <span class="name">${escapeHtml(dbProdName(it))}</span>
+        <span class="val">${val}</span>
+      </button>`;
+    const oosRows = (oos.items || []).slice(0, 2).map(it => prodRow(it, cuT('out', '售罄')));
+    const lowRows = (low.items || []).slice(0, 4 - Math.min(2, (oos.items || []).length))
+      .map(it => prodRow(it, cuT(`${it.stock_qty} left`, `剩 ${it.stock_qty}`)));
+    const shown = Math.min(2, (oos.items || []).length) + lowRows.length;
+    const restN = low.count + oos.count - shown;
+    cards.push(tdAttnCard('amber', cuT('Running low', '库存告急'), low.count + oos.count,
+      oosRows.join('') + lowRows.join(''),
+      restN > 0 ? cuT(`and ${restN} more`, `另有 ${restN} 项`) : '',
+      `<button type="button" class="td-attn-go" onclick="dashJumpTab('products')">${cuT('Open products', '查看产品')}</button>`));
+  }
+
+  if (!cards.length) {
+    // The empty state is a compliment, not an apology — the settled waveform.
+    host.innerHTML = `<section class="card td-card td-clear">
+      <svg viewBox="0 0 340 24" aria-hidden="true"><path d="M10 12 C80 12, 180 12, 330 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.45"/></svg>
+      <p>${cuT('Nothing needs you. Enjoy it.', '没有需要您处理的事，请安心。')}</p>
+      <p class="sub">${cuT('Cards appear here the moment something does.', '一旦有事项需要处理，会立即在这里显示。')}</p>
+    </section>`;
+    return;
+  }
+  host.innerHTML = `<div class="td-attn-grid">${cards.join('')}</div>`;
+}
 
 // Echo the active range into the deep-dive summary so the timeline stays
 // legible once you've scrolled past the top range bar (read-only — change it
@@ -1473,7 +1196,7 @@ function dashRefresh() {
 // invisible, then ease it back on the same fade as the tab switch — one clean fade-in, no
 // appear-snap-fade. Honours prefers-reduced-motion.
 function dashSwapWithFade(render) {
-  const els = ['db-bento', 'db-deepdive'].map(id => document.getElementById(id)).filter(Boolean);
+  const els = ['reports-body'].map(id => document.getElementById(id)).filter(Boolean);
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (reduce || !els.length) { render(); return; }
   els.forEach(el => { el.style.transition = 'none'; el.style.opacity = '0'; });
@@ -1541,10 +1264,9 @@ function dashRenderKpis() {
     const cu = (c.num != null && isFinite(c.num)) ? ` data-cu="${c.num}" data-fmt="${c.fmt}"` : '';
     return `<div class="db-kpi${c.accent ? ' accent' : ''}"><div class="lbl">${c.lbl}</div><div class="val"${cu}>${c.val}</div>${foot}</div>`;
   }).join('');
-  // If the fold is already open when fresh data lands, count up now (the open
-  // event won't fire again). Otherwise the open handler runs it on reveal.
+  // Fresh data lands → drift each number from its old rest to the new one.
   // A manual ↻ refresh forces a roll-up from zero (no prev) for the re-reveal.
-  if (document.getElementById('db-deepdive')?.open) dashKpiAnimate(DASH_FORCE_ROLLUP ? null : prevVals);
+  dashKpiAnimate(DASH_FORCE_ROLLUP ? null : prevVals);
   DASH_FORCE_ROLLUP = false;
 }
 
@@ -1570,7 +1292,7 @@ function dashRenderTrend() {
   const win = DASH_DATA.window;
   $('#db-trend-window').textContent = win ? `· ${win.from}${win.from !== win.to ? ' → ' + win.to : ''}` : '';
   const metric = DASH_METRIC;
-  const cs = (window.DASH_VIEW ? DASH_VIEW.chart : 'curve');   // View tweak: curve|bars|dots
+  const cs = 'curve';   // fixed shape — the View popover went with the deep-dive fold
   const isMoney = metric === 'revenue';
   const vals = t.map(p => Number(p[metric] || 0));
   const max = Math.max(1, ...vals);

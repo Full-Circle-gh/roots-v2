@@ -6529,8 +6529,7 @@
   @media (max-width: 720px) {
     /* Desktop dashboard surfaces off; the mobile view replaces them. */
     #tab-dashboard .db-head,
-    #tab-dashboard #db-bento,
-    #tab-dashboard #db-deepdive { display: none; }
+    #tab-dashboard .td-wrap { display: none; }
     #rm-dash { display: block; }
 
     /* Compact one-line header — eyebrow + title share a baseline row so the
@@ -7134,4 +7133,206 @@
     .su-choose { grid-template-columns: 1fr; }
     .su-task { gap: 11px; }
     .su-time { display: none; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     TACET DASHBOARD + REPORTS SKIN (td-*)
+     The first Tacet-brand surfaces in the admin (spec: tacet-tokens.css /
+     tacet-design-system.md). Scoped to #tab-dashboard + #tab-reports so
+     the rest of the chrome keeps its current look until each screen is
+     touched. Rules of the system worth keeping honest here:
+       - Dusk (#6E67AF) is scarce: it means "the system did this". On the
+         dashboard it appears ONLY as The Recap's dots; in Reports only on
+         the Apply button (the screen's one primary action).
+       - Colour is status, never decoration; amber warns, brick errors,
+         sage means all-clear.
+       - Motion "settles": strong ease-out, no bounce; cards rise 8px once.
+     ════════════════════════════════════════════════════════════════════ */
+  #tab-dashboard, #tab-reports {
+    /* Tacet tokens — dark theme first (admin default). Paper/Ink swap in
+       light; sage/amber/brick hold their roles in both. */
+    --td-surface:    #18233A;
+    --td-raised:     #1E2A44;
+    --td-border:     #2A3550;
+    --td-text:       #FBF9F4;
+    --td-text2:      #9AA3B2;
+    --td-dusk:       #6E67AF;
+    --td-dusk-hi:    #7E77BF;
+    --td-dusk-tint:  #262A4A;
+    --td-sage:       #A3B49F;
+    --td-sage-tint:  #1E2C26;
+    --td-sage-ink:   #A3B49F;
+    --td-amber:      #C9954A;
+    --td-amber-tint: #33290F;
+    --td-amber-ink:  #C9954A;
+    --td-brick:      #B4533E;
+    --td-brick-tint: #351B14;
+    --td-brick-ink:  #D07A66;
+  }
+  :root[data-theme="light"] #tab-dashboard,
+  :root[data-theme="light"] #tab-reports {
+    --td-surface:    #FFFFFF;
+    --td-raised:     #F6F3EC;
+    --td-border:     #E4E0D5;
+    --td-text:       #111A2B;
+    --td-text2:      #58606E;
+    --td-dusk-tint:  #EEEDF6;
+    --td-sage-tint:  #EDF1EC;
+    --td-sage-ink:   #4A6249;
+    --td-amber-tint: #F7EEDE;
+    --td-amber-ink:  #8A6425;
+    --td-brick-tint: #F6E7E3;
+    --td-brick-ink:  #B4533E;
+  }
+  /* Chart accents inside these sections follow Tacet's functional colours
+     (amber warns, brick errors). --accent (tea) stays for chart lines —
+     it is close kin to sage and keeps contrast in both themes. */
+  #tab-dashboard, #tab-reports {
+    --brass: var(--td-amber);
+    --danger: var(--td-brick-ink);
+  }
+
+  /* ── shared chrome ── */
+  #tab-dashboard .td-wrap { max-width: 1120px; }
+  #tab-reports #reports-body, #tab-reports .db-rangebar, #tab-reports .db-head { max-width: 1120px; }
+  .td-head { display: flex; align-items: baseline; gap: 14px; }
+  .td-date { margin-left: auto; font-size: 13px; color: var(--td-text2, var(--text-3)); }
+  .td-kicker {
+    font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--td-text2); margin: 26px 0 10px;
+  }
+  #tab-dashboard .card.td-card,
+  #tab-reports .card {
+    background: var(--td-surface);
+    border: 1px solid var(--td-border);
+    border-radius: 14px;
+    box-shadow: 0 1px 2px rgba(17, 26, 43, .05), 0 4px 16px rgba(17, 26, 43, .04);
+  }
+  .td-card { padding: 20px 24px; }
+  .td-card-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 10px; }
+  .td-card-head h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--td-text); }
+  .td-muted { font-size: 13px; color: var(--td-text2); }
+  .td-meta  { font-size: 12.5px; color: var(--td-text2); }
+
+  /* Cards settle in once on load — 8px rise, strong ease-out, no bounce. */
+  @keyframes td-settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .td-recap  { animation: td-settle .6s cubic-bezier(.16,1,.3,1) both; }
+  .td-today  { animation: td-settle .6s cubic-bezier(.16,1,.3,1) .1s both; }
+  .td-feed   { animation: td-settle .6s cubic-bezier(.16,1,.3,1) .18s both; }
+  @media (prefers-reduced-motion: reduce) {
+    .td-recap, .td-today, .td-feed { animation: none; }
+    .td-dusk-dot { animation: none; }
+  }
+
+  /* ── The Recap ── */
+  .td-recap { margin-top: 14px; }
+  .td-recap-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+  .td-recap-head h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--td-text); }
+  .td-recap-rows { display: grid; gap: 10px; margin-top: 14px; }
+  .td-recap-row { display: flex; align-items: baseline; gap: 12px; font-size: 14px; color: var(--td-text); }
+  .td-recap-row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+  .td-recap-quiet { font-size: 14px; color: var(--td-text2); }
+  .td-dusk-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex: none; position: relative; top: -1px;
+    background: var(--td-dusk);
+    animation: td-breathe 2.4s cubic-bezier(.16,1,.3,1) infinite;
+  }
+  @keyframes td-breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: .45; transform: scale(.8); }
+  }
+  .td-recap-close {
+    margin: 16px 0 0; padding-top: 12px; border-top: 1px solid var(--td-border);
+    font-size: 12.5px; color: var(--td-text2);
+  }
+  .td-ghost {
+    margin-left: auto; border: 0; background: transparent; cursor: pointer;
+    font-size: 12.5px; color: var(--td-text2); padding: 2px 4px; font-family: var(--f-sans);
+    border-bottom: 1px solid transparent; transition: color .2s cubic-bezier(.16,1,.3,1);
+  }
+  .td-ghost:hover { color: var(--td-text); border-bottom-color: var(--td-border); }
+
+  /* ── Needs you — attention cards ── */
+  .td-attn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .td-attn-card { padding: 18px 20px; }
+  .td-attn-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .td-attn-head h3 { margin: 0; font-size: 14px; font-weight: 600; color: var(--td-text); }
+  .td-pill {
+    margin-left: auto; font-size: 12.5px; font-weight: 600; padding: 1px 11px;
+    border-radius: 999px; font-variant-numeric: tabular-nums;
+  }
+  .td-pill-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .td-pill-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  .td-attn-rows { display: grid; gap: 2px; }
+  .td-attn-row {
+    display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
+    border: 0; background: transparent; cursor: pointer; padding: 5px 8px; margin: 0 -8px;
+    border-radius: 6px; font-size: 13px; color: var(--td-text); font-family: var(--f-sans);
+  }
+  .td-attn-row:hover { background: var(--td-raised); }
+  .td-attn-row .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-attn-row .val { margin-left: auto; flex: none; font-size: 12.5px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .td-attn-more { margin-top: 8px; font-size: 12.5px; color: var(--td-text2); }
+  .td-attn-go {
+    margin-top: 12px; display: inline-block; cursor: pointer;
+    font-size: 12.5px; font-weight: 500; color: var(--td-text); background: transparent;
+    border: 1px solid var(--td-border); border-radius: 8px; padding: 6px 14px;
+    font-family: var(--f-sans); transition: border-color .2s cubic-bezier(.16,1,.3,1);
+  }
+  .td-attn-go:hover { border-color: var(--td-text2); }
+
+  /* All clear — the empty state is a compliment, with the settled waveform. */
+  .td-clear { text-align: center; padding: 30px 24px 26px; background: var(--td-raised); border-color: transparent; }
+  .td-clear svg { width: 170px; height: 24px; color: var(--td-text2); margin-bottom: 6px; }
+  .td-clear p { margin: 0; font-size: 14.5px; color: var(--td-text); }
+  .td-clear p.sub { margin-top: 4px; font-size: 12.5px; color: var(--td-text2); }
+
+  /* ── Today — the pulse ── */
+  .td-pulse-grid { display: grid; grid-template-columns: 1.55fr 1fr; gap: 14px; align-items: stretch; }
+  @media (max-width: 1000px) { .td-pulse-grid { grid-template-columns: 1fr; } }
+  .td-live { display: inline-flex; align-items: baseline; gap: 7px; margin-left: auto; font-size: 12.5px; color: var(--td-text2); }
+  .td-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--td-sage); align-self: center; opacity: .45; }
+  .td-live.is-on .td-live-dot { opacity: 1; }
+  .td-live-num { font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-live.is-zero .td-live-num { display: none; }
+  .td-today .td-card-head { margin-bottom: 2px; }
+  .td-today .db-hero-sync { margin-left: 0; }
+  .td-rev { display: flex; align-items: baseline; gap: 12px; margin-top: 8px; }
+  .td-rev-big { font-size: 36px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-spark { height: 34px; margin-top: 14px; }
+  .td-cells { display: flex; gap: 44px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--td-border); }
+  .td-cell .v { font-size: 20px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-cell .k { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--td-text2); margin-top: 2px; }
+  .td-cell .db-spark-wrap { width: 120px; }
+
+  /* Activity strip — quiet rows; the toggle reveals the full day (scrolling
+     inside the card past ~340px so the page below stays reachable). */
+  .td-feed .db-feed-list { display: flex; flex-direction: column; gap: 2px; max-height: 340px; }
+  .td-feed .db-feed-empty { font-size: 13px; color: var(--td-text2); padding: 6px 0; }
+
+  .td-foot { margin-top: 26px; text-align: center; }
+  .td-foot-link {
+    border: 0; background: transparent; cursor: pointer; font-family: var(--f-sans);
+    font-size: 13px; color: var(--td-text2); padding: 4px 8px;
+    border-bottom: 1px solid var(--td-border); transition: color .2s cubic-bezier(.16,1,.3,1);
+  }
+  .td-foot-link:hover { color: var(--td-text); }
+
+  /* ── Reports chrome ── */
+  #tab-reports .td-kicker:first-of-type { margin-top: 22px; }
+  #tab-reports .db-rangebar { margin: 14px 0 16px; }
+  /* The one Dusk element in Reports: Apply — the screen's primary action. */
+  #tab-reports .db-rangebar .db-btn.primary {
+    background: var(--td-dusk); border-color: var(--td-dusk); color: #FFFFFF;
+  }
+  #tab-reports .db-rangebar .db-btn.primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+  #tab-reports .db-kpis { margin-bottom: 14px; }
+  #tab-reports .db-kpi {
+    background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
+  }
+
+  @media (max-width: 720px) {
+    /* Reports has no phone variant this pass — stack what's there. */
+    #tab-reports .db-grid-2 { grid-template-columns: 1fr; }
+    #tab-reports .db-range { flex-wrap: wrap; }
   }
