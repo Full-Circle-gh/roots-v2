@@ -687,7 +687,7 @@ function tdFeedMeta(e) {
   const yuan = n => '¥' + Number(n || 0).toLocaleString();
   const buyer = (p.buyer || '').trim();
   const chan = String(p.channel || '').toLowerCase();
-  const chanName = { meituan: 'Meituan', eleme: 'Eleme', gzgrocery: 'Wholesale' }[chan];
+  const chanName = { meituan: 'Meituan', eleme: 'Eleme', gzgrocery: 'gzgrocery' }[chan];
   const ono = escapeHtml(p.order_no || '');
   const firstBadge = p.first_order
     ? ` <span class="td-feed-badge">${cuT('first order', '首单')}</span>` : '';
@@ -724,8 +724,8 @@ function tdFeedMeta(e) {
       const nm = escapeHtml((window.cuLang && cuLang() === 'cn') ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn));
       const u = Math.abs(Number(p.units || 0));
       return p.is_return
-        ? { text: cuT(`Wholesale return · ${nm}`, `批发退货 · ${nm}`), amount: '−' + yuan(Math.abs(p.owed)) }
-        : { text: cuT(`Wholesale pickup · ${nm} ×${u}`, `批发提货 · ${nm} ×${u}`), amount: yuan(Math.abs(p.owed)) };
+        ? { text: cuT(`gzgrocery return · ${nm}`, `gzgrocery 退货 · ${nm}`), amount: '−' + yuan(Math.abs(p.owed)) }
+        : { text: cuT(`gzgrocery pickup · ${nm} ×${u}`, `gzgrocery 提货 · ${nm} ×${u}`), amount: yuan(Math.abs(p.owed)) };
     }
     default:
       return { text: escapeHtml(e.type) };
@@ -1080,8 +1080,8 @@ function tdRecapRender() {
                               `<b>${topups.length}</b> 笔钱包充值，共 ${money(sumAmt(topups, 'amount'))}`);
   if (newCust.length)    push(`<b>${newCust.length}</b> new ${newCust.length === 1 ? 'customer' : 'customers'} joined`,
                               `新增 <b>${newCust.length}</b> 位客户`);
-  if (pickups.length)    push(`<b>${pickups.length}</b> wholesale ${pickups.length === 1 ? 'pickup' : 'pickups'} recorded`,
-                              `记录 <b>${pickups.length}</b> 笔批发提货`);
+  if (pickups.length)    push(`<b>${pickups.length}</b> gzgrocery ${pickups.length === 1 ? 'pickup' : 'pickups'} recorded`,
+                              `记录 <b>${pickups.length}</b> 笔 gzgrocery 提货`);
 
   const close = document.getElementById('td-recap-close');
   if (!rows.length) {
@@ -1183,9 +1183,9 @@ function tdAttnRender() {
       `<button type="button" class="td-attn-go" onclick="dashJumpTab('products')">${cuT('Open restock', '前往补货')}</button>`));
   }
 
-  // Delivery problems — the carrier flagged something an operator must chase.
-  // A single alert reads like the mockup: order+reason, a buyer sub-line, and an
-  // "Open the order" button; several stack as clickable rows.
+  // Delivery — always shown (per request) so it's a permanent fixture. When the
+  // carrier has flagged a problem it's the brick "needs a call" card; when clear
+  // it's a calm sage all-clear so the operator can see deliveries are fine.
   const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
   if (da.count) {
     const reasonOf = it => {
@@ -1205,6 +1205,9 @@ function tdAttnRender() {
       ? `<button type="button" class="td-attn-go" onclick="openOrder(${Number(first.id)})">${cuT('Open the order', '打开订单')}</button>`
       : '';
     cards.push(tdAttnCard('brick', 'truck', cuT('Delivery needs a call', '配送需要跟进'), da.count, rows, more, action));
+  } else {
+    cards.push(tdAttnCard('ok', 'truck', cuT('Delivery', '配送'), 0,
+      `<div class="td-attn-clear">${cuT('All deliveries on track', '配送一切正常')}</div>`, ''));
   }
 
   // Refund queue — pending / reviewing requests.

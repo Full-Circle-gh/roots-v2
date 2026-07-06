@@ -7294,6 +7294,9 @@
   }
   .td-pill-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
   .td-pill-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  .td-pill-ok    { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+  .td-ic-ok { color: var(--td-sage-ink); }
+  .td-attn-clear { font-size: 14px; color: var(--td-text2); padding: 2px 0; }
   .td-attn-rows { display: grid; gap: 4px; }
   .td-attn-row {
     display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
