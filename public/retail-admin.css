@@ -406,6 +406,10 @@
     color: var(--text-3);
     border: 0;
     padding: 9px 11px;
+    /* Inter to match the Tacet reskin + the Fraunces wordmark; the rest of the
+       legacy chrome is still IBM Plex Sans, but the rail is the loudest nav so
+       it leads the type migration. */
+    font-family: 'Inter', var(--f-sans);
     font-size: 13px; font-weight: 500;
     cursor: pointer;
     border-radius: var(--r-md);
@@ -438,6 +442,11 @@
      (padding, colour, hover, and the collapsed icon-only rule), so we only add
      the footer chrome and the chevron flip here. */
   .nav-foot {
+    /* Rail buttons carry explicit flex `order` (Dashboard 1 … Settings 11); an
+       unset order defaults to 0, which would float this ABOVE the whole list.
+       Push it past the last item so it lands at the very bottom, and let
+       margin-top:auto absorb the slack above it. */
+    order: 99;
     margin-top: auto;
     padding-top: 8px;
     border-top: 1px solid var(--line-soft);
