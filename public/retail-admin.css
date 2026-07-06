@@ -431,15 +431,21 @@
      destination-less groups (Marketing / Loyalty) re-expand the rail on
      click so their children stay reachable. Hidden on phones, where the
      rail is already swapped for the fixed bottom nav. */
-  .nav-collapse-btn {
-    flex: none; width: 34px; height: 34px; padding: 0; margin-right: 2px;
-    display: inline-flex; align-items: center; justify-content: center;
-    border: 0; background: transparent; cursor: pointer;
-    color: var(--text-2); border-radius: var(--r-md);
-    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+  /* Fold control — a quiet footer row pinned to the bottom of the rail.
+     Frequent nav lives up top; the rare "reshape the layout" toggle recedes
+     here instead of sitting in the prime top-left corner. `margin-top:auto`
+     floats it to the rail's foot. Base button styling comes from `.tabs button`
+     (padding, colour, hover, and the collapsed icon-only rule), so we only add
+     the footer chrome and the chevron flip here. */
+  .nav-foot {
+    margin-top: auto;
+    padding-top: 8px;
+    border-top: 1px solid var(--line-soft);
   }
-  .nav-collapse-btn:hover { background: var(--bg-elev-1); color: var(--text-1); }
-  .nav-collapse-btn svg { width: 19px; height: 19px; }
+  .nav-fold-chev {
+    transition: transform var(--t-fast) ease;
+  }
+  body.nav-collapsed .nav-fold-chev { transform: rotate(180deg); }
 
   .tabs { transition: width var(--t-fast) ease, padding var(--t-fast) ease; }
   main  { transition: margin-left var(--t-fast) ease; }
@@ -452,7 +458,8 @@
   }
   body.nav-collapsed .tabs .tabs-chev { display: none; }
   body.nav-collapsed .tabs-group.open > .tabs-popover { display: none; }
-  @media (max-width: 720px) { .nav-collapse-btn { display: none; } }
+  /* The fold control lives inside .tabs, which is hidden wholesale on phones
+     (the rail is replaced by the bottom nav), so no mobile rule is needed. */
 
   /* Unseen-orders notification on the Orders tab. Hidden by default;
      JS adds .has-unseen when the unseen-count > 0. The dot pulses to grab
@@ -4434,6 +4441,10 @@
     transform: scale(1.05);
   }
   .side-drawer .drawer-close svg { width: 16px; height: 16px; }
+  /* The Recap drawer is a short peek with a footer Close — the floating round ×
+     would be a redundant second exit and the shadowed pill fights the flat
+     Tacet paper skin, so drop it here. */
+  #db-activity-drawer .drawer-close { display: none; }
   /* Mobile-only back chevron in the drawer app-bar; hidden on desktop where the
      floating round × is used instead. */
   .side-drawer .drawer-back { display: none; }
