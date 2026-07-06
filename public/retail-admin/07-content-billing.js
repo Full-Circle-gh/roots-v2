@@ -555,102 +555,13 @@ async function unissueInvoice(id) {
     _invoiceRefreshAfter(id);
   } catch (e) { toast('Failed · 失败: ' + e.message, 'err'); }
 }
-// After issuing/reverting, refresh whichever view the action came from: the
-// Invoices tab list (when active) or the open order drawer.
+// After issuing/reverting, refresh the views that show the fapiao state: the
+// open order drawer (where invoices are issued since the Invoices tab was
+// retired) and, when the Orders list is on screen, its rows/badges/chip count.
 function _invoiceRefreshAfter(id) {
-  const sec = document.getElementById('tab-invoices');
-  if (sec && sec.classList.contains('active')) { loadInvoices(); invLoadKpis(true); }
-  else if (typeof _OPEN_ORDER !== 'undefined' && _OPEN_ORDER && Number(_OPEN_ORDER.id) === Number(id)) openOrder(id);
-}
-
-// ── Invoices tab — list every needs_invoice order so staff issue from one
-// place. Each row reuses renderInvoiceBlock (issue form / issued view + copy).
-let INV_FILTER = 'requested';
-function invSetFilter(f) {
-  INV_FILTER = f;
-  document.querySelectorAll('#inv-filter button').forEach(b => b.classList.toggle('active', b.dataset.f === f));
-  loadInvoices();
-}
-// ── KPI tile → set the matching list filter and scroll the list into view.
-function invKpiJump(f) {
-  invSetFilter(f);
-  const host = document.getElementById('invoices-list');
-  if (host && host.scrollIntoView) host.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-// ── Invoices KPI strip — fapiao queue summary on the shared fc-* layer.
-// Reuses the same /invoices?status=all payload the list already speaks; the
-// ORDER BY puts every un-issued row first, so even if the 200-row cap clips
-// old issued rows we still see every pending one for the value/age maths.
-let _INV_KPI_AT = 0;
-let _INV_KPI_DATA = null;
-let _INV_KPI_LANG_HOOKED = false;
-async function invLoadKpis(force) {
-  if (!document.getElementById('inv-kpis')) return;
-  if (!force && Date.now() - _INV_KPI_AT < 30000) return;
-  _INV_KPI_AT = Date.now();
-  if (!_INV_KPI_LANG_HOOKED && window.onLangChange) { _INV_KPI_LANG_HOOKED = true; onLangChange(invRenderKpis); }
-  try {
-    const j = await api('/api/retail-admin/invoices?status=all');
-    _INV_KPI_DATA = j;
-    invRenderKpis();
-  } catch (e) {}
-}
-function invRenderKpis() {
-  const j = _INV_KPI_DATA; if (!j) return;
-  const rows = j.data || [];
-  const counts = j.counts || {};
-  const pendingRows = rows.filter(o => o.invoice_status !== 'issued');
-  const pending = counts.requested != null ? counts.requested : pendingRows.length;
-  const issued  = counts.issued != null ? counts.issued : rows.filter(o => o.invoice_status === 'issued').length;
-  const awaitVal = pendingRows.reduce((s, o) => s + Number(o.total || 0), 0);
-  let oldestDays = null, oldestDate = '';
-  for (const o of pendingRows) {
-    const d = String(o.placed_at || '').slice(0, 10);
-    if (!d) continue;
-    const age = Math.floor((Date.now() - new Date(d + 'T00:00:00+08:00').getTime()) / 86400000);
-    if (oldestDays === null || age > oldestDays) { oldestDays = age; oldestDate = d; }
-  }
-  dashCountUp($('#inv-kpi-pending'), pending);
-  dashCountUp($('#inv-kpi-issued'), issued);
-  const valEl = $('#inv-kpi-value'); if (valEl) valEl.textContent = fcMoney(awaitVal);
-  const vsub = $('#inv-kpi-value-sub');
-  if (vsub) vsub.textContent = pendingRows.length
-    ? cuT('across ' + pendingRows.length + (pendingRows.length === 1 ? ' order' : ' orders'), '共 ' + pendingRows.length + ' 单')
-    : cuT('nothing awaiting · 无待开', '无待开');
-  const ageEl = $('#inv-kpi-age'), ageSub = $('#inv-kpi-age-sub'), ageTile = $('#inv-kpi-age-tile');
-  if (oldestDays === null) {
-    if (ageEl) ageEl.textContent = '—';
-    if (ageSub) ageSub.textContent = cuT('queue clear · 已清空', '已清空');
-    if (ageTile) ageTile.classList.remove('alert');
-  } else {
-    if (ageEl) ageEl.textContent = oldestDays + cuT('d', '天');
-    if (ageSub) ageSub.textContent = oldestDate ? cuT('since ' + oldestDate, '自 ' + oldestDate) : ' ';
-    if (ageTile) ageTile.classList.toggle('alert', oldestDays >= 7);
-  }
-}
-async function loadInvoices() {
-  const host = document.getElementById('invoices-list');
-  if (!host) return;
-  host.innerHTML = '<div class="db-muted">Loading… · 加载中…</div>';
-  try {
-    const j = await api('/api/retail-admin/invoices?status=' + INV_FILTER);
-    const list = j.data || [];
-    if (j.counts) {
-      const rq = document.getElementById('inv-count-requested'); if (rq) rq.textContent = j.counts.requested ? '(' + j.counts.requested + ')' : '';
-      const is = document.getElementById('inv-count-issued');    if (is) is.textContent = j.counts.issued ? '(' + j.counts.issued + ')' : '';
-    }
-    if (!list.length) { host.innerHTML = '<div class="db-muted">No invoices here · 这里暂无发票</div>'; return; }
-    host.innerHTML = list.map(o => `
-      <div class="card" style="margin-bottom: var(--s3);">
-        <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;">
-          <div><b>#${escapeHtml(o.order_no)}</b> <span style="color: var(--text-3); font-size: 12px;">${escapeHtml(o.nickname || '')}</span></div>
-          <div style="color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums;">${escapeHtml(String(o.placed_at || '').slice(0, 10))} · ${dashMoney(o.total)}</div>
-        </div>
-        ${renderInvoiceBlock(o)}
-      </div>`).join('');
-  } catch (e) {
-    host.innerHTML = `<div class="db-muted">Failed to load · 加载失败: ${escapeHtml(e.message)}</div>`;
-  }
+  if (typeof _OPEN_ORDER !== 'undefined' && _OPEN_ORDER && Number(_OPEN_ORDER.id) === Number(id)) openOrder(id);
+  const sec = document.getElementById('tab-orders');
+  if (sec && sec.classList.contains('active') && typeof loadOrders === 'function') loadOrders({ silent: true });
 }
 async function uploadInvoicePdf(id, input) {
   const file = input.files && input.files[0];

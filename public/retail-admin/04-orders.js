@@ -170,6 +170,7 @@ function _ordersFp(rows) {
   for (const r of rows) {
     s += r.id + ':' + (r.status||'') + ':'
        + (r.refund_status||'') + ':'
+       + (r.invoice_status||'') + ':'
        + (r.tracking_number||'') + ':'
        + (r.local_eta||'') + ':'
        + (r.updated_at || r.placed_at || '') + ',';
@@ -216,6 +217,51 @@ function refundBadge(o) {
   };
   const label = labels[rs] || rs;
   return `<span class="pill refund-pending" title="Open refund · 退款进行中 (${rs})">↩ ${label}</span>`;
+}
+
+// Fapiao badge — rides the status cell on every row that carries an invoice
+// request (the retired Invoices tab's queue is now the "Needs invoice" chip),
+// so an owed fapiao is visible from any filter without opening the drawer.
+// Issued requests go quiet: done work isn't a badge.
+function invoiceBadge(o) {
+  if (!Number(o.needs_invoice)) return '';
+  if (o.invoice_status === 'issued') return '';
+  return `<span class="pill st-awaiting_restock" title="${cuT('Invoice requested — issue it from the order drawer', '顾客申请开票 — 请在订单详情中开票')}">`
+    + `<span class="dot"></span>${cuT('needs invoice · 待开票', '待开票 · invoice')}</span>`;
+}
+
+// Full-width summary line under a row in the "Needs invoice" view — the 抬头 /
+// 税号 / status the accountant batches into the tax system, plus the same
+// "Copy for accounting" the drawer block has, so the whole queue clears
+// without opening a single drawer. Shares .order-row so click/Enter still
+// opens the drawer (the copy button stops its own propagation via the
+// delegated handler's interactive-child bail).
+function invoiceSubRow(o) {
+  if (!Number(o.needs_invoice)) return '';
+  const issued = o.invoice_status === 'issued';
+  const company = String(o.invoice_type || '').toLowerCase() === 'company';
+  const typeTag = company
+    ? `<span class="pill st-paid" style="font-size:11px;"><span class="dot"></span>${cuT('Company · 企业', '企业 · Company')}</span>`
+    : `<span class="pill st-refunded" style="font-size:11px;"><span class="dot"></span>${cuT('Personal · 个人', '个人 · Personal')}</span>`;
+  const stateTag = issued
+    ? `<span class="pill st-delivered" style="font-size:11px;"><span class="dot"></span>${cuT('Issued · 已开', '已开 · Issued')}</span>`
+    : `<span class="pill st-awaiting_restock" style="font-size:11px;"><span class="dot"></span>${cuT('To issue · 待开', '待开 · To issue')}</span>`;
+  return `
+      <tr class="order-row ord-inv-subrow${issued ? ' is-issued' : ''}" data-order-id="${o.id}">
+        <td colspan="10" style="padding: 4px 12px 10px; border-top: none;">
+          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--text-2);">
+            ${typeTag}
+            <b style="color:var(--text-1);">${escapeHtml(o.invoice_title || '—')}</b>
+            ${company && o.invoice_tax_id ? `<span style="font-variant-numeric:tabular-nums;">${escapeHtml(o.invoice_tax_id)}</span>` : ''}
+            ${o.invoice_email ? `<span>${escapeHtml(o.invoice_email)}</span>` : ''}
+            ${stateTag}
+            ${issued && o.invoice_number ? `<span style="font-variant-numeric:tabular-nums;">${escapeHtml(o.invoice_number)}</span>` : ''}
+            <button type="button" class="db-btn" style="margin-left:auto; font-size:11px; padding:3px 10px;"
+              data-copy="${escapeAttr(invoiceAccountingText(o))}"
+              onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">${cuT('Copy for accounting · 复制开票信息', '复制开票信息')}</button>
+          </div>
+        </td>
+      </tr>`;
 }
 
 // Big, hard-to-miss banner at the top of the order drawer. Surfaces the
@@ -798,6 +844,9 @@ async function loadOrders(opts = {}) {
     if (!j.data.length) {
       const emptyMsg = (status === 'refunds_open')
         ? `<h3>Nothing waiting. Enjoy it. · 无待处理退款</h3>`
+        : (status === 'needs_invoice')
+        ? `<h3>No invoices owed · 无待开发票</h3>
+           <p class="muted">Orders show up here when a customer asks for an invoice. · 顾客申请开票的订单会显示在这里。</p>`
         : `<h3>No orders yet · 暂无订单</h3>
            <p class="muted">New orders settle in here from every channel. · 新订单会从各渠道汇聚到这里。</p>`;
       tbody.innerHTML = `<tr><td colspan="10">
@@ -859,10 +908,10 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div></td>
+        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${invoiceBadge(o)}${addonBadge(o)}</div></td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
-      </tr>`;
+      </tr>${status === 'needs_invoice' ? invoiceSubRow(o) : ''}`;
     }).join('');
     ordTweaksApply();
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
@@ -950,14 +999,8 @@ function toggleOrdersLive() {
     setTimeout(_ordersAutoTick, 50);
     ordLoadKpis(true);   // fresh today pulse on tab open
     _markOrdersSeenNow();
+    _markInvoicesSeenNow();   // fapiao requests live on this tab now too
   });
-})();
-
-// Load the Invoices tab each time it's opened. Also clears the unseen-invoice
-// badge — the operator is about to see the pending requests.
-(function () {
-  const btn = document.querySelector('.tabs [data-tab="invoices"]');
-  if (btn) btn.addEventListener('click', () => { setTimeout(loadInvoices, 50); invLoadKpis(true); _markInvoicesSeenNow(); });
 })();
 
 // ── Unseen-orders badge (red pulsing dot on the Orders tab) ─────────────
@@ -979,7 +1022,16 @@ function _setOrdersLastSeen(ts) {
 }
 function _markOrdersSeenNow() {
   _setOrdersLastSeen(new Date().toISOString());
-  _paintOrdersBadge(0);
+  _ordersUnseenN = 0;
+  _paintCombinedOrdersBadge();
+}
+// The Orders nav badge covers TWO unseen streams since the Invoices sub-tab
+// was retired: new orders and new fapiao requests. Each poller stores its own
+// count; the dot shows their sum so neither can hide the other.
+let _ordersUnseenN = 0;
+let _invoicesUnseenN = 0;
+function _paintCombinedOrdersBadge() {
+  _paintOrdersBadge(_ordersUnseenN + _invoicesUnseenN);
 }
 // Browser-tab title badge — prefixes the page title with "(N) " so unseen
 // orders are visible even when the whole backend tab is in the background.
@@ -1089,7 +1141,8 @@ async function _pollUnseenOrders() {
     const j = await api('/api/retail-admin/orders/unseen-count?since=' + encodeURIComponent(since));
     if (!j?.success) return;
     const count = j.data?.count || 0;
-    _paintOrdersBadge(count);
+    _ordersUnseenN = count;
+    _paintCombinedOrdersBadge();
     // Chime only on a genuine increase (a NEW order arriving), not on the
     // first poll after load and not on every steady-state tick.
     if (_ordersUnseenPrev !== null && count > _ordersUnseenPrev) _playOrderChime();
@@ -1112,9 +1165,11 @@ async function _pollUnseenOrders() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollUnseenOrders(); });
 })();
 
-// ── Unseen-invoice badge (red pulsing dot + chime on the Invoices tab) ──
+// ── Unseen-invoice requests (fold into the Orders nav badge) ────────────
 // Mirrors the new-order notification: a pending fapiao request should land
-// like a new order. Shares the same chime + sound toggle as orders.
+// like a new order. Shares the chime + sound toggle with orders, and since
+// the Invoices sub-tab was retired the count rides the SAME red dot on the
+// Orders row — the Orders tab is where the request is now seen and handled.
 const INVOICES_LAST_SEEN_KEY = 'tacet-invoices-last-seen-at';
 let _INVOICES_UNSEEN_TIMER = null;
 
@@ -1125,32 +1180,24 @@ function _invoicesLastSeen() {
 function _markInvoicesSeenNow() {
   try { localStorage.setItem(INVOICES_LAST_SEEN_KEY, new Date().toISOString()); }
   catch {}
-  _paintInvoicesBadge(0);
-}
-function _paintInvoicesBadge(count) {
-  const btn   = document.querySelector('.tabs [data-tab="invoices"]');
-  const badge = document.getElementById('invoicesTabBadge');
-  if (!btn || !badge) return;
-  if (count > 0) {
-    btn.classList.add('has-unseen');
-    badge.textContent = count > 1 ? (count > 99 ? '99+' : String(count)) : '';
-  } else {
-    btn.classList.remove('has-unseen');
-    badge.textContent = '';
-  }
+  _invoicesUnseenN = 0;
+  _paintCombinedOrdersBadge();
 }
 
 let _invoicesUnseenPrev = null;
 async function _pollUnseenInvoices() {
   if (document.hidden) return;
-  const invTabActive = document.getElementById('tab-invoices')?.classList.contains('active');
-  if (invTabActive) { _markInvoicesSeenNow(); _invoicesUnseenPrev = 0; return; }
+  // On the Orders tab the request is in front of the operator (chip count +
+  // row badge), so everything counts as seen — same rule as new orders.
+  const ordersTabActive = document.getElementById('tab-orders')?.classList.contains('active');
+  if (ordersTabActive) { _markInvoicesSeenNow(); _invoicesUnseenPrev = 0; return; }
   try {
     const since = _invoicesLastSeen();
     const j = await api('/api/retail-admin/invoices/unseen-count?since=' + encodeURIComponent(since));
     if (!j?.success) return;
     const count = j.data?.count || 0;
-    _paintInvoicesBadge(count);
+    _invoicesUnseenN = count;
+    _paintCombinedOrdersBadge();
     if (_invoicesUnseenPrev !== null && count > _invoicesUnseenPrev) _playOrderChime();
     _invoicesUnseenPrev = count;
   } catch {
@@ -5723,6 +5770,7 @@ async function refreshOrderStatusCounts() {
     set('oc-dispatched',      d.dispatched);
     set('oc-awaiting_restock',d.awaiting_restock);
     set('refund-queue-count', d.refunds_open);
+    set('oc-needs_invoice',   d.needs_invoice);
   } catch {}
 }
 

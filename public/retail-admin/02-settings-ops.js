@@ -936,8 +936,7 @@ async function loadIntegrationsStatus() {
   // searchable text. Bilingual where it helps discovery.
   const ALIASES = {
     'dashboard':   'home overview stats revenue sales summary 概览 首页 数据',
-    'orders':      'fulfil fulfill shipping refund cancel 订单 退款 发货',
-    'invoices':    'receipt billing tax fapiao 发票 收据',
+    'orders':      'fulfil fulfill shipping refund cancel invoice receipt billing tax fapiao 订单 退款 发货 发票 收据',
     'customers':   'members users buyers tags 顾客 会员 用户',
     'products':    'items catalog inventory stock price sku 产品 商品 库存 价格',
     'coupons':     'voucher discount promo code 优惠券 折扣 促销',

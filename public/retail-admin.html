@@ -827,20 +827,13 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 15l4-4 3 3 5-6 4 5"/></svg>
     Reports · 报表
   </button>
-  <!-- Orders → Invoices (sub) -->
-  <div class="tabs-group nav-parent" data-group="orders" style="order:4">
-    <button class="nav-parent-link" data-tab="orders">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l3 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7z"/><path d="M9 12h6M9 16h6"/></svg>
-      Orders · 订单<span id="ordersTabBadge" class="tab-badge" aria-label="Unseen new orders"></span>
-      <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
-    <div class="tabs-popover">
-      <button data-tab="invoices">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="13" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-        Invoices · 发票<span id="invoicesTabBadge" class="tab-badge" aria-label="Unseen invoice requests"></span>
-      </button>
-    </div>
-  </div>
+  <!-- Orders — the Invoices sub-tab is retired: invoices live inside Orders
+       now (the "Needs invoice" status chip + per-row summary + the drawer
+       block). The unseen badge covers new orders AND new fapiao requests. -->
+  <button data-tab="orders" style="order:4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l3 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7z"/><path d="M9 12h6M9 16h6"/></svg>
+    Orders · 订单<span id="ordersTabBadge" class="tab-badge" aria-label="Unseen new orders and invoice requests"></span>
+  </button>
 
   <!-- Sales → channel overview (its own landing page) + the marketplace
        channels folded in below (Meituan / gzgrocery / Eleme). The parent row
@@ -1317,49 +1310,10 @@
     </div>
   </section>
 
-  <!-- ─── INVOICES ─── -->
-  <section id="tab-invoices">
-    <div class="db-head">
-      <h2 style="margin:0">Invoices · 发票</h2>
-      <div class="db-range">
-        <div class="seg" id="inv-filter">
-          <button data-f="requested" class="active" onclick="invSetFilter('requested')">Pending · 待开 <span id="inv-count-requested"></span></button>
-          <button data-f="issued" onclick="invSetFilter('issued')">Issued · 已开 <span id="inv-count-issued"></span></button>
-          <button data-f="all" onclick="invSetFilter('all')">All · 全部</button>
-        </div>
-        <button class="db-btn" onclick="loadInvoices(); invLoadKpis(true)" title="Refresh · 刷新">↻</button>
-      </div>
-    </div>
-    <p style="color:var(--text-3); font-size:12px; margin:0 0 var(--s4)">Send info to your accountant with “Copy for accounting”, then paste the link / attach the PDF or photo + Mark issued. · 用“复制开票信息”发给会计,开好后粘贴链接/上传 PDF 或图片 并标记已开。</p>
-    <!-- Fapiao queue summary — shared fc-* KPI strip. No baseline/trend exists
-         for fapiao, so this stays deltas/sparkline-free; the oldest-pending
-         tile flips to .alert as an SLA nudge. -->
-    <div class="fc-kpis" id="inv-kpis">
-      <div class="fc-kpi accent is-clickable" role="button" tabindex="0" onclick="invKpiJump('requested')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();invKpiJump('requested')}" title="Show pending · 查看待开">
-        <div class="lbl">Pending · 待开</div>
-        <div class="val" id="inv-kpi-pending">—</div>
-        <div class="sub">to issue · 待处理</div>
-      </div>
-      <div class="fc-kpi is-clickable" role="button" tabindex="0" onclick="invKpiJump('requested')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();invKpiJump('requested')}" title="Show pending · 查看待开">
-        <div class="lbl">Awaiting value · 待开金额</div>
-        <div class="val" id="inv-kpi-value">—</div>
-        <div class="sub" id="inv-kpi-value-sub">&nbsp;</div>
-      </div>
-      <div class="fc-kpi is-clickable" role="button" tabindex="0" onclick="invKpiJump('issued')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();invKpiJump('issued')}" title="Show issued · 查看已开">
-        <div class="lbl">Issued · 已开</div>
-        <div class="val" id="inv-kpi-issued">—</div>
-        <div class="sub">fapiao done · 已开票</div>
-      </div>
-      <div class="fc-kpi is-clickable" id="inv-kpi-age-tile" role="button" tabindex="0" onclick="invKpiJump('requested')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();invKpiJump('requested')}" title="Show pending · 查看待开">
-        <div class="lbl">Oldest pending · 最久待开</div>
-        <div class="val" id="inv-kpi-age">—</div>
-        <div class="sub" id="inv-kpi-age-sub">&nbsp;</div>
-      </div>
-    </div>
-    <div id="invoices-list"></div>
-  </section>
-
-  <!-- ─── ORDERS ─── -->
+  <!-- ─── ORDERS ───
+       (The standalone Invoices tab was folded in here: the "Needs invoice"
+       status chip filters the list to fapiao requests, each row carries the
+       invoice summary, and issuing happens in the order drawer.) -->
   <section id="tab-orders">
     <h2>Orders · 订单</h2>
 
@@ -1406,6 +1360,7 @@
       <div class="status-chip st-cancelled"              data-status="cancelled"        onclick="setOrderStatus(this)"><span class="dot"></span>Cancelled</div>
       <div class="status-chip st-refunded"               data-status="refunded"         onclick="setOrderStatus(this)"><span class="dot"></span>Refunded</div>
       <div class="status-chip st-refunded"               data-status="refunds_open"     onclick="setOrderStatus(this)" title="Pending refund requests · 待处理退款"><span class="dot"></span>Refund queue<span class="chip-ct alert" id="refund-queue-count"></span></div>
+      <div class="status-chip st-awaiting_restock"       data-status="needs_invoice"    onclick="setOrderStatus(this)" title="Invoice requests to issue · 待开发票"><span class="dot"></span>Needs invoice<span class="chip-ct alert" id="oc-needs_invoice"></span></div>
     </div>
 
     <!-- Channel chip strip — orthogonal to status. Filters the combined order
@@ -1431,6 +1386,7 @@
       <option value="cancelled"></option>
       <option value="refunded"></option>
       <option value="refunds_open"></option>
+      <option value="needs_invoice"></option>
     </select>
 
     <div class="row" style="margin-bottom: var(--s4)">

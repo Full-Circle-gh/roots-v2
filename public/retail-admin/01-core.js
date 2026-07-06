@@ -119,7 +119,7 @@ function setCaps(list){ CAPS = Array.isArray(list) ? new Set(list) : null; try {
 // array means "any of these". Untracked tabs stay visible. Settings (config) is
 // shown if the operator holds any one of its sub-area caps.
 const TAB_CAP = {
-  dashboard: 'dashboard:view', reports: 'dashboard:view', orders: 'orders:view', invoices: 'invoices:view',
+  dashboard: 'dashboard:view', reports: 'dashboard:view', orders: 'orders:view',
   customers: 'customers:view', products: 'products:view', categories: 'categories:view',
   'mini-app-editor': 'editor:view', vouchers: 'coupons:view', flash: 'flash:view',
   popups: 'popups:view', affiliate: 'affiliate:view', sharing: 'sharing:edit',

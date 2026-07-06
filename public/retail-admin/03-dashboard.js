@@ -958,6 +958,17 @@ function dashOpenRestock() {
   tick();
 }
 
+// "Open in Orders" on the Invoices-to-issue card → jump to the Orders tab
+// pre-filtered on the "Needs invoice" chip. The chips are static DOM, so no
+// polling is needed — click the tab (fires its own load), then apply the chip
+// filter (setOrderStatus reloads with it).
+function dashOpenInvoices() {
+  const btn = document.querySelector('.tabs [data-tab="orders"]');
+  if (btn) btn.click();
+  const chip = document.querySelector('#orders-status-chips .status-chip[data-status="needs_invoice"]');
+  if (chip && typeof setOrderStatus === 'function' && !chip.classList.contains('active')) setOrderStatus(chip);
+}
+
 // Programmatic tab-switch — clicks the tab button so the global switcher
 // runs (closes drawers, updates active classes, etc.). Returns true if the
 // tab exists, false otherwise — lets callers fall back to a sibling tab.
@@ -1229,6 +1240,7 @@ const TD_ATTN_ICON = {
   box:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
   truck: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>',
   refund:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
+  invoice:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>',
 };
 function tdAttnCard(tone, icon, title, count, rowsHtml, moreText, action, headerCtrl) {
   return `<section class="card td-card td-attn-card is-${tone}">
@@ -1333,6 +1345,22 @@ function tdAttnRender() {
       </button>`).join('');
     cards.push(tdAttnCard('amber', 'refund', cuT('Refunds waiting', '退款待处理'), rf.count, rows,
       rf.count > 4 ? cuT(`and ${rf.count - 4} more`, `另有 ${rf.count - 4} 笔`) : ''));
+  }
+
+  // Invoices to issue — un-issued fapiao requests, oldest first (the retired
+  // Invoices tab's queue). Rows open the order drawer (where issuing happens);
+  // the card action deep-links to the Orders list pre-filtered on the
+  // "Needs invoice" chip — same pattern as Running-low → Open restock.
+  const inv = DASH_OPS.invoices || { count: 0, items: [] };
+  if (inv.count) {
+    const rows = (inv.items || []).slice(0, 4).map(it => `
+      <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
+        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.title || '')}</span>
+        <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
+      </button>`).join('');
+    cards.push(tdAttnCard('amber', 'invoice', cuT('Invoices to issue', '待开发票'), inv.count, rows,
+      inv.count > 4 ? cuT(`and ${inv.count - 4} more`, `另有 ${inv.count - 4} 张`) : '',
+      `<button type="button" class="td-attn-go" onclick="dashOpenInvoices()">${cuT('Open in Orders', '前往订单')}</button>`));
   }
 
   if (!cards.length) {
