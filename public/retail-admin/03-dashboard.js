@@ -1287,7 +1287,7 @@ function tdAttnRender() {
     } else {
       const prodRow = (it, val) => `
         <button type="button" class="td-attn-row"${it.id ? ` onclick="dashOpenProductFromFeed(${Number(it.id)})"` : ''}>
-          <span class="name">${escapeHtml(dbProdName(it))}</span>
+          <span class="name"><span class="nm" data-no-i18n>${escapeHtml(dbProdName(it))}</span>${it.sku ? `<span class="sku" data-no-i18n>${escapeHtml(it.sku)}</span>` : ''}</span>
           <span class="val">${val}</span>
         </button>`;
       const oosRows = (oos.items || []).slice(0, 2).map(it => prodRow(it, cuT('out', '售罄')));
@@ -1453,9 +1453,14 @@ function dashStockDrawerRender() {
     });
     return `<span class="sub" data-no-i18n>${parts.join(' · ')}</span>`;
   };
+  // SKU (货号) under the name — the only way to tell two same-named rows apart
+  // (duplicate listings, or a plain vs. "Medium Size" variant) when picking what
+  // to restock. Absent for products that never got a code.
+  const skuLine = (it) => it.sku
+    ? `<span class="sku" data-no-i18n>${escapeHtml(it.sku)}</span>` : '';
   const row = (it, val, valCls) => `
     <button type="button" class="td-stock-row"${it.id ? ` onclick="dashOpenStockProduct(${Number(it.id)})"` : ''}>
-      <span class="name"><span class="nm" data-no-i18n>${escapeHtml(dbProdName(it))}</span>${subLine(it)}</span>
+      <span class="name"><span class="nm" data-no-i18n>${escapeHtml(dbProdName(it))}</span>${skuLine(it)}${subLine(it)}</span>
       <span class="val${valCls || ''}">${val}</span>
     </button>`;
   let html = '';
