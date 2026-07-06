@@ -147,7 +147,6 @@ function cuPage(d) {
 }
 
 async function cuOpenDetail(id, restore = null) {
-  _CDV_OPEN = false;               // View popover starts closed on a fresh open
   const drawer = document.getElementById('cu-drawer');
   const body = document.querySelector('#cu-drawer .drawer-body');
   // Switching customers in an already-open drawer → cross-fade, mirroring the
@@ -189,7 +188,7 @@ async function cuOpenDetail(id, restore = null) {
   // the operator lands on the exact same row they left from.
   if (restore && body) {
     if (restore.openRecent) {
-      const fold = body.querySelector('details.cu-fold');   // first fold = Recent orders
+      const fold = body.querySelector('details.cux-fold');   // first fold = Recent orders
       if (fold) fold.open = true;
     }
     requestAnimationFrame(() => { body.scrollTop = restore.scrollTop || 0; });
@@ -248,73 +247,31 @@ onDrawerClose('#cu-drawer', () => {
 // is always visible, that just means close the drawer.
 function cuShowList() { closeDrawer('#cu-drawer'); }
 
-// ── Customer detail · per-operator View tweaks ────────────────────────
-// The Full Circle Customer Detail "Tweaks" panel, made operator-selectable:
-// open the Recent-orders ledger by default, and stretch the orders chart
-// taller. Persisted to localStorage; defaults match the standard look
-// (collapsed ledger, normal chart) so nothing changes until a pick.
-const CUSTOMER_DETAIL_TWEAK_DEFAULTS = { recentOpen: false, chartTall: false };
-function cdvLoad() {
-  try { return { ...CUSTOMER_DETAIL_TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-customer-detail-tweaks') || '{}')) }; }
-  catch (e) { return { ...CUSTOMER_DETAIL_TWEAK_DEFAULTS }; }
+// ── Header overflow menu (More ▾) ────────────────────────────────────
+// Rare/destructive actions (Sign out all devices, Block) live behind one
+// calm "More" button so the everyday header stays two buttons. Closed on
+// outside-click; each item closes the menu before it acts.
+function cuMoreToggle() {
+  const m = document.getElementById('cux-more-menu'); if (!m) return;
+  m.hidden = !m.hidden;
+  if (!m.hidden) setTimeout(() => document.addEventListener('mousedown', cuMoreOutside), 0);
+  else document.removeEventListener('mousedown', cuMoreOutside);
 }
-let CDV = cdvLoad();
-let _CDV_OPEN = false;
-function cdvSet(key, val) {
-  CDV[key] = val;
-  try { localStorage.setItem('retail-admin-customer-detail-tweaks', JSON.stringify(CDV)); } catch (e) {}
-  _CDV_OPEN = true;                        // keep the popover open across the re-render
-  // Defer + preserve scroll, same rationale as the order drawer: re-rendering
-  // synchronously inside the click detaches the target before the dw-dismiss
-  // handler runs, which would then close the whole drawer.
-  if (CU_CURRENT) setTimeout(() => {
-    if (!CU_CURRENT) return;
-    const body = document.querySelector('#cu-drawer .drawer-body');
-    const y = body ? body.scrollTop : 0;
-    cuRenderDetail();
-    if (body) body.scrollTop = y;
-  }, 0);
+function cuMoreClose() {
+  const m = document.getElementById('cux-more-menu'); if (m) m.hidden = true;
+  document.removeEventListener('mousedown', cuMoreOutside);
 }
-function cdvToggle() {
-  _CDV_OPEN = !_CDV_OPEN;
-  const pop = document.getElementById('cdv-pop'); if (pop) pop.hidden = !_CDV_OPEN;
-  if (_CDV_OPEN) setTimeout(() => document.addEventListener('mousedown', cdvOutside), 0);
-  else document.removeEventListener('mousedown', cdvOutside);
+function cuMoreOutside(e) {
+  if (e.target.closest && e.target.closest('.cux-more-wrap')) return;
+  cuMoreClose();
 }
-function cdvOutside(e) {
-  if (e.target.closest && e.target.closest('.ovp-wrap')) return;
-  _CDV_OPEN = false;
-  const pop = document.getElementById('cdv-pop'); if (pop) pop.hidden = true;
-  document.removeEventListener('mousedown', cdvOutside);
-}
-function cdvBtn(key, val, label) {
-  return `<button class="${CDV[key] === val ? 'active' : ''}" onclick="cdvSet('${key}',${val})">${label}</button>`;
-}
-function renderCustomerViewPopover() {
-  return `
-    <div class="ovp-wrap cdv-view-wrap" style="margin-left: auto;">
-      <button class="btn btn-sm" id="cdv-btn" onclick="cdvToggle()" aria-haspopup="true" title="Display options · 显示选项">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-        View · 视图
-      </button>
-      <div id="cdv-pop" class="ovp" ${_CDV_OPEN ? '' : 'hidden'}>
-        <div class="ovp-head">Display options · 显示选项</div>
-        <div class="ovp-group">
-          <div class="ovp-label">Recent orders · 近期订单</div>
-          <div class="ovp-seg">
-            ${cdvBtn('recentOpen', false, 'Collapsed · 收起')}
-            ${cdvBtn('recentOpen', true, 'Open · 展开')}
-          </div>
-        </div>
-        <div class="ovp-group">
-          <div class="ovp-label">Chart height · 图表高度</div>
-          <div class="ovp-seg">
-            ${cdvBtn('chartTall', false, 'Normal · 标准')}
-            ${cdvBtn('chartTall', true, 'Tall · 加高')}
-          </div>
-        </div>
-      </div>
-    </div>`;
+
+// Small copy-to-clipboard for the header phone + openid rows.
+function cuCopyText(text) {
+  const done = () => (typeof toast === 'function' ? toast(cuT('Copied', '已复制')) : null);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => prompt('Copy:', text));
+  } else { prompt('Copy:', text); }
 }
 
 // Diagnostics block — "what's happening on this customer's phone". Built from
@@ -427,18 +384,49 @@ function cuRenderDetail() {
   const c = d.customer;
   const s = d.stats;
 
-  // Drawer action bar — Edit / Block / Force-logout. Block and Force logout
-  // are destructive-but-deliberate: Aged Brass ghost (not red), confirmed on
-  // click. Unblock reverts to neutral since it isn't destructive.
-  const blockLabel = c.is_blocked ? 'Unblock · 解封' : 'Block · 封禁';
-  const blockCls   = c.is_blocked ? 'btn' : 'btn btn-brass';
+  // Defensive guards — the server could omit a key for newly-onboarded
+  // customers with no orders/points/topup history. Coerce everything to
+  // safe defaults so the template never throws on a missing nested field.
+  const ord = (s.orders   || {});
+  const pts = (s.points   || {});
+  const top = (s.topup    || {});
+  const vch = (s.vouchers || {});
+  const rev = (s.reviews  || {});
+  const sessions = Number(s.active_sessions) || 0;
+  const yuan = v => '¥' + Number(v || 0).toFixed(2);
+
+  // Drawer action bar — two everyday buttons (Message, Edit profile). The
+  // rare/deliberate actions (Sign out all devices, Block) fold into a More ▾
+  // menu so the header stays calm; Block sits last, brick, behind a divider.
+  // Unblock renders neutral since it isn't destructive.
+  const blockItem = c.is_blocked
+    ? `<button class="cux-mi" onclick="cuMoreClose(); cuToggleBlock()">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 5-5"/></svg>
+         Unblock · 解封</button>`
+    : `<button class="cux-mi danger" onclick="cuMoreClose(); cuToggleBlock()">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
+         Block customer · 封禁顾客</button>`;
   $('#cu-drawer-actions').innerHTML = `
-    <button class="btn" onclick="cuOpenEdit()">Edit profile · 编辑资料</button>
-    <button class="btn btn-primary" onclick="cuMessageCustomer()">✉ Message · 发消息</button>
-    <button class="${blockCls}" id="cu-block-btn" onclick="cuToggleBlock()">${blockLabel}</button>
-    <button class="btn btn-brass" onclick="cuForceLogout()">Sign out all devices · 退出所有设备</button>
-    <button class="btn" onclick="cuResetTest()" title="Testing: become a brand-new customer on next app open">Reset to new user (test) · 重置为新用户(测试)</button>
-    ${renderCustomerViewPopover()}
+    <button class="btn" onclick="cuMessageCustomer()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+      Message · 发消息</button>
+    <button class="btn" onclick="cuOpenEdit()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+      Edit profile · 编辑资料</button>
+    <div style="flex: 1;"></div>
+    <div class="cux-more-wrap">
+      <button class="btn" onclick="cuMoreToggle()" aria-haspopup="true">More · 更多
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div id="cux-more-menu" class="cux-menu" hidden>
+        <button class="cux-mi" onclick="cuMoreClose(); cuForceLogout()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+          Sign out all devices · 退出所有设备
+          <span class="hint" data-no-i18n>${sessions || ''}</span></button>
+        <div class="cux-sep"></div>
+        ${blockItem}
+      </div>
+    </div>
   `;
 
   // 12-month bars — pad missing months with zero
@@ -451,7 +439,7 @@ function cuRenderDetail() {
     months.push({ key, n: row ? row.n : 0, revenue: row ? row.revenue : 0 });
   }
   const maxN = Math.max(1, ...months.map(m => m.n));
-  const barMax = CDV.chartTall ? 162 : 110;   // View tweak: taller bars when stretched
+  const barMax = 78;   // fixed quiet height — the summary line carries the headline
   const monthBars = months.map(m => `
     <div class="cu-bar-col" data-m="${m.key}" data-n="${m.n}" data-rev="${Number(m.revenue || 0).toFixed(2)}" onmousemove="cuBarTip(event)" onmouseleave="cuBarTipHide()">
       <div class="cu-bar ${m.n === 0 ? 'empty' : (m.n === maxN ? 'peak' : '')}" style="height: ${m.n === 0 ? 3 : Math.max(8, (m.n / maxN) * barMax)}px;"></div>
@@ -501,107 +489,169 @@ function cuRenderDetail() {
     : '<tr><td colspan="5" class="muted">No top-up activity · 暂无充值记录</td></tr>';
 
   const addressesHtml = d.addresses.length
-    ? d.addresses.map(a => `
-        <div class="cu-addr">
-          <div class="cu-addr-main">
-            <div class="cu-addr-id">
-              <span class="cu-addr-name">${escapeHtml(a.recipient_name)}</span>
-              <span style="color: var(--text-4);">·</span>
-              <span class="cu-addr-phone">${escapeHtml(a.phone)}</span>
-              ${a.is_default ? '<span class="cu-addr-default">Default · 默认</span>' : ''}
-            </div>
-            <div class="cu-addr-text">${escapeHtml([a.province, a.city, a.district, a.address, a.detail].filter(Boolean).join(' ')) || '—'}</div>
+    ? d.addresses.map(a => {
+        const full = [a.province, a.city, a.district, a.address, a.detail].filter(Boolean).join(' ');
+        return `
+        <div class="cux-addr">
+          <div class="top">
+            <span class="nm">${escapeHtml(a.recipient_name)}</span>
+            <span class="ph">${escapeHtml(a.phone)}</span>
+            ${a.is_default ? '<span class="def">Default · 默认</span>' : ''}
+            <span class="acts">
+              <button onclick="cuOpenAddrModal(${a.id})">Edit · 编辑</button>
+              <button class="del" onclick="cuDeleteAddr(${a.id})">Delete · 删除</button>
+            </span>
           </div>
-          <div class="cu-addr-acts">
-            <button class="btn btn-sm" onclick="cuOpenAddrModal(${a.id})">Edit · 编辑</button>
-            <button class="btn btn-sm btn-brass" onclick="cuDeleteAddr(${a.id})">Delete · 删除</button>
-          </div>
-        </div>`).join('')
-    : '<div class="muted" style="font-size: 12px;">No saved addresses. · 暂无收货地址。</div>';
+          <div class="line2" data-no-i18n title="${escapeAttr(full)}">${escapeHtml(full) || '—'}</div>
+        </div>`;
+      }).join('')
+    : '<div class="muted" style="font-size: 12.5px;">No saved addresses. · 暂无收货地址。</div>';
 
   const avatar = c.avatar_url
     ? `<img src="${escapeHtml(c.avatar_url)}" class="cu-avatar" onerror="this.style.display='none'">`
-    : `<div class="cu-avatar"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg></div>`;
+    : `<div class="cu-avatar"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg></div>`;
 
-  // Defensive guards — the server could omit a key for newly-onboarded
-  // customers with no orders/points/topup history. Coerce everything to
-  // safe defaults so the template never throws on a missing nested field.
-  const ord = (s.orders   || {});
-  const pts = (s.points   || {});
-  const top = (s.topup    || {});
-  const vch = (s.vouchers || {});
-  const rev = (s.reviews  || {});
-  const sessions = Number(s.active_sessions) || 0;
+  // ── Snapshot sub-lines — one quiet line per figure. Zero rows simply
+  // don't appear (the old tiles rendered four lines of ¥0.00 for a new
+  // customer); non-zero extras (refunded, expired, admin adjust…) join the
+  // line only when they exist. Composed via cuT (one live language) and
+  // marked data-no-i18n in the template — the " · " here is a real data
+  // separator, not an EN·CN divider for the walker.
+  const ordersN = ord.orders_count || 0;
+  let ordSub;
+  if (!ordersN) ordSub = escapeHtml(cuT('no orders yet', '暂无订单'));
+  else {
+    const en = [`${yuan(ord.revenue)} lifetime`, `AOV ${yuan(ord.aov)}`];
+    const cn = [`累计 ${yuan(ord.revenue)}`, `客单价 ${yuan(ord.aov)}`];
+    if ((ord.refunded_count || 0) > 0)  { en.push(`${ord.refunded_count} refunded`);  cn.push(`退款 ${ord.refunded_count}`); }
+    if ((ord.cancelled_count || 0) > 0) { en.push(`${ord.cancelled_count} cancelled`); cn.push(`取消 ${ord.cancelled_count}`); }
+    ordSub = escapeHtml(cuT(en.join(' · '), cn.join(' · ')));
+  }
+
+  const ptsBal = c.points_balance || 0;
+  let ptsSub;
+  {
+    const en = [`${pts.earned || 0} earned`];
+    const cn = [`累计获得 ${pts.earned || 0}`];
+    if ((pts.redeemed || 0) > 0) { en.push(`${pts.redeemed} redeemed`); cn.push(`已兑换 ${pts.redeemed}`); }
+    if ((pts.expired || 0) > 0)  { en.push(`${pts.expired} expired`);   cn.push(`已过期 ${pts.expired}`); }
+    if (Number(pts.admin_adjust || 0) !== 0) {
+      const v = (pts.admin_adjust > 0 ? '+' : '') + pts.admin_adjust;
+      en.push(`admin ${v}`); cn.push(`后台调整 ${v}`);
+    }
+    ptsSub = escapeHtml(cuT(en.join(' · '), cn.join(' · ')))
+      + ((pts.expiring_30d || 0) > 0
+        ? ` · <span class="warn">${escapeHtml(cuT(pts.expiring_30d + ' expiring soon', '临期 ' + pts.expiring_30d))}</span>`
+        : ` · ${escapeHtml(cuT('none expiring soon', '暂无临期'))}`);
+  }
+
+  const walletBal = Number(c.balance || 0);
+  const topTotal  = Number(top.topup_total || 0);
+  const topAdj    = Number(top.admin_adjust_total || 0);
+  const vUnused = vch.unused || 0, vUsed = vch.used || 0;
+  let walSub;
+  if (!topTotal && !topAdj && !vUnused && !vUsed) {
+    walSub = escapeHtml(cuT('never topped up', '从未充值'));
+  } else {
+    const en = [], cn = [];
+    if (topTotal) { en.push(`${yuan(topTotal)} topped up`); cn.push(`累计充值 ${yuan(topTotal)}`); }
+    if ((top.bonus_pts_total || 0) > 0) { en.push(`+${top.bonus_pts_total} bonus pts`); cn.push(`赠送积分 ${top.bonus_pts_total}`); }
+    if (topAdj) { en.push(`admin ${yuan(topAdj)}`); cn.push(`后台调整 ${yuan(topAdj)}`); }
+    if (vUnused || vUsed) { en.push(`${vUnused}/${vUsed} vouchers`); cn.push(`优惠券 ${vUnused}/${vUsed}`); }
+    walSub = escapeHtml(cuT(en.join(' · '), cn.join(' · ')));
+  }
+
+  // Facts-card values.
+  const dso = ord.days_since_last_order;
+  const lastOrderV = (dso === null || dso === undefined) ? '—'
+    : (dso === 0 ? cuT('today', '今天') : cuT(dso + ' days ago', dso + ' 天前'));
+  const buildV = (d.diagnostics && d.diagnostics.device_last_seen) || null;
+  const openid = c.openid || '';
+  const openidShort = openid.length > 18 ? openid.slice(0, 8) + '…' + openid.slice(-6) : (openid || '—');
+
+  // Chart headline — for sparse customers the sentence reads faster than the bars.
+  const yr    = months.reduce((a, m) => a + m.n, 0);
+  const yrRev = months.reduce((a, m) => a + Number(m.revenue || 0), 0);
+  const chartSummary = escapeHtml(cuT(
+    `${yr} ${yr === 1 ? 'order' : 'orders'} · ${yuan(yrRev)} in 12 months`,
+    `近 12 个月 ${yr} 单 · ${yuan(yrRev)}`));
+
+  // Fold hints — say what's inside before it's opened.
+  const diagErrs = (d.diagnostics && d.diagnostics.error_count_7d) || 0;
+  const affTotal = Number((d.affiliate && d.affiliate.summary && d.affiliate.summary.total) || 0);
+  const noneHint = escapeHtml(cuT('none', '无'));
+  const chevron = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+  const copyIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   $('#cu-detail-body').innerHTML = `
-    <div class="cu-identity">
+    <div class="cux-head">
       ${avatar}
       <div style="flex: 1; min-width: 0;">
-        <div class="cu-name">${escapeHtml(c.nickname || '—')}</div>
-        <div class="cu-id">ID #${c.id}${c.phone ? ' · ' + escapeHtml(c.phone) : ''}${c.email ? ' · ' + escapeHtml(c.email) : ''}</div>
-        <div class="cu-tags">
+        <div class="cux-eyebrow" data-no-i18n>${escapeHtml(cuT(
+          'Customer #' + c.id + (cuFmtDate(c.created_at) ? ' · joined ' + cuFmtDate(c.created_at) : ''),
+          '顾客 #' + c.id + (cuFmtDate(c.created_at) ? ' · ' + cuFmtDate(c.created_at) + ' 加入' : '')))}</div>
+        <div class="cux-name">${escapeHtml(c.nickname || '—')}
           <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(c.tier_key || 'seed')}</span>
           ${c.is_blocked ? '<span class="cu-pill blocked">Blocked · 已封禁</span>' : ''}
-          <span class="cu-pill">Joined · 加入 <span>${cuFmtDate(c.created_at) || '—'}</span></span>
-          <span class="cu-pill">Last login · 最近登录 <span>${cuFmtTime(c.last_login_at) || 'never · 从未'}</span></span>
-          <span class="cu-pill${sessions >= 5 ? ' brass' : ''}">${sessions} active sessions · 活跃会话</span>
-          ${(d.diagnostics && d.diagnostics.device_last_seen && d.diagnostics.device_last_seen.app_version)
-            ? `<span class="cu-pill" title="${cuT('Last-seen app build / phone', '最近一次的版本 / 机型')}">${escapeHtml(d.diagnostics.device_last_seen.app_version)}${d.diagnostics.device_last_seen.device_model ? ' · ' + escapeHtml(d.diagnostics.device_last_seen.device_model) : ''}</span>`
-            : ''}
         </div>
-        <div class="cu-openid" style="margin-top: 14px; word-break: break-all;">openid: ${escapeHtml(c.openid || '')}</div>
+        ${(c.phone || c.email) ? `<div class="cux-phone" data-no-i18n>
+          ${c.phone ? `${escapeHtml(c.phone)}<button class="cux-copy" title="Copy · 复制" onclick="cuCopyText('${escapeAttr(c.phone)}')">${copyIco}</button>` : ''}
+          ${c.email ? `<span${c.phone ? ' class="muted"' : ''}>${escapeHtml(c.email)}</span>` : ''}
+        </div>` : ''}
       </div>
     </div>
 
-    <div class="cu-grid-stats">
-      <div class="cu-tile">
-        <div class="cu-tile-head"><span class="cu-tile-title">Orders · 订单</span></div>
-        <div class="cu-tile-big">${ord.orders_count || 0}</div>
-        <div class="cu-kv"><span>Revenue · 收入</span><b>¥${Number(ord.revenue || 0).toFixed(2)}</b></div>
-        <div class="cu-kv"><span>AOV · 客单价</span><b>¥${Number(ord.aov || 0).toFixed(2)}</b></div>
-        <div class="cu-kv"><span>Completed · 已完成</span><b class="${(ord.completed_count || 0) > 0 ? 'is-tea' : 'is-zero'}">${ord.completed_count || 0}</b></div>
-        <div class="cu-kv"><span>Refunded · 退款</span><b class="${(ord.refunded_count || 0) === 0 ? 'is-zero' : ''}">${ord.refunded_count || 0}</b></div>
-        <div class="cu-kv"><span>Cancelled · 已取消</span><b class="${(ord.cancelled_count || 0) === 0 ? 'is-zero' : ''}">${ord.cancelled_count || 0}</b></div>
-        <div class="cu-kv"><span>Last order · 最近订单</span><b class="is-human">${ord.days_since_last_order === null || ord.days_since_last_order === undefined ? '—' : ord.days_since_last_order + ' days ago · 天前'}</b></div>
+    <!-- Snapshot band — Orders · Points · Wallet, one figure + one quiet line each. -->
+    <div class="cux-snap">
+      <div>
+        <div class="lbl">Orders · 订单</div>
+        <div class="fig${ordersN ? '' : ' zero'}" data-no-i18n>${ordersN}</div>
+        <div class="sub" data-no-i18n>${ordSub}</div>
       </div>
-      <div class="cu-tile">
-        <div class="cu-tile-head">
-          <span class="cu-tile-title">Points · 积分</span>
-          <button class="btn btn-sm" onclick="cuOpenAdjust('points')">Adjust · 调整</button>
-        </div>
-        <div class="cu-tile-big">${c.points_balance || 0}</div>
-        <div class="cu-kv"><span>Earned (lifetime) · 累计获得</span><b class="${(pts.earned || 0) === 0 ? 'is-zero' : ''}">${pts.earned || 0}</b></div>
-        <div class="cu-kv"><span>Redeemed · 已兑换</span><b class="${(pts.redeemed || 0) === 0 ? 'is-zero' : ''}">${pts.redeemed || 0}</b></div>
-        <div class="cu-kv"><span>Expired · 已过期</span><b class="${(pts.expired || 0) === 0 ? 'is-zero' : ''}">${pts.expired || 0}</b></div>
-        <div class="cu-kv"><span>Admin adjust · 后台调整</span><b class="${(pts.admin_adjust || 0) === 0 ? 'is-zero' : ''}">${pts.admin_adjust >= 0 ? '+' : ''}${pts.admin_adjust || 0}</b></div>
-        <div class="cu-kv"><span>Expiring next 30d · 30 天内过期</span><b class="${(pts.expiring_30d || 0) > 0 ? 'is-brass' : 'is-zero'}">${pts.expiring_30d || 0}</b></div>
+      <div>
+        <div class="lbl">Points · 积分
+          <button class="cux-adj" onclick="cuOpenAdjust('points')">Adjust · 调整</button></div>
+        <div class="fig${ptsBal ? '' : ' zero'}" data-no-i18n>${ptsBal}</div>
+        <div class="sub" data-no-i18n>${ptsSub}</div>
       </div>
-      <div class="cu-tile">
-        <div class="cu-tile-head">
-          <span class="cu-tile-title">Wallet · 钱包</span>
-          <button class="btn btn-sm" onclick="cuOpenAdjust('wallet')">Adjust · 调整</button>
-        </div>
-        <div class="cu-tile-big">¥${Number(c.balance || 0).toFixed(2)}</div>
-        <div class="cu-kv"><span>Topped up (lifetime) · 累计充值</span><b class="${Number(top.topup_total || 0) === 0 ? 'is-zero' : ''}">¥${Number(top.topup_total || 0).toFixed(2)}</b></div>
-        <div class="cu-kv"><span>Bonus pts from top-up · 充值赠送积分</span><b class="${(top.bonus_pts_total || 0) === 0 ? 'is-zero' : ''}">${top.bonus_pts_total || 0}</b></div>
-        <div class="cu-kv"><span>Admin adjust · 后台调整</span><b class="${Number(top.admin_adjust_total || 0) === 0 ? 'is-zero' : ''}">¥${Number(top.admin_adjust_total || 0).toFixed(2)}</b></div>
-        <div class="cu-kv"><span>Vouchers (unused/used) · 优惠券(未用/已用)</span><b class="${(vch.unused || 0) === 0 && (vch.used || 0) === 0 ? 'is-zero' : ''}">${vch.unused || 0} / ${vch.used || 0}</b></div>
-        <div class="cu-kv"><span>Reviews · 评价</span><b class="${(rev.count || 0) === 0 ? 'is-zero' : ''}">${rev.count || 0}${rev.avg_rating ? ' · ' + Number(rev.avg_rating).toFixed(1) + '<span class="rv-star">★</span>' : ''}</b></div>
+      <div>
+        <div class="lbl">Wallet · 钱包
+          <button class="cux-adj" onclick="cuOpenAdjust('wallet')">Adjust · 调整</button></div>
+        <div class="fig${walletBal ? '' : ' zero'}" data-no-i18n>${yuan(walletBal)}</div>
+        <div class="sub" data-no-i18n>${walSub}</div>
       </div>
     </div>
 
-    <!-- Above the fold: Orders by month chart, Top items, Addresses — these
-         stay open because the operator scans them at-a-glance. -->
-    <div style="margin-bottom: var(--s7);">
-      <div class="cu-sec-title" style="margin-bottom: var(--s3);">Orders by month (last 12) · 月度订单数(近 12 个月)</div>
+    <!-- Facts cards — what used to be the pill wall + tile zero-rows. -->
+    <div class="cux-cards">
+      <div class="cux-card">
+        <div class="cux-kicker">Activity · 动态</div>
+        <div class="cux-frow"><div class="k">Last order · 最近订单</div><div class="v" data-no-i18n>${escapeHtml(lastOrderV)}</div></div>
+        <div class="cux-frow"><div class="k">Last login · 最近登录</div><div class="v quiet" data-no-i18n>${escapeHtml(cuFmtTime(c.last_login_at) || cuT('never', '从未'))}</div></div>
+        <div class="cux-frow"><div class="k">Completed · 已完成</div><div class="v" data-no-i18n>${ord.completed_count || 0} <span class="muted">${escapeHtml(cuT('of ' + ordersN + ' orders', '/ 共 ' + ordersN + ' 单'))}</span></div></div>
+        ${(rev.count || 0) > 0 ? `<div class="cux-frow"><div class="k">Reviews · 评价</div><div class="v" data-no-i18n>${rev.count}${rev.avg_rating ? ' <span class="muted">· ' + Number(rev.avg_rating).toFixed(1) + '★</span>' : ''}</div></div>` : ''}
+      </div>
+      <div class="cux-card">
+        <div class="cux-kicker">Device &amp; account · 设备与账号</div>
+        <div class="cux-frow"><div class="k">App build · 版本</div><div class="v quiet" data-no-i18n>${(buildV && buildV.app_version) ? escapeHtml(buildV.app_version + (buildV.device_model ? ' · ' + buildV.device_model : '')) : '—'}</div></div>
+        <div class="cux-frow"><div class="k">Sessions · 会话</div><div class="v${sessions >= 5 ? ' warn' : ''}" data-no-i18n>${sessions} <span class="muted">${escapeHtml(cuT('active', '个活跃'))}</span></div></div>
+        <div class="cux-frow"><div class="k">openid</div><div class="v mono" data-no-i18n>${escapeHtml(openidShort)}${openid ? `<button class="cux-copy" title="Copy · 复制" onclick="cuCopyText('${escapeAttr(openid)}')">${copyIco}</button>` : ''}</div></div>
+      </div>
+    </div>
+
+    <!-- Chart — short and quiet; the headline sentence carries the story. -->
+    <div class="cux-chart">
+      <div class="cux-sec">Orders by month · 月度订单
+        <span class="side" data-no-i18n>${chartSummary}</span>
+      </div>
       <div class="cu-bar-host" style="position: relative;">
-        <div class="cu-bar-row${CDV.chartTall ? ' cu-bars-tall' : ''}">${monthBars}</div>
+        <div class="cu-bar-row">${monthBars}</div>
         <!-- tooltip is a body-level singleton (cuBarTip) so the drawer can't crop it -->
       </div>
     </div>
 
     <div class="cu-detail-pairs">
       <div>
-        <div class="cu-sec-title" style="margin-bottom: var(--s3);">Top items · 热销商品</div>
+        <div class="cux-sec">Top items · 热销商品</div>
         <div class="table-wrap">
           <table>
             <thead><tr><th>Item · 商品</th><th class="numeric">Qty · 数量</th><th class="numeric">Spend · 消费</th></tr></thead>
@@ -610,63 +660,70 @@ function cuRenderDetail() {
         </div>
       </div>
       <div>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--s3);">
-          <div class="cu-sec-title">Addresses · 地址</div>
-          <button class="btn btn-sm" onclick="cuOpenAddrModal(null)">+ Add address · 添加地址</button>
+        <div class="cux-sec">Addresses · 地址
+          <span class="side"><button class="btn btn-sm" onclick="cuOpenAddrModal(null)">+ Add address · 添加地址</button></span>
         </div>
         ${addressesHtml}
       </div>
     </div>
 
-    <!-- Below the fold: longer ledger-style lists fold into <details>
-         accordions, closed by default. Per operator request: recent orders,
-         points ledger, top-up ledger, and Affiliate. The chart / top items /
-         addresses above DO NOT collapse. -->
-    <details class="cu-fold"${(d.diagnostics && d.diagnostics.error_count_7d > 0) ? ' open' : ''}>
-      <summary>${cuT('Diagnostics (device & app health)', '诊断（设备与运行状况）')}${(d.diagnostics && d.diagnostics.error_count_7d > 0) ? ' ⚠' : ''}</summary>
-      <div class="cu-fold-body">${renderDiagnosticsBlock(d.diagnostics)}</div>
-    </details>
-
-    <details class="cu-fold"${CDV.recentOpen ? ' open' : ''}>
-      <summary>Recent orders · 近期订单</summary>
-      <div class="cu-fold-body">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Order # · 订单号</th><th>Status · 状态</th><th class="numeric">Total · 总额</th><th>When · 时间</th></tr></thead>
-            <tbody>${recentOrdersRows}</tbody>
-          </table>
+    <!-- Ledger folds — flat rows with a hint of what's inside. Recent orders
+         first (most used); Diagnostics further down but still auto-opens when
+         the customer's app reported errors. -->
+    <div class="cux-folds">
+      <details class="cux-fold">
+        <summary>${chevron}<span class="t">Recent orders · 近期订单</span>
+          <span class="hint" data-no-i18n>${d.recent_orders.length || noneHint}</span></summary>
+        <div class="cux-fold-body">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Order # · 订单号</th><th>Status · 状态</th><th class="numeric">Total · 总额</th><th>When · 时间</th></tr></thead>
+              <tbody>${recentOrdersRows}</tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    </details>
+      </details>
 
-    <details class="cu-fold">
-      <summary>Points ledger (last 20) · 积分明细(近 20 条)</summary>
-      <div class="cu-fold-body">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Source · 来源</th><th class="numeric">Δ · 变动</th><th class="numeric">After · 之后</th><th>Note · 备注</th><th>When · 时间</th></tr></thead>
-            <tbody>${recentPtsRows}</tbody>
-          </table>
+      <details class="cux-fold">
+        <summary>${chevron}<span class="t">Points ledger · 积分明细</span>
+          <span class="hint" data-no-i18n>${d.recent_points.length || noneHint}</span></summary>
+        <div class="cux-fold-body">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Source · 来源</th><th class="numeric">Δ · 变动</th><th class="numeric">After · 之后</th><th>Note · 备注</th><th>When · 时间</th></tr></thead>
+              <tbody>${recentPtsRows}</tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    </details>
+      </details>
 
-    <details class="cu-fold">
-      <summary>Top-up ledger (last 10) · 充值明细(近 10 条)</summary>
-      <div class="cu-fold-body">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Method · 方式</th><th class="numeric">Amount · 金额</th><th class="numeric">Bonus · 赠送</th><th>Status · 状态</th><th>When · 时间</th></tr></thead>
-            <tbody>${recentTopupsRows}</tbody>
-          </table>
+      <details class="cux-fold">
+        <summary>${chevron}<span class="t">Top-ups · 充值明细</span>
+          <span class="hint" data-no-i18n>${d.recent_topups.length || noneHint}</span></summary>
+        <div class="cux-fold-body">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Method · 方式</th><th class="numeric">Amount · 金额</th><th class="numeric">Bonus · 赠送</th><th>Status · 状态</th><th>When · 时间</th></tr></thead>
+              <tbody>${recentTopupsRows}</tbody>
+            </table>
+          </div>
         </div>
-      </div>
-    </details>
+      </details>
 
-    <details class="cu-fold">
-      <summary>Affiliate · 推广</summary>
-      <div class="cu-fold-body">${renderAffiliateBlock(d.affiliate)}</div>
-    </details>
+      <details class="cux-fold"${diagErrs > 0 ? ' open' : ''}>
+        <summary>${chevron}<span class="t">Diagnostics · 诊断</span>
+          <span class="hint${diagErrs > 0 ? ' warn' : ' ok'}" data-no-i18n>${diagErrs > 0
+            ? escapeHtml(cuT(diagErrs + ' errors in 7 days', '近 7 天报错 ' + diagErrs))
+            : escapeHtml(cuT('no errors in 7 days', '近 7 天无报错'))}</span></summary>
+        <div class="cux-fold-body">${renderDiagnosticsBlock(d.diagnostics)}</div>
+      </details>
+
+      <details class="cux-fold">
+        <summary>${chevron}<span class="t">Affiliate · 推广</span>
+          <span class="hint" data-no-i18n>${affTotal ? escapeHtml(cuT(affTotal + ' invites', '邀请 ' + affTotal)) : escapeHtml(cuT('no invites', '暂无邀请'))}</span></summary>
+        <div class="cux-fold-body">${renderAffiliateBlock(d.affiliate)}</div>
+      </details>
+    </div>
   `;
 }
 
@@ -939,22 +996,6 @@ async function cuForceLogout() {
     });
     const n = j.revoked || 0;
     toast(`Signed out all devices · ${n} session${n === 1 ? '' : 's'} revoked · 已退出所有设备(${n} 个会话)`);
-    cuOpenDetail(CU_CURRENT.customer.id);
-  } catch {}
-}
-
-// TESTING — archives this customer's openid + revokes sessions so the next
-// app open on the same phone creates a brand-new customer (fresh onboarding).
-// The old row/data is kept (just unreachable by login), not deleted.
-async function cuResetTest() {
-  if (!CU_CURRENT?.customer) return;
-  if (!confirm('TESTING: turn this customer into a brand-new user on next app open? Their openid is archived and sessions revoked — reopening the mini app on that phone creates a fresh account (no orders, points or addresses). The old data is kept but no longer reachable by login. · 测试:下次打开小程序时将此顾客变为全新用户?将归档其 openid 并撤销会话——在该手机上重新打开小程序会创建全新账户(无订单、积分或地址)。原数据保留但登录无法再访问。')) return;
-  try {
-    await cuWriteRequest({
-      url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id + '/reset-test', method: 'POST',
-      errLabelEn: 'Reset failed', errLabelCn: '重置失败',
-    });
-    toast('Reset · reopen the mini app for a fresh user · 已重置,重新打开小程序即为新用户');
     cuOpenDetail(CU_CURRENT.customer.id);
   } catch {}
 }

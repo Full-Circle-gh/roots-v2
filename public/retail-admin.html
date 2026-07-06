@@ -48,7 +48,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-orders, #tab-invoices, #order-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -78,7 +78,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -1959,7 +1959,6 @@
       /* Orders-by-month chart — Tea bars (peak full, others 80%), faint
          baseline strip for empty months. */
       .cu-bar-row { display: flex; align-items: flex-end; gap: 8px; height: 120px; }
-      .cu-bar-row.cu-bars-tall { height: 178px; }   /* View tweak: stretch chart taller */
       .cu-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; min-width: 0; }
       .cu-bar { width: 100%; background: var(--accent); opacity: .8; border-radius: 2px 2px 0 0; min-height: 3px; transition: opacity var(--t-fast) ease; }
       .cu-bar.peak  { opacity: 1; }
@@ -1991,9 +1990,6 @@
            the whole track (and the address cards in it) wider than the viewport,
            cropping the Spend column and the address Edit/Delete buttons. */
         .cu-detail-pairs { grid-template-columns: minmax(0, 1fr); }
-        /* The display-options "View" popover isn't wanted in the phone customer
-           drawer — hide it (desktop keeps it). */
-        .cdv-view-wrap { display: none; }
         /* Address modal: stack every field full-width so it fits one phone
            window. The .row fields carry desktop min-widths (140–200px) that
            otherwise refuse to shrink and force horizontal scrolling. */
@@ -2162,6 +2158,124 @@
       #cu-detail-body tr.cu-order-row { cursor: pointer; transition: background var(--t-fast) ease; }
       #cu-detail-body tr.cu-order-row:hover,
       #cu-detail-body tr.cu-order-row:focus-visible { background: var(--bg-elev-1); outline: none; }
+
+      /* ══ Tacet customer-drawer skin ══════════════════════════════════════
+         The drawer (#cu-drawer) sits in the tacet-orders-skin token scope, so
+         --bg-*, --line-*, --text-* and the tacet-* palette are already
+         remapped (Inter, paper/ink, dark theme handled). The cux-* classes
+         below are the customer-drawer components from
+         reference/customer-drawer-mockup.html. */
+
+      /* Header — avatar + eyebrow + 27px name + phone w/ copy. */
+      #cu-drawer .cux-head { display: flex; gap: 16px; padding-right: 46px; margin-bottom: 18px; }
+      #cu-drawer .cu-avatar { width: 52px; height: 52px; background: var(--bg-elev-1); border: 1px solid var(--line-soft); color: var(--text-3); }
+      #cu-drawer .cux-eyebrow { font-size: 14px; color: var(--text-2); margin-bottom: 6px; }
+      #cu-drawer .cux-name { font-size: 27px; font-weight: 600; letter-spacing: -.005em; line-height: 1.15; color: var(--text-1); display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
+      #cu-drawer .cux-phone { font-size: 15px; color: var(--text-2); margin-top: 5px; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      #cu-drawer .cux-phone .muted { color: var(--text-3); }
+      #cu-drawer .cux-copy { width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-pane); color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
+      #cu-drawer .cux-copy svg { width: 11px; height: 11px; }
+      #cu-drawer .cux-copy:hover { color: var(--text-1); border-color: var(--line-strong); }
+
+      /* Pills — quiet rounded chips (tier stays sage; blocked brick). */
+      #cu-drawer .cu-pill { font-family: var(--f-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: capitalize; border-radius: 999px; padding: 4px 13px; border: none; background: var(--bg-elev-1); color: var(--text-2); }
+      #cu-drawer :is(.cu-pill.tier-seed, .cu-pill.tier-sprout) { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
+      #cu-drawer :is(.cu-pill.tier-root, .cu-pill.tier-tree) { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
+      #cu-drawer .cu-pill.blocked { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
+
+      /* More ▾ overflow menu. */
+      #cu-drawer .cux-more-wrap { position: relative; }
+      #cu-drawer .cux-menu { position: absolute; top: calc(100% + 8px); right: 0; z-index: 40; min-width: 240px; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 14px 36px rgba(20, 15, 3, .16); padding: 6px; }
+      #cu-drawer .cux-mi { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; font-family: var(--f-sans); font-size: 14.5px; color: var(--text-1); padding: 9px 11px; border-radius: 6px; cursor: pointer; }
+      #cu-drawer .cux-mi:hover { background: var(--bg-elev-1); }
+      #cu-drawer .cux-mi svg { width: 16px; height: 16px; color: var(--text-3); flex: none; }
+      #cu-drawer .cux-mi .hint { margin-left: auto; font-size: 12px; color: var(--text-4); }
+      #cu-drawer .cux-mi.danger { color: var(--tacet-brick); }
+      #cu-drawer .cux-mi.danger svg { color: var(--tacet-brick); }
+      #cu-drawer .cux-sep { height: 1px; background: var(--line-soft); margin: 5px 4px; }
+
+      /* Snapshot band — one cream strip, three figures, hairline dividers. */
+      #cu-drawer .cux-snap { background: var(--bg-elev-1); border-radius: 14px; padding: 18px 6px; display: grid; grid-template-columns: 1fr 1fr 1fr; margin-bottom: 16px; }
+      #cu-drawer .cux-snap > div { padding: 2px 22px; min-width: 0; }
+      #cu-drawer .cux-snap > div + div { border-left: 1px solid var(--line-strong); }
+      #cu-drawer .cux-snap .lbl { font-size: 13px; font-weight: 500; color: var(--text-2); letter-spacing: .02em; display: flex; align-items: baseline; gap: 8px; }
+      #cu-drawer .cux-adj { margin-left: auto; font-size: 13px; font-weight: 500; color: var(--text-2); border: 0; background: none; font-family: var(--f-sans); cursor: pointer; padding: 0; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--line-strong); }
+      #cu-drawer .cux-adj:hover { color: var(--text-1); }
+      #cu-drawer .cux-snap .fig { font-size: 30px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; margin-top: 6px; color: var(--text-1); }
+      #cu-drawer .cux-snap .fig.zero { color: var(--text-3); font-weight: 500; }
+      #cu-drawer .cux-snap .sub { font-size: 13px; color: var(--text-2); margin-top: 3px; line-height: 1.45; }
+      #cu-drawer .cux-snap .sub .warn { color: var(--tacet-amber-ink); }
+
+      /* Facts cards — Activity / Device & account. */
+      #cu-drawer .cux-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
+      #cu-drawer .cux-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+      #cu-drawer .cux-kicker { font-size: 14px; font-weight: 500; color: var(--text-2); letter-spacing: .01em; margin-bottom: 9px; }
+      #cu-drawer .cux-frow { display: grid; grid-template-columns: 118px 1fr; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); align-items: baseline; }
+      #cu-drawer .cux-kicker + .cux-frow { border-top: none; padding-top: 0; }
+      #cu-drawer .cux-frow .k { font-size: 14px; color: var(--text-3); }
+      #cu-drawer .cux-frow .v { font-size: 16px; font-weight: 600; color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
+      #cu-drawer .cux-frow .v .muted { color: var(--text-3); font-weight: 400; }
+      #cu-drawer .cux-frow .v.quiet { font-weight: 400; color: var(--text-2); }
+      #cu-drawer .cux-frow .v.warn { color: var(--tacet-amber-ink); }
+      #cu-drawer .cux-frow .v.mono { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 400; color: var(--text-2); }
+      #cu-drawer .cux-frow .v.mono .cux-copy { vertical-align: -5px; margin-left: 6px; }
+
+      /* Uppercase section labels with an optional right-side summary. */
+      #cu-drawer .cux-sec { font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--text-2); margin: 2px 0 14px; display: flex; align-items: baseline; gap: 10px; }
+      #cu-drawer .cux-sec .side { margin-left: auto; font-weight: 400; font-size: 13px; letter-spacing: 0; text-transform: none; color: var(--text-3); font-variant-numeric: tabular-nums; }
+      #cu-drawer .cux-chart { margin-bottom: 26px; }
+
+      /* Chart — shorter sage bars, quiet labels (tooltip singleton unchanged). */
+      #cu-drawer .cu-bar-row { height: 96px; gap: 6px; }
+      #cu-drawer .cu-bar { background: var(--tacet-sage); opacity: 1; border-radius: 5px 5px 2px 2px; max-width: 34px; margin: 0 auto; }
+      #cu-drawer .cu-bar.peak { background: var(--tacet-sage-ink); }
+      #cu-drawer .cu-bar.empty { background: var(--line-strong); border-radius: 2px; }
+      #cu-drawer .cu-bar-label { font-family: var(--f-sans); font-size: 11.5px; letter-spacing: 0; color: var(--text-4); }
+
+      /* Tables inside the drawer — sentence-case Inter headers. */
+      #cu-drawer #cu-detail-body thead th { font-family: var(--f-sans); font-weight: 500; font-size: 11.5px; letter-spacing: .02em; text-transform: none; color: var(--text-2); }
+
+      /* Address cards. */
+      #cu-drawer .cux-addr { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; margin-bottom: 10px; }
+      #cu-drawer .cux-addr .top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
+      #cu-drawer .cux-addr .nm { font-weight: 600; font-size: 15px; color: var(--text-1); }
+      #cu-drawer .cux-addr .ph { color: var(--text-2); font-size: 14px; font-variant-numeric: tabular-nums; }
+      #cu-drawer .cux-addr .def { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tacet-sage-ink); background: var(--tacet-sage-tint); border-radius: 999px; padding: 2px 9px; }
+      #cu-drawer .cux-addr .acts { margin-left: auto; display: flex; gap: 4px; }
+      #cu-drawer .cux-addr .acts button { border: 0; background: none; font-family: var(--f-sans); font-size: 13.5px; color: var(--text-2); cursor: pointer; padding: 2px 6px; border-radius: 6px; }
+      #cu-drawer .cux-addr .acts button:hover { color: var(--text-1); background: var(--bg-elev-1); }
+      #cu-drawer .cux-addr .acts button.del:hover { color: var(--tacet-brick); background: var(--tacet-brick-tint); }
+      #cu-drawer .cux-addr .line2 { color: var(--text-3); font-size: 13px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* Ledger folds — flat rows, svg chevron, right-side hint. */
+      #cu-drawer .cux-folds { border-top: 1px solid var(--line); margin-top: 26px; }
+      #cu-drawer details.cux-fold { border-bottom: 1px solid var(--line); }
+      #cu-drawer details.cux-fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 11px; padding: 15px 2px; font-size: 15.5px; font-weight: 500; color: var(--text-1); user-select: none; }
+      #cu-drawer details.cux-fold > summary::-webkit-details-marker { display: none; }
+      #cu-drawer details.cux-fold > summary::marker { content: ''; }
+      #cu-drawer details.cux-fold > summary:hover { background: var(--bg-elev-1); }
+      #cu-drawer details.cux-fold > summary .chev { flex: none; width: 16px; height: 16px; color: var(--text-3); transition: transform .85s cubic-bezier(.33,1,.68,1); }
+      #cu-drawer details.cux-fold[open] > summary .chev { transform: rotate(90deg); }
+      #cu-drawer details.cux-fold > summary .t { flex: 1; min-width: 0; }
+      #cu-drawer details.cux-fold > summary .hint { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+      #cu-drawer details.cux-fold > summary .hint.ok { color: var(--tacet-sage-ink); }
+      #cu-drawer details.cux-fold > summary .hint.warn { color: var(--tacet-amber-ink); }
+      #cu-drawer .cux-fold-body { padding: 2px 2px 18px; }
+      /* Same zen open/close breathing as the old folds. */
+      #cu-drawer details.cux-fold::details-content { block-size: 0; overflow: clip; opacity: .35; transition: block-size .85s cubic-bezier(.33,1,.68,1), opacity .7s ease, content-visibility .85s allow-discrete; }
+      #cu-drawer details.cux-fold[open]::details-content { block-size: auto; opacity: 1; }
+      @media (prefers-reduced-motion: reduce) {
+        #cu-drawer details.cux-fold::details-content,
+        #cu-drawer details.cux-fold > summary .chev { transition: none; }
+      }
+
+      /* Phone: stack the band + cards; dividers rotate to horizontal. */
+      @media (max-width: 720px) {
+        #cu-drawer .cux-snap { grid-template-columns: 1fr; }
+        #cu-drawer .cux-snap > div + div { border-left: 0; border-top: 1px solid var(--line-strong); margin-top: 12px; padding-top: 12px; }
+        #cu-drawer .cux-cards { grid-template-columns: 1fr; }
+        #cu-drawer .cux-head { padding-right: 0; }
+      }
     </style>
 
     <!-- LIST VIEW (always visible; detail opens as a side-drawer overlay) -->
@@ -2302,7 +2416,7 @@
     <!-- (Customer detail drawer lives at the global level, alongside #order-drawer) -->
 
     <!-- EDIT MODAL -->
-    <div id="cu-edit-bg" class="pu-editor-bg">
+    <div id="cu-edit-bg" class="pu-editor-bg tacet">
       <div class="pu-editor" style="width: 540px;">
         <div class="pu-editor-head">
           <h3 style="margin: 0; font-size: 14px;">Edit customer · 编辑顾客</h3>
@@ -2332,7 +2446,7 @@
     <!-- CREATE CUSTOMER MODAL — key in a walk-in / phone-order customer who never
          signed up through the app. A synthetic 'manual:' identity is minted
          server-side; a matching phone links to the existing record instead. -->
-    <div id="cu-create-bg" class="pu-editor-bg">
+    <div id="cu-create-bg" class="pu-editor-bg tacet">
       <div class="pu-editor" style="width: 480px;">
         <div class="pu-editor-head">
           <h3 style="margin: 0; font-size: 14px;">New customer · 新增顾客</h3>
@@ -2354,7 +2468,7 @@
 
     <!-- MESSAGE MODAL — operator opens a direct-message thread with this customer.
          Reuses the feedback thread tables; the customer replies in-app. -->
-    <div id="cu-msg-bg" class="pu-editor-bg">
+    <div id="cu-msg-bg" class="pu-editor-bg tacet">
       <div class="pu-editor" style="width: 480px;">
         <div class="pu-editor-head">
           <h3 style="margin: 0; font-size: 14px;">Message customer · 给顾客发消息</h3>
@@ -2376,7 +2490,7 @@
     </div>
 
     <!-- ADJUST MODAL (points & wallet share same UI) -->
-    <div id="cu-adjust-bg" class="pu-editor-bg">
+    <div id="cu-adjust-bg" class="pu-editor-bg tacet">
       <div class="pu-editor" style="width: 480px;">
         <div class="pu-editor-head">
           <h3 id="cu-adjust-title" style="margin: 0; font-size: 14px;">Adjust balance · 调整余额</h3>
@@ -2402,7 +2516,7 @@
     </div>
 
     <!-- ADDRESS MODAL (add / edit) -->
-    <div id="cu-addr-bg" class="pu-editor-bg">
+    <div id="cu-addr-bg" class="pu-editor-bg tacet">
       <div class="pu-editor" style="width: 560px;">
         <div class="pu-editor-head">
           <h3 id="cu-addr-title" style="margin: 0; font-size: 14px;">Add address · 添加地址</h3>

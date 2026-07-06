@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Customer drawer — Tacet redesign mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ── Tacet tokens (same set as reference/order-drawer-mockup.html) ── */
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF; --graphite:#58606E;
+    --cream:#F6F3EC; --elev2:#EFEBE1;
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --dusk:#6E67AF;
+    --sage:#A3B49F; --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --amber:#C9954A; --amber-tint:#F7EEDE; --amber-ink:#8A6425;
+    --brick:#B4533E; --brick-tint:#F6E7E3;
+    --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
+    --f:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:28px 28px 80px;
+  }
+
+  /* ── CSS-only language toggle ── */
+  .lang-input{ position:absolute; width:0; height:0; opacity:0; pointer-events:none; }
+  .zh{ display:none; }
+  #lang-zh:checked ~ .page-head .en,
+  #lang-zh:checked ~ .stage .en{ display:none; }
+  #lang-zh:checked ~ .page-head .zh,
+  #lang-zh:checked ~ .stage .zh{ display:inline; }
+
+  .langbar{ max-width:1000px; margin:0 auto 16px; display:flex; justify-content:flex-end; }
+  .seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; background:var(--pane); padding:3px; gap:2px; }
+  .seg label{ font-size:12.5px; font-weight:500; color:var(--text-2); padding:5px 16px; border-radius:999px; cursor:pointer; }
+  #lang-en:checked ~ .langbar label[for="lang-en"],
+  #lang-zh:checked ~ .langbar label[for="lang-zh"]{ background:var(--ink); color:var(--paper); }
+
+  .page-head{max-width:1000px; margin:0 auto 24px;}
+  .page-head h1{font-size:20px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em;}
+  .page-head p{margin:0; color:var(--text-2); font-size:13.5px; max-width:680px;}
+  .stage{ max-width:1000px; margin:0 auto; display:flex; gap:28px; align-items:flex-start; }
+  @media (max-width:940px){ .stage{flex-direction:column;} }
+
+  /* ── Drawer shell ── */
+  .drawer{
+    flex:0 0 660px; max-width:660px; width:100%;
+    background:var(--paper); border:1px solid var(--line);
+    border-radius:18px; padding:24px 24px 20px;
+    box-shadow:0 24px 60px rgba(40,30,5,.10); position:relative;
+  }
+  @media (max-width:940px){ .drawer{flex:1 1 auto;} }
+  .close{ position:absolute; top:18px; right:18px; width:32px; height:32px;
+    border-radius:999px; background:var(--pane); border:1px solid var(--line);
+    color:var(--text-2); display:flex; align-items:center; justify-content:center; }
+  .close svg{width:16px;height:16px;}
+
+  /* ── Header: avatar + name + quiet meta, actions on their own row ── */
+  .cu-head{padding-right:46px; margin-bottom:20px; display:flex; gap:16px;}
+  .avatar{flex:none; width:52px; height:52px; border-radius:999px; background:var(--cream);
+    border:1px solid var(--line-soft); display:flex; align-items:center; justify-content:center; color:var(--text-3);}
+  .avatar svg{width:26px;height:26px;}
+  .cu-head .eyebrow{font-size:14px; color:var(--text-2); margin:0 0 6px;}
+  .cu-head .name{font-size:27px; font-weight:600; letter-spacing:-.005em; line-height:1.15;
+    display:flex; align-items:center; gap:13px; flex-wrap:wrap;}
+  .cu-head .phone{font-size:15px; color:var(--text-2); margin-top:5px; font-variant-numeric:tabular-nums;
+    display:flex; align-items:center; gap:8px;}
+
+  .pill{display:inline-flex; align-items:center; gap:7px; font-size:14px; font-weight:500; border-radius:999px; padding:4px 13px;}
+  .pill .dot{width:8px; height:8px; border-radius:999px; flex:none;}
+  .pill.tier{background:var(--sage-tint); color:var(--sage-ink);}
+  .pill.blocked{background:var(--brick-tint); color:var(--brick);}
+
+  .cu-actions{display:flex; align-items:center; gap:10px; margin-top:0; margin-bottom:22px; flex-wrap:wrap;}
+  .btn{display:inline-flex; align-items:center; gap:7px; font-family:var(--f); font-size:15px; font-weight:500;
+    padding:9px 17px; border:1px solid var(--line); background:var(--pane); color:var(--text-1);
+    border-radius:var(--r-md); cursor:pointer; white-space:nowrap;}
+  .btn:hover{background:var(--cream);}
+  .btn svg{width:16px;height:16px;}
+  .btn-sm{padding:6px 13px; font-size:14px;}
+  .btn-ghost{background:transparent; border-color:transparent; color:var(--text-2); padding-left:8px; padding-right:8px;}
+  .btn-ghost:hover{color:var(--text-1); background:transparent; text-decoration:underline; text-underline-offset:3px;}
+  .spacer{flex:1;}
+
+  /* Overflow menu, drawn open for the mockup */
+  .more-wrap{position:relative;}
+  .menu{position:absolute; top:calc(100% + 8px); right:0; z-index:5; min-width:240px;
+    background:var(--pane); border:1px solid var(--line); border-radius:var(--r-lg);
+    box-shadow:0 14px 36px rgba(40,30,5,.14); padding:6px; }
+  .menu .mi{display:flex; align-items:center; gap:10px; width:100%; text-align:left; border:0; background:none;
+    font-family:var(--f); font-size:14.5px; color:var(--text-1); padding:9px 11px; border-radius:var(--r-sm); cursor:pointer;}
+  .menu .mi:hover{background:var(--cream);}
+  .menu .mi svg{width:16px; height:16px; color:var(--text-3); flex:none;}
+  .menu .mi .hint{margin-left:auto; font-size:12px; color:var(--text-4);}
+  .menu .mi.danger{color:var(--brick);}
+  .menu .mi.danger svg{color:var(--brick);}
+  .menu .sep{height:1px; background:var(--line-soft); margin:5px 4px;}
+
+  /* ── Snapshot band: one cream strip, three figures ── */
+  .snap{background:var(--cream); border-radius:var(--r-xl); padding:18px 6px; display:grid;
+    grid-template-columns:1fr 1fr 1fr; margin-bottom:16px;}
+  .snap > div{padding:2px 22px; min-width:0;}
+  .snap > div + div{border-left:1px solid var(--line-strong);}
+  .snap .lbl{font-size:13px; font-weight:500; color:var(--text-2); letter-spacing:.02em;
+    display:flex; align-items:center; gap:8px;}
+  .snap .lbl .adj{margin-left:auto; font-size:13px; font-weight:500; color:var(--text-2);
+    border:0; background:none; font-family:var(--f); cursor:pointer; padding:0;
+    text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--line-strong);}
+  .snap .lbl .adj:hover{color:var(--text-1);}
+  .snap .fig{font-size:30px; font-weight:600; letter-spacing:-.01em; font-variant-numeric:tabular-nums; margin-top:6px;}
+  .snap .sub{font-size:13px; color:var(--text-2); margin-top:3px; line-height:1.45;}
+  .snap .fig.zero{color:var(--text-3); font-weight:500;}
+  @media (max-width:560px){ .snap{grid-template-columns:1fr;} .snap>div+div{border-left:0; border-top:1px solid var(--line-strong); margin-top:12px; padding-top:12px;} }
+
+  /* ── Facts cards ── */
+  .info-row{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:24px;}
+  @media (max-width:560px){ .info-row{grid-template-columns:1fr;} }
+  .card{background:var(--pane); border:1px solid var(--line); border-radius:var(--r-xl); padding:16px 18px;}
+  .kicker{font-size:14px; font-weight:500; color:var(--text-2); letter-spacing:.01em; margin-bottom:9px; display:flex; align-items:center; gap:8px;}
+  .frow{display:grid; grid-template-columns:118px 1fr; gap:12px; padding:8px 0; border-top:1px solid var(--line-soft); align-items:baseline;}
+  .frow:first-of-type{border-top:none; padding-top:0;}
+  .frow .k{font-size:14px; color:var(--text-3);}
+  .frow .v{font-size:16px; color:var(--text-1); font-weight:600; min-width:0; overflow-wrap:anywhere;}
+  .frow .v .muted{color:var(--text-3); font-weight:400;}
+  .frow .v.quiet{font-weight:400; color:var(--text-2);}
+  .frow .v.mono{font-family:var(--mono); font-size:13px; font-weight:400; color:var(--text-2);}
+  .copy{width:20px; height:20px; border:1px solid var(--line); border-radius:999px; background:var(--pane); color:var(--text-3); display:inline-flex; align-items:center; justify-content:center; vertical-align:-4px; margin-left:6px;}
+  .copy svg{width:11px;height:11px;}
+
+  .sec-lbl{font-size:12px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; color:var(--graphite); margin:2px 0 14px; display:flex; align-items:baseline; gap:10px;}
+  .sec-lbl .side{margin-left:auto; font-weight:400; font-size:13px; letter-spacing:0; text-transform:none; color:var(--text-3); font-variant-numeric:tabular-nums;}
+
+  /* ── Chart: shorter, quieter ── */
+  .chart{margin-bottom:26px;}
+  .bars{display:flex; align-items:flex-end; gap:6px; height:96px; padding:0 2px;}
+  .bcol{flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; justify-content:flex-end; height:100%;}
+  .bar{width:100%; max-width:34px; border-radius:5px 5px 2px 2px; background:var(--sage);}
+  .bar.peak{background:var(--sage-ink);}
+  .bar.empty{height:3px; border-radius:2px; background:var(--line-strong);}
+  .blbl{font-size:11.5px; color:var(--text-4); font-variant-numeric:tabular-nums;}
+  .bcol.has .blbl{color:var(--text-2);}
+
+  /* ── Top items + addresses ── */
+  .pairs{display:grid; grid-template-columns:1.1fr 1fr; gap:22px; margin-bottom:26px;}
+  @media (max-width:640px){ .pairs{grid-template-columns:1fr;} }
+  table{width:100%; border-collapse:collapse; font-size:14.5px;}
+  th{font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3); text-align:left; padding:0 10px 9px 0; border-bottom:1px solid var(--line);}
+  th.num, td.num{text-align:right; font-variant-numeric:tabular-nums;}
+  td{padding:10px 10px 10px 0; border-bottom:1px solid var(--line-soft);}
+  tr:last-child td{border-bottom:0;}
+  td.qty{color:var(--text-2);}
+
+  .addr{background:var(--pane); border:1px solid var(--line); border-radius:var(--r-lg); padding:13px 15px; margin-bottom:10px;}
+  .addr .top{display:flex; align-items:baseline; gap:9px; flex-wrap:wrap;}
+  .addr .nm{font-weight:600; font-size:15px;}
+  .addr .ph{color:var(--text-2); font-size:14px; font-variant-numeric:tabular-nums;}
+  .addr .def{font-size:11px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--sage-ink); background:var(--sage-tint); border-radius:999px; padding:2px 9px;}
+  .addr .acts{margin-left:auto; display:flex; gap:4px;}
+  .addr .acts button{border:0; background:none; font-family:var(--f); font-size:13.5px; color:var(--text-2); cursor:pointer; padding:2px 6px; border-radius:var(--r-sm);}
+  .addr .acts button:hover{color:var(--text-1); background:var(--cream);}
+  .addr .acts button.del:hover{color:var(--brick); background:var(--brick-tint);}
+  .addr .line2{color:var(--text-3); font-size:13px; margin-top:4px;}
+
+  /* ── Ledger folds ── */
+  .folds{border-top:1px solid var(--line); }
+  details.fold{border-bottom:1px solid var(--line);}
+  details.fold summary{list-style:none; cursor:pointer; display:flex; align-items:center; gap:11px; padding:15px 2px; font-size:15.5px; font-weight:500; color:var(--text-1);}
+  details.fold summary::-webkit-details-marker{display:none;}
+  details.fold summary .chev{flex:none; width:16px; height:16px; color:var(--text-3); transition:transform .15s;}
+  details.fold[open] summary .chev{transform:rotate(90deg);}
+  details.fold summary .hint{margin-left:auto; font-size:13px; font-weight:400; color:var(--text-3); font-variant-numeric:tabular-nums;}
+  details.fold summary .hint.ok{color:var(--sage-ink);}
+  details.fold .fold-body{padding:2px 2px 18px;}
+
+  /* ── Notes sidebar ── */
+  .notes{flex:1 1 280px; max-width:320px; position:sticky; top:28px;}
+  @media (max-width:940px){ .notes{position:static; max-width:660px;} }
+  .notes h2{font-size:12px; text-transform:uppercase; letter-spacing:.12em; color:var(--graphite); margin:0 0 14px;}
+  .note{background:var(--pane); border:1px solid var(--line); border-radius:var(--r-lg); padding:13px 15px; margin-bottom:12px;}
+  .note .tag{font-size:10.5px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--dusk); margin-bottom:6px;}
+  .note h3{font-size:13.5px; font-weight:600; margin:0 0 5px;}
+  .note p{font-size:12.5px; color:var(--text-2); margin:0; line-height:1.55;}
+  .note p + p{margin-top:7px;}
+</style>
+</head>
+<body>
+
+<input type="radio" name="lang" id="lang-en" class="lang-input" checked>
+<input type="radio" name="lang" id="lang-zh" class="lang-input">
+
+<div class="langbar">
+  <div class="seg">
+    <label for="lang-en">EN</label>
+    <label for="lang-zh">中文</label>
+  </div>
+</div>
+
+<div class="page-head">
+  <h1>Customer drawer — restructured</h1>
+  <p>Same <b>Tacet</b> system as the new order drawer. Six-button bar becomes two buttons + an overflow menu; the pill wall becomes two facts cards; the three stat tiles become one snapshot band with zero-noise hidden; ledgers stay folded. EN / 中文 one at a time, never glued.</p>
+</div>
+
+<div class="stage">
+
+  <!-- ============ THE DRAWER ============ -->
+  <div class="drawer">
+    <div class="close" title="Close (Esc)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </div>
+
+    <!-- Header -->
+    <div class="cu-head">
+      <div class="avatar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
+      </div>
+      <div style="flex:1; min-width:0;">
+        <div class="eyebrow"><span class="en">Customer #392 · joined 2026-06-22</span><span class="zh">顾客 #392 · 加入于 2026-06-22</span></div>
+        <div class="name">Navin
+          <span class="pill tier"><span class="dot" style="background:var(--sage-ink);"></span>Seed</span>
+        </div>
+        <div class="phone">13501535903
+          <span class="copy" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions: two everyday buttons, everything else in ⋯ More -->
+    <div class="cu-actions">
+      <button class="btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
+        <span class="en">Message</span><span class="zh">发消息</span>
+      </button>
+      <button class="btn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        <span class="en">Edit profile</span><span class="zh">编辑资料</span>
+      </button>
+      <div class="spacer"></div>
+      <div class="more-wrap">
+        <button class="btn">
+          <span class="en">More</span><span class="zh">更多</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <!-- menu drawn open for the mockup -->
+        <div class="menu">
+          <button class="mi">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
+            <span class="en">Sign out all devices</span><span class="zh">退出所有设备</span>
+            <span class="hint">5</span>
+          </button>
+          <div class="sep"></div>
+          <button class="mi danger">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
+            <span class="en">Block customer</span><span class="zh">封禁顾客</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Snapshot band -->
+    <div class="snap">
+      <div>
+        <div class="lbl"><span class="en">Orders</span><span class="zh">订单</span></div>
+        <div class="fig">2</div>
+        <div class="sub"><span class="en">¥473.00 lifetime · AOV ¥236.50</span><span class="zh">累计 ¥473.00 · 客单价 ¥236.50</span></div>
+      </div>
+      <div>
+        <div class="lbl"><span class="en">Points</span><span class="zh">积分</span>
+          <button class="adj"><span class="en">Adjust</span><span class="zh">调整</span></button>
+        </div>
+        <div class="fig">4</div>
+        <div class="sub"><span class="en">4 earned · none expiring soon</span><span class="zh">累计获得 4 · 暂无临期</span></div>
+      </div>
+      <div>
+        <div class="lbl"><span class="en">Wallet</span><span class="zh">钱包</span>
+          <button class="adj"><span class="en">Adjust</span><span class="zh">调整</span></button>
+        </div>
+        <div class="fig zero">¥0.00</div>
+        <div class="sub"><span class="en">never topped up</span><span class="zh">从未充值</span></div>
+      </div>
+    </div>
+
+    <!-- Facts: Activity + Device & account -->
+    <div class="info-row">
+      <div class="card">
+        <div class="kicker"><span class="en">Activity</span><span class="zh">动态</span></div>
+        <div class="frow"><div class="k"><span class="en">Last order</span><span class="zh">最近订单</span></div><div class="v"><span class="en">today</span><span class="zh">今天</span></div></div>
+        <div class="frow"><div class="k"><span class="en">Last login</span><span class="zh">最近登录</span></div><div class="v quiet">2026-07-06 13:21</div></div>
+        <div class="frow"><div class="k"><span class="en">Completed</span><span class="zh">已完成</span></div><div class="v">2 <span class="muted"><span class="en">of 2 orders</span><span class="zh">/ 共 2 单</span></span></div></div>
+      </div>
+      <div class="card">
+        <div class="kicker"><span class="en">Device &amp; account</span><span class="zh">设备与账号</span></div>
+        <div class="frow"><div class="k"><span class="en">App build</span><span class="zh">版本</span></div><div class="v quiet">8.4 · iPhone 17 Pro</div></div>
+        <div class="frow"><div class="k"><span class="en">Sessions</span><span class="zh">会话</span></div><div class="v">5 <span class="muted"><span class="en">active</span><span class="zh">个活跃</span></span></div></div>
+        <div class="frow"><div class="k">openid</div><div class="v mono">oeqDi5B…dhh7Eo
+          <span class="copy" title="Copy"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
+        </div></div>
+      </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="chart">
+      <div class="sec-lbl"><span class="en">Orders by month</span><span class="zh">月度订单</span>
+        <span class="side"><span class="en">2 orders · ¥473.00 in 12 months</span><span class="zh">近 12 个月 2 单 · ¥473.00</span></span>
+      </div>
+      <div class="bars">
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">08</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">09</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">10</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">11</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">12</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">01</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">02</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">03</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">04</div></div>
+        <div class="bcol"><div class="bar empty"></div><div class="blbl">05</div></div>
+        <div class="bcol has"><div class="bar peak" style="height:78px;"></div><div class="blbl">06</div></div>
+        <div class="bcol has"><div class="bar peak" style="height:78px;"></div><div class="blbl">07</div></div>
+      </div>
+    </div>
+
+    <!-- Top items + Addresses -->
+    <div class="pairs">
+      <div>
+        <div class="sec-lbl"><span class="en">Top items</span><span class="zh">热销商品</span></div>
+        <table>
+          <thead><tr>
+            <th><span class="en">Item</span><span class="zh">商品</span></th>
+            <th class="num"><span class="en">Qty</span><span class="zh">数量</span></th>
+            <th class="num"><span class="en">Spend</span><span class="zh">消费</span></th>
+          </tr></thead>
+          <tbody>
+            <tr><td>Buckwheat Bread (GF, Sliced &amp; Frozen)</td><td class="num qty">2</td><td class="num">¥98.00</td></tr>
+            <tr><td>Apple Pie Overnight Oats</td><td class="num qty">1</td><td class="num">¥27.00</td></tr>
+            <tr><td>Choco Hemp Protein Bites</td><td class="num qty">1</td><td class="num">¥38.00</td></tr>
+            <tr><td>Choco-Hazel Bars</td><td class="num qty">1</td><td class="num">¥47.00</td></tr>
+            <tr><td>Energy Cubes</td><td class="num qty">1</td><td class="num">¥40.00</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div>
+        <div class="sec-lbl"><span class="en">Addresses</span><span class="zh">地址</span>
+          <span class="side"><button class="btn btn-sm" style="font-size:13px;"><span class="en">+ Add</span><span class="zh">+ 添加</span></button></span>
+        </div>
+        <div class="addr">
+          <div class="top">
+            <span class="nm">Navin</span>
+            <span class="ph">13501535903</span>
+            <span class="def"><span class="en">Default</span><span class="zh">默认</span></span>
+            <span class="acts">
+              <button><span class="en">Edit</span><span class="zh">编辑</span></button>
+              <button class="del"><span class="en">Delete</span><span class="zh">删除</span></button>
+            </span>
+          </div>
+          <div class="line2">广州市 天河区 …</div>
+        </div>
+        <div class="addr">
+          <div class="top">
+            <span class="nm">Morgo</span>
+            <span class="ph">13501535903</span>
+            <span class="acts">
+              <button><span class="en">Edit</span><span class="zh">编辑</span></button>
+              <button class="del"><span class="en">Delete</span><span class="zh">删除</span></button>
+            </span>
+          </div>
+          <div class="line2">广州市 越秀区 …</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ledger folds -->
+    <div class="folds">
+      <details class="fold">
+        <summary>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>
+          <span class="en">Recent orders</span><span class="zh">近期订单</span>
+          <span class="hint">2</span>
+        </summary>
+        <div class="fold-body"></div>
+      </details>
+      <details class="fold">
+        <summary>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>
+          <span class="en">Points ledger</span><span class="zh">积分明细</span>
+          <span class="hint">4</span>
+        </summary>
+        <div class="fold-body"></div>
+      </details>
+      <details class="fold">
+        <summary>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>
+          <span class="en">Top-ups</span><span class="zh">充值明细</span>
+          <span class="hint"><span class="en">none</span><span class="zh">无</span></span>
+        </summary>
+        <div class="fold-body"></div>
+      </details>
+      <details class="fold">
+        <summary>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>
+          <span class="en">Diagnostics</span><span class="zh">诊断</span>
+          <span class="hint ok"><span class="en">no errors in 7 days</span><span class="zh">近 7 天无报错</span></span>
+        </summary>
+        <div class="fold-body"></div>
+      </details>
+      <details class="fold">
+        <summary>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg>
+          <span class="en">Affiliate</span><span class="zh">推广</span>
+          <span class="hint"><span class="en">no invites</span><span class="zh">暂无邀请</span></span>
+        </summary>
+        <div class="fold-body"></div>
+      </details>
+    </div>
+
+  </div>
+
+  <!-- ============ DECISION NOTES ============ -->
+  <div class="notes">
+    <h2>What changed &amp; why</h2>
+
+    <div class="note">
+      <div class="tag">Header</div>
+      <h3>2 buttons instead of 6</h3>
+      <p>Message and Edit profile are the everyday actions — they stay as calm bordered buttons. Sign out all devices and Block move into a <b>More</b> menu (drawn open here). Block sits last, in brick, behind a divider.</p>
+      <p>Dropped entirely: the <b>View</b> display-options popover and <b>Reset to new user (test)</b>.</p>
+      <p>Gold "Message" button dropped — nothing here needs to shout.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Identity</div>
+      <h3>Pill wall → eyebrow + facts</h3>
+      <p>Eyebrow carries ID + joined date, same pattern as the order drawer. Only the <b>tier</b> stays as a pill (plus red Blocked when it applies). Joined / last login / sessions / app build move into the two facts cards. The openid shrinks to one truncated mono row with a copy button.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Numbers</div>
+      <h3>3 tiles → 1 snapshot band</h3>
+      <p>Orders · Points · Wallet as one cream strip, one figure each, one quiet sub-line. Zero values render grey ("never topped up"), not four rows of ¥0.00. Adjust becomes a small underlined text action.</p>
+      <p>The dropped rows (Refunded, Expired, Admin adjust…) aren't lost — they only appear in the sub-line when non-zero, and the full history stays in the folds below.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Chart</div>
+      <h3>Shorter, with a summary</h3>
+      <p>96px tall, quiet month labels, sage bars. The headline ("2 orders · ¥473.00 in 12 months") reads faster than the bars for sparse customers.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Folds</div>
+      <h3>Ledgers get count hints</h3>
+      <p>Each fold shows what's inside before you open it: counts, "none", or "no errors in 7 days" in sage. Recent orders moves to the top (most used); Diagnostics drops down and still auto-opens when there are errors.</p>
+    </div>
+
+    <div class="note">
+      <div class="tag">Open question</div>
+      <h3>Where should Block live?</h3>
+      <p>Recommended: in the More menu (shown). Alternative: keep Block visible as a bordered brick button if staff use it often enough that two clicks is too slow.</p>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
