@@ -7204,7 +7204,14 @@
   /* ── shared chrome ── */
   #tab-dashboard .td-wrap { max-width: 1120px; }
   #tab-reports #reports-body, #tab-reports .db-rangebar, #tab-reports .db-head { max-width: 1120px; }
-  .td-head { display: flex; align-items: baseline; gap: 14px; }
+  .td-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 22px; }
+  /* Tacet page title — a large sentence-case heading (like the reference
+     mockups' h1), NOT the admin's tiny mono-uppercase eyebrow that the global
+     `h2` rule would otherwise give it. */
+  .td-head h2 {
+    font-family: var(--f-sans); font-size: 22px; font-weight: 600;
+    letter-spacing: -.01em; text-transform: none; color: var(--td-text);
+  }
   .td-date { margin-left: auto; font-size: 13px; color: var(--td-text2, var(--text-3)); }
   .td-kicker {
     font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
