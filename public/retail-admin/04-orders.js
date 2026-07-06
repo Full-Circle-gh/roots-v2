@@ -4240,8 +4240,47 @@ function airShipmentDelayDays(o, s) {
 // Tracking card for one shipment row. Each shipment gets its own carrier +
 // waybill input. The save/clear/retry handlers all pass the shipment_id so
 // the right row in retail_shipments is touched.
+// "In this parcel" strip for the tracking card. Answers "which parcel is
+// this?" right where the operator reads the waybill — number, status, and
+// contents in one place, no scrolling to the items section. Only rendered on
+// multi-parcel orders (a single-parcel card already refers to the whole
+// order, so listing its contents would be redundant noise).
+// The first two lines always show — enough to recognise the parcel; the rest
+// tuck behind a disclosure so a big parcel never makes the card tall. Wrapped
+// in data-no-i18n like the events block: the product names are single-language
+// strings the auto-translator would otherwise mis-pair (we pick the live
+// language ourselves via orderItemNames/cuT, re-run on every drawer render).
+function renderParcelContents(s) {
+  const items = s.items || [];
+  if (!items.length) return '';
+  const lines = items.length;
+  const units = items.reduce((n, it) => n + (Number(it.qty) || 0), 0);
+  const countLabel = units !== lines
+    ? cuT(`${lines} products · ${units} units`, `${lines} 款 · ${units} 件`)
+    : cuT(`${lines} product${lines === 1 ? '' : 's'}`, `${lines} 款`);
+  const row = (it) => {
+    const nm = orderItemNames(it).primary || ('#' + it.id);
+    const q = Number(it.qty) || 1;
+    return `<div class="tc-item"><span class="tc-q">×${q}</span><span class="tc-nm">${escapeHtml(nm)}</span></div>`;
+  };
+  // ≤3 lines: show them all — hiding just one behind a toggle isn't worth it.
+  const shown = lines <= 3 ? items : items.slice(0, 2);
+  const rest  = lines <= 3 ? []    : items.slice(2);
+  return `
+    <div class="od-trk-contents" data-no-i18n>
+      <div class="tc-head">${cuT('In this parcel', '此包裹内含')} <span class="cnt">· ${countLabel}</span></div>
+      ${shown.map(row).join('')}
+      ${rest.length ? `
+        <details class="od-trk-items-more">
+          <summary><span class="od-trk-chev" aria-hidden="true">▸</span>${cuT(`${rest.length} more`, `还有 ${rest.length} 款`)}</summary>
+          <div class="od-trk-items-rest">${rest.map(row).join('')}</div>
+        </details>` : ''}
+    </div>`;
+}
+
 function renderShipmentTrackingCard(o, s, hoisted) {
   const t = s.tracking;
+  const multiParcel = (o.shipments?.length || 0) > 1;
   const has = !!(t && t.number);
   const sid = s.id;
   const carrierOpts = (TRACKING_CARRIERS || []).map(c =>
@@ -4380,6 +4419,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
               return t.status_label_en ? `<span class="pill st-dispatched"><span class="dot"></span>${escapeHtml(t.status_label_en)} · ${escapeHtml(t.status_label_cn)}</span>` : '';
             })()}
           </div>
+          ${multiParcel ? renderParcelContents(s) : ''}
           <div class="od-trk-foot">
             ${kdBadge}
             <span class="od-trk-updated">${synced}</span>

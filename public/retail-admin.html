@@ -411,6 +411,26 @@
   #order-drawer .od-trk-foot-actions { margin-left:auto; display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
   #order-drawer .od-trk-foot-actions .btn { padding:5px 11px; }
 
+  /* "In this parcel" strip — the contents of a multi-parcel shipment, listed
+     right under the waybill so ops can tell which parcel this card is. Sits
+     between the number row and the meta footer, shares the footer's inset look. */
+  #order-drawer .od-trk-contents { padding:11px 15px; border-top:1px solid var(--line-soft); background:var(--bg-app); }
+  #order-drawer .od-trk-contents .tc-head { display:flex; align-items:center; gap:7px; margin-bottom:8px;
+    font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3); }
+  #order-drawer .od-trk-contents .tc-head .cnt { font-family:var(--f-mono); letter-spacing:0; text-transform:none; color:var(--text-2); }
+  #order-drawer .od-trk-contents .tc-item { display:flex; align-items:center; gap:9px; padding:2px 0; font-size:12.5px; min-width:0; }
+  #order-drawer .od-trk-contents .tc-q { flex:none; min-width:30px; text-align:center; padding:0 6px;
+    font-family:var(--f-mono); font-size:11px; font-weight:600; color:var(--text-2);
+    background:var(--bg-pane); border:1px solid var(--line-soft); border-radius:4px; }
+  #order-drawer .od-trk-contents .tc-nm { min-width:0; color:var(--text-1); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #order-drawer .od-trk-items-more { margin-top:5px; }
+  #order-drawer .od-trk-items-more > summary { list-style:none; cursor:pointer; user-select:none;
+    display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-3); }
+  #order-drawer .od-trk-items-more > summary::-webkit-details-marker { display:none; }
+  #order-drawer .od-trk-items-more > summary:hover { color:var(--text-1); }
+  #order-drawer .od-trk-items-more[open] > summary .od-trk-chev { transform:rotate(90deg); }
+  #order-drawer .od-trk-items-rest { margin-top:6px; display:flex; flex-direction:column; gap:2px; }
+
   /* Change-waybill disclosure — closed by default when a waybill is attached. */
   #order-drawer .od-trk-edit { border-top:1px dashed var(--line-soft); margin-top:14px; padding-top:12px; }
   #order-drawer .od-trk-edit > summary { list-style:none; display:inline-flex; align-items:center; gap:7px;
