@@ -7186,6 +7186,12 @@
   #tab-dashboard, #tab-reports {
     --brass: var(--td-amber);
     --danger: var(--td-brick-ink);
+    /* Render the whole dashboard in Inter (like the mockup). The Inter remap in
+       the HTML <style> is scoped to orders/customers only; without this the
+       dashboard inherited the body's IBM Plex, which reads smaller + heavier and
+       never matched the mockup. Set on the section root so every child inherits. */
+    --f-sans: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    font-family: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
   }
 
   /* Tacet page ground — warm Paper in light, Ink in dark. Painted on <body>
