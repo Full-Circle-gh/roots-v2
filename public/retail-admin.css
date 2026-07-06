@@ -398,32 +398,56 @@
     padding: 10px 10px 14px;
     background: var(--bg-pane);
     border-right: 1px solid var(--line-soft);
-    position: fixed; top: 56px; left: 0; bottom: 0; width: 212px; z-index: 9;
+    position: fixed; top: 56px; left: 0; bottom: 0; width: 236px; z-index: 9;
     overflow-y: auto; overflow-x: hidden;
   }
   .tabs button {
+    position: relative;
     background: transparent;
-    color: var(--text-3);
+    color: var(--text-2);
     border: 0;
-    padding: 9px 11px;
+    padding: 11px 12px;
     /* Inter to match the Tacet reskin + the Fraunces wordmark; the rest of the
        legacy chrome is still IBM Plex Sans, but the rail is the loudest nav so
        it leads the type migration. */
     font-family: 'Inter', var(--f-sans);
-    font-size: 13px; font-weight: 500;
+    font-size: 14.5px; font-weight: 500;
     cursor: pointer;
-    border-radius: var(--r-md);
+    border-radius: var(--r-lg);
     transition: color var(--t-fast) ease, background var(--t-fast) ease, box-shadow var(--t-fast) ease;
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 13px;
     width: 100%; text-align: left;
     /* Never wrap a label to a second line — keep every rail row single-line. */
     white-space: nowrap;
   }
   .tabs button:hover { color: var(--text-1); background: var(--bg-elev-1); }
-  .tabs button.active { color: var(--text-1); background: var(--bg-elev-1); box-shadow: inset 3px 0 0 var(--brass); }
-  .tabs button svg { width: 16px; height: 16px; flex: none; }
+  /* Active row — cream fill + a short rounded brass mark on the left edge and a
+     heavier label (matches the Tacet mockup, replacing the old full-height
+     inset shadow). Popover children opt out of the mark below. */
+  .tabs button.active { color: var(--text-1); background: var(--bg-elev-1); font-weight: 600; box-shadow: none; }
+  .tabs button.active::before {
+    content: ""; position: absolute; left: 0; top: 9px; bottom: 9px;
+    width: 3px; border-radius: 0 3px 3px 0; background: var(--brass);
+  }
+  .tabs-popover button.active::before { content: none; }
+  .tabs button svg { width: 20px; height: 20px; flex: none; }
   /* Group/parent chevron sits at the far right of its row. */
   .tabs .tabs-chev { margin-left: auto; }
+
+  /* Section headers — RUN / SELL / SET UP. Quiet uppercase Inter labels; their
+     order in the rail is set by flex `order` on each header div (1 / 7 / 13). */
+  .nav-sec {
+    font-family: 'Inter', var(--f-sans);
+    font-size: 10.5px; font-weight: 600; letter-spacing: .13em;
+    text-transform: uppercase; color: var(--text-4);
+    padding: 16px 12px 6px; white-space: nowrap; user-select: none;
+  }
+  /* Automation marker — the scarce Dusk dot, same #6E67AF as the wordmark dot.
+     Sits at the far right of a rail row to flag "this page runs an automation". */
+  .nav-auto-dot {
+    flex: none; margin-left: auto;
+    width: 8px; height: 8px; border-radius: 50%; background: #6E67AF;
+  }
 
   /* ── Collapsible rail ──────────────────────────────────────────────
      A topbar toggle folds the rail down to an icon-only strip; the main
@@ -467,6 +491,11 @@
   }
   body.nav-collapsed .tabs .tabs-chev { display: none; }
   body.nav-collapsed .tabs-group.open > .tabs-popover { display: none; }
+  /* Collapsed: section headers shrink to a centered dot; the auto marker hides. */
+  body.nav-collapsed .nav-sec { text-align: center; padding: 14px 0 6px; }
+  body.nav-collapsed .nav-sec span { display: none; }
+  body.nav-collapsed .nav-sec::after { content: "·"; color: var(--text-4); font-size: 15px; }
+  body.nav-collapsed .nav-auto-dot { display: none; }
   /* The fold control lives inside .tabs, which is hidden wholesale on phones
      (the rail is replaced by the bottom nav), so no mobile rule is needed. */
 
@@ -527,7 +556,8 @@
   .tabs-group.open .tabs-popover { display: flex; animation: zen-pop-in 380ms cubic-bezier(.16, 1, .3, 1); }
   .tabs-popover button {
     width: 100%;
-    padding: 7px 12px 7px 38px;
+    padding: 7px 12px 7px 40px;
+    font-size: 13.5px;
     border-radius: var(--r-md);
     justify-content: flex-start;
     font-weight: 400;
@@ -616,7 +646,7 @@
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
      ═══════════════════════════════════════════════════════════════════ */
-  main { padding: var(--s6) var(--s6) var(--s7); max-width: 1440px; margin: 0 0 0 212px; }
+  main { padding: var(--s6) var(--s6) var(--s7); max-width: 1440px; margin: 0 0 0 236px; }
   section { display: none; }
   /* Embedded editors (Mini App / Product Page) — pin the iframe to the full
      viewport below the topbar (56px) + tab nav (~42px) so it uses the whole
@@ -627,7 +657,7 @@
      (9). The editor inside skips its own zoom when embedded, so scale isn't
      applied twice (see is-embedded in the editors). */
   #tab-mini-app-editor, #tab-product-editor {
-    position: fixed; top: 56px; left: 212px; right: 0; bottom: 0;
+    position: fixed; top: 56px; left: 236px; right: 0; bottom: 0;
     margin: 0; padding: 0; z-index: 1;
   }
   .tab-embed-editor .ed-frame {

@@ -808,22 +808,29 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.4 6.2L21 9l-5 4.4L17.5 21 12 17.3 6.5 21 8 13.4 3 9l6.6-.8z"/></svg>
     Open your store · 开店引导<span id="setup-nav-badge" class="tab-badge setup-badge"></span>
   </button>
+  <!-- Section headers — RUN / SELL / SET UP. Position is driven purely by flex
+       `order`, so they render between their groups even though they sit together
+       here in the DOM. Collapsed, each shrinks to a centered dot. -->
+  <div class="nav-sec" style="order:1"><span>Run · 运营</span></div>
+  <div class="nav-sec" style="order:7"><span>Sell · 销售</span></div>
+  <div class="nav-sec" style="order:13"><span>Set up · 设置</span></div>
+
   <!-- Daily-essentials always visible -->
-  <button data-tab="dashboard" class="active" style="order:1">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+  <button data-tab="dashboard" class="active" style="order:2">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.4"/><rect x="14" y="3" width="7" height="7" rx="1.4"/><rect x="3" y="14" width="7" height="7" rx="1.4"/><rect x="14" y="14" width="7" height="7" rx="1.4"/></svg>
     Dashboard · 概览
   </button>
   <!-- Reports — the historical analytics moved out of the Dashboard's
        deep-dive fold into their own page. Same order value as Dashboard:
        equal flex order falls back to DOM order, so this sits right below. -->
-  <button data-tab="reports" style="order:1" onclick="reportsInit()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M7 15l4-5 3 3 5-7"/></svg>
+  <button data-tab="reports" style="order:3" onclick="reportsInit()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5"/><path d="M4 15l4-4 3 3 5-6 4 5"/></svg>
     Reports · 报表
   </button>
   <!-- Orders → Invoices (sub) -->
-  <div class="tabs-group nav-parent" data-group="orders" style="order:2">
+  <div class="tabs-group nav-parent" data-group="orders" style="order:4">
     <button class="nav-parent-link" data-tab="orders">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l3 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7z"/><path d="M9 12h6M9 16h6"/></svg>
       Orders · 订单<span id="ordersTabBadge" class="tab-badge" aria-label="Unseen new orders"></span>
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
@@ -839,9 +846,9 @@
        channels folded in below (Meituan / gzgrocery / Eleme). The parent row
        opens #tab-sales (summary + per-channel cards); the children jump
        straight into a single channel's full admin. -->
-  <div class="tabs-group nav-parent" data-group="sales" style="order:3">
+  <div class="tabs-group nav-parent" data-group="sales" style="order:8">
     <button class="nav-parent-link" data-tab="sales" onclick="salesInit()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h2l1.5 11h10L20 8H7"/><circle cx="9" cy="20" r="1.3"/><circle cx="17" cy="20" r="1.3"/></svg>
       Sales · 销售
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
@@ -863,14 +870,14 @@
   <!-- Channels & Delivery is now merged into the Sales page (setup + operations
        in one screen); its standalone tab was removed. -->
 
-  <button data-tab="customers" style="order:4">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+  <button data-tab="customers" style="order:10">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 6a3 3 0 0 1 0 5"/><path d="M18 20c0-2.4-1-4.2-2.5-5"/></svg>
     Customers · 顾客
   </button>
   <!-- Products → Categories (sub) -->
-  <div class="tabs-group nav-parent" data-group="products" style="order:5">
+  <div class="tabs-group nav-parent" data-group="products" style="order:9">
     <button class="nav-parent-link" data-tab="products">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M8 7h8"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l8-4 8 4-8 4-8-4z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></svg>
       Products · 产品
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
@@ -890,9 +897,9 @@
        /cms); its children are the mini-app content surfaces folded in from the
        old "Content" dropdown. The Product Page Editor swaps in under this same
        tab via showProductSection / the message handler. -->
-  <div class="tabs-group nav-parent" data-group="editor" style="order:8">
+  <div class="tabs-group nav-parent" data-group="editor" style="order:14">
     <button class="nav-parent-link" data-tab="mini-app-editor">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l3-.7L18.5 7.8a2 2 0 0 0-2.8-2.8L4.2 16.5 4 20z"/><path d="M14.5 6.5l3 3"/></svg>
       Editor · 编辑器
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
@@ -921,9 +928,9 @@
   </div>
 
   <!-- Marketing — promos + retention -->
-  <div class="tabs-group" data-group="marketing" style="order:9">
+  <div class="tabs-group" data-group="marketing" style="order:11">
     <button type="button" class="tabs-group-trigger">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6l10 5V4L4 9z"/><path d="M14 7l6-3v16l-6-3"/></svg>
       Marketing · 营销
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
@@ -962,9 +969,9 @@
   <!-- Loyalty & Wallet — the points engine + store credit. Membership tiers,
        the points rules they depend on, the leaderboard that ranks members,
        voting rewards, and wallet top-up all live together here. -->
-  <div class="tabs-group" data-group="loyalty" style="order:10">
+  <div class="tabs-group" data-group="loyalty" style="order:12">
     <button type="button" class="tabs-group-trigger">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M9 13l-1.5 8L12 18l4.5 3L15 13"/></svg>
       Loyalty &amp; Wallet · 会员与钱包
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
@@ -995,24 +1002,25 @@
   <!-- Inbox moved to the topbar (next to Search) — see #tbInbox. Its sections
        (#tab-reviews / #tab-feedback) are reached from that dropdown via goTab(). -->
 
-  <button data-tab="delivery" style="order:7">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+  <button data-tab="delivery" style="order:6">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2-6h8l3 4h4v5h-2"/><circle cx="7.5" cy="17" r="2"/><circle cx="16.5" cy="17" r="2"/></svg>
     Delivery · 配送
+    <span class="nav-auto-dot" title="Runs an automation · 含自动化" aria-hidden="true"></span>
   </button>
 
   <!-- Quick Stock moved into Settings → Operations (see #qs-home). No top-level tab. -->
 
 
-  <button data-tab="activity" onclick="actAdminInit()" style="order:6">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 4-6"/></svg>
+  <button data-tab="activity" onclick="actAdminInit()" style="order:5">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9l4 3 4-8 4 6 4-2v11"/></svg>
     Activity · 库存流水
   </button>
 
   <!-- The live-poll dot + sound toggle moved to the topbar cluster (#tb-cluster);
        Settings now sits in the rail list where Inbox used to be (order:11). -->
 
-  <button data-tab="config" class="tabs-settings" title="Settings · 设置" style="order:11">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  <button data-tab="config" class="tabs-settings" title="Settings · 设置" style="order:15">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
     Settings · 设置
   </button>
 
