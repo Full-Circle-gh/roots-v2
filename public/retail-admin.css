@@ -128,10 +128,9 @@
   :root[data-theme="light"] select {
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23767369' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
   }
-  /* Brand mark is an ensō on an Ink backplate in both themes — keep it
-     Ink so it reads the same on Deeper Paper as on the dark canvas. */
+  /* Tacet mark has no backplate — it inherits --text-1 (ink on light). */
   :root[data-theme="light"] .brand-mark {
-    background: #12161A;
+    background: none;
     box-shadow: none;
   }
   /* Tier / status pills used a translucent overlay tuned for the dark bg.
@@ -199,20 +198,17 @@
     display: flex; align-items: center; gap: 10px;
     font-size: 13px; color: var(--text-1);
   }
-  /* Full Circle mark — ensō on a quiet Ink backplate (rings stay
-     Brass + Tea; main stroke is Paper so it reads in both themes). */
+  /* Tacet mark — the bare settling-waveform (no backplate); stroke follows
+     the text colour so it reads ink on paper / paper on ink. Dusk dot fixed. */
   .brand-mark {
-    width: 26px; height: 26px; border-radius: var(--r-md);
-    background: #12161A;
-    border: 1px solid var(--line-strong);
-    display: flex; align-items: center; justify-content: center;
-    color: #E8E5DC;
-    box-shadow: none;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-1);
+    background: none; border: 0; box-shadow: none;
   }
-  .brand-mark svg { width: 18px; height: 18px; display: block; }
+  .brand-mark svg { width: 46px; height: 15px; display: block; }
   .brand .brand-name {
-    font-family: var(--f-sans); font-weight: 700; font-size: 12px;
-    letter-spacing: .20em; text-transform: uppercase; color: var(--text-1);
+    font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 17px;
+    letter-spacing: .20em; text-transform: none; color: var(--text-1);
   }
   .brand .divider {
     width: auto; height: auto; background: none; margin: 0 1px;
