@@ -6149,6 +6149,75 @@ function tickAutoDispatchQingyun() {
 const _autoDispatchSweep = setInterval(tickAutoDispatchQingyun, 60 * 1000);
 if (_autoDispatchSweep.unref) _autoDispatchSweep.unref();
 
+// ─── Auto-deliver on the Qingyun rider's real drop-off ──────────────────────
+// Companion to the auto-dispatch sweep. The auto-deliver-local-eta sweep above
+// flips an order to "delivered" once its promised ETA has passed — a TIMER, not
+// the rider's actual drop-off. The qingyun-daemon now reconciles completed orders
+// (order_status 50 已送达) back into delivery_jobs, so this sweep flips the roots
+// order to "delivered" the moment the courier actually reports the drop-off.
+// Same side effects as the manual "Mark delivered" (delivered_at, per-parcel
+// mirror, customer notification / review prompt). Toggle:
+// storefront_config `delivery.qingyunAutoDeliver` (default on).
+function autoDeliverQingyunForTenant() {
+  if (cfgValue('delivery.qingyunAutoDeliver', true) !== true) return 0;   // disabled
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT o.id AS id, o.status AS status
+         FROM retail_orders o
+         JOIN delivery_jobs j ON j.retail_order_id = o.id
+        WHERE o.status IN ('paid','preparing','dispatched')
+          AND j.order_status >= 50`
+    ).all();
+  } catch (e) {
+    if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
+    throw e;
+  }
+  let fired = 0;
+  for (const o of rows) {
+    // Atomic claim: only the first tick that catches the order flips + notifies.
+    const claim = tdb().prepare(
+      `UPDATE retail_orders
+          SET status = 'delivered',
+              delivered_at  = CURRENT_TIMESTAMP,
+              dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
+              updated_at    = CURRENT_TIMESTAMP
+        WHERE id = ? AND status IN ('paid','preparing','dispatched')`
+    ).run(o.id);
+    if (claim.changes === 0) continue;
+    try {
+      tdb().prepare(
+        `UPDATE retail_shipments
+            SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
+                delivered_at  = COALESCE(delivered_at,  CURRENT_TIMESTAMP),
+                updated_at    = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'`
+      ).run(o.id);
+    } catch (e) { console.warn('[auto-deliver-qy] shipment mirror', o.id, e.message); }
+    try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: o.status, to: 'delivered', reason: 'qingyun_dropoff' }, null); } catch {}
+    try { notifyOrderStatusChange(o.id, 'delivered'); } catch (e) { console.warn('[auto-deliver-qy] notify', o.id, e.message); }
+    fired++;
+  }
+  return fired;
+}
+
+function tickAutoDeliverQingyun() {
+  let tenants;
+  try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
+  catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
+  const run = (tid) => {
+    try {
+      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const total = tenantAls.run(tdb_, () => autoDeliverQingyunForTenant());
+      if (total > 0) console.log(`[auto-deliver-qy] tenant=${tid ?? 'main'} delivered=${total}`);
+    } catch (e) { console.warn('[auto-deliver-qy]', tid, e.message); }
+  };
+  if (!tenants) run(null);
+  else for (const t of tenants) run(t.id);
+}
+const _autoDeliverQySweep = setInterval(tickAutoDeliverQingyun, 60 * 1000);
+if (_autoDeliverQySweep.unref) _autoDeliverQySweep.unref();
+
 // ─── WeChat virtual-shipping retry sweeper ──────────────────────────────────
 // The event-driven upload (notifyOrderStatusChange → uploadWeChatVirtualShipping)
 // is one-shot and best-effort: a transient token/network blip at the exact

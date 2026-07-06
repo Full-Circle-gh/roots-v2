@@ -169,6 +169,37 @@ function matchRetailOrderId(d) {
   return null;
 }
 
+// Build the delivery_jobs upsert row from a parsed order (+ optional live track).
+// track is null for a completion reconcile (a delivered order has no live GPS); the
+// upsert COALESCEs carrier/rider/waybill/etc, so a track-less row never wipes them.
+function buildDeliveryRow(d, track, storeCode, retailOrderId) {
+  return {
+    qingyun_order_id: d.qingyunOrderId,
+    retail_order_id: retailOrderId,
+    store_code: storeCode,
+    channel_name: d.channelName || null,
+    carrier_name: d.carrierName || null,
+    waybill_id: track ? (track.waybillId || null) : null,
+    delivery_id: d.deliveryId || (track && track.deliveryId) || null,
+    rider_name: d.riderName || null,
+    rider_phone: d.riderPhone || null,
+    order_status: track ? (track.orderStatus ?? d.orderStatus) : d.orderStatus,
+    delivery_status: track ? (track.deliveryStatus ?? d.deliveryStatus) : d.deliveryStatus,
+    rider_lat: track ? track.riderLat : null,
+    rider_lng: track ? track.riderLng : null,
+    rider_to_cust_m: track ? track.riderToCustM : null,
+    eta_seconds: track ? track.etaSeconds : null,
+    recipient_name: d.recipientName || null,
+    recipient_phone: d.recipientPhone || null,
+    recipient_addr: d.recipientAddr || null,
+    recipient_lat: d.recipientLat ?? null,
+    recipient_lng: d.recipientLng ?? null,
+    expected_delivery_at: d.expectedDeliveredTime || null,
+    raw_order: JSON.stringify(d.raw).slice(0, 20000),
+    raw_track: track ? JSON.stringify(track.raw).slice(0, 20000) : null,
+  };
+}
+
 const upsert = db.prepare(`
   INSERT INTO delivery_jobs
     (qingyun_order_id, retail_order_id, store_code, channel_name, carrier_name, waybill_id,
@@ -464,31 +495,7 @@ async function pollStore(storeCode) {
         catch (e) { log(storeCode, `getRiderTrack ${d.qingyunOrderId} error: ${e.message}`); }
       }
       const retailOrderId = matchRetailOrderId(d);
-      upsert.run({
-        qingyun_order_id: d.qingyunOrderId,
-        retail_order_id: retailOrderId,
-        store_code: storeCode,
-        channel_name: d.channelName || null,
-        carrier_name: d.carrierName || (track && null) || null,
-        waybill_id: track ? (track.waybillId || null) : null,
-        delivery_id: d.deliveryId || (track && track.deliveryId) || null,
-        rider_name: d.riderName || null,
-        rider_phone: d.riderPhone || null,
-        order_status: track ? (track.orderStatus ?? d.orderStatus) : d.orderStatus,
-        delivery_status: track ? (track.deliveryStatus ?? d.deliveryStatus) : d.deliveryStatus,
-        rider_lat: track ? track.riderLat : null,
-        rider_lng: track ? track.riderLng : null,
-        rider_to_cust_m: track ? track.riderToCustM : null,
-        eta_seconds: track ? track.etaSeconds : null,
-        recipient_name: d.recipientName || null,
-        recipient_phone: d.recipientPhone || null,
-        recipient_addr: d.recipientAddr || null,
-        recipient_lat: d.recipientLat ?? null,
-        recipient_lng: d.recipientLng ?? null,
-        expected_delivery_at: d.expectedDeliveredTime || null,
-        raw_order: JSON.stringify(d.raw).slice(0, 20000),
-        raw_track: track ? JSON.stringify(track.raw).slice(0, 20000) : null,
-      });
+      upsert.run(buildDeliveryRow(d, track, storeCode, retailOrderId));
       // Auto-fill the customer-facing "Estimated arrival" from the courier's
       // promised time (unless an operator set it by hand).
       stampLocalEta(retailOrderId, d, track);
@@ -496,6 +503,30 @@ async function pollStore(storeCode) {
     }
     if (tracked) logSync(storeCode, 'poll', 'ok', { tracked });
     log(storeCode, `tracked ${tracked} active delivery(ies)`);
+
+    // ── Completion reconcile ────────────────────────────────────────────────
+    // A delivered order (orderStatus 50 已送达) drops off the active (20/30) tabs,
+    // so its delivery_jobs row would otherwise freeze at its last in-flight status
+    // and the roots order would only auto-deliver off the ETA timer — never off the
+    // rider's REAL drop-off. Poll the recent 完成 tab and, for orders we ALREADY
+    // track (never import history), stamp the final delivered state so the server
+    // auto-deliver sweep flips the roots order on the true drop-off signal.
+    try {
+      const done = await br.getCompletedDeliveries();
+      let reconciled = 0;
+      for (const d of done) {
+        if (!d.qingyunOrderId) continue;
+        const existing = db.prepare(
+          'SELECT retail_order_id, order_status FROM delivery_jobs WHERE qingyun_order_id = ?'
+        ).get(d.qingyunOrderId);
+        if (!existing) continue;                                  // untracked → skip
+        if ((existing.order_status ?? 0) >= DELIVERED_STATUS) continue; // already delivered
+        const retailOrderId = existing.retail_order_id || matchRetailOrderId(d);
+        upsert.run(buildDeliveryRow(d, null, storeCode, retailOrderId));
+        reconciled++;
+      }
+      if (reconciled) { logSync(storeCode, 'complete', 'ok', { reconciled }); log(storeCode, `reconciled ${reconciled} delivered order(s)`); }
+    } catch (e) { log(storeCode, `completion reconcile error: ${e.message}`); }
   } catch (err) {
     log(storeCode, `pollStore error: ${err.message}`);
     logSync(storeCode, 'poll', 'error', null, err.message);
