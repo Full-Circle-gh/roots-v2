@@ -466,17 +466,69 @@
     }).catch(function(){ mount(false); });
   }).catch(function(){});
   function mount(hidden){
-    var btn=el('button','position:fixed;right:18px;bottom:84px;z-index:99998;background:'+AC+';color:'+FG+';border:0;border-radius:999px;padding:11px 16px;font:600 13px/1 "IBM Plex Sans",system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:pointer;visibility:visible','Support · 客服');
+    var btn=el('button','position:fixed;right:18px;bottom:84px;z-index:99998;background:'+AC+';color:'+FG+';border:0;border-radius:999px;padding:11px 16px;font:600 13px/1 "IBM Plex Sans",system-ui,sans-serif;box-shadow:0 6px 18px rgba(0,0,0,.25);cursor:grab;visibility:visible;touch-action:none;user-select:none;-webkit-user-select:none','Support · 客服');
     var panel=el('div','position:fixed;right:18px;bottom:84px;z-index:99999;width:340px;max-width:calc(100vw - 36px);max-height:72vh;background:'+PANEL+';color:'+FG+';border:1px solid '+LINE+';border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.3);display:none;flex-direction:column;overflow:hidden;font-family:"IBM Plex Sans","IBM Plex Sans SC",system-ui,sans-serif');
     document.body.appendChild(btn); document.body.appendChild(panel);
     if(hidden){ btn.style.display='none'; }
-    // Let the Settings toggle show/hide the launcher live, without a reload.
+    // Let the Settings toggle AND the in-panel "Hide" link show/hide the
+    // launcher live, without a reload.
     window.__fcSupportButton={ setHidden:function(h){ btn.style.display=h?'none':'block'; if(h)panel.style.display='none'; } };
-    btn.addEventListener('click',function(){ var open=panel.style.display!=='none'; panel.style.display=open?'none':'flex'; btn.style.display=open?'block':'none'; if(!open) list(); });
+
+    // ── Drag-to-move + remembered position ──────────────────────────────
+    // The launcher isn't pinned to one corner: operators can drag it anywhere,
+    // it snaps to the nearest side, and it remembers where (per browser, in
+    // localStorage — position is a personal preference, not store policy). This
+    // keeps it clear of whatever sits under the bottom-right on a given screen.
+    var POSK='ra:supportPos';
+    function navClear(){ return window.innerWidth<=720 ? 76 : 16; } // clear the mobile tab bar
+    function loadPos(){ try{ return JSON.parse(localStorage.getItem(POSK)||'null'); }catch(e){ return null; } }
+    function savePos(p){ try{ localStorage.setItem(POSK,JSON.stringify(p)); }catch(e){} }
+    function applyPos(p){
+      if(!p){ btn.style.left=''; btn.style.top=''; btn.style.right='18px'; btn.style.bottom='84px'; return; }
+      var h=btn.offsetHeight||40, m=16;
+      var top=Math.max(m, Math.min(p.top, window.innerHeight-h-navClear()));
+      btn.style.top=top+'px'; btn.style.bottom='';
+      if(p.side==='left'){ btn.style.left=m+'px'; btn.style.right=''; }
+      else { btn.style.right=m+'px'; btn.style.left=''; }
+    }
+    applyPos(loadPos());
+    window.addEventListener('resize',function(){ applyPos(loadPos()); });
+    var dragging=false, moved=false, sx=0, sy=0, oLeft=0, oTop=0;
+    btn.addEventListener('pointerdown',function(e){
+      dragging=true; moved=false; sx=e.clientX; sy=e.clientY;
+      var r=btn.getBoundingClientRect(); oLeft=r.left; oTop=r.top;
+      try{ btn.setPointerCapture(e.pointerId); }catch(_){}
+    });
+    btn.addEventListener('pointermove',function(e){
+      if(!dragging) return;
+      var dx=e.clientX-sx, dy=e.clientY-sy;
+      if(!moved && Math.abs(dx)+Math.abs(dy)>5){ moved=true; btn.style.cursor='grabbing'; }
+      if(moved){ btn.style.left=(oLeft+dx)+'px'; btn.style.right=''; btn.style.top=(oTop+dy)+'px'; btn.style.bottom=''; e.preventDefault(); }
+    });
+    btn.addEventListener('pointerup',function(e){
+      if(!dragging) return; dragging=false; btn.style.cursor='grab';
+      try{ btn.releasePointerCapture(e.pointerId); }catch(_){}
+      if(moved){ var r=btn.getBoundingClientRect(); var side=(r.left+r.width/2)<window.innerWidth/2?'left':'right'; var p={side:side,top:r.top}; savePos(p); applyPos(p); }
+    });
+
+    // Anchor the panel to wherever the button currently sits: same side, and
+    // opening upward when the button is in the lower half of the screen.
+    function placePanel(){
+      var r=btn.getBoundingClientRect();
+      if(r.left+r.width/2 < window.innerWidth/2){ panel.style.left=Math.round(r.left)+'px'; panel.style.right=''; }
+      else { panel.style.right=Math.round(window.innerWidth-r.right)+'px'; panel.style.left=''; }
+      if(r.top > window.innerHeight/2){ panel.style.bottom=Math.round(window.innerHeight-r.top+8)+'px'; panel.style.top=''; }
+      else { panel.style.top=Math.round(r.bottom+8)+'px'; panel.style.bottom=''; }
+    }
+
+    // A drag ends in a click event too — swallow that one so a move never also
+    // opens the panel. A genuine click (no move) falls through and opens it.
+    btn.addEventListener('click',function(){ if(moved){ moved=false; return; } placePanel(); var open=panel.style.display!=='none'; panel.style.display=open?'none':'flex'; btn.style.display=open?'block':'none'; if(!open) list(); });
     function head(title,back){ return '<div style="display:flex;align-items:center;gap:8px;padding:13px 14px;border-bottom:1px solid '+LINE+'">'+(back?'<button id="sp-back" style="background:0;border:0;font-size:16px;cursor:pointer;color:'+FG+'">‹</button>':'')+'<strong style="flex:1;font-size:14px">'+title+'</strong><button id="sp-close" style="background:0;border:0;font-size:20px;line-height:1;cursor:pointer;color:#888">×</button></div>'; }
     function wire(){ var c=panel.querySelector('#sp-close'); if(c)c.addEventListener('click',function(){panel.style.display='none';btn.style.display='block';}); var b=panel.querySelector('#sp-back'); if(b)b.addEventListener('click',list); }
     function list(){
-      panel.innerHTML=head('Support · 客服',false)+'<div id="sp-body" style="padding:12px 14px;overflow:auto"><div style="color:#888;font-size:13px">Loading… · 加载中…</div></div>'; wire();
+      panel.innerHTML=head('Support · 客服',false)+'<div id="sp-body" style="padding:12px 14px;overflow:auto;flex:1"><div style="color:#888;font-size:13px">Loading… · 加载中…</div></div>'+'<div style="padding:9px 14px;border-top:1px solid '+LINE+';display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="color:#aaa;font-size:11px;line-height:1.35">Drag the button to move it. Turn it back on in Settings › Operations. · 可拖动移动;在设置›运营重新开启。</span><button id="sp-hide" style="background:0;border:0;color:#888;font-size:12px;cursor:pointer;white-space:nowrap">Hide · 隐藏</button></div>'; wire();
+      var hb=panel.querySelector('#sp-hide'); if(hb)hb.addEventListener('click',function(){ fetch('/api/retail-admin/config',{method:'PUT',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({'support.hidden':true})}).catch(function(){}); if(window.__fcSupportButton)window.__fcSupportButton.setHidden(true); });
       fetch('/api/backend/support',{credentials:'same-origin'}).then(function(r){return r.json();}).then(function(j){
         var body=panel.querySelector('#sp-body'); if(!body) return; var h='<button id="sp-new" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:10px;font:600 13px/1 inherit;cursor:pointer;margin-bottom:12px">+ New request · 新建</button>';
         var ts=(j&&j.tickets)||[];
