@@ -5994,7 +5994,18 @@ function autoDeliverLocalEtaForTenant() {
                 ORDER BY sh.id ASC LIMIT 1) AS local_eta
          FROM retail_orders o
         WHERE o.fulfillment_type = 'delivery'
-          AND o.status IN ('paid','preparing','dispatched')`
+          AND o.status IN ('paid','preparing','dispatched')
+          -- Defer to the real 青云 drop-off signal: if a Qingyun rider is being
+          -- tracked live (delivery_jobs in-flight, updated recently), DON'T deliver
+          -- off the ETA timer — the auto-deliver-qy sweep will flip it on the actual
+          -- drop-off (order_status 50). The ETA stays a fallback only, for orders
+          -- with no live tracking (tracking lost/stale > 30min, or non-Qingyun).
+          AND NOT EXISTS (
+                SELECT 1 FROM delivery_jobs j
+                 WHERE j.retail_order_id = o.id
+                   AND j.order_status IS NOT NULL
+                   AND j.order_status < 50
+                   AND j.updated_at > datetime('now','-30 minutes'))`
     ).all();
   } catch (e) {
     if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
