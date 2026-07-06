@@ -442,13 +442,6 @@
     text-transform: uppercase; color: var(--text-4);
     padding: 16px 12px 6px; white-space: nowrap; user-select: none;
   }
-  /* Automation marker — the scarce Dusk dot, same #6E67AF as the wordmark dot.
-     Sits at the far right of a rail row to flag "this page runs an automation". */
-  .nav-auto-dot {
-    flex: none; margin-left: auto;
-    width: 8px; height: 8px; border-radius: 50%; background: #6E67AF;
-  }
-
   /* ── Collapsible rail ──────────────────────────────────────────────
      A topbar toggle folds the rail down to an icon-only strip; the main
      content reflows to fill the reclaimed width. State persists in
@@ -495,7 +488,6 @@
   body.nav-collapsed .nav-sec { text-align: center; padding: 14px 0 6px; }
   body.nav-collapsed .nav-sec span { display: none; }
   body.nav-collapsed .nav-sec::after { content: "·"; color: var(--text-4); font-size: 15px; }
-  body.nav-collapsed .nav-auto-dot { display: none; }
   /* The fold control lives inside .tabs, which is hidden wholesale on phones
      (the rail is replaced by the bottom nav), so no mobile rule is needed. */
 
@@ -7409,6 +7401,13 @@
   .td-pill-ok    { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
   .td-ic-ok { color: var(--td-sage-ink); }
   .td-attn-clear { font-size: 14px; color: var(--td-text2); padding: 2px 0; }
+  /* All-clear roll-up — one calm card of the watched channels with nothing
+     waiting, a sage tick per line, value right-aligned like an alert row. */
+  .td-attn-ok-row { display: flex; align-items: baseline; gap: 9px; font-size: 14px; color: var(--td-text); padding: 4px 0; }
+  .td-attn-ok-row .tick { flex: none; color: var(--td-sage-ink); display: inline-flex; position: relative; top: 2px; }
+  .td-attn-ok-row .tick svg { display: block; }
+  .td-attn-ok-row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-attn-ok-row .val { margin-left: auto; flex: none; font-size: 13px; color: var(--td-text2); }
   .td-attn-rows { display: grid; gap: 4px; }
   .td-attn-row {
     display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;

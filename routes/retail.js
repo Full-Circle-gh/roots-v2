@@ -16401,6 +16401,42 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   res.json({ success: true, data: out });
 });
 
+// Delivery "needs a human" count — feeds the attention dot on the Delivery rail
+// tab (retired from a static "runs an automation" marker to a live signal). Two
+// genuinely actionable problems, both meaning the same-city rider automation
+// can't finish on its own:
+//   • error rows in the Qingyun push queue — a paid delivery order the auto-push
+//     tried to hand to a rider but couldn't; an operator must dispatch by hand.
+//   • a store set up on Qingyun but currently disconnected WHILE auto-push is on —
+//     new delivery orders would silently never reach a rider until someone signs
+//     the session back in (ops-screen re-login).
+// Terminal/idle states never count, so a healthy delivery op reads zero and the
+// dot stays dark. Tolerates missing tables (tenant never set up Qingyun) → 0.
+router.get('/api/retail-admin/delivery-attention', requireRetailAdmin, (req, res) => {
+  let failedPushes = 0;
+  const disconnected = [];
+  try {
+    failedPushes = tdb().prepare(
+      "SELECT COUNT(*) AS n FROM qingyun_push_queue WHERE status = 'error'"
+    ).get().n;
+  } catch (_) { /* table missing pre-migration — treat as none */ }
+
+  const autoPushOn = cfgValue('delivery.qingyunAutoPush', false) === true;
+  if (autoPushOn) {
+    try {
+      const now = Date.now();
+      for (const r of tdb().prepare('SELECT store_code, logged_in, updated_at FROM qingyun_status').all()) {
+        const fresh = r.updated_at &&
+          (now - Date.parse(String(r.updated_at).replace(' ', 'T') + 'Z')) < QY_FRESH_MS;
+        if (!(fresh && r.logged_in)) disconnected.push(r.store_code);
+      }
+    } catch (_) { /* table missing — no stores to check */ }
+  }
+
+  const needsAction = failedPushes + disconnected.length;
+  res.json({ success: true, data: { needsAction, failedPushes, disconnected, autoPushOn } });
+});
+
 // Per-channel order counts for the combined orders view's channel chips.
 // Deliberately orthogonal to the status filter (channel is a separate axis —
 // a Meituan order is always 'paid', so folding status in would zero its chip

@@ -1241,6 +1241,7 @@ const TD_ATTN_ICON = {
   truck: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>',
   refund:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
   invoice:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>',
+  check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>',
 };
 function tdAttnCard(tone, icon, title, count, rowsHtml, moreText, action, headerCtrl) {
   return `<section class="card td-card td-attn-card is-${tone}">
@@ -1248,7 +1249,7 @@ function tdAttnCard(tone, icon, title, count, rowsHtml, moreText, action, header
       <span class="td-attn-ic td-ic-${tone}" aria-hidden="true">${TD_ATTN_ICON[icon] || ''}</span>
       <h3>${title}</h3>
       ${headerCtrl || ''}
-      <span class="td-pill td-pill-${tone}">${count}</span>
+      ${count === '' ? '' : `<span class="td-pill td-pill-${tone}">${count}</span>`}
     </div>
     <div class="td-attn-rows">${rowsHtml}</div>
     ${moreText ? `<div class="td-attn-more">${moreText}</div>` : ''}
@@ -1308,9 +1309,9 @@ function tdAttnRender() {
       storeSel));
   }
 
-  // Delivery — always shown (per request) so it's a permanent fixture. When the
-  // carrier has flagged a problem it's the brick "needs a call" card; when clear
-  // it's a calm sage all-clear so the operator can see deliveries are fine.
+  // Delivery — the brick "needs a call" card only when the carrier has flagged a
+  // problem. When it's clear there's no card here; the calm channels are folded
+  // into the single "All clear" roll-up at the end instead of one card each.
   const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
   if (da.count) {
     const reasonOf = it => {
@@ -1330,9 +1331,6 @@ function tdAttnRender() {
       ? `<button type="button" class="td-attn-go" onclick="openOrder(${Number(first.id)})">${cuT('Open the order', '打开订单')}</button>`
       : '';
     cards.push(tdAttnCard('brick', 'truck', cuT('Delivery needs a call', '配送需要跟进'), da.count, rows, more, action));
-  } else {
-    cards.push(tdAttnCard('ok', 'truck', cuT('Delivery', '配送'), 0,
-      `<div class="td-attn-clear">${cuT('All deliveries on track', '配送一切正常')}</div>`, ''));
   }
 
   // Refund queue — pending / reviewing requests.
@@ -1361,6 +1359,26 @@ function tdAttnRender() {
     cards.push(tdAttnCard('amber', 'invoice', cuT('Invoices to issue', '待开发票'), inv.count, rows,
       inv.count > 4 ? cuT(`and ${inv.count - 4} more`, `另有 ${inv.count - 4} 张`) : '',
       `<button type="button" class="td-attn-go" onclick="dashOpenInvoices()">${cuT('Open in Orders', '前往订单')}</button>`));
+  }
+
+  // All clear — one calm roll-up of the watched channels that have nothing
+  // waiting, folded into a single card rather than one "all good" card each.
+  // It only appears beside a real alert (cards.length): when EVERYTHING is
+  // clear there are no cards at all, and the full-width "Nothing needs you"
+  // state below takes over instead — so the roll-up never competes with it.
+  // The channels listed are exactly the alert channels that raise a card here,
+  // so each one shows either as an alert card or as a tick — never both.
+  if (cards.length) {
+    const clearTick = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
+    const clear = [];
+    const clearRow = (nm, val) =>
+      `<div class="td-attn-ok-row"><span class="tick" aria-hidden="true">${clearTick}</span><span class="nm">${nm}</span><span class="val">${val}</span></div>`;
+    if (!da.count)  clear.push(clearRow(cuT('Delivery', '配送'), cuT('on track', '一切正常')));
+    if (!rf.count)  clear.push(clearRow(cuT('Refunds', '退款'), cuT('none waiting', '无待处理')));
+    if (!inv.count) clear.push(clearRow(cuT('Invoices', '发票'), cuT('none to issue', '无需开具')));
+    if (clear.length) {
+      cards.push(tdAttnCard('ok', 'check', cuT('All clear', '一切正常'), '', clear.join(''), ''));
+    }
   }
 
   if (!cards.length) {
