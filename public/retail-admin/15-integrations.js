@@ -1018,18 +1018,18 @@
     }
 
     box.style.display = '';
-    box.innerHTML = `<div class="ig-wiz">
+    box.innerHTML = `<div class="ig-wiz mc-wiz">
       <div class="mc-head">
         <div>
-          <strong style="font-size:16px">${cuT('Set up your Mini App', '设置你的小程序')}</strong>
+          <strong class="mc-title">${cuT('Set up your Mini App', '设置你的小程序')}</strong>
           <div class="mc-subtitle">${cuT('Three short steps. Skip any of them and come back later.', '三个小步骤。任何一步都可以先跳过，之后再回来。')}</div>
         </div>
-        <button class="btn btn-sm" onclick="igLocClose()">✕</button>
+        <button class="btn btn-sm btn-icon" onclick="igLocClose()" aria-label="${cuT('Close', '关闭')}">${MC_SVG.x}</button>
       </div>
       <div class="mw-steps">${rail}</div>
       ${body}
       <div class="mc-foot">
-        <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px;padding:0" onclick="igHelp('wechat_miniapp')">? ${cuT('Get help', '获取帮助')}</button>
+        <button class="helplink" onclick="igHelp('wechat_miniapp')">${MC_SVG.info}<span>${cuT('Get help', '获取帮助')}</span></button>
         <span class="ig-spacer"></span>
         <span id="mw_msg" style="font-size:12.5px;max-width:420px"></span>
         <button type="button" class="btn" id="mw_finish_anyway" style="display:none" onclick="igMwFinish(false, true)">${cuT('Finish anyway', '仍然完成')}</button>
@@ -1152,7 +1152,7 @@
     }
     const pending = paySkipped || unverified;
     box.style.display = '';
-    box.innerHTML = `<div class="ig-wiz">
+    box.innerHTML = `<div class="ig-wiz mc-wiz">
       <div class="mw-done">
         <div class="big${pending ? ' later' : ''}">${pending ? MC_SVG.clock : MC_SVG.tick}</div>
         <strong style="font-size:16px">${pending ? cuT('Saved — a couple of things left for later', '已保存 — 还有几项留到之后') : cuT('Your mini app is connected', '你的小程序已接入')}</strong>
@@ -1313,13 +1313,10 @@
         <button class="btn btn-sm" onclick="salesGo('config')">${cuT('Set up', '设置')}</button>
       </div>`;
 
-    box.innerHTML = `<div class="ig-wiz">
+    box.innerHTML = `<div class="ig-wiz mc-wiz">
       <div class="mc-head">
-        <div>
-          <strong style="font-size:16px">${cuT('Web store configuration', '网页商店配置')}</strong>
-          <div class="mc-subtitle">${cuT('Your browser storefront — the address customers visit, how they sign in, and how they pay.', '浏览器版商店 — 顾客访问的网址、登录与付款方式。')}</div>
-        </div>
-        <button class="btn btn-sm" onclick="igLocClose()">✕</button>
+        <strong class="mc-title">${cuT('Web store configuration', '网页商店配置')}</strong>
+        <button class="btn btn-sm btn-icon" onclick="igLocClose()" aria-label="${cuT('Close', '关闭')}">${MC_SVG.x}</button>
       </div>
       <div class="mc-chips">
         ${chip(!!primary, 'Store online', '商店在线')}
@@ -1328,26 +1325,23 @@
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.globe}</span><b>${cuT('Shop address', '商店网址')}</b></div>
-        <div class="mc-purpose">${cuT('Where customers reach your store. A free address is included — add your own domain any time.', '顾客访问商店的网址。已含免费网址,可随时接入自有域名。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.globe}</span><b>${cuT('Shop address', '商店网址')}</b>${mcInfo('Where customers reach your store. A free address is included — add your own domain any time.', '顾客访问商店的网址。已含免费网址,可随时接入自有域名。')}</div>
         ${addrHtml}
         ${customHtml}
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.user}</span><b>${cuT('Customer sign-in', '顾客登录')}</b></div>
-        <div class="mc-purpose">${cuT('How shoppers sign in on the web. Turn on the ones you want — nothing to set up.', '顾客在网页端的登录方式。按需开启即可,无需配置。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.user}</span><b>${cuT('Customer sign-in', '顾客登录')}</b>${mcInfo('How shoppers sign in on the web. Turn on the ones you want — nothing to set up.', '顾客在网页端的登录方式。按需开启即可,无需配置。')}</div>
         ${methodRows}
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Payments', '收款')}</b></div>
-        <div class="mc-purpose">${cuT('How customers pay on the web. WeChat Pay uses the merchant setup from your Mini App.', '顾客在网页端的付款方式。微信支付沿用小程序的商户配置。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Payments', '收款')}</b>${mcInfo('How customers pay on the web. WeChat Pay uses the merchant setup from your Mini App.', '顾客在网页端的付款方式。微信支付沿用小程序的商户配置。')}</div>
         ${payHtml}
       </div>
 
       <div class="mc-foot">
-        <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px;padding:0" onclick="igHelp('web')">? ${cuT('Get help', '获取帮助')}</button>
+        <button class="helplink" onclick="igHelp('web')">${MC_SVG.info}<span>${cuT('Get help', '获取帮助')}</span></button>
         <span class="ig-spacer"></span>
         <span id="wc_result" style="font-size:12.5px"></span>
         <button class="btn" onclick="igLocClose()">${cuT('Close', '关闭')}</button>

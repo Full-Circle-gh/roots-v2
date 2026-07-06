@@ -7757,6 +7757,24 @@
     background: var(--td-surface); border: 1px solid var(--td-border);
     border-radius: 14px; padding: 24px; margin: 4px 0 16px; color: var(--td-text);
     box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
+    /* Remap the admin's base tokens to Tacet inside the card. The web-config
+       (wc-*) and setup-wizard (mw-*) inline rules read these vars, so they
+       recolour themselves to Tacet without a per-class override each. Literal
+       rgba() spots + semantic bits (toggles, the one Dusk CTA) are fixed below. */
+    --bg-pane: var(--td-surface);
+    --bg-elev-1: var(--td-raised);
+    --bg-elev-2: var(--td-raised);
+    --line: var(--td-border);
+    --line-soft: var(--td-border);
+    --line-strong: var(--td-border);
+    --text-1: var(--td-text);
+    --text-2: var(--td-text);
+    --text-3: var(--td-text2);
+    --text-4: var(--td-text2);
+    --accent: var(--td-sage-ink);       /* "ready / live / ok" cues → sage */
+    --brass: var(--td-amber);           /* "now / waiting" cues → amber */
+    --brass-hi: var(--td-amber);
+    --danger: var(--td-brick-ink);
   }
   #tab-sales .mc-wiz .mc-head { align-items: center; }
   #tab-sales .mc-wiz .mc-title { font-size: 18px; font-weight: 500; letter-spacing: -.01em; color: var(--td-text); }
@@ -7802,10 +7820,54 @@
   }
   #tab-sales .mc-wiz .helplink:hover { color: var(--td-text); }
   #tab-sales .mc-wiz .helplink svg { width: 14px; height: 14px; }
-  /* Save & verify is the page's primary action → the one Dusk button here. */
-  #tab-sales .mc-wiz #mc_save { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
-  #tab-sales .mc-wiz #mc_save:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+  /* The footer's main action is the page's one Dusk CTA (Save & verify / Save
+     changes / Next). Inline strong actions (Add domain, Check DNS) stay Ink so
+     Dusk keeps its "this is THE action" meaning. */
+  #tab-sales .mc-wiz .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  #tab-sales .mc-wiz .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .9; }
+  #tab-sales .mc-wiz #mc_save,
+  #tab-sales .mc-wiz #wc_save,
+  #tab-sales .mc-wiz #mw_next { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  #tab-sales .mc-wiz #mc_save:hover,
+  #tab-sales .mc-wiz #wc_save:hover,
+  #tab-sales .mc-wiz #mw_next:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
   #tab-sales .mc-wiz #mc_save.mc-ok { background: var(--td-sage); border-color: var(--td-sage); color: #fff; }
+
+  /* ── Setup wizard (mw-*) — Tacet, beyond the token remap ──
+     The step instructions (mc-purpose + mw-help lists) stay: this is an
+     onboarding flow and the how-to IS the feature — just reskinned. */
+  #tab-sales .mc-wiz .mc-subtitle { color: var(--td-text2); }
+  #tab-sales .mc-wiz .mc-purpose { color: var(--td-text2); }
+  #tab-sales .mc-wiz .mw-step.now { border-color: var(--td-border); color: var(--td-text); }
+  #tab-sales .mc-wiz .mw-step.now .n { background: var(--td-text); color: var(--td-paper); }
+  #tab-sales .mc-wiz .mw-step.done { color: var(--td-sage-ink); border-color: transparent; }
+  #tab-sales .mc-wiz .mw-step.done .n { background: var(--td-sage); color: #fff; }
+  #tab-sales .mc-wiz .mw-help li { color: var(--td-text); }
+  #tab-sales .mc-wiz .mw-done .big { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+  #tab-sales .mc-wiz .mw-done .big.later { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  #tab-sales .mc-wiz .mc-chip.later { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: transparent; }
+  #tab-sales .mc-wiz .mw-todo .t > svg { color: var(--td-amber-ink); }
+  #tab-sales .mc-wiz .mw-later:hover { color: var(--td-amber-ink); }
+
+  /* ── Web store config (wc-*) — Tacet, beyond the token remap ── */
+  /* Live address dot = sage; reserved = muted. */
+  #tab-sales .mc-wiz .wc-addr .live { background: var(--td-sage); box-shadow: 0 0 0 4px var(--td-sage-tint); }
+  #tab-sales .mc-wiz .wc-addr .live.off { background: var(--td-text2); box-shadow: 0 0 0 4px var(--td-raised); }
+  /* Method / payment icons: monochrome line-work on a raised tile. */
+  #tab-sales .mc-wiz .wc-mico { background: var(--td-raised); border-color: var(--td-border); color: var(--td-text); }
+  #tab-sales .mc-wiz .wc-mstat.ok { color: var(--td-sage-ink); }
+  /* Sign-in toggles are Ink, matching the channel-card toggles (green is not a
+     control colour in Tacet). */
+  #tab-sales .mc-wiz .wc-tog { background: var(--td-border); }
+  #tab-sales .mc-wiz .wc-tog .knob { background: var(--td-surface); }
+  #tab-sales .mc-wiz .wc-tog.on { background: var(--td-text); }
+  /* Domain DNS stepper: done = sage, waiting = amber. */
+  #tab-sales .mc-wiz .wc-dstep.done .num { background: var(--td-sage); border-color: var(--td-sage); color: #fff; }
+  #tab-sales .mc-wiz .wc-dstep.now .num { background: var(--td-amber); border-color: var(--td-amber); color: #fff; }
+  #tab-sales .mc-wiz .wc-dstep.done .stat { color: var(--td-sage-ink); }
+  #tab-sales .mc-wiz .wc-dstep.now .stat { color: var(--td-amber-ink); }
+  /* Inputs focus Dusk (the Tacet input accent), not brass. */
+  #tab-sales .mc-wiz .wc-di input:focus { border-color: var(--td-dusk); box-shadow: 0 0 0 3px var(--td-dusk-tint); }
 
   /* Info dot + hover tooltip. The bubble inverts against the page — Ink-on-Paper
      in light, Paper-on-Ink in dark — so it reads in either theme. Keyboard-
