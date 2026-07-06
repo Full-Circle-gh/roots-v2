@@ -165,7 +165,18 @@ App({
   // fails to open. Land the customer on home instead, and log it so support can
   // see the bad path that was attempted.
   onPageNotFound(res) {
-    try { diag.reportError('onPageNotFound: ' + (res && res.path), null, res); } catch (e) {}
+    // pages/index/index is the conventional WeChat home this app never
+    // registered (its entry is pages/home/home). A stale shortcut, share card,
+    // or cached start-page on a customer's device keeps asking for it; we bounce
+    // them to home every launch, so it's a fully self-recovering non-event.
+    // Log it as a quiet breadcrumb — NOT an error — so it doesn't inflate a
+    // healthy customer's error count. Any OTHER missing path is a real bug.
+    const path = res && res.path;
+    try {
+      const label = 'onPageNotFound: ' + path;
+      if (path === 'pages/index/index') diag.reportNotice(label, res);
+      else diag.reportError(label, null, res);
+    } catch (e) {}
     // home is a tab-bar page → switchTab; reLaunch covers anything else.
     try {
       wx.switchTab({

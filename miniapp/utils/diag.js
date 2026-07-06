@@ -102,4 +102,26 @@ function reportError(message, stack, extra) {
   } catch (e) { /* intentionally silent */ }
 }
 
-module.exports = { reportSession, reportError, setScene, snapshot };
+// A handled, expected condition worth leaving a trail for — but NOT a fault.
+// Posted as kind 'notice' (the backend coerces it to a 'session'-class row),
+// so it shows up in the customer's recent log for support without counting
+// toward the per-customer error total the way reportError does. Same 30s
+// dedup as errors, but it never touches the error budget. Use this instead of
+// reportError for known self-recovering paths (e.g. onPageNotFound → home).
+function reportNotice(message, extra) {
+  try {
+    const msg = String(message == null ? '' : message).slice(0, 500) || 'notice';
+    const now = Date.now();
+    const last = _recentErr.get(msg);
+    if (last && now - last < _ERR_DEDUP_MS) return;   // same notice, too soon
+    _recentErr.set(msg, now);
+    send({
+      kind: 'notice',
+      page: currentPage(),
+      message: msg,
+      extra: extra != null ? extra : undefined,
+    });
+  } catch (e) { /* intentionally silent */ }
+}
+
+module.exports = { reportSession, reportError, reportNotice, setScene, snapshot };
