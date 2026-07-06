@@ -3558,7 +3558,7 @@ function renderOpenOrder(o) {
           <div class="od-facts">
             <div${o.customer_id ? ` onclick="orderGotoCustomer(${o.customer_id})" style="cursor: pointer;" title="View customer · 查看顾客"` : ''}>
               <div class="kicker">Customer · 顾客</div>
-              <div class="val"><b>${escapeHtml(o.nickname || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">› #${o.customer_id}</span>` : ''}</div>
+              <div class="val" data-no-i18n><b>${escapeHtml(o.nickname || o.recipient_name || '—')}</b>${o.customer_id ? ` <span style="color: var(--text-3); font-weight: 600;">› #${o.customer_id}</span>` : ''}</div>
             </div>
             ${(() => { const _pmt = primaryPayment(o); return `
             <div>
