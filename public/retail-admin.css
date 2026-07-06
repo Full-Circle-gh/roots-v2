@@ -7287,11 +7287,24 @@
   .td-attn-ic svg { display: block; }
   .td-ic-amber { color: var(--td-amber-ink); }
   .td-ic-brick { color: var(--td-brick-ink); }
-  .td-attn-head h3 { margin: 0; font-size: 15px; font-weight: 500; color: var(--td-text); }
+  /* h3 grows to push the (optional) store dropdown + count pill to the right. */
+  .td-attn-head h3 { margin: 0 auto 0 0; font-size: 15px; font-weight: 500; color: var(--td-text); }
   .td-pill {
-    margin-left: auto; font-size: 13px; font-weight: 500; padding: 2px 12px;
+    flex: none; font-size: 13px; font-weight: 500; padding: 2px 12px;
     border-radius: 999px; font-variant-numeric: tabular-nums;
   }
+  /* Per-store filter chip in the Running-low header (Option A). */
+  .td-store-sel {
+    flex: none; appearance: none; -webkit-appearance: none;
+    font: 500 12.5px var(--f-sans); color: var(--td-text2);
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 8px; padding: 3px 24px 3px 10px; cursor: pointer; max-width: 160px;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="%2358606E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>');
+    background-repeat: no-repeat; background-position: right 8px center;
+    transition: border-color .2s cubic-bezier(.16,1,.3,1);
+  }
+  .td-store-sel:hover { border-color: var(--td-text2); }
+  .td-store-sel:focus { outline: none; border-color: var(--td-dusk); }
   .td-pill-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
   .td-pill-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
   .td-pill-ok    { background: var(--td-sage-tint);  color: var(--td-sage-ink); }

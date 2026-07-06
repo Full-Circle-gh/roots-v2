@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Running low — per-location options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#111A2B;--paper:#FBF9F4;--graphite:#58606E;--cream:#F6F3EC;--border:#E4E0D5;
+  --amber:#C9954A;--amber-tint:#F7EEDE;--amber-ink:#8A6425;--sage-tint:#EDF1EC;--sage-ink:#4A6249;
+  --font:'Inter',system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--paper);color:var(--ink);padding:40px;line-height:1.5}
+.wrap{max-width:640px;margin:0 auto}
+h1{font-size:24px;font-weight:500;letter-spacing:-.01em;margin-bottom:6px}
+.lede{font-size:14px;color:var(--graphite);margin-bottom:8px}
+.opt-label{font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--graphite);margin:36px 0 12px}
+.note{font-size:13px;color:var(--graphite);margin-top:10px}
+.rec{display:inline-block;font-size:11px;font-weight:500;padding:1px 9px;border-radius:999px;background:var(--sage-tint);color:var(--sage-ink);margin-left:8px;letter-spacing:0;text-transform:none}
+
+/* card */
+.card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px 24px}
+.card-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.card-head svg{flex:none;color:var(--amber-ink)}
+.card-head h3{font-size:15px;font-weight:500}
+.pill{margin-left:auto;font-size:13px;font-weight:500;padding:2px 12px;border-radius:999px;background:var(--amber-tint);color:var(--amber-ink)}
+.rows{display:grid;gap:4px}
+.row{display:flex;align-items:baseline;gap:10px;font-size:14px;padding:4px 0}
+.row .qty{margin-left:auto;color:var(--graphite);font-size:13px}
+.more{font-size:13px;color:var(--graphite);margin-top:8px}
+.go{display:inline-block;margin-top:14px;font-size:13.5px;font-weight:500;color:var(--ink);text-decoration:none;border:1px solid var(--border);border-radius:8px;padding:6px 14px}
+
+/* A — dropdown */
+.store-dd{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:4px 10px;cursor:pointer;background:#fff}
+.store-dd .cn{color:var(--graphite);font-size:11px}
+.card-head.has-dd .pill{margin-left:10px}
+
+/* B — segmented */
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin:0 0 14px}
+.seg span{padding:5px 14px;font-size:13px;color:var(--graphite);cursor:pointer;border-right:1px solid var(--border)}
+.seg span:last-child{border-right:0}
+.seg .on{background:var(--ink);color:var(--paper);font-weight:500}
+
+/* C — grouped */
+.grp{margin-top:6px}
+.grp-h{display:flex;align-items:baseline;gap:8px;font-size:12px;font-weight:500;color:var(--graphite);margin:12px 0 4px;padding-top:10px;border-top:1px solid var(--border)}
+.grp:first-child .grp-h{border-top:0;padding-top:0;margin-top:0}
+.grp-h .n{margin-left:auto;color:var(--amber-ink)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Running low — per location</h1>
+  <p class="lede">Stock lives per store, so a store can be out of something another has plenty of. Three ways to let the operator choose which store's shelf they're looking at. (The server already supports a per-store <code>store_id</code> filter — this is only the picker.)</p>
+
+  <!-- OPTION A -->
+  <div class="opt-label">Option A — store dropdown in the card <span class="rec">recommended</span></div>
+  <div class="card">
+    <div class="card-head has-dd">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      <h3>Running low</h3>
+      <span class="store-dd">Yuexiu <span class="cn">越秀</span> ▾</span>
+      <span class="pill">18</span>
+    </div>
+    <div class="rows">
+      <div class="row">Cashew Camembert<span class="qty">out</span></div>
+      <div class="row">Cherry-Ginger Jam<span class="qty">out</span></div>
+      <div class="row">Probiotic Coconut Yogurt - Vanilla<span class="qty">1 left</span></div>
+      <div class="row">Sweet 'n' Sour (Yunnan Beans)<span class="qty">2 left</span></div>
+    </div>
+    <div class="more">and 14 more at Yuexiu</div>
+    <a class="go" href="#">Open restock</a>
+  </div>
+  <p class="note"><b>Why this one:</b> compact, doesn't change the card's shape, and the picker sits right where the count is — one glance tells you "18 low <i>at Yuexiu</i>". Default is "All stores"; pick a store to narrow. Scales cleanly to 2 or 20 stores.</p>
+
+  <!-- OPTION B -->
+  <div class="opt-label">Option B — store tabs above the list</div>
+  <div class="card">
+    <div class="card-head">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      <h3>Running low</h3>
+      <span class="pill">40</span>
+    </div>
+    <div class="seg"><span class="on">All</span><span>Yuexiu 越秀</span><span>Tianhe 天河</span></div>
+    <div class="rows">
+      <div class="row">Cashew Camembert<span class="qty">out</span></div>
+      <div class="row">Cherry-Ginger Jam<span class="qty">out</span></div>
+      <div class="row">Probiotic Coconut Yogurt - Vanilla<span class="qty">1 left</span></div>
+      <div class="row">Sweet 'n' Sour (Yunnan Beans)<span class="qty">1 left</span></div>
+    </div>
+    <div class="more">and 36 more</div>
+    <a class="go" href="#">Open restock</a>
+  </div>
+  <p class="note"><b>Trade-off:</b> the stores are always visible (no click to discover them), but the tabs add a row of chrome and get cramped past ~3–4 stores.</p>
+
+  <!-- OPTION C -->
+  <div class="opt-label">Option C — grouped by store in one list</div>
+  <div class="card">
+    <div class="card-head">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+      <h3>Running low</h3>
+      <span class="pill">40</span>
+    </div>
+    <div class="grp">
+      <div class="grp-h">Yuexiu 越秀 <span class="n">18</span></div>
+      <div class="rows">
+        <div class="row">Cashew Camembert<span class="qty">out</span></div>
+        <div class="row">Cherry-Ginger Jam<span class="qty">out</span></div>
+      </div>
+    </div>
+    <div class="grp">
+      <div class="grp-h">Tianhe 天河 <span class="n">22</span></div>
+      <div class="rows">
+        <div class="row">Almond Butter<span class="qty">out</span></div>
+        <div class="row">Sweet 'n' Sour (Yunnan Beans)<span class="qty">1 left</span></div>
+      </div>
+    </div>
+    <a class="go" href="#">Open restock</a>
+  </div>
+  <p class="note"><b>Trade-off:</b> shows everything at once (good for 2 stores), but the card gets tall fast and is noisy with many stores or many low items.</p>
+
+</div>
+</body>
+</html>

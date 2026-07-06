@@ -968,11 +968,12 @@ function dbProdName(o) {
   return (cn ? (o.name_cn || o.name_en) : (o.name_en || o.name_cn)) || '—';
 }
 
-const TD = { recapSince: 0, recapEvents: null };
+const TD = { recapSince: 0, recapEvents: null, stores: null, stockStore: '', stockOps: null };
 const TD_SEEN_KEY = 'retail-admin-last-seen';
 
 function tdInit() {
   tdDateRender();
+  tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (date, recap, attention).
   if (window.onLangChange) onLangChange(() => { tdDateRender(); tdRecapRender(); tdAttnRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
@@ -981,6 +982,42 @@ function tdInit() {
   if (!TD._opsTimer) {
     TD._opsTimer = setInterval(() => { if (!document.hidden) tdOpsLoad(); }, 60000);
   }
+}
+
+// Load the store list once so the Running-low card can offer a per-store filter.
+// Single-store tenants get no dropdown (nothing to choose).
+async function tdEnsureStores() {
+  if (TD.stores) return;
+  try {
+    const r = await api('/api/retail-admin/stores');
+    TD.stores = r.data || [];
+  } catch (e) { TD.stores = []; }
+  if (TD.stores.length >= 2 && DASH_OPS) tdAttnRender();  // reveal the dropdown once stores arrive
+}
+
+// The store <select> shown in the Running-low card header (Option A). Rebuilt
+// on each render so the label follows the active language and current pick.
+function tdStoreSelectHtml() {
+  const cn = window.cuLang && cuLang() === 'cn';
+  const opts = ['<option value="">' + cuT('All stores', '全部门店') + '</option>']
+    .concat((TD.stores || []).map(s => {
+      const nm = cn ? (s.name_cn || s.name_en || s.code) : (s.name_en || s.code);
+      const sel = String(s.id) === String(TD.stockStore) ? ' selected' : '';
+      return `<option value="${escapeAttr(String(s.id))}"${sel}>${escapeHtml(nm || ('#' + s.id))}</option>`;
+    })).join('');
+  return `<select class="td-store-sel" onchange="tdStockStoreChange(this.value)" aria-label="${escapeAttr(cuT('Filter stock by store', '按门店筛选库存'))}">${opts}</select>`;
+}
+// Name of the currently-selected store (for the "and N more at <store>" tail).
+function tdStockStoreName() {
+  if (!TD.stockStore) return '';
+  const cn = window.cuLang && cuLang() === 'cn';
+  const s = (TD.stores || []).find(x => String(x.id) === String(TD.stockStore));
+  return s ? (cn ? (s.name_cn || s.name_en || s.code) : (s.name_en || s.code)) : '';
+}
+// A store pick re-pulls ops so the Running-low card reflects that shelf.
+function tdStockStoreChange(v) {
+  TD.stockStore = v || '';
+  tdOpsLoad();
 }
 
 // Today's date under the page title — the calm anchor for "Today" numbers.
@@ -1127,6 +1164,17 @@ async function tdOpsLoad() {
   try {
     const j = await api(`/api/retail-admin/dashboard/ops?${dashStoreQS().replace(/^&/, '')}`);
     DASH_OPS = j.data || null;
+    // A store picked on the Running-low card → also pull that shelf's stock so
+    // the card shows the store's own low/out items (delivery + refunds stay
+    // all-stores). Cleared back to all-stores when the pick is reset.
+    if (TD.stockStore) {
+      try {
+        const j2 = await api(`/api/retail-admin/dashboard/ops?store_id=${encodeURIComponent(TD.stockStore)}&preview=8`);
+        TD.stockOps = j2.data || null;
+      } catch (e) { TD.stockOps = null; }
+    } else {
+      TD.stockOps = null;
+    }
     tdAttnRender();
   } catch (e) { /* silent — next tick retries */ }
 }
@@ -1138,11 +1186,12 @@ const TD_ATTN_ICON = {
   truck: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>',
   refund:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
 };
-function tdAttnCard(tone, icon, title, count, rowsHtml, moreText, action) {
+function tdAttnCard(tone, icon, title, count, rowsHtml, moreText, action, headerCtrl) {
   return `<section class="card td-card td-attn-card is-${tone}">
     <div class="td-attn-head">
       <span class="td-attn-ic td-ic-${tone}" aria-hidden="true">${TD_ATTN_ICON[icon] || ''}</span>
       <h3>${title}</h3>
+      ${headerCtrl || ''}
       <span class="td-pill td-pill-${tone}">${count}</span>
     </div>
     <div class="td-attn-rows">${rowsHtml}</div>
@@ -1163,24 +1212,39 @@ function tdAttnRender() {
   if (refCell) refCell.textContent = String((DASH_OPS.refunds && DASH_OPS.refunds.count) || 0);
   const cards = [];
 
-  // Stock first (left, like the mockup) — out-of-stock rows before the lowest counts.
-  const low = DASH_OPS.low_stock || { count: 0, items: [] };
-  const oos = DASH_OPS.out_of_stock || { count: 0, items: [] };
-  if (low.count + oos.count) {
-    const prodRow = (it, val) => `
-      <button type="button" class="td-attn-row"${it.id ? ` onclick="dashOpenProductFromFeed(${Number(it.id)})"` : ''}>
-        <span class="name">${escapeHtml(dbProdName(it))}</span>
-        <span class="val">${val}</span>
-      </button>`;
-    const oosRows = (oos.items || []).slice(0, 2).map(it => prodRow(it, cuT('out', '售罄')));
-    const lowRows = (low.items || []).slice(0, 4 - Math.min(2, (oos.items || []).length))
-      .map(it => prodRow(it, cuT(`${it.stock_qty} left`, `剩 ${it.stock_qty}`)));
-    const shown = Math.min(2, (oos.items || []).length) + lowRows.length;
-    const restN = low.count + oos.count - shown;
-    cards.push(tdAttnCard('amber', 'box', cuT('Running low', '库存告急'), low.count + oos.count,
-      oosRows.join('') + lowRows.join(''),
-      restN > 0 ? cuT(`and ${restN} more`, `另有 ${restN} 项`) : '',
-      `<button type="button" class="td-attn-go" onclick="dashJumpTab('products')">${cuT('Open restock', '前往补货')}</button>`));
+  // Stock first (left, like the mockup) — out-of-stock rows before the lowest
+  // counts. The card shows whenever ANY store has low stock; its list + count
+  // reflect the store picked in the header dropdown (all stores by default).
+  const allLow = ((DASH_OPS.low_stock || {}).count || 0) + ((DASH_OPS.out_of_stock || {}).count || 0);
+  if (allLow) {
+    const src = (TD.stockStore && TD.stockOps) ? TD.stockOps : DASH_OPS;
+    const low = src.low_stock || { count: 0, items: [] };
+    const oos = src.out_of_stock || { count: 0, items: [] };
+    const cnt = low.count + oos.count;
+    const storeSel = (TD.stores && TD.stores.length >= 2) ? tdStoreSelectHtml() : '';
+    let rowsHtml, moreText;
+    if (cnt === 0) {
+      // Picked a store that's fully stocked — say so rather than showing nothing.
+      rowsHtml = `<div class="td-attn-clear">${cuT('All stocked at this store', '此门店库存充足')}</div>`;
+      moreText = '';
+    } else {
+      const prodRow = (it, val) => `
+        <button type="button" class="td-attn-row"${it.id ? ` onclick="dashOpenProductFromFeed(${Number(it.id)})"` : ''}>
+          <span class="name">${escapeHtml(dbProdName(it))}</span>
+          <span class="val">${val}</span>
+        </button>`;
+      const oosRows = (oos.items || []).slice(0, 2).map(it => prodRow(it, cuT('out', '售罄')));
+      const lowRows = (low.items || []).slice(0, 4 - Math.min(2, (oos.items || []).length))
+        .map(it => prodRow(it, cuT(`${it.stock_qty} left`, `剩 ${it.stock_qty}`)));
+      const shown = Math.min(2, (oos.items || []).length) + lowRows.length;
+      const restN = cnt - shown;
+      const at = TD.stockStore ? ' ' + cuT('at ' + tdStockStoreName(), '· ' + tdStockStoreName()) : '';
+      rowsHtml = oosRows.join('') + lowRows.join('');
+      moreText = restN > 0 ? cuT(`and ${restN} more${at}`, `另有 ${restN} 项${TD.stockStore ? ' · ' + tdStockStoreName() : ''}`) : '';
+    }
+    cards.push(tdAttnCard('amber', 'box', cuT('Running low', '库存告急'), cnt, rowsHtml, moreText,
+      `<button type="button" class="td-attn-go" onclick="dashJumpTab('products')">${cuT('Open restock', '前往补货')}</button>`,
+      storeSel));
   }
 
   // Delivery — always shown (per request) so it's a permanent fixture. When the
