@@ -2770,14 +2770,121 @@ function renderLocalEtaCard(o, s, hoisted) {
     </div>`;
 }
 
+// ── Same-city courier (Qingyun) live status ────────────────────────────────
+// The Qingyun daemon writes the real rider stage into delivery_jobs every ~25s;
+// the server hands it to the drawer as o.courier. Three reliable stages — the
+// finer "assigned vs physically picked up" step isn't in the data, so we don't
+// pretend to it. These mirror what the customer already sees in the mini-app.
+const COURIER_STAGE = {
+  awaiting_dispatch: { en: 'Finding a rider', cn: '正在找骑手', dot: '#9A6E2A' },
+  in_transit:        { en: 'On the way',      cn: '配送中',     dot: '#5C7A4E' },
+  delivered:         { en: 'Delivered',       cn: '已送达',     dot: '#5C7A4E' },
+};
+
+// SQLite hands naive UTC ("YYYY-MM-DD HH:MM:SS", no zone); a bare new Date()
+// reads it as LOCAL, so in China (UTC+8) a fresh row would show "8h ago".
+// Normalise naive strings to UTC before diffing.
+function courierAgeMs(iso) {
+  if (!iso) return Infinity;
+  const hasZone = /[zZ]|[+-]\d\d:?\d\d$/.test(iso);
+  const t = new Date(hasZone ? iso : String(iso).replace(' ', 'T') + 'Z').getTime();
+  return isNaN(t) ? Infinity : Date.now() - t;
+}
+function courierAgo(iso) {
+  const diff = courierAgeMs(iso);
+  if (!isFinite(diff))  return '';
+  if (diff < 60000)     return cuT('just now', '刚刚');
+  if (diff < 3600000)   return cuT(Math.floor(diff / 60000) + 'm ago', Math.floor(diff / 60000) + ' 分钟前');
+  if (diff < 86400000)  return cuT(Math.floor(diff / 3600000) + 'h ago', Math.floor(diff / 3600000) + ' 小时前');
+  return cuT(Math.floor(diff / 86400000) + 'd ago', Math.floor(diff / 86400000) + ' 天前');
+}
+// A live delivery whose row hasn't refreshed in this long is suspect — the
+// daemon polls every ~25s, so a frozen "on the way" order (10 min+) has likely
+// dropped off Qingyun's active list (a rider cancel / drop). We can't yet PROVE
+// a cancel (Qingyun's cancel signal isn't captured), so we warn + reopen dispatch
+// rather than assert it. See routes/retail.js deliveryJobStage.
+const COURIER_STALE_MS = 10 * 60 * 1000;
+
+// Header status pill — for a same-city courier order, show the REAL rider stage
+// instead of a premature "Dispatched" (that flag flips when staff mark the order
+// shipped, BEFORE a rider is even on it). Falls back to the plain order status
+// when there's no live courier job (JD parcel, off-system courier, non-local).
+function orderStatusPill(o) {
+  const c = o.courier;
+  if (o.status === 'dispatched' && c) {
+    if (c.stage === 'awaiting_dispatch') return { cls: 'st-preparing',  label: cuT('Finding a rider', '正在找骑手') };
+    if (c.stage === 'in_transit')        return { cls: 'st-dispatched', label: cuT('On the way', '配送中') };
+  }
+  return { cls: 'st-' + o.status, label: humanStatus(o.status, o.fulfillment_type) };
+}
+
+// Live rider card for the drawer. Only rendered once a courier is on the job (or
+// being sought) — a 'scheduled' order (pre-pushed, not dispatched) shows nothing.
+// `stale` = an "on the way" order whose row has frozen (likely a rider cancel /
+// drop); we warn instead of trusting the last-seen rider position.
+function renderCourierStatusCard(o, c, meta, stale) {
+  const rider = c.rider
+    ? `<div style="font-size:12px; margin-top:5px;" data-no-i18n>
+         <b>${escapeHtml(c.rider.name)}</b>${c.rider.phone ? ` · <a href="tel:${escapeAttr(c.rider.phone)}" style="color:var(--brand);">${escapeHtml(c.rider.phone)}</a>` : ''}
+       </div>`
+    : '';
+  // ETA + distance — only meaningful while a rider is actually moving, and never
+  // once the row has gone stale (the numbers would be a frozen snapshot).
+  const bits = [];
+  if (c.stage === 'in_transit' && !stale && c.eta_seconds != null)
+    bits.push(cuT(`~${Math.max(1, Math.round(c.eta_seconds / 60))} min away`, `约 ${Math.max(1, Math.round(c.eta_seconds / 60))} 分钟`));
+  if (c.stage === 'in_transit' && !stale && c.rider_to_cust_m != null)
+    bits.push(c.rider_to_cust_m >= 1000 ? (c.rider_to_cust_m / 1000).toFixed(1) + ' km' : Math.round(c.rider_to_cust_m) + ' m');
+  const etaLine = bits.length ? `<div class="muted" style="font-size:11px; margin-top:5px;">${bits.join(' · ')}</div>` : '';
+  const carrier = c.carrier ? `<span class="muted" style="font-size:11px; margin-left:auto;" data-no-i18n>${escapeHtml(c.carrier)}</span>` : '';
+  // Stale → amber warning + amber dot; otherwise the stage's own colour.
+  const dot = stale ? '#9A6E2A' : meta.dot;
+  const staleLine = stale
+    ? `<div style="display:flex; align-items:flex-start; gap:5px; font-size:11px; font-weight:600; margin-top:7px; color:#9A6E2A;">${deliveryIcon('alert', 12)}<span>${cuT(
+        "Not updating — the rider may have cancelled. Check the courier or call another.",
+        '状态未更新 — 骑手可能已取消,请核实或另叫一位。')}</span></div>`
+    : '';
+  const ago = courierAgo(c.updated_at);
+  return `
+    <div style="padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:8px;">
+      <div style="display:flex; align-items:center; gap:7px;">
+        <span style="background:${dot}; width:8px; height:8px; border-radius:50%; flex:none;"></span>
+        <b style="font-size:13px;">${cuT(meta.en, meta.cn)}</b>
+        ${carrier}
+      </div>
+      ${rider}
+      ${etaLine}
+      ${staleLine}
+      ${ago ? `<div class="muted" style="font-size:10px; margin-top:6px;">${cuT('Updated', '更新于')} ${ago}</div>` : ''}
+    </div>`;
+}
+
 // Same-city courier dispatch (青云聚信) — compare live carrier prices and send a rider
 // straight from here, instead of the Qingyun app. Only meaningful once the order is in
 // Qingyun (auto-pushed as 待配送). Loads on demand (a click) so the drawer stays fast.
+// Once a rider is actually on it, the live status card replaces the price picker.
 function renderQyDispatch(o) {
+  const c = o.courier;
+  const meta = c && COURIER_STAGE[c.stage];
+  // A live "on the way" order whose row has frozen (>10 min) is a likely cancel/
+  // drop — warn on the card and reopen the dispatch button so staff can re-book.
+  const stale = !!(c && c.stage === 'in_transit' && courierAgeMs(c.updated_at) > COURIER_STALE_MS);
+  const card = meta ? renderCourierStatusCard(o, c, meta, stale) : '';
+  // Keep the compare/dispatch button while there's no rider yet (still looking,
+  // or not dispatched), or when a live run has gone stale; hide it while a rider
+  // is genuinely on the way — re-comparing mid-run is pointless. When finding a
+  // rider or recovering from a stall, the button offers to call another courier.
+  const finding = c && c.stage === 'awaiting_dispatch';
+  const showCompare = !c || c.stage === 'scheduled' || finding || stale;
+  const relabel = finding || stale;
+  const compareBtn = showCompare
+    ? `<button class="btn btn-sm" id="qy-get-${o.id}" onclick="qyLoadCarriers(${o.id}, this)">${cuT(relabel ? 'Call another courier' : 'Compare couriers', relabel ? '再叫一家运力' : '查看运力比价')}</button>`
+    : '';
   return `
     <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Same-city courier · 同城运力</div>
-      <button class="btn btn-sm" id="qy-get-${o.id}" onclick="qyLoadCarriers(${o.id}, this)">${cuT('Compare couriers', '查看运力比价')}</button>
+      ${card}
+      ${compareBtn}
       <div id="qy-carriers-${o.id}" style="margin-top:8px;"></div>
     </div>`;
 }
@@ -3395,7 +3502,7 @@ function renderOpenOrder(o) {
           <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
           <div class="title-row">
             <b>${escapeHtml(o.order_no)}</b>
-            <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
+            ${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}
             ${o.fulfillment?.rollup === 'partial' ? `<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>` : ''}
             ${(o.addons && o.addons.length) ? `<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>` : ''}
             ${refundBadge(o)}

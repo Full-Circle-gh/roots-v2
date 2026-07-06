@@ -9752,6 +9752,38 @@ router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
 // feature_qingyun_delivery_tracking). Returns { tracking:false } when no Qingyun
 // delivery is linked yet (e.g. not dispatched, or the daemon hasn't matched it).
 // Coordinates are returned as decimal GCJ-02 (raw ÷ 1e6) — AMap-ready, no conversion.
+// Coarse courier stage from a delivery_jobs row — shared by the customer track
+// endpoint AND the admin drawer so staff and customer always read the same stage.
+// orderStatus enum: 20 待配送 → 30 in-flight → 50 已送达.
+//
+// CRITICAL: 待配送 (20) means the order was CREATED in the merchant list but staff
+// haven't dispatched a courier yet — so NO courier is being sought. We pre-push
+// scheduled orders into Qingyun early (待配送 sitting there for a later slot), so
+// "finding a rider" must NOT fire on 待配送 alone. It fires only once the order is
+// actually DISPATCHED (发起配送 → 待抢单), which surfaces as a carrier / deliveryId /
+// a live deliveryStatus / a rider. Stages:
+//   scheduled          created 待配送, not dispatched — no live tracking yet
+//   awaiting_dispatch  dispatched, no rider on it — "finding a rider"
+//   in_transit         a rider accepted / is delivering — "on the way"
+//   delivered          已送达
+function deliveryJobStage(job) {
+  const os = job.order_status;
+  const dispatched = !!(job.delivery_id || job.carrier_name || job.rider_name
+    || (job.delivery_status != null && Number(job.delivery_status) > 0));
+  if (os != null) {
+    if (os >= 50) return 'delivered';
+    if (os >= 30) return 'in_transit';
+    // os is 待配送 (20): NO rider is actively on it. Trust the status over any
+    // rider name — the daemon keeps a stale rider_name (COALESCE upsert), so a
+    // rider who CANCELLED reverts the order here, and we must fall back to
+    // "finding a rider" (not keep reading "on the way" off the dead rider name).
+    return dispatched ? 'awaiting_dispatch' : 'scheduled';
+  }
+  // orderStatus missing — fall back to whether a rider is attached.
+  if (job.rider_name) return 'in_transit';
+  return dispatched ? 'awaiting_dispatch' : 'scheduled';
+}
+
 router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
@@ -9783,24 +9815,9 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
   }
   if (!job) return res.json({ success: true, data: { tracking: false } });
 
-  // orderStatus enum → coarse customer-facing stage. 20 待配送 → 30 in-flight
-  // (rider grabbed → delivering) → 50 已送达. < 50 with a rider assigned = in transit.
-  //
-  // CRITICAL: 待配送 (20) means the order was CREATED in the merchant list but staff
-  // haven't dispatched a courier yet — so NO courier is being sought. We pre-push
-  // scheduled orders into Qingyun early (待配送 sitting there for a later slot), so
-  // "Finding a courier" must NOT fire on 待配送 alone. It fires only once the order
-  // is actually DISPATCHED (发起配送 → 待抢单), which surfaces as a carrier / deliveryId
-  // / a live deliveryStatus / a rider. A created-but-not-dispatched order shows no
-  // live tracking at all (the customer just sees the normal order timeline).
-  const os = job.order_status;
-  const dispatched = !!(job.delivery_id || job.carrier_name || job.rider_name
-    || (job.delivery_status != null && Number(job.delivery_status) > 0));
-  let stage;
-  if (os != null && os >= 50) stage = 'delivered';
-  else if (job.rider_name || (os != null && os >= 30)) stage = 'in_transit';
-  else if (dispatched) stage = 'awaiting_dispatch';   // dispatched → genuinely finding a rider
-  else stage = 'scheduled';                           // created 待配送, not dispatched → preview map + calm label (no "finding a courier", no rider/ETA)
+  // Coarse stage from the delivery_jobs row — see deliveryJobStage (shared with
+  // the admin drawer so staff + customer always read the same stage).
+  const stage = deliveryJobStage(job);
   const coord = (lat, lng) => (lat != null && lng != null) ? { lat: lat / 1e6, lng: lng / 1e6 } : null;
 
   let route = [];
@@ -16367,6 +16384,43 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   o.tracking = o.shipments[0]?.tracking || buildTrackingView(o);
   // Split-package suggestion — drives the banner above Items in the drawer.
   try { o.shipment_suggestion = buildShipmentSuggestion(id); } catch (e) { o.shipment_suggestion = null; }
+
+  // Same-city courier (Qingyun) live status — so the drawer can show the real
+  // rider stage, and the header pill stops reading "Dispatched" before a rider
+  // is actually on it. Same match logic as the customer track endpoint: link by
+  // retail_order_id, else fall back to recipient phone; newest row wins. Absent
+  // job (JD parcel / off-system courier / pre-migration) → no courier block, and
+  // the drawer falls back to the plain order status as before.
+  try {
+    let job = tdb().prepare(
+      'SELECT * FROM delivery_jobs WHERE retail_order_id = ? ORDER BY updated_at DESC LIMIT 1'
+    ).get(id);
+    if (!job) {
+      const phone = String(o.recipient_phone || '').replace(/\D/g, '');
+      if (phone.length >= 7) {
+        job = tdb().prepare(
+          `SELECT * FROM delivery_jobs
+            WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
+            ORDER BY updated_at DESC LIMIT 1`
+        ).get('%' + phone.slice(-8) + '%');
+      }
+    }
+    if (job) {
+      const stage = deliveryJobStage(job);
+      o.courier = {
+        stage,                                            // scheduled | awaiting_dispatch | in_transit | delivered
+        carrier: job.carrier_name || null,
+        rider: job.rider_name ? { name: job.rider_name, phone: job.rider_phone || null } : null,
+        // No ETA/distance before a rider is on it — suppress for the pre-dispatch
+        // preview so we never show a bogus "~N min".
+        eta_seconds:     stage === 'scheduled' ? null : (job.eta_seconds ?? null),
+        rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? null),
+        expected_delivery_at: job.expected_delivery_at || null,
+        updated_at: job.updated_at,
+      };
+    }
+  } catch (e) { /* delivery_jobs missing (pre-migration) — no courier block */ }
+
   res.json({ success: true, data: o });
 });
 

@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Same-city courier — live status in the drawer</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF;
+    --cream:#F6F3EC; --elev1:#F1EDE3; --elev2:#EFEBE1;
+    --line-soft:#ECE8DE; --line:#E4E0D5;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E;
+    --brand:#8A6425;
+    --sage:#5C7A4E; --sage-tint:#EDF1EC;
+    --amber:#9A6E2A; --amber-tint:#F7EEDE;
+    --brick:#B4533E;
+    --f:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{ margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:28px 20px 70px; }
+  .zh{ display:none; }
+  body.cn .en{ display:none; } body.cn .zh{ display:inline; }
+
+  .wrap{ max-width:1200px; margin:0 auto; }
+  .topbar{ display:flex; justify-content:space-between; align-items:flex-end; gap:20px; margin-bottom:8px; flex-wrap:wrap; }
+  h1{ font-size:21px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub{ margin:0; color:var(--text-2); font-size:13.5px; max-width:760px; }
+  .seg{ display:inline-flex; border:1px solid var(--line); border-radius:999px; background:var(--pane); padding:3px; gap:2px; flex:none; }
+  .seg button{ font:inherit; font-size:12.5px; font-weight:500; color:var(--text-2); padding:5px 16px; border:0; border-radius:999px; cursor:pointer; background:transparent; }
+  .seg button.on{ background:var(--ink); color:var(--paper); }
+
+  .beforeafter{ background:var(--pane); border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:22px 0 26px; }
+  .beforeafter h3{ margin:0 0 10px; font-size:12px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3); }
+  .barow{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; font-size:13px; color:var(--text-2); }
+  .barow .arrow{ color:var(--text-3); }
+  .strike{ text-decoration:line-through; opacity:.55; }
+
+  .grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:22px; }
+  .case-h{ display:flex; align-items:center; gap:9px; margin:0 0 10px; }
+  .case-h .n{ font-size:11px; font-weight:700; color:var(--paper); background:var(--text-3); width:20px; height:20px; border-radius:50%; display:grid; place-items:center; flex:none; }
+  .case-h h2{ font-size:13.5px; font-weight:600; margin:0; }
+
+  /* Drawer fragment */
+  .drawer{ background:var(--paper); border:1px solid var(--line); border-radius:16px; overflow:hidden; box-shadow:0 14px 40px rgba(40,30,5,.08); }
+  .dhead{ padding:16px 18px 14px; border-bottom:1px solid var(--line-soft); }
+  .eyebrow{ font-size:11.5px; color:var(--text-3); margin-bottom:6px; }
+  .title-row{ display:flex; align-items:center; gap:9px; flex-wrap:wrap; }
+  .ono{ font-size:22px; font-weight:600; letter-spacing:-.01em; }
+  .pill{ display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600; padding:4px 11px 4px 9px; border-radius:999px; }
+  .pill .dot{ width:7px; height:7px; border-radius:50%; flex:none; }
+  .pill.dispatched{ background:#E8EAF0; color:#3D4657; } .pill.dispatched .dot{ background:#6B7280; }
+  .pill.finding{ background:var(--amber-tint); color:var(--amber); } .pill.finding .dot{ background:var(--amber); }
+  .pill.moving{ background:var(--sage-tint); color:var(--sage); } .pill.moving .dot{ background:var(--sage); }
+  .pill.done{ background:var(--sage-tint); color:var(--sage); } .pill.done .dot{ background:var(--sage); }
+
+  .dbody{ padding:16px 18px 18px; }
+  .kicker{ font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom:8px; }
+  .divider{ border:0; border-top:1px dashed var(--line-soft); margin:16px 0; }
+
+  .courier-card{ padding:11px 13px; background:var(--elev1); border-radius:8px; margin-bottom:10px; }
+  .cc-top{ display:flex; align-items:center; gap:8px; }
+  .cc-dot{ width:9px; height:9px; border-radius:50%; flex:none; }
+  .cc-stage{ font-size:13.5px; font-weight:600; }
+  .cc-carrier{ margin-left:auto; font-size:11.5px; color:var(--text-3); }
+  .cc-rider{ font-size:12.5px; margin-top:6px; }
+  .cc-rider a{ color:var(--brand); text-decoration:none; }
+  .cc-eta{ font-size:11.5px; color:var(--text-3); margin-top:6px; }
+  .cc-warn{ display:flex; align-items:flex-start; gap:6px; font-size:11.5px; font-weight:600; color:var(--amber); margin-top:8px; }
+  .cc-warn svg{ flex:none; margin-top:1px; }
+  .cc-upd{ font-size:10.5px; color:var(--text-3); margin-top:8px; }
+
+  .btn{ font:inherit; font-size:12.5px; font-weight:500; color:var(--text-1); background:var(--pane); border:1px solid var(--line); border-radius:8px; padding:7px 13px; cursor:pointer; }
+  .note{ font-size:11.5px; color:var(--text-3); margin-top:10px; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>
+        <span class="en">Same-city courier — live status</span>
+        <span class="zh">同城运力 — 实时状态</span>
+      </h1>
+      <p class="sub">
+        <span class="en">The order drawer now shows the real rider stage from Qingyun instead of a fixed "Dispatched". Both the header badge and the courier card update as the rider moves — and flag a likely cancel.</span>
+        <span class="zh">订单抽屉现在显示青云返回的真实骑手状态，而非固定的"已发货"。顶部徽章与运力卡片随骑手移动更新，并对疑似取消发出提醒。</span>
+      </p>
+    </div>
+    <div class="seg" role="tablist">
+      <button class="on" onclick="setLang('en',this)">EN</button>
+      <button onclick="setLang('cn',this)">中文</button>
+    </div>
+  </div>
+
+  <div class="beforeafter">
+    <h3><span class="en">The badge fix</span><span class="zh">徽章修复</span></h3>
+    <div class="barow">
+      <span class="en">Before a rider is on it:</span><span class="zh">骑手接单前：</span>
+      <span class="pill dispatched strike"><span class="dot"></span>Dispatched</span>
+      <span class="arrow">→</span>
+      <span class="pill finding"><span class="dot"></span><span class="en">Finding a rider</span><span class="zh">正在找骑手</span></span>
+      <span class="arrow" style="margin:0 4px;">·</span>
+      <span class="en">once accepted:</span><span class="zh">接单后：</span>
+      <span class="pill moving"><span class="dot"></span><span class="en">On the way</span><span class="zh">配送中</span></span>
+    </div>
+  </div>
+
+  <div class="grid">
+
+    <!-- 1 · Finding a rider -->
+    <div>
+      <div class="case-h"><span class="n">1</span><h2><span class="en">Dispatched, no rider yet</span><span class="zh">已发单，暂无骑手</span></h2></div>
+      <div class="drawer">
+        <div class="dhead">
+          <div class="eyebrow"><span class="en">Order placed 2026-07-06 14:08</span><span class="zh">下单于 2026-07-06 14:08</span></div>
+          <div class="title-row">
+            <span class="ono">R683030</span>
+            <span class="pill finding"><span class="dot"></span><span class="en">Finding a rider</span><span class="zh">正在找骑手</span></span>
+          </div>
+        </div>
+        <div class="dbody">
+          <div class="kicker"><span class="en">Same-city courier · 同城运力</span></div>
+          <div class="courier-card">
+            <div class="cc-top"><span class="cc-dot" style="background:var(--amber);"></span><span class="cc-stage"><span class="en">Finding a rider</span><span class="zh">正在找骑手</span></span></div>
+            <div class="cc-upd"><span class="en">Updated just now</span><span class="zh">更新于 刚刚</span></div>
+          </div>
+          <button class="btn"><span class="en">Call another courier</span><span class="zh">再叫一家运力</span></button>
+        </div>
+      </div>
+      <div class="note"><span class="en">A courier was booked but no one has accepted yet. Staff can call another.</span><span class="zh">已发起配送但暂无骑手接单，可另叫一位。</span></div>
+    </div>
+
+    <!-- 2 · On the way -->
+    <div>
+      <div class="case-h"><span class="n">2</span><h2><span class="en">Rider on the way</span><span class="zh">骑手配送中</span></h2></div>
+      <div class="drawer">
+        <div class="dhead">
+          <div class="eyebrow"><span class="en">Order placed 2026-07-06 14:08</span><span class="zh">下单于 2026-07-06 14:08</span></div>
+          <div class="title-row">
+            <span class="ono">R683030</span>
+            <span class="pill moving"><span class="dot"></span><span class="en">On the way</span><span class="zh">配送中</span></span>
+          </div>
+        </div>
+        <div class="dbody">
+          <div class="kicker"><span class="en">Same-city courier · 同城运力</span></div>
+          <div class="courier-card">
+            <div class="cc-top">
+              <span class="cc-dot" style="background:var(--sage);"></span>
+              <span class="cc-stage"><span class="en">On the way</span><span class="zh">配送中</span></span>
+              <span class="cc-carrier">闪送</span>
+            </div>
+            <div class="cc-rider"><b>王师傅</b> · <a href="#">138 0000 1234</a></div>
+            <div class="cc-eta"><span class="en">~8 min away · 1.2 km</span><span class="zh">约 8 分钟 · 1.2 km</span></div>
+            <div class="cc-upd"><span class="en">Updated 20s ago</span><span class="zh">更新于 20 秒前</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="note"><span class="en">A rider accepted — name, phone, ETA and distance are live. The compare button is hidden mid-run.</span><span class="zh">骑手已接单 — 姓名、电话、预计时间与距离实时显示。配送中隐藏比价按钮。</span></div>
+    </div>
+
+    <!-- 3 · Stale / likely cancel -->
+    <div>
+      <div class="case-h"><span class="n">3</span><h2><span class="en">Frozen — likely cancel</span><span class="zh">状态冻结 — 疑似取消</span></h2></div>
+      <div class="drawer">
+        <div class="dhead">
+          <div class="eyebrow"><span class="en">Order placed 2026-07-06 14:08</span><span class="zh">下单于 2026-07-06 14:08</span></div>
+          <div class="title-row">
+            <span class="ono">R683030</span>
+            <span class="pill moving"><span class="dot"></span><span class="en">On the way</span><span class="zh">配送中</span></span>
+          </div>
+        </div>
+        <div class="dbody">
+          <div class="kicker"><span class="en">Same-city courier · 同城运力</span></div>
+          <div class="courier-card">
+            <div class="cc-top">
+              <span class="cc-dot" style="background:var(--amber);"></span>
+              <span class="cc-stage"><span class="en">On the way</span><span class="zh">配送中</span></span>
+              <span class="cc-carrier">闪送</span>
+            </div>
+            <div class="cc-rider"><b>王师傅</b> · <a href="#">138 0000 1234</a></div>
+            <div class="cc-warn">
+              <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 3 19h18L12 4z"/><path d="M12 10v4"/><path d="M12 17h.01"/></svg>
+              <span><span class="en">Not updating — the rider may have cancelled. Check the courier or call another.</span><span class="zh">状态未更新 — 骑手可能已取消，请核实或另叫一位。</span></span>
+            </div>
+            <div class="cc-upd"><span class="en">Updated 14m ago</span><span class="zh">更新于 14 分钟前</span></div>
+          </div>
+          <button class="btn"><span class="en">Call another courier</span><span class="zh">再叫一家运力</span></button>
+        </div>
+      </div>
+      <div class="note"><span class="en">Row hasn't refreshed in 10 min+ — the order likely dropped off Qingyun's list. We warn and reopen dispatch (can't yet prove a cancel).</span><span class="zh">10 分钟以上未刷新 — 订单可能已从青云列表消失。发出提醒并重新开放派单（暂无法确证取消）。</span></div>
+    </div>
+
+    <!-- 4 · Delivered -->
+    <div>
+      <div class="case-h"><span class="n">4</span><h2><span class="en">Delivered</span><span class="zh">已送达</span></h2></div>
+      <div class="drawer">
+        <div class="dhead">
+          <div class="eyebrow"><span class="en">Order placed 2026-07-06 14:08</span><span class="zh">下单于 2026-07-06 14:08</span></div>
+          <div class="title-row">
+            <span class="ono">R683030</span>
+            <span class="pill done"><span class="dot"></span><span class="en">Delivered</span><span class="zh">已送达</span></span>
+          </div>
+        </div>
+        <div class="dbody">
+          <div class="kicker"><span class="en">Same-city courier · 同城运力</span></div>
+          <div class="courier-card">
+            <div class="cc-top">
+              <span class="cc-dot" style="background:var(--sage);"></span>
+              <span class="cc-stage"><span class="en">Delivered</span><span class="zh">已送达</span></span>
+              <span class="cc-carrier">闪送</span>
+            </div>
+            <div class="cc-rider"><b>王师傅</b></div>
+            <div class="cc-upd"><span class="en">Updated 3m ago</span><span class="zh">更新于 3 分钟前</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="note"><span class="en">Courier reports delivered. The order's own "Mark delivered" / auto-deliver sweep closes it out.</span><span class="zh">运力返回已送达。订单由"标记已送达"或自动送达清扫收尾。</span></div>
+    </div>
+
+  </div>
+</div>
+<script>
+  function setLang(l, btn){
+    document.body.classList.toggle('cn', l === 'cn');
+    document.querySelectorAll('.seg button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+  }
+</script>
+</body>
+</html>
