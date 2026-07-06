@@ -2700,8 +2700,8 @@ function renderGzMethodToggle(o, s) {
         ${seg(!isLocal, 'land', 'van', 'JD logistics', '京东物流')}
       </div>
       <div class="muted" style="font-size:11px; margin-top:6px;">${cuT(
-        'Choose how this parcel ships — a same-city rider (set an arrival time) or JD logistics (attach a waybill).',
-        '选择此包裹的配送方式 — 同城骑手(设置送达时间)或京东物流(填写运单号)。')}</div>
+        'Rider (set an arrival time) or JD logistics (attach a waybill).',
+        '骑手(设置送达时间)或京东物流(填写运单号)。')}</div>
     </div>`;
 }
 
@@ -4135,9 +4135,12 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   const carrierOpts = (TRACKING_CARRIERS || []).map(c =>
     `<option value="${c.code}" ${ (has ? t.carrier_code : 'jd') === c.code ? 'selected' : '' }>${escapeHtml(c.name_en)} · ${escapeHtml(c.name_cn)}</option>`
   ).join('');
-  const synced = t?.synced_at ? cuT(`last updated ${formatDate(t.synced_at)}`, `最后更新 ${formatDate(t.synced_at)}`) : cuT('no live sync yet', '尚未实时同步');
+  // Short stamp (drop the leading year — "2026-07-06 13:59" → "07-06 13:59")
+  // so the footer reads "Updated 07-06 13:59" like the mockup, not the long form.
+  const syncShort = t?.synced_at ? formatDate(t.synced_at).replace(/^\d{4}-/, '') : '';
+  const synced = t?.synced_at ? cuT(`Updated ${syncShort}`, `更新于 ${syncShort}`) : cuT('no live sync yet', '尚未实时同步');
   const trackLink = (has && t.track_url)
-    ? `<a href="${t.track_url}" target="_blank" rel="noopener" class="muted" style="font-size:11px; text-decoration:underline;">View on carrier site → · 在承运商官网查看 →</a>`
+    ? `<a href="${t.track_url}" target="_blank" rel="noopener" class="btn btn-sm">${cuT('Carrier site →', '承运商官网 →')}</a>`
     : '';
 
   // A waybill reused from an ALREADY-DELIVERED order can't live-sync: kd100/JD
@@ -4196,13 +4199,12 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       <div style="display:flex; flex-direction:column; gap:6px; max-height: 320px; overflow-y: auto;">
         ${t.events.map(ev => {
           const desc = cuT(ev.description_en || ev.description_cn || '', ev.description_cn || ev.description_en || '');
+          // Short time — drop the year and the trailing seconds (mockup: "07-06 12:41").
+          const evTime = (ev.time || '').replace(/^\d{4}-/, '').replace(/:\d{2}$/, '');
           return `
-          <div style="display:flex; gap:10px; font-size:12px; line-height:1.4;">
-            <div class="muted" style="font-family: var(--f-mono); white-space:nowrap; min-width: 130px;">${escapeHtml(ev.time || '')}</div>
-            <div style="flex:1;">
-              <div>${escapeHtml(desc)}</div>
-              ${ev.location ? `<div class="muted" style="font-size:11px;">${escapeHtml(ev.location)}</div>` : ''}
-            </div>
+          <div style="display:flex; gap:12px; font-size:12.5px; line-height:1.45;">
+            <div class="muted" style="font-family: var(--f-mono); white-space:nowrap; min-width: 98px;">${escapeHtml(evTime)}</div>
+            <div style="flex:1;">${escapeHtml(desc)}${ev.location ? ` <span class="muted" style="font-size:11.5px;">· ${escapeHtml(ev.location)}</span>` : ''}</div>
           </div>`;
         }).join('')}
       </div>
