@@ -2822,18 +2822,19 @@ function orderStatusPill(o) {
 // being sought) — a 'scheduled' order (pre-pushed, not dispatched) shows nothing.
 // `stale` = an "on the way" order whose row has frozen (likely a rider cancel /
 // drop); we warn instead of trusting the last-seen rider position.
-function renderCourierStatusCard(o, c, meta, stale) {
+function renderCourierStatusCard(o, c, meta, stale, delivered) {
   const rider = c.rider
     ? `<div style="font-size:12px; margin-top:5px;" data-no-i18n>
          <b>${escapeHtml(c.rider.name)}</b>${c.rider.phone ? ` · <a href="tel:${escapeAttr(c.rider.phone)}" style="color:var(--brand);">${escapeHtml(c.rider.phone)}</a>` : ''}
        </div>`
     : '';
   // ETA + distance — only meaningful while a rider is actually moving, and never
-  // once the row has gone stale (the numbers would be a frozen snapshot).
+  // once the row has gone stale (the numbers would be a frozen snapshot) or the
+  // order is already delivered (a delivered row's frozen "~5 min away" is a lie).
   const bits = [];
-  if (c.stage === 'in_transit' && !stale && c.eta_seconds != null)
+  if (c.stage === 'in_transit' && !stale && !delivered && c.eta_seconds != null)
     bits.push(cuT(`~${Math.max(1, Math.round(c.eta_seconds / 60))} min away`, `约 ${Math.max(1, Math.round(c.eta_seconds / 60))} 分钟`));
-  if (c.stage === 'in_transit' && !stale && c.rider_to_cust_m != null)
+  if (c.stage === 'in_transit' && !stale && !delivered && c.rider_to_cust_m != null)
     bits.push(c.rider_to_cust_m >= 1000 ? (c.rider_to_cust_m / 1000).toFixed(1) + ' km' : Math.round(c.rider_to_cust_m) + ' m');
   const etaLine = bits.length ? `<div class="muted" style="font-size:11px; margin-top:5px;">${bits.join(' · ')}</div>` : '';
   const carrier = c.carrier ? `<span class="muted" style="font-size:11px; margin-left:auto;" data-no-i18n>${escapeHtml(c.carrier)}</span>` : '';
@@ -2865,11 +2866,15 @@ function renderCourierStatusCard(o, c, meta, stale) {
 // Once a rider is actually on it, the live status card replaces the price picker.
 function renderQyDispatch(o) {
   const c = o.courier;
-  const meta = c && COURIER_STAGE[c.stage];
+  // Once the ORDER is delivered, the courier row froze at "on the way" only because
+  // the finished job dropped off the courier's live in-flight list — that's normal,
+  // not a cancel. Show it as Delivered (green, done) and never flag it stale.
+  const delivered = !!(c && (o.status === 'delivered' || c.stage === 'delivered'));
+  const meta = c && (delivered ? COURIER_STAGE.delivered : COURIER_STAGE[c.stage]);
   // A live "on the way" order whose row has frozen (>10 min) is a likely cancel/
   // drop — warn on the card and reopen the dispatch button so staff can re-book.
-  const stale = !!(c && c.stage === 'in_transit' && courierAgeMs(c.updated_at) > COURIER_STALE_MS);
-  const card = meta ? renderCourierStatusCard(o, c, meta, stale) : '';
+  const stale = !delivered && !!(c && c.stage === 'in_transit' && courierAgeMs(c.updated_at) > COURIER_STALE_MS);
+  const card = meta ? renderCourierStatusCard(o, c, meta, stale, delivered) : '';
   // Keep the compare/dispatch button while there's no rider yet (still looking,
   // or not dispatched), or when a live run has gone stale; hide it while a rider
   // is genuinely on the way — re-comparing mid-run is pointless. When finding a
@@ -4300,20 +4305,34 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   // auto-classifier would otherwise treat the raw Chinese as a stray half of a
   // translation pair and blank it in the other language — so we opt the whole
   // block out and pick the live language ourselves via cuT().
-  const eventsBlock = (has && t.events && t.events.length) ? `
-    <div data-no-i18n style="margin-top:14px; border-top: 1px dashed var(--line-soft); padding-top:10px;">
-      <div class="muted" style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px;">${cuT('Recent events', '最近事件')}</div>
-      <div style="display:flex; flex-direction:column; gap:6px; max-height: 320px; overflow-y: auto;">
-        ${t.events.map(ev => {
-          const desc = cuT(ev.description_en || ev.description_cn || '', ev.description_cn || ev.description_en || '');
-          // Short time — drop the year and the trailing seconds (mockup: "07-06 12:41").
-          const evTime = (ev.time || '').replace(/^\d{4}-/, '').replace(/:\d{2}$/, '');
-          return `
+  const renderEventRow = (ev) => {
+    const desc = cuT(ev.description_en || ev.description_cn || '', ev.description_cn || ev.description_en || '');
+    // Short time — drop the year and the trailing seconds (mockup: "07-06 12:41").
+    const evTime = (ev.time || '').replace(/^\d{4}-/, '').replace(/:\d{2}$/, '');
+    return `
           <div style="display:flex; gap:12px; font-size:12.5px; line-height:1.45;">
             <div class="muted" style="font-family: var(--f-mono); white-space:nowrap; min-width: 98px;">${escapeHtml(evTime)}</div>
             <div style="flex:1;">${escapeHtml(desc)}${ev.location ? ` <span class="muted" style="font-size:11.5px;">· ${escapeHtml(ev.location)}</span>` : ''}</div>
           </div>`;
-        }).join('')}
+  };
+  // Show only the newest event by default; tuck the rest behind a disclosure so
+  // the drawer stays calm. Events arrive newest-first, so [0] is the latest.
+  const restEvents = (has && t.events && t.events.length > 1) ? t.events.slice(1) : [];
+  const eventsBlock = (has && t.events && t.events.length) ? `
+    <div data-no-i18n style="margin-top:14px; border-top: 1px dashed var(--line-soft); padding-top:10px;">
+      <div class="muted" style="font-size:10px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:6px;">${cuT('Recent events', '最近事件')}</div>
+      <div style="display:flex; flex-direction:column; gap:6px;">
+        ${renderEventRow(t.events[0])}
+        ${restEvents.length ? `
+        <details class="od-trk-events-more" style="margin-top:2px;">
+          <summary style="cursor:pointer; list-style:none; font-size:11.5px; color:var(--text-3); user-select:none;">
+            <span class="od-trk-chev" aria-hidden="true" style="display:inline-block; transition:transform .15s;">▸</span>
+            ${cuT(`${restEvents.length} earlier events`, `更早的 ${restEvents.length} 条`)}
+          </summary>
+          <div style="display:flex; flex-direction:column; gap:6px; margin-top:6px; max-height: 300px; overflow-y: auto;">
+            ${restEvents.map(renderEventRow).join('')}
+          </div>
+        </details>` : ''}
       </div>
     </div>` : '';
 
