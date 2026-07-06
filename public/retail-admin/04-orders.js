@@ -2661,8 +2661,17 @@ function hoistedTracking(o) {
     // even before "dispatch"), so they're never hoisted here.
     if (mode === 'supplier') return '';
     if (!['dispatched', 'delivered'].includes(s.state || 'pending')) return '';
+    // Fold the shipping mode into the parcel label so it's self-identifying —
+    // "Parcel 2 · Land" tells the two parcels apart (air is faster + drives the
+    // perishable-delay warning) far better than a bare number. cuT single-lang
+    // to match the label. (Supplier is filtered out above; local hoists an ETA
+    // card, but still gets the word so its rider parcel reads distinct.)
+    const modeWord = mode === 'air'   ? cuT('Air', '空运')
+                   : mode === 'land'  ? cuT('Land', '陆运')
+                   : mode === 'local' ? cuT('Same-city', '同城')
+                   : '';
     const label = multi
-      ? `<div class="od-trk-parcel">${cuT(`Parcel ${i + 1}`, `包裹 ${i + 1}`)}</div>`
+      ? `<div class="od-trk-parcel">${cuT(`Parcel ${i + 1}`, `包裹 ${i + 1}`)}${modeWord ? ` <span class="od-trk-parcel-mode">· ${modeWord}</span>` : ''}</div>`
       : '';
     // Local same-city: no waybill — hoist the arrival-time (ETA) card instead.
     return label + (mode === 'local'

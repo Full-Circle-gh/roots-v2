@@ -4821,6 +4821,9 @@
     text-transform: uppercase; color: var(--text-3);
   }
   .od-trk-parcel:first-child { margin-top: 0; }
+  /* Shipping mode folded into the parcel label ("Parcel 2 · Land") — slightly
+     darker than the label so it reads as its attribute, not a second heading. */
+  .od-trk-parcel-mode { color: var(--text-2); }
   .shipment-head {
     display: flex; align-items: center; gap: var(--s3);
     margin-bottom: var(--s3);
