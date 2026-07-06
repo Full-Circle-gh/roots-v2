@@ -83,6 +83,9 @@ const MT_STATUS = {
   '配送中':     { en: 'Delivering',       tone: 'dispatched' },
   '派送中':     { en: 'Delivering',       tone: 'dispatched' },
   '已送达':     { en: 'Delivered',        tone: 'delivered' },
+  '用户已收货': { en: 'Delivered',        tone: 'delivered' },
+  '已收货':     { en: 'Delivered',        tone: 'delivered' },
+  '已签收':     { en: 'Delivered',        tone: 'delivered' },
   '已完成':     { en: 'Completed',        tone: 'delivered' },
   '交易完成':   { en: 'Completed',        tone: 'delivered' },
   '订单完成':   { en: 'Completed',        tone: 'delivered' },
@@ -97,16 +100,17 @@ function channelStatusMeta(desc) {
   const d = String(desc || '').trim();
   if (!d) return null;
   if (MT_STATUS[d]) return { en: MT_STATUS[d].en, cn: d, tone: MT_STATUS[d].tone };
-  // Keyword fallback for labels not in the table — colour sensibly, show the raw
-  // Chinese for both languages (it's dynamic platform text we can't pre-translate).
-  let tone = 'paid';
-  if (/退款|退货/.test(d))                tone = 'refunded';
-  else if (/取消/.test(d))                tone = 'cancelled';
-  else if (/完成|送达|签收|已收货/.test(d)) tone = 'delivered';
-  else if (/配送|派送|骑手|取货/.test(d))   tone = 'dispatched';
-  else if (/拣货|备货|发货|制作/.test(d))   tone = 'preparing';
-  else if (/待支付|未支付|待付款/.test(d))  tone = 'pending_payment';
-  return { en: d, cn: d, tone };
+  // Keyword fallback for labels not in the table — colour sensibly AND give a
+  // generic English word by tone, so the English view never leaks raw Chinese.
+  // The Chinese view still shows the exact platform label.
+  let tone = 'paid', en = 'In progress';
+  if (/退款|退货/.test(d))                { tone = 'refunded';        en = 'Refund'; }
+  else if (/取消/.test(d))                { tone = 'cancelled';       en = 'Cancelled'; }
+  else if (/完成|送达|签收|收货/.test(d)) { tone = 'delivered';       en = 'Delivered'; }
+  else if (/配送|派送|骑手|取货/.test(d))   { tone = 'dispatched';      en = 'Delivering'; }
+  else if (/拣货|备货|发货|制作/.test(d))   { tone = 'preparing';       en = 'Preparing'; }
+  else if (/待支付|未支付|待付款/.test(d))  { tone = 'pending_payment'; en = 'Unpaid'; }
+  return { en, cn: d, tone };
 }
 // channelStatusMeta is used by the read-only order drawer to show the EXACT
 // Meituan label (e.g. "Rider heading over") as a detail field. The list/card
