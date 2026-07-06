@@ -7779,49 +7779,53 @@
        open/close API wired in first. The figures are placeholders until the
        sales-summary endpoint lands; see salesGo()/salesInit() in 01-core.js. -->
   <section id="tab-sales">
-    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 var(--s4)">
+    <div class="td-head">
       <h2 style="margin:0">Sales channels · 销售渠道</h2>
-      <span style="flex:1"></span>
-      <button class="btn btn-sm" type="button" onclick="igAddLocation()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M21 10c0 7-9 12-9 12s-9-5-9-12a9 9 0 0 1 18 0z"/><line x1="12" y1="7" x2="12" y2="13"/><line x1="9" y1="10" x2="15" y2="10"/></svg>
-        Add location · 新增门店
-      </button>
-      <button class="btn btn-sm" type="button" onclick="igHelp('general')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-        Get help · 获取帮助
-      </button>
+      <span class="tds-actions">
+        <button class="btn btn-sm" type="button" onclick="igAddLocation()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" style="width:14px;height:14px"><path d="M12 5v14M5 12h14"/></svg>
+          Add location · 新增门店
+        </button>
+        <button class="btn btn-sm btn-ghost" type="button" onclick="igHelp('general')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.5 2.5 0 1 1 3.4 2.3c-.7.3-.9.8-.9 1.4v.5"/><path d="M12 16.8h.01"/></svg>
+          Get help · 获取帮助
+        </button>
+      </span>
     </div>
+
+    <div class="tds-body">
 
     <!-- Wizard host: setup flows (Eleme/Meituan/JD/Qingyun/Mini App) + Add location render here -->
     <div id="sales-setup-host" style="display:none"></div>
 
     <!-- SUMMARY — folded across every channel -->
-    <div class="sales-eyebrow">Summary · 概要</div>
-    <div class="fc-kpis" id="sales-summary">
-      <div class="fc-kpi">
+    <div class="td-kicker" style="margin-top:0">Summary · 概要</div>
+    <div class="db-kpis" id="sales-summary">
+      <div class="db-kpi">
         <div class="lbl">Channel revenue · 渠道营收</div>
         <div class="val" id="sales-sum-rev">—</div>
         <div class="sub">today · 今日</div>
       </div>
-      <div class="fc-kpi">
+      <div class="db-kpi">
         <div class="lbl">Channel orders · 渠道订单</div>
         <div class="val" id="sales-sum-orders">—</div>
         <div class="sub">today · 今日</div>
       </div>
-      <div class="fc-kpi">
+      <div class="db-kpi">
         <div class="lbl">Avg order value · 客单价</div>
         <div class="val" id="sales-sum-aov">—</div>
         <div class="sub">today · 今日</div>
       </div>
-      <div class="fc-kpi">
+      <div class="db-kpi">
         <div class="lbl">Active channels · 启用渠道</div>
         <div class="val" id="sales-sum-active">4 <span class="sales-of">/ 5</span></div>
         <div class="sub">live now · 当前在线</div>
       </div>
     </div>
 
-    <!-- CHANNELS — one card each -->
-    <div class="sales-eyebrow">Channels · 渠道</div>
+    <!-- CHANNELS — one card each. csRenderLocations injects the "Store status"
+         kicker + location close bar just above this anchor. -->
+    <div class="td-kicker" id="sales-ch-kicker">Channels · 渠道</div>
     <div class="sales-grid">
 
       <!-- Mini app (WeChat) -->
@@ -7945,7 +7949,7 @@
             </span>
             <div>
               <div class="sales-ch-name">Eleme · 饿了么</div>
-              <div class="sales-ch-stat"><span class="sales-dot off"></span>Off · 未连接</div>
+              <div class="sales-ch-stat"><span class="sales-dot off"></span>Not set up · 未设置</div>
             </div>
           </div>
           <button class="sales-toggle is-locked" type="button" disabled aria-disabled="true" title="Channel open/close coming soon · 渠道开关即将开放"><span class="knob"></span></button>
@@ -7969,6 +7973,7 @@
     <!-- The "Delivery & logistics" row (JD Logistics + Qingyun riders) moved to
          the Delivery tab's card hub (2026-07-03) — carriers live where delivery
          lives. One home per carrier: dlvGo('jd') / dlvGo('qy'). -->
+    </div><!-- /.tds-body -->
   </section>
 
   <!-- ── Meituan Sync ── -->

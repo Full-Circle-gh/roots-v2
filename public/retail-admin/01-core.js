@@ -424,19 +424,24 @@ function csRender() {
 function csRenderLocations() {
   const grid = document.querySelector('.sales-grid');
   if (!grid) return;
-  let bar = document.getElementById('cs-locations');
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'cs-locations';
-    bar.className = 'sales-locbar';
-    grid.parentNode.insertBefore(bar, grid);
+  let box = document.getElementById('cs-locations');
+  if (!box) {
+    box = document.createElement('div');
+    box.id = 'cs-locations';
+    // Land above the "Channels" kicker so the page reads Summary → Store
+    // status → Channels (the kicker anchor is in retail-admin.html).
+    const anchor = document.getElementById('sales-ch-kicker') || grid;
+    anchor.parentNode.insertBefore(box, anchor);
   }
   const locs = (_csData && _csData.locations) || [];
-  const storeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>';
-  bar.innerHTML = '<span class="sales-locbar-lead">' + storeIcon + '<span>' + cuT('Close a whole location', '关闭整个门店') + '</span></span>'
+  const storeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>';
+  box.innerHTML = '<div class="td-kicker">' + cuT('Store status', '门店状态') + '</div>'
+    + '<div class="sales-locbar">'
+    + '<span class="sales-locbar-lead">' + storeIcon + '<span>' + cuT('Close a whole location', '关闭整个门店') + '</span></span>'
+    + '<span class="sales-locbar-hint">' + cuT('turns every channel off for that store', '该门店的所有渠道将一起关闭') + '</span>'
     + '<span class="sales-locbar-pills">'
-    + locs.map((l) => '<button class="sales-locpill' + (l.allOpen ? '' : ' closed') + '" onclick="csLocation(\'' + l.storeCode + '\',' + (l.allOpen ? 'false' : 'true') + ')"><span class="nm">' + csStoreName(l) + '</span><span class="act">' + (l.allOpen ? cuT('Close all', '全部关闭') : cuT('Open all', '全部开启')) + '</span></button>').join('')
-    + '</span>';
+    + locs.map((l) => '<button class="sales-locpill' + (l.allOpen ? '' : ' closed') + '" onclick="csLocation(\'' + l.storeCode + '\',' + (l.allOpen ? 'false' : 'true') + ')"><span class="nm">' + csStoreName(l) + '</span><span class="act">' + (l.allOpen ? cuT('Close all', '全部关闭') : (cuT('Closed — open all', '已关闭 — 全部开启'))) + '</span></button>').join('')
+    + '</span></div>';
 }
 
 function csToggleGz(info) {
@@ -455,23 +460,26 @@ function csPopup(ch) {
   if (!ov) {
     ov = document.createElement('div');
     ov.id = 'cs-popup';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.className = 'cs-ov';
     document.body.appendChild(ov);
     ov.onclick = () => csClosePopup();
   }
+  // Tacet modal (classes in retail-admin.css): sage dot = open, mute = closed —
+  // a closed store is a state, not an error, so no red here.
   const rows = (info.cells || []).map((c) => {
     const note = (ch === 'meituan' && c.pending) ? ' <span class="muted" style="font-size:11px">' + cuT('applying…', '处理中…') + '</span>' : '';
-    return '<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line)">'
-      + '<span style="width:9px;height:9px;border-radius:50%;flex:none;background:' + (c.open ? '#1a9d5a' : 'var(--danger,#d33)') + '"></span>'
-      + '<div style="flex:1;min-width:0">' + csStoreName(c) + note + '</div>'
+    return '<div class="cs-row">'
+      + '<span class="cs-dot ' + (c.open ? 'open' : 'closed') + '"></span>'
+      + '<div class="cs-nm">' + csStoreName(c) + note + '</div>'
+      + '<span class="muted" style="font-size:12.5px">' + (c.open ? cuT('Open', '营业中') : cuT('Closed', '已关闭')) + '</span>'
       + '<button class="btn btn-sm' + (c.open ? '' : ' btn-primary') + '" onclick="csCell(\'' + ch + '\',\'' + c.storeCode + '\',' + (c.open ? 'false' : 'true') + ')">' + (c.open ? cuT('Close', '关闭') : cuT('Open', '开启')) + '</button>'
       + '</div>';
   }).join('');
-  ov.innerHTML = '<div style="background:var(--bg-pane,#fff);border:1px solid var(--line);border-radius:16px;max-width:400px;width:100%;padding:18px 20px;box-shadow:0 20px 60px rgba(18,22,26,.28)" onclick="event.stopPropagation()">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:15px">' + csName(ch) + ' — ' + cuT('by location', '按门店') + '</b><button class="btn btn-sm" onclick="csClosePopup()">✕</button></div>'
-    + ''
+  ov.innerHTML = '<div class="cs-modal" onclick="event.stopPropagation()">'
+    + '<div class="cs-modal-head"><b>' + csName(ch) + ' — ' + cuT('by location', '按门店') + '</b><button class="cs-modal-x" onclick="csClosePopup()" aria-label="Close">✕</button></div>'
+    + '<div class="cs-sub">' + cuT('Turn this channel on or off per location.', '按门店开启或关闭这个渠道。') + '</div>'
     + rows
-    + '<div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">'
+    + '<div class="cs-foot">'
     + '<button class="btn btn-sm" onclick="csChannelAll(\'' + ch + '\',false)">' + cuT('Close all', '全部关闭') + '</button>'
     + '<button class="btn btn-sm btn-primary" onclick="csChannelAll(\'' + ch + '\',true)">' + cuT('Open all', '全部开启') + '</button>'
     + '</div></div>';
