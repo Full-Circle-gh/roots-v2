@@ -617,9 +617,13 @@ async function processListingJobs() {
 // The web server writes store_business_status.target_open (operator toggle); this
 // daemon — which owns the logged-in 闪购 session — applies it via change_status,
 // then reads /common/businessStatus back so the toggle UI reflects reality. Read
-// is throttled; a pending command is applied immediately on any cycle. NOT gated
-// by isStoreOpen (an operator can close/reopen anytime); the loop's proxy gate
-// still applies. See feature_meituan_store_open_close.
+// is throttled AND only runs while the store is open (+grace): a merchant backend
+// pinging Meituan every 60s in the dead of night is itself a risk-control tell —
+// it's what surfaced the 2am 验证中心 challenge. A pending operator open/close
+// command still applies IMMEDIATELY at any hour (an operator can close/reopen
+// anytime — that must never wait for opening hours); only the periodic read-back
+// is hour-gated. The loop's proxy gate still applies. See
+// feature_meituan_store_open_close.
 const STATUS_READ_MS = 60_000;
 const lastStatusRead = {};
 
@@ -661,7 +665,10 @@ async function syncBusinessStatus(storeCode) {
   let cmd = null;
   try { cmd = db.prepare("SELECT target_open FROM store_business_status WHERE store_code=? AND target_open IS NOT NULL").get(storeCode); }
   catch (_) { cmd = null; }
-  const due = Date.now() - (lastStatusRead[storeCode] || 0) >= STATUS_READ_MS;
+  // Periodic read-back only while the store is open (+grace) — no dead-of-night
+  // heartbeat to Meituan. A pending command (cmd) still falls through below and is
+  // applied at any hour.
+  const due = isStoreOpen(storeCode) && Date.now() - (lastStatusRead[storeCode] || 0) >= STATUS_READ_MS;
   if (!cmd && !due) return;
 
   try {
