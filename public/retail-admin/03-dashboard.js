@@ -936,6 +936,25 @@ function dashOpenProductFromFeed(productId) {
   tick();
 }
 
+// "Open restock" on the Running-low card → jump to the Products tab and land
+// pre-filtered on everything that needs buying back (out of stock + low),
+// lowest stock first. Reuses the Products page's own quick-filter (PA_STATUS
+// 'restock') instead of dumping the operator on the full catalogue. paLoad()
+// is async on first open, so poll briefly for the catalogue before applying.
+function dashOpenRestock() {
+  const btn = document.querySelector('.tabs [data-tab="products"]');
+  if (btn) btn.click();   // activates Products + triggers paLoad() on first open
+  let tries = 0;
+  const tick = () => {
+    if (typeof paSetStatus === 'function' && Array.isArray(PA_PRODUCTS) && PA_PRODUCTS.length) {
+      if (PA_STATUS !== 'restock') paSetStatus('restock');   // paSetStatus toggles; only set when off
+      return;
+    }
+    if (tries++ < 30) { setTimeout(tick, 150); return; }
+  };
+  tick();
+}
+
 // Programmatic tab-switch — clicks the tab button so the global switcher
 // runs (closes drawers, updates active classes, etc.). Returns true if the
 // tab exists, false otherwise — lets callers fall back to a sibling tab.
@@ -1261,7 +1280,7 @@ function tdAttnRender() {
       moreText = restN > 0 ? cuT(`and ${restN} more${at}`, `另有 ${restN} 项${TD.stockStore ? ' · ' + tdStockStoreName() : ''}`) : '';
     }
     cards.push(tdAttnCard('amber', 'box', cuT('Running low', '库存告急'), cnt, rowsHtml, moreText,
-      `<button type="button" class="td-attn-go" onclick="dashJumpTab('products')">${cuT('Open restock', '前往补货')}</button>`,
+      `<button type="button" class="td-attn-go" onclick="dashOpenRestock()">${cuT('Open restock', '前往补货')}</button>`,
       storeSel));
   }
 

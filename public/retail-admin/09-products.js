@@ -73,9 +73,11 @@ function paSetView(v) {
 }
 
 // Quick status filter driven by the catalogue-health KPI tiles. One of
-// 'all' | 'live' | 'oos' | 'low' | 'drafts'. Clicking a tile toggles its
-// filter (click again to clear), narrowing the grid to that status —
-// independent of the search box and category filter, which still stack on top.
+// 'all' | 'live' | 'restock' | 'oos' | 'low' | 'drafts'. Clicking a tile
+// toggles its filter (click again to clear), narrowing the grid to that
+// status — independent of the search box and category filter, which still
+// stack on top. 'restock' = OOS + low together (what the dashboard's
+// "Open restock" button deep-links into).
 let PA_STATUS = 'all';
 function paSetStatus(v) {
   PA_STATUS = (PA_STATUS === v) ? 'all' : v;   // click the active tile to clear
@@ -99,11 +101,12 @@ function _paStatusMatch(p) {
   const pub = p.is_published === 1;
   const s = _paStockOf(p);
   switch (PA_STATUS) {
-    case 'live':   return pub;
-    case 'drafts': return !pub;
-    case 'oos':    return pub && s <= 0;
-    case 'low':    return pub && s > 0 && s <= paLowThreshold(p);
-    default:       return true;
+    case 'live':    return pub;
+    case 'drafts':  return !pub;
+    case 'oos':     return pub && s <= 0;
+    case 'low':     return pub && s > 0 && s <= paLowThreshold(p);
+    case 'restock': return pub && s <= paLowThreshold(p);   // OOS + low = everything to buy back
+    default:        return true;
   }
 }
 
@@ -932,13 +935,15 @@ function paRenderKpis(animate) {
     if (animate) dashCountUp(el, n); else el.textContent = fcNum(n);
   };
   set('pa-kpi-live', live);
+  set('pa-kpi-restock', oos + low);   // everything that needs buying back
   set('pa-kpi-oos', oos);
   set('pa-kpi-low', low);
   set('pa-kpi-drafts', drafts);
   const oosTile = document.getElementById('pa-kpi-oos-tile'); if (oosTile) oosTile.classList.toggle('alert', oos > 0);
   const lowTile = document.getElementById('pa-kpi-low-tile'); if (lowTile) lowTile.classList.toggle('alert', low > 0);
+  const restockTile = document.getElementById('pa-kpi-restock-tile'); if (restockTile) restockTile.classList.toggle('alert', (oos + low) > 0);
   // Light up whichever tile drives the active quick-filter (none when 'all').
-  const tiles = { live: 'pa-kpi-live-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile' };
+  const tiles = { live: 'pa-kpi-live-tile', restock: 'pa-kpi-restock-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile' };
   for (const [status, id] of Object.entries(tiles)) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('pa-kpi-on', PA_STATUS === status);
@@ -1146,6 +1151,11 @@ function paRender() {
   }
   if (PA_STATUS !== 'all') {
     rows = rows.filter(_paStatusMatch);
+  }
+  // Restock view — lowest stock first, so the emptiest shelves (out of stock,
+  // then 1 left, 2 left…) sit at the top where the operator works down the list.
+  if (PA_STATUS === 'restock') {
+    rows = rows.slice().sort((a, b) => _paStockOf(a) - _paStockOf(b));
   }
 
   // Count display UNITS (variant sizes merged into one), so the toolbar total
