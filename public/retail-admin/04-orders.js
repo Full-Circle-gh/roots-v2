@@ -1304,47 +1304,6 @@ async function _pollUnseenInbox() {
   });
 })();
 
-// ── Delivery attention badge (needs-action dot on the Delivery tab) ─────
-// Replaces the old static "runs an automation" marker: the dot now lights ONLY
-// when the same-city rider automation needs a human — a failed Qingyun push
-// (a paid delivery order that couldn't be handed to a rider) or a set-up store
-// that's disconnected while auto-push is on. Unlike the Orders badge there's no
-// "seen" concept — the count is a live health reading, so it clears by itself
-// when the underlying problem clears. Shows the number when >1, a bare dot at 1.
-function _paintDeliveryBadge(count, reason) {
-  const btn   = document.querySelector('.tabs [data-tab="delivery"]');
-  const badge = document.getElementById('deliveryTabBadge');
-  if (!btn || !badge) return;
-  if (count > 0) {
-    btn.classList.add('has-unseen');
-    badge.textContent = count > 1 ? (count > 99 ? '99+' : String(count)) : '';
-    if (reason) badge.setAttribute('title', reason);
-  } else {
-    btn.classList.remove('has-unseen');
-    badge.textContent = '';
-    badge.removeAttribute('title');
-  }
-}
-async function _pollDeliveryAttention() {
-  try {
-    const j = await api('/api/retail-admin/delivery-attention');
-    if (!j?.success) return;
-    const d = j.data || {};
-    const parts = [];
-    if (d.failedPushes)         parts.push(cuT(d.failedPushes + ' rider hand-off failed', d.failedPushes + ' 单派单失败'));
-    if (d.disconnected?.length) parts.push(cuT(d.disconnected.length + ' store disconnected', d.disconnected.length + ' 家门店掉线'));
-    _paintDeliveryBadge(d.needsAction || 0, parts.join(' · '));
-  } catch { /* network/unauthorized — leave the badge as-is */ }
-}
-(function _startDeliveryAttentionPoller() {
-  if (window._deliveryAttentionPollerWired) return;
-  window._deliveryAttentionPollerWired = true;
-  setTimeout(_pollDeliveryAttention, 800);
-  setInterval(_pollDeliveryAttention, ORDERS_UNSEEN_POLL_MS);
-  window.addEventListener('focus', _pollDeliveryAttention);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) _pollDeliveryAttention(); });
-})();
-
 // "Ship by" — when the customer needs this order shipped/delivered. Pulled
 // from `delivery_slot_label` (the human-readable picker label captured at
 // checkout) and `scheduled_for` (ISO start of the slot, or NULL for ASAP).
