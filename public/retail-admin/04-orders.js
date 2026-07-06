@@ -2659,9 +2659,22 @@ function renderLocalEtaCard(o, s, hoisted) {
   const sid = s.id;
   const eta = s.local_eta || '';            // 'HH:MM' 24h, or '' when unset
   const pretty = eta ? formatEtaPretty(eta) : '';
+  // When the Qingyun daemon has stamped the courier's promised arrival, the ETA
+  // is filled and kept fresh automatically — the operator no longer types it.
+  // eta_source='auto' marks that; the manual picker is tucked behind a toggle so
+  // staff can still override (an override flips the row to 'manual' server-side).
+  const isAuto = eta && s.eta_source === 'auto';
   // Inline (under the items) it sits below a dashed divider; hoisted to the top
   // of the drawer it stands on its own, so drop the divider/top margin there.
   const wrapStyle = hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);';
+  // The manual picker markup — shown outright when there's no auto ETA, or
+  // collapsed inside a <details> under the auto display as the override path.
+  const picker = `
+      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
+        <input type="time" id="eta-time-${sid}" value="${escapeHtml(eta)}" style="min-width:140px; font-family: var(--f-mono);">
+        <button class="btn ${eta ? 'btn-primary' : ''} btn-sm" onclick="saveLocalEta(${o.id}, ${sid}, event)">${eta ? 'Update time · 更新时间' : 'Set arrival time · 设置送达时间'}</button>
+        ${eta ? `<button class="btn btn-sm" onclick="clearLocalEta(${o.id}, ${sid}, event)">Clear · 清除</button>` : ''}
+      </div>`;
   return `
     <div style="${wrapStyle}" id="eta-card-${sid}">
       ${renderGzMethodToggle(o, s)}
@@ -2673,15 +2686,17 @@ function renderLocalEtaCard(o, s, hoisted) {
             <div style="font-family: var(--f-mono); font-weight:600; font-size:15px;">${escapeHtml(pretty)}</div>
           </div>
           <div style="flex:1; min-width:120px; text-align:right;">
-            <span class="muted" style="font-size:11px;">Shown to the customer · 已展示给顾客</span>
+            <span class="muted" style="font-size:11px;">${isAuto ? 'From the courier · 来自骑手,自动' : 'Shown to the customer · 已展示给顾客'}</span>
           </div>
         </div>` : ''}
-      <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
-        <input type="time" id="eta-time-${sid}" value="${escapeHtml(eta)}" style="min-width:140px; font-family: var(--f-mono);">
-        <button class="btn ${eta ? 'btn-primary' : ''} btn-sm" onclick="saveLocalEta(${o.id}, ${sid}, event)">${eta ? 'Update time · 更新时间' : 'Set arrival time · 设置送达时间'}</button>
-        ${eta ? `<button class="btn btn-sm" onclick="clearLocalEta(${o.id}, ${sid}, event)">Clear · 清除</button>` : ''}
-      </div>
-      <div class="muted" style="font-size:11px; margin-top:6px;">Same-city delivery — set when the rider should arrive; the customer sees this on their order. · 同城配送 — 设置骑手预计送达时间,顾客可在订单中查看。</div>
+      ${isAuto ? `
+        <details style="margin-bottom:4px;">
+          <summary style="font-size:12px; cursor:pointer; color:var(--text-3);">Set a time manually · 手动设置时间</summary>
+          <div style="margin-top:8px;">${picker}</div>
+        </details>` : picker}
+      <div class="muted" style="font-size:11px; margin-top:6px;">${isAuto
+        ? 'The courier reports the arrival time and it updates on its own — the customer sees it automatically. Set a time above only to override. · 骑手会自动上报送达时间并实时更新,顾客可直接查看。如需覆盖请在上方手动设置。'
+        : 'Same-city delivery — set when the rider should arrive; the customer sees this on their order. · 同城配送 — 设置骑手预计送达时间,顾客可在订单中查看。'}</div>
       ${renderQyDispatch(o)}
     </div>`;
 }

@@ -2785,6 +2785,13 @@ db.exec(`
 // shipments; air/land parcels use tracking_number instead.
 addColumn('retail_shipments', 'local_eta', 'TEXT');
 
+// Where local_eta came from: 'auto' = stamped by the Qingyun daemon from the
+// courier's promised arrival time (expected_delivery_at); 'manual' = an operator
+// typed/edited it by hand. The daemon only auto-fills/refreshes when this is NOT
+// 'manual', so an operator override permanently wins. NULL = never set (treated
+// as auto-fillable). See scripts/qingyun-daemon.js stampLocalEta.
+addColumn('retail_shipments', 'eta_source', 'TEXT');
+
 // Per-store restock *target* — the level this store wants to keep on
 // hand. When physical_qty < restock_target the cross-store grid flags
 // it. Optional (NULL = no target set yet).

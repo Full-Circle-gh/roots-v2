@@ -201,6 +201,62 @@ const upsert = db.prepare(`
     updated_at       = CURRENT_TIMESTAMP
 `);
 
+// ── Auto-fill the customer-facing ETA from the courier ────────────────────────
+// A same-city (local) order's "Estimated arrival" was operator-typed. Once Qingyun
+// dispatches a courier it hands us the promised arrival time (expectedDeliveredTime),
+// so we stamp that onto the order's 'local' shipment (local_eta = 'HH:MM' Beijing) and
+// mark eta_source='auto'. The customer order page + admin drawer both read local_eta,
+// so one write feeds the whole chain. An operator override sets eta_source='manual'
+// (see routes/retail.js saveLocalEta), which we never overwrite. Same-day by design:
+// we only stamp when the promised time is today (Beijing) so a next-day scheduled
+// order doesn't get a misleading same-day clock.
+const stampEta = db.prepare(`
+  UPDATE retail_shipments
+     SET local_eta = @eta, eta_source = 'auto', updated_at = CURRENT_TIMESTAMP
+   WHERE order_id = @order_id AND mode = 'local'
+     AND (eta_source IS NULL OR eta_source != 'manual')
+     AND COALESCE(local_eta, '') != @eta`);
+
+// Qingyun timestamps arrive as unix epoch (seconds or ms) or an ISO-ish string.
+// Return Beijing 'HH:MM' iff it lands on today (Beijing); else null. Never throws.
+function beijingSameDayHHMM(val) {
+  try {
+    if (val == null || val === '') return null;
+    let ms;
+    if (typeof val === 'number' || /^\d+$/.test(String(val))) {
+      const n = Number(val);
+      ms = n < 1e12 ? n * 1000 : n;   // seconds vs milliseconds
+    } else {
+      ms = Date.parse(String(val).replace(' ', 'T'));
+    }
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    const bj  = new Date(ms + 8 * 3600 * 1000);
+    const now = new Date(Date.now() + 8 * 3600 * 1000);
+    if (bj.getUTCFullYear() !== now.getUTCFullYear()
+      || bj.getUTCMonth() !== now.getUTCMonth()
+      || bj.getUTCDate() !== now.getUTCDate()) return null;   // not today Beijing
+    const p = (n) => String(n).padStart(2, '0');
+    return `${p(bj.getUTCHours())}:${p(bj.getUTCMinutes())}`;
+  } catch (e) { return null; }
+}
+
+// Stamp the courier's promised arrival onto the matched order's local shipment.
+// Only for dispatched orders (a courier is actually on it) with a same-day ETA;
+// falls back to now+eta_seconds when Qingyun gives no explicit promised time.
+function stampLocalEta(retailOrderId, d, track) {
+  if (!retailOrderId) return;
+  const dispatched = !!(d.deliveryId || d.carrierName || d.riderName
+    || (track && track.deliveryId) || (track && Number(track.deliveryStatus) > 0));
+  if (!dispatched) return;
+  let hhmm = beijingSameDayHHMM(d.expectedDeliveredTime);
+  if (!hhmm && track && Number.isFinite(track.etaSeconds) && track.etaSeconds > 0) {
+    hhmm = beijingSameDayHHMM(Date.now() + track.etaSeconds * 1000);
+  }
+  if (!hhmm) return;
+  try { stampEta.run({ eta: hhmm, order_id: retailOrderId }); }
+  catch (e) { log('eta', `stampLocalEta ${retailOrderId} error: ${e.message}`); }
+}
+
 // ── Phase 2: auto-push paid delivery orders into Qingyun (drain the queue) ─────
 // The main app enqueues qingyun_push_queue rows on payment; here we hold the signed
 // browser, so we build the create payload from the roots order and call order/create.
@@ -433,6 +489,9 @@ async function pollStore(storeCode) {
         raw_order: JSON.stringify(d.raw).slice(0, 20000),
         raw_track: track ? JSON.stringify(track.raw).slice(0, 20000) : null,
       });
+      // Auto-fill the customer-facing "Estimated arrival" from the courier's
+      // promised time (unless an operator set it by hand).
+      stampLocalEta(retailOrderId, d, track);
       tracked++;
     }
     if (tracked) logSync(storeCode, 'poll', 'ok', { tracked });

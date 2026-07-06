@@ -16353,6 +16353,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     dispatched_at: s.dispatched_at,
     delivered_at:  s.delivered_at,
     local_eta:     s.local_eta || null,   // 'HH:MM' arrival time for local delivery (no waybill)
+    eta_source:    s.eta_source || null,  // 'auto' = from Qingyun courier, 'manual' = operator-set
     state: shipmentState(s),
     items: o.items.filter(it => it.shipment_id === s.id),
     tracking: buildShipmentTrackingView(s),
@@ -18718,8 +18719,10 @@ router.put('/api/retail-admin/orders/:id/eta', requireRetailAdmin, express.json(
   if (!shipment) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
   if (shipment.mode !== 'local') return res.status(409).json({ success: false, error: 'not_local' });
 
+  // eta_source='manual' pins this as an operator override — the Qingyun daemon
+  // never overwrites a manual ETA with the courier's auto time.
   tdb().prepare(
-    `UPDATE retail_shipments SET local_eta = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    `UPDATE retail_shipments SET local_eta = ?, eta_source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
   ).run(eta, shipment.id);
   logActivity(req.user.id, req.user.username, 'eta_set', 'retail_order', id,
     { eta, shipment_id: shipment.id }, req.ip);
@@ -18737,8 +18740,10 @@ router.delete('/api/retail-admin/orders/:id/eta', requireRetailAdmin, (req, res)
     ? shipments.find(x => x.id === shipmentIdReq)
     : shipments.find(x => x.mode === 'local') || shipments[0];
   if (!s) return res.status(400).json({ success: false, error: 'invalid_shipment_id' });
+  // Clearing is an explicit operator choice to show no ETA — pin it 'manual' so
+  // the Qingyun daemon doesn't re-stamp the courier time on the next poll.
   tdb().prepare(
-    `UPDATE retail_shipments SET local_eta = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    `UPDATE retail_shipments SET local_eta = NULL, eta_source = 'manual', updated_at = CURRENT_TIMESTAMP WHERE id = ?`
   ).run(s.id);
   logActivity(req.user.id, req.user.username, 'eta_clear', 'retail_order', id, { shipment_id: s.id }, req.ip);
   res.json({ success: true });
