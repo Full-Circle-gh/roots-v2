@@ -48,7 +48,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, #db-activity-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -78,7 +78,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, #db-activity-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-orders, #tab-invoices, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -1166,6 +1166,25 @@
       <div class="drawer-foot">
         <button class="btn" onclick="closeDrawer('#db-activity-drawer')">Close · 关闭</button>
         <button class="btn btn-primary" id="db-drawer-open" style="display:none">Open ↗</button>
+      </div>
+    </aside>
+
+    <!-- Running-low stock drawer — the FULL out-of-stock + low-stock list
+         behind the card's "and N more". Read drawer (dw-dismiss: Esc or an
+         outside click closes it). Body + pill filled by dashStockDrawer*
+         (03-dashboard); reuses the global .side-drawer chrome. -->
+    <aside id="db-stock-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
+      <button class="drawer-close" onclick="closeDrawer('#db-stock-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <div class="drawer-head">
+        <h3 style="margin:0;font-size:14px;display:flex;align-items:center;gap:10px"><span>Running low · 库存告急</span>
+          <span id="db-stock-pill" class="td-pill td-pill-amber" data-no-i18n style="display:none"></span></h3>
+      </div>
+      <div class="drawer-body" id="db-stock-body"></div>
+      <div class="drawer-foot">
+        <button class="btn" onclick="closeDrawer('#db-stock-drawer')">Close · 关闭</button>
+        <button class="btn btn-primary" onclick="dashStockDrawerRestock()">Open restock · 前往补货</button>
       </div>
     </aside>
 

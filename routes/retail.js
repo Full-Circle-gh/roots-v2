@@ -11753,11 +11753,14 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 // even when they were fully stocked per-store — see the stock NOTE in the
 // activity endpoint above.
 router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => {
-  const previewLimit = Math.min(Math.max(parseInt(req.query.preview || '8', 10) || 8, 1), 50);
+  // preview caps the item lists (counts are always exact). The dashboard card
+  // asks for 8; its Running-low drawer asks for 500 to show the whole list.
+  const previewLimit = Math.min(Math.max(parseInt(req.query.preview || '8', 10) || 8, 1), 500);
   let low = { count: 0, items: [] };
   let out_of_stock = { count: 0, items: [] };
   let refunds = { count: 0, items: [] };
   let delivery_alerts = { count: 0, items: [] };
+  let invoices = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -11782,6 +11785,25 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
                     WHERE rss.product_id = p.id AND rss.store_id = @store_id)`
     : '';
   const storeBind = storeId ? { store_id: storeId } : {};
+  // Optional per-store breakdown (breakdown=1, all-stores view only) — feeds
+  // the dashboard's Running-low drawer so a multi-store tenant can see which
+  // shelf is short without flipping the store picker. json_group_array keeps
+  // it inside the same query; the client sorts and labels.
+  const wantBreakdown = String(req.query.breakdown || '') === '1' && !storeId;
+  const BREAKDOWN_COL = wantBreakdown ? `,
+        (SELECT json_group_array(json_object(
+                  'name_en', rs.name_en, 'name_cn', rs.name_cn,
+                  'qty', COALESCE(rss.physical_qty, 0)))
+           FROM retail_store_stock rss
+           JOIN retail_stores rs ON rs.id = rss.store_id
+          WHERE rss.product_id = p.id AND rs.is_active = 1) AS stores` : '';
+  // json_group_array arrives as a string — parse it so clients get an array.
+  const parseStores = (it) => {
+    if (typeof it.stores === 'string') {
+      try { it.stores = JSON.parse(it.stores); } catch (e) { it.stores = null; }
+    }
+    return it;
+  };
 
   try {
     const lowDefault = lowStockDefault();
@@ -11797,7 +11819,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
          ${STORE_SCOPE}
     `).get({ ...storeBind, low_default: lowDefault }).n;
     const lowItems = tdb().prepare(`
-      SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty
+      SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty${BREAKDOWN_COL}
         FROM store_products p
        WHERE ${REAL_STOCK} > 0
          AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, @low_default)
@@ -11805,7 +11827,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
          ${STORE_SCOPE}
        ORDER BY stock_qty ASC, p.name_en LIMIT @preview
     `).all({ ...storeBind, low_default: lowDefault, preview: previewLimit });
-    low = { count: lowCount, items: lowItems };
+    low = { count: lowCount, items: lowItems.map(parseStores) };
 
     const oosCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products p
@@ -11814,14 +11836,14 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
          ${STORE_SCOPE}
     `).get(storeBind).n;
     const oosItems = tdb().prepare(`
-      SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty
+      SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty${BREAKDOWN_COL}
         FROM store_products p
        WHERE ${REAL_STOCK} = 0
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
        ORDER BY p.name_en LIMIT @preview
     `).all({ ...storeBind, preview: previewLimit });
-    out_of_stock = { count: oosCount, items: oosItems };
+    out_of_stock = { count: oosCount, items: oosItems.map(parseStores) };
 
     // Refunds awaiting operator attention. refund_status states:
     //   pending | reviewing | approved | paid | rejected | withdrawn
@@ -11886,12 +11908,44 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         buyer:            maskBuyerName(r.buyer),
       })),
     };
+
+    // Fapiao worklist — un-issued invoice requests, oldest debt first. Feeds
+    // the "Invoices to issue" attention card; its deep link lands on the
+    // Orders list pre-filtered to the same `needs_invoice` pseudo-status.
+    const INV_WHERE = `o.needs_invoice = 1
+         AND COALESCE(o.invoice_status, 'requested') <> 'issued'
+         AND o.status NOT IN ('cancelled','pending_payment')`;
+    const invCount = tdb().prepare(`
+      SELECT COUNT(*) AS n FROM retail_orders o WHERE ${INV_WHERE}
+    `).get().n;
+    const invItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.total, o.placed_at,
+             o.invoice_type, o.invoice_title,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${INV_WHERE}
+       ORDER BY o.placed_at ASC LIMIT ?
+    `).all(previewLimit);
+    invoices = {
+      count: invCount,
+      items: invItems.map(r => ({
+        id:        r.id,
+        order_no:  r.order_no,
+        amount:    r.total,
+        type:      r.invoice_type || 'personal',
+        // Company requests show the 抬头 (that's what the accountant types);
+        // personal ones fall back to the buyer, masked like the refund card.
+        title:     r.invoice_title || maskBuyerName(r.buyer),
+        placed_at: r.placed_at,
+      })),
+    };
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
@@ -16171,6 +16225,14 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_status, o.refund_amount_requested,
                     o.refund_amount_approved, o.refund_amount_paid,
                     o.refund_requested_at,
+                    -- Fapiao request riding the order (the Invoices sub-tab is
+                    -- retired; the list's "Needs invoice" chip + row summary and
+                    -- the drawer block are the invoice UI now). subtotal +
+                    -- shipping_fee feed the "Copy for accounting" goods total.
+                    o.subtotal, o.shipping_fee,
+                    o.needs_invoice, o.invoice_type, o.invoice_title,
+                    o.invoice_tax_id, o.invoice_email, o.invoice_status,
+                    o.invoice_number, o.invoice_file_url, o.invoice_issued_at,
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.routed_by_distance, o.channel, o.fulfillment_type,
                     o.channel_status, o.channel_status_at, o.channel_eta,
@@ -16227,6 +16289,12 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   // are reachable from the main orders table, not only the chip view.
   if (status === 'refunds_open') {
     sql += " AND o.refund_status IN ('pending','reviewing','approved')";
+  } else if (status === 'needs_invoice') {
+    // Pseudo-status: every order carrying a fapiao request, whatever its
+    // primary status. Dead orders drop out (a cancelled order owes no fapiao);
+    // issued ones stay browsable in this view but sort below the open work.
+    sql += ` AND o.needs_invoice = 1
+             AND o.status NOT IN ('cancelled','pending_payment')`;
   } else if (status === 'paid') {
     // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
     // multi-parcel order that's had only SOME parcels shipped flips to
@@ -16252,7 +16320,13 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   }
   if (from) { sql += ' AND o.placed_at >= ?'; params.push(from); }
   if (to)   { sql += ' AND o.placed_at <= ?'; params.push(to); }
-  sql += ' ORDER BY o.placed_at DESC LIMIT ? OFFSET ?';
+  // The Needs-invoice view is a work queue: un-issued requests first (oldest
+  // debt at the very top), issued history below. Everything else stays newest-first.
+  sql += (status === 'needs_invoice')
+    ? ` ORDER BY (CASE WHEN o.invoice_status = 'issued' THEN 1 ELSE 0 END) ASC,
+                 (CASE WHEN o.invoice_status = 'issued' THEN NULL ELSE o.placed_at END) ASC,
+                 o.placed_at DESC LIMIT ? OFFSET ?`
+    : ' ORDER BY o.placed_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
   const rows = tdb().prepare(sql).all(...params);
@@ -16312,6 +16386,16 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   out.refunds_open = tdb().prepare(
     `SELECT COUNT(*) AS n FROM retail_orders
       WHERE refund_status IN ('pending','reviewing','approved')${where}`
+  ).get(...args).n;
+
+  // Fapiao worklist — un-issued invoice requests on live orders. Matches the
+  // `status=needs_invoice` pseudo-filter's open rows (issued history rides the
+  // list but is done work, so it never feeds the badge).
+  out.needs_invoice = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_orders
+      WHERE needs_invoice = 1
+        AND COALESCE(invoice_status, 'requested') <> 'issued'
+        AND status NOT IN ('cancelled','pending_payment')${where}`
   ).get(...args).n;
 
   res.json({ success: true, data: out });

@@ -997,7 +997,7 @@ function tdInit() {
   tdDateRender();
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdDateRender(); tdRecapRender(); tdAttnRender(); });
+  if (window.onLangChange) onLangChange(() => { tdDateRender(); tdRecapRender(); tdAttnRender(); dashStockDrawerRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
@@ -1037,9 +1037,13 @@ function tdStockStoreName() {
   return s ? (cn ? (s.name_cn || s.name_en || s.code) : (s.name_en || s.code)) : '';
 }
 // A store pick re-pulls ops so the Running-low card reflects that shelf.
+// The stock drawer shares the same pick (its dropdown calls this too), so an
+// open drawer re-pulls its full list as well — both surfaces stay in step.
 function tdStockStoreChange(v) {
   TD.stockStore = v || '';
   tdOpsLoad();
+  const d = document.getElementById('db-stock-drawer');
+  if (d && d.classList.contains('open')) dashStockDrawerLoad();
 }
 
 // Today's date under the page title — the calm anchor for "Today" numbers.
@@ -1280,7 +1284,12 @@ function tdAttnRender() {
       const restN = cnt - shown;
       const at = TD.stockStore ? ' ' + cuT('at ' + tdStockStoreName(), '· ' + tdStockStoreName()) : '';
       rowsHtml = oosRows.join('') + lowRows.join('');
-      moreText = restN > 0 ? cuT(`and ${restN} more${at}`, `另有 ${restN} 项${TD.stockStore ? ' · ' + tdStockStoreName() : ''}`) : '';
+      // The hidden tail is a link now — it opens the stock drawer with the
+      // full list (data-no-i18n: the CN string can hold a " · " store tail,
+      // and the whole label is repainted by tdAttnRender on a toggle anyway).
+      moreText = restN > 0
+        ? `<button type="button" class="td-attn-more-link" data-no-i18n onclick="dashStockDrawerOpen(event)">${cuT(`and ${restN} more${at}`, `另有 ${restN} 项${TD.stockStore ? ' · ' + tdStockStoreName() : ''}`)}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>`
+        : '';
     }
     cards.push(tdAttnCard('amber', 'box', cuT('Running low', '库存告急'), cnt, rowsHtml, moreText,
       `<button type="button" class="td-attn-go" onclick="dashOpenRestock()">${cuT('Open restock', '前往补货')}</button>`,
@@ -1336,6 +1345,107 @@ function tdAttnRender() {
     return;
   }
   host.innerHTML = `<div class="td-attn-grid">${cards.join('')}</div>`;
+}
+
+// ── Running-low stock drawer ────────────────────────────────────────────────
+// The card previews 4 items; "and N more" opens this drawer with the FULL
+// out-of-stock + low-stock list (one preview=500 pull — far above any real
+// catalogue, and anything past it gets a named tail rather than vanishing).
+// All-stores view asks for breakdown=1 so each row can carry per-shelf counts
+// on multi-store tenants. Shares TD.stockStore with the card's dropdown.
+let TD_STOCK_FULL = null;   // last payload — repainted on a language toggle
+
+function dashStockDrawerOpen(ev) {
+  // The opening click must not bubble to the dw-dismiss outside-click
+  // handler, which would shut the drawer the moment it opens.
+  if (ev && ev.stopPropagation) ev.stopPropagation();
+  const d = document.getElementById('db-stock-drawer'); if (!d) return;
+  d.classList.add('open');
+  d.setAttribute('aria-hidden', 'false');
+  dashStockDrawerLoad();
+}
+
+async function dashStockDrawerLoad() {
+  const body = document.getElementById('db-stock-body'); if (!body) return;
+  body.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
+  TD_STOCK_FULL = null;
+  try {
+    const scope = TD.stockStore
+      ? `store_id=${encodeURIComponent(TD.stockStore)}`
+      : 'breakdown=1';
+    const j = await api(`/api/retail-admin/dashboard/ops?${scope}&preview=500`);
+    TD_STOCK_FULL = j.data || null;
+  } catch (e) { /* render paints the retry line */ }
+  dashStockDrawerRender();
+}
+
+function dashStockDrawerRender() {
+  const d = document.getElementById('db-stock-drawer');
+  if (!d || !d.classList.contains('open')) return;
+  const body = document.getElementById('db-stock-body');
+  const pill = document.getElementById('db-stock-pill');
+  if (!body) return;
+  if (!TD_STOCK_FULL) {
+    body.innerHTML = `<div class="td-muted">${cuT('Could not load. Close and try again.', '加载失败，请关闭后重试。')}</div>`;
+    if (pill) pill.style.display = 'none';
+    return;
+  }
+  const low = TD_STOCK_FULL.low_stock || { count: 0, items: [] };
+  const oos = TD_STOCK_FULL.out_of_stock || { count: 0, items: [] };
+  const cnt = low.count + oos.count;
+  if (pill) { pill.textContent = String(cnt); pill.style.display = ''; }
+  const cn = window.cuLang && cuLang() === 'cn';
+  // Per-shelf line under a name — only present in the all-stores view of a
+  // multi-store tenant (the server sends `stores` when breakdown=1). Emptiest
+  // shelf first, so the store to restock reads first.
+  const subLine = (it) => {
+    const st = Array.isArray(it.stores) ? it.stores : null;
+    if (!st || st.length < 2) return '';
+    const parts = st.slice().sort((a, b) => (a.qty || 0) - (b.qty || 0)).map(s => {
+      const nm = (cn ? (s.name_cn || s.name_en) : (s.name_en || s.name_cn)) || '';
+      return `${escapeHtml(nm)} ${Number(s.qty || 0)}`;
+    });
+    return `<span class="sub" data-no-i18n>${parts.join(' · ')}</span>`;
+  };
+  const row = (it, val, valCls) => `
+    <button type="button" class="td-stock-row"${it.id ? ` onclick="dashOpenStockProduct(${Number(it.id)})"` : ''}>
+      <span class="name"><span class="nm" data-no-i18n>${escapeHtml(dbProdName(it))}</span>${subLine(it)}</span>
+      <span class="val${valCls || ''}">${val}</span>
+    </button>`;
+  let html = '';
+  if (TD.stores && TD.stores.length >= 2) {
+    html += `<div class="td-stock-scope">${tdStoreSelectHtml()}</div>`;
+  }
+  if (!cnt) {
+    html += `<div class="td-attn-clear">${TD.stockStore ? cuT('All stocked at this store', '此门店库存充足') : cuT('All stocked', '库存充足')}</div>`;
+  }
+  if (oos.count) {
+    html += `<div class="td-stock-grp is-out">${cuT('Out of stock', '已售罄')}<span class="n" data-no-i18n>${oos.count}</span></div>`;
+    html += (oos.items || []).map(it => row(it, cuT('out', '售罄'), ' out')).join('');
+  }
+  if (low.count) {
+    html += `<div class="td-stock-grp is-low">${cuT('Running low', '库存不足')}<span class="n" data-no-i18n>${low.count}</span></div>`;
+    html += (low.items || []).map(it => row(it, cuT(`${it.stock_qty} left`, `剩 ${it.stock_qty}`), '')).join('');
+  }
+  // Never truncate silently — a catalogue past the 500-item pull gets a tail.
+  const shown = (oos.items || []).length + (low.items || []).length;
+  if (cnt > shown) {
+    html += `<div class="td-attn-more">${cuT(`and ${cnt - shown} more — Open restock shows everything`, `另有 ${cnt - shown} 项 — 请前往补货查看全部`)}</div>`;
+  }
+  body.innerHTML = html;
+}
+
+// Row → that product's editor. Close this drawer first (the editor lives on
+// the Products tab, and the tab switch would close it mid-slide anyway).
+function dashOpenStockProduct(id) {
+  closeDrawer('#db-stock-drawer');
+  dashOpenProductFromFeed(id);
+}
+
+// Foot button → the Products tab pre-filtered on Needs restock.
+function dashStockDrawerRestock() {
+  closeDrawer('#db-stock-drawer');
+  dashOpenRestock();
 }
 
 // Echo the active range into the Reports page head — "Jun 7 – Jul 6 · 30 days
