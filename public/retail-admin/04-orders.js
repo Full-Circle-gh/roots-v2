@@ -30,6 +30,19 @@ function ordIsReadonlyChannel(o) {
   const c = String(o.channel || '').toLowerCase();
   return c === 'meituan' || c === 'gzgrocery';
 }
+// Short display for the list glance. Channel/legacy numbers look like
+// PREFIX + yyyymmdd + sequence (e.g. MT20260706256422). The date is dead
+// weight — the row already carries a time column — so collapse it to the
+// letter prefix + last 6 digits (MT·256422). The full number still shows in
+// the drawer and on hover (title). Anything already short is left untouched.
+function ordShortNo(no) {
+  const s = String(no || '');
+  const m = s.match(/^([A-Za-z]*)(\d+)$/);
+  if (!m) return s;
+  const prefix = m[1], digits = m[2];
+  if (prefix && digits.length > 6) return prefix + '·' + digits.slice(-6);
+  return s;
+}
 function ordChannelLabel(o) {
   const c = String(o.channel || 'wechat').toLowerCase();
   if (c === 'meituan')   return 'Meituan';
@@ -826,7 +839,7 @@ async function loadOrders(opts = {}) {
       const chanCell = `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>${ro ? `<div class="muted" style="font-size: 11px; margin-top: 2px; font-style: italic">${cuT('view only', '只读')}</div>` : ''}`;
       return `
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}" tabindex="0"${ro ? ' data-readonly="1"' : ''}>
-        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no">${o.order_no}</span></td>
+        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
         <td class="oc-chan">${chanCell}</td>
         <td>
           <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
@@ -2728,12 +2741,14 @@ async function qyLoadCarriers(orderId, btn) {
     const rows = carriers.map(c => `
       <label style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:6px;margin-bottom:6px;cursor:pointer;">
         <span style="display:flex;align-items:center;gap:8px;">
-          <input type="radio" name="qy-car-${orderId}" value="${c.carrierId}|${escapeAttr(c.serviceCode)}" ${c.cheapest ? 'checked' : ''}>
+          <input type="checkbox" name="qy-car-${orderId}" value="${c.carrierId}|${escapeAttr(c.serviceCode)}" ${c.cheapest ? 'checked' : ''}>
           <span><b>${escapeHtml(c.serviceName || c.carrierName)}</b>${c.cheapest ? ` <span style="font-size:10px;color:var(--brand);">${cuT('cheapest', '最便宜')}</span>` : ''}<div class="muted" style="font-size:11px;">${escapeHtml(c.carrierName)}${c.distanceM ? ' · ' + (c.distanceM / 1000).toFixed(1) + 'km' : ''}</div></span>
         </span>
         <b style="font-family:var(--f-mono);white-space:nowrap;">¥${c.feeYuan}</b>
       </label>`).join('');
-    box.innerHTML = rows +
+    box.innerHTML =
+      `<div class="muted" style="font-size:11px;margin-bottom:6px;">${cuT('Tick one or more. Pick several and the first rider to accept takes the order — only that courier is charged.', '可勾选一个或多个。选多家时,谁先接单谁配送,仅对接单的那家扣费。')}</div>` +
+      rows +
       `<button class="btn btn-primary btn-sm" onclick="qyDispatch(${orderId}, this)" style="margin-top:4px;">${cuT('Dispatch courier', '发起配送')}</button>` +
       `<div class="muted" style="font-size:10px;margin-top:6px;">${cuT('The fee is deducted from your Qingyun balance.', '费用从青云余额中扣除。')}</div>`;
   } catch (e) {
@@ -2744,22 +2759,32 @@ async function qyLoadCarriers(orderId, btn) {
 
 // Dispatch the selected courier — real money (deducts the Qingyun wallet), so confirm.
 async function qyDispatch(orderId, btn) {
-  const sel = document.querySelector(`input[name="qy-car-${orderId}"]:checked`);
-  if (!sel) { toast(cuT('Pick a courier first', '请先选择运力'), 'err'); return; }
-  const [carrierId, serviceCode] = sel.value.split('|');
-  const label = sel.closest('label')?.querySelector('b')?.textContent || '';
-  if (!confirm(cuT(`Dispatch ${label}? A rider is called and your Qingyun balance is charged.`, `确认发起配送 ${label}?将呼叫骑手并从青云余额扣费。`))) return;
+  const sels = Array.from(document.querySelectorAll(`input[name="qy-car-${orderId}"]:checked`));
+  if (!sels.length) { toast(cuT('Pick at least one courier', '请至少选择一个运力'), 'err'); return; }
+  const carriers = sels.map(s => { const [carrierId, serviceCode] = s.value.split('|'); return { carrierId: Number(carrierId), serviceCode }; });
+  const labels = sels.map(s => s.closest('label')?.querySelector('b')?.textContent || '').filter(Boolean);
+  const many = carriers.length > 1;
+  const confirmMsg = many
+    ? cuT(`Call ${carriers.length} couriers at once? The first rider to accept takes the order — only that courier is charged to your Qingyun balance.`,
+          `同时呼叫 ${carriers.length} 家运力?谁先接单谁配送,仅对接单的那家从青云余额扣费。`)
+    : cuT(`Dispatch ${labels[0]}? A rider is called and your Qingyun balance is charged.`,
+          `确认发起配送 ${labels[0]}?将呼叫骑手并从青云余额扣费。`);
+  if (!confirm(confirmMsg)) return;
   if (btn) { btn.disabled = true; btn.textContent = cuT('Dispatching…', '发单中…'); }
   try {
     const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/dispatch`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ carrierId: Number(carrierId), serviceCode }),
+      body: JSON.stringify({ carriers }),
     });
     const j = await r.json();
     if (j.success) {
       toast(cuT('Courier dispatched', '已发起配送'), 'success');
       const box = document.getElementById('qy-carriers-' + orderId);
-      if (box) box.innerHTML = `<div style="font-size:12px;color:var(--brand)">✓ ${cuT('Dispatched', '已发单')}: ${escapeHtml(j.carrier?.name || '')} ¥${j.carrier?.fee_yuan ?? ''}</div>`;
+      const done = (j.carriers && j.carriers.length) ? j.carriers : (j.carrier ? [j.carrier] : []);
+      const names = done.length > 1
+        ? `${done.map(c => escapeHtml(c.name || '')).join(', ')} — ${cuT('first to accept wins', '谁先接单谁配送')}`
+        : `${escapeHtml(done[0]?.name || '')} ¥${done[0]?.fee_yuan ?? ''}`;
+      if (box) box.innerHTML = `<div style="font-size:12px;color:var(--brand)">✓ ${cuT('Dispatched', '已发单')}: ${names}</div>`;
       loadOrders();
     } else {
       if (btn) { btn.disabled = false; btn.textContent = cuT('Dispatch courier', '发起配送'); }
