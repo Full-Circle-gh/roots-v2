@@ -325,9 +325,6 @@
   #order-drawer .od-facts .val { grid-column:2; }
   #order-drawer .od-facts .sub { grid-column:2; margin-top:2px; }
 
-  /* Receipt = just the print action(s), sitting on the drawer field (no card). */
-  #order-drawer .receipt-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 20px; }
-
   /* Shipment cards + manifest — larger, calmer. */
   #order-drawer .shipment-head .mode-pill { font-size:13.5px; padding:5px 14px; }
   #order-drawer .shipment-head .count { font-size:13px; }
@@ -8500,6 +8497,10 @@
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
   </button>
   <div class="drawer-body" id="order-detail-mount"></div>
+  <!-- Print controls pinned to the bottom of the drawer (outside the scroll
+       area) so a reprint is one click. Populated by orderDrawerFoot(); collapses
+       when empty via `#order-drawer .drawer-foot:empty`. -->
+  <div class="drawer-foot" id="order-drawer-foot"></div>
 </aside>
 
 <!-- Customer detail drawer — same slide-in pattern as Orders. -->
