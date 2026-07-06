@@ -891,14 +891,14 @@ async function loadOrders(opts = {}) {
       // fulfilment actions. data-readonly is kept as the branch signal.
       const ro = ordIsReadonlyChannel(o);
       // Sales channel now has its own column (was a sub-line under the order #).
-      const chanCell = `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>${ro ? `<div class="muted" style="font-size: 11px; margin-top: 2px; font-style: italic">${cuT('view only', '只读')}</div>` : ''}`;
+      // The "view only" tag lives inside the detail drawer, not the table row.
+      const chanCell = `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>`;
       return `
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}" tabindex="0"${ro ? ' data-readonly="1"' : ''}>
         <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
         <td class="oc-chan">${chanCell}</td>
         <td>
           <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
-          <div class="muted" style="font-size: 11px; margin-top: 2px">${escapeHtml(ordCustomerLines(o).phone)}</div>
         </td>
         <td class="oc-store">
           ${o.store_code ? `<div>${escapeHtml(o.store_name_en || o.store_code)}</div>
@@ -3659,11 +3659,25 @@ function renderOpenOrder(o) {
 
         ${renderAddonTimeline(o)}
 
-        ${(o.reservations && o.reservations.length) ? `
-        <details class="order-items resv-details" style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
-          <summary class="kicker resv-summary" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass);">
+        ${(() => {
+          // The reservation lifecycle (pending → committed) is inventory-side
+          // plumbing an operator never acts on — for a healthy order it's pure
+          // noise. So this audit table only surfaces when a hold is in an
+          // ABNORMAL state worth diagnosing: expired, released back, or a
+          // pending hold that has already sailed past its expiry (stuck).
+          // A normal committed/pending order renders nothing.
+          const resv = o.reservations || [];
+          const nowMs = Date.now();
+          const isStuck = (r) => r.status === 'pending' && r.expires_at
+            && new Date(r.expires_at).getTime() < nowMs;
+          const abnormal = resv.some(r =>
+            r.status === 'expired' || r.status === 'released' || isStuck(r));
+          if (!abnormal) return '';
+          return `
+        <details class="order-items resv-details" open style="margin-top: var(--s5); padding-top: var(--s4); border-top: 1px solid var(--line-soft);">
+          <summary class="kicker resv-summary" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--warn);">
             <span class="resv-caret" aria-hidden="true">▸</span>
-            <span>Stock reservations · 库存预留</span>
+            <span>Stock reservations — needs attention · 库存预留 — 需留意</span>
             <span class="resv-count">${o.reservations.length}</span>
           </summary>
           <div class="table-wrap">
@@ -3701,7 +3715,8 @@ function renderOpenOrder(o) {
                 </tr>`; }).join('')}</tbody>
             </table>
           </div>
-        </details>` : ''}
+        </details>`;
+        })()}
 
         ${ODV.totalPlacement === 'footer' ? renderOrderTotalFooter(o) : ''}
       </div>`;
