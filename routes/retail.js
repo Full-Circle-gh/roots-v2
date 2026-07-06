@@ -17254,24 +17254,31 @@ router.get('/api/retail-admin/orders/:id/qingyun/carriers', requireRetailAdmin, 
 // delivery/create → deducts the fee from the Qingyun wallet + sends a courier.
 router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const carrierId = req.body?.carrierId;
-  const serviceCode = String(req.body?.serviceCode || '');
-  if (carrierId == null || !serviceCode) return res.status(400).json({ success: false, error: 'carrierId + serviceCode required' });
+  // Accept a LIST of carriers for concurrent dispatch (并发发单 — whoever accepts first wins),
+  // or a single carrierId/serviceCode for back-compat. Each pick = { carrierId, serviceCode }.
+  let picks = Array.isArray(req.body?.carriers) ? req.body.carriers : null;
+  if (!picks && req.body?.carrierId != null) picks = [{ carrierId: req.body.carrierId, serviceCode: req.body.serviceCode }];
+  picks = (picks || []).filter(p => p && p.carrierId != null && p.serviceCode);
+  if (!picks.length) return res.status(400).json({ success: false, error: 'carriers required' });
   const ref = _qingyunOrderRef(id);
   if (!ref) return res.status(400).json({ success: false, error: 'order_not_in_qingyun' });
   try {
     const { getQingyunBrowser } = require('../lib/qingyun-browser');
     const br = await getQingyunBrowser(ref.storeCode);
     const q = await br.quoteCarriers(ref.qyOrderId);  // fresh waybills
-    const carrier = (q.carriers || []).find(c =>
-      String(c.carrierId) === String(carrierId) && c.serviceCode === serviceCode && c.enabled);
-    if (!carrier) return res.status(409).json({ success: false, error: 'carrier_unavailable' });
-    const r = await br.dispatch(ref.qyOrderId, carrier);
+    const chosen = [];
+    for (const p of picks) {
+      const carrier = (q.carriers || []).find(c =>
+        String(c.carrierId) === String(p.carrierId) && c.serviceCode === String(p.serviceCode) && c.enabled);
+      if (carrier) chosen.push(carrier);
+    }
+    if (!chosen.length) return res.status(409).json({ success: false, error: 'carrier_unavailable' });
+    const r = await br.dispatch(ref.qyOrderId, chosen);
     if (!r.ok) {
       const insufficient = /余额|余额不足|balance|充值/i.test(String(r.msg || ''));
       return res.json({ success: false, error: r.msg || 'dispatch_failed', insufficient_balance: insufficient });
     }
-    res.json({ success: true, carrier: { name: carrier.serviceName, fee_yuan: carrier.feeYuan } });
+    res.json({ success: true, carriers: chosen.map(c => ({ name: c.serviceName, fee_yuan: c.feeYuan })) });
   } catch (e) {
     console.error('[qingyun dispatch]', e.message);
     res.json({ success: false, error: 'dispatch_failed' });
