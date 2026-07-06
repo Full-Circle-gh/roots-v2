@@ -800,7 +800,7 @@ async function loadOrders(opts = {}) {
         ? `<h3>Nothing waiting. Enjoy it. · 无待处理退款</h3>`
         : `<h3>No orders yet · 暂无订单</h3>
            <p class="muted">New orders settle in here from every channel. · 新订单会从各渠道汇聚到这里。</p>`;
-      tbody.innerHTML = `<tr><td colspan="11">
+      tbody.innerHTML = `<tr><td colspan="10">
         <div class="empty-state">
           <div class="icon">${ICONS.empty}</div>
           ${emptyMsg}
@@ -860,8 +860,7 @@ async function loadOrders(opts = {}) {
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
         <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div></td>
-        <td>${renderTrackingCell(o)}</td>
-        <td>${renderShipByCell(o)}</td>
+        <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
     }).join('');
@@ -1925,6 +1924,41 @@ function deliveryIcon(key, size = 12) {
 // it reads as part of the platform line-icon language rather than a system glyph.
 function pinIcon(size = 13) {
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-2px;"><path d="M12 21s7-6.5 7-12a7 7 0 1 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="9" r="2.5"/></svg>`;
+}
+
+// ── "Delivery" — ONE column that merges the old Tracking + Ship-by pair.
+// Those were two separate columns that each sat empty on most rows: a shipped
+// order has a tracking line but its ship-by deadline is already in the past; an
+// unshipped one has a ship-by deadline but no tracking yet. Side by side, two
+// half-empty columns left a wide empty gap in the list. Collapsing them into a
+// single column removes that gap AND reads better — each row shows the ONE
+// fulfilment fact that's live right now:
+//   readonly channel  → the platform's own ETA while in flight, else "view only"
+//   pickup            → the counter window (owned by the ship-by plan)
+//   shipped / moving  → the waybill + live delivery state (owned by tracking)
+//   not yet shipped   → the ship-by deadline (owned by the ship-by plan)
+// Delegating to the existing renderers keeps every downstream behaviour intact
+// (split-parcel rollup, air-delay badge, missing-waybill warning, urgency tags).
+function renderDeliveryCell(o) {
+  // Mirrored ledger rows (Meituan / gzgrocery): we don't fulfil them. Surface
+  // the platform's delivery ETA while the order is still in flight; once it's
+  // done (or never carried an ETA) there's nothing we own to show — a bare dash,
+  // not a second "view only" (the Channel column already carries that tag).
+  if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
+    if (o.channel_eta && !['delivered', 'cancelled', 'refunded'].includes(o.status)) {
+      return renderTrackingCell(o);
+    }
+    return '<span class="muted">—</span>';
+  }
+  // Pickup carries no parcel — the counter window IS the delivery fact.
+  if (o.fulfillment_type === 'pickup') return renderShipByCell(o);
+  // Once an order has left (or has a waybill / operator-set ETA), the tracking
+  // line is the live fact and the ship-by deadline is by definition in the past.
+  const moving = o.status === 'dispatched' || o.status === 'delivered'
+    || o.tracking_number || o.local_eta;
+  if (moving) return renderTrackingCell(o);
+  // Still to ship: the ship-by deadline is what the operator acts on.
+  return renderShipByCell(o);
 }
 
 function renderTrackingCell(o) {
@@ -3410,7 +3444,6 @@ function renderOpenOrder(o) {
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
           ${o.needs_invoice ? renderInvoiceBlock(o) : ''}
         </div>
-        ${printReceiptRow(o)}
 
         <div class="order-items">
           <div class="kicker" style="font-size: 10px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase; color: var(--brass); margin-bottom: var(--s2);">Items &amp; shipments · 商品与发货</div>
