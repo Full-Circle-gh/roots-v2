@@ -1136,42 +1136,35 @@
   .db-btn:hover { border-color: var(--line-strong); }
   .db-btn.primary { background: var(--brass); color: var(--accent-ink); border-color: var(--brass); font-weight: 600; }
 
+  /* Reports KPI cards (Tacet) — a quiet 4-across grid: small sentence-case
+     label, 26px figure, one 12.5px foot line. No accent card, no colour on the
+     numbers; the deltas carry the only tint (sage up, amber down — never red). */
   .db-kpis {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
-    gap: var(--s3); margin-bottom: var(--s3);
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 16px; margin-bottom: 16px;
   }
+  @media (max-width: 900px) { .db-kpis { grid-template-columns: repeat(2, 1fr); } }
   .db-kpi {
     position: relative;
-    background: var(--bg-pane); border: 1px solid var(--line);
-    border-radius: var(--r-lg); padding: var(--s4);
-    display: flex; flex-direction: column; gap: 4px;
-    box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 14px; padding: 18px 20px;
+    display: flex; flex-direction: column;
+    box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
   }
   .db-kpi .lbl {
-    font-family: var(--f-mono);
-    font-size: 10px; text-transform: uppercase; letter-spacing: .12em;
-    color: var(--text-2); font-weight: 500;
+    font-size: 12px; color: var(--td-text2); margin-bottom: 6px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  /* Headline stat — Plex Sans medium so the number leads the card, not whispers.
-     Sized to keep the widest value (e.g. ¥131.27) on one line at the ~155px card
-     width; nowrap stops a stray wrap from floating one card's number out of line. */
-  .db-kpi .val { font-size: 30px; font-weight: 500; letter-spacing: -.02em; color: var(--text-1); font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
-  /* Revenue is the hero financial signal — Tea Green + a focal accent bar. */
-  .db-kpi.accent::before {
-    content: ""; position: absolute; left: 0; top: 12px; bottom: 12px;
-    width: 3px; border-radius: 0 3px 3px 0; background: var(--accent);
-  }
-  .db-kpi.accent .val { color: var(--accent); }
-  .db-kpi .sub { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .db-kpi .val { font-size: 26px; font-weight: 500; letter-spacing: -.01em; color: var(--td-text); font-variant-numeric: tabular-nums; line-height: 1.2; white-space: nowrap; }
+  .db-kpi .sub { font-size: 12.5px; color: var(--td-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* One uniform foot row per card (delta and/or sub on a single baseline) so
      every card is exactly 3 rows tall — keeps the headline numbers in line. */
-  .db-kpi-foot { display: flex; align-items: baseline; gap: 6px; min-height: 15px; min-width: 0; }
+  .db-kpi-foot { display: flex; align-items: baseline; gap: 6px; min-height: 19px; min-width: 0; margin-top: 4px; }
   .db-kpi-foot .sub { min-width: 0; }
-  .db-delta { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .db-delta.up   { color: var(--success); }
-  .db-delta.down { color: var(--brass); }
-  .db-delta.flat { color: var(--text-3); }
+  .db-delta { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .db-delta.up   { color: var(--td-sage-ink); }
+  .db-delta.down { color: var(--td-amber-ink); }
+  .db-delta.flat { color: var(--td-text2); }
 
   /* Right-now hero — sits above the historical KPI strip. Live presence on the
      left, today's mini-KPIs in the middle, activity feed on the right. Polls
@@ -1536,23 +1529,30 @@
   @media (max-width: 980px) { .db-grid-2 { grid-template-columns: 1fr; } }
   .db-card-head { display: flex; align-items: center; justify-content: space-between; gap: var(--s3); margin-bottom: var(--s4); }
   .db-card-head h3 { font-size: 13px; font-weight: 600; color: var(--text-1); margin: 0; }
-  .db-metric-btns { display: inline-flex; gap: 4px; }
+  /* Tacet mini-seg (the trend's Revenue/Orders/Visits switch) — a quiet pill
+     rail; the active segment inverts to ink-on-paper. */
+  .db-metric-btns { display: inline-flex; border: 1px solid var(--td-border); border-radius: 999px; overflow: hidden; }
   .db-metric-btns button {
-    background: var(--bg-elev-1); border: 1px solid var(--line-soft); color: var(--text-2);
-    padding: 4px 9px; border-radius: var(--r-sm); font-size: 11px; cursor: pointer;
+    background: transparent; border: 0; color: var(--td-text2);
+    padding: 2px 12px; font-size: 12px; cursor: pointer; font-family: inherit;
+    transition: color .2s cubic-bezier(.16,1,.3,1);
   }
-  .db-metric-btns button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+  .db-metric-btns button:hover { color: var(--td-text); }
+  .db-metric-btns button.active { background: var(--td-text); color: var(--td-paper); }
 
-  /* SVG trend chart */
+  /* SVG trend chart — ink line over a faint ink wash, dashed guides, a solid
+     baseline, and an end dot (the Tacet mockup). */
   .db-chart { width: 100%; height: auto; display: block; }
-  .db-chart .grid-line { stroke: var(--line-soft); stroke-width: 1; }
-  .db-chart .area { fill: var(--accent); opacity: .13; }
-  .db-chart .line { fill: none; stroke: var(--accent); stroke-width: 2; }
-  .db-chart .dot  { fill: var(--accent); }
-  .db-chart .ax   { fill: var(--text-3); font-size: 10px; }
+  .db-chart .grid-line { stroke: var(--td-border); stroke-width: 1; }
+  .db-chart .grid-line.dash { stroke-dasharray: 2 6; }
+  .db-chart .area { fill: rgba(var(--td-heat-rgb), .04); }
+  .db-chart .line { fill: none; stroke: var(--td-text); stroke-width: 2; stroke-linejoin: round; }
+  .db-chart .dot,
+  .db-chart .enddot { fill: var(--td-text); }
+  .db-chart .ax   { fill: var(--td-text2); font-size: 11px; }
   .db-chart .hovercol { fill: transparent; }
   .db-chart .hovercol:hover,
-  .db-chart .hovercol.on { fill: var(--line-soft); }
+  .db-chart .hovercol.on { fill: rgba(var(--td-heat-rgb), .05); }
   /* Cursor-following tooltip for the trend chart. Replaces the unreliable
      native SVG <title> (which only shows if the pointer holds dead-still
      and resets on every column while sweeping). */
@@ -1572,14 +1572,53 @@
   .db-trend-tip .r b { font-weight: 700; }
 
   /* Horizontal bar list (splits, funnel, geo, products) */
-  .db-bars { display: flex; flex-direction: column; gap: var(--s3); }
-  .db-bar-row { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: var(--s3); font-size: 12px; }
-  .db-bar-row .k { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
-  .db-bar-row .v { color: var(--text-1); font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; white-space: nowrap; }
-  .db-bar-row .sub { color: var(--text-3); font-weight: 400; font-size: 11px; }
-  .db-track { height: 8px; background: var(--bg-elev-1); border-radius: 99px; overflow: hidden; }
-  .db-track > span { display: block; height: 100%; background: var(--accent); border-radius: 99px; }
-  .db-track > span.muted { background: var(--text-4); }
+  /* Bar lists (Tacet) — label / value on one baseline, a thin 5px ink bar
+     spanning the full row beneath. Muted fills (delivery modes) drop to 40%. */
+  .db-bars { display: grid; gap: 10px; }
+  .db-bars-gap { height: 8px; }
+  .db-bar-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: baseline; font-size: 13.5px; }
+  .db-bar-row .k { color: var(--td-text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: baseline; gap: 8px; }
+  .db-bar-row .v { color: var(--td-text2); font-variant-numeric: tabular-nums; font-size: 13px; text-align: right; white-space: nowrap; }
+  .db-bar-row .sub { color: var(--td-text2); font-weight: 400; font-size: 12px; }
+  .db-track { grid-column: 1 / -1; height: 5px; background: var(--td-raised); border-radius: 999px; overflow: hidden; }
+  .db-track > span { display: block; height: 100%; background: var(--td-text); opacity: .75; border-radius: 999px; }
+  .db-track > span.muted { opacity: .35; }
+
+  /* Status pill rows (Order status) — tinted status pill · count · revenue. */
+  .db-status-rows { display: grid; gap: 8px; }
+  .db-status-row { display: flex; align-items: baseline; gap: 10px; font-size: 13.5px; color: var(--td-text); }
+  .db-status-row .n { font-variant-numeric: tabular-nums; }
+  .db-status-row .rv { margin-left: auto; color: var(--td-text2); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .db-status-row .sp { font-size: 12px; font-weight: 500; padding: 1px 10px; border-radius: 999px; flex: none; }
+  .sp-sage  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+  .sp-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .sp-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  .sp-mute  { background: var(--td-raised);     color: var(--td-text2); }
+
+  /* Revenue composition — one two-segment ink bar + a legend line. */
+  .db-comp-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; background: var(--td-raised); margin: 14px 0 10px; }
+  .db-comp-bar .c1 { background: var(--td-text); opacity: .8; }
+  .db-comp-bar .c2 { background: var(--td-text); opacity: .3; }
+  .db-comp-legend { display: flex; gap: 24px; flex-wrap: wrap; font-size: 13px; color: var(--td-text2); }
+  .db-comp-legend b { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .db-comp-legend em { font-style: normal; }
+  .db-comp-legend .net { margin-left: auto; }
+
+  /* Ranked lists (top customers / top products) — index · name · value. */
+  .db-rank { display: grid; gap: 10px; }
+  .db-rank-row { display: flex; align-items: baseline; gap: 10px; font-size: 13.5px; color: var(--td-text); }
+  .db-rank-row .idx { color: var(--td-text2); font-size: 12px; width: 16px; flex: none; font-variant-numeric: tabular-nums; }
+  .db-rank-row .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .db-rank-row .rv { margin-left: auto; color: var(--td-text2); font-size: 13px; font-variant-numeric: tabular-nums; flex: none; }
+
+  /* Small in-card group heading (Vouchers / Entry scenes). */
+  .db-group-h { font-size: 12px; font-weight: 500; color: var(--td-text2); margin: 16px 0 10px; }
+  .db-funnel-foot { margin-top: 14px; font-size: 12.5px; color: var(--td-text2); }
+
+  /* Retention decay curve — a thin ink line over one baseline. */
+  .db-ret-curve { display: block; width: 100%; height: 72px; margin-top: 14px; }
+  .db-ret-curve .base { stroke: var(--td-border); stroke-width: 1; }
+  .db-ret-curve .line { fill: none; stroke: var(--td-text); stroke-width: 1.8; vector-effect: non-scaling-stroke; }
 
   /* Product / customer rows */
   .db-list { display: flex; flex-direction: column; }
@@ -1597,21 +1636,26 @@
   .db-row .mny b { color: var(--text-1); }
   .db-row .mny span { display: block; color: var(--accent); font-size: 9px; text-transform: uppercase; letter-spacing: .12em; font-weight: 500; }
 
-  .db-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: var(--s2); }
-  .db-tile { background: var(--bg-elev-1); border-radius: var(--r-md); padding: var(--s3); text-align: center; }
-  .db-tile .t-val { font-size: 20px; font-weight: 300; color: var(--text-1); font-variant-numeric: tabular-nums; }
-  .db-tile .t-lbl { font-family: var(--f-mono); font-size: 10px; color: var(--text-3); text-transform: uppercase; letter-spacing: .12em; }
-  .db-muted { color: var(--text-3); font-size: 12px; padding: var(--s3) 0; }
+  /* Stat tiles (Customer mix / Retention / Marketing) — bare left-aligned
+     figures in a row, no boxes (the Tacet mockup's cohort tiles). */
+  .db-tiles { display: flex; gap: 32px; flex-wrap: wrap; margin-bottom: 14px; }
+  .db-tile { min-width: 0; }
+  .db-tile .t-val { font-size: 21px; font-weight: 500; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .db-tile .t-lbl { font-size: 12px; color: var(--td-text2); }
+  .db-muted { color: var(--td-text2); font-size: 13px; padding: var(--s3) 0; }
   .db-pill { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 10px; font-weight: 600; background: var(--bg-elev-2); color: var(--text-2); }
 
   /* Demand heatmap — hour × day-of-week grid */
-  .db-heat { display: flex; flex-direction: column; gap: 3px; overflow-x: auto; }
-  .db-heat-row { display: grid; grid-template-columns: 54px repeat(24, 1fr); gap: 3px; align-items: center; min-width: 560px; }
-  .db-heat-row .dl { font-size: 11px; color: var(--text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .db-heat-row.hdr .hh { font-size: 9px; color: var(--text-4); text-align: center; }
-  .db-heat-cell { aspect-ratio: 1; border-radius: 3px; min-height: 12px; }
-  .db-heat-legend { display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-3); margin-top: var(--s3); }
-  .db-heat-legend .sw { width: 13px; height: 13px; border-radius: 3px; }
+  /* Demand heatmap — compact Tacet grid: single-letter day rail + 7×24
+     ink-tinted cells, "busiest" foot + fewer→more legend. */
+  .db-heat { display: grid; grid-template-columns: 18px 1fr; gap: 6px; align-items: start; }
+  .db-heat .days { display: grid; gap: 3px; font-size: 10.5px; color: var(--td-text2); line-height: 1; }
+  .db-heat .days span { height: 14px; display: flex; align-items: center; }
+  .db-heat .cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; }
+  .db-heat .cells i { height: 14px; border-radius: 3px; background: var(--td-raised); display: block; }
+  .db-heat-foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--td-text2); }
+  .db-heat-foot .legend { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+  .db-heat-foot .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 
   /* ── Dashboard View tweaks (per-operator) — Trend bars, heatmap shape,
      headline number style. Defaults (curve / cells / light) = base look. ── */
@@ -7155,7 +7199,10 @@
          sage means all-clear.
        - Motion "settles": strong ease-out, no bounce; cards rise 8px once.
      ════════════════════════════════════════════════════════════════════ */
-  #tab-dashboard, #tab-reports {
+  /* Tacet tokens live at :root (not on the tab sections): the phone report
+     sheets clone Reports markup into body-level containers, and the clones
+     would lose every colour if the custom properties stayed tab-scoped. */
+  :root {
     /* Tacet tokens — dark theme first (admin default). Paper/Ink swap in
        light; sage/amber/brick hold their roles in both. */
     --td-surface:    #18233A;
@@ -7163,6 +7210,7 @@
     --td-border:     #2A3550;
     --td-text:       #FBF9F4;
     --td-text2:      #9AA3B2;
+    --td-heat-rgb:   251, 249, 244;   /* heatmap tint = the theme's ink, as rgb() parts */
     --td-dusk:       #6E67AF;
     --td-dusk-hi:    #7E77BF;
     --td-dusk-tint:  #262A4A;
@@ -7176,13 +7224,13 @@
     --td-brick-tint: #351B14;
     --td-brick-ink:  #D07A66;
   }
-  :root[data-theme="light"] #tab-dashboard,
-  :root[data-theme="light"] #tab-reports {
+  :root[data-theme="light"] {
     --td-surface:    #FFFFFF;
     --td-raised:     #F6F3EC;
     --td-border:     #E4E0D5;
     --td-text:       #111A2B;
     --td-text2:      #58606E;
+    --td-heat-rgb:   17, 26, 43;
     --td-dusk-tint:  #EEEDF6;
     --td-sage-tint:  #EDF1EC;
     --td-sage-ink:   #4A6249;
@@ -7408,17 +7456,46 @@
   .td-foot-link:hover { color: var(--td-text); }
 
   /* ── Reports chrome ── */
-  #tab-reports .td-kicker:first-of-type { margin-top: 22px; }
-  #tab-reports .db-rangebar { margin: 14px 0 16px; }
+  #tab-reports .td-kicker:first-of-type { margin-top: 40px; }
+  #tab-reports .db-rangebar { margin: 14px 0 32px; }
+  /* Controls rail — quiet paper segments and inputs; the active range segment
+     inverts to ink-on-paper. Dusk appears exactly once: the Apply button. */
+  #tab-reports .db-range .seg {
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 8px;
+  }
+  #tab-reports .db-range .seg button {
+    color: var(--td-text2); font-size: 13.5px; padding: 7px 16px;
+    border-right: 1px solid var(--td-border);
+    transition: color .2s cubic-bezier(.16,1,.3,1);
+  }
+  #tab-reports .db-range .seg button:last-child { border-right: 0; }
+  #tab-reports .db-range .seg button:hover { color: var(--td-text); }
+  #tab-reports .db-range .seg button.active { background: var(--td-text); color: var(--td-paper); font-weight: 500; }
+  #tab-reports .db-range input[type=date],
+  #tab-reports .db-select,
+  #tab-reports .db-btn {
+    background: var(--td-surface); border: 1px solid var(--td-border); color: var(--td-text);
+    border-radius: 8px; padding: 7px 12px; font-size: 13.5px; font-family: inherit;
+  }
+  #tab-reports .db-select:hover, #tab-reports .db-btn:hover { border-color: var(--td-text2); }
   /* The one Dusk element in Reports: Apply — the screen's primary action. */
   #tab-reports .db-rangebar .db-btn.primary {
     background: var(--td-dusk); border-color: var(--td-dusk); color: #FFFFFF;
+    font-weight: 500; padding: 7px 20px;
   }
   #tab-reports .db-rangebar .db-btn.primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
-  #tab-reports .db-kpis { margin-bottom: 14px; }
-  #tab-reports .db-kpi {
-    background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
-  }
+
+  /* Panels — every chart card is the Tacet card at 24px padding; heads carry a
+     15px title with the window caption on the right. 16px gaps everywhere. */
+  #tab-reports .db-grid-2 { gap: 16px; }
+  #tab-reports .card.db-panel { padding: 24px; margin-bottom: 16px; }
+  #tab-reports .db-grid-2 .card.db-panel { margin-bottom: 0; }
+  #tab-reports .db-card-head { align-items: baseline; justify-content: flex-start; gap: 12px; margin-bottom: 16px; }
+  #tab-reports .db-card-head h3 { font-size: 15px; font-weight: 500; color: var(--td-text); }
+  #tab-reports .db-card-head .td-meta { margin-left: auto; font-size: 12.5px; text-align: right; }
+  #tab-reports .db-card-head .db-metric-btns { margin-left: auto; }
+  #tab-reports #db-trend .db-chart { height: 260px; }
 
   @media (max-width: 720px) {
     /* Reports has no phone variant this pass — stack what's there. */

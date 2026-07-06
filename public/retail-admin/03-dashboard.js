@@ -264,6 +264,9 @@ function dashInit() {
       if (tr) { tr.classList.remove('is-swap'); void tr.offsetWidth; tr.classList.add('is-swap'); }
     }
   }));
+  // Language toggle repaints the cuT-built Reports chrome (head range echo +
+  // per-panel window captions); the charts themselves re-render on dashLoad.
+  if (window.onLangChange) onLangChange(() => { dashRangeLabel(); dashWinMeta(); });
   // Initial 30d load — fills the Reports charts (hidden until visited) AND
   // DASH_DATA, which the phone dashboard (rmRenderDash) renders from.
   dashSetRange('30');
@@ -1335,23 +1338,44 @@ function tdAttnRender() {
   host.innerHTML = `<div class="td-attn-grid">${cards.join('')}</div>`;
 }
 
-// Echo the active range into the deep-dive summary so the timeline stays
-// legible once you've scrolled past the top range bar (read-only — change it
-// up top). Kept in sync on every dashLoad().
+// Echo the active range into the Reports page head — "Jun 7 – Jul 6 · 30 days
+// · all stores" (the mockup). Built with cuT (the span carries data-no-i18n:
+// the string holds several " · " so the walker's first-dot split would mangle
+// it). Kept in sync on every dashLoad() and on a language toggle.
 function dashRangeLabel() {
-  const el = document.getElementById('db-dd-range');
+  const el = document.getElementById('db-rep-range');
   if (!el) return;
   const from = $('#db-from').value, to = $('#db-to').value;
   if (!from || !to) { el.textContent = ''; return; }
-  const active = document.querySelector('#db-range-seg button.active');
-  const key = active ? active.dataset.range : '';
-  const tag = key === 'today' ? 'Today · 今日'
-            : key === '7'  ? '7d'
-            : key === '30' ? '30d'
-            : key === '90' ? '90d'
-            : 'Custom · 自定';
-  const fmt = s => new Date(s + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  el.textContent = from === to ? `${fmt(from)} · ${tag}` : `${fmt(from)} – ${fmt(to)} · ${tag}`;
+  const cn = window.cuLang && cuLang() === 'cn';
+  const fmt = s => {
+    const d = new Date(s + 'T00:00:00');
+    return cn ? `${d.getMonth() + 1}月${d.getDate()}日`
+              : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  const days = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
+  const win = days <= 1 ? cuT('today', '今日') : cuT(`${days} days`, `${days}天`);
+  const sel = document.getElementById('db-store');
+  const store = (sel && sel.value && sel.selectedIndex >= 0)
+    ? sel.options[sel.selectedIndex].textContent
+    : cuT('all stores', '全部门店');
+  const dates = from === to ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
+  el.textContent = `${dates} · ${win} · ${store}`;
+}
+
+// Per-panel window caption ("30 days · 近30天") — one class, filled after each
+// load so every card head says which window it summarises (the mockup's meta).
+// data-pre-en/-cn add a panel-specific prefix (Top products: "units, 30 days").
+function dashWinMeta() {
+  const w = (DASH_DATA && DASH_DATA.window) || null;
+  const d = w ? (Number(w.span_days) || 1) : null;
+  document.querySelectorAll('#tab-reports .db-win-meta').forEach(el => {
+    if (d == null) { el.textContent = ''; return; }
+    const en = d <= 1 ? 'today' : `${d} days`;
+    const cn = d <= 1 ? '今日' : `近${d}天`;
+    const pe = el.dataset.preEn, pc = el.dataset.preCn;
+    el.textContent = cuT(pe ? `${pe}, ${en}` : en, pc ? `${pc}，${cn}` : cn);
+  });
 }
 
 async function dashLoad() {
@@ -1411,6 +1435,7 @@ function dashSwapWithFade(render) {
 }
 
 function dashRenderAll() {
+  dashWinMeta();
   dashRenderKpis();
   dashRenderTrend();
   dashRenderHeatmap();
@@ -1432,13 +1457,19 @@ function dashRenderAll() {
 function dashRenderKpis() {
   const k = DASH_DATA.kpis, d = DASH_DATA.deltas;
   const conv = k.conversion_rate == null ? '—' : k.conversion_rate.toFixed(1) + '%';
+  // "vs prior 30 days · 对比前30天" — only the Revenue card carries the
+  // comparison caption (the mockup); the other deltas stay bare.
+  const w = DASH_DATA.window || {};
+  const span = Number(w.span_days) || 0;
+  const priorNote = span > 1 ? cuT(`vs prior ${span} days`, `对比前${span}天`)
+    : span === 1 ? cuT('vs yesterday', '对比昨天') : '';
   const cards = [
-    { lbl: 'Revenue · 营收',        val: dashMoney(k.revenue),       num: k.revenue,         fmt: 'money',  delta: d.revenue,       sub: '', accent: true },
+    { lbl: 'Revenue · 营收',        val: dashMoney(k.revenue),       num: k.revenue,         fmt: 'money',  delta: d.revenue,       sub: d.revenue == null ? '' : priorNote },
     { lbl: 'Orders · 订单',         val: dashNum(k.orders),          num: k.orders,          fmt: 'num',    delta: d.orders,        sub: '' },
-    { lbl: 'Avg order · 客单价',     val: dashMoney(k.aov, 2),        num: k.aov,             fmt: 'money2', delta: d.aov,           sub: '' },
-    { lbl: 'New customers · 新客',   val: dashNum(k.new_customers),   num: k.new_customers,   fmt: 'num',    delta: d.new_customers, sub: '' },
-    { lbl: 'Visits · 访问',         val: dashNum(k.visits),          num: k.visits,          fmt: 'num',    delta: d.visits,        sub: k.visits === 0 ? 'No data yet · 暂无' : dashNum(k.sessions) + ' ' + cuT('sessions', '会话') },
-    { lbl: 'Unique visitors · 访客', val: dashNum(k.visitors),        num: k.visitors,        fmt: 'num',    delta: null,            sub: '' },
+    { lbl: 'Average order · 客单价', val: dashMoney(k.aov, 2),        num: k.aov,             fmt: 'money2', delta: d.aov,           sub: '' },
+    { lbl: 'New customers · 新客户', val: dashNum(k.new_customers),   num: k.new_customers,   fmt: 'num',    delta: null,            sub: cuT(`of ${dashNum(k.visitors)} visitors`, `共 ${dashNum(k.visitors)} 访客`) },
+    { lbl: 'Visits · 访问',         val: dashNum(k.visits),          num: k.visits,          fmt: 'num',    delta: null,            sub: k.visits === 0 ? 'No data yet · 暂无' : dashNum(k.sessions) + ' ' + cuT('sessions', '会话') },
+    { lbl: 'Unique visitors · 独立访客', val: dashNum(k.visitors),    num: k.visitors,        fmt: 'num',    delta: null,            sub: '' },
     { lbl: 'Conversion · 转化率',    val: conv,                       num: k.conversion_rate, fmt: 'pct',    delta: null,            sub: 'orders ÷ sessions · 订单 ÷ 会话' },
     { lbl: 'Refund rate · 退款率',   val: (k.refund_rate || 0).toFixed(1) + '%', num: k.refund_rate || 0, fmt: 'pct', delta: null, sub: dashNum(k.refunded_orders) + ' ' + cuT('refunded', '已退款') },
   ];
@@ -1486,54 +1517,47 @@ function dashKpiAnimate(prev) {
 
 function dashRenderTrend() {
   const t = DASH_DATA.trend || [];
-  const win = DASH_DATA.window;
-  $('#db-trend-window').textContent = win ? `· ${win.from}${win.from !== win.to ? ' → ' + win.to : ''}` : '';
   const metric = DASH_METRIC;
-  const cs = 'curve';   // fixed shape — the View popover went with the deep-dive fold
   const isMoney = metric === 'revenue';
   const vals = t.map(p => Number(p[metric] || 0));
   const max = Math.max(1, ...vals);
-  const W = 820, H = 240, padL = 8, padR = 8, padT = 14, padB = 22;
+  const W = 1000, H = 270, padL = 8, padR = 8, padT = 20, padB = 30;
   const innerW = W - padL - padR, innerH = H - padT - padB;
   const n = t.length || 1;
   const x = i => padL + (n === 1 ? innerW / 2 : (i / (n - 1)) * innerW);
   const y = v => padT + innerH - (v / max) * innerH;
 
+  // Three gridlines only (the mockup): a solid baseline at ¥0 and dashed lines
+  // at the half and full marks, each labelled just above its line at the left.
   let grid = '';
-  for (let g = 0; g <= 4; g++) {
+  for (const g of [0, 2, 4]) {
     const gy = padT + (g / 4) * innerH;
     const gv = max * (1 - g / 4);
-    grid += `<line class="grid-line" x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}"/>`;
-    grid += `<text class="ax" x="${padL + 2}" y="${(gy - 3).toFixed(1)}">${isMoney ? dashMoney(gv) : dashNum(Math.round(gv))}</text>`;
+    grid += `<line class="grid-line${g === 4 ? '' : ' dash'}" x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}"/>`;
+    grid += `<text class="ax" x="${padL + 2}" y="${(gy - 4).toFixed(1)}">${isMoney ? dashMoney(gv) : dashNum(Math.round(gv))}</text>`;
   }
   const linePts = vals.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
   const area = n > 1 ? `<path class="area" d="M ${linePts.join(' L ')} L ${x(n - 1).toFixed(1)},${(padT + innerH).toFixed(1)} L ${x(0).toFixed(1)},${(padT + innerH).toFixed(1)} Z"/>` : '';
   const line = n > 1 ? `<polyline class="line" points="${linePts.join(' ')}" pathLength="1"/>` : '';
+  // Last-point marker — the "you are here" dot the mockup ends the line with.
+  const enddot = n > 1 ? `<circle class="enddot" cx="${x(n - 1).toFixed(1)}" cy="${y(vals[n - 1]).toFixed(1)}" r="4"/>` : '';
 
-  const labelEvery = Math.max(1, Math.ceil(n / 6));
-  let xl = '', dots = '', hover = '';
+  // A handful of x-axis date labels (the mockup shows ~4), never per-point dots
+  // — the line + end dot carry the shape; hover still reads every bucket.
+  const labelEvery = Math.max(1, Math.ceil(n / 4));
+  let xl = '', hover = '';
   t.forEach((p, i) => {
-    const px = x(i), py = y(vals[i]);
+    const px = x(i);
     if (i % labelEvery === 0 || i === n - 1) {
       const lbl = String(p.bucket).length > 5 ? String(p.bucket).slice(5) : String(p.bucket);
-      xl += `<text class="ax" x="${px.toFixed(1)}" y="${H - 6}" text-anchor="middle">${escapeHtml(lbl)}</text>`;
+      const anchor = i === 0 ? 'start' : (i === n - 1 ? 'end' : 'middle');
+      xl += `<text class="ax" x="${px.toFixed(1)}" y="${H - 8}" text-anchor="${anchor}">${escapeHtml(lbl)}</text>`;
     }
-    if (cs === 'dots' || n <= 32) dots += `<circle class="dot" cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="${cs === 'dots' ? 3.6 : 2.5}"/>`;
     const colW = innerW / Math.max(1, n - 1);  // tile contiguously, point-to-point
     hover += `<rect class="hovercol" data-i="${i}" onmousemove="dashTrendTip(event)" x="${(px - colW / 2).toFixed(1)}" y="${padT}" width="${colW.toFixed(1)}" height="${innerH}"></rect>`;
   });
 
-  // Bars mode — one rounded column per bucket from the baseline up.
-  let bars = '';
-  if (cs === 'bars') {
-    const bw = Math.max(2, (innerW / n) * 0.55);
-    bars = vals.map((v, i) => `<rect class="bar" x="${(x(i) - bw / 2).toFixed(1)}" y="${y(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, padT + innerH - y(v)).toFixed(1)}" rx="1.5"/>`).join('');
-  }
-  const svgArea = cs === 'curve' ? area : '';
-  const svgLine = cs === 'curve' ? line : '';
-  const svgDots = cs !== 'bars' ? dots : '';
-
-  $('#db-trend').innerHTML = `<svg class="db-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" onmouseleave="dashTrendHide()">${grid}${svgArea}${svgLine}${bars}${svgDots}${hover}${xl}</svg>`;  /* per-column hover binding is on each .hovercol; tooltip is a body-level singleton */
+  $('#db-trend').innerHTML = `<svg class="db-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" onmouseleave="dashTrendHide()">${grid}${area}${line}${enddot}${hover}${xl}</svg>`;  /* per-column hover binding is on each .hovercol; tooltip is a body-level singleton */
 }
 
 // Cursor-following tooltip for the trend chart. Computes the nearest data
@@ -1653,12 +1677,15 @@ function cuBarTipHide() {
 
 function dashBarList(rows) {
   // rows: [{ k, kSub, value, valueSub, frac (numeric weight), muted }]
+  // Mockup bar rows: label left / value right on one baseline, then a thin
+  // 5px track spanning the full row beneath them. The fill keeps the
+  // `.db-track > span` shape so the phone clones' sweep animation still bites.
   const max = Math.max(1, ...rows.map(r => r.frac || 0));
   return `<div class="db-bars">${rows.map(r => `
     <div class="db-bar-row">
       <div class="k" title="${escapeAttr(r.kTitle || r.k)}">${escapeHtml(r.k)}${r.kSub ? ` <span class="sub">${escapeHtml(r.kSub)}</span>` : ''}</div>
-      <div class="db-track"><span class="${r.muted ? 'muted' : ''}" style="width:${(((r.frac || 0) / max) * 100).toFixed(1)}%${r.barColor ? `;background:${r.barColor}` : ''}"></span></div>
       <div class="v">${escapeHtml(r.value)}${r.valueSub ? ` <span class="sub">${escapeHtml(r.valueSub)}</span>` : ''}</div>
+      <div class="db-track"><span class="${r.muted ? 'muted' : ''}" style="width:${(((r.frac || 0) / max) * 100).toFixed(1)}%"></span></div>
     </div>`).join('')}</div>`;
 }
 
@@ -1687,30 +1714,22 @@ function dashRenderAcqFunnel() {
   const paid    = Number(k.orders || 0);
   if (!opened) { host.innerHTML = '<div class="db-muted">No visitors in range · 区间内无访客</div>'; return; }
   const pctOf  = (n, d) => (d > 0 ? (n / d) * 100 : null);
-  const fmtPct = (p) => (p == null ? '—' : (p >= 10 ? p.toFixed(0) : p.toFixed(1)) + '%');
   // checkout→paid completion: prefer the server's rate; fall back to a guarded ratio.
   const paidStep = c.conversion_rate != null ? c.conversion_rate : pctOf(paid, reached);
   const stages = [
-    { k: 'Opened · 打开',   n: opened,  step: null },
-    { k: 'Signed up · 注册', n: signed,  step: pctOf(signed, opened) },
-    { k: 'Checkout · 结算',  n: reached, step: pctOf(reached, signed) },
-    { k: 'Paid · 下单',     n: paid,    step: paidStep },
+    { k: 'Opened the store · 打开店铺', n: opened },
+    { k: 'Signed up · 注册',           n: signed },
+    { k: 'Reached checkout · 进入结算', n: reached },
+    { k: 'Paid · 支付',                n: paid },
   ];
-  // Bar width = share of visitors (visual); the right-side sub = step retention
-  // vs the stage above — the drop between rows is where the funnel leaks.
-  const rows = stages.map((s, i) => ({
-    k: s.k,
-    value: dashNum(s.n),
-    valueSub: i === 0 ? fmtPct(100) : (s.step != null ? '↓ ' + fmtPct(s.step) : ''),
-    frac: s.n,
-    barColor: i === stages.length - 1 ? 'var(--tea)' : undefined,
-  }));
-  const conv = fmtPct(pctOf(paid, opened));
+  // Bar width = share of visitors, so each stage's drop reads at a glance
+  // (the mockup); the foot names the one number worth acting on.
+  const rows = stages.map(s => ({ k: s.k, value: dashNum(s.n), frac: s.n }));
+  const footPct = paidStep == null ? null : Math.round(paidStep);
   host.innerHTML = dashBarList(rows)
-    + `<div class="db-muted" style="margin-top:10px;font-size:12px">`
-    + `${cuT('Visitor → order', '访客 → 下单')}: <b style="color:var(--tea)">${conv}</b>`
-    + (reached ? ` · ${cuT('checkout → paid', '结算 → 下单')}: <b>${fmtPct(paidStep)}</b>` : '')
-    + `</div>`;
+    + (footPct != null && reached
+      ? `<div class="db-funnel-foot">${cuT(`${footPct}% of checkouts become paid orders.`, `${footPct}% 的结算最终完成支付。`)}</div>`
+      : '');
 }
 
 // Article views — Kitchen Notes editorial (recipe_story) cards. Each row is
@@ -1743,52 +1762,56 @@ function dashRenderArticleViews() {
 
 function dashRenderFunnel() {
   const f = DASH_DATA.funnel || {};
-  // Tea = money-in / done (paid, delivered); Brass = needs-action / in-flight
-  // (pending, awaiting stock, preparing, dispatched); neutral = closed.
-  const ATTENTION = ['pending_payment', 'awaiting_restock', 'preparing', 'dispatched'];
-  const rows = DASH_STATUS_ORDER.filter(s => f[s]).map(s => ({
-    k: DASH_STATUS_LABELS[s] || s,
-    value: dashNum(f[s].n),
-    valueSub: f[s].revenue ? dashMoney(f[s].revenue) : '',
-    frac: f[s].n,
-    muted: s === 'cancelled' || s === 'refunded',
-    barColor: ATTENTION.includes(s) ? 'var(--brass)' : undefined,
-  }));
-  $('#db-funnel').innerHTML = rows.length ? dashBarList(rows) : '<div class="db-muted">No orders in range · 区间内无订单</div>';
+  // Status pill rows (the mockup): a tinted pill naming the status, the order
+  // count beside it, the status revenue right-aligned. Colour is status —
+  // amber = still needs work, sage = moving/done, brick = money went back,
+  // muted = closed without money.
+  const TONE = {
+    pending_payment: 'amber', paid: 'sage', awaiting_restock: 'amber', preparing: 'amber',
+    dispatched: 'sage', delivered: 'sage', cancelled: 'mute', refunded: 'brick',
+  };
+  const rows = DASH_STATUS_ORDER.filter(s => f[s]).map(s => `
+    <div class="db-status-row">
+      <span class="sp sp-${TONE[s] || 'mute'}">${DASH_STATUS_LABELS[s] || s}</span>
+      <span class="n">${dashNum(f[s].n)}</span>
+      <span class="rv">${f[s].revenue ? dashMoney(f[s].revenue) : ''}</span>
+    </div>`).join('');
+  $('#db-funnel').innerHTML = rows ? `<div class="db-status-rows">${rows}</div>` : '<div class="db-muted">No orders in range · 区间内无订单</div>';
 }
 
 function dashRenderSplits() {
   const pay = DASH_DATA.payments || [], del = DASH_DATA.delivery || [];
-  const payLabel = m => ({ wechat: 'WeChat · 微信', alipay: 'Alipay · 支付宝', points: 'Points · 积分', cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', other: 'Other · 其他', unknown: 'Unknown · 未知' }[m] || m);
-  const delLabel = m => ({ standard: 'Standard · 标准', max: 'Max speed · 极速', fixed: 'City · 同城', sameday: 'Same-day · 当日', unknown: 'Unknown · 未知' }[m] || m);
-  let html = '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin-bottom:8px;font-weight:500">PAYMENT · 支付方式</div>';
-  html += pay.length ? dashBarList(pay.map(p => ({ k: payLabel(p.method), value: dashNum(p.orders), valueSub: dashMoney(p.revenue), frac: p.revenue }))) : '<div class="db-muted">—</div>';
-  html += '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px;font-weight:500">DELIVERY · 配送方式</div>';
-  html += del.length ? dashBarList(del.map(p => ({ k: delLabel(p.mode), value: dashNum(p.orders), frac: p.orders }))) : '<div class="db-muted">—</div>';
+  const payLabel = m => ({ wechat: 'WeChat Pay · 微信支付', alipay: 'Alipay · 支付宝', points: 'Points · 积分', cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', other: 'Other · 其他', unknown: 'Unknown · 未知' }[m] || m);
+  const delLabel = m => ({ standard: 'Standard · 标准', max: 'Max speed · 极速', fixed: 'Same-city · 同城', sameday: 'Same-day · 当日', pickup: 'Pickup · 自提', unknown: 'Unknown · 未知' }[m] || m);
+  // Two quiet bar groups (the mockup has no group headers): payment methods by
+  // revenue, then delivery modes by order count with dimmed fills.
+  let html = pay.length ? dashBarList(pay.map(p => ({ k: payLabel(p.method), value: dashMoney(p.revenue), frac: p.revenue }))) : '<div class="db-muted">—</div>';
+  html += '<div class="db-bars-gap"></div>';
+  html += del.length ? dashBarList(del.map(p => ({ k: delLabel(p.mode), value: `${dashNum(p.orders)} ${cuT(Number(p.orders) === 1 ? 'order' : 'orders', '单')}`, frac: p.orders, muted: true }))) : '<div class="db-muted">—</div>';
   $('#db-splits').innerHTML = html;
 }
 
 function dashRenderProducts() {
   const p = DASH_DATA.topProducts || [];
   if (!p.length) { $('#db-products').innerHTML = '<div class="db-muted">No sales in range · 区间内无销售</div>'; return; }
-  const nm = (en, cn) => en || cn || '—';
-  $('#db-products').innerHTML = '<div class="db-list">' + p.map((r, i) => `
-    <div class="db-row">
-      <div class="rank">${i + 1}</div>
-      ${r.image_url ? `<img class="thumb" src="${escapeAttr(r.image_url)}" loading="lazy" onerror="this.style.visibility='hidden'">` : '<div class="thumb"></div>'}
-      <div class="nm"><b title="${escapeAttr(nm(r.name_en, r.name_cn))}">${escapeHtml(nm(r.name_en, r.name_cn))}</b><span>${dashNum(r.units)} ${cuT('sold','已售')} · ${dashNum(r.orders)} ${cuT('orders','单')}</span></div>
-      <div class="mny"><b>${dashMoney(r.revenue)}</b></div>
+  // Ranked rows (the mockup): index · name · units. Revenue and order count
+  // ride each row as a hover title so the detail isn't lost, just quiet.
+  $('#db-products').innerHTML = '<div class="db-rank">' + p.map((r, i) => `
+    <div class="db-rank-row" title="${escapeAttr(`${dashMoney(r.revenue)} · ${dashNum(r.orders)} ${cuT('orders', '单')}`)}">
+      <span class="idx">${i + 1}</span>
+      <span class="name">${escapeHtml(dbProdName(r))}</span>
+      <span class="rv">${dashNum(r.units)}</span>
     </div>`).join('') + '</div>';
 }
 
 function dashRenderCustomers() {
   const c = DASH_DATA.topCustomers || [];
   if (!c.length) { $('#db-customers').innerHTML = '<div class="db-muted">No buyers in range · 区间内无买家</div>'; return; }
-  $('#db-customers').innerHTML = '<div class="db-list">' + c.map((r, i) => `
-    <div class="db-row">
-      <div class="rank">${i + 1}</div>
-      <div class="nm"><b>${escapeHtml(r.nickname || ('Customer #' + r.customer_id))}</b><span>${escapeHtml(r.phone || '')} · ${dashNum(r.orders)} ${cuT('orders','单')}</span></div>
-      <div class="mny"><b>${dashMoney(r.revenue)}</b><span>${escapeHtml(r.tier_key || 'seed')}</span></div>
+  $('#db-customers').innerHTML = '<div class="db-rank">' + c.map((r, i) => `
+    <div class="db-rank-row" title="${escapeAttr(`${dashNum(r.orders)} ${cuT('orders', '单')} · ${r.tier_key || 'seed'}`)}">
+      <span class="idx">${i + 1}</span>
+      <span class="name">${escapeHtml(r.nickname || ('Customer #' + r.customer_id))}</span>
+      <span class="rv">${dashMoney(r.revenue, 2)}</span>
     </div>`).join('') + '</div>';
 }
 
@@ -1796,12 +1819,14 @@ function dashRenderTiers() {
   const nvr = DASH_DATA.new_vs_returning || {};
   const tiers = DASH_DATA.tiers || [];
   const tierLabel = t => ({ seed: 'Seed · 种子', sprout: 'Sprout · 嫩芽', root: 'Root · 扎根', tree: 'Tree · 大树' }[t] || t);
+  // The mockup's tiles: buyer count, then new / returning as SHARES of buyers.
+  const buyers = Number(nvr.buyers || 0);
+  const shr = n => buyers > 0 ? Math.round(Number(n || 0) / buyers * 100) + '%' : '—';
   let html = '<div class="db-tiles">'
-    + `<div class="db-tile"><div class="t-val">${dashNum(nvr.buyers)}</div><div class="t-lbl">Buyers · 买家</div></div>`
-    + `<div class="db-tile"><div class="t-val">${dashNum(nvr.new_buyers)}</div><div class="t-lbl">New · 新客</div></div>`
-    + `<div class="db-tile"><div class="t-val">${dashNum(nvr.returning_buyers)}</div><div class="t-lbl">Returning · 回头</div></div>`
+    + `<div class="db-tile"><div class="t-val">${dashNum(buyers)}</div><div class="t-lbl">buyers · 购买客户</div></div>`
+    + `<div class="db-tile"><div class="t-val">${shr(nvr.new_buyers)}</div><div class="t-lbl">new · 新客</div></div>`
+    + `<div class="db-tile"><div class="t-val">${shr(nvr.returning_buyers)}</div><div class="t-lbl">returning · 回头客</div></div>`
     + '</div>';
-  html += '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px;font-weight:500">TIER DISTRIBUTION · 等级分布 <span style="font-weight:400;color:var(--text-3);letter-spacing:.02em;text-transform:none">(all customers · 全部顾客)</span></div>';
   html += tiers.length ? dashBarList(tiers.map(t => ({ k: tierLabel(t.tier), value: dashNum(t.n), frac: t.n }))) : '<div class="db-muted">—</div>';
   $('#db-tiers').innerHTML = html;
 }
@@ -1809,9 +1834,12 @@ function dashRenderTiers() {
 function dashRenderGeo() {
   const cities = DASH_DATA.geoCities || [];
   if (!cities.length) { $('#db-geo').innerHTML = '<div class="db-muted">No location data · 暂无地域数据</div>'; return; }
+  // City bars by order count (the mockup); revenue + customers ride the hover.
   $('#db-geo').innerHTML = dashBarList(cities.map(c => ({
-    k: c.city || '—', kSub: `${dashNum(c.customers)} ${cuT('cust.','顾客')}`,
-    value: dashMoney(c.revenue), valueSub: `${dashNum(c.orders)} ${cuT('ord.','单')}`, frac: c.revenue,
+    k: c.city || '—',
+    kTitle: `${dashMoney(c.revenue)} · ${dashNum(c.customers)} ${cuT('customers', '顾客')}`,
+    value: `${dashNum(c.orders)} ${cuT(Number(c.orders) === 1 ? 'order' : 'orders', '单')}`,
+    frac: c.orders,
   })));
 }
 
@@ -1823,7 +1851,7 @@ function dashRenderMarketing() {
     + `<div class="db-tile"><div class="t-val">${dashNum(p.points_used)}</div><div class="t-lbl">Points used · 已用积分</div></div>`
     + `<div class="db-tile"><div class="t-val">${dashMoney(p.points_value)}</div><div class="t-lbl">Points value · 积分抵扣</div></div>`
     + '</div>';
-  html += '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px;font-weight:500">VOUCHERS · 优惠券</div>';
+  html += '<div class="db-group-h">Vouchers · 优惠券</div>';
   html += v.length ? dashBarList(v.map(x => ({ k: x.code || '—', kSub: `${dashNum(x.uses)} ${cuT('uses','次')}`, value: '−' + dashMoney(x.discount), valueSub: `${dashMoney(x.revenue)} ${cuT('rev','营收')}`, frac: x.uses }))) : '<div class="db-muted">No vouchers redeemed · 无优惠券核销</div>';
   $('#db-marketing').innerHTML = html;
 }
@@ -1877,7 +1905,7 @@ function dashRenderTraffic() {
     + `<div class="db-tile"><div class="t-val">${dashNum(k.visitors)}</div><div class="t-lbl">Visitors · 访客</div></div>`
     + `<div class="db-tile"><div class="t-val">${conv}</div><div class="t-lbl">Conversion · 转化</div></div>`
     + '</div>';
-  html += '<div style="font-family:var(--f-mono);font-size:10px;color:var(--brass);letter-spacing:.18em;text-transform:uppercase;margin:16px 0 8px;font-weight:500">ENTRY SCENES · 进入场景</div>';
+  html += '<div class="db-group-h">Entry scenes · 进入场景</div>';
   html += '<div class="db-muted" style="font-size:11px;margin:-2px 0 8px">Hover a source to see what it means · 将鼠标移到来源上查看其含义</div>';
   html += scenes.length ? dashBarList(scenes.map(s => {
     const sc = DASH_SCENES[s.scene];
@@ -1890,38 +1918,56 @@ function dashRenderTraffic() {
 
 // ── Demand heatmap (hour-of-day × day-of-week) ──
 const DASH_DOW = ['日 Sun', '一 Mon', '二 Tue', '三 Wed', '四 Thu', '五 Fri', '六 Sat'];
+// Single-letter day rail for the compact mockup grid (EN letter · CN 字).
+const DASH_DOW_1 = ['S · 日', 'M · 一', 'T · 二', 'W · 三', 'T · 四', 'F · 五', 'S · 六'];
+const DASH_DOW_EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DASH_DOW_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
 function dashRenderHeatmap() {
   const host = $('#db-heatmap');
   if (!host) return;
   const heat = DASH_DATA.heat || [];
   if (!heat.length) { host.innerHTML = '<div class="db-muted">No orders in range · 区间内无订单</div>'; return; }
   const grid = {};
-  let max = 1;
-  heat.forEach(h => { grid[h.dow + '-' + h.hour] = h; if (h.orders > max) max = h.orders; });
-  const hdr = Array.from({ length: 24 }, (_, h) => `<div class="hh">${h}</div>`).join('');
-  let rows = `<div class="db-heat-row hdr"><div class="dl"></div>${hdr}</div>`;
+  let max = 1, busiest = null;
+  heat.forEach(h => {
+    grid[h.dow + '-' + h.hour] = h;
+    if (h.orders > max) max = h.orders;
+    if (!busiest || h.orders > busiest.orders) busiest = h;
+  });
+  // Compact mockup grid: a single-letter day rail, 7×24 ink-tinted cells (the
+  // tint colour is the theme's text ink via --td-heat-rgb), hour detail on
+  // hover, and a foot naming the busiest hour beside a fewer→more legend.
+  let rows = '';
   for (let d = 0; d < 7; d++) {
-    let cells = '';
     for (let h = 0; h < 24; h++) {
       const cell = grid[d + '-' + h];
       const intensity = cell ? cell.orders / max : 0;
-      const bg = intensity === 0 ? 'var(--bg-elev-1)' : `rgba(107,142,111,${(0.16 + intensity * 0.84).toFixed(2)})`;
+      const bg = intensity === 0 ? 'var(--td-raised)' : `rgba(var(--td-heat-rgb),${(0.1 + intensity * 0.75).toFixed(2)})`;
       const hh = String(h).padStart(2, '0');
       const tip = cell
         ? `${DASH_DOW[d]} ${hh}:00 — ${dashNum(cell.orders)} ${cuT('orders','单')} · ${dashMoney(cell.revenue)}`
         : `${DASH_DOW[d]} ${hh}:00 — 0`;
-      cells += `<div class="db-heat-cell" style="background:${bg}" title="${escapeAttr(tip)}"></div>`;
+      rows += `<i style="background:${bg}" title="${escapeAttr(tip)}"></i>`;
     }
-    rows += `<div class="db-heat-row"><div class="dl">${DASH_DOW[d]}</div>${cells}</div>`;
   }
-  host.innerHTML = `<div class="db-heat">${rows}</div>
-    <div class="db-heat-legend"><span>Fewer · 少</span>
-      <span class="sw" style="background:var(--bg-elev-1)"></span>
-      <span class="sw" style="background:rgba(107,142,111,.32)"></span>
-      <span class="sw" style="background:rgba(107,142,111,.58)"></span>
-      <span class="sw" style="background:rgba(107,142,111,.84)"></span>
-      <span class="sw" style="background:rgba(107,142,111,1)"></span>
-      <span>More · 多</span></div>`;
+  const days = DASH_DOW_1.map(l => `<span>${l}</span>`).join('');
+  const busyTxt = busiest
+    ? `Busiest: ${DASH_DOW_EN[busiest.dow]} ${String(busiest.hour).padStart(2, '0')}:00 · 最忙：${DASH_DOW_CN[busiest.dow]} ${String(busiest.hour).padStart(2, '0')}:00`
+    : '';
+  host.innerHTML = `
+    <div class="db-heat">
+      <div class="days">${days}</div>
+      <div class="cells">${rows}</div>
+    </div>
+    <div class="db-heat-foot">
+      <span>${busyTxt}</span>
+      <span class="legend"><span>fewer · 少</span>
+        <i style="background:var(--td-raised)"></i>
+        <i style="background:rgba(var(--td-heat-rgb),.18)"></i>
+        <i style="background:rgba(var(--td-heat-rgb),.45)"></i>
+        <i style="background:rgba(var(--td-heat-rgb),.8)"></i>
+        <span>more · 多</span></span>
+    </div>`;
 }
 
 // ── Revenue composition (product subtotal vs delivery, with discounts) ──
@@ -1935,23 +1981,22 @@ function dashRenderComposition() {
   const net      = Number(c.net_total || 0);
   if (!product && !delivery && !net) { host.innerHTML = '<div class="db-muted">No revenue in range · 区间内无收入</div>'; return; }
   const base = (product + delivery) || 1;
-  const pctOf = a => Math.round(a / base * 1000) / 10;
-  const row = (lbl, val, color) => `
-    <div class="db-bar-row" style="grid-template-columns:130px 1fr auto">
-      <div class="k"><span style="width:10px;height:10px;border-radius:3px;background:${color};flex:none"></span>${lbl}</div>
-      <div class="db-track"><span style="width:${(val / base * 100).toFixed(1)}%;background:${color}"></span></div>
-      <div class="v">${dashMoney(val)} <span class="sub">${pctOf(val)}%</span></div>
+  // The mockup: one two-segment composition bar (ink at two weights), then a
+  // legend line — products / delivery fees / net after discounts. The discount
+  // detail rides the net figure as a hover title.
+  const netTitle = discount > 0
+    ? escapeAttr(cuT(`after ${dashMoney(discount)} in voucher and point discounts`, `已扣除优惠券与积分让利 ${dashMoney(discount)}`))
+    : '';
+  host.innerHTML = `
+    <div class="db-comp-bar">
+      <span class="c1" title="${escapeAttr('Products · 商品')}" style="width:${(product / base * 100).toFixed(1)}%"></span>
+      <span class="c2" title="${escapeAttr('Delivery fees · 运费')}" style="width:${(delivery / base * 100).toFixed(1)}%"></span>
+    </div>
+    <div class="db-comp-legend">
+      <span><b>${dashMoney(product)}</b> <em>products · 商品</em></span>
+      <span><b>${dashMoney(delivery)}</b> <em>delivery fees · 运费</em></span>
+      <span class="net"${netTitle ? ` title="${netTitle}"` : ''}><em>net after discounts · 折后净额</em> <b>${dashMoney(net)}</b></span>
     </div>`;
-  let html = `<div style="display:flex;height:14px;border-radius:99px;overflow:hidden;background:var(--bg-elev-1);margin-bottom:14px">
-      <div title="${escapeAttr('Product · 商品')}" style="width:${(product / base * 100).toFixed(1)}%;background:var(--accent)"></div>
-      <div title="${escapeAttr('Delivery · 配送')}" style="width:${(delivery / base * 100).toFixed(1)}%;background:var(--brass)"></div>
-    </div>`;
-  html += '<div class="db-bars">' + row('Product · 商品', product, 'var(--accent)') + row('Delivery · 配送', delivery, 'var(--brass)') + '</div>';
-  html += `<div class="db-row" style="border-bottom:0;padding:10px 0 0">
-      <div class="nm"><b>Net revenue · 实收</b></div>
-      <div class="mny"><b style="color:var(--accent);font-size:15px">${dashMoney(net)}</b></div></div>`;
-  if (discount > 0) html += `<div class="db-muted" style="color:var(--text-3)">− ${dashMoney(discount)} in voucher &amp; point discounts · 优惠券与积分让利</div>`;
-  host.innerHTML = html;
 }
 
 // ── Cohort retention (summary tiles + weighted curve + matrix) ──
@@ -1997,56 +2042,29 @@ function dashRenderCohorts() {
     if (size > 0) curve.push({ offset: m, pct: Math.round(active / size * 1000) / 10 });
   }
   const kpi = m => { const c = curve.find(x => x.offset === m); return c ? c.pct : null; };
-  const tile = (m, lbl) => { const v = kpi(m); return `<div class="db-tile"><div class="t-val">${v == null ? '—' : v + '%'}</div><div class="t-lbl">${lbl}</div></div>`; };
+  const tile = (m, en, cn) => {
+    const v = kpi(m);
+    return `<div class="db-tile"><div class="t-val">${v == null ? '—' : Math.round(v) + '%'}</div><div class="t-lbl">${en} · ${cn}</div></div>`;
+  };
 
+  // The mockup: month 1/3/6/12 tiles + a quiet weighted decay curve above a
+  // single baseline. The old per-cohort matrix went with the redesign — the
+  // curve IS the story; per-cohort detail wasn't worth its screenful.
   let curveSvg = '';
   if (curve.length > 1) {
-    const W = 760, H = 150, padL = 30, padR = 10, padT = 10, padB = 22;
-    const iw = W - padL - padR, ih = H - padT - padB;
-    const xs = i => padL + (i / (curve.length - 1)) * iw;
+    const W = 400, H = 80, padT = 6, padB = 8;
+    const ih = H - padT - padB;
+    const xs = i => (i / (curve.length - 1)) * W;
     const ys = v => padT + ih - (v / 100) * ih;
-    let grid = '', xl = '', dots = '';
-    [0, 25, 50, 75, 100].forEach(v => {
-      const gy = ys(v);
-      grid += `<line class="grid-line" x1="${padL}" y1="${gy.toFixed(1)}" x2="${W - padR}" y2="${gy.toFixed(1)}"/>`;
-      grid += `<text class="ax" x="${padL - 4}" y="${(gy + 3).toFixed(1)}" text-anchor="end">${v}%</text>`;
-    });
-    const pts = curve.map((c, i) => `${xs(i).toFixed(1)},${ys(c.pct).toFixed(1)}`);
-    const area = `<path class="area" d="M ${pts.join(' L ')} L ${xs(curve.length - 1).toFixed(1)},${(padT + ih).toFixed(1)} L ${padL},${(padT + ih).toFixed(1)} Z"/>`;
-    const line = `<polyline class="line" points="${pts.join(' ')}" pathLength="1"/>`;
-    curve.forEach((c, i) => {
-      dots += `<circle class="dot" cx="${xs(i).toFixed(1)}" cy="${ys(c.pct).toFixed(1)}" r="2.5"><title>M${c.offset}: ${c.pct}%</title></circle>`;
-      xl += `<text class="ax" x="${xs(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">M${c.offset}</text>`;
-    });
-    curveSvg = `<svg class="db-cohort-curve" viewBox="0 0 ${W} ${H}">${grid}${area}${line}${dots}${xl}</svg>`;
+    const pts = curve.map((c, i) => `${xs(i).toFixed(1)},${ys(c.pct).toFixed(1)}`).join(' ');
+    curveSvg = `<svg class="db-ret-curve" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+      <line class="base" x1="0" y1="${H - padB}" x2="${W}" y2="${H - padB}"/>
+      <polyline class="line" points="${pts}"/>
+    </svg>`;
   }
 
-  // Matrix — most recent 12 cohorts, newest first.
-  const shown = months.slice(-12).reverse();
-  const cols = Math.min(maxOffset + 1, 12);
-  const cellColor = p => p >= 75 ? '#4E6B52' : p >= 50 ? '#5E7E62' : p >= 25 ? '#6B8E6F' : p > 0 ? '#7FA083' : null;
-  let head = `<th class="l">Cohort · 队列</th><th>Size</th>`;
-  for (let i = 0; i < cols; i++) head += `<th>M${i}</th>`;
-  let body = '';
-  shown.forEach(cm => {
-    const size = sizeMap[cm] || 0;
-    let cells = `<td class="lbl">${cm}</td><td class="lbl" style="text-align:right">${dashNum(size)}</td>`;
-    for (let i = 0; i < cols; i++) {
-      if (age[cm] < i) { cells += `<td class="empty" style="opacity:.4">·</td>`; continue; }
-      const active = byMonth[cm] && byMonth[cm][monthAdd(cm, i)] || 0;
-      const p = size > 0 ? Math.round(active / size * 1000) / 10 : 0;
-      const col = cellColor(p);
-      cells += col
-        ? `<td style="background:${col};color:#E8E5DC" title="${escapeAttr(cuLang() === 'cn' ? `${monthAdd(cm, i)} 回购 ${active}/${size}` : `${active} of ${size} returned in ${monthAdd(cm, i)}`)}">${p.toFixed(0)}%</td>`
-        : `<td class="empty">—</td>`;
-    }
-    body += `<tr>${cells}</tr>`;
-  });
-
   host.innerHTML =
-    `<div class="db-tiles" style="margin-bottom:14px">${tile(1, 'M1 · 1月')}${tile(3, 'M3 · 3月')}${tile(6, 'M6 · 6月')}${tile(12, 'M12 · 12月')}</div>`
-    + curveSvg
-    + `<div class="db-cohort-wrap"><table class="db-cohort-tbl"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
-    + `<div class="db-cohort-note"><b>How to read · 阅读说明:</b> Each row is the customers whose first order was that month. M0 = their first month (always 100%); M1, M2… show the share who ordered again that many months later. · 每行为该月首单的客户群，M0 为入群当月(恒为 100%)，M1、M2… 为之后第 N 个月再次下单的占比。</div>`;
+    `<div class="db-tiles">${tile(1, 'month 1', '第1个月')}${tile(3, 'month 3', '第3个月')}${tile(6, 'month 6', '第6个月')}${tile(12, 'month 12', '第12个月')}</div>`
+    + curveSvg;
 }
 

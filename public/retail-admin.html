@@ -1181,6 +1181,9 @@
   <section id="tab-reports">
     <div class="db-head td-head">
       <h2 style="margin:0">Reports · 报表</h2>
+      <!-- Range summary echo ("Jun 7 – Jul 6 · 30 days · all stores") — built by
+           dashRangeLabel with cuT, so it opts out of the " · " i18n walker. -->
+      <span class="td-date" id="db-rep-range" data-no-i18n></span>
     </div>
 
     <div class="db-rangebar td-rangebar" id="db-rangebar">
@@ -1192,7 +1195,7 @@
           <button data-range="90">90d</button>
         </div>
         <input type="date" id="db-from" aria-label="From date">
-        <span style="color:var(--text-3)">–</span>
+        <span style="color:var(--td-text2)">–</span>
         <input type="date" id="db-to" aria-label="To date">
         <!-- Per-store filter. Hidden until >1 store loads (single-store tenants
              see no filter). Scopes every store-derived card below. -->
@@ -1207,9 +1210,9 @@
       <div class="db-kpis" id="db-kpis"></div>
 
       <!-- Revenue / orders / visits trend -->
-      <div class="card">
+      <div class="card db-panel">
         <div class="db-card-head">
-          <h3>Trend · 趋势 <span id="db-trend-window" style="color:var(--text-3);font-weight:400"></span></h3>
+          <h3>Trend · 趋势</h3>
           <div class="db-metric-btns" id="db-trend-metrics">
             <button data-metric="revenue" class="active">Revenue · 营收</button>
             <button data-metric="orders">Orders · 订单</button>
@@ -1221,75 +1224,67 @@
 
       <div class="td-kicker">Sales · 销售</div>
       <div class="db-grid-2">
-        <div class="card">
-          <div class="db-card-head"><h3>Order status · 订单状态</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Order status · 订单状态</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
           <div id="db-funnel"></div>
         </div>
-        <div class="card">
-          <div class="db-card-head"><h3>Payment & delivery · 支付与配送</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Payment and delivery · 支付与配送</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
           <div id="db-splits"></div>
         </div>
-      </div>
-      <div class="db-grid-2">
-        <div class="card">
-          <div class="db-card-head"><h3>Revenue composition · 收入构成</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Where revenue comes from · 营收构成</h3></div>
           <div id="db-composition"></div>
         </div>
-        <div class="card">
-          <div class="db-card-head"><h3>Marketing impact · 营销效果</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Demand heatmap · 需求热力图</h3><span class="td-meta">orders by hour · 按小时订单</span></div>
+          <div id="db-heatmap"></div>
+        </div>
+        <!-- Not in the mockup, kept for the operator: vouchers + points impact. -->
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Marketing impact · 营销效果</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
           <div id="db-marketing"></div>
         </div>
       </div>
 
       <div class="td-kicker">Customers · 客户</div>
       <div class="db-grid-2">
-        <div class="card">
-          <div class="db-card-head"><h3>Top customers · 顶级顾客</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Top customers · 高价值客户</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
           <div id="db-customers"></div>
         </div>
-        <div class="card">
-          <div class="db-card-head"><h3>Customer mix · 顾客构成</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Customer mix · 客户构成</h3></div>
           <div id="db-tiers"></div>
         </div>
-      </div>
-      <div class="db-grid-2">
-        <div class="card">
-          <div class="db-card-head"><h3>Geography · 地域</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Where orders go · 订单地区</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
           <div id="db-geo"></div>
         </div>
-        <div class="card">
-          <div class="db-card-head"><h3>Cohort retention · 客户留存</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Retention · 留存</h3><span class="td-meta">weighted, all cohorts · 加权，全部批次</span></div>
           <div id="db-cohorts"></div>
         </div>
       </div>
 
-      <div class="td-kicker">Products & demand · 商品与需求</div>
-      <div class="card">
-        <div class="db-card-head">
-          <h3>Demand heatmap · 需求热力图 <span style="color:var(--text-3);font-weight:400">When orders land · 下单时段 — darker = busier · 颜色越深越繁忙</span></h3>
-        </div>
-        <div id="db-heatmap"></div>
-      </div>
+      <div class="td-kicker">Products and traffic · 商品与流量</div>
       <div class="db-grid-2">
-        <div class="card">
-          <div class="db-card-head"><h3>Top products · 热销产品</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Top products · 热销商品</h3><span class="td-meta db-win-meta" data-pre-en="units" data-pre-cn="件数" data-no-i18n></span></div>
           <div id="db-products"></div>
         </div>
-        <div class="card">
-          <div class="db-card-head"><h3>Article views · 文章阅读</h3></div>
-          <div id="db-articleviews"></div>
-        </div>
-      </div>
-
-      <div class="td-kicker">Traffic · 流量</div>
-      <div class="db-grid-2">
-        <div class="card">
-          <div class="db-card-head"><h3>Acquisition funnel · 转化漏斗</h3></div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>From visit to order · 从访问到下单</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
           <div id="db-acqfunnel"></div>
         </div>
-        <div class="card">
-          <div class="db-card-head"><h3>Traffic & sources · 流量与来源</h3></div>
+        <!-- Not in the mockup, kept for the operator: entry scenes + article reads. -->
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Traffic and sources · 流量与来源</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
           <div id="db-traffic"></div>
+        </div>
+        <div class="card db-panel">
+          <div class="db-card-head"><h3>Article views · 文章阅读</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
+          <div id="db-articleviews"></div>
         </div>
       </div>
     </div>
