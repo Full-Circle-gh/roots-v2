@@ -11785,11 +11785,15 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
 
   try {
     const lowDefault = lowStockDefault();
+    // Only surface products that are actually sellable. status='Active' just
+    // means "not archived"; a product can be Active-but-unpublished (is_published=0
+    // = "Show in shop" off). Those are disabled/hidden from customers, so nagging
+    // to restock them is noise on a NEEDS-YOU card — exclude them.
     const lowCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products p
        WHERE ${REAL_STOCK} > 0
          AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, @low_default)
-         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
     `).get({ ...storeBind, low_default: lowDefault }).n;
     const lowItems = tdb().prepare(`
@@ -11797,7 +11801,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         FROM store_products p
        WHERE ${REAL_STOCK} > 0
          AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, @low_default)
-         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
        ORDER BY stock_qty ASC, p.name_en LIMIT @preview
     `).all({ ...storeBind, low_default: lowDefault, preview: previewLimit });
@@ -11806,14 +11810,14 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const oosCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products p
        WHERE ${REAL_STOCK} = 0
-         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
     `).get(storeBind).n;
     const oosItems = tdb().prepare(`
       SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty
         FROM store_products p
        WHERE ${REAL_STOCK} = 0
-         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1
+         AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
        ORDER BY p.name_en LIMIT @preview
     `).all({ ...storeBind, preview: previewLimit });
