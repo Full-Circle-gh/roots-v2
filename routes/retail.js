@@ -6067,6 +6067,88 @@ function tickAutoDeliverLocalEta() {
 const _autoDeliverSweep = setInterval(tickAutoDeliverLocalEta, 60 * 1000);
 if (_autoDeliverSweep.unref) _autoDeliverSweep.unref();
 
+// ─── Auto-dispatch when the Qingyun rider has picked the order up ────────────
+// A same-city (青云聚信) delivery has no "Mark dispatched" click — staff dispatch
+// the courier inside the Qingyun app, so the roots order would sit on "preparing"
+// until it's delivered. The qingyun-daemon already mirrors the rider's live
+// progress into delivery_jobs (order_status / delivery_status); this sweep folds
+// that into the fulfillment status so the order reads "Dispatched" the moment the
+// rider actually has it.
+//
+// PICKED-UP definition (NOT mere 骑手接单成功): order_status >= 40 (配送中, out for
+// delivery) OR order_status 30 (in-flight) WITH delivery_status >= 30 (前往取货/
+// 取货中). A rider who has only ACCEPTED (os 30 / ds 20) is deliberately NOT
+// dispatched — an accept→cancel reverts to 待配送 (20) before pickup, so gating on
+// pickup avoids a premature flip. Flip is preparing/paid → dispatched with the
+// SAME side effects as the manual dispatch (dispatched_at, per-parcel mirror,
+// customer "on the way" notification, cancel lockout). Toggle:
+// storefront_config `delivery.qingyunAutoDispatch` (default on).
+function autoDispatchQingyunForTenant() {
+  if (cfgValue('delivery.qingyunAutoDispatch', true) !== true) return 0;   // disabled
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT o.id AS id, o.status AS status
+         FROM retail_orders o
+         JOIN delivery_jobs j ON j.retail_order_id = o.id
+        WHERE o.status IN ('paid','preparing')
+          AND j.order_status IS NOT NULL
+          AND j.order_status < 50
+          AND ( j.order_status >= 40
+                OR (j.order_status >= 30 AND COALESCE(j.delivery_status, 0) >= 30) )`
+    ).all();
+  } catch (e) {
+    if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
+    throw e;
+  }
+  let fired = 0;
+  for (const o of rows) {
+    // Atomic claim: the status guard means only the first tick that catches the
+    // order flips + notifies; a concurrent/retry tick sees changes===0.
+    const claim = tdb().prepare(
+      `UPDATE retail_orders
+          SET status = 'dispatched',
+              dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
+              updated_at    = CURRENT_TIMESTAMP
+        WHERE id = ? AND status IN ('paid','preparing')`
+    ).run(o.id);
+    if (claim.changes === 0) continue;
+    // Keep per-parcel state in lockstep with the whole-order flip (mirrors the
+    // manual per-shipment dispatch transition).
+    try {
+      tdb().prepare(
+        `UPDATE retail_shipments
+            SET dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
+                updated_at    = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'`
+      ).run(o.id);
+    } catch (e) { console.warn('[auto-dispatch] shipment mirror', o.id, e.message); }
+    try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: o.status, to: 'dispatched', reason: 'qingyun_pickup' }, null); } catch {}
+    try { notifyOrderStatusChange(o.id, 'dispatched'); } catch (e) { console.warn('[auto-dispatch] notify', o.id, e.message); }
+    fired++;
+  }
+  return fired;
+}
+
+// Every 60s, walk every active tenant and auto-dispatch its picked-up same-city
+// orders. Best-effort: a per-tenant failure never aborts the others.
+function tickAutoDispatchQingyun() {
+  let tenants;
+  try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
+  catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
+  const run = (tid) => {
+    try {
+      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const total = tenantAls.run(tdb_, () => autoDispatchQingyunForTenant());
+      if (total > 0) console.log(`[auto-dispatch] tenant=${tid ?? 'main'} dispatched=${total}`);
+    } catch (e) { console.warn('[auto-dispatch]', tid, e.message); }
+  };
+  if (!tenants) run(null);
+  else for (const t of tenants) run(t.id);
+}
+const _autoDispatchSweep = setInterval(tickAutoDispatchQingyun, 60 * 1000);
+if (_autoDispatchSweep.unref) _autoDispatchSweep.unref();
+
 // ─── WeChat virtual-shipping retry sweeper ──────────────────────────────────
 // The event-driven upload (notifyOrderStatusChange → uploadWeChatVirtualShipping)
 // is one-shot and best-effort: a transient token/network blip at the exact
