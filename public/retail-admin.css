@@ -7192,6 +7192,15 @@
     --danger: var(--td-brick-ink);
   }
 
+  /* Tacet page ground — warm Paper in light, Ink in dark. Painted on <body>
+     (fills the whole viewport, so no seam under short content) only while a
+     Tacet tab is active, via :has(); the fixed topbar + sidebar carry their own
+     --bg-pane so they're untouched. Other tabs keep the admin's default tan. */
+  :root { --td-paper: #111A2B; }
+  :root[data-theme="light"] { --td-paper: #FBF9F4; }
+  body:has(#tab-dashboard.active),
+  body:has(#tab-reports.active) { background: var(--td-paper); }
+
   /* ── shared chrome ── */
   #tab-dashboard .td-wrap { max-width: 1120px; }
   #tab-reports #reports-body, #tab-reports .db-rangebar, #tab-reports .db-head { max-width: 1120px; }
@@ -7299,19 +7308,40 @@
   .td-live-num { font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
   .td-live.is-zero .td-live-num { display: none; }
   .td-today .td-card-head { margin-bottom: 2px; }
-  .td-today .db-hero-sync { margin-left: 0; }
+  .td-today .db-hero-sync[hidden] { display: none; }
   .td-rev { display: flex; align-items: baseline; gap: 12px; margin-top: 8px; }
-  .td-rev-big { font-size: 36px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .td-spark { height: 34px; margin-top: 14px; }
-  .td-cells { display: flex; gap: 44px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--td-border); }
-  .td-cell .v { font-size: 20px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .td-cell .k { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--td-text2); margin-top: 2px; }
-  .td-cell .db-spark-wrap { width: 120px; }
+  .td-rev-big { font-size: 38px; font-weight: 600; letter-spacing: -.01em; line-height: 1.1; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-rev .db-delta { font-size: 13px; }
+  .td-rev-note { font-size: 13px; color: var(--td-text2); }
+  /* Muted, unfilled revenue sparkline (the mockup's thin graphite line with an
+     ink end-dot) — overrides the tea-green filled spark used elsewhere. */
+  .td-spark { height: 40px; margin-top: 16px; color: var(--td-text2); }
+  .td-spark .db-spark-area { display: none; }
+  .td-spark .db-spark-line { opacity: .7; }
+  .td-spark .db-spark-dot { background: var(--td-text); }
+  /* Three plain pulse cells — orders / new customers / refund requests. No
+     mini-sparklines, no deltas: just the number and its label (the mockup). */
+  .td-cells { display: flex; gap: 48px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--td-border); }
+  .td-cell .v { font-size: 21px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-cell .k { font-size: 12.5px; color: var(--td-text2); margin-top: 3px; }
 
-  /* Activity strip — quiet rows; the toggle reveals the full day (scrolling
-     inside the card past ~340px so the page below stays reachable). */
-  .td-feed .db-feed-list { display: flex; flex-direction: column; gap: 2px; max-height: 340px; }
+  /* Activity strip — clean prose rows: time · sentence · right-aligned amount,
+     no icon, first-order pill only. Toggle reveals the full day (scrolls inside
+     the card past ~340px so the page below stays reachable). */
+  .td-feed .db-feed-list { display: flex; flex-direction: column; gap: 1px; max-height: 340px; }
   .td-feed .db-feed-empty { font-size: 13px; color: var(--td-text2); padding: 6px 0; }
+  .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 6px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 13.5px; line-height: 1.4; cursor: pointer; }
+  .td-feed-row:hover { background: var(--td-raised); }
+  .td-feed-row .db-feed-ts { flex: none; min-width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .td-feed-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--td-text); }
+  .td-feed-amt { margin-left: auto; flex: none; color: var(--td-text2); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .td-feed-badge { flex: none; font-size: 11.5px; font-weight: 500; padding: 1px 9px; border-radius: 999px; background: var(--td-sage-tint); color: var(--td-sage-ink); }
+  .td-feed-badge.td-feed-badge-mute { background: var(--td-raised); color: var(--td-text2); }
+  /* A first-order badge takes the right slot, so its amount sits inline before
+     it rather than pushed to the far edge. */
+  .td-feed-row:has(.td-feed-badge) .td-feed-amt { margin-left: 6px; }
+  .td-viewall { margin-left: auto; border: 0; background: transparent; cursor: pointer; font-family: var(--f-sans); font-size: 13px; color: var(--td-text2); padding: 2px 4px; transition: color .2s cubic-bezier(.16,1,.3,1); }
+  .td-viewall:hover { color: var(--td-text); }
 
   .td-foot { margin-top: 26px; text-align: center; }
   .td-foot-link {

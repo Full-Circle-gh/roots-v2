@@ -1091,24 +1091,29 @@
       <section class="card td-card td-today">
         <div class="td-card-head">
           <h3>Revenue · 营业额</h3>
-          <span class="db-hero-sync" id="db-hero-sync">syncing… · 同步中…</span>
+          <!-- sync stamp kept for JS but hidden — the mockup shows only the
+               live browsing indicator on the right. -->
+          <span class="db-hero-sync" id="db-hero-sync" hidden></span>
           <span class="td-live is-zero" id="td-live"><i class="td-live-dot" aria-hidden="true"></i><b class="td-live-num" id="db-live-num">0</b><span class="td-live-lbl" id="td-live-lbl"></span></span>
         </div>
         <div class="td-rev">
           <span class="td-rev-big" id="db-today-rev">¥—</span>
           <span class="db-delta" id="db-today-rev-d"></span>
+          <span class="td-rev-note" id="td-rev-note"></span>
         </div>
         <div class="db-spark-wrap td-spark" id="db-today-spark"></div>
         <div class="td-cells">
           <div class="td-cell">
             <div class="v" id="db-today-ord">—</div>
-            <div class="k"><span class="lbl">Orders · 订单</span><span class="db-delta" id="db-today-ord-d"></span></div>
-            <div class="db-spark-wrap db-spark-sm" id="db-today-ord-spark"></div>
+            <div class="k">Orders · 订单</div>
           </div>
           <div class="td-cell">
             <div class="v" id="db-today-new">—</div>
-            <div class="k"><span class="lbl">New customers · 新客</span><span class="db-delta" id="db-today-new-d"></span></div>
-            <div class="db-spark-wrap db-spark-sm" id="db-today-new-spark"></div>
+            <div class="k">New customers · 新客</div>
+          </div>
+          <div class="td-cell">
+            <div class="v" id="td-today-ref">0</div>
+            <div class="k">Refund requests · 退款申请</div>
           </div>
         </div>
       </section>
@@ -1116,9 +1121,9 @@
       <section class="card td-card td-feed db-feed-pane" id="db-feed-pane">
         <div class="td-card-head">
           <h3>Activity · 动态</h3>
+          <button class="td-viewall" type="button" id="db-feed-toggle" onclick="dashFeedToggleExpand()" hidden></button>
         </div>
         <div class="db-feed-list" id="db-feed-list"><div class="db-feed-empty">Loading… · 加载中…</div></div>
-        <button class="db-feed-toggle" type="button" id="db-feed-toggle" onclick="dashFeedToggleExpand()" hidden></button>
       </section>
     </div>
 

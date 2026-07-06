@@ -414,8 +414,22 @@ function dashHeroTodayRepaint() {
   const data = DASH_HERO.todayData; if (!data) return;
   const k = data.kpis || {}, b = data.baseline || null;
   dashSetDelta('#db-today-rev-d', b && b.revenue,       Number(k.revenue || 0),       b && b.days, v => '¥' + Math.round(v).toLocaleString());
+  // The Today card only carries the revenue delta now (the order / new-customer
+  // cells are plain, per the mockup) — but the badge elements may be absent, and
+  // dashSetDelta no-ops on a missing selector, so these stay safe if present.
   dashSetDelta('#db-today-ord-d', b && b.orders,        Number(k.orders || 0),        b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
   dashSetDelta('#db-today-new-d', b && b.new_customers, Number(k.new_customers || 0), b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
+  // "vs a typical {weekday}" caption beside the revenue delta — shown only when
+  // there's revenue to compare (empty otherwise, so it never reads oddly at ¥0).
+  const note = document.getElementById('td-rev-note');
+  if (note) {
+    if (Number(k.revenue || 0) > 0) {
+      const wd = new Date();
+      const EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][wd.getDay()];
+      const CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][wd.getDay()];
+      note.textContent = cuT(`vs a typical ${EN}`, `对比平常的${CN}`);
+    } else { note.textContent = ''; }
+  }
 }
 // Integer when whole, else one decimal — keeps "/day" averages readable.
 function dashTrim(n) {
@@ -615,11 +629,15 @@ function dashFeedRender(events) {
     const ts = new Date(e.ts);
     const pad = n => String(n).padStart(2, '0');
     const tstr = `${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
-    const meta = dashFeedMeta(e);
-    return `<div class="db-feed-row${isNew ? ' is-new' : ''}" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
+    // Tacet activity rows are prose, not iconed log lines: "Patricia paid
+    // ¥532.20" / "Meituan order · ¥48" / "Refund settled — R261204", with the
+    // amount right-aligned and only a first-order badge, per the mockup.
+    const m = tdFeedMeta(e);
+    return `<div class="db-feed-row td-feed-row${isNew ? ' is-new' : ''}" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
       <span class="db-feed-ts">${tstr}</span>
-      <span class="db-feed-icon db-fi-${meta.tone || 'muted'}">${meta.icon}</span>
-      <span class="db-feed-text">${meta.text}</span>
+      <span class="td-feed-text">${m.text}</span>
+      ${m.badge || ''}
+      ${m.amount ? `<span class="td-feed-amt">${m.amount}</span>` : ''}
     </div>`;
   };
   // The collapsed strip shows only the day's MEANINGFUL events (money moving,
@@ -657,7 +675,61 @@ function dashFeedSyncExpand(overflow) {
   const total = (DASH_HERO._lastEvents || []).length;
   toggle.hidden = false;
   toggle.classList.toggle('is-open', expanded);
-  toggle.innerHTML = expanded ? 'Collapse · 收起' : `Show all (${total}) · 展开`;
+  toggle.innerHTML = expanded ? 'Show less · 收起' : 'View all · 查看全部';
+}
+
+// Tacet activity row — clean prose per the dashboard mockup. Returns
+// { text, amount, badge }: `text` is the sentence, `amount` is the
+// right-aligned money (muted), `badge` a small first-order pill. No icon,
+// no bold type-label prefix. (dashFeedMeta below still drives the drawer.)
+function tdFeedMeta(e) {
+  const p = e.payload || {};
+  const yuan = n => '¥' + Number(n || 0).toLocaleString();
+  const buyer = (p.buyer || '').trim();
+  const chan = String(p.channel || '').toLowerCase();
+  const chanName = { meituan: 'Meituan', eleme: 'Eleme', gzgrocery: 'Wholesale' }[chan];
+  const ono = escapeHtml(p.order_no || '');
+  const firstBadge = p.first_order
+    ? ` <span class="td-feed-badge">${cuT('first order', '首单')}</span>` : '';
+  switch (e.type) {
+    case 'paid_order': {
+      // Named buyer → "{buyer} paid"; an unattributed channel order (e.g.
+      // Meituan) → "{Channel} order"; otherwise a plain "Order paid".
+      const text = buyer ? cuT(`${escapeHtml(buyer)} paid`, `${escapeHtml(buyer)} 已支付`)
+        : (chanName ? cuT(`${chanName} order`, `${cuT(chanName, chanName)}订单`) : cuT('Order paid', '订单已支付'));
+      return { text, amount: yuan(p.total), badge: firstBadge };
+    }
+    case 'order_dispatched':
+      return { text: cuT(`${escapeHtml(buyer || ono)} — dispatched`, `${escapeHtml(buyer || ono)} — 已发货`) };
+    case 'order_delivered':
+      return { text: cuT(`${escapeHtml(buyer || ono)} — delivered`, `${escapeHtml(buyer || ono)} — 已送达`) };
+    case 'order_cancelled': {
+      const unpaid = p.reason === 'auto_cancelled_unpaid'
+        ? ` <span class="td-feed-badge td-feed-badge-mute">${cuT('unpaid', '未付款')}</span>` : '';
+      return { text: cuT(`Cancelled — ${ono}`, `已取消 — ${ono}`), amount: p.total ? yuan(p.total) : '', badge: unpaid };
+    }
+    case 'refund_request':
+      return { text: cuT(`Refund requested — ${ono}`, `退款申请 — ${ono}`), amount: p.amount ? yuan(p.amount) : '' };
+    case 'refund_paid':
+      return { text: cuT(`Refund settled — ${ono}`, `退款完成 — ${ono}`), amount: p.amount ? yuan(p.amount) : '' };
+    case 'refund_rejected':
+      return { text: cuT(`Refund declined — ${ono}`, `退款驳回 — ${ono}`) };
+    case 'topup':
+      return { text: buyer ? cuT(`${escapeHtml(buyer)} topped up`, `${escapeHtml(buyer)} 已充值`) : cuT('Wallet top-up', '钱包充值'), amount: yuan(p.amount) };
+    case 'new_customer':
+      return { text: p.name ? cuT(`${escapeHtml(p.name)} joined`, `${escapeHtml(p.name)} 加入`) : cuT('New customer joined', '新客户加入') };
+    case 'feedback':
+      return { text: cuT(`Feedback · “${escapeHtml(p.excerpt || '')}”`, `反馈 · “${escapeHtml(p.excerpt || '')}”`) };
+    case 'gzgrocery_pickup': {
+      const nm = escapeHtml((window.cuLang && cuLang() === 'cn') ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn));
+      const u = Math.abs(Number(p.units || 0));
+      return p.is_return
+        ? { text: cuT(`Wholesale return · ${nm}`, `批发退货 · ${nm}`), amount: '−' + yuan(Math.abs(p.owed)) }
+        : { text: cuT(`Wholesale pickup · ${nm} ×${u}`, `批发提货 · ${nm} ×${u}`), amount: yuan(Math.abs(p.owed)) };
+    }
+    default:
+      return { text: escapeHtml(e.type) };
+  }
 }
 
 // Thin-stroke line icons for the activity feed — 16-box viewBox, currentColor
@@ -919,7 +991,7 @@ function tdDateRender() {
     const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
     el.textContent = `${d.getMonth() + 1}月${d.getDate()}日 ${DOW[d.getDay()]}`;
   } else {
-    el.textContent = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+    el.textContent = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 }
 
@@ -1077,6 +1149,10 @@ function tdAttnRender() {
     host.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
     return;
   }
+  // Feed the Today pulse's "refund requests" cell from the same live ops
+  // snapshot (the open-refund queue) — 0 when clear, matching the mockup.
+  const refCell = document.getElementById('td-today-ref');
+  if (refCell) refCell.textContent = String((DASH_OPS.refunds && DASH_OPS.refunds.count) || 0);
   const cards = [];
 
   // Delivery problems — the carrier flagged something an operator must chase.
