@@ -9946,23 +9946,21 @@ function deliveryJobStage(job) {
   return dispatched ? 'awaiting_dispatch' : 'scheduled';
 }
 
-router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const order = tdb().prepare(
-    'SELECT id, recipient_phone, delivery_slot_label FROM retail_orders WHERE id = ? AND customer_id = ?'
-  ).get(id, req.customer.id);
-  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
-
-  // Primary: the daemon has linked this delivery to the roots order. Fallback:
-  // match by recipient phone (the daemon may not have matched it to the order id
-  // yet, but the phone snapshot is the same). Newest row wins.
-  let job = null;
+// Find the newest delivery_jobs row for an order — used by BOTH the customer
+// mini-app track endpoint and the admin drawer's live rider map, so staff and
+// shopper always read the same rider position from one code path. Primary match
+// is the daemon's link (retail_order_id); fallback is the recipient phone (the
+// daemon may not have linked the order id yet, but the phone snapshot matches).
+// Returns null when there's no job (JD parcel / off-system / pre-dispatch) and
+// undefined when the table is missing (pre-migration) — callers treat both as
+// "no tracking".
+function findDeliveryJobForOrder(orderId, recipientPhone) {
   try {
-    job = tdb().prepare(
+    let job = tdb().prepare(
       'SELECT * FROM delivery_jobs WHERE retail_order_id = ? ORDER BY updated_at DESC LIMIT 1'
-    ).get(id);
+    ).get(orderId);
     if (!job) {
-      const phone = String(order.recipient_phone || '').replace(/\D/g, '');
+      const phone = String(recipientPhone || '').replace(/\D/g, '');
       if (phone.length >= 7) {
         job = tdb().prepare(
           `SELECT * FROM delivery_jobs
@@ -9971,12 +9969,15 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
         ).get('%' + phone.slice(-8) + '%');
       }
     }
+    return job || null;
   } catch (e) {
-    // delivery_jobs missing (pre-migration) or query error — degrade gracefully.
-    return res.json({ success: true, data: { tracking: false } });
+    return undefined;   // delivery_jobs missing (pre-migration) or query error
   }
-  if (!job) return res.json({ success: true, data: { tracking: false } });
+}
 
+// Build the track payload (stage, rider, positions, route, ETA) from a job row.
+// Coordinates are stored GCJ-02 ×1e6; we divide by 1e6 on the way out.
+function buildDeliveryTrackData(job, slotLabel) {
   // Coarse stage from the delivery_jobs row — see deliveryJobStage (shared with
   // the admin drawer so staff + customer always read the same stage).
   const stage = deliveryJobStage(job);
@@ -9997,7 +9998,7 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
     }
   } catch (e) { /* raw_track unparseable — omit route */ }
 
-  res.json({ success: true, data: {
+  return {
     tracking: true,
     stage,
     order_status: job.order_status,
@@ -10014,9 +10015,35 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
     eta_seconds: stage === 'scheduled' ? null : (job.eta_seconds ?? null),
     rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? null),
     expected_delivery_at: job.expected_delivery_at || null,
-    slot_label: order.delivery_slot_label || null,   // human slot for the 'scheduled' sub-line
+    slot_label: slotLabel || null,   // human slot for the 'scheduled' sub-line
     updated_at: job.updated_at,
-  }});
+  };
+}
+
+router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const order = tdb().prepare(
+    'SELECT id, recipient_phone, delivery_slot_label FROM retail_orders WHERE id = ? AND customer_id = ?'
+  ).get(id, req.customer.id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  const job = findDeliveryJobForOrder(id, order.recipient_phone);
+  if (!job) return res.json({ success: true, data: { tracking: false } });
+  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label) });
+});
+
+// Admin twin of the track endpoint — identical payload, admin auth, no
+// customer_id scoping. Powers the live rider map in the order drawer; the admin
+// session can't use the customer endpoint above (that's Bearer-token scoped to
+// the shopper), so staff read the same feed through their own guard.
+router.get('/api/retail-admin/orders/:id/delivery-track', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const order = tdb().prepare(
+    'SELECT id, recipient_phone, delivery_slot_label FROM retail_orders WHERE id = ?'
+  ).get(id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  const job = findDeliveryJobForOrder(id, order.recipient_phone);
+  if (!job) return res.json({ success: true, data: { tracking: false } });
+  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label) });
 });
 
 // Request a fapiao (发票) for an existing PAID order — for shoppers who didn't

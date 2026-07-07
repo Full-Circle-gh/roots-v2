@@ -2961,8 +2961,20 @@ function renderCourierStatusCard(o, c, meta, stale, delivered) {
         '状态未更新 — 骑手可能已取消,请核实或另叫一位。')}</span></div>`
     : '';
   const ago = courierAgo(c.updated_at);
+  // Live rider map — only while a rider is genuinely moving (in_transit, not
+  // stale, not delivered), which is exactly when a rider position exists to plot.
+  // The container is filled by mountCourierMap() after the drawer renders; it
+  // loads AMap on demand and polls the admin track endpoint every ~25s.
+  const showMap = c.stage === 'in_transit' && !stale && !delivered;
+  const mapEl = showMap
+    ? `<div id="courier-map-${o.id}" class="courier-map" aria-label="${cuT('Live rider location', '骑手实时位置')}"
+           style="height:180px; margin-bottom:10px; border-radius:8px; overflow:hidden; position:relative; background:var(--bg-elev-2, #ECEAE3);">
+         <div class="muted" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:11px;">${cuT('Loading map…', '正在加载地图…')}</div>
+       </div>`
+    : '';
   return `
     <div style="padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:8px;">
+      ${mapEl}
       <div style="display:flex; align-items:center; gap:7px;">
         <span style="background:${dot}; width:8px; height:8px; border-radius:50%; flex:none;"></span>
         <b style="font-size:13px;">${cuT(meta.en, meta.cn)}</b>
@@ -2973,6 +2985,120 @@ function renderCourierStatusCard(o, c, meta, stale, delivered) {
       ${staleLine}
       ${ago ? `<div class="muted" style="font-size:10px; margin-top:6px;">${cuT('Updated', '更新于')} ${ago}</div>` : ''}
     </div>`;
+}
+
+// ── Live rider map (高德 AMap) in the courier card ──────────────────────────
+// Staff see the rider dot move from store to door without calling to ask. The
+// coordinates come from the admin delivery-track endpoint (same courier feed the
+// mini-app map uses). AMap is loaded on demand — the admin bundle never carries
+// the SDK until a live delivery drawer needs it — and re-polled every ~25s (the
+// daemon's cadence) while the drawer stays open, torn down on close / switch.
+let _courierMap = null;   // active map controller, or null
+let _amapSdkP  = null;    // memoised SDK-load promise (reset on failure so a
+                          // network blip doesn't permanently poison it)
+
+function _adminLoadAmapOnce() {
+  return (async () => {
+    let cfg = null;
+    try { cfg = (await api('/api/retail/maps-config')).data; } catch (e) { cfg = null; }
+    if (!cfg || cfg.provider !== 'amap' || !cfg.key) throw new Error('no_amap');
+    if (window.AMap) return;
+    if (cfg.security) window._AMapSecurityConfig = { securityJsCode: cfg.security };
+    await new Promise((resolve, reject) => {
+      const cb = '__adminMapReady';
+      window[cb] = () => resolve();
+      const s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(cfg.key) + '&callback=' + cb;
+      s.onerror = () => reject(new Error('sdk_load_failed'));
+      document.head.appendChild(s);
+    });
+  })();
+}
+function _adminLoadAmap() {
+  if (_amapSdkP) return _amapSdkP;
+  _amapSdkP = _adminLoadAmapOnce().catch((e) => { _amapSdkP = null; throw e; });
+  return _amapSdkP;
+}
+
+function teardownCourierMap() {
+  if (!_courierMap) return;
+  try { clearInterval(_courierMap.timer); } catch (e) {}
+  try { _courierMap.map && _courierMap.map.destroy(); } catch (e) {}
+  _courierMap = null;
+}
+
+// A labelled point marker (caption above a monochrome dot) as AMap HTML content.
+function _courierMarkerHtml(color, label) {
+  return '<div style="display:flex; flex-direction:column; align-items:center; gap:2px;">'
+    + '<div style="font:600 10px/1 Inter,sans-serif; color:' + color + '; white-space:nowrap; text-shadow:0 1px 2px rgba(251,249,244,.9);">' + label + '</div>'
+    + '<div style="width:14px; height:14px; border-radius:50%; background:' + color + '; border:2.5px solid #FBF9F4; box-shadow:0 1px 3px rgba(17,26,43,.3);"></div>'
+    + '</div>';
+}
+
+async function mountCourierMap(o) {
+  teardownCourierMap();                                   // drop any prior map first
+  const el = document.getElementById('courier-map-' + o.id);
+  if (!el) return;                                        // no live rider → no container
+  let sdkOk = true;
+  try { await _adminLoadAmap(); } catch (e) { sdkOk = false; }
+  if (!document.body.contains(el)) return;                // drawer closed/switched while loading
+  if (!sdkOk || !window.AMap) {
+    el.innerHTML = '<div class="muted" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; padding:0 12px; font-size:11px;">'
+      + cuT('Map unavailable — rider details are below.', '地图暂不可用 — 骑手信息见下方') + '</div>';
+    return;
+  }
+  el.innerHTML = '';                                      // clear the "Loading…" placeholder
+
+  const state = { orderId: o.id, map: null, timer: null, rider: null, shop: null, cust: null, line: null, fitted: false };
+  _courierMap = state;
+  const map = new AMap.Map(el, { zoom: 15, resizeEnable: true, jogEnable: false });
+  state.map = map;
+
+  const setMarker = (cur, pos, color, label, z) => {
+    if (!pos) return cur;
+    const lnglat = [pos.lng, pos.lat];
+    if (cur) { cur.setPosition(lnglat); return cur; }
+    const mk = new AMap.Marker({ position: lnglat, content: _courierMarkerHtml(color, label), anchor: 'center', zIndex: z });
+    mk.setMap(map);
+    return mk;
+  };
+  const apply = (d) => {
+    if (!d || !d.tracking) return;
+    state.shop  = setMarker(state.shop,  d.shop_position,      '#58606E', '门店', 100);
+    state.cust  = setMarker(state.cust,  d.recipient_position, '#111A2B', '收货', 100);
+    state.rider = setMarker(state.rider, d.rider_position,     '#5C7A4E', '骑手', 120);
+    if (Array.isArray(d.route) && d.route.length > 1) {
+      const path = d.route.map((p) => [p.lng, p.lat]);
+      if (state.line) state.line.setPath(path);
+      else {
+        state.line = new AMap.Polyline({ path, strokeColor: '#6E67AF', strokeWeight: 4, strokeOpacity: 0.85, lineJoin: 'round', showDir: true });
+        state.line.setMap(map);
+      }
+    }
+    if (!state.fitted) {
+      // First paint: frame all known points so staff see the whole trip.
+      const pts = [state.shop, state.cust, state.rider].filter(Boolean);
+      if (pts.length > 1) { try { map.setFitView(pts, false, [24, 24, 24, 24]); } catch (e) {} }
+      else if (d.rider_position) map.setZoomAndCenter(15, [d.rider_position.lng, d.rider_position.lat]);
+      state.fitted = true;
+    } else if (d.rider_position) {
+      map.setCenter([d.rider_position.lng, d.rider_position.lat]);   // keep the rider centred as it moves
+    }
+  };
+  const poll = async () => {
+    if (_courierMap !== state) return;                    // superseded by a newer drawer
+    try {
+      const r = await api('/api/retail-admin/orders/' + o.id + '/delivery-track');
+      if (_courierMap !== state) return;
+      const d = r.data;
+      // Rider gone (delivered / cancelled) → stop polling; the text card carries the rest.
+      if (!d || !d.tracking || d.stage === 'delivered' || !d.rider_position) { clearInterval(state.timer); return; }
+      apply(d);
+    } catch (e) { /* transient — retry next tick */ }
+  };
+  await poll();                                           // first paint
+  if (_courierMap === state) state.timer = setInterval(poll, 25000);
 }
 
 // Same-city courier dispatch (青云聚信) — compare live carrier prices and send a rider
@@ -3201,6 +3327,9 @@ async function openOrder(id, opts = {}) {
     } else {
       renderOpenOrder(o);
     }
+    // Live rider map — mounts only when the drawer rendered a courier-map
+    // container (an on-the-way same-city order). Self-tears-down any prior map.
+    try { mountCourierMap(o); } catch (e) { /* map is best-effort */ }
     // The GET above stamped seen_at server-side (shared across staff). Clear
     // this row's unread treatment immediately so it doesn't wait for the next
     // poll; a later list rebuild reflects the server seen_at and stays cleared.
@@ -3280,6 +3409,7 @@ document.addEventListener('click', (e) => {
 });
 // Order-drawer cleanup hook — clear the mount after slide-out.
 onDrawerClose('#order-drawer', () => {
+  teardownCourierMap();            // stop polling + destroy the AMap instance
   const m = document.getElementById('order-detail-mount');
   if (m) m.innerHTML = '';
   _OPEN_ORDER = null;
