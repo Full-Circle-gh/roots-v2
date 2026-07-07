@@ -577,15 +577,15 @@
                 background var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
   .seam-dot svg {
-    width: 15px; height: 15px; display: block;
+    width: 13px; height: 13px; display: block;
     opacity: 0; transition: opacity var(--t-fast) ease, transform var(--t-fast) ease;
   }
   .seam-fold:hover .seam-dot,
   .seam-fold:focus-visible .seam-dot,
   body.nav-collapsed .seam-dot {
-    width: 26px; height: 26px;
+    width: 21px; height: 21px;
     background: var(--bg-pane); color: var(--text-1);
-    box-shadow: 0 0 0 1px var(--line-soft), 0 1px 5px rgba(17, 26, 43, .16);
+    box-shadow: 0 0 0 1px var(--line-soft), 0 1px 3px rgba(17, 26, 43, .1);
   }
   .seam-fold:hover .seam-dot svg,
   .seam-fold:focus-visible .seam-dot svg,
@@ -7479,7 +7479,10 @@
   /* Top-bar left edge — hamburger + wide search (2026-07-07). Wrapped so the
      topbar's own 16px gap doesn't push them apart; .grow after pins the right
      cluster (inbox + avatar). */
-  .tb-left { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
+  /* margin-left keeps the search clear of the seam fold dot, which straddles the
+     divider at the topbar's left edge — without it the collapsed arrow kisses
+     the search field. */
+  .tb-left { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; margin-left: 14px; }
 
   /* Search — pill → wide field. Icon inside-left, full placeholder, no kbd chip;
      colours already set in the slice-one block above, geometry here. */
