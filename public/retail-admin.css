@@ -7387,7 +7387,10 @@
     max-height: 420px; overflow-y: auto;
     /* A reading column, not the full 1120px card — otherwise the right-aligned
        amount floats to the far edge, miles from its row text. */
-    max-width: 680px;
+    max-width: 692px;
+    /* Right gutter so the scroll track + amounts don't jam against the border
+       (the tinted rows still bleed 8px each side via their negative margin). */
+    padding-right: 12px;
   }
   /* Author `display:grid` above beats the UA `[hidden]{display:none}`, so the
      fold would never collapse without this — "Hide the work" needs it. */
