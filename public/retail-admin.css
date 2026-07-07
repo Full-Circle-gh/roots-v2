@@ -7406,6 +7406,37 @@
   .topbar .acct-danger svg { color: var(--td-brick-ink); }
   .topbar .acct-danger:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
 
+  /* Top-bar left edge — hamburger + wide search (2026-07-07). Wrapped so the
+     topbar's own 16px gap doesn't push them apart; .grow after pins the right
+     cluster (inbox + avatar). */
+  .tb-left { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
+  .nav-burger {
+    flex: none; width: 42px; height: 42px;
+    border: 1px solid var(--td-border); background: var(--td-surface);
+    border-radius: var(--r-lg); color: var(--td-text2); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .nav-burger:hover { background: var(--td-raised); color: var(--td-text); border-color: var(--td-text2); }
+  .nav-burger svg { width: 20px; height: 20px; }
+
+  /* Search — pill → wide field. Icon inside-left, full placeholder, no kbd chip;
+     colours already set in the slice-one block above, geometry here. */
+  .topbar .gsearch-trigger {
+    flex: 0 1 460px; min-width: 150px; height: 42px;
+    padding: 0 15px; gap: 10px; border-radius: var(--r-lg);
+  }
+  .topbar .gsearch-trigger svg { width: 17px; height: 17px; color: var(--td-text2); }
+  .topbar .gsearch-ph {
+    flex: 1 1 auto; min-width: 0; text-align: left;
+    font-size: 15px; font-weight: 400; color: var(--td-text2);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  @media (max-width: 720px) {
+    .nav-burger { display: none; }
+    .topbar .gsearch-trigger { flex: 1 1 auto; }
+  }
+
   /* ── shared chrome ── */
   /* Content is a centered 1120px column (like the mockup's .page), so the
      header date lines up with the cards' right edge instead of the screen edge. */

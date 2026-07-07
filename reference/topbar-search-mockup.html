@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tacet — top bar with wide search</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#111A2B; --paper:#FBF9F4; --graphite:#58606E;
+  --dusk:#6E67AF; --amber:#C9954A; --cream:#F6F3EC; --border:#E4E0D5;
+  --surface:#FFFFFF; --raised:var(--cream);
+  --text:var(--ink); --text-2:var(--graphite); --text-3:#8A8578; --line:var(--border);
+  --font:"Inter",-apple-system,Arial,sans-serif; --display:"Fraunces",Georgia,serif;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+[data-theme="dark"]{
+  --surface:#18233A; --raised:#1E2A44; --border:#2A3550;
+  --text:var(--paper); --text-2:#9AA3B2; --text-3:#6B7488; --line:#2A3550;
+  --paper:#111A2B; --cream:#1E2A44;
+}
+*{margin:0;box-sizing:border-box}
+body{font-family:var(--font); font-size:15px; color:var(--text); background:var(--paper);
+  -webkit-font-smoothing:antialiased; transition:background .2s var(--ease),color .2s var(--ease)}
+
+/* ══════════ TOP BAR ══════════ */
+.topbar{height:72px; background:var(--surface); border-bottom:1px solid var(--line);
+  display:flex; align-items:center; position:sticky; top:0; z-index:10}
+
+/* Brand sits in a rail-width column with the rail's right edge as the divider */
+.brand{flex:0 0 236px; display:flex; align-items:center; gap:12px; height:100%;
+  padding:0 22px; border-right:1px solid var(--line)}
+.brand .mark svg{display:block; color:var(--text)}
+.brand .word{font-family:var(--display); font-weight:300; font-size:29px; letter-spacing:.28em; color:var(--text)}
+
+/* Everything right of the divider */
+.tools{flex:1 1 auto; min-width:0; display:flex; align-items:center; gap:14px; padding:0 22px}
+
+/* Hamburger — collapses the rail */
+.burger{flex:none; width:48px; height:48px; border:1px solid var(--line); background:var(--surface);
+  border-radius:11px; color:var(--text-2); cursor:pointer; display:inline-flex; align-items:center; justify-content:center;
+  transition:background .16s var(--ease),color .16s var(--ease),border-color .16s var(--ease)}
+.burger:hover{background:var(--raised); color:var(--text); border-color:var(--text-3)}
+.burger svg{width:22px; height:22px}
+
+/* Wide search — real input, icon inside-left, full placeholder */
+.search{flex:1 1 auto; min-width:0; max-width:560px; display:flex; align-items:center; gap:11px;
+  height:48px; padding:0 16px; border:1px solid var(--line); background:var(--surface);
+  border-radius:11px; color:var(--text-3); cursor:text; transition:border-color .16s var(--ease)}
+.search:hover{border-color:var(--text-3)}
+.search:focus-within{border-color:var(--dusk)}
+.search svg{flex:none; width:18px; height:18px; color:var(--text-3)}
+.search input{flex:1 1 auto; min-width:0; border:0; background:transparent; outline:none;
+  font:inherit; font-size:16px; color:var(--text)}
+.search input::placeholder{color:var(--text-3); opacity:1}
+.search .kbd{flex:none; font-size:12px; font-weight:500; color:var(--text-3);
+  border:1px solid var(--line); border-radius:6px; padding:2px 7px; background:var(--raised)}
+
+.grow{flex:1 1 auto}
+
+/* Right cluster — inbox (amber unseen pip) + avatar (Ink) */
+.ico{position:relative; flex:none; width:44px; height:44px; border:0; background:transparent; cursor:pointer;
+  border-radius:10px; color:var(--text-2); display:inline-flex; align-items:center; justify-content:center;
+  transition:background .16s var(--ease),color .16s var(--ease)}
+.ico:hover{background:var(--raised); color:var(--text)}
+.ico svg{width:20px; height:20px}
+.ico .pip{position:absolute; top:9px; right:9px; width:7px; height:7px; border-radius:50%;
+  background:var(--amber); box-shadow:0 0 0 2px var(--surface)}
+.avatar{flex:none; width:38px; height:38px; border-radius:50%; border:0; background:var(--ink); color:var(--paper);
+  display:inline-flex; align-items:center; justify-content:center; font-weight:500; font-size:15px;
+  box-shadow:0 0 0 1px var(--line); cursor:pointer}
+[data-theme="dark"] .avatar{background:var(--paper); color:var(--ink)}
+
+/* ── faint page body so the bar has context ── */
+.page{padding:34px 32px}
+.h1{font-family:var(--display); font-weight:300; font-size:30px; margin-bottom:6px}
+.sub{color:var(--text-2); font-size:14.5px; max-width:56ch; line-height:1.6}
+
+.controls{position:fixed; left:20px; bottom:20px; background:var(--surface); border:1px solid var(--line);
+  border-radius:12px; padding:11px 14px; box-shadow:0 4px 16px rgba(17,26,43,.08); display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-2)}
+.seg{border:1px solid var(--line); background:transparent; color:var(--text-2); border-radius:6px; padding:4px 9px; font:inherit; font-size:12px; cursor:pointer}
+.seg[aria-pressed="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+[data-theme="dark"] .seg[aria-pressed="true"]{background:var(--paper); color:var(--ink); border-color:var(--paper)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <span class="mark">
+      <svg width="52" height="17" viewBox="0 0 340 110" fill="none"><path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="7" stroke-linecap="round"/><circle cx="305" cy="55" r="9" fill="#6E67AF"/></svg>
+    </span>
+    <span class="word">tacet</span>
+  </div>
+
+  <div class="tools">
+    <button class="burger" type="button" aria-label="Collapse menu" title="Collapse menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
+    </button>
+
+    <label class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input type="text" placeholder="Search orders, products, customers…" aria-label="Search">
+    </label>
+
+    <div class="grow"></div>
+
+    <button class="ico" type="button" aria-label="Inbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      <span class="pip"></span>
+    </button>
+    <button class="avatar" type="button">A</button>
+  </div>
+</div>
+
+<div class="page">
+  <div class="h1">While you were away</div>
+  <p class="sub">Wordmark over the rail column, a hamburger to fold the menu, and the search promoted from a little pill to a real, wide field — exactly like your reference. The right cluster (inbox with its Amber unseen dot, and the Ink avatar) is what your screenshot crops off.</p>
+</div>
+
+<div class="controls">
+  <span>Theme</span>
+  <button class="seg" data-v="light" aria-pressed="true">Light</button>
+  <button class="seg" data-v="dark" aria-pressed="false">Dark</button>
+</div>
+
+<script>
+document.querySelectorAll('.seg').forEach(function(b){
+  b.addEventListener('click', function(){
+    document.documentElement.setAttribute('data-theme', b.dataset.v);
+    document.querySelectorAll('.seg').forEach(function(s){ s.setAttribute('aria-pressed', s===b?'true':'false'); });
+  });
+});
+</script>
+</body>
+</html>
