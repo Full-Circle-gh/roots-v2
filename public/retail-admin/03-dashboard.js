@@ -316,9 +316,12 @@ function dashHeroInit() {
   });
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) dashHeroStop();
-    else dashHeroStart();
+    // Returning to the tab: restart the backstop polls, and if a live nudge
+    // arrived while we were hidden, do the one deferred refresh now.
+    else { dashHeroStart(); if (DASH_HERO._liveDirty) dashLiveRefresh(); }
   });
   dashHeroStart();
+  dashLiveConnect();   // live push — instant updates without a visible refresh
 }
 function dashHeroStart() {
   dashHeroStop();  // idempotent — clear any stale timers first
@@ -339,6 +342,47 @@ function dashHeroRefreshAll() {
   dashHeroLoadPresence();
   dashChanLoad();
   dashHeroLoadToday();
+}
+
+// ── Live push (SSE) ────────────────────────────────────────────────────────
+// One persistent connection to /api/retail-admin/stream. The server sends an
+// `activity` nudge whenever the tenant's order / customer / wholesale streams
+// move — INCLUDING rows written by the separate Meituan / gzgrocery daemon
+// processes, which an in-process write hook could never see — so the recap,
+// the open feed, and Channels-today update the moment something happens, with
+// no visible refresh and no per-client polling. The browser's EventSource
+// auto-reconnects on drop; the 60s backstop polls above cover the rare gap
+// while the socket is down.
+function dashLiveConnect() {
+  if (DASH_HERO._sse || typeof EventSource === 'undefined') return;
+  let es;
+  try { es = new EventSource('/api/retail-admin/stream'); }
+  catch (e) { return; }
+  DASH_HERO._sse = es;
+  es.addEventListener('activity', () => dashLiveNudge());
+  // A reconnect can mean events were missed while the socket was down — do one
+  // catch-up refresh on re-open, but skip the very first open (init loaded).
+  es.addEventListener('open', () => {
+    if (DASH_HERO._sseOpened) dashLiveNudge();
+    DASH_HERO._sseOpened = true;
+  });
+  // On error EventSource retries by itself; keep the handle so we don't stack
+  // connections.
+}
+// Coalesce a burst of nudges into one refresh, and defer while the tab is
+// hidden so a returning operator gets a single refresh, not a backlog.
+function dashLiveNudge() {
+  if (document.hidden) { DASH_HERO._liveDirty = true; return; }
+  clearTimeout(DASH_HERO._liveDebounce);
+  DASH_HERO._liveDebounce = setTimeout(dashLiveRefresh, 500);
+}
+function dashLiveRefresh() {
+  DASH_HERO._liveDirty = false;
+  tdRecapLoad();        // recap summary rows (re-pulls the away window)
+  dashChanLoad();       // Channels today
+  dashHeroLoadToday();  // today KPIs + sparkline
+  if (typeof tdOpsLoad === 'function') tdOpsLoad();  // running-low / needs-you
+  tdRecapWorkFetch();   // the open fold, if any (no-op when collapsed)
 }
 function dashHeroSyncStamp() {
   DASH_HERO.lastSync = Date.now();
@@ -1039,9 +1083,18 @@ async function tdRecapToggleWork() {
   fold.hidden = false;
   tdRecapWorkBtnSync();
   fold.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
+  await tdRecapWorkFetch();
+}
+
+// Pull today's events (server window = since GZ-midnight) merged with the
+// recap window's (which can reach back days) — deduped, newest first — and
+// render the fold. Shared by the toggle (first open) and the live refresh (a
+// push nudge while the fold is open), so the two can never drift. A live
+// refresh keeps the operator's scroll position instead of jumping to the top.
+async function tdRecapWorkFetch() {
+  const fold = document.getElementById('td-recap-work');
+  if (!fold || fold.hidden) return;
   try {
-    // Today's events (server window = since GZ-midnight) merged with the
-    // recap window's (which can reach back days) — deduped, newest first.
     const j = await api('/api/retail-admin/dashboard/activity?limit=500');
     const today = (j.data && j.data.events) || [];
     const idOf = e => `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}`;
@@ -1052,9 +1105,11 @@ async function tdRecapToggleWork() {
     }
     all.sort((a, b) => new Date(b.ts) - new Date(a.ts));
     TD.workEvents = all;
+    const keepTop = fold.scrollTop;
     tdRecapWorkRender();
+    fold.scrollTop = keepTop;
   } catch (e) {
-    fold.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
+    if (!TD.workEvents) fold.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
   }
 }
 

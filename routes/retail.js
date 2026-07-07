@@ -11769,6 +11769,103 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
   res.json({ success: true, data: { events: out, since: sinceMs, server_now: Date.now() } });
 });
 
+// ── Dashboard live stream (SSE) ───────────────────────────────────────────
+// Push channel for the Tacet dashboard so the recap / feed / Channels-today
+// update the moment something happens — no operator refresh, no per-client
+// polling every few seconds. Auth is requireRetailAdmin (the backend-operator
+// realm), so this is deliberately separate from /api/events (routes/events.js,
+// which is requireAuth / req.user and rejects backend operators).
+//
+// Mechanism: SQLite has no cross-process change signal, and the busiest event
+// sources (Meituan, gzgrocery) are written by SEPARATE daemon processes an
+// in-process write hook could never observe. So instead of broadcasting at
+// each mutation site, one cheap per-tenant "activity watermark" is sampled on
+// a short server-side tick — but ONLY while that tenant has a live dashboard
+// open. When the signature moves, a tiny {ts} nudge fans out to that tenant's
+// dashboards, which then refetch. One aggregate query per tenant regardless of
+// how many dashboards are open; zero cost when nobody is watching.
+const _dashLiveSubs = new Set();   // { id, res, tenantId }
+let _dashLiveSid = 0;
+const _dashLiveMark = new Map();   // tenantId → last signature string
+let _dashLiveTimer = null;
+
+// Cheap signature of the streams the dashboard reflects. Every max moves when
+// a human OR a daemon writes, so the dashboard stays honest across processes.
+// Each source is guarded so a tenant missing a table just contributes a
+// constant, never throws.
+function _dashActivitySignature(tenantId) {
+  const d = getTenantDb(tenantId);
+  const parts = [];
+  try {
+    const o = d.prepare(`
+      SELECT COUNT(*) n, MAX(paid_at) a, MAX(dispatched_at) b, MAX(delivered_at) c,
+             MAX(cancelled_at) e, MAX(refund_requested_at) f, MAX(refund_paid_at) g,
+             MAX(updated_at) h
+        FROM retail_orders`).get();
+    parts.push(o.n, o.a, o.b, o.c, o.e, o.f, o.g, o.h);
+  } catch (e) { parts.push('o?'); }
+  try {
+    const c = d.prepare(`SELECT COUNT(*) n, MAX(created_at) m FROM retail_customers`).get();
+    parts.push(c.n, c.m);
+  } catch (e) { parts.push('c?'); }
+  try {
+    const g = d.prepare(`SELECT MAX(created_at) m FROM retail_stock_ledger
+                          WHERE reason IN ('gzgrocery_order','gzgrocery_order_reverse')`).get();
+    parts.push(g.m);
+  } catch (e) { parts.push('g?'); }
+  return parts.join('|');
+}
+
+function _dashLiveTick() {
+  const tenants = new Set();
+  for (const s of _dashLiveSubs) tenants.add(s.tenantId);
+  if (!tenants.size) { clearInterval(_dashLiveTimer); _dashLiveTimer = null; return; }
+  for (const tid of tenants) {
+    let sig;
+    try { sig = _dashActivitySignature(tid); } catch (e) { continue; }
+    const prev = _dashLiveMark.get(tid);
+    if (prev === undefined) { _dashLiveMark.set(tid, sig); continue; }  // baseline, no nudge
+    if (sig === prev) continue;
+    _dashLiveMark.set(tid, sig);
+    const frame = `event: activity\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`;
+    for (const s of _dashLiveSubs) {
+      if (s.tenantId !== tid) continue;
+      try { s.res.write(frame); } catch { /* dead socket — close handler cleans up */ }
+    }
+  }
+}
+
+router.get('/api/retail-admin/stream', requireRetailAdmin, (req, res) => {
+  const tenantId = (req.tenant && req.tenant.id) || ROOTS_TENANT_ID;
+  const sub = { id: ++_dashLiveSid, res, tenantId };
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    // Disable nginx/Caddy response buffering once behind a proxy.
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders?.();
+  res.write(`event: hello\ndata: ${JSON.stringify({ ts: Date.now(), sid: sub.id })}\n\n`);
+  _dashLiveSubs.add(sub);
+  // Seed this tenant's baseline on first connect so the next tick never fires a
+  // spurious nudge from an empty watermark.
+  if (!_dashLiveMark.has(tenantId)) {
+    try { _dashLiveMark.set(tenantId, _dashActivitySignature(tenantId)); } catch (e) {}
+  }
+  if (!_dashLiveTimer) _dashLiveTimer = setInterval(_dashLiveTick, 5000);
+  // Keep-alive comment every 25s — under the typical 60s proxy idle timeout.
+  const ka = setInterval(() => { try { res.write(':ka\n\n'); } catch (e) {} }, 25000);
+  req.on('close', () => {
+    clearInterval(ka);
+    _dashLiveSubs.delete(sub);
+    try { res.end(); } catch (e) {}
+    // Drop the watermark when a tenant's last dashboard closes so a later
+    // reconnect re-baselines (the client does a full load on connect anyway).
+    if (![..._dashLiveSubs].some(s => s.tenantId === tenantId)) _dashLiveMark.delete(tenantId);
+  });
+});
+
 // ── Dashboard: operational snapshot (low stock + refunds queue) ────────────
 // Feeds the bento "Low stock" and "Refunds queue" tiles. Counts + small
 // preview lists in one round-trip. Cheap; polled every ~60s alongside today's
