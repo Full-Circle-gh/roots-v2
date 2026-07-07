@@ -48,7 +48,7 @@ function ordShortNo(no) {
 function ordChannelLabel(o) {
   const c = String(o.channel || 'wechat').toLowerCase();
   if (c === 'meituan')   return 'Meituan';
-  if (c === 'gzgrocery') return 'gzgrocery';
+  if (c === 'gzgrocery') return 'Gzgrocery';
   if (c === 'web')       return 'Web';
   if (c === 'manual')    return cuT('Manual', '手动');
   return 'Mini app';

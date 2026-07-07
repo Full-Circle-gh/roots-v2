@@ -318,7 +318,7 @@
         : '<span style="background:var(--bg-elev-1);color:var(--text-3);border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:11px">off</span>';
 
     let html = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <strong style="font-size:14px">gzgrocery pickups · 提货扣减</strong> ${modeBadge}
+      <strong style="font-size:14px">Gzgrocery pickups · 提货扣减</strong> ${modeBadge}
       <span class="muted" style="font-size:12px;margin-left:auto">${sm.appliedEvents24h || 0} applied · ${sm.appliedUnits24h || 0} units (24h)</span>
     </div>`;
 

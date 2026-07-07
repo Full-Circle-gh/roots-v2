@@ -693,7 +693,7 @@ function tdFeedMeta(e) {
   const yuan = n => '¥' + Number(n || 0).toLocaleString();
   const buyer = (p.buyer || '').trim();
   const chan = String(p.channel || '').toLowerCase();
-  const chanName = { meituan: 'Meituan', eleme: 'Eleme', gzgrocery: 'gzgrocery' }[chan];
+  const chanName = { meituan: 'Meituan', eleme: 'Eleme', gzgrocery: 'Gzgrocery' }[chan];
   const ono = escapeHtml(p.order_no || '');
   const firstBadge = p.first_order
     ? ` <span class="td-feed-badge">${cuT('first order', '首单')}</span>` : '';
@@ -730,8 +730,8 @@ function tdFeedMeta(e) {
       const nm = escapeHtml((window.cuLang && cuLang() === 'cn') ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn));
       const u = Math.abs(Number(p.units || 0));
       return p.is_return
-        ? { text: cuT(`gzgrocery return · ${nm}`, `gzgrocery 退货 · ${nm}`), amount: '−' + yuan(Math.abs(p.owed)) }
-        : { text: cuT(`gzgrocery pickup · ${nm} ×${u}`, `gzgrocery 提货 · ${nm} ×${u}`), amount: yuan(Math.abs(p.owed)) };
+        ? { text: cuT(`Gzgrocery return · ${nm}`, `Gzgrocery 退货 · ${nm}`), amount: '−' + yuan(Math.abs(p.owed)) }
+        : { text: cuT(`Gzgrocery pickup · ${nm} ×${u}`, `Gzgrocery 提货 · ${nm} ×${u}`), amount: yuan(Math.abs(p.owed)) };
     }
     default:
       return { text: escapeHtml(e.type) };

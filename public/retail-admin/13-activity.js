@@ -16,7 +16,7 @@ const ACT = { from: null, to: null, source: '', q: '', offset: 0, limit: 200, ro
 // they follow the live language via actT.
 const ACT_SOURCE_NAME = {
   miniapp:        () => actT('Mini-app', '小程序'),
-  gzgrocery:      () => 'gzgrocery',
+  gzgrocery:      () => 'Gzgrocery',
   meituan_tianhe: () => actT('Meituan Tianhe', '美团天河'),
   meituan_yuexiu: () => actT('Meituan Yuexiu', '美团越秀'),
   meituan:        () => actT('Meituan', '美团'),
@@ -120,7 +120,7 @@ function actStartPolling() {
 const ACT_TABS = [
   ['',               () => actT('All channels', '全部渠道')],
   ['miniapp',        () => actSourceName('miniapp')],
-  ['gzgrocery',      () => 'gzgrocery'],
+  ['gzgrocery',      () => 'Gzgrocery'],
   ['meituan_tianhe', () => actSourceName('meituan_tianhe')],
   ['meituan_yuexiu', () => actSourceName('meituan_yuexiu')],
   ['manual',         () => actSourceName('manual')],

@@ -381,7 +381,7 @@ async function salesWireSetup() {
 const CS_KEY2CH = { wc: 'mini_app', wb: 'web', mt: 'meituan', gy: 'gzgrocery', el: 'eleme' };
 function csName(ch) {
   return ({ mini_app: cuT('Mini app', '小程序'), web: cuT('Web shop', '网页商店'),
-            meituan: cuT('Meituan', '美团'), eleme: cuT('Eleme', '饿了么'), gzgrocery: 'gzgrocery' })[ch] || ch;
+            meituan: cuT('Meituan', '美团'), eleme: cuT('Eleme', '饿了么'), gzgrocery: 'Gzgrocery' })[ch] || ch;
 }
 let _csData = null;
 function csChannel(key) { return ((_csData && _csData.channels) || []).find(c => c.channel === key); }
