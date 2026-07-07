@@ -996,6 +996,14 @@ async function tdRecapLoad() {
   const now = Date.now();
   const MAX_BACK = 7 * 86400000;   // server-friendly cap for a long absence
   const MIN_BACK = 30 * 60000;     // a quick reload still gets a real window
+  const REAL_ABSENCE = 25 * 60000; // under this you never really left — a reload
+                                   // or a tab-switch, not a departure
+  // Did the operator GENUINELY step away? Needs a real prior stamp and a true
+  // gap long enough to count as leaving — measured BEFORE the MIN_BACK floor,
+  // which otherwise fakes a 30-min window on every load. Drives the framing:
+  // no real absence ⇒ no "while you were away" / "you left here" story, just
+  // a calm recent-activity digest of the same window.
+  TD.reallyAway = !!since && (now - since >= REAL_ABSENCE) && (now - since <= MAX_BACK);
   if (!since || now - since > MAX_BACK) since = now - MAX_BACK;
   if (now - since < MIN_BACK) since = now - MIN_BACK;
   TD.recapSince = since;
@@ -1022,13 +1030,25 @@ function tdSinceLabel(ms) {
   return cuT(`since ${d.getMonth() + 1}/${d.getDate()} ${hm}`, `自${d.getMonth() + 1}月${d.getDate()}日 ${hm}`);
 }
 
+// "last 30 minutes" — the meta edge when there was NO real absence, so the card
+// never claims a departure that didn't happen. Reads the actual window rather
+// than hardcoding the floor.
+function tdRecentLabel(ms) {
+  const mins = Math.max(1, Math.round((Date.now() - ms) / 60000));
+  return cuT(`last ${mins} minutes`, `最近 ${mins} 分钟`);
+}
+
 // Aggregate the recap window's events into calm one-line rows, each with a
 // breathing Dusk dot — Dusk means "the system did this", and this card is the
 // only place on the dashboard that uses it.
 function tdRecapRender() {
   const host = document.getElementById('td-recap-rows'); if (!host || !TD.recapEvents) return;
+  const title = document.getElementById('td-recap-title');
+  if (title) title.textContent = TD.reallyAway
+    ? cuT('While you were away', '您不在的这段时间')
+    : cuT('Latest activity', '最新动态');
   const meta = document.getElementById('td-recap-meta');
-  if (meta) meta.textContent = tdSinceLabel(TD.recapSince);
+  if (meta) meta.textContent = TD.reallyAway ? tdSinceLabel(TD.recapSince) : tdRecentLabel(TD.recapSince);
   const ev = TD.recapEvents;
   const of = type => ev.filter(e => e.type === type);
   const sumAmt = (rows, k) => rows.reduce((s, e) => s + (Number(e.payload && e.payload[k]) || 0), 0);
@@ -1064,7 +1084,9 @@ function tdRecapRender() {
 
   const close = document.getElementById('td-recap-close');
   if (!rows.length) {
-    host.innerHTML = `<div class="td-recap-quiet">${cuT('All quiet while you were away.', '您不在时，一切平静。')}</div>`;
+    host.innerHTML = `<div class="td-recap-quiet">${TD.reallyAway
+      ? cuT('All quiet while you were away.', '您不在时，一切平静。')
+      : cuT('All quiet just now.', '目前一切平静。')}</div>`;
     if (close) close.hidden = true;
     return;
   }
@@ -1145,11 +1167,13 @@ function tdRecapWorkRender() {
   const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
   const multiDay = new Set(evs.map(e => new Date(e.ts).toDateString())).size > 1;
   const since = TD.recapSince || 0;
-  const hasAway = evs.some(e => new Date(e.ts).getTime() >= since);
+  // Only split the feed into an "away" band when the operator genuinely left.
+  // A quick reload / tab-switch shows a plain reverse-chron feed, no boundary.
+  const hasAway = TD.reallyAway && evs.some(e => new Date(e.ts).getTime() >= since);
   let html = '', lastDay = '', lineDone = false;
   for (const e of evs) {
     const ts = new Date(e.ts);
-    const away = ts.getTime() >= since;
+    const away = TD.reallyAway && ts.getTime() >= since;
     if (multiDay) {
       const dayKey = ts.toDateString();
       if (dayKey !== lastDay) {
