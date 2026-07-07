@@ -209,11 +209,30 @@ function dashSetRange(key) {
   dashLoad();
 }
 
+// ── Dashboards by position ─────────────────────────────────────────────────
+// The operator's role picks a fixed dashboard view (set as window.RA_POS +
+// body.pos-* at boot). 'default' = the full owner view. The position decides
+// which attention cards render (dashPosWants) and, via CSS, whether the money
+// blocks (Recap / Today pulse / Channels) exist at all.
+const DASH_POS_CARDS = {
+  warehouse:        { stock: 1 },
+  dispatch:         { delivery: 1 },
+  customer_service: { delivery: 1, refunds: 1, invoices: 1 },
+};
+function dashPos() { return window.RA_POS || 'default'; }
+function dashPosWants(kind) {
+  const m = DASH_POS_CARDS[dashPos()];
+  return !m || !!m[kind];
+}
+
 // ── Per-store filter ───────────────────────────────────────────────────────
 // Returns the active store_id (string) or '' for "all stores". Read straight
 // off the select so every loader (deep-dive, Today hero, ops tiles) scopes to
-// the same store without threading state around.
+// the same store without threading state around. A store-scoped operator
+// (store_manager — window.RA_STORE_LOCK) is pinned: every pull carries their
+// store and the picker never appears.
 function dashStoreId() {
+  if (window.RA_STORE_LOCK) return String(window.RA_STORE_LOCK);
   const sel = document.getElementById('db-store');
   return sel ? (sel.value || '') : '';
 }
@@ -233,6 +252,7 @@ function dashStoreChange() {
 let DASH_STORE_FILTER_LOADED = false;
 async function dashEnsureStoreFilter() {
   if (DASH_STORE_FILTER_LOADED) return;
+  if (window.RA_STORE_LOCK) return;   // store-scoped operator — no picker, always their store
   const sel = document.getElementById('db-store');
   if (!sel) return;
   try {
@@ -1346,12 +1366,13 @@ function tdAttnRender() {
   // counts. The card shows whenever ANY store has low stock; its list + count
   // reflect the store picked in the header dropdown (all stores by default).
   const allLow = ((DASH_OPS.low_stock || {}).count || 0) + ((DASH_OPS.out_of_stock || {}).count || 0);
-  if (allLow) {
+  if (allLow && dashPosWants('stock')) {
     const src = (TD.stockStore && TD.stockOps) ? TD.stockOps : DASH_OPS;
     const low = src.low_stock || { count: 0, items: [] };
     const oos = src.out_of_stock || { count: 0, items: [] };
     const cnt = low.count + oos.count;
-    const storeSel = (TD.stores && TD.stores.length >= 2) ? tdStoreSelectHtml() : '';
+    // A store-locked operator's ops pull is already scoped — no store dropdown.
+    const storeSel = (TD.stores && TD.stores.length >= 2 && !window.RA_STORE_LOCK) ? tdStoreSelectHtml() : '';
     let rowsHtml, moreText;
     if (cnt === 0) {
       // Picked a store that's fully stocked — say so rather than showing nothing.
@@ -1396,7 +1417,7 @@ function tdAttnRender() {
   // problem. When it's clear there's no card here; the calm channels are folded
   // into the single "All clear" roll-up at the end instead of one card each.
   const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
-  if (da.count) {
+  if (da.count && dashPosWants('delivery')) {
     const reasonOf = it => {
       const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
         || { en: 'delivery issue', cn: '配送异常' };
@@ -1418,7 +1439,7 @@ function tdAttnRender() {
 
   // Refund queue — pending / reviewing requests.
   const rf = DASH_OPS.refunds || { count: 0, items: [] };
-  if (rf.count) {
+  if (rf.count && dashPosWants('refunds')) {
     const rows = (rf.items || []).slice(0, 4).map(it => `
       <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
         <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
@@ -1433,7 +1454,7 @@ function tdAttnRender() {
   // the card action deep-links to the Orders list pre-filtered on the
   // "Needs invoice" chip — same pattern as Running-low → Open restock.
   const inv = DASH_OPS.invoices || { count: 0, items: [] };
-  if (inv.count) {
+  if (inv.count && dashPosWants('invoices')) {
     const rows = (inv.items || []).slice(0, 4).map(it => `
       <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
         <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.title || '')}</span>
@@ -1456,9 +1477,9 @@ function tdAttnRender() {
     const clear = [];
     const clearRow = (nm, val) =>
       `<div class="td-attn-ok-row"><span class="tick" aria-hidden="true">${clearTick}</span><span class="nm">${nm}</span><span class="val">${val}</span></div>`;
-    if (!da.count)  clear.push(clearRow(cuT('Delivery', '配送'), cuT('on track', '一切正常')));
-    if (!rf.count)  clear.push(clearRow(cuT('Refunds', '退款'), cuT('none waiting', '无待处理')));
-    if (!inv.count) clear.push(clearRow(cuT('Invoices', '发票'), cuT('none to issue', '无需开具')));
+    if (!da.count && dashPosWants('delivery'))  clear.push(clearRow(cuT('Delivery', '配送'), cuT('on track', '一切正常')));
+    if (!rf.count && dashPosWants('refunds'))   clear.push(clearRow(cuT('Refunds', '退款'), cuT('none waiting', '无待处理')));
+    if (!inv.count && dashPosWants('invoices')) clear.push(clearRow(cuT('Invoices', '发票'), cuT('none to issue', '无需开具')));
     if (clear.length) {
       cards.push(tdAttnCard('ok', 'check', cuT('All clear', '一切正常'), '', clear.join(''), ''));
     }

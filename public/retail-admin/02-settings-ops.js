@@ -1480,6 +1480,17 @@ let ENTITLEMENTS = {};
     // DARK in Phase 0/1: owner/admin/staff resolve to the full set and an older
     // session sends caps:null (treated as all-allowed), so nothing hides yet.
     setCaps(u.caps);
+    // Dashboards by position — the role picks a fixed dashboard view (see
+    // 03-dashboard.js dashPos*). body.pos-* drives the CSS that removes the
+    // money blocks for warehouse / customer_service / dispatch; RA_STORE_LOCK
+    // pins a store-scoped operator (store_manager) to their own store on every
+    // dashboard pull. Full-access roles land on pos-default (unchanged view).
+    const POSITIONS = ['store_manager', 'warehouse', 'customer_service', 'dispatch'];
+    window.RA_POS = POSITIONS.includes(u.role) ? u.role : 'default';
+    document.body.classList.add('pos-' + window.RA_POS.replace(/_/g, '-'));
+    if (window.RA_POS !== 'default' && Array.isArray(u.scopeStores) && u.scopeStores.length) {
+      window.RA_STORE_LOCK = u.scopeStores[0];
+    }
     // Google-style profile circle + dropdown (avatar · account · team · sign out).
     initAcctMenu(u);
   } catch (e) { location.href = '/backend/login'; return; }
@@ -1540,8 +1551,8 @@ function acctInitials(u) {
 }
 function acctRoleLabel(role) {
   return cuT(
-    ({ owner: 'Owner', admin: 'Admin', staff: 'Staff' })[role] || (role || 'Operator'),
-    ({ owner: '负责人', admin: '管理员', staff: '员工' })[role] || (role || '操作员')
+    ({ owner: 'Owner', admin: 'Admin', staff: 'Staff', store_manager: 'Store manager', warehouse: 'Warehouse', customer_service: 'Customer service', dispatch: 'Dispatch' })[role] || (role || 'Operator'),
+    ({ owner: '负责人', admin: '管理员', staff: '员工', store_manager: '店长', warehouse: '仓库', customer_service: '客服', dispatch: '配送调度' })[role] || (role || '操作员')
   );
 }
 function acctRenderCircle(el, u) {

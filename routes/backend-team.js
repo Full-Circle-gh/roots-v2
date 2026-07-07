@@ -46,8 +46,13 @@ function entitledKeys(tenantId) {
 //   • 'store_stock' — store stock clerks, managed under Settings → Operations →
 //                     Stores (see the per-store staff endpoints at the bottom of
 //                     this file). They are NOT listed on the Team page.
-const ROLES = ['owner', 'admin', 'staff', 'kitchen', 'store_stock'];
-const STORE_PINNED_ROLES = new Set(['kitchen', 'store_stock']);
+// The POSITION roles (store_manager / warehouse / customer_service / dispatch)
+// are capability presets (lib/capabilities.js) that also pick the member's
+// dashboard view. store_manager is pinned to one store AND store-scoped
+// (scope_all=0), so their dashboard + data stay on their own shelf.
+const ROLES = ['owner', 'admin', 'staff', 'store_manager', 'warehouse', 'customer_service', 'dispatch', 'kitchen', 'store_stock'];
+const STORE_PINNED_ROLES = new Set(['kitchen', 'store_stock', 'store_manager']);
+const STORE_SCOPED_ROLES = new Set(['store_manager']);
 
 function requireBackend(req, res, next) {
   if (!req.session?.backendUserId || !req.session?.tenantId) {
@@ -154,6 +159,11 @@ router.post('/api/backend/team', requireBackend, express.json(), (req, res) => {
     const r = db.prepare(
       'INSERT INTO tenant_users (tenant_id, username, password, display_name, role, retail_store_id) VALUES (?,?,?,?,?,?)'
     ).run(req.session.tenantId, username, hash, displayName || username, role, storeId);
+    // A store-scoped position sees only its own store's data (operator-caps
+    // falls back to the retail_store_id pin when tenant_user_stores is empty).
+    if (STORE_SCOPED_ROLES.has(role)) {
+      try { db.prepare('UPDATE tenant_users SET scope_all = 0 WHERE id = ?').run(r.lastInsertRowid); } catch (e) {}
+    }
     const u = db.prepare('SELECT id, username, display_name, role, retail_store_id, is_active, avatar_url, last_login FROM tenant_users WHERE id = ?').get(r.lastInsertRowid);
     res.json({ success: true, user: publicUser(u, req.session.backendUserId) });
   } catch (e) {
@@ -208,6 +218,13 @@ router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) =
     sets.push('retail_store_id = ?'); args.push(storeId);
   } else if (body.role !== undefined && u.retail_store_id != null) {
     sets.push('retail_store_id = ?'); args.push(null);
+  }
+  // Store scope follows the position: store_manager narrows to their pin;
+  // moving OFF a scoped position lifts the narrow back to all-stores (an admin
+  // can still narrow anyone later from the permission matrix).
+  if (body.role !== undefined && newRole !== u.role) {
+    if (STORE_SCOPED_ROLES.has(newRole)) { sets.push('scope_all = 0'); }
+    else if (STORE_SCOPED_ROLES.has(u.role)) { sets.push('scope_all = 1'); }
   }
 
   if (body.is_active !== undefined) {
