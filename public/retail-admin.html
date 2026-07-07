@@ -1719,11 +1719,8 @@
       #orders-table td:first-child { font-variant-numeric: tabular-nums; }
       /* Read-only channel rows (Meituan / gzgrocery) — a mirrored ledger, not a
          worklist item. They open a view-only detail drawer (product / SKU / qty)
-         but carry no fulfilment actions; keep the pointer affordance, italicise
-         AND mute the channel tag so a mirrored row visibly recedes against our
-         own Mini app / Web / Manual orders (italic alone reads too similar). */
-      #orders-table tr.order-row--ro .ord-chan { font-style: italic; color: #9A968E; }
-      #orders-table tr.order-row--ro .ord-chan svg { opacity: .6; }
+         but carry no fulfilment actions. The channel cell renders identically to
+         our own Mini app / Web / Manual orders (same font + colour, no dimming). */
 
       /* Channel chips carry a leading glyph (mockup parity), not the status dot. */
       #orders-channel-chips .chan-ico {
