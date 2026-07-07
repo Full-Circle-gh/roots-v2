@@ -378,6 +378,16 @@
     box-shadow:0 0 0 3px var(--tacet-dusk-tint); flex:none; }
   #order-drawer .ap-reasons { margin-top:12px; font-size:12.5px; color:var(--tacet-brick); line-height:1.5; }
   #order-drawer .ap-hint { margin-top:12px; font-size:13px; color:var(--tacet-amber-ink); }
+  /* Tap-to-enlarge lightbox — floats the screenshot over everything so the
+     operator can read it against the order. Backdrop / ✕ / Esc dismiss it. */
+  #ap-lightbox { position:fixed; inset:0; z-index:2000; display:flex; align-items:center; justify-content:center;
+    padding:32px; background:rgba(17,26,43,.72); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); }
+  #ap-lightbox .ap-lb-img { max-width:min(92vw, 440px); max-height:88vh; object-fit:contain;
+    border-radius:12px; box-shadow:0 24px 64px rgba(0,0,0,.5); background:#fff; }
+  #ap-lightbox .ap-lb-x { position:fixed; top:20px; right:24px; width:40px; height:40px; border:0; cursor:pointer;
+    border-radius:50%; background:rgba(255,255,255,.14); color:#fff; font-size:24px; line-height:1;
+    display:flex; align-items:center; justify-content:center; }
+  #ap-lightbox .ap-lb-x:hover { background:rgba(255,255,255,.26); }
 
   /* Brand ETA time field — replaces the raw OS <input type=time>; segmented
      HH:MM + AM/PM toggle (mockup: reference/courier-dispatch-mockup.html). */
@@ -1114,17 +1124,22 @@
     <!-- ── Tacet dashboard — one question: is everything okay? ──
          1. The Recap (what the system handled while the operator was away)
          2. Needs you (attention cards, present only when non-empty)
-         3. Today (the pulse) + the trimmed activity strip.
-         All rendering in 03-dashboard.js (td* + dashHero*). -->
+         3. Today (the pulse) + Channels today (revenue split by channel).
+            The activity feed lives inside The Recap's "Show the work" fold.
+         All rendering in 03-dashboard.js (td* + dashHero* + dashChan*). -->
     <div class="td-wrap">
 
     <section class="card td-card td-recap" id="td-recap">
       <div class="td-recap-head">
         <h3>While you were away · 您不在的这段时间</h3>
         <span class="td-meta" id="td-recap-meta"></span>
-        <button class="td-ghost" type="button" onclick="tdRecapShowWork()">Show the work · 查看明细</button>
+        <button class="td-ghost" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
       </div>
       <div class="td-recap-rows" id="td-recap-rows"><div class="td-muted">Loading… · 加载中…</div></div>
+      <!-- "Show the work" unfolds here — the away window's events (tinted dusk)
+           above a "you left here" line, the rest of today below. Rendered by
+           tdRecapToggleWork/tdRecapWorkRender (03-dashboard). -->
+      <div class="td-recap-work" id="td-recap-work" hidden></div>
       <p class="td-recap-close" id="td-recap-close" hidden></p>
     </section>
 
@@ -1163,12 +1178,15 @@
         </div>
       </section>
 
-      <section class="card td-card td-feed db-feed-pane" id="db-feed-pane">
+      <!-- Channels today — the Activity strip folded into The Recap's
+           "Show the work"; this square now shows today's revenue split by
+           channel (all stores). Rendered by dashChanRender (03-dashboard). -->
+      <section class="card td-card td-chan" id="td-chan-pane">
         <div class="td-card-head">
-          <h3>Activity · 动态</h3>
-          <button class="td-viewall" type="button" id="db-feed-toggle" onclick="dashFeedToggleExpand()" hidden></button>
+          <h3>Channels today · 今日渠道</h3>
         </div>
-        <div class="db-feed-list" id="db-feed-list"><div class="db-feed-empty">Loading… · 加载中…</div></div>
+        <div class="td-chan-list" id="td-chan-list"><div class="td-muted">Loading… · 加载中…</div></div>
+        <p class="td-chan-foot">All stores · 全部门店</p>
       </section>
     </div>
 
@@ -1179,8 +1197,8 @@
     </div>
     <!-- end .td-wrap -->
 
-    <!-- Activity drill-through drawer — populated by dashFeedClick and by
-         The Recap's "Show the work". Reuses the global .side-drawer chrome. -->
+    <!-- Activity drill-through drawer — populated by dashFeedClick (rows in
+         The Recap's "Show the work" fold). Reuses the global .side-drawer chrome. -->
     <aside id="db-activity-drawer" class="side-drawer dw-compact" aria-hidden="true">
       <button class="drawer-close" onclick="closeDrawer('#db-activity-drawer')" title="Close · 关闭 (Esc)" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>

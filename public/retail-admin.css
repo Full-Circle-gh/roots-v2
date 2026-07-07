@@ -7337,8 +7337,9 @@
   .td-recap  { animation: td-settle .6s cubic-bezier(.16,1,.3,1) both; }
   .td-today  { animation: td-settle .6s cubic-bezier(.16,1,.3,1) .1s both; }
   .td-feed   { animation: td-settle .6s cubic-bezier(.16,1,.3,1) .18s both; }
+  .td-chan   { animation: td-settle .6s cubic-bezier(.16,1,.3,1) .18s both; }
   @media (prefers-reduced-motion: reduce) {
-    .td-recap, .td-today, .td-feed { animation: none; }
+    .td-recap, .td-today, .td-feed, .td-chan { animation: none; }
     .td-dusk-dot { animation: none; }
   }
 
@@ -7369,6 +7370,26 @@
     border-bottom: 1px solid transparent; transition: color .2s cubic-bezier(.16,1,.3,1);
   }
   .td-ghost:hover { color: var(--td-text); border-bottom-color: var(--td-border); }
+
+  /* ── "Show the work" fold — the banner unfolds in place into the day's feed.
+     Away-window rows carry a dusk tint; the boundary is the "you left here"
+     line. Rows reuse .td-feed-row (same drill-through as the drawer). ── */
+  .td-recap-work {
+    display: grid; gap: 4px; margin-top: 18px; padding-top: 16px;
+    border-top: 1px solid var(--td-border);
+    max-height: 420px; overflow-y: auto;
+  }
+  .td-recap-work::-webkit-scrollbar { width: 6px; }
+  .td-recap-work::-webkit-scrollbar-thumb { background: var(--td-border); border-radius: 3px; }
+  .td-recap-work .td-feed-row.td-work-away { background: var(--td-dusk-tint); }
+  .td-left-line {
+    display: flex; align-items: center; gap: 12px; margin: 8px 0;
+    font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--td-dusk);
+  }
+  .td-left-line::before, .td-left-line::after {
+    content: ""; flex: 1; height: 1px; background: var(--td-dusk); opacity: .35;
+  }
 
   /* ── Needs you — attention cards ── */
   .td-attn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
@@ -7467,6 +7488,23 @@
   .td-feed .td-card-head { margin-bottom: 14px; }
   .td-feed .db-feed-list { display: flex; flex-direction: column; gap: 4px; max-height: 360px; }
   .td-feed .db-feed-empty { font-size: 13px; color: var(--td-text2); padding: 6px 0; }
+
+  /* ── Channels today — the Activity square's replacement. Revenue split by
+     channel as quiet magnitude bars (share of today's total). ── */
+  .td-chan-list { display: grid; gap: 14px; margin-top: 6px; align-content: start; }
+  .td-chan-row {
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+    align-items: baseline; font-size: 13.5px;
+  }
+  .td-chan-lbl { color: var(--td-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-chan-cnt { color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+  .td-chan-val { color: var(--td-text); font-weight: 500; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .td-chan-track { grid-column: 1 / -1; height: 5px; border-radius: 999px; background: var(--td-raised); overflow: hidden; }
+  .td-chan-fill { height: 100%; border-radius: 999px; background: var(--td-text); opacity: .75; transition: width .8s cubic-bezier(.16,1,.3,1); }
+  .td-chan-foot {
+    margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--td-border);
+    font-size: 12.5px; color: var(--td-text2);
+  }
   .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 14px; line-height: 1.4; cursor: pointer; }
   .td-feed-row:hover { background: var(--td-raised); }
   .td-feed-row .db-feed-ts { flex: none; width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }

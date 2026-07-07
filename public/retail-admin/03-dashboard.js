@@ -283,14 +283,14 @@ function reportsInit() {
 
 // ════════════════════════════════════════════════════════════════
 // RIGHT-NOW HERO (phase 2/3) — live presence, today's mini-KPIs,
-// activity feed. Pulls /api/retail-admin/dashboard/presence (15s),
-// /api/retail-admin/dashboard/activity (20s), and a single
-// /api/retail-admin/dashboard?from=today&to=today (60s for the
-// "Today" mini-row). Polling pauses while the document is hidden
-// so we don't hammer the server with a backgrounded tab.
+// the Channels-today split. Pulls /api/retail-admin/dashboard/presence
+// (15s), /api/retail-admin/sales/summary (60s for the channel split),
+// and a single /api/retail-admin/dashboard?from=today&to=today (60s
+// for the "Today" mini-row). Polling pauses while the document is
+// hidden so we don't hammer the server with a backgrounded tab.
 // ════════════════════════════════════════════════════════════════
-const DASH_HERO = { presence:null, activity:null, today:null, lastSync:0, seenIds:null };
-const DASH_HERO_INTERVALS = { presence: 15000, activity: 20000, today: 60000 };
+const DASH_HERO = { presence:null, channels:null, today:null, lastSync:0 };
+const DASH_HERO_INTERVALS = { presence: 15000, channels: 60000, today: 60000 };
 
 function dashHeroInit() {
   // Single bootstrap — once wired, the timers + visibility listener carry it.
@@ -298,10 +298,9 @@ function dashHeroInit() {
   DASH_HERO._wired = true;
   // Language toggle repaints the Today delta badges from the stashed data.
   if (window.onLangChange) onLangChange(dashHeroTodayRepaint);
-  // ...and re-renders the activity feed so baked-in product names follow the
-  // active language (the " · " labels auto-translate, the names don't).
+  // ...and re-renders the Channels-today split (channel names are JS-built).
   if (window.onLangChange) onLangChange(() => {
-    if (DASH_HERO._lastEvents) dashFeedRender(DASH_HERO._lastEvents);
+    if (DASH_HERO.chan) dashChanRender();
   });
   // Hover-scrub the Today sparklines to read each hour of the day.
   ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
@@ -325,20 +324,20 @@ function dashHeroStart() {
   dashHeroStop();  // idempotent — clear any stale timers first
   dashHeroRefreshAll();
   DASH_HERO.presence = setInterval(dashHeroLoadPresence, DASH_HERO_INTERVALS.presence);
-  DASH_HERO.activity = setInterval(dashHeroLoadActivity, DASH_HERO_INTERVALS.activity);
+  DASH_HERO.channels = setInterval(dashChanLoad,         DASH_HERO_INTERVALS.channels);
   DASH_HERO.today    = setInterval(dashHeroLoadToday,    DASH_HERO_INTERVALS.today);
   // Keep the relative "synced Xs ago" stamp ticking between polls.
   DASH_HERO._syncTimer = setInterval(dashRenderSync, 10000);
 }
 function dashHeroStop() {
-  for (const k of ['presence', 'activity', 'today']) {
+  for (const k of ['presence', 'channels', 'today']) {
     if (DASH_HERO[k]) { clearInterval(DASH_HERO[k]); DASH_HERO[k] = null; }
   }
   if (DASH_HERO._syncTimer) { clearInterval(DASH_HERO._syncTimer); DASH_HERO._syncTimer = null; }
 }
 function dashHeroRefreshAll() {
   dashHeroLoadPresence();
-  dashHeroLoadActivity();
+  dashChanLoad();
   dashHeroLoadToday();
 }
 function dashHeroSyncStamp() {
@@ -579,112 +578,61 @@ function fcBarRows(items, opt) {
   }).join('');
 }
 
-// Activity feed shows only the first DASH_FEED_PREVIEW events by default; the
-// operator can expand to the full list and collapse again. Preference persists.
-const DASH_FEED_PREVIEW = 5;
-function dashFeedExpanded() {
-  try { return localStorage.getItem('retail-admin-feed-expanded') === '1'; } catch (e) { return false; }
-}
-function dashFeedToggleExpand() {
-  const next = !dashFeedExpanded();
-  try { localStorage.setItem('retail-admin-feed-expanded', next ? '1' : '0'); } catch (e) {}
-  // Flip classes only — re-rendering would swap the DOM and kill the
-  // grid-rows transition mid-flight.
-  dashFeedSyncExpand();
-}
-
-async function dashHeroLoadActivity() {
+// Channels today — the Activity square's replacement. Today's revenue split
+// by channel from /api/retail-admin/sales/summary (same source as the Sales
+// overview page; all stores, GZ-local day, no .data wrapper). The activity
+// feed itself now lives inside The Recap's "Show the work" fold.
+const DASH_CHAN_NAMES = {
+  wechat:    ['Mini app', '小程序'],
+  web:       ['Web shop', '网上商店'],
+  meituan:   ['Meituan', '美团'],
+  eleme:     ['Eleme', '饿了么'],
+  gzgrocery: ['gzgrocery pickup', 'gzgrocery 提货'],
+};
+async function dashChanLoad() {
   try {
-    // Pull the whole day (server window = since GZ-midnight today), capped
-    // high so a busy day's events aren't truncated to the last few minutes.
-    const j = await api('/api/retail-admin/dashboard/activity?limit=500');
-    const events = (j.data && j.data.events) || [];
-    dashFeedRender(events);
+    const j = await api('/api/retail-admin/sales/summary');
+    DASH_HERO.chan = { channels: j.channels || {} };
+    dashChanRender();
+    dashHeroSyncStamp();
   } catch (e) {
-    const list = $('#db-feed-list');
-    if (list) list.innerHTML = `<div class="db-feed-empty">Failed to load · 加载失败</div>`;
+    // Keep the last good split on a poll error; only the first load reports.
+    const host = $('#td-chan-list');
+    if (host && !DASH_HERO.chan) host.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
   }
 }
-
-// Render feed rows. Cache the raw event objects keyed by a stable id so the
-// drawer-open click can grab the full payload without another fetch.
-function dashFeedRender(events) {
-  const list = $('#db-feed-list'); if (!list) return;
-  const toggle = $('#db-feed-toggle');
-  DASH_HERO._lastEvents = events;
-  if (!events.length) {
-    list.innerHTML = `<div class="db-feed-empty">Nothing recent · 暂无动态</div>`;
-    if (toggle) toggle.hidden = true;
+// Bar rows sorted by revenue, widths as share of today's total. Channels that
+// took nothing today stay hidden — a quiet day shows a single line, not a
+// column of zeros.
+function dashChanRender() {
+  const host = $('#td-chan-list'); if (!host || !DASH_HERO.chan) return;
+  const ch = DASH_HERO.chan.channels;
+  const rows = Object.keys(ch)
+    .map(k => ({ key: k, revenue: Number(ch[k].revenue || 0), orders: Number(ch[k].orders || 0) }))
+    .filter(r => r.revenue > 0 || r.orders > 0)
+    .sort((a, b) => b.revenue - a.revenue);
+  if (!rows.length) {
+    host.innerHTML = `<div class="td-muted">${cuT('No sales yet today', '今日暂无销售')}</div>`;
     return;
   }
-  // Stable identity (no row index) so "new since last poll" survives re-renders.
-  const idOf = e => `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}`;
-  // First paint has no baseline — don't animate the whole list in. After that,
-  // any id we haven't seen before is a genuinely fresh event.
-  const firstPaint = DASH_HERO.seenIds === null;
-  const prevSeen = DASH_HERO.seenIds || new Set();
-  const nextSeen = new Set(events.map(idOf));
-  // The click handler only needs the event's type + ref_id, so carry them on
-  // the row itself. Reading straight off the clicked element can't go stale —
-  // a separate id→event Map would silently miss whenever a poll rebuilt it.
-  const rowHtml = (e, i) => {
-    const isNew = !firstPaint && !prevSeen.has(idOf(e));
-    const ts = new Date(e.ts);
-    const pad = n => String(n).padStart(2, '0');
-    const tstr = `${pad(ts.getHours())}:${pad(ts.getMinutes())}`;
-    // Tacet activity rows are prose, not iconed log lines: "Patricia paid
-    // ¥532.20" / "Meituan order · ¥48" / "Refund settled — R261204", with the
-    // amount right-aligned and only a first-order badge, per the mockup.
-    const m = tdFeedMeta(e);
-    return `<div class="db-feed-row td-feed-row${isNew ? ' is-new' : ''}" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
-      <span class="db-feed-ts">${tstr}</span>
-      <span class="td-feed-text">${m.text}</span>
-      ${m.badge || ''}
-      ${m.amount ? `<span class="td-feed-amt">${m.amount}</span>` : ''}
+  const total = rows.reduce((s, r) => s + r.revenue, 0) || 1;
+  const money = n => '¥' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+  host.innerHTML = rows.map(r => {
+    const nm = DASH_CHAN_NAMES[r.key] ? cuT(DASH_CHAN_NAMES[r.key][0], DASH_CHAN_NAMES[r.key][1]) : r.key;
+    const cnt = cuT(`${r.orders} ${r.orders === 1 ? 'order' : 'orders'}`, `${r.orders} 单`);
+    const pct = Math.max(2, Math.round((r.revenue / total) * 100));
+    return `<div class="td-chan-row">
+      <span class="td-chan-lbl">${escapeHtml(nm)} <span class="td-chan-cnt">${cnt}</span></span>
+      <span class="td-chan-val">${money(r.revenue)}</span>
+      <span class="td-chan-track"><span class="td-chan-fill" style="width:${pct}%"></span></span>
     </div>`;
-  };
-  // The collapsed strip shows only the day's MEANINGFUL events (money moving,
-  // refunds, cancellations, feedback) — routine dispatch/delivery/new-customer
-  // rows are noise here; The Recap and the counters already carry them. The
-  // expand toggle still reveals the complete day, so nothing is lost.
-  const KEY_TYPES = new Set(['paid_order', 'order_cancelled', 'refund_request',
-    'refund_paid', 'refund_rejected', 'topup', 'feedback', 'gzgrocery_pickup']);
-  const keyEvents = events.filter(e => KEY_TYPES.has(e.type));
-  const previewEvents = (keyEvents.length ? keyEvents : events).slice(0, DASH_FEED_PREVIEW);
-  const shown = new Set(previewEvents);
-  // Preview rows render directly; the overflow lives in a collapsible wrapper
-  // that the toggle eases open/closed — all rows stay in the DOM so the
-  // grid-rows transition has something to animate against.
-  const preview = previewEvents.map(rowHtml).join('');
-  const rest = events.filter(e => !shown.has(e));
-  const moreHtml = rest.length
-    ? `<div class="db-feed-more"><div class="db-feed-more-inner">${rest.map((e, i) => rowHtml(e, i + DASH_FEED_PREVIEW)).join('')}</div></div>`
-    : '';
-  const html = preview + moreHtml;
-  list.innerHTML = html;
-  dashFeedSyncExpand(rest.length);
-  DASH_HERO.seenIds = nextSeen;
-}
-
-// Reflect the expanded/collapsed state onto the pane + toggle. `overflow`
-// is the count of rows hidden behind the fold; when zero the toggle hides.
-function dashFeedSyncExpand(overflow) {
-  const pane = $('#db-feed-pane'), toggle = $('#db-feed-toggle');
-  if (overflow == null) overflow = ($$('.db-feed-more-inner .db-feed-row') || []).length;
-  const expanded = dashFeedExpanded();
-  if (pane) pane.classList.toggle('is-expanded', expanded);
-  if (!toggle) return;
-  if (!overflow) { toggle.hidden = true; return; }
-  const total = (DASH_HERO._lastEvents || []).length;
-  toggle.hidden = false;
-  toggle.classList.toggle('is-open', expanded);
-  toggle.innerHTML = expanded ? 'Show less · 收起' : 'View all · 查看全部';
+  }).join('');
 }
 
 // Tacet activity row — clean prose per the dashboard mockup. Returns
 // { text, amount, badge }: `text` is the sentence, `amount` is the
 // right-aligned money (muted), `badge` a small first-order pill. No icon,
-// no bold type-label prefix. (dashFeedMeta below still drives the drawer.)
+// no bold type-label prefix. Drives the "Show the work" fold rows.
 function tdFeedMeta(e) {
   const p = e.payload || {};
   const yuan = n => '¥' + Number(n || 0).toLocaleString();
@@ -732,96 +680,6 @@ function tdFeedMeta(e) {
     }
     default:
       return { text: escapeHtml(e.type) };
-  }
-}
-
-// Thin-stroke line icons for the activity feed — 16-box viewBox, currentColor
-// so the .db-fi-* tone class drives the tint. Flat + editorial, no emoji.
-const FEED_SVG = {
-  ok:    '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M5.2 8.2l1.9 1.9 3.7-4"/></svg>',
-  refund:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5.5h6.5a3.5 3.5 0 0 1 0 7H5"/><path d="M5.2 3l-2.3 2.5L5.2 8"/></svg>',
-  alert: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2l6 11H2z"/><path d="M8 6.6v3.2"/><path d="M8 11.8h.01"/></svg>',
-  person:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13.5a5 5 0 0 1 10 0"/></svg>',
-  chat:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5 5 0 0 1-7.2 4.5L3 13.5l1-3.3A5 5 0 1 1 13.5 8z"/></svg>',
-  truck: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 4.5h7v6h-7z"/><path d="M8.5 6.5h3l2 2.2v1.8h-5z"/><circle cx="4.2" cy="11.6" r="1.2"/><circle cx="11" cy="11.6" r="1.2"/></svg>',
-  box:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 1.8l5.5 3v6.4L8 14.2l-5.5-3V4.8z"/><path d="M2.6 4.9L8 7.8l5.4-2.9"/><path d="M8 7.8v6.4"/></svg>',
-  wallet:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4.5h10.5a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1z"/><path d="M2 4.5V4a1 1 0 0 1 1-1h7.5"/><circle cx="10.8" cy="8.5" r=".9"/></svg>',
-  star:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l1.8 3.7 4 .6-2.9 2.8.7 4L8 11.9 4.4 13.1l.7-4L2.2 6.3l4-.6z"/></svg>',
-  cancel:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M5.8 5.8l4.4 4.4M10.2 5.8l-4.4 4.4"/></svg>',
-  dot:   '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="3"/></svg>',
-};
-
-// Compact one-line summary shown in the feed row, per event type.
-// Real text only — no fake demo strings (per project memory).
-function dashFeedMeta(e) {
-  const p = e.payload || {};
-  // Product names carry both languages; show the one matching the active UI
-  // language (the " · " labels auto-translate, but baked-in names don't).
-  const pickName = (en, cn) => (window.cuLang && cuLang() === 'cn')
-    ? (cn || en || '') : (en || cn || '');
-  // Order-line SKU(s) (货号) dimmed at the end of an order row. The server sends
-  // a comma-joined distinct list; show the first 3 then "+N" so a big basket
-  // doesn't overflow the row. Empty when no item carried a SKU.
-  const skuTag = (raw, channel) => {
-    // Mini-app (wechat) orders already carry name + amount and open a full
-    // drawer on click — the SKU code is noise there. Only surface SKUs for
-    // other channels where the row is the only handle on the order.
-    if (String(channel || '').toLowerCase() === 'wechat') return '';
-    const all = String(raw || '').split(',').map(s => s.trim()).filter(Boolean);
-    if (!all.length) return '';
-    const shown = all.slice(0, 3).map(escapeHtml).join(' ');
-    const more = all.length > 3 ? ` +${all.length - 3}` : '';
-    return ` <span class="db-feed-sku">${shown}${more}</span>`;
-  };
-  switch (e.type) {
-    case 'paid_order': {
-      const badge = p.first_order ? ` <span class="db-feed-badge db-fb-first">${FEED_SVG.star}First · 首单</span>`
-                  : p.big_order   ? ` <span class="db-feed-badge db-fb-big">${FEED_SVG.star}Big · 大单</span>` : '';
-      return { icon: FEED_SVG.ok, tone: 'ok', text: `<b>Paid · 已付</b> ${escapeHtml(p.order_no || '')} · ¥${Number(p.total || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus, p.channel)}${badge}` };
-    }
-    case 'order_dispatched':
-      return { icon: FEED_SVG.truck, tone: 'muted', text: `<b>Dispatched · 已发货</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus, p.channel)}` };
-    case 'order_delivered':
-      return { icon: FEED_SVG.box, tone: 'ok', text: `<b>Delivered · 已送达</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus, p.channel)}` };
-    case 'order_cancelled': {
-      // The auto-cancel sweep stamps a machine reason ('auto_cancelled_unpaid');
-      // surface that as a human "unpaid" tag so an abandoned cart reads
-      // differently from a staff cancellation.
-      const auto = p.reason === 'auto_cancelled_unpaid'
-        ? ` <span class="db-feed-badge db-fb-muted">${cuT('unpaid','未付款')}</span>` : '';
-      return { icon: FEED_SVG.cancel, tone: 'bad', text: `<b>Cancelled · 已取消</b> ${escapeHtml(p.order_no || '')}${p.total ? ' · ¥' + Number(p.total).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}${skuTag(p.skus, p.channel)}${auto}` };
-    }
-    case 'refund_request':
-      return { icon: FEED_SVG.refund, tone: 'warn', text: `<b>Refund request · 退款申请</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
-    case 'refund_paid':
-      return { icon: FEED_SVG.refund, tone: 'ok', text: `<b>Refunded · 已退款</b> ${escapeHtml(p.order_no || '')}${p.amount ? ' · ¥' + Number(p.amount).toLocaleString() : ''} · ${escapeHtml(p.buyer || '')}` };
-    case 'refund_rejected':
-      return { icon: FEED_SVG.refund, tone: 'bad', text: `<b>Refund rejected · 退款驳回</b> ${escapeHtml(p.order_no || '')} · ${escapeHtml(p.buyer || '')}` };
-    case 'topup':
-      return { icon: FEED_SVG.wallet, tone: 'ok', text: `<b>Top-up · 充值</b> ¥${Number(p.amount || 0).toLocaleString()} · ${escapeHtml(p.buyer || '')}` };
-    case 'low_stock':
-      return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Low · 缺货</b> ${escapeHtml(pickName(p.name_en, p.name_cn))} (${p.stock} left · 剩 ${p.stock})` };
-    case 'out_of_stock':
-      return { icon: FEED_SVG.alert, tone: 'bad', text: `<b>Out · 售罄</b> ${escapeHtml(pickName(p.name_en, p.name_cn))}` };
-    case 'new_customer':
-      return { icon: FEED_SVG.person, tone: 'muted', text: p.name ? `<b>New · 新客</b> ${escapeHtml(p.name)}` : `<b>New customer · 新客户</b>` };
-    case 'feedback':
-      return { icon: FEED_SVG.chat, tone: 'muted', text: `<b>Feedback · 反馈</b> "${escapeHtml(p.excerpt || '')}"` };
-    case 'gzgrocery_pickup': {
-      // Inferred wholesale pickup — gzgrocery took stock through Guanyi. A return
-      // (is_return) shows the units coming back; a normal pickup nets out.
-      const nm = escapeHtml(pickName(p.name_en, p.name_cn));
-      // SKU (货号) printed dimmed after the name so operators can match the feed
-      // row to the Guanyi/wholesale listing at a glance.
-      const sk = p.sku ? ` <span class="db-feed-sku">${escapeHtml(p.sku)}</span>` : '';
-      const u  = Math.abs(Number(p.units || 0));
-      const amt = Math.abs(Number(p.owed || 0)).toLocaleString();
-      return p.is_return
-        ? { icon: FEED_SVG.refund, tone: 'warn', text: `<b>gzgrocery return · 退货</b> ${nm}${sk} ×${u} · −¥${amt}` }
-        : { icon: FEED_SVG.box,    tone: 'ok',   text: `<b>gzgrocery · 批发提货</b> ${nm}${sk} ×${u} · ¥${amt}` };
-    }
-    default:
-      return { icon: FEED_SVG.dot, tone: 'muted', text: escapeHtml(e.type) };
   }
 }
 
@@ -988,7 +846,8 @@ function dashJumpTab(name) {
 //      problems / refund queue / low stock), rendered ONLY when
 //      non-empty; all-clear shows a quiet compliment instead.
 //   3. Today — the pulse (revenue/orders/new customers + presence)
-//      and the trimmed activity strip, both handled by dashHero*.
+//      and the Channels-today split, both handled by dashHero*/dashChan*.
+//      The activity feed lives inside The Recap's "Show the work" fold.
 // ════════════════════════════════════════════════════════════════
 
 let DASH_OPS = null;
@@ -1008,7 +867,7 @@ function tdInit() {
   tdDateRender();
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdDateRender(); tdRecapRender(); tdAttnRender(); dashStockDrawerRender(); });
+  if (window.onLangChange) onLangChange(() => { tdDateRender(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); dashStockDrawerRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
@@ -1170,48 +1029,101 @@ function tdRecapRender() {
   }
 }
 
-// "Show the work" — the silent system is never secretive: list every event in
-// the recap window inside the activity drawer, each row drilling through to
-// its order / customer / product like the main feed does.
-function tdRecapShowWork() {
-  const drawer = document.getElementById('db-activity-drawer'); if (!drawer) return;
-  const title = document.getElementById('db-drawer-title');
-  const body  = document.getElementById('db-drawer-body');
-  if (title) title.textContent = cuT('While you were away', '您不在的这段时间');
-  const evs = TD.recapEvents || [];
-  if (body) {
-    if (!evs.length) {
-      body.innerHTML = `<div class="td-drawer-empty">${cuT('Nothing in this window', '此时段无事件')}</div>`;
-    } else {
-      // Same clean prose rows as the Activity card (time · sentence · amount),
-      // grouped under a day header since the recap window can span days.
-      const pad = n => String(n).padStart(2, '0');
-      const cn = window.cuLang && cuLang() === 'cn';
-      const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-      let html = '', lastDay = '';
-      for (const e of evs) {
-        const ts = new Date(e.ts);
-        const dayKey = ts.toDateString();
-        if (dayKey !== lastDay) {
-          lastDay = dayKey;
-          const dayLbl = cn
-            ? `${ts.getMonth() + 1}月${ts.getDate()}日 ${DOW[ts.getDay()]}`
-            : ts.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-          html += `<div class="td-drawer-day">${escapeHtml(dayLbl)}</div>`;
-        }
-        const m = tdFeedMeta(e);
-        html += `<div class="td-feed-row" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
-          <span class="db-feed-ts">${pad(ts.getHours())}:${pad(ts.getMinutes())}</span>
-          <span class="td-feed-text">${m.text}</span>
-          ${m.badge || ''}
-          ${m.amount ? `<span class="td-feed-amt">${m.amount}</span>` : ''}
-        </div>`;
-      }
-      body.innerHTML = html;
+// "Show the work" — the silent system is never secretive: the banner unfolds
+// in place into the real feed. The away window's events sit tinted dusk above
+// a "you left here" line, the rest of today below; every row drills through
+// to its order / customer / product via dashFeedClick.
+async function tdRecapToggleWork() {
+  const fold = document.getElementById('td-recap-work'); if (!fold) return;
+  if (!fold.hidden) { fold.hidden = true; tdRecapWorkBtnSync(); return; }
+  fold.hidden = false;
+  tdRecapWorkBtnSync();
+  fold.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
+  try {
+    // Today's events (server window = since GZ-midnight) merged with the
+    // recap window's (which can reach back days) — deduped, newest first.
+    const j = await api('/api/retail-admin/dashboard/activity?limit=500');
+    const today = (j.data && j.data.events) || [];
+    const idOf = e => `${e.type}-${e.ref_type}-${e.ref_id}-${e.ts}`;
+    const seen = new Set(); const all = [];
+    for (const e of (TD.recapEvents || []).concat(today)) {
+      const id = idOf(e); if (seen.has(id)) continue;
+      seen.add(id); all.push(e);
     }
+    all.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    TD.workEvents = all;
+    tdRecapWorkRender();
+  } catch (e) {
+    fold.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
   }
-  drawer.classList.add('open');
-  drawer.setAttribute('aria-hidden', 'false');
+}
+
+// "you left here — 06:49" — the fold's boundary label, with the day spelled
+// out when the operator has been away past midnight. Em dash, not " · ", so
+// the i18n walker never mistakes the finished string for an EN·CN pair.
+function tdLeftLineLabel() {
+  const d = new Date(TD.recapSince || 0);
+  const pad = n => String(n).padStart(2, '0');
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const now = new Date();
+  const dayDiff = Math.floor((new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+  if (dayDiff <= 0) return cuT(`you left here — ${hm}`, `您离开时 — ${hm}`);
+  if (dayDiff === 1) return cuT(`you left yesterday — ${hm}`, `您昨天 ${hm} 离开`);
+  return cuT(`you left ${d.getMonth() + 1}/${d.getDate()} — ${hm}`, `您于${d.getMonth() + 1}月${d.getDate()}日 ${hm} 离开`);
+}
+
+// Fold body — day headers when the window spans days, dusk tint on rows in
+// the away window, the "you left here" line at the boundary.
+function tdRecapWorkRender() {
+  const fold = document.getElementById('td-recap-work');
+  if (!fold || fold.hidden || !TD.workEvents) return;
+  const evs = TD.workEvents;
+  if (!evs.length) {
+    fold.innerHTML = `<div class="td-muted">${cuT('Nothing yet today', '今日暂无动态')}</div>`;
+    return;
+  }
+  const pad = n => String(n).padStart(2, '0');
+  const cn = window.cuLang && cuLang() === 'cn';
+  const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  const multiDay = new Set(evs.map(e => new Date(e.ts).toDateString())).size > 1;
+  const since = TD.recapSince || 0;
+  const hasAway = evs.some(e => new Date(e.ts).getTime() >= since);
+  let html = '', lastDay = '', lineDone = false;
+  for (const e of evs) {
+    const ts = new Date(e.ts);
+    const away = ts.getTime() >= since;
+    if (multiDay) {
+      const dayKey = ts.toDateString();
+      if (dayKey !== lastDay) {
+        lastDay = dayKey;
+        const dayLbl = cn
+          ? `${ts.getMonth() + 1}月${ts.getDate()}日 ${DOW[ts.getDay()]}`
+          : ts.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+        html += `<div class="td-drawer-day">${escapeHtml(dayLbl)}</div>`;
+      }
+    }
+    if (!away && !lineDone && hasAway) {
+      html += `<div class="td-left-line">${escapeHtml(tdLeftLineLabel())}</div>`;
+      lineDone = true;
+    }
+    const m = tdFeedMeta(e);
+    html += `<div class="td-feed-row${away ? ' td-work-away' : ''}" data-type="${escapeHtml(e.type)}" data-ref-id="${escapeHtml(e.ref_id == null ? '' : e.ref_id)}" onclick="dashFeedClick(this, event)">
+      <span class="db-feed-ts">${pad(ts.getHours())}:${pad(ts.getMinutes())}</span>
+      <span class="td-feed-text">${m.text}</span>
+      ${m.badge || ''}
+      ${m.amount ? `<span class="td-feed-amt">${m.amount}</span>` : ''}
+    </div>`;
+  }
+  fold.innerHTML = html;
+}
+
+// Keep the header button's label in step with the fold's state.
+function tdRecapWorkBtnSync() {
+  const btn = document.getElementById('td-recap-work-btn'); if (!btn) return;
+  const fold = document.getElementById('td-recap-work');
+  const open = !!(fold && !fold.hidden);
+  btn.textContent = open ? cuT('Hide the work ▴', '收起明细 ▴') : cuT('Show the work ▾', '查看明细 ▾');
 }
 
 // ── Needs you — attention cards from /dashboard/ops ────────────────────────
