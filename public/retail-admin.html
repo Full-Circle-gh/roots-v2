@@ -743,15 +743,12 @@
     </span>
     <span class="brand-name">tacet</span>
   </div>
-  <!-- Hamburger + wide search sit at the topbar's left edge, right of the rail
-       divider (2026-07-07). The burger folds the rail (same toggleNavCollapse
-       the footer control uses); the search is promoted from a pill to a wide
-       field — icon inside-left, full placeholder, no Ctrl K chip — but it stays
-       a button that opens the command palette (openCmdSearch). -->
+  <!-- Wide search sits at the topbar's left edge, right of the rail divider. The
+       rail-fold control is no longer a hamburger here — it moved onto the seam
+       between the rail and the content as a small dot (see #railSeamFold below).
+       The search is a wide field — icon inside-left, full placeholder, no Ctrl K
+       chip — but stays a button that opens the command palette (openCmdSearch). -->
   <div class="tb-left">
-    <button class="nav-burger" type="button" onclick="toggleNavCollapse()" title="Collapse menu · 收起菜单" aria-label="Collapse menu">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg>
-    </button>
     <button class="topbar-link gsearch-trigger" id="gsearch-trigger" type="button" onclick="openCmdSearch()" title="Search anything · 搜索任何设置 (Ctrl K)" aria-label="Search">
       <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       <span class="gsearch-ph">Search orders, products, customers… · 搜索订单、商品、顾客…</span>
@@ -1070,19 +1067,24 @@
     Settings · 设置
   </button>
 
-  <!-- Rail-fold control — pinned to the bottom of the rail (margin-top:auto).
-       The chevron flips to point outward when folded. Kept id=navCollapseBtn so
-       setNavCollapsed() styles it; wrapped in .nav-foot so it isn't a direct
-       `.tabs > button` (the collapsed title-mirror loop skips it). -->
-  <div class="nav-foot">
-    <button class="nav-fold-btn" id="navCollapseBtn" type="button"
-            onclick="toggleNavCollapse()" title="Collapse menu · 收起菜单"
-            aria-label="Collapse menu · 收起菜单" aria-pressed="false">
-      <svg class="nav-fold-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
-      <span class="nav-fold-lbl">Collapse menu · 收起菜单</span>
-    </button>
-  </div>
+  <!-- Rail-fold control lives on the seam now (#railSeamFold, below the rail) —
+       the old .nav-foot chevron button was removed 2026-07-07 so the dot is the
+       single fold control. -->
 </div>
+
+<!-- Rail-fold dot — rides the seam between the rail and the content, level with
+     the search bar (replaces the old topbar hamburger). Rest state is a small
+     Dusk dot sitting on the divider; hovering swells it into a chevron and a
+     click folds the rail. Fixed like .tabs/.topbar so it shares their zoom
+     context and stays glued to the seam under the Aa text-size zoom; its `left`
+     rides the rail width so it tracks the divider as the rail folds. setNavCollapsed()
+     keeps its title/aria in sync; the chevron flip is pure CSS. -->
+<button class="seam-fold" id="railSeamFold" type="button" onclick="toggleNavCollapse()"
+        title="Collapse menu · 收起菜单" aria-label="Collapse menu · 收起菜单" aria-pressed="false">
+  <span class="seam-dot">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
+  </span>
+</button>
 
 <!-- ─── COMMAND SEARCH PALETTE ───
      A keyword search over every page, settings panel and individual setting

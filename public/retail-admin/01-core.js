@@ -663,7 +663,9 @@ function setNavCollapsed(on) {
   on = !!on;
   document.body.classList.toggle('nav-collapsed', on);
   try { localStorage.setItem(NAV_COLLAPSE_KEY, on ? '1' : '0'); } catch (e) {}
-  const btn = document.getElementById('navCollapseBtn');
+  // Keep the seam dot's state in sync — its tooltip/aria flip with the fold, and
+  // the chevron direction is handled in CSS off body.nav-collapsed.
+  const btn = document.getElementById('railSeamFold');
   if (btn) {
     const T = (typeof cuT === 'function') ? cuT : ((en) => en);
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');

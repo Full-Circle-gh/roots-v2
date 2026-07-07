@@ -510,26 +510,8 @@
      destination-less groups (Marketing / Loyalty) re-expand the rail on
      click so their children stay reachable. Hidden on phones, where the
      rail is already swapped for the fixed bottom nav. */
-  /* Fold control — a quiet footer row pinned to the bottom of the rail.
-     Frequent nav lives up top; the rare "reshape the layout" toggle recedes
-     here instead of sitting in the prime top-left corner. `margin-top:auto`
-     floats it to the rail's foot. Base button styling comes from `.tabs button`
-     (padding, colour, hover, and the collapsed icon-only rule), so we only add
-     the footer chrome and the chevron flip here. */
-  .nav-foot {
-    /* Rail buttons carry explicit flex `order` (Dashboard 1 … Settings 11); an
-       unset order defaults to 0, which would float this ABOVE the whole list.
-       Push it past the last item so it lands at the very bottom, and let
-       margin-top:auto absorb the slack above it. */
-    order: 99;
-    margin-top: auto;
-    padding-top: 8px;
-    border-top: 1px solid var(--line-soft);
-  }
-  .nav-fold-chev {
-    transition: transform var(--t-fast) ease;
-  }
-  body.nav-collapsed .nav-fold-chev { transform: rotate(180deg); }
+  /* The rail-foot fold row (.nav-foot / .nav-fold-chev) was removed 2026-07-07 —
+     the single fold control is now the seam dot (#railSeamFold, styled below). */
 
   .tabs { transition: width var(--t-fast) ease, padding var(--t-fast) ease; }
   main    { transition: margin-left var(--t-fast) ease; }
@@ -558,6 +540,50 @@
   body.nav-collapsed .nav-sec::after { content: "·"; color: var(--text-4); font-size: 15px; }
   /* The fold control lives inside .tabs, which is hidden wholesale on phones
      (the rail is replaced by the bottom nav), so no mobile rule is needed. */
+
+  /* ── Seam fold dot ─────────────────────────────────────────────────
+     The primary rail-fold control (replaces the old topbar hamburger). It
+     rides the divider between the rail and the content, level with the search
+     bar. Fixed like .tabs/.topbar so it shares their positioning + zoom
+     context; `left` tracks the rail width so the dot stays glued to the seam
+     as the rail folds. Rest state is a small Dusk dot; on hover it swells into
+     a chevron button, and while collapsed it stays open so the way back is
+     always visible. Both sides of the seam here are --bg-pane, so the dot's
+     paper ring blends into the bar and only interrupts the 1px divider. */
+  .seam-fold {
+    position: fixed; top: 28px; left: 236px; transform: translate(-50%, -50%);
+    z-index: 12; border: 0; background: none; padding: 8px; margin: 0;
+    cursor: pointer; transition: left var(--t-fast) ease;
+  }
+  .seam-dot {
+    display: flex; align-items: center; justify-content: center;
+    width: 10px; height: 10px; border-radius: 50%; overflow: hidden;
+    background: #6E67AF; color: #fff;
+    box-shadow: 0 0 0 3px var(--bg-pane);
+    transition: width var(--t-fast) ease, height var(--t-fast) ease,
+                background var(--t-fast) ease, box-shadow var(--t-fast) ease;
+  }
+  .seam-dot svg {
+    width: 15px; height: 15px; display: block;
+    opacity: 0; transition: opacity var(--t-fast) ease, transform var(--t-fast) ease;
+  }
+  .seam-fold:hover .seam-dot,
+  .seam-fold:focus-visible .seam-dot,
+  body.nav-collapsed .seam-dot {
+    width: 26px; height: 26px;
+    background: var(--bg-pane); color: var(--text-1);
+    box-shadow: 0 0 0 1px var(--line-soft), 0 1px 5px rgba(17, 26, 43, .16);
+  }
+  .seam-fold:hover .seam-dot svg,
+  .seam-fold:focus-visible .seam-dot svg,
+  body.nav-collapsed .seam-dot svg { opacity: 1; }
+  /* Chevron points into the rail (collapse) when open; flips outward (expand)
+     once folded. */
+  body.nav-collapsed .seam-dot svg { transform: rotate(180deg); }
+  /* Track the folded rail's narrower width. */
+  body.nav-collapsed .seam-fold { left: 62px; }
+  /* Phones swap the rail for the bottom nav, so the seam control has no home. */
+  @media (max-width: 720px) { .seam-fold { display: none; } }
 
   /* Unseen-orders notification on the Orders tab. Hidden by default;
      JS adds .has-unseen when the unseen-count > 0. The dot pulses to grab
@@ -7443,15 +7469,6 @@
      topbar's own 16px gap doesn't push them apart; .grow after pins the right
      cluster (inbox + avatar). */
   .tb-left { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; }
-  .nav-burger {
-    flex: none; width: 42px; height: 42px;
-    border: 1px solid var(--td-border); background: var(--td-surface);
-    border-radius: var(--r-lg); color: var(--td-text2); cursor: pointer;
-    display: inline-flex; align-items: center; justify-content: center;
-    transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
-  }
-  .nav-burger:hover { background: var(--td-raised); color: var(--td-text); border-color: var(--td-text2); }
-  .nav-burger svg { width: 20px; height: 20px; }
 
   /* Search — pill → wide field. Icon inside-left, full placeholder, no kbd chip;
      colours already set in the slice-one block above, geometry here. */
@@ -7466,7 +7483,6 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   @media (max-width: 720px) {
-    .nav-burger { display: none; }
     .topbar .gsearch-trigger { flex: 1 1 auto; }
   }
 
