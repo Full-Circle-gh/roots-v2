@@ -976,6 +976,34 @@ async function loadIntegrationsStatus() {
     customer: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>',
   };
 
+  // Distinctive line glyphs per top-level destination, so pages don't all
+  // read as the same globe. Matched by a keyword in the (English) title;
+  // first hit wins, else we fall back to the type icon (ICON above).
+  const NAMED_ICON = [
+    ['open your store', '<path d="M3 9l1.6-5h14.8L21 9"/><path d="M4 9v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9h18"/><path d="M9.5 19v-5h5v5"/>'],
+    ['dashboard',       '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>'],
+    ['report',          '<path d="M4 20h16"/><path d="M7 20v-6"/><path d="M12 20V8"/><path d="M17 20v-9"/>'],
+    ['sales',           '<polyline points="3 17 9 11 13 15 21 6"/><polyline points="15 6 21 6 21 12"/>'],
+    ['order',           ICON.order],
+    ['customer',        ICON.customer],
+    ['product',         ICON.product],
+    ['categor',         '<path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>'],
+    ['purchas',         '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.4 12.5a1 1 0 0 0 1 .8h9.1a1 1 0 0 0 1-.78L21 7H6"/>'],
+    ['meituan',         '<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.6 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>'],
+    ['eleme',           '<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.6 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>'],
+    ['gzgrocery',       '<path d="M10 13a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1.6 1.5"/><path d="M14 11a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1.5-1.5"/>'],
+  ];
+
+  // Pick the glyph for a result: a named page/setting icon when the title
+  // matches, else the type default.
+  function glyphFor(it) {
+    if (it.type === 'page' || it.type === 'setting') {
+      const t = it.title.toLowerCase();
+      for (const [key, svg] of NAMED_ICON) if (t.includes(key)) return svg;
+    }
+    return ICON[it.type] || ICON.page;
+  }
+
   // Result groups, shown in this order. Static chrome ("nav") first, then live
   // records pulled from the backend. Empty groups collapse automatically.
   const GROUP_LABEL = {
@@ -1129,7 +1157,7 @@ async function loadIntegrationsStatus() {
     const tag = itemTag(it);
     const crumb = it.crumb ? '<div class="gs-crumb">' + esc(it.crumb) + '</div>' : '';
     return '<button class="gsearch-item" role="option" data-idx="' + idx + '">'
-      + '<span class="gs-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + (ICON[it.type] || ICON.page) + '</svg></span>'
+      + '<span class="gs-ico"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + glyphFor(it) + '</svg></span>'
       + '<span class="gs-body"><div class="gs-title">' + esc(it.title) + '</div>' + crumb + '</span>'
       + (tag ? '<span class="gs-tag">' + esc(tag) + '</span>' : '')
       + '</button>';
