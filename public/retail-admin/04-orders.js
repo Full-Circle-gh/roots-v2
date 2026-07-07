@@ -359,11 +359,28 @@ function renderAlipayProof(o) {
   </div>`;
 }
 
-// Open the stored proof full-size in a new tab (the thumbnail is deliberately small).
+// Grow the stored proof in place (the thumbnail is deliberately small). Rather
+// than punting the operator to a new tab — which loses the order beside it — we
+// float the full screenshot over the drawer so they can eyeball it against the
+// facts list, then dismiss with the ✕, a backdrop tap, or Esc.
 function zoomAlipayProof(el) {
-  const im = el.querySelector('img'); if (!im) return;
-  const w = window.open();
-  if (w) w.document.write('<img src="' + im.src + '" style="max-width:100%">');
+  const im = el && el.querySelector('img'); if (!im) return;
+  const old = document.getElementById('ap-lightbox'); if (old) old.remove();
+  const box = document.createElement('div');
+  box.id = 'ap-lightbox';
+  box.innerHTML = `<button type="button" class="ap-lb-x" title="${cuT('Close', '关闭')}" aria-label="${cuT('Close', '关闭')}">×</button>
+    <img class="ap-lb-img" src="${im.src}" alt="Alipay payment screenshot">`;
+  let closed = false;
+  const close = () => {
+    if (closed) return; closed = true;
+    box.remove();
+    document.removeEventListener('keydown', onKey);
+  };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  // ✕ or backdrop closes; a tap on the image itself does not.
+  box.addEventListener('click', e => { if (e.target === box || e.target.closest('.ap-lb-x')) close(); });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(box);
 }
 
 // Retry the Vision-AI read on the stored Alipay proof (after a transient read
