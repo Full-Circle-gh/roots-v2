@@ -8351,8 +8351,10 @@
   #cfg-host > .ig-wiz:has(> .mc-sec) {
     max-width: 1120px; margin: 0 auto;
     background: transparent; border: none; box-shadow: none; padding: 0;
-    columns: 2; column-gap: 18px;
   }
+  /* Two balanced columns only when there are 2+ sections (mini/web). A single-
+     section panel (meituan) stays full width and fills it with its own grid. */
+  #cfg-host > .ig-wiz:has(> .mc-sec ~ .mc-sec) { columns: 2; column-gap: 18px; }
   #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-chips,
   #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-foot { column-span: all; }
   #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-chips { margin: 0 0 8px; }
@@ -8361,7 +8363,16 @@
     margin: 0 0 16px; padding: 16px 18px;
     border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface);
   }
-  @media (max-width: 760px) { #cfg-host > .ig-wiz:has(> .mc-sec) { columns: 1; } }
+  @media (max-width: 760px) { #cfg-host > .ig-wiz:has(> .mc-sec ~ .mc-sec) { columns: 1; } }
+
+  /* Meituan store list — 2-up cards that fill the wide single-section panel. */
+  :is(#tab-sales, .cfg-host) .mc-wiz .mt-stores {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;
+  }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mt-store {
+    border: 1px solid var(--td-border); border-radius: 10px; padding: 13px 15px; background: var(--td-paper);
+  }
+  @media (max-width: 760px) { :is(#tab-sales, .cfg-host) .mc-wiz .mt-stores { grid-template-columns: 1fr; } }
 
   /* Info dot + hover tooltip. The bubble inverts against the page — Ink-on-Paper
      in light, Paper-on-Ink in dark — so it reads in either theme. Keyboard-

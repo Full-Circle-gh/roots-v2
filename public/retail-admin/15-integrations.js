@@ -568,7 +568,7 @@
       `${cuT('last order', '最近订单')} ${igAgo(s.lastOrder)}`,
       `${cuT('orders today', '今日订单')} ${Number(s.ordersToday || 0)}`,
     ].join(' · ');
-    return `<div style="border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:8px">
+    return `<div class="mt-store">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <b style="font-size:13.5px">${name}</b>
         <span style="flex:1"></span>
@@ -597,7 +597,7 @@
     const paused = status === 'paused';
     const storeRows = detail.map(igMtStoreRow).join('');
 
-    box.innerHTML = `<div class="ig-wiz">
+    box.innerHTML = `<div class="ig-wiz mc-wiz">
       <div class="mc-head">
         <div>
           <strong style="font-size:16px">${cuT('Meituan', '美团')}</strong>
@@ -612,7 +612,7 @@
       <div class="mc-sec">
         <div class="mc-sec-head"><span class="mc-ico">${bag}</span><b>${cuT('Your stores', '您的门店')}</b></div>
         <div class="mc-purpose">${cuT('Meituan keeps stock in sync and imports new orders for these stores.', '美团为这些门店同步库存并导入新订单。')}</div>
-        ${storeRows || `<div class="mc-note">${cuT('No stores linked yet.', '尚未关联门店。')}</div>`}
+        ${storeRows ? `<div class="mt-stores">${storeRows}</div>` : `<div class="mc-note">${cuT('No stores linked yet.', '尚未关联门店。')}</div>`}
       </div>
 
       <div class="mc-foot">
