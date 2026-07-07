@@ -8363,6 +8363,12 @@
     margin: 0 0 16px; padding: 16px 18px;
     border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface);
   }
+  /* A single-section panel (meituan) shouldn't double-card — keep its one
+     section frameless so its inner store cards are the primary cards, like the
+     two section cards of the mini-app / web configs. */
+  #cfg-host > .ig-wiz:has(> .mc-sec):not(:has(> .mc-sec ~ .mc-sec)) > .mc-sec {
+    border: none; background: transparent; padding: 0; margin: 0;
+  }
   @media (max-width: 760px) { #cfg-host > .ig-wiz:has(> .mc-sec ~ .mc-sec) { columns: 1; } }
 
   /* Meituan store list — 2-up cards that fill the wide single-section panel. */
