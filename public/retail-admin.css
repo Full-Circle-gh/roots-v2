@@ -8022,6 +8022,86 @@
   }
   #tab-sales .sales-ch[data-on="0"] .sales-ch-metrics .m-n { color: var(--td-text2); }
   #tab-sales .sales-ch-foot { border-top: 1px solid var(--td-border); padding-top: 13px; }
+  /* Connected cards empty their footer (Configure is now the gear) — hide it. */
+  #tab-sales .sales-ch-foot:empty { display: none; }
+
+  /* Gear (Configure) sits just left of the master toggle, top-right of a card. */
+  #tab-sales .sales-ch-gear {
+    margin-left: auto; border: none; background: transparent; color: var(--td-text2);
+    cursor: pointer; padding: 6px; border-radius: 8px; display: grid; place-items: center;
+    transition: background .2s cubic-bezier(.16,1,.3,1), color .2s cubic-bezier(.16,1,.3,1);
+  }
+  #tab-sales .sales-ch-gear:hover { background: var(--td-raised); color: var(--td-text); }
+  #tab-sales .sales-ch-gear svg { width: 16px; height: 16px; }
+  /* With a gear present the toggle no longer needs to claim the free space. */
+  #tab-sales .sales-ch-gear + .sales-toggle { margin-left: 6px; }
+
+  /* Small inline toggle for the per-location rows. */
+  #tab-sales .sales-toggle.sm { width: 34px; height: 19px; }
+  #tab-sales .sales-toggle.sm .knob { width: 13px; height: 13px; top: 3px; left: 3px; }
+  #tab-sales .sales-toggle.sm.on .knob { left: 18px; }
+
+  /* Per-location rows inside a channel card. */
+  #tab-sales .sales-ch-locs { border-top: 1px solid var(--td-border); padding-top: 12px; }
+  #tab-sales .sales-ch-locs-hd {
+    display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2); margin-bottom: 4px;
+  }
+  #tab-sales .sales-ch-locs-note { margin-left: auto; font-size: 11px; letter-spacing: normal; text-transform: none; }
+  #tab-sales .sales-ch-loc-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+  #tab-sales .sales-ch-loc-row + .sales-ch-loc-row { border-top: 1px solid var(--td-raised); }
+  #tab-sales .sales-ch-loc-nm { font-size: 13.5px; font-weight: 500; color: var(--td-text); }
+  #tab-sales .sales-ch-loc-row.closed .sales-ch-loc-nm { color: var(--td-text2); }
+  #tab-sales .sales-ch-loc-st { margin-left: auto; font-size: 12px; color: var(--td-text2); }
+  #tab-sales .sales-ch-loc-note { font-size: 11px; color: var(--td-amber-ink); }
+
+  /* Locations section: kicker with the Add-location button + a chip row card. */
+  #tab-sales .sales-loc-kicker { display: flex; align-items: center; gap: 12px; }
+  #tab-sales .sales-loc-kicker .btn {
+    margin-left: auto; text-transform: none; letter-spacing: normal;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  #tab-sales .sales-loc-grid { margin-bottom: 8px; }
+  /* Location cards re-render on every toggle, so don't re-run the settle rise. */
+  #tab-sales .sales-loc-grid .sales-ch { animation: none; }
+  #tab-sales .sales-loc-chips {
+    display: flex; flex-wrap: wrap; gap: 7px;
+    border-top: 1px solid var(--td-border); padding-top: 14px;
+  }
+  #tab-sales .sales-chip {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--td-text);
+    background: var(--td-raised); border-radius: 999px; padding: 4px 11px;
+  }
+  #tab-sales .sales-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--td-sage); flex: none; }
+  #tab-sales .sales-chip.off { color: var(--td-text2); background: transparent; border: 1px solid var(--td-border); }
+  #tab-sales .sales-chip.off .sales-chip-dot { background: var(--td-border); }
+
+  /* ── Full-screen Configure overlay (opened by a channel's gear) ──
+     A 16px-inset sheet over a dim backdrop; the config panel renders inside
+     #cfg-host and brings its own header + ✕. Not #tab-sales-scoped — it sits at
+     body level so it clears the rail/topbar. */
+  .cfg-ov {
+    /* Above the rail (11), app modals/drawers (200–300) and popovers, but below
+       toasts (400) so a panel's "Saved" confirmation stays visible. */
+    position: fixed; inset: 0; z-index: 390; background: rgba(17,26,43,.42);
+    opacity: 0; transition: opacity .25s cubic-bezier(.16,1,.3,1);
+  }
+  .cfg-ov.in { opacity: 1; }
+  .cfg-host {
+    position: absolute; inset: 16px; overflow: auto; -webkit-overflow-scrolling: touch;
+    background: var(--td-paper); border: 1px solid var(--td-border); border-radius: 16px;
+    padding: 24px clamp(16px, 4vw, 48px);
+    box-shadow: 0 8px 24px rgba(17,26,43,.12), 0 40px 90px rgba(17,26,43,.28);
+    transform: translateY(12px) scale(.995); opacity: 0;
+    transition: transform .3s cubic-bezier(.16,1,.3,1), opacity .3s cubic-bezier(.16,1,.3,1);
+    font-family: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    color: var(--td-text);
+  }
+  .cfg-ov.in .cfg-host { transform: none; opacity: 1; }
+  /* Center the rendered config on a comfortable column. */
+  .cfg-host > * { max-width: 860px; margin-left: auto; margin-right: auto; }
+  @media (max-width: 640px) { .cfg-host { inset: 0; border-radius: 0; padding: 16px; } }
+  @media (prefers-reduced-motion: reduce) { .cfg-ov, .cfg-host { transition: none; } }
 
   /* Cards settle in once — same 8px rise as the other Tacet screens. */
   #tab-sales .db-kpi, #tab-sales .sales-locbar, #tab-sales .sales-ch {

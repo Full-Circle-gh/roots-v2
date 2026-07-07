@@ -7863,12 +7863,8 @@
        sales-summary endpoint lands; see salesGo()/salesInit() in 01-core.js. -->
   <section id="tab-sales">
     <div class="td-head">
-      <h2 style="margin:0">Sales channels · 销售渠道</h2>
+      <h2 style="margin:0">Sales · 销售</h2>
       <span class="tds-actions">
-        <button class="btn btn-sm" type="button" onclick="igAddLocation()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" style="width:14px;height:14px"><path d="M12 5v14M5 12h14"/></svg>
-          Add location · 新增门店
-        </button>
         <button class="btn btn-sm btn-ghost" type="button" onclick="igHelp('general')">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" style="width:14px;height:14px"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.3a2.5 2.5 0 1 1 3.4 2.3c-.7.3-.9.8-.9 1.4v.5"/><path d="M12 16.8h.01"/></svg>
           Get help · 获取帮助
@@ -10688,6 +10684,15 @@
   window.addEventListener('focus', check);
 })();
 </script>
+
+<!-- Full-screen Configure overlay: the Sales-page gear renders a channel's
+     config surface into #cfg-host (see salesOpenConfig in 01-core + igHostEl in
+     15-integrations). Panels bring their own header + close (igLocClose), which
+     also tears this down + refreshes Sales. 16px inset, dim backdrop, Esc/click
+     to close. -->
+<div id="cfg-overlay" class="cfg-ov" hidden onclick="if(event.target===this)igLocClose()">
+  <div id="cfg-host" class="cfg-host"></div>
+</div>
 
 </body>
 </html>

@@ -316,20 +316,24 @@ async function salesInit() {
   salesWireSetup();  // merge: Set up / Configure per card from the integrations hub
 }
 
-// Merge of the old "Channels & Delivery" hub into this Sales page: each card's
-// footer button becomes "Set up" (launches the plugin's wizard) when the channel
-// isn't connected yet, or "Configure" (opens its admin) when it is. Driven by the
-// integrations registry status (window.igStatusFor). Degrades to the static
-// Configure buttons if the hub JS/endpoint isn't available.
+// Gear/settings glyph — Configure now rides beside each channel's master toggle
+// (salesWireSetup injects it), replacing the old footer "Configure" button.
+const GEAR_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>';
+
+// Merge of the old "Channels & Delivery" hub into this Sales page: a connected
+// card gets a gear beside its toggle (Configure); an unconnected one keeps a
+// "Set up" call-to-action in its footer. Driven by the integrations registry
+// status (window.igStatusFor). Degrades to the static footer Configure buttons
+// if the hub JS/endpoint isn't available.
 async function salesWireSetup() {
   if (typeof window.igEnsureLoaded !== 'function') return;
   try { await window.igEnsureLoaded(); } catch (_) { return; }
   // key → { hub kind, what Configure opens }. gzgrocery is Roots-only (not a hub
   // plugin) so it stays always-Configure.
   const MAP = {
-    wc: { kind: 'wechat_miniapp', open: () => (window.igMiniappConfig ? igMiniappConfig() : salesGo('config')) },  // Configure = the all-in-one Mini App config page
-    wb: { kind: 'web',            open: () => (window.igWebConfig ? igWebConfig() : salesGo('config')) },  // Configure = the Web store config page
-    mt: { kind: 'meituan',        open: () => (window.igMeituanConfig ? igMeituanConfig() : salesGo('meituan')) },  // Configure = clean Meituan page (summary when connected, box-first setup when new)
+    wc: { kind: 'wechat_miniapp', overlay: true, open: () => (window.igMiniappConfig ? igMiniappConfig() : salesGo('config')) },  // Configure = the all-in-one Mini App config page
+    wb: { kind: 'web',            overlay: true, open: () => (window.igWebConfig ? igWebConfig() : salesGo('config')) },  // Configure = the Web store config page
+    mt: { kind: 'meituan',        overlay: true, open: () => (window.igMeituanConfig ? igMeituanConfig() : salesGo('meituan')) },  // Configure = clean Meituan page (summary when connected, box-first setup when new)
     gy: { kind: 'gzgrocery',      open: () => salesGo('guanyi'), alwaysConfigure: true },
     el: { kind: 'eleme',          open: () => salesGo('eleme') },
     // jd / qy cards moved to the Delivery tab's card hub (2026-07-03).
@@ -357,19 +361,67 @@ async function salesWireSetup() {
       }
       statEl.innerHTML = '<span class="sales-dot ' + dot + '"></span>' + txt;
     }
-    // Footer button.
+    // Configure moves to a gear beside the master toggle (added once); the
+    // footer only carries a Set up / Fix CTA while a channel is not connected.
+    // A connected card's footer is emptied (CSS hides it when empty).
     const foot = card.querySelector('.sales-ch-foot');
-    if (!foot) continue;
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'btn btn-sm' + (connected ? '' : ' btn-primary');
-    if (connected) { b.textContent = cuT('Configure · 配置', '配置'); b.onclick = cfg.open; }
-    else if (isError) { b.textContent = cuT('Fix · 修复', '修复'); b.onclick = () => igLaunchSetup(cfg.kind); }
-    else { b.textContent = cuT('Set up · 设置', '设置'); b.onclick = () => igLaunchSetup(cfg.kind); }
-    foot.innerHTML = '';
-    foot.appendChild(b);
+    const top = card.querySelector('.sales-ch-top');
+    const toggle = top && top.querySelector('.sales-toggle');
+    if (connected) {
+      if (top && toggle && !top.querySelector('.sales-ch-gear')) {
+        const g = document.createElement('button');
+        g.type = 'button';
+        g.className = 'sales-ch-gear';
+        g.title = cuT('Configure', '配置');
+        g.setAttribute('aria-label', cuT('Configure', '配置'));
+        g.innerHTML = GEAR_SVG;
+        // Host-rendered configs (mini/web/meituan) open in the full-screen
+        // overlay; tab-navigating ones (gzgrocery/eleme) go straight there.
+        g.onclick = cfg.overlay ? () => salesOpenConfig(cfg.open) : cfg.open;
+        top.insertBefore(g, toggle);
+      }
+      if (foot) foot.innerHTML = '';
+    } else {
+      if (!foot) continue;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'btn btn-sm btn-primary';
+      b.textContent = isError ? cuT('Fix', '修复') : cuT('Set up', '设置');
+      b.onclick = () => igLaunchSetup(cfg.kind);
+      foot.innerHTML = '';
+      foot.appendChild(b);
+    }
   }
 }
+
+// ── Full-screen Configure overlay ────────────────────────────────────────────
+// A channel's gear renders its config surface into #cfg-host — a 16px-inset
+// full-screen sheet — instead of the inline host. igHostEl() (part 15) targets
+// #cfg-host while body.cfg-open is set, so the existing renderers need no change;
+// each panel brings its own header + ✕ (igLocClose), which tears the overlay
+// down and refreshes Sales. Also used by the Locations "Add location" button.
+window.salesOpenConfig = function (renderFn) {
+  const ov = document.getElementById('cfg-overlay');
+  if (!ov) { if (typeof renderFn === 'function') renderFn(); return; }  // graceful fallback
+  document.body.classList.add('cfg-open');
+  document.body.style.overflow = 'hidden';
+  ov.hidden = false;
+  requestAnimationFrame(() => ov.classList.add('in'));
+  try { if (typeof renderFn === 'function') renderFn(); } catch (e) { /* renderer surfaces its own errors */ }
+};
+// Called by igLocClose after it clears the host: fade the overlay out + reload
+// the Sales figures so a just-saved change shows.
+window.salesAfterConfigClose = function () {
+  const ov = document.getElementById('cfg-overlay');
+  document.body.classList.remove('cfg-open');
+  document.body.style.overflow = '';
+  if (ov) { ov.classList.remove('in'); setTimeout(() => { ov.hidden = true; }, 250); }
+  const sales = document.getElementById('tab-sales');
+  if (sales && sales.classList.contains('active') && typeof salesInit === 'function') salesInit();
+};
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && document.body.classList.contains('cfg-open') && typeof window.igLocClose === 'function') window.igLocClose();
+});
 
 // ── Sales channel × location close controls ──────────────────────────────────
 // The Sales-page channel cards ship with a LOCKED toggle. We unlock + wire the
@@ -401,118 +453,131 @@ async function csLoad() {
 
 function csRender() {
   if (!_csData) return;
-  document.querySelectorAll('.sales-ch').forEach((card) => {
+  let anyPending = false;
+  document.querySelectorAll('#tab-sales .sales-ch').forEach((card) => {
     const m = card.querySelector('[id^="sales-"][id$="-rev"]');
     const mm = m && m.id.match(/^sales-(\w+)-rev$/);
     const ch = mm && CS_KEY2CH[mm[1]];
     const info = ch && csChannel(ch);
     const btn = card.querySelector('.sales-toggle');
     if (!info || !btn) return;
-    btn.disabled = false; btn.removeAttribute('disabled'); btn.classList.remove('is-locked');
-    btn.title = cuT('Open / close by location', '按门店开关');
-    // Mixed state: open in some locations, closed in others → half-lit toggle.
+    // Not-set-up channels (e.g. Eleme): leave the locked toggle + "Set up"
+    // footer as salesWireSetup left them — no channel×location matrix yet.
+    if (info.integrated === false) return;
+
     const cells = info.cells || [];
-    const openCount = cells.filter(c => c.open).length;
+    const openCount = cells.filter((c) => c.open).length;
     const partial = cells.length > 1 && openCount > 0 && openCount < cells.length;
+    const cardOpen = !!info.cardOpen;
+
+    // Master toggle: unlock + reflect state. One tap opens/closes this channel
+    // at EVERY store in one shot (no popup); half-lit = open at only some.
+    btn.disabled = false; btn.removeAttribute('disabled'); btn.classList.remove('is-locked');
+    btn.title = cuT('Turn this channel on or off at every store', '一键开关所有门店的该渠道');
     btn.classList.toggle('partial', partial);
-    btn.classList.toggle('on', !partial && !!info.cardOpen);
-    btn.onclick = () => { if (ch === 'gzgrocery') csToggleGz(info); else csPopup(ch); };
+    btn.classList.toggle('on', !partial && cardOpen);
+    btn.onclick = () => csChannelToggle(ch, cardOpen);
+
+    // Inline per-location rows (rebuilt each render), between metrics + footer.
+    const prev = card.querySelector('.sales-ch-locs');
+    if (prev) prev.remove();
+    const box = document.createElement('div');
+    box.className = 'sales-ch-locs';
+    const single = cells.length <= 1;
+    let html = '<div class="sales-ch-locs-hd"><span>' + cuT('Per location', '按门店') + '</span>'
+      + (single ? '<span class="sales-ch-locs-note">' + cuT('serves 1 store', '仅 1 家门店') + '</span>' : '') + '</div>';
+    for (const c of cells) {
+      if (c.pending) anyPending = true;
+      const note = (ch === 'meituan' && c.pending) ? ' <span class="sales-ch-loc-note">' + cuT('applying…', '处理中…') + '</span>' : '';
+      html += '<div class="sales-ch-loc-row' + (c.open ? '' : ' closed') + '">'
+        + '<span class="sales-dot ' + (c.open ? 'ok' : 'warn') + '"></span>'
+        + '<span class="sales-ch-loc-nm">' + csStoreName(c) + note + '</span>'
+        + '<span class="sales-ch-loc-st">' + (c.open ? cuT('Open', '营业中') : cuT('Closed', '已关闭')) + '</span>'
+        + '<button class="sales-toggle sm' + (c.open ? ' on' : '') + '" type="button" aria-label="'
+        + escapeHtml(c.nameEn || c.name || '') + '" onclick="csCell(\'' + ch + '\',\'' + c.storeCode + '\',' + (c.open ? 'false' : 'true') + ')"><span class="knob"></span></button>'
+        + '</div>';
+    }
+    box.innerHTML = html;
+    const foot = card.querySelector('.sales-ch-foot');
+    if (foot) card.insertBefore(box, foot); else card.appendChild(box);
   });
   csRenderLocations();
+  // Meituan applies open/close on the box asynchronously (置休 via the daemon);
+  // poll until the pending cells settle, then the rows flip on their own.
+  csClearPoll();
+  if (anyPending) _csPollTimer = setTimeout(() => { _csPollTimer = null; csLoad(); }, 4000);
 }
+let _csPollTimer = null;
+function csClearPoll() { if (_csPollTimer) { clearTimeout(_csPollTimer); _csPollTimer = null; } }
 
+// Locations section: one card per store (same shell as the channel cards) with
+// a chip row of the channels that serve it + a master toggle that opens/closes
+// the WHOLE store. The "Add location" button rides this section's kicker.
 function csRenderLocations() {
-  const grid = document.querySelector('.sales-grid');
-  if (!grid) return;
+  const anchor = document.getElementById('sales-ch-kicker');
+  if (!anchor) return;
   let box = document.getElementById('cs-locations');
   if (!box) {
     box = document.createElement('div');
     box.id = 'cs-locations';
-    // Land above the "Channels" kicker so the page reads Summary → Store
-    // status → Channels (the kicker anchor is in retail-admin.html).
-    const anchor = document.getElementById('sales-ch-kicker') || grid;
+    // Land above the "Channels" kicker so the page reads Summary → Locations
+    // → Channels (the kicker anchor is in retail-admin.html).
     anchor.parentNode.insertBefore(box, anchor);
   }
   const locs = (_csData && _csData.locations) || [];
+  const channels = (_csData && _csData.channels) || [];
   const storeIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>';
-  box.innerHTML = '<div class="td-kicker">' + cuT('Store status', '门店状态') + '</div>'
-    + '<div class="sales-locbar">'
-    + '<span class="sales-locbar-lead">' + storeIcon + '<span>' + cuT('Close a whole location', '关闭整个门店') + '</span></span>'
-    + '<span class="sales-locbar-hint">' + cuT('turns every channel off for that store', '该门店的所有渠道将一起关闭') + '</span>'
-    + '<span class="sales-locbar-pills">'
-    + locs.map((l) => '<button class="sales-locpill' + (l.allOpen ? '' : ' closed') + '" onclick="csLocation(\'' + l.storeCode + '\',' + (l.allOpen ? 'false' : 'true') + ')"><span class="nm">' + csStoreName(l) + '</span><span class="act">' + (l.allOpen ? cuT('Close all', '全部关闭') : (cuT('Closed — open all', '已关闭 — 全部开启'))) + '</span></button>').join('')
-    + '</span></div>';
-}
-
-function csToggleGz(info) {
-  const open = !info.cardOpen;
-  if (!window.confirm(open ? cuT('Open gzgrocery?', '开启 gzgrocery?')
-                           : cuT('Close gzgrocery? It will stop importing new orders.', '关闭 gzgrocery?将停止导入新订单。'))) return;
-  api('/api/retail-admin/channel-status/cell', { method: 'POST', body: { channel: 'gzgrocery', storeCode: 'tianhe', open } })
-    .then(() => { if (window.toast) toast(cuT('Saved', '已保存')); return csLoad(); })
-    .catch((e) => { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); });
-}
-
-function csPopup(ch) {
-  const info = csChannel(ch);
-  if (!info) return;
-  let ov = document.getElementById('cs-popup');
-  if (!ov) {
-    ov = document.createElement('div');
-    ov.id = 'cs-popup';
-    ov.className = 'cs-ov';
-    document.body.appendChild(ov);
-    ov.onclick = () => csClosePopup();
-  }
-  // Tacet modal (classes in retail-admin.css): sage dot = open, mute = closed —
-  // a closed store is a state, not an error, so no red here.
-  const rows = (info.cells || []).map((c) => {
-    const note = (ch === 'meituan' && c.pending) ? ' <span class="muted" style="font-size:11px">' + cuT('applying…', '处理中…') + '</span>' : '';
-    return '<div class="cs-row">'
-      + '<span class="cs-dot ' + (c.open ? 'open' : 'closed') + '"></span>'
-      + '<div class="cs-nm">' + csStoreName(c) + note + '</div>'
-      + '<span class="muted" style="font-size:12.5px">' + (c.open ? cuT('Open', '营业中') : cuT('Closed', '已关闭')) + '</span>'
-      + '<button class="btn btn-sm' + (c.open ? '' : ' btn-primary') + '" onclick="csCell(\'' + ch + '\',\'' + c.storeCode + '\',' + (c.open ? 'false' : 'true') + ')">' + (c.open ? cuT('Close', '关闭') : cuT('Open', '开启')) + '</button>'
+  const plusIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" style="width:13px;height:13px"><path d="M12 5v14M5 12h14"/></svg>';
+  const cellFor = (c, code) => (c.cells || []).find((x) => x.storeCode === code);
+  const cards = locs.map((l) => {
+    // Only set-up channels count toward a store's live/total + chips.
+    const serving = channels.filter((c) => c.integrated !== false && cellFor(c, l.storeCode));
+    const live = serving.filter((c) => { const x = cellFor(c, l.storeCode); return x && x.open; }).length;
+    const total = serving.length;
+    const none = live === 0, allOn = live === total && total > 0, partial = !allOn && !none;
+    let dot = 'ok', txt = cuT('Open — all channels live', '营业中 — 所有渠道');
+    if (none) { dot = 'warn'; txt = cuT('Closed — every channel off', '已关闭 — 所有渠道'); }
+    else if (partial) { dot = 'warn'; txt = cuT(live + ' of ' + total + ' channels live', total + ' 个渠道中 ' + live + ' 个在线'); }
+    const chips = serving.map((c) => {
+      const x = cellFor(c, l.storeCode); const on = x && x.open;
+      return '<span class="sales-chip' + (on ? '' : ' off') + '"><span class="sales-chip-dot"></span>' + csName(c.channel) + '</span>';
+    }).join('');
+    const tgl = partial ? ' partial' : (allOn ? ' on' : '');
+    return '<div class="sales-ch" data-on="1">'
+      + '<div class="sales-ch-top"><div class="sales-ch-id">'
+      + '<span class="sales-ch-ico">' + storeIcon + '</span>'
+      + '<div><div class="sales-ch-name">' + csStoreName(l) + '</div>'
+      + '<div class="sales-ch-stat"><span class="sales-dot ' + dot + '"></span>' + txt + '</div></div></div>'
+      + '<button class="sales-toggle' + tgl + '" type="button" title="' + cuT('Open or close the whole store', '开关整个门店')
+      + '" onclick="csLocation(\'' + l.storeCode + '\',' + (none ? 'true' : 'false') + ')"><span class="knob"></span></button>'
+      + '</div>'
+      + '<div class="sales-loc-chips">' + chips + '</div>'
       + '</div>';
   }).join('');
-  ov.innerHTML = '<div class="cs-modal" onclick="event.stopPropagation()">'
-    + '<div class="cs-modal-head"><b>' + csName(ch) + ' — ' + cuT('by location', '按门店') + '</b><button class="cs-modal-x" onclick="csClosePopup()" aria-label="Close">✕</button></div>'
-    + '<div class="cs-sub">' + cuT('Turn this channel on or off per location.', '按门店开启或关闭这个渠道。') + '</div>'
-    + rows
-    + '<div class="cs-foot">'
-    + '<button class="btn btn-sm" onclick="csChannelAll(\'' + ch + '\',false)">' + cuT('Close all', '全部关闭') + '</button>'
-    + '<button class="btn btn-sm btn-primary" onclick="csChannelAll(\'' + ch + '\',true)">' + cuT('Open all', '全部开启') + '</button>'
-    + '</div></div>';
-  // Meituan applies open/close asynchronously on the box (the daemon pushes 置休
-  // to Meituan, then clears the pending flag). Without this, the popup froze on
-  // "applying…" forever because it only rendered a one-shot snapshot. Poll while
-  // any cell is still pending so the row flips to its real state on its own.
-  csSchedulePoll(ch, (info.cells || []).some((c) => c.pending));
+  box.innerHTML = '<div class="td-kicker sales-loc-kicker"><span>' + cuT('Locations', '门店') + '</span>'
+    + '<button class="btn btn-sm" type="button" onclick="salesOpenConfig(igAddLocation)">' + plusIcon + cuT('Add location', '新增门店') + '</button></div>'
+    + '<div class="sales-grid sales-loc-grid">' + cards + '</div>';
 }
-let _csPollTimer = null;
-function csClearPoll() { if (_csPollTimer) { clearTimeout(_csPollTimer); _csPollTimer = null; } }
-function csSchedulePoll(ch, hasPending) {
-  csClearPoll();
-  if (!hasPending) return;
-  _csPollTimer = setTimeout(async () => {
-    _csPollTimer = null;
-    if (!document.getElementById('cs-popup')) return;   // operator closed it
+
+// One tap on a channel's master toggle opens/closes it at every store.
+window.csChannelToggle = async function (ch, isOpenNow) {
+  const open = !isOpenNow;
+  if (!open && !window.confirm(cuT('Close this channel at every store?', '关闭所有门店的该渠道？'))) return;
+  try {
+    await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } });
+    if (window.toast) toast(cuT('Saved', '已保存'));
     await csLoad();
-    if (document.getElementById('cs-popup')) csPopup(ch); // re-render (re-arms poll if still pending)
-  }, 4000);
-}
-window.csClosePopup = function () { csClearPoll(); const ov = document.getElementById('cs-popup'); if (ov) ov.remove(); };
+  } catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
+};
+// One store's cell for a channel (the inline row toggle).
 window.csCell = async function (ch, storeCode, open) {
-  try { await api('/api/retail-admin/channel-status/cell', { method: 'POST', body: { channel: ch, storeCode, open } }); await csLoad(); csPopup(ch); }
+  try { await api('/api/retail-admin/channel-status/cell', { method: 'POST', body: { channel: ch, storeCode, open } }); await csLoad(); }
   catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };
-window.csChannelAll = async function (ch, open) {
-  try { await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } }); await csLoad(); csPopup(ch); }
-  catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
-};
+// Location master: open/close EVERY channel for one store.
 window.csLocation = async function (storeCode, open) {
-  if (!window.confirm(open ? cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道?')
-                           : cuT('Close ALL sales channels for this location?', '关闭该门店的所有销售渠道?'))) return;
+  if (!window.confirm(open ? cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道？')
+                           : cuT('Close ALL sales channels for this location?', '关闭该门店的所有销售渠道？'))) return;
   try { await api('/api/retail-admin/channel-status/location', { method: 'POST', body: { storeCode, open } }); if (window.toast) toast(cuT('Done', '完成')); await csLoad(); }
   catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };

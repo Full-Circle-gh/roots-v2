@@ -24,7 +24,16 @@
   // Where the wizards (setup / add-location / help) render. The channels UI now
   // lives ON the Sales page (#sales-setup-host); the legacy #ig-locwiz is a
   // fallback so the functions keep working if that host isn't present.
-  function igHostEl() { return document.getElementById('sales-setup-host') || document.getElementById('ig-locwiz'); }
+  function igHostEl() {
+    // The Sales-page Configure gear (and Add location) opens surfaces in a
+    // full-screen overlay; its body #cfg-host is the render target while it's
+    // open. Otherwise the inline Sales host, then the legacy fallback.
+    if (document.body.classList.contains('cfg-open')) {
+      const h = document.getElementById('cfg-host');
+      if (h) return h;
+    }
+    return document.getElementById('sales-setup-host') || document.getElementById('ig-locwiz');
+  }
 
   // The current status of a plugin from the last igLoad() (used by the Sales
   // page to decide Set up vs Configure). Returns 'not_configured' if unknown.
@@ -250,6 +259,9 @@
   window.igLocClose = function () {
     const box = igHostEl();
     if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+    // If this was rendered in the full-screen Configure overlay, tear it down
+    // and refresh the Sales page (part 01 owns that transition).
+    if (document.body.classList.contains('cfg-open') && typeof window.salesAfterConfigClose === 'function') window.salesAfterConfigClose();
   };
 
   // Populate the district <select> from the shared china-districts endpoint.
