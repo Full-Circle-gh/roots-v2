@@ -904,7 +904,9 @@ function dbProdName(o) {
   return (cn ? (o.name_cn || o.name_en) : (o.name_en || o.name_cn)) || '—';
 }
 
-const TD = { recapSince: 0, recapEvents: null, stores: null, stockStore: '', stockOps: null };
+const TD = { recapSince: 0, recapEvents: null, stores: null, stockStore: '', stockOps: null,
+             lowRotAt: 0, _lowRotTimer: null, _lowRotPaused: false, _lowCnt: 0 };
+let TD_LOW_POOL = [];   // ordered out-then-low pool the Running-low card rolls through
 const TD_SEEN_KEY = 'retail-admin-last-seen';
 
 function tdInit() {
@@ -1184,14 +1186,17 @@ function tdRecapWorkBtnSync() {
 // ── Needs you — attention cards from /dashboard/ops ────────────────────────
 async function tdOpsLoad() {
   try {
-    const j = await api(`/api/retail-admin/dashboard/ops?${dashStoreQS().replace(/^&/, '')}`);
+    // preview=TD_LOW_PREVIEW gives the Running-low card a deep-enough pool for
+    // its rolling window to cycle through the whole low/out list, not just 8.
+    const opsQS = [dashStoreQS().replace(/^&/, ''), `preview=${TD_LOW_PREVIEW}`].filter(Boolean).join('&');
+    const j = await api(`/api/retail-admin/dashboard/ops?${opsQS}`);
     DASH_OPS = j.data || null;
     // A store picked on the Running-low card → also pull that shelf's stock so
     // the card shows the store's own low/out items (delivery + refunds stay
     // all-stores). Cleared back to all-stores when the pick is reset.
     if (TD.stockStore) {
       try {
-        const j2 = await api(`/api/retail-admin/dashboard/ops?store_id=${encodeURIComponent(TD.stockStore)}&preview=8`);
+        const j2 = await api(`/api/retail-admin/dashboard/ops?store_id=${encodeURIComponent(TD.stockStore)}&preview=${TD_LOW_PREVIEW}`);
         TD.stockOps = j2.data || null;
       } catch (e) { TD.stockOps = null; }
     } else {
@@ -1224,8 +1229,74 @@ function tdAttnCard(tone, icon, title, count, rowsHtml, moreText, action, header
   </section>`;
 }
 
+// ── Running-low rolling window ─────────────────────────────────────────────
+// The card is a glanceable slice of a long list (often many out + many low).
+// Rather than freeze on the alphabetical first 4, it pages through the WHOLE
+// fetched pool a window at a time, cross-fading, so the full picture rolls by
+// without a click. Out-of-stock rows come first in the pool, then low ones.
+// Pauses while the pointer/focus is on the card (so a row never moves out from
+// under a tap), and stays still entirely for prefers-reduced-motion.
+const TD_LOW_PREVIEW = 40;   // how many items to pull for the pool (counts stay exact)
+const TD_LOW_WIN     = 4;    // rows visible per window
+const TD_LOW_ROT_MS  = 7000; // dwell per window before the next cross-fade
+
+// One pool row → button HTML, label computed live so a language toggle repaints.
+function tdLowRowHtml(it) {
+  const val = it._oos ? cuT('out', '售罄')
+                      : cuT(`${it.stock_qty} left`, `剩 ${it.stock_qty}`);
+  return `
+    <button type="button" class="td-attn-row"${it.id ? ` onclick="dashOpenProductFromFeed(${Number(it.id)})"` : ''}>
+      <span class="name"><span class="nm" data-no-i18n>${escapeHtml(dbProdName(it))}</span>${it.sku ? `<span class="sku" data-no-i18n>${escapeHtml(it.sku)}</span>` : ''}</span>
+      <span class="val">${val}</span>
+    </button>`;
+}
+// The window starting at TD.lowRotAt (paged, non-wrapping — loops back to 0).
+function tdLowWindowHtml() {
+  const pool = TD_LOW_POOL || [];
+  return pool.slice(TD.lowRotAt, TD.lowRotAt + TD_LOW_WIN).map(tdLowRowHtml).join('');
+}
+// Live "5–8 of 32" position label for the more-link (also the see-all handle).
+function tdLowPosText() {
+  const pool = TD_LOW_POOL || [];
+  const cnt = TD._lowCnt || pool.length;
+  const s = TD.lowRotAt, e = Math.min(s + TD_LOW_WIN, pool.length);
+  return cuT(`${s + 1}–${e} of ${cnt} · see all`, `第 ${s + 1}–${e} · 共 ${cnt} · 查看全部`);
+}
+function tdLowPause()  { TD._lowRotPaused = true; }
+function tdLowResume() { TD._lowRotPaused = false; }
+function tdLowRotStop() {
+  if (TD._lowRotTimer) { clearInterval(TD._lowRotTimer); TD._lowRotTimer = null; }
+}
+// Advance one window with an opacity cross-fade. Re-grabs the rows node inside
+// the fade so a mid-cycle re-render (SSE / poll) can't write to a stale node.
+function tdLowRotTick() {
+  const pool = TD_LOW_POOL || [];
+  if (pool.length <= TD_LOW_WIN || TD._lowRotPaused || document.hidden) return;
+  const box = document.getElementById('td-low-rows'); if (!box) return;
+  let next = TD.lowRotAt + TD_LOW_WIN;
+  if (next >= pool.length) next = 0;
+  box.style.opacity = '0';
+  setTimeout(() => {
+    TD.lowRotAt = next;
+    const b = document.getElementById('td-low-rows'); if (!b) return;
+    b.innerHTML = tdLowWindowHtml();
+    b.style.opacity = '1';
+    const pos = document.getElementById('td-low-pos');
+    if (pos) pos.textContent = tdLowPosText();
+  }, 220);
+}
+// Restarted at the tail of every tdAttnRender (the rows node is recreated then).
+function tdLowRotStart() {
+  tdLowRotStop();
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const pool = TD_LOW_POOL || [];
+  if (reduce || pool.length <= TD_LOW_WIN) return;
+  TD._lowRotTimer = setInterval(tdLowRotTick, TD_LOW_ROT_MS);
+}
+
 function tdAttnRender() {
   const host = document.getElementById('td-attn'); if (!host) return;
+  TD_LOW_POOL = [];   // rebuilt below when the Running-low card is present
   if (!DASH_OPS) {
     host.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
     return;
@@ -1252,24 +1323,34 @@ function tdAttnRender() {
       rowsHtml = `<div class="td-attn-clear">${cuT('All stocked at this store', '此门店库存充足')}</div>`;
       moreText = '';
     } else {
-      const prodRow = (it, val) => `
-        <button type="button" class="td-attn-row"${it.id ? ` onclick="dashOpenProductFromFeed(${Number(it.id)})"` : ''}>
-          <span class="name"><span class="nm" data-no-i18n>${escapeHtml(dbProdName(it))}</span>${it.sku ? `<span class="sku" data-no-i18n>${escapeHtml(it.sku)}</span>` : ''}</span>
-          <span class="val">${val}</span>
-        </button>`;
-      const oosRows = (oos.items || []).slice(0, 2).map(it => prodRow(it, cuT('out', '售罄')));
-      const lowRows = (low.items || []).slice(0, 4 - Math.min(2, (oos.items || []).length))
-        .map(it => prodRow(it, cuT(`${it.stock_qty} left`, `剩 ${it.stock_qty}`)));
-      const shown = Math.min(2, (oos.items || []).length) + lowRows.length;
-      const restN = cnt - shown;
-      const at = TD.stockStore ? ' ' + cuT('at ' + tdStockStoreName(), '· ' + tdStockStoreName()) : '';
-      rowsHtml = oosRows.join('') + lowRows.join('');
-      // The hidden tail is a link now — it opens the stock drawer with the
-      // full list (data-no-i18n: the CN string can hold a " · " store tail,
-      // and the whole label is repainted by tdAttnRender on a toggle anyway).
-      moreText = restN > 0
-        ? `<button type="button" class="td-attn-more-link" data-no-i18n onclick="dashStockDrawerOpen(event)">${cuT(`and ${restN} more${at}`, `另有 ${restN} 项${TD.stockStore ? ' · ' + tdStockStoreName() : ''}`)}<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>`
-        : '';
+      // Ordered pool the window rolls through: out-of-stock first, then low.
+      // The _oos tag lets tdLowRowHtml pick the right label ("out" vs "N left").
+      TD_LOW_POOL = [
+        ...(oos.items || []).map(it => ({ ...it, _oos: true })),
+        ...(low.items || []),
+      ];
+      TD._lowCnt = cnt;
+      // A shorter pool than the last tick (SSE restock) can leave the saved
+      // index past the end — snap it back so the first window shows.
+      if (TD.lowRotAt >= TD_LOW_POOL.length) TD.lowRotAt = 0;
+      const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const willRotate = TD_LOW_POOL.length > TD_LOW_WIN && !reduce;
+      if (!willRotate) TD.lowRotAt = 0;   // static list always starts at the top
+      const chev = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+      // Rows live in an id'd, pause-on-hover box so the timer can cross-fade just
+      // this slice (see tdLowRotTick) without rebuilding the whole card.
+      rowsHtml = `<div id="td-low-rows" class="td-low-rows"${willRotate ? ' onmouseenter="tdLowPause()" onmouseleave="tdLowResume()" onfocusin="tdLowPause()" onfocusout="tdLowResume()"' : ''}>${tdLowWindowHtml()}</div>`;
+      if (willRotate) {
+        // The more-link doubles as a live "5–8 of 32" position + see-all handle.
+        moreText = `<button type="button" class="td-attn-more-link" data-no-i18n onclick="dashStockDrawerOpen(event)"><span id="td-low-pos">${tdLowPosText()}</span>${chev}</button>`;
+      } else {
+        // Static (reduced-motion or a short list) — the classic "and N more".
+        const restN = cnt - Math.min(TD_LOW_WIN, TD_LOW_POOL.length);
+        const at = TD.stockStore ? ' ' + cuT('at ' + tdStockStoreName(), '· ' + tdStockStoreName()) : '';
+        moreText = restN > 0
+          ? `<button type="button" class="td-attn-more-link" data-no-i18n onclick="dashStockDrawerOpen(event)">${cuT(`and ${restN} more${at}`, `另有 ${restN} 项${TD.stockStore ? ' · ' + tdStockStoreName() : ''}`)}${chev}</button>`
+          : '';
+      }
     }
     cards.push(tdAttnCard('amber', 'box', cuT('Running low', '库存告急'), cnt, rowsHtml, moreText,
       `<button type="button" class="td-attn-go" onclick="dashOpenRestock()">${cuT('Open restock', '前往补货')}</button>`,
@@ -1355,9 +1436,13 @@ function tdAttnRender() {
       <p>${cuT('Nothing needs you. Enjoy it.', '没有需要您处理的事，请安心。')}</p>
       <p class="sub">${cuT('Cards appear here the moment something does.', '一旦有事项需要处理，会立即在这里显示。')}</p>
     </section>`;
+    tdLowRotStop();   // no card → no window to roll
     return;
   }
   host.innerHTML = `<div class="td-attn-grid">${cards.join('')}</div>`;
+  // The rows node was just recreated; (re)start the rolling window against it.
+  // No-ops when the pool is short, reduced-motion, or there's no Running-low card.
+  tdLowRotStart();
 }
 
 // ── Running-low stock drawer ────────────────────────────────────────────────

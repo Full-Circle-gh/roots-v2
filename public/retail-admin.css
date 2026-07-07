@@ -7446,6 +7446,10 @@
   .td-attn-ok-row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .td-attn-ok-row .val { margin-left: auto; flex: none; font-size: 13px; color: var(--td-text2); }
   .td-attn-rows { display: grid; gap: 4px; }
+  /* Running-low rolling window: the rows box cross-fades as it pages through the
+     out/low pool (see tdLowRotTick). 220ms matches the JS fade timing. */
+  .td-low-rows { display: grid; gap: 4px; transition: opacity .22s ease; }
+  @media (prefers-reduced-motion: reduce) { .td-low-rows { transition: none; } }
   .td-attn-row {
     display: flex; align-items: baseline; gap: 10px; width: 100%; text-align: left;
     border: 0; background: transparent; cursor: pointer; padding: 4px 8px; margin: 0 -8px;
