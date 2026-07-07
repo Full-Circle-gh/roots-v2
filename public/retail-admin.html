@@ -345,6 +345,40 @@
   #order-drawer .outside-gz-note .btn { background:transparent; border-color:rgba(138,100,37,.4); color:var(--tacet-amber-ink); }
   #order-drawer .outside-gz-note .btn:hover { background:rgba(201,149,74,.14); }
 
+  /* Alipay payment proof (reference/payment-proof-mockup.html, option A):
+     the AI-read facts lead; the raw screenshot demotes to a small tap-to-
+     enlarge thumbnail; the verdict is one calm pill. */
+  #order-drawer .ap-proof .ap-card { border:1px solid var(--line); border-radius:var(--r-xl);
+    background:var(--bg-pane); padding:16px 18px; margin-top:6px; }
+  #order-drawer .ap-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  #order-drawer .ap-pill { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:500;
+    padding:4px 12px; border-radius:999px; line-height:1.3; }
+  #order-drawer .ap-pill svg { width:14px; height:14px; flex:none; }
+  #order-drawer .ap-pill.match    { background:var(--tacet-sage-tint);  color:var(--tacet-sage-ink); }
+  #order-drawer .ap-pill.mismatch { background:var(--tacet-brick-tint); color:var(--tacet-brick); }
+  #order-drawer .ap-pill.unread   { background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
+  #order-drawer .ap-thumb { position:relative; width:52px; height:78px; border-radius:8px; overflow:hidden;
+    border:1px solid var(--line); cursor:pointer; flex:none; }
+  #order-drawer .ap-thumb img { width:100%; height:100%; object-fit:cover; object-position:top center; display:block; }
+  #order-drawer .ap-thumb .ap-exp { position:absolute; right:3px; bottom:3px; width:17px; height:17px;
+    background:rgba(17,26,43,.55); border-radius:5px; display:flex; align-items:center; justify-content:center; }
+  #order-drawer .ap-thumb .ap-exp svg { width:9px; height:9px; color:#fff; }
+  #order-drawer .ap-facts { list-style:none; margin:14px 0 0; padding:0; }
+  #order-drawer .ap-facts li { display:grid; grid-template-columns:110px 1fr; column-gap:12px; align-items:baseline;
+    padding:9px 0; border-top:1px solid var(--line-soft); }
+  #order-drawer .ap-facts li:first-child { border-top:none; }
+  #order-drawer .ap-facts .k { color:var(--text-3); font-size:13.5px; }
+  #order-drawer .ap-facts .v { font-size:15px; font-weight:500; }
+  #order-drawer .ap-facts .v.amt { font-size:19px; font-weight:600; letter-spacing:-.01em;
+    font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+  #order-drawer .ap-facts .v.amt.bad { color:var(--tacet-brick); }
+  #order-drawer .ap-note { display:flex; align-items:center; gap:8px; margin-top:14px; font-size:12.5px;
+    color:var(--tacet-dusk); }
+  #order-drawer .ap-note .ap-dot { width:7px; height:7px; border-radius:50%; background:var(--tacet-dusk);
+    box-shadow:0 0 0 3px var(--tacet-dusk-tint); flex:none; }
+  #order-drawer .ap-reasons { margin-top:12px; font-size:12.5px; color:var(--tacet-brick); line-height:1.5; }
+  #order-drawer .ap-hint { margin-top:12px; font-size:13px; color:var(--tacet-amber-ink); }
+
   /* Brand ETA time field — replaces the raw OS <input type=time>; segmented
      HH:MM + AM/PM toggle (mockup: reference/courier-dispatch-mockup.html). */
   #order-drawer .eta-timefield { display:inline-flex; align-items:center; gap:2px; background:var(--bg-app);

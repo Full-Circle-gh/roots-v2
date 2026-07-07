@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Alipay payment proof — Tacet redesign options</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF; --graphite:#58606E;
+    --cream:#F6F3EC; --elev2:#EFEBE1;
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E;
+    --dusk:#6E67AF; --dusk-tint:#EEEDF6; --dusk-ink:#4E4886;
+    --sage:#A3B49F; --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --amber:#C9954A; --amber-tint:#F7EEDE; --amber-ink:#8A6425;
+    --brick:#B4533E; --brick-tint:#F6E7E3; --brick-ink:#8C3D2D;
+    --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
+    --f:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --serif:'Fraunces',Georgia,serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:28px 28px 80px;
+  }
+  .num{font-variant-numeric:tabular-nums; font-feature-settings:"tnum";}
+
+  .page-head{max-width:1240px; margin:0 auto 8px;}
+  .page-head h1{font-family:var(--serif); font-weight:400; font-size:30px; margin:0 0 6px; letter-spacing:-.01em;}
+  .page-head p{margin:0; color:var(--text-2); font-size:14px; max-width:760px;}
+
+  .grid{ max-width:1240px; margin:28px auto 0; display:grid; grid-template-columns:repeat(3,1fr); gap:28px; align-items:start;}
+  @media (max-width:1080px){ .grid{grid-template-columns:1fr;} }
+
+  .col-h{display:flex; align-items:baseline; gap:10px; margin:0 0 6px;}
+  .col-h .n{font-family:var(--serif); font-size:15px; color:var(--dusk); font-weight:500;}
+  .col-h h2{font-size:15px; font-weight:600; margin:0;}
+  .col-sub{color:var(--text-2); font-size:12.5px; margin:0 0 14px; min-height:32px;}
+
+  /* Card shell mimicking the order-drawer "full" section */
+  .card{ background:var(--pane); border:1px solid var(--line); border-radius:var(--r-xl); padding:18px; }
+  .kicker{font-size:11px; font-weight:600; letter-spacing:.09em; text-transform:uppercase; color:var(--text-3); margin:0 0 12px;}
+
+  /* ── shared bits ── */
+  .pill{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:4px 11px; border-radius:999px; letter-spacing:.01em;}
+  .pill-sage{background:var(--sage-tint); color:var(--sage-ink);}
+  .pill-dusk{background:var(--dusk-tint); color:var(--dusk-ink);}
+  .pill-amber{background:var(--amber-tint); color:var(--amber-ink);}
+  .pill-brick{background:var(--brick-tint); color:var(--brick-ink);}
+  .ico{width:14px; height:14px; flex:none;}
+
+  .facts{list-style:none; margin:0; padding:0;}
+  .facts li{display:flex; justify-content:space-between; align-items:baseline; gap:16px; padding:9px 0; border-bottom:1px solid var(--line-soft);}
+  .facts li:last-child{border-bottom:none;}
+  .facts .k{color:var(--text-2); font-size:13px;}
+  .facts .v{font-weight:500; text-align:right;}
+  .amount{font-weight:600; font-size:24px; letter-spacing:-.01em; line-height:1; font-variant-numeric:tabular-nums; font-feature-settings:"tnum";}
+
+  /* thumbnail — the demoted screenshot */
+  .thumb{position:relative; width:52px; height:78px; border-radius:8px; overflow:hidden; border:1px solid var(--line); cursor:pointer; flex:none; background:#1677FF;}
+  .thumb.lg{width:64px; height:96px;}
+  .thumb .scr{position:absolute; inset:0; background:linear-gradient(180deg,#2b8bff 0%,#4aa0ff 30%,#eaf3ff 75%,#fff 100%);}
+  .thumb .scr::before{content:"✓ ¥199.50"; position:absolute; top:12px; left:0; right:0; text-align:center; color:#fff; font-size:8px; font-weight:600;}
+  .thumb .exp{position:absolute; right:3px; bottom:3px; width:16px; height:16px; background:rgba(17,26,43,.55); border-radius:4px; display:flex; align-items:center; justify-content:center;}
+  .thumb .exp svg{width:9px; height:9px; color:#fff;}
+
+  .btn{font:600 13px var(--f); padding:8px 14px; border-radius:var(--r-md); border:1px solid var(--line); background:var(--pane); color:var(--text-1); cursor:pointer;}
+  .btn:hover{border-color:var(--text-2);}
+  .dot{width:7px; height:7px; border-radius:50%; background:var(--dusk); display:inline-block; box-shadow:0 0 0 3px var(--dusk-tint);}
+
+  .note{max-width:1240px; margin:44px auto 0; padding:18px 20px; background:var(--cream); border:1px solid var(--line); border-radius:var(--r-lg); font-size:13.5px; color:var(--text-2);}
+  .note b{color:var(--text-1);}
+  .states{max-width:1240px; margin:40px auto 0;}
+  .states h3{font-family:var(--serif); font-weight:400; font-size:20px; margin:0 0 4px;}
+  .states p{margin:0 0 18px; color:var(--text-2); font-size:13.5px;}
+  .staterow{display:grid; grid-template-columns:repeat(3,1fr); gap:28px;}
+  @media (max-width:1080px){ .staterow{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Alipay payment proof — three Tacet-native ways to show it</h1>
+  <p>Today it's a raw phone screenshot in a card with a bright-emerald verified band. The screenshot is noise — the AI already read the amount, payee, method and time. Each option leads with that read and demotes the screenshot to a tap-to-enlarge thumbnail. Verification is an automation, so its accent is <b style="color:var(--dusk)">dusk</b>; the clean result is <b style="color:var(--sage-ink)">sage</b>.</p>
+</div>
+
+<div class="grid">
+
+  <!-- OPTION A -->
+  <div>
+    <div class="col-h"><span class="n">A</span><h2>Verified facts, proof tucked away</h2></div>
+    <p class="col-sub">Lead with the extracted facts as a clean list. Sage “Verified” pill up top; screenshot shrinks to a thumbnail on the header row. Most on-brand: shows the read, not the pixels.</p>
+    <div class="card">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:6px;">
+        <div>
+          <p class="kicker" style="margin:0 0 8px;">Alipay payment</p>
+          <span class="pill pill-sage">
+            <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>
+            Verified
+          </span>
+        </div>
+        <div class="thumb" title="Tap to view screenshot"><div class="scr"></div><span class="exp"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2H2v4M10 14h4v-4"/></svg></span></div>
+      </div>
+      <ul class="facts" style="margin-top:10px;">
+        <li><span class="k">Amount</span><span class="v amount num">¥199.50</span></li>
+        <li><span class="k">Paid to</span><span class="v">Govegan 哈素萌</span></li>
+        <li><span class="k">Method</span><span class="v">Balance</span></li>
+        <li><span class="k">Paid at</span><span class="v num">Jul 7, 11:16</span></li>
+      </ul>
+      <div style="display:flex; align-items:center; gap:7px; margin-top:12px; color:var(--dusk-ink); font-size:12px;">
+        <span class="dot"></span> Read &amp; matched automatically
+      </div>
+    </div>
+  </div>
+
+  <!-- OPTION B -->
+  <div>
+    <div class="col-h"><span class="n">B</span><h2>Amount hero, dusk auto strip</h2></div>
+    <p class="col-sub">The matched amount is the hero in Fraunces. A quiet dusk strip names the automation (“Read by Tacet”). Facts sit compact below. Feels premium and calm.</p>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div style="display:flex; align-items:center; gap:8px; padding:10px 16px; background:var(--dusk-tint); color:var(--dusk-ink); font-size:12px; font-weight:600;">
+        <span class="dot"></span> Read by Tacet · matched
+        <span style="margin-left:auto; font-weight:500; color:var(--dusk);">Alipay</span>
+      </div>
+      <div style="padding:18px 16px 16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:14px;">
+          <div>
+            <div style="font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:var(--text-3); margin-bottom:4px;">Amount received</div>
+            <div class="amount num" style="font-size:32px;">¥199.50</div>
+          </div>
+          <div class="thumb lg" title="Tap to view screenshot"><div class="scr"></div><span class="exp"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2H2v4M10 14h4v-4"/></svg></span></div>
+        </div>
+        <ul class="facts" style="margin-top:14px; border-top:1px solid var(--line-soft); padding-top:4px;">
+          <li><span class="k">Paid to</span><span class="v">Govegan 哈素萌</span></li>
+          <li><span class="k">Method</span><span class="v">Balance</span></li>
+          <li><span class="k">Paid at</span><span class="v num">Jul 7, 11:16</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- OPTION C -->
+  <div>
+    <div class="col-h"><span class="n">C</span><h2>One quiet line</h2></div>
+    <p class="col-sub">Minimal. A single row: sage tick, amount, method — proof collapsed behind a disclosure. For staff who trust the auto-read and only expand on doubt. Fewest pixels.</p>
+    <div class="card">
+      <p class="kicker" style="margin:0 0 12px;">Alipay payment</p>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <span class="pill pill-sage">
+          <svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>
+          Verified
+        </span>
+        <span class="amount num" style="font-size:22px;">¥199.50</span>
+        <span style="color:var(--text-2); font-size:13px; margin-left:auto;">Balance · 11:16</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin-top:14px; padding-top:12px; border-top:1px solid var(--line-soft);">
+        <div class="thumb" style="width:36px; height:54px;"><div class="scr"></div></div>
+        <button class="btn" style="padding:6px 12px;">View screenshot</button>
+        <span style="margin-left:auto; display:flex; align-items:center; gap:6px; color:var(--dusk-ink); font-size:12px;"><span class="dot"></span>Auto</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<div class="note">
+  <b>Why this reads as Tacet:</b> the emerald <span class="num">#d1fae5</span> band → sage tint; the emoji ✓ → a monochrome stroke tick; the dominant screenshot → a demoted thumbnail; and the “auto” cue uses the breathing dusk dot — the one place dusk is meant to appear. All three keep the amount as the single loud number (tabular Fraunces), everything else quiet.
+</div>
+
+<!-- Other states, using Option A's shape -->
+<div class="states">
+  <h3>The other two verdicts (shown in Option A's shape)</h3>
+  <p>Verification isn't always a clean match — the redesign has to carry mismatch and unreadable too, in amber and brick, never pure red.</p>
+  <div class="staterow">
+
+    <!-- match, repeated small -->
+    <div class="card">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+        <div><p class="kicker" style="margin:0 0 8px;">Alipay payment</p>
+          <span class="pill pill-sage"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>Verified · auto-marked paid</span></div>
+        <div class="thumb"><div class="scr"></div></div>
+      </div>
+      <ul class="facts" style="margin-top:10px;">
+        <li><span class="k">Amount</span><span class="v amount num">¥199.50</span></li>
+        <li><span class="k">Paid at</span><span class="v num">Jul 7, 11:16</span></li>
+      </ul>
+    </div>
+
+    <!-- mismatch -->
+    <div class="card" style="border-color:#E7C9C0;">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+        <div><p class="kicker" style="margin:0 0 8px;">Alipay payment</p>
+          <span class="pill pill-brick"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4.5v4M8 11.2v.2"/><path d="M8 2l6 11H2z"/></svg>Doesn’t match — check first</span></div>
+        <div class="thumb"><div class="scr"></div></div>
+      </div>
+      <ul class="facts" style="margin-top:10px;">
+        <li><span class="k">Read amount</span><span class="v amount num" style="color:var(--brick-ink);">¥19.95</span></li>
+        <li><span class="k">Order total</span><span class="v num">¥199.50</span></li>
+      </ul>
+      <div style="margin-top:10px; font-size:12px; color:var(--brick-ink);">Amount is short by ¥179.55 · verify before marking paid.</div>
+    </div>
+
+    <!-- unreadable -->
+    <div class="card">
+      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+        <div><p class="kicker" style="margin:0 0 8px;">Alipay payment</p>
+          <span class="pill pill-amber"><svg class="ico" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 5.5v3M8 10.8v.2"/></svg>Couldn’t read it</span></div>
+        <div class="thumb"><div class="scr"></div></div>
+      </div>
+      <p style="margin:12px 0 0; font-size:13px; color:var(--text-2);">The screenshot couldn’t be read automatically — open it and verify by hand.</p>
+      <button class="btn" style="margin-top:12px;">Try reading again</button>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

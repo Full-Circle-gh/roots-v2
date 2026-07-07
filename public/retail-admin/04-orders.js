@@ -292,36 +292,78 @@ function drawerRefundBanner(o) {
     </div>`;
 }
 
-// Vision-AI verdict banner for a manual-Alipay payment screenshot. Green when
-// the OCR read matched (amount/payee/time/txn all check out), red on mismatch
-// (with reasons), grey when the read failed. Auto-flip mode turns a green match
-// straight to paid; assisted mode just helps staff decide the Mark-paid tap.
-function alipayOcrBanner(o) {
-  const v = o.alipay_ocr_verdict;
-  if (!v) return '';
+// Alipay payment proof — Tacet card (reference/payment-proof-mockup.html, option A).
+// The customer's raw screenshot is noise: the vision-AI already read amount /
+// payee / time / txn from it. So lead with that read as a facts list, demote
+// the screenshot to a tap-to-enlarge thumbnail, and carry the verdict in one
+// calm pill — sage when it matched, brick on mismatch (never pure red), amber
+// when the read couldn't complete. The "auto" footnote uses the breathing dusk
+// dot: the AI's colour, the one place it's meant to appear.
+const AP_ICON = {
+  // Monochrome stroke icons (brand rule: line SVG, never emoji).
+  check: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.5l3 3 6-7"/></svg>',
+  warn:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2l6 11H2z"/><path d="M8 6.4v3.1M8 11.5v.2"/></svg>',
+  info:  '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6"/><path d="M8 5.3v.2M8 7.6v3"/></svg>',
+  expand:'<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2H2v4M10 14h4v-4"/></svg>',
+};
+
+function renderAlipayProof(o) {
+  if (!o.alipay_proof_image) return '';
   let d = {}; try { d = o.alipay_ocr_json ? JSON.parse(o.alipay_ocr_json) : {}; } catch {}
+  const v = o.alipay_ocr_verdict;
   const reasons = Array.isArray(d.reasons) ? d.reasons : [];
+  const paidAt = d.paid_at || d.raw_time_text || o.alipay_proof_at || '';
+
+  // What the AI read, one row each — only the fields it actually found.
   const facts = [];
-  if (d.amount != null) facts.push('¥' + Number(d.amount).toFixed(2));
-  if (d.payee) facts.push(escapeHtml(d.payee));
-  if (d.paid_at || d.raw_time_text) facts.push(escapeHtml(d.paid_at || d.raw_time_text));
-  const factStr = facts.join(' · ');
+  if (d.amount != null) facts.push(`<li><span class="k">${cuT('Amount', '金额')}</span><span class="v amt${v === 'mismatch' ? ' bad' : ''}">¥${Number(d.amount).toFixed(2)}</span></li>`);
+  if (d.payee) facts.push(`<li><span class="k">${cuT('Paid to', '收款方')}</span><span class="v" data-no-i18n>${escapeHtml(d.payee)}</span></li>`);
+  if (paidAt) facts.push(`<li><span class="k">${cuT('Paid at', '付款时间')}</span><span class="v" data-no-i18n>${escapeHtml(paidAt)}</span></li>`);
+  if (d.txn_id) facts.push(`<li><span class="k">${cuT('Txn', '流水号')}</span><span class="v">${copyChip(d.txn_id, 'Txn ID')}</span></li>`);
+
+  // One pill for the verdict.
+  let pill, footer = '';
   if (v === 'match') {
     const paid = o.status !== 'pending_payment';
-    return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#d1fae5; color:#065f46; font-weight:700; font-size:12px; line-height:1.5;">
-      ✓ ${cuT('Auto-verified', '自动核对通过')}${factStr ? ' — ' + factStr : ''}${paid ? ` · ${cuT('auto-marked paid', '已自动标记付款')}` : ` · ${cuT('looks good', '可放心标记付款')}`}</div>`;
+    pill = `<span class="ap-pill match">${AP_ICON.check}${cuT('Verified', '已核对')}${paid ? ' · ' + cuT('auto-marked paid', '已自动标记付款') : ''}</span>`;
+    footer = `<div class="ap-note"><span class="ap-dot"></span>${cuT('Read & matched automatically', '已自动识别并核对')}</div>`;
+  } else if (v === 'mismatch') {
+    pill = `<span class="ap-pill mismatch">${AP_ICON.warn}${cuT("Doesn't match — check first", '不一致 · 请先核实')}</span>`;
+    if (reasons.length) footer = `<div class="ap-reasons">${reasons.map(escapeHtml).join('；')}</div>`;
+  } else if (v === 'error') {
+    pill = `<span class="ap-pill unread">${AP_ICON.info}${cuT("Couldn't read it", '无法识别')}</span>`;
+    footer = `<div style="margin-top:12px;"><button class="btn btn-sm" onclick="rerunAlipayOcr(${o.id}, this)">${cuT('Try reading again', '重新识别')}</button></div>`;
+  } else {
+    // Proof uploaded but the AI read never ran (OCR off / not configured).
+    pill = `<span class="ap-pill unread">${AP_ICON.info}${cuT('Screenshot on file — verify by hand', '已上传截图 · 请人工核对')}</span>`;
   }
-  if (v === 'mismatch') {
-    return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:#fee2e2; color:#991b1b; font-weight:700; font-size:12px; line-height:1.5;">
-      ⚠ ${cuT('Does not match — check before paying', '不一致 · 请核实后再付款')}${factStr ? '<br><span style="font-weight:600">' + factStr + '</span>' : ''}${reasons.length ? '<br><span style="font-weight:600">' + reasons.map(escapeHtml).join('；') + '</span>' : ''}</div>`;
-  }
-  // verdict 'error' (or unknown): the read couldn't complete — usually a
-  // momentary network blip reaching the model. Offer a one-tap re-run so staff
-  // don't have to ask the customer to re-upload a perfectly good screenshot.
-  return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px; background:var(--bg-elev-2); color:var(--text-2); font-weight:600; font-size:12px; line-height:1.5;">
-    ${cuT('Could not read the screenshot automatically — verify manually.', '无法自动识别截图 · 请人工核对。')}
-    <div style="margin-top:6px;"><button class="btn btn-sm" onclick="rerunAlipayOcr(${o.id}, this)">${cuT('Re-run OCR', '重新识别')}</button></div>
+
+  const hint = o.status === 'pending_payment'
+    ? `<div class="ap-hint">${cuT('Verify the amount matches, then Mark paid below.', '核对金额一致后,点击下方“标记已付款”。')}</div>`
+    : '';
+
+  return `<div class="full ap-proof">
+    <div class="kicker">Alipay payment · 支付宝付款</div>
+    <div class="ap-card">
+      <div class="ap-head">
+        <div>${pill}</div>
+        <div class="ap-thumb" title="${cuT('View screenshot', '查看截图')}" onclick="zoomAlipayProof(this)">
+          <img src="${o.alipay_proof_image}" alt="Alipay payment screenshot">
+          <span class="ap-exp">${AP_ICON.expand}</span>
+        </div>
+      </div>
+      ${facts.length ? `<ul class="ap-facts">${facts.join('')}</ul>` : ''}
+      ${footer}
+      ${hint}
+    </div>
   </div>`;
+}
+
+// Open the stored proof full-size in a new tab (the thumbnail is deliberately small).
+function zoomAlipayProof(el) {
+  const im = el.querySelector('img'); if (!im) return;
+  const w = window.open();
+  if (w) w.document.write('<img src="' + im.src + '" style="max-width:100%">');
 }
 
 // Retry the Vision-AI read on the stored Alipay proof (after a transient read
@@ -3621,12 +3663,7 @@ function renderOpenOrder(o) {
               ${fulfillmentShortNote(o)}
             </div>` : ''}
           </div>
-          ${o.alipay_proof_image ? `<div class="full">
-            <div class="kicker">Alipay payment proof · 支付宝付款截图${o.alipay_proof_at ? ' · ' + escapeHtml(o.alipay_proof_at) : ''}</div>
-            <img src="${o.alipay_proof_image}" alt="Alipay payment proof" style="max-width: 220px; max-height: 300px; border: 1px solid var(--line); border-radius: 8px; margin-top: 6px; display: block;" onclick="(function(s){var w=window.open();if(w)w.document.write('<img src=\\''+s+'\\' style=\\'max-width:100%\\'>');})(this.src)">
-            ${alipayOcrBanner(o)}
-            ${o.status === 'pending_payment' ? `<div class="sub" style="margin-top: 6px; color: var(--brass); font-weight: 700;">${cuT('Verify the amount matches, then Mark paid below.', '核对金额一致后,点击下方“标记已付款”。')}</div>` : ''}
-          </div>` : ''}
+          ${renderAlipayProof(o)}
           ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
