@@ -533,6 +533,11 @@
      follow the rail's tighter 8px padding. */
   body.nav-collapsed .nav-brand { justify-content: center; padding: 0; margin: -8px -8px 6px; }
   body.nav-collapsed .nav-brand .brand-name { display: none; }
+  /* Collapsed, the rail head shrinks to 62px and its mark ends right on the seam
+     — exactly where the fold dot's expand arrow sits — so the arrow would cover
+     the wordmark. Hide the mark while folded; the 56px head + its bottom border
+     stay, so the y:56 divider is unbroken and only the arrow occupies the corner. */
+  body.nav-collapsed .nav-brand .brand-mark { display: none; }
   body.nav-collapsed .tabs button {
     font-size: 0; gap: 0; justify-content: center;
     padding-left: 0; padding-right: 0;
@@ -8182,7 +8187,7 @@
      inside #tab-sales. Scoped to .mc-wiz so the other credential pages that
      reuse the base .mc-*/.ig-wiz classes aren't half-restyled. Every "where do
      I find this?" line moved off the page into the .mc-info hover tooltip. */
-  #tab-sales .mc-wiz {
+  :is(#tab-sales, .cfg-host) .mc-wiz {
     background: var(--td-surface); border: 1px solid var(--td-border);
     border-radius: 14px; padding: 24px; margin: 4px 0 16px; color: var(--td-text);
     box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
@@ -8205,99 +8210,99 @@
     --brass-hi: var(--td-amber);
     --danger: var(--td-brick-ink);
   }
-  #tab-sales .mc-wiz .mc-head { align-items: center; }
-  #tab-sales .mc-wiz .mc-title { font-size: 18px; font-weight: 500; letter-spacing: -.01em; color: var(--td-text); }
-  #tab-sales .mc-wiz .mc-chips { margin: 16px 0 4px; }
-  #tab-sales .mc-wiz .mc-chip {
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-head { align-items: center; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-title { font-size: 18px; font-weight: 500; letter-spacing: -.01em; color: var(--td-text); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-chips { margin: 16px 0 4px; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-chip {
     border-color: var(--td-border); background: var(--td-raised); color: var(--td-text2);
     font-weight: 500;
   }
   /* "ready" chips = all-clear = sage (status colour, never decoration). */
-  #tab-sales .mc-wiz .mc-chip.on {
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-chip.on {
     background: var(--td-sage-tint); color: var(--td-sage-ink); border-color: transparent;
   }
-  #tab-sales .mc-wiz .mc-sec { border-top-color: var(--td-border); margin-top: 20px; padding-top: 20px; }
-  #tab-sales .mc-wiz .mc-sec-head b { color: var(--td-text); font-size: 14px; font-weight: 500; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-sec { border-top-color: var(--td-border); margin-top: 20px; padding-top: 20px; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-sec-head b { color: var(--td-text); font-size: 14px; font-weight: 500; }
   /* Section icon: monochrome line-work on a raised tile — no brand-colour chip. */
-  #tab-sales .mc-wiz .mc-ico { background: var(--td-raised); color: var(--td-text); border-radius: 10px; }
-  #tab-sales .mc-wiz .field-label {
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-ico { background: var(--td-raised); color: var(--td-text); border-radius: 10px; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .field-label {
     color: var(--td-text); font-weight: 500; font-size: 13px;
     display: inline-flex; align-items: center;
     margin-bottom: 6px;
   }
-  #tab-sales .mc-wiz .mc-opt { border-color: var(--td-border); color: var(--td-text2); font-weight: 500; }
-  #tab-sales .mc-wiz input, #tab-sales .mc-wiz textarea {
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-opt { border-color: var(--td-border); color: var(--td-text2); font-weight: 500; }
+  :is(#tab-sales, .cfg-host) .mc-wiz input, :is(#tab-sales, .cfg-host) .mc-wiz textarea {
     background: var(--td-surface); border: 1px solid var(--td-border); color: var(--td-text);
     border-radius: 8px; padding: 9px 12px; font-size: 14px; width: 100%;
     transition: border-color .2s cubic-bezier(.16,1,.3,1);
   }
-  #tab-sales .mc-wiz input::placeholder, #tab-sales .mc-wiz textarea::placeholder { color: var(--td-text2); opacity: .7; }
-  #tab-sales .mc-wiz input:focus, #tab-sales .mc-wiz textarea:focus { outline: none; border-color: var(--td-dusk); }
-  #tab-sales .mc-wiz input[readonly] { background: var(--td-raised); color: var(--td-text2); }
-  #tab-sales .mc-wiz .mc-saved { background: var(--td-raised); border-color: var(--td-border); }
-  #tab-sales .mc-wiz .mc-saved > svg { color: var(--td-sage-ink); }
-  #tab-sales .mc-wiz .mc-saved .tx { color: var(--td-text); }
-  #tab-sales .mc-wiz .mc-saved .dots { color: var(--td-text2); }
-  #tab-sales .mc-wiz .mc-keep { color: var(--td-text2); }
-  #tab-sales .mc-wiz .mc-keep:hover { color: var(--td-text); }
-  #tab-sales .mc-wiz .mc-foot { border-top-color: var(--td-border); margin-top: 20px; padding-top: 16px; }
-  #tab-sales .mc-wiz .mc-note { color: var(--td-text2); }
-  #tab-sales .mc-wiz .btn-icon svg { width: 15px; height: 15px; }
-  #tab-sales .mc-wiz .helplink {
+  :is(#tab-sales, .cfg-host) .mc-wiz input::placeholder, :is(#tab-sales, .cfg-host) .mc-wiz textarea::placeholder { color: var(--td-text2); opacity: .7; }
+  :is(#tab-sales, .cfg-host) .mc-wiz input:focus, :is(#tab-sales, .cfg-host) .mc-wiz textarea:focus { outline: none; border-color: var(--td-dusk); }
+  :is(#tab-sales, .cfg-host) .mc-wiz input[readonly] { background: var(--td-raised); color: var(--td-text2); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-saved { background: var(--td-raised); border-color: var(--td-border); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-saved > svg { color: var(--td-sage-ink); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-saved .tx { color: var(--td-text); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-saved .dots { color: var(--td-text2); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-keep { color: var(--td-text2); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-keep:hover { color: var(--td-text); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-foot { border-top-color: var(--td-border); margin-top: 20px; padding-top: 16px; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-note { color: var(--td-text2); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .btn-icon svg { width: 15px; height: 15px; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .helplink {
     display: inline-flex; align-items: center; gap: 6px;
     background: none; border: 0; cursor: pointer; padding: 0;
     color: var(--td-text2); font: 500 12.5px var(--f-sans);
   }
-  #tab-sales .mc-wiz .helplink:hover { color: var(--td-text); }
-  #tab-sales .mc-wiz .helplink svg { width: 14px; height: 14px; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .helplink:hover { color: var(--td-text); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .helplink svg { width: 14px; height: 14px; }
   /* The footer's main action is the page's one Dusk CTA (Save & verify / Save
      changes / Next). Inline strong actions (Add domain, Check DNS) stay Ink so
      Dusk keeps its "this is THE action" meaning. */
-  #tab-sales .mc-wiz .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
-  #tab-sales .mc-wiz .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .9; }
-  #tab-sales .mc-wiz #mc_save,
-  #tab-sales .mc-wiz #wc_save,
-  #tab-sales .mc-wiz #mw_next { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
-  #tab-sales .mc-wiz #mc_save:hover,
-  #tab-sales .mc-wiz #wc_save:hover,
-  #tab-sales .mc-wiz #mw_next:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
-  #tab-sales .mc-wiz #mc_save.mc-ok { background: var(--td-sage); border-color: var(--td-sage); color: #fff; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .9; }
+  :is(#tab-sales, .cfg-host) .mc-wiz #mc_save,
+  :is(#tab-sales, .cfg-host) .mc-wiz #wc_save,
+  :is(#tab-sales, .cfg-host) .mc-wiz #mw_next { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  :is(#tab-sales, .cfg-host) .mc-wiz #mc_save:hover,
+  :is(#tab-sales, .cfg-host) .mc-wiz #wc_save:hover,
+  :is(#tab-sales, .cfg-host) .mc-wiz #mw_next:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
+  :is(#tab-sales, .cfg-host) .mc-wiz #mc_save.mc-ok { background: var(--td-sage); border-color: var(--td-sage); color: #fff; }
 
   /* ── Setup wizard (mw-*) — Tacet, beyond the token remap ──
      The step instructions (mc-purpose + mw-help lists) stay: this is an
      onboarding flow and the how-to IS the feature — just reskinned. */
-  #tab-sales .mc-wiz .mc-subtitle { color: var(--td-text2); }
-  #tab-sales .mc-wiz .mc-purpose { color: var(--td-text2); }
-  #tab-sales .mc-wiz .mw-step.now { border-color: var(--td-border); color: var(--td-text); }
-  #tab-sales .mc-wiz .mw-step.now .n { background: var(--td-text); color: var(--td-paper); }
-  #tab-sales .mc-wiz .mw-step.done { color: var(--td-sage-ink); border-color: transparent; }
-  #tab-sales .mc-wiz .mw-step.done .n { background: var(--td-sage); color: #fff; }
-  #tab-sales .mc-wiz .mw-help li { color: var(--td-text); }
-  #tab-sales .mc-wiz .mw-done .big { background: var(--td-sage-tint); color: var(--td-sage-ink); }
-  #tab-sales .mc-wiz .mw-done .big.later { background: var(--td-amber-tint); color: var(--td-amber-ink); }
-  #tab-sales .mc-wiz .mc-chip.later { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: transparent; }
-  #tab-sales .mc-wiz .mw-todo .t > svg { color: var(--td-amber-ink); }
-  #tab-sales .mc-wiz .mw-later:hover { color: var(--td-amber-ink); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-subtitle { color: var(--td-text2); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-purpose { color: var(--td-text2); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-step.now { border-color: var(--td-border); color: var(--td-text); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-step.now .n { background: var(--td-text); color: var(--td-paper); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-step.done { color: var(--td-sage-ink); border-color: transparent; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-step.done .n { background: var(--td-sage); color: #fff; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-help li { color: var(--td-text); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-done .big { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-done .big.later { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mc-chip.later { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: transparent; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-todo .t > svg { color: var(--td-amber-ink); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .mw-later:hover { color: var(--td-amber-ink); }
 
   /* ── Web store config (wc-*) — Tacet, beyond the token remap ── */
   /* Live address dot = sage; reserved = muted. */
-  #tab-sales .mc-wiz .wc-addr .live { background: var(--td-sage); box-shadow: 0 0 0 4px var(--td-sage-tint); }
-  #tab-sales .mc-wiz .wc-addr .live.off { background: var(--td-text2); box-shadow: 0 0 0 4px var(--td-raised); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-addr .live { background: var(--td-sage); box-shadow: 0 0 0 4px var(--td-sage-tint); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-addr .live.off { background: var(--td-text2); box-shadow: 0 0 0 4px var(--td-raised); }
   /* Method / payment icons: monochrome line-work on a raised tile. */
-  #tab-sales .mc-wiz .wc-mico { background: var(--td-raised); border-color: var(--td-border); color: var(--td-text); }
-  #tab-sales .mc-wiz .wc-mstat.ok { color: var(--td-sage-ink); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-mico { background: var(--td-raised); border-color: var(--td-border); color: var(--td-text); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-mstat.ok { color: var(--td-sage-ink); }
   /* Sign-in toggles are Ink, matching the channel-card toggles (green is not a
      control colour in Tacet). */
-  #tab-sales .mc-wiz .wc-tog { background: var(--td-border); }
-  #tab-sales .mc-wiz .wc-tog .knob { background: var(--td-surface); }
-  #tab-sales .mc-wiz .wc-tog.on { background: var(--td-text); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-tog { background: var(--td-border); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-tog .knob { background: var(--td-surface); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-tog.on { background: var(--td-text); }
   /* Domain DNS stepper: done = sage, waiting = amber. */
-  #tab-sales .mc-wiz .wc-dstep.done .num { background: var(--td-sage); border-color: var(--td-sage); color: #fff; }
-  #tab-sales .mc-wiz .wc-dstep.now .num { background: var(--td-amber); border-color: var(--td-amber); color: #fff; }
-  #tab-sales .mc-wiz .wc-dstep.done .stat { color: var(--td-sage-ink); }
-  #tab-sales .mc-wiz .wc-dstep.now .stat { color: var(--td-amber-ink); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-dstep.done .num { background: var(--td-sage); border-color: var(--td-sage); color: #fff; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-dstep.now .num { background: var(--td-amber); border-color: var(--td-amber); color: #fff; }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-dstep.done .stat { color: var(--td-sage-ink); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-dstep.now .stat { color: var(--td-amber-ink); }
   /* Inputs focus Dusk (the Tacet input accent), not brass. */
-  #tab-sales .mc-wiz .wc-di input:focus { border-color: var(--td-dusk); box-shadow: 0 0 0 3px var(--td-dusk-tint); }
+  :is(#tab-sales, .cfg-host) .mc-wiz .wc-di input:focus { border-color: var(--td-dusk); box-shadow: 0 0 0 3px var(--td-dusk-tint); }
 
   /* Info dot + hover tooltip. The bubble inverts against the page — Ink-on-Paper
      in light, Paper-on-Ink in dark — so it reads in either theme. Keyboard-
