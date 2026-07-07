@@ -337,13 +337,20 @@
     position: fixed; inset: 0; z-index: 9000;
     background: var(--bg-overlay);
     display: flex; align-items: flex-start; justify-content: center;
-    padding: 12vh 16px 16px;
+    padding: 7vh 16px 24px;
     animation: gsearchBackdrop 350ms cubic-bezier(.16, 1, .3, 1);
+    /* Re-point this panel off the leftover Full Circle Tea green onto Tacet
+       Amber — the same "here" hue the rail's active row already uses. Scoped
+       here so every var(--accent)/var(--ring) inside the palette (focus ring,
+       active-row icon, jump flash) migrates in one place; the rest of the
+       legacy chrome keeps its own --accent untouched. */
+    --accent: var(--td-amber);
+    --ring: rgba(201, 149, 74, .26);
   }
   @keyframes gsearchBackdrop { from { opacity: 0; } to { opacity: 1; } }
   .gsearch-overlay[hidden] { display: none; }
   .gsearch-box {
-    width: 100%; max-width: 640px; background: var(--bg-pane);
+    width: 100%; max-width: 680px; background: var(--bg-pane);
     border: 1px solid var(--line); border-radius: 14px;
     box-shadow: 0 20px 56px rgba(0, 0, 0, .28);
     overflow: hidden; display: flex; flex-direction: column;
@@ -354,8 +361,8 @@
   /* Search field — a real Tacet input: 1px border, 10r, focus = accent
      border + a soft tea ring (a tint, not a neon glow). */
   .gsearch-inputrow {
-    display: flex; align-items: center; gap: 10px;
-    margin: 14px; padding: 12px 14px;
+    display: flex; align-items: center; gap: 12px;
+    margin: 16px; padding: 15px 16px;
     border: 1px solid var(--line); border-radius: 10px;
     background: var(--bg-input); color: var(--text-3);
     transition: border-color 200ms cubic-bezier(.16, 1, .3, 1),
@@ -367,26 +374,29 @@
   }
   #gsearch-input {
     flex: 1; border: none; background: transparent; outline: none;
-    font-size: 16px; color: var(--text-1); font-family: inherit;
+    font-size: 17px; color: var(--text-1); font-family: inherit;
   }
   #gsearch-input::placeholder { color: var(--text-3); }
   .gsearch-esc {
     font-size: 10px; font-weight: 600; letter-spacing: .04em; color: var(--text-3);
     border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px;
   }
+  /* Tall enough that the full page/settings list shows without a scrollbar on
+     a normal window; still caps on short viewports so the panel can't overrun
+     the screen. */
   .gsearch-results {
-    max-height: 52vh; overflow-y: auto; padding: 4px 8px 8px;
+    max-height: 72vh; overflow-y: auto; padding: 6px 10px 12px;
     border-top: 1px solid var(--line);
   }
   .gsearch-group-head {
     font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--text-3); padding: 14px 10px 6px;
+    color: var(--text-3); padding: 16px 12px 6px;
   }
   .gsearch-item {
-    display: flex; align-items: center; gap: 13px; width: 100%;
-    padding: 10px; border-radius: 8px; cursor: pointer;
+    display: flex; align-items: center; gap: 14px; width: 100%;
+    padding: 12px; border-radius: 8px; cursor: pointer;
     border: none; background: transparent; text-align: left; color: var(--text-1);
-    font-family: inherit; font-size: 14px;
+    font-family: inherit; font-size: 14.5px;
     transition: background 160ms cubic-bezier(.16, 1, .3, 1);
   }
   .gsearch-item .gs-ico { color: var(--text-3); flex: 0 0 auto; display: inline-flex; }
@@ -8329,6 +8339,29 @@
   :is(#tab-sales, .cfg-host) .mc-wiz .wc-dstep.now .stat { color: var(--td-amber-ink); }
   /* Inputs focus Dusk (the Tacet input accent), not brass. */
   :is(#tab-sales, .cfg-host) .mc-wiz .wc-di input:focus { border-color: var(--td-dusk); box-shadow: 0 0 0 3px var(--td-dusk-tint); }
+
+  /* ── Two-column, no-scroll layout for config panels in the overlay ──
+     The sections (.mc-sec) flow into two balanced columns (multicol); chips +
+     footer span full width; each section becomes its own card. :has(> .mc-sec)
+     targets the three config panels (mini/web/meituan — mini/web are .ig-wiz
+     .mc-wiz, meituan is .ig-wiz) but NOT the Add-location form (.ig-wiz-grid, no
+     .mc-sec). #cfg-host (id) keeps these above the :is() skin; overlay-only so
+     the inline in-tab config keeps its single stacked column. Falls back to one
+     column where :has()/multicol isn't supported. */
+  #cfg-host > .ig-wiz:has(> .mc-sec) {
+    max-width: 1120px; margin: 0 auto;
+    background: transparent; border: none; box-shadow: none; padding: 0;
+    columns: 2; column-gap: 18px;
+  }
+  #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-chips,
+  #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-foot { column-span: all; }
+  #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-chips { margin: 0 0 8px; }
+  #cfg-host > .ig-wiz:has(> .mc-sec) > .mc-sec {
+    break-inside: avoid;
+    margin: 0 0 16px; padding: 16px 18px;
+    border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface);
+  }
+  @media (max-width: 760px) { #cfg-host > .ig-wiz:has(> .mc-sec) { columns: 1; } }
 
   /* Info dot + hover tooltip. The bubble inverts against the page — Ink-on-Paper
      in light, Paper-on-Ink in dark — so it reads in either theme. Keyboard-
