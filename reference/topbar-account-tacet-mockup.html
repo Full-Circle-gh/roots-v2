@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-inbox="amber" data-sound="menu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tacet — top bar + account menu redesign</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET TOKENS (from tacet-tokens.css v1.0) — light + dark
+   ============================================================ */
+:root{
+  --ink:#111A2B; --paper:#FBF9F4; --graphite:#58606E;
+  --dusk:#6E67AF; --sage:#A3B49F; --amber:#C9954A; --brick:#B4533E;
+  --cream:#F6F3EC; --border:#E4E0D5;
+  --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC; --amber-tint:#F7EEDE; --brick-tint:#F6E7E3;
+
+  --bg:var(--paper); --surface:#FFFFFF; --raised:var(--cream);
+  --text:var(--ink); --text-2:var(--graphite);
+  --line:var(--border);
+  --shadow-soft:0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.06);
+
+  --font:"Inter",-apple-system,Arial,sans-serif;
+  --display:"Fraunces",Georgia,serif;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --dur:200ms;
+}
+[data-theme="dark"]{
+  --bg:var(--ink); --surface:#18233A; --raised:#1E2A44;
+  --text:var(--paper); --text-2:#9AA3B2; --line:#2A3550;
+  --dusk-tint:#262A4A; --sage-tint:#1E2C26; --amber-tint:#33290F; --brick-tint:#351B14;
+  --cream:#1E2A44;
+  --shadow-soft:0 1px 2px rgba(0,0,0,.3), 0 8px 28px rgba(0,0,0,.35);
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:var(--font); font-size:15px; color:var(--text);
+  background:var(--bg); min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+  transition:background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+/* ============================================================
+   TOP BAR
+   ============================================================ */
+.topbar{
+  height:60px; background:var(--surface);
+  border-bottom:1px solid var(--line);
+  display:flex; align-items:center; gap:24px;
+  padding:0 28px; position:sticky; top:0; z-index:10;
+}
+/* Wordmark — waveform settling to a flat line + the ONE Dusk dot (breathes
+   when an automation is live). This dot is the only Dusk on the whole bar. */
+.brand{display:flex; align-items:center; gap:11px; color:var(--text)}
+.brand-mark svg{width:52px; height:17px; display:block}
+.brand-mark .wave{stroke:var(--text)}
+.brand-name{
+  font-family:var(--display); font-weight:300; font-size:19px;
+  letter-spacing:.20em; color:var(--text);
+}
+.grow{flex:1}
+
+/* Search — neutral white pill, never Dusk. Ctrl K in a quiet cream chip. */
+.gsearch{
+  display:inline-flex; align-items:center; gap:9px; cursor:pointer;
+  height:38px; padding:0 12px 0 13px; border-radius:8px;
+  border:1px solid var(--line); background:var(--surface); color:var(--text-2);
+  font-size:14px; transition:border-color var(--dur) var(--ease);
+}
+.gsearch:hover{border-color:var(--text-2)}
+.gsearch .lbl{font-weight:500}
+.gsearch .kbd{
+  font-size:11px; font-weight:500; letter-spacing:.02em; color:var(--text-2);
+  border:1px solid var(--line); border-radius:5px; padding:2px 6px;
+  background:var(--raised);
+}
+
+/* Icon cluster */
+.cluster{display:flex; align-items:center; gap:2px}
+.ico{
+  position:relative; width:38px; height:38px; border:0; background:transparent;
+  cursor:pointer; border-radius:8px; color:var(--text-2);
+  display:inline-flex; align-items:center; justify-content:center;
+  transition:background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+.ico:hover{background:var(--raised); color:var(--text)}
+.ico svg{width:19px; height:19px}
+
+/* Unseen marker — NEVER red. Three treatments the merchant picks between. */
+.pip{position:absolute; top:8px; right:8px; width:7px; height:7px; border-radius:50%;
+  box-shadow:0 0 0 2px var(--surface);}
+[data-inbox="ink"]  .pip{background:var(--ink)}
+[data-theme="dark"][data-inbox="ink"] .pip{background:var(--paper)}
+[data-inbox="amber"] .pip{background:var(--amber)}
+[data-inbox="none"] .pip{display:none}
+
+/* Sound in chrome (only when data-sound="chrome") */
+.sound{display:none}
+[data-sound="chrome"] .sound{display:inline-flex}
+
+/* Avatar — Ink circle, Paper initial. No green. */
+.acctwrap{position:relative}
+.avatar{
+  width:34px; height:34px; border-radius:50%; border:0; cursor:pointer; padding:0;
+  background:var(--ink); color:var(--paper);
+  display:inline-flex; align-items:center; justify-content:center;
+  font-weight:500; font-size:14px; letter-spacing:.02em;
+  box-shadow:0 0 0 1px var(--line);
+  transition:box-shadow var(--dur) var(--ease);
+}
+[data-theme="dark"] .avatar{background:var(--paper); color:var(--ink)}
+.avatar:hover,.avatar[aria-expanded="true"]{box-shadow:0 0 0 2px var(--dusk)}
+
+/* ============================================================
+   ACCOUNT MENU
+   ============================================================ */
+.menu{
+  position:absolute; top:calc(100% + 10px); right:0; min-width:264px; z-index:250;
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:14px; padding:7px;
+  box-shadow:var(--shadow-soft);
+  animation:settle 350ms var(--ease) both;
+}
+@keyframes settle{from{opacity:0; transform:translateY(-6px)} to{opacity:1; transform:none}}
+.menu-head{display:flex; align-items:center; gap:12px; padding:10px 11px 12px}
+.menu-head .avatar{width:44px; height:44px; font-size:17px; cursor:default}
+.menu-head .avatar:hover{box-shadow:0 0 0 1px var(--line)}
+.mh-name{font-size:15px; font-weight:500; color:var(--text); line-height:1.3}
+.mh-role{
+  font-size:12px; color:var(--text-2); margin-top:3px;
+  text-transform:uppercase; letter-spacing:.08em; font-weight:500;
+}
+.sep{height:1px; background:var(--line); margin:5px 0}
+.item{
+  display:flex; align-items:center; gap:12px; width:100%;
+  padding:10px 11px; border:0; background:transparent; cursor:pointer;
+  border-radius:8px; text-align:left; text-decoration:none;
+  font-family:inherit; font-size:14px; color:var(--text); line-height:1.2;
+  transition:background var(--dur) var(--ease);
+}
+.item svg{width:17px; height:17px; flex:none; color:var(--text-2)}
+.item:hover{background:var(--raised)}
+.item .val{
+  margin-left:auto; padding-left:12px; flex:none;
+  font-size:13px; color:var(--text-2); font-variant-numeric:tabular-nums;
+}
+.item.danger{color:var(--brick)}
+.item.danger svg{color:var(--brick)}
+.item.danger:hover{background:var(--brick-tint)}
+[data-theme="dark"] .item.danger{color:#D98570}
+[data-theme="dark"] .item.danger svg{color:#D98570}
+
+/* Sound row inside menu (only when data-sound="menu") */
+.sound-row{display:none}
+[data-sound="menu"] .sound-row{display:flex}
+
+/* ============================================================
+   MOCKUP SCAFFOLD (not part of the product)
+   ============================================================ */
+.stage{padding:40px 28px 80px; max-width:1120px; margin:0 auto}
+.ghost-h{font-family:var(--display); font-weight:300; font-size:30px; color:var(--text); margin-bottom:6px}
+.ghost-p{color:var(--text-2); font-size:15px; max-width:52ch; line-height:1.6}
+
+.controls{
+  position:fixed; left:20px; bottom:20px; z-index:400;
+  background:var(--surface); border:1px solid var(--line); border-radius:14px;
+  padding:14px 16px; box-shadow:var(--shadow-soft); font-size:13px; color:var(--text-2);
+  max-width:260px;
+}
+.controls h4{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-2); font-weight:500; margin-bottom:10px}
+.controls .row{display:flex; align-items:center; gap:6px; margin-bottom:9px; flex-wrap:wrap}
+.controls .row > span{width:100%; font-size:11px; color:var(--text); font-weight:500}
+.seg{border:1px solid var(--line); background:transparent; color:var(--text-2);
+  border-radius:7px; padding:5px 9px; font:inherit; font-size:12px; cursor:pointer;
+  transition:all var(--dur) var(--ease)}
+.seg[aria-pressed="true"]{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+[data-theme="dark"] .seg[aria-pressed="true"]{background:var(--paper); color:var(--ink); border-color:var(--paper)}
+
+/* annotation callouts */
+.notes{margin-top:44px; display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+.note{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 18px}
+.note .k{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--dusk); font-weight:500; margin-bottom:6px}
+.note .t{font-size:14px; color:var(--text); font-weight:500; margin-bottom:4px}
+.note .d{font-size:13px; color:var(--text-2); line-height:1.55}
+</style>
+</head>
+<body>
+
+<!-- ===================== TOP BAR ===================== -->
+<div class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 340 110" fill="none">
+        <path class="wave" d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="305" cy="55" r="9" fill="#6E67AF"/>
+      </svg>
+    </span>
+    <span class="brand-name">tacet</span>
+  </div>
+
+  <div class="grow"></div>
+
+  <button class="gsearch" type="button" title="Search anything · 搜索 (Ctrl K)">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <span class="lbl">Search</span>
+    <span class="kbd">Ctrl K</span>
+  </button>
+
+  <div class="cluster">
+    <button class="ico" type="button" title="Inbox · 收件箱" aria-label="Inbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+      <span class="pip"></span>
+    </button>
+
+    <button class="ico sound" type="button" title="Notification sound · 提示音" aria-label="Notification sound">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+    </button>
+  </div>
+
+  <div class="acctwrap">
+    <button class="avatar" type="button" aria-haspopup="true" aria-expanded="true" aria-label="Account">A</button>
+
+    <!-- ===================== ACCOUNT MENU (shown open) ===================== -->
+    <div class="menu" role="menu">
+      <div class="menu-head">
+        <span class="avatar" aria-hidden="true">A</span>
+        <div>
+          <div class="mh-name">Asher</div>
+          <div class="mh-role">Owner · Roots</div>
+        </div>
+      </div>
+      <div class="sep"></div>
+
+      <a class="item" href="#" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
+        <span>Account</span>
+      </a>
+      <a class="item" href="#" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.9-3 3.2-4.5 6-4.5S14.1 17 15 20"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6"/><path d="M18.5 20c-.5-2-1.6-3.3-3.2-4"/></svg>
+        <span>Manage team</span>
+      </a>
+
+      <div class="sep"></div>
+
+      <button class="item" type="button" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none"/></svg>
+        <span>Appearance</span><span class="val">Light</span>
+      </button>
+      <button class="item" type="button" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="9" y1="20" x2="15" y2="20"/></svg>
+        <span>Text size</span><span class="val">110%</span>
+      </button>
+      <button class="item" type="button" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg>
+        <span>Language</span><span class="val">English</span>
+      </button>
+      <button class="item sound-row" type="button" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <span>New-order sound</span><span class="val">On</span>
+      </button>
+
+      <div class="sep"></div>
+
+      <button class="item danger" type="button" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        <span>Sign out</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== STAGE ===================== -->
+<div class="stage">
+  <div class="ghost-h">While you were away</div>
+  <p class="ghost-p">214 orders processed. 3 issues resolved. Nothing needs you right now — this page is just here so the top bar has something to sit on.</p>
+
+  <div class="notes">
+    <div class="note">
+      <div class="k">Avatar</div>
+      <div class="t">Ink circle, Paper initial</div>
+      <div class="d">The green was leftover Tea accent. Tacet keeps green (Sage) for success only, so the avatar goes neutral — the same Ink/Paper as the app icon.</div>
+    </div>
+    <div class="note">
+      <div class="k">Inbox marker</div>
+      <div class="t">Never red</div>
+      <div class="d">Tacet forbids alarming badges. Unseen reviews/feedback show a quiet Ink pip (calm presence) — or Amber if you want it to nudge. Try the toggle.</div>
+    </div>
+    <div class="note">
+      <div class="k">Sound</div>
+      <div class="t">Folded into the menu</div>
+      <div class="d">“Runs in silence.” A ding toggle in the chrome fights the whole brand, so it becomes a set-once preference beside Appearance. Flip it back to the bar if the counter needs it one tap away.</div>
+    </div>
+    <div class="note">
+      <div class="k">Dusk</div>
+      <div class="t">Exactly one, on the mark</div>
+      <div class="d">The only Dusk on the bar is the wave’s automation dot. Search stays neutral; the menu carries none. Scarcity is the rule.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== MOCKUP CONTROLS ===================== -->
+<div class="controls">
+  <h4>Mockup controls</h4>
+  <div class="row"><span>Theme</span>
+    <button class="seg" data-k="theme" data-v="light" aria-pressed="true">Light</button>
+    <button class="seg" data-k="theme" data-v="dark" aria-pressed="false">Dark</button>
+  </div>
+  <div class="row"><span>Inbox marker</span>
+    <button class="seg" data-k="inbox" data-v="ink" aria-pressed="false">Ink pip</button>
+    <button class="seg" data-k="inbox" data-v="amber" aria-pressed="true">Amber</button>
+    <button class="seg" data-k="inbox" data-v="none" aria-pressed="false">None</button>
+  </div>
+  <div class="row"><span>Sound toggle lives…</span>
+    <button class="seg" data-k="sound" data-v="menu" aria-pressed="true">In menu</button>
+    <button class="seg" data-k="sound" data-v="chrome" aria-pressed="false">In bar</button>
+  </div>
+</div>
+
+<script>
+document.querySelectorAll('.seg').forEach(function(b){
+  b.addEventListener('click', function(){
+    var k=b.dataset.k, v=b.dataset.v;
+    document.documentElement.setAttribute('data-'+k, v);
+    document.querySelectorAll('.seg[data-k="'+k+'"]').forEach(function(s){
+      s.setAttribute('aria-pressed', s===b ? 'true':'false');
+    });
+  });
+});
+</script>
+</body>
+</html>
