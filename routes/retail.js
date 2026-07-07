@@ -14927,6 +14927,25 @@ const REPORT_READ_TOOL = {
     properties: {
       read_en: { type: 'string', description: 'At most 3 short paragraphs (~110 words total), separated by blank lines: (1) where the business stands this period, (2) the single number most worth attention and why, (3) the next thing to build or keep doing.' },
       read_cn: { type: 'string', description: 'The same reading written natively in simplified Chinese, similar length.' },
+      // The drawn read — the page renders these as picture cards whose numbers
+      // are computed client-side from the same digest; you only choose what to
+      // say about each picture and how urgent it is. Captions repeat at most
+      // ONE number; the picture carries the rest.
+      verdict_en: { type: 'string', description: 'ONE line, at most 8 words, answering "is everything okay this period?" — e.g. "Mostly calm. One thing needs you." or "Steady all round." No number in it.' },
+      verdict_cn: { type: 'string', description: 'The same verdict written natively in simplified Chinese.' },
+      flow_cap_en: { type: 'string', description: 'ONE line, at most 14 words, over the money-path picture (sessions → orders → money kept, what cancellations took).' },
+      flow_cap_cn: { type: 'string' },
+      flow_level: { type: 'string', enum: ['ok', 'watch'], description: '"watch" only if cancellations or conversion genuinely deserve attention.' },
+      retention_cap_en: { type: 'string', description: 'ONE line, at most 12 words, over the buyers picture (new vs returning).' },
+      retention_cap_cn: { type: 'string' },
+      retention_level: { type: 'string', enum: ['ok', 'watch'] },
+      channel_cap_en: { type: 'string', description: 'ONE line, at most 12 words, over the where-orders-come-from picture (top payment channel vs the rest).' },
+      channel_cap_cn: { type: 'string' },
+      channel_level: { type: 'string', enum: ['ok', 'watch'] },
+      action_en: { type: 'string', description: 'The single next thing to do. Imperative, at most 14 words, doable this week with what the store already has.' },
+      action_cn: { type: 'string' },
+      action_day_from: { type: 'integer', description: 'Set with action_day_to ONLY when the action is tied to a window of days after a buyer’s first purchase (e.g. 20).' },
+      action_day_to: { type: 'integer', description: 'End of that window in days (e.g. 30).' },
       note_sales_en:     { type: 'string', description: 'ONE dry sentence: the most useful takeaway about sales (status, payment, timing, promotions).' },
       note_sales_cn:     { type: 'string' },
       note_customers_en: { type: 'string', description: 'ONE dry sentence: the most useful takeaway about customers (mix, retention, geography, top spenders).' },
@@ -14934,7 +14953,7 @@ const REPORT_READ_TOOL = {
       note_products_en:  { type: 'string', description: 'ONE dry sentence: the most useful takeaway about products and traffic (top sellers, funnel, sources).' },
       note_products_cn:  { type: 'string' },
     },
-    required: ['read_en', 'read_cn'],
+    required: ['read_en', 'read_cn', 'verdict_en', 'verdict_cn'],
   },
 };
 
@@ -14992,11 +15011,21 @@ router.post('/api/retail-admin/reports/read', requireRetailAdmin, express.json({
       system: { static: REPORT_VOICE_RULES },
       tools: [REPORT_READ_TOOL],
       messages: [{ role: 'user', content: `Report digest for the window ${key.split('|')[0]} to ${key.split('|')[1]}:\n${digestStr}\n\nWrite the reading. Always answer by calling report_read.` }],
-      max_tokens: 1600,
+      max_tokens: 2200,
     });
     const raw = modelGateway.extractToolUse(out.content_blocks, 'report_read') || {};
+    const lvl = v => (v === 'watch' || v === 'ok' ? v : '');
+    const dayN = v => { const n = parseInt(v, 10); return Number.isFinite(n) && n >= 0 && n <= 90 ? n : null; };
+    let adf = dayN(raw.action_day_from), adt = dayN(raw.action_day_to);
+    if (adf == null || adt == null || adt <= adf) { adf = null; adt = null; }
     const read = {
       read_en: trimField(raw.read_en), read_cn: trimField(raw.read_cn),
+      verdict_en: trimField(raw.verdict_en), verdict_cn: trimField(raw.verdict_cn),
+      flow_cap_en: trimField(raw.flow_cap_en), flow_cap_cn: trimField(raw.flow_cap_cn), flow_level: lvl(raw.flow_level),
+      retention_cap_en: trimField(raw.retention_cap_en), retention_cap_cn: trimField(raw.retention_cap_cn), retention_level: lvl(raw.retention_level),
+      channel_cap_en: trimField(raw.channel_cap_en), channel_cap_cn: trimField(raw.channel_cap_cn), channel_level: lvl(raw.channel_level),
+      action_en: trimField(raw.action_en), action_cn: trimField(raw.action_cn),
+      action_day_from: adf, action_day_to: adt,
       note_sales_en: trimField(raw.note_sales_en), note_sales_cn: trimField(raw.note_sales_cn),
       note_customers_en: trimField(raw.note_customers_en), note_customers_cn: trimField(raw.note_customers_cn),
       note_products_en: trimField(raw.note_products_en), note_products_cn: trimField(raw.note_products_cn),

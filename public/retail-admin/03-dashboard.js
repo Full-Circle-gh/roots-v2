@@ -2578,6 +2578,168 @@ async function dashReadMaybeLoad() {
   dashAskEnsure();
 }
 
+// The read, drawn — the AI's findings rendered as picture cards instead of
+// paragraphs (spec: reference/reports-read-combo-mockup.html, combo 2: pulse
+// verdict + insight cards). Every number in the pictures is computed HERE from
+// DASH_DATA; the AI only chose the captions, urgency levels and the action.
+// Old cached payloads (no verdict) and thin data fall back to the prose read.
+
+// One bilingual field pick — prefers the live language, falls back across.
+function dashReadPick(r, base) {
+  const cn = window.cuLang && cuLang() === 'cn';
+  const en = r[base + '_en'] || '', zh = r[base + '_cn'] || '';
+  return (cn ? (zh || en) : (en || zh)) || '';
+}
+
+function dashReadPill(level) {
+  if (level === 'watch') return `<span class="rv-pill warn">${escapeHtml(cuT('Watch this', '要留意'))}</span>`;
+  if (level === 'ok')    return `<span class="rv-pill ok">${escapeHtml(cuT('Working', '运转良好'))}</span>`;
+  return '';
+}
+function dashRvCap(text, level, showOk) {
+  const pill = level === 'watch' ? dashReadPill('watch') : (showOk && level === 'ok' ? dashReadPill('ok') : '');
+  return `<div class="rv-cap"><span class="td-ai-dot"></span><span class="t">${escapeHtml(text)}</span>${pill}</div>`;
+}
+function dashRvRow(label, barHtml, val, sub) {
+  return `<div class="rv-frow"><span class="l">${escapeHtml(label)}</span><span class="rv-bar">${barHtml}</span>` +
+    `<span class="v">${escapeHtml(val)}${sub ? `<small>${escapeHtml(sub)}</small>` : ''}</span></div>`;
+}
+function dashRvBarW(pct, floor) {
+  return Math.max(floor, Math.min(100, pct)).toFixed(2);
+}
+
+// Builds the card grid; returns { html, levels: [name, level][] } or null when
+// the data is too thin to draw (new store) — caller falls back to prose.
+function dashReadVisual(r) {
+  const D = DASH_DATA;
+  if (!D) return null;
+  const k = D.kpis || {};
+  const cn = window.cuLang && cuLang() === 'cn';
+  const cards = [];
+  const levels = [];
+
+  // 1 · The money path — visits → orders → money kept.
+  const flowCap = dashReadPick(r, 'flow_cap');
+  const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
+  const sessions = Number(k.sessions || k.visits || 0);
+  if (flowCap && orders > 0 && revenue > 0) {
+    const cancel = (D.funnel || {}).cancelled || null;
+    const cancelRev = cancel ? Number(cancel.revenue || 0) : 0;
+    const keptPct = revenue + cancelRev > 0 ? revenue / (revenue + cancelRev) * 100 : 100;
+    const convPct = k.conversion_rate != null ? Number(k.conversion_rate) : (sessions > 0 ? orders / sessions * 100 : null);
+    const rows = [];
+    if (sessions > 0) {
+      rows.push(dashRvRow(cuT('Visited the store', '到店浏览'), '<i style="flex-basis:100%"></i>', dashNum(sessions), ''));
+      const w = dashRvBarW(convPct == null ? 5 : convPct, 1.2);
+      rows.push(dashRvRow(cuT('Placed an order', '下了单'),
+        `<i style="flex-basis:${w}%"></i><i class="ghost" style="flex-basis:${(100 - w).toFixed(2)}%"></i>`,
+        dashNum(orders), convPct == null ? '' : convPct.toFixed(1) + '%'));
+    } else {
+      rows.push(dashRvRow(cuT('Orders placed', '下单数'), '<i style="flex-basis:100%"></i>', dashNum(orders), ''));
+    }
+    const kw = dashRvBarW(keptPct, 2);
+    rows.push(dashRvRow(cuT('Money kept', '实收'),
+      `<i style="flex-basis:${kw}%"></i>` + (cancelRev > 0 ? `<i class="lost" style="flex-basis:${(100 - kw).toFixed(2)}%"></i>` : ''),
+      dashMoney(revenue), cancelRev > 0 ? cuT('cancelled ', '取消 ') + dashMoney(cancelRev) : ''));
+    cards.push(`<div class="rv-card rv-span2">${dashRvCap(flowCap, r.flow_level, false)}
+      <div class="rv-sub">${escapeHtml(cuT('The path from a visit to money kept', '从到访到实收的路径'))}</div>${rows.join('')}</div>`);
+    levels.push([cuT('Money', '钱'), r.flow_level]);
+  }
+
+  // 2 · Buyers — one dot per buyer, green = came back.
+  const retCap = dashReadPick(r, 'retention_cap');
+  const nvr = D.new_vs_returning || {};
+  const buyers = Number(nvr.buyers || k.buyers || 0);
+  if (retCap && buyers > 0) {
+    const newB = Math.min(buyers, Number(nvr.new_buyers || 0));
+    const backB = Math.max(0, buyers - newB);
+    const dots = buyers <= 160 ? buyers : 100;
+    const per = buyers / dots;
+    const on = Math.min(dots, Math.round(backB / buyers * dots));
+    let grid = '';
+    for (let i = 0; i < dots; i++) grid += (i < on ? '<i class="on"></i>' : '<i></i>');
+    const each = per > 1 ? cuT(`each dot is about ${dashNum(Math.round(per))} buyers`, `每个点约代表 ${dashNum(Math.round(per))} 位买家`)
+                         : cuT('each dot is one buyer this period', '每个点代表本期一位买家');
+    const bits = dashFactBits();
+    const retNote = bits.ret1 != null
+      ? `<div class="rv-note">${escapeHtml(cn ? `一个月后仍回购：${Math.round(bits.ret1)}%` : `${Math.round(bits.ret1)}% still buying a month later`)}</div>` : '';
+    cards.push(`<div class="rv-card">${dashRvCap(retCap, r.retention_level, true)}
+      <div class="rv-sub">${escapeHtml(each)}</div>
+      <div class="rv-dots">${grid}</div>
+      <div class="rv-legend">
+        <span><i class="k on"></i><b>${dashNum(backB)}</b> ${escapeHtml(cuT('returning', '回头客'))}</span>
+        <span><i class="k"></i><b>${dashNum(newB)}</b> ${escapeHtml(cuT('first-timers', '新客'))}</span>
+      </div>${retNote}</div>`);
+    levels.push([cuT('Buyers', '买家'), r.retention_level]);
+  }
+
+  // 3 · Channels — top payment channel vs the rest, orders and revenue.
+  const chCap = dashReadPick(r, 'channel_cap');
+  const pays = (D.payments || []).slice().sort((a, b) => Number(b.revenue || 0) - Number(a.revenue || 0));
+  const top = pays[0];
+  if (chCap && top && orders > 0 && revenue > 0 && Number(top.orders || 0) <= orders) {
+    const name = dashPayName(top.method, cn);
+    const oPct = dashRvBarW(Number(top.orders || 0) / orders * 100, 0);
+    const vPct = dashRvBarW(Number(top.revenue || 0) / revenue * 100, 0);
+    const seg = (label, pct, a, bLbl) =>
+      `<div class="rv-segname">${escapeHtml(label)}</div>
+       <div class="rv-segbar"><i style="flex-basis:${pct}%"></i><i class="rest" style="flex-basis:${(100 - pct).toFixed(2)}%"></i></div>
+       <div class="rv-seglbl"><span>${escapeHtml(a)}</span><span>${escapeHtml(bLbl)}</span></div>`;
+    cards.push(`<div class="rv-card">${dashRvCap(chCap, r.channel_level, true)}
+      <div class="rv-sub">${escapeHtml(cuT('Share by channel', '各渠道占比'))}</div>
+      ${seg(cuT('Orders', '订单'), oPct, `${name} ${dashNum(top.orders)}`, `${cuT('Other', '其他')} ${dashNum(orders - Number(top.orders || 0))}`)}
+      ${seg(cuT('Revenue', '收入'), vPct, `${name} ${dashMoney(top.revenue)}`, `${cuT('Other', '其他')} ${dashMoney(Math.max(0, revenue - Number(top.revenue || 0)))}`)}
+    </div>`);
+    levels.push([cuT('Channels', '渠道'), r.channel_level]);
+  }
+
+  // A verdict over zero data pictures is noise — need at least one before the
+  // action card counts (brand-new store falls back to the prose read).
+  if (!cards.length) return null;
+
+  // 4 · What to do next — the one Dusk surface; timeline only when the action
+  // is tied to a days-after-first-purchase window.
+  const act = dashReadPick(r, 'action');
+  if (act) {
+    let tl = '';
+    if (r.action_day_from != null && r.action_day_to != null) {
+      const scale = Math.max(30, Number(r.action_day_to));
+      const left = Number(r.action_day_from) / scale * 100, width = (Number(r.action_day_to) - Number(r.action_day_from)) / scale * 100;
+      tl = `<div class="rv-tl">
+        <span class="rail"></span><span class="mark"></span>
+        <span class="mlbl">${escapeHtml(cuT('First purchase', '首次下单'))}</span>
+        <span class="win" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%"></span>
+        <span class="wlbl" style="left:${left.toFixed(1)}%;width:${width.toFixed(1)}%">${escapeHtml(cn ? `第 ${r.action_day_from}–${r.action_day_to} 天` : `Day ${r.action_day_from}–${r.action_day_to}`)}</span>
+        <span class="tick" style="left:0%">0</span>
+        <span class="tick" style="left:${left.toFixed(1)}%">${r.action_day_from}</span>
+        <span class="tick" style="left:${(left + width).toFixed(1)}%">${r.action_day_to}</span>
+      </div>`;
+    }
+    cards.push(`<div class="rv-card rv-act rv-span2">
+      <div class="rv-cap"><span class="td-ai-dot"></span><span class="t">${escapeHtml(act)}</span></div>${tl}</div>`);
+  }
+
+  if (!cards.length) return null;
+
+  // Pulse chips — steady vs needs-you, named so the amber one says what.
+  const okN = levels.filter(l => l[1] === 'ok').length;
+  const watch = levels.filter(l => l[1] === 'watch').map(l => l[0]);
+  let chips = '';
+  if (okN) chips += `<span class="rv-chip ok"><i></i>${escapeHtml(cn ? `${okN} 项平稳` : `${okN} steady`)}</span>`;
+  if (watch.length) chips += `<span class="rv-chip warn"><i></i>${escapeHtml(cn
+    ? `${watch.length} 项要留意 — ${watch.join('、')}` : `${watch.length} need${watch.length > 1 ? '' : 's'} you — ${watch.join(', ')}`)}</span>`;
+
+  return { cards: `<div class="rv-cards">${cards.join('')}</div>`, chips };
+}
+
+function dashReadWordsToggle() {
+  const btn = document.getElementById('db-read-words');
+  const box = document.getElementById('db-read-prose');
+  if (!btn || !box) return;
+  box.hidden = !box.hidden;
+  btn.textContent = box.hidden ? cuT('Read it as words', '看文字版') : cuT('Hide the words', '收起文字');
+}
+
 function dashReadRender() {
   const host = document.getElementById('db-read');
   if (!host) return;
@@ -2598,12 +2760,27 @@ function dashReadRender() {
     const t = new Date(String(d.generated_at).replace(' ', 'T') + 'Z');
     if (!isNaN(t)) when = t.toLocaleTimeString(cn ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
   }
+  const head = `<div class="rh"><span class="td-ai-dot"></span><h3>${escapeHtml(cuT('The read', '解读'))}</h3>
+      <span class="meta">${escapeHtml(when ? cuT('written at ' + when, '写于 ' + when) : cuT("written from this period's numbers", '由本期数据生成'))}</span></div>`;
+  const foot = `<div class="rfoot">${escapeHtml(cuT('Drawn from the numbers in this report — nothing else. Refreshes with the range, at most twice a day.', '内容仅依据本报表数据。随区间刷新，每天最多两次。'))}</div>`;
+
+  const verdict = dashReadPick(d.read, 'verdict');
+  const vis = verdict ? dashReadVisual(d.read) : null;
   host.hidden = false;
-  host.innerHTML = `
-    <div class="rh"><span class="td-ai-dot"></span><h3>${escapeHtml(cuT('The read', '解读'))}</h3>
-      <span class="meta">${escapeHtml(when ? cuT('written at ' + when, '写于 ' + when) : cuT("written from this period's numbers", '由本期数据生成'))}</span></div>
-    ${paras}
-    <div class="rfoot">${escapeHtml(cuT('Written from the numbers in this report — nothing else. Refreshes with the range, at most twice a day.', '内容仅依据本报表数据。随区间刷新，每天最多两次。'))}</div>`;
+  if (vis) {
+    host.innerHTML = `${head}
+      <div class="rv-verdict">
+        <svg width="96" height="18" viewBox="0 0 96 18" fill="none" aria-hidden="true"><path d="M2 9 C6 9 6 3 10 3 S14 15 18 15 22 4 26 4 30 13 34 13 38 8 42 9 L60 9 L84 9" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/><circle cx="90" cy="9" r="2.5" fill="var(--td-dusk)"/></svg>
+        <span class="v">${escapeHtml(verdict)}</span>
+        <span class="chips">${vis.chips}</span>
+      </div>
+      ${vis.cards}
+      <button type="button" class="rv-words" id="db-read-words" onclick="dashReadWordsToggle()">${escapeHtml(cuT('Read it as words', '看文字版'))}</button>
+      <div class="rv-prose" id="db-read-prose" hidden>${paras}</div>
+      ${foot}`;
+  } else {
+    host.innerHTML = `${head}${paras}${foot}`;
+  }
 }
 
 // One dry sentence opening each chapter — same generation, same dot.

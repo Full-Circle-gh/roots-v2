@@ -7872,6 +7872,67 @@
   #tab-reports .db-read .rfoot { margin-top: 12px; font-size: 12px; color: var(--td-text2); }
   #tab-reports .db-read .rload { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--td-text2); }
 
+  /* The read, drawn — pulse verdict + insight cards inside the read card.
+     Numbers are computed from DASH_DATA; the AI only picked captions/levels.
+     Spec: reference/reports-read-combo-mockup.html (combo 2). */
+  #tab-reports .db-read .rv-verdict { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 4px 0 2px; color: var(--td-text); }
+  #tab-reports .db-read .rv-verdict svg { flex: none; color: var(--td-text); }
+  #tab-reports .db-read .rv-verdict .v { font-size: 16.5px; font-weight: 500; letter-spacing: -0.01em; }
+  #tab-reports .db-read .rv-verdict .chips { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+  #tab-reports .db-read .rv-chip { display: inline-flex; align-items: center; gap: 7px; padding: 2px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 500; }
+  #tab-reports .db-read .rv-chip i { width: 8px; height: 8px; border-radius: 50%; }
+  #tab-reports .db-read .rv-chip.ok { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+  #tab-reports .db-read .rv-chip.ok i { background: var(--td-sage); }
+  #tab-reports .db-read .rv-chip.warn { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  #tab-reports .db-read .rv-chip.warn i { background: var(--td-amber); }
+  #tab-reports .db-read .rv-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  #tab-reports .db-read .rv-card { border: 1px solid var(--td-border); border-radius: 10px; padding: 16px 18px; min-width: 0; }
+  #tab-reports .db-read .rv-card.rv-span2 { grid-column: span 2; }
+  @media (max-width: 980px) {
+    #tab-reports .db-read .rv-cards { grid-template-columns: 1fr; }
+    #tab-reports .db-read .rv-card.rv-span2 { grid-column: auto; }
+  }
+  #tab-reports .db-read .rv-cap { display: flex; align-items: center; gap: 9px; font-size: 14.5px; font-weight: 500; color: var(--td-text); }
+  #tab-reports .db-read .rv-cap .t { flex: 1; min-width: 0; }
+  #tab-reports .db-read .rv-pill { flex: none; padding: 1px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+  #tab-reports .db-read .rv-pill.warn { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  #tab-reports .db-read .rv-pill.ok { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+  #tab-reports .db-read .rv-sub { font-size: 12.5px; color: var(--td-text2); margin: 2px 0 10px; }
+  #tab-reports .db-read .rv-frow { display: grid; grid-template-columns: 130px 1fr 130px; align-items: center; gap: 12px; margin-top: 10px; }
+  #tab-reports .db-read .rv-frow .l { font-size: 13px; color: var(--td-text2); }
+  #tab-reports .db-read .rv-frow .v { font-size: 13px; font-weight: 500; color: var(--td-text); text-align: right; font-variant-numeric: tabular-nums; }
+  #tab-reports .db-read .rv-frow .v small { display: block; font-weight: 400; font-size: 11.5px; color: var(--td-text2); }
+  @media (max-width: 720px) { #tab-reports .db-read .rv-frow { grid-template-columns: 96px 1fr 96px; gap: 8px; } }
+  #tab-reports .db-read .rv-bar { height: 9px; border-radius: 5px; background: var(--td-raised); overflow: hidden; display: flex; }
+  #tab-reports .db-read .rv-bar i { display: block; height: 100%; background: var(--td-text); border-radius: 5px; }
+  #tab-reports .db-read .rv-bar i.ghost { background: var(--td-border); }
+  #tab-reports .db-read .rv-bar i.lost { background: var(--td-brick); border-radius: 0 5px 5px 0; }
+  #tab-reports .db-read .rv-dots { display: grid; grid-template-columns: repeat(20, 10px); gap: 5px; margin: 4px 0 10px; }
+  #tab-reports .db-read .rv-dots i { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--td-border); box-sizing: border-box; }
+  #tab-reports .db-read .rv-dots i.on { background: var(--td-sage); border-color: var(--td-sage); }
+  #tab-reports .db-read .rv-legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12.5px; color: var(--td-text2); }
+  #tab-reports .db-read .rv-legend b { font-weight: 500; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  #tab-reports .db-read .rv-legend .k { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--td-border); box-sizing: border-box; margin-right: 5px; }
+  #tab-reports .db-read .rv-legend .k.on { background: var(--td-sage); border-color: var(--td-sage); }
+  #tab-reports .db-read .rv-note { font-size: 12.5px; color: var(--td-text2); margin-top: 8px; }
+  #tab-reports .db-read .rv-segname { font-size: 12.5px; font-weight: 500; color: var(--td-text); margin-top: 10px; }
+  #tab-reports .db-read .rv-segbar { height: 12px; border-radius: 6px; background: var(--td-raised); overflow: hidden; display: flex; margin: 4px 0 2px; }
+  #tab-reports .db-read .rv-segbar i { display: block; height: 100%; background: var(--td-text); }
+  #tab-reports .db-read .rv-segbar i.rest { background: var(--td-border); }
+  #tab-reports .db-read .rv-seglbl { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  #tab-reports .db-read .rv-card.rv-act { background: var(--td-dusk-tint); border-color: transparent; }
+  #tab-reports .db-read .rv-act .rv-cap .t { font-size: 15px; }
+  #tab-reports .db-read .rv-tl { position: relative; height: 46px; margin: 18px 6px 0; }
+  #tab-reports .db-read .rv-tl .rail { position: absolute; top: 22px; left: 0; right: 0; height: 2px; background: var(--td-border); }
+  #tab-reports .db-read .rv-tl .mark { position: absolute; top: 17px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--td-text); }
+  #tab-reports .db-read .rv-tl .mlbl { position: absolute; top: -2px; left: 0; font-size: 11.5px; color: var(--td-text2); white-space: nowrap; }
+  #tab-reports .db-read .rv-tl .win { position: absolute; top: 16px; height: 14px; border-radius: 7px; background: var(--td-dusk); opacity: .85; }
+  #tab-reports .db-read .rv-tl .wlbl { position: absolute; top: -2px; text-align: center; font-size: 11.5px; font-weight: 500; color: var(--td-dusk); white-space: nowrap; }
+  #tab-reports .db-read .rv-tl .tick { position: absolute; top: 30px; transform: translateX(-50%); font-size: 11px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  #tab-reports .db-read .rv-words { background: transparent; border: 0; padding: 0 0 1px; margin-top: 14px; font-family: inherit; font-size: 12.5px; color: var(--td-text2); cursor: pointer; border-bottom: 1px dotted var(--td-border); }
+  #tab-reports .db-read .rv-words:hover { color: var(--td-text); }
+  #tab-reports .db-read .rv-prose { margin-top: 10px; }
+
   /* Per-chapter one-line note. */
   #tab-reports .db-ai-note {
     display: flex; gap: 12px; align-items: baseline;
@@ -8513,3 +8574,32 @@
   .act-ghost:hover { color: var(--td-text); background: var(--td-raised); }
 
   @media (max-width: 900px) { .act-digest { grid-template-columns: 1fr; } }
+
+/* ════════════════════════════════════════════════════════════════
+   DASHBOARDS BY POSITION — body.pos-<position> is set at boot from
+   the operator's role (02-settings-ops bootstrap).
+   · warehouse / customer-service / dispatch see NO revenue: the
+     Recap, the Today pulse and the Channels split are removed — the
+     "Needs you" attention cards (filtered per position in
+     03-dashboard tdAttnRender) ARE their dashboard.
+   · On phones those positions keep this same card surface instead of
+     the revenue-led mobile variant (#rm-dash).
+   · store-manager keeps the full pulse but locked to their store, so
+     the tenant-wide Channels square (no store filter) is dropped.
+   ════════════════════════════════════════════════════════════════ */
+body.pos-warehouse #td-recap, body.pos-customer-service #td-recap, body.pos-dispatch #td-recap,
+body.pos-warehouse #td-kick-today, body.pos-customer-service #td-kick-today, body.pos-dispatch #td-kick-today,
+body.pos-warehouse .td-pulse-grid, body.pos-customer-service .td-pulse-grid, body.pos-dispatch .td-pulse-grid,
+body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot {
+  display: none;
+}
+body.pos-store-manager #td-chan-pane { display: none; }
+body.pos-store-manager .td-pulse-grid { grid-template-columns: 1fr; }
+@media (max-width: 720px) {
+  body.pos-warehouse #tab-dashboard .td-wrap,
+  body.pos-customer-service #tab-dashboard .td-wrap,
+  body.pos-dispatch #tab-dashboard .td-wrap { display: block; }
+  body.pos-warehouse #rm-dash,
+  body.pos-customer-service #rm-dash,
+  body.pos-dispatch #rm-dash { display: none; }
+}

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — The read combo (how much is too much?)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET REPORTS — combo test for "The read, drawn."
+   Flip the bar to judge noise with your own eyes:
+     1 — A alone            (cards only)
+     2 — A + pulse line     (recommended: one verdict line on top)
+     3 — Everything         (adds B's annotated trend — the noise case)
+   The pulse line answers "do I even need to look today?"
+   before the cards. B repeats the cards' facts — that's why 3 feels heavy.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --dusk-tint:   #EEEDF6;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+  --font-text: "Inter", "Noto Sans SC", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", "Noto Sans SC", Georgia, serif;
+  --r-control: 8px;
+  --r-card: 14px;
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font-text); font-size: 15px; line-height: 1.6; color: var(--ink); background: var(--paper); }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- state ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+#lang-en:checked ~ .frame .zh, #lang-en:checked ~ .chrome .zh { display: none; }
+#lang-zh:checked ~ .frame .en, #lang-zh:checked ~ .chrome .en { display: none; }
+/* combo depth: pulse shows in 2+3, trend-pins shows in 3 only */
+#c-1:checked ~ .frame .pulseline, #c-1:checked ~ .frame .trendpins,
+#c-2:checked ~ .frame .trendpins { display: none; }
+#c-1:checked ~ .chrome label[for="c-1"],
+#c-2:checked ~ .chrome label[for="c-2"],
+#c-3:checked ~ .chrome label[for="c-3"],
+#lang-en:checked ~ .chrome label[for="lang-en"],
+#lang-zh:checked ~ .chrome label[for="lang-zh"] { background: var(--paper); color: var(--ink); }
+
+/* ---- chrome (mockup only) ---- */
+.chrome { background: var(--ink); color: rgba(251,249,244,0.75); display: flex; align-items: center; gap: 24px; padding: 10px 28px; font-size: 12.5px; flex-wrap: wrap; }
+.chrome .tag { letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5); }
+.chrome .seg { display: inline-flex; border: 1px solid rgba(251,249,244,0.25); border-radius: 999px; overflow: hidden; }
+.chrome .seg label { padding: 3px 14px; cursor: pointer; transition: background 200ms var(--ease-settle); }
+.chrome .rec { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sage); margin-left: 5px; }
+.chrome .note { color: rgba(251,249,244,0.45); }
+
+/* ---- topbar ---- */
+.topbar { display: flex; align-items: center; gap: 14px; padding: 18px 40px; border-bottom: 1px solid var(--border); background: var(--paper); }
+.topbar .wordmark { font-family: var(--font-display); font-weight: 300; font-size: 19px; letter-spacing: 0.2em; color: var(--ink); }
+.topbar .crumb { margin-left: auto; font-size: 13px; color: var(--graphite); }
+
+/* ---- scaffold ---- */
+.page { max-width: 1120px; margin: 0 auto; padding: 36px 40px 96px; }
+.page-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 20px; }
+.page-head h1 { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; }
+.page-head .date { margin-left: auto; font-size: 13px; color: var(--graphite); }
+
+/* ---- KPIs ---- */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+.kpi { background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 14px 20px; }
+.kpi .lbl { font-size: 13px; color: var(--graphite); }
+.kpi .val { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.3; }
+.kpi .sub { font-size: 12.5px; color: var(--graphite); }
+
+/* ---- AI voice bits ---- */
+@keyframes tdAiBreathe { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+.ai-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--dusk); margin-right: 8px; flex: none; animation: tdAiBreathe 2.4s ease-in-out infinite; position: relative; top: -1px; }
+@media (prefers-reduced-motion: reduce) { .ai-dot { animation: none; } }
+.read-head { display: flex; align-items: center; gap: 4px; margin: 22px 0 12px; }
+.read-head h2 { font-size: 16px; font-weight: 500; }
+.read-head .meta { margin-left: auto; font-size: 12.5px; color: var(--graphite); }
+.foot { font-size: 12.5px; color: var(--graphite); margin-top: 14px; }
+
+.pill { display: inline-block; padding: 1px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.pill.amber { background: var(--amber-tint); color: var(--amber-ink); }
+.pill.sage { background: var(--sage-tint); color: var(--sage-ink); }
+
+/* ---- pulse line (the one addition from C) ---- */
+.pulseline { display: flex; align-items: center; gap: 16px; background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 16px 24px; margin-bottom: 14px; }
+.pulseline .verdict { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+.pulseline .chips { margin-left: auto; display: flex; gap: 10px; align-items: center; }
+.pchip { display: inline-flex; align-items: center; gap: 7px; padding: 3px 12px; border-radius: 999px; font-size: 12.5px; font-weight: 500; cursor: pointer; }
+.pchip .st { width: 8px; height: 8px; border-radius: 50%; }
+.pchip.ok { background: var(--sage-tint); color: var(--sage-ink); } .pchip.ok .st { background: var(--sage); }
+.pchip.warn { background: var(--amber-tint); color: var(--amber-ink); } .pchip.warn .st { background: var(--amber); }
+.pchip:hover { filter: brightness(0.97); }
+
+/* ---- insight cards (variant A) ---- */
+.cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.card { background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 20px 24px; }
+.card.span2 { grid-column: span 2; }
+.card .cap { display: flex; align-items: center; font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+.card .cap .pill { margin-left: auto; }
+.card .sub { font-size: 12.5px; color: var(--graphite); margin-bottom: 14px; }
+
+.frow { display: grid; grid-template-columns: 150px 1fr 130px; align-items: center; gap: 14px; margin-bottom: 12px; }
+.frow .l { font-size: 13.5px; color: var(--graphite); }
+.frow .v { font-size: 13.5px; font-weight: 500; text-align: right; }
+.frow .v small { display: block; font-weight: 400; color: var(--graphite); font-size: 12px; }
+.bar { height: 10px; background: var(--cream); border-radius: 5px; overflow: hidden; display: flex; }
+.bar i { display: block; height: 100%; background: var(--ink); border-radius: 5px; }
+.bar i.lost { background: var(--brick); border-radius: 0 5px 5px 0; }
+.bar i.ghost { background: #D9D4C7; }
+
+.dots { display: grid; grid-template-columns: repeat(20, 1fr); gap: 5px; max-width: 340px; margin: 6px 0 10px; }
+.dots i { display: block; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid #D9D4C7; }
+.dots i.on { background: var(--sage); border-color: var(--sage); }
+.legend { display: flex; gap: 18px; font-size: 12.5px; color: var(--graphite); }
+.legend b { font-weight: 500; color: var(--ink); }
+.legend .k { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; position: relative; top: 0.5px; }
+
+.seg-bar { height: 14px; border-radius: 7px; overflow: hidden; display: flex; background: var(--cream); margin: 4px 0 2px; }
+.seg-bar i { display: block; height: 100%; }
+.seg-lbl { display: flex; font-size: 12.5px; color: var(--graphite); margin-bottom: 10px; }
+.seg-lbl .r { margin-left: auto; }
+.seg-name { font-size: 13px; font-weight: 500; margin-top: 8px; }
+
+.card.act { background: var(--dusk-tint); border-color: #DBD8EC; }
+.act-line { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.act-line .txt { font-size: 15px; font-weight: 500; }
+.btn-dusk { margin-left: auto; padding: 8px 22px; font-size: 13.5px; font-weight: 500; color: #fff; background: var(--dusk); border: none; border-radius: var(--r-control); cursor: pointer; font-family: var(--font-text); }
+.timeline { position: relative; height: 44px; margin: 16px 4px 2px; }
+.timeline .rail { position: absolute; top: 20px; left: 0; right: 0; height: 2px; background: #D9D4C7; }
+.timeline .win { position: absolute; top: 14px; left: 66%; width: 34%; height: 14px; background: var(--dusk); opacity: 0.85; border-radius: 7px; }
+.timeline .tick { position: absolute; top: 28px; font-size: 11.5px; color: var(--graphite); transform: translateX(-50%); }
+.timeline .mark { position: absolute; top: 15px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--ink); }
+.timeline .mlbl { position: absolute; top: -4px; left: 0; font-size: 11.5px; color: var(--graphite); }
+.timeline .wlbl { position: absolute; top: -4px; left: 66%; width: 34%; text-align: center; font-size: 11.5px; color: var(--dusk); font-weight: 500; }
+
+.wtog { position: absolute; opacity: 0; pointer-events: none; }
+.wlink { display: inline-block; margin-top: 12px; font-size: 12.5px; color: var(--graphite); cursor: pointer; border-bottom: 1px dotted var(--border); }
+.wlink:hover { color: var(--ink); }
+.why { display: none; margin-top: 10px; padding: 10px 14px; background: var(--cream); border-radius: var(--r-control); font-size: 13.5px; color: var(--graphite); }
+.wtog:checked ~ .why { display: block; }
+
+/* ---- trend pins (the B block — only in "everything") ---- */
+.trendpins { margin-top: 14px; }
+.panel { background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 20px 24px; }
+.panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.panel-head h3 { font-size: 15px; font-weight: 500; }
+.panel-head .meta { margin-left: auto; font-size: 12.5px; color: var(--graphite); }
+.chart { width: 100%; height: auto; display: block; }
+.pins { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 16px; }
+.pin { border: 1px solid var(--border); border-radius: var(--r-control); padding: 12px 16px; font-size: 13.5px; }
+.pin .n { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--dusk); color: #fff; font-size: 12px; font-weight: 500; margin-right: 8px; }
+.pin.warn { background: var(--amber-tint); border-color: #EADFC8; }
+.pin .t { color: var(--graphite); font-size: 12.5px; display: block; margin-top: 2px; }
+</style>
+</head>
+<body>
+
+<input class="state" type="radio" name="c" id="c-1">
+<input class="state" type="radio" name="c" id="c-2" checked>
+<input class="state" type="radio" name="c" id="c-3">
+<input class="state" type="radio" name="lang" id="lang-en" checked>
+<input class="state" type="radio" name="lang" id="lang-zh">
+
+<div class="chrome">
+  <span class="tag">tacet · reports — combo test</span>
+  <span class="seg">
+    <label for="c-1">1 · Cards alone</label>
+    <label for="c-2">2 · Cards + pulse</label>
+    <label for="c-3">3 · Everything</label>
+  </span>
+  <span class="rec">2 recommended</span>
+  <span class="seg">
+    <label for="lang-en">EN</label>
+    <label for="lang-zh">中文</label>
+  </span>
+  <span class="note en">Flip 1→2→3 and feel where it turns into noise.</span>
+  <span class="note zh">在 1→2→3 之间切换，感受哪里开始变成噪音。</span>
+</div>
+
+<div class="frame">
+<div class="topbar">
+  <svg width="52" height="16" viewBox="0 0 52 16" fill="none"><path d="M1 8 C4 8 4 2 7 2 S10 14 13 14 16 4 19 4 22 12 25 12 28 7 31 8 L46 8" stroke="#111A2B" stroke-width="1.6" stroke-linecap="round"/><circle cx="49.5" cy="8" r="2" fill="#6E67AF"/></svg>
+  <span class="wordmark">tacet</span>
+  <span class="crumb"><span class="en">Reports · Overview</span><span class="zh">报表 · 总览</span></span>
+</div>
+
+<div class="page">
+  <div class="page-head">
+    <h1><span class="en">Reports</span><span class="zh">报表</span></h1>
+    <span class="date num"><span class="en">Jun 7 – Jul 7 · 30 days · All stores</span><span class="zh">6月7日 – 7月7日 · 30 天 · 全部门店</span></span>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="lbl"><span class="en">Revenue</span><span class="zh">收入</span></div><div class="val num">¥56,642</div><div class="sub num"><span class="en">avg order ¥223.78</span><span class="zh">平均客单 ¥223.78</span></div></div>
+    <div class="kpi"><div class="lbl"><span class="en">Orders</span><span class="zh">订单</span></div><div class="val num">232</div><div class="sub num"><span class="en">66 cancelled</span><span class="zh">66 单取消</span></div></div>
+    <div class="kpi"><div class="lbl"><span class="en">Buyers</span><span class="zh">买家</span></div><div class="val num">120</div><div class="sub"><span class="en">all new this period</span><span class="zh">本期全是新客</span></div></div>
+    <div class="kpi"><div class="lbl"><span class="en">Conversion</span><span class="zh">转化率</span></div><div class="val num">9.92%</div><div class="sub num"><span class="en">2,339 sessions</span><span class="zh">2,339 次访问</span></div></div>
+  </div>
+
+  <div class="read-head">
+    <span class="ai-dot"></span>
+    <h2><span class="en">The read</span><span class="zh">解读</span></h2>
+    <span class="meta"><span class="en">Drawn from this report's numbers — nothing else · refreshes twice a day</span><span class="zh">只根据本报告的数字生成 · 每天最多更新两次</span></span>
+  </div>
+
+  <!-- the pulse line — shows in 2 + 3 -->
+  <div class="pulseline">
+    <svg width="120" height="22" viewBox="0 0 120 22" fill="none">
+      <path d="M2 11 C7 11 7 3 12 3 S17 19 22 19 27 5 32 5 37 16 42 16 47 9 52 10 L75 11 L104 11" stroke="#111A2B" stroke-width="1.6" stroke-linecap="round"/>
+      <circle cx="112" cy="11" r="3" fill="#6E67AF"/>
+    </svg>
+    <span class="verdict"><span class="en">Mostly calm. One thing needs you.</span><span class="zh">大体平稳。有一件事需要你。</span></span>
+    <span class="chips">
+      <span class="pchip ok"><span class="st"></span><span class="en num">2 steady</span><span class="zh num">2 项平稳</span></span>
+      <span class="pchip warn"><span class="st"></span><span class="en"><span class="num">1</span> needs you — buyers not returning</span><span class="zh">1 项要留意 —— 买家没回头</span></span>
+    </span>
+  </div>
+
+  <div class="cards">
+
+    <!-- 1 · money flow -->
+    <div class="card span2">
+      <div class="cap"><span class="ai-dot"></span><span class="en">2,339 visits became ¥56,642. Cancels took ¥8,568.</span><span class="zh">2,339 次到访变成 ¥56,642，取消吃掉了 ¥8,568。</span></div>
+      <div class="sub"><span class="en">The path from a visit to money kept</span><span class="zh">从到访到实收的路径</span></div>
+      <div class="frow">
+        <span class="l"><span class="en">Visited the store</span><span class="zh">到店浏览</span></span>
+        <span class="bar"><i style="flex-basis:100%"></i></span>
+        <span class="v num">2,339</span>
+      </div>
+      <div class="frow">
+        <span class="l"><span class="en">Placed an order</span><span class="zh">下了单</span></span>
+        <span class="bar"><i style="flex-basis:9.92%"></i><i class="ghost" style="flex-basis:90.08%"></i></span>
+        <span class="v num">232 <small>9.92%</small></span>
+      </div>
+      <div class="frow">
+        <span class="l"><span class="en">Money kept</span><span class="zh">实收</span></span>
+        <span class="bar"><i style="flex-basis:86.9%"></i><i class="lost" style="flex-basis:13.1%"></i></span>
+        <span class="v num">¥56,642 <small><span class="en">¥8,568 cancelled</span><span class="zh">取消 ¥8,568</span></small></span>
+      </div>
+      <input class="wtog" type="checkbox" id="w1">
+      <label class="wlink" for="w1"><span class="en">See the sentence</span><span class="zh">看原句</span></label>
+      <div class="why"><span class="en">The conversion rate was 9.92%, and 66 orders were cancelled, representing ¥8,567.76 in lost revenue worth watching.</span><span class="zh">转化率为 9.92%，有 66 单被取消，相当于 ¥8,567.76 的流失收入，值得留意。</span></div>
+    </div>
+
+    <!-- 2 · retention dots -->
+    <div class="card">
+      <div class="cap"><span class="ai-dot"></span><span class="en">120 buyers came. 11 came back.</span><span class="zh">来了 120 位买家，回头的只有 11 位。</span><span class="pill amber"><span class="en">Watch this</span><span class="zh">要留意</span></span></div>
+      <div class="sub"><span class="en">Each dot is one buyer this period</span><span class="zh">每个点代表本期一位买家</span></div>
+      <div class="dots">
+        <i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i>
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+      </div>
+      <div class="legend">
+        <span><span class="k" style="background:var(--sage)"></span><b class="num">11</b> <span class="en">returned in month 1 · 8.9%</span><span class="zh">第 1 个月回头 · 8.9%</span></span>
+        <span><span class="k" style="border:1.5px solid #D9D4C7"></span><b class="num">109</b> <span class="en">haven't come back</span><span class="zh">还没回来</span></span>
+      </div>
+      <input class="wtog" type="checkbox" id="w2">
+      <label class="wlink" for="w2"><span class="en">See the sentence</span><span class="zh">看原句</span></label>
+      <div class="why"><span class="en">Every one of the 120 buyers this period is recorded as new, with zero returning buyers. The store is acquiring people but not yet keeping them.</span><span class="zh">本期 120 位买家全部是新客，没有老客回购。店铺在获客，但还留不住人。</span></div>
+    </div>
+
+    <!-- 3 · channel share -->
+    <div class="card">
+      <div class="cap"><span class="ai-dot"></span><span class="en">WeChat carries 6 of every 10 orders.</span><span class="zh">每 10 单里有 6 单来自微信。</span><span class="pill sage"><span class="en">Working</span><span class="zh">运转良好</span></span></div>
+      <div class="sub"><span class="en">Share by channel</span><span class="zh">各渠道占比</span></div>
+      <div class="seg-name"><span class="en">Orders</span><span class="zh">订单</span></div>
+      <div class="seg-bar"><i style="flex-basis:61%;background:var(--ink)"></i><i style="flex-basis:39%;background:#C9C4B6"></i></div>
+      <div class="seg-lbl num"><span><span class="en">WeChat 141</span><span class="zh">微信 141</span></span><span class="r"><span class="en">Other 91</span><span class="zh">其他 91</span></span></div>
+      <div class="seg-name"><span class="en">Revenue</span><span class="zh">收入</span></div>
+      <div class="seg-bar"><i style="flex-basis:70%;background:var(--ink)"></i><i style="flex-basis:30%;background:#C9C4B6"></i></div>
+      <div class="seg-lbl num"><span><span class="en">WeChat ¥39,417</span><span class="zh">微信 ¥39,417</span></span><span class="r"><span class="en">Other ¥17,225</span><span class="zh">其他 ¥17,225</span></span></div>
+      <input class="wtog" type="checkbox" id="w3">
+      <label class="wlink" for="w3"><span class="en">See the sentence</span><span class="zh">看原句</span></label>
+      <div class="why"><span class="en">Keep building the WeChat channel — it drove 141 of 232 orders and ¥39,417 in revenue.</span><span class="zh">继续经营微信渠道 —— 它带来了 232 单中的 141 单，收入 ¥39,417。</span></div>
+    </div>
+
+    <!-- 4 · next step (the one Dusk element) -->
+    <div class="card act span2">
+      <div class="act-line">
+        <span class="ai-dot"></span>
+        <span class="txt"><span class="en">Message first-time buyers 20–30 days after they buy.</span><span class="zh">在首单后第 20–30 天，给新买家发一条消息。</span></span>
+        <button class="btn-dusk"><span class="en">Set up the nudge</span><span class="zh">设置提醒</span></button>
+      </div>
+      <div class="timeline">
+        <span class="rail"></span>
+        <span class="mark"></span>
+        <span class="mlbl"><span class="en">First purchase</span><span class="zh">首次下单</span></span>
+        <span class="win"></span>
+        <span class="wlbl"><span class="en">Nudge window</span><span class="zh">提醒窗口</span></span>
+        <span class="tick" style="left:0%">0</span>
+        <span class="tick" style="left:33%">10</span>
+        <span class="tick" style="left:66%">20</span>
+        <span class="tick" style="left:100%">30</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- the B block — only in "everything", to feel the noise -->
+  <div class="trendpins">
+    <div class="panel">
+      <div class="panel-head">
+        <h3><span class="en">Daily revenue, annotated</span><span class="zh">每日收入（带注记）</span></h3>
+        <span class="meta num"><span class="en">30 days · peak ¥4,102</span><span class="zh">30 天 · 峰值 ¥4,102</span></span>
+      </div>
+      <svg class="chart" viewBox="0 0 1040 240" fill="none">
+        <line x1="0" y1="210" x2="1040" y2="210" stroke="#E4E0D5"/>
+        <polyline points="10,190 45,178 80,185 115,160 150,168 185,150 220,158 255,120 290,138 325,145 360,128 395,135 430,90 465,110 500,125 535,118 570,105 605,112 640,95 675,60 710,82 745,98 780,90 815,102 850,78 885,88 920,140 955,150 990,162 1025,158"
+          stroke="#111A2B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="675" cy="60" r="5" fill="#6E67AF"/>
+        <rect x="600" y="20" width="150" height="24" rx="12" fill="#EEEDF6"/>
+        <text x="675" y="36" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#6E67AF" font-weight="500">1</text>
+        <circle cx="430" cy="90" r="5" fill="#6E67AF"/>
+        <rect x="370" y="52" width="120" height="24" rx="12" fill="#F7EEDE"/>
+        <text x="430" y="68" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#8A6425" font-weight="500">2</text>
+        <circle cx="955" cy="150" r="5" fill="#6E67AF"/>
+        <rect x="900" y="112" width="110" height="24" rx="12" fill="#EEEDF6"/>
+        <text x="955" y="128" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" fill="#6E67AF" font-weight="500">3</text>
+      </svg>
+      <div class="pins">
+        <div class="pin"><span class="n">1</span><span class="en">Best day: ¥4,102.</span><span class="zh">最好的一天：¥4,102。</span><span class="t"><span class="en">A WeChat push landed the day before.</span><span class="zh">前一天有一次微信推送。</span></span></div>
+        <div class="pin warn"><span class="n" style="background:var(--amber)">2</span><span class="en">Cancels clustered here — 19 of the 66.</span><span class="zh">取消在这里扎堆 —— 66 单中的 19 单。</span><span class="t"><span class="en">Worth checking what happened this week.</span><span class="zh">值得查一下这周发生了什么。</span></span></div>
+        <div class="pin"><span class="n">3</span><span class="en">The last week cooled off.</span><span class="zh">最后一周转淡。</span><span class="t"><span class="en">No returning buyers yet to smooth the dips.</span><span class="zh">还没有回头客来填平低谷。</span></span></div>
+      </div>
+    </div>
+    <div class="foot"><span class="en">↑ This is the B block. Notice it mostly re-tells the cards above — same money, same cancels, same WeChat. Extra reading, little extra knowing.</span><span class="zh">↑ 这是 B 模块。注意它基本在重复上面的卡片 —— 同样的钱、同样的取消、同样的微信。多了阅读量，没多多少信息。</span></div>
+  </div>
+
+  <div class="foot"><span class="en">Anything with the breathing dot was chosen and captioned by Tacet. The numbers themselves are computed, never written by AI.</span><span class="zh">带呼吸圆点的内容由 Tacet 挑选并配一句短话；数字本身全部由系统计算，AI 不写数字。</span></div>
+</div>
+</div>
+
+</body>
+</html>
