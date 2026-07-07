@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Inventory activity redesign mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   INVENTORY ACTIVITY — Tacet redesign, static mockup, no live data.
+   Three directions, same day, same 52 events:
+     A · Quiet ledger  — same table, Tacet skin. Sales are ink, not
+                         red; product+SKU share a cell; by+note merge.
+     B · Grouped feed  — one row per order / count session / restock.
+                         52 events fold to ~14 lines; rows expand.
+     C · Read first    — digest cards answer "anything wrong?" (hit
+                         zero, big moves, per channel), ledger below.
+     D · Combined B+C  — digest cards on top, grouped feed below.
+   Tokens per tacet-tokens.css v1.0. CSS-only, no code blocks.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --dusk-tint:   #EEEDF6;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", "Noto Sans SC", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", "Noto Sans SC", Georgia, serif;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+.mono { font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 12px; }
+
+/* ---- state machinery (CSS only) ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+
+#opt-a:checked ~ .frame .page-b,
+#opt-a:checked ~ .frame .page-c,
+#opt-a:checked ~ .frame .page-d,
+#opt-b:checked ~ .frame .page-a,
+#opt-b:checked ~ .frame .page-c,
+#opt-b:checked ~ .frame .page-d,
+#opt-c:checked ~ .frame .page-a,
+#opt-c:checked ~ .frame .page-b,
+#opt-c:checked ~ .frame .page-d,
+#opt-d:checked ~ .frame .page-a,
+#opt-d:checked ~ .frame .page-b,
+#opt-d:checked ~ .frame .page-c { display: none; }
+
+#lang-en:checked ~ .frame .zh { display: none; }
+#lang-zh:checked ~ .frame .en { display: none; }
+
+#opt-a:checked ~ .frame .chrome label[for="opt-a"],
+#opt-b:checked ~ .frame .chrome label[for="opt-b"],
+#opt-c:checked ~ .frame .chrome label[for="opt-c"],
+#opt-d:checked ~ .frame .chrome label[for="opt-d"],
+#lang-en:checked ~ .frame .chrome label[for="lang-en"],
+#lang-zh:checked ~ .frame .chrome label[for="lang-zh"] {
+  background: var(--paper); color: var(--ink);
+}
+#opt-a:checked ~ .frame .chrome .note-a,
+#opt-b:checked ~ .frame .chrome .note-b,
+#opt-c:checked ~ .frame .chrome .note-c,
+#opt-d:checked ~ .frame .chrome .note-d { display: inline; }
+
+/* ---- mockup chrome bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink);
+  color: rgba(251,249,244,0.75);
+  display: flex; align-items: center; gap: 24px;
+  padding: 10px 28px;
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5);
+}
+.chrome .seg { display: inline-flex; border: 1px solid rgba(251,249,244,0.25); border-radius: 999px; overflow: hidden; }
+.chrome .seg label {
+  padding: 3px 14px; cursor: pointer; color: rgba(251,249,244,0.75);
+  transition: background 200ms var(--ease-settle);
+}
+.chrome .note { display: none; color: rgba(251,249,244,0.45); }
+
+/* ---- product topbar (context only) ---- */
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 40px;
+  border-bottom: 1px solid var(--border);
+  background: var(--paper);
+}
+.topbar .wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 19px; letter-spacing: 0.2em; color: var(--ink);
+}
+.topbar .crumb { font-size: 13px; color: var(--graphite); }
+.topbar .crumb b { font-weight: 500; color: var(--ink); }
+
+/* ============================================================
+   SHARED PAGE PIECES
+   ============================================================ */
+main { max-width: 1120px; margin: 0 auto; padding: 32px 40px 96px; }
+
+.page-head { margin-bottom: 24px; }
+.page-head h1 { font-size: 20px; font-weight: 500; line-height: 1.3; }
+.page-head p { font-size: 13px; color: var(--graphite); max-width: 60ch; }
+
+/* Channel tabs — quiet text, active = ink underline. No colored dots,
+   no filled chips: the channel is a filter, not a traffic light. */
+.tabs {
+  display: flex; gap: 4px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.tab {
+  appearance: none; background: none; border: none;
+  font: 400 14px var(--font-text); color: var(--graphite);
+  padding: 8px 12px 10px; cursor: pointer;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+  display: inline-flex; align-items: baseline; gap: 7px;
+  transition: color 200ms var(--ease-settle);
+}
+.tab:hover { color: var(--ink); }
+.tab .n { font-size: 12px; color: var(--graphite); opacity: 0.75; }
+.tab.on { color: var(--ink); font-weight: 500; border-bottom-color: var(--ink); }
+.tab.quiet-ch .n { opacity: 0.4; }
+
+/* Toolbar — one line: range on the left, search + export on the right. */
+.toolbar {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.toolbar .grow { flex: 1; }
+.range { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; }
+.range .date {
+  border: 1px solid var(--border); background: #fff;
+  border-radius: var(--r-control); padding: 7px 12px;
+  font-size: 13.5px; color: var(--ink);
+}
+.range .arrow { color: var(--graphite); }
+.quick { display: inline-flex; gap: 2px; }
+.quick button {
+  appearance: none; background: none; border: none; cursor: pointer;
+  font: 400 13px var(--font-text); color: var(--graphite);
+  padding: 6px 10px; border-radius: var(--r-control);
+  transition: all 200ms var(--ease-settle);
+}
+.quick button:hover { background: var(--cream); color: var(--ink); }
+.quick button.on { background: var(--cream); color: var(--ink); font-weight: 500; }
+.search {
+  display: inline-flex; align-items: center; gap: 8px;
+  border: 1px solid var(--border); background: #fff;
+  border-radius: var(--r-control); padding: 7px 12px; min-width: 240px;
+}
+.search svg { flex: none; }
+.search input {
+  border: none; outline: none; background: none; width: 100%;
+  font: 400 13.5px var(--font-text); color: var(--ink);
+}
+.search input::placeholder { color: var(--graphite); opacity: 0.7; }
+.btn-secondary {
+  appearance: none; cursor: pointer;
+  font: 500 13.5px var(--font-text); color: var(--ink);
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--r-control); padding: 8px 16px;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: border-color 200ms var(--ease-settle);
+}
+.btn-secondary:hover { border-color: var(--graphite); }
+.btn-ghost {
+  appearance: none; cursor: pointer; background: none; border: none;
+  font: 400 13.5px var(--font-text); color: var(--graphite);
+  padding: 10px 16px; border-radius: var(--r-control);
+  transition: all 200ms var(--ease-settle);
+}
+.btn-ghost:hover { color: var(--ink); background: var(--cream); }
+
+/* Scope line under the toolbar — one quiet sentence, tabular numbers. */
+.scope { font-size: 13px; color: var(--graphite); margin-bottom: 12px; }
+.scope b { font-weight: 500; color: var(--ink); }
+
+/* The ledger card. */
+.card {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r-card); box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+
+/* Table (option A + C). */
+table { width: 100%; border-collapse: collapse; }
+thead th {
+  font: 500 11.5px var(--font-text); letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--graphite);
+  text-align: left; padding: 12px 16px;
+  border-bottom: 1px solid var(--border); background: var(--cream);
+}
+thead th.r, td.r { text-align: right; }
+tbody td {
+  padding: 11px 16px; font-size: 14px; vertical-align: top;
+  border-bottom: 1px solid #F0EDE4;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: #FDFCF9; }
+td.time { white-space: nowrap; color: var(--graphite); font-size: 13px; }
+td.ch   { white-space: nowrap; font-size: 13px; color: var(--graphite); }
+td.ch.manual { color: var(--ink); }
+td.store { white-space: nowrap; font-size: 13px; color: var(--graphite); }
+.prod { font-size: 14px; color: var(--ink); }
+.prod .sku { display: block; color: var(--graphite); opacity: 0.8; margin-top: 1px; }
+td.delta { white-space: nowrap; font-size: 14px; }
+.d-out { color: var(--ink); }
+.d-in  { color: var(--sage-ink); }
+td.bal { white-space: nowrap; font-size: 14px; color: var(--graphite); }
+.zero {
+  display: inline-block; padding: 0 9px; border-radius: 999px;
+  background: var(--amber-tint); color: var(--amber-ink);
+  font-size: 12.5px; font-weight: 500; line-height: 20px;
+}
+td.ctx { font-size: 12.5px; color: var(--graphite); max-width: 260px; }
+.day-divider td {
+  padding: 8px 16px; background: var(--cream);
+  font: 500 12px var(--font-text); color: var(--graphite);
+  letter-spacing: 0.04em;
+}
+.table-foot {
+  display: flex; justify-content: center; padding: 6px;
+  border-top: 1px solid #F0EDE4;
+}
+
+/* ============================================================
+   OPTION B — grouped feed
+   ============================================================ */
+.feed { padding: 4px 0; }
+.feed details { border-bottom: 1px solid #F0EDE4; }
+.feed details:last-of-type { border-bottom: none; }
+.feed summary {
+  list-style: none; cursor: pointer;
+  display: grid; grid-template-columns: 56px 150px 1fr auto auto;
+  gap: 16px; align-items: baseline;
+  padding: 13px 20px;
+  transition: background 200ms var(--ease-settle);
+}
+.feed summary::-webkit-details-marker { display: none; }
+.feed summary:hover { background: #FDFCF9; }
+.feed .f-time { font-size: 13px; color: var(--graphite); white-space: nowrap; }
+.feed .f-ch   { font-size: 13px; color: var(--graphite); white-space: nowrap; }
+.feed .f-ch.manual { color: var(--ink); }
+.feed .f-what { font-size: 14px; color: var(--ink); }
+.feed .f-what .sub { color: var(--graphite); font-size: 13px; }
+.feed .f-net { font-size: 14px; white-space: nowrap; text-align: right; min-width: 64px; }
+.feed .f-chev { color: var(--graphite); opacity: 0.55; transition: transform 200ms var(--ease-settle); }
+.feed details[open] .f-chev { transform: rotate(90deg); }
+.feed details[open] summary { background: #FDFCF9; }
+.f-items { padding: 2px 20px 14px 242px; }
+.f-item {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 16px;
+  align-items: baseline; padding: 5px 0; font-size: 13.5px;
+  border-bottom: 1px dashed #EFECE2;
+}
+.f-item:last-child { border-bottom: none; }
+.f-item .sku { color: var(--graphite); font-size: 12px; margin-left: 8px; }
+.f-item .bal { color: var(--graphite); font-size: 13px; min-width: 72px; text-align: right; }
+.f-more { padding: 6px 0 2px; font-size: 12.5px; color: var(--graphite); }
+
+/* ============================================================
+   OPTION C — read first
+   ============================================================ */
+.digest {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+  margin-bottom: 24px;
+}
+.dcard {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r-card); padding: 18px 20px;
+}
+.dcard h3 {
+  font: 500 11.5px var(--font-text); letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--graphite); margin-bottom: 10px;
+}
+.dcard .drow {
+  display: flex; justify-content: space-between; align-items: baseline;
+  gap: 12px; padding: 5px 0; font-size: 14px;
+}
+.dcard .drow + .drow { border-top: 1px dashed #EFECE2; }
+.dcard .drow .meta { color: var(--graphite); font-size: 12.5px; white-space: nowrap; }
+.dcard .foot { margin-top: 10px; font-size: 12.5px; color: var(--graphite); }
+.dcard .foot a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--border); }
+.dcard .foot a:hover { border-bottom-color: var(--ink); }
+.dcard.calm { background: var(--cream); border: none; }
+.ledger-title {
+  font: 500 11.5px var(--font-text); letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--graphite); margin: 0 0 10px 2px;
+}
+
+@media (max-width: 860px) {
+  main { padding: 24px 16px 64px; }
+  .digest { grid-template-columns: 1fr; }
+  .feed summary { grid-template-columns: 48px 1fr auto; }
+  .feed .f-ch { display: none; }
+  .f-items { padding-left: 20px; }
+}
+</style>
+</head>
+<body>
+
+<input type="radio" name="opt" id="opt-a" class="state">
+<input type="radio" name="opt" id="opt-b" class="state">
+<input type="radio" name="opt" id="opt-c" class="state">
+<input type="radio" name="opt" id="opt-d" class="state" checked>
+<input type="radio" name="lang" id="lang-en" class="state" checked>
+<input type="radio" name="lang" id="lang-zh" class="state">
+
+<div class="frame">
+
+<div class="chrome">
+  <span class="tag">tacet mockup · inventory activity</span>
+  <span class="seg">
+    <label for="opt-a">A · Quiet ledger</label>
+    <label for="opt-b">B · Grouped feed</label>
+    <label for="opt-c">C · Read first</label>
+    <label for="opt-d">D · Combined</label>
+  </span>
+  <span class="seg">
+    <label for="lang-en">EN</label>
+    <label for="lang-zh">中文</label>
+  </span>
+  <span class="note note-a">Same table, Tacet skin — sales are ink, not red; only a zero balance asks for attention.</span>
+  <span class="note note-b">One line per order, count session or restock — 52 events fold to 14 lines. Rows open.</span>
+  <span class="note note-c">Answers "anything wrong?" first — hit zero, big moves, per channel — then the ledger.</span>
+  <span class="note note-d">B + C together — the digest answers "anything wrong?", the grouped feed tells the day.</span>
+</div>
+
+<div class="topbar">
+  <span class="wordmark">tacet</span>
+  <span class="crumb"><span class="en">Inventory · <b>Activity</b></span><span class="zh">库存 · <b>动态</b></span></span>
+</div>
+
+<main>
+
+<!-- ============================================================
+     OPTION A — QUIET LEDGER
+     ============================================================ -->
+<div class="page page-a">
+
+  <div class="page-head">
+    <h1><span class="en">Activity</span><span class="zh">库存动态</span></h1>
+    <p><span class="en">Every stock change across every channel, one line each. Times are Guangzhou local.</span><span class="zh">各渠道的每一次库存变动，一行一条。时间为广州本地时间。</span></p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on"><span class="en">All channels</span><span class="zh">全部渠道</span> <span class="n num">52</span></button>
+    <button class="tab"><span class="en">Mini-app</span><span class="zh">小程序</span> <span class="n num">3</span></button>
+    <button class="tab">gzgrocery <span class="n num">4</span></button>
+    <button class="tab quiet-ch"><span class="en">Meituan Tianhe</span><span class="zh">美团天河</span> <span class="n num">0</span></button>
+    <button class="tab"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span> <span class="n num">22</span></button>
+    <button class="tab"><span class="en">Manual</span><span class="zh">手动</span> <span class="n num">23</span></button>
+  </div>
+
+  <div class="toolbar">
+    <span class="range">
+      <span class="date num">2026-07-07</span>
+      <span class="arrow">→</span>
+      <span class="date num">2026-07-07</span>
+    </span>
+    <span class="quick">
+      <button class="on"><span class="en">Today</span><span class="zh">今天</span></button>
+      <button>7d</button>
+      <button>30d</button>
+    </span>
+    <span class="grow"></span>
+    <span class="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input placeholder="SKU / name / order · 货号 / 名称 / 订单">
+    </span>
+    <button class="btn-secondary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+      <span class="en">Export CSV</span><span class="zh">导出 CSV</span>
+    </button>
+  </div>
+
+  <p class="scope">
+    <span class="en"><b>All channels</b> · <span class="num">52</span> events · <span class="num">41</span> out · <span class="num">1,883</span> in — export downloads this view.</span>
+    <span class="zh"><b>全部渠道</b> · <span class="num">52</span> 条 · 出库 <span class="num">41</span> · 入库 <span class="num">1,883</span> — 导出即当前视图。</span>
+  </p>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th><span class="en">Time</span><span class="zh">时间</span></th>
+          <th><span class="en">Channel</span><span class="zh">渠道</span></th>
+          <th><span class="en">Store</span><span class="zh">门店</span></th>
+          <th><span class="en">Product</span><span class="zh">商品</span></th>
+          <th class="r">Δ</th>
+          <th class="r"><span class="en">Left</span><span class="zh">余量</span></th>
+          <th><span class="en">Context</span><span class="zh">备注</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="time num">19:02</td>
+          <td class="ch manual"><span class="en">Manual</span><span class="zh">手动</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Tabbouleh Bowl<span class="sku mono">1-330</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num">1</td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">19:02</td>
+          <td class="ch manual"><span class="en">Manual</span><span class="zh">手动</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Roasted Pumpkin Soup<span class="sku mono">1-370</span></span></td>
+          <td class="delta r num d-out">−5</td>
+          <td class="bal r num">2</td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">19:01</td>
+          <td class="ch manual"><span class="en">Manual</span><span class="zh">手动</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Hearty Rye &amp; Whole Wheat Bread (Sliced &amp; Frozen)<span class="sku mono">3-250</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num">2</td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">19:01</td>
+          <td class="ch manual"><span class="en">Manual</span><span class="zh">手动</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Peanut Butter Duo<span class="sku mono">4-680 + 4-690</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num">1</td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">19:01</td>
+          <td class="ch manual"><span class="en">Manual</span><span class="zh">手动</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">All Natural Peanut Butter<span class="sku mono">4-680</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num">1</td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">18:38</td>
+          <td class="ch manual"><span class="en">Manual</span><span class="zh">手动</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Quinoa Salad<span class="sku mono">1-300</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num"><span class="zero num">0</span></td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">18:13</td>
+          <td class="ch"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Roasted Pumpkin Soup<span class="sku mono">1-370</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num">7</td>
+          <td class="ctx"><span class="en">Order …4931820 #8 · x1</span><span class="zh">订单 …4931820 #8 · x1</span></td>
+        </tr>
+        <tr>
+          <td class="time num">18:13</td>
+          <td class="ch"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Beet Salad<span class="sku mono">1-310</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num"><span class="zero num">0</span></td>
+          <td class="ctx"><span class="en">Order …4931820 #8 · x1</span><span class="zh">订单 …4931820 #8 · x1</span></td>
+        </tr>
+        <tr>
+          <td class="time num">18:13</td>
+          <td class="ch"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Hearty Rye &amp; Whole Wheat Bread<span class="sku mono">S(3-250)</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num">4</td>
+          <td class="ctx"><span class="en">Order …4931820 #8 · x1</span><span class="zh">订单 …4931820 #8 · x1</span></td>
+        </tr>
+        <tr>
+          <td class="time num">17:26</td>
+          <td class="ch"><span class="en">Mini-app</span><span class="zh">小程序</span></td>
+          <td class="store"><span class="en">Tianhe</span><span class="zh">天河</span></td>
+          <td><span class="prod">Silken Tofu Pudding<span class="sku mono">2-140</span></span></td>
+          <td class="delta r num d-out">−2</td>
+          <td class="bal r num">11</td>
+          <td class="ctx"><span class="en">Order R-2107 · x2</span><span class="zh">订单 R-2107 · x2</span></td>
+        </tr>
+        <tr>
+          <td class="time num">16:47</td>
+          <td class="ch">gzgrocery</td>
+          <td class="store"><span class="en">Tianhe</span><span class="zh">天河</span></td>
+          <td><span class="prod">Oat Milk 1L<span class="sku mono">5-020</span></span></td>
+          <td class="delta r num d-out">−3</td>
+          <td class="bal r num">24</td>
+          <td class="ctx"><span class="en">Order GV-88231 · x3</span><span class="zh">订单 GV-88231 · x3</span></td>
+        </tr>
+        <tr>
+          <td class="time num">15:12</td>
+          <td class="ch manual"><span class="en">Manual</span><span class="zh">手动</span></td>
+          <td class="store"><span class="en">Yuexiu</span><span class="zh">越秀</span></td>
+          <td><span class="prod">Sprouted Grain Bread<span class="sku mono">3-110</span></span></td>
+          <td class="delta r num d-in">+240</td>
+          <td class="bal r num">252</td>
+          <td class="ctx"><span class="en">Jing · restock from Tianhe</span><span class="zh">Jing · 天河调货补库</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="table-foot">
+      <button class="btn-ghost"><span class="en">Show 40 more</span><span class="zh">再显示 40 条</span></button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     OPTION B — GROUPED FEED
+     ============================================================ -->
+<div class="page page-b">
+
+  <div class="page-head">
+    <h1><span class="en">Activity</span><span class="zh">库存动态</span></h1>
+    <p>
+      <span class="en">Today: 12 orders took <span class="num">41</span> units out, one restock brought <span class="num">1,883</span> in. Two items hit zero.</span>
+      <span class="zh">今天：12 笔订单出库 <span class="num">41</span> 件，一次补货入库 <span class="num">1,883</span> 件。两个商品已售罄。</span>
+    </p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on"><span class="en">All channels</span><span class="zh">全部渠道</span> <span class="n num">52</span></button>
+    <button class="tab"><span class="en">Mini-app</span><span class="zh">小程序</span> <span class="n num">3</span></button>
+    <button class="tab">gzgrocery <span class="n num">4</span></button>
+    <button class="tab quiet-ch"><span class="en">Meituan Tianhe</span><span class="zh">美团天河</span> <span class="n num">0</span></button>
+    <button class="tab"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span> <span class="n num">22</span></button>
+    <button class="tab"><span class="en">Manual</span><span class="zh">手动</span> <span class="n num">23</span></button>
+  </div>
+
+  <div class="toolbar">
+    <span class="range">
+      <span class="date num">2026-07-07</span>
+      <span class="arrow">→</span>
+      <span class="date num">2026-07-07</span>
+    </span>
+    <span class="quick">
+      <button class="on"><span class="en">Today</span><span class="zh">今天</span></button>
+      <button>7d</button>
+      <button>30d</button>
+    </span>
+    <span class="grow"></span>
+    <span class="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input placeholder="SKU / name / order · 货号 / 名称 / 订单">
+    </span>
+    <button class="btn-secondary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+      <span class="en">Export CSV</span><span class="zh">导出 CSV</span>
+    </button>
+  </div>
+
+  <div class="card feed">
+
+    <details>
+      <summary>
+        <span class="f-time num">19:01</span>
+        <span class="f-ch manual"><span class="en">Manual · Yuexiu</span><span class="zh">手动 · 越秀</span></span>
+        <span class="f-what"><span class="en">Jing counted 6 items</span><span class="zh">Jing 盘点了 6 个商品</span> <span class="sub num">19:01–19:03</span></span>
+        <span class="f-net num d-out">−10</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Tabbouleh Bowl<span class="sku mono">1-330</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">1 left</span><span class="zh">余 1</span></span></div>
+        <div class="f-item"><span>Roasted Pumpkin Soup<span class="sku mono">1-370</span></span><span class="num d-out">−5</span><span class="bal num"><span class="en">2 left</span><span class="zh">余 2</span></span></div>
+        <div class="f-item"><span>Hearty Rye &amp; Whole Wheat Bread (Sliced &amp; Frozen)<span class="sku mono">3-250</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">2 left</span><span class="zh">余 2</span></span></div>
+        <div class="f-item"><span>Peanut Butter Duo<span class="sku mono">4-680 + 4-690</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">1 left</span><span class="zh">余 1</span></span></div>
+        <div class="f-item"><span>All Natural Peanut Butter<span class="sku mono">4-680</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">1 left</span><span class="zh">余 1</span></span></div>
+        <div class="f-item"><span>Quinoa Salad<span class="sku mono">1-300</span></span><span class="num d-out">−1</span><span class="bal"><span class="zero num">0</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">18:13</span>
+        <span class="f-ch"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></span>
+        <span class="f-what"><span class="en">Order …4931820 #8</span><span class="zh">订单 …4931820 #8</span> <span class="sub"><span class="en">3 items</span><span class="zh">3 个商品</span></span></span>
+        <span class="f-net num d-out">−3</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Roasted Pumpkin Soup<span class="sku mono">1-370</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">7 left</span><span class="zh">余 7</span></span></div>
+        <div class="f-item"><span>Beet Salad<span class="sku mono">1-310</span></span><span class="num d-out">−1</span><span class="bal"><span class="zero num">0</span></span></div>
+        <div class="f-item"><span>Hearty Rye &amp; Whole Wheat Bread<span class="sku mono">S(3-250)</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">4 left</span><span class="zh">余 4</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">17:26</span>
+        <span class="f-ch"><span class="en">Mini-app · Tianhe</span><span class="zh">小程序 · 天河</span></span>
+        <span class="f-what"><span class="en">Order R-2107</span><span class="zh">订单 R-2107</span> <span class="sub"><span class="en">2 items</span><span class="zh">2 个商品</span></span></span>
+        <span class="f-net num d-out">−3</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Silken Tofu Pudding<span class="sku mono">2-140</span></span><span class="num d-out">−2</span><span class="bal num"><span class="en">11 left</span><span class="zh">余 11</span></span></div>
+        <div class="f-item"><span>Oat Milk 1L<span class="sku mono">5-020</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">27 left</span><span class="zh">余 27</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">16:47</span>
+        <span class="f-ch">gzgrocery · <span class="en">Tianhe</span><span class="zh">天河</span></span>
+        <span class="f-what"><span class="en">Order GV-88231</span><span class="zh">订单 GV-88231</span> <span class="sub"><span class="en">1 item</span><span class="zh">1 个商品</span></span></span>
+        <span class="f-net num d-out">−3</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Oat Milk 1L<span class="sku mono">5-020</span></span><span class="num d-out">−3</span><span class="bal num"><span class="en">24 left</span><span class="zh">余 24</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">16:20</span>
+        <span class="f-ch"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></span>
+        <span class="f-what"><span class="en">Order …4922105 #7</span><span class="zh">订单 …4922105 #7</span> <span class="sub"><span class="en">1 item</span><span class="zh">1 个商品</span></span></span>
+        <span class="f-net num d-out">−1</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Tabbouleh Bowl<span class="sku mono">1-330</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">2 left</span><span class="zh">余 2</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">15:12</span>
+        <span class="f-ch manual"><span class="en">Manual · Yuexiu</span><span class="zh">手动 · 越秀</span></span>
+        <span class="f-what"><span class="en">Restock from Tianhe</span><span class="zh">天河调货补库</span> <span class="sub"><span class="en">17 items · Jing</span><span class="zh">17 个商品 · Jing</span></span></span>
+        <span class="f-net num d-in">+1,883</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Sprouted Grain Bread<span class="sku mono">3-110</span></span><span class="num d-in">+240</span><span class="bal num"><span class="en">252 left</span><span class="zh">余 252</span></span></div>
+        <div class="f-item"><span>Oat Milk 1L<span class="sku mono">5-020</span></span><span class="num d-in">+180</span><span class="bal num"><span class="en">204 left</span><span class="zh">余 204</span></span></div>
+        <div class="f-item"><span>All Natural Peanut Butter<span class="sku mono">4-680</span></span><span class="num d-in">+96</span><span class="bal num"><span class="en">97 left</span><span class="zh">余 97</span></span></div>
+        <div class="f-more"><span class="en">14 more items</span><span class="zh">另有 14 个商品</span></div>
+      </div>
+    </details>
+
+  </div>
+
+  <div class="table-foot" style="border:none">
+    <button class="btn-ghost"><span class="en">Show the morning · 8 more</span><span class="zh">显示上午 · 再 8 条</span></button>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     OPTION C — READ FIRST
+     ============================================================ -->
+<div class="page page-c">
+
+  <div class="page-head">
+    <h1><span class="en">Activity</span><span class="zh">库存动态</span></h1>
+    <p><span class="en">What moved today, and what needs a look. The full ledger is below.</span><span class="zh">今天动了什么、哪里需要看一眼。完整明细在下方。</span></p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on"><span class="en">All channels</span><span class="zh">全部渠道</span> <span class="n num">52</span></button>
+    <button class="tab"><span class="en">Mini-app</span><span class="zh">小程序</span> <span class="n num">3</span></button>
+    <button class="tab">gzgrocery <span class="n num">4</span></button>
+    <button class="tab quiet-ch"><span class="en">Meituan Tianhe</span><span class="zh">美团天河</span> <span class="n num">0</span></button>
+    <button class="tab"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span> <span class="n num">22</span></button>
+    <button class="tab"><span class="en">Manual</span><span class="zh">手动</span> <span class="n num">23</span></button>
+  </div>
+
+  <div class="toolbar">
+    <span class="range">
+      <span class="date num">2026-07-07</span>
+      <span class="arrow">→</span>
+      <span class="date num">2026-07-07</span>
+    </span>
+    <span class="quick">
+      <button class="on"><span class="en">Today</span><span class="zh">今天</span></button>
+      <button>7d</button>
+      <button>30d</button>
+    </span>
+    <span class="grow"></span>
+    <span class="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input placeholder="SKU / name / order · 货号 / 名称 / 订单">
+    </span>
+    <button class="btn-secondary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+      <span class="en">Export CSV</span><span class="zh">导出 CSV</span>
+    </button>
+  </div>
+
+  <div class="digest">
+
+    <div class="dcard">
+      <h3><span class="en">Hit zero today</span><span class="zh">今日售罄</span></h3>
+      <div class="drow"><span>Quinoa Salad</span><span class="meta num">18:38</span></div>
+      <div class="drow"><span>Beet Salad</span><span class="meta num">18:13</span></div>
+      <div class="foot"><a href="#"><span class="en">Restock →</span><span class="zh">补货 →</span></a></div>
+    </div>
+
+    <div class="dcard">
+      <h3><span class="en">Big moves</span><span class="zh">大变动</span></h3>
+      <div class="drow"><span><span class="en">Restock from Tianhe · 17 items</span><span class="zh">天河调货补库 · 17 个商品</span></span><span class="num d-in">+1,883</span></div>
+      <div class="drow"><span>Roasted Pumpkin Soup · <span class="en">Jing's count</span><span class="zh">Jing 盘点</span></span><span class="num d-out">−5</span></div>
+    </div>
+
+    <div class="dcard calm">
+      <h3><span class="en">By channel</span><span class="zh">分渠道</span></h3>
+      <div class="drow"><span><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></span><span class="meta"><span class="num">22</span> · <span class="num d-out">−22</span></span></div>
+      <div class="drow"><span>gzgrocery</span><span class="meta"><span class="num">4</span> · <span class="num d-out">−9</span></span></div>
+      <div class="drow"><span><span class="en">Mini-app</span><span class="zh">小程序</span></span><span class="meta"><span class="num">3</span> · <span class="num d-out">−5</span></span></div>
+      <div class="drow"><span><span class="en">Meituan Tianhe</span><span class="zh">美团天河</span></span><span class="meta"><span class="en">quiet all day</span><span class="zh">全天无动静</span></span></div>
+    </div>
+
+  </div>
+
+  <p class="ledger-title"><span class="en">The ledger · 52 events</span><span class="zh">明细 · 52 条</span></p>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th><span class="en">Time</span><span class="zh">时间</span></th>
+          <th><span class="en">Channel</span><span class="zh">渠道</span></th>
+          <th><span class="en">Product</span><span class="zh">商品</span></th>
+          <th class="r">Δ</th>
+          <th class="r"><span class="en">Left</span><span class="zh">余量</span></th>
+          <th><span class="en">Context</span><span class="zh">备注</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="time num">19:02</td>
+          <td class="ch manual"><span class="en">Manual · Yuexiu</span><span class="zh">手动 · 越秀</span></td>
+          <td><span class="prod">Tabbouleh Bowl<span class="sku mono">1-330</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num">1</td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">19:02</td>
+          <td class="ch manual"><span class="en">Manual · Yuexiu</span><span class="zh">手动 · 越秀</span></td>
+          <td><span class="prod">Roasted Pumpkin Soup<span class="sku mono">1-370</span></span></td>
+          <td class="delta r num d-out">−5</td>
+          <td class="bal r num">2</td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">18:38</td>
+          <td class="ch manual"><span class="en">Manual · Yuexiu</span><span class="zh">手动 · 越秀</span></td>
+          <td><span class="prod">Quinoa Salad<span class="sku mono">1-300</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num"><span class="zero num">0</span></td>
+          <td class="ctx">Jing</td>
+        </tr>
+        <tr>
+          <td class="time num">18:13</td>
+          <td class="ch"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></td>
+          <td><span class="prod">Beet Salad<span class="sku mono">1-310</span></span></td>
+          <td class="delta r num d-out">−1</td>
+          <td class="bal r num"><span class="zero num">0</span></td>
+          <td class="ctx"><span class="en">Order …4931820 #8</span><span class="zh">订单 …4931820 #8</span></td>
+        </tr>
+        <tr>
+          <td class="time num">15:12</td>
+          <td class="ch manual"><span class="en">Manual · Yuexiu</span><span class="zh">手动 · 越秀</span></td>
+          <td><span class="prod">Sprouted Grain Bread<span class="sku mono">3-110</span></span></td>
+          <td class="delta r num d-in">+240</td>
+          <td class="bal r num">252</td>
+          <td class="ctx"><span class="en">Jing · restock from Tianhe</span><span class="zh">Jing · 天河调货补库</span></td>
+        </tr>
+      </tbody>
+    </table>
+    <div class="table-foot">
+      <button class="btn-ghost"><span class="en">Show all 52</span><span class="zh">显示全部 52 条</span></button>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     OPTION D — COMBINED (C digest + B grouped feed)
+     ============================================================ -->
+<div class="page page-d">
+
+  <div class="page-head">
+    <h1><span class="en">Activity</span><span class="zh">库存动态</span></h1>
+    <p>
+      <span class="en">Today: 12 orders took <span class="num">41</span> units out, one restock brought <span class="num">1,883</span> in. Two items hit zero.</span>
+      <span class="zh">今天：12 笔订单出库 <span class="num">41</span> 件，一次补货入库 <span class="num">1,883</span> 件。两个商品已售罄。</span>
+    </p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on"><span class="en">All channels</span><span class="zh">全部渠道</span> <span class="n num">52</span></button>
+    <button class="tab"><span class="en">Mini-app</span><span class="zh">小程序</span> <span class="n num">3</span></button>
+    <button class="tab">gzgrocery <span class="n num">4</span></button>
+    <button class="tab quiet-ch"><span class="en">Meituan Tianhe</span><span class="zh">美团天河</span> <span class="n num">0</span></button>
+    <button class="tab"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span> <span class="n num">22</span></button>
+    <button class="tab"><span class="en">Manual</span><span class="zh">手动</span> <span class="n num">23</span></button>
+  </div>
+
+  <div class="toolbar">
+    <span class="range">
+      <span class="date num">2026-07-07</span>
+      <span class="arrow">→</span>
+      <span class="date num">2026-07-07</span>
+    </span>
+    <span class="quick">
+      <button class="on"><span class="en">Today</span><span class="zh">今天</span></button>
+      <button>7d</button>
+      <button>30d</button>
+    </span>
+    <span class="grow"></span>
+    <span class="search">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#58606E" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input placeholder="SKU / name / order · 货号 / 名称 / 订单">
+    </span>
+    <button class="btn-secondary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+      <span class="en">Export CSV</span><span class="zh">导出 CSV</span>
+    </button>
+  </div>
+
+  <div class="digest">
+
+    <div class="dcard">
+      <h3><span class="en">Hit zero today</span><span class="zh">今日售罄</span></h3>
+      <div class="drow"><span>Quinoa Salad</span><span class="meta num">18:38</span></div>
+      <div class="drow"><span>Beet Salad</span><span class="meta num">18:13</span></div>
+      <div class="foot"><a href="#"><span class="en">Restock →</span><span class="zh">补货 →</span></a></div>
+    </div>
+
+    <div class="dcard">
+      <h3><span class="en">Big moves</span><span class="zh">大变动</span></h3>
+      <div class="drow"><span><span class="en">Restock from Tianhe · 17 items</span><span class="zh">天河调货补库 · 17 个商品</span></span><span class="num d-in">+1,883</span></div>
+      <div class="drow"><span>Roasted Pumpkin Soup · <span class="en">Jing's count</span><span class="zh">Jing 盘点</span></span><span class="num d-out">−5</span></div>
+    </div>
+
+    <div class="dcard calm">
+      <h3><span class="en">By channel</span><span class="zh">分渠道</span></h3>
+      <div class="drow"><span><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></span><span class="meta"><span class="num">22</span> · <span class="num d-out">−22</span></span></div>
+      <div class="drow"><span>gzgrocery</span><span class="meta"><span class="num">4</span> · <span class="num d-out">−9</span></span></div>
+      <div class="drow"><span><span class="en">Mini-app</span><span class="zh">小程序</span></span><span class="meta"><span class="num">3</span> · <span class="num d-out">−5</span></span></div>
+      <div class="drow"><span><span class="en">Meituan Tianhe</span><span class="zh">美团天河</span></span><span class="meta"><span class="en">quiet all day</span><span class="zh">全天无动静</span></span></div>
+    </div>
+
+  </div>
+
+  <p class="ledger-title"><span class="en">The day · 14 entries · 52 events</span><span class="zh">今日 · 14 组 · 52 条</span></p>
+
+  <div class="card feed">
+
+    <details>
+      <summary>
+        <span class="f-time num">19:01</span>
+        <span class="f-ch manual"><span class="en">Manual · Yuexiu</span><span class="zh">手动 · 越秀</span></span>
+        <span class="f-what"><span class="en">Jing counted 6 items</span><span class="zh">Jing 盘点了 6 个商品</span> <span class="sub num">19:01–19:03</span></span>
+        <span class="f-net num d-out">−10</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Tabbouleh Bowl<span class="sku mono">1-330</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">1 left</span><span class="zh">余 1</span></span></div>
+        <div class="f-item"><span>Roasted Pumpkin Soup<span class="sku mono">1-370</span></span><span class="num d-out">−5</span><span class="bal num"><span class="en">2 left</span><span class="zh">余 2</span></span></div>
+        <div class="f-item"><span>Hearty Rye &amp; Whole Wheat Bread (Sliced &amp; Frozen)<span class="sku mono">3-250</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">2 left</span><span class="zh">余 2</span></span></div>
+        <div class="f-item"><span>Peanut Butter Duo<span class="sku mono">4-680 + 4-690</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">1 left</span><span class="zh">余 1</span></span></div>
+        <div class="f-item"><span>All Natural Peanut Butter<span class="sku mono">4-680</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">1 left</span><span class="zh">余 1</span></span></div>
+        <div class="f-item"><span>Quinoa Salad<span class="sku mono">1-300</span></span><span class="num d-out">−1</span><span class="bal"><span class="zero num">0</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">18:13</span>
+        <span class="f-ch"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></span>
+        <span class="f-what"><span class="en">Order …4931820 #8</span><span class="zh">订单 …4931820 #8</span> <span class="sub"><span class="en">3 items</span><span class="zh">3 个商品</span></span></span>
+        <span class="f-net num d-out">−3</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Roasted Pumpkin Soup<span class="sku mono">1-370</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">7 left</span><span class="zh">余 7</span></span></div>
+        <div class="f-item"><span>Beet Salad<span class="sku mono">1-310</span></span><span class="num d-out">−1</span><span class="bal"><span class="zero num">0</span></span></div>
+        <div class="f-item"><span>Hearty Rye &amp; Whole Wheat Bread<span class="sku mono">S(3-250)</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">4 left</span><span class="zh">余 4</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">17:26</span>
+        <span class="f-ch"><span class="en">Mini-app · Tianhe</span><span class="zh">小程序 · 天河</span></span>
+        <span class="f-what"><span class="en">Order R-2107</span><span class="zh">订单 R-2107</span> <span class="sub"><span class="en">2 items</span><span class="zh">2 个商品</span></span></span>
+        <span class="f-net num d-out">−3</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Silken Tofu Pudding<span class="sku mono">2-140</span></span><span class="num d-out">−2</span><span class="bal num"><span class="en">11 left</span><span class="zh">余 11</span></span></div>
+        <div class="f-item"><span>Oat Milk 1L<span class="sku mono">5-020</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">27 left</span><span class="zh">余 27</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">16:47</span>
+        <span class="f-ch">gzgrocery · <span class="en">Tianhe</span><span class="zh">天河</span></span>
+        <span class="f-what"><span class="en">Order GV-88231</span><span class="zh">订单 GV-88231</span> <span class="sub"><span class="en">1 item</span><span class="zh">1 个商品</span></span></span>
+        <span class="f-net num d-out">−3</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Oat Milk 1L<span class="sku mono">5-020</span></span><span class="num d-out">−3</span><span class="bal num"><span class="en">24 left</span><span class="zh">余 24</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">16:20</span>
+        <span class="f-ch"><span class="en">Meituan Yuexiu</span><span class="zh">美团越秀</span></span>
+        <span class="f-what"><span class="en">Order …4922105 #7</span><span class="zh">订单 …4922105 #7</span> <span class="sub"><span class="en">1 item</span><span class="zh">1 个商品</span></span></span>
+        <span class="f-net num d-out">−1</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Tabbouleh Bowl<span class="sku mono">1-330</span></span><span class="num d-out">−1</span><span class="bal num"><span class="en">2 left</span><span class="zh">余 2</span></span></div>
+      </div>
+    </details>
+
+    <details>
+      <summary>
+        <span class="f-time num">15:12</span>
+        <span class="f-ch manual"><span class="en">Manual · Yuexiu</span><span class="zh">手动 · 越秀</span></span>
+        <span class="f-what"><span class="en">Restock from Tianhe</span><span class="zh">天河调货补库</span> <span class="sub"><span class="en">17 items · Jing</span><span class="zh">17 个商品 · Jing</span></span></span>
+        <span class="f-net num d-in">+1,883</span>
+        <span class="f-chev">›</span>
+      </summary>
+      <div class="f-items">
+        <div class="f-item"><span>Sprouted Grain Bread<span class="sku mono">3-110</span></span><span class="num d-in">+240</span><span class="bal num"><span class="en">252 left</span><span class="zh">余 252</span></span></div>
+        <div class="f-item"><span>Oat Milk 1L<span class="sku mono">5-020</span></span><span class="num d-in">+180</span><span class="bal num"><span class="en">204 left</span><span class="zh">余 204</span></span></div>
+        <div class="f-item"><span>All Natural Peanut Butter<span class="sku mono">4-680</span></span><span class="num d-in">+96</span><span class="bal num"><span class="en">97 left</span><span class="zh">余 97</span></span></div>
+        <div class="f-more"><span class="en">14 more items</span><span class="zh">另有 14 个商品</span></div>
+      </div>
+    </details>
+
+  </div>
+
+  <div class="table-foot" style="border:none">
+    <button class="btn-ghost"><span class="en">Show the morning · 8 more</span><span class="zh">显示上午 · 再 8 条</span></button>
+  </div>
+
+</div>
+
+</main>
+</div>
+</body>
+</html>

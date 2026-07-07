@@ -11437,7 +11437,43 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
         LEFT JOIN retail_stores  s ON s.id = l.store_id
        WHERE ${built.whereNoSource}
        GROUP BY 1 ORDER BY 2 DESC`).all(built.params);
-    res.json({ success: true, from: built.from, to: built.to, total, limit, offset, summary, rows });
+    // Digest for the "read first" cards above the ledger: items whose LAST
+    // movement in the window left them at zero (they ended the window sold
+    // out — a later restock takes them off the list), and the largest single
+    // moves. Both honour the full filter (channel tab + search + dates), so
+    // switching tabs re-scopes the cards along with the table.
+    const zeroed = tdb().prepare(`
+      WITH last AS (
+        SELECT l.product_id, l.store_id, MAX(l.id) AS last_id
+          FROM retail_stock_ledger l
+          LEFT JOIN store_products p ON p.id = l.product_id
+          LEFT JOIN retail_stores  s ON s.id = l.store_id
+         WHERE ${built.where}
+         GROUP BY l.product_id, l.store_id
+      )
+      SELECT datetime(l.created_at,'+8 hours') AS ts_local,
+             COALESCE(NULLIF(TRIM(p.name_en),''), NULLIF(TRIM(p.name_cn),'')) AS product,
+             p.sku,
+             COALESCE(NULLIF(TRIM(s.name_en),''), NULLIF(TRIM(s.name_cn),''), s.code) AS store
+        FROM last
+        JOIN retail_stock_ledger l ON l.id = last.last_id
+        LEFT JOIN store_products p ON p.id = l.product_id
+        LEFT JOIN retail_stores  s ON s.id = l.store_id
+       WHERE l.balance_after = 0 AND l.delta < 0
+       ORDER BY l.id DESC LIMIT 8`).all(built.params);
+    const big = tdb().prepare(`
+      SELECT datetime(l.created_at,'+8 hours') AS ts_local,
+             ${ACT_SOURCE_SQL} AS source,
+             COALESCE(NULLIF(TRIM(p.name_en),''), NULLIF(TRIM(p.name_cn),'')) AS product,
+             p.sku, l.delta, l.actor_label,
+             COALESCE(NULLIF(TRIM(s.name_en),''), NULLIF(TRIM(s.name_cn),''), s.code) AS store
+        FROM retail_stock_ledger l
+        LEFT JOIN store_products p ON p.id = l.product_id
+        LEFT JOIN retail_stores  s ON s.id = l.store_id
+       WHERE ${built.where} AND ABS(l.delta) >= 2
+       ORDER BY ABS(l.delta) DESC, l.id DESC LIMIT 3`).all(built.params);
+    res.json({ success: true, from: built.from, to: built.to, total, limit, offset, summary, rows,
+               digest: { zeroed, big } });
   } catch (e) {
     console.error('[activity]', e);
     res.status(500).json({ success: false, error: 'activity_failed', message: e.message });

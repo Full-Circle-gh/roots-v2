@@ -8198,50 +8198,59 @@
   <section id="tab-activity">
     <h2>Inventory activity · 库存流水</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      Every stock change across all channels in one timeline — mini-app, gzgrocery, Meituan Tianhe, Meituan Yuexiu, Guanyi pickups and manual adjustments. Tap a channel card to filter, or download just that channel as CSV. Times are Guangzhou local.
+      What moved today, and what needs a look. Every stock change across every channel, one line each — pick a channel tab to filter; Export CSV downloads the view you're looking at. Times are Guangzhou local.
     </p>
     <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      所有渠道的库存变动都汇总在一条时间线 —— 小程序、gzgrocery、美团天河、美团越秀、管易自提与手动调整。点按某个渠道卡片即可筛选,也可单独导出该渠道的 CSV。时间为广州本地时间。
+      今天动了什么、哪里需要看一眼。各渠道的每一次库存变动，一行一条 —— 点渠道页签可筛选；导出 CSV 即当前视图。时间为广州本地时间。
     </p>
 
-    <!-- Channel switcher: pick a sales channel and the whole view below
-         (count, log, export) scopes to it. Counts are filled in by JS. -->
-    <div id="act-tabs" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px"></div>
+    <!-- Channel switcher: quiet text tabs, one per sales channel. Picking a
+         tab scopes the digest, ledger and export. Counts filled in by JS. -->
+    <div id="act-tabs"></div>
 
-    <div class="pa-toolbar" style="flex-wrap:wrap;gap:8px;align-items:center">
-      <input id="act-from" type="date" onchange="actLoad(true)" style="padding:6px 8px">
-      <span class="muted">→</span>
-      <input id="act-to" type="date" onchange="actLoad(true)" style="padding:6px 8px">
-      <button class="btn-ghost" type="button" onclick="actSetRange('today')">Today · 今天</button>
-      <button class="btn-ghost" type="button" onclick="actSetRange('week')">7d · 近7天</button>
-      <button class="btn-ghost" type="button" onclick="actSetRange('month')">30d · 近30天</button>
-      <input id="act-search" type="text" placeholder="SKU / name / order · 货号 / 名称 / 订单" oninput="clearTimeout(window._actSearchT);window._actSearchT=setTimeout(()=>actLoad(true),300)" style="padding:6px 8px;min-width:200px">
+    <div class="act-toolbar">
+      <input id="act-from" type="date" class="act-date" onchange="actLoad(true)">
+      <span class="act-arrow">→</span>
+      <input id="act-to" type="date" class="act-date" onchange="actLoad(true)">
+      <span class="act-quick">
+        <button type="button" onclick="actSetRange('today')">Today · 今天</button>
+        <button type="button" onclick="actSetRange('week')">7d · 近7天</button>
+        <button type="button" onclick="actSetRange('month')">30d · 近30天</button>
+      </span>
       <span style="flex:1"></span>
-      <button class="btn-primary" type="button" onclick="actExportCsv()">⬇ Export CSV · 导出</button>
+      <span class="act-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="act-search" type="text" placeholder="SKU / name / order · 货号 / 名称 / 订单" oninput="clearTimeout(window._actSearchT);window._actSearchT=setTimeout(()=>actLoad(true),300)">
+      </span>
+      <button class="act-export" type="button" onclick="actExportCsv()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+        <span>Export CSV · 导出</span>
+      </button>
     </div>
 
-    <div id="act-summary" style="margin:12px 0"></div>
+    <!-- Read-first digest: hit zero / big moves / by channel. Filled by JS. -->
+    <div id="act-digest" class="act-digest"></div>
 
-    <div style="overflow-x:auto;border:1px solid var(--border,#e0ddd5);border-radius:8px">
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <div id="act-summary" class="act-scope"></div>
+
+    <div class="act-tablewrap">
+      <table class="act-table">
         <thead>
-          <tr style="text-align:left;background:var(--bg-elev-1)">
-            <th style="padding:8px 10px">Time · 时间</th>
-            <th style="padding:8px 10px">Source · 来源</th>
-            <th style="padding:8px 10px">Store · 门店</th>
-            <th style="padding:8px 10px">SKU · 货号</th>
-            <th style="padding:8px 10px">Product · 商品</th>
-            <th style="padding:8px 10px;text-align:right">Δ</th>
-            <th style="padding:8px 10px;text-align:right">Balance · 库存</th>
-            <th style="padding:8px 10px">By · 操作人</th>
-            <th style="padding:8px 10px">Note · 备注</th>
+          <tr>
+            <th>Time · 时间</th>
+            <th>Channel · 渠道</th>
+            <th>Store · 门店</th>
+            <th>Product · 商品</th>
+            <th class="r">Δ</th>
+            <th class="r">Left · 余量</th>
+            <th>Context · 备注</th>
           </tr>
         </thead>
         <tbody id="act-tbody"></tbody>
       </table>
     </div>
-    <div style="text-align:center;margin:12px 0">
-      <button id="act-more" class="btn-ghost" type="button" onclick="actLoadMore()" style="display:none">Load more · 加载更多</button>
+    <div class="act-foot">
+      <button id="act-more" class="act-ghost" type="button" onclick="actLoadMore()" style="display:none">Load more · 加载更多</button>
     </div>
   </section>
 
