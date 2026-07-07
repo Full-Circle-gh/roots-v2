@@ -10687,11 +10687,19 @@
 
 <!-- Full-screen Configure overlay: the Sales-page gear renders a channel's
      config surface into #cfg-host (see salesOpenConfig in 01-core + igHostEl in
-     15-integrations). Panels bring their own header + close (igLocClose), which
-     also tears this down + refreshes Sales. 16px inset, dim backdrop, Esc/click
-     to close. -->
+     15-integrations). The overlay's own top bar owns the title + ✕; each panel's
+     header is hidden. Closing (bar ✕ / backdrop / Esc → igLocClose) tears this
+     down + refreshes Sales. 16px inset, dim backdrop. -->
 <div id="cfg-overlay" class="cfg-ov" hidden onclick="if(event.target===this)igLocClose()">
-  <div id="cfg-host" class="cfg-host"></div>
+  <div class="cfg-shell" role="dialog" aria-modal="true">
+    <div class="cfg-bar">
+      <span class="cfg-bar-ico" id="cfg-ico"></span>
+      <span class="cfg-bar-t" id="cfg-title">Configuration · 配置</span>
+      <span class="cfg-bar-sp"></span>
+      <button class="cfg-bar-x" type="button" onclick="igLocClose()" aria-label="Close">✕</button>
+    </div>
+    <div id="cfg-host" class="cfg-host"></div>
+  </div>
 </div>
 
 </body>

@@ -376,8 +376,13 @@ async function salesWireSetup() {
         g.setAttribute('aria-label', cuT('Configure', '配置'));
         g.innerHTML = GEAR_SVG;
         // Host-rendered configs (mini/web/meituan) open in the full-screen
-        // overlay; tab-navigating ones (gzgrocery/eleme) go straight there.
-        g.onclick = cfg.overlay ? () => salesOpenConfig(cfg.open) : cfg.open;
+        // overlay — reuse the card's own channel icon for the bar; tab-
+        // navigating ones (gzgrocery/eleme) go straight there.
+        const cardIco = card.querySelector('.sales-ch-ico');
+        const barIcon = cardIco ? cardIco.innerHTML : '';
+        g.onclick = cfg.overlay
+          ? () => salesOpenConfig(cfg.open, { icon: barIcon, title: cuT('Configuration', '配置') })
+          : cfg.open;
         top.insertBefore(g, toggle);
       }
       if (foot) foot.innerHTML = '';
@@ -396,18 +401,30 @@ async function salesWireSetup() {
 
 // ── Full-screen Configure overlay ────────────────────────────────────────────
 // A channel's gear renders its config surface into #cfg-host — a 16px-inset
-// full-screen sheet — instead of the inline host. igHostEl() (part 15) targets
-// #cfg-host while body.cfg-open is set, so the existing renderers need no change;
-// each panel brings its own header + ✕ (igLocClose), which tears the overlay
-// down and refreshes Sales. Also used by the Locations "Add location" button.
-window.salesOpenConfig = function (renderFn) {
+// full-screen sheet with its own top bar (icon + title + ✕). igHostEl() (part
+// 15) targets #cfg-host while body.cfg-open is set, so the existing renderers
+// need no change; each panel's own header is hidden (CSS) and the bar owns it.
+// Closing (bar ✕ / backdrop / Esc → igLocClose) tears the overlay down and
+// refreshes Sales. Also used by the Locations "Add location" button.
+const SALES_STORE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>';
+window.salesOpenConfig = function (renderFn, opts) {
   const ov = document.getElementById('cfg-overlay');
   if (!ov) { if (typeof renderFn === 'function') renderFn(); return; }  // graceful fallback
+  opts = opts || {};
+  const ico = document.getElementById('cfg-ico');
+  const ttl = document.getElementById('cfg-title');
+  if (ico) ico.innerHTML = opts.icon || '';
+  if (ttl) ttl.textContent = opts.title || cuT('Configuration', '配置');
   document.body.classList.add('cfg-open');
   document.body.style.overflow = 'hidden';
   ov.hidden = false;
   requestAnimationFrame(() => ov.classList.add('in'));
   try { if (typeof renderFn === 'function') renderFn(); } catch (e) { /* renderer surfaces its own errors */ }
+};
+// Locations "Add location" — same overlay, store icon + its own title.
+window.salesAddLocation = function () {
+  salesOpenConfig(function () { if (window.igAddLocation) igAddLocation(); },
+    { icon: SALES_STORE_ICON, title: cuT('Add location', '新增门店') });
 };
 // Called by igLocClose after it clears the host: fade the overlay out + reload
 // the Sales figures so a just-saved change shows.
@@ -555,7 +572,7 @@ function csRenderLocations() {
       + '</div>';
   }).join('');
   box.innerHTML = '<div class="td-kicker sales-loc-kicker"><span>' + cuT('Locations', '门店') + '</span>'
-    + '<button class="btn btn-sm" type="button" onclick="salesOpenConfig(igAddLocation)">' + plusIcon + cuT('Add location', '新增门店') + '</button></div>'
+    + '<button class="btn btn-sm" type="button" onclick="salesAddLocation()">' + plusIcon + cuT('Add location', '新增门店') + '</button></div>'
     + '<div class="sales-grid sales-loc-grid">' + cards + '</div>';
 }
 
