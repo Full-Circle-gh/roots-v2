@@ -3642,6 +3642,17 @@ function renderReadonlyOrder(o) {
   const cust = (typeof ordCustomerLines === 'function') ? ordCustomerLines(o) : { name: o.nickname || o.recipient_name || '—', phone: o.recipient_phone || '' };
   const chan = ordChannelLabel(o);
   const hasCust = (cust.name && cust.name !== '—') || cust.phone;
+  // Same-city courier (Qingyun) live tracking. Meituan's own delivery is fulfilled
+  // by a Qingyun rider, so once the daemon links this mirrored order to its waybill
+  // (via the platform order number) we show the SAME live rider card + AMap map our
+  // own orders use — the point of running a Meituan order from here. Read-only: no
+  // dispatch/compare button (that's the write-back wave), just watch the rider. The
+  // map element mounts via mountCourierMap(o) in the shared open-order flow.
+  const c = o.courier;
+  const cDelivered = !!(c && c.stage === 'delivered');
+  const cMeta = c && (cDelivered ? COURIER_STAGE.delivered : COURIER_STAGE[c.stage]);
+  const cStale = !cDelivered && !!(c && c.stage === 'in_transit' && courierAgeMs(c.updated_at) > COURIER_STALE_MS);
+  const courierCard = cMeta ? renderCourierStatusCard(o, c, cMeta, cStale, cDelivered) : '';
   mount.innerHTML = `
     <div class="order-card odd-${ODV.density}">
       <div class="order-head">
@@ -3654,6 +3665,8 @@ function renderReadonlyOrder(o) {
           <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
         </div>
       </div>
+
+      ${courierCard}
 
       <div class="order-detail">
         ${o.store_code ? `<div>

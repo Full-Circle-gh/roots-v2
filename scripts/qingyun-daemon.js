@@ -148,6 +148,22 @@ const BOOTSTRAP_ALERT_MS = Number(process.env.QINGYUN_BOOTSTRAP_ALERT_MS || 10 *
 // Returns retail_orders.id or null. Never throws.
 function matchRetailOrderId(d) {
   try {
+    // Channel deliveries dispatched THROUGH Qingyun (Meituan's own delivery is
+    // fulfilled by a Qingyun rider) carry the upstream platform order number as
+    // channelOrderId. Our Meituan mirror stores that number in
+    // meituan_order_import.meituan_order_no → retail_order_id, so an exact match
+    // links the rider to the right mirrored order. This is the reliable key for
+    // Meituan: the 备注/phone fallbacks below don't apply — Meituan masks the
+    // customer phone and never stamps our order ref into the 备注. A contains-
+    // match backs up the exact one in case the aggregator wraps our id with a
+    // prefix/suffix; meituan_order_no is a long unique id so it won't over-match.
+    const chanNo = String(d.channelOrderId || '').trim();
+    if (chanNo.length >= 6) {
+      const byChan =
+           db.prepare('SELECT retail_order_id FROM meituan_order_import WHERE meituan_order_no = ? AND retail_order_id IS NOT NULL').get(chanNo)
+        || db.prepare("SELECT retail_order_id FROM meituan_order_import WHERE ? LIKE '%' || meituan_order_no || '%' AND retail_order_id IS NOT NULL ORDER BY rowid DESC LIMIT 1").get(chanNo);
+      if (byChan && byChan.retail_order_id) return byChan.retail_order_id;
+    }
     const remark = String(d.userRemark || '');
     const m = remark.match(/MA\d{7}/i) || remark.match(/R\d{6,}/i) || remark.match(/#\s*(\d{3,})/);
     if (m) {
