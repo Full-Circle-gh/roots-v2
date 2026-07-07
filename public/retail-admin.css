@@ -192,7 +192,9 @@
     display: flex; align-items: center;
     padding: 0 var(--s5);
     gap: var(--s4);
-    position: sticky; top: 0; z-index: 10;
+    /* Fixed (not sticky) so it shares the rail's positioning context — see the
+       comment at `.topbar { … }` below. left set to the rail width. */
+    position: fixed; top: 0; left: 236px; right: 0; z-index: 10;
   }
   .brand {
     display: flex; align-items: center; gap: 10px;
@@ -419,10 +421,12 @@
     font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 18px;
     letter-spacing: .20em; color: var(--text-1);
   }
-  /* Topbar now spans only the content column (right of the rail). It stays
-     sticky/in-flow, so a matching left margin is all it needs; collapse + mobile
-     adjust it below. The topbar's own brand is hidden on desktop. */
-  .topbar { margin-left: 236px; }
+  /* Topbar spans only the content column (right of the rail) and is position:fixed
+     like the rail — both then share ONE positioning context, so their bottom
+     borders always meet at y:56. (A sticky topbar drifted from the fixed rail
+     under the Text-size `zoom`; the `main` comment notes fixed is zoom-safe.)
+     `main` reserves the 56px below; collapse + mobile adjust `left` below. The
+     topbar's own brand is hidden on desktop. */
   .topbar .brand { display: none; }
   .tabs button {
     position: relative;
@@ -501,13 +505,13 @@
 
   .tabs { transition: width var(--t-fast) ease, padding var(--t-fast) ease; }
   main    { transition: margin-left var(--t-fast) ease; }
-  .topbar { transition: margin-left var(--t-fast) ease; }
+  .topbar { transition: left var(--t-fast) ease; }
 
   body.nav-collapsed .tabs { width: 62px; padding-left: 8px; padding-right: 8px; }
   body.nav-collapsed main   { margin-left: 62px; }
   /* Topbar + the fixed embedded editors ride the rail's width so they stay
      flush against its right edge when it folds to icons. */
-  body.nav-collapsed .topbar { margin-left: 62px; }
+  body.nav-collapsed .topbar { left: 62px; }
   body.nav-collapsed #tab-mini-app-editor,
   body.nav-collapsed #tab-product-editor { left: 62px; }
   /* Collapsed rail brand → just the centered mark; wordmark + full-bleed inset
@@ -674,7 +678,7 @@
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
      ═══════════════════════════════════════════════════════════════════ */
-  main { padding: var(--s6) var(--s6) var(--s7); max-width: 1440px; margin: 0 0 0 236px; }
+  main { padding: calc(var(--s6) + 56px) var(--s6) var(--s7); max-width: 1440px; margin: 0 0 0 236px; }
   section { display: none; }
   /* Embedded editors (Mini App / Product Page) — pin the iframe to the full
      viewport below the topbar (56px) + tab nav (~42px) so it uses the whole
@@ -5965,7 +5969,7 @@
     /* Rail is hidden on phones, so the topbar reclaims full width AND shows its
        own brand again (the desktop rule hides it because the wordmark lives in
        the rail there). */
-    .topbar { padding: 0 14px; gap: 8px; position: static; margin-left: 0; }
+    .topbar { padding: 0 14px; gap: 8px; position: static; left: auto; right: auto; margin-left: 0; }
     .topbar .brand { display: flex; }
     .brand .sub, .brand .divider { display: none; }
 
