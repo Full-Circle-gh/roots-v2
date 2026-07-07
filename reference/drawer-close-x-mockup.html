@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drawer close × — Tacet options</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#E8E5DC;      /* drawer body (bg-app light) */
+    --surface:#FFFFFF;    /* card / chrome */
+    --cream:#F6F3EC;      /* raised surface on paper */
+    --ink:#12161A;
+    --graphite:#43413a;   /* text-2 light */
+    --graphite-2:#7d7a72; /* text-3 */
+    --line:rgba(18,22,26,.12);
+    --line-soft:rgba(18,22,26,.07);
+    --brass:#B08D4A;
+    --shadow-soft:0 1px 2px rgba(18,22,26,.05), 0 6px 20px rgba(18,22,26,.05);
+    --ease:cubic-bezier(.16,1,.3,1);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:#DDD9CE;font-family:"Inter",system-ui,sans-serif;color:var(--ink);
+       padding:40px 24px 80px;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto}
+  h1{font-family:"Fraunces",Georgia,serif;font-weight:400;font-size:30px;margin:0 0 4px;letter-spacing:-.01em}
+  .lede{color:var(--graphite);font-size:14px;line-height:1.6;margin:0 0 32px;max-width:640px}
+  .lede b{font-weight:600}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:22px}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;
+        box-shadow:var(--shadow-soft)}
+  .card.pick{border-color:var(--brass);box-shadow:0 0 0 1px var(--brass),var(--shadow-soft)}
+  .card-h{padding:16px 18px 12px;border-bottom:1px solid var(--line-soft)}
+  .tag{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;
+       color:var(--graphite-2);margin-bottom:7px}
+  .tag.rec{color:var(--brass)}
+  .card-h h2{font-size:15px;font-weight:600;margin:0 0 4px}
+  .card-h p{font-size:12.5px;line-height:1.55;color:var(--graphite);margin:0}
+
+  /* Fake drawer-corner stage so each × sits in real context */
+  .stage{position:relative;height:180px;background:
+      linear-gradient(90deg,#D2CEC2 0 26px,var(--paper) 26px);overflow:hidden}
+  .stage::before{content:"";position:absolute;left:26px;top:0;bottom:0;width:1px;background:var(--line)}
+  .stage .peek{position:absolute;left:0;top:0;bottom:0;width:26px;background:rgba(18,22,26,.04)}
+  .rows{position:absolute;left:52px;right:20px;top:56px;display:flex;flex-direction:column;gap:11px;opacity:.85}
+  .rows i{display:block;height:9px;border-radius:5px;background:var(--line)}
+  .rows i:nth-child(1){width:58%}
+  .rows i:nth-child(2){width:80%}
+  .rows i:nth-child(3){width:42%}
+  .hint{position:absolute;left:52px;bottom:16px;font-size:11px;color:var(--graphite-2)}
+
+  /* Every button anchored top-right like the real .drawer-close */
+  .x{position:absolute;top:14px;right:14px;width:32px;height:32px;display:inline-flex;
+     align-items:center;justify-content:center;cursor:pointer;padding:0;border:0;background:none;
+     color:var(--graphite);transition:all .2s var(--ease)}
+  .x svg{width:15px;height:15px;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;fill:none}
+
+  /* CURRENT — heavy black-shadowed white disc + scale bounce */
+  .x-current{border-radius:999px;background:#fff;border:1px solid var(--line);
+             box-shadow:0 2px 8px rgba(0,0,0,.18)}
+  .x-current:hover{background:var(--cream);transform:scale(1.05)}
+
+  /* A — Quiet disc: paper fill, ink hairline, Tacet ambient shadow, no bounce */
+  .x-a{border-radius:999px;background:var(--paper);border:1px solid var(--line);
+       box-shadow:0 1px 2px rgba(18,22,26,.05)}
+  .x-a:hover{background:#fff;border-color:var(--graphite-2);color:var(--ink)}
+
+  /* B — Bare glyph: no chrome; a cream disc fades in only on hover (RECOMMEND) */
+  .x-b{border-radius:999px;background:transparent}
+  .x-b::after{content:"";position:absolute;inset:0;border-radius:999px;background:var(--cream);
+              opacity:0;transition:opacity .2s var(--ease);z-index:-1}
+  .x-b:hover{color:var(--ink)}
+  .x-b:hover::after{opacity:1}
+  .x-b{position:absolute;isolation:isolate}
+
+  /* C — Squircle control: 8px radius (Tacet control radius), cream fill, hairline */
+  .x-c{border-radius:8px;background:var(--cream);border:1px solid var(--line)}
+  .x-c:hover{background:#fff;border-color:var(--graphite-2);color:var(--ink)}
+
+  /* D — Hairline header bar (structural): flush glyph + Esc hint, no float */
+  .x-d-bar{position:absolute;top:0;left:26px;right:0;height:48px;background:var(--paper);
+           border-bottom:1px solid var(--line);display:flex;align-items:center;
+           justify-content:space-between;padding:0 14px 0 20px}
+  .x-d-bar .ttl{font-family:"Fraunces",serif;font-size:15px}
+  .x-d-side{display:inline-flex;align-items:center;gap:10px}
+  .x-d-side .esc{font-size:10px;letter-spacing:.08em;color:var(--graphite-2);
+                 border:1px solid var(--line);border-radius:5px;padding:2px 6px}
+  .x-d{position:static;color:var(--graphite)}
+  .x-d:hover{color:var(--ink)}
+  .stage.hdr .rows{top:74px}
+
+  /* dark chip preview */
+  .darkchip{display:flex;align-items:center;gap:10px;padding:10px 18px;border-top:1px solid var(--line-soft);
+            background:var(--cream)}
+  .darkstage{position:relative;width:100%;height:52px;border-radius:9px;overflow:hidden;
+             background:linear-gradient(90deg,#12161A 0 18px,#1A1F24 18px);border:1px solid rgba(232,229,220,.1)}
+  .darkstage .x{top:10px;right:10px;width:30px;height:30px;color:#AEABA2}
+  .darkstage .x-a{background:#1A1F24;border-color:rgba(232,229,220,.12);box-shadow:none}
+  .darkstage .x-a:hover{background:#1F252B;color:#E8E5DC;border-color:rgba(232,229,220,.28)}
+  .darkstage .x-b::after{background:rgba(232,229,220,.08)}
+  .darkstage .x-b:hover{color:#E8E5DC}
+  .darkstage .x-c{background:#1F252B;border-color:rgba(232,229,220,.12)}
+  .darkstage .x-c:hover{background:#262E35;color:#E8E5DC}
+  .darklabel{font-size:11px;color:var(--graphite-2)}
+
+  .note{margin-top:34px;font-size:12.5px;line-height:1.7;color:var(--graphite);background:var(--surface);
+        border:1px solid var(--line);border-radius:12px;padding:16px 20px}
+  .note b{color:var(--ink)}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:11.5px;background:var(--cream);
+       padding:1px 5px;border-radius:4px;border:1px solid var(--line-soft)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Drawer close × — does it fit Tacet?</h1>
+  <p class="lede">The current button is a white disc with a <b>heavy pure-black drop shadow</b> and a <b>scale bounce</b> on hover — both read Material/iOS, not "quiet paper." Below: the current one, then four options. Hover each to feel the motion. My pick is <b>Option B</b>.</p>
+
+  <div class="grid">
+
+    <!-- CURRENT -->
+    <div class="card">
+      <div class="card-h">
+        <span class="tag">Current — ships today</span>
+        <h2>Heavy floating disc</h2>
+        <p>Pure-black <code>0 2px 8px /.18</code> shadow + <code>scale(1.05)</code> bounce. Loud on paper.</p>
+      </div>
+      <div class="stage">
+        <div class="peek"></div>
+        <div class="rows"><i></i><i></i><i></i></div>
+        <div class="hint">Order R260607…</div>
+        <button class="x x-current" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- A -->
+    <div class="card">
+      <div class="card-h">
+        <span class="tag">Option A</span>
+        <h2>Quiet disc</h2>
+        <p>Same shape, fixed: paper fill, ink hairline, one faint ambient shadow, no bounce. Safest, smallest change.</p>
+      </div>
+      <div class="stage">
+        <div class="peek"></div>
+        <div class="rows"><i></i><i></i><i></i></div>
+        <div class="hint">Order R260607…</div>
+        <button class="x x-a" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="darkchip"><div class="darkstage"><button class="x x-a"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><span class="darklabel">dark</span></div>
+    </div>
+
+    <!-- B -->
+    <div class="card pick">
+      <div class="card-h">
+        <span class="tag rec">Option B · recommended</span>
+        <h2>Bare glyph</h2>
+        <p>No disc, no border, no shadow at rest — just the mark. A soft cream halo fades in <b>only on hover</b>. "When in doubt, remove something."</p>
+      </div>
+      <div class="stage">
+        <div class="peek"></div>
+        <div class="rows"><i></i><i></i><i></i></div>
+        <div class="hint">Order R260607…</div>
+        <button class="x x-b" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="darkchip"><div class="darkstage"><button class="x x-b"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><span class="darklabel">dark</span></div>
+    </div>
+
+    <!-- C -->
+    <div class="card">
+      <div class="card-h">
+        <span class="tag">Option C</span>
+        <h2>Squircle control</h2>
+        <p>8px radius — the same corner Tacet gives buttons &amp; inputs. Reads as "a control," consistent with the rest of the chrome.</p>
+      </div>
+      <div class="stage">
+        <div class="peek"></div>
+        <div class="rows"><i></i><i></i><i></i></div>
+        <div class="hint">Order R260607…</div>
+        <button class="x x-c" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="darkchip"><div class="darkstage"><button class="x x-c"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><span class="darklabel">dark</span></div>
+    </div>
+
+    <!-- D -->
+    <div class="card">
+      <div class="card-h">
+        <span class="tag">Option D · structural</span>
+        <h2>Hairline header bar</h2>
+        <p>Stop floating altogether: a thin top bar holds the title, the × sits flush right with an <code>Esc</code> hint. Most Tacet, but needs a header these drawers don't have yet.</p>
+      </div>
+      <div class="stage hdr">
+        <div class="peek"></div>
+        <div class="x-d-bar">
+          <span class="ttl">Order</span>
+          <span class="x-d-side">
+            <span class="esc">ESC</span>
+            <button class="x x-d" aria-label="Close">
+              <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            </button>
+          </span>
+        </div>
+        <div class="rows"><i></i><i></i><i></i></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="note">
+    <b>Recommendation — Option B (bare glyph).</b> It removes the two loudest offenders (the black shadow and the disc) so the mark simply floats on the paper the way Tacet wants; the cream halo on hover gives enough of a target without adding permanent chrome. <b>Option A</b> is the low-risk pick if you'd rather keep an always-visible affordance. Either is a change to one rule — <code>.side-drawer .drawer-close</code> in <code>retail-admin.css</code> — and applies everywhere (Orders, Customers, editors) at once. Tell me which and I'll wire it in.
+  </div>
+</div>
+</body>
+</html>
