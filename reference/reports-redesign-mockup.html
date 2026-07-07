@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Reports redesign mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET REPORTS REDESIGN — static mockup, no live data.
+   Three options in the chrome bar:
+     A — Chapters: sub-tabs, each answers one question   (recommended)
+     B — One screen: prose headlines, numbers unfold
+     C — Packed grid: everything visible, lists capped
+   Tokens per tacet-tokens.css v1.0.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --dusk-tint:   #EEEDF6;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+  --font-text: "Inter", "Noto Sans SC", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", "Noto Sans SC", Georgia, serif;
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: var(--font-text); font-size: 15px; line-height: 1.6; color: var(--ink); background: var(--paper); }
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- state machinery ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+#opt-a:checked ~ .frame .pg-b, #opt-a:checked ~ .frame .pg-c,
+#opt-b:checked ~ .frame .pg-a, #opt-b:checked ~ .frame .pg-c,
+#opt-c:checked ~ .frame .pg-a, #opt-c:checked ~ .frame .pg-b { display: none; }
+#lang-en:checked ~ .frame .zh, #lang-en:checked ~ .chrome .zh { display: none; }
+#lang-zh:checked ~ .frame .en, #lang-zh:checked ~ .chrome .en { display: none; }
+#opt-a:checked ~ .chrome .note-b, #opt-a:checked ~ .chrome .note-c,
+#opt-b:checked ~ .chrome .note-a, #opt-b:checked ~ .chrome .note-c,
+#opt-c:checked ~ .chrome .note-a, #opt-c:checked ~ .chrome .note-b { display: none; }
+#opt-a:checked ~ .chrome label[for="opt-a"],
+#opt-b:checked ~ .chrome label[for="opt-b"],
+#opt-c:checked ~ .chrome label[for="opt-c"],
+#lang-en:checked ~ .chrome label[for="lang-en"],
+#lang-zh:checked ~ .chrome label[for="lang-zh"] { background: var(--paper); color: var(--ink); }
+
+/* option A chapters */
+#ach-o:checked ~ .frame .ach:not(.ch-o),
+#ach-s:checked ~ .frame .ach:not(.ch-s),
+#ach-c:checked ~ .frame .ach:not(.ch-c),
+#ach-p:checked ~ .frame .ach:not(.ch-p) { display: none; }
+#ach-o:checked ~ .frame .chtabs label[for="ach-o"],
+#ach-s:checked ~ .frame .chtabs label[for="ach-s"],
+#ach-c:checked ~ .frame .chtabs label[for="ach-c"],
+#ach-p:checked ~ .frame .chtabs label[for="ach-p"] {
+  color: var(--ink); border-color: var(--ink); font-weight: 500;
+}
+
+/* ---- mockup chrome bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink); color: rgba(251,249,244,0.75);
+  display: flex; align-items: center; gap: 24px;
+  padding: 10px 28px; font-size: 12.5px; flex-wrap: wrap;
+}
+.chrome .tag { letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5); }
+.chrome .seg { display: inline-flex; border: 1px solid rgba(251,249,244,0.25); border-radius: 999px; overflow: hidden; }
+.chrome .seg label { padding: 3px 14px; cursor: pointer; transition: background 200ms var(--ease-settle); }
+.chrome .rec { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--sage); margin-left: 5px; }
+.chrome .note { color: rgba(251,249,244,0.45); }
+
+/* ---- topbar ---- */
+.topbar { display: flex; align-items: center; gap: 14px; padding: 18px 40px; border-bottom: 1px solid var(--border); background: var(--paper); }
+.topbar .wave { height: 16px; width: auto; display: block; }
+.topbar .wordmark { font-family: var(--font-display); font-weight: 300; font-size: 19px; letter-spacing: 0.2em; color: var(--ink); }
+.topbar .crumb { margin-left: auto; font-size: 13px; color: var(--graphite); }
+
+/* ---- page scaffold ---- */
+.page { max-width: 1120px; margin: 0 auto; padding: 36px 40px 96px; }
+.page-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 20px; }
+.page-head h1 { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; }
+.page-head .date { margin-left: auto; font-size: 13px; color: var(--graphite); }
+
+/* ---- controls ---- */
+.controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+.controls .seg { display: inline-flex; background: #fff; border: 1px solid var(--border); border-radius: var(--r-control); overflow: hidden; }
+.controls .seg span { padding: 6px 16px; font-size: 13.5px; color: var(--graphite); cursor: pointer; }
+.controls .seg span.on { background: var(--ink); color: var(--paper); }
+.controls .field { padding: 6px 14px; font-size: 13.5px; color: var(--graphite); background: #fff; border: 1px solid var(--border); border-radius: var(--r-control); cursor: pointer; }
+.controls .apply { margin-left: auto; padding: 7px 22px; font-size: 13.5px; font-weight: 500; color: #fff; background: var(--dusk); border: none; border-radius: var(--r-control); cursor: pointer; }
+
+/* ---- KPI cards ---- */
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 22px; }
+.kpi { background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 16px 20px; }
+.kpi .lbl { font-size: 13px; color: var(--graphite); }
+.kpi .val { font-size: 26px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.25; margin-top: 2px; }
+.kpi .sub { font-size: 12.5px; color: var(--graphite); margin-top: 2px; }
+.kpi .up   { color: var(--sage-ink); }
+.kpi .down { color: var(--amber-ink); }
+/* compact strip (options B and C) */
+.kpistrip { display: grid; grid-template-columns: repeat(8, 1fr); gap: 0; background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); margin-bottom: 18px; overflow: hidden; }
+.kpistrip .cell { padding: 14px 16px; border-left: 1px solid var(--border); }
+.kpistrip .cell:first-child { border-left: none; }
+.kpistrip .lbl { font-size: 11.5px; color: var(--graphite); white-space: nowrap; }
+.kpistrip .val { font-size: 19px; font-weight: 500; letter-spacing: -0.01em; margin-top: 1px; }
+.kpistrip .d { font-size: 11.5px; margin-left: 4px; font-weight: 400; }
+.kpistrip .up { color: var(--sage-ink); } .kpistrip .down { color: var(--amber-ink); }
+
+/* ---- panels ---- */
+.panel { background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 20px 24px; }
+.panel-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.panel-head h3 { font-size: 15px; font-weight: 500; }
+.panel-head .meta { margin-left: auto; font-size: 12.5px; color: var(--graphite); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; align-items: start; }
+.span2 { grid-column: span 2; }
+.foot-note { font-size: 12.5px; color: var(--graphite); margin-top: 12px; }
+.seeall { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--graphite); cursor: pointer; }
+.seeall:hover { color: var(--ink); }
+
+/* ---- bar list ---- */
+.brow { margin-bottom: 10px; }
+.brow .line { display: flex; align-items: baseline; font-size: 13.5px; }
+.brow .line .v { margin-left: auto; font-weight: 500; }
+.brow .track { height: 5px; background: var(--cream); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+.brow .track span { display: block; height: 100%; background: var(--ink); border-radius: 3px; }
+
+/* ---- status pill rows ---- */
+.srow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--cream); font-size: 13.5px; }
+.srow:first-of-type { border-top: none; }
+.srow .pill { padding: 1px 10px; border-radius: 999px; font-size: 12.5px; }
+.srow .n { margin-left: auto; font-weight: 500; }
+.srow .amt { color: var(--graphite); font-size: 12.5px; width: 76px; text-align: right; }
+.p-sage  { background: var(--sage-tint);  color: var(--sage-ink); }
+.p-amber { background: var(--amber-tint); color: var(--amber-ink); }
+.p-grey  { background: var(--cream);      color: var(--graphite); }
+.p-brick { background: var(--brick-tint); color: var(--brick); }
+
+/* ---- ranked rows ---- */
+.rrow { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; border-top: 1px solid var(--cream); font-size: 13.5px; }
+.rrow:first-of-type { border-top: none; }
+.rrow .ix { width: 18px; color: var(--graphite); font-size: 12.5px; }
+.rrow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rrow .v { font-weight: 500; }
+
+/* ---- trend ---- */
+.trend-wrap { position: relative; }
+.trend-seg { display: inline-flex; background: var(--cream); border-radius: 999px; font-size: 12.5px; }
+.trend-seg span { padding: 3px 14px; border-radius: 999px; color: var(--graphite); cursor: pointer; }
+.trend-seg span.on { background: var(--ink); color: var(--paper); }
+svg.trend { width: 100%; height: 170px; display: block; }
+svg.trend.short { height: 130px; }
+
+/* ---- heatmap ---- */
+.heatgrid { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
+.heatgrid i { display: block; aspect-ratio: 1 / 1; background: var(--ink); border-radius: 2px; }
+.heat-days { display: flex; flex-direction: column; justify-content: space-between; font-size: 10.5px; color: var(--graphite); padding: 1px 8px 1px 0; }
+.heat-flex { display: flex; }
+.heat-flex .heatgrid { flex: 1; }
+.heat-hours { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--graphite); margin: 6px 0 0 24px; }
+
+/* ---- funnel ---- */
+.frow { padding: 7px 0; border-top: 1px solid var(--cream); font-size: 13.5px; }
+.frow:first-of-type { border-top: none; }
+.frow .line { display: flex; }
+.frow .line .v { margin-left: auto; font-weight: 500; }
+.frow .line .pct { color: var(--graphite); font-size: 12.5px; width: 52px; text-align: right; }
+.frow .track { height: 5px; background: var(--cream); border-radius: 3px; margin-top: 4px; }
+.frow .track span { display: block; height: 100%; background: var(--ink); border-radius: 3px; }
+
+/* ---- composition bar ---- */
+.comp { display: flex; height: 10px; border-radius: 5px; overflow: hidden; margin: 6px 0 12px; }
+.comp i { display: block; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12.5px; color: var(--graphite); }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; }
+
+/* ---- mix / retention tiles ---- */
+.tiles { display: flex; gap: 12px; }
+.tile { flex: 1; background: var(--cream); border-radius: var(--r-control); padding: 12px 14px; text-align: center; }
+.tile .tv { font-size: 21px; font-weight: 500; }
+.tile .tl { font-size: 12px; color: var(--graphite); }
+
+/* ================= OPTION A ================= */
+.chtabs { display: flex; gap: 26px; border-bottom: 1px solid var(--border); margin: 4px 0 24px; }
+.chtabs label { padding: 0 2px 10px; font-size: 14px; color: var(--graphite); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 200ms var(--ease-settle); }
+.chtabs label:hover { color: var(--ink); }
+.hl-card { background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 8px 24px; margin-top: 14px; }
+.hl-row { display: flex; align-items: baseline; gap: 14px; padding: 13px 0; border-top: 1px solid var(--cream); cursor: pointer; }
+.hl-row:first-child { border-top: none; }
+.hl-row .k { width: 170px; flex: none; font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--graphite); }
+.hl-row .t { flex: 1; font-size: 14px; }
+.hl-row .go { color: var(--graphite); font-size: 14px; transition: transform 200ms var(--ease-settle); }
+.hl-row:hover .go { transform: translateX(3px); color: var(--ink); }
+
+/* ================= OPTION B ================= */
+.dom-card { background: #fff; border: 1px solid var(--border); border-radius: var(--r-card); padding: 20px 24px; margin-bottom: 14px; }
+.dom-card h3 { font-size: 15px; font-weight: 500; margin-bottom: 8px; }
+.facts { }
+.fact { display: flex; align-items: baseline; gap: 12px; padding: 8px 0; border-top: 1px solid var(--cream); font-size: 13.5px; }
+.fact:first-child { border-top: none; }
+.fact .t { flex: 1; color: var(--ink); }
+.fact .v { font-weight: 500; }
+.bff { display: none; }
+.bfold { display: none; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+.bff:checked ~ .bfold { display: block; }
+.bft { display: inline-block; margin-top: 10px; font-size: 12.5px; color: var(--graphite); cursor: pointer; }
+.bft:hover { color: var(--ink); }
+.bff:checked ~ .bft .closed { display: none; }
+.bff:not(:checked) ~ .bft .open { display: none; }
+.minigrid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.minigrid h4 { font-size: 13px; font-weight: 500; color: var(--graphite); margin-bottom: 8px; }
+
+/* ================= OPTION C ================= */
+.pg-c .panel { padding: 16px 20px; }
+.pg-c .panel-head { margin-bottom: 10px; }
+.pg-c .srow, .pg-c .rrow, .pg-c .frow { padding: 5px 0; font-size: 13px; }
+.pg-c .brow { margin-bottom: 7px; }
+.pg-c .brow .line { font-size: 13px; }
+</style>
+</head>
+<body>
+
+<!-- state -->
+<input class="state" type="radio" name="opt" id="opt-a" checked>
+<input class="state" type="radio" name="opt" id="opt-b">
+<input class="state" type="radio" name="opt" id="opt-c">
+<input class="state" type="radio" name="lang" id="lang-en" checked>
+<input class="state" type="radio" name="lang" id="lang-zh">
+<input class="state" type="radio" name="ach" id="ach-o" checked>
+<input class="state" type="radio" name="ach" id="ach-s">
+<input class="state" type="radio" name="ach" id="ach-c">
+<input class="state" type="radio" name="ach" id="ach-p">
+
+<!-- chrome (mockup only) -->
+<div class="chrome">
+  <span class="tag">Reports redesign</span>
+  <span class="seg">
+    <label for="opt-a">A<span class="rec">rec</span></label>
+    <label for="opt-b">B</label>
+    <label for="opt-c">C</label>
+  </span>
+  <span class="seg">
+    <label for="lang-en">EN</label>
+    <label for="lang-zh">中文</label>
+  </span>
+  <span class="note note-a"><span class="en">Chapters — each tab answers one question, one screen each</span><span class="zh">分章 — 每个页签回答一个问题，各占一屏</span></span>
+  <span class="note note-b"><span class="en">One screen — plain-language headlines, numbers unfold on demand</span><span class="zh">单屏 — 白话结论，明细按需展开</span></span>
+  <span class="note note-c"><span class="en">Packed grid — everything visible, lists capped at five</span><span class="zh">紧凑网格 — 全部可见，列表只留前五</span></span>
+</div>
+
+<div class="frame">
+  <div class="topbar">
+    <svg class="wave" viewBox="0 0 340 110" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55
+               C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55
+               C215 55, 260 55, 305 55" stroke="#111A2B" stroke-width="7" stroke-linecap="round"/>
+    </svg>
+    <span class="wordmark">tacet</span>
+    <span class="crumb"><span class="en">Reports</span><span class="zh">报表</span></span>
+  </div>
+
+  <!-- ============================================================
+       OPTION A — CHAPTERS
+       ============================================================ -->
+  <div class="page pg-a">
+    <div class="page-head">
+      <h1><span class="en">Reports</span><span class="zh">报表</span></h1>
+      <span class="date num"><span class="en">Jun 8 – Jul 7 · 30 days · all stores</span><span class="zh">6月8日 – 7月7日 · 近30天 · 全部门店</span></span>
+    </div>
+
+    <div class="controls">
+      <span class="seg num"><span><span class="en">Today</span><span class="zh">今天</span></span><span>7<span class="en">d</span><span class="zh">天</span></span><span class="on">30<span class="en">d</span><span class="zh">天</span></span><span>90<span class="en">d</span><span class="zh">天</span></span></span>
+      <span class="field num">06/08 – 07/07</span>
+      <span class="field"><span class="en">All stores</span><span class="zh">全部门店</span> ▾</span>
+      <button class="apply"><span class="en">Apply</span><span class="zh">应用</span></button>
+    </div>
+
+    <div class="chtabs">
+      <label for="ach-o"><span class="en">Overview</span><span class="zh">总览</span></label>
+      <label for="ach-s"><span class="en">Sales</span><span class="zh">销售</span></label>
+      <label for="ach-c"><span class="en">Customers</span><span class="zh">客户</span></label>
+      <label for="ach-p"><span class="en">Products &amp; traffic</span><span class="zh">商品与流量</span></label>
+    </div>
+
+    <!-- chapter: OVERVIEW -->
+    <div class="ach ch-o">
+      <div class="kpis">
+        <div class="kpi"><div class="lbl"><span class="en">Revenue</span><span class="zh">营业额</span></div><div class="val num">¥55,653</div><div class="sub"><span class="up num">↑ 12%</span> <span class="en">vs prior 30 days</span><span class="zh">对比前30天</span></div></div>
+        <div class="kpi"><div class="lbl"><span class="en">Orders</span><span class="zh">订单</span></div><div class="val num">228</div><div class="sub"><span class="up num">↑ 8%</span></div></div>
+        <div class="kpi"><div class="lbl"><span class="en">Average order</span><span class="zh">平均客单</span></div><div class="val num">¥223.77</div><div class="sub"><span class="down num">↓ 3%</span></div></div>
+        <div class="kpi"><div class="lbl"><span class="en">New customers</span><span class="zh">新客户</span></div><div class="val num">512</div><div class="sub"><span class="en">of 2,609 visitors</span><span class="zh">共2,609位访客</span></div></div>
+        <div class="kpi"><div class="lbl"><span class="en">Visits</span><span class="zh">访问量</span></div><div class="val num">4,891</div><div class="sub"><span class="en">2,326 sessions</span><span class="zh">2,326次会话</span></div></div>
+        <div class="kpi"><div class="lbl"><span class="en">Unique visitors</span><span class="zh">独立访客</span></div><div class="val num">2,609</div><div class="sub">&nbsp;</div></div>
+        <div class="kpi"><div class="lbl"><span class="en">Conversion</span><span class="zh">转化率</span></div><div class="val num">9.8%</div><div class="sub"><span class="en">visitors who ordered</span><span class="zh">下单访客占比</span></div></div>
+        <div class="kpi"><div class="lbl"><span class="en">Refund rate</span><span class="zh">退款率</span></div><div class="val num">1.7%</div><div class="sub"><span class="en">4 of 228 orders</span><span class="zh">228单中4单</span></div></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3><span class="en">Trend</span><span class="zh">趋势</span></h3>
+          <span class="trend-seg" style="margin-left:auto"><span class="on"><span class="en">Revenue</span><span class="zh">营业额</span></span><span><span class="en">Orders</span><span class="zh">订单</span></span><span><span class="en">Visits</span><span class="zh">访问</span></span></span>
+        </div>
+        <svg class="trend" viewBox="0 0 700 170" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" y1="30"  x2="700" y2="30"  stroke="#E4E0D5" stroke-dasharray="3 5"/>
+          <line x1="0" y1="85"  x2="700" y2="85"  stroke="#E4E0D5" stroke-dasharray="3 5"/>
+          <line x1="0" y1="140" x2="700" y2="140" stroke="#E4E0D5" stroke-dasharray="3 5"/>
+          <path d="M8 120 C25 100,38 142,56 118 C76 92,92 148,110 124 C128 88,148 132,168 106 C188 72,208 128,228 100
+                   C248 80,268 140,288 114 C308 62,328 122,348 96 C368 66,388 130,408 104 C428 56,448 118,468 90
+                   C488 62,508 124,528 98 C548 52,568 110,588 84 C608 48,630 98,652 70 C668 54,682 60,692 56"
+                stroke="#111A2B" stroke-width="2" fill="none"/>
+          <circle cx="692" cy="56" r="4" fill="#111A2B"/>
+        </svg>
+      </div>
+
+      <div class="hl-card">
+        <label class="hl-row" for="ach-s">
+          <span class="k"><span class="en">Sales</span><span class="zh">销售</span></span>
+          <span class="t"><span class="en">WeChat Pay carried 70% of revenue. Busiest hour: Saturday 20:00.</span><span class="zh">微信支付占营收 70%。最忙时段：周六 20:00。</span></span>
+          <span class="go">→</span>
+        </label>
+        <label class="hl-row" for="ach-c">
+          <span class="k"><span class="en">Customers</span><span class="zh">客户</span></span>
+          <span class="t"><span class="en">119 buyers, nearly all first-timers. 广州 leads with 90 orders.</span><span class="zh">119 位买家，几乎全是新客。广州订单最多（90 单）。</span></span>
+          <span class="go">→</span>
+        </label>
+        <label class="hl-row" for="ach-p">
+          <span class="k"><span class="en">Products &amp; traffic</span><span class="zh">商品与流量</span></span>
+          <span class="t"><span class="en">Protein powders lead sales. 8.7% of visits became orders.</span><span class="zh">蛋白粉最热销。8.7% 的访问转化为订单。</span></span>
+          <span class="go">→</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- chapter: SALES -->
+    <div class="ach ch-s">
+      <div class="grid2">
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Order status</span><span class="zh">订单状态</span></h3><span class="meta num"><span class="en">30 days</span><span class="zh">近30天</span></span></div>
+          <div class="srow"><span class="pill p-sage"><span class="en">Delivered</span><span class="zh">已送达</span></span><span class="n num">220</span><span class="amt num">¥46,123</span></div>
+          <div class="srow"><span class="pill p-amber"><span class="en">Dispatched</span><span class="zh">配送中</span></span><span class="n num">6</span><span class="amt num">¥2,800</span></div>
+          <div class="srow"><span class="pill p-grey"><span class="en">Cancelled</span><span class="zh">已取消</span></span><span class="n num">66</span><span class="amt num">¥6,500</span></div>
+          <div class="srow"><span class="pill p-brick"><span class="en">Refunded</span><span class="zh">已退款</span></span><span class="n num">4</span><span class="amt num">¥607</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Payment</span><span class="zh">支付方式</span></h3><span class="meta num"><span class="en">30 days</span><span class="zh">近30天</span></span></div>
+          <div class="brow"><div class="line"><span><span class="en">WeChat Pay</span><span class="zh">微信支付</span></span><span class="v num">¥39,074</span></div><div class="track"><span style="width:100%"></span></div></div>
+          <div class="brow"><div class="line"><span><span class="en">Meituan</span><span class="zh">美团</span></span><span class="v num">¥7,307</span></div><div class="track"><span style="width:19%"></span></div></div>
+          <div class="brow"><div class="line"><span><span class="en">Alipay off-app</span><span class="zh">支付宝（站外）</span></span><span class="v num">¥2,313</span></div><div class="track"><span style="width:6%"></span></div></div>
+          <div class="brow"><div class="line"><span><span class="en">Alipay</span><span class="zh">支付宝</span></span><span class="v num">¥1,606</span></div><div class="track"><span style="width:4%"></span></div></div>
+          <div class="brow"><div class="line"><span><span class="en">WeChat off-app</span><span class="zh">微信（站外）</span></span><span class="v num">¥676</span></div><div class="track"><span style="width:2%"></span></div></div>
+          <div class="foot-note"><span class="en">Delivery: 153 standard · 9 pickup · 67 unknown</span><span class="zh">配送：153 标准 · 9 自提 · 67 未知</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Where revenue comes from</span><span class="zh">营收构成</span></h3></div>
+          <div class="comp"><i style="flex:92;background:var(--ink)"></i><i style="flex:5;background:var(--graphite)"></i><i style="flex:3;background:var(--amber)"></i></div>
+          <div class="legend">
+            <span><i style="background:var(--ink)"></i><span class="en">Products</span><span class="zh">商品</span> <b class="num">¥53,597</b></span>
+            <span><i style="background:var(--graphite)"></i><span class="en">Delivery fees</span><span class="zh">运费</span> <b class="num">¥1,300</b></span>
+            <span><i style="background:var(--amber)"></i><span class="en">Off-app discounts</span><span class="zh">站外优惠</span> <b class="num">−¥1,010</b></span>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Marketing impact</span><span class="zh">营销效果</span></h3><span class="meta num"><span class="en">30 days</span><span class="zh">近30天</span></span></div>
+          <div class="tiles" style="margin-bottom:12px">
+            <div class="tile"><div class="tv num">24</div><div class="tl"><span class="en">voucher orders</span><span class="zh">用券订单</span></div></div>
+            <div class="tile"><div class="tv num">¥3,289</div><div class="tl"><span class="en">sales on them</span><span class="zh">对应销售额</span></div></div>
+            <div class="tile"><div class="tv num">−¥1,340</div><div class="tl"><span class="en">given away</span><span class="zh">让利金额</span></div></div>
+          </div>
+          <div class="rrow"><span class="nm num">GRAND-BLOOM</span><span class="v num">−¥1,220 · ¥2,631</span></div>
+          <div class="rrow"><span class="nm num">SPROUT</span><span class="v num">−¥120 · ¥658</span></div>
+        </div>
+        <div class="panel span2">
+          <div class="panel-head"><h3><span class="en">Demand heatmap</span><span class="zh">需求热力图</span></h3><span class="meta"><span class="en">orders by hour</span><span class="zh">按小时订单</span></span></div>
+          <div class="heat-flex">
+            <div class="heat-days"><span class="en">Mon</span><span class="zh">一</span><span class="en">Thu</span><span class="zh">四</span><span class="en">Sun</span><span class="zh">日</span></div>
+            <div class="heatgrid" aria-hidden="true"></div>
+          </div>
+          <div class="heat-hours num"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div>
+          <div class="foot-note"><span class="en">Busiest: Saturday 20:00</span><span class="zh">最忙：周六 20:00</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- chapter: CUSTOMERS -->
+    <div class="ach ch-c">
+      <div class="grid2">
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Top customers</span><span class="zh">高价值客户</span></h3><span class="meta num"><span class="en">30 days</span><span class="zh">近30天</span></span></div>
+          <div class="rrow"><span class="ix num">1</span><span class="nm">Anders</span><span class="v num">¥9,237.63</span></div>
+          <div class="rrow"><span class="ix num">2</span><span class="nm">Paul Hamilton</span><span class="v num">¥1,368.10</span></div>
+          <div class="rrow"><span class="ix num">3</span><span class="nm">Jacob Hogan</span><span class="v num">¥1,338.48</span></div>
+          <div class="rrow"><span class="ix num">4</span><span class="nm">Syd</span><span class="v num">¥1,307.84</span></div>
+          <div class="rrow"><span class="ix num">5</span><span class="nm">Charlaine 依旧</span><span class="v num">¥1,071.66</span></div>
+          <div class="rrow"><span class="ix num">6</span><span class="nm">Genar Segal</span><span class="v num">¥971.10</span></div>
+          <span class="seeall"><span class="en">See all 119 →</span><span class="zh">查看全部 119 位 →</span></span>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Customer mix</span><span class="zh">客户构成</span></h3></div>
+          <div class="tiles">
+            <div class="tile"><div class="tv num">119</div><div class="tl"><span class="en">buyers</span><span class="zh">买家</span></div></div>
+            <div class="tile"><div class="tv num">100%</div><div class="tl"><span class="en">new</span><span class="zh">新客</span></div></div>
+            <div class="tile"><div class="tv num">0%</div><div class="tl"><span class="en">returning</span><span class="zh">回头客</span></div></div>
+          </div>
+          <div class="panel-head" style="margin-top:20px"><h3><span class="en">Retention</span><span class="zh">留存</span></h3><span class="meta"><span class="en">weighted, all cohorts</span><span class="zh">加权，全部批次</span></span></div>
+          <div class="tiles">
+            <div class="tile"><div class="tv num">9%</div><div class="tl"><span class="en">month 1</span><span class="zh">第1个月</span></div></div>
+            <div class="tile"><div class="tv num">3%</div><div class="tl"><span class="en">month 2</span><span class="zh">第2个月</span></div></div>
+            <div class="tile"><div class="tv num">1%</div><div class="tl"><span class="en">month 3</span><span class="zh">第3个月</span></div></div>
+          </div>
+          <div class="foot-note"><span class="en">Most customers are new — retention builds from here.</span><span class="zh">多数客户是新客——留存从这里开始积累。</span></div>
+        </div>
+        <div class="panel span2">
+          <div class="panel-head"><h3><span class="en">Where orders go</span><span class="zh">订单地区</span></h3><span class="meta num"><span class="en">30 days</span><span class="zh">近30天</span></span></div>
+          <div class="grid2" style="gap:4px 40px">
+            <div class="brow"><div class="line"><span>广州市</span><span class="v num">90</span></div><div class="track"><span style="width:100%"></span></div></div>
+            <div class="brow"><div class="line"><span>上海市</span><span class="v num">29</span></div><div class="track"><span style="width:32%"></span></div></div>
+            <div class="brow"><div class="line"><span>深圳市</span><span class="v num">21</span></div><div class="track"><span style="width:23%"></span></div></div>
+            <div class="brow"><div class="line"><span>北京市</span><span class="v num">10</span></div><div class="track"><span style="width:11%"></span></div></div>
+            <div class="brow"><div class="line"><span>佛山市</span><span class="v num">9</span></div><div class="track"><span style="width:10%"></span></div></div>
+            <div class="brow"><div class="line"><span>杭州市</span><span class="v num">7</span></div><div class="track"><span style="width:8%"></span></div></div>
+          </div>
+          <span class="seeall"><span class="en">See all 18 cities →</span><span class="zh">查看全部 18 个城市 →</span></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- chapter: PRODUCTS & TRAFFIC -->
+    <div class="ach ch-p">
+      <div class="grid2">
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Top products</span><span class="zh">热销商品</span></h3><span class="meta"><span class="en">units, 30 days</span><span class="zh">件数，近30天</span></span></div>
+          <div class="rrow"><span class="ix num">1</span><span class="nm">Pea Protein Powder USDA Organic</span><span class="v num">11</span></div>
+          <div class="rrow"><span class="ix num">2</span><span class="nm">Soy Protein Powder USDA Organic</span><span class="v num">10</span></div>
+          <div class="rrow"><span class="ix num">3</span><span class="nm">Medjool Dates (Jumbo 5pk)</span><span class="v num">10</span></div>
+          <div class="rrow"><span class="ix num">4</span><span class="nm">OT Buckwheat Bread (Sliced &amp; Frozen)</span><span class="v num">10</span></div>
+          <div class="rrow"><span class="ix num">5</span><span class="nm">Hemp Protein Powder USDA Organic</span><span class="v num">8</span></div>
+          <div class="rrow"><span class="ix num">6</span><span class="nm">Tabbouleh Bowl</span><span class="v num">8</span></div>
+          <span class="seeall"><span class="en">See all 42 →</span><span class="zh">查看全部 42 个 →</span></span>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">From visit to order</span><span class="zh">从访问到下单</span></h3><span class="meta num"><span class="en">30 days</span><span class="zh">近30天</span></span></div>
+          <div class="frow"><div class="line"><span><span class="en">Opened the store</span><span class="zh">打开店铺</span></span><span class="v num">2,609</span><span class="pct num">100%</span></div><div class="track"><span style="width:100%"></span></div></div>
+          <div class="frow"><div class="line"><span><span class="en">Signed up</span><span class="zh">注册</span></span><span class="v num">512</span><span class="pct num">20%</span></div><div class="track"><span style="width:20%"></span></div></div>
+          <div class="frow"><div class="line"><span><span class="en">Reached checkout</span><span class="zh">进入结算</span></span><span class="v num">271</span><span class="pct num">10%</span></div><div class="track"><span style="width:10%"></span></div></div>
+          <div class="frow"><div class="line"><span><span class="en">Paid</span><span class="zh">支付成功</span></span><span class="v num">228</span><span class="pct num">8.7%</span></div><div class="track"><span style="width:9%"></span></div></div>
+          <div class="foot-note"><span class="en">84% of checkouts become paid orders.</span><span class="zh">84% 的结算最终完成支付。</span></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Where visits come from</span><span class="zh">访问来源</span></h3><span class="meta num"><span class="en">30 days</span><span class="zh">近30天</span></span></div>
+          <div class="brow"><div class="line"><span><span class="en">Mini program</span><span class="zh">小程序主入口</span></span><span class="v num">1,903</span></div><div class="track"><span style="width:100%"></span></div></div>
+          <div class="brow"><div class="line"><span><span class="en">Long-press QR</span><span class="zh">长按识别二维码</span></span><span class="v num">887</span></div><div class="track"><span style="width:47%"></span></div></div>
+          <div class="brow"><div class="line"><span><span class="en">Single chat card</span><span class="zh">单聊卡片</span></span><span class="v num">525</span></div><div class="track"><span style="width:28%"></span></div></div>
+          <div class="brow"><div class="line"><span><span class="en">Official account menu</span><span class="zh">公众号菜单</span></span><span class="v num">342</span></div><div class="track"><span style="width:18%"></span></div></div>
+          <div class="brow"><div class="line"><span><span class="en">Search results</span><span class="zh">搜索结果</span></span><span class="v num">118</span></div><div class="track"><span style="width:6%"></span></div></div>
+          <span class="seeall"><span class="en">See all 17 sources →</span><span class="zh">查看全部 17 个来源 →</span></span>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><h3><span class="en">Article views</span><span class="zh">文章浏览</span></h3><span class="meta num"><span class="en">30 days</span><span class="zh">近30天</span></span></div>
+          <div class="rrow"><span class="nm">The Roots of it All</span><span class="v num">23</span></div>
+          <div class="rrow"><span class="nm">Roots in the Wild</span><span class="v num">3</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       OPTION B — ONE SCREEN, HEADLINES + FOLDS
+       ============================================================ -->
+  <div class="page pg-b">
+    <div class="page-head">
+      <h1><span class="en">Reports</span><span class="zh">报表</span></h1>
+      <span class="date num"><span class="en">Jun 8 – Jul 7 · 30 days · all stores</span><span class="zh">6月8日 – 7月7日 · 近30天 · 全部门店</span></span>
+    </div>
+    <div class="controls">
+      <span class="seg num"><span><span class="en">Today</span><span class="zh">今天</span></span><span>7<span class="en">d</span><span class="zh">天</span></span><span class="on">30<span class="en">d</span><span class="zh">天</span></span><span>90<span class="en">d</span><span class="zh">天</span></span></span>
+      <span class="field num">06/08 – 07/07</span>
+      <span class="field"><span class="en">All stores</span><span class="zh">全部门店</span> ▾</span>
+      <button class="apply"><span class="en">Apply</span><span class="zh">应用</span></button>
+    </div>
+
+    <div class="kpistrip">
+      <div class="cell"><div class="lbl"><span class="en">Revenue</span><span class="zh">营业额</span></div><div class="val num">¥55,653<span class="d up">↑12%</span></div></div>
+      <div class="cell"><div class="lbl"><span class="en">Orders</span><span class="zh">订单</span></div><div class="val num">228<span class="d up">↑8%</span></div></div>
+      <div class="cell"><div class="lbl"><span class="en">Avg order</span><span class="zh">平均客单</span></div><div class="val num">¥223.77<span class="d down">↓3%</span></div></div>
+      <div class="cell"><div class="lbl"><span class="en">New customers</span><span class="zh">新客户</span></div><div class="val num">512</div></div>
+      <div class="cell"><div class="lbl"><span class="en">Visits</span><span class="zh">访问量</span></div><div class="val num">4,891</div></div>
+      <div class="cell"><div class="lbl"><span class="en">Visitors</span><span class="zh">独立访客</span></div><div class="val num">2,609</div></div>
+      <div class="cell"><div class="lbl"><span class="en">Conversion</span><span class="zh">转化率</span></div><div class="val num">9.8%</div></div>
+      <div class="cell"><div class="lbl"><span class="en">Refund rate</span><span class="zh">退款率</span></div><div class="val num">1.7%</div></div>
+    </div>
+
+    <div class="panel" style="margin-bottom:14px">
+      <div class="panel-head">
+        <h3><span class="en">Trend</span><span class="zh">趋势</span></h3>
+        <span class="trend-seg" style="margin-left:auto"><span class="on"><span class="en">Revenue</span><span class="zh">营业额</span></span><span><span class="en">Orders</span><span class="zh">订单</span></span><span><span class="en">Visits</span><span class="zh">访问</span></span></span>
+      </div>
+      <svg class="trend short" viewBox="0 0 700 170" preserveAspectRatio="none" aria-hidden="true">
+        <line x1="0" y1="30" x2="700" y2="30" stroke="#E4E0D5" stroke-dasharray="3 5"/>
+        <line x1="0" y1="85" x2="700" y2="85" stroke="#E4E0D5" stroke-dasharray="3 5"/>
+        <line x1="0" y1="140" x2="700" y2="140" stroke="#E4E0D5" stroke-dasharray="3 5"/>
+        <path d="M8 120 C25 100,38 142,56 118 C76 92,92 148,110 124 C128 88,148 132,168 106 C188 72,208 128,228 100
+                 C248 80,268 140,288 114 C308 62,328 122,348 96 C368 66,388 130,408 104 C428 56,448 118,468 90
+                 C488 62,508 124,528 98 C548 52,568 110,588 84 C608 48,630 98,652 70 C668 54,682 60,692 56"
+              stroke="#111A2B" stroke-width="2" fill="none"/>
+        <circle cx="692" cy="56" r="4" fill="#111A2B"/>
+      </svg>
+    </div>
+
+    <div class="dom-card">
+      <h3><span class="en">Sales</span><span class="zh">销售</span></h3>
+      <div class="facts">
+        <div class="fact"><span class="t"><span class="en">Delivered</span><span class="zh">已送达</span></span><span class="v num">220 <span class="en">of</span><span class="zh">/</span> 228</span></div>
+        <div class="fact"><span class="t"><span class="en">WeChat Pay share of revenue</span><span class="zh">微信支付占营收</span></span><span class="v num">70%</span></div>
+        <div class="fact"><span class="t"><span class="en">Busiest hour</span><span class="zh">最忙时段</span></span><span class="v"><span class="en">Saturday 20:00</span><span class="zh">周六 20:00</span></span></div>
+        <div class="fact"><span class="t"><span class="en">Given away in vouchers</span><span class="zh">优惠券让利</span></span><span class="v num">−¥1,340</span></div>
+      </div>
+      <input class="bff" type="checkbox" id="bf-sales" checked>
+      <div class="bfold">
+        <div class="minigrid">
+          <div>
+            <h4><span class="en">Order status</span><span class="zh">订单状态</span></h4>
+            <div class="srow"><span class="pill p-sage"><span class="en">Delivered</span><span class="zh">已送达</span></span><span class="n num">220</span><span class="amt num">¥46,123</span></div>
+            <div class="srow"><span class="pill p-amber"><span class="en">Dispatched</span><span class="zh">配送中</span></span><span class="n num">6</span><span class="amt num">¥2,800</span></div>
+            <div class="srow"><span class="pill p-grey"><span class="en">Cancelled</span><span class="zh">已取消</span></span><span class="n num">66</span><span class="amt num">¥6,500</span></div>
+            <div class="srow"><span class="pill p-brick"><span class="en">Refunded</span><span class="zh">已退款</span></span><span class="n num">4</span><span class="amt num">¥607</span></div>
+          </div>
+          <div>
+            <h4><span class="en">Payment</span><span class="zh">支付方式</span></h4>
+            <div class="brow"><div class="line"><span><span class="en">WeChat Pay</span><span class="zh">微信支付</span></span><span class="v num">¥39,074</span></div><div class="track"><span style="width:100%"></span></div></div>
+            <div class="brow"><div class="line"><span><span class="en">Meituan</span><span class="zh">美团</span></span><span class="v num">¥7,307</span></div><div class="track"><span style="width:19%"></span></div></div>
+            <div class="brow"><div class="line"><span><span class="en">Alipay off-app</span><span class="zh">支付宝（站外）</span></span><span class="v num">¥2,313</span></div><div class="track"><span style="width:6%"></span></div></div>
+            <div class="brow"><div class="line"><span><span class="en">Others</span><span class="zh">其他</span></span><span class="v num">¥2,336</span></div><div class="track"><span style="width:6%"></span></div></div>
+          </div>
+        </div>
+      </div>
+      <label class="bft" for="bf-sales"><span class="closed"><span class="en">Show the numbers →</span><span class="zh">展开明细 →</span></span><span class="open"><span class="en">Fold it away</span><span class="zh">收起明细</span></span></label>
+    </div>
+
+    <div class="dom-card">
+      <h3><span class="en">Customers</span><span class="zh">客户</span></h3>
+      <div class="facts">
+        <div class="fact"><span class="t"><span class="en">People bought — nearly all first-timers</span><span class="zh">买家人数——几乎全是新客</span></span><span class="v num">119</span></div>
+        <div class="fact"><span class="t"><span class="en">Top spender: Anders</span><span class="zh">消费最高：Anders</span></span><span class="v num">¥9,238</span></div>
+        <div class="fact"><span class="t"><span class="en">Top city: 广州</span><span class="zh">订单最多城市：广州</span></span><span class="v num">90 <span class="en">orders</span><span class="zh">单</span></span></div>
+        <div class="fact"><span class="t"><span class="en">Still buying a month later</span><span class="zh">一个月后仍回购</span></span><span class="v num">9%</span></div>
+      </div>
+      <input class="bff" type="checkbox" id="bf-cust">
+      <div class="bfold"><div class="foot-note"><span class="en">(unfolds to top customers, mix, cities and retention)</span><span class="zh">（展开为高价值客户、构成、城市与留存）</span></div></div>
+      <label class="bft" for="bf-cust"><span class="closed"><span class="en">Show the numbers →</span><span class="zh">展开明细 →</span></span><span class="open"><span class="en">Fold it away</span><span class="zh">收起明细</span></span></label>
+    </div>
+
+    <div class="dom-card">
+      <h3><span class="en">Products &amp; traffic</span><span class="zh">商品与流量</span></h3>
+      <div class="facts">
+        <div class="fact"><span class="t"><span class="en">Top seller: Pea Protein Powder USDA Organic</span><span class="zh">最热销：有机豌豆蛋白粉</span></span><span class="v num">11 <span class="en">units</span><span class="zh">件</span></span></div>
+        <div class="fact"><span class="t"><span class="en">Visits that became orders</span><span class="zh">访问转化为订单</span></span><span class="v num">8.7%</span></div>
+        <div class="fact"><span class="t"><span class="en">Most visits arrive through the mini program itself</span><span class="zh">多数访问来自小程序主入口</span></span><span class="v num">1,903</span></div>
+        <div class="fact"><span class="t"><span class="en">Article views</span><span class="zh">文章浏览</span></span><span class="v num">26</span></div>
+      </div>
+      <input class="bff" type="checkbox" id="bf-prod">
+      <div class="bfold"><div class="foot-note"><span class="en">(unfolds to top products, funnel, sources and articles)</span><span class="zh">（展开为热销商品、转化漏斗、来源与文章）</span></div></div>
+      <label class="bft" for="bf-prod"><span class="closed"><span class="en">Show the numbers →</span><span class="zh">展开明细 →</span></span><span class="open"><span class="en">Fold it away</span><span class="zh">收起明细</span></span></label>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       OPTION C — PACKED GRID
+       ============================================================ -->
+  <div class="page pg-c">
+    <div class="page-head">
+      <h1><span class="en">Reports</span><span class="zh">报表</span></h1>
+      <span class="date num"><span class="en">Jun 8 – Jul 7 · 30 days · all stores</span><span class="zh">6月8日 – 7月7日 · 近30天 · 全部门店</span></span>
+    </div>
+    <div class="controls">
+      <span class="seg num"><span><span class="en">Today</span><span class="zh">今天</span></span><span>7<span class="en">d</span><span class="zh">天</span></span><span class="on">30<span class="en">d</span><span class="zh">天</span></span><span>90<span class="en">d</span><span class="zh">天</span></span></span>
+      <span class="field num">06/08 – 07/07</span>
+      <span class="field"><span class="en">All stores</span><span class="zh">全部门店</span> ▾</span>
+      <button class="apply"><span class="en">Apply</span><span class="zh">应用</span></button>
+    </div>
+
+    <div class="kpistrip">
+      <div class="cell"><div class="lbl"><span class="en">Revenue</span><span class="zh">营业额</span></div><div class="val num">¥55,653<span class="d up">↑12%</span></div></div>
+      <div class="cell"><div class="lbl"><span class="en">Orders</span><span class="zh">订单</span></div><div class="val num">228<span class="d up">↑8%</span></div></div>
+      <div class="cell"><div class="lbl"><span class="en">Avg order</span><span class="zh">平均客单</span></div><div class="val num">¥223.77<span class="d down">↓3%</span></div></div>
+      <div class="cell"><div class="lbl"><span class="en">New customers</span><span class="zh">新客户</span></div><div class="val num">512</div></div>
+      <div class="cell"><div class="lbl"><span class="en">Visits</span><span class="zh">访问量</span></div><div class="val num">4,891</div></div>
+      <div class="cell"><div class="lbl"><span class="en">Visitors</span><span class="zh">独立访客</span></div><div class="val num">2,609</div></div>
+      <div class="cell"><div class="lbl"><span class="en">Conversion</span><span class="zh">转化率</span></div><div class="val num">9.8%</div></div>
+      <div class="cell"><div class="lbl"><span class="en">Refund rate</span><span class="zh">退款率</span></div><div class="val num">1.7%</div></div>
+    </div>
+
+    <div class="grid3">
+      <div class="panel span2">
+        <div class="panel-head">
+          <h3><span class="en">Trend</span><span class="zh">趋势</span></h3>
+          <span class="trend-seg" style="margin-left:auto"><span class="on"><span class="en">Revenue</span><span class="zh">营业额</span></span><span><span class="en">Orders</span><span class="zh">订单</span></span><span><span class="en">Visits</span><span class="zh">访问</span></span></span>
+        </div>
+        <svg class="trend short" viewBox="0 0 700 170" preserveAspectRatio="none" aria-hidden="true">
+          <line x1="0" y1="30" x2="700" y2="30" stroke="#E4E0D5" stroke-dasharray="3 5"/>
+          <line x1="0" y1="85" x2="700" y2="85" stroke="#E4E0D5" stroke-dasharray="3 5"/>
+          <line x1="0" y1="140" x2="700" y2="140" stroke="#E4E0D5" stroke-dasharray="3 5"/>
+          <path d="M8 120 C25 100,38 142,56 118 C76 92,92 148,110 124 C128 88,148 132,168 106 C188 72,208 128,228 100
+                   C248 80,268 140,288 114 C308 62,328 122,348 96 C368 66,388 130,408 104 C428 56,448 118,468 90
+                   C488 62,508 124,528 98 C548 52,568 110,588 84 C608 48,630 98,652 70 C668 54,682 60,692 56"
+                stroke="#111A2B" stroke-width="2" fill="none"/>
+          <circle cx="692" cy="56" r="4" fill="#111A2B"/>
+        </svg>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Order status</span><span class="zh">订单状态</span></h3></div>
+        <div class="srow"><span class="pill p-sage"><span class="en">Delivered</span><span class="zh">已送达</span></span><span class="n num">220</span><span class="amt num">¥46,123</span></div>
+        <div class="srow"><span class="pill p-amber"><span class="en">Dispatched</span><span class="zh">配送中</span></span><span class="n num">6</span><span class="amt num">¥2,800</span></div>
+        <div class="srow"><span class="pill p-grey"><span class="en">Cancelled</span><span class="zh">已取消</span></span><span class="n num">66</span><span class="amt num">¥6,500</span></div>
+        <div class="srow"><span class="pill p-brick"><span class="en">Refunded</span><span class="zh">已退款</span></span><span class="n num">4</span><span class="amt num">¥607</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Payment</span><span class="zh">支付方式</span></h3></div>
+        <div class="brow"><div class="line"><span><span class="en">WeChat Pay</span><span class="zh">微信支付</span></span><span class="v num">¥39,074</span></div><div class="track"><span style="width:100%"></span></div></div>
+        <div class="brow"><div class="line"><span><span class="en">Meituan</span><span class="zh">美团</span></span><span class="v num">¥7,307</span></div><div class="track"><span style="width:19%"></span></div></div>
+        <div class="brow"><div class="line"><span><span class="en">Alipay off-app</span><span class="zh">支付宝（站外）</span></span><span class="v num">¥2,313</span></div><div class="track"><span style="width:6%"></span></div></div>
+        <div class="brow"><div class="line"><span><span class="en">Alipay</span><span class="zh">支付宝</span></span><span class="v num">¥1,606</span></div><div class="track"><span style="width:4%"></span></div></div>
+        <div class="brow"><div class="line"><span><span class="en">Others</span><span class="zh">其他</span></span><span class="v num">¥730</span></div><div class="track"><span style="width:2%"></span></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Where revenue comes from</span><span class="zh">营收构成</span></h3></div>
+        <div class="comp"><i style="flex:92;background:var(--ink)"></i><i style="flex:5;background:var(--graphite)"></i><i style="flex:3;background:var(--amber)"></i></div>
+        <div class="legend" style="flex-direction:column;gap:6px">
+          <span><i style="background:var(--ink)"></i><span class="en">Products</span><span class="zh">商品</span> <b class="num">¥53,597</b></span>
+          <span><i style="background:var(--graphite)"></i><span class="en">Delivery fees</span><span class="zh">运费</span> <b class="num">¥1,300</b></span>
+          <span><i style="background:var(--amber)"></i><span class="en">Off-app discounts</span><span class="zh">站外优惠</span> <b class="num">−¥1,010</b></span>
+        </div>
+        <div class="foot-note"><span class="en">Vouchers: 24 orders · −¥1,340 given</span><span class="zh">优惠券：24 单 · 让利 −¥1,340</span></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Demand heatmap</span><span class="zh">需求热力图</span></h3></div>
+        <div class="heat-flex">
+          <div class="heat-days"><span class="en">Mon</span><span class="zh">一</span><span class="en">Thu</span><span class="zh">四</span><span class="en">Sun</span><span class="zh">日</span></div>
+          <div class="heatgrid" aria-hidden="true"></div>
+        </div>
+        <div class="foot-note"><span class="en">Busiest: Saturday 20:00</span><span class="zh">最忙：周六 20:00</span></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Top products</span><span class="zh">热销商品</span></h3><span class="meta"><span class="en">units</span><span class="zh">件数</span></span></div>
+        <div class="rrow"><span class="ix num">1</span><span class="nm">Pea Protein Powder USDA Organic</span><span class="v num">11</span></div>
+        <div class="rrow"><span class="ix num">2</span><span class="nm">Soy Protein Powder USDA Organic</span><span class="v num">10</span></div>
+        <div class="rrow"><span class="ix num">3</span><span class="nm">Medjool Dates (Jumbo 5pk)</span><span class="v num">10</span></div>
+        <div class="rrow"><span class="ix num">4</span><span class="nm">OT Buckwheat Bread</span><span class="v num">10</span></div>
+        <div class="rrow"><span class="ix num">5</span><span class="nm">Hemp Protein Powder USDA Organic</span><span class="v num">8</span></div>
+        <span class="seeall"><span class="en">See all 42 →</span><span class="zh">查看全部 42 个 →</span></span>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Top customers</span><span class="zh">高价值客户</span></h3></div>
+        <div class="rrow"><span class="ix num">1</span><span class="nm">Anders</span><span class="v num">¥9,237.63</span></div>
+        <div class="rrow"><span class="ix num">2</span><span class="nm">Paul Hamilton</span><span class="v num">¥1,368.10</span></div>
+        <div class="rrow"><span class="ix num">3</span><span class="nm">Jacob Hogan</span><span class="v num">¥1,338.48</span></div>
+        <div class="rrow"><span class="ix num">4</span><span class="nm">Syd</span><span class="v num">¥1,307.84</span></div>
+        <div class="rrow"><span class="ix num">5</span><span class="nm">Charlaine 依旧</span><span class="v num">¥1,071.66</span></div>
+        <span class="seeall"><span class="en">See all 119 →</span><span class="zh">查看全部 119 位 →</span></span>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Where orders go</span><span class="zh">订单地区</span></h3></div>
+        <div class="brow"><div class="line"><span>广州市</span><span class="v num">90</span></div><div class="track"><span style="width:100%"></span></div></div>
+        <div class="brow"><div class="line"><span>上海市</span><span class="v num">29</span></div><div class="track"><span style="width:32%"></span></div></div>
+        <div class="brow"><div class="line"><span>深圳市</span><span class="v num">21</span></div><div class="track"><span style="width:23%"></span></div></div>
+        <div class="brow"><div class="line"><span>北京市</span><span class="v num">10</span></div><div class="track"><span style="width:11%"></span></div></div>
+        <div class="brow"><div class="line"><span>佛山市</span><span class="v num">9</span></div><div class="track"><span style="width:10%"></span></div></div>
+        <span class="seeall"><span class="en">See all 18 →</span><span class="zh">查看全部 18 个 →</span></span>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">From visit to order</span><span class="zh">从访问到下单</span></h3></div>
+        <div class="frow"><div class="line"><span><span class="en">Opened the store</span><span class="zh">打开店铺</span></span><span class="v num">2,609</span><span class="pct num">100%</span></div><div class="track"><span style="width:100%"></span></div></div>
+        <div class="frow"><div class="line"><span><span class="en">Signed up</span><span class="zh">注册</span></span><span class="v num">512</span><span class="pct num">20%</span></div><div class="track"><span style="width:20%"></span></div></div>
+        <div class="frow"><div class="line"><span><span class="en">Reached checkout</span><span class="zh">进入结算</span></span><span class="v num">271</span><span class="pct num">10%</span></div><div class="track"><span style="width:10%"></span></div></div>
+        <div class="frow"><div class="line"><span><span class="en">Paid</span><span class="zh">支付成功</span></span><span class="v num">228</span><span class="pct num">8.7%</span></div><div class="track"><span style="width:9%"></span></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Where visits come from</span><span class="zh">访问来源</span></h3></div>
+        <div class="brow"><div class="line"><span><span class="en">Mini program</span><span class="zh">小程序主入口</span></span><span class="v num">1,903</span></div><div class="track"><span style="width:100%"></span></div></div>
+        <div class="brow"><div class="line"><span><span class="en">Long-press QR</span><span class="zh">长按识别二维码</span></span><span class="v num">887</span></div><div class="track"><span style="width:47%"></span></div></div>
+        <div class="brow"><div class="line"><span><span class="en">Single chat card</span><span class="zh">单聊卡片</span></span><span class="v num">525</span></div><div class="track"><span style="width:28%"></span></div></div>
+        <div class="brow"><div class="line"><span><span class="en">Official account menu</span><span class="zh">公众号菜单</span></span><span class="v num">342</span></div><div class="track"><span style="width:18%"></span></div></div>
+        <div class="brow"><div class="line"><span><span class="en">Search results</span><span class="zh">搜索结果</span></span><span class="v num">118</span></div><div class="track"><span style="width:6%"></span></div></div>
+        <span class="seeall"><span class="en">See all 17 →</span><span class="zh">查看全部 17 个 →</span></span>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><h3><span class="en">Customers &amp; retention</span><span class="zh">客户与留存</span></h3></div>
+        <div class="tiles" style="margin-bottom:10px">
+          <div class="tile"><div class="tv num">119</div><div class="tl"><span class="en">buyers</span><span class="zh">买家</span></div></div>
+          <div class="tile"><div class="tv num">100%</div><div class="tl"><span class="en">new</span><span class="zh">新客</span></div></div>
+          <div class="tile"><div class="tv num">9%</div><div class="tl"><span class="en">back in month 1</span><span class="zh">1个月回购</span></div></div>
+        </div>
+        <div class="rrow"><span class="nm"><span class="en">Article: The Roots of it All</span><span class="zh">文章：The Roots of it All</span></span><span class="v num">23</span></div>
+        <div class="rrow"><span class="nm"><span class="en">Article: Roots in the Wild</span><span class="zh">文章：Roots in the Wild</span></span><span class="v num">3</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// deterministic demand heatmap fill — 7 rows x 24 hours
+document.querySelectorAll('.heatgrid').forEach(function (g) {
+  var html = '';
+  for (var d = 0; d < 7; d++) {
+    for (var h = 0; h < 24; h++) {
+      var v = Math.max(0, Math.sin((h - 8) / 14 * Math.PI));
+      if (h >= 18 && h <= 21) v += 0.35;
+      if (d >= 5) v *= 1.3;
+      if (h < 7) v = 0.02;
+      v = Math.min(1, v);
+      html += '<i style="opacity:' + (0.05 + v * 0.85).toFixed(2) + '"></i>';
+    }
+  }
+  g.innerHTML = html;
+});
+</script>
+</body>
+</html>

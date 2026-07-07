@@ -2875,6 +2875,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_checkout_quotes_created  ON retail_checkout_quotes(created_at);
   CREATE INDEX IF NOT EXISTS idx_retail_checkout_quotes_customer ON retail_checkout_quotes(customer_id);
 
+  -- ── Reports AI: "The read" cache + "Ask" log ──────────────────────
+  -- ai_report_reads caches the model-written analysis of a Reports window so
+  -- one merchant costs at most a couple of billed calls a day per range.
+  -- cache_key = "<from>|<to>|<store or all>"; payload_json carries the full
+  -- bilingual read + per-chapter notes. Rows age out (server prunes >14d).
+  -- Tenant-scoped like every retail_* table (cloned into per-tenant DBs).
+  CREATE TABLE IF NOT EXISTS ai_report_reads (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    cache_key    TEXT NOT NULL,
+    payload_json TEXT NOT NULL,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_report_reads_key ON ai_report_reads(cache_key, created_at);
+
+  -- ai_report_asks logs each "Ask about your numbers" question — both the
+  -- audit trail and the per-day cap counter (day = GZ-local YYYY-MM-DD).
+  CREATE TABLE IF NOT EXISTS ai_report_asks (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    day          TEXT NOT NULL,
+    question     TEXT,
+    answer_json  TEXT,
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_report_asks_day ON ai_report_asks(day);
+
   -- ── retail_client_logs ────────────────────────────────────────────
   -- Mini-app self-diagnostics. The customer's phone posts here best-effort
   -- (POST /api/retail/client-log) so support can see WHAT happened on the

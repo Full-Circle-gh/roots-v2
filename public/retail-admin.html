@@ -851,6 +851,19 @@
 </div>
 
 <div class="tabs">
+  <!-- Brand head — the tacet wordmark moved here from the topbar (2026-07-07) so
+       it anchors the nav column; the topbar shrank to the content area. Sticky at
+       the rail top. On phones the whole rail is hidden, so the topbar's own
+       .brand (kept in the markup above) shows the wordmark there instead. -->
+  <div class="nav-brand">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 340 110" fill="none">
+        <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+        <circle cx="305" cy="55" r="9" fill="#6E67AF"/>
+      </svg>
+    </span>
+    <span class="brand-name">tacet</span>
+  </div>
   <!-- New-tenant setup guide — pinned at the very top with a live % badge while
        setup is unfinished; JS (part 17) hides it for good once the store is
        open. Nothing else in the rail changes. -->
@@ -1277,91 +1290,138 @@
         <!-- Per-store filter. Hidden until >1 store loads (single-store tenants
              see no filter). Scopes every store-derived card below. -->
         <select id="db-store" class="db-select" hidden onchange="dashStoreChange()" aria-label="Store · 门店"></select>
-        <button class="db-btn primary" onclick="dashLoad()">Apply · 应用</button>
+        <!-- Apply is a quiet secondary here — on Reports the Dusk belongs to
+             the AI voice (The read / Ask), per the one-Dusk rule. -->
+        <button class="db-btn" onclick="dashLoad()">Apply · 应用</button>
         <button class="db-btn" onclick="dashRefresh()" title="Refresh · 刷新">↻</button>
       </div>
     </div>
 
-    <div id="reports-body">
-      <!-- KPI strip -->
-      <div class="db-kpis" id="db-kpis"></div>
+    <!-- Chapter rail — one screen answers one question (spec:
+         reference/reports-ai-mockup.html). Every chart container id below is
+         UNCHANGED so the phone dashboard (rmRenderDash clones by id) keeps
+         working; chapters only show/hide wrappers. -->
+    <div class="db-chtabs" id="db-chtabs" role="tablist">
+      <button data-ch="overview" class="active">Overview · 总览</button>
+      <button data-ch="sales">Sales · 销售</button>
+      <button data-ch="customers">Customers · 客户</button>
+      <button data-ch="products">Products &amp; traffic · 商品与流量</button>
+    </div>
 
-      <!-- Revenue / orders / visits trend -->
-      <div class="card db-panel">
-        <div class="db-card-head">
-          <h3>Trend · 趋势</h3>
-          <div class="db-metric-btns" id="db-trend-metrics">
-            <button data-metric="revenue" class="active">Revenue · 营收</button>
-            <button data-metric="orders">Orders · 订单</button>
-            <button data-metric="visits">Visits · 访问</button>
+    <div id="reports-body">
+      <!-- ── Chapter: OVERVIEW ── -->
+      <div class="db-chapter active" data-ch="overview">
+        <!-- KPI strip -->
+        <div class="db-kpis" id="db-kpis"></div>
+
+        <!-- The read — the AI's plain-words analysis of this period. JS-built
+             (cuT + data-no-i18n); hidden until the server hands one back. -->
+        <div class="db-read" id="db-read" data-no-i18n hidden></div>
+
+        <!-- Revenue / orders / visits trend -->
+        <div class="card db-panel">
+          <div class="db-card-head">
+            <h3>Trend · 趋势</h3>
+            <div class="db-metric-btns" id="db-trend-metrics">
+              <button data-metric="revenue" class="active">Revenue · 营收</button>
+              <button data-metric="orders">Orders · 订单</button>
+              <button data-metric="visits">Visits · 访问</button>
+            </div>
+          </div>
+          <div id="db-trend"></div>
+        </div>
+
+        <!-- The short version — one computed plain-words line per chapter,
+             each row jumps into its chapter. JS-built, deterministic (no AI). -->
+        <div class="card db-panel db-hl" id="db-headlines" data-no-i18n hidden></div>
+
+        <!-- Ask about your numbers — shown only when the AI is available. -->
+        <div class="card db-panel db-ask" id="db-ask" hidden>
+          <div class="db-ask-head"><span class="td-ai-dot"></span><h3>Ask about your numbers · 问问你的数据</h3></div>
+          <div class="db-ask-box">
+            <input type="text" id="db-ask-input" maxlength="300" aria-label="Ask about your numbers · 问问你的数据">
+            <button class="db-ask-send" id="db-ask-send" onclick="dashAskSubmit()">Ask · 提问</button>
+          </div>
+          <div class="db-ask-chips" id="db-ask-chips" data-no-i18n></div>
+          <div class="db-ask-log" id="db-ask-log" data-no-i18n></div>
+        </div>
+      </div>
+
+      <!-- ── Chapter: SALES ── -->
+      <div class="db-chapter" data-ch="sales">
+        <div class="db-ai-note" id="db-note-sales" data-no-i18n hidden></div>
+        <div class="card db-panel db-factsbar" id="db-facts-sales" data-no-i18n hidden></div>
+        <div class="db-grid-2">
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Order status · 订单状态</h3></div>
+            <div id="db-funnel"></div>
+          </div>
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Payment and delivery · 支付与配送</h3></div>
+            <div id="db-splits"></div>
+          </div>
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Where revenue comes from · 营收构成</h3></div>
+            <div id="db-composition"></div>
+          </div>
+          <!-- Not in the mockup, kept for the operator: vouchers + points impact. -->
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Marketing impact · 营销效果</h3></div>
+            <div id="db-marketing"></div>
+          </div>
+          <div class="card db-panel db-span2">
+            <div class="db-card-head"><h3>Demand heatmap · 需求热力图</h3><span class="td-meta">orders by hour · 按小时订单</span></div>
+            <div id="db-heatmap"></div>
           </div>
         </div>
-        <div id="db-trend"></div>
       </div>
 
-      <div class="td-kicker">Sales · 销售</div>
-      <div class="db-grid-2">
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Order status · 订单状态</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
-          <div id="db-funnel"></div>
-        </div>
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Payment and delivery · 支付与配送</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
-          <div id="db-splits"></div>
-        </div>
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Where revenue comes from · 营收构成</h3></div>
-          <div id="db-composition"></div>
-        </div>
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Demand heatmap · 需求热力图</h3><span class="td-meta">orders by hour · 按小时订单</span></div>
-          <div id="db-heatmap"></div>
-        </div>
-        <!-- Not in the mockup, kept for the operator: vouchers + points impact. -->
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Marketing impact · 营销效果</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
-          <div id="db-marketing"></div>
-        </div>
-      </div>
-
-      <div class="td-kicker">Customers · 客户</div>
-      <div class="db-grid-2">
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Top customers · 高价值客户</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
-          <div id="db-customers"></div>
-        </div>
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Customer mix · 客户构成</h3></div>
-          <div id="db-tiers"></div>
-        </div>
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Where orders go · 订单地区</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
-          <div id="db-geo"></div>
-        </div>
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Retention · 留存</h3><span class="td-meta">weighted, all cohorts · 加权，全部批次</span></div>
-          <div id="db-cohorts"></div>
+      <!-- ── Chapter: CUSTOMERS ── -->
+      <div class="db-chapter" data-ch="customers">
+        <div class="db-ai-note" id="db-note-customers" data-no-i18n hidden></div>
+        <div class="card db-panel db-factsbar" id="db-facts-customers" data-no-i18n hidden></div>
+        <div class="db-grid-2">
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Top customers · 高价值客户</h3></div>
+            <div id="db-customers"></div>
+          </div>
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Customer mix · 客户构成</h3></div>
+            <div id="db-tiers"></div>
+          </div>
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Retention · 留存</h3><span class="td-meta">weighted, all cohorts · 加权，全部批次</span></div>
+            <div id="db-cohorts"></div>
+          </div>
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Where orders go · 订单地区</h3></div>
+            <div id="db-geo"></div>
+          </div>
         </div>
       </div>
 
-      <div class="td-kicker">Products and traffic · 商品与流量</div>
-      <div class="db-grid-2">
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Top products · 热销商品</h3><span class="td-meta db-win-meta" data-pre-en="units" data-pre-cn="件数" data-no-i18n></span></div>
-          <div id="db-products"></div>
-        </div>
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>From visit to order · 从访问到下单</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
-          <div id="db-acqfunnel"></div>
-        </div>
-        <!-- Not in the mockup, kept for the operator: entry scenes + article reads. -->
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Traffic and sources · 流量与来源</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
-          <div id="db-traffic"></div>
-        </div>
-        <div class="card db-panel">
-          <div class="db-card-head"><h3>Article views · 文章阅读</h3><span class="td-meta db-win-meta" data-no-i18n></span></div>
-          <div id="db-articleviews"></div>
+      <!-- ── Chapter: PRODUCTS & TRAFFIC ── -->
+      <div class="db-chapter" data-ch="products">
+        <div class="db-ai-note" id="db-note-products" data-no-i18n hidden></div>
+        <div class="card db-panel db-factsbar" id="db-facts-products" data-no-i18n hidden></div>
+        <div class="db-grid-2">
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Top products · 热销商品</h3><span class="td-meta">units · 件数</span></div>
+            <div id="db-products"></div>
+          </div>
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>From visit to order · 从访问到下单</h3></div>
+            <div id="db-acqfunnel"></div>
+          </div>
+          <!-- Not in the mockup, kept for the operator: entry scenes + article reads. -->
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Traffic and sources · 流量与来源</h3></div>
+            <div id="db-traffic"></div>
+          </div>
+          <div class="card db-panel">
+            <div class="db-card-head"><h3>Article views · 文章阅读</h3></div>
+            <div id="db-articleviews"></div>
+          </div>
         </div>
       </div>
     </div>

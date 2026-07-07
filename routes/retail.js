@@ -14863,6 +14863,150 @@ router.post('/api/retail-admin/ai/extract-facts', requireRetailAdmin, express.js
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// REPORTS AI — "The read" (period analysis + chapter notes) and "Ask about
+// your numbers". The CLIENT sends a compact digest built from the exact
+// DASH_DATA it rendered, so the model can only cite numbers the merchant is
+// looking at — no second aggregation path to drift. White-labeled: neutral
+// errors, vendor never revealed. Reads are cached per window so a merchant
+// costs at most ~2 billed read calls a day per range; asks are capped/day.
+// ═══════════════════════════════════════════════════════════════════════
+const AI_READ_TTL_HOURS = 12;
+const AI_ASK_DAILY_CAP  = 20;
+
+// Shared voice rules — the static (prompt-cached) system chunk.
+const REPORT_VOICE_RULES = `You are the quiet analytics voice inside a store admin. The merchant is looking at a report; you receive the same numbers as JSON. Write what a sharp, kind analyst would say.
+Rules:
+- Plain everyday words. Short sentences. No jargon, no exclamation marks, no emoji, no greetings, no apologies.
+- Cite ONLY numbers present in the digest, or simple arithmetic on them (shares, differences, per-order averages). Never estimate, never invent. If the data cannot show a cause, do not guess one — you may name what to check instead.
+- Write money with the currency symbol used in the digest.
+- Never mention AI, language models, providers, or yourself.
+- English and Chinese versions are written natively in each language with the same substance — never a stiff word-for-word translation, never mixed language in one field.`;
+
+const REPORT_READ_TOOL = {
+  name: 'report_read',
+  description: 'Return the analysis of this reporting period.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      read_en: { type: 'string', description: 'At most 3 short paragraphs (~110 words total), separated by blank lines: (1) where the business stands this period, (2) the single number most worth attention and why, (3) the next thing to build or keep doing.' },
+      read_cn: { type: 'string', description: 'The same reading written natively in simplified Chinese, similar length.' },
+      note_sales_en:     { type: 'string', description: 'ONE dry sentence: the most useful takeaway about sales (status, payment, timing, promotions).' },
+      note_sales_cn:     { type: 'string' },
+      note_customers_en: { type: 'string', description: 'ONE dry sentence: the most useful takeaway about customers (mix, retention, geography, top spenders).' },
+      note_customers_cn: { type: 'string' },
+      note_products_en:  { type: 'string', description: 'ONE dry sentence: the most useful takeaway about products and traffic (top sellers, funnel, sources).' },
+      note_products_cn:  { type: 'string' },
+    },
+    required: ['read_en', 'read_cn'],
+  },
+};
+
+const REPORT_ASK_TOOL = {
+  name: 'report_answer',
+  description: "Answer the merchant's question about this reporting period.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      answer_en: { type: 'string', description: 'At most 70 words. Answer from the digest only; if the digest cannot answer, say so in one sentence and name what would (a different range, filter, or report).' },
+      answer_cn: { type: 'string', description: 'The same answer written natively in simplified Chinese.' },
+    },
+    required: ['answer_en', 'answer_cn'],
+  },
+};
+
+// Digest guard — the client builds it small, but never trust a body blindly.
+function reportDigestString(body) {
+  const digest = body && typeof body.digest === 'object' && body.digest ? body.digest : null;
+  if (!digest) return null;
+  const s = JSON.stringify(digest);
+  return s.length > 20000 ? null : s;
+}
+function reportWindowKey(body) {
+  const d = s => (/^\d{4}-\d{2}-\d{2}$/.test(String(s || '')) ? String(s) : null);
+  const from = d(body && body.from), to = d(body && body.to);
+  if (!from || !to) return null;
+  const store = String((body && body.store_id) || '').slice(0, 20) || 'all';
+  return `${from}|${to}|${store}`;
+}
+const trimField = v => (v == null ? '' : String(v)).trim().slice(0, 4000);
+
+// The read — cached per window; one model call fills the Overview card AND
+// the three chapter notes.
+router.post('/api/retail-admin/reports/read', requireRetailAdmin, express.json({ limit: '64kb' }), async (req, res) => {
+  if (!modelGateway.isConfigured()) return res.json({ success: true, data: { available: false } });
+  const key = reportWindowKey(req.body);
+  const digestStr = reportDigestString(req.body);
+  if (!key || !digestStr) return res.status(400).json({ success: false, error: 'bad_digest' });
+
+  const cached = tdb().prepare(
+    `SELECT payload_json, created_at FROM ai_report_reads
+      WHERE cache_key = ? AND created_at > datetime('now', '-${AI_READ_TTL_HOURS} hours')
+      ORDER BY id DESC LIMIT 1`).get(key);
+  if (cached) {
+    let payload = null;
+    try { payload = JSON.parse(cached.payload_json); } catch (e) { /* regenerate below */ }
+    if (payload) {
+      return res.json({ success: true, data: { available: true, cached: true, generated_at: cached.created_at, read: payload } });
+    }
+  }
+
+  try {
+    const out = await modelGateway.callModel({
+      system: { static: REPORT_VOICE_RULES },
+      tools: [REPORT_READ_TOOL],
+      messages: [{ role: 'user', content: `Report digest for the window ${key.split('|')[0]} to ${key.split('|')[1]}:\n${digestStr}\n\nWrite the reading. Always answer by calling report_read.` }],
+      max_tokens: 1600,
+    });
+    const raw = modelGateway.extractToolUse(out.content_blocks, 'report_read') || {};
+    const read = {
+      read_en: trimField(raw.read_en), read_cn: trimField(raw.read_cn),
+      note_sales_en: trimField(raw.note_sales_en), note_sales_cn: trimField(raw.note_sales_cn),
+      note_customers_en: trimField(raw.note_customers_en), note_customers_cn: trimField(raw.note_customers_cn),
+      note_products_en: trimField(raw.note_products_en), note_products_cn: trimField(raw.note_products_cn),
+    };
+    if (!read.read_en || !read.read_cn) return res.status(502).json({ success: false, error: 'read_failed' });
+    tdb().prepare('INSERT INTO ai_report_reads (cache_key, payload_json) VALUES (?, ?)').run(key, JSON.stringify(read));
+    tdb().prepare("DELETE FROM ai_report_reads WHERE created_at < datetime('now', '-14 days')").run();
+    res.json({ success: true, data: { available: true, cached: false, generated_at: new Date().toISOString().slice(0, 19).replace('T', ' '), read } });
+  } catch (e) {
+    if (e && e.code === 'not_configured') return res.json({ success: true, data: { available: false } });
+    console.error('[reports/read]', e && (e.message || e));
+    res.status(502).json({ success: false, error: 'read_failed' });
+  }
+});
+
+// Ask about your numbers — same digest, one question, capped per day.
+router.post('/api/retail-admin/reports/ask', requireRetailAdmin, express.json({ limit: '64kb' }), async (req, res) => {
+  if (!modelGateway.isConfigured()) return res.status(503).json({ success: false, error: 'ai_not_configured' });
+  const key = reportWindowKey(req.body);
+  const digestStr = reportDigestString(req.body);
+  const q = String((req.body && req.body.q) || '').trim().slice(0, 300);
+  if (!key || !digestStr || q.length < 2) return res.status(400).json({ success: false, error: 'bad_question' });
+
+  const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);   // GZ-local day
+  const used = tdb().prepare('SELECT COUNT(*) AS n FROM ai_report_asks WHERE day = ?').get(day).n;
+  if (used >= AI_ASK_DAILY_CAP) return res.status(429).json({ success: false, error: 'ask_limit' });
+
+  try {
+    const out = await modelGateway.callModel({
+      system: { static: REPORT_VOICE_RULES },
+      tools: [REPORT_ASK_TOOL],
+      messages: [{ role: 'user', content: `Report digest for the window ${key.split('|')[0]} to ${key.split('|')[1]}:\n${digestStr}\n\nThe merchant asks: ${q}\n\nAlways answer by calling report_answer.` }],
+      max_tokens: 600,
+    });
+    const raw = modelGateway.extractToolUse(out.content_blocks, 'report_answer') || {};
+    const answer = { answer_en: trimField(raw.answer_en), answer_cn: trimField(raw.answer_cn) };
+    if (!answer.answer_en || !answer.answer_cn) return res.status(502).json({ success: false, error: 'ask_failed' });
+    tdb().prepare('INSERT INTO ai_report_asks (day, question, answer_json) VALUES (?, ?, ?)').run(day, q, JSON.stringify(answer));
+    res.json({ success: true, data: { answer, remaining: Math.max(0, AI_ASK_DAILY_CAP - used - 1) } });
+  } catch (e) {
+    if (e && e.code === 'not_configured') return res.status(503).json({ success: false, error: 'ai_not_configured' });
+    console.error('[reports/ask]', e && (e.message || e));
+    res.status(502).json({ success: false, error: 'ask_failed' });
+  }
+});
+
 // Start an async generation job. Body = quiz/upload inputs.
 router.post('/api/retail-admin/brand/generate', requireRetailAdmin, express.json(), (req, res) => {
   if (!modelGateway.isConfigured()) {

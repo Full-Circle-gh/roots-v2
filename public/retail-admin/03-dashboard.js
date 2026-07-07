@@ -264,9 +264,16 @@ function dashInit() {
       if (tr) { tr.classList.remove('is-swap'); void tr.offsetWidth; tr.classList.add('is-swap'); }
     }
   }));
+  // Chapter rail (Overview / Sales / Customers / Products & traffic).
+  dashChaptersInit();
   // Language toggle repaints the cuT-built Reports chrome (head range echo +
-  // per-panel window captions); the charts themselves re-render on dashLoad.
-  if (window.onLangChange) onLangChange(() => { dashRangeLabel(); dashWinMeta(); });
+  // per-panel window captions + chapter facts/headlines + the AI surfaces);
+  // the charts themselves re-render on dashLoad.
+  if (window.onLangChange) onLangChange(() => {
+    dashRangeLabel(); dashWinMeta();
+    if (DASH_DATA) { dashRenderHeadlines(); dashRenderFacts(); }
+    dashReadRender(); dashNotesRender(); dashAskChipsRender(); dashAskRender();
+  });
   // Initial 30d load — fills the Reports charts (hidden until visited) AND
   // DASH_DATA, which the phone dashboard (rmRenderDash) renders from.
   dashSetRange('30');
@@ -275,10 +282,14 @@ function dashInit() {
 }
 
 // Reports rail-button init — everything is already loaded/rendered at boot by
-// dashInit (the charts render fine while the section is hidden); this only
-// covers the edge where the first load failed and a tab visit should retry.
+// dashInit (the charts render fine while the section is hidden); this covers
+// the edge where the first load failed, and marks the tab as VISITED — the AI
+// read is only fetched once someone actually opens Reports, so merchants who
+// never look never cost a billed call.
 function reportsInit() {
+  DASH_REPORTS_SEEN = true;
   if (!DASH_DATA) dashLoad();
+  else dashReadMaybeLoad();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1687,7 +1698,10 @@ function dashRenderAll() {
   dashRenderMarketing();
   dashRenderTraffic();
   dashRenderComposition();
-  dashRenderCohorts();
+  dashRenderCohorts();          // also stashes DASH_RET_CURVE for facts/digest
+  dashRenderHeadlines();
+  dashRenderFacts();
+  dashReadMaybeLoad();
   if (window.rmRenderDash) rmRenderDash();   // mobile Variant A hero + tiles (≤720px)
 }
 
@@ -2240,6 +2254,7 @@ function dashRenderComposition() {
 function dashRenderCohorts() {
   const host = $('#db-cohorts');
   if (!host) return;
+  DASH_RET_CURVE = [];   // reset the stash a stale range can't leak through
   const sizes = DASH_DATA.cohortSizes || [];
   const rows  = DASH_DATA.cohorts || [];
   if (!sizes.length) { host.innerHTML = '<div class="db-muted">Not enough history yet · 暂无足够留存数据</div>'; return; }
@@ -2278,6 +2293,7 @@ function dashRenderCohorts() {
     }
     if (size > 0) curve.push({ offset: m, pct: Math.round(active / size * 1000) / 10 });
   }
+  DASH_RET_CURVE = curve;   // reused by the chapter facts bar + the AI digest
   const kpi = m => { const c = curve.find(x => x.offset === m); return c ? c.pct : null; };
   const tile = (m, en, cn) => {
     const v = kpi(m);
@@ -2303,5 +2319,382 @@ function dashRenderCohorts() {
   host.innerHTML =
     `<div class="db-tiles">${tile(1, 'month 1', '第1个月')}${tile(3, 'month 3', '第3个月')}${tile(6, 'month 6', '第6个月')}${tile(12, 'month 12', '第12个月')}</div>`
     + curveSvg;
+}
+
+// ════════════════════════════════════════════════════════════════
+// REPORTS CHAPTERS + THE READ — the A+B redesign (spec:
+// reference/reports-ai-mockup.html, user picked AI depth 3).
+//   · Chapters: Overview / Sales / Customers / Products & traffic —
+//     show/hide wrappers only; every chart container id is unchanged.
+//   · Facts bars + headline rows: COMPUTED plain words (no AI, no dot).
+//   · The read / chapter notes / Ask: the AI voice — every sentence it
+//     wrote sits next to a breathing Dusk dot. The client sends a compact
+//     digest of the exact DASH_DATA on screen; the server caches the read
+//     per window (~2 calls/day) and caps asks per day.
+// ════════════════════════════════════════════════════════════════
+let DASH_CH = 'overview';
+let DASH_RET_CURVE = [];        // weighted retention curve, stashed by dashRenderCohorts
+let DASH_REPORTS_SEEN = false;  // AI read only loads once Reports has been opened
+
+function dashShowChapter(ch) {
+  DASH_CH = ch;
+  document.querySelectorAll('#db-chtabs button').forEach(b => b.classList.toggle('active', b.dataset.ch === ch));
+  document.querySelectorAll('#tab-reports .db-chapter').forEach(p => p.classList.toggle('active', p.dataset.ch === ch));
+}
+function dashChaptersInit() {
+  document.querySelectorAll('#db-chtabs button').forEach(b =>
+    b.addEventListener('click', () => dashShowChapter(b.dataset.ch)));
+}
+
+// Currency symbol exactly as dashMoney prints it — tenant-neutral, no
+// hardcoded ¥ ([[feedback_default_tenant_neutral_plumbing]]).
+function dashCurrencySym() {
+  return (dashMoney(0) || '¥0').replace(/[0-9.,\s-]/g, '') || '¥';
+}
+
+const DASH_PAY_NAMES = {
+  wechat: ['WeChat Pay', '微信支付'], alipay: ['Alipay', '支付宝'], meituan: ['Meituan', '美团'],
+  points: ['Points', '积分'], cash: ['Cash', '现金'], bank_transfer: ['Bank transfer', '银行转账'],
+  wechat_offline: ['WeChat off-app', '微信(线下)'], alipay_offline: ['Alipay off-app', '支付宝(线下)'],
+  other: ['Other', '其他'], unknown: ['Unknown', '未知'],
+};
+function dashPayName(m, cn) { const p = DASH_PAY_NAMES[m]; return p ? (cn ? p[1] : p[0]) : String(m || ''); }
+
+// Shared computed nuggets — feed the headline rows, the facts bars and the
+// AI digest from ONE place so they can never disagree.
+function dashFactBits() {
+  const D = DASH_DATA || {};
+  const k = D.kpis || {};
+  const pays = D.payments || [];
+  const payTotal = pays.reduce((s, p) => s + Number(p.revenue || 0), 0);
+  const topPay = pays[0] || null;
+  let busiest = null;
+  (D.heat || []).forEach(h => { if (!busiest || h.orders > busiest.orders) busiest = h; });
+  const nvr = D.new_vs_returning || {};
+  const vouchers = (D.marketing && D.marketing.vouchers) || [];
+  const ret1 = (DASH_RET_CURVE || []).find(c => c.offset === 1);
+  return {
+    k,
+    topPay,
+    payShare: topPay && payTotal > 0 ? Math.round(topPay.revenue / payTotal * 100) : null,
+    busiest,
+    buyers: Number(nvr.buyers || 0),
+    newPct: nvr.buyers > 0 ? Math.round(Number(nvr.new_buyers || 0) / nvr.buyers * 100) : null,
+    topCust: (D.topCustomers || [])[0] || null,
+    topCity: (D.geoCities || [])[0] || null,
+    topProd: (D.topProducts || [])[0] || null,
+    vGiven: vouchers.reduce((s, v) => s + Number(v.discount || 0), 0),
+    vOrders: vouchers.reduce((s, v) => s + Number(v.uses || 0), 0),
+    delivered: (D.funnel || {}).delivered || null,
+    cancelled: (D.funnel || {}).cancelled || null,
+    checkout: D.checkout || {},
+    ret1: ret1 ? ret1.pct : null,
+    reads: (D.articleViews || []).reduce((s, a) => s + Number(a.reads || 0), 0),
+  };
+}
+
+// "The short version" — one computed sentence per chapter on the Overview;
+// each row jumps into its chapter. Deterministic: no dot, never a guess.
+function dashRenderHeadlines() {
+  const host = document.getElementById('db-headlines');
+  if (!host) return;
+  if (!DASH_DATA) { host.hidden = true; return; }
+  const cn = window.cuLang && cuLang() === 'cn';
+  const b = dashFactBits();
+  const hh = h => String(h).padStart(2, '0') + ':00';
+  const rows = [];
+  if (b.topPay && b.payShare != null) {
+    let t = cn ? `${dashPayName(b.topPay.method, true)}占营收 ${b.payShare}%。`
+               : `${dashPayName(b.topPay.method, false)} carried ${b.payShare}% of revenue.`;
+    if (b.busiest) t += cn ? ` 最忙时段：${DASH_DOW_CN[b.busiest.dow]} ${hh(b.busiest.hour)}。`
+                           : ` Busiest hour: ${DASH_DOW_EN[b.busiest.dow]} ${hh(b.busiest.hour)}.`;
+    rows.push(['sales', cuT('Sales', '销售'), t]);
+  }
+  if (b.buyers) {
+    let t = cn ? `${dashNum(b.buyers)} 位买家` : `${dashNum(b.buyers)} buyers`;
+    t += b.newPct != null ? (cn ? `，${b.newPct}% 为新客。` : `, ${b.newPct}% first-timers.`) : (cn ? '。' : '.');
+    if (b.topCity) t += cn ? ` ${b.topCity.city}订单最多（${dashNum(b.topCity.orders)} 单）。`
+                           : ` ${b.topCity.city_en || b.topCity.city} leads with ${dashNum(b.topCity.orders)} orders.`;
+    rows.push(['customers', cuT('Customers', '客户'), t]);
+  }
+  if (b.topProd) {
+    const nm = cn ? (b.topProd.name_cn || b.topProd.name_en) : (b.topProd.name_en || b.topProd.name_cn);
+    let t = cn ? `${nm} 最热销（${dashNum(b.topProd.units)} 件）。` : `${nm} leads with ${dashNum(b.topProd.units)} units.`;
+    if (b.k.conversion_rate != null) t += cn ? ` ${b.k.conversion_rate.toFixed(1)}% 的会话转化为订单。`
+                                             : ` ${b.k.conversion_rate.toFixed(1)}% of sessions became orders.`;
+    rows.push(['products', cuT('Products & traffic', '商品与流量'), t]);
+  }
+  if (!rows.length) { host.hidden = true; return; }
+  host.hidden = false;
+  host.innerHTML = rows.map(r =>
+    `<div class="db-hl-row" role="button" onclick="dashShowChapter('${r[0]}')">
+       <span class="k">${escapeHtml(r[1])}</span><span class="t">${escapeHtml(r[2])}</span><span class="go">→</span>
+     </div>`).join('');
+}
+
+// Facts bars — the plain-words rows atop each chapter. Computed, not AI.
+function dashFactRow(t, v) {
+  return `<div class="db-fact"><span class="t">${escapeHtml(t)}</span><span class="v">${escapeHtml(v)}</span></div>`;
+}
+function dashFactsFill(id, rows) {
+  const host = document.getElementById(id);
+  if (!host) return;
+  if (!rows.length) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+  host.innerHTML = rows.join('');
+}
+function dashRenderFacts() {
+  if (!DASH_DATA) return;
+  const cn = window.cuLang && cuLang() === 'cn';
+  const b = dashFactBits();
+  const hh = h => String(h).padStart(2, '0') + ':00';
+
+  const s = [];
+  if (b.delivered) s.push(dashFactRow(cuT('Delivered', '已送达'), `${dashNum(b.delivered.n)} · ${dashMoney(b.delivered.revenue)}`));
+  if (b.cancelled && b.cancelled.n) s.push(dashFactRow(cuT('Cancelled', '已取消'), `${dashNum(b.cancelled.n)} · ${dashMoney(b.cancelled.revenue)}`));
+  if (b.topPay && b.payShare != null) s.push(dashFactRow(
+    cn ? `${dashPayName(b.topPay.method, true)}占营收` : `${dashPayName(b.topPay.method, false)} share of revenue`,
+    b.payShare + '%'));
+  if (b.busiest) s.push(dashFactRow(cuT('Busiest hour', '最忙时段'),
+    cn ? `${DASH_DOW_CN[b.busiest.dow]} ${hh(b.busiest.hour)}` : `${DASH_DOW_EN[b.busiest.dow]} ${hh(b.busiest.hour)}`));
+  if (b.vGiven > 0) s.push(dashFactRow(cuT('Given away in vouchers', '优惠券让利'),
+    `−${dashMoney(b.vGiven)} · ${dashNum(b.vOrders)} ${cuT('orders', '单')}`));
+  dashFactsFill('db-facts-sales', s);
+
+  const c = [];
+  if (b.buyers) c.push(dashFactRow(cuT('People bought', '购买人数'), dashNum(b.buyers)));
+  if (b.newPct != null) c.push(dashFactRow(cuT('First-time buyers', '新客占比'), b.newPct + '%'));
+  if (b.topCust) c.push(dashFactRow(
+    cuT('Top spender', '消费最高') + (cn ? '：' : ': ') + (b.topCust.nickname || ('#' + b.topCust.customer_id)),
+    dashMoney(b.topCust.revenue)));
+  if (b.topCity) c.push(dashFactRow(
+    cuT('Top city', '订单最多城市') + (cn ? '：' : ': ') + (cn ? b.topCity.city : (b.topCity.city_en || b.topCity.city)),
+    `${dashNum(b.topCity.orders)} ${cuT('orders', '单')}`));
+  if (b.ret1 != null) c.push(dashFactRow(cuT('Still buying a month later', '一个月后仍回购'), Math.round(b.ret1) + '%'));
+  dashFactsFill('db-facts-customers', c);
+
+  const p = [];
+  if (b.topProd) {
+    const nm = cn ? (b.topProd.name_cn || b.topProd.name_en) : (b.topProd.name_en || b.topProd.name_cn);
+    p.push(dashFactRow(cuT('Top seller', '最热销') + (cn ? '：' : ': ') + nm,
+      `${dashNum(b.topProd.units)} ${cuT('units', '件')}`));
+  }
+  if (b.k.conversion_rate != null) p.push(dashFactRow(cuT('Sessions that became orders', '会话转化下单'), b.k.conversion_rate.toFixed(1) + '%'));
+  if (b.checkout && b.checkout.conversion_rate != null) p.push(dashFactRow(cuT('Checkouts that got paid', '结算完成支付'), Math.round(b.checkout.conversion_rate) + '%'));
+  if (b.reads > 0) p.push(dashFactRow(cuT('Article reads', '文章阅读'), dashNum(b.reads)));
+  dashFactsFill('db-facts-products', p);
+}
+
+// ── The read — the AI's analysis of the window ─────────────────────────────
+const DASH_READ = { key: null, data: null, loading: false, unavailable: false, error: false };
+
+function dashReadKey() {
+  return `${$('#db-from').value}|${$('#db-to').value}|${dashStoreId() || 'all'}`;
+}
+
+// Compact digest of the EXACT data on screen. Top-N lists only, rounded —
+// the model may cite these numbers and nothing else.
+function dashAiDigest() {
+  const D = DASH_DATA;
+  if (!D) return null;
+  const r2 = n => Math.round(Number(n || 0) * 100) / 100;
+  const k = D.kpis || {};
+  const status = {};
+  Object.entries(D.funnel || {}).forEach(([st, v]) => { status[st] = { orders: v.n, revenue: r2(v.revenue) }; });
+  const mk = D.marketing || {};
+  const vouchers = mk.vouchers || [];
+  return {
+    currency: dashCurrencySym(),
+    window: D.window,
+    kpis: {
+      revenue: r2(k.revenue), orders: k.orders, average_order: r2(k.aov), buyers: k.buyers,
+      new_customers: k.new_customers, visits: k.visits, sessions: k.sessions, unique_visitors: k.visitors,
+      conversion_rate_pct: r2(k.conversion_rate), refund_rate_pct: r2(k.refund_rate),
+      cancelled_orders: k.cancelled_orders, refunded_orders: k.refunded_orders,
+    },
+    change_vs_prior_window_pct: D.deltas,
+    order_status: status,
+    payments: (D.payments || []).slice(0, 6).map(p => ({ method: p.method, orders: p.orders, revenue: r2(p.revenue) })),
+    delivery_modes: (D.delivery || []).slice(0, 5).map(d => ({ mode: d.mode, orders: d.orders })),
+    revenue_composition: D.composition ? {
+      products: r2(D.composition.product_total), delivery_fees: r2(D.composition.delivery_fee),
+      voucher_discounts: r2(D.composition.voucher_total), point_discounts: r2(D.composition.points_total),
+      net: r2(D.composition.net_total),
+    } : null,
+    busiest_hours: (D.heat || []).slice().sort((a, b) => b.orders - a.orders).slice(0, 3)
+      .map(h => ({ weekday: DASH_DOW_EN[h.dow], hour: h.hour, orders: h.orders })),
+    top_products: (D.topProducts || []).slice(0, 8).map(p => ({ name: p.name_en || p.name_cn, units: p.units, revenue: r2(p.revenue) })),
+    top_customers: (D.topCustomers || []).slice(0, 5).map(c => ({ name: c.nickname || ('#' + c.customer_id), orders: c.orders, revenue: r2(c.revenue) })),
+    buyers_new_vs_returning: D.new_vs_returning,
+    top_cities: (D.geoCities || []).slice(0, 6).map(g => ({ city: g.city_en || g.city, city_cn: g.city, orders: g.orders, revenue: r2(g.revenue) })),
+    vouchers: {
+      orders_with_voucher: vouchers.reduce((s, v) => s + Number(v.uses || 0), 0),
+      discount_given: r2(vouchers.reduce((s, v) => s + Number(v.discount || 0), 0)),
+    },
+    points: mk.points ? { orders: mk.points.orders, value: r2(mk.points.points_value) } : null,
+    checkout: D.checkout ? {
+      started: D.checkout.started, converted: D.checkout.converted,
+      abandoned: D.checkout.abandoned, checkout_to_paid_pct: D.checkout.conversion_rate,
+    } : null,
+    retention_pct_by_months_since_first_order: (DASH_RET_CURVE || []).slice(0, 7).map(c => ({ month: c.offset, pct: c.pct })),
+    traffic_scenes: ((D.traffic && D.traffic.scenes) || []).slice(0, 6).map(sc => {
+      const m = DASH_SCENES[sc.scene];
+      return { source: m ? m[0] : ('scene ' + sc.scene), visits: sc.visits };
+    }),
+    article_views: (D.articleViews || []).slice(0, 3).map(a => ({ title: a.title_en || a.title_cn || '(removed)', seen: a.impressions, reads: a.reads })),
+  };
+}
+
+// Fetch the read for the current window — once per window, only after the
+// Reports tab has actually been opened, never again once the server says the
+// AI isn't configured.
+async function dashReadMaybeLoad() {
+  if (!DASH_REPORTS_SEEN || !DASH_DATA || DASH_READ.unavailable) return;
+  const key = dashReadKey();
+  if (DASH_READ.key === key && (DASH_READ.data || DASH_READ.loading)) { dashReadRender(); return; }
+  DASH_READ.key = key;
+  DASH_READ.loading = true;
+  DASH_READ.data = null;
+  DASH_READ.error = false;
+  dashReadRender();
+  try {
+    const j = await api('/api/retail-admin/reports/read', { method: 'POST', body: {
+      from: $('#db-from').value, to: $('#db-to').value, store_id: dashStoreId(), digest: dashAiDigest(),
+    } });
+    if (DASH_READ.key !== key) return;   // range changed mid-flight — stale
+    DASH_READ.loading = false;
+    if (!j.data || j.data.available === false) {
+      DASH_READ.unavailable = true;      // quietly a reports page without AI
+    } else {
+      DASH_READ.data = j.data;
+    }
+  } catch (e) {
+    if (DASH_READ.key !== key) return;
+    DASH_READ.loading = false;
+    DASH_READ.error = true;              // hide rather than apologise
+  }
+  dashReadRender();
+  dashNotesRender();
+  dashAskEnsure();
+}
+
+function dashReadRender() {
+  const host = document.getElementById('db-read');
+  if (!host) return;
+  if (DASH_READ.unavailable || DASH_READ.error) { host.hidden = true; return; }
+  if (DASH_READ.loading && !DASH_READ.data) {
+    host.hidden = false;
+    host.innerHTML = `<div class="rload"><span class="td-ai-dot"></span>${escapeHtml(cuT('Reading the numbers…', '正在读取数据…'))}</div>`;
+    return;
+  }
+  const d = DASH_READ.data;
+  if (!d || !d.read) { host.hidden = true; return; }
+  const cn = window.cuLang && cuLang() === 'cn';
+  const paras = String(cn ? d.read.read_cn : d.read.read_en).split(/\n+/)
+    .map(s => s.trim()).filter(Boolean)
+    .map(pText => `<p>${escapeHtml(pText)}</p>`).join('');
+  let when = '';
+  if (d.generated_at) {
+    const t = new Date(String(d.generated_at).replace(' ', 'T') + 'Z');
+    if (!isNaN(t)) when = t.toLocaleTimeString(cn ? 'zh-CN' : 'en-US', { hour: '2-digit', minute: '2-digit' });
+  }
+  host.hidden = false;
+  host.innerHTML = `
+    <div class="rh"><span class="td-ai-dot"></span><h3>${escapeHtml(cuT('The read', '解读'))}</h3>
+      <span class="meta">${escapeHtml(when ? cuT('written at ' + when, '写于 ' + when) : cuT("written from this period's numbers", '由本期数据生成'))}</span></div>
+    ${paras}
+    <div class="rfoot">${escapeHtml(cuT('Written from the numbers in this report — nothing else. Refreshes with the range, at most twice a day.', '内容仅依据本报表数据。随区间刷新，每天最多两次。'))}</div>`;
+}
+
+// One dry sentence opening each chapter — same generation, same dot.
+function dashNotesRender() {
+  const d = DASH_READ.data;
+  const cn = window.cuLang && cuLang() === 'cn';
+  [['db-note-sales', 'note_sales'], ['db-note-customers', 'note_customers'], ['db-note-products', 'note_products']].forEach(([id, field]) => {
+    const host = document.getElementById(id);
+    if (!host) return;
+    const text = d && d.read ? (cn ? d.read[field + '_cn'] : d.read[field + '_en']) : '';
+    if (!text) { host.hidden = true; host.innerHTML = ''; return; }
+    host.hidden = false;
+    host.innerHTML = `<span class="td-ai-dot"></span><p>${escapeHtml(text)}</p>`;
+  });
+}
+
+// ── Ask about your numbers ─────────────────────────────────────────────────
+const DASH_ASK = { log: [], busy: false, wired: false };
+const DASH_ASK_CHIPS = [
+  ['Why did the average order change?', '平均客单为什么变化？'],
+  ['What should I restock first?', '我该先补什么货？'],
+  ['How does this period compare with the one before?', '这个区间和上一个相比怎么样？'],
+];
+
+function dashAskEnsure() {
+  const host = document.getElementById('db-ask');
+  if (!host) return;
+  if (DASH_READ.unavailable) { host.hidden = true; return; }
+  host.hidden = false;
+  if (!DASH_ASK.wired) {
+    DASH_ASK.wired = true;
+    const inp = document.getElementById('db-ask-input');
+    if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') dashAskSubmit(); });
+  }
+  dashAskChipsRender();
+  dashAskRender();
+}
+function dashAskChipsRender() {
+  const host = document.getElementById('db-ask-chips');
+  if (!host) return;
+  host.innerHTML = DASH_ASK_CHIPS.map((c, i) =>
+    `<button class="db-ask-chip" onclick="dashAskChip(${i})">${escapeHtml(cuT(c[0], c[1]))}</button>`).join('');
+  const inp = document.getElementById('db-ask-input');
+  if (inp) inp.placeholder = cuT('e.g. Why did the average order drop?', '例如：平均客单为什么下降？');
+}
+function dashAskChip(i) {
+  const c = DASH_ASK_CHIPS[i];
+  if (c) dashAskSubmit(cuT(c[0], c[1]));
+}
+function dashAskRender() {
+  const host = document.getElementById('db-ask-log');
+  if (!host) return;
+  const cn = window.cuLang && cuLang() === 'cn';
+  host.innerHTML = DASH_ASK.log.map(r => {
+    let body;
+    if (r.pending) {
+      body = `<div class="a muted"><span class="td-ai-dot"></span><p>${escapeHtml(cuT('Reading the numbers…', '正在读取数据…'))}</p></div>`;
+    } else if (r.error) {
+      body = `<div class="a muted"><p>${escapeHtml(r.error === 'ask_limit'
+        ? cuT("That's the day's questions used up — ask again tomorrow.", '今天的提问次数已用完，明天再来。')
+        : cuT('That one didn’t go through. Try again.', '这次没有成功，请再试一次。'))}</p></div>`;
+    } else {
+      body = `<div class="a"><span class="td-ai-dot"></span><p>${escapeHtml(cn ? r.a_cn : r.a_en)}</p></div>`;
+    }
+    return `<div class="db-ask-qa"><div class="q">${escapeHtml(r.q)}</div>${body}</div>`;
+  }).join('');
+}
+async function dashAskSubmit(qArg) {
+  const inp = document.getElementById('db-ask-input');
+  const q = String(qArg || (inp && inp.value) || '').trim();
+  if (!q || DASH_ASK.busy || !DASH_DATA) return;
+  DASH_ASK.busy = true;
+  const btn = document.getElementById('db-ask-send');
+  if (btn) btn.disabled = true;
+  if (inp && !qArg) inp.value = '';
+  const row = { q, pending: true };
+  DASH_ASK.log.push(row);
+  dashAskRender();
+  try {
+    const j = await api('/api/retail-admin/reports/ask', { method: 'POST', body: {
+      q, from: $('#db-from').value, to: $('#db-to').value, store_id: dashStoreId(), digest: dashAiDigest(),
+    } });
+    row.pending = false;
+    row.a_en = j.data.answer.answer_en;
+    row.a_cn = j.data.answer.answer_cn;
+  } catch (e) {
+    row.pending = false;
+    row.error = (e && e.code === 'ask_limit') ? 'ask_limit' : 'failed';
+  }
+  DASH_ASK.busy = false;
+  if (btn) btn.disabled = false;
+  dashAskRender();
 }
 
