@@ -11909,6 +11909,15 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
                     WHERE rss.product_id = p.id AND rss.store_id = @store_id)`
     : '';
   const storeBind = storeId ? { store_id: storeId } : {};
+  // Per-store low-stock default. When scoped to one store, that store's own
+  // low_stock_threshold (if set) sits between the product override and the
+  // tenant-wide default: product override → this store's default → global.
+  // In the all-stores view there's no single store, so we keep product override
+  // → global only.
+  const storeLowDefault = storeId
+    ? (tdb().prepare('SELECT low_stock_threshold FROM retail_stores WHERE id = ?').get(storeId) || {}).low_stock_threshold ?? null
+    : null;
+  const lowBind = storeId ? { store_default: storeLowDefault } : {};
   // Optional per-store breakdown (breakdown=1, all-stores view only) — feeds
   // the dashboard's Running-low drawer so a multi-store tenant can see which
   // shelf is short without flipping the store picker. json_group_array keeps
@@ -11931,6 +11940,13 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
 
   try {
     const lowDefault = lowStockDefault();
+    // Threshold a product is judged "low" against. Product override wins; then
+    // (store-scoped view only) this store's own default; then the tenant global.
+    // @store_default is bound only when storeId is set, so COALESCE simply skips
+    // it in the all-stores view.
+    const LOW_THRESHOLD = storeId
+      ? 'COALESCE(p.low_stock_threshold, @store_default, @low_default)'
+      : 'COALESCE(p.low_stock_threshold, @low_default)';
     // Only surface products that are actually sellable. status='Active' just
     // means "not archived"; a product can be Active-but-unpublished (is_published=0
     // = "Show in shop" off). Those are disabled/hidden from customers, so nagging
@@ -11938,19 +11954,19 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const lowCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM store_products p
        WHERE ${REAL_STOCK} > 0
-         AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, @low_default)
+         AND ${REAL_STOCK} <= ${LOW_THRESHOLD}
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
-    `).get({ ...storeBind, low_default: lowDefault }).n;
+    `).get({ ...storeBind, ...lowBind, low_default: lowDefault }).n;
     const lowItems = tdb().prepare(`
       SELECT p.id, p.name_en, p.name_cn, p.sku, ${REAL_STOCK} AS stock_qty${BREAKDOWN_COL}
         FROM store_products p
        WHERE ${REAL_STOCK} > 0
-         AND ${REAL_STOCK} <= COALESCE(p.low_stock_threshold, @low_default)
+         AND ${REAL_STOCK} <= ${LOW_THRESHOLD}
          AND p.status = 'Active' AND COALESCE(p.is_active,1) = 1 AND p.is_published = 1
          ${STORE_SCOPE}
        ORDER BY stock_qty ASC, p.name_en LIMIT @preview
-    `).all({ ...storeBind, low_default: lowDefault, preview: previewLimit });
+    `).all({ ...storeBind, ...lowBind, low_default: lowDefault, preview: previewLimit });
     low = { count: lowCount, items: lowItems.map(parseStores) };
 
     const oosCount = tdb().prepare(`

@@ -64,6 +64,15 @@ function requireInventoryRead(req, res, next) {
   });
 }
 
+// Normalise a per-store low-stock threshold from a request body: blank/absent
+// → null (store falls back to the tenant-wide default), otherwise a clamped
+// non-negative integer. Anything unparseable also becomes null.
+function coerceLowStockThreshold(raw) {
+  if (raw == null || raw === '') return null;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+}
+
 // ─── Stores ─────────────────────────────────────────────────────────────
 router.get('/api/retail-admin/stores', requireInventoryRead, (req, res) => {
   const stores = inventory.listStores({ activeOnly: false });
@@ -78,8 +87,9 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
 
   const info = tdb().prepare(`
     INSERT INTO retail_stores (code, name_en, name_cn, address, city, district, lat, lng, phone,
-                               meituan_account_id, is_active, pickup_enabled, sort_order, open_time, close_time, timezone)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                               meituan_account_id, is_active, pickup_enabled, sort_order, open_time, close_time, timezone,
+                               low_stock_threshold)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     b.code.trim(),
     b.name_en || null, b.name_cn || null,
@@ -93,6 +103,7 @@ router.post('/api/retail-admin/stores', requireRetailAdmin, express.json(), (req
     Number.isFinite(b.sort_order) ? b.sort_order : 0,
     b.open_time || null, b.close_time || null,
     b.timezone || null,
+    coerceLowStockThreshold(b.low_stock_threshold),
   );
   // Background geocode the new store unless the admin provided coords.
   if (b.lat == null || b.lng == null) geocodeStoreAsync(info.lastInsertRowid, tdb());
@@ -113,7 +124,7 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
   const id = parseInt(req.params.id, 10);
   const existing = inventory.getStore(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
-  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time','timezone'];
+  const allowed = ['name_en','name_cn','address','city','district','lat','lng','phone','meituan_account_id','is_active','pickup_enabled','sort_order','open_time','close_time','timezone','low_stock_threshold'];
   const sets = [];
   const vals = [];
   for (const k of allowed) {
@@ -122,6 +133,7 @@ router.patch('/api/retail-admin/stores/:id', requireRetailAdmin, express.json(),
       let v = req.body[k];
       if (k === 'is_active' || k === 'pickup_enabled') v = v ? 1 : 0;
       if (k === 'sort_order') v = Number.isFinite(v) ? v : 0;
+      if (k === 'low_stock_threshold') v = coerceLowStockThreshold(v);
       vals.push(v);
     }
   }

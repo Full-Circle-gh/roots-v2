@@ -2612,6 +2612,11 @@ addColumn('retail_stores', 'close_time', 'TEXT');
 // checkout validates a pickup time against the store's LOCAL clock rather than
 // the UTC+8 host. NULL = fall back to host-local (unchanged for China stores).
 addColumn('retail_stores', 'timezone', 'TEXT');
+// Per-store low-stock threshold (units). A product at this store is flagged
+// "low" when its shelf qty is >0 and at/under this number. NULL = fall back to
+// the tenant-wide default (storefront_config 'inventory.lowStockThreshold', 5).
+// A product's own low_stock_threshold still wins over both.
+addColumn('retail_stores', 'low_stock_threshold', 'INTEGER');
 
 // Staff "seen" timestamp — stamped the first time ANY operator opens the
 // order detail (shared across devices). NULL = unread; powers the bold + dot

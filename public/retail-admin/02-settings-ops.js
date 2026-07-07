@@ -242,6 +242,7 @@ function _opsStoreForm(s) {
           <div style="flex:1"><label class="field-label">Closes · 关门</label><input type="time" id="osf_close" value="${val(s?.close_time)}"></div>
         </div>
         <div><label class="field-label">Sort priority · 排序 <span style="color:var(--text-3);font-weight:400">(lower = preferred)</span></label><input type="number" id="osf_sort" value="${s?.sort_order ?? 0}"></div>
+        <div><label class="field-label">Low-stock alert at · 低库存提醒 <span style="color:var(--text-3);font-weight:400">— flag this store's items low at this many units. Blank = store-wide default. · 门店商品降到此数量时提醒;留空用全店默认。</span></label><input type="number" min="0" id="osf_low_stock" value="${s?.low_stock_threshold ?? ''}" placeholder="Store default · 全店默认"></div>
         <div style="display:flex;align-items:flex-end;padding-bottom:6px">
           <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;color:var(--text-1)">
             <input type="checkbox" id="osf_pickup" ${s?.pickup_enabled ? 'checked' : ''} style="width:16px;height:16px">${pickupIcon(13)} Offer store pickup · 到店自提
@@ -273,6 +274,8 @@ async function _opsStoreSave(id) {
     sort_order: +document.getElementById('osf_sort').value || 0,
     pickup_enabled: document.getElementById('osf_pickup').checked,
     open_time: v('osf_open') || null, close_time: v('osf_close') || null,
+    // Blank clears the override → store falls back to the tenant-wide default.
+    low_stock_threshold: v('osf_low_stock') === '' ? null : (parseInt(v('osf_low_stock'), 10) || 0),
   };
   const latRaw = v('osf_lat'), lngRaw = v('osf_lng');
   if (latRaw && lngRaw) {
