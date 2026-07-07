@@ -193,8 +193,13 @@
     padding: 0 var(--s5);
     gap: var(--s4);
     /* Fixed (not sticky) so it shares the rail's positioning context — see the
-       comment at `.topbar { … }` below. left set to the rail width. */
-    position: fixed; top: 0; left: 236px; right: 0; z-index: 10;
+       comment at `.topbar { … }` below. left set to the rail width. z-index sits
+       ABOVE the rail (.tabs is z:11) so the seam fold dot — an absolute child
+       anchored to the topbar's left edge — can straddle the divider and render
+       its rail-side half over the rail instead of being clipped behind it. The
+       two boxes don't overlap spatially (topbar starts at the rail's right edge),
+       so raising the topbar has no other visual effect. */
+    position: fixed; top: 0; left: 236px; right: 0; z-index: 12;
   }
   .brand {
     display: flex; align-items: center; gap: 10px;
@@ -542,18 +547,21 @@
      (the rail is replaced by the bottom nav), so no mobile rule is needed. */
 
   /* ── Seam fold dot ─────────────────────────────────────────────────
-     The primary rail-fold control (replaces the old topbar hamburger). It
-     rides the divider between the rail and the content, level with the search
-     bar. Fixed like .tabs/.topbar so it shares their positioning + zoom
-     context; `left` tracks the rail width so the dot stays glued to the seam
-     as the rail folds. Rest state is a small Dusk dot; on hover it swells into
-     a chevron button, and while collapsed it stays open so the way back is
-     always visible. Both sides of the seam here are --bg-pane, so the dot's
-     paper ring blends into the bar and only interrupts the 1px divider. */
+     The primary rail-fold control (replaces the old topbar hamburger). It sits
+     on the divider between the rail and the content, level with the search bar.
+     Anchored to the topbar's own left edge (left:0) — which IS the seam, since
+     the topbar's `left` equals the rail width — so it tracks the divider in
+     every state (open/collapsed) and under the Aa `zoom` with no hardcoded
+     widths. It straddles the line (translateX(-50%)); the topbar sits above the
+     rail (z-index below) so the half over the rail isn't clipped. Rest state is
+     a small Dusk dot; on hover it swells into a chevron button, and while
+     collapsed it stays open so the way back is always visible. Both sides of the
+     seam here are --bg-pane, so the dot's paper ring blends into the bar and
+     only interrupts the 1px divider. */
   .seam-fold {
-    position: fixed; top: 28px; left: 236px; transform: translate(-50%, -50%);
-    z-index: 12; border: 0; background: none; padding: 8px; margin: 0;
-    cursor: pointer; transition: left var(--t-fast) ease;
+    position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%);
+    z-index: 3; border: 0; background: none; padding: 8px; margin: 0;
+    cursor: pointer;
   }
   .seam-dot {
     display: flex; align-items: center; justify-content: center;
@@ -580,8 +588,6 @@
   /* Chevron points into the rail (collapse) when open; flips outward (expand)
      once folded. */
   body.nav-collapsed .seam-dot svg { transform: rotate(180deg); }
-  /* Track the folded rail's narrower width. */
-  body.nav-collapsed .seam-fold { left: 62px; }
   /* Phones swap the rail for the bottom nav, so the seam control has no home. */
   @media (max-width: 720px) { .seam-fold { display: none; } }
 

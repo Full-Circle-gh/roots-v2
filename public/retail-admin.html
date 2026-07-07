@@ -728,9 +728,21 @@
 </nav>
 
 <div class="topbar">
-  <!-- Brand leads the topbar. The rail-fold control moved out of this corner
-       down to the rail footer (.nav-foot) — a rare "reshape the layout" action
-       doesn't belong in the most valuable top-left slot. -->
+  <!-- Rail-fold dot — sits on the seam between the rail and the content, level
+       with the search bar (replaces the old topbar hamburger). It's anchored to
+       the topbar's own left edge (left:0), which IS the divider by construction:
+       the topbar's `left` equals the rail width and animates with it, so the dot
+       tracks the seam automatically in every state and under the Aa `zoom` with
+       no pixel guessing. It straddles the line (translateX(-50%)); the topbar's
+       z-index is raised above the rail so the half over the rail isn't clipped.
+       Rest state is a small Dusk dot; hover swells it into a chevron, click folds.
+       setNavCollapsed() keeps its title/aria in sync; the chevron flip is CSS. -->
+  <button class="seam-fold" id="railSeamFold" type="button" onclick="toggleNavCollapse()"
+          title="Collapse menu · 收起菜单" aria-label="Collapse menu · 收起菜单" aria-pressed="false">
+    <span class="seam-dot">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
+    </span>
+  </button>
   <!-- Tacet wordmark — the waveform settling into a straight line (chaos → calm)
        with the Dusk automation dot at its end, then lowercase "tacet" in
        Fraunces. Mark stroke = currentColor so it flips ink/paper by theme. -->
@@ -745,7 +757,7 @@
   </div>
   <!-- Wide search sits at the topbar's left edge, right of the rail divider. The
        rail-fold control is no longer a hamburger here — it moved onto the seam
-       between the rail and the content as a small dot (see #railSeamFold below).
+       between the rail and the content as a small dot (see #railSeamFold above).
        The search is a wide field — icon inside-left, full placeholder, no Ctrl K
        chip — but stays a button that opens the command palette (openCmdSearch). -->
   <div class="tb-left">
@@ -1067,24 +1079,10 @@
     Settings · 设置
   </button>
 
-  <!-- Rail-fold control lives on the seam now (#railSeamFold, below the rail) —
+  <!-- Rail-fold control lives on the seam now (#railSeamFold, in the topbar) —
        the old .nav-foot chevron button was removed 2026-07-07 so the dot is the
        single fold control. -->
 </div>
-
-<!-- Rail-fold dot — rides the seam between the rail and the content, level with
-     the search bar (replaces the old topbar hamburger). Rest state is a small
-     Dusk dot sitting on the divider; hovering swells it into a chevron and a
-     click folds the rail. Fixed like .tabs/.topbar so it shares their zoom
-     context and stays glued to the seam under the Aa text-size zoom; its `left`
-     rides the rail width so it tracks the divider as the rail folds. setNavCollapsed()
-     keeps its title/aria in sync; the chevron flip is pure CSS. -->
-<button class="seam-fold" id="railSeamFold" type="button" onclick="toggleNavCollapse()"
-        title="Collapse menu · 收起菜单" aria-label="Collapse menu · 收起菜单" aria-pressed="false">
-  <span class="seam-dot">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
-  </span>
-</button>
 
 <!-- ─── COMMAND SEARCH PALETTE ───
      A keyword search over every page, settings panel and individual setting
