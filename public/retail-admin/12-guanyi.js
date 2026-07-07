@@ -228,8 +228,8 @@
         gyQty = gqty == null ? '<span class="muted">?</span>' : String(gqty);
         if (gqty != null) {
           const d = ourQty - gqty;
-          delta = d === 0 ? '<span style="color:var(--ok,#2a8)">=</span>'
-            : `<span style="color:${d > 0 ? '#c80' : '#c00'}">${d > 0 ? '+' : ''}${d}</span>`;
+          delta = d === 0 ? '<span style="color:var(--success)">=</span>'
+            : `<span style="color:${d > 0 ? 'var(--warn)' : 'var(--danger)'}">${d > 0 ? '+' : ''}${d}</span>`;
         }
         sync = `<label class="toggle-label" title="Enable/disable sync"><input type="checkbox" ${m.sync_enabled ? 'checked' : ''} onchange="gyToggleSync(${p.id}, this.checked)"></label>`;
       } else if (sg) {
@@ -312,10 +312,10 @@
     const when = (t) => gyLocalTime(t, false);
 
     const modeBadge = mode === 'live'
-      ? '<span style="background:#e6f5ec;color:#1a7a44;border:1px solid #b6e0c6;border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600">● LIVE</span>'
+      ? '<span style="background:rgba(107,142,111,.14);color:var(--success);border:1px solid rgba(107,142,111,.35);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600">● LIVE</span>'
       : mode === 'shadow'
-        ? '<span style="background:var(--bg-elev-1);color:var(--fg-muted);border:1px solid var(--border,#ddd);border-radius:10px;padding:1px 8px;font-size:11px" title="Detecting + logging only — not changing stock">◌ shadow</span>'
-        : '<span style="background:var(--bg-elev-1);color:var(--fg-muted);border:1px solid var(--border,#ddd);border-radius:10px;padding:1px 8px;font-size:11px">off</span>';
+        ? '<span style="background:var(--bg-elev-1);color:var(--text-3);border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:11px" title="Detecting + logging only — not changing stock">◌ shadow</span>'
+        : '<span style="background:var(--bg-elev-1);color:var(--text-3);border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:11px">off</span>';
 
     let html = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <strong style="font-size:14px">gzgrocery pickups · 提货扣减</strong> ${modeBadge}
@@ -323,14 +323,14 @@
     </div>`;
 
     if (flagged.length) {
-      html += `<div style="border:1px solid #e6c200;background:#fff9e0;border-radius:8px;padding:10px 12px;margin-bottom:10px">
-        <div style="font-size:13px;font-weight:600;color:#8a6d00;margin-bottom:6px">⚠ ${flagged.length} flagged drop(s) need your decision · 待确认</div>`
+      html += `<div style="border:1px solid var(--warn);background:color-mix(in srgb, var(--warn) 12%, transparent);border-radius:8px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:13px;font-weight:600;color:var(--warn);margin-bottom:6px">⚠ ${flagged.length} flagged drop(s) need your decision · 待确认</div>`
         + flagged.map(f => {
           const drop = Math.abs(f.drift || 0);
-          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #f0e2a8">
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid color-mix(in srgb, var(--warn) 28%, transparent)">
             <div style="flex:1;min-width:0">
-              <div style="font-size:13px;color:#4a3d00;font-weight:500">${pname(f)}${psku(f)}</div>
-              <div style="font-size:11px;color:#8a7a3a">Guanyi ${f.baseline_qty}→${f.observed_qty} (drop ${drop}) · your stock now ${f.current_qty} · ${when(f.created_at)}</div>
+              <div style="font-size:13px;color:var(--text-1);font-weight:500">${pname(f)}${psku(f)}</div>
+              <div style="font-size:11px;color:var(--text-3)">Guanyi ${f.baseline_qty}→${f.observed_qty} (drop ${drop}) · your stock now ${f.current_qty} · ${when(f.created_at)}</div>
             </div>
             <button class="btn btn-sm btn-primary" onclick="gyApplyPickup(${f.id})" title="Yes, real sale — lower my stock by ${drop}">Apply −${drop}</button>
             <button class="btn btn-sm" onclick="gyIgnorePickup(${f.id})" title="Glitch — keep my stock, correct Guanyi back up">Ignore</button>
@@ -344,10 +344,10 @@
       // Preserve the expanded state across the background poll's re-render —
       // otherwise the section snaps shut every refresh cycle.
       const wasOpen = !!wrap.querySelector('#gy-pickups-recent[open]');
-      html += `<details id="gy-pickups-recent"${wasOpen ? ' open' : ''}><summary style="cursor:pointer;font-size:12px;color:var(--fg-muted);padding:2px 0">Recent auto-applied pickups (${recent.length}) · 最近自动扣减</summary>
+      html += `<details id="gy-pickups-recent"${wasOpen ? ' open' : ''}><summary style="cursor:pointer;font-size:12px;color:var(--text-3);padding:2px 0">Recent auto-applied pickups (${recent.length}) · 最近自动扣减</summary>
         <div style="margin-top:6px;font-size:12px;max-height:160px;overflow-y:auto">`
         + recent.map(x => `<div style="display:flex;gap:8px;padding:2px 0">
-            <span style="color:#c00;font-weight:600;width:44px">−${x.inferred_pickup}</span>
+            <span style="color:var(--danger);font-weight:600;width:44px">−${x.inferred_pickup}</span>
             <span style="flex:1">${pname(x)}${psku(x)}</span>
             <span class="muted">${when(x.created_at)}</span>
           </div>`).join('')
@@ -449,7 +449,7 @@
     const per = r.period || 'day';
     const btn = (p, label) => `<button class="btn btn-sm ${per === p ? 'btn-primary' : ''}" onclick="gySetAnaPeriod('${p}')">${label}</button>`;
 
-    const card = (label, val, sub) => `<div style="flex:1;min-width:120px;background:var(--bg-elev-1);border:1px solid var(--border,#e0ddd5);border-radius:8px;padding:10px 12px">
+    const card = (label, val, sub) => `<div style="flex:1;min-width:120px;background:var(--bg-elev-1);border:1px solid var(--line);border-radius:8px;padding:10px 12px">
       <div class="muted" style="font-size:11px;text-transform:uppercase;letter-spacing:.04em">${label}</div>
       <div style="font-size:20px;font-weight:700;margin-top:2px">${val}</div>${sub ? `<div class="muted" style="font-size:11px">${sub}</div>` : ''}</div>`;
 
@@ -472,7 +472,7 @@
     </div>`;
 
     if (r.unpriced && r.unpriced.length) {
-      html += `<div style="font-size:12px;color:#8a6d00;background:#fff9e0;border:1px solid #e6c200;border-radius:6px;padding:6px 10px;margin-bottom:10px">
+      html += `<div style="font-size:12px;color:var(--warn);background:color-mix(in srgb, var(--warn) 12%, transparent);border:1px solid var(--warn);border-radius:6px;padding:6px 10px;margin-bottom:10px">
         ⚠ ${r.unpriced.length} ordered product(s) have no gzgrocery price yet — counted in units but billed at full retail: ${r.unpriced.slice(0, 6).map(u => esc(u.name || ('#' + u.product_id))).join(', ')}${r.unpriced.length > 6 ? '…' : ''}</div>`;
     }
 
@@ -484,10 +484,10 @@
     // simple per-bucket bar list
     if (ts.length) {
       const max = Math.max(...ts.map(t => t.owed)) || 1;
-      html += `<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:12px;color:var(--fg-muted)">By ${per} (${ts.length})</summary>
+      html += `<details style="margin-bottom:10px"><summary style="cursor:pointer;font-size:12px;color:var(--text-3)">By ${per} (${ts.length})</summary>
         <div style="margin-top:6px">` + ts.map(t => `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:1px 0">
           <span style="width:90px" class="muted">${esc(t.bucket)}</span>
-          <span style="height:10px;background:var(--accent,#7a8b3a);border-radius:2px;width:${Math.max(2, (t.owed / max) * 200)}px"></span>
+          <span style="height:10px;background:var(--accent);border-radius:2px;width:${Math.max(2, (t.owed / max) * 200)}px"></span>
           <span>${yuan(t.owed)}</span><span class="muted">· ${t.units}u</span>
         </div>`).join('') + `</div></details>`;
     }
@@ -500,7 +500,7 @@
         <td style="text-align:right;font-weight:600">${p.units}</td>
         <td style="text-align:right">${yuan(p.owed)}</td>
         <td style="text-align:right" class="muted">${yuan(p.retail)}</td>
-        <td style="text-align:right">${p.discount == null ? '<span style="color:#c80">—</span>' : (p.discount * 100).toFixed(0) + '%'}</td>
+        <td style="text-align:right">${p.discount == null ? '<span style="color:var(--text-3)">—</span>' : (p.discount * 100).toFixed(0) + '%'}</td>
       </tr>`).join('') + `</tbody></table>`;
     if (prods.length > 50) html += `<div class="muted" style="font-size:11px;margin-top:4px">Showing top 50 of ${prods.length} — full list in the CSV.</div>`;
 
