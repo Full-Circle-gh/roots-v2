@@ -7928,19 +7928,19 @@ function backfillShipmentTrackingFromOrder(orderId) {
 }
 
 function nextOrderNo() {
-  // R{6-digit-random}. Short and easy to read/say — one letter + 6 digits.
+  // MA{7-digit-random}. Short and easy to read/say — two letters + 7 digits.
   // A random suffix (not a daily counter) so the digits are always different,
   // never the repeating 0001/0002/0003 a per-day reset produces. Retry until
   // the full number is unused.
   const exists = tdb().prepare(`SELECT 1 FROM retail_orders WHERE order_no = ? LIMIT 1`);
   for (let attempt = 0; attempt < 50; attempt++) {
-    // 100000–999999: always 6 digits, never leading-zero padded.
-    const suffix = String(100000 + Math.floor(Math.random() * 900000));
-    const candidate = 'R' + suffix;
+    // 1000000–9999999: always 7 digits, never leading-zero padded.
+    const suffix = String(1000000 + Math.floor(Math.random() * 9000000));
+    const candidate = 'MA' + suffix;
     if (!exists.get(candidate)) return candidate;
   }
   // Extremely unlikely fallback: append more entropy to guarantee uniqueness.
-  return 'R' + String(100000 + Math.floor(Math.random() * 900000)) + String(Math.floor(Math.random() * 10));
+  return 'MA' + String(1000000 + Math.floor(Math.random() * 9000000)) + String(Math.floor(Math.random() * 10));
 }
 
 router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req, res, next) => {

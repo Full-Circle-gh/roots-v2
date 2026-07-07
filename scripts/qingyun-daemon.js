@@ -149,7 +149,7 @@ const BOOTSTRAP_ALERT_MS = Number(process.env.QINGYUN_BOOTSTRAP_ALERT_MS || 10 *
 function matchRetailOrderId(d) {
   try {
     const remark = String(d.userRemark || '');
-    const m = remark.match(/R\d{8,}/i) || remark.match(/#\s*(\d{3,})/);
+    const m = remark.match(/MA\d{7}/i) || remark.match(/R\d{6,}/i) || remark.match(/#\s*(\d{3,})/);
     if (m) {
       const ref = (m[0].startsWith('#') ? m[1] : m[0]).toUpperCase();
       const byNo = db.prepare('SELECT id FROM retail_orders WHERE UPPER(order_no) = ?').get(ref)
