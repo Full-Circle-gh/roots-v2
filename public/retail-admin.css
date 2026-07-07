@@ -410,7 +410,12 @@
      topbar keeps its own .brand for phones (rail hidden there) — hidden here on
      desktop, re-shown in the mobile block. */
   .nav-brand {
-    position: sticky; top: 0; z-index: 2;
+    /* Static + flex:none (was position:sticky). Sticky drifts under the Aa
+       text-size `zoom`, so the brand stopped meeting the now-fixed topbar at
+       110%+. Static keeps it at the rail's top (y:0) and is zoom-safe like the
+       topbar; flex:none stops the rail's flex column from ever shrinking it
+       below 56px so its bottom border always lands at y:56. */
+    position: static; flex: none;
     display: flex; align-items: center; gap: 10px;
     height: 56px; padding: 0 14px; margin: -10px -10px 6px;
     background: var(--bg-pane); border-bottom: 1px solid var(--td-border);
