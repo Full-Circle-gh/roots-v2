@@ -7378,7 +7378,13 @@
     display: grid; gap: 4px; margin-top: 18px; padding-top: 16px;
     border-top: 1px solid var(--td-border);
     max-height: 420px; overflow-y: auto;
+    /* A reading column, not the full 1120px card — otherwise the right-aligned
+       amount floats to the far edge, miles from its row text. */
+    max-width: 680px;
   }
+  /* Author `display:grid` above beats the UA `[hidden]{display:none}`, so the
+     fold would never collapse without this — "Hide the work" needs it. */
+  .td-recap-work[hidden] { display: none; }
   .td-recap-work::-webkit-scrollbar { width: 6px; }
   .td-recap-work::-webkit-scrollbar-thumb { background: var(--td-border); border-radius: 3px; }
   .td-recap-work .td-feed-row.td-work-away { background: var(--td-dusk-tint); }
