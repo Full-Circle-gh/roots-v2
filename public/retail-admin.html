@@ -8745,6 +8745,301 @@
 </div>
 
 <!-- App JS — one global scope split across 10 files; ORDER MATTERS (see each file header). -->
+<!-- ═══════════════════════════════════════════════════════════════════════
+     i18n / language-collapse engine — INLINE ON PURPOSE.
+     The static markup carries BOTH languages ("Dashboard · 概览"). This engine
+     collapses every "EN · 中文" node to the one active language. It lives inline,
+     right here before the module scripts, so it runs DURING HTML parse: all the
+     static chrome above is already in the DOM, so it is collapsed and the page is
+     stamped data-ui-lang (which reveals the body) BEFORE the browser's first
+     paint — with zero network wait. That is what makes the flash-of-both-languages
+     on a cold refresh physically impossible. Do NOT move this back into an external
+     module: any external file is a network round-trip, during which the 3s
+     anti-FOUC failsafe can fire and reveal the raw bilingual page.
+     A guarded fallback copy also lives in 10-extras.js (window.__raI18nEngine). ═══ -->
+<script>
+(function () {
+  if (window.__raI18nEngine) return;
+  window.__raI18nEngine = 1;
+  // Shared across the whole admin suite (app.html / cms.html / product-editor.html)
+  // so the language you pick on one surface follows you into the others.
+  const LANG_KEY = 'roots-admin-lang';
+  let _lang = 'en';
+  const _listeners = [];
+  try { const s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'cn') _lang = s; } catch {}
+
+  const EN_ONLY_MAP = {
+    'Mini App Editor': '小程序编辑器',
+    'Dashboard': '主控台',
+    'All': '全部',
+    'Pending': '待付款',
+    'Paid': '已付款',
+    'Preparing': '备货中',
+    'Dispatched': '已发货',
+    'Delivered': '已送达',
+    'Awaiting restock': '等待补货',
+    'Cancelled': '已取消',
+    'Refunded': '已退款',
+    'Refund queue': '退款队列',
+    'Refresh': '刷新',
+    'Bulk attach tracking': '批量绑定运单号',
+    'Include blocked': '包括已封禁',
+    '‹ Prev': '‹ 上一页',
+    'Active & scheduled': '进行中 & 已排期',
+    'Save flash sale': '保存秒杀',
+    'Update flash sale': '更新秒杀',
+    'New flash sale': '新建秒杀',
+    'No flash sales yet': '暂无秒杀活动',
+    'ACTIVE': '进行中',
+    'UPCOMING': '即将开始',
+    'ENDED': '已结束',
+    'JOINED': '已加入',
+    'ORDERED': '已下单',
+    'VOIDED': '已作废',
+    'Loading preview…': '加载预览中…',
+    'Live': '开启',
+    'Off': '关闭',
+    'Bilingual': '双语',
+    'English only': '仅英文',
+    '中文 only': '仅中文',
+    'Loading…': '加载中…',
+    'Adding…': '添加中…',
+    'Added ✓': '已添加 ✓',
+    'Deleting…': '删除中…',
+    'Deleted ✓': '已删除 ✓',
+    'Saving…': '保存中…',
+    'Saved': '已保存',
+    'Saved ✓': '已保存 ✓',
+    'Sending…': '发送中…',
+    'Saving order…': '保存排序中…',
+    'Order saved ✓': '排序已保存 ✓',
+  };
+
+  // Only treat "X · Y" as a bilingual label when the right side contains
+  // Chinese characters. Prevents splitting data strings like
+  // "asher · 18613159912" or "subtotal ¥118 · shipping ¥30".
+  function hasChinese(s) { return /[一-鿿]/.test(s); }
+
+  const _reg = [];
+  const _tipReg = [];
+  const _phReg = [];
+  const _titleReg = [];
+
+  function inSkippedContext(el) {
+    for (let n = el; n; n = n.parentElement) {
+      if (!n.tagName) break;
+      const T = n.tagName.toUpperCase();
+      if (T === 'SCRIPT' || T === 'STYLE' || T === 'TEXTAREA' || T === 'INPUT' ||
+          T === 'NOSCRIPT' || T === 'SVG' || T === 'CANVAS') return true;
+      if (n.namespaceURI === 'http://www.w3.org/2000/svg') return true;
+      if (n.dataset && n.dataset.noI18n != null) return true;
+    }
+    return false;
+  }
+
+  function processNode(textNode) {
+    if (textNode.__i18nDone) return;
+    const parent = textNode.parentElement;
+    if (!parent || inSkippedContext(parent)) return;
+
+    const text = textNode.nodeValue || '';
+    let en, cn, lead = '', trail = '';
+    const idx = text.indexOf(' · ');
+    if (idx !== -1) {
+      const left = text.slice(0, idx);
+      const right = text.slice(idx + 3);
+      en = left.trim();
+      cn = right.trim();
+      if (!en || !cn) return;
+      if (!hasChinese(cn) || hasChinese(en)) return;
+      lead  = left.slice(0, left.length - left.trimStart().length);
+      trail = right.slice(right.trimEnd().length);
+    } else {
+      const trimmed = text.trim();
+      if (!EN_ONLY_MAP[trimmed]) return;
+      en = trimmed;
+      cn = EN_ONLY_MAP[trimmed];
+      lead  = text.slice(0, text.length - text.trimStart().length);
+      trail = text.slice(text.trimEnd().length);
+    }
+
+    const enFull = lead + en + trail;
+    const cnFull = lead + cn + trail;
+    textNode.__i18nDone = true;
+    textNode.nodeValue = _lang === 'cn' ? cnFull : enFull;
+    _reg.push({ node: textNode, en: enFull, cn: cnFull });
+  }
+
+  function isCNBlock(el) {
+    const t = el.textContent || '';
+    return /[一-鿿]/.test(t) && !/[A-Za-z]/.test(t);
+  }
+  function isENBlock(el) {
+    const t = el.textContent || '';
+    return /[A-Za-z]/.test(t) && !/[一-鿿]/.test(t);
+  }
+  function isStructuralBlock(el) {
+    return !!el.querySelector('button, a, input, select, textarea, svg');
+  }
+  function tagBlockPair(cnEl) {
+    if (cnEl.dataset.langBlock || (cnEl.textContent || '').trim().length < 6) return;
+    if (inSkippedContext(cnEl) || isStructuralBlock(cnEl)) return;
+    const prev = cnEl.previousElementSibling, next = cnEl.nextElementSibling;
+    let enEl = null;
+    if (prev && prev.tagName === cnEl.tagName && !prev.dataset.langBlock && isENBlock(prev) && !inSkippedContext(prev) && !isStructuralBlock(prev)) enEl = prev;
+    else if (next && next.tagName === cnEl.tagName && !next.dataset.langBlock && isENBlock(next) && !inSkippedContext(next) && !isStructuralBlock(next)) enEl = next;
+    if (!enEl) return;
+    cnEl.dataset.langBlock = 'cn';
+    enEl.dataset.langBlock = 'en';
+  }
+  function processBlocks(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    if (scope.tagName === 'DIV' || scope.tagName === 'P') {
+      if (isCNBlock(scope)) tagBlockPair(scope);
+    }
+    scope.querySelectorAll && scope.querySelectorAll('div, p').forEach(el => {
+      if (isCNBlock(el)) tagBlockPair(el);
+    });
+  }
+
+  function processTip(el) {
+    if (el.__i18nTipDone) return;
+    const raw = el.getAttribute('data-tip') || '';
+    const idx = raw.indexOf(' · ');
+    if (idx === -1) return;
+    const en = raw.slice(0, idx).trim();
+    const cn = raw.slice(idx + 3).trim();
+    if (!en || !cn) return;
+    if (!hasChinese(cn)) return;
+    el.__i18nTipDone = true;
+    el.setAttribute('data-tip', _lang === 'cn' ? cn : en);
+    _tipReg.push({ el, en, cn });
+  }
+  function processTips(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    if (scope.hasAttribute && scope.hasAttribute('data-tip')) processTip(scope);
+    scope.querySelectorAll && scope.querySelectorAll('[data-tip]').forEach(processTip);
+  }
+
+  function processPh(el) {
+    if (el.__i18nPhDone) return;
+    const en = el.getAttribute('data-ph-en'), cn = el.getAttribute('data-ph-cn');
+    if (en == null || cn == null) return;
+    el.__i18nPhDone = true;
+    el.setAttribute('placeholder', _lang === 'cn' ? cn : en);
+    _phReg.push({ el, en, cn });
+  }
+  function processPhs(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    if (scope.hasAttribute && scope.hasAttribute('data-ph-en')) processPh(scope);
+    scope.querySelectorAll && scope.querySelectorAll('[data-ph-en]').forEach(processPh);
+  }
+
+  function processTitle(el) {
+    if (el.__i18nTitleDone) return;
+    const raw = el.getAttribute('title') || '';
+    const idx = raw.indexOf(' · ');
+    if (idx === -1) return;
+    const en = raw.slice(0, idx).trim();
+    const cn = raw.slice(idx + 3).trim();
+    if (!en || !cn || !hasChinese(cn)) return;
+    el.__i18nTitleDone = true;
+    el.setAttribute('title', _lang === 'cn' ? cn : en);
+    _titleReg.push({ el, en, cn });
+  }
+  function processTitles(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    if (scope.hasAttribute && scope.hasAttribute('title')) processTitle(scope);
+    scope.querySelectorAll && scope.querySelectorAll('[title]').forEach(processTitle);
+  }
+
+  function processSubtree(root) {
+    if (!root) return;
+    if (root.nodeType === 3) { processNode(root); return; }
+    if (root.nodeType !== 1 || inSkippedContext(root)) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    let n;
+    while ((n = walker.nextNode())) {
+      if (n.__i18nDone) continue;
+      const t = n.nodeValue;
+      if (t && (t.indexOf(' · ') !== -1 || EN_ONLY_MAP[t.trim()])) nodes.push(n);
+    }
+    nodes.forEach(processNode);
+    processBlocks(root);
+    processTips(root);
+    processPhs(root);
+    processTitles(root);
+  }
+
+  function applyLang(lang) {
+    _lang = lang;
+    document.documentElement.dataset.uiLang = lang;
+    for (let i = _reg.length - 1; i >= 0; i--) {
+      const e = _reg[i];
+      if (!e.node.isConnected) { _reg.splice(i, 1); continue; }
+      e.node.nodeValue = lang === 'cn' ? e.cn : e.en;
+    }
+    for (let i = _tipReg.length - 1; i >= 0; i--) {
+      const e = _tipReg[i];
+      if (!e.el.isConnected) { _tipReg.splice(i, 1); continue; }
+      e.el.setAttribute('data-tip', lang === 'cn' ? e.cn : e.en);
+    }
+    for (let i = _phReg.length - 1; i >= 0; i--) {
+      const e = _phReg[i];
+      if (!e.el.isConnected) { _phReg.splice(i, 1); continue; }
+      e.el.setAttribute('placeholder', lang === 'cn' ? e.cn : e.en);
+    }
+    for (let i = _titleReg.length - 1; i >= 0; i--) {
+      const e = _titleReg[i];
+      if (!e.el.isConnected) { _titleReg.splice(i, 1); continue; }
+      e.el.setAttribute('title', lang === 'cn' ? e.cn : e.en);
+    }
+    processSubtree(document.body);
+    try { localStorage.setItem(LANG_KEY, lang); } catch {}
+    updateBtn();
+    _listeners.forEach(cb => { try { cb(lang); } catch {} });
+  }
+
+  function updateBtn() {
+    const btn = document.getElementById('lang-toggle');
+    if (btn) btn.textContent = _lang === 'cn' ? 'EN' : '中文';
+  }
+
+  const _mo = new MutationObserver(function (mutations) {
+    const batch = [];
+    for (const m of mutations) {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1 || node.nodeType === 3) batch.push(node);
+      }
+    }
+    if (!batch.length) return;
+    batch.forEach(function (nd) { try { processSubtree(nd); } catch (e) {} });
+  });
+
+  window.cuToggleLang  = function () { applyLang(_lang === 'cn' ? 'en' : 'cn'); };
+  window.cuT           = function (en, cn) { return _lang === 'cn' ? cn : en; };
+  window.cuLang        = function () { return _lang; };
+  window.onLangChange  = function (cb) { _listeners.push(cb); };
+
+  function init() {
+    document.documentElement.dataset.uiLang = _lang;
+    const st = document.createElement('style');
+    st.textContent = 'html[data-ui-lang="en"] [data-lang-block="cn"]{display:none!important}'
+                   + 'html[data-ui-lang="cn"] [data-lang-block="en"]{display:none!important}';
+    document.head.appendChild(st);
+    try { processSubtree(document.body); } catch (e) {}
+    updateBtn();
+    _mo.observe(document.body, { childList: true, subtree: true });
+  }
+
+  if (document.body) {
+    init();
+  } else {
+    document.addEventListener('DOMContentLoaded', init);
+  }
+})();
+</script>
 <script src="/assets/retail-admin/01-core.js"></script>
 <script src="/assets/retail-admin/02-settings-ops.js"></script>
 <script src="/assets/retail-admin/03-dashboard.js"></script>

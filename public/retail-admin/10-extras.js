@@ -324,7 +324,17 @@ cuApplyUiScale(cuGetUiScale());
 
 
 // ── i18n / Language toggle ──
+// NOTE: the AUTHORITATIVE copy of this engine now runs INLINE in retail-admin.html,
+// right before the module <script> tags, so the bilingual "EN · 中文" markup is
+// collapsed to one language DURING HTML parse — before first paint, with zero
+// network wait. That is what stops the flash-of-both-languages on a cold refresh
+// (the old failsafe used to reveal the raw bilingual page after 3s when this
+// 10th-of-17 script hadn't downloaded yet). This copy is kept as a self-guarded
+// FALLBACK: if the inline engine ever runs, it sets window.__raI18nEngine and this
+// block no-ops; if the inline copy is removed/errors, this one still initializes.
 (function () {
+  if (window.__raI18nEngine) return;
+  window.__raI18nEngine = 1;
   // Shared across the whole admin suite (app.html / cms.html / product-editor.html)
   // so the language you pick on one surface follows you into the others.
   const LANG_KEY = 'roots-admin-lang';
