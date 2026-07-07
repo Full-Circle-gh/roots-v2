@@ -774,12 +774,10 @@
         </button>
       </div>
     </div>
-    <button id="orders-sound-toggle" class="tabs-sound-toggle" type="button"
-            onclick="toggleOrdersSound()" title="Notification sound — click to mute/unmute · 通知提示音 — 点击静音/开启"
-            aria-label="Toggle notification sound">
-      <svg class="ico-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
-      <svg class="ico-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></svg>
-    </button>
+    <!-- Sound toggle moved into the account dropdown (2026-07-07) — Tacet:
+         "runs in silence", so a ding control doesn't belong in the chrome; it's
+         a set-once preference beside Appearance / Text size / Language. The
+         handler (toggleOrdersSound) is unchanged; see #acctSound below. -->
   </div>
 
   <div class="acct" id="acct" style="display:none;">
@@ -823,6 +821,14 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg>
         <span>Language · 语言</span>
         <span class="acct-val" id="acctLangVal"></span>
+      </button>
+      <!-- New-order sound — folded up from the topbar. Set-once preference;
+           clicking previews the ding and keeps the menu open (like the rows
+           above). Chip shows On/Off, synced by acctSyncPrefs(). -->
+      <button class="acct-item" id="acctSound" type="button" role="menuitem" title="New-order sound — click to mute / unmute · 新订单提示音 — 点击静音 / 开启">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+        <span>New-order sound · 提示音</span>
+        <span class="acct-val" id="acctSoundVal"></span>
       </button>
       <div class="acct-sep"></div>
       <button class="acct-item acct-danger" id="acctSignout" type="button" role="menuitem">

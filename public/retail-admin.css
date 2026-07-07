@@ -7301,6 +7301,65 @@
   body:has(#tab-reports.active),
   body:has(#tab-sales.active) { background: var(--td-paper); }
 
+  /* ════════════════════════════════════════════════════════════════════
+     TACET SKIN — top bar + account menu (chrome reskin, slice one).
+     Scoped to .topbar so nothing else repaints; the account dropdown is a
+     DOM child of .topbar, so it's covered too. Reuses the shared --td-*
+     tokens (no new palette). What this fixes vs. the leftover Full Circle
+     look: the Tea-green avatar → Ink circle · the red inbox badge → calm
+     Amber (attention, never alarmist) · the pink Sign-out → Brick · IBM
+     Plex → Inter · one Dusk element only (the wordmark's automation dot).
+     The left rail + everything else keep the old look until their turn.
+     ════════════════════════════════════════════════════════════════════ */
+  .topbar {
+    font-family: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    border-bottom-color: var(--td-border);
+  }
+
+  /* Search — neutral pill, never Dusk. Ctrl K in a quiet cream chip. */
+  .topbar .gsearch-trigger { background: var(--td-surface); border-color: var(--td-border); color: var(--td-text2); }
+  .topbar .gsearch-trigger:hover { border-color: var(--td-text2); }
+  .topbar .gsearch-label { color: var(--td-text2); font-weight: 500; }
+  .topbar .gsearch-kbd { color: var(--td-text2); border-color: var(--td-border); background: var(--td-raised); font-weight: 500; }
+
+  /* Icon buttons → graphite, hover raised. */
+  .topbar .topbar-ico { color: var(--td-text2); }
+  .topbar .topbar-ico:hover { background: var(--td-raised); color: var(--td-text); }
+
+  /* Unseen inbox marker → calm Amber. Never red, no alarm pulse. */
+  .topbar .tab-badge {
+    background: var(--td-amber);
+    box-shadow: 0 0 0 2px var(--bg-pane);
+    animation: none;
+    color: #fff;
+  }
+
+  /* Avatar → Ink circle, Paper initial (no Tea green). Dusk focus ring. */
+  .topbar .acct-circle { background: var(--td-text); color: var(--td-paper); box-shadow: 0 0 0 1px var(--td-border) inset; }
+  .topbar .acct-btn:hover .acct-circle,
+  .topbar .acct-btn:focus-visible .acct-circle,
+  .topbar .acct-btn[aria-expanded="true"] .acct-circle { box-shadow: 0 0 0 2px var(--td-dusk); }
+
+  /* Account dropdown — Tacet card: 14px radius, warm border, one soft shadow. */
+  .topbar .acct-menu {
+    background: var(--td-surface); border-color: var(--td-border);
+    border-radius: var(--r-xl);
+    box-shadow: 0 1px 2px rgba(17, 26, 43, .05), 0 4px 16px rgba(17, 26, 43, .06);
+  }
+  .topbar .acct-name { color: var(--td-text); font-weight: 500; font-size: 15px; }
+  .topbar .acct-role {
+    color: var(--td-text2); font-family: inherit;
+    text-transform: uppercase; letter-spacing: .08em; font-weight: 500;
+  }
+  .topbar .acct-sep { background: var(--td-border); }
+  .topbar .acct-item { color: var(--td-text); }
+  .topbar .acct-item svg { color: var(--td-text2); opacity: 1; }
+  .topbar .acct-item:hover { background: var(--td-raised); color: var(--td-text); }
+  .topbar .acct-val { color: var(--td-text2); font-family: inherit; font-variant-numeric: tabular-nums; }
+  .topbar .acct-danger { color: var(--td-brick-ink); }
+  .topbar .acct-danger svg { color: var(--td-brick-ink); }
+  .topbar .acct-danger:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+
   /* ── shared chrome ── */
   /* Content is a centered 1120px column (like the mockup's .page), so the
      header date lines up with the cards' right edge instead of the screen edge. */
