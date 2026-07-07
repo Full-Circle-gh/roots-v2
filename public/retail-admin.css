@@ -8363,22 +8363,9 @@
     margin: 0 0 16px; padding: 16px 18px;
     border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface);
   }
-  /* A single-section panel (meituan) shouldn't double-card — keep its one
-     section frameless so its inner store cards are the primary cards, like the
-     two section cards of the mini-app / web configs. */
-  #cfg-host > .ig-wiz:has(> .mc-sec):not(:has(> .mc-sec ~ .mc-sec)) > .mc-sec {
-    border: none; background: transparent; padding: 0; margin: 0;
-  }
   @media (max-width: 760px) { #cfg-host > .ig-wiz:has(> .mc-sec ~ .mc-sec) { columns: 1; } }
-
-  /* Meituan store list — 2-up cards that fill the wide single-section panel. */
-  :is(#tab-sales, .cfg-host) .mc-wiz .mt-stores {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;
-  }
-  :is(#tab-sales, .cfg-host) .mc-wiz .mt-store {
-    border: 1px solid var(--td-border); border-radius: 10px; padding: 13px 15px; background: var(--td-paper);
-  }
-  @media (max-width: 760px) { :is(#tab-sales, .cfg-host) .mc-wiz .mt-stores { grid-template-columns: 1fr; } }
+  /* Meituan renders each store as its own .mc-sec, so the store cards get the
+     same white-surface section-card treatment as the mini-app / web configs. */
 
   /* Info dot + hover tooltip. The bubble inverts against the page — Ink-on-Paper
      in light, Paper-on-Ink in dark — so it reads in either theme. Keyboard-

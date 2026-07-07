@@ -568,13 +568,13 @@
       `${cuT('last order', '最近订单')} ${igAgo(s.lastOrder)}`,
       `${cuT('orders today', '今日订单')} ${Number(s.ordersToday || 0)}`,
     ].join(' · ');
-    return `<div class="mt-store">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-        <b style="font-size:13.5px">${name}</b>
-        <span style="flex:1"></span>
-        ${chip}${relogin}
-      </div>
-      <div style="font-size:12.5px;color:var(--text-2);margin-top:6px">${facts.join(' · ')}</div>
+    // Each store is its own section card (like the mini-app's two cards): icon
+    // tile + store name in the head, signed-in chip on the right, facts below.
+    const storeIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>';
+    return `<div class="mc-sec">
+      <div class="mc-sec-head"><span class="mc-ico">${storeIco}</span><b>${name}</b><span style="flex:1"></span>${chip}</div>
+      ${relogin ? `<div style="margin-top:10px">${relogin}</div>` : ''}
+      <div style="font-size:12.5px;color:var(--text-2);margin-top:10px">${facts.join(' · ')}</div>
       <div style="font-size:12.5px;color:var(--text-3);margin-top:3px">${live}</div>
     </div>`;
   }
@@ -593,7 +593,6 @@
     let detail = [];
     try { const r = await api('/api/retail-admin/channel-hub/meituan/stores'); detail = r.data || []; } catch (_) {}
     if (!detail.length) detail = (_stores || []).map(s => ({ code: s.code, name: s.name || s.code, nameCn: s.name || s.code, signedIn: null, liveProducts: 0, notMatched: 0, ordersToday: 0 }));
-    const bag = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8h12l-1 12H7L6 8z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>';
     const paused = status === 'paused';
     const storeRows = detail.map(igMtStoreRow).join('');
 
@@ -609,11 +608,7 @@
         <span class="mc-chip${paused ? '' : ' on'}">${paused ? MC_SVG.circle : MC_SVG.check}<span>${paused ? cuT('Paused', '已暂停') : cuT('Connected', '已连接')}</span></span>
       </div>
 
-      <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${bag}</span><b>${cuT('Your stores', '您的门店')}</b></div>
-        <div class="mc-purpose">${cuT('Meituan keeps stock in sync and imports new orders for these stores.', '美团为这些门店同步库存并导入新订单。')}</div>
-        ${storeRows ? `<div class="mt-stores">${storeRows}</div>` : `<div class="mc-note">${cuT('No stores linked yet.', '尚未关联门店。')}</div>`}
-      </div>
+      ${storeRows || `<div class="mc-sec"><div class="mc-note">${cuT('No stores linked yet.', '尚未关联门店。')}</div></div>`}
 
       <div class="mc-foot">
         <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px;padding:0" onclick="igHelp('meituan')">? ${cuT('Get help', '获取帮助')}</button>
