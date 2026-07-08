@@ -12143,8 +12143,96 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
        ORDER BY o.tracking_synced_at DESC LIMIT ?
     `).all(previewLimit);
 
+    // Meituan (view-only channel) never writes tracking_status/scenario — the
+    // platform runs its own rider + customer contact, and it exposes no explicit
+    // "delivery failed" label; an undeliverable order just stalls, then flips to
+    // 已取消/退款. So the one delivery signal worth an operator's follow-up is an
+    // in-flight order that has blown well past its promised time AND the
+    // auto-deliver-past-eta sweep (routes/meituan-internal.js) hasn't closed it:
+    //   • has an ETA, now >2h past it — the sweep closes stuck orders at +1h, so
+    //     anything still open past +2h means the sweep missed it or the daemon is
+    //     down (a genuine "check it" case, not routine lateness);
+    //   • no ETA at all — the orphan the sweep can't catch (the known no-eta gap)
+    //     — stuck 'dispatched' >3h since the platform last updated it.
+    // Cancel/refund is a money event owned by the Refunds card, so it stays out of
+    // here to keep this card about delivery, not billing. Channel-scoped, so the
+    // self-ship pipeline (which Meituan never touches) is unaffected. Times are UTC
+    // both sides (channel_eta / channel_status_at stored UTC; datetime('now') UTC).
+    const MT_ALERT_WHERE = `o.channel = 'meituan' AND o.status = 'dispatched'
+         AND (
+            (o.channel_eta IS NOT NULL AND o.channel_eta != ''
+                 AND datetime(o.channel_eta, '+2 hour') <= datetime('now'))
+         OR ((o.channel_eta IS NULL OR o.channel_eta = '')
+                 AND datetime(COALESCE(o.channel_status_at, o.placed_at), '+3 hour') <= datetime('now'))
+         )`;
+    const mtCount = tdb().prepare(`
+      SELECT COUNT(*) AS n FROM retail_orders o WHERE ${MT_ALERT_WHERE}
+    `).get().n;
+    const mtItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.channel_status, o.channel_status_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${MT_ALERT_WHERE}
+       ORDER BY o.channel_status_at DESC LIMIT ?
+    `).all(previewLimit);
+
+    // Same-city (青云 Qingyun rider) — our own local deliveries carry NO waybill
+    // and NO tracking_status; the live rider stage lives in delivery_jobs. Two
+    // sweeps already close the happy paths: the drop-off signal flips it delivered
+    // on order_status 50, and autoDeliverLocalEtaForTenant() closes it on
+    // local_eta+grace WHEN there's no live tracking. The gap neither sweep touches
+    // is a LIVE-tracked order stuck BEFORE pickup — a rider was requested but none
+    // grabbed it (order_status < 30), so nothing carries it AND the ETA sweep
+    // defers to the fresh tracking. Those sit on 'dispatched' silently. We surface
+    // one once its promised local ETA has passed: the customer is waiting and no
+    // rider is on the way. ETA parsing mirrors the sweep exactly (same-day "HH:MM"
+    // read as Beijing wall-clock; future-scheduled orders skipped) so the two
+    // agree on when an order is overdue. delivery_jobs is always present (created
+    // at boot), but guard anyway so a query hiccup never nukes the other cards.
+    let localStuck = [];
+    try {
+      const LOCAL_STUCK_GRACE_MIN = 15;
+      const localRows = tdb().prepare(`
+        SELECT o.id, o.order_no, o.scheduled_for,
+               (SELECT sh.local_eta FROM retail_shipments sh
+                 WHERE sh.order_id = o.id AND sh.mode = 'local'
+                   AND sh.local_eta IS NOT NULL AND sh.local_eta != ''
+                 ORDER BY sh.id ASC LIMIT 1) AS local_eta,
+               (SELECT j.order_status FROM delivery_jobs j
+                 WHERE j.retail_order_id = o.id AND j.order_status IS NOT NULL
+                   AND j.updated_at > datetime('now','-30 minutes')
+                 ORDER BY j.updated_at DESC LIMIT 1) AS job_os,
+               COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+          FROM retail_orders o
+          LEFT JOIN retail_customers c ON c.id = o.customer_id
+         WHERE o.fulfillment_type = 'delivery' AND o.status = 'dispatched'
+      `).all();
+      const nowD = new Date();
+      localStuck = localRows.filter(r => {
+        // Must have a FRESH live Qingyun job that hasn't reached pickup (os < 30) —
+        // i.e. still finding / awaiting a rider. An in-transit rider (os >= 30) is
+        // on the way and resolves on drop-off, so it's not "stuck".
+        if (r.job_os == null || r.job_os >= 30) return false;
+        const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(r.local_eta || '').trim());
+        if (!m) return false;
+        if (r.scheduled_for) {
+          const sched = new Date(r.scheduled_for);
+          if (!isNaN(sched.getTime()) &&
+              new Date(sched.getFullYear(), sched.getMonth(), sched.getDate()).getTime() >
+              new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime()) {
+            return false;   // scheduled for a later day — not overdue today
+          }
+        }
+        const eta = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), +m[1], +m[2], 0, 0);
+        return nowD.getTime() > eta.getTime() + LOCAL_STUCK_GRACE_MIN * 60_000;
+      }).slice(0, previewLimit);
+    } catch (e) {
+      if (!/no such column|no such table/i.test(e.message)) throw e;   // pre-migration tenant → skip
+    }
+
     delivery_alerts = {
-      count: daCount + airCount,
+      count: daCount + airCount + mtCount + localStuck.length,
       items: daItems.map(r => ({
         id:               r.id,
         order_no:         r.order_no,
@@ -12158,6 +12246,18 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         air_delayed: 1,
         synced_at:  r.tracking_synced_at,
         buyer:      maskBuyerName(r.buyer),
+      }))).concat(mtItems.map(r => ({
+        id:         r.id,
+        order_no:   r.order_no,
+        channel:    'meituan',
+        overdue:    1,
+        synced_at:  r.channel_status_at,
+        buyer:      maskBuyerName(r.buyer),
+      }))).concat(localStuck.map(r => ({
+        id:          r.id,
+        order_no:    r.order_no,
+        local_stuck: 1,
+        buyer:       maskBuyerName(r.buyer),
       }))),
     };
 

@@ -1423,6 +1423,16 @@ function tdAttnRender() {
       // it has no live tracking_status to read, so name it directly (mirrors the
       // "AIR DELAYED · contact customer" badge in the orders list).
       if (it.air_delayed) return cuT('air delayed · contact customer', '空运延误 · 联系客户');
+      // Meituan is a view-only channel with no live tracking_status; a flagged
+      // Meituan order is one the auto-deliver sweep left stuck past its promised
+      // time (see the dashboard/ops endpoint), so name it as an overdue delivery.
+      if (it.overdue || it.channel === 'meituan')
+        return cuT('overdue · check delivery', '配送超时 · 请跟进');
+      // Same-city (Qingyun) local delivery stuck before a rider grabbed it — the
+      // promised arrival time passed with no rider on the way. Name it directly;
+      // these orders carry no tracking_status for deliveryStateInfo to read.
+      if (it.local_stuck)
+        return cuT('no rider yet · check delivery', '暂无骑手接单 · 请跟进');
       const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
         || { en: 'delivery issue', cn: '配送异常' };
       return cuT(info.en, info.cn);
