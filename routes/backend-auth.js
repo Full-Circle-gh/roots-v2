@@ -106,6 +106,20 @@ db.exec(`
 // below (after seedBackend, so the row is guaranteed to exist).
 try { db.exec("ALTER TABLE tenants ADD COLUMN product_catalog_mode TEXT NOT NULL DEFAULT 'self'"); } catch (e) { /* already added */ }
 
+// Co-brand identity (identity-only tier). A tenant uploads a logo + name that
+// lead the admin chrome, sign-in, favicon and customer emails; a small
+// "runs on tacet" credit stays unless the platform grants white-label
+//   brand_logo_data  — primary logo, base64 data-URI (served via /api/backend/brand/:id/logo)
+//   brand_mark_data  — square mark, auto-derived from the logo with sharp (favicon / folded rail)
+//   brand_credit     — 1 = show the "runs on tacet" credit; only the platform clears it to 0
+//   brand_updated_at — cache-bust stamp so the image URLs refresh on save
+for (const [c, t] of [
+  ['brand_logo_data', 'TEXT'],
+  ['brand_mark_data', 'TEXT'],
+  ['brand_credit', 'INTEGER NOT NULL DEFAULT 1'],
+  ['brand_updated_at', 'DATETIME'],
+]) { try { db.exec(`ALTER TABLE tenants ADD COLUMN ${c} ${t}`); } catch (e) { /* already added */ } }
+
 // Per-tenant feature ENTITLEMENT ceiling (dormant by default). A JSON object of
 // { <featureKey>: false } disables a feature for this tenant; null/absent =
 // entitled to everything (see lib/features.js). The platform lowers this in
@@ -246,10 +260,16 @@ router.get('/api/backend/me', (req, res) => {
     const r = require('../lib/operator-caps').resolveOperator(db, u, tenant);
     caps = r.caps; scopeStores = r.scopeStores;
   } catch (e) { caps = null; scopeStores = null; }
+  const brandStamp = tenant && tenant.brand_updated_at ? +new Date(tenant.brand_updated_at) : 0;
   res.json({
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, lastLogin: u.last_login, avatarUrl: u.avatar_url || null,
             caps, scopeStores,
-            tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json) } : null },
+            tenant: tenant ? { id: tenant.id, name: tenant.name, brand: tenant.brand_name, accent: tenant.brand_accent || null, status: tenant.status, catalogMode: tenant.product_catalog_mode || 'self', entitlements: features.entitlements(tenant.features_json),
+            // Co-brand identity — logo/mark served as bytes (kept out of this payload);
+            // ?v= busts the cache when the logo changes. brandCredit gates the credit line.
+            brandLogoUrl: tenant.brand_logo_data ? `/api/backend/brand/${tenant.id}/logo?v=${brandStamp}` : null,
+            brandMarkUrl: tenant.brand_mark_data ? `/api/backend/brand/${tenant.id}/mark?v=${brandStamp}` : null,
+            brandCredit: tenant.brand_credit !== 0 } : null },
   });
 });
 
@@ -304,6 +324,103 @@ router.put('/api/backend/avatar', express.json({ limit: '1mb' }), (req, res) => 
   }
   db.prepare('UPDATE tenant_users SET avatar_url = ? WHERE id = ?').run(avatar, req.session.backendUserId);
   res.json({ success: true, avatarUrl: avatar });
+});
+
+// ── Co-brand identity ────────────────────────────────────────────────────
+// Brand assets are NOT sensitive — they're shown to customers on receipts,
+// emails and the storefront by design — so the read endpoints are public and
+// keyed by tenant id. That lets pre-auth surfaces (the sign-in page, the
+// favicon, customer emails) load them without a session. Writes stay gated.
+let _brandSharp = null;
+try { _brandSharp = require('sharp'); } catch (e) { /* thumbnails degrade to the logo as-is */ }
+
+function serveBrandImage(col) {
+  return (req, res) => {
+    const id = parseInt(req.params.tenantId, 10);
+    if (!(id > 0)) return res.status(404).end();
+    let data = null;
+    try { const r = db.prepare(`SELECT ${col} AS d FROM tenants WHERE id = ?`).get(id); data = r && r.d; }
+    catch (e) { return res.status(404).end(); }
+    if (!data) return res.status(404).end();
+    const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(String(data));
+    if (!m) return res.redirect(String(data));            // plain URL fallback
+    res.set('Content-Type', m[1] || 'application/octet-stream');
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8'));
+  };
+}
+router.get('/api/backend/brand/:tenantId/logo', serveBrandImage('brand_logo_data'));
+router.get('/api/backend/brand/:tenantId/mark', serveBrandImage('brand_mark_data'));
+
+function brandPayload(t) {
+  const stamp = t.brand_updated_at ? +new Date(t.brand_updated_at) : 0;
+  return {
+    name: t.brand_name || null,
+    brandLogoUrl: t.brand_logo_data ? `/api/backend/brand/${t.id}/logo?v=${stamp}` : null,
+    brandMarkUrl: t.brand_mark_data ? `/api/backend/brand/${t.id}/mark?v=${stamp}` : null,
+    brandCredit: t.brand_credit !== 0,
+  };
+}
+
+// Set / clear the tenant's brand — owner or admin only. Body: { name?, logo?, credit? }.
+//   name  — brand text (≤60 chars); '' clears it.
+//   logo  — data-URL of the primary logo; null/'' clears both logo and mark.
+//           The square mark is auto-derived with sharp (contain onto a 256px
+//           transparent canvas); if sharp is unavailable the logo is reused as-is.
+//   credit — IGNORED here. The "runs on tacet" credit is platform-controlled
+//            (white-label is a plan grant), so a tenant can never remove it.
+router.put('/api/backend/brand', express.json({ limit: '4mb' }), async (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const u = db.prepare('SELECT tenant_id, role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  if (!u) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  if (u.role !== 'owner' && u.role !== 'admin') {
+    return res.status(403).json({ error: 'Only an owner or admin can change the brand · 仅负责人或管理员可修改品牌' });
+  }
+  const b = req.body || {};
+
+  if (b.name !== undefined) {
+    const name = String(b.name || '').trim().slice(0, 60);
+    db.prepare('UPDATE tenants SET brand_name = ? WHERE id = ?').run(name || null, u.tenant_id);
+  }
+
+  if (b.logo !== undefined) {
+    if (b.logo === null || b.logo === '') {
+      db.prepare('UPDATE tenants SET brand_logo_data = NULL, brand_mark_data = NULL WHERE id = ?').run(u.tenant_id);
+    } else {
+      const logo = String(b.logo);
+      if (!/^data:image\/(png|jpe?g|webp|svg\+xml);base64,/i.test(logo)) {
+        return res.status(400).json({ error: 'Logo must be a PNG, JPEG, WebP or SVG image · 徽标须为 PNG、JPEG、WebP 或 SVG 图片' });
+      }
+      if (logo.length > 3 * 1024 * 1024) {
+        return res.status(413).json({ error: 'Logo is too large — please use a smaller file · 徽标过大,请使用更小的文件' });
+      }
+      // Derive the square mark (favicon + folded rail) from the logo.
+      let mark = logo;
+      const mm = /^data:([^;,]*?);base64,([\s\S]*)$/.exec(logo);
+      if (_brandSharp && mm && !/svg/i.test(mm[1])) {
+        try {
+          const png = await _brandSharp(Buffer.from(mm[2], 'base64'))
+            .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+            .png().toBuffer();
+          mark = 'data:image/png;base64,' + png.toString('base64');
+        } catch (e) { mark = logo; }   // fall back to the logo as-is
+      }
+      db.prepare('UPDATE tenants SET brand_logo_data = ?, brand_mark_data = ? WHERE id = ?').run(logo, mark, u.tenant_id);
+    }
+  }
+
+  db.prepare("UPDATE tenants SET brand_updated_at = datetime('now') WHERE id = ?").run(u.tenant_id);
+  const t = db.prepare('SELECT id, brand_name, brand_logo_data, brand_mark_data, brand_credit, brand_updated_at FROM tenants WHERE id = ?').get(u.tenant_id);
+  res.json({ success: true, brand: brandPayload(t) });
+});
+
+// Read the tenant's current brand (for the setup page to hydrate its form).
+router.get('/api/backend/brand', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const u = db.prepare('SELECT tenant_id FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  if (!u) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const t = db.prepare('SELECT id, brand_name, brand_logo_data, brand_mark_data, brand_credit, brand_updated_at FROM tenants WHERE id = ?').get(u.tenant_id);
+  res.json({ success: true, brand: t ? brandPayload(t) : null });
 });
 
 module.exports = router;

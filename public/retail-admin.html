@@ -5,6 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" id="meta-theme-color" content="#12161A">
 <title>tacet</title>
+<!-- Favicon — defaults to the Tacet icon; applyBrand() swaps it to the tenant's
+     square mark once /me resolves (co-brand identity). Real default so a
+     non-branded (Tacet) tenant keeps its icon rather than a blank one. -->
+<link rel="icon" id="favlink" href="/favicon.svg">
+<link rel="apple-touch-icon" id="favlink-apple" href="/favicon-32.png">
 <script>
   // Apply theme BEFORE first paint to prevent flash. Reads saved choice
   // first; otherwise honours the OS preference. Toggle logic lives at the
@@ -747,13 +752,17 @@
        with the Dusk automation dot at its end, then lowercase "tacet" in
        Fraunces. Mark stroke = currentColor so it flips ink/paper by theme. -->
   <div class="brand">
+    <!-- Tenant logo (co-brand) — hidden until applyBrand() sets its src from /me.
+         When shown it hides the waveform + wordmark below. data-no-i18n so the
+         translation walker never touches brand assets. -->
+    <img class="brand-logo" id="brandLogoTop" alt="" hidden data-no-i18n>
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 340 110" fill="none">
         <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
         <circle cx="305" cy="55" r="9" fill="#6E67AF"/>
       </svg>
     </span>
-    <span class="brand-name">tacet</span>
+    <span class="brand-name" data-no-i18n>tacet</span>
   </div>
   <!-- Wide search sits at the topbar's left edge, right of the rail divider. The
        rail-fold control is no longer a hamburger here — it moved onto the seam
@@ -874,13 +883,23 @@
        the rail top. On phones the whole rail is hidden, so the topbar's own
        .brand (kept in the markup above) shows the wordmark there instead. -->
   <div class="nav-brand">
+    <!-- Tenant logo (co-brand). Folded rail shows just this tile (the square mark);
+         open rail shows logo + name. Hidden until applyBrand() fills it from /me. -->
+    <img class="brand-logo" id="brandLogoRail" alt="" hidden data-no-i18n>
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 340 110" fill="none">
         <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
         <circle cx="305" cy="55" r="9" fill="#6E67AF"/>
       </svg>
     </span>
-    <span class="brand-name">tacet</span>
+    <span class="brand-name" data-no-i18n>tacet</span>
+  </div>
+  <!-- "runs on tacet" credit — sits at the rail bottom (flex pushes it there via
+       margin-top:auto + high order). Shown by applyBrand() only for a co-branded
+       tenant (custom logo/name) whose brandCredit is on; hidden for Tacet itself. -->
+  <div class="brand-credit" id="brandCredit" hidden aria-hidden="true" style="order:99">
+    <svg viewBox="0 0 340 110" fill="none" aria-hidden="true"><path d="M20 55 C40 20,60 90,80 55 C100 28,120 82,140 55 C160 42,180 68,200 55 C240 55,280 55,310 55" stroke="currentColor" stroke-width="12" stroke-linecap="round"/></svg>
+    <span>runs on tacet</span>
   </div>
   <!-- New-tenant setup guide — pinned at the very top with a live % badge while
        setup is unfinished; JS (part 17) hides it for good once the store is

@@ -384,10 +384,46 @@ function backendSessionValid(req) {
 
 // Mini App Backend login — separate branded sign-in for backend operators
 // (tenant_users realm). Self-redirects to /retail-admin if already signed in.
+// Co-brand the sign-in page per tenant. The page is pre-auth, so the tenant is
+// resolved by Host (via tenant_domains) rather than session. When the host maps
+// to a tenant that has set a brand, we swap the wordmark name, drop in the logo,
+// and point the favicon at the mark. Anything unresolved falls back to the
+// stock Tacet page — never a broken brand. Raw file is read once and cached.
+let _loginHtmlRaw = null;
+function _escHtmlAttr(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+function brandedLoginHtml(req) {
+  if (_loginHtmlRaw == null) _loginHtmlRaw = fs.readFileSync(path.join(__dirname, 'public', 'backend-login.html'), 'utf8');
+  let html = _loginHtmlRaw;
+  try {
+    const dbx = require('./database');
+    const host = String(req.headers['x-forwarded-host'] || req.hostname || '').toLowerCase().split(':')[0];
+    if (!host) return html;
+    const dom = dbx.prepare("SELECT tenant_id FROM tenant_domains WHERE host = ? AND status = 'active'").get(host);
+    if (!dom) return html;
+    const t = dbx.prepare('SELECT id, brand_name, brand_logo_data, brand_mark_data, brand_updated_at FROM tenants WHERE id = ?').get(dom.tenant_id);
+    if (!t || (!t.brand_name && !t.brand_logo_data)) return html;   // tenant hasn't co-branded → stock page
+    const stamp = t.brand_updated_at ? +new Date(t.brand_updated_at) : 0;
+    if (t.brand_name) {
+      const nm = _escHtmlAttr(t.brand_name);
+      html = html.replace('<span class="name">FULL CIRCLE</span>', `<span class="name">${nm}</span>`)
+                 .replace('<title>Full Circle — Mini App Backend · Sign in</title>', `<title>${nm} · Sign in</title>`);
+    }
+    if (t.brand_mark_data) {
+      html = html.replace('</head>', `<link rel="icon" href="/api/backend/brand/${t.id}/mark?v=${stamp}"></head>`);
+    }
+    if (t.brand_logo_data) {
+      html = html.replace(/<div class="enso">[\s\S]*?<\/div>/,
+        `<div class="enso"><img src="/api/backend/brand/${t.id}/logo?v=${stamp}" alt="" style="max-width:40px;max-height:40px;object-fit:contain"></div>`);
+    }
+  } catch (e) { /* any hiccup → stock page */ }
+  return html;
+}
 app.get('/backend/login', (req, res) => {
   if (backendSessionValid(req)) return res.redirect('/retail-admin');
   res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'backend-login.html'));
+  res.type('html').send(brandedLoginHtml(req));
 });
 
 // Mini App Backend account — change password / sign out for backend operators.

@@ -2966,7 +2966,7 @@ router.post('/api/retail/auth/email/request', express.json(), async (req, res) =
         new Date(now).toISOString(), createdIso);
 
   let sent;
-  try { sent = await _emailSender.sendOtpEmail(email, code, integ().email, { brand: tenantBrandName() }); }
+  try { sent = await _emailSender.sendOtpEmail(email, code, integ().email, { brand: tenantBrandName(), logoUrl: tenantBrandLogoUrl(req) }); }
   catch (e) { sent = { ok: false, error: 'send_threw: ' + e.message }; }
 
   if (sent.ok) return res.json({ success: true, data: { sent: true, cooldown: OTP_RESEND_MS / 1000 } });
@@ -3374,6 +3374,34 @@ function tenantBrandLabel() {
   } catch { return 'Store'; }
 }
 function payDescription(orderNo) { return `${tenantBrandLabel()} order ${orderNo}`; }
+
+// Co-brand: does this tenant show the "runs on tacet" credit? On for every
+// non-Roots tenant unless the platform cleared brand_credit (white-label).
+function tenantPrintCredit() {
+  try {
+    const tid = currentTenantId();
+    if (!tid || tid === ROOTS_TENANT_ID) return false;
+    const t = db.prepare('SELECT brand_credit FROM tenants WHERE id = ?').get(tid);
+    return !t || t.brand_credit !== 0;
+  } catch { return false; }
+}
+
+// Absolute URL to the tenant's logo for use in emails (customer inbox has no
+// session, so the brand read endpoint is public + tenant-keyed). '' when the
+// tenant has no logo or we can't resolve the host — the email just shows the name.
+function tenantBrandLogoUrl(req) {
+  try {
+    const tid = currentTenantId();
+    if (!tid || tid === ROOTS_TENANT_ID || !req) return '';
+    const t = db.prepare('SELECT brand_logo_data, brand_updated_at FROM tenants WHERE id = ?').get(tid);
+    if (!t || !t.brand_logo_data) return '';
+    const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
+    if (!host) return '';
+    const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+    const stamp = t.brand_updated_at ? +new Date(t.brand_updated_at) : 0;
+    return `${proto}://${host}/api/backend/brand/${tid}/logo?v=${stamp}`;
+  } catch { return ''; }
+}
 
 // Validate a callback :tid path param → an active tenant id (or Roots), else
 // null so an unknown id 404s instead of silently settling on the wrong books.
@@ -16692,6 +16720,39 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     annotateShipBy(r);   // adds ship_by_mode + dispatch_deadline for out-of-GZ ASAP orders
     annotateShipTo(r);   // adds ship_city + ship_district (or ship_pickup) for the list "Ship to" column
   }
+  // Same-city courier (Qingyun) live stage for the list. Meituan mirror rows are
+  // fulfilled by a Qingyun rider (Wave A links them), so the "Out for delivery"
+  // cell can read the real stage + ETA instead of the platform's static ETA. One
+  // batched newest-row-per-order query for the whole page — no N+1. Best-effort:
+  // a missing delivery_jobs table (pre-migration) just leaves the cell as before.
+  try {
+    const ids = rows.map(r => r.id);
+    if (ids.length) {
+      const ph = ids.map(() => '?').join(',');
+      const jobs = tdb().prepare(
+        `SELECT * FROM (
+           SELECT dj.*, ROW_NUMBER() OVER (PARTITION BY retail_order_id ORDER BY updated_at DESC) rn
+             FROM delivery_jobs dj
+            WHERE retail_order_id IN (${ph})
+         ) WHERE rn = 1`
+      ).all(...ids);
+      const byOrder = new Map();
+      for (const j of jobs) {
+        const stage = deliveryJobStage(j);
+        byOrder.set(j.retail_order_id, {
+          stage,
+          carrier: j.carrier_name || null,
+          rider_name: j.rider_name || null,
+          // Suppress ETA/distance pre-dispatch (a 'scheduled' row's numbers are noise).
+          eta_seconds:     stage === 'scheduled' ? null : (j.eta_seconds ?? null),
+          rider_to_cust_m: stage === 'scheduled' ? null : (j.rider_to_cust_m ?? null),
+          expected_delivery_at: j.expected_delivery_at || null,
+          updated_at: j.updated_at,
+        });
+      }
+      for (const r of rows) { const c = byOrder.get(r.id); if (c) r.courier = c; }
+    }
+  } catch (e) { /* delivery_jobs missing (pre-migration) — list simply shows no live stage */ }
   res.json({ success: true, data: rows, meta: { limit, offset } });
 });
 
@@ -18216,7 +18277,7 @@ function printOrderById(orderId, prefs, pcfg) {
   }
   const shipments = tdb().prepare('SELECT id, mode, label FROM retail_shipments WHERE order_id = ? ORDER BY id ASC').all(orderId);
   const tpl = _feie.TEMPLATE_IDS.includes(printer.template) ? printer.template : 'receipt';
-  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments);
+  const content = _feie.renderOrder(tpl, order, items, p.shop_name, shipments, { credit: tenantPrintCredit() });
   return _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, fc);
 }
 
@@ -18471,7 +18532,7 @@ router.get('/api/retail-admin/printer/preview', requireRetailAdmin, (req, res) =
     ({ order, items, shipments } = _sampleOrderForPreview());
     sample = true;
   }
-  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments);
+  const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit() });
   res.json({ ok: true, content, sample, template: tpl });
 });
 
@@ -18493,7 +18554,7 @@ router.post('/api/retail-admin/printer/test', requireRetailAdmin, async (req, re
     r = await printOrderById(last.id, prefs, printer);
   } else {
     const { order, items, shipments } = _sampleOrderForPreview();
-    const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments);
+    const content = _feie.renderOrder(tpl, order, items, prefs.shop_name, shipments, { credit: tenantPrintCredit() });
     r = await _feie.printContent(content, { sn: printer.sn, copies: 1 }, integ().feie);
   }
   if (r.ok) return res.json({ ok: true });

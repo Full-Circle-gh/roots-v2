@@ -326,6 +326,36 @@
         </p>
       </section>
 
+      <!-- Brand (co-brand identity) — owner/admin only; JS reveals it in hydrate(). -->
+      <section class="card" id="brandCard" hidden>
+        <h2><span class="en">Brand</span><span class="sep"> · </span><span class="cn">品牌</span></h2>
+        <p class="lead"><span class="en">Your logo and name lead the admin, sign-in and customer emails. Everything else keeps the Tacet look.</span><span class="cn">您的徽标与名称将展示在后台、登录页与顾客邮件上。其余部分保持 Tacet 外观。</span></p>
+
+        <div class="avatarrow">
+          <img id="brandLogoPrev" alt="" style="height:38px;max-width:150px;object-fit:contain;display:none" />
+          <div class="avatar-actions">
+            <button type="button" id="brandPick" class="btn-ghost"><span class="en">Upload logo</span><span class="cn">上传徽标</span></button>
+            <button type="button" id="brandClear" class="btn-ghost" hidden><span class="en">Remove</span><span class="cn">移除</span></button>
+            <input type="file" id="brandFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
+          </div>
+        </div>
+        <div class="msg" id="brandMsg" role="status"><span></span></div>
+
+        <form id="brandNameForm" class="namebar" novalidate>
+          <label class="flabel" for="brandNameInput"><span class="en">Brand name</span><span class="sep"> · </span><span class="cn">品牌名称</span></label>
+          <div class="nameedit">
+            <input id="brandNameInput" type="text" spellcheck="false" maxlength="60" placeholder="Your brand" />
+            <button type="submit" id="brandNameBtn" class="btn-ghost"><span class="en">Save</span><span class="cn">保存</span></button>
+          </div>
+          <div class="msg" id="brandNameMsg" role="status"><span></span></div>
+        </form>
+
+        <p class="rohint">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <span class="en">A small “runs on tacet” credit stays — removed on the Studio plan.</span><span class="cn">页面保留小字“runs on tacet”——升级 Studio 套餐后移除。</span>
+        </p>
+      </section>
+
       <!-- Subscription -->
       <section class="card">
         <h2><span class="en">Subscription</span><span class="sep"> · </span><span class="cn">订阅</span></h2>
@@ -407,6 +437,16 @@
     var avatarClear  = document.getElementById('avatarClear');
     var avatarFile   = document.getElementById('avatarFile');
     var avatarMsg    = document.getElementById('avatarMsg');
+    var brandCard      = document.getElementById('brandCard');
+    var brandLogoPrev  = document.getElementById('brandLogoPrev');
+    var brandPick      = document.getElementById('brandPick');
+    var brandClear     = document.getElementById('brandClear');
+    var brandFile      = document.getElementById('brandFile');
+    var brandMsg       = document.getElementById('brandMsg');
+    var brandNameForm  = document.getElementById('brandNameForm');
+    var brandNameInput = document.getElementById('brandNameInput');
+    var brandNameBtn   = document.getElementById('brandNameBtn');
+    var brandInited    = false;
 
     function initials(u){
       var s = String((u && (u.displayName || u.username)) || '').trim();
@@ -474,6 +514,8 @@
       ]);
       renderAvatar(u);
       applyTenant(tenant);
+      // Brand setup is a tenant-level identity control — owners/admins only.
+      if (u.role === 'owner' || u.role === 'admin') { brandCard.hidden = false; initBrand(); }
       if (u.mustChangePassword || u.defaultPassword) { defaultWarn.classList.add('show'); }
     }
 
@@ -570,6 +612,83 @@
       };
       reader.onerror = function () { setMsg(avatarMsg, 'err', L('Couldn’t read that file', '无法读取该文件')); };
       reader.readAsDataURL(file);
+    });
+
+    /* ── Brand (co-brand identity) → GET/PUT /api/backend/brand ──
+       Upload a logo + set a name; the server derives the square mark and
+       stamps the change so every surface (chrome, favicon, sign-in, email)
+       refreshes. Raster logos are downscaled client-side to ≤512px PNG (keeps
+       transparency); SVGs are sent as-is. The credit is platform-controlled. */
+    function renderBrandPrev(url){
+      if (url) { brandLogoPrev.src = url; brandLogoPrev.style.display = 'block'; brandClear.hidden = false; }
+      else { brandLogoPrev.removeAttribute('src'); brandLogoPrev.style.display = 'none'; brandClear.hidden = true; }
+    }
+    function initBrand(){
+      if (brandInited) return; brandInited = true;
+      fetch('/api/backend/brand', { credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j || !j.brand) return;
+          if (document.activeElement !== brandNameInput) brandNameInput.value = j.brand.name || '';
+          renderBrandPrev(j.brand.brandLogoUrl || null);
+        })
+        .catch(function () {});
+    }
+    function saveBrand(payload, okMsg){
+      brandPick.disabled = true; brandPick.classList.add('loading'); setMsg(brandMsg, null, '');
+      return fetch('/api/backend/brand', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin', body: JSON.stringify(payload)
+      })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          brandPick.disabled = false; brandPick.classList.remove('loading');
+          if (res.ok && res.data && res.data.success) {
+            renderBrandPrev((res.data.brand && res.data.brand.brandLogoUrl) || null);
+            setMsg(brandMsg, 'ok', okMsg); return true;
+          }
+          setMsg(brandMsg, 'err', (res.data && res.data.error) || L('Couldn’t save — please try again', '保存失败，请重试')); return false;
+        })
+        .catch(function () {
+          brandPick.disabled = false; brandPick.classList.remove('loading');
+          setMsg(brandMsg, 'err', L('Network error — please try again', '网络错误，请重试')); return false;
+        });
+    }
+    brandPick.addEventListener('click', function () { brandFile.click(); });
+    brandClear.addEventListener('click', function () { saveBrand({ logo: null }, L('Logo removed', '徽标已移除')); });
+    brandFile.addEventListener('change', function () {
+      var file = brandFile.files && brandFile.files[0];
+      brandFile.value = '';
+      if (!file) return;
+      if (!/^image\//.test(file.type)) { setMsg(brandMsg, 'err', L('Please choose an image file', '请选择图片文件')); return; }
+      // SVG is vector — send as-is. Raster is downscaled to ≤512px PNG.
+      if (/svg/.test(file.type)) {
+        var rs = new FileReader();
+        rs.onload = function () { saveBrand({ logo: rs.result }, L('Logo updated', '徽标已更新')); };
+        rs.onerror = function () { setMsg(brandMsg, 'err', L('Couldn’t read that file', '无法读取该文件')); };
+        rs.readAsDataURL(file); return;
+      }
+      var reader = new FileReader();
+      reader.onload = function () {
+        var img = new Image();
+        img.onload = function () {
+          var MAX = 512, scale = Math.min(1, MAX / Math.max(img.width, img.height));
+          var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+          var canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          saveBrand({ logo: canvas.toDataURL('image/png') }, L('Logo updated', '徽标已更新'));
+        };
+        img.onerror = function () { setMsg(brandMsg, 'err', L('Couldn’t read that image', '无法读取该图片')); };
+        img.src = reader.result;
+      };
+      reader.onerror = function () { setMsg(brandMsg, 'err', L('Couldn’t read that file', '无法读取该文件')); };
+      reader.readAsDataURL(file);
+    });
+    brandNameForm.addEventListener('submit', function (e) {
+      e.preventDefault();
+      brandNameBtn.disabled = true; brandNameBtn.classList.add('loading');
+      saveBrand({ name: brandNameInput.value.trim() }, L('Saved', '已保存'))
+        .then(function () { brandNameBtn.disabled = false; brandNameBtn.classList.remove('loading'); });
     });
 
     /* ── Change password → PUT /api/backend/password ── */

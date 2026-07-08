@@ -1493,6 +1493,9 @@ let ENTITLEMENTS = {};
     }
     // Google-style profile circle + dropdown (avatar · account · team · sign out).
     initAcctMenu(u);
+    // Co-brand identity — swap the rail/topbar wordmark, page title and favicon
+    // to the tenant's own logo + name (falls back to the tacet waveform when unset).
+    applyBrand(u.tenant);
   } catch (e) { location.href = '/backend/login'; return; }
   // Phase 1 — feature controls. ent-<key> = platform entitlement; the per-feature
   // on/off switch lives on each feature's own page (Option B: off dims the nav
@@ -1534,6 +1537,59 @@ let ENTITLEMENTS = {};
   // paints the sidebar badge + dashboard card (both gone once setup hits 100%).
   try { if (typeof suInit === 'function') suInit(); } catch (e) {}
 })();
+
+// ── Co-brand identity — make the chrome read as the tenant's own ─────────
+// Given the tenant object from /api/backend/me, swap the rail + topbar wordmark
+// to the tenant's logo + name, retitle the tab, and repoint the favicon at the
+// tenant's square mark. A tenant with no logo set (including Tacet/Roots itself)
+// keeps the built-in waveform + "tacet" — never a broken image. Identity only:
+// we touch the logo/name/title/favicon and nothing else about the Tacet look.
+function applyBrand(tenant) {
+  if (!tenant) return;
+  const name = (tenant.brand || '').trim();
+  const logoUrl = tenant.brandLogoUrl || null;
+  const markUrl = tenant.brandMarkUrl || null;
+  const custom = !!(logoUrl || name);   // a tenant that has set any identity
+
+  // Page title — their name in the tab, or the default wordmark.
+  document.title = name || 'tacet';
+
+  // Favicon + apple-touch-icon → the square mark (falls back silently if 404).
+  if (markUrl) {
+    const fav = document.getElementById('favlink');
+    const favA = document.getElementById('favlink-apple');
+    if (fav) fav.href = markUrl;
+    if (favA) favA.href = markUrl;
+  }
+
+  // Rail + topbar wordmark. When a logo is set, show it and hide the waveform;
+  // always update the name text so a name-only tenant still reads as theirs.
+  // The rail uses the SQUARE MARK (a tile that reads well both open and folded);
+  // the topbar (phones) uses the full logo. Mark falls back to the logo when
+  // sharp couldn't derive one server-side.
+  const pairs = [
+    ['brandLogoTop', '.brand', logoUrl],
+    ['brandLogoRail', '.nav-brand', markUrl || logoUrl],
+  ];
+  for (const [imgId, wrapSel, url] of pairs) {
+    const img = document.getElementById(imgId);
+    const wrap = img && img.closest(wrapSel);
+    if (!wrap) continue;
+    const svgMark = wrap.querySelector('.brand-mark');
+    const nameEl = wrap.querySelector('.brand-name');
+    if (nameEl && name) nameEl.textContent = name;
+    if (url && img) {
+      img.onload = () => { img.hidden = false; if (svgMark) svgMark.hidden = true; };
+      img.onerror = () => { img.hidden = true; if (svgMark) svgMark.hidden = false; };  // fall back to waveform
+      img.src = url;
+    }
+  }
+  document.body.classList.toggle('cobrand', custom);
+
+  // "runs on tacet" credit — only for a co-branded tenant whose credit is on.
+  const credit = document.getElementById('brandCredit');
+  if (credit) credit.hidden = !(custom && tenant.brandCredit);
+}
 
 // ── Account menu — Google-style profile circle + dropdown ────────────────
 // Avatar (uploaded photo, or initials monogram fallback) in the topbar; click

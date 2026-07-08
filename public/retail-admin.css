@@ -464,6 +464,20 @@
     font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 18px;
     letter-spacing: .20em; color: var(--text-1);
   }
+  /* ── Co-brand identity — the tenant's own logo replaces the waveform+wordmark.
+     Contained so any aspect ratio fits without distortion; the mark stays small
+     so it never fights the 56px header height (the y:56 divider must hold). */
+  .brand-logo { display: block; width: auto; object-fit: contain; }
+  .nav-brand .brand-logo { height: 30px; max-width: 34px; border-radius: 7px; }  /* square mark tile */
+  .brand .brand-logo { height: 22px; max-width: 132px; }                          /* full logo (topbar/phones) */
+  /* "runs on tacet" credit — pinned to the rail foot via margin-top:auto. */
+  .brand-credit {
+    margin-top: auto; display: flex; align-items: center; gap: 7px;
+    padding: 12px 16px 6px; color: var(--text-4);
+    font-family: 'Fraunces', Georgia, serif; font-weight: 300;
+    font-size: 11px; letter-spacing: .14em;
+  }
+  .brand-credit svg { width: 18px; height: 7px; stroke: var(--text-4); flex: none; }
   /* Topbar spans only the content column (right of the rail) and is position:fixed
      like the rail — both then share ONE positioning context, so their bottom
      borders always meet at y:56. (A sticky topbar drifted from the fixed rail
@@ -548,6 +562,13 @@
      the wordmark. Hide the mark while folded; the 56px head + its bottom border
      stay, so the y:56 divider is unbroken and only the arrow occupies the corner. */
   body.nav-collapsed .nav-brand .brand-mark { display: none; }
+  /* Co-brand: the tenant logo shares that corner with the fold arrow, so it hides
+     while folded too (same reason as the mark above). The brand still persists in
+     the tab/favicon, and returns the moment the rail expands. The credit shrinks
+     to its bare waveform. */
+  body.nav-collapsed .nav-brand .brand-logo { display: none; }
+  body.nav-collapsed .brand-credit { justify-content: center; padding: 12px 0 6px; }
+  body.nav-collapsed .brand-credit span { display: none; }
   body.nav-collapsed .tabs button {
     font-size: 0; gap: 0; justify-content: center;
     padding-left: 0; padding-right: 0;
