@@ -2,427 +2,324 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Full Circle — Mini App Backend · Account · 账户</title>
+<title>tacet · Account · 账户</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<meta name="theme-color" content="#E8E5DC" />
+<meta name="theme-color" content="#FBF9F4" />
+<link rel="icon" href="/favicon.svg" />
+
+<!-- Theme + language boot — mirror the admin's stored choices before paint. -->
+<script>
+  (function(){ try {
+    var t = localStorage.getItem('retail-admin-theme');
+    document.documentElement.setAttribute('data-theme', (t === 'dark' || t === 'light') ? t : 'light');
+    var l = localStorage.getItem('roots-admin-lang');
+    document.documentElement.setAttribute('data-lang', (l === 'cn') ? 'cn' : 'en');
+  } catch (e) { document.documentElement.setAttribute('data-theme','light'); } })();
+</script>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
 
 <style>
   :root{
-    --ink:#12161A;
-    --canvas:#E8E5DC;
-    --card:#FFFFFF;
-    --sunk:#F4F2EB;
-    --text:#12161A;
-    --muted:#5f5d55;
-    --faint:#8f8c83;
-    --brass:#B08D4A; --brass-hi:#C29B54;
-    --tea:#6B8E6F; --tea-deep:#3f6b46;
-    --danger:#e8556a; --danger-deep:#b23a4d;
-    --line:rgba(18,22,26,.10);
-    --line-2:rgba(18,22,26,.16);
-    --field:#FFFFFF;
+    --ink:#111A2B; --paper:#FBF9F4; --graphite:#58606E;
+    --dusk:#6E67AF; --dusk-hi:#5F58A0; --sage:#A3B49F; --amber:#C9954A; --brick:#B4533E;
+    --cream:#F6F3EC; --border:#E4E0D5;
+    --surface:#FFFFFF; --raised:var(--cream);
+    --text:var(--ink); --text-2:var(--graphite); --text-4:#B0AEA6; --line:var(--border);
+    --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC; --amber-tint:#F7EEDE; --brick-tint:#F6E7E3;
+    --sage-ink:#4A6249; --amber-ink:#8A6425;
+    --font:"Inter","Noto Sans SC",-apple-system,Arial,sans-serif;
+    --display:"Fraunces",Georgia,serif;
+    --ease:cubic-bezier(.16,1,.3,1);
+    --shadow:0 1px 2px rgba(17,26,43,.04),0 4px 16px rgba(17,26,43,.04);
   }
+  [data-theme="dark"]{
+    --surface:#18233A; --raised:#1E2A44; --border:#2A3550;
+    --text:#FBF9F4; --text-2:#9AA3B2; --text-4:#5B6478; --line:#2A3550;
+    --paper:#111A2B; --cream:#1E2A44;
+    --dusk-tint:#262A4A; --sage-tint:#1E2C26; --amber-tint:#33290F; --brick-tint:#351B14;
+    --sage-ink:#9DB39A; --amber-ink:#D0A867;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
   *{box-sizing:border-box;}
   html,body{height:100%;}
   body{
-    margin:0;
-    background:
-      radial-gradient(120% 78% at 50% -8%, #F2EFE7 0%, #E8E5DC 52%, #E2DED3 100%);
-    background-attachment:fixed;
-    color:var(--text);
-    font-family:"IBM Plex Sans","IBM Plex Sans SC",system-ui,sans-serif;
+    margin:0; background:var(--paper); color:var(--text);
+    font-family:var(--font); font-size:15px;
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
     display:flex; flex-direction:column; align-items:center;
-    min-height:100%; padding:34px 20px 56px;
-    position:relative; overflow-x:hidden;
+    min-height:100%; padding:30px 20px 64px;
+    transition:background .25s var(--ease), color .25s var(--ease);
   }
-  .mono{font-family:"IBM Plex Mono",monospace;}
-  .cn{font-family:"IBM Plex Sans SC","IBM Plex Sans",sans-serif;}
-
-  /* Language split — show only the active language, never both.
-     `.sep` is the middot joiner; it's never needed in single-language mode. */
   html[data-lang=en] .cn, html[data-lang=en] .sep{display:none;}
   html[data-lang=cn] .en, html[data-lang=cn] .sep{display:none;}
 
-  /* ambient backdrop: one faint ring set, very quiet */
-  .bg{position:fixed; inset:0; z-index:0; pointer-events:none; overflow:hidden;}
-  .bg svg{position:absolute; top:-200px; left:50%; transform:translateX(-50%);}
-  .bg .glow{position:absolute; width:780px; height:780px; border-radius:50%;
-    top:-360px; left:50%; transform:translateX(-50%);
-    background:radial-gradient(circle at center, rgba(176,141,74,.10), rgba(176,141,74,0) 62%);}
+  .shell{width:100%; max-width:420px;}
 
-  .shell{position:relative; z-index:2; width:100%; max-width:420px;}
+  .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 2px 24px;}
+  .back{font-size:13px; color:var(--text-2); text-decoration:none; display:inline-flex; align-items:center; gap:7px; transition:color .15s;}
+  .back:hover{color:var(--text);} .back svg{stroke:currentColor; fill:none;}
+  .topbar-r{display:flex; align-items:center; gap:6px;}
+  .icobtn{cursor:pointer; border:none; background:transparent; color:var(--text-2); padding:6px; border-radius:8px; line-height:0; transition:color .15s, background .15s;}
+  .icobtn:hover{color:var(--text); background:var(--raised);}
+  .icobtn svg{stroke:currentColor; fill:none;}
+  .langtoggle{cursor:pointer; border:none; background:transparent; font-family:inherit; font-size:13px; font-weight:500;
+    color:var(--text-2); padding:6px 8px; border-radius:8px; transition:color .15s, background .15s;}
+  .langtoggle:hover{color:var(--text); background:var(--raised);}
 
-  /* back link + language toggle */
-  .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 2px 22px;}
-  .back{
-    display:inline-block; font-size:13px; color:var(--muted);
-    text-decoration:none; letter-spacing:.005em; transition:color .15s;
-  }
-  .back:hover{color:var(--tea-deep);}
-  .langtoggle{
-    flex:none; cursor:pointer; border:none; background:transparent;
-    font-family:inherit; font-size:13px; font-weight:600; letter-spacing:.02em;
-    color:var(--muted); padding:2px 4px; transition:color .15s;
-  }
-  .langtoggle:hover{color:var(--tea-deep);}
-
-  /* header / brand */
-  .head{margin:0 2px 24px;}
-  .brand{display:flex; align-items:center; gap:13px;}
-  .mark{
-    width:46px; height:46px; flex:none; border-radius:12px;
-    background:radial-gradient(120% 120% at 30% 25%, #FFFFFF, #F1EFE8);
-    border:1px solid var(--line-2);
-    display:flex; align-items:center; justify-content:center;
-    box-shadow:0 1px 0 rgba(255,255,255,.9) inset, 0 10px 22px -16px rgba(40,34,20,.5);
-    color:var(--ink);
-  }
-  .word{font-size:19px; font-weight:600; letter-spacing:.22em; line-height:1; color:var(--ink);}
-  .eyebrow{margin:15px 0 0 1px; font-size:11px; letter-spacing:.34em; text-transform:uppercase; color:var(--faint);}
+  /* co-brand header — tacet by default; applyBrand() swaps to the tenant logo+name */
+  .head{margin:0 2px 4px;}
+  .brandrow{display:flex; align-items:center; gap:12px;}
+  .brand-mark{width:38px; height:38px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--text);}
+  .brand-mark svg path{stroke:currentColor;}
+  #brandLogoTop{height:38px; width:auto; max-width:180px; border-radius:8px; display:block;}
+  .brand-name{font-family:var(--display); font-weight:300; font-size:26px; letter-spacing:.16em; line-height:1; color:var(--text);}
+  body.cobrand .brand-name{letter-spacing:.01em;}
+  .eyebrow{margin-left:auto; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--text-4); font-weight:500;}
 
   /* cards */
   .stack{display:flex; flex-direction:column; gap:16px;}
-  .card{
-    background:var(--card);
-    border:1px solid var(--line);
-    border-radius:16px;
-    padding:26px 26px 28px;
-    box-shadow:
-      0 1px 2px rgba(40,34,20,.04),
-      0 22px 46px -34px rgba(40,34,20,.40);
-  }
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:24px 24px 26px;
+    box-shadow:var(--shadow); animation:settle .5s var(--ease) both;}
+  @keyframes settle{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
+  .card h2{margin:0 0 4px; font-size:17px; font-weight:500; letter-spacing:-.01em; color:var(--text);}
+  .lead{margin:2px 0 18px; font-size:13.5px; line-height:1.55; color:var(--text-2);}
 
-  .card h2{
-    margin:0 0 4px; font-size:17px; font-weight:600; letter-spacing:-.01em; color:var(--ink);
-  }
-  .card h2 .cn{font-weight:400; color:var(--muted); font-size:15px; margin-left:3px;}
-  .lead{margin:0 0 18px; font-size:13px; line-height:1.55; color:var(--muted);}
-
-  /* field primitives */
-  .flabel{
-    display:block; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
-    color:var(--muted); margin:0 0 8px;
-  }
-  .flabel .cn{letter-spacing:.04em; color:var(--faint); margin-left:3px; text-transform:none;}
+  .flabel{display:block; font-size:13px; font-weight:500; color:var(--text); margin:0 0 8px;}
   input[type=text], input[type=password]{
-    width:100%; background:var(--field); color:var(--text);
-    border:1px solid var(--line-2); border-radius:11px;
-    padding:13px 14px; font-size:15px; font-family:inherit; letter-spacing:.01em;
-    transition:border-color .16s, box-shadow .16s, background .16s;
-  }
-  input::placeholder{color:#b6b2a8;}
-  input:hover{border-color:rgba(18,22,26,.24);}
-  input:focus{
-    outline:none; border-color:var(--tea);
-    box-shadow:0 0 0 3px rgba(107,142,111,.20);
-  }
+    width:100%; background:var(--surface); color:var(--text);
+    border:1px solid var(--line); border-radius:8px; padding:11px 13px; font-size:15px; font-family:inherit;
+    transition:border-color .16s;}
+  input::placeholder{color:var(--text-4);}
+  input:hover{border-color:var(--text-2);}
+  input:focus{outline:none; border-color:var(--dusk);}
+  .field{margin-bottom:16px;} .field:last-of-type{margin-bottom:0;}
 
-  /* operator: profile photo (the topbar circle) */
-  .avatarrow{display:flex; align-items:center; gap:16px; margin:4px 0 4px;}
-  .avatar-circle{
-    width:64px; height:64px; flex:none; border-radius:50%; overflow:hidden;
-    display:flex; align-items:center; justify-content:center;
-    background:var(--tea); color:#fff; font-size:24px; font-weight:600;
-    text-transform:uppercase; user-select:none;
-    border:1px solid var(--line-2);
-  }
+  /* avatar / logo row */
+  .avatarrow{display:flex; align-items:center; gap:16px; margin:6px 0;}
+  .avatar-circle{width:60px; height:60px; flex:none; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center;
+    background:var(--sage-tint); color:var(--sage-ink); font-size:22px; font-weight:500; text-transform:uppercase; user-select:none;}
   .avatar-circle img{width:100%; height:100%; object-fit:cover; display:block;}
   .avatar-actions{display:flex; flex-wrap:wrap; gap:9px;}
-  .avatar-actions .btn-ghost{padding:0 15px; height:38px; display:inline-flex; align-items:center;}
 
-  /* operator: editable name */
-  .namebar{margin:18px 0 20px;}
+  /* editable name */
+  .namebar{margin:18px 0 0;}
   .nameedit{display:flex; gap:9px; align-items:stretch;}
   .nameedit input{flex:1; min-width:0;}
 
-  /* read-only identity panel */
-  .ident{
-    margin:0; border:1px solid var(--line); border-radius:12px;
-    background:var(--sunk); overflow:hidden;
-  }
-  .ident .row{
-    display:flex; align-items:baseline; justify-content:space-between; gap:16px;
-    padding:12px 15px;
-  }
+  /* read-only identity */
+  .ident{margin:18px 0 0; border:1px solid var(--line); border-radius:12px; background:var(--raised); overflow:hidden;}
+  .ident .row{display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding:12px 15px;}
   .ident .row + .row{border-top:1px solid var(--line);}
-  .ident dt{
-    font-family:"IBM Plex Mono",monospace; font-size:10.5px; letter-spacing:.12em;
-    text-transform:uppercase; color:var(--faint); white-space:nowrap;
-  }
-  .ident dd{margin:0; font-size:14.5px; color:var(--ink); text-align:right; word-break:break-word;}
-  .rohint{
-    display:flex; align-items:center; gap:7px; margin:11px 2px 0;
-    font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--faint);
-  }
-  .rohint svg{flex:none; opacity:.8;}
+  .ident dt{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-4); font-weight:500; white-space:nowrap;}
+  .ident dd{margin:0; font-size:14px; color:var(--text); text-align:right; word-break:break-word;}
+  .rohint{display:flex; align-items:center; gap:7px; margin:11px 2px 0; font-size:11.5px; color:var(--text-2); line-height:1.5;}
+  .rohint svg{flex:none; stroke:var(--text-4); fill:none; margin-top:1px;}
 
-  /* messages (shared #msg / #nameMsg pattern) */
-  .msg{
-    display:none; align-items:center; gap:8px; font-size:12.5px; line-height:1.4;
-    border-radius:10px; padding:10px 12px; margin-top:12px;
-  }
+  /* messages */
+  .msg{display:none; align-items:center; gap:8px; font-size:12.5px; line-height:1.4; border-radius:8px; padding:10px 12px; margin-top:12px;}
   .msg.show{display:flex;}
-  .msg.ok{color:var(--tea-deep); background:rgba(107,142,111,.12); border:1px solid rgba(107,142,111,.32);}
-  .msg.err{color:var(--danger-deep); background:rgba(232,85,106,.10); border:1px solid rgba(232,85,106,.30);}
-  .msg::before{
-    content:""; width:6px; height:6px; border-radius:50%; flex:none; background:currentColor; opacity:.7;
-  }
+  .msg.ok{color:var(--sage-ink); background:var(--sage-tint); border:1px solid var(--sage);}
+  .msg.err{color:var(--brick); background:var(--brick-tint); border:1px solid var(--brick);}
+  .msg::before{content:""; width:6px; height:6px; border-radius:50%; flex:none; background:currentColor; opacity:.7;}
 
-  /* default-password warning */
-  .warn{
-    display:none; align-items:flex-start; gap:9px; margin:0 0 18px;
-    font-size:12.5px; line-height:1.5; color:#7a5f24;
-    background:rgba(176,141,74,.10); border:1px solid rgba(176,141,74,.34);
-    border-radius:11px; padding:11px 13px;
-  }
+  /* default-password warning (amber) */
+  .warn{display:none; align-items:flex-start; gap:9px; margin:0 0 18px; font-size:12.5px; line-height:1.5;
+    color:var(--amber-ink); background:var(--amber-tint); border:1px solid var(--amber); border-radius:8px; padding:11px 13px;}
   .warn.show{display:flex;}
-  .warn svg{flex:none; margin-top:1px; color:var(--brass);}
+  .warn svg{flex:none; margin-top:1px; stroke:var(--amber); fill:none;}
 
   /* buttons */
-  .field{margin-bottom:16px;}
-  .field:last-of-type{margin-bottom:0;}
+  .btn-primary{margin-top:18px; width:100%; border:none; cursor:pointer; background:var(--dusk); color:#fff;
+    font-family:inherit; font-size:15px; font-weight:500; padding:13px; border-radius:8px; position:relative;
+    --spin-track:rgba(255,255,255,.4); --spin-head:#fff; transition:background .18s;}
+  .btn-primary:hover{background:var(--dusk-hi);}
+  .btn-primary:focus-visible{outline:2px solid var(--dusk); outline-offset:2px;}
+  .btn-primary:disabled{cursor:default; opacity:.7;}
+  .btn-sec{flex:none; cursor:pointer; white-space:nowrap; position:relative;
+    background:transparent; color:var(--text); border:1px solid var(--line); border-radius:8px;
+    padding:0 16px; height:40px; display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    font-family:inherit; font-size:13.5px; font-weight:500;
+    --spin-track:var(--line); --spin-head:var(--text-2); transition:border-color .15s, color .15s, background .15s;}
+  .btn-sec:hover{border-color:var(--text-2);}
+  .btn-sec:focus-visible{outline:2px solid var(--dusk); outline-offset:2px;}
+  .btn-sec:disabled{cursor:default; opacity:.55;}
+  .btn-sec.block{width:100%;}
+  .btn-danger{width:100%; cursor:pointer; background:transparent; color:var(--brick); border:1px solid var(--line);
+    border-radius:8px; padding:12px; font-family:inherit; font-size:13.5px; font-weight:500; transition:border-color .15s, background .15s;}
+  .btn-danger:hover{border-color:var(--brick); background:var(--brick-tint);}
 
-  .btn-brass{
-    margin-top:18px; width:100%; border:none; cursor:pointer;
-    background:linear-gradient(180deg, var(--brass-hi), var(--brass));
-    color:#1A140A; font-family:inherit; font-size:15px; font-weight:600; letter-spacing:.02em;
-    padding:15px; border-radius:12px; position:relative;
-    box-shadow:0 1px 0 rgba(255,255,255,.28) inset, 0 12px 26px -14px rgba(176,141,74,.7);
-    transition:filter .16s, transform .08s, box-shadow .16s;
-  }
-  .btn-brass .cn{font-family:"IBM Plex Sans SC",sans-serif;}
-  .btn-brass:hover{filter:brightness(1.05);}
-  .btn-brass:active{transform:translateY(1px);}
-  .btn-brass:focus-visible{outline:none; box-shadow:0 0 0 3px rgba(176,141,74,.4), 0 12px 26px -14px rgba(176,141,74,.7);}
-  .btn-brass:disabled{cursor:default; opacity:.8;}
-
-  .btn-ghost{
-    flex:none; cursor:pointer; white-space:nowrap;
-    background:#fff; color:var(--ink);
-    border:1px solid var(--line-2); border-radius:11px;
-    padding:0 17px; font-family:inherit; font-size:13.5px; font-weight:500;
-    transition:border-color .15s, color .15s, background .15s;
-  }
-  .btn-ghost .cn{color:var(--muted);}
-  .btn-ghost:hover{border-color:var(--tea); color:var(--tea-deep);}
-  .btn-ghost:hover .cn{color:var(--tea-deep);}
-  .btn-ghost:focus-visible{outline:none; border-color:var(--tea); box-shadow:0 0 0 3px rgba(107,142,111,.2);}
-  .btn-ghost:disabled{cursor:default; opacity:.6;}
-
-  .btn-line{
-    display:flex; align-items:center; justify-content:center; gap:7px;
-    width:100%; cursor:pointer; text-decoration:none; white-space:nowrap;
-    background:#fff; color:var(--ink);
-    border:1px solid var(--line-2); border-radius:12px;
-    padding:13px; font-family:inherit; font-size:13.5px; font-weight:500; letter-spacing:.01em;
-    transition:border-color .15s, color .15s, background .15s;
-  }
-  .btn-line .cn{color:var(--muted); font-weight:400;}
-  .btn-line:hover{border-color:rgba(18,22,26,.3); background:var(--sunk);}
-  .btn-line:focus-visible{outline:none; border-color:var(--tea); box-shadow:0 0 0 3px rgba(107,142,111,.2);}
-  .btn-line.danger:hover{border-color:rgba(232,85,106,.45); color:var(--danger-deep); background:rgba(232,85,106,.05);}
-  .btn-line.danger:hover .cn{color:var(--danger-deep);}
-
-  /* loading spinner on submit buttons */
   .loading{color:transparent !important; pointer-events:none;}
-  .loading::after{
-    content:""; position:absolute; top:50%; left:50%; width:16px; height:16px; margin:-8px 0 0 -8px;
-    border:2px solid rgba(26,20,10,.3); border-top-color:#1A140A; border-radius:50%;
-    animation:spin .7s linear infinite;
-  }
-  .btn-ghost.loading{position:relative;}
-  .btn-ghost.loading::after{border-color:rgba(18,22,26,.25); border-top-color:var(--ink);}
+  .loading::after{content:""; position:absolute; top:50%; left:50%; width:16px; height:16px; margin:-8px 0 0 -8px;
+    border:2px solid var(--spin-track); border-top-color:var(--spin-head); border-radius:50%; animation:spin .7s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
-  .foot{margin:26px 2px 0; font-size:10.5px; letter-spacing:.22em; color:var(--faint); text-align:center;}
+  .foot{margin:24px 2px 0; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-4); text-align:center;}
 
-  /* Grid layout — packs the four blocks into two balanced columns on wider
-     viewports; everything collapses to the single 420px column on phones. */
+  /* two balanced columns on wide viewports */
   @media (min-width:781px){
     body.layout-grid .shell{max-width:864px;}
     body.layout-grid .stack{display:block; column-count:2; column-gap:18px;}
     body.layout-grid .stack .card{margin:0 0 18px; break-inside:avoid;}
   }
-
   @media (max-width:440px){
-    body{padding:26px 16px 44px;}
-    .card{padding:22px 20px 24px;}
     .nameedit{flex-direction:column;}
-    .btn-ghost{padding:12px; width:100%;}
-  }
-  @media (prefers-reduced-motion: reduce){
-    .card{animation:none;} .loading::after{animation:none;}
+    .btn-sec{width:100%; padding:12px;}
   }
 </style>
 </head>
 <body class="layout-grid">
 
-  <div class="bg" aria-hidden="true">
-    <div class="glow"></div>
-    <svg width="640" height="640" viewBox="0 0 640 640" fill="none">
-      <circle cx="320" cy="320" r="312" stroke="#B08D4A" stroke-opacity=".10" stroke-width="1"/>
-      <circle cx="320" cy="320" r="240" stroke="#6B8E6F" stroke-opacity=".09" stroke-width="1"/>
-      <circle cx="320" cy="320" r="172" stroke="#12161A" stroke-opacity=".05" stroke-width="1"/>
-      <circle cx="320" cy="320" r="108" stroke="#B08D4A" stroke-opacity=".08" stroke-width="1"/>
-    </svg>
-  </div>
-
   <main class="shell">
 
     <div class="topbar">
-      <a class="back" href="/retail-admin"><span class="en">← Back to backend</span><span class="cn">← 返回后台</span></a>
-      <button type="button" id="langToggle" class="langtoggle">中文</button>
+      <a class="back" href="/retail-admin"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">Backend</span><span class="cn">后台</span></a>
+      <div class="topbar-r">
+        <button type="button" id="themeToggle" class="icobtn" aria-label="Theme">
+          <svg width="17" height="17" viewBox="0 0 20 20" id="themeIcon"><circle cx="10" cy="10" r="4.2" stroke-width="1.4"/><path d="M10 1.5v2.2M10 16.3v2.2M18.5 10h-2.2M3.7 10H1.5M16 4l-1.6 1.6M5.6 14.4 4 16M16 16l-1.6-1.6M5.6 5.6 4 4" stroke-width="1.4" stroke-linecap="round"/></svg>
+        </button>
+        <button type="button" id="langToggle" class="langtoggle">中文</button>
+      </div>
     </div>
 
     <header class="head">
-      <div class="brand">
-        <span class="mark" aria-hidden="true">
-          <svg width="24" height="24" viewBox="0 0 24 24">
-            <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.6" stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
-            <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.6" stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
-            <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <div class="brandrow">
+        <span class="brand-mark" aria-hidden="true">
+          <svg width="30" height="20" viewBox="0 0 30 20" fill="none">
+            <path d="M1 10c3 0 3-6 6-6s3 12 6 12 3-9 5-9h6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="27" cy="7" r="1.7" fill="#6E67AF" stroke="none"/>
           </svg>
         </span>
-        <span class="word">Full Circle</span>
+        <img id="brandLogoTop" alt="" hidden />
+        <span class="brand-name word" data-no-i18n>tacet</span>
+        <span class="eyebrow"><span class="en">Account</span><span class="cn">账户</span></span>
       </div>
-      <div class="eyebrow mono"><span class="en">Account</span><span class="cn">账户</span></div>
     </header>
 
     <div class="stack">
 
       <!-- Operator identity -->
       <section class="card">
-        <h2><span class="en">Operator</span><span class="sep"> · </span><span class="cn">操作员</span></h2>
+        <h2><span class="en">Operator</span><span class="cn">操作员</span></h2>
 
-        <!-- Profile photo — the Google-style circle shown in the backend topbar. -->
         <div class="avatarrow">
           <span class="avatar-circle" id="avatarCircle" aria-hidden="true"></span>
           <div class="avatar-actions">
-            <button type="button" id="avatarPick" class="btn-ghost"><span class="en">Change photo</span><span class="cn">更换照片</span></button>
-            <button type="button" id="avatarClear" class="btn-ghost" hidden><span class="en">Remove</span><span class="cn">移除</span></button>
+            <button type="button" id="avatarPick" class="btn-sec"><span class="en">Change photo</span><span class="cn">更换照片</span></button>
+            <button type="button" id="avatarClear" class="btn-sec" hidden><span class="en">Remove</span><span class="cn">移除</span></button>
             <input type="file" id="avatarFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
           </div>
         </div>
         <div class="msg" id="avatarMsg" role="status"><span></span></div>
 
         <form id="nameForm" class="namebar" novalidate>
-          <label class="flabel" for="nameInput"><span class="en">Name</span><span class="sep"> · </span><span class="cn">姓名</span></label>
+          <label class="flabel" for="nameInput"><span class="en">Name</span><span class="cn">姓名</span></label>
           <div class="nameedit">
             <input id="nameInput" type="text" autocomplete="name" spellcheck="false" placeholder="Your display name" />
-            <button type="submit" id="nameBtn" class="btn-ghost"><span class="en">Save</span><span class="cn">保存</span></button>
+            <button type="submit" id="nameBtn" class="btn-sec"><span class="en">Save</span><span class="cn">保存</span></button>
           </div>
           <div class="msg" id="nameMsg" role="status"><span></span></div>
         </form>
 
         <dl id="ident" class="ident"></dl>
         <p class="rohint">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
           <span class="en">Read-only — set by your administrator</span><span class="cn">只读 — 由管理员设置</span>
         </p>
       </section>
 
-      <!-- Brand (co-brand identity) — owner/admin only; JS reveals it in hydrate(). -->
+      <!-- Brand (co-brand identity) — owner/admin only; revealed in hydrate(). -->
       <section class="card" id="brandCard" hidden>
-        <h2><span class="en">Brand</span><span class="sep"> · </span><span class="cn">品牌</span></h2>
-        <p class="lead"><span class="en">Your logo and name lead the admin, sign-in and customer emails. Everything else keeps the Tacet look.</span><span class="cn">您的徽标与名称将展示在后台、登录页与顾客邮件上。其余部分保持 Tacet 外观。</span></p>
+        <h2><span class="en">Brand</span><span class="cn">品牌</span></h2>
+        <p class="lead"><span class="en">Your logo and name lead the admin, sign-in and customer emails. Everything else keeps the tacet look.</span><span class="cn">您的徽标与名称将展示在后台、登录页与顾客邮件上。其余部分保持 tacet 外观。</span></p>
 
         <div class="avatarrow">
           <img id="brandLogoPrev" alt="" style="height:38px;max-width:150px;object-fit:contain;display:none" />
           <div class="avatar-actions">
-            <button type="button" id="brandPick" class="btn-ghost"><span class="en">Upload logo</span><span class="cn">上传徽标</span></button>
-            <button type="button" id="brandClear" class="btn-ghost" hidden><span class="en">Remove</span><span class="cn">移除</span></button>
+            <button type="button" id="brandPick" class="btn-sec"><span class="en">Upload logo</span><span class="cn">上传徽标</span></button>
+            <button type="button" id="brandClear" class="btn-sec" hidden><span class="en">Remove</span><span class="cn">移除</span></button>
             <input type="file" id="brandFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
           </div>
         </div>
         <div class="msg" id="brandMsg" role="status"><span></span></div>
 
         <form id="brandNameForm" class="namebar" novalidate>
-          <label class="flabel" for="brandNameInput"><span class="en">Brand name</span><span class="sep"> · </span><span class="cn">品牌名称</span></label>
+          <label class="flabel" for="brandNameInput"><span class="en">Brand name</span><span class="cn">品牌名称</span></label>
           <div class="nameedit">
             <input id="brandNameInput" type="text" spellcheck="false" maxlength="60" placeholder="Your brand" />
-            <button type="submit" id="brandNameBtn" class="btn-ghost"><span class="en">Save</span><span class="cn">保存</span></button>
+            <button type="submit" id="brandNameBtn" class="btn-sec"><span class="en">Save</span><span class="cn">保存</span></button>
           </div>
           <div class="msg" id="brandNameMsg" role="status"><span></span></div>
         </form>
 
         <p class="rohint">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <svg width="13" height="13" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
           <span class="en">A small “runs on tacet” credit stays — removed on the Studio plan.</span><span class="cn">页面保留小字“runs on tacet”——升级 Studio 套餐后移除。</span>
         </p>
       </section>
 
       <!-- Subscription -->
       <section class="card">
-        <h2><span class="en">Subscription</span><span class="sep"> · </span><span class="cn">订阅</span></h2>
+        <h2><span class="en">Subscription</span><span class="cn">订阅</span></h2>
         <p class="lead"><span class="en">View your plan, renewal date, and invoices.</span><span class="cn">查看套餐、续订日期与发票。</span></p>
-        <a class="btn-line" href="/backend/billing"><span class="en">Billing &amp; plans →</span><span class="cn">账单与套餐 →</span></a>
+        <a class="btn-sec block" href="/backend/billing"><span class="en">Billing &amp; plans →</span><span class="cn">账单与套餐 →</span></a>
       </section>
 
       <!-- Change password -->
       <section class="card">
-        <h2><span class="en">Change password</span><span class="sep"> · </span><span class="cn">修改密码</span></h2>
+        <h2><span class="en">Change password</span><span class="cn">修改密码</span></h2>
         <p class="lead"><span class="en">Minimum 10 characters.</span><span class="cn">至少 10 位。</span></p>
 
         <div class="warn" id="defaultWarn" role="alert">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4"/><path d="M12 17v.2"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4"/><path d="M12 17v.2"/></svg>
           <span><span class="en">You're still using the default password — please set a new one.</span><span class="cn">您仍在使用默认密码，请设置新密码。</span></span>
         </div>
 
         <form id="pwForm" novalidate>
           <div class="field">
-            <label class="flabel" for="cur"><span class="en">Current password</span><span class="sep"> · </span><span class="cn">当前密码</span></label>
+            <label class="flabel" for="cur"><span class="en">Current password</span><span class="cn">当前密码</span></label>
             <input id="cur" type="password" autocomplete="current-password" placeholder="••••••••" />
           </div>
           <div class="field">
-            <label class="flabel" for="nw"><span class="en">New password</span><span class="sep"> · </span><span class="cn">新密码</span></label>
+            <label class="flabel" for="nw"><span class="en">New password</span><span class="cn">新密码</span></label>
             <input id="nw" type="password" autocomplete="new-password" placeholder="••••••••" />
           </div>
           <div class="field">
-            <label class="flabel" for="nw2"><span class="en">Confirm new password</span><span class="sep"> · </span><span class="cn">确认新密码</span></label>
+            <label class="flabel" for="nw2"><span class="en">Confirm new password</span><span class="cn">确认新密码</span></label>
             <input id="nw2" type="password" autocomplete="new-password" placeholder="••••••••" />
           </div>
           <div class="msg" id="msg" role="status"><span></span></div>
-          <button type="submit" id="pwBtn" class="btn-brass"><span class="en">Update password</span><span class="cn">更新密码</span></button>
+          <button type="submit" id="pwBtn" class="btn-primary"><span class="en">Update password</span><span class="cn">更新密码</span></button>
         </form>
       </section>
 
       <!-- Session -->
       <section class="card">
-        <h2><span class="en">Session</span><span class="sep"> · </span><span class="cn">会话</span></h2>
-        <p class="lead"><span class="en">Sign out of the Mini App Backend on this device.</span><span class="cn">在此设备上登出后台。</span></p>
-        <button type="button" id="logoutBtn" class="btn-line danger"><span class="en">Sign out</span><span class="cn">退出登录</span></button>
+        <h2><span class="en">Session</span><span class="cn">会话</span></h2>
+        <p class="lead"><span class="en">Sign out of the backend on this device.</span><span class="cn">在此设备上登出后台。</span></p>
+        <button type="button" id="logoutBtn" class="btn-danger"><span class="en">Sign out</span><span class="cn">退出登录</span></button>
       </section>
 
     </div>
 
-    <div class="foot mono">OPERATOR CONSOLE · v2.4</div>
+    <div class="foot"><span class="en">Roots · Account</span><span class="cn">Roots · 账户</span></div>
 
   </main>
 
 <script>
-  /* Account controller — loads operator identity, white-labels chrome per tenant,
-     edits display name, changes password, and signs out. */
+  /* Account controller — loads operator identity, co-brands the header per tenant,
+     edits display name + photo + brand, changes password, and signs out. */
   (function () {
-    /* ── Language — shares the toggle preference with the rest of the admin suite ── */
     var LANG_KEY = 'roots-admin-lang';
-    var lang = 'en';
-    try { var s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'cn') lang = s; } catch (e) {}
+    var THEME_KEY = 'retail-admin-theme';
+    var lang = document.documentElement.getAttribute('data-lang') === 'cn' ? 'cn' : 'en';
     function L(en, cn){ return lang === 'cn' ? cn : en; }
-    function applyLang(){
-      document.documentElement.setAttribute('data-lang', lang);
-      var tg = document.getElementById('langToggle');
-      if (tg) tg.textContent = lang === 'cn' ? 'EN' : '中文';
-      nameInput.placeholder = L('Your display name', '您的显示名称');
-      if (lastUser) hydrate(lastUser);
-    }
     var lastUser = null;
+    var brandApplied = false;
 
-    var word       = document.querySelector('.word');
     var ident      = document.getElementById('ident');
     var nameForm   = document.getElementById('nameForm');
     var nameInput  = document.getElementById('nameInput');
@@ -469,7 +366,6 @@
         avatarClear.hidden = true;
       }
     }
-
     function esc(s){
       return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
         return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
@@ -481,20 +377,29 @@
       if (kind) { el.classList.add(kind, 'show'); }
     }
 
-    /* White-label the chrome wordmark + accent for this tenant. */
-    function setWord(text){ if (text) { word.textContent = text; } }
-    function applyTenant(tenant){
-      tenant = tenant || {};
-      setWord(tenant.brand);
-      if (tenant.brand) { document.title = tenant.brand + ' — ' + L('Account', '账户'); }
-      if (tenant.accent) {
-        var root = document.documentElement.style;
-        root.setProperty('--brass', tenant.accent);
-        root.setProperty('--brass-hi', tenant.accent);
+    // Co-brand the header — tacet by default; a tenant takes over only once
+    // they've uploaded a LOGO (mirrors the admin's applyBrand rule).
+    function applyBrand(tenant){
+      if (!tenant || brandApplied) return;
+      var name = (tenant.brand || '').trim();
+      var logoUrl = tenant.brandLogoUrl || null;
+      var markUrl = tenant.brandMarkUrl || null;
+      if (!logoUrl) return;                          // stay tacet
+      brandApplied = true;
+      if (name) document.title = name + ' · Account';
+      if (markUrl) { var f = document.querySelector('link[rel=icon]'); if (f) f.href = markUrl; }
+      var img = document.getElementById('brandLogoTop');
+      var svg = document.querySelector('.brand-mark');
+      var nameEl = document.querySelector('.brand-name');
+      if (nameEl && name) nameEl.textContent = name;
+      if (img) {
+        img.onload = function (){ img.hidden = false; if (svg) svg.hidden = true; };
+        img.onerror = function (){ img.hidden = true; if (svg) svg.hidden = false; };
+        img.src = markUrl || logoUrl;
       }
+      document.body.classList.add('cobrand');
     }
 
-    /* Read-only identity rows (login identity / admin-assigned / tenant). */
     function renderIdent(rows){
       ident.innerHTML = rows.map(function (r) {
         return '<div class="row"><dt>' + r[0] + '</dt><dd>' + esc(r[1] || '—') + '</dd></div>';
@@ -513,8 +418,7 @@
         [L('Company', '公司'),    tenant.brand || tenant.name]
       ]);
       renderAvatar(u);
-      applyTenant(tenant);
-      // Brand setup is a tenant-level identity control — owners/admins only.
+      applyBrand(tenant);
       if (u.role === 'owner' || u.role === 'admin') { brandCard.hidden = false; initBrand(); }
       if (u.mustChangePassword || u.defaultPassword) { defaultWarn.classList.add('show'); }
     }
@@ -536,20 +440,14 @@
 
       nameBtn.disabled = true; nameBtn.classList.add('loading');
       fetch('/api/backend/profile', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
         body: JSON.stringify({ display_name: name })
       })
-        .then(function (r) {
-          return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; });
-        })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           nameBtn.disabled = false; nameBtn.classList.remove('loading');
           if (res.ok && res.data && res.data.success) {
-            var dn = res.data.displayName || name;
-            nameInput.value = dn;
-            setWord(dn);
+            nameInput.value = res.data.displayName || name;
             setMsg(nameMsg, 'ok', L('Saved', '已保存'));
           } else {
             setMsg(nameMsg, 'err', (res.data && res.data.error) || L('Couldn’t save — please try again', '保存失败，请重试'));
@@ -566,10 +464,8 @@
       avatarPick.disabled = true; avatarPick.classList.add('loading');
       setMsg(avatarMsg, null, '');
       fetch('/api/backend/avatar', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ avatar: dataUrl })   // null clears it
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
+        body: JSON.stringify({ avatar: dataUrl })
       })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
@@ -590,14 +486,13 @@
     avatarClear.addEventListener('click', function () { saveAvatar(null); });
     avatarFile.addEventListener('change', function () {
       var file = avatarFile.files && avatarFile.files[0];
-      avatarFile.value = '';                       // allow re-picking the same file
+      avatarFile.value = '';
       if (!file) return;
       if (!/^image\//.test(file.type)) { setMsg(avatarMsg, 'err', L('Please choose an image file', '请选择图片文件')); return; }
       var reader = new FileReader();
       reader.onload = function () {
         var img = new Image();
         img.onload = function () {
-          // Cover-crop to a centered 256px square, re-encode as JPEG (small).
           var S = 256;
           var canvas = document.createElement('canvas');
           canvas.width = S; canvas.height = S;
@@ -614,11 +509,7 @@
       reader.readAsDataURL(file);
     });
 
-    /* ── Brand (co-brand identity) → GET/PUT /api/backend/brand ──
-       Upload a logo + set a name; the server derives the square mark and
-       stamps the change so every surface (chrome, favicon, sign-in, email)
-       refreshes. Raster logos are downscaled client-side to ≤512px PNG (keeps
-       transparency); SVGs are sent as-is. The credit is platform-controlled. */
+    /* ── Brand (co-brand identity) → GET/PUT /api/backend/brand ── */
     function renderBrandPrev(url){
       if (url) { brandLogoPrev.src = url; brandLogoPrev.style.display = 'block'; brandClear.hidden = false; }
       else { brandLogoPrev.removeAttribute('src'); brandLogoPrev.style.display = 'none'; brandClear.hidden = true; }
@@ -637,8 +528,7 @@
     function saveBrand(payload, okMsg){
       brandPick.disabled = true; brandPick.classList.add('loading'); setMsg(brandMsg, null, '');
       return fetch('/api/backend/brand', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin', body: JSON.stringify(payload)
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(payload)
       })
         .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
@@ -661,7 +551,6 @@
       brandFile.value = '';
       if (!file) return;
       if (!/^image\//.test(file.type)) { setMsg(brandMsg, 'err', L('Please choose an image file', '请选择图片文件')); return; }
-      // SVG is vector — send as-is. Raster is downscaled to ≤512px PNG.
       if (/svg/.test(file.type)) {
         var rs = new FileReader();
         rs.onload = function () { saveBrand({ logo: rs.result }, L('Logo updated', '徽标已更新')); };
@@ -705,14 +594,10 @@
 
       pwBtn.disabled = true; pwBtn.classList.add('loading');
       fetch('/api/backend/password', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
         body: JSON.stringify({ current_password: cur, new_password: nw })
       })
-        .then(function (r) {
-          return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; });
-        })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
         .then(function (res) {
           pwBtn.disabled = false; pwBtn.classList.remove('loading');
           if (res.ok && res.data && res.data.success) {
@@ -736,12 +621,37 @@
         .catch(function () { window.location.href = '/backend/login'; });
     });
 
-    /* ── Language toggle ── */
+    /* ── Theme ── */
+    function applyTheme(){
+      var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+      document.querySelector('meta[name=theme-color]').setAttribute('content', t === 'dark' ? '#111A2B' : '#FBF9F4');
+      var ico = document.getElementById('themeIcon');
+      if (ico) ico.innerHTML = t === 'dark'
+        ? '<path d="M16 11.5A6.5 6.5 0 1 1 8.5 4a5 5 0 0 0 7.5 7.5Z" stroke-width="1.4" stroke-linejoin="round"/>'
+        : '<circle cx="10" cy="10" r="4.2" stroke-width="1.4"/><path d="M10 1.5v2.2M10 16.3v2.2M18.5 10h-2.2M3.7 10H1.5M16 4l-1.6 1.6M5.6 14.4 4 16M16 16l-1.6-1.6M5.6 5.6 4 4" stroke-width="1.4" stroke-linecap="round"/>';
+    }
+    document.getElementById('themeToggle').addEventListener('click', function () {
+      var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', t);
+      try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
+      applyTheme();
+    });
+
+    /* ── Language ── */
+    function applyLang(){
+      document.documentElement.setAttribute('data-lang', lang);
+      var tg = document.getElementById('langToggle');
+      if (tg) tg.textContent = lang === 'cn' ? 'EN' : '中文';
+      nameInput.placeholder = L('Your display name', '您的显示名称');
+      if (lastUser) hydrate(lastUser);
+    }
     document.getElementById('langToggle').addEventListener('click', function () {
       lang = lang === 'cn' ? 'en' : 'cn';
       try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
       applyLang();
     });
+
+    applyTheme();
     applyLang();
   })();
 </script>
