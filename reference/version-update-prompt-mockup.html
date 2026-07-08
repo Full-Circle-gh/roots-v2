@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — New version prompt mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   NEW VERSION PROMPT — static mockup, no live data.
+   Replaces the brass floating pill at bottom-center.
+   The problem: a fresh build ships while an operator keeps this
+   tab open for hours. A version token changes; today a brass
+   pill toasts up. Brass is not a tacet colour, and a floating
+   toast is exactly the "ding" the system avoids.
+
+   A new build is something tacet did in the background, so the
+   prompt is Dusk (the automation colour) with a waveform that
+   settles — "tacet updated itself; refresh when you're ready."
+
+   Three options, one build event ("v341 · 5 min ago"):
+     A · Quiet dock  — inline Dusk bar, one primary, one link  (recommended)
+     B · Recap note  — "While you were working" card + digest
+     C · Corner cue  — smallest possible chip, breathing dot
+   Tokens per tacet-tokens.css v1.0. English only.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --dusk-hi:  #5B54A0;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+
+  --cream:      #F6F3EC;
+  --border:     #E4E0D5;
+  --dusk-tint:  #EEEDF6;
+  --sage-tint:  #EDF1EC;
+  --sage-ink:   #4A6249;
+
+  --bg:      var(--paper);
+  --surface: #FFFFFF;
+  --text-1:  var(--ink);
+  --text-2:  var(--graphite);
+  --line:    var(--border);
+
+  --font-text: "Inter", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.05);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* dark mode = Paper/Ink swap, other roles hold */
+#dark:checked ~ .frame {
+  --bg:      #0E1622;
+  --surface: #18212F;
+  --text-1:  #FBF9F4;
+  --text-2:  #9AA1AC;
+  --line:    rgba(251,249,244,0.12);
+  --cream:   #1C2636;
+  --dusk-tint: rgba(110,103,175,0.20);
+  --sage-tint: rgba(163,180,159,0.16);
+  --shadow-soft: 0 1px 2px rgba(0,0,0,0.30), 0 8px 24px rgba(0,0,0,0.35);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px; line-height: 1.6;
+  color: var(--ink); background: #2A2A2A;
+}
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- state machinery (CSS only) ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+
+#opt-a:checked ~ .frame .stage-b,
+#opt-a:checked ~ .frame .stage-c,
+#opt-b:checked ~ .frame .stage-a,
+#opt-b:checked ~ .frame .stage-c,
+#opt-c:checked ~ .frame .stage-a,
+#opt-c:checked ~ .frame .stage-b { display: none; }
+
+#opt-a:checked ~ .frame .chrome label[for="opt-a"],
+#opt-b:checked ~ .frame .chrome label[for="opt-b"],
+#opt-c:checked ~ .frame .chrome label[for="opt-c"],
+#light:checked  ~ .frame .chrome label[for="light"],
+#dark:checked   ~ .frame .chrome label[for="dark"] {
+  background: var(--paper); color: var(--ink);
+}
+#opt-a:checked ~ .frame .chrome .note-a,
+#opt-b:checked ~ .frame .chrome .note-b,
+#opt-c:checked ~ .frame .chrome .note-c { display: inline; }
+
+/* ---- mockup chrome bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink);
+  color: rgba(251,249,244,0.75);
+  display: flex; align-items: center; gap: 22px;
+  padding: 11px 26px; font-size: 12.5px; flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5);
+}
+.chrome .seg { display: inline-flex; border: 1px solid rgba(251,249,244,0.25); border-radius: 999px; overflow: hidden; }
+.chrome .seg label {
+  padding: 3px 14px; cursor: pointer; color: rgba(251,249,244,0.75);
+  transition: background 200ms var(--ease-settle);
+}
+.chrome .note { display: none; color: rgba(251,249,244,0.5); }
+
+/* ---- product frame ---- */
+.frame { background: var(--bg); color: var(--text-1); }
+
+.topbar {
+  position: relative;
+  display: flex; align-items: center; gap: 13px;
+  padding: 16px 34px; border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.wave { height: 15px; width: auto; display: block; }
+.wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 18px; letter-spacing: 0.2em; color: var(--text-1);
+}
+.topbar .crumb { margin-left: auto; font-size: 13px; color: var(--text-2); }
+
+/* ---- faux page behind, for context ---- */
+.stage { position: relative; min-height: 560px; overflow: hidden; }
+.page { max-width: 1120px; margin: 0 auto; padding: 34px 34px 120px; }
+.page.dim { opacity: 0.55; filter: saturate(0.9); }
+
+.page-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 22px; }
+.page-head h1 { font-size: 21px; font-weight: 500; letter-spacing: -0.01em; }
+.page-head .date { margin-left: auto; font-size: 13px; color: var(--text-2); }
+
+.ghost-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.ghost {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-card); padding: 22px; min-height: 118px;
+}
+.ghost .lbl { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-2); }
+.ghost .big { font-size: 30px; font-weight: 400; margin-top: 10px; letter-spacing: -0.02em; }
+.ghost .sub { font-size: 13px; color: var(--text-2); margin-top: 4px; }
+
+/* ---- shared bits ---- */
+.dusk-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--dusk);
+  animation: breathe 2.4s var(--ease-settle) infinite;
+}
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.82); }
+}
+.btn-primary {
+  border: 0; cursor: pointer; white-space: nowrap;
+  background: var(--dusk); color: #FFFFFF;
+  font-family: var(--font-text); font-weight: 500; font-size: 14px;
+  padding: 8px 18px; border-radius: var(--r-control);
+  transition: background 200ms var(--ease-settle);
+}
+.btn-primary:hover { background: var(--dusk-hi); }
+.btn-ghost {
+  border: 0; cursor: pointer; background: transparent;
+  color: var(--text-2); font-family: var(--font-text); font-size: 13.5px;
+  padding: 8px 4px; transition: color 200ms var(--ease-settle);
+}
+.btn-ghost:hover { color: var(--text-1); }
+.btn-x {
+  border: 0; cursor: pointer; background: transparent;
+  color: var(--text-2); font-size: 15px; line-height: 1;
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  transition: color 200ms var(--ease-settle), background 200ms var(--ease-settle);
+}
+.btn-x:hover { color: var(--text-1); background: var(--cream); }
+
+/* ============================================================
+   OPTION A — Quiet dock (recommended)
+   A calm inline bar docked bottom-centre. Dusk waveform that has
+   just settled to a flat line, one-line dry-warm copy, a Dusk
+   primary, a quiet "See what changed" link, and dismiss. Not a
+   pill, not brass; it reads as part of the surface, not a toast.
+   ============================================================ */
+.dock {
+  position: absolute; left: 50%; bottom: 26px;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 48px));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft);
+  padding: 15px 16px 15px 18px;
+  display: flex; align-items: center; gap: 14px;
+  animation: dock-in 600ms var(--ease-settle) both;
+}
+@keyframes dock-in {
+  from { opacity: 0; transform: translate(-50%, 12px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.dock .mark { flex: none; position: relative; top: 1px; }
+.dock .body { min-width: 0; }
+.dock .t1 { font-size: 15px; font-weight: 500; line-height: 1.3; }
+.dock .t2 { font-size: 13px; color: var(--text-2); margin-top: 1px; }
+.dock .t2 a {
+  color: var(--text-2); text-decoration: none;
+  border-bottom: 1px solid var(--line);
+  transition: color 200ms var(--ease-settle);
+}
+.dock .t2 a:hover { color: var(--text-1); }
+.dock .spacer { flex: 1 1 auto; }
+
+/* ============================================================
+   OPTION B — Recap note
+   The signature Recap card, but small: "While you were working"
+   + a two-line digest of what shipped, then refresh. For builds
+   worth a sentence. More weight than most deploys need.
+   ============================================================ */
+.recap {
+  position: absolute; right: 34px; bottom: 30px;
+  width: min(380px, calc(100% - 48px));
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft);
+  padding: 20px 22px 18px;
+  animation: dock-in-r 600ms var(--ease-settle) both;
+}
+@keyframes dock-in-r {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.recap .r-head { display: flex; align-items: center; gap: 10px; }
+.recap .r-head h3 { font-size: 16px; font-weight: 500; }
+.recap .r-head .r-x { margin-left: auto; }
+.recap .r-meta { font-size: 13px; color: var(--text-2); margin: 3px 0 14px 18px; }
+.recap ul { list-style: none; display: grid; gap: 9px; margin-bottom: 16px; }
+.recap li { display: flex; align-items: baseline; gap: 10px; font-size: 14px; }
+.recap li .rd {
+  width: 6px; height: 6px; border-radius: 50%; flex: none;
+  background: var(--dusk); position: relative; top: 6px;
+}
+.recap .r-foot { display: flex; align-items: center; gap: 8px; }
+.recap .r-foot .spacer { flex: 1 1 auto; }
+
+/* ============================================================
+   OPTION C — Corner cue
+   The smallest honest prompt: a chip in the top bar with a
+   breathing Dusk dot. Zero footprint, no copy to read; hover /
+   click reveals the refresh. For operators who never want to be
+   interrupted at all.
+   ============================================================ */
+.cue {
+  display: inline-flex; align-items: center; gap: 9px;
+  margin-left: auto;
+  background: var(--dusk-tint);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 6px 8px 6px 13px;
+  font-size: 13px; color: var(--text-1);
+  animation: dock-in-r 500ms var(--ease-settle) both;
+}
+.cue .lbl { font-weight: 500; }
+.cue button {
+  border: 0; cursor: pointer;
+  background: var(--dusk); color: #FFFFFF;
+  font-family: var(--font-text); font-weight: 500; font-size: 12.5px;
+  padding: 4px 12px; border-radius: 999px;
+  transition: background 200ms var(--ease-settle);
+}
+.cue button:hover { background: var(--dusk-hi); }
+.stage-c .crumb { display: none; }
+
+/* callout under stage */
+.legend {
+  max-width: 1120px; margin: 0 auto; padding: 22px 34px 40px;
+  color: var(--text-2); font-size: 13.5px; line-height: 1.7;
+}
+.legend b { color: var(--text-1); font-weight: 500; }
+.legend .lead { font-family: var(--font-display); font-weight: 400; font-size: 17px; color: var(--text-1); margin-bottom: 8px; letter-spacing: 0.01em; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+@media (max-width: 640px) {
+  .ghost-grid { grid-template-columns: 1fr; }
+  .recap { right: 24px; left: 24px; width: auto; }
+}
+</style>
+</head>
+<body>
+
+<!-- option state -->
+<input type="radio" name="opt" id="opt-a" class="state" checked>
+<input type="radio" name="opt" id="opt-b" class="state">
+<input type="radio" name="opt" id="opt-c" class="state">
+<!-- theme state -->
+<input type="radio" name="theme" id="light" class="state" checked>
+<input type="radio" name="theme" id="dark" class="state">
+
+<div class="frame">
+
+  <!-- chrome (not product) -->
+  <div class="chrome">
+    <span class="tag">New version prompt</span>
+    <span class="seg">
+      <label for="opt-a">A · Quiet dock</label>
+      <label for="opt-b">B · Recap note</label>
+      <label for="opt-c">C · Corner cue</label>
+    </span>
+    <span class="seg">
+      <label for="light">Light</label>
+      <label for="dark">Dark</label>
+    </span>
+    <span class="note note-a">Recommended — calm inline bar, one Dusk action.</span>
+    <span class="note note-b">Recap card with a two-line digest of what shipped.</span>
+    <span class="note note-c">Smallest possible: a breathing dot in the bar.</span>
+  </div>
+
+  <!-- ============ STAGE A ============ -->
+  <div class="stage stage-a">
+    <div class="topbar">
+      <svg class="wave" viewBox="0 0 46 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M1 8 Q4 8 6 4 T11 8 Q13 12 15 8 T20 8 L45 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="color:var(--text-1)"/>
+        <circle cx="44" cy="8" r="2.2" fill="var(--dusk)"/>
+      </svg>
+      <span class="wordmark">tacet</span>
+      <span class="crumb">Dashboard · Yuexiu</span>
+    </div>
+
+    <div class="stage-inner">
+      <div class="page dim">
+        <div class="page-head"><h1>Good afternoon</h1><span class="date">Tue · 3:12 PM</span></div>
+        <div class="ghost-grid">
+          <div class="ghost"><div class="lbl">Orders today</div><div class="big num">128</div><div class="sub">+14 vs yesterday</div></div>
+          <div class="ghost"><div class="lbl">Revenue</div><div class="big num">¥8,940</div><div class="sub">across 3 channels</div></div>
+          <div class="ghost"><div class="lbl">Low stock</div><div class="big num">6</div><div class="sub">needs a restock</div></div>
+        </div>
+      </div>
+
+      <!-- THE PROMPT -->
+      <div class="dock" role="status">
+        <span class="mark">
+          <svg width="26" height="16" viewBox="0 0 26 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M1 8 Q3 8 4.5 5 T8 8 Q9.5 11 11 8 T14 8 L25 8" stroke="var(--dusk)" stroke-width="1.7" stroke-linecap="round"/>
+            <circle cx="24" cy="8" r="2.4" fill="var(--dusk)"/>
+          </svg>
+        </span>
+        <div class="body">
+          <div class="t1">A newer version is ready.</div>
+          <div class="t2">Refresh when you reach a good stopping point · <a href="#">See what changed</a></div>
+        </div>
+        <span class="spacer"></span>
+        <button class="btn-primary">Refresh</button>
+        <button class="btn-x" aria-label="Dismiss">&times;</button>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="lead">A · Quiet dock</div>
+      Docked, not floating. <b>Dusk</b> — this is something tacet did in the background, so it wears the automation colour, not brass. One primary action, one quiet link, and it never auto-reloads: an operator mid-edit is never interrupted. The waveform has already <b>settled to a flat line</b> — the update is done, only the refresh is left.
+    </div>
+  </div>
+
+  <!-- ============ STAGE B ============ -->
+  <div class="stage stage-b">
+    <div class="topbar">
+      <svg class="wave" viewBox="0 0 46 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M1 8 Q4 8 6 4 T11 8 Q13 12 15 8 T20 8 L45 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="color:var(--text-1)"/>
+        <circle cx="44" cy="8" r="2.2" fill="var(--dusk)"/>
+      </svg>
+      <span class="wordmark">tacet</span>
+      <span class="crumb">Dashboard · Yuexiu</span>
+    </div>
+
+    <div class="stage-inner">
+      <div class="page dim">
+        <div class="page-head"><h1>Good afternoon</h1><span class="date">Tue · 3:12 PM</span></div>
+        <div class="ghost-grid">
+          <div class="ghost"><div class="lbl">Orders today</div><div class="big num">128</div><div class="sub">+14 vs yesterday</div></div>
+          <div class="ghost"><div class="lbl">Revenue</div><div class="big num">¥8,940</div><div class="sub">across 3 channels</div></div>
+          <div class="ghost"><div class="lbl">Low stock</div><div class="big num">6</div><div class="sub">needs a restock</div></div>
+        </div>
+      </div>
+
+      <!-- THE PROMPT -->
+      <div class="recap" role="status">
+        <div class="r-head">
+          <span class="dusk-dot"></span>
+          <h3>While you were working</h3>
+          <button class="btn-x r-x" aria-label="Dismiss">&times;</button>
+        </div>
+        <div class="r-meta">tacet updated itself · 5 minutes ago</div>
+        <ul>
+          <li><span class="rd"></span><span>Meituan orders now show the live rider on the map.</span></li>
+          <li><span class="rd"></span><span>Low-stock alerts group by store.</span></li>
+        </ul>
+        <div class="r-foot">
+          <button class="btn-primary">Refresh to get it</button>
+          <span class="spacer"></span>
+          <button class="btn-ghost">Later</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="lead">B · Recap note</div>
+      The signature <b>Recap</b>, shrunk to a corner. "While you were working" + a two-line digest so the refresh has a reason behind it. Best when a build is worth a sentence; heavier than the everyday deploy needs. Digest text would come from the release notes, not every commit.
+    </div>
+  </div>
+
+  <!-- ============ STAGE C ============ -->
+  <div class="stage stage-c">
+    <div class="topbar">
+      <svg class="wave" viewBox="0 0 46 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <path d="M1 8 Q4 8 6 4 T11 8 Q13 12 15 8 T20 8 L45 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="color:var(--text-1)"/>
+        <circle cx="44" cy="8" r="2.2" fill="var(--dusk)"/>
+      </svg>
+      <span class="wordmark">tacet</span>
+      <span class="cue">
+        <span class="dusk-dot"></span>
+        <span class="lbl">Update ready</span>
+        <button>Refresh</button>
+      </span>
+    </div>
+
+    <div class="stage-inner">
+      <div class="page">
+        <div class="page-head"><h1>Good afternoon</h1><span class="date">Tue · 3:12 PM</span></div>
+        <div class="ghost-grid">
+          <div class="ghost"><div class="lbl">Orders today</div><div class="big num">128</div><div class="sub">+14 vs yesterday</div></div>
+          <div class="ghost"><div class="lbl">Revenue</div><div class="big num">¥8,940</div><div class="sub">across 3 channels</div></div>
+          <div class="ghost"><div class="lbl">Low stock</div><div class="big num">6</div><div class="sub">needs a restock</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="lead">C · Corner cue</div>
+      The smallest honest prompt. A <b>breathing Dusk dot</b> in the top bar — no card, no shadow, nothing over the work. The dot's breath is the same signal used for live automation, so operators already read it as "tacet is doing something." For anyone who never wants a surface to move under them.
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

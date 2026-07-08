@@ -1790,8 +1790,9 @@ window.onLangChange(function () {
 
   function syncText() {
     if (!banner) return;
-    banner.querySelector('.vb-text').textContent   = label('A new version is available', '有新版本可用');
-    banner.querySelector('.vb-reload').textContent = label('Reload', '刷新');
+    banner.querySelector('.vb-text').textContent   = label('A newer version is ready', '有新版本了');
+    banner.querySelector('.vb-sub').textContent    = label('Refresh when you reach a good stopping point', '方便时刷新即可');
+    banner.querySelector('.vb-reload').textContent = label('Refresh', '刷新');
   }
 
   function showBanner() {
@@ -1799,8 +1800,17 @@ window.onLangChange(function () {
     banner = document.createElement('div');
     banner.id = 'version-banner';
     banner.setAttribute('role', 'status');
+    // Waveform already settled to a flat line + a Dusk dot: "the update is
+    // done in the background, only the refresh is left." Colours come from CSS
+    // (var() in SVG presentation attributes isn't reliable), so no fill here.
     banner.innerHTML =
-      '<span class="vb-text"></span>' +
+      '<span class="vb-mark" aria-hidden="true">' +
+        '<svg width="26" height="16" viewBox="0 0 26 16" fill="none" xmlns="http://www.w3.org/2000/svg">' +
+          '<path d="M1 8 Q3 8 4.5 5 T8 8 Q9.5 11 11 8 T14 8 L25 8" stroke-width="1.7" stroke-linecap="round"/>' +
+          '<circle cx="24" cy="8" r="2.4"/>' +
+        '</svg>' +
+      '</span>' +
+      '<span class="vb-body"><span class="vb-text"></span><span class="vb-sub"></span></span>' +
       '<button class="vb-reload" type="button"></button>' +
       '<button class="vb-close" type="button" aria-label="Dismiss" data-i18n-skip>✕</button>';
     document.body.appendChild(banner);
