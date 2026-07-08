@@ -2027,8 +2027,7 @@
   /* Products wears the full Tacet skin (Inter + paper #FBF9F4 + ink), same as
      Orders — the tab is now in the scope selector above. Paint the section paper
      so the page ground matches the mockup, not the deeper shell paper. */
-  #tab-products { background: var(--bg-app); }
-  #tab-products > .pa-lede { font-size: 14px; color: var(--text-2); margin: 8px 0 22px; max-width: 640px; }
+  #tab-products > .t-ord-eyebrow { margin: 0 0 16px; }
   .pa-recap {
     display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
     background: var(--bg-pane); border: 1px solid var(--line);
