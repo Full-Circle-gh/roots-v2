@@ -1427,14 +1427,37 @@ function tdAttnRender() {
         || { en: 'delivery issue', cn: '配送异常' };
       return cuT(info.en, info.cn);
     };
-    const rows = (da.items || []).slice(0, 4).map(it => `
-      <button type="button" class="td-attn-row" onclick="openOrder(${Number(it.id)})">
-        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(reasonOf(it))}</span>
-      </button>`).join('');
-    const first = (da.items || [])[0] || {};
-    const more = da.count === 1
-      ? escapeHtml(first.buyer || '')
-      : (da.count > 4 ? cuT(`and ${da.count - 4} more`, `另有 ${da.count - 4} 个`) : '');
+    // Long order numbers (R260616000003) crowd the row, so show a short head+tail
+    // ref — still recognisable, and the whole row is a deep link anyway.
+    const shortRef = no => { no = String(no || ''); return no.length > 10 ? `${no.slice(0, 5)}…${no.slice(-3)}` : no; };
+    const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    const daChev = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+    const daPhone = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+
+    const shown = (da.items || []).slice(0, 4).map(it => ({
+      id: Number(it.id), buyer: String(it.buyer || '').trim(),
+      order_no: it.order_no || '', reason: reasonOf(it),
+    }));
+    // When every flagged order carries the same reason (the common "air delayed"
+    // case), say it once under the title and let each row just show who to call.
+    // When reasons differ, drop the shared line and label each row instead.
+    const daReasons = [...new Set(shown.map(r => r.reason))];
+    const daShared = daReasons.length === 1 ? daReasons[0] : '';
+    const rows = (daShared ? `<div class="td-attn-sub">${daPhone}${escapeHtml(cap(daShared))}</div>` : '')
+      + shown.map(r => {
+        // Lead with who to call; fall back to the order number when no name's on
+        // file. The short ref only rides along when the buyer name is the label.
+        const nm  = escapeHtml(r.buyer || r.order_no);
+        const ref = r.buyer ? `<span class="td-da-ref">${escapeHtml(shortRef(r.order_no))}</span>` : '';
+        const rsn = daShared ? '' : `<span class="rsn">${escapeHtml(cap(r.reason))}</span>`;
+        return `
+      <button type="button" class="td-attn-row td-da-row" onclick="openOrder(${r.id})">
+        <span class="td-da-main"><span class="nm">${nm}</span>${rsn}</span>
+        ${ref}<span class="td-da-chev" aria-hidden="true">${daChev}</span>
+      </button>`;
+      }).join('');
+    const first = shown[0] || {};
+    const more = da.count > 4 ? cuT(`and ${da.count - 4} more`, `另有 ${da.count - 4} 个`) : '';
     const action = da.count === 1 && first.id
       ? `<button type="button" class="td-attn-go" onclick="openOrder(${Number(first.id)})">${cuT('Open the order', '打开订单')}</button>`
       : '';

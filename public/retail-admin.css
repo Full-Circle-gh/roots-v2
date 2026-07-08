@@ -7707,6 +7707,23 @@
   }
   .td-attn-go:hover { border-color: var(--td-text2); }
 
+  /* Delivery "needs a call" card: shared reason hoisted under the title, rows
+     lead with who to call + a short order ref. When reasons differ, the shared
+     line drops and each row carries its own muted reason under the name. */
+  .td-attn-sub { display: flex; align-items: center; gap: 6px; margin: 0 0 4px;
+    font-size: 12.5px; color: var(--td-brick-ink); }
+  .td-attn-sub svg { flex: none; }
+  .td-da-row { align-items: center; }
+  .td-da-main { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; }
+  .td-da-main .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 14px; font-weight: 500; color: var(--td-text); }
+  .td-da-main .rsn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11.5px; color: var(--td-text2); }
+  .td-da-ref { flex: none; font-size: 12px; color: var(--td-text2);
+    font-family: var(--f-mono, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+  .td-da-chev { flex: none; display: inline-flex; color: var(--td-text2); }
+  .td-da-chev svg { display: block; }
+
   /* All clear — the empty state is a compliment, with the settled waveform. */
   .td-clear { text-align: center; padding: 40px 24px 36px; background: var(--td-raised); border-color: transparent; }
   .td-clear svg { width: 180px; height: 24px; color: var(--td-text2); margin-bottom: 14px; }
