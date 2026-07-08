@@ -10659,37 +10659,14 @@
 })();
 </script>
 
-<script>
-/* ── Auto-fresh shell ──────────────────────────────────────────────────
-   The operator admin is a single long-lived page, so a deploy doesn't show
-   up until the HTML is re-fetched — and on a flaky mobile network the user
-   kept having to hard-refresh. This compares this page's build signature
-   (the HTML's ETag / Last-Modified, served with Cache-Control:no-cache) when
-   the tab regains focus, and reloads ONCE if the server has a newer copy.
-   Network-only (cache:'no-store') so it sees past any HTTP/SW cache; any
-   failure (offline / VPN stall) is swallowed and simply skips the reload. */
-(function autoFreshShell() {
-  var baseSig = null, checking = false;
-  function sig() {
-    return fetch(location.pathname + location.search, { method: 'HEAD', cache: 'no-store' })
-      .then(function (r) { return r.headers.get('etag') || r.headers.get('last-modified') || null; })
-      .catch(function () { return null; });
-  }
-  sig().then(function (s) { baseSig = s; });
-  function check() {
-    if (checking || document.hidden) return;
-    checking = true;
-    sig().then(function (s) {
-      if (s) {
-        if (!baseSig) baseSig = s;
-        else if (s !== baseSig) { location.reload(); return; }
-      }
-    }).finally(function () { checking = false; });
-  }
-  document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
-  window.addEventListener('focus', check);
-})();
-</script>
+<!-- ── Auto-fresh shell: REMOVED 2026-07-08 ──────────────────────────────
+     This used to auto-reload the whole page once when the tab regained focus
+     and the HTML signature had changed. Operators reported it refreshing "by
+     itself" mid-task. The "new version" banner (versionWatch in 10-extras.js)
+     now covers deploy detection — /api/version mixes in server-boot time so
+     it changes on EVERY deploy — and it is button-only, so nobody ever loses
+     an in-progress edit to a surprise reload. Do not re-add an auto-reload
+     watcher here; if the banner ever misses a deploy, fix /api/version. -->
 
 <!-- Full-screen Configure overlay: the Sales-page gear renders a channel's
      config surface into #cfg-host (see salesOpenConfig in 01-core + igHostEl in
