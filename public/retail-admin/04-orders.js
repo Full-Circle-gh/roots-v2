@@ -5218,6 +5218,9 @@ async function clearAirDelay(orderId, ev) {
     toast('Air delay marked handled · 空运延误已处理');
     openOrder(orderId, { instant: true });
     loadOrders();
+    // Refresh the dashboard "Delivery needs a call" card so the handled order
+    // drops off it right away — the ops query excludes cleared air-delays.
+    if (typeof tdOpsLoad === 'function') tdOpsLoad();
   } catch {}
 }
 
@@ -5232,6 +5235,8 @@ async function reopenAirDelay(orderId, ev) {
     toast('Air delay re-opened · 空运延误已恢复');
     openOrder(orderId, { instant: true });
     loadOrders();
+    // Undo re-flags the order, so refresh the dashboard card to bring it back.
+    if (typeof tdOpsLoad === 'function') tdOpsLoad();
   } catch {}
 }
 
