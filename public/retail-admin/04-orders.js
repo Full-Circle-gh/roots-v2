@@ -1887,10 +1887,15 @@ function fulfillmentShortNote(o) {
       + itemSkuHtml(it)
       + `</div>`;
   }).join('');
-  return `<div class="sub" style="margin-top:6px; color: var(--st-awaiting_restock); font-weight:700;">`
-    + `⚠ ${cuT('Not in stock at this store — restock or transfer before shipping',
-                '该门店暂无库存 — 发货前请补货或调货')}`
-    + `<div style="margin-top:4px;">${rows}</div>`
+  return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px;`
+    + ` background: color-mix(in srgb, var(--st-awaiting_restock) 9%, transparent);`
+    + ` border:1px solid color-mix(in srgb, var(--st-awaiting_restock) 26%, transparent);">`
+    + `<div style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700;`
+    + ` letter-spacing:.02em; color: var(--st-awaiting_restock);">`
+    +   `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+    +   `<span>${cuT('Not in stock here — restock or transfer', '该门店暂无库存 — 请补货或调货')}</span>`
+    + `</div>`
+    + `<div style="margin-top:6px;">${rows}</div>`
     + `</div>`;
 }
 // Full-size "Ship by" tile shown in the order-detail card grid. Same decision
@@ -2067,6 +2072,27 @@ function renderDeliveryCell(o) {
   return renderShipByCell(o);
 }
 
+// Live courier stage line for the orders LIST (a compact twin of the drawer's
+// rider card). Returns '' when there's no live rider to show — pre-dispatch
+// ('scheduled'), delivered (the status pill already says so), or no courier job —
+// so the caller falls back to the platform ETA. Brick-red matches the drawer's
+// "live rider" colour. Fed by o.courier, attached to each list row server-side.
+function renderCourierListLine(o) {
+  const c = o.courier;
+  if (!c || !c.stage || c.stage === 'scheduled' || c.stage === 'delivered') return '';
+  const label = c.stage === 'in_transit'       ? cuT('En route', '配送中')
+              : c.stage === 'awaiting_dispatch' ? cuT('Finding rider', '正在找骑手')
+              : '';
+  if (!label) return '';
+  const mins = (c.stage === 'in_transit' && c.eta_seconds != null)
+    ? `~${Math.max(1, Math.round(c.eta_seconds / 60))}${cuT('m', '分')}` : '';
+  const dist = (c.stage === 'in_transit' && c.rider_to_cust_m != null)
+    ? (c.rider_to_cust_m >= 1000 ? (c.rider_to_cust_m / 1000).toFixed(1) + 'km' : Math.round(c.rider_to_cust_m) + 'm') : '';
+  const sub = [mins, dist].filter(Boolean).join(' · ');
+  return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#B4533E;">${deliveryIcon('scooter', 12)}<span>${label}</span></div>`
+       + (sub ? `<div class="muted" style="font-size:10px; margin-top:2px;">${sub}</div>` : '');
+}
+
 function renderTrackingCell(o) {
   if (o.fulfillment_type === 'pickup') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
@@ -2075,6 +2101,10 @@ function renderTrackingCell(o) {
   // show the platform's delivery ETA instead, and never the "missing waybill"
   // warning below (which doesn't apply). Hide once the order is done/void.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
+    // Live Qingyun rider stage (Wave A): Meituan's delivery IS a Qingyun rider we
+    // now track, so prefer the real stage + ETA over the platform's static ETA.
+    const live = renderCourierListLine(o);
+    if (live) return live;
     if (o.channel_eta && !['delivered', 'cancelled', 'refunded'].includes(o.status)) {
       return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#5C7A4E;">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(o.channel_eta))}</span></div>
               <div class="muted" style="font-size:10px; margin-top:2px;">${cuT('arrival','预计送达')}</div>`;
