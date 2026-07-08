@@ -8205,8 +8205,10 @@
     display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px;
     border-top: 1px solid var(--td-border); padding-top: 14px;
     /* Reserve two chip rows so a 3-channel store is the same height as a
-       4/5-channel one — every location card matches regardless of chip count. */
-    min-height: 55px;
+       4/5-channel one — every location card matches regardless of chip count.
+       border-box, so this spans the 14px divider padding + two ~23px chip rows
+       + the 7px gap. */
+    min-height: 68px;
   }
   #tab-sales .sales-chip {
     display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--td-text);
