@@ -2024,25 +2024,30 @@
 
   /* ── Recap band — replaces the 5-tile KPI strip. One calm hero count +
         one-click jumps to sold-out / low / drafts. Colour = status only. ── */
+  /* Products wears the full Tacet skin (Inter + paper #FBF9F4 + ink), same as
+     Orders — the tab is now in the scope selector above. Paint the section paper
+     so the page ground matches the mockup, not the deeper shell paper. */
+  #tab-products { background: var(--bg-app); }
+  #tab-products > .pa-lede { font-size: 14px; color: var(--text-2); margin: 8px 0 22px; max-width: 640px; }
   .pa-recap {
-    display: flex; align-items: center; gap: var(--s5); flex-wrap: wrap;
+    display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
     background: var(--bg-pane); border: 1px solid var(--line);
-    border-radius: var(--r-xl); padding: 16px 22px; margin-bottom: var(--s3);
+    border-radius: var(--r-xl); padding: 22px 26px; margin-bottom: var(--s3);
   }
   .pa-recap-hero { flex-shrink: 0; }
   .pa-recap-cap {
-    font-family: var(--f-mono); font-size: 10px; font-weight: 700;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--accent);
+    font-family: var(--f-sans); font-size: 11px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--tacet-sage-ink, #4A6249);
   }
   .pa-recap-n {
-    font-size: 38px; font-weight: 500; letter-spacing: -.02em; line-height: 1.05;
-    color: var(--text-1); font-variant-numeric: tabular-nums; margin-top: 4px;
+    font-size: 44px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05;
+    color: var(--text-1); font-variant-numeric: tabular-nums; margin-top: 6px;
   }
   .pa-recap-u { font-size: 13px; font-weight: 500; color: var(--text-3); letter-spacing: 0; }
   .pa-recap-rule { width: 1px; align-self: stretch; background: var(--line); margin: 4px 0; }
   .pa-recap-jump { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .pa-recap-jlbl {
-    font-family: var(--f-mono); font-size: 10px; font-weight: 700;
+    font-family: var(--f-sans); font-size: 11px; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-right: 8px;
   }
   .pa-jump {
@@ -2058,8 +2063,8 @@
   .pa-jump-dot.is-out { background: var(--danger); }
   .pa-jump-dot.is-low { background: var(--warn); }
   .pa-jump-dot.is-draft { background: var(--text-3); }
-  .pa-jump-n { font-size: 21px; font-weight: 500; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
-  .pa-jump-l { font-size: 12.5px; color: var(--text-3); font-weight: 500; white-space: nowrap; }
+  .pa-jump-n { font-size: 23px; font-weight: 600; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .pa-jump-l { font-size: 13.5px; color: var(--text-3); font-weight: 500; white-space: nowrap; }
   .pa-jump.pa-kpi-on .pa-jump-l { color: var(--text-1); }
   .pa-lowknob {
     margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
