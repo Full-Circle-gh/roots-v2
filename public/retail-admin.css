@@ -2288,18 +2288,21 @@
     margin: 0 0 var(--s3); font-family: var(--f-sans);
   }
   .pa-store-seg .pa-store-lbl {
-    font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--text-4); font-weight: 600;
+    font-size: 12.5px; letter-spacing: 0; text-transform: none;
+    color: var(--text-3); font-weight: 500;
   }
-  .pa-store-seg .pa-store-btns { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+  /* Rounded pill segmented control (matches the mockup): cream track, white
+     active pill. The active fill is set by the #pa-store-seg override earlier. */
+  .pa-store-seg .pa-store-btns {
+    display: inline-flex; gap: 2px; padding: 3px;
+    border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev-1);
+  }
   .pa-store-seg .pa-store-btn {
-    padding: 6px 12px; font-size: 12px; border: none; cursor: pointer;
-    background: var(--bg-elev-1); color: var(--text-2);
-    border-left: 1px solid var(--line); font-family: var(--f-sans);
+    padding: 6px 15px; font-size: 13px; font-weight: 500; border: none; cursor: pointer;
+    background: none; color: var(--text-2); border-radius: 999px; font-family: var(--f-sans);
   }
-  .pa-store-seg .pa-store-btn:first-child { border-left: none; }
-  .pa-store-seg .pa-store-btn.active { background: var(--brass, #B08D57); color: #fff; }
   .pa-store-seg .pa-store-hint { font-size: 11px; color: var(--text-4); }
+  .pa-subbar .pa-count { font-size: 13px; color: var(--text-3); font-variant-numeric: tabular-nums; margin-left: 0; }
 
   /* Shop column: centre the toggle in its cell so it sits under the SHOP header
      instead of hugging the right-aligned price next to it. The dup button is

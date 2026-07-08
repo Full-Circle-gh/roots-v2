@@ -462,15 +462,9 @@ function paRenderStoreSeg() {
   const btns = [btn('all', cuT('All', '全部'))]
     .concat(PA_STORES.map(s => btn(s.id, escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en || s.code)))))
     .join('');
-  const hint = PA_STORE === 'all'
-    ? cuT('Combined stock across all stores — pick a store to edit its counts.',
-          '所有门店库存合计 — 选择某门店即可编辑该店库存。')
-    : cuT('Editing this store’s stock. Variant families show the store total — open them to set each size.',
-          '正在编辑该门店库存。多规格产品显示门店合计 — 打开后可分别设置各规格。');
   bar.innerHTML =
     `<span class="pa-store-lbl">${cuT('Stock for', '库存门店')}</span>` +
-    `<span class="pa-store-btns">${btns}</span>` +
-    `<span class="pa-store-hint">${hint}</span>`;
+    `<span class="pa-store-btns">${btns}</span>`;
   bar.style.display = 'flex';
 }
 
@@ -1044,15 +1038,11 @@ function paRenderBulkBar() {
     return;
   }
 
-  // Default (not select mode): a quiet inline row — no boxed panel, so it reads
-  // like the mockup's toolbar rather than a stacked card. Select mode re-applies
-  // the boxed style via the cssText above on the next render.
-  bar.style.border = '0'; bar.style.background = 'none'; bar.style.padding = '0';
-  bar.innerHTML =
-    `<span class="muted">${cuT(shown.length + ' shown', '显示 ' + shown.length + ' 件')}</span>` +
-    `<span style="margin-left:auto;display:flex;gap:8px;">` +
-      `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(true)">${cuT('Bulk', '批量')}</button>` +
-    `</span>`;
+  // Default (not select mode): the "Bulk" entry lives in the sub-bar now, so the
+  // bulk bar stays hidden until the operator enters select mode (when it becomes
+  // the action bar above).
+  bar.style.display = 'none';
+  bar.innerHTML = '';
 }
 // Enter/leave select mode. Leaving drops the tick set. Re-renders the list so
 // the checkbox column slides in/out and the bar swaps.
