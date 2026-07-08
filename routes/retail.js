@@ -12101,8 +12101,41 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
        WHERE ${ALERT_WHERE}
        ORDER BY o.tracking_synced_at DESC LIMIT ?
     `).all(previewLimit);
+    // Late air parcels are the other half of "delivery needs a call" — an order
+    // that DID deliver, but a cold-chain air leg landed >1 day late, so the
+    // fresh/perishable contents may be unsafe and the customer must be warned.
+    // These orders are status='delivered' (terminal), so the dispatched-only
+    // ALERT_WHERE above never sees them — the exact reason the list flagged
+    // "AIR DELAYED · contact customer" while the dashboard still said "on track".
+    // Mirrors the `air_delivery_delayed` list column + orderHasDelayedAirShipment().
+    // Dispatched-order alerts self-clear when they deliver, but a delivered
+    // air-delay is terminal, so it stays on the dashboard until an operator marks
+    // it handled (air_delay_cleared_at) — set from the drawer once they've
+    // contacted the customer. Same clear drops the list badge, keeping the two
+    // views in lock-step.
+    const AIR_DELAY_EXISTS = `EXISTS (
+        SELECT 1 FROM retail_shipments sha
+         WHERE sha.order_id = o.id
+           AND sha.mode = 'air'
+           AND sha.dispatched_at IS NOT NULL
+           AND (sha.delivered_at IS NOT NULL OR sha.tracking_status = 'delivered')
+           AND DATE(COALESCE(sha.delivered_at, sha.tracking_synced_at))
+                 > DATE(sha.dispatched_at, '+1 day')
+           AND sha.air_delay_cleared_at IS NULL)`;
+    const airCount = tdb().prepare(`
+      SELECT COUNT(*) AS n FROM retail_orders o WHERE ${AIR_DELAY_EXISTS}
+    `).get().n;
+    const airItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.tracking_synced_at,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${AIR_DELAY_EXISTS}
+       ORDER BY o.tracking_synced_at DESC LIMIT ?
+    `).all(previewLimit);
+
     delivery_alerts = {
-      count: daCount,
+      count: daCount + airCount,
       items: daItems.map(r => ({
         id:               r.id,
         order_no:         r.order_no,
@@ -12110,7 +12143,13 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         tracking_scenario: r.tracking_scenario,
         synced_at:        r.tracking_synced_at,
         buyer:            maskBuyerName(r.buyer),
-      })),
+      })).concat(airItems.map(r => ({
+        id:         r.id,
+        order_no:   r.order_no,
+        air_delayed: 1,
+        synced_at:  r.tracking_synced_at,
+        buyer:      maskBuyerName(r.buyer),
+      }))),
     };
 
     // Fapiao worklist — un-issued invoice requests, oldest debt first. Feeds
@@ -16649,6 +16688,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                          AND (sha.delivered_at IS NOT NULL OR sha.tracking_status = 'delivered')
                          AND DATE(COALESCE(sha.delivered_at, sha.tracking_synced_at))
                                > DATE(sha.dispatched_at, '+1 day')
+                         AND sha.air_delay_cleared_at IS NULL
                        LIMIT 1) AS air_delivery_delayed,
                     s.code AS store_code, s.name_en AS store_name_en, s.name_cn AS store_name_cn
                FROM retail_orders o
@@ -17029,6 +17069,8 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     tracking_synced_at:  s.tracking_synced_at,
     dispatched_at: s.dispatched_at,
     delivered_at:  s.delivered_at,
+    air_delay_cleared_at: s.air_delay_cleared_at || null,  // late-air food-safety alert marked handled
+    air_delay_cleared_by: s.air_delay_cleared_by || null,
     local_eta:     s.local_eta || null,   // 'HH:MM' arrival time for local delivery (no waybill)
     eta_source:    s.eta_source || null,  // 'auto' = from Qingyun courier, 'manual' = operator-set
     state: shipmentState(s),
@@ -17607,6 +17649,48 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
   }
 
   res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: 'dispatched' } });
+});
+
+// Mark a late-air food-safety alert handled (or re-open it). A delivered order
+// with an air parcel that landed >1 day late raises the "AIR DELAYED · contact
+// customer" badge in the list and a "Delivery needs a call" card on the
+// dashboard. Because the order is 'delivered' (terminal) the alert never clears
+// itself — the operator clears it here once they've contacted the customer and
+// filed any JD claim. Clearing every delayed air parcel on the order at once
+// (a single order rarely has more than one) drops the badge and the card
+// together. Pass { cleared: false } to re-open a mistakenly-cleared alert.
+router.post('/api/retail-admin/orders/:id/air-delay/ack',
+  requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  // Default to clearing; only an explicit `cleared:false` re-opens.
+  const clear = req.body?.cleared !== false;
+  // Scope to the actually-delayed air parcels so re-opening doesn't touch an
+  // on-time air leg, and clearing only marks the ones that raised the alert.
+  const DELAYED = `mode = 'air'
+       AND dispatched_at IS NOT NULL
+       AND (delivered_at IS NOT NULL OR tracking_status = 'delivered')
+       AND DATE(COALESCE(delivered_at, tracking_synced_at)) > DATE(dispatched_at, '+1 day')`;
+  const info = clear
+    ? tdb().prepare(
+        `UPDATE retail_shipments
+            SET air_delay_cleared_at = CURRENT_TIMESTAMP,
+                air_delay_cleared_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND ${DELAYED} AND air_delay_cleared_at IS NULL`
+      ).run(req.user.username || null, id)
+    : tdb().prepare(
+        `UPDATE retail_shipments
+            SET air_delay_cleared_at = NULL,
+                air_delay_cleared_by = NULL,
+                updated_at = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND ${DELAYED}`
+      ).run(id);
+  logActivity(req.user.id, req.user.username,
+    clear ? 'air_delay_cleared' : 'air_delay_reopened', 'retail_order', id,
+    { shipments: info.changes }, req.ip);
+  res.json({ success: true, data: { cleared: clear, shipments: info.changes } });
 });
 
 // Switch a Guangzhou outer-district parcel between same-city RIDER ('local',

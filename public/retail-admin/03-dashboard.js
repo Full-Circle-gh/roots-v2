@@ -1419,6 +1419,10 @@ function tdAttnRender() {
   const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
   if (da.count && dashPosWants('delivery')) {
     const reasonOf = it => {
+      // A late air parcel is a delivered order flagged for a food-safety call —
+      // it has no live tracking_status to read, so name it directly (mirrors the
+      // "AIR DELAYED · contact customer" badge in the orders list).
+      if (it.air_delayed) return cuT('air delayed · contact customer', '空运延误 · 联系客户');
       const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
         || { en: 'delivery issue', cn: '配送异常' };
       return cuT(info.en, info.cn);

@@ -4678,12 +4678,19 @@ function renderShipmentTrackingCard(o, s, hoisted) {
     </div>` : '';
 
   const delayDays = airShipmentDelayDays(o, s);
-  const delayBanner = delayDays > 0 ? `
+  // Once an operator has contacted the customer they mark the alert handled; the
+  // red banner collapses to a calm "handled" note (with an undo), and the same
+  // clear drops the order from the dashboard "needs a call" card and the list
+  // "AIR DELAYED" badge. Keyed off the shipment's air_delay_cleared_at stamp.
+  const airCleared = !!s.air_delay_cleared_at;
+  let delayBanner = '';
+  if (delayDays > 0 && !airCleared) {
+    delayBanner = `
     <div style="display:flex; gap:10px; align-items:flex-start; padding:12px 14px; margin-bottom:12px;
                 background: var(--danger-soft, rgba(232,85,106,.14)); border:1px solid var(--danger, #e8556a);
                 border-radius: var(--r-md, 6px); font-size:12.5px; line-height:1.5;">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-      <div>
+      <div style="flex:1;">
         <div style="font-weight:700; font-size:13px; color: var(--danger, #e8556a); margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em;">
           ${cuT(`Air shipment delayed — arrived ${delayDays} day${delayDays > 1 ? 's' : ''} late`, `空运延误 — 晚到 ${delayDays} 天`)}
         </div>
@@ -4691,11 +4698,31 @@ function renderShipmentTrackingCard(o, s, hoisted) {
           <strong>${cuT('1. Contact customer immediately:', '1. 立即联系客户：')}</strong>
           ${cuT('Perishable / fresh items may no longer be safe — advise them <u>not to consume</u>.', '生鲜/易腐产品可能已不安全，请告知客户<u>勿食用</u>。')}
         </div>
-        <div style="color: var(--text-1);">
+        <div style="color: var(--text-1); margin-bottom:10px;">
           <strong>${cuT('2. Contact JD Logistics for delay compensation.', '2. 联系京东物流，申请延误赔偿。')}</strong>
         </div>
+        <button type="button" onclick="clearAirDelay(${Number(o.id)}, event)"
+          style="font: inherit; font-size:12px; font-weight:600; cursor:pointer; padding:6px 12px;
+                 border:1px solid var(--danger, #e8556a); border-radius: var(--r-sm, 5px);
+                 background: transparent; color: var(--danger, #e8556a);">
+          ${cuT('Mark handled — customer contacted', '标记已处理 — 已联系客户')}
+        </button>
       </div>
-    </div>` : '';
+    </div>`;
+  } else if (delayDays > 0 && airCleared) {
+    delayBanner = `
+    <div style="display:flex; gap:8px; align-items:center; padding:8px 12px; margin-bottom:12px;
+                background: var(--surface-2, #f4f2ec); border:1px solid var(--line-soft);
+                border-radius: var(--r-md, 6px); font-size:12px; line-height:1.4; color: var(--text-2);">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0; color: var(--sage, #5a7d5a);"><path d="M20 6 9 17l-5-5"/></svg>
+      <span style="flex:1;">${cuT(`Air delay handled${s.air_delay_cleared_by ? ' · ' + s.air_delay_cleared_by : ''}`, `空运延误已处理${s.air_delay_cleared_by ? ' · ' + s.air_delay_cleared_by : ''}`)}</span>
+      <button type="button" onclick="reopenAirDelay(${Number(o.id)}, event)"
+        style="font: inherit; font-size:11.5px; cursor:pointer; padding:2px 4px; border:none;
+               background: transparent; color: var(--text-3); text-decoration: underline;">
+        ${cuT('Undo', '撤销')}
+      </button>
+    </div>`;
+  }
 
   return `
     <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
@@ -5126,6 +5153,37 @@ async function dispatchShipment(orderId, shipmentId, ev) {
       errLabelEn: 'Dispatch failed', errLabelCn: '发货失败',
     });
     toast('Parcel dispatched · 包裹已发货');
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {}
+}
+
+// Mark a late-air food-safety alert handled (operator has contacted the
+// customer). Clears the drawer banner, the dashboard "needs a call" card, and
+// the orders-list "AIR DELAYED" badge in one shot. reopenAirDelay undoes it.
+async function clearAirDelay(orderId, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/air-delay/ack`,
+      method: 'POST', body: { cleared: true },
+      errLabelEn: 'Could not mark handled', errLabelCn: '标记失败',
+    });
+    toast('Air delay marked handled · 空运延误已处理');
+    openOrder(orderId, { instant: true });
+    loadOrders();
+  } catch {}
+}
+
+async function reopenAirDelay(orderId, ev) {
+  try {
+    await adminWrite({
+      btn: ev?.currentTarget,
+      url: `/api/retail-admin/orders/${orderId}/air-delay/ack`,
+      method: 'POST', body: { cleared: false },
+      errLabelEn: 'Could not re-open', errLabelCn: '撤销失败',
+    });
+    toast('Air delay re-opened · 空运延误已恢复');
     openOrder(orderId, { instant: true });
     loadOrders();
   } catch {}

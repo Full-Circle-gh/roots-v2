@@ -2797,6 +2797,16 @@ addColumn('retail_shipments', 'local_eta', 'TEXT');
 // as auto-fillable). See scripts/qingyun-daemon.js stampLocalEta.
 addColumn('retail_shipments', 'eta_source', 'TEXT');
 
+// A late AIR parcel (arrived >1 day after dispatch) raises a food-safety alert:
+// the "AIR DELAYED · contact customer" badge in the orders list and a matching
+// "Delivery needs a call" card on the dashboard. Because the order is already
+// 'delivered' (terminal), the alert never clears on its own — an operator marks
+// it handled after they've contacted the customer / filed the JD claim. These
+// stamp WHEN and WHO cleared it; NULL = still open. Once set, the list badge and
+// the dashboard card both drop the order.
+addColumn('retail_shipments', 'air_delay_cleared_at', 'DATETIME');
+addColumn('retail_shipments', 'air_delay_cleared_by', 'TEXT');
+
 // Per-store restock *target* — the level this store wants to keep on
 // hand. When physical_qty < restock_target the cross-store grid flags
 // it. Optional (NULL = no target set yet).
