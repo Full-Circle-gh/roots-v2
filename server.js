@@ -402,20 +402,24 @@ function brandedLoginHtml(req) {
     if (!host) return html;
     const dom = dbx.prepare("SELECT tenant_id FROM tenant_domains WHERE host = ? AND status = 'active'").get(host);
     if (!dom) return html;
-    const t = dbx.prepare('SELECT id, brand_name, brand_logo_data, brand_mark_data, brand_updated_at FROM tenants WHERE id = ?').get(dom.tenant_id);
+    const t = dbx.prepare('SELECT id, brand_name, brand_logo_data, brand_mark_data, brand_credit, brand_updated_at FROM tenants WHERE id = ?').get(dom.tenant_id);
     if (!t || (!t.brand_name && !t.brand_logo_data)) return html;   // tenant hasn't co-branded → stock page
     const stamp = t.brand_updated_at ? +new Date(t.brand_updated_at) : 0;
     if (t.brand_name) {
       const nm = _escHtmlAttr(t.brand_name);
-      html = html.replace('<span class="name">FULL CIRCLE</span>', `<span class="name">${nm}</span>`)
-                 .replace('<title>Full Circle — Mini App Backend · Sign in</title>', `<title>${nm} · Sign in</title>`);
+      html = html.replace('<span class="wordmark" data-no-i18n>tacet</span>', `<span class="wordmark tenant" data-no-i18n>${nm}</span>`)
+                 .replace('<title>tacet · Sign in · 登录</title>', `<title>${nm} · Sign in</title>`);
     }
     if (t.brand_mark_data) {
       html = html.replace('</head>', `<link rel="icon" href="/api/backend/brand/${t.id}/mark?v=${stamp}"></head>`);
     }
     if (t.brand_logo_data) {
-      html = html.replace(/<div class="enso">[\s\S]*?<\/div>/,
-        `<div class="enso"><img src="/api/backend/brand/${t.id}/logo?v=${stamp}" alt="" style="max-width:40px;max-height:40px;object-fit:contain"></div>`);
+      html = html.replace(/<span class="wave"[\s\S]*?<\/span>/,
+        `<img class="brandlogo" src="/api/backend/brand/${t.id}/logo?v=${stamp}" alt="">`);
+    }
+    // co-branded page credits the platform — unless white-label cleared it
+    if (t.brand_credit !== 0) {
+      html = html.replace('<div class="logincredit" hidden>', '<div class="logincredit">');
     }
   } catch (e) { /* any hiccup → stock page */ }
   return html;
