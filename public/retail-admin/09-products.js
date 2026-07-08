@@ -1041,6 +1041,10 @@ function paRenderBulkBar() {
     return;
   }
 
+  // Default (not select mode): a quiet inline row — no boxed panel, so it reads
+  // like the mockup's toolbar rather than a stacked card. Select mode re-applies
+  // the boxed style via the cssText above on the next render.
+  bar.style.border = '0'; bar.style.background = 'none'; bar.style.padding = '0';
   bar.innerHTML =
     `<span class="muted">${cuT(shown.length + ' shown', '显示 ' + shown.length + ' 件')}</span>` +
     `<span style="margin-left:auto;display:flex;gap:8px;">` +
