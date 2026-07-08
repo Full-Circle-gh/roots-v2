@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v362-channel-card-equal-height';
+const CACHE = 'roots-v2-shell-v363-channel-card-row-equalize';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?

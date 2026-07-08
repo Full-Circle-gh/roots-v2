@@ -8108,6 +8108,9 @@
   /* Channel cards. */
   #tab-sales .sales-grid {
     grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 16px;
+    /* Equalize EVERY row to the tallest so all channel cards match — cards flex
+       to fill, content stays top-packed, any slack sits at the card bottom. */
+    grid-auto-rows: 1fr;
   }
   #tab-sales .sales-ch {
     background: var(--td-surface); border: 1px solid var(--td-border);
@@ -8179,10 +8182,7 @@
   #tab-sales .sales-toggle.sm.on .knob { left: 18px; }
 
   /* Per-location rows inside a channel card. */
-  /* Reserve two location rows (border-box: 12px top pad + ~20px header + two
-     ~35px rows + row divider) so a 1-store channel is the same height as a
-     2-store one — every channel card lands at a uniform height. */
-  #tab-sales .sales-ch-locs { border-top: 1px solid var(--td-border); padding-top: 12px; min-height: 103px; }
+  #tab-sales .sales-ch-locs { border-top: 1px solid var(--td-border); padding-top: 12px; }
   #tab-sales .sales-ch-locs-hd {
     display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 500;
     letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2); margin-bottom: 4px;
