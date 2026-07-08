@@ -238,10 +238,15 @@ const upsert = db.prepare(`
     rider_phone      = COALESCE(excluded.rider_phone, delivery_jobs.rider_phone),
     order_status     = excluded.order_status,
     delivery_status  = excluded.delivery_status,
-    rider_lat        = excluded.rider_lat,
-    rider_lng        = excluded.rider_lng,
-    rider_to_cust_m  = excluded.rider_to_cust_m,
-    eta_seconds      = excluded.eta_seconds,
+    -- Keep the last-known rider position/ETA when a poll carries no fresh track
+    -- (a track-less reconcile / status refresh has these as NULL). Overwriting with
+    -- NULL made the live map lose the rider between pings — "Rider en route" but the
+    -- dot vanished. A poll WITH a real track always supplies non-NULL values, so the
+    -- rider still updates every live tick; only empty polls fall back to last-known.
+    rider_lat        = COALESCE(excluded.rider_lat, delivery_jobs.rider_lat),
+    rider_lng        = COALESCE(excluded.rider_lng, delivery_jobs.rider_lng),
+    rider_to_cust_m  = COALESCE(excluded.rider_to_cust_m, delivery_jobs.rider_to_cust_m),
+    eta_seconds      = COALESCE(excluded.eta_seconds, delivery_jobs.eta_seconds),
     expected_delivery_at = COALESCE(excluded.expected_delivery_at, delivery_jobs.expected_delivery_at),
     raw_order        = excluded.raw_order,
     raw_track        = COALESCE(excluded.raw_track, delivery_jobs.raw_track),

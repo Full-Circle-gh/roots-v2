@@ -10012,17 +10012,23 @@ function buildDeliveryTrackData(job, slotLabel) {
   const coord = (lat, lng) => (lat != null && lng != null) ? { lat: lat / 1e6, lng: lng / 1e6 } : null;
 
   let route = [];
-  let shopPos = null, recipientPos = null;
+  let shopPos = null, recipientPos = null, riderPos = null;
+  let etaFromTrack = null, distFromTrack = null;
   try {
     const t = job.raw_track ? JSON.parse(job.raw_track) : null;
     if (t) {
       shopPos = coord(t.shopLat, t.shopLng);
       recipientPos = coord(t.recipientLat, t.recipientLng);
-      if (Array.isArray(t.routeCoords)) {
-        route = t.routeCoords
-          .filter(p => p && p.lat != null && p.lng != null)
-          .map(p => ({ lat: p.lat / 1e6, lng: p.lng / 1e6 }));
-      }
+      riderPos = coord(t.riderLat, t.riderLng);
+      if (t.routeInfo && t.routeInfo.duration != null) etaFromTrack = t.routeInfo.duration;
+      if (t.riderRecipientDistance != null) distFromTrack = t.riderRecipientDistance;
+      // Qingyun nests the path under routeInfo.routeCoords; tolerate a top-level
+      // routeCoords too in case a response ever flattens it.
+      const rc = (t.routeInfo && Array.isArray(t.routeInfo.routeCoords)) ? t.routeInfo.routeCoords
+               : (Array.isArray(t.routeCoords) ? t.routeCoords : []);
+      route = rc
+        .filter(p => p && p.lat != null && p.lng != null)
+        .map(p => ({ lat: p.lat / 1e6, lng: p.lng / 1e6 }));
     }
   } catch (e) { /* raw_track unparseable — omit route */ }
 
@@ -10034,14 +10040,17 @@ function buildDeliveryTrackData(job, slotLabel) {
     carrier: job.carrier_name || null,
     waybill_id: job.waybill_id || null,
     rider: job.rider_name ? { name: job.rider_name, phone: job.rider_phone || null } : null,
-    rider_position: stage === 'delivered' ? null : coord(job.rider_lat, job.rider_lng),
+    // Prefer the live column; fall back to the last-known rider point in raw_track.
+    // Track-less reconcile polls can null the column while raw_track keeps the last
+    // real fix, so without this the map loses the rider between pings.
+    rider_position: stage === 'delivered' ? null : (coord(job.rider_lat, job.rider_lng) || riderPos),
     shop_position: shopPos,
     recipient_position: recipientPos || coord(job.recipient_lat, job.recipient_lng),
     route,
     // No ETA/distance before an actual courier is on it — suppress for 'scheduled'
     // so the pre-dispatch preview never shows a bogus "~N min".
-    eta_seconds: stage === 'scheduled' ? null : (job.eta_seconds ?? null),
-    rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? null),
+    eta_seconds: stage === 'scheduled' ? null : (job.eta_seconds ?? etaFromTrack),
+    rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? distFromTrack),
     expected_delivery_at: job.expected_delivery_at || null,
     slot_label: slotLabel || null,   // human slot for the 'scheduled' sub-line
     updated_at: job.updated_at,
