@@ -1549,12 +1549,14 @@ function applyBrand(tenant) {
   const name = (tenant.brand || '').trim();
   const logoUrl = tenant.brandLogoUrl || null;
   const markUrl = tenant.brandMarkUrl || null;
-  const custom = !!(logoUrl || name);   // a tenant that has set any identity
+  // The admin's default identity is ALWAYS "tacet". A tenant only takes over the
+  // chrome once they've uploaded a LOGO — a brand_name alone (used for customer
+  // payment/print, e.g. Roots) must NOT rename the admin. So "custom" = has logo.
+  const custom = !!logoUrl;
+  if (!custom) return;   // nothing to do — leave the built-in tacet waveform + wordmark
 
-  // Page title — their name in the tab, or the default wordmark.
-  document.title = name || 'tacet';
-
-  // Favicon + apple-touch-icon → the square mark (falls back silently if 404).
+  // Page title + favicon → the tenant's name + square mark.
+  if (name) document.title = name;
   if (markUrl) {
     const fav = document.getElementById('favlink');
     const favA = document.getElementById('favlink-apple');
@@ -1562,8 +1564,7 @@ function applyBrand(tenant) {
     if (favA) favA.href = markUrl;
   }
 
-  // Rail + topbar wordmark. When a logo is set, show it and hide the waveform;
-  // always update the name text so a name-only tenant still reads as theirs.
+  // Rail + topbar wordmark. Show the logo (hiding the waveform) and set the name.
   // The rail uses the SQUARE MARK (a tile that reads well both open and folded);
   // the topbar (phones) uses the full logo. Mark falls back to the logo when
   // sharp couldn't derive one server-side.
@@ -1584,11 +1585,11 @@ function applyBrand(tenant) {
       img.src = url;
     }
   }
-  document.body.classList.toggle('cobrand', custom);
+  document.body.classList.add('cobrand');
 
-  // "runs on tacet" credit — only for a co-branded tenant whose credit is on.
+  // "runs on tacet" credit — shown for a co-branded tenant whose credit is on.
   const credit = document.getElementById('brandCredit');
-  if (credit) credit.hidden = !(custom && tenant.brandCredit);
+  if (credit) credit.hidden = !tenant.brandCredit;
 }
 
 // ── Account menu — Google-style profile circle + dropdown ────────────────

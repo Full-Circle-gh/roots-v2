@@ -472,12 +472,12 @@
   .brand .brand-logo { height: 22px; max-width: 132px; }                          /* full logo (topbar/phones) */
   /* "runs on tacet" credit — pinned to the rail foot via margin-top:auto. */
   .brand-credit {
-    margin-top: auto; display: flex; align-items: center; gap: 7px;
-    padding: 12px 16px 6px; color: var(--text-4);
+    margin-top: auto; display: flex; align-items: center; gap: 9px;
+    padding: 14px 16px 10px; color: var(--text-3);
     font-family: 'Fraunces', Georgia, serif; font-weight: 300;
-    font-size: 11px; letter-spacing: .14em;
+    font-size: 13px; letter-spacing: .12em;
   }
-  .brand-credit svg { width: 18px; height: 7px; stroke: var(--text-4); flex: none; }
+  .brand-credit svg { width: 34px; height: 13px; stroke: var(--text-2); stroke-width: 14; flex: none; }
   /* Topbar spans only the content column (right of the rail) and is position:fixed
      like the rail — both then share ONE positioning context, so their bottom
      borders always meet at y:56. (A sticky topbar drifted from the fixed rail
