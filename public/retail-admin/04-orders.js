@@ -3062,11 +3062,30 @@ function teardownCourierMap() {
   _courierMap = null;
 }
 
-// A labelled point marker (caption above a monochrome dot) as AMap HTML content.
-function _courierMarkerHtml(color, label) {
-  return '<div style="display:flex; flex-direction:column; align-items:center; gap:2px;">'
-    + '<div style="font:600 10px/1 Inter,sans-serif; color:' + color + '; white-space:nowrap; text-shadow:0 1px 2px rgba(251,249,244,.9);">' + label + '</div>'
-    + '<div style="width:14px; height:14px; border-radius:50%; background:' + color + '; border:2.5px solid #FBF9F4; box-shadow:0 1px 3px rgba(17,26,43,.3);"></div>'
+// A labelled point marker as AMap HTML content. The RIDER is the point that
+// matters (it's the one moving), so it's drawn large, brick-red with a soft halo
+// and a solid label pill; the fixed store/customer points stay small and muted so
+// the rider is unmistakable at a glance. opts: { color, size, halo, pill, ring }.
+function _courierMarkerHtml(label, opts) {
+  opts = opts || {};
+  const color = opts.color || '#58606E';
+  const size  = opts.size || 11;
+  const halo  = opts.halo
+    ? '<div style="position:absolute; left:50%; top:50%; width:' + (size * 2.6) + 'px; height:' + (size * 2.6) + 'px; transform:translate(-50%,-50%); border-radius:50%; background:' + color + '; opacity:.2;"></div>'
+    : '';
+  // Customer is a hollow ring (paper fill, coloured border) so its shape differs
+  // from the solid store dot even before you read the label.
+  const dotBg     = opts.ring ? '#FBF9F4' : color;
+  const dotBorder = opts.ring ? ('3px solid ' + color) : '2.5px solid #FBF9F4';
+  const labelStyle = opts.pill
+    ? 'font:600 10.5px/1 Inter,sans-serif; color:#fff; background:' + color + '; padding:3px 8px; border-radius:999px; white-space:nowrap; box-shadow:0 2px 5px rgba(17,26,43,.35);'
+    : 'font:600 10px/1 Inter,sans-serif; color:' + color + '; white-space:nowrap; text-shadow:0 1px 2px rgba(251,249,244,.95);';
+  return '<div style="display:flex; flex-direction:column; align-items:center; gap:3px;">'
+    + '<div style="' + labelStyle + '">' + label + '</div>'
+    + '<div style="position:relative; width:' + size + 'px; height:' + size + 'px; display:flex; align-items:center; justify-content:center;">'
+    +   halo
+    +   '<div style="position:relative; width:' + size + 'px; height:' + size + 'px; border-radius:50%; background:' + dotBg + '; border:' + dotBorder + '; box-shadow:0 1px 3px rgba(17,26,43,.4);"></div>'
+    + '</div>'
     + '</div>';
 }
 
@@ -3089,19 +3108,19 @@ async function mountCourierMap(o) {
   const map = new AMap.Map(el, { zoom: 15, resizeEnable: true, jogEnable: false });
   state.map = map;
 
-  const setMarker = (cur, pos, color, label, z) => {
+  const setMarker = (cur, pos, opts, label, z) => {
     if (!pos) return cur;
     const lnglat = [pos.lng, pos.lat];
     if (cur) { cur.setPosition(lnglat); return cur; }
-    const mk = new AMap.Marker({ position: lnglat, content: _courierMarkerHtml(color, label), anchor: 'center', zIndex: z });
+    const mk = new AMap.Marker({ position: lnglat, content: _courierMarkerHtml(label, opts), anchor: 'center', zIndex: z });
     mk.setMap(map);
     return mk;
   };
   const apply = (d) => {
     if (!d || !d.tracking) return;
-    state.shop  = setMarker(state.shop,  d.shop_position,      '#58606E', '门店', 100);
-    state.cust  = setMarker(state.cust,  d.recipient_position, '#111A2B', '收货', 100);
-    state.rider = setMarker(state.rider, d.rider_position,     '#5C7A4E', '骑手', 120);
+    state.shop  = setMarker(state.shop,  d.shop_position,      { color: '#58606E', size: 11 },                          cuT('Store', '门店'),    100);
+    state.cust  = setMarker(state.cust,  d.recipient_position, { color: '#111A2B', size: 11, ring: true },              cuT('Customer', '收货'), 100);
+    state.rider = setMarker(state.rider, d.rider_position,     { color: '#B4533E', size: 18, halo: true, pill: true },  cuT('Rider', '骑手'),    120);
     if (Array.isArray(d.route) && d.route.length > 1) {
       const path = d.route.map((p) => [p.lng, p.lat]);
       if (state.line) state.line.setPath(path);
