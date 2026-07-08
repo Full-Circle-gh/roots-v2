@@ -755,7 +755,7 @@
     <!-- Tenant logo (co-brand) — hidden until applyBrand() sets its src from /me.
          When shown it hides the waveform + wordmark below. data-no-i18n so the
          translation walker never touches brand assets. -->
-    <img class="brand-logo" id="brandLogoTop" alt="" hidden data-no-i18n>
+    <img class="brand-logo" id="brandLogoTop" alt="" data-no-i18n>
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 340 110" fill="none">
         <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
@@ -883,9 +883,11 @@
        the rail top. On phones the whole rail is hidden, so the topbar's own
        .brand (kept in the markup above) shows the wordmark there instead. -->
   <div class="nav-brand">
-    <!-- Tenant logo (co-brand). Folded rail shows just this tile (the square mark);
-         open rail shows logo + name. Hidden until applyBrand() fills it from /me. -->
-    <img class="brand-logo" id="brandLogoRail" alt="" hidden data-no-i18n>
+    <!-- Tenant logo (co-brand, option A = logo only). Open rail shows the FULL
+         logo (replacing our waveform + wordmark); the folded rail swaps in the
+         square mark. Both revealed by body.cobrand once applyBrand() fills them. -->
+    <img class="brand-logo" id="brandLogoRail" alt="" data-no-i18n>
+    <img class="brand-mark-img" id="brandMarkRail" alt="" data-no-i18n>
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 340 110" fill="none">
         <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>

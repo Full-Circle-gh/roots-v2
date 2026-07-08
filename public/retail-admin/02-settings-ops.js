@@ -1548,44 +1548,32 @@ function applyBrand(tenant) {
   if (!tenant) return;
   const name = (tenant.brand || '').trim();
   const logoUrl = tenant.brandLogoUrl || null;
-  const markUrl = tenant.brandMarkUrl || null;
+  const markUrl = tenant.brandMarkUrl || logoUrl;
   // The admin's default identity is ALWAYS "tacet". A tenant only takes over the
   // chrome once they've uploaded a LOGO — a brand_name alone (used for customer
-  // payment/print, e.g. Roots) must NOT rename the admin. So "custom" = has logo.
-  const custom = !!logoUrl;
-  if (!custom) return;   // nothing to do — leave the built-in tacet waveform + wordmark
+  // payment/print, e.g. Roots) must NOT rename the admin.
+  if (!logoUrl) return;   // leave the built-in tacet waveform + wordmark
 
-  // Page title + favicon → the tenant's name + square mark.
+  // Option A — LOGO ONLY. The uploaded logo replaces our waveform + wordmark
+  // entirely (no name text, no waveform); body.cobrand drives the swap in CSS.
+  // Open rail + topbar show the full logo; the folded rail shows the square mark.
   if (name) document.title = name;
-  if (markUrl) {
-    const fav = document.getElementById('favlink');
-    const favA = document.getElementById('favlink-apple');
-    if (fav) fav.href = markUrl;
-    if (favA) favA.href = markUrl;
-  }
+  const fav = document.getElementById('favlink');
+  const favA = document.getElementById('favlink-apple');
+  if (markUrl && fav) fav.href = markUrl;
+  if (markUrl && favA) favA.href = markUrl;
 
-  // Rail + topbar wordmark. Show the logo (hiding the waveform) and set the name.
-  // The rail uses the SQUARE MARK (a tile that reads well both open and folded);
-  // the topbar (phones) uses the full logo. Mark falls back to the logo when
-  // sharp couldn't derive one server-side.
-  const pairs = [
-    ['brandLogoTop', '.brand', logoUrl],
-    ['brandLogoRail', '.nav-brand', markUrl || logoUrl],
-  ];
-  for (const [imgId, wrapSel, url] of pairs) {
-    const img = document.getElementById(imgId);
-    const wrap = img && img.closest(wrapSel);
-    if (!wrap) continue;
-    const svgMark = wrap.querySelector('.brand-mark');
-    const nameEl = wrap.querySelector('.brand-name');
-    if (nameEl && name) nameEl.textContent = name;
-    if (url && img) {
-      img.onload = () => { img.hidden = false; if (svgMark) svgMark.hidden = true; };
-      img.onerror = () => { img.hidden = true; if (svgMark) svgMark.hidden = false; };  // fall back to waveform
-      img.src = url;
-    }
-  }
-  document.body.classList.add('cobrand');
+  const set = (id, url) => { const el = document.getElementById(id); if (el && url) el.src = url; };
+  set('brandLogoTop', logoUrl);
+  set('brandLogoRail', logoUrl);
+  set('brandMarkRail', markUrl);
+
+  // Only commit the swap once the logo actually loads — a 404 leaves the clean
+  // tacet waveform in place rather than an empty brand corner.
+  const probe = new Image();
+  probe.onload = () => document.body.classList.add('cobrand');
+  probe.onerror = () => document.body.classList.remove('cobrand');
+  probe.src = logoUrl;
 
   // "runs on tacet" credit — shown for a co-branded tenant whose credit is on.
   const credit = document.getElementById('brandCredit');
