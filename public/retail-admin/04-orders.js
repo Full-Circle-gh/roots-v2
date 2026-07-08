@@ -3080,11 +3080,15 @@ function _courierMarkerHtml(label, opts) {
   const labelStyle = opts.pill
     ? 'font:600 10.5px/1 Inter,sans-serif; color:#fff; background:' + color + '; padding:3px 8px; border-radius:999px; white-space:nowrap; box-shadow:0 2px 5px rgba(17,26,43,.35);'
     : 'font:600 10px/1 Inter,sans-serif; color:' + color + '; white-space:nowrap; text-shadow:0 1px 2px rgba(251,249,244,.95);';
+  // A glyph (e.g. a scooter for the rider) sits inside the dot, in paper white.
+  const glyph = opts.glyph
+    ? '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#FBF9F4;">' + opts.glyph + '</div>'
+    : '';
   return '<div style="display:flex; flex-direction:column; align-items:center; gap:3px;">'
     + '<div style="' + labelStyle + '">' + label + '</div>'
     + '<div style="position:relative; width:' + size + 'px; height:' + size + 'px; display:flex; align-items:center; justify-content:center;">'
     +   halo
-    +   '<div style="position:relative; width:' + size + 'px; height:' + size + 'px; border-radius:50%; background:' + dotBg + '; border:' + dotBorder + '; box-shadow:0 1px 3px rgba(17,26,43,.4);"></div>'
+    +   '<div style="position:relative; width:' + size + 'px; height:' + size + 'px; border-radius:50%; background:' + dotBg + '; border:' + dotBorder + '; box-shadow:0 1px 3px rgba(17,26,43,.4);">' + glyph + '</div>'
     + '</div>'
     + '</div>';
 }
@@ -3120,7 +3124,7 @@ async function mountCourierMap(o) {
     if (!d || !d.tracking) return;
     state.shop  = setMarker(state.shop,  d.shop_position,      { color: '#58606E', size: 11 },                          cuT('Store', '门店'),    100);
     state.cust  = setMarker(state.cust,  d.recipient_position, { color: '#111A2B', size: 11, ring: true },              cuT('Customer', '收货'), 100);
-    state.rider = setMarker(state.rider, d.rider_position,     { color: '#B4533E', size: 18, halo: true, pill: true },  cuT('Rider', '骑手'),    120);
+    state.rider = setMarker(state.rider, d.rider_position,     { color: '#B4533E', size: 22, halo: true, pill: true, glyph: deliveryIcon('scooter', 13) }, cuT('Rider', '骑手'), 120);
     if (Array.isArray(d.route) && d.route.length > 1) {
       const path = d.route.map((p) => [p.lng, p.lat]);
       if (state.line) state.line.setPath(path);
