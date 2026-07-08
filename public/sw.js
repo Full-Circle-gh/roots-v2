@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v349-cobrand-logo-only';
+const CACHE = 'roots-v2-shell-v350-restock-quiet';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?

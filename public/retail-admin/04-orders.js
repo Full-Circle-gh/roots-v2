@@ -1862,11 +1862,12 @@ function renderAddonTimeline(o) {
       ${rows}
     </div>`;
 }
-// Full-width restock strip shown BELOW the facts grid (never crammed inside the
+// Restock heads-up shown BELOW the facts grid (never crammed inside the
 // half-width Fulfilled-by tile, where the heading wrapped to 5 lines and the
-// thumbnail collided with the qty). One horizontal amber band: an alert icon,
-// a "RESTOCK FIRST" lead, then each short item (thumb · name · size · sku) on
-// its own line — room to breathe and scales to several short items.
+// thumbnail collided with the qty). Deliberately quiet — Tacet amber is
+// "attention, never alarmist": a plain card with a single brass left rule and
+// a calm dot, not a filled alarm band. Each short item (thumb · name · size ·
+// sku) sits inline; stacks when several are short.
 function fulfillmentShortStrip(o) {
   let pids = [];
   try { pids = JSON.parse(o.fulfillment_short_pids || '[]') || []; } catch {}
@@ -1877,28 +1878,28 @@ function fulfillmentShortStrip(o) {
     if (!it) {
       return `<div style="display:flex; align-items:center; gap:8px; min-width:0;">`
         + `<span class="oi-thumb is-empty" aria-hidden="true"></span>`
-        + `<span style="font-weight:700; color: var(--text-1);">#${escapeHtml(String(pid))}</span></div>`;
+        + `<span style="font-weight:600; color: var(--text-1);">#${escapeHtml(String(pid))}</span></div>`;
     }
     const nm = orderItemNames(it);
-    const size = it.size ? ` · <span style="color: var(--text-3);">${escapeHtml(it.size)}</span>` : '';
+    const size = it.size ? ` <span style="color: var(--text-3); font-weight:400;">· ${escapeHtml(it.size)}</span>` : '';
     return `<div style="display:flex; align-items:center; gap:8px; min-width:0;">`
       + itemThumb(it)
-      + `<span style="font-weight:700; color: var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">`
+      + `<span style="font-weight:600; color: var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">`
       +   `${escapeHtml(nm.primary || ('#' + pid))}${size}</span>`
       + itemSkuHtml(it)
       + `</div>`;
   }).join('');
-  return `<div class="full" style="display:flex; align-items:flex-start; gap:14px;`
-    + ` padding:12px 16px; border-radius:12px;`
-    + ` background: color-mix(in srgb, var(--brass) 12%, transparent);`
-    + ` border:1px solid color-mix(in srgb, var(--brass) 34%, transparent);">`
-    + `<span style="display:flex; align-items:center; gap:8px; flex:none; padding-top:2px;`
-    + ` font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;`
-    + ` color: color-mix(in srgb, var(--brass) 82%, #000);">`
-    +   `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
-    +   `<span>${cuT('Restock first', '先补货')}</span>`
+  const multi = pids.length > 1;
+  return `<div class="full" style="display:flex; align-items:${multi ? 'flex-start' : 'center'}; gap:12px;`
+    + ` padding:10px 14px 10px 16px; border-radius:12px; background: var(--bg-pane);`
+    + ` border:1px solid var(--line); box-shadow: inset 3px 0 0 var(--brass);">`
+    + `<span style="display:flex; align-items:center; gap:7px; flex:none;${multi ? ' padding-top:5px;' : ''}">`
+    +   `<span style="width:7px; height:7px; border-radius:50%; background: var(--brass); flex:none;"></span>`
+    +   `<span style="font-size:13px; font-weight:700; color: color-mix(in srgb, var(--brass) 72%, #000);">`
+    +     `${cuT('Restock before shipping', '发货前补货')}</span>`
     + `</span>`
-    + `<div style="display:flex; flex-direction:column; gap:8px; min-width:0; flex:1;">${items}</div>`
+    + `<span style="color: var(--line); flex:none;${multi ? ' padding-top:5px;' : ''}">·</span>`
+    + `<div style="display:flex; flex-direction:column; gap:7px; min-width:0; flex:1;">${items}</div>`
     + `</div>`;
 }
 // Full-size "Ship by" tile shown in the order-detail card grid. Same decision
