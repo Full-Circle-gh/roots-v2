@@ -2088,12 +2088,21 @@
     .pa-lowknob { margin-left: 0; width: 100%; }
   }
 
+  /* Products page wears the pure-Tacet chrome from the locked mockup: Dusk is
+     the one CTA colour (Guided add = the AI action) and the segment controls go
+     neutral instead of brass. Scoped by id so the rest of the admin is untouched
+     — mirrors how #tab-sales makes its "Set up" the single Dusk element. */
+  #pa-wizard-btn.btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; box-shadow: none; }
+  #pa-wizard-btn.btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+  #pa-view-seg .pa-view-btn.active { background: var(--bg-elev-2); color: var(--text-1); }
+  #pa-store-seg .pa-store-btns { background: var(--bg-elev-1); }
+  #pa-store-seg .pa-store-btn.active { background: var(--bg-pane); color: var(--text-1); box-shadow: 0 1px 2px rgba(18,22,26,.10); }
+
   .pa-toolbar {
     display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap;
-    padding: var(--s3) var(--s4);
-    background: var(--bg-pane);
-    border: 1px solid var(--line-soft);
-    border-radius: var(--r-lg);
+    padding: 0;
+    background: transparent;
+    border: 0;
     margin-bottom: var(--s4);
   }
   .pa-toolbar input[type=text] { flex: 1; min-width: 220px; }
