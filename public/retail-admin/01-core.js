@@ -367,24 +367,29 @@ async function salesWireSetup() {
     const foot = card.querySelector('.sales-ch-foot');
     const top = card.querySelector('.sales-ch-top');
     const toggle = top && top.querySelector('.sales-toggle');
+    // The gear rides beside the toggle on EVERY card (added once). Connected
+    // cards open their config; a not-set-up card's gear launches setup, same as
+    // its footer CTA — so the control is never dead.
+    if (top && toggle && !top.querySelector('.sales-ch-gear')) {
+      const g = document.createElement('button');
+      g.type = 'button';
+      g.className = 'sales-ch-gear';
+      g.title = cuT('Configure', '配置');
+      g.setAttribute('aria-label', cuT('Configure', '配置'));
+      g.innerHTML = GEAR_SVG;
+      // Host-rendered configs (mini/web/meituan) open in the full-screen
+      // overlay — reuse the card's own channel icon for the bar; tab-
+      // navigating ones (gzgrocery/eleme) go straight there.
+      const cardIco = card.querySelector('.sales-ch-ico');
+      const barIcon = cardIco ? cardIco.innerHTML : '';
+      g.onclick = connected
+        ? (cfg.overlay
+            ? () => salesOpenConfig(cfg.open, { icon: barIcon, title: cuT('Configuration', '配置') })
+            : cfg.open)
+        : () => igLaunchSetup(cfg.kind);
+      top.insertBefore(g, toggle);
+    }
     if (connected) {
-      if (top && toggle && !top.querySelector('.sales-ch-gear')) {
-        const g = document.createElement('button');
-        g.type = 'button';
-        g.className = 'sales-ch-gear';
-        g.title = cuT('Configure', '配置');
-        g.setAttribute('aria-label', cuT('Configure', '配置'));
-        g.innerHTML = GEAR_SVG;
-        // Host-rendered configs (mini/web/meituan) open in the full-screen
-        // overlay — reuse the card's own channel icon for the bar; tab-
-        // navigating ones (gzgrocery/eleme) go straight there.
-        const cardIco = card.querySelector('.sales-ch-ico');
-        const barIcon = cardIco ? cardIco.innerHTML : '';
-        g.onclick = cfg.overlay
-          ? () => salesOpenConfig(cfg.open, { icon: barIcon, title: cuT('Configuration', '配置') })
-          : cfg.open;
-        top.insertBefore(g, toggle);
-      }
       if (foot) foot.innerHTML = '';
     } else {
       if (!foot) continue;
