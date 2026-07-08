@@ -932,8 +932,18 @@
   });
 
   /* ── Language ── */
+  function paintRoleOptions(){
+    ['iRole','eRole'].forEach(function (id){
+      var sel = document.getElementById(id);
+      if (!sel) return;
+      Array.prototype.forEach.call(sel.options, function (opt){
+        if (opt.value) opt.textContent = roleLabel(opt.value);
+      });
+    });
+  }
   function applyLang(){
     document.documentElement.setAttribute('data-lang', lang);
+    paintRoleOptions();
     var tg = document.getElementById('langToggle');
     if (tg) tg.textContent = lang === 'cn' ? 'EN' : '中文';
     fillStoreSelect(document.getElementById('iStore'));
