@@ -419,7 +419,6 @@
         </div>
 
         <div class="perm-tools">
-          <button type="button" class="linkbtn" id="keysToggle"><span class="en">Show keys</span><span class="cn">显示代码</span></button>
           <button type="button" class="linkbtn" id="permResetPreset"><span class="en">Reset to position default</span><span class="cn">重置为职位默认</span></button>
         </div>
         <div id="permMatrix"></div>
@@ -479,23 +478,23 @@
 
   function roleDesc(role){
     var en = {
-      staff: 'Sees and does everything.',
+      staff: 'Day-to-day shop floor — orders, stock, customers. No money reports or setup.',
       store_manager: 'Runs one store — its orders, stock and customers. Their home opens on that store.',
       warehouse: 'Stock and shipments only. No revenue shown, anywhere.',
       customer_service: 'Refunds, invoices, order fixes and customer feedback.',
       dispatch: 'Keeps deliveries moving — orders waiting to go out and orders on the road.',
       kitchen: 'Only the Add Stock app, for one store.',
-      admin: 'Sees and does everything, plus managing the team.',
+      admin: 'Runs everything and manages the team. Can’t change billing, edit others’ permissions, or delete a store.',
       owner: 'Full access, always. Cannot be narrowed.'
     }[role] || '';
     var cn = {
-      staff: '可见可做全部内容。',
+      staff: '门店日常——订单、库存、顾客。不含营收报表与设置。',
       store_manager: '负责一家门店——该店的订单、库存与顾客,首页只看本店。',
       warehouse: '只看库存与发货,任何地方都不显示营收。',
       customer_service: '处理退款、发票、订单问题与顾客反馈。',
       dispatch: '盯配送——待派单与在途订单。',
       kitchen: '仅限一家门店的“加库存”应用。',
-      admin: '可见可做全部内容,并可管理团队。',
+      admin: '负责全部运营并管理团队。不能更改账单、编辑他人权限或删除门店。',
       owner: '始终拥有完整权限,不可缩减。'
     }[role] || '';
     return L(en, cn);
@@ -887,11 +886,6 @@
     if (permLocked) return;
     (CATALOG ? CATALOG.capabilities : []).forEach(function (c){ permState[c.key] = permPreset.has(c.key); });
     renderMatrix();
-  });
-  document.getElementById('keysToggle').addEventListener('click', function (){
-    var on = document.body.classList.toggle('showkeys');
-    this.querySelector('.en').textContent = on ? 'Hide keys' : 'Show keys';
-    this.querySelector('.cn').textContent = on ? '隐藏代码' : '显示代码';
   });
   document.getElementById('permsCancel').addEventListener('click', closePerms);
   permsScrim.addEventListener('mousedown', function (e){ if (e.target === permsScrim) closePerms(); });
