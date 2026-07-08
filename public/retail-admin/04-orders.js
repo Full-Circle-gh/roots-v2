@@ -3133,12 +3133,29 @@ async function mountCourierMap(o) {
         state.line.setMap(map);
       }
     }
+    // Rider GPS is intermittent on some couriers (Meituan-dispatched Qingyun riders
+    // in particular drop it between pings). When it's absent, say "locating rider"
+    // instead of leaving a destination pin with no scooter.
+    if (!d.rider_position && d.stage !== 'delivered') {
+      if (!state.hint) {
+        state.hint = document.createElement('div');
+        state.hint.style.cssText = 'position:absolute; left:11px; top:11px; z-index:5; background:rgba(251,249,244,.94); border:1px solid #E4E0D5; border-radius:999px; padding:4px 10px; font:600 11px Inter,sans-serif; color:#8A6425; display:flex; align-items:center; gap:6px;';
+        state.hint.innerHTML = '<span style="width:6px; height:6px; border-radius:50%; background:#C9954A;"></span>' + cuT('Locating rider…', '正在定位骑手…');
+        el.appendChild(state.hint);
+      }
+    } else if (state.hint) { state.hint.remove(); state.hint = null; }
+
     if (!state.fitted) {
-      // First paint: frame all known points so staff see the whole trip.
+      // First paint: frame every point we have. With 2+ points fit them all; with a
+      // single point (e.g. only the customer, before the rider GPS arrives) centre on
+      // it so the map lands in the right city instead of AMap's default (Beijing).
+      // With zero points, stay unfitted so a later poll that carries coords frames it.
       const pts = [state.shop, state.cust, state.rider].filter(Boolean);
-      if (pts.length > 1) { try { map.setFitView(pts, false, [24, 24, 24, 24]); } catch (e) {} }
-      else if (d.rider_position) map.setZoomAndCenter(15, [d.rider_position.lng, d.rider_position.lat]);
-      state.fitted = true;
+      if (pts.length > 1) { try { map.setFitView(pts, false, [24, 24, 24, 24]); } catch (e) {} state.fitted = true; }
+      else {
+        const only = d.rider_position || d.recipient_position || d.shop_position;
+        if (only) { map.setZoomAndCenter(15, [only.lng, only.lat]); state.fitted = true; }
+      }
     } else if (d.rider_position) {
       map.setCenter([d.rider_position.lng, d.rider_position.lat]);   // keep the rider centred as it moves
     }
@@ -3149,8 +3166,11 @@ async function mountCourierMap(o) {
       const r = await api('/api/retail-admin/orders/' + o.id + '/delivery-track');
       if (_courierMap !== state) return;
       const d = r.data;
-      // Rider gone (delivered / cancelled) → stop polling; the text card carries the rest.
-      if (!d || !d.tracking || d.stage === 'delivered' || !d.rider_position) { clearInterval(state.timer); return; }
+      // Keep polling while the order is genuinely in flight. A momentarily-absent
+      // rider_position is NOT a stop signal (rider GPS blinks in and out) — only a
+      // delivered / no-longer-tracking order ends the loop. apply() still runs so the
+      // store + customer render and the "locating rider" hint shows meanwhile.
+      if (!d || !d.tracking || d.stage === 'delivered') { clearInterval(state.timer); return; }
       apply(d);
     } catch (e) { /* transient — retry next tick */ }
   };
