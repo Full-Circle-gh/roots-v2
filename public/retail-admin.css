@@ -2304,6 +2304,84 @@
   .pa-store-seg .pa-store-hint { font-size: 11px; color: var(--text-4); }
   .pa-subbar .pa-count { font-size: 13px; color: var(--text-3); font-variant-numeric: tabular-nums; margin-left: 0; }
 
+  /* ═══════════════════════════════════════════════════════════════════
+     PRODUCTS — full Tacet port. Every value below is a direct copy of
+     reference/products-page-mockup.html, scoped to #tab-products so it fully
+     overrides the shared admin chrome (buttons/inputs/table/toggle). The tab
+     is already in the Tacet token scope (Inter + paper + ink) via the inline
+     skin block; this pins the component sizes/shapes to the mockup. Behaviour
+     is untouched — only the visual layer.
+     ═══════════════════════════════════════════════════════════════════ */
+
+  /* Paper ground bled over <main>'s padding so there's no grey frame ("crop"). */
+  #tab-products {
+    background: var(--bg-app);
+    margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
+    padding: calc(var(--s6) + 56px) var(--s6) var(--s7);
+    min-height: 100vh;
+  }
+
+  /* Toolbar — search + selects + buttons + view toggle */
+  #tab-products .pa-toolbar { gap: 12px; margin-top: 22px; }
+  #tab-products .pa-toolbar input[type=text] {
+    font: 400 15px var(--f-sans); color: var(--text-1); background: var(--bg-pane);
+    border: 1px solid var(--line); border-radius: 8px; padding: 11px 14px 11px 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: left 14px center;
+  }
+  #tab-products .pa-toolbar input[type=text]::placeholder { color: var(--text-3); opacity: .7; }
+  #tab-products .pa-toolbar input[type=text]:focus { outline: none; border-color: var(--td-dusk); }
+  #tab-products #pa-filter, #tab-products #pa-subfilter {
+    font: 400 14px var(--f-sans); color: var(--text-1); background: var(--bg-pane);
+    border: 1px solid var(--line); border-radius: 8px; padding: 11px 34px 11px 14px; cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  #tab-products .btn {
+    font: 500 14px var(--f-sans); border-radius: 8px; border: 1px solid var(--line);
+    background: var(--bg-pane); color: var(--text-1); padding: 10px 16px; box-shadow: none;
+  }
+  #tab-products .btn:hover { background: var(--bg-pane); border-color: var(--text-2); }
+  #tab-products .btn svg { width: 16px; height: 16px; }
+  #tab-products #pa-wizard-btn.btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; padding: 10px 16px; }
+  #tab-products #pa-wizard-btn.btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+  #tab-products .btn-sm { font-size: 13px; padding: 8px 14px; }
+  #tab-products .pa-view-seg { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; }
+  #tab-products .pa-view-btn { padding: 7px 9px; border-radius: 6px; color: var(--text-3); border: none; background: none; }
+  #tab-products .pa-view-btn:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  #tab-products .pa-view-btn.active { background: var(--bg-elev-1); color: var(--text-1); }
+
+  /* Table — card, header, rows, cells */
+  #tab-products .pa-list-rich { border: 1px solid var(--line); border-radius: 14px; margin-top: 16px; }
+  #tab-products .pa-rowhead {
+    background: transparent; border-bottom: 1px solid var(--line);
+    font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-3); padding: 14px 18px;
+  }
+  #tab-products .pa-list-rich .pa-row { padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  #tab-products .pa-list-rich .pa-row:hover { background: var(--bg-elev-1); }
+  #tab-products .pa-row-img { width: 44px; height: 44px; border-radius: 10px; background: var(--bg-elev-1); border: 1px solid var(--line); color: var(--text-3); }
+  #tab-products .pa-row-img svg { width: 20px; height: 20px; }
+  #tab-products .pa-row-name { font-size: 15px; font-weight: 500; color: var(--text-1); }
+  #tab-products .pa-row-sub { font-size: 12.5px; color: var(--text-3); }
+  #tab-products .pa-row-sub .pa-row-meta { font-family: var(--f-sans); font-size: 12.5px; letter-spacing: 0; color: var(--text-3); }
+  #tab-products .pa-col-cat { font-size: 14px; color: var(--text-1); }
+  #tab-products .pa-col-sku { font-family: var(--f-sans); font-size: 13px; color: var(--text-3); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  #tab-products .pa-col-stock { font-size: 14px; }
+  #tab-products .pa-stock { color: var(--text-1); gap: 7px; }
+  #tab-products .pa-stock-dot { width: 7px; height: 7px; background: #A3B49F; }
+  #tab-products .pa-stock.is-low .pa-stock-dot { background: var(--warn); }
+  #tab-products .pa-stock.is-out .pa-stock-dot { background: var(--danger); }
+  #tab-products .pa-col-price { font-size: 14px; font-weight: 500; color: var(--text-1); }
+
+  /* Shop toggle — mockup sage/grey, 38×22 with an 18px knob */
+  #tab-products .pa-shop-toggle { width: 38px; height: 22px; }
+  #tab-products .pa-shop-knob { width: 38px; height: 22px; background: #D8D3C7; }
+  #tab-products .pa-shop-knob::after { width: 18px; height: 18px; }
+  #tab-products .pa-shop-toggle.is-on .pa-shop-knob { background: #A3B49F; }
+  #tab-products .pa-shop-toggle.is-on .pa-shop-knob::after { transform: translateX(16px); }
+
   /* Shop column: centre the toggle in its cell so it sits under the SHOP header
      instead of hugging the right-aligned price next to it. The dup button is
      pulled out of flow (absolute, hover-reveal) so it doesn't shift the toggle
