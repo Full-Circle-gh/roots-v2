@@ -472,8 +472,9 @@
   body.cobrand .brand .brand-mark,  body.cobrand .nav-brand .brand-mark  { display: none; }  /* our waveform */
   body.cobrand .brand .brand-name,  body.cobrand .nav-brand .brand-name  { display: none; }  /* our/their name text */
   body.cobrand .brand-logo { display: block; }
-  .nav-brand .brand-logo { height: 28px; max-width: 172px; }   /* full logo, open rail */
-  .brand .brand-logo { height: 22px; max-width: 150px; }       /* full logo, topbar/phones */
+  .nav-brand .brand-logo { height: 40px; max-width: 184px; }   /* full logo, open rail — sized to fill the 56px head */
+  .brand .brand-logo { height: 26px; max-width: 150px; }       /* full logo, topbar/phones */
+  body.cobrand .nav-brand { justify-content: center; }          /* centre the logo in the rail head */
   /* "runs on tacet" credit — pinned to the rail foot via margin-top:auto. */
   .brand-credit {
     margin-top: auto; display: flex; align-items: center; gap: 9px;
