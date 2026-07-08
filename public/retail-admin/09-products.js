@@ -942,12 +942,45 @@ function paRenderKpis(animate) {
   const oosTile = document.getElementById('pa-kpi-oos-tile'); if (oosTile) oosTile.classList.toggle('alert', oos > 0);
   const lowTile = document.getElementById('pa-kpi-low-tile'); if (lowTile) lowTile.classList.toggle('alert', low > 0);
   const restockTile = document.getElementById('pa-kpi-restock-tile'); if (restockTile) restockTile.classList.toggle('alert', (oos + low) > 0);
-  // Light up whichever tile drives the active quick-filter (none when 'all').
+  // Light up whichever jump drives the active quick-filter (none when 'all').
   const tiles = { live: 'pa-kpi-live-tile', restock: 'pa-kpi-restock-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile' };
   for (const [status, id] of Object.entries(tiles)) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('pa-kpi-on', PA_STATUS === status);
   }
+  // Context line under the band: only while a jump filter is active. Tells the
+  // operator what they're looking at + gives a one-move "Select all" and a way
+  // back to the full catalogue.
+  const banner = document.getElementById('pa-recap-banner');
+  if (banner) {
+    const meta = {
+      oos:     { c: 'var(--danger)', en: 'sold-out products',   cn: '缺货产品',     n: oos },
+      low:     { c: 'var(--warn)',   en: 'low-stock products',  cn: '库存偏低产品', n: low },
+      drafts:  { c: 'var(--text-3)', en: 'drafts',              cn: '草稿',        n: drafts },
+      restock: { c: 'var(--warn)',   en: 'products to restock', cn: '需补货产品',   n: oos + low },
+      live:    { c: 'var(--accent)', en: 'live products',       cn: '已上架产品',   n: live },
+    };
+    const m = meta[PA_STATUS];
+    if (m) {
+      banner.hidden = false;
+      banner.innerHTML =
+        `<span class="rb-dot" style="background:${m.c}"></span>` +
+        cuT('Showing ', '正在显示 ') + `<b>${fcNum(m.n)}</b>` + cuT(' of your ' + m.en, ' 件' + m.cn) +
+        ` · <a onclick="paSelectAllFiltered()">${cuT('Select all', '全选')}</a>` +
+        ` · <a onclick="paSetStatus('all')">${cuT('See all products', '查看全部产品')}</a>`;
+    } else {
+      banner.hidden = true;
+      banner.innerHTML = '';
+    }
+  }
+}
+// Recap-banner shortcut: arm bulk-select and tick every product on the current
+// (filtered) page in one move — the "Select all N" affordance. paRender()
+// repopulates PA_VISIBLE_MEMBER_IDS for the filtered page before we tick them.
+function paSelectAllFiltered() {
+  PA_SELECT_MODE = true;
+  paRender();
+  paSelectAllVisible(true);
 }
 
 let PA_FILTERED_IDS = [];
