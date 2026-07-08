@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light" data-lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tacet — Team page redesign (blend)</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#111A2B; --paper:#FBF9F4; --graphite:#58606E;
+  --dusk:#6E67AF; --sage:#A3B49F; --amber:#C9954A; --brick:#B4533E;
+  --cream:#F6F3EC; --border:#E4E0D5;
+  --surface:#FFFFFF; --raised:var(--cream);
+  --text:var(--ink); --text-2:var(--graphite); --text-4:#B0AEA6; --line:var(--border);
+  --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC; --amber-tint:#F7EEDE; --brick-tint:#F6E7E3;
+  --font:"Inter",-apple-system,Arial,sans-serif; --display:"Fraunces",Georgia,serif;
+  --ease:cubic-bezier(.16,1,.3,1);
+  --brand:#2F7D4F;              /* tenant's own logo colour — never in Tacet chrome */
+  --shadow:0 1px 2px rgba(17,26,43,.04),0 4px 16px rgba(17,26,43,.04);
+}
+[data-theme="dark"]{
+  --surface:#18233A; --raised:#1E2A44; --border:#2A3550;
+  --text:var(--paper); --text-2:#9AA3B2; --text-4:#5B6478; --line:#2A3550;
+  --paper:#111A2B; --cream:#1E2A44;
+  --dusk-tint:#262A4A; --sage-tint:#1E2C26; --amber-tint:#33290F; --brick-tint:#351B14;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.25);
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+*{margin:0;box-sizing:border-box}
+body{font-family:var(--font); font-size:15px; color:var(--text); background:var(--paper);
+  -webkit-font-smoothing:antialiased; padding:0 0 96px; transition:background .25s var(--ease),color .25s var(--ease)}
+.tnum{font-variant-numeric:tabular-nums; font-feature-settings:"tnum"}
+.cn{display:none} [data-lang="cn"] .en{display:none} [data-lang="cn"] .cn{display:inline}
+
+/* ---- mockup chrome (not part of the design) ---- */
+.chrome{position:sticky; top:0; z-index:40; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:12px 20px; background:var(--surface); border-bottom:1px solid var(--line)}
+.chrome .grp{display:inline-flex; border:1px solid var(--line); border-radius:999px; overflow:hidden}
+.chrome button{font:500 12.5px var(--font); background:transparent; color:var(--text-2); border:0; padding:7px 15px; cursor:pointer}
+.chrome button.on{background:var(--dusk); color:#fff}
+.chrome .note{margin-left:auto; font-size:12px; color:var(--text-4)}
+
+/* ---- page frame ---- */
+.wrap{max-width:660px; margin:0 auto; padding:28px 20px 0}
+.topbar{display:flex; align-items:center; justify-content:space-between; margin-bottom:26px}
+.back{font-size:13px; color:var(--text-2); text-decoration:none; display:inline-flex; align-items:center; gap:7px}
+.back:hover{color:var(--text)}
+.eyebrow{font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--text-4); font-weight:500}
+
+/* tenant identity leads (co-brand) */
+.brandrow{display:flex; align-items:center; gap:12px; margin-bottom:6px}
+.mark{width:38px; height:38px; border-radius:9px; background:var(--brand); flex:none; display:flex; align-items:center; justify-content:center}
+.mark svg{stroke:#fff; fill:none}
+.tname{font-family:var(--display); font-weight:300; font-size:27px; letter-spacing:.01em; line-height:1}
+.credit{display:inline-flex; align-items:center; gap:6px; color:var(--text-4); font-size:10.5px; letter-spacing:.04em; margin:0 0 26px 50px}
+.credit .w{font-family:var(--display); font-weight:300; letter-spacing:.16em; font-size:11px; color:var(--text-2)}
+
+/* ---- cards ---- */
+.card{background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); margin-bottom:16px;
+  animation:settle .5s var(--ease) both}
+@keyframes settle{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card .cb{padding:22px 22px 24px}
+.h-title{font-size:17px; font-weight:500; letter-spacing:-.01em}
+.h-sub{font-size:13.5px; color:var(--text-2); line-height:1.6; margin-top:6px; max-width:60ch}
+.h-sub b{font-weight:500; color:var(--text)}
+
+/* stat strip (from dir B) */
+.stats{display:flex; gap:10px; margin-top:18px; flex-wrap:wrap}
+.stat{flex:1; min-width:110px; border:1px solid var(--line); border-radius:12px; padding:13px 15px; background:var(--raised)}
+.stat .n{font-size:22px; font-weight:500; letter-spacing:-.02em}
+.stat .k{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-4); margin-top:3px}
+
+/* enforce row (sage when on — NOT dusk; enforcement is a guard, not the AI) */
+.enforce{display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:16px;
+  border:1px solid var(--line); border-radius:12px; padding:14px 16px}
+.enforce.on{border-color:var(--sage); background:var(--sage-tint)}
+.enforce .lab{font-size:13.5px; font-weight:500}
+.enforce .sub{font-size:12px; color:var(--text-2); margin-top:3px; max-width:46ch; line-height:1.5}
+.pill-tog{font:500 12.5px var(--font); border:1px solid var(--line); background:var(--surface); color:var(--text-2);
+  border-radius:999px; padding:6px 16px; cursor:pointer; min-width:52px}
+.pill-tog.act{border-color:var(--sage); color:#4A6249}
+
+/* member rows */
+.members{margin-top:20px; display:flex; flex-direction:column}
+.member{display:flex; align-items:center; gap:13px; padding:13px 8px; border-top:1px solid var(--line)}
+.member:first-child{border-top:0}
+.member:hover{background:var(--raised)}
+.member.inactive{opacity:.5}
+.av{width:38px; height:38px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center;
+  background:var(--sage-tint); color:#4A6249; font-size:14px; font-weight:500}
+.m-main{flex:1; min-width:0}
+.m-name{font-size:14.5px; font-weight:500; display:flex; align-items:center; gap:8px}
+.tag{font-size:9.5px; letter-spacing:.08em; text-transform:uppercase; font-weight:500; border-radius:999px; padding:2px 8px}
+.tag.you{color:var(--dusk); background:var(--dusk-tint)}
+.tag.off{color:var(--brick); background:var(--brick-tint)}
+.m-sub{font-size:12.5px; color:var(--text-2); margin-top:3px; display:flex; align-items:center; gap:7px; flex-wrap:wrap}
+.m-sub .u{color:var(--text-4)}
+.m-sub .dot{width:3px; height:3px; border-radius:50%; background:var(--text-4); flex:none}
+.m-sub .pin{display:inline-flex; align-items:center; gap:4px}
+.m-sub svg{stroke:var(--text-4); fill:none}
+.role{font-size:11px; letter-spacing:.04em; font-weight:500; border-radius:999px; padding:4px 11px; white-space:nowrap; flex:none}
+.role.owner{color:#8A6425; background:var(--amber-tint)}
+.role.staff{color:var(--text-2); background:var(--raised); border:1px solid var(--line)}
+.role.op{color:#4A6249; background:var(--sage-tint)}
+.custom{font-size:10px; letter-spacing:.04em; color:var(--dusk); background:var(--dusk-tint); border-radius:999px; padding:3px 9px; white-space:nowrap; flex:none}
+.edit{font:500 12.5px var(--font); background:transparent; color:var(--text-2); border:1px solid var(--line);
+  border-radius:8px; padding:7px 14px; cursor:pointer; flex:none}
+.edit:hover{border-color:var(--text-2); color:var(--text)}
+
+/* buttons */
+.btn{font:500 14px var(--font); border-radius:8px; padding:11px 20px; cursor:pointer; border:1px solid transparent;
+  display:inline-flex; align-items:center; gap:8px; transition:all .2s var(--ease)}
+.btn-primary{background:var(--dusk); color:#fff}
+.btn-primary:hover{background:#5F58A0}
+.btn-sec{background:transparent; color:var(--text); border-color:var(--line)}
+.btn-sec:hover{border-color:var(--text-2)}
+.btn-block{width:100%; justify-content:center}
+
+/* invite form */
+.field{margin-bottom:18px}
+.field:last-child{margin-bottom:0}
+.field label{display:block; font-size:13px; font-weight:500; margin-bottom:8px}
+.field .hint{font-size:12px; color:var(--text-2); margin-top:7px; line-height:1.5}
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+@media(max-width:480px){.grid2{grid-template-columns:1fr}}
+.input,.select{width:100%; font:400 15px var(--font); color:var(--text); background:var(--surface);
+  border:1px solid var(--line); border-radius:8px; padding:11px 13px}
+.select{appearance:none; cursor:pointer;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5 6 7.5 9 4.5' stroke='%2358606E' fill='none' stroke-width='1.3'/></svg>");
+  background-repeat:no-repeat; background-position:right 13px center}
+.input:focus,.select:focus{outline:none; border-color:var(--dusk)}
+.input::placeholder{color:var(--text-4)}
+
+/* credential hand-off (chosen add-on) */
+.cred{margin-top:18px; border:1px solid var(--sage); background:var(--sage-tint); border-radius:12px; padding:16px; display:none}
+.cred.show{display:block; animation:settle .4s var(--ease) both}
+.cred .t{font-size:13.5px; font-weight:500; margin-bottom:4px}
+.cred .st{font-size:12px; color:var(--text-2); margin-bottom:12px}
+.cred .kv{display:flex; align-items:center; justify-content:space-between; gap:12px; font-size:14px; padding:8px 0; border-top:1px solid rgba(163,180,159,.4)}
+.cred .kv .k{color:var(--text-2); font-size:12.5px}
+.cred .kv .v{font-weight:500; font-variant-numeric:tabular-nums}
+.cred .copy{font:500 12.5px var(--font); border:1px solid var(--sage); background:var(--surface); color:#4A6249; border-radius:8px; padding:8px 14px; cursor:pointer; margin-top:12px; width:100%}
+
+/* modal (edit + permissions) */
+.scrim{position:fixed; inset:0; background:rgba(17,26,43,.42); z-index:50; display:none; align-items:center; justify-content:center; padding:20px}
+.scrim.show{display:flex}
+#permScrim{z-index:60}
+.modal{width:100%; max-width:460px; max-height:88vh; overflow:auto; background:var(--surface); border:1px solid var(--line);
+  border-radius:14px; padding:24px; box-shadow:0 30px 60px -30px rgba(17,26,43,.5)}
+.modal h3{font-size:17px; font-weight:500; display:flex; align-items:center; gap:11px; margin-bottom:6px}
+.modal .msub{font-size:12.5px; color:var(--text-2); margin-bottom:18px; line-height:1.5}
+.pg{margin-top:18px}
+.pg-h{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-4); font-weight:500;
+  padding-bottom:8px; border-bottom:1px solid var(--line); margin-bottom:4px}
+.prow{display:flex; align-items:center; gap:11px; padding:9px 6px; border-radius:8px}
+.prow:hover{background:var(--raised)}
+.prow.dev{background:var(--dusk-tint)}
+.prow label{flex:1; font-size:13.5px; cursor:pointer}
+.prow .pk{display:none; font-size:10.5px; color:var(--text-4); font-family:ui-monospace,monospace; margin-left:8px}
+body.showkeys .prow .pk{display:inline}
+.prow input{width:17px; height:17px; accent-color:var(--dusk); cursor:pointer}
+.modal .av{margin:0}
+.trow{display:flex; align-items:center; justify-content:space-between; gap:14px; padding:14px 0; border-top:1px solid var(--line); margin-top:6px}
+.trow .lab{font-size:13.5px; font-weight:500}
+.trow .sub{font-size:12px; color:var(--text-2); margin-top:3px}
+.trow.self{opacity:.5}
+.perm-tools{display:flex; justify-content:space-between; align-items:center; margin:16px 2px 2px}
+.linkbtn{font:500 12px var(--font); color:var(--dusk); background:0; border:0; cursor:pointer; padding:4px 0}
+.modal-actions{display:flex; gap:10px; margin-top:20px}
+.modal-actions .btn{flex:1; justify-content:center}
+
+.foot{max-width:660px; margin:8px auto 0; padding:0 20px; text-align:center}
+.foot .l{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-4)}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="grp">
+    <button data-set="lang" data-val="en" class="on">EN</button>
+    <button data-set="lang" data-val="cn">中文</button>
+  </span>
+  <span class="grp">
+    <button data-set="theme" data-val="light" class="on">Light</button>
+    <button data-set="theme" data-val="dark">Dark</button>
+  </span>
+  <span class="note">Blend · stat strip + inline invite · reference/team-redesign-mockup.html</span>
+</div>
+
+<div class="wrap">
+  <div class="topbar">
+    <a class="back" href="#"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke="currentColor" fill="none" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">Backend</span><span class="cn">后台</span></a>
+    <span class="eyebrow"><span class="en">Team</span><span class="cn">团队</span></span>
+  </div>
+
+  <div class="brandrow">
+    <span class="mark"><svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 21c0-5 0-9 0-9m0 0c0-3 2-5 5-5-.2 3-2 5-5 5Zm0 0c0-3-2-5-5-5 .2 3 2 5 5 5Z" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    <span class="tname">Roots</span>
+  </div>
+  <div class="credit"><span class="en">runs on</span><span class="cn">由</span> <span class="w">tacet</span><span class="cn"> 提供</span></div>
+
+  <!-- ============ TEAM CARD ============ -->
+  <section class="card">
+    <div class="cb">
+      <div class="h-title"><span class="en">Team</span><span class="cn">团队</span></div>
+      <p class="h-sub">
+        <span class="en">A <b>position</b> sets what each person sees and can do — and shapes their home screen. Open <b>Permissions</b> to fine-tune, or limit someone to certain stores. The owner always keeps full access.</span>
+        <span class="cn"><b>职位</b>决定每个人可见、可做的内容,也决定其首页。打开<b>权限</b>可精细调整,或将成员限定到指定门店。负责人始终拥有完整权限。</span>
+      </p>
+
+      <!-- stat strip (from dir B) -->
+      <div class="stats">
+        <div class="stat"><div class="n tnum">6</div><div class="k"><span class="en">People</span><span class="cn">成员</span></div></div>
+        <div class="stat"><div class="n tnum">2</div><div class="k"><span class="en">Owners</span><span class="cn">负责人</span></div></div>
+        <div class="stat"><div class="n tnum">1</div><div class="k"><span class="en">Never in</span><span class="cn">从未登录</span></div></div>
+        <div class="stat"><div class="n tnum">2</div><div class="k"><span class="en">Limited</span><span class="cn">受限</span></div></div>
+      </div>
+
+      <div class="enforce" id="enforce">
+        <div>
+          <div class="lab"><span class="en">Enforce permissions</span><span class="cn">强制权限</span></div>
+          <div class="sub"><span class="en">Off — permissions shape what each person sees. On — they're also blocked from anything outside it.</span><span class="cn">关 — 权限仅影响可见内容。开 — 同时阻止越权操作。</span></div>
+        </div>
+        <button class="pill-tog" id="enforceBtn"><span class="en">Off</span><span class="cn">关</span></button>
+      </div>
+
+      <div class="members">
+        <div class="member">
+          <span class="av">A</span>
+          <div class="m-main">
+            <div class="m-name">Asher <span class="tag you"><span class="en">You</span><span class="cn">你</span></span></div>
+            <div class="m-sub"><span class="u">@owner</span></div>
+          </div>
+          <span class="role owner"><span class="en">Owner</span><span class="cn">负责人</span></span>
+          <button class="edit" data-perm><span class="en">Edit</span><span class="cn">编辑</span></button>
+        </div>
+        <div class="member">
+          <span class="av">MR</span>
+          <div class="m-main">
+            <div class="m-name">Mor Raviv</div>
+            <div class="m-sub"><span class="u">@morraviv</span></div>
+          </div>
+          <span class="role owner"><span class="en">Owner</span><span class="cn">负责人</span></span>
+          <button class="edit" data-perm><span class="en">Edit</span><span class="cn">编辑</span></button>
+        </div>
+        <div class="member">
+          <span class="av">A</span>
+          <div class="m-main">
+            <div class="m-name">Aru</div>
+            <div class="m-sub"><span class="u">@aru</span><span class="dot"></span><span class="pin"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M6 1a3.5 3.5 0 0 0-3.5 3.5C2.5 7 6 11 6 11s3.5-4 3.5-6.5A3.5 3.5 0 0 0 6 1Z" stroke-width="1"/><circle cx="6" cy="4.5" r="1.2" stroke-width="1"/></svg>Tianhe</span></div>
+          </div>
+          <span class="role op"><span class="en">Kitchen</span><span class="cn">后厨</span></span>
+          <button class="edit" data-perm><span class="en">Edit</span><span class="cn">编辑</span></button>
+        </div>
+        <div class="member">
+          <span class="av">J</span>
+          <div class="m-main">
+            <div class="m-name">Jing</div>
+            <div class="m-sub"><span class="u">@jass</span></div>
+          </div>
+          <span class="custom"><span class="en">Custom</span><span class="cn">自定义</span></span>
+          <span class="role staff"><span class="en">Staff</span><span class="cn">员工</span></span>
+          <button class="edit" data-perm><span class="en">Edit</span><span class="cn">编辑</span></button>
+        </div>
+        <div class="member">
+          <span class="av">S</span>
+          <div class="m-main">
+            <div class="m-name">Shun</div>
+            <div class="m-sub"><span class="u">@warehouse</span><span class="dot"></span><span class="en">never signed in</span><span class="cn">从未登录</span></div>
+          </div>
+          <span class="role op"><span class="en">Warehouse</span><span class="cn">仓库</span></span>
+          <button class="edit" data-perm><span class="en">Edit</span><span class="cn">编辑</span></button>
+        </div>
+        <div class="member inactive">
+          <span class="av">X</span>
+          <div class="m-main">
+            <div class="m-name">Xin <span class="tag off"><span class="en">Inactive</span><span class="cn">已停用</span></span></div>
+            <div class="m-sub"><span class="u">@xin</span><span class="dot"></span><span class="pin"><svg width="11" height="11" viewBox="0 0 12 12"><path d="M6 1a3.5 3.5 0 0 0-3.5 3.5C2.5 7 6 11 6 11s3.5-4 3.5-6.5A3.5 3.5 0 0 0 6 1Z" stroke-width="1"/><circle cx="6" cy="4.5" r="1.2" stroke-width="1"/></svg>Tianhe</span></div>
+          </div>
+          <span class="role op"><span class="en">Kitchen</span><span class="cn">后厨</span></span>
+          <button class="edit" data-perm><span class="en">Edit</span><span class="cn">编辑</span></button>
+        </div>
+      </div>
+
+      <!-- inline reveal invite (from dir A) -->
+      <button class="btn btn-sec btn-block" style="margin-top:18px" id="revealInvite">
+        <svg width="15" height="15" viewBox="0 0 15 15"><path d="M7.5 3v9M3 7.5h9" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>
+        <span class="en">Add teammate</span><span class="cn">添加成员</span>
+      </button>
+    </div>
+  </section>
+
+  <!-- ============ INVITE ============ -->
+  <section class="card" id="inviteCard" style="display:none">
+    <div class="cb">
+      <div class="h-title"><span class="en">Add a teammate</span><span class="cn">添加成员</span></div>
+      <p class="h-sub"><span class="en">Creates a sign-in you hand to a colleague. You'll get the username and password to share once it's made.</span><span class="cn">创建一个交给同事的登录账户。创建后会显示用户名和密码,供你转交。</span></p>
+      <div style="margin-top:20px">
+        <div class="field">
+          <label><span class="en">Display name</span><span class="cn">显示名称</span></label>
+          <input class="input" type="text" placeholder="Jane Lee">
+        </div>
+        <div class="field">
+          <label><span class="en">Position</span><span class="cn">职位</span></label>
+          <select class="select" id="posSel">
+            <option value="staff">Staff · 员工</option>
+            <option value="store_manager">Store manager · 店长</option>
+            <option value="warehouse">Warehouse · 仓库</option>
+            <option value="customer_service">Customer service · 客服</option>
+            <option value="dispatch">Dispatch · 配送调度</option>
+            <option value="kitchen">Kitchen · 后厨</option>
+            <option value="admin">Admin · 管理员</option>
+            <option value="owner">Owner · 负责人</option>
+          </select>
+          <div class="hint" id="posHint"></div>
+        </div>
+        <div class="field" id="storeField" style="display:none">
+          <label><span class="en">Store</span><span class="cn">门店</span></label>
+          <select class="select"><option>Tianhe · 天河</option><option>Yuexiu · 越秀</option></select>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label><span class="en">Username</span><span class="cn">用户名</span></label>
+            <input class="input" type="text" placeholder="jane">
+          </div>
+          <div class="field">
+            <label><span class="en">Temporary password</span><span class="cn">初始密码</span></label>
+            <input class="input" type="text" placeholder="min 10 characters">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" style="margin-top:6px" id="createBtn"><span class="en">Create sign-in</span><span class="cn">创建账户</span></button>
+
+        <!-- credential hand-off -->
+        <div class="cred" id="cred">
+          <div class="t"><span class="en">Sign-in ready</span><span class="cn">账户已创建</span></div>
+          <div class="st"><span class="en">Share these with Jane. The password won't be shown again.</span><span class="cn">请把以下信息转交给对方。密码不会再次显示。</span></div>
+          <div class="kv"><span class="k"><span class="en">Username</span><span class="cn">用户名</span></span><span class="v">jane</span></div>
+          <div class="kv"><span class="k"><span class="en">Password</span><span class="cn">密码</span></span><span class="v">k7mP-tea-92xq</span></div>
+          <button class="copy"><span class="en">Copy username &amp; password</span><span class="cn">复制用户名和密码</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="foot"><span class="l">Roots · <span class="en">Team</span><span class="cn">团队</span></span></div>
+
+<!-- ============ EDIT MEMBER MODAL ============ -->
+<div class="scrim" id="editScrim">
+  <div class="modal">
+    <h3><span class="av" id="editAv">J</span><span id="editName">Jing</span></h3>
+    <div class="msub"><span class="en">Change what this person is, reset their sign-in, or open Permissions to fine-tune.</span><span class="cn">调整该成员的身份、重置登录,或打开权限精细调整。</span></div>
+
+    <div class="field">
+      <label><span class="en">Display name</span><span class="cn">显示名称</span></label>
+      <input class="input" type="text" value="Jing">
+    </div>
+    <div class="field">
+      <label><span class="en">Position</span><span class="cn">职位</span></label>
+      <select class="select" id="ePosSel">
+        <option value="staff">Staff · 员工</option>
+        <option value="store_manager">Store manager · 店长</option>
+        <option value="warehouse">Warehouse · 仓库</option>
+        <option value="customer_service">Customer service · 客服</option>
+        <option value="dispatch">Dispatch · 配送调度</option>
+        <option value="kitchen">Kitchen · 后厨</option>
+        <option value="admin">Admin · 管理员</option>
+        <option value="owner">Owner · 负责人</option>
+      </select>
+      <div class="hint" id="ePosHint"></div>
+    </div>
+    <div class="field" id="eStoreField" style="display:none">
+      <label><span class="en">Store</span><span class="cn">门店</span></label>
+      <select class="select"><option>Tianhe · 天河</option><option>Yuexiu · 越秀</option></select>
+    </div>
+    <div class="field">
+      <label><span class="en">Reset password</span><span class="cn">重置密码</span></label>
+      <input class="input" type="text" placeholder="Leave blank to keep · 留空则不变">
+    </div>
+
+    <div class="trow">
+      <div>
+        <div class="lab"><span class="en">Active</span><span class="cn">启用</span></div>
+        <div class="sub"><span class="en">Turned off, they can't sign in — the account and its history stay.</span><span class="cn">关闭后无法登录 — 账户与历史仍保留。</span></div>
+      </div>
+      <button class="pill-tog act" id="eActiveBtn"><span class="en">On</span><span class="cn">开</span></button>
+    </div>
+
+    <button class="btn btn-sec btn-block" style="margin-top:16px" id="openPerm">
+      <svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 1.5 2.5 3.8v3.6c0 3.3 2.3 5.4 5.5 7 3.2-1.6 5.5-3.7 5.5-7V3.8L8 1.5Z" stroke="currentColor" fill="none" stroke-width="1.2" stroke-linejoin="round"/></svg>
+      <span class="en">Permissions…</span><span class="cn">权限…</span>
+    </button>
+
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="editCancel"><span class="en">Cancel</span><span class="cn">取消</span></button>
+      <button class="btn btn-primary"><span class="en">Save</span><span class="cn">保存</span></button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ PERMISSIONS MODAL (plain labels; raw keys behind toggle) ============ -->
+<div class="scrim" id="permScrim">
+  <div class="modal">
+    <h3><span class="en">Permissions</span><span class="cn">权限</span> — Jing</h3>
+    <div class="msub"><span class="en">Position: Staff. Tinted rows differ from the position's default.</span><span class="cn">职位:员工。带底色的行与职位默认不同。</span></div>
+
+    <div class="pg">
+      <div class="pg-h"><span class="en">Run</span><span class="cn">运营</span></div>
+      <div class="prow"><input type="checkbox" checked><label><span class="en">See orders</span><span class="cn">查看订单</span><span class="pk">orders:view</span></label></div>
+      <div class="prow"><input type="checkbox" checked><label><span class="en">Fulfil &amp; update orders</span><span class="cn">处理并更新订单</span><span class="pk">orders:manage</span></label></div>
+      <div class="prow dev"><input type="checkbox"><label><span class="en">Issue refunds</span><span class="cn">发起退款</span><span class="pk">orders:refund</span></label></div>
+    </div>
+    <div class="pg">
+      <div class="pg-h"><span class="en">Sell</span><span class="cn">销售</span></div>
+      <div class="prow"><input type="checkbox" checked><label><span class="en">See revenue &amp; reports</span><span class="cn">查看营收与报表</span><span class="pk">reports:view</span></label></div>
+      <div class="prow dev"><input type="checkbox" checked><label><span class="en">Edit products &amp; prices</span><span class="cn">编辑商品与价格</span><span class="pk">catalog:manage</span></label></div>
+    </div>
+    <div class="pg">
+      <div class="pg-h"><span class="en">Set up</span><span class="cn">设置</span></div>
+      <div class="prow"><input type="checkbox"><label><span class="en">Manage the team</span><span class="cn">管理团队</span><span class="pk">team:manage</span></label></div>
+    </div>
+
+    <div class="perm-tools">
+      <button class="linkbtn" id="keysToggle"><span class="en">Show keys</span><span class="cn">显示代码</span></button>
+      <button class="linkbtn"><span class="en">Reset to position default</span><span class="cn">重置为职位默认</span></button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-sec" id="permCancel"><span class="en">Cancel</span><span class="cn">取消</span></button>
+      <button class="btn btn-primary"><span class="en">Save permissions</span><span class="cn">保存权限</span></button>
+    </div>
+  </div>
+</div>
+
+<script>
+var POS = {
+  staff:['Sees and does everything.','可见可做全部内容。'],
+  store_manager:['Runs one store — its orders, stock and customers. Home opens on that store.','负责一家门店——该店订单、库存与顾客,首页只看本店。'],
+  warehouse:['Stock and shipments only. No revenue shown, anywhere.','只看库存与发货,任何地方都不显示营收。'],
+  customer_service:['Refunds, invoices, order fixes and customer feedback.','退款、发票、订单问题与顾客反馈。'],
+  dispatch:['Keeps deliveries moving — waiting to go out, and on the road.','盯配送——待派单与在途订单。'],
+  kitchen:['Only the Add Stock app, for one store.','仅限一家门店的“加库存”应用。'],
+  admin:['Everything, plus managing the team.','全部内容,并可管理团队。'],
+  owner:['Full access, always. Cannot be narrowed.','始终拥有完整权限,不可缩减。']
+};
+// Position picker → plain description + conditional store field. Shared by the
+// invite form and the edit modal so both stay in step with the language toggle.
+function bindPos(selId,hintId,fieldId){
+  var sel=document.getElementById(selId),hint=document.getElementById(hintId),field=document.getElementById(fieldId);
+  function sync(){var v=sel.value,cn=document.documentElement.getAttribute('data-lang')==='cn';
+    hint.textContent=POS[v][cn?1:0];field.style.display=(v==='kitchen'||v==='store_manager')?'':'none';}
+  sel.addEventListener('change',sync);
+  return sync;
+}
+var syncInvite=bindPos('posSel','posHint','storeField');
+var syncEdit=bindPos('ePosSel','ePosHint','eStoreField');
+function syncPos(){syncInvite();syncEdit();}
+syncPos();
+
+document.querySelectorAll('.chrome button[data-set]').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.documentElement.setAttribute('data-'+b.getAttribute('data-set'),b.getAttribute('data-val'));
+    b.parentNode.querySelectorAll('button').forEach(function(x){x.classList.remove('on')});b.classList.add('on');
+    syncPos();
+  });
+});
+document.getElementById('enforceBtn').addEventListener('click',function(){
+  var on=document.getElementById('enforce').classList.toggle('on');this.classList.toggle('act',on);
+  this.querySelector('.en').textContent=on?'On':'Off';this.querySelector('.cn').textContent=on?'开':'关';
+});
+document.getElementById('revealInvite').addEventListener('click',function(){
+  var c=document.getElementById('inviteCard');c.style.display='block';c.scrollIntoView({behavior:'smooth',block:'center'});
+});
+document.getElementById('createBtn').addEventListener('click',function(){document.getElementById('cred').classList.add('show');});
+
+// Edit → open the edit modal, seeded from the clicked row (avatar, name, position).
+document.querySelectorAll('[data-perm]').forEach(function(b){b.addEventListener('click',function(){
+  var row=b.closest('.member');
+  document.getElementById('editAv').textContent=row.querySelector('.av').textContent;
+  document.getElementById('editName').textContent=row.querySelector('.m-name').childNodes[0].textContent.trim();
+  document.querySelector('#editScrim .input').value=row.querySelector('.m-name').childNodes[0].textContent.trim();
+  var isOp=row.querySelector('.role.op'),isOwner=row.querySelector('.role.owner');
+  document.getElementById('ePosSel').value=isOwner?'owner':isOp?'kitchen':'staff';
+  syncEdit();
+  document.getElementById('editScrim').classList.add('show');
+});});
+document.getElementById('eActiveBtn').addEventListener('click',function(){
+  var on=this.classList.toggle('act');
+  this.querySelector('.en').textContent=on?'On':'Off';this.querySelector('.cn').textContent=on?'开':'关';
+});
+document.getElementById('editCancel').addEventListener('click',function(){document.getElementById('editScrim').classList.remove('show');});
+document.getElementById('editScrim').addEventListener('click',function(e){if(e.target===this)this.classList.remove('show');});
+document.getElementById('openPerm').addEventListener('click',function(){document.getElementById('permScrim').classList.add('show');});
+document.getElementById('permCancel').addEventListener('click',function(){document.getElementById('permScrim').classList.remove('show');});
+document.getElementById('permScrim').addEventListener('click',function(e){if(e.target===this)this.classList.remove('show');});
+document.getElementById('keysToggle').addEventListener('click',function(){
+  var on=document.body.classList.toggle('showkeys');
+  this.querySelector('.en').textContent=on?'Hide keys':'Show keys';this.querySelector('.cn').textContent=on?'隐藏代码':'显示代码';
+});
+</script>
+</body>
+</html>
