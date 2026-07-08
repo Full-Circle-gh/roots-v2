@@ -7609,8 +7609,8 @@
   /* Search — pill → wide field. Icon inside-left, full placeholder, no kbd chip;
      colours already set in the slice-one block above, geometry here. */
   .topbar .gsearch-trigger {
-    flex: 0 1 460px; min-width: 150px; height: 42px;
-    padding: 0 15px; gap: 10px; border-radius: var(--r-lg);
+    flex: 0 1 460px; min-width: 150px; height: 44px;
+    padding: 0 18px; gap: 11px; border-radius: var(--r-lg);
   }
   .topbar .gsearch-trigger svg { width: 17px; height: 17px; color: var(--td-text2); }
   .topbar .gsearch-ph {
