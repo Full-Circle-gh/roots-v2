@@ -8117,6 +8117,10 @@
     border-radius: 14px; padding: 22px 24px 18px;
     box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
     display: flex; flex-direction: column; gap: 16px;
+    /* grid-auto-rows:1fr makes the row track definite; height:100% forces every
+       card to fill it so a light card (e.g. Eleme "Not set up") matches its
+       row-mate instead of collapsing to its own content height. */
+    height: 100%;
   }
   #tab-sales .sales-ch:hover { transform: none; border-color: var(--td-border); box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04); }
   #tab-sales .sales-ch[data-on="0"] { opacity: 1; background: transparent; box-shadow: none; }
