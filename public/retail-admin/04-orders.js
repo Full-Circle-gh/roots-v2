@@ -1820,7 +1820,7 @@ function routingNote(reason) {
 // stock gate — see fulfillment_short_pids). Names the short items so the office
 // knows what to restock or transfer in before the parcel ships. The order was
 // accepted normally; this is purely a heads-up, never a block.
-// Compact list-row counterpart to fulfillmentShortNote — a small amber chip so
+// Compact list-row counterpart to fulfillmentShortStrip — a small amber chip so
 // the office can spot "shipping store is short" orders without opening each one.
 function fulfillmentShortBadge(o) {
   let pids = [];
@@ -1862,40 +1862,43 @@ function renderAddonTimeline(o) {
       ${rows}
     </div>`;
 }
-function fulfillmentShortNote(o) {
+// Full-width restock strip shown BELOW the facts grid (never crammed inside the
+// half-width Fulfilled-by tile, where the heading wrapped to 5 lines and the
+// thumbnail collided with the qty). One horizontal amber band: an alert icon,
+// a "RESTOCK FIRST" lead, then each short item (thumb · name · size · sku) on
+// its own line — room to breathe and scales to several short items.
+function fulfillmentShortStrip(o) {
   let pids = [];
   try { pids = JSON.parse(o.fulfillment_short_pids || '[]') || []; } catch {}
   if (!pids.length) return '';
   const byId = new Map((o.items || []).map(it => [it.product_id, it]));
-  const rows = pids.map(pid => {
+  const items = pids.map(pid => {
     const it = byId.get(pid);
     if (!it) {
-      return `<div style="display:flex; align-items:center; gap:8px; margin-top:4px;">`
+      return `<div style="display:flex; align-items:center; gap:8px; min-width:0;">`
         + `<span class="oi-thumb is-empty" aria-hidden="true"></span>`
-        + `<span style="font-weight:600; color: var(--text-2);">#${escapeHtml(String(pid))}</span></div>`;
+        + `<span style="font-weight:700; color: var(--text-1);">#${escapeHtml(String(pid))}</span></div>`;
     }
     const nm = orderItemNames(it);
-    const sub = it.size
-      ? `<div class="sub" style="color: var(--text-3); font-size:11px;">${escapeHtml(it.size)}</div>`
-      : '';
-    return `<div style="display:flex; align-items:center; gap:8px; margin-top:4px;">`
+    const size = it.size ? ` · <span style="color: var(--text-3);">${escapeHtml(it.size)}</span>` : '';
+    return `<div style="display:flex; align-items:center; gap:8px; min-width:0;">`
       + itemThumb(it)
-      + `<div style="min-width:0;">`
-      +   `<div style="font-weight:600; color: var(--text-2);">${escapeHtml(nm.primary || ('#' + pid))}</div>`
-      +   sub
-      + `</div>`
+      + `<span style="font-weight:700; color: var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">`
+      +   `${escapeHtml(nm.primary || ('#' + pid))}${size}</span>`
       + itemSkuHtml(it)
       + `</div>`;
   }).join('');
-  return `<div style="margin-top:8px; padding:8px 10px; border-radius:8px;`
-    + ` background: color-mix(in srgb, var(--st-awaiting_restock) 9%, transparent);`
-    + ` border:1px solid color-mix(in srgb, var(--st-awaiting_restock) 26%, transparent);">`
-    + `<div style="display:flex; align-items:center; gap:6px; font-size:11px; font-weight:700;`
-    + ` letter-spacing:.02em; color: var(--st-awaiting_restock);">`
-    +   `<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
-    +   `<span>${cuT('Not in stock here — restock or transfer', '该门店暂无库存 — 请补货或调货')}</span>`
-    + `</div>`
-    + `<div style="margin-top:6px;">${rows}</div>`
+  return `<div class="full" style="display:flex; align-items:flex-start; gap:14px;`
+    + ` padding:12px 16px; border-radius:12px;`
+    + ` background: color-mix(in srgb, var(--brass) 12%, transparent);`
+    + ` border:1px solid color-mix(in srgb, var(--brass) 34%, transparent);">`
+    + `<span style="display:flex; align-items:center; gap:8px; flex:none; padding-top:2px;`
+    + ` font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase;`
+    + ` color: color-mix(in srgb, var(--brass) 82%, #000);">`
+    +   `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:none;"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`
+    +   `<span>${cuT('Restock first', '先补货')}</span>`
+    + `</span>`
+    + `<div style="display:flex; flex-direction:column; gap:8px; min-width:0; flex:1;">${items}</div>`
     + `</div>`;
 }
 // Full-size "Ship by" tile shown in the order-detail card grid. Same decision
@@ -3850,9 +3853,9 @@ function renderOpenOrder(o) {
               <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
               <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
               ${o.routed_by_distance === 0 ? `<div class="sub" style="color: var(--warn); font-weight: 600;">⚠ ${cuT('routed by area — address not locatable, verify store','按区域派单 · 地址无法定位,请核对门店')}</div>` : ''}
-              ${fulfillmentShortNote(o)}
             </div>` : ''}
           </div>
+          ${fulfillmentShortStrip(o)}
           ${renderAlipayProof(o)}
           ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
