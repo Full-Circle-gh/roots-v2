@@ -740,12 +740,13 @@
        tracks the seam automatically in every state and under the Aa `zoom` with
        no pixel guessing. It straddles the line (translateX(-50%)); the topbar's
        z-index is raised above the rail so the half over the rail isn't clipped.
-       Rest state is a small Dusk dot; hover swells it into a chevron, click folds.
-       setNavCollapsed() keeps its title/aria in sync; the chevron flip is CSS. -->
+       A bare Dusk-purple arrow, shown at all times; hover nudges it toward the
+       way it points, click folds. setNavCollapsed() keeps its title/aria in
+       sync; the chevron flip is CSS. -->
   <button class="seam-fold" id="railSeamFold" type="button" onclick="toggleNavCollapse()"
           title="Collapse menu · 收起菜单" aria-label="Collapse menu · 收起菜单" aria-pressed="false">
     <span class="seam-dot">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
     </span>
   </button>
   <!-- Tacet wordmark — the waveform settling into a straight line (chaos → calm)

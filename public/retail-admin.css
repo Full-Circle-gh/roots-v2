@@ -596,11 +596,11 @@
      the topbar's `left` equals the rail width — so it tracks the divider in
      every state (open/collapsed) and under the Aa `zoom` with no hardcoded
      widths. It straddles the line (translateX(-50%)); the topbar sits above the
-     rail (z-index below) so the half over the rail isn't clipped. Rest state is
-     a small Dusk dot; on hover it swells into a chevron button, and while
-     collapsed it stays open so the way back is always visible. Both sides of the
-     seam here are --bg-pane, so the dot's paper ring blends into the bar and
-     only interrupts the 1px divider. */
+     rail (z-index below) so the half over the rail isn't clipped. It's a bare
+     Dusk-purple arrow, shown at all times — no dot, no ring, no swell. The arrow
+     points into the rail (collapse) when open and flips outward (expand) once
+     folded; on hover it nudges a couple px toward the way it points, so it reads
+     as alive. */
   .seam-fold {
     position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%);
     z-index: 3; border: 0; background: none; padding: 8px; margin: 0;
@@ -608,29 +608,20 @@
   }
   .seam-dot {
     display: flex; align-items: center; justify-content: center;
-    width: 10px; height: 10px; border-radius: 50%; overflow: hidden;
-    background: #6E67AF; color: #fff;
-    box-shadow: 0 0 0 3px var(--bg-pane);
-    transition: width var(--t-fast) ease, height var(--t-fast) ease,
-                background var(--t-fast) ease, box-shadow var(--t-fast) ease;
+    color: #6E67AF;
   }
   .seam-dot svg {
-    width: 13px; height: 13px; display: block;
-    opacity: 0; transition: opacity var(--t-fast) ease, transform var(--t-fast) ease;
+    width: 15px; height: 15px; display: block;
+    transition: transform var(--t-fast) ease;
   }
-  .seam-fold:hover .seam-dot,
-  .seam-fold:focus-visible .seam-dot,
-  body.nav-collapsed .seam-dot {
-    width: 21px; height: 21px;
-    background: var(--bg-pane); color: var(--text-1);
-    box-shadow: 0 0 0 1px var(--line-soft), 0 1px 3px rgba(17, 26, 43, .1);
-  }
+  /* Open: points left (collapse); hover nudges it left. */
   .seam-fold:hover .seam-dot svg,
-  .seam-fold:focus-visible .seam-dot svg,
-  body.nav-collapsed .seam-dot svg { opacity: 1; }
-  /* Chevron points into the rail (collapse) when open; flips outward (expand)
-     once folded. */
+  .seam-fold:focus-visible .seam-dot svg { transform: translateX(-2px); }
+  /* Folded: chevron flips outward (expand); the hover nudge follows the flip, so
+     it drifts right on screen — still toward the way it points. */
   body.nav-collapsed .seam-dot svg { transform: rotate(180deg); }
+  body.nav-collapsed .seam-fold:hover .seam-dot svg,
+  body.nav-collapsed .seam-fold:focus-visible .seam-dot svg { transform: rotate(180deg) translateX(-2px); }
   /* Phones swap the rail for the bottom nav, so the seam control has no home. */
   @media (max-width: 720px) { .seam-fold { display: none; } }
 
@@ -8211,8 +8202,11 @@
   /* Location cards re-render on every toggle, so don't re-run the settle rise. */
   #tab-sales .sales-loc-grid .sales-ch { animation: none; }
   #tab-sales .sales-loc-chips {
-    display: flex; flex-wrap: wrap; gap: 7px;
+    display: flex; flex-wrap: wrap; align-content: flex-start; gap: 7px;
     border-top: 1px solid var(--td-border); padding-top: 14px;
+    /* Reserve two chip rows so a 3-channel store is the same height as a
+       4/5-channel one — every location card matches regardless of chip count. */
+    min-height: 55px;
   }
   #tab-sales .sales-chip {
     display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--td-text);
