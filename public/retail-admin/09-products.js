@@ -692,7 +692,10 @@ function _paUnitStock(u) {
 function _paPriceCell(u) {
   const pr = _paUnitPrices(u);
   if (!pr) return '<span class="pa-col-price pa-col-muted">—</span>';
-  const body = pr.min === pr.max ? `¥${fmt(pr.min)}` : `¥${fmt(pr.min)}–${fmt(pr.max)}`;
+  // Single price keeps the cents (¥89.00); a range drops trailing .00 so it
+  // reads compact (¥57–89), matching the catalogue mockup.
+  const short = n => fmt(n).replace(/\.00$/, '');
+  const body = pr.min === pr.max ? `¥${fmt(pr.min)}` : `¥${short(pr.min)}–${short(pr.max)}`;
   return `<span class="pa-col-price">${body}</span>`;
 }
 // Stock badge: green = healthy, brass = low (≤5), red = out (0). The number is
@@ -1290,9 +1293,12 @@ function paRender() {
       const p = u.p;
       const img  = p.image_data || p.image_url || '';
       if (overview) {
-        const sku = u.group
-          ? `${u.members.length} ${cuT('sizes', '规格')}`
-          : escapeHtml(p.sku || '—');
+        // A variant family shows "N sizes" as a pill beside the name (below),
+        // and a plain "—" in the SKU column (each size owns its own SKU).
+        const sizesPill = u.group
+          ? `<span class="pa-sizes-pill">${u.members.length} ${cuT('sizes', '规格')}</span>`
+          : '';
+        const sku = u.group ? '—' : escapeHtml(p.sku || '—');
         const gripCell = reorderActive
           ? `<span class="pa-grip" draggable="true" title="${cuT('Drag to reorder', '拖动排序')}" onclick="event.stopPropagation()" ondragstart="paRowDragStart(event, ${ui})" ondragend="paRowDragEnd()">${PA_ICON_GRIP}</span>`
           : '';
@@ -1310,7 +1316,7 @@ function paRender() {
           ${selCell}${gripCell}
           <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
           <div class="pa-row-main" data-no-i18n>
-            <div class="pa-row-name">${escapeHtml(p.name_en || '—')}</div>
+            <div class="pa-row-name">${escapeHtml(p.name_en || '—')}${sizesPill}</div>
             ${p.name_cn ? `<div class="pa-row-sub">${escapeHtml(p.name_cn)}</div>` : ''}
           </div>
           <div class="pa-col-cat">${_paCatCell(u)}</div>

@@ -2105,6 +2105,10 @@
      to restore Compact and the photo-crop / status / empty-photo options. */
   #pa-view-seg .pa-view-btn[data-view="compact"] { display: none; }
   .pa-toolbar .ovp-wrap { display: none; }
+  /* "N sizes" tag beside a variant product's name (list view) — quiet Dusk pill. */
+  .pa-sizes-pill { display: inline-flex; align-items: center; vertical-align: middle;
+    margin-left: 8px; padding: 1px 9px; border-radius: var(--r-pill, 999px); font-size: 11px;
+    font-weight: 500; background: var(--td-dusk-tint); color: var(--td-dusk); white-space: nowrap; }
 
   .pa-toolbar {
     display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap;
