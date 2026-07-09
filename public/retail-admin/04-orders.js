@@ -258,17 +258,28 @@ function invoiceSubRow(o) {
   const stateTag = issued
     ? `<span class="pill st-delivered" style="font-size:11px;"><span class="dot"></span>${cuT('Issued · 已开', '已开 · Issued')}</span>`
     : `<span class="pill st-awaiting_restock" style="font-size:11px;"><span class="dot"></span>${cuT('To issue · 待开', '待开 · To issue')}</span>`;
+  // Secondary line (税号 / email / 发票号) folded under the title so the title
+  // reads first and the panel doesn't wrap into a cramped single row.
+  const metaBits = [];
+  if (company && o.invoice_tax_id) metaBits.push(escapeHtml(o.invoice_tax_id));
+  if (o.invoice_email) metaBits.push(escapeHtml(o.invoice_email));
+  if (issued && o.invoice_number) metaBits.push(escapeHtml(o.invoice_number));
+  const meta = metaBits.length ? `<span class="ord-inv-meta">${metaBits.join(' · ')}</span>` : '';
   return `
       <tr class="order-row ord-inv-subrow${issued ? ' is-issued' : ''}" data-order-id="${o.id}">
-        <td colspan="10" style="padding: 4px 12px 10px; border-top: none;">
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--text-2);">
+        <td colspan="10" style="padding:0 12px 16px; border-top:none;">
+          <div class="ord-inv-panel">
+            <span class="ord-inv-label">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8"/></svg>
+              ${cuT('Invoice · 发票', '发票 · Invoice')}
+            </span>
             ${typeTag}
-            <b style="color:var(--text-1);">${escapeHtml(o.invoice_title || '—')}</b>
-            ${company && o.invoice_tax_id ? `<span style="font-variant-numeric:tabular-nums;">${escapeHtml(o.invoice_tax_id)}</span>` : ''}
-            ${o.invoice_email ? `<span>${escapeHtml(o.invoice_email)}</span>` : ''}
+            <div class="ord-inv-body">
+              <b>${escapeHtml(o.invoice_title || '—')}</b>
+              ${meta}
+            </div>
             ${stateTag}
-            ${issued && o.invoice_number ? `<span style="font-variant-numeric:tabular-nums;">${escapeHtml(o.invoice_number)}</span>` : ''}
-            <button type="button" class="db-btn" style="margin-left:auto; font-size:11px; padding:3px 10px;"
+            <button type="button" class="db-btn ord-inv-copy" style="font-size:11px; padding:3px 10px;"
               data-copy="${escapeAttr(invoiceAccountingText(o))}"
               onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">${cuT('Copy for accounting · 复制开票信息', '复制开票信息')}</button>
           </div>

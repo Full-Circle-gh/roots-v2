@@ -4134,6 +4134,34 @@
     100% { background: transparent;              box-shadow: inset 0   0 0 transparent; }
   }
   tbody tr.row-flash { animation: row-flash 1.6s ease-out 1; }
+  /* ── Invoice summary panel (the "Needs invoice" view) ───────────────────
+     The fapiao 抬头 / 税号 for an order used to be a bare full-width row that
+     floated under the order with no visual tie — you couldn't tell whose
+     invoice was whose. It's now a nested tinted card hanging off its order:
+     a left accent connects it upward, a full gap below (td padding) separates
+     it from the next order, and the title leads with 税号/email folded beneath.
+     Theme-aware via the elev tokens; carries its own bg so row-hover can't wash
+     it out. */
+  tr.ord-inv-subrow:hover { background: transparent; }
+  .ord-inv-panel {
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px; padding: 11px 14px;
+    font-size: 12.5px; color: var(--text-2);
+  }
+  .ord-inv-subrow.is-issued .ord-inv-panel { border-left-color: var(--line-strong); opacity: .8; }
+  .ord-inv-label {
+    display: inline-flex; align-items: center; gap: 7px; flex: none;
+    font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .ord-inv-label svg { flex: none; }
+  .ord-inv-body { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 180px; }
+  .ord-inv-body b { color: var(--text-1); font-weight: 600; font-size: 13px; }
+  .ord-inv-meta { color: var(--text-2); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
+  .ord-inv-copy { flex: none; }
   /* Unread order — a Tea "NEW" chip + bold order#/customer + a soft Tea wash
      over the whole row, persisting from arrival until any operator opens the
      detail (server seen_at). The wash is an inset box-shadow so it layers above
