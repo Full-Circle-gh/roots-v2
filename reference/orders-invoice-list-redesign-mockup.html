@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Orders list — room to breathe</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#111A2B;--paper:#FBF9F4;--graphite:#58606E;--cream:#F6F3EC;--border:#E4E0D5;
+  --raised:#F6F3EC;
+  --amber:#C9954A;--amber-tint:#F7EEDE;--amber-ink:#8A6425;
+  --brick-tint:#F6E7E3;--brick-ink:#9A4A38;
+  --sage:#A3B49F;--sage-tint:#EDF1EC;--sage-ink:#4A6249;
+  --dusk:#6E67AF;--dusk-tint:#EEEDF6;
+  --font:'Inter',system-ui,sans-serif;--display:'Fraunces',serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--paper);color:var(--ink);padding:48px 24px;line-height:1.55;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto}
+.tnum{font-variant-numeric:tabular-nums}
+
+/* header */
+h1{font-family:var(--display);font-size:30px;font-weight:500;letter-spacing:-.01em;margin-bottom:8px}
+.lede{font-size:15px;color:var(--graphite);margin-bottom:36px;max-width:660px}
+
+/* toolbar */
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:20px}
+.search{flex:1;min-width:220px;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 13px}
+.search svg{flex:none;color:var(--graphite)}
+.search input{border:0;outline:0;font:400 14px var(--font);color:var(--ink);background:none;width:100%}
+.search input::placeholder{color:var(--graphite)}
+.chips{display:flex;gap:7px;flex-wrap:wrap}
+.chip{font-size:13px;font-weight:500;padding:8px 15px;border-radius:999px;border:1px solid var(--border);background:#fff;color:var(--graphite);cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:7px}
+.chip.on{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.chip .n{font-size:11.5px;font-weight:600;background:var(--amber-tint);color:var(--amber-ink);border-radius:999px;padding:0 7px}
+.chip.on .n{background:rgba(251,249,244,.18);color:var(--paper)}
+
+/* order cards */
+.list{display:grid;gap:16px}
+.order{background:#fff;border:1px solid var(--border);border-radius:14px;padding:20px 22px;box-shadow:0 1px 2px rgba(17,26,43,.03);transition:box-shadow .2s cubic-bezier(.16,1,.3,1)}
+.order:hover{box-shadow:0 4px 16px rgba(17,26,43,.05)}
+
+/* line 1: identity + money + status */
+.o-head{display:flex;align-items:center;gap:14px}
+.o-no{font-size:17px;font-weight:600;letter-spacing:.01em}
+.o-chan{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--graphite)}
+.o-chan svg{flex:none}
+.o-total{margin-left:auto;font-size:17px;font-weight:600;letter-spacing:.01em}
+.badge{font-size:12.5px;font-weight:500;padding:3px 12px;border-radius:999px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.badge.done{background:var(--sage-tint);color:var(--sage-ink)}
+.badge.done::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--sage)}
+.badge.transit{background:var(--amber-tint);color:var(--amber-ink)}
+.badge.transit::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--amber)}
+
+/* line 2: the three facts, evenly spaced */
+.o-facts{display:grid;grid-template-columns:1.4fr 1fr 1.3fr;gap:22px;margin-top:16px;padding-top:16px;border-top:1px solid var(--cream)}
+.fact .lab{font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--graphite);margin-bottom:5px}
+.fact .big{font-size:14.5px;font-weight:500;line-height:1.35}
+.fact .sub{font-size:12.5px;color:var(--graphite);margin-top:2px}
+.fact .sub.live{display:inline-flex;align-items:center;gap:6px}
+.fact .sub.live::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--sage)}
+
+/* invoice zone — clearly nested inside the order */
+.inv{margin-top:16px;background:var(--raised);border-radius:10px;padding:13px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.inv-mark{display:inline-flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--graphite)}
+.inv-mark svg{color:var(--amber-ink)}
+.inv-body{flex:1;min-width:200px;display:flex;flex-direction:column;gap:1px}
+.inv-title{font-size:14px;font-weight:500}
+.inv-meta{font-size:12.5px;color:var(--graphite)}
+.inv-meta .tax{font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.pill{font-size:11.5px;font-weight:500;padding:2px 10px;border-radius:999px;white-space:nowrap}
+.pill.co{background:var(--dusk-tint);color:var(--dusk)}
+.pill.per{background:#EDEBE4;color:var(--graphite)}
+.pill.issued{background:var(--sage-tint);color:var(--sage-ink)}
+.pill.topay{background:var(--amber-tint);color:var(--amber-ink)}
+.copy{font:500 13px var(--font);color:var(--ink);background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 14px;cursor:pointer;display:inline-flex;align-items:center;gap:7px;white-space:nowrap}
+.copy svg{color:var(--graphite)}
+.copy:hover{border-color:var(--graphite)}
+
+/* no-invoice case */
+.inv.none{background:none;padding:6px 0 0;margin-top:12px;color:var(--graphite);font-size:12.5px}
+.inv.none .inv-mark{color:var(--graphite)}
+.inv.none .inv-mark svg{color:var(--graphite);opacity:.6}
+
+/* callout */
+.why{margin-top:44px;background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px 24px}
+.why h2{font-size:15px;font-weight:600;margin-bottom:12px}
+.why ul{list-style:none;display:grid;gap:10px}
+.why li{display:flex;gap:11px;font-size:14px;color:var(--ink)}
+.why li svg{flex:none;color:var(--sage-ink);margin-top:3px}
+.why .g{color:var(--graphite)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Orders — room to breathe</h1>
+<p class="lede">One order is one card. The invoice sits inside the card it belongs to, in its own quiet zone, so there's never a question of whose invoice is whose. The dense table becomes three clear facts per order — who, how much, where it's going.</p>
+
+<!-- toolbar -->
+<div class="bar">
+  <div class="search">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+    <input placeholder="Search order number, customer, tax number…">
+  </div>
+</div>
+<div class="chips" style="margin-bottom:22px">
+  <span class="chip on">All</span>
+  <span class="chip">Open</span>
+  <span class="chip">Needs invoice <span class="n">3</span></span>
+  <span class="chip">Delivered</span>
+  <span class="chip">Refunded</span>
+</div>
+
+<div class="list">
+
+  <!-- order 1 -->
+  <div class="order">
+    <div class="o-head">
+      <span class="o-no tnum">R·215654</span>
+      <span class="o-chan">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+        Mini app
+      </span>
+      <span class="o-total tnum">¥291.80</span>
+      <span class="badge done">Delivered</span>
+    </div>
+    <div class="o-facts">
+      <div class="fact">
+        <div class="lab">Customer</div>
+        <div class="big">Shafer Busch</div>
+        <div class="sub">6 items · placed Jun 24, 10:17</div>
+      </div>
+      <div class="fact">
+        <div class="lab">Ship to</div>
+        <div class="big">Shanghai</div>
+        <div class="sub">Changning · from Tianhe</div>
+      </div>
+      <div class="fact">
+        <div class="lab">Delivery</div>
+        <div class="big tnum">JD ····5700</div>
+        <div class="sub live">2 parcels · both delivered</div>
+      </div>
+    </div>
+    <div class="inv">
+      <span class="inv-mark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8"/></svg>
+        Invoice
+      </span>
+      <span class="pill per">Personal</span>
+      <div class="inv-body">
+        <span class="inv-title">Joseph Norman Greenawalt Jr</span>
+        <span class="inv-meta">shaferbusch13@gmail.com</span>
+      </div>
+      <span class="pill issued">Issued</span>
+      <button class="copy">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy for accounting
+      </button>
+    </div>
+  </div>
+
+  <!-- order 2 -->
+  <div class="order">
+    <div class="o-head">
+      <span class="o-no tnum">R·158745</span>
+      <span class="o-chan">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+        Mini app
+      </span>
+      <span class="o-total tnum">¥336.02</span>
+      <span class="badge done">Delivered</span>
+    </div>
+    <div class="o-facts">
+      <div class="fact">
+        <div class="lab">Customer</div>
+        <div class="big">Allie</div>
+        <div class="sub">6 items · placed Jun 21, 15:44</div>
+      </div>
+      <div class="fact">
+        <div class="lab">Ship to</div>
+        <div class="big">Guangzhou</div>
+        <div class="sub">Panyu · from Tianhe</div>
+      </div>
+      <div class="fact">
+        <div class="lab">Delivery</div>
+        <div class="big tnum">JD ····5072</div>
+        <div class="sub live">Delivered</div>
+      </div>
+    </div>
+    <div class="inv">
+      <span class="inv-mark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8"/></svg>
+        Invoice
+      </span>
+      <span class="pill co">Company</span>
+      <div class="inv-body">
+        <span class="inv-title">广州万铧堡食品有限公司</span>
+        <span class="inv-meta"><span class="tax">91440105567934365Y</span> · 38253329@qq.com</span>
+      </div>
+      <span class="pill issued">Issued</span>
+      <button class="copy">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy for accounting
+      </button>
+    </div>
+  </div>
+
+  <!-- order 3 — invoice still to issue -->
+  <div class="order">
+    <div class="o-head">
+      <span class="o-no tnum">R·000003</span>
+      <span class="o-chan">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+        Mini app
+      </span>
+      <span class="o-total tnum">¥360.84</span>
+      <span class="badge done">Delivered</span>
+    </div>
+    <div class="o-facts">
+      <div class="fact">
+        <div class="lab">Customer</div>
+        <div class="big">Christi Anne</div>
+        <div class="sub">2 items · placed Jun 15, 10:58</div>
+      </div>
+      <div class="fact">
+        <div class="lab">Ship to</div>
+        <div class="big">Beijing</div>
+        <div class="sub">Chaoyang · from Tianhe</div>
+      </div>
+      <div class="fact">
+        <div class="lab">Delivery</div>
+        <div class="big tnum">JD ····2551</div>
+        <div class="sub live">Delivered</div>
+      </div>
+    </div>
+    <div class="inv">
+      <span class="inv-mark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8"/></svg>
+        Invoice
+      </span>
+      <span class="pill co">Company</span>
+      <div class="inv-body">
+        <span class="inv-title">US Embassy</span>
+        <span class="inv-meta"><span class="tax">110105D0000016</span> · ca.and.ewan@gmail.com</span>
+      </div>
+      <span class="pill topay">To issue</span>
+      <button class="copy">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copy for accounting
+      </button>
+    </div>
+  </div>
+
+  <!-- order 4 — no invoice requested -->
+  <div class="order">
+    <div class="o-head">
+      <span class="o-no tnum">R·000003</span>
+      <span class="o-chan">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+        Mini app
+      </span>
+      <span class="o-total tnum">¥700.46</span>
+      <span class="badge done">Delivered</span>
+    </div>
+    <div class="o-facts">
+      <div class="fact">
+        <div class="lab">Customer</div>
+        <div class="big">DN. Rafael</div>
+        <div class="sub">16 items · placed Jun 14, 13:19</div>
+      </div>
+      <div class="fact">
+        <div class="lab">Ship to</div>
+        <div class="big">Guangzhou</div>
+        <div class="sub">Panyu · from Yuexiu</div>
+      </div>
+      <div class="fact">
+        <div class="lab">Delivery</div>
+        <div class="big">Pickup</div>
+        <div class="sub">No shipment</div>
+      </div>
+    </div>
+    <div class="inv none">
+      <span class="inv-mark">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+        No invoice requested
+      </span>
+    </div>
+  </div>
+
+</div>
+
+<!-- why -->
+<div class="why">
+  <h2>What changed</h2>
+  <ul>
+    <li>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span><strong>The invoice lives inside its order.</strong> <span class="g">Not a floating row underneath — it sits in a tinted zone within the same card, so the tax title and the customer can never drift apart.</span></span>
+    </li>
+    <li>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span><strong>Ten columns become three facts.</strong> <span class="g">Who, where it's going, how it's arriving. Everything else folds into a quiet second line or into the drawer.</span></span>
+    </li>
+    <li>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span><strong>One status word per order.</strong> <span class="g">The green dot tells you it's fine at a glance. "To issue" amber is the only thing that asks for you.</span></span>
+    </li>
+    <li>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span><strong>Space between orders.</strong> <span class="g">A full gap between cards, not a hairline. The eye lands on one order at a time instead of a wall of rows.</span></span>
+    </li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Invoice batch — for the tax system</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#111A2B;--paper:#FBF9F4;--graphite:#58606E;--cream:#F6F3EC;--border:#E4E0D5;
+  --raised:#F6F3EC;
+  --amber:#C9954A;--amber-tint:#F7EEDE;--amber-ink:#8A6425;
+  --brick-tint:#F6E7E3;--brick-ink:#9A4A38;
+  --sage:#A3B49F;--sage-tint:#EDF1EC;--sage-ink:#4A6249;
+  --dusk:#6E67AF;--dusk-tint:#EEEDF6;
+  --font:'Inter',system-ui,sans-serif;--display:'Fraunces',serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--paper);color:var(--ink);padding:48px 24px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1000px;margin:0 auto}
+.tnum{font-variant-numeric:tabular-nums}
+
+h1{font-family:var(--display);font-size:30px;font-weight:500;letter-spacing:-.01em;margin-bottom:8px}
+.lede{font-size:15px;color:var(--graphite);margin-bottom:32px;max-width:660px}
+
+/* segmented toggle showing this is the same list, two views */
+.views{display:inline-flex;background:var(--cream);border:1px solid var(--border);border-radius:10px;padding:3px;margin-bottom:24px}
+.views button{font:500 13px var(--font);color:var(--graphite);background:none;border:0;padding:7px 16px;border-radius:8px;cursor:pointer}
+.views button.on{background:#fff;color:var(--ink);box-shadow:0 1px 2px rgba(17,26,43,.05)}
+
+/* action bar */
+.bar{background:#fff;border:1px solid var(--border);border-radius:12px 12px 0 0;border-bottom:0;padding:14px 20px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.selall{display:inline-flex;align-items:center;gap:9px;font-size:13.5px;font-weight:500;color:var(--ink);cursor:pointer}
+.box{width:17px;height:17px;border:1.6px solid var(--graphite);border-radius:5px;flex:none;display:grid;place-items:center;background:#fff}
+.box.on{background:var(--ink);border-color:var(--ink)}
+.box.on svg{color:var(--paper)}
+.box svg{opacity:0}
+.box.on svg{opacity:1}
+.selcount{font-size:13px;color:var(--graphite)}
+.selcount b{color:var(--ink);font-weight:600}
+.bar .grow{flex:1}
+.copyall{font:500 13.5px var(--font);color:var(--paper);background:var(--ink);border:0;border-radius:8px;padding:9px 16px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.copyall svg{color:var(--paper)}
+.ghost{font:500 13.5px var(--font);color:var(--ink);background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 15px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
+.ghost svg{color:var(--graphite)}
+
+/* the table */
+.tbl{background:#fff;border:1px solid var(--border);border-radius:0 0 12px 12px;overflow:hidden}
+.hrow{display:grid;grid-template-columns:34px 88px 1.7fr 150px 1fr 96px 118px;gap:16px;padding:11px 20px;background:var(--raised);border-bottom:1px solid var(--border);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--graphite)}
+.hrow .r{text-align:right}
+.irow{display:grid;grid-template-columns:34px 88px 1.7fr 150px 1fr 96px 118px;gap:16px;padding:15px 20px;border-bottom:1px solid var(--cream);align-items:center;font-size:14px}
+.irow:last-child{border-bottom:0}
+.irow:hover{background:#FCFBF7}
+.irow.sel{background:var(--dusk-tint)}
+.irow.sel:hover{background:#E8E6F2}
+
+.c-order{font-weight:500;color:var(--graphite);font-size:13px}
+.c-title{min-width:0}
+.c-title .name{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-title .who{font-size:12px;color:var(--graphite);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-tax{font-variant-numeric:tabular-nums;font-size:13px;letter-spacing:.02em;color:var(--ink)}
+.c-tax.dash{color:var(--border)}
+.c-mail{font-size:13px;color:var(--graphite);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-amt{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+.c-stat{text-align:right}
+.type{display:inline-block;font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:1px 7px;border-radius:5px;margin-bottom:4px}
+.type.co{background:var(--dusk-tint);color:var(--dusk)}
+.type.per{background:#EDEBE4;color:var(--graphite)}
+.pill{font-size:11.5px;font-weight:500;padding:3px 11px;border-radius:999px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.pill.issued{background:var(--sage-tint);color:var(--sage-ink)}
+.pill.issued::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--sage)}
+.pill.topay{background:var(--amber-tint);color:var(--amber-ink)}
+.pill.topay::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--amber)}
+
+/* footer total strip */
+.foot{display:flex;align-items:center;gap:10px;margin-top:16px;padding:0 4px;font-size:13px;color:var(--graphite)}
+.foot .tot{margin-left:auto;font-size:14px}
+.foot .tot b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+
+.why{margin-top:40px;background:#fff;border:1px solid var(--border);border-radius:14px;padding:22px 24px}
+.why h2{font-size:15px;font-weight:600;margin-bottom:12px}
+.why ul{list-style:none;display:grid;gap:10px}
+.why li{display:flex;gap:11px;font-size:14px;color:var(--ink)}
+.why li svg{flex:none;color:var(--sage-ink);margin-top:3px}
+.why .g{color:var(--graphite)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Invoice batch view</h1>
+<p class="lede">The same orders, seen as a flat invoice ledger. One line per invoice, everything the tax system needs on that line, tick the ones you're filing and copy them all at once. Nothing to open.</p>
+
+<div class="views">
+  <button>Order cards</button>
+  <button class="on">Invoice batch</button>
+</div>
+
+<!-- action bar -->
+<div class="bar">
+  <label class="selall">
+    <span class="box on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+    Select all
+  </label>
+  <span class="selcount"><b>3</b> selected</span>
+  <span class="grow"></span>
+  <button class="ghost">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>
+    Export CSV
+  </button>
+  <button class="copyall">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    Copy 3 for accounting
+  </button>
+</div>
+
+<!-- table -->
+<div class="tbl">
+  <div class="hrow">
+    <span></span>
+    <span>Order</span>
+    <span>Invoice title</span>
+    <span>Tax number</span>
+    <span>Email</span>
+    <span class="r">Amount</span>
+    <span class="r">Status</span>
+  </div>
+
+  <div class="irow sel">
+    <span class="box on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+    <span class="c-order tnum">R·215654</span>
+    <span class="c-title"><span class="type per">Personal</span><div class="name">Joseph Norman Greenawalt Jr</div><div class="who">Shafer Busch · Mini app</div></span>
+    <span class="c-tax dash">—</span>
+    <span class="c-mail">shaferbusch13@gmail.com</span>
+    <span class="c-amt">¥291.80</span>
+    <span class="c-stat"><span class="pill issued">Issued</span></span>
+  </div>
+
+  <div class="irow sel">
+    <span class="box on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+    <span class="c-order tnum">R·158745</span>
+    <span class="c-title"><span class="type co">Company</span><div class="name">广州万铧堡食品有限公司</div><div class="who">Allie · Mini app</div></span>
+    <span class="c-tax tnum">91440105567934365Y</span>
+    <span class="c-mail">38253329@qq.com</span>
+    <span class="c-amt">¥336.02</span>
+    <span class="c-stat"><span class="pill issued">Issued</span></span>
+  </div>
+
+  <div class="irow sel">
+    <span class="box on"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+    <span class="c-order tnum">R·000003</span>
+    <span class="c-title"><span class="type co">Company</span><div class="name">US Embassy</div><div class="who">Christi Anne · Mini app</div></span>
+    <span class="c-tax tnum">110105D0000016</span>
+    <span class="c-mail">ca.and.ewan@gmail.com</span>
+    <span class="c-amt">¥360.84</span>
+    <span class="c-stat"><span class="pill topay">To issue</span></span>
+  </div>
+
+  <div class="irow">
+    <span class="box"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+    <span class="c-order tnum">R·000012</span>
+    <span class="c-title"><span class="type co">Company</span><div class="name">凯洛斯国际教育咨询（江门）有限责任公司</div><div class="who">DN. Rafael · Mini app</div></span>
+    <span class="c-tax tnum">91440703MA52AGEK9M</span>
+    <span class="c-mail">bgwl_0522@qq.com</span>
+    <span class="c-amt">¥700.46</span>
+    <span class="c-stat"><span class="pill topay">To issue</span></span>
+  </div>
+</div>
+
+<div class="foot">
+  <span>4 invoices this range · 2 to issue</span>
+  <span class="tot">Selected total <b>¥988.66</b></span>
+</div>
+
+<!-- why -->
+<div class="why">
+  <h2>Why two views, not two pages</h2>
+  <ul>
+    <li>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span><strong>Same orders, one toggle.</strong> <span class="g">The card view is for looking after an order. The batch view is for filing tax. They're the same list wearing different clothes — never a separate section to keep in sync.</span></span>
+    </li>
+    <li>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span><strong>Everything the tax system wants is on the line.</strong> <span class="g">Title, tax number, email, amount. Tick, copy, paste. No drawer to open forty times.</span></span>
+    </li>
+    <li>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      <span><strong>The two that still need you stand out.</strong> <span class="g">Amber "To issue" is the only thing that isn't quiet green — filter to those on a busy day.</span></span>
+    </li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>
