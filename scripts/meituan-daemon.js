@@ -275,6 +275,85 @@ function noteVerifyResult(storeCode, challenged) {
   }
 }
 
+// ── Lost store-binding (acctId/region missing) ──────────────────────────────
+// A session can stay AUTHENTICATED yet lose its STORE binding — Meituan drops the
+// acctId/region context, so every stock write returns acctId=null and every order
+// read returns "SET REGION QUERY ERROR", while the session still looks logged in
+// (token/bsid valid, session refreshes fine). Before 2026-07-09 this failed
+// SILENTLY for 18h because those replies weren't classed as a disconnect. We now
+// treat it like the verify state: page ops ONCE on transition, gate pushing so we
+// don't spam a dead session, and clear + page recovery the moment a bound op
+// succeeds. Time-latched (not first-blip) so a one-off transient 10002 never pages.
+// See reference_meituan_tianhe_session_binding_loss.
+const BINDING_ALERT_AFTER_MS = 5 * 60_000; // must persist this long before paging
+const bindingDown = {}; // storeCode -> { since: epochMs|null, alerted: bool }
+
+// True while a store is currently suspected of having lost its binding — the
+// daemon skips pushing to it (pointless + burns nothing useful); the ~5 min order
+// poll stays the recovery probe that clears it.
+function bindingSuspected(storeCode) {
+  const s = bindingDown[storeCode];
+  return !!(s && s.since != null);
+}
+
+// Record the binding health of a poll/push cycle. lost=true starts/continues the
+// latch and pages once it has persisted past the threshold; lost=false clears it
+// (and pages a recovery if we'd alerted).
+function noteBindingResult(storeCode, lost) {
+  const s = bindingDown[storeCode] || (bindingDown[storeCode] = { since: null, alerted: false });
+  if (!lost) {
+    if (s.alerted) {
+      logSync(storeCode, 'binding_cleared', 'ok', null, 'store binding restored — sync resumed');
+      sendOpsAlert(`✅ 美团外卖 ${storeCode} 门店绑定已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} store binding restored — stock/order sync resumed`);
+    }
+    s.since = null; s.alerted = false;
+    return;
+  }
+  const now = Date.now();
+  if (s.since == null) s.since = now;
+  if (!s.alerted && now - s.since >= BINDING_ALERT_AFTER_MS) {
+    s.alerted = true;
+    logSync(storeCode, 'binding_lost', 'error', null,
+      'session authed but lost store binding (acctId/region) — needs re-login');
+    sendOpsAlert(`🔴 美团外卖 ${storeCode} 掉了门店绑定（acctId/区域丢失），库存和订单同步已停，需要重新登录（ops-screen 扫码后选回门店）\nMeituan 外卖 ${storeCode} lost its store binding (acctId/region) — stock + order sync DOWN, needs a re-login (ops-screen QR, then re-select the store).`);
+  }
+}
+
+// ── Heartbeat canary (Layer 2: generic stall backstop) ──────────────────────
+// The verify / binding / proxy / browser-crash alerts each cover a KNOWN silent
+// mode. This is the catch-all for an unforeseen one: during open hours, if a store
+// hasn't had a single clean order read in HEARTBEAT_STALE_MS, page ops. The order
+// poll runs every ~5 min unconditionally, so a healthy store refreshes this
+// constantly — a stale clock means something we didn't anticipate has wedged.
+const HEARTBEAT_STALE_MS = Number(process.env.MEITUAN_HEARTBEAT_STALE_MIN || 45) * 60_000;
+const lastOrderFetchOk = {}; // storeCode -> epochMs of last clean order read
+const heartbeatFlagged = {}; // storeCode -> bool latch
+
+function noteOrderFetchOk(storeCode) { lastOrderFetchOk[storeCode] = Date.now(); }
+
+// Evaluate the heartbeat for one store. Any state that legitimately stops polling
+// (closed, verify/binding cool-down, browser down) "parks" the clock so it can't
+// false-fire — and those states own their own alerts anyway. Only a store that is
+// open, healthy on every other axis, yet silent, trips this.
+function heartbeatTick(storeCode) {
+  const now = Date.now();
+  const bd = browserDown[storeCode];
+  const excused = !isStoreOpen(storeCode) || inVerifyCooldown(storeCode)
+                  || bindingSuspected(storeCode) || (bd && bd.since != null);
+  if (excused || lastOrderFetchOk[storeCode] == null) { lastOrderFetchOk[storeCode] = now; return; }
+  const stale = now - lastOrderFetchOk[storeCode] >= HEARTBEAT_STALE_MS;
+  if (stale && !heartbeatFlagged[storeCode]) {
+    heartbeatFlagged[storeCode] = true;
+    const mins = Math.round((now - lastOrderFetchOk[storeCode]) / 60000);
+    logSync(storeCode, 'sync_stalled', 'error', null, `no successful order read in ~${mins} min during open hours`);
+    sendOpsAlert(`🔴 美团外卖 ${storeCode} 同步疑似卡住：营业时间内约 ${mins} 分钟没有一次成功的订单读取，请检查\nMeituan 外卖 ${storeCode} sync looks stalled — no successful order read in ~${mins} min during open hours; please check`);
+  } else if (!stale && heartbeatFlagged[storeCode]) {
+    heartbeatFlagged[storeCode] = false;
+    logSync(storeCode, 'sync_resumed', 'ok', null, 'order reads succeeding again');
+    sendOpsAlert(`✅ 美团外卖 ${storeCode} 同步恢复正常\nMeituan 外卖 ${storeCode} sync back to normal`);
+  }
+}
+
 // ── Store config ─────────────────────────────────────────────────────────────
 // Reads store codes from retail_stores table; maps code → Meituan credentials
 // from environment variables.
@@ -311,10 +390,16 @@ async function pollOrders(storeConfig) {
     // transition so it doesn't flood the sync log the admin tab reads).
     noteVerifyResult(storeCode, browser.verificationRequired);
 
+    // Surface a lost store binding (acctId/region) the same way — this order read
+    // is the primary detector AND the recovery probe. A clean read (neither verify
+    // nor binding) also feeds the heartbeat canary.
+    noteBindingResult(storeCode, browser.bindingLost);
+    if (!browser.verificationRequired && !browser.bindingLost) noteOrderFetchOk(storeCode);
+
     // Keep the on-disk session fresh while we're cleanly logged in, so a crash
     // restores recent cookies instead of the stale login-time snapshot (fewer
     // forced re-logins). Throttled; console-only log (not the admin sync log).
-    if (!browser.verificationRequired) {
+    if (!browser.verificationRequired && !browser.bindingLost) {
       const now = Date.now();
       if (!lastSessionSave[storeCode] || now - lastSessionSave[storeCode] >= SESSION_SAVE_MS) {
         if (await browser.persistSession()) {
@@ -453,6 +538,8 @@ async function sweepStaleOrders(storeConfig) {
     const orders = await browser.getPendingOrders({ sinceDays: ORDER_SWEEP_DAYS, pageSize: 100 });
     noteBrowserHealth(storeCode, true);
     noteVerifyResult(storeCode, browser.verificationRequired);
+    noteBindingResult(storeCode, browser.bindingLost);
+    if (!browser.verificationRequired && !browser.bindingLost) noteOrderFetchOk(storeCode);
     if (!orders.length) return;
 
     const want = new Set(stale.map(s => s.meituan_order_no));
@@ -510,6 +597,10 @@ async function processStockQueue() {
     // pending and flush at the next open / after the cool-down.
     if (!isStoreOpen(storeCode)) continue;
     if (inVerifyCooldown(storeCode)) continue;
+    // Don't push to a store whose store binding is suspected lost — every write
+    // would just return acctId=null. Rows stay pending; the order poll clears the
+    // binding once a re-login lands, then pushes flush on the next cycle.
+    if (bindingSuspected(storeCode)) continue;
 
     // Collapse to the latest qty per product/bundle so we push each target once,
     // not replay every intermediate change. Older same-target rows are retired.
@@ -562,6 +653,12 @@ async function processStockQueue() {
       const challenged = browser.verificationRequired;
       if (challenged) noteVerifyResult(storeCode, true);
 
+      // If the batch revealed a lost store binding (acctId=null), start the
+      // binding latch now so the next cycle skips pushing to this store and the
+      // failed rows are requeued (below) rather than burned.
+      const bindingLost = browser.bindingLost;
+      if (bindingLost) noteBindingResult(storeCode, true);
+
       for (const res of results) {
         const { row, isBundle, newQty, ok, transient } = res;
         if (ok) {
@@ -582,6 +679,12 @@ async function processStockQueue() {
           // Deferred by risk-control, not a real failure — requeue and refund the
           // attempt so it retries once the cool-down passes (no burned attempts).
           db.prepare(`UPDATE meituan_sync_queue SET status='pending', attempts=attempts-1 WHERE id=?`)
+            .run(row.id);
+        } else if (bindingLost) {
+          // Session lost its store binding, not a product-level failure — requeue
+          // and refund the attempt so the row flushes after re-login instead of
+          // burning terminal during the outage.
+          db.prepare(`UPDATE meituan_sync_queue SET status='pending', attempts=attempts-1, last_error='store binding lost — will retry after re-login' WHERE id=?`)
             .run(row.id);
         } else if (transient && (row.attempts || 0) + 1 < 3) {
           // Transient automation hiccup (resolve / searchSugByName / navigation),
@@ -940,6 +1043,9 @@ async function main() {
       console.log(`[meituan-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
       for (const s of stores) logSync(s.storeCode, 'proxy_up', 'ok', null, 'proxy reachable again — sync resumed');
       sendOpsAlert(`✅ 美团外卖 代理已恢复，同步继续\nMeituan 外卖 proxy recovered — sync resumed`);
+      // Grace the heartbeat clock: no polls ran during the outage, so don't let a
+      // long outage make the first post-recovery tick look like a stall.
+      for (const s of stores) noteOrderFetchOk(s.storeCode);
     }
 
     // Poll for new orders on a jittered ~5 min cadence. Stagger stores so the two
@@ -994,6 +1100,11 @@ async function main() {
       if (inVerifyCooldown(s.storeCode)) continue;
       await syncBusinessStatus(s.storeCode);
     }
+
+    // Heartbeat backstop: page ops if any open store has gone silent (no clean
+    // order read) beyond the stall window, and isn't already covered by another
+    // alert. Cheap; runs every cycle.
+    for (const s of stores) heartbeatTick(s.storeCode);
 
     await sleep(jitter(QUEUE_CHECK_MS));
   }
