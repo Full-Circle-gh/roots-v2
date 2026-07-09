@@ -165,6 +165,11 @@ async function loadDeliveryZones() {
     }
     if ($('#dlv-holiday-msg-en')) $('#dlv-holiday-msg-en').value = hMsg.en || '';
     if ($('#dlv-holiday-msg-cn')) $('#dlv-holiday-msg-cn').value = hMsg.cn || '';
+    // Same-day cutoff — minutes-before-close buffer + optional message override.
+    const cMsg = dlv.sameDayCutoffMessage || {};
+    if ($('#dlv-cutoff-minutes')) $('#dlv-cutoff-minutes').value = dlv.sameDayCutoffMinutes != null ? dlv.sameDayCutoffMinutes : 10;
+    if ($('#dlv-cutoff-msg-en')) $('#dlv-cutoff-msg-en').value = cMsg.en || '';
+    if ($('#dlv-cutoff-msg-cn')) $('#dlv-cutoff-msg-cn').value = cMsg.cn || '';
     const cb = $('#dlv-holiday-mode');
     if (cb && !cb._wired) {
       cb._wired = true;
@@ -288,6 +293,28 @@ async function saveHolidayMode() {
     'delivery.holidayMessage': {
       en: ($('#dlv-holiday-msg-en').value || '').trim(),
       cn: ($('#dlv-holiday-msg-cn').value || '').trim(),
+    },
+  };
+  try {
+    await api('/api/retail-admin/config', { method: 'PUT', body });
+    toast('Saved · 已保存');
+  } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
+}
+
+// Same-day cutoff — minutes-before-close buffer, with an optional bilingual
+// message override (blank = server keeps using its auto-built "closes at
+// Xpm" copy). Clamp minutes to a sane range so a typo can't swallow the
+// whole business day or send a negative value to the server.
+async function saveCutoffSettings() {
+  let mins = Math.round(Number($('#dlv-cutoff-minutes').value));
+  if (!Number.isFinite(mins) || mins < 0) mins = 0;
+  if (mins > 180) mins = 180;
+  $('#dlv-cutoff-minutes').value = mins;
+  const body = {
+    'delivery.sameDayCutoffMinutes': mins,
+    'delivery.sameDayCutoffMessage': {
+      en: ($('#dlv-cutoff-msg-en').value || '').trim(),
+      cn: ($('#dlv-cutoff-msg-cn').value || '').trim(),
     },
   };
   try {
@@ -1146,6 +1173,14 @@ const RM_DLV_EDITORS = {
       { id: 'dlv-holiday-msg-cn', kind: 'textarea', label: '消息(中文)· Message (Chinese)' },
     ],
   },
+  cutoff: {
+    title: 'Same-day cutoff · 当日截单', save: 'saveCutoffSettings',
+    fields: [
+      { id: 'dlv-cutoff-minutes', kind: 'numsm', unit: 'min before close · 分钟(关门前)', label: 'Cutoff · 截单时间' },
+      { id: 'dlv-cutoff-msg-en', kind: 'textarea', label: 'Message (English) · 英文消息 — optional' },
+      { id: 'dlv-cutoff-msg-cn', kind: 'textarea', label: '消息(中文)· Message (Chinese) — 可留空' },
+    ],
+  },
   batch: {
     title: 'Batch schedule · 现做排期', save: 'saveBatchSchedule',
     fields: [
@@ -1304,6 +1339,7 @@ function rmDlvRenderHub() {
     grouplab('Schedule &amp; closures · 排期与休假') +
     '<div class="rm-dlv-group">' +
       row('sun', 'Holiday mode · 假期模式', 'Pause same-day, show a banner · 暂停当日达并显示横幅', toggle(holidayOn, 'holiday'), "rmDlvOpenEditor('holiday')") +
+      row('clock', 'Same-day cutoff · 当日截单', (Number(_rmGv('dlv-cutoff-minutes')) || 0) + ' min before close · 分钟(关门前)', '', "rmDlvOpenEditor('cutoff')") +
       row('repeat', 'Fresh batch schedule · 现做排期', 'Outside-GZ + far districts · 广州以外及较远城区', pill(batchOn), "rmDlvOpenEditor('batch')") +
     '</div>' +
     grouplab('Defaults · 默认') +
@@ -1473,6 +1509,11 @@ function dlvHubRender() {
   if (hubSw) hubSw.checked = hol;
   if (hol) _dlvStat('dlv-st-holiday', 'warn', cuT('On — same-day delivery paused', '已开启 — 当日达暂停'));
   else _dlvStat('dlv-st-holiday', 'off', cuT('Off — everything running normally', '关闭 — 一切正常'));
+
+  // Same-day cutoff — minutes-before-close buffer.
+  const cutoffMin = Number(val('#dlv-cutoff-minutes'));
+  if (cutoffMin > 0) _dlvStat('dlv-st-cutoff', 'ok', cuT(cutoffMin + ' min before close', '关门前 ' + cutoffMin + ' 分钟'));
+  else _dlvStat('dlv-st-cutoff', 'off', cuT('Off — accepted up to closing minute', '关闭 — 关门前一分钟仍可接单'));
 
   // Fresh batches.
   const bOn = !!document.getElementById('batch-enabled')?.checked;

@@ -4257,6 +4257,26 @@
           </div>
         </div>
 
+        <!-- Same-day cutoff — how many minutes before close we stop taking
+             same-day / right-away delivery, plus the checkout message. -->
+        <div class="sales-ch dlv-hc">
+          <div class="sales-ch-top">
+            <div class="sales-ch-id">
+              <span class="sales-ch-ico" style="background:rgba(201,138,42,.15);color:#a3701f">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/></svg>
+              </span>
+              <div>
+                <div class="sales-ch-name">Same-day cutoff · 当日截单</div>
+                <div class="sales-ch-stat" id="dlv-st-cutoff"><span class="sales-dot off"></span>Loading… · 加载中…</div>
+              </div>
+            </div>
+          </div>
+          <div class="sales-ch-blurb">Stop taking same-day orders this many minutes before close, so the kitchen has time to prep and dispatch. · 关门前多少分钟停止接单,好让厨房有时间备餐和发货。</div>
+          <div class="sales-ch-foot">
+            <button class="btn btn-sm" type="button" onclick="dlvGo('cutoff')">Edit · 编辑</button>
+          </div>
+        </div>
+
         <!-- Fresh batches -->
         <div class="sales-ch dlv-hc">
           <div class="sales-ch-top">
@@ -4680,6 +4700,36 @@
             <textarea id="dlv-holiday-msg-cn" rows="2" style="width: 100%;" placeholder="我们短暂休假中 — 订单将在我们回来后第一时间发货。"></textarea>
           </div>
           <button class="btn btn-primary" onclick="saveHolidayMode()" style="align-self: flex-end;">Save · 保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ SAME-DAY CUTOFF VIEW ══ -->
+    <div class="dlv-view" data-dlv="cutoff" hidden>
+      <button type="button" class="dlv-back" onclick="dlvGo('hub')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Delivery · 配送</button>
+      <h2>Same-day cutoff · 当日截单</h2>
+      <div class="muted" style="font-size: 12px; margin-top: calc(-1 * var(--s2)); margin-bottom: var(--s4);">
+        Within this many minutes of a store's close, "Right away" / same-day is withdrawn and the customer is moved to tomorrow's slots — the kitchen can't prep and dispatch an order placed a minute before closing. Applies to every Guangzhou same-city zone (Tianhe, Yuexiu, …). 0 = accept same-day right up to the closing minute. · 关门前这段时间内,「立即配送」/ 当日达会被撤下,顾客将改选明天的时段 —— 关门前一分钟下的单厨房来不及备餐发货。适用于所有广州同城配送区(天河、越秀等)。0 = 关门前一分钟仍可接单。
+      </div>
+
+      <div class="card" style="margin-bottom: var(--s4);">
+        <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+          <div class="field" style="margin: 0;">
+            <label class="stacked">Cutoff · 截单时间</label>
+            <span class="row" style="gap: 6px; align-items: center;">
+              <input type="number" id="dlv-cutoff-minutes" min="0" max="180" step="1" style="width: 80px;">
+              <span class="muted" style="font-size: 12px;">min before close · 分钟(关门前)</span>
+            </span>
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
+            <label class="stacked">Message (English) · 英文消息 <span class="muted" style="font-weight: 400;">— optional, leave blank for the default</span></label>
+            <textarea id="dlv-cutoff-msg-en" rows="2" style="width: 100%;" placeholder="Too late for same-day delivery — we stop taking today's orders 10 min before we close at 8pm. Please choose a time for tomorrow."></textarea>
+          </div>
+          <div class="field" style="margin: 0; flex: 1; min-width: 280px;">
+            <label class="stacked">消息(中文)· Message (Chinese) <span class="muted" style="font-weight: 400;">— 可留空,使用默认文案</span></label>
+            <textarea id="dlv-cutoff-msg-cn" rows="2" style="width: 100%;" placeholder="已过今日配送截单时间 — 关门前 10 分钟停止接单(今日 20:00 关门)。请选择明天的配送时段。"></textarea>
+          </div>
+          <button class="btn btn-primary" onclick="saveCutoffSettings()" style="align-self: flex-end;">Save · 保存</button>
         </div>
       </div>
     </div>
