@@ -242,22 +242,22 @@ function invoiceBadge(o) {
     + `<span class="dot"></span>${cuT('needs invoice · 待开票', '待开票 · invoice')}</span>`;
 }
 
-// Full-width summary line under a row in the "Needs invoice" view — the 抬头 /
-// 税号 / status the accountant batches into the tax system, plus the same
-// "Copy for accounting" the drawer block has, so the whole queue clears
-// without opening a single drawer. Shares .order-row so click/Enter still
-// opens the drawer (the copy button stops its own propagation via the
-// delegated handler's interactive-child bail).
-function invoiceSubRow(o) {
+// The invoice zone that lives INSIDE an order card — the 抬头 / 税号 / status
+// the accountant batches into the tax system, plus the same "Copy for
+// accounting" the drawer block has, so the whole queue clears without opening
+// a single drawer. Rendered as part of the card so the fapiao unmistakably
+// belongs to its order; the copy button stops its own click propagation so
+// the card click (which opens the drawer) still fires everywhere else.
+function invoiceZone(o) {
   if (!Number(o.needs_invoice)) return '';
   const issued = o.invoice_status === 'issued';
   const company = String(o.invoice_type || '').toLowerCase() === 'company';
   const typeTag = company
-    ? `<span class="pill st-paid" style="font-size:11px;"><span class="dot"></span>${cuT('Company · 企业', '企业 · Company')}</span>`
-    : `<span class="pill st-refunded" style="font-size:11px;"><span class="dot"></span>${cuT('Personal · 个人', '个人 · Personal')}</span>`;
+    ? `<span class="pill st-paid" style="font-size:11px;"><span class="dot"></span>${cuT('Company', '企业')}</span>`
+    : `<span class="pill st-refunded" style="font-size:11px;"><span class="dot"></span>${cuT('Personal', '个人')}</span>`;
   const stateTag = issued
-    ? `<span class="pill st-delivered" style="font-size:11px;"><span class="dot"></span>${cuT('Issued · 已开', '已开 · Issued')}</span>`
-    : `<span class="pill st-awaiting_restock" style="font-size:11px;"><span class="dot"></span>${cuT('To issue · 待开', '待开 · To issue')}</span>`;
+    ? `<span class="pill st-delivered" style="font-size:11px;"><span class="dot"></span>${cuT('Issued', '已开')}</span>`
+    : `<span class="pill st-awaiting_restock" style="font-size:11px;"><span class="dot"></span>${cuT('To issue', '待开')}</span>`;
   // Secondary line (税号 / email / 发票号) folded under the title so the title
   // reads first and the panel doesn't wrap into a cramped single row.
   const metaBits = [];
@@ -266,12 +266,10 @@ function invoiceSubRow(o) {
   if (issued && o.invoice_number) metaBits.push(escapeHtml(o.invoice_number));
   const meta = metaBits.length ? `<span class="ord-inv-meta">${metaBits.join(' · ')}</span>` : '';
   return `
-      <tr class="order-row ord-inv-subrow${issued ? ' is-issued' : ''}" data-order-id="${o.id}">
-        <td colspan="10" style="padding:0 12px 16px; border-top:none;">
-          <div class="ord-inv-panel">
+          <div class="ord-inv-panel${issued ? ' is-issued' : ''}">
             <span class="ord-inv-label">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8M16 17H8"/></svg>
-              ${cuT('Invoice · 发票', '发票 · Invoice')}
+              ${cuT('Invoice', '发票')}
             </span>
             ${typeTag}
             <div class="ord-inv-body">
@@ -281,10 +279,8 @@ function invoiceSubRow(o) {
             ${stateTag}
             <button type="button" class="db-btn ord-inv-copy" style="font-size:11px; padding:3px 10px;"
               data-copy="${escapeAttr(invoiceAccountingText(o))}"
-              onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">${cuT('Copy for accounting · 复制开票信息', '复制开票信息')}</button>
-          </div>
-        </td>
-      </tr>`;
+              onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">${cuT('Copy for accounting', '复制开票信息')}</button>
+          </div>`;
 }
 
 // Big, hard-to-miss banner at the top of the order drawer. Surfaces the
@@ -972,28 +968,52 @@ async function loadOrders(opts = {}) {
       // renderOpenOrder branches to renderReadonlyOrder for these, with no
       // fulfilment actions. data-readonly is kept as the branch signal.
       const ro = ordIsReadonlyChannel(o);
-      // Sales channel now has its own column (was a sub-line under the order #).
-      // The "view only" tag lives inside the detail drawer, not the table row.
-      const chanCell = `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>`;
+      // Each order is one Tacet card. We keep it wrapped in <tr class="order-row">
+      // with a single full-width <td> so all the existing wiring — the delegated
+      // click/Enter → openOrder, the is-fresh arrival flash, is-unread, sort, and
+      // the empty/loading states — keeps working untouched. The ten old columns
+      // become a head line (identity · money · status) and three plain-language
+      // facts (Customer / Ship to / Delivery); the invoice folds in as its own
+      // zone so the fapiao belongs unmistakably to its order.
+      const store = o.store_code
+        ? `<div class="ocard-sub">${cuT('from', '来自')} ${escapeHtml(o.store_name_en || o.store_code)}</div>`
+          + (routingNote(o.routing_reason) ? `<div class="ocard-sub">${routingNote(o.routing_reason)}</div>` : '')
+          + fulfillmentShortBadge(o)
+        : '';
+      const items = `${o.item_count} ${o.item_count === 1 ? cuT('item', '件') : cuT('items', '件')}`;
       return `
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}" tabindex="0"${ro ? ' data-readonly="1"' : ''}>
-        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
-        <td class="oc-chan">${chanCell}</td>
-        <td>
-          <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
+        <td colspan="10">
+          <div class="ocard">
+            <div class="ocard-head">
+              ${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}
+              <span class="ord-no ocard-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span>
+              <span class="ocard-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</span>
+              <span class="ocard-when">${formatDate(o.placed_at)}</span>
+              <span class="ocard-total numeric">¥${fmt(o.total)}</span>
+              <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
+              ${refundBadge(o)}${addonBadge(o)}
+            </div>
+            <div class="ocard-facts">
+              <div class="ocard-fact">
+                <div class="lab">${cuT('Customer', '顾客')}</div>
+                <div class="v ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
+                <div class="ocard-sub">${items}</div>
+              </div>
+              <div class="ocard-fact">
+                <div class="lab">${cuT('Ship to', '收货地')}</div>
+                <div class="v">${renderShipToCell(o)}</div>
+                ${store}
+              </div>
+              <div class="ocard-fact">
+                <div class="lab">${cuT('Delivery', '配送')}</div>
+                <div class="v">${renderDeliveryCell(o)}</div>
+              </div>
+            </div>
+            ${invoiceZone(o)}
+          </div>
         </td>
-        <td class="oc-store">
-          ${o.store_code ? `<div>${escapeHtml(o.store_name_en || o.store_code)}</div>
-            ${routingNote(o.routing_reason) ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${routingNote(o.routing_reason)}</div>` : ''}
-            ${fulfillmentShortBadge(o)}` : '<span class="muted">—</span>'}
-        </td>
-        <td class="oc-shipto">${renderShipToCell(o)}</td>
-        <td>${o.item_count}</td>
-        <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${invoiceBadge(o)}${addonBadge(o)}</div></td>
-        <td class="oc-delivery">${renderDeliveryCell(o)}</td>
-        <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
-      </tr>${status === 'needs_invoice' ? invoiceSubRow(o) : ''}`;
+      </tr>`;
     }).join('');
     ordTweaksApply();
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);

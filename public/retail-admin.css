@@ -4134,24 +4134,71 @@
     100% { background: transparent;              box-shadow: inset 0   0 0 transparent; }
   }
   tbody tr.row-flash { animation: row-flash 1.6s ease-out 1; }
-  /* ── Invoice summary panel (the "Needs invoice" view) ───────────────────
-     The fapiao 抬头 / 税号 for an order used to be a bare full-width row that
-     floated under the order with no visual tie — you couldn't tell whose
-     invoice was whose. It's now a nested tinted card hanging off its order:
-     a left accent connects it upward, a full gap below (td padding) separates
-     it from the next order, and the title leads with 税号/email folded beneath.
-     Theme-aware via the elev tokens; carries its own bg so row-hover can't wash
-     it out. */
-  tr.ord-inv-subrow:hover { background: transparent; }
+  /* ══ Orders as Tacet cards (desktop) ════════════════════════════════════
+     The orders list is a stack of order cards. The <table> stays only as a
+     plain vertical skeleton — one full-width <td> per order — so every bit of
+     existing wiring keeps working untouched: the delegated click/Enter → drawer,
+     the is-fresh arrival flash, is-unread, sort tweaks, and the empty/loading
+     states. All the look lives on .ocard. (.table-wrap is display:none on phones,
+     which fall back to #rm-orders-cards — so these rules never double-render.) */
+  #orders-table { border-collapse: separate; border-spacing: 0 14px; }
+  #orders-table thead { display: none; }
+  #orders-table tbody td { border: none !important; padding: 0 !important; background: transparent !important; }
+  #orders-table tbody tr.order-row:hover td { background: transparent !important; }
+
+  .ocard {
+    background: var(--bg-pane); border: 1px solid var(--line);
+    border-radius: var(--r-lg); padding: 18px 20px;
+    transition: box-shadow var(--t-med) var(--ease-out), border-color var(--t-med) var(--ease-out);
+  }
+  .order-row:hover .ocard { border-color: var(--line-strong); box-shadow: 0 4px 16px rgba(0,0,0,.05); }
+  .order-row:focus-visible { outline: none; }
+  .order-row:focus-visible .ocard { outline: 2px solid var(--ring, rgba(107,142,111,.55)); outline-offset: 2px; }
+  .order-row--ro .ocard { border-style: dashed; }
+
+  /* head line — identity · channel · when · total · status */
+  .ocard-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .ocard-no { font-size: 16px; }
+  .ocard-chan { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
+  .ocard-chan svg { width: 14px; height: 14px; flex: none; }
+  .ocard-when { font-size: 11.5px; color: var(--text-3); }
+  .ocard-total { margin-left: auto; font-family: var(--f-mono); font-weight: 600; font-size: 16px; color: var(--text-1); }
+  .ocard-head .pill { flex: none; }
+
+  /* three facts — Customer / Ship to / Delivery */
+  .ocard-facts {
+    display: grid; grid-template-columns: 1.4fr 1fr 1.3fr; gap: 22px;
+    margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line-soft);
+  }
+  .ocard-fact .lab { font-size: 10.5px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-bottom: 5px; }
+  .ocard-fact .v { font-size: 14px; color: var(--text-1); line-height: 1.4; }
+  .ocard-sub { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+  @media (max-width: 1000px) { .ocard-facts { grid-template-columns: 1fr 1fr; } }
+
+  /* arrival flash + unread accent live on the card — the old <td> wash sits
+     behind the opaque card, so it would be invisible now. */
+  @keyframes ocard-flash {
+    0%   { box-shadow: inset 0 0 0 999px rgba(107,142,111,.22); }
+    100% { box-shadow: inset 0 0 0 999px rgba(107,142,111,0); }
+  }
+  .order-row.is-fresh .ocard { animation: ocard-flash 6s ease-out 1; }
+  .order-row.is-unread .ocard { box-shadow: inset 3px 0 0 var(--accent); }
+
+  /* ── Invoice zone, nested inside the order card ──
+     The fapiao 抬头 / 税号 used to float as a bare row under the order with no
+     visual tie — you couldn't tell whose invoice was whose. It now sits inside
+     the card it belongs to: a tinted panel with a left accent and the title
+     leading, 税号/email folded beneath. Theme-aware via the elev tokens. */
   .ord-inv-panel {
     display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    margin-top: 15px;
     background: var(--bg-elev-1);
     border: 1px solid var(--line);
     border-left: 3px solid var(--accent);
     border-radius: 8px; padding: 11px 14px;
     font-size: 12.5px; color: var(--text-2);
   }
-  .ord-inv-subrow.is-issued .ord-inv-panel { border-left-color: var(--line-strong); opacity: .8; }
+  .ord-inv-panel.is-issued { border-left-color: var(--line-strong); opacity: .8; }
   .ord-inv-label {
     display: inline-flex; align-items: center; gap: 7px; flex: none;
     font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
