@@ -245,6 +245,18 @@
         </view>
       </view>
 
+      <!-- Same-day cutoff banner — kitchen is still open but the order landed
+           inside the last-orders buffer before close (e.g. ordering 19:59 when
+           Tianhe closes 20:00). Same-day/right-away is withdrawn; the customer
+           is told why and steered to tomorrow's slots. -->
+      <view wx:if="{{scheduling.same_day_cutoff_passed}}" class="holiday-banner">
+        <view class="hb-icon">⏰</view>
+        <view class="hb-body">
+          <view class="hb-title f-bear">{{lang === 'cn' ? '今日配送已截单' : 'Same-day cutoff reached'}}</view>
+          <view class="hb-msg">{{lang === 'cn' ? scheduling.same_day_cutoff_message.cn : scheduling.same_day_cutoff_message.en}}</view>
+        </view>
+      </view>
+
       <!-- Fresh batch notice — outside-GZ or Panyu-style-district cart with a
            made-to-batch item. Tells the customer the exact day we make it +
            when it arrives. Tap to re-open the full popup. -->
@@ -282,6 +294,7 @@
           <view class="opt-label f-bear">{{lang === 'cn' ? '立即配送' : 'Right away'}}</view>
           <view wx:if="{{scheduling.right_away_available}}" class="opt-sub muted">{{lang === 'cn' ? '尽快出餐' : 'ASAP after the kitchen confirms'}}</view>
           <view wx:elif="{{scheduling.holiday_mode}}" class="opt-sub muted">{{lang === 'cn' ? '假期模式中 — 请选择未来日期' : 'Holiday mode — please pick a future date'}}</view>
+          <view wx:elif="{{scheduling.same_day_cutoff_passed}}" class="opt-sub muted">{{lang === 'cn' ? '今日已停止当日配送' : 'Same-day orders are closed for today'}}</view>
           <view wx:elif="{{!scheduling.kitchen_open_now}}" class="opt-sub muted">{{lang === 'cn' ? (scheduling.kitchen_reopens_today ? '厨房已关闭 — 今天上午' : '厨房已关闭 — 明天上午') : 'Closed — reopens '}}{{scheduling.kitchen_hours.start}}{{lang === 'cn' ? '点重开' : (scheduling.kitchen_reopens_today ? 'am today' : 'am tomorrow')}}</view>
           <view wx:else class="opt-sub muted">{{lang === 'cn' ? '本配送区不支持立即配送' : 'Not available for this area'}}</view>
         </view>

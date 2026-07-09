@@ -22166,11 +22166,34 @@ function computeDeliverySlots(zone, now) {
         tzNow.getHours() >= startHour &&
         tzNow.getHours() <  endHour;
 
+  // Same-day cutoff buffer — how many minutes BEFORE kitchen close we stop
+  // taking same-day / right-away delivery. A Guangzhou store closing at 20:00
+  // can't prep + dispatch an order placed at 19:55, so within this buffer the
+  // same-day options are withdrawn and the customer is asked to pick tomorrow.
+  // Configured once (delivery.sameDayCutoffMinutes) and applies to every
+  // time-slot zone — Tianhe, Yuexiu, and any other same-city district. 0 keeps
+  // the legacy behavior (accept right up to the closing minute). Clamped to a
+  // sane bound so it can never swallow the whole business day.
+  let sameDayCutoffMinutes = Number(cfgValue('delivery.sameDayCutoffMinutes', 10));
+  if (!(sameDayCutoffMinutes >= 0)) sameDayCutoffMinutes = 0;
+  const openSpanMinutes = (endHour - startHour) * 60;
+  if (sameDayCutoffMinutes > openSpanMinutes) sameDayCutoffMinutes = openSpanMinutes;
+  const nowMinutes   = tzNow.getHours() * 60 + tzNow.getMinutes();
+  const closeMinutes = endHour * 60;
+  // True only while the kitchen is still technically open but we're inside the
+  // last `sameDayCutoffMinutes` before close — a distinct "too late for today"
+  // state, separate from fully-closed (which the reopen copy already covers).
+  const pastSameDayCutoff =
+        kitchenOpenNow &&
+        sameDayCutoffMinutes > 0 &&
+        nowMinutes >= closeMinutes - sameDayCutoffMinutes;
+
   // "Right away" only applies in time-slot mode. Day-only zones express
   // the same-day option as a "Today (+¥X)" day-chip instead.
   const rightAwayAvailable = !isDayOnly &&
         cfg.same_day_allowed === 1 &&
         kitchenOpenNow &&
+        !pastSameDayCutoff &&
         cfg.min_lead_days === 0 &&
         cfg.same_day_surcharge === 0;
 
@@ -22260,7 +22283,7 @@ function computeDeliverySlots(zone, now) {
   // kicks in. A zone with min_lead_days >= 1 (e.g. outside-GZ city zones)
   // can never be fulfilled today — its earliest day comes from the
   // schedule-for-later calendar below, never a same-day/today chip.
-  if (cfg.same_day_allowed === 1 && cfg.min_lead_days === 0) {
+  if (cfg.same_day_allowed === 1 && cfg.min_lead_days === 0 && !pastSameDayCutoff) {
     if (isDayOnly) {
       // Day-only zones don't have per-slot times, so we need an explicit
       // "is today still fulfillable" check — kitchen must not be past
@@ -22346,6 +22369,21 @@ function computeDeliverySlots(zone, now) {
     label_cn:   `最早 ${expressDateIso}`,
   } : null;
 
+  // "Too late for same-day" copy — shown when the kitchen is still open but the
+  // order landed inside the cutoff buffer. Built server-side so both customer
+  // apps read one authoritative bilingual string. `closeLabelEn` renders the
+  // 24h close hour as a friendly 12h time (20 → "8pm").
+  const closeLabelEn = (() => {
+    const mer = endHour < 12 ? 'am' : 'pm';
+    const dh  = endHour % 12 === 0 ? 12 : endHour % 12;
+    return `${dh}${mer}`;
+  })();
+  const closeLabelCn = `${endHour}:00`;
+  const sameDayCutoffMessage = pastSameDayCutoff ? {
+    en: `Too late for same-day delivery — we stop taking today's orders ${sameDayCutoffMinutes} min before we close at ${closeLabelEn}. Please choose a time for tomorrow.`,
+    cn: `已过今日配送截单时间 — 关门前 ${sameDayCutoffMinutes} 分钟停止接单(今日 ${closeLabelCn} 关门)。请选择明天的配送时段。`,
+  } : null;
+
   return {
     mode: isDayOnly ? 'day_only' : 'time_slots',
     right_away_available: rightAwayAvailable,
@@ -22354,6 +22392,12 @@ function computeDeliverySlots(zone, now) {
     min_lead_days:        cfg.min_lead_days,
     max_lead_days:        cfg.max_lead_days,
     kitchen_open_now:     kitchenOpenNow,
+    // Same-day cutoff buffer state — see the pastSameDayCutoff derivation above.
+    // `same_day_cutoff_passed` is true only during business hours inside the
+    // last `same_day_cutoff_minutes` before close; the message is null otherwise.
+    same_day_cutoff_minutes: sameDayCutoffMinutes,
+    same_day_cutoff_passed:  pastSameDayCutoff,
+    same_day_cutoff_message: sameDayCutoffMessage,
     // When closed, distinguishes "before today's opening" (reopens today) from
     // "after close" (reopens tomorrow) so the UI doesn't always say "tomorrow".
     kitchen_reopens_today: !kitchenOpenNow && tzNow.getHours() < startHour,
