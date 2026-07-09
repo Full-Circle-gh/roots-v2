@@ -253,11 +253,11 @@ function invoiceZone(o) {
   const issued = o.invoice_status === 'issued';
   const company = String(o.invoice_type || '').toLowerCase() === 'company';
   const typeTag = company
-    ? `<span class="pill st-paid" style="font-size:11px;"><span class="dot"></span>${cuT('Company', '企业')}</span>`
-    : `<span class="pill st-refunded" style="font-size:11px;"><span class="dot"></span>${cuT('Personal', '个人')}</span>`;
+    ? `<span class="pill inv-type inv-co"><span class="dot"></span>${cuT('Company', '企业')}</span>`
+    : `<span class="pill inv-type inv-per"><span class="dot"></span>${cuT('Personal', '个人')}</span>`;
   const stateTag = issued
-    ? `<span class="pill st-delivered" style="font-size:11px;"><span class="dot"></span>${cuT('Issued', '已开')}</span>`
-    : `<span class="pill st-awaiting_restock" style="font-size:11px;"><span class="dot"></span>${cuT('To issue', '待开')}</span>`;
+    ? `<span class="pill st-delivered"><span class="dot"></span>${cuT('Issued', '已开')}</span>`
+    : `<span class="pill st-awaiting_restock"><span class="dot"></span>${cuT('To issue', '待开')}</span>`;
   // Secondary line (税号 / email / 发票号) folded under the title so the title
   // reads first and the panel doesn't wrap into a cramped single row.
   const metaBits = [];
@@ -277,9 +277,9 @@ function invoiceZone(o) {
               ${meta}
             </div>
             ${stateTag}
-            <button type="button" class="db-btn ord-inv-copy" style="font-size:11px; padding:3px 10px;"
+            <button type="button" class="ord-inv-copy"
               data-copy="${escapeAttr(invoiceAccountingText(o))}"
-              onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">${cuT('Copy for accounting', '复制开票信息')}</button>
+              onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>${cuT('Copy for accounting', '复制开票信息')}</button>
           </div>`;
 }
 
@@ -987,7 +987,7 @@ async function loadOrders(opts = {}) {
           <div class="ocard">
             <div class="ocard-head">
               ${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}
-              <span class="ord-no ocard-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span>
+              <span class="ocard-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span>
               <span class="ocard-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</span>
               <span class="ocard-when">${formatDate(o.placed_at)}</span>
               <span class="ocard-total numeric">¥${fmt(o.total)}</span>
