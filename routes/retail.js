@@ -16920,13 +16920,21 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   const where = " AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')" + (sid ? ' AND store_id = ?' : '');
   const args  = sid ? [sid] : [];
 
-  const out = { pending_payment: 0, paid: 0, preparing: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0 };
+  const out = { pending_payment: 0, paid: 0, preparing: 0, rider_pickup: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0 };
   const rows = tdb().prepare(
     `SELECT status, COUNT(*) AS n FROM retail_orders
       WHERE status IN ('pending_payment','paid','preparing','dispatched','awaiting_restock')${where}
       GROUP BY status`
   ).all(...args);
   for (const r of rows) { if (r.status in out) out[r.status] = r.n; }
+
+  // "Rider coming" is a Meituan-only bucket (a rider is en route to the store to
+  // collect — genuine "have it ready NOW" work), so unlike the other badges it
+  // must count PAST the read-only-channel exclusion above. Store filter only.
+  out.rider_pickup = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_orders
+      WHERE status = 'rider_pickup'${sid ? ' AND store_id = ?' : ''}`
+  ).get(...args).n;
 
   // Mirror the list filter: the Paid/to-ship tab also holds partially-shipped
   // 'dispatched' orders that still owe an unshipped parcel, so the badge must

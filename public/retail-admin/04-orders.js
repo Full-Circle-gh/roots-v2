@@ -2243,7 +2243,7 @@ function humanStatus(s, fulfillmentType) {
     if (s === 'dispatched') return 'Ready · 可取货';
     if (s === 'delivered')  return 'Picked up · 已取货';
   }
-  return { pending_payment: 'Pending', paid: 'Paid', preparing: 'Preparing', dispatched: 'Dispatched', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded', awaiting_restock: 'Awaiting restock' }[s] || s;
+  return { pending_payment: 'Pending', paid: 'Paid', preparing: 'Preparing', rider_pickup: 'Rider coming', dispatched: 'Dispatched', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded', awaiting_restock: 'Awaiting restock' }[s] || s;
 }
 function formatDate(iso) {
   if (!iso) return '';
@@ -2285,6 +2285,10 @@ const NEXT_STATUS = {
   pending_payment: [['paid', 'Mark paid · 标记已付款'], ['cancelled', 'Cancel · 取消']],
   paid:            [['preparing', 'Start preparing · 开始备货'], ['refunded', 'Refund · 退款'], ['cancelled', 'Cancel + refund · 取消并退款']],
   preparing:       [['dispatched', 'Mark dispatched · 标记已发货'], ['refunded', 'Refund · 退款'], ['cancelled', 'Cancel + refund · 取消并退款']],
+  // Meituan-only, read-only mirror: the platform (not our staff) advances a
+  // "Rider coming" order to Dispatched once the rider picks up, so there are no
+  // manual transition buttons — it flips itself on the next status poll.
+  rider_pickup:    [],
   dispatched:      [['delivered', 'Mark delivered · 标记已送达'], ['refunded', 'Refund · 退款']],
   delivered:       [['refunded', 'Refund · 退款']],
   cancelled:       [],
@@ -4662,16 +4666,16 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   let kdBadge = '';
   if (has) {
     if (deadReuse) {
-      kdBadge = `<span style="font-size:11px; color:#9A6E2A;">● sync inactive · 同步未生效 (reused number · 重复运单号)</span>`;
+      kdBadge = `<span style="font-size:11px; color:#9A6E2A;">● ${cuT('sync inactive (reused number)', '同步未生效(重复运单号)')}</span>`;
     } else if (s.jd_live) {
-      kdBadge = `<span class="muted" style="font-size:11px; color: #5C7A4E;">● JD live sync on · 京东实时同步中</span>`;
+      kdBadge = `<span class="muted" style="font-size:11px; color: #5C7A4E;">● ${cuT('JD live sync on', '京东实时同步中')}</span>`;
     } else if (s.tracking_kd100_subscribed) {
-      kdBadge = `<span class="muted" style="font-size:11px; color: #5C7A4E;">● kd100 live sync on · 快递100实时同步中</span>`;
+      kdBadge = `<span class="muted" style="font-size:11px; color: #5C7A4E;">● ${cuT('kd100 live sync on', '快递100实时同步中')}</span>`;
     } else if (s.tracking_last_error) {
       kdBadge = `<span style="font-size:11px; color: var(--danger);">⚠ ${escapeHtml(s.tracking_last_error)}</span>
-        <button class="btn btn-sm" onclick="resubscribeTracking(${o.id}, ${sid})" style="margin-left:6px;">Retry sync · 重试同步</button>`;
+        <button class="btn btn-sm" onclick="resubscribeTracking(${o.id}, ${sid})" style="margin-left:6px;">${cuT('Retry sync', '重试同步')}</button>`;
     } else {
-      kdBadge = `<span class="muted" style="font-size:11px;">manual entry only · 仅手动录入</span>`;
+      kdBadge = `<span class="muted" style="font-size:11px;">${cuT('manual entry only', '仅手动录入')}</span>`;
     }
   }
 
@@ -4785,7 +4789,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   return `
     <div style="${hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);'}" id="trk-card-${sid}">
       ${renderGzMethodToggle(o, s)}
-      <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Tracking · 物流</div>
+      <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">${cuT('Tracking', '物流')}</div>
       ${delayBanner}${reuseBanner}
       ${has ? `
         <div class="od-trk-panel">
@@ -4803,7 +4807,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
               if (dl) {
                 return `<span class="pill" style="display:inline-flex; align-items:center; gap:5px; color:${dl.color}; border-color:${dl.color}55; background:${dl.color}14; font-weight:${dl.tone === 'urgent' ? 700 : 600};">${deliveryIcon(dl.icon, 13)}<span>${cuT(dl.en, dl.cn)}</span></span>`;
               }
-              return t.status_label_en ? `<span class="pill st-dispatched"><span class="dot"></span>${escapeHtml(t.status_label_en)} · ${escapeHtml(t.status_label_cn)}</span>` : '';
+              return t.status_label_en ? `<span class="pill st-dispatched"><span class="dot"></span>${cuT(escapeHtml(t.status_label_en), escapeHtml(t.status_label_cn))}</span>` : '';
             })()}
           </div>
           ${multiParcel ? renderParcelContents(s) : ''}
@@ -4811,7 +4815,7 @@ function renderShipmentTrackingCard(o, s, hoisted) {
             ${kdBadge}
             <span class="od-trk-updated">${synced}</span>
             <span class="od-trk-foot-actions">
-              ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" onclick="printJdLabel(${o.id}, ${sid})" title="${escapeAttr(cuT('Print this JD waybill label on the local label printer', '在本机标签打印机打印此京东面单'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print label · 打印面单', '打印面单 · Print label')}</button>` : ''}
+              ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" onclick="printJdLabel(${o.id}, ${sid})" title="${escapeAttr(cuT('Print this JD waybill label on the local label printer', '在本机标签打印机打印此京东面单'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print label', '打印面单')}</button>` : ''}
               ${trackLink}
             </span>
           </div>
@@ -4819,31 +4823,31 @@ function renderShipmentTrackingCard(o, s, hoisted) {
       ${eventsBlock}
       ${has ? `
         <details class="od-trk-edit">
-          <summary><span class="od-trk-chev" aria-hidden="true">▸</span>Change waybill · 修改运单</summary>
+          <summary><span class="od-trk-chev" aria-hidden="true">▸</span>${cuT('Change waybill', '修改运单')}</summary>
           <div class="od-trk-edit-body">
             <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
               <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
               <input type="text" id="trk-number-${sid}" value="${escapeHtml(t.number)}" placeholder="Tracking / waybill number" data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" style="flex:1; min-width:200px; font-family: var(--f-mono);">
-              <button class="btn btn-primary btn-sm" onclick="saveTracking(${o.id}, ${sid})">Update · 更新</button>
-              ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" style="color:var(--danger);" onclick="cancelJdPickup(${o.id}, ${sid}, event)">Cancel JD pickup · 取消揽收</button>` : ''}
-              <button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">Clear · 清除</button>
+              <button class="btn btn-primary btn-sm" onclick="saveTracking(${o.id}, ${sid})">${cuT('Update', '更新')}</button>
+              ${t.carrier_code === 'jd' ? `<button class="btn btn-sm" style="color:var(--danger);" onclick="cancelJdPickup(${o.id}, ${sid}, event)">${cuT('Cancel JD pickup', '取消揽收')}</button>` : ''}
+              <button class="btn btn-sm" onclick="clearTracking(${o.id}, ${sid})">${cuT('Clear', '清除')}</button>
             </div>
-            ${t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">“Cancel JD pickup” calls off the courier with JD. “Clear” only removes the number locally (courier still comes). · “取消揽收”会向京东取消上门;“清除”仅在本地移除运单号(快递仍会上门)。</div>` : ''}
+            ${t.carrier_code === 'jd' ? `<div class="muted" style="font-size:11px; margin-top:6px;">${cuT('"Cancel JD pickup" calls off the courier with JD. "Clear" only removes the number locally (courier still comes).', '"取消揽收"会向京东取消上门;"清除"仅在本地移除运单号(快递仍会上门)。')}</div>` : ''}
           </div>
         </details>`
       : `
         ${s.mode !== 'supplier' ? `
           <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
-            <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Create JD label · 生成京东运单</button>
-            <span class="muted" style="font-size:11px;">Free live tracking — JD bills the parcel. · 免费物流追踪。</span>
+            <button class="btn btn-primary btn-sm" onclick="createJdLabel(${o.id}, ${sid}, '${s.mode || ''}', ${(s.items || []).some(it => it.needs_ice_pack) ? 1 : 0}, event)"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>${cuT('Create JD label', '生成京东运单')}</button>
+            <span class="muted" style="font-size:11px;">${cuT('Free live tracking — JD bills the parcel.', '免费物流追踪，京东承担费用。')}</span>
           </div>
-          <div class="muted" style="font-size:11px; margin:8px 0 4px;">— or attach an existing waybill manually · 或手动填写已有运单 —</div>` : ''}
+          <div class="muted" style="font-size:11px; margin:8px 0 4px;">${cuT('— or attach an existing waybill manually —', '— 或手动填写已有运单 —')}</div>` : ''}
         <div class="row" style="gap:8px; align-items:center; flex-wrap:wrap;">
           <select id="trk-carrier-${sid}" style="min-width:180px;">${carrierOpts}</select>
           <input type="text" id="trk-number-${sid}" value="" placeholder="Tracking / waybill number" data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" style="flex:1; min-width:200px; font-family: var(--f-mono);">
-          <button class="btn btn-sm" onclick="saveTracking(${o.id}, ${sid})">Save tracking · 保存运单号</button>
+          <button class="btn btn-sm" onclick="saveTracking(${o.id}, ${sid})">${cuT('Save tracking', '保存运单号')}</button>
         </div>
-        ${s.mode !== 'supplier' ? `<div class="muted" style="font-size:11px; margin-top:6px;">A manually-entered number tracks via 快递100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use “Create JD label” above instead. · 手动录入的运单号通过快递100(付费)追踪,含个人的京东 JDV0… 单号;如需免费京东追踪,请改用上方“生成京东运单”。</div>` : ''}
+        ${s.mode !== 'supplier' ? `<div class="muted" style="font-size:11px; margin-top:6px;">${cuT('A manually-entered number tracks via kd100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use "Create JD label" above instead.', '手动录入的运单号通过快递100(付费)追踪，含个人的京东 JDV0… 单号；如需免费京东追踪，请改用上方"生成京东运单"。')}</div>` : ''}
       `}
     </div>`;
 }
@@ -6134,6 +6138,7 @@ async function refreshOrderStatusCounts() {
     set('oc-pending_payment', d.pending_payment);
     set('oc-paid',            d.paid);
     set('oc-preparing',       d.preparing);
+    set('oc-rider_pickup',    d.rider_pickup);
     set('oc-dispatched',      d.dispatched);
     set('oc-awaiting_restock',d.awaiting_restock);
     set('refund-queue-count', d.refunds_open);

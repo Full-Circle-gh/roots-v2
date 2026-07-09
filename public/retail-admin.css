@@ -53,6 +53,9 @@
     --st-pending_payment: #B08D4A;
     --st-paid:            #6B8E6F;
     --st-preparing:       #B08D4A;
+    /* Rider coming (Meituan): a rider is en route to the store to collect.
+       In-motion blue so it reads distinct from the brass Preparing/Dispatched. */
+    --st-rider_pickup:    #4A72B0;
     --st-dispatched:      #B08D4A;
     --st-delivered:       #6B8E6F;
     --st-cancelled:       #8a8780;
@@ -4573,6 +4576,8 @@
   .pill.st-preparing .dot  { background: var(--st-preparing); }
   .pill.st-dispatched      { background: rgba(176, 141, 74, .12); color: var(--st-dispatched); border-color: rgba(176, 141, 74, .30); }
   .pill.st-dispatched .dot { background: var(--st-dispatched); }
+  .pill.st-rider_pickup      { background: rgba(74, 114, 176, .12); color: var(--st-rider_pickup); border-color: rgba(74, 114, 176, .30); }
+  .pill.st-rider_pickup .dot { background: var(--st-rider_pickup); }
   .pill.st-delivered       { background: rgba(107, 142, 111, .14); color: var(--st-delivered); border-color: rgba(107, 142, 111, .35); }
   .pill.st-delivered .dot  { background: var(--st-delivered); }
   .pill.st-cancelled       { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
@@ -4641,6 +4646,7 @@
   .status-chip.active.st-paid             { background: rgba(107, 142, 111, .14); color: var(--st-paid); border-color: rgba(107, 142, 111, .45); }
   .status-chip.active.st-preparing        { background: rgba(176, 141, 74, .16); color: var(--st-preparing); border-color: rgba(176, 141, 74, .45); }
   .status-chip.active.st-dispatched       { background: rgba(176, 141, 74, .16);  color: var(--st-dispatched); border-color: rgba(176, 141, 74, .45); }
+  .status-chip.active.st-rider_pickup     { background: rgba(74, 114, 176, .16);  color: var(--st-rider_pickup); border-color: rgba(74, 114, 176, .45); }
   .status-chip.active.st-delivered        { background: rgba(107, 142, 111, .16);  color: var(--st-delivered); border-color: rgba(107, 142, 111, .45); }
   .status-chip.active.st-awaiting_restock { background: rgba(176, 141, 74, .16); color: var(--st-awaiting_restock); border-color: rgba(176, 141, 74, .45); }
   .status-chip.active.st-cancelled        { background: var(--bg-elev-2); color: var(--text-2); border-color: var(--line-strong); }

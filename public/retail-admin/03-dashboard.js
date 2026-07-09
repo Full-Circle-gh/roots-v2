@@ -2186,10 +2186,11 @@ function dashBarList(rows) {
 
 const DASH_STATUS_LABELS = {
   pending_payment: 'Pending · 待付款', paid: 'Paid · 已付款', preparing: 'Preparing · 备货中',
+  rider_pickup: 'Rider coming · 骑手来取货',
   dispatched: 'Dispatched · 已发货', delivered: 'Delivered · 已送达',
   awaiting_restock: 'Awaiting stock · 待补货', cancelled: 'Cancelled · 已取消', refunded: 'Refunded · 已退款',
 };
-const DASH_STATUS_ORDER = ['pending_payment', 'paid', 'awaiting_restock', 'preparing', 'dispatched', 'delivered', 'cancelled', 'refunded'];
+const DASH_STATUS_ORDER = ['pending_payment', 'paid', 'awaiting_restock', 'preparing', 'rider_pickup', 'dispatched', 'delivered', 'cancelled', 'refunded'];
 
 // Acquisition funnel — the visitor→buyer drop-off, built from numbers the
 // dashboard already loads (no extra fetch): kpis.visitors / new_customers /
@@ -2263,7 +2264,7 @@ function dashRenderFunnel() {
   // muted = closed without money.
   const TONE = {
     pending_payment: 'amber', paid: 'sage', awaiting_restock: 'amber', preparing: 'amber',
-    dispatched: 'sage', delivered: 'sage', cancelled: 'mute', refunded: 'brick',
+    rider_pickup: 'amber', dispatched: 'sage', delivered: 'sage', cancelled: 'mute', refunded: 'brick',
   };
   const rows = DASH_STATUS_ORDER.filter(s => f[s]).map(s => `
     <div class="db-status-row">

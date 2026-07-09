@@ -112,7 +112,15 @@ function internalStatusForChannel(desc) {
   if (/取消|已关闭|交易关闭/.test(d))                             return 'cancelled';
   if (/已完成|交易完成|已送达|已收货|订单完成|已签收/.test(d))     return 'delivered';
   if (/待发起配送|待配送|待接单|已接单|待拣货|拣货|备货|待发货|制作/.test(d)) return 'preparing';
-  if (/配送|派送|骑手|取货/.test(d))                              return 'dispatched';
+  // Rider now HOLDS the parcel and is en route to the customer — real dispatch.
+  // (已取货 = picked up; distinguished from 待…取货 = still awaiting pickup below.)
+  if (/已取货|已揽收|配送中|派送中|派件中|运输中/.test(d))         return 'dispatched';
+  // Rider assigned and heading to the store to COLLECT, parcel not yet in hand
+  // (正在分配骑手 / 骑手已接单 / 待骑手到店 / 骑手已到店 / 待骑手取货 / 待取货).
+  // Its own bucket so the floor knows "a rider is coming — have it ready now".
+  if (/骑手|到店|待取货/.test(d))                                 return 'rider_pickup';
+  // Any other delivery-ish label with no rider phase → dispatched fallback.
+  if (/配送|派送|取货/.test(d))                                   return 'dispatched';
   return null; // 待支付 / unknown → keep 'paid'
 }
 
