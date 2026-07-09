@@ -1493,6 +1493,9 @@ let ENTITLEMENTS = {};
     }
     // Google-style profile circle + dropdown (avatar · account · team · sign out).
     initAcctMenu(u);
+    // The dashboard greeting reads this same user — repaint it now in case the
+    // dashboard rendered its fallback "Dashboard" title before /me resolved.
+    if (typeof tdGreetRender === 'function') tdGreetRender();
     // Co-brand identity — swap the rail/topbar wordmark, page title and favicon
     // to the tenant's own logo + name (falls back to the tacet waveform when unset).
     applyBrand(u.tenant);

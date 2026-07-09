@@ -1139,7 +1139,16 @@
     <div id="setup-dash-card" style="display:none"></div>
 
     <div class="db-head td-head">
-      <h2 style="margin:0">Dashboard · 概览</h2>
+      <!-- Personalised page title (Option B) — a time-of-day greeting to the
+           signed-in operator replaces the plain "Dashboard" heading. Painted by
+           tdGreetRender in 03-dashboard.js from the resolved account user; the
+           literal "Dashboard" here is the graceful fallback before that runs
+           (and when no name is known). data-no-i18n: the greeting is built
+           language-aware in JS, so the i18n walker must leave it alone. -->
+      <div class="td-greet-col">
+        <h2 id="td-greeting" style="margin:0" data-no-i18n>Dashboard</h2>
+        <p class="td-greet-sub" id="td-greet-sub" data-no-i18n></p>
+      </div>
       <span class="td-date" id="td-date"></span>
       <!-- Arrange mode — lets the operator drag the dashboard cards into the
            order they like and hide the ones they don't. Layout is saved per

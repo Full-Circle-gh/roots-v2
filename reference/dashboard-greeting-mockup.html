@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard greeting — placement options</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    --cream:#faf8f2;
+    --card:#ffffff;
+    --ink:#22201b;
+    --ink-2:#57534a;
+    --ink-3:#8a857a;
+    --line:#ece7dc;
+    --line-2:#e2ddd0;
+    --accent:#3a5a40;
+    --gold:#b98a2e;
+    --shadow:0 1px 2px rgba(40,36,28,.04),0 8px 24px rgba(40,36,28,.05);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--cream);color:var(--ink);
+    font-family:'Inter',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:1120px;margin:0 auto;padding:40px 32px 80px}
+
+  .note{
+    font-size:13px;color:var(--ink-3);margin:0 0 28px;
+    border-left:2px solid var(--line-2);padding-left:12px;line-height:1.6;
+  }
+  .label{
+    font-size:11px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--gold);margin:44px 0 14px;display:flex;align-items:center;gap:10px;
+  }
+  .label::after{content:"";flex:1;height:1px;background:var(--line)}
+  .label.first{margin-top:0}
+
+  /* ── shared header chrome ────────────────────────────── */
+  .demo{
+    background:var(--cream);border:1px solid var(--line);border-radius:16px;
+    padding:26px 30px 30px;box-shadow:var(--shadow);
+  }
+  .db-head{
+    display:flex;align-items:baseline;gap:16px;
+  }
+  .db-head h2{
+    font-weight:600;font-size:32px;
+    letter-spacing:-.02em;margin:0;line-height:1.05;
+  }
+  .db-head .date{
+    margin-left:auto;font-size:14px;color:var(--ink-3);white-space:nowrap;
+  }
+  .arrange{
+    display:inline-flex;align-items:center;gap:7px;
+    font-size:13px;color:var(--ink-2);font-weight:500;
+    background:var(--card);border:1px solid var(--line-2);border-radius:999px;
+    padding:7px 14px;white-space:nowrap;
+  }
+  .arrange svg{width:15px;height:15px;stroke:var(--ink-2);stroke-width:1.7;fill:none;stroke-linecap:round}
+
+  /* skeleton of the cards under the header, so placement reads in context */
+  .skeleton{margin-top:24px;display:grid;gap:16px}
+  .sk-card{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    height:64px;
+  }
+  .sk-card.tall{height:96px}
+
+  /* ── greeting bits ───────────────────────────────────── */
+  .greet-eyebrow{
+    font-size:14px;color:var(--ink-2);font-weight:500;margin:0 0 4px;
+  }
+  .greet-eyebrow .wave{color:var(--gold)}
+
+  .greet-inline{
+    font-weight:400;color:var(--ink-3);
+    font-size:32px;letter-spacing:-.02em;
+  }
+
+  .greet-hero h2{margin-bottom:0}
+  .greet-sub{
+    font-size:14px;color:var(--ink-3);margin:6px 0 0;
+  }
+
+  /* Option D: dedicated greeting card / banner */
+  .greet-banner{
+    background:linear-gradient(180deg,#ffffff, #fcfaf4);
+    border:1px solid var(--line);border-radius:14px;
+    padding:20px 24px;display:flex;align-items:center;gap:16px;
+    box-shadow:var(--shadow);
+  }
+  .greet-avatar{
+    width:44px;height:44px;border-radius:50%;flex:none;
+    background:var(--accent);color:#f3efe4;
+    display:flex;align-items:center;justify-content:center;
+    font-size:18px;font-weight:600;
+  }
+  .greet-banner .g-title{
+    font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0;line-height:1.2;
+  }
+  .greet-banner .g-sub{font-size:13px;color:var(--ink-3);margin:3px 0 0}
+
+  .caption{font-size:12.5px;color:var(--ink-3);margin:10px 2px 0;line-height:1.5}
+
+  /* time-of-day chips */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 4px}
+  .chip{
+    font-size:12px;color:var(--ink-2);background:var(--card);
+    border:1px solid var(--line-2);border-radius:999px;padding:5px 12px;
+  }
+  .chip b{color:var(--ink);font-weight:600}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <p class="note">
+    Four places a personalized greeting could live on the Dashboard — same header,
+    different weight. Copy adapts to the time of day and the operator's name
+    (e.g. <b>Asher</b>). Pick one; I'll wire the real string logic after.
+  </p>
+
+  <!-- ══ OPTION A — small eyebrow above the title ══ -->
+  <div class="label first">Option A · Quiet eyebrow above the title</div>
+  <div class="demo">
+    <div>
+      <p class="greet-eyebrow"><span class="wave">Good morning,</span> Asher</p>
+      <div class="db-head">
+        <h2>Dashboard</h2>
+        <span class="date">Thursday 9 July</span>
+        <span class="arrange"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Arrange</span>
+      </div>
+    </div>
+    <div class="skeleton"><div class="sk-card tall"></div></div>
+  </div>
+  <p class="caption">Least disruptive. The word "Dashboard" stays the anchor; the greeting is a soft line above it.</p>
+
+  <!-- ══ OPTION B — greeting replaces the title ══ -->
+  <div class="label">Option B · Greeting as the title</div>
+  <div class="demo">
+    <div class="db-head greet-hero">
+      <h2>Good morning, Asher</h2>
+      <span class="date">Thursday 9 July</span>
+      <span class="arrange"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Arrange</span>
+    </div>
+    <p class="greet-sub">Here's your Thursday.</p>
+    <div class="skeleton"><div class="sk-card tall"></div></div>
+  </div>
+  <p class="caption">Warmest. The greeting <i>is</i> the headline — the page still reads as the dashboard from the nav. Sub-line optional.</p>
+
+  <!-- ══ OPTION C — inline, one line ══ -->
+  <div class="label">Option C · Inline with the title</div>
+  <div class="demo">
+    <div class="db-head">
+      <h2>Dashboard <span class="greet-inline">· morning, Asher</span></h2>
+      <span class="date">Thursday 9 July</span>
+      <span class="arrange"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Arrange</span>
+    </div>
+    <div class="skeleton"><div class="sk-card tall"></div></div>
+  </div>
+  <p class="caption">Compact. Keeps one line, blends the greeting into the existing title as a lighter tail.</p>
+
+  <!-- ══ OPTION D — dedicated greeting banner ══ -->
+  <div class="label">Option D · Greeting banner (its own card)</div>
+  <div class="demo">
+    <div class="db-head">
+      <h2>Dashboard</h2>
+      <span class="date">Thursday 9 July</span>
+      <span class="arrange"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Arrange</span>
+    </div>
+    <div class="skeleton">
+      <div class="greet-banner">
+        <div class="greet-avatar">A</div>
+        <div>
+          <p class="g-title">Good morning, Asher</p>
+          <p class="g-sub">Happy Thursday — three things need you today.</p>
+        </div>
+      </div>
+      <div class="sk-card"></div>
+    </div>
+  </div>
+  <p class="caption">Most presence. A full card can carry a second line (a nudge, a weekend note) and an avatar. Heaviest of the four.</p>
+
+  <!-- time-of-day copy set -->
+  <div class="label">The copy set (adapts by time &amp; day)</div>
+  <div class="demo" style="padding-bottom:24px">
+    <div class="chips">
+      <span class="chip"><b>05–11</b> · Good morning, Asher</span>
+      <span class="chip"><b>11–17</b> · Good afternoon, Asher</span>
+      <span class="chip"><b>17–22</b> · Good evening, Asher</span>
+      <span class="chip"><b>22–05</b> · Still up, Asher?</span>
+      <span class="chip"><b>Sat / Sun</b> · Happy weekend, Asher</span>
+      <span class="chip"><b>First login of day</b> · Welcome back, Asher</span>
+    </div>
+    <p class="caption" style="margin-top:14px">
+      Time bands are examples — easy to tune. Weekend / "welcome back" can override the
+      time-of-day line, or stack as a sub-line (Option B / D).
+    </p>
+  </div>
+
+</div>
+</body>
+</html>

@@ -941,10 +941,11 @@ let TD_LOW_POOL = [];   // ordered out-then-low pool the Running-low card rolls 
 const TD_SEEN_KEY = 'retail-admin-last-seen';
 
 function tdInit() {
+  tdGreetRender();
   tdDateRender();
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
-  // Language toggle repaints the JS-built strings (date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdDateRender(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); dashStockDrawerRender(); });
+  // Language toggle repaints the JS-built strings (greeting, date, recap, attention).
+  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); dashStockDrawerRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
@@ -1177,6 +1178,49 @@ function tdStockStoreChange(v) {
   tdOpsLoad();
   const d = document.getElementById('db-stock-drawer');
   if (d && d.classList.contains('open')) dashStockDrawerLoad();
+}
+
+// ── Greeting title (Option B) ────────────────────────────────────────────────
+// The page heading greets the signed-in operator by name — "Good morning,
+// Asher" — instead of a flat "Dashboard". The name comes from the account
+// menu's resolved user (ACCT_USER, set by initAcctMenu in 02-settings-ops.js);
+// same file scope, read at paint time so it's populated by then. Language-aware
+// (cuT) and repainted on a language flip and again when the account resolves.
+
+// First name for the greeting: Latin names → first word; CJK → the whole
+// (given) name. Empty when no user has resolved yet, which drops the name from
+// the line rather than showing a placeholder.
+function tdGreetName() {
+  const u = (typeof ACCT_USER !== 'undefined') ? ACCT_USER : null;
+  const src = String((u && (u.displayName || u.username)) || '').trim();
+  if (!src) return '';
+  return /^[\x00-\x7F]+$/.test(src) ? src.split(/\s+/)[0] : src;
+}
+
+// The greeting line: weekend overrides the time-of-day band. Bands mirror the
+// mockup (05–11 morning · 11–17 afternoon · 17–22 evening · 22–05 late).
+function tdGreetLine() {
+  const name = tdGreetName();
+  const nm = name ? ', ' + name : '', nmCn = name ? '，' + name : '';
+  const d = new Date(), day = d.getDay(), h = d.getHours();
+  if (day === 0 || day === 6) return cuT(`Happy weekend${nm}`, `周末愉快${nmCn}`);
+  if (h >= 5  && h < 11) return cuT(`Good morning${nm}`,   `早上好${nmCn}`);
+  if (h >= 11 && h < 17) return cuT(`Good afternoon${nm}`, `下午好${nmCn}`);
+  if (h >= 17 && h < 22) return cuT(`Good evening${nm}`,   `晚上好${nmCn}`);
+  return name ? cuT(`Still up, ${name}?`, `还没休息${nmCn}？`) : cuT('Still up?', '还没休息?');
+}
+
+// Paint the greeting heading + the quiet "Here's your {weekday}." sub-line.
+function tdGreetRender() {
+  const el = document.getElementById('td-greeting'); if (!el) return;
+  el.textContent = tdGreetLine();
+  const sub = document.getElementById('td-greet-sub');
+  if (sub) {
+    const d = new Date();
+    const EN = DASH_DOW_EN[d.getDay()];
+    const CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
+    sub.textContent = cuT(`Here's your ${EN}.`, `这是你的${CN}。`);
+  }
 }
 
 // Today's date under the page title — the calm anchor for "Today" numbers.
