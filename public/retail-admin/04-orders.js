@@ -2875,9 +2875,6 @@ function renderGzMethodToggle(o, s) {
         ${seg(isLocal, 'local', 'scooter', 'Rider', '骑手配送')}
         ${seg(!isLocal, 'land', 'van', 'JD logistics', '京东物流')}
       </div>
-      <div class="muted" style="font-size:11px; margin-top:6px;">${cuT(
-        'Rider (set an arrival time) or JD logistics (attach a waybill).',
-        '骑手(设置送达时间)或京东物流(填写运单号)。')}</div>
     </div>`;
 }
 
@@ -2923,9 +2920,13 @@ function renderLocalEtaCard(o, s, hoisted) {
         <button class="btn ${eta ? 'btn-primary' : ''} btn-sm" onclick="saveLocalEta(${o.id}, ${sid}, event)">${eta ? 'Update time · 更新时间' : 'Set arrival time · 设置送达时间'}</button>
         ${eta ? `<button class="btn btn-sm" onclick="clearLocalEta(${o.id}, ${sid}, event)">Clear · 清除</button>` : ''}
       </div>`;
-  return `
-    <div style="${wrapStyle}" id="eta-card-${sid}">
-      ${renderGzMethodToggle(o, s)}
+  // ── Delivery time block ─────────────────────────────────────────────
+  // The arrival time is filled in automatically by the courier once a rider
+  // is booked, so it reads as a quiet confirmation, not an input. Three cases:
+  //   auto  → read-only "estimated arrival" chip + manual override tucked away
+  //   set   → the picker, pre-filled, with a "shown to customer" note
+  //   unset → the picker, empty (staff can set a time up-front if they want)
+  const timeBlock = `
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Delivery time · 送达时间</div>
       ${isAuto ? `
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
@@ -2934,15 +2935,25 @@ function renderLocalEtaCard(o, s, hoisted) {
             <div style="font-family: var(--f-mono); font-weight:600; font-size:15px;">${escapeHtml(pretty)}</div>
           </div>
           <div style="flex:1; min-width:120px; text-align:right;">
-            <span class="muted" style="font-size:11px;">From the courier · 来自骑手,自动</span>
+            <span class="muted" style="font-size:11px;">Set by the courier · 来自骑手,自动</span>
           </div>
         </div>
         <details style="margin-bottom:4px;">
           <summary style="font-size:12px; cursor:pointer; color:var(--text-3);">Set a time manually · 手动设置时间</summary>
           <div style="margin-top:8px;">${picker}</div>
         </details>`
-      : `${picker}${eta ? `<div class="muted" style="font-size:11px; margin-top:8px;">Shown to the customer · 已展示给顾客</div>` : ''}`}
+      : `${picker}${eta ? `<div class="muted" style="font-size:11px; margin-top:8px;">Shown to the customer · 已展示给顾客</div>` : ''}`}`;
+
+  // Order top-to-bottom: method toggle → same-city courier (compare/dispatch) →
+  // delivery time. The courier picker leads because the arrival time follows from
+  // whichever rider is booked; the time block sits below its own dashed divider.
+  return `
+    <div style="${wrapStyle}" id="eta-card-${sid}">
+      ${renderGzMethodToggle(o, s)}
       ${renderQyDispatch(o)}
+      <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">
+        ${timeBlock}
+      </div>
     </div>`;
 }
 

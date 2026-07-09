@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dispatch — courier first — Tacet mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF; --graphite:#58606E;
+    --cream:#F6F3EC; --elev1:#F4F1E9; --elev2:#EFEBE1;
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --sage:#A3B49F; --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
+    --f:'Inter',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:28px 20px 80px;
+  }
+  .page-head{max-width:520px; margin:0 auto 22px;}
+  .page-head h1{font-size:20px; font-weight:600; margin:0 0 4px; letter-spacing:-.01em;}
+  .page-head p{margin:0; color:var(--text-2); font-size:13.5px;}
+  .stage{ max-width:520px; margin:0 auto; }
+
+  .panel{
+    background:var(--paper); border:1px solid var(--line);
+    border-radius:18px; padding:26px 26px 24px;
+    box-shadow:0 24px 60px rgba(40,30,5,.10); position:relative;
+  }
+
+  .kicker{font-size:11px; font-weight:600; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--graphite); margin:0 0 12px;}
+
+  /* ── Dispatch method segmented control ── */
+  .seg-row{margin-bottom:26px;}
+  .od-seg{display:inline-flex; background:var(--elev1); border:1px solid var(--line);
+    border-radius:999px; padding:4px; gap:2px;}
+  .od-seg-opt{display:inline-flex; align-items:center; gap:8px; border:0; background:transparent;
+    font-family:var(--f); font-size:15px; font-weight:500; color:var(--text-2);
+    padding:9px 20px; border-radius:999px; cursor:pointer;}
+  .od-seg-opt.on{background:var(--ink); color:var(--paper);}
+  .od-seg-opt svg{width:16px;height:16px;}
+
+  .divider{height:1px; background:var(--line-soft); margin:26px 0; border:0;}
+
+  /* ── Courier compare ── */
+  .courier-head{display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px;}
+  .refresh{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:500;
+    color:var(--text-2); background:transparent; border:1px solid var(--line); border-radius:999px;
+    padding:5px 13px; cursor:pointer;}
+  .refresh:hover{background:var(--cream); color:var(--text-1);}
+  .refresh svg{width:13px; height:13px;}
+
+  .clist{display:flex; flex-direction:column; gap:8px;}
+  .crow{display:flex; align-items:center; gap:14px; padding:13px 15px;
+    border:1px solid var(--line); border-radius:var(--r-lg); background:var(--pane); cursor:pointer;
+    transition:border-color .12s, background .12s;}
+  .crow:hover{border-color:var(--line-strong);}
+  .crow.sel{border-color:var(--ink); background:#FCFBF7;}
+  .cbox{width:20px; height:20px; border-radius:6px; border:1.5px solid var(--line-strong);
+    background:var(--pane); flex:none; display:flex; align-items:center; justify-content:center;
+    color:transparent; transition:.12s;}
+  .crow.sel .cbox{background:var(--ink); border-color:var(--ink); color:var(--paper);}
+  .cbox svg{width:12px; height:12px;}
+  .cbody{flex:1; min-width:0;}
+  .cname{font-size:15px; font-weight:600; color:var(--text-1); display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+  .cheap{font-size:10.5px; font-weight:600; letter-spacing:.03em; text-transform:uppercase;
+    color:var(--sage-ink); background:var(--sage-tint); border-radius:999px; padding:2px 8px;}
+  .cmeta{font-size:12.5px; color:var(--text-3); margin-top:3px;}
+  .cprice{font-family:var(--mono); font-weight:600; font-size:16px; color:var(--text-1);
+    white-space:nowrap; font-variant-numeric:tabular-nums; flex:none;}
+
+  .compare-btn{display:inline-flex; align-items:center; gap:8px; font-family:var(--f);
+    font-size:14px; font-weight:500; padding:11px 18px; border:1px solid var(--line);
+    background:var(--pane); color:var(--text-1); border-radius:var(--r-md); cursor:pointer;}
+  .compare-btn:hover{background:var(--cream);}
+  .compare-btn svg{width:15px;height:15px;}
+
+  /* ── Delivery time (auto, below courier) ── */
+  .eta-auto{display:flex; flex-wrap:wrap; align-items:center; gap:12px;
+    padding:14px 16px; background:var(--elev1); border:1px solid var(--line-soft);
+    border-radius:var(--r-lg);}
+  .eta-auto .k{font-size:12px; color:var(--text-3); margin-bottom:2px;}
+  .eta-auto .big{font-family:var(--mono); font-weight:600; font-size:20px; letter-spacing:-.01em;
+    color:var(--text-1); font-variant-numeric:tabular-nums;}
+  .eta-auto .src{flex:1; min-width:120px; text-align:right;}
+  .tag{display:inline-flex; align-items:center; gap:6px; font-size:11.5px; font-weight:500;
+    color:var(--sage-ink); background:var(--sage-tint); border-radius:999px; padding:5px 11px; white-space:nowrap;}
+  .tag .dot{width:6px; height:6px; border-radius:999px; background:var(--sage); flex:none;}
+  .manual{margin-top:10px;}
+  .manual summary{font-size:12.5px; color:var(--text-3); cursor:pointer; list-style:none;}
+  .manual summary::-webkit-details-marker{display:none;}
+  .manual summary:hover{color:var(--text-1);}
+
+  .footer{display:flex; align-items:center; justify-content:flex-end; gap:14px; margin-top:26px;}
+  .btn-lg{display:inline-flex; align-items:center; gap:8px; padding:12px 22px; font-size:15px;
+    font-weight:500; border:1px solid var(--ink); background:var(--ink); color:var(--paper);
+    border-radius:var(--r-md); cursor:pointer;}
+  .btn-lg:hover{background:#2A3550;}
+
+  .note{max-width:520px; margin:22px auto 0; font-size:12.5px; color:var(--text-3);
+    background:var(--pane); border:1px dashed var(--line); border-radius:var(--r-lg); padding:14px 16px;}
+  .note b{color:var(--text-2); font-weight:600;}
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>Dispatch — courier first</h1>
+  <p>The courier picker leads. Arrival time fills in on its own, so it sits below as a quiet confirmation.</p>
+</div>
+
+<div class="stage">
+  <div class="panel">
+
+    <!-- ── DISPATCH METHOD ── (helper line removed) -->
+    <div class="seg-row">
+      <div class="kicker">Dispatch method</div>
+      <div class="od-seg">
+        <button type="button" class="od-seg-opt on">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17h6l3-8h3M9 17l3-8"/></svg>
+          Rider
+        </button>
+        <button type="button" class="od-seg-opt">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="6" width="13" height="10" rx="1.5"/><path d="M14 9h4l3 3v4h-7z"/><circle cx="6" cy="18" r="1.8"/><circle cx="17" cy="18" r="1.8"/></svg>
+          JD logistics
+        </button>
+      </div>
+    </div>
+
+    <!-- ── SAME-CITY COURIER (now first) ── -->
+    <div class="courier-head">
+      <div class="kicker" style="margin-bottom:0;">Same-city courier</div>
+      <button class="refresh">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v4h-4"/></svg>
+        Refresh prices
+      </button>
+    </div>
+
+    <div class="clist">
+      <label class="crow sel">
+        <span class="cbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="cbody">
+          <span class="cname">货拉拉跑腿-特惠 <span class="cheap">cheapest</span></span>
+          <span class="cmeta">货拉拉跑腿 · 7.0km</span>
+        </span>
+        <span class="cprice">¥11.35</span>
+      </label>
+      <label class="crow">
+        <span class="cbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="cbody">
+          <span class="cname">京东特惠</span>
+          <span class="cmeta">京东秒送 · 6.5km</span>
+        </span>
+        <span class="cprice">¥12.74</span>
+      </label>
+      <label class="crow">
+        <span class="cbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="cbody">
+          <span class="cname">闪送一对一专人直送</span>
+          <span class="cmeta">闪送 · 6.6km</span>
+        </span>
+        <span class="cprice">¥16.60</span>
+      </label>
+    </div>
+
+    <hr class="divider">
+
+    <!-- ── DELIVERY TIME — automatic, read-only by default ── -->
+    <div class="kicker">Delivery time</div>
+    <div class="eta-auto">
+      <div>
+        <div class="k">Estimated arrival</div>
+        <div class="big">12:00 PM</div>
+      </div>
+      <div class="src">
+        <span class="tag"><span class="dot"></span>Set by the courier</span>
+      </div>
+    </div>
+    <details class="manual">
+      <summary>Set a time manually instead</summary>
+    </details>
+
+    <div class="footer">
+      <button class="btn-lg">Dispatch courier</button>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>What changed.</b> The helper line under Dispatch method is gone. The courier picker moved above Delivery time, since arrival time is filled in automatically by the chosen rider — it now reads as a confirmation, with a manual override tucked underneath.
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.crow').forEach(row => {
+    row.addEventListener('click', e => {
+      e.preventDefault();
+      document.querySelectorAll('.crow').forEach(r => r.classList.remove('sel'));
+      row.classList.add('sel');
+    });
+  });
+  document.querySelectorAll('.od-seg-opt').forEach(b => {
+    b.addEventListener('click', () => {
+      b.parentNode.querySelectorAll('.od-seg-opt').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+    });
+  });
+</script>
+</body>
+</html>
