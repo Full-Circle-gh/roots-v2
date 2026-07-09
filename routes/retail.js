@@ -22387,9 +22387,15 @@ function computeDeliverySlots(zone, now) {
     return `${dh}${mer}`;
   })();
   const closeLabelCn = `${endHour}:00`;
+  // Operator can override this copy in Settings → Delivery → Same-day cutoff
+  // (delivery.sameDayCutoffMessage). Blank fields fall back to the auto-built
+  // text above, which stays accurate as the zone's hours/buffer change.
+  const cutoffMsgOverride = cfgValue('delivery.sameDayCutoffMessage', { en: '', cn: '' }) || {};
   const sameDayCutoffMessage = pastSameDayCutoff ? {
-    en: `Too late for same-day delivery — we stop taking today's orders ${sameDayCutoffMinutes} min before we close at ${closeLabelEn}. Please choose a time for tomorrow.`,
-    cn: `已过今日配送截单时间 — 关门前 ${sameDayCutoffMinutes} 分钟停止接单(今日 ${closeLabelCn} 关门)。请选择明天的配送时段。`,
+    en: (cutoffMsgOverride.en && String(cutoffMsgOverride.en).trim())
+      || `Too late for same-day delivery — we stop taking today's orders ${sameDayCutoffMinutes} min before we close at ${closeLabelEn}. Please choose a time for tomorrow.`,
+    cn: (cutoffMsgOverride.cn && String(cutoffMsgOverride.cn).trim())
+      || `已过今日配送截单时间 — 关门前 ${sameDayCutoffMinutes} 分钟停止接单(今日 ${closeLabelCn} 关门)。请选择明天的配送时段。`,
   } : null;
 
   return {
