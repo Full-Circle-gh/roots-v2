@@ -951,6 +951,192 @@ function tdInit() {
   if (!TD._opsTimer) {
     TD._opsTimer = setInterval(() => { if (!document.hidden) tdOpsLoad(); }, 60000);
   }
+  // Restore the operator's saved card arrangement, wire drag, and paint the
+  // language-aware Arrange chrome. Repaint the chrome + tray on a language flip.
+  dashArrangeApply();
+  dashArrangeWire();
+  dashArrangeChromePaint();
+  if (window.onLangChange) onLangChange(dashArrangeChromePaint);
+}
+
+// ════════════════════════════════════════════════════════════════
+// ARRANGE MODE — the dashboard as the operator's own space.
+// Each top-level surface is a .td-block[data-block]; the operator can drag
+// them into any order and hide the ones they don't want. The order + hidden
+// set persist per user in localStorage (same convention as the Orders /
+// Products view tweaks). The dynamic #td-attn card grid keeps rebuilding
+// inside its block untouched, so live updates survive any arrangement.
+// ════════════════════════════════════════════════════════════════
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout';
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'revenue', 'channels'];
+// Tray-chip / restore labels for each block (bilingual via cuT at paint time).
+const DASH_BLOCK_TITLES = {
+  recap:    ['While you were away', '您不在的这段时间'],
+  needs:    ['Needs you', '需要您处理'],
+  revenue:  ['Revenue', '营业额'],
+  channels: ['Channels today', '今日渠道'],
+};
+let DASH_ARRANGING = false;
+let _dashDragBlock = null;
+
+function dashLayoutLoad() {
+  try {
+    const v = JSON.parse(localStorage.getItem(DASH_LAYOUT_KEY) || '{}');
+    return { order: Array.isArray(v.order) ? v.order : [], hidden: Array.isArray(v.hidden) ? v.hidden : [] };
+  } catch (e) { return { order: [], hidden: [] }; }
+}
+function dashLayoutSave(order, hidden) {
+  try { localStorage.setItem(DASH_LAYOUT_KEY, JSON.stringify({ order, hidden })); } catch (e) {}
+}
+// Persist whatever the DOM currently shows (order of blocks + which are hidden).
+function dashArrangePersist() {
+  const host = document.getElementById('td-blocks'); if (!host) return;
+  const blocks = [...host.querySelectorAll('.td-block')];
+  const order  = blocks.map(b => b.dataset.block);
+  const hidden = blocks.filter(b => b.classList.contains('is-hidden')).map(b => b.dataset.block);
+  dashLayoutSave(order, hidden);
+}
+
+// Reorder the blocks in the DOM to the saved order and apply the hidden set.
+// Any block missing from the saved order keeps its markup order at the tail
+// (new blocks added in a future release surface rather than vanish).
+function dashArrangeApply() {
+  const host = document.getElementById('td-blocks'); if (!host) return;
+  const { order, hidden } = dashLayoutLoad();
+  const seq = (order && order.length) ? order : DASH_BLOCK_DEFAULT;
+  seq.forEach(key => {
+    const el = host.querySelector(`.td-block[data-block="${key}"]`);
+    if (el) host.appendChild(el);   // re-append in saved order
+  });
+  const hide = new Set(hidden || []);
+  host.querySelectorAll('.td-block').forEach(el => {
+    el.classList.toggle('is-hidden', hide.has(el.dataset.block));
+  });
+  dashArrangeTray();
+}
+
+// Enter / leave Arrange mode. Blocks become draggable only while arranging;
+// leaving saves the layout.
+function dashArrangeToggle() {
+  DASH_ARRANGING = !DASH_ARRANGING;
+  document.body.classList.toggle('td-arranging', DASH_ARRANGING);
+  const host = document.getElementById('td-blocks');
+  if (host) host.querySelectorAll('.td-block').forEach(b => { b.draggable = DASH_ARRANGING; });
+  dashArrangeChromePaint();
+  if (!DASH_ARRANGING) dashArrangePersist();
+}
+
+// Paint the language-aware Arrange chrome: the button label (Arrange ⇄ Done),
+// the hint line, the reset link, and any hidden-card tray chips.
+function dashArrangeChromePaint() {
+  const lbl = document.getElementById('td-arrange-lbl');
+  if (lbl) lbl.textContent = DASH_ARRANGING ? cuT('Done', '完成') : cuT('Arrange', '整理');
+  const hint = document.getElementById('td-arrange-hint-txt');
+  if (hint) hint.textContent = cuT(
+    "Drag cards to reorder. Hide the ones you don't need — they wait in the tray below.",
+    '拖动卡片重新排序，隐藏不需要的卡片 — 它们会保存在下方的托盘里。');
+  const reset = document.getElementById('td-arrange-reset');
+  if (reset) reset.textContent = cuT('Reset to default', '恢复默认');
+  dashArrangeTray();
+}
+
+function dashArrangeHide(key) {
+  const el = document.querySelector(`.td-block[data-block="${key}"]`);
+  if (!el) return;
+  el.classList.add('is-hidden');
+  dashArrangePersist();
+  dashArrangeTray();
+}
+function dashArrangeShow(key) {
+  const host = document.getElementById('td-blocks');
+  const el = host && host.querySelector(`.td-block[data-block="${key}"]`);
+  if (!el) return;
+  el.classList.remove('is-hidden');
+  host.appendChild(el);   // restored cards land at the end
+  dashArrangePersist();
+  dashArrangeTray();
+}
+
+// Render the hidden-cards tray (a row of "+ add back" chips). The tray only
+// shows in Arrange mode (CSS), and only when it has items.
+function dashArrangeTray() {
+  const tray = document.getElementById('td-tray');
+  const row  = document.getElementById('td-tray-row');
+  if (!tray || !row) return;
+  const hidden = [...document.querySelectorAll('.td-block.is-hidden')].map(b => b.dataset.block);
+  tray.classList.toggle('has-items', hidden.length > 0);
+  row.innerHTML = hidden.map(key => {
+    const t = DASH_BLOCK_TITLES[key];
+    const nm = t ? cuT(t[0], t[1]) : key;
+    return `<span class="td-chip">${escapeHtml(nm)}`
+      + `<button type="button" class="td-chip-add" title="${escapeAttr(cuT('Add back', '恢复'))}" onclick="dashArrangeShow('${key}')">`
+      + `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span>`;
+  }).join('');
+}
+
+// Reset to the shipped default: forget the saved layout, un-hide everything,
+// restore the markup order.
+function dashArrangeReset() {
+  try { localStorage.removeItem(DASH_LAYOUT_KEY); } catch (e) {}
+  const host = document.getElementById('td-blocks'); if (!host) return;
+  DASH_BLOCK_DEFAULT.forEach(key => {
+    const el = host.querySelector(`.td-block[data-block="${key}"]`);
+    if (el) { el.classList.remove('is-hidden'); host.appendChild(el); }
+  });
+  host.querySelectorAll('.td-block').forEach(b => { b.draggable = DASH_ARRANGING; });
+  dashArrangeTray();
+}
+
+// ── Drag to reorder (native HTML5 DnD, wired once) ──────────────────────────
+function dashArrangeWire() {
+  const host = document.getElementById('td-blocks');
+  if (!host || host._dndWired) return;
+  host._dndWired = true;
+
+  host.addEventListener('dragstart', e => {
+    if (!DASH_ARRANGING) return;
+    const b = e.target.closest('.td-block');
+    if (!b) return;
+    _dashDragBlock = b;
+    b.classList.add('td-dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    try { e.dataTransfer.setData('text/plain', b.dataset.block); } catch (err) {}
+  });
+  host.addEventListener('dragend', () => {
+    if (_dashDragBlock) _dashDragBlock.classList.remove('td-dragging');
+    dashArrangeClearMarkers();
+    _dashDragBlock = null;
+    dashArrangePersist();
+  });
+  host.addEventListener('dragover', e => {
+    if (!_dashDragBlock) return;
+    e.preventDefault();
+    const over = e.target.closest('.td-block');
+    dashArrangeClearMarkers();
+    if (!over || over === _dashDragBlock || over.classList.contains('is-hidden')) return;
+    const r = over.getBoundingClientRect();
+    // Full-width blocks read as vertical (before/after = above/below); side-by-side
+    // span-1 blocks read horizontally. Use whichever axis the target is wider on.
+    const horizontal = over.dataset.span === '1';
+    const after = horizontal ? (e.clientX - r.left) > r.width / 2 : (e.clientY - r.top) > r.height / 2;
+    over.classList.add(after ? 'td-drop-after' : 'td-drop-before');
+  });
+  host.addEventListener('drop', e => {
+    if (!_dashDragBlock) return;
+    e.preventDefault();
+    const over = e.target.closest('.td-block');
+    if (!over || over === _dashDragBlock) { dashArrangeClearMarkers(); return; }
+    const r = over.getBoundingClientRect();
+    const horizontal = over.dataset.span === '1';
+    const after = horizontal ? (e.clientX - r.left) > r.width / 2 : (e.clientY - r.top) > r.height / 2;
+    if (after) over.after(_dashDragBlock); else over.before(_dashDragBlock);
+    dashArrangeClearMarkers();
+    dashArrangePersist();
+  });
+}
+function dashArrangeClearMarkers() {
+  document.querySelectorAll('.td-block.td-drop-before, .td-block.td-drop-after')
+    .forEach(b => b.classList.remove('td-drop-before', 'td-drop-after'));
 }
 
 // Load the store list once so the Running-low card can offer a per-store filter.

@@ -7903,6 +7903,106 @@
   .td-clear p { margin: 0; font-size: 15px; color: var(--td-text); }
   .td-clear p.sub { margin-top: 4px; font-size: 13px; color: var(--td-text2); }
 
+  /* ════════════════════════════════════════════════════════════════
+     THE DASHBOARD AS THE OPERATOR'S OWN SPACE — a draggable card grid.
+     Normal view is identical to before: Recap + Needs-you span the full
+     width, Revenue + Channels are span-1 and share a row. "Arrange" mode
+     (body.td-arranging) reveals a drag grip + a hide ✕ on each block, a
+     Dusk drop-seam while dragging, and a hidden-cards tray. Order + hidden
+     set persist per user. Controller: dashArrange* in 03-dashboard.js. ── */
+  .td-blocks { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .td-block { position: relative; min-width: 0; }
+  .td-block[data-span="2"] { grid-column: 1 / -1; }
+  @media (max-width: 1000px) { .td-block[data-span="1"] { grid-column: 1 / -1; } }
+  /* A block the operator has hidden — out of the grid entirely (its inner
+     surfaces keep updating in the background so restoring is instant). */
+  .td-block.is-hidden { display: none; }
+
+  /* Arrange / Done control in the dashboard header. */
+  .td-arrange-btn {
+    display: inline-flex; align-items: center; gap: 7px; margin-left: 12px;
+    font-family: var(--f-sans); font-size: 13px; font-weight: 500;
+    color: var(--td-text2); background: transparent;
+    border: 1px solid var(--td-border); border-radius: 999px;
+    padding: 6px 13px; cursor: pointer;
+    transition: color .2s cubic-bezier(.16,1,.3,1), border-color .2s, background .2s;
+  }
+  .td-arrange-btn svg { width: 15px; height: 15px; }
+  .td-arrange-btn:hover { color: var(--td-text); border-color: var(--td-text2); }
+  body.td-arranging .td-arrange-btn { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  body.td-arranging .td-arrange-btn:hover { filter: brightness(1.06); }
+  @media (max-width: 720px) { .td-arrange-btn { display: none; } }  /* desktop td-* surface only */
+
+  /* One-line Dusk hint that appears only in Arrange mode. */
+  .td-arrange-hint { display: none; }
+  body.td-arranging .td-arrange-hint {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-size: 12.5px; color: var(--td-dusk); margin: 0 0 18px;
+  }
+  .td-arrange-hint .td-reset {
+    margin-left: auto; color: var(--td-text2); background: none; border: none;
+    font: 500 12.5px var(--f-sans); cursor: pointer; text-decoration: underline; text-underline-offset: 2px;
+  }
+  .td-arrange-hint .td-reset:hover { color: var(--td-text); }
+
+  /* Per-block tools (grip + hide) — invisible until Arrange mode. */
+  .td-block-tools { display: none; }
+  body.td-arranging .td-block-tools {
+    display: flex; align-items: center; justify-content: space-between;
+    position: absolute; top: 8px; left: 12px; right: 12px; z-index: 3; pointer-events: none;
+  }
+  body.td-arranging .td-block-tools > * { pointer-events: auto; }
+  .td-grip { display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center; color: var(--td-text2); cursor: grab; }
+  .td-grip svg { width: 18px; height: 18px; }
+  .td-hide-btn {
+    display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center;
+    border-radius: 999px; border: 1px solid var(--td-border); background: var(--td-surface);
+    color: var(--td-text2); cursor: pointer; transition: color .16s, border-color .16s, background .16s;
+  }
+  .td-hide-btn svg { width: 14px; height: 14px; }
+  .td-hide-btn:hover { color: var(--td-brick-ink); border-color: var(--td-brick); background: var(--td-brick-tint); }
+
+  /* Arrange mode: dashed Dusk outline so the card reads as movable; the
+     whole block is the drag surface, so swallow clicks on its inner
+     controls (they'd otherwise open drawers mid-drag). Nudge the heading
+     clear of the tools bar. */
+  body.td-arranging .td-block { cursor: grab; }
+  body.td-arranging .td-block .card,
+  body.td-arranging .td-block .td-attn,
+  body.td-arranging .td-block .td-kicker { pointer-events: none; }
+  body.td-arranging .td-block .card { border-style: dashed; border-color: var(--td-dusk); }
+  body.td-arranging .td-block .td-card-head,
+  body.td-arranging .td-block .td-recap-head { padding-top: 16px; }
+  body.td-arranging .td-block[data-block="needs"] .td-kicker { margin-top: 26px; }
+
+  .td-block.td-dragging { opacity: .5; }
+  .td-block.td-dragging .card { box-shadow: 0 8px 28px rgba(17,26,43,.16); border-style: solid; }
+  /* Dusk drop-seam marking where the dragged block will land. */
+  .td-block.td-drop-before::before, .td-block.td-drop-after::after {
+    content: ""; position: absolute; top: 6px; bottom: 6px; width: 3px; border-radius: 3px;
+    background: var(--td-dusk); z-index: 4;
+  }
+  .td-block.td-drop-before::before { left: -9px; }
+  .td-block.td-drop-after::after { right: -9px; }
+
+  /* Hidden-cards tray — only in Arrange mode, only when something's hidden. */
+  .td-tray { display: none; margin-top: 28px; }
+  body.td-arranging .td-tray.has-items { display: block; }
+  .td-tray .td-kicker { margin-top: 0; }
+  .td-tray-row { display: flex; flex-wrap: wrap; gap: 10px; }
+  .td-chip {
+    display: inline-flex; align-items: center; gap: 8px;
+    border: 1px dashed var(--td-border); border-radius: 999px;
+    padding: 6px 8px 6px 14px; font-size: 13px; color: var(--td-text2); background: var(--td-raised);
+  }
+  .td-chip .td-chip-add {
+    width: 22px; height: 22px; border-radius: 999px; border: none; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--td-dusk-tint); color: var(--td-dusk);
+  }
+  .td-chip .td-chip-add svg { width: 13px; height: 13px; }
+  .td-chip .td-chip-add:hover { background: var(--td-dusk); color: #fff; }
+
   /* ── Today — the pulse ── */
   .td-pulse-grid { display: grid; grid-template-columns: 1.6fr 1fr; gap: 16px; align-items: stretch; }
   @media (max-width: 1000px) { .td-pulse-grid { grid-template-columns: 1fr; } }
@@ -8817,14 +8917,15 @@
    · store-manager keeps the full pulse but locked to their store, so
      the tenant-wide Channels square (no store filter) is dropped.
    ════════════════════════════════════════════════════════════════ */
-body.pos-warehouse #td-recap, body.pos-customer-service #td-recap, body.pos-dispatch #td-recap,
-body.pos-warehouse #td-kick-today, body.pos-customer-service #td-kick-today, body.pos-dispatch #td-kick-today,
-body.pos-warehouse .td-pulse-grid, body.pos-customer-service .td-pulse-grid, body.pos-dispatch .td-pulse-grid,
-body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot {
+body.pos-warehouse .td-block[data-block="recap"], body.pos-customer-service .td-block[data-block="recap"], body.pos-dispatch .td-block[data-block="recap"],
+body.pos-warehouse .td-block[data-block="revenue"], body.pos-customer-service .td-block[data-block="revenue"], body.pos-dispatch .td-block[data-block="revenue"],
+body.pos-warehouse .td-block[data-block="channels"], body.pos-customer-service .td-block[data-block="channels"], body.pos-dispatch .td-block[data-block="channels"],
+body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot,
+/* role-restricted views are fixed — the Arrange control is hidden for them */
+body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, body.pos-dispatch .td-arrange-btn, body.pos-store-manager .td-arrange-btn {
   display: none;
 }
-body.pos-store-manager #td-chan-pane { display: none; }
-body.pos-store-manager .td-pulse-grid { grid-template-columns: 1fr; }
+body.pos-store-manager .td-block[data-block="channels"] { display: none; }
 @media (max-width: 720px) {
   body.pos-warehouse #tab-dashboard .td-wrap,
   body.pos-customer-service #tab-dashboard .td-wrap,

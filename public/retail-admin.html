@@ -1141,6 +1141,14 @@
     <div class="db-head td-head">
       <h2 style="margin:0">Dashboard · 概览</h2>
       <span class="td-date" id="td-date"></span>
+      <!-- Arrange mode — lets the operator drag the dashboard cards into the
+           order they like and hide the ones they don't. Layout is saved per
+           user (localStorage). Desktop only (mobile uses #rm-dash). Label +
+           behaviour driven by dashArrange* in 03-dashboard.js. -->
+      <button type="button" class="td-arrange-btn" id="td-arrange-btn" onclick="dashArrangeToggle()" data-no-i18n>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+        <span id="td-arrange-lbl">Arrange</span>
+      </button>
     </div>
 
     <!-- Mobile dashboard (Variant A) — untouched this pass. Rendered by
@@ -1156,25 +1164,57 @@
          All rendering in 03-dashboard.js (td* + dashHero* + dashChan*). -->
     <div class="td-wrap">
 
-    <section class="card td-card td-recap" id="td-recap">
-      <div class="td-recap-head">
-        <h3 id="td-recap-title">While you were away · 您不在的这段时间</h3>
-        <span class="td-meta" id="td-recap-meta"></span>
-        <button class="td-ghost" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
+    <!-- Arrange-mode hint — shown only while arranging (CSS). -->
+    <div class="td-arrange-hint" id="td-arrange-hint" data-no-i18n>
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg>
+      <span id="td-arrange-hint-txt">Drag cards to reorder. Hide the ones you don't need — they wait in the tray below.</span>
+      <button type="button" class="td-reset" id="td-arrange-reset" onclick="dashArrangeReset()">Reset to default</button>
+    </div>
+
+    <!-- ── Arrangeable card grid ──────────────────────────────────────────
+         Each top-level surface is a draggable .td-block (data-block = its
+         saved identity, data-span = 2 full-width / 1 half). In "Arrange"
+         mode each block gets a drag grip + a hide ✕; the order and hidden
+         set persist per user. Recap + Needs-you span the full width so their
+         internal grids (and the live #td-attn rebuild) are untouched; Revenue
+         + Channels are span-1 and share a row, matching the current layout.
+         Controller: dashArrange* in 03-dashboard.js. -->
+    <div class="td-blocks" id="td-blocks">
+
+    <div class="td-block" data-block="recap" data-span="2">
+      <div class="td-block-tools" aria-hidden="true">
+        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('recap')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
-      <div class="td-recap-rows" id="td-recap-rows"><div class="td-muted">Loading… · 加载中…</div></div>
-      <!-- "Show the work" unfolds here — the away window's events (tinted dusk)
-           above a "you left here" line, the rest of today below. Rendered by
-           tdRecapToggleWork/tdRecapWorkRender (03-dashboard). -->
-      <div class="td-recap-work" id="td-recap-work" hidden></div>
-      <p class="td-recap-close" id="td-recap-close" hidden></p>
-    </section>
+      <section class="card td-card td-recap" id="td-recap">
+        <div class="td-recap-head">
+          <h3 id="td-recap-title">While you were away · 您不在的这段时间</h3>
+          <span class="td-meta" id="td-recap-meta"></span>
+          <button class="td-ghost" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
+        </div>
+        <div class="td-recap-rows" id="td-recap-rows"><div class="td-muted">Loading… · 加载中…</div></div>
+        <!-- "Show the work" unfolds here — the away window's events (tinted dusk)
+             above a "you left here" line, the rest of today below. Rendered by
+             tdRecapToggleWork/tdRecapWorkRender (03-dashboard). -->
+        <div class="td-recap-work" id="td-recap-work" hidden></div>
+        <p class="td-recap-close" id="td-recap-close" hidden></p>
+      </section>
+    </div>
 
-    <div class="td-kicker">Needs you · 需要您处理</div>
-    <div id="td-attn" class="td-attn" aria-live="polite"></div>
+    <div class="td-block" data-block="needs" data-span="2">
+      <div class="td-block-tools" aria-hidden="true">
+        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('needs')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
+      <div class="td-kicker">Needs you · 需要您处理</div>
+      <div id="td-attn" class="td-attn" aria-live="polite"></div>
+    </div>
 
-    <div class="td-kicker" id="td-kick-today">Today · 今日</div>
-    <div class="td-pulse-grid">
+    <div class="td-block" data-block="revenue" data-span="1">
+      <div class="td-block-tools" aria-hidden="true">
+        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('revenue')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
       <section class="card td-card td-today">
         <div class="td-card-head">
           <h3>Revenue · 营业额</h3>
@@ -1204,7 +1244,13 @@
           </div>
         </div>
       </section>
+    </div>
 
+    <div class="td-block" data-block="channels" data-span="1">
+      <div class="td-block-tools" aria-hidden="true">
+        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
+        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('channels')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      </div>
       <!-- Channels today — the Activity strip folded into The Recap's
            "Show the work"; this square now shows today's revenue split by
            channel (all stores). Rendered by dashChanRender (03-dashboard). -->
@@ -1215,6 +1261,16 @@
         <div class="td-chan-list" id="td-chan-list"><div class="td-muted">Loading… · 加载中…</div></div>
         <p class="td-chan-foot">All stores · 全部门店</p>
       </section>
+    </div>
+
+    </div>
+    <!-- end .td-blocks -->
+
+    <!-- Hidden-cards tray — only shown in Arrange mode, and only when the
+         operator has hidden at least one card. Filled by dashArrangeTray. -->
+    <div class="td-tray" id="td-tray">
+      <div class="td-kicker">Hidden cards · 已隐藏</div>
+      <div class="td-tray-row" id="td-tray-row"></div>
     </div>
 
     <div class="td-foot">
