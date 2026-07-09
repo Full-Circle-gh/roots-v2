@@ -4847,7 +4847,6 @@ function renderShipmentTrackingCard(o, s, hoisted) {
           <input type="text" id="trk-number-${sid}" value="" placeholder="Tracking / waybill number" data-ph-en="Tracking / waybill number" data-ph-cn="快递单号 / 运单号" style="flex:1; min-width:200px; font-family: var(--f-mono);">
           <button class="btn btn-sm" onclick="saveTracking(${o.id}, ${sid})">${cuT('Save tracking', '保存运单号')}</button>
         </div>
-        ${s.mode !== 'supplier' ? `<div class="muted" style="font-size:11px; margin-top:6px;">${cuT('A manually-entered number tracks via kd100 (paid) — incl. a personal JD JDV0… number. For free JD tracking, use "Create JD label" above instead.', '手动录入的运单号通过快递100(付费)追踪，含个人的京东 JDV0… 单号；如需免费京东追踪，请改用上方"生成京东运单"。')}</div>` : ''}
       `}
     </div>`;
 }
