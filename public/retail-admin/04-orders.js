@@ -86,6 +86,17 @@ const MT_STATUS = {
   '用户已收货': { en: 'Delivered',        tone: 'delivered' },
   '已收货':     { en: 'Delivered',        tone: 'delivered' },
   '已签收':     { en: 'Delivered',        tone: 'delivered' },
+  '妥投':       { en: 'Delivered',        tone: 'delivered' },
+  '已妥投':     { en: 'Delivered',        tone: 'delivered' },
+  '签收成功':   { en: 'Delivered',        tone: 'delivered' },
+  '已下单':     { en: 'Order placed',     tone: 'paid' },
+  '已揽收':     { en: 'Picked up',        tone: 'dispatched' },
+  '运输中':     { en: 'In transit',       tone: 'dispatched' },
+  '派件中':     { en: 'Out for delivery', tone: 'dispatched' },
+  '拒收':       { en: 'Rejected',         tone: 'cancelled' },
+  '拒签':       { en: 'Rejected',         tone: 'cancelled' },
+  '派送失败':   { en: 'Delivery failed',  tone: 'cancelled' },
+  '投递失败':   { en: 'Delivery failed',  tone: 'cancelled' },
   '已完成':     { en: 'Completed',        tone: 'delivered' },
   '交易完成':   { en: 'Completed',        tone: 'delivered' },
   '订单完成':   { en: 'Completed',        tone: 'delivered' },
@@ -105,9 +116,10 @@ function channelStatusMeta(desc) {
   // The Chinese view still shows the exact platform label.
   let tone = 'paid', en = 'In progress';
   if (/退款|退货/.test(d))                { tone = 'refunded';        en = 'Refund'; }
+  else if (/拒收|拒签|派送失败|投递失败|配送异常/.test(d)) { tone = 'cancelled'; en = 'Delivery failed'; }
   else if (/取消/.test(d))                { tone = 'cancelled';       en = 'Cancelled'; }
-  else if (/完成|送达|签收|收货/.test(d)) { tone = 'delivered';       en = 'Delivered'; }
-  else if (/配送|派送|骑手|取货/.test(d))   { tone = 'dispatched';      en = 'Delivering'; }
+  else if (/完成|送达|签收|收货|妥投/.test(d)) { tone = 'delivered';       en = 'Delivered'; }
+  else if (/配送|派送|派件|骑手|取货|揽收|运输/.test(d))   { tone = 'dispatched';      en = 'Delivering'; }
   else if (/拣货|备货|发货|制作/.test(d))   { tone = 'preparing';       en = 'Preparing'; }
   else if (/待支付|未支付|待付款/.test(d))  { tone = 'pending_payment'; en = 'Unpaid'; }
   return { en, cn: d, tone };
