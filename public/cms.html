@@ -4759,6 +4759,164 @@
     letter-spacing: .08em;
     color: var(--text-3);
   }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     CANVAS-FIRST LAYOUT  (opt-in: html[data-layout="canvas"])
+     The phone is the only permanent thing on stage. The left pane folds
+     to a 56px icon rail; the inspector floats beside the selected block;
+     device / preview / tweaks drop into a dock under the phone; the gaps
+     between blocks become clickable "+" seams. Everything reuses the
+     existing IDs + handlers — this is a re-housing, not a rewrite. The
+     default three-pane layout is untouched when the flag is off.
+     ═══════════════════════════════════════════════════════════════════ */
+  html[data-layout="canvas"] .body {
+    grid-template-columns: 56px 1fr;
+  }
+  /* The left pane folds away; a rail button floats it back as a drawer so
+     its Design pickers and Blocks palette keep working exactly as they do
+     today (menus anchor to their live picker rects). The right pane floats
+     as the inspector. Both are re-housed, not rebuilt. */
+  html[data-layout="canvas"] .pane.left {
+    display: none;
+    position: fixed; left: 56px; top: 56px; bottom: 0; width: 288px;
+    z-index: 44;
+    border-right: 1px solid var(--line);
+    box-shadow: var(--sh-3);
+    animation: cf-settle var(--t-med) var(--ease-out) both;
+  }
+  html[data-layout="canvas"] .pane.left.cf-open { display: block; }
+  /* The drawer shows one section at a time depending on the rail button. */
+  html[data-layout="canvas"] .pane.left.cf-show-design .pane-section:not(.cf-sec-design),
+  html[data-layout="canvas"] .pane.left.cf-show-blocks .pane-section:not(.cf-sec-blocks) { display: none; }
+  html[data-layout="canvas"] .pane.right { display: none; }
+
+  /* ── the rail ── */
+  .cf-rail { display: none; }
+  html[data-layout="canvas"] .cf-rail {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    padding: 12px 0;
+    background: var(--bg-pane);
+    border-right: 1px solid var(--line);
+    grid-row: 1; grid-column: 1;
+    overflow: visible;
+  }
+  .cf-rail button {
+    width: 38px; height: 38px; border-radius: var(--r-md);
+    border: 0; background: none; color: var(--text-2);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; position: relative;
+    transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  }
+  .cf-rail button:hover { background: var(--bg-elev-2); color: var(--text-1); }
+  .cf-rail button.on { background: var(--bg-elev-2); color: var(--text-1); }
+  .cf-rail button svg { width: 17px; height: 17px; }
+  .cf-rail .cf-spacer { flex: 1; }
+  .cf-rail .cf-alert {
+    position: absolute; top: 6px; right: 6px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--tacet-amber); border: 1.5px solid var(--bg-pane);
+  }
+  .cf-rail .cf-alert[hidden] { display: none; }
+
+  /* ── canvas becomes a relative, single-column stage ── */
+  html[data-layout="canvas"] .canvas {
+    position: relative;
+    padding: 0;
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+  /* The stage centres the phone and leaves room for the dock. */
+  html[data-layout="canvas"] .canvas .phone { margin: 36px auto 0; }
+
+  /* ── the dock (repurposed .canvas-meta) ── */
+  html[data-layout="canvas"] .canvas-meta {
+    position: sticky; bottom: 0; z-index: 12;
+    order: 99;                    /* fall to the bottom of the flex column */
+    width: auto; max-width: none;
+    margin: auto 0 0; padding: 16px 0 18px;
+    justify-content: center;
+    background: linear-gradient(to top, var(--bg-canvas) 55%, transparent);
+    pointer-events: none;
+  }
+  html[data-layout="canvas"] .canvas-meta > * { pointer-events: auto; }
+  html[data-layout="canvas"] .cf-dock {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg-pane); border: 1px solid var(--line);
+    border-radius: var(--r-pill); padding: 6px 8px; box-shadow: var(--sh-2);
+  }
+  html[data-layout="canvas"] .cf-dock .cf-sep { width: 1px; height: 20px; background: var(--line); }
+  html[data-layout="canvas"] .canvas-meta select {
+    border: 0; background: none;
+  }
+
+  /* ── floating inspector ── */
+  html[data-layout="canvas"] .pane.right.cf-float {
+    display: block;
+    position: fixed; z-index: 40;
+    width: 320px; max-height: calc(100vh - 150px);
+    background: var(--bg-pane); border: 1px solid var(--line);
+    border-radius: var(--r-lg); box-shadow: var(--sh-3);
+    overflow: hidden auto;
+    animation: cf-settle var(--t-med) var(--ease-out) both;
+  }
+  html[data-layout="canvas"] .pane.right.cf-float[hidden] { display: none; }
+  @keyframes cf-settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  /* When floating and nothing is selected, the empty-state is pointless —
+     the panel just hides (see cf JS), so no rule needed for .empty here. */
+
+  /* ── seams: the drop-zones gain a persistent, clickable + ── */
+  html[data-layout="canvas"] .drop-zone {
+    height: 14px; position: relative;
+  }
+  html[data-layout="canvas"] .drop-zone::before {
+    content: ''; position: absolute; left: 8px; right: 8px; top: 50%;
+    border-top: 1.5px dashed rgba(110,103,175,.30);
+    opacity: 0; transition: opacity var(--t-fast) var(--ease-out);
+  }
+  html[data-layout="canvas"] .drop-zone:hover::before { opacity: 1; }
+  html[data-layout="canvas"] .drop-zone .cf-seam-add {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) scale(.7);
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--bg-pane); color: var(--text-1); border: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; box-shadow: var(--sh-2); padding: 0;
+    opacity: 0; transition: opacity var(--t-fast) var(--ease-out), transform var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
+    z-index: 6;
+  }
+  html[data-layout="canvas"] .drop-zone .cf-seam-add svg { width: 12px; height: 12px; }
+  html[data-layout="canvas"] .drop-zone:hover .cf-seam-add,
+  html[data-layout="canvas"] .drop-zone.cf-seam-open .cf-seam-add { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  html[data-layout="canvas"] .drop-zone.cf-seam-open .cf-seam-add { background: var(--tacet-ink); color: var(--tacet-paper); border-color: var(--tacet-ink); }
+
+  /* ── drawer header: a close affordance + which section it's showing ── */
+  html[data-layout="canvas"] .pane.left .cf-drawer-head {
+    display: none;
+    align-items: center; gap: 8px;
+    padding: 12px 16px 0;
+  }
+  html[data-layout="canvas"] .pane.left.cf-open .cf-drawer-head { display: flex; }
+  .cf-drawer-head .t { font-size: 13.5px; font-weight: 600; }
+  .cf-drawer-head .x {
+    margin-left: auto; border: 0; background: none; color: var(--text-3);
+    cursor: pointer; padding: 3px; border-radius: 6px; display: flex;
+  }
+  .cf-drawer-head .x:hover { background: var(--bg-elev-2); color: var(--text-1); }
+  .cf-drawer-head .x svg { width: 15px; height: 15px; }
+
+  /* ── first-run coach marks ── */
+  .cf-coach {
+    position: fixed; z-index: 60;
+    display: flex; align-items: center; gap: 9px;
+    background: var(--tacet-ink); color: var(--tacet-paper);
+    font-size: 12px; font-weight: 500; padding: 8px 13px; border-radius: var(--r-pill);
+    box-shadow: var(--sh-3); animation: cf-settle var(--t-med) var(--ease-out) both;
+    max-width: 300px;
+  }
+  .cf-coach button {
+    border: 0; background: rgba(251,249,244,.16); color: var(--tacet-paper);
+    border-radius: var(--r-pill); font-size: 11px; font-weight: 500;
+    padding: 3px 9px; cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -4834,6 +4992,25 @@
 
 <!-- ═══════════════ BODY ═══════════════ -->
 <div class="body">
+
+  <!-- ─── CANVAS-FIRST RAIL ───
+       Only shown under html[data-layout="canvas"]. Its buttons open the
+       existing palette / pickers / design-check as popovers, so no editor
+       feature is lost when the panes fold away. Wired in initCanvasLayout(). -->
+  <div class="cf-rail" aria-label="Editor tools">
+    <button type="button" id="cf-rail-add" title="Add a block  ·  A" aria-label="Add a block">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+    </button>
+    <button type="button" id="cf-rail-style" title="Page style" aria-label="Page style">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.7s6.5 7 6.5 11.3a6.5 6.5 0 1 1-13 0C5.5 9.7 12 2.7 12 2.7z"/></svg>
+    </button>
+    <button type="button" id="cf-rail-check" title="Design check" aria-label="Design check">
+      <span class="cf-alert" id="cf-rail-check-alert" hidden></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5z"/><path d="M9 12l2 2 4-4"/></svg>
+    </button>
+    <div class="cf-spacer"></div>
+    <button type="button" id="cf-rail-help" title="Keyboard shortcuts  ·  ?" aria-label="Shortcuts" style="font-size:14px;font-weight:600">?</button>
+  </div>
 
   <!-- ─── PALETTE (LEFT) ─── -->
   <div class="pane left">
@@ -5356,6 +5533,7 @@ const ICONS = {
   upload:           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
   library:          '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
   x:                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  plus:             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
   image_placeholder:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
 };
 
@@ -5493,6 +5671,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
   initThemeBrand();
   buildLangToggle();
   buildResolutionPicker();
+  initCanvasLayout();   // opt-in canvas-first re-housing (no-op unless enabled)
   try {
     const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.json());
     if (!me?.user) { cmsAuthBail(); return; }
@@ -5539,6 +5718,219 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     setStatusText('Failed to load: ' + e.message, 'err');
   }
 })();
+
+// ═══════════════════════════════════════════════════════════════════════
+// CANVAS-FIRST LAYOUT  (opt-in)
+// Re-houses the existing editor into the canvas-first shape the user
+// approved: a 56px rail, the left pane floated as a rail-triggered drawer,
+// the inspector floated beside the selected block, the device/preview
+// controls docked under the phone, and "+" seams between blocks. Every
+// feature is the SAME element with the SAME handler — only its home moves —
+// so nothing the classic editor can do is lost. Enabled with ?layout=canvas
+// (remembered), turned back off with ?layout=classic. No-op by default, so
+// shipping this can never disturb the live three-pane editor.
+// ═══════════════════════════════════════════════════════════════════════
+function cfLayoutMode() {
+  try {
+    const q = new URLSearchParams(location.search).get('layout');
+    if (q === 'canvas' || q === 'classic') { localStorage.setItem('cms-layout', q); return q; }
+    return localStorage.getItem('cms-layout') || 'classic';
+  } catch (e) { return 'classic'; }
+}
+
+function initCanvasLayout() {
+  if (cfLayoutMode() !== 'canvas') return;
+  const root = document.documentElement;
+  root.dataset.layout = 'canvas';
+
+  const rail   = document.querySelector('.cf-rail');
+  const leftPane = document.querySelector('.pane.left');
+  const rightPane = document.querySelector('.pane.right');
+  const canvas = document.querySelector('.canvas');
+  const meta   = document.querySelector('.canvas-meta');
+  if (!rail || !leftPane || !canvas) return;
+
+  // ── tag the left pane's three sections so the drawer can show one at a
+  //    time. Order is stable: Design, Blocks, Tips. ──
+  const secs = leftPane.querySelectorAll('.pane-section');
+  if (secs[0]) secs[0].classList.add('cf-sec-design');
+  if (secs[1]) secs[1].classList.add('cf-sec-blocks');
+  if (secs[2]) secs[2].classList.add('cf-sec-tips');
+
+  // ── a small header inside the drawer with a close button ──
+  const head = document.createElement('div');
+  head.className = 'cf-drawer-head';
+  head.innerHTML = '<span class="t"></span><button type="button" class="x" title="Close" aria-label="Close">'
+    + (ICONS.x || '✕') + '</button>';
+  leftPane.insertBefore(head, leftPane.firstChild);
+  head.querySelector('.x').addEventListener('click', cfCloseDrawer);
+
+  // ── dock: wrap the device/preview/tweaks controls in a floating pill ──
+  if (meta && !meta.querySelector('.cf-dock')) {
+    const dock = document.createElement('div');
+    dock.className = 'cf-dock';
+    while (meta.firstChild) dock.appendChild(meta.firstChild);
+    meta.appendChild(dock);
+  }
+
+  // ── float the inspector; it stays hidden until a block is selected ──
+  if (rightPane) { rightPane.classList.add('cf-float'); rightPane.hidden = true; }
+
+  // ── rail wiring ──
+  const railAdd   = document.getElementById('cf-rail-add');
+  const railStyle = document.getElementById('cf-rail-style');
+  const railCheck = document.getElementById('cf-rail-check');
+  const railHelp  = document.getElementById('cf-rail-help');
+  if (railAdd)   railAdd.addEventListener('click', e => { e.stopPropagation(); cfToggleDrawer('blocks'); });
+  if (railStyle) railStyle.addEventListener('click', e => { e.stopPropagation(); cfToggleDrawer('design'); });
+  if (railCheck) railCheck.addEventListener('click', e => {
+    e.stopPropagation();
+    cfOpenDrawer('design');
+    // Expand the Design-check menu inside the drawer so a click on the
+    // shield lands you straight on the findings.
+    const dc = document.getElementById('design-check-picker');
+    const menu = document.getElementById('design-check-menu');
+    if (dc && menu && !menu.classList.contains('open')) dc.click();
+  });
+  if (railHelp)  railHelp.addEventListener('click', e => { e.stopPropagation(); cfShowHelp(); });
+
+  // ── mirror the design-check badge onto the rail's alert dot ──
+  const badge = document.getElementById('design-check-badge');
+  const alert = document.getElementById('cf-rail-check-alert');
+  if (badge && alert) {
+    const sync = () => { alert.hidden = badge.hidden || !badge.textContent.trim(); };
+    new MutationObserver(sync).observe(badge, { attributes: true, childList: true, characterData: true, subtree: true });
+    sync();
+  }
+
+  // ── seam + and rail + both open the Blocks drawer, remembering where the
+  //    new block should land. Clicking a palette item then inserts there. ──
+  window.cfOpenAddPalette = function (beforeIdx, seamEl) {
+    cfPendingInsert = (typeof beforeIdx === 'number') ? beforeIdx : null;
+    document.querySelectorAll('.drop-zone.cf-seam-open').forEach(z => z.classList.remove('cf-seam-open'));
+    if (seamEl) seamEl.classList.add('cf-seam-open');
+    cfOpenDrawer('blocks');
+  };
+  if (railAdd) railAdd.addEventListener('click', () => { cfPendingInsert = null; });
+
+  // Click-to-add: in the Blocks drawer, a click on a palette item inserts a
+  // block (at the pending seam index, or the end) and closes the drawer.
+  leftPane.addEventListener('click', e => {
+    const item = e.target.closest('.palette-item');
+    if (!item || !leftPane.classList.contains('cf-show-blocks')) return;
+    const type = item.dataset.type;
+    if (!type) return;
+    const at = (cfPendingInsert == null) ? state.draft.length : cfPendingInsert;
+    insertBlock(type, at);
+    cfCloseDrawer();
+  });
+
+  // ── inspector positioner (called from positionFloatingToolbar) ──
+  window.cfPositionInspector = function () {
+    const panel = document.querySelector('.pane.right.cf-float');
+    if (!panel) return;
+    const id = state.selectedId;
+    const wrap = id && document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
+    if (!id || !wrap) { panel.hidden = true; return; }
+    panel.hidden = false;
+    const cv = canvas.getBoundingClientRect();
+    const r  = wrap.getBoundingClientRect();
+    const w  = panel.offsetWidth  || 320;
+    const h  = panel.offsetHeight || 420;
+    let left = r.right + 20;
+    if (left + w > cv.right - 12) left = cv.right - w - 12;   // tuck beside the phone
+    if (left < cv.left + 12) left = cv.left + 12;
+    let top = Math.max(cv.top + 12, r.top);
+    if (top + h > cv.bottom - 12) top = Math.max(cv.top + 12, cv.bottom - h - 12);
+    panel.style.left = left + 'px';
+    panel.style.top  = top + 'px';
+  };
+
+  // ── dismiss the drawer on outside click / Esc ──
+  document.addEventListener('click', e => {
+    if (!leftPane.classList.contains('cf-open')) return;
+    if (e.target.closest('.pane.left') || e.target.closest('.cf-rail')) return;
+    cfCloseDrawer();
+  });
+  document.addEventListener('keydown', e => {
+    if (root.dataset.layout !== 'canvas') return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
+    if (e.key === 'Escape') { cfCloseDrawer(); return; }
+    if (typing) return;
+    if (e.key === 'a' || e.key === 'A') { cfPendingInsert = null; cfToggleDrawer('blocks'); }
+    else if (e.key === 's' || e.key === 'S') { cfToggleDrawer('design'); }
+  });
+
+  // ── first-run coach marks: two, then gone ──
+  cfMaybeCoach(rail);
+}
+
+let cfPendingInsert = null;
+function cfOpenDrawer(which) {
+  const leftPane = document.querySelector('.pane.left');
+  if (!leftPane) return;
+  leftPane.classList.add('cf-open');
+  leftPane.classList.toggle('cf-show-blocks', which === 'blocks');
+  leftPane.classList.toggle('cf-show-design', which === 'design');
+  const head = leftPane.querySelector('.cf-drawer-head .t');
+  if (head) head.textContent = which === 'blocks' ? T('Add a block', '添加模块') : T('Page style', '页面样式');
+  document.getElementById('cf-rail-add')  ?.classList.toggle('on', which === 'blocks');
+  document.getElementById('cf-rail-style')?.classList.toggle('on', which === 'design');
+}
+function cfToggleDrawer(which) {
+  const leftPane = document.querySelector('.pane.left');
+  if (!leftPane) return;
+  const showing = leftPane.classList.contains('cf-open') &&
+    leftPane.classList.contains(which === 'blocks' ? 'cf-show-blocks' : 'cf-show-design');
+  if (showing) cfCloseDrawer(); else cfOpenDrawer(which);
+}
+function cfCloseDrawer() {
+  const leftPane = document.querySelector('.pane.left');
+  if (!leftPane) return;
+  leftPane.classList.remove('cf-open', 'cf-show-blocks', 'cf-show-design');
+  document.querySelectorAll('.drop-zone.cf-seam-open').forEach(z => z.classList.remove('cf-seam-open'));
+  document.getElementById('cf-rail-add')  ?.classList.remove('on');
+  document.getElementById('cf-rail-style')?.classList.remove('on');
+  cfPendingInsert = null;
+}
+function cfShowHelp() {
+  if (document.getElementById('cf-help')) return;
+  const bg = document.createElement('div');
+  bg.className = 'modal-bg'; bg.id = 'cf-help';
+  const rows = [
+    [T('Add a block', '添加模块'), 'A'],
+    [T('Page style', '页面样式'), 'S'],
+    [T('Close / deselect', '关闭 / 取消选择'), 'Esc'],
+    [T('Publish', '发布'), '⌘ ⇧ P'],
+  ];
+  bg.innerHTML = '<div class="help-card"><h3>' + T('Keyboard', '快捷键') + '</h3><table><tbody>' +
+    rows.map(r => '<tr><td class="key">' + r[0] + '</td><td><kbd>' +
+      r[1].split(' ').join('</kbd> <kbd>') + '</kbd></td></tr>').join('') +
+    '</tbody></table><div class="close">' + T('Close', '关闭') + '</div></div>';
+  bg.addEventListener('click', e => { if (e.target === bg || e.target.closest('.close')) bg.remove(); });
+  document.body.appendChild(bg);
+}
+function cfMaybeCoach(rail) {
+  let seen = false;
+  try { seen = localStorage.getItem('cms-canvas-coached') === '1'; } catch (e) {}
+  if (seen) return;
+  const mk = (html, style) => {
+    const c = document.createElement('div');
+    c.className = 'cf-coach';
+    c.innerHTML = html;
+    Object.assign(c.style, style);
+    document.body.appendChild(c);
+    return c;
+  };
+  const railRect = rail.getBoundingClientRect();
+  const c1 = mk('<span>Everything lives on this rail. Start with +</span><button type="button">Got it</button>',
+    { left: (railRect.right + 12) + 'px', top: (railRect.top + 8) + 'px' });
+  const c2 = mk('<span>Hover between two blocks to add one exactly there</span>',
+    { left: '50%', top: 'calc(50% - 20px)', transform: 'translateX(-50%)' });
+  const done = () => { try { localStorage.setItem('cms-canvas-coached', '1'); } catch (e) {} [c1, c2].forEach(c => c.remove()); };
+  c1.querySelector('button').addEventListener('click', done);
+  setTimeout(() => { if (document.body.contains(c1)) done(); }, 9000);
+}
 
 function applyTabLabels() {
   document.querySelectorAll('[data-tab-label]').forEach(el => {
@@ -8204,6 +8596,20 @@ function buildDropZone(beforeIdx, isTail = false) {
   const d = document.createElement('div');
   d.className = 'drop-zone' + (isTail ? ' tail' : '');
   d.dataset.beforeIdx = beforeIdx;
+  // Canvas-first: every gap between blocks is a place you can add one. The
+  // + opens the block palette anchored here and inserts at this index.
+  if (document.documentElement.dataset.layout === 'canvas') {
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'cf-seam-add';
+    add.title = 'Add a block here';
+    add.innerHTML = ICONS.plus || '+';
+    add.addEventListener('click', e => {
+      e.stopPropagation();
+      if (window.cfOpenAddPalette) window.cfOpenAddPalette(beforeIdx, d);
+    });
+    d.appendChild(add);
+  }
   return d;
 }
 
@@ -8307,6 +8713,11 @@ function positionFloatingToolbar() {
 
   tb.style.top = top + 'px';
   tb.style.left = left + 'px';
+
+  // Canvas-first: the floating inspector rides alongside the toolbar, anchored
+  // to the same block. This hook already fires on render / canvas-scroll /
+  // resize — exactly when the panel needs to follow.
+  if (window.cfPositionInspector) window.cfPositionInspector();
 }
 
 function renderBlockBody(b) {
