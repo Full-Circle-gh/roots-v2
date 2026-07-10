@@ -35,7 +35,7 @@ function ordRenderPager() {
   rmRenderPager('ord-pager', {
     page: ORD_PAGE, pageSize: ORD_PAGE_SIZE, total: ORD_TOTAL,
     sizes: [50, 100, 200],
-    noun: { en: 'orders', cn: '个订单' },
+    noun: { en: 'orders', one: 'order', cn: '个订单' },
     onPage: p => {
       ORD_PAGE = p;
       // A new page is a new set of rows: clear the arrival baseline so the
@@ -863,6 +863,76 @@ function ordRepaintKpiLabels() {
   fcRenderSpark($('#ord-kpi-rev-spark'),    trend.map(p => Number(p.revenue || 0)), labels, v => '¥' + Math.round(v).toLocaleString(), true);
 }
 
+// ── Sub-views: the order list ↔ Stock activity (the Activity page, folded in
+// here 2026-07-10). One page, two views: the switcher tabs sit under the H2,
+// and the four stock cards below the KPI strip are doors into the ledger.
+// State is session-only — the tab always opens on the order list.
+let ORD_VIEW = 'orders';
+function ordShowView(view) {
+  view = (view === 'activity' && (typeof can !== 'function' || can('activity:view'))) ? 'activity' : 'orders';
+  ORD_VIEW = view;
+  // Same courtesy as a rail tab switch: no drawer left hanging over the new view.
+  $$('.side-drawer.open').forEach(d => closeDrawer(d));
+  const vo = document.getElementById('ord-view-orders');
+  const va = document.getElementById('ord-view-activity');
+  if (vo) vo.style.display = view === 'orders' ? '' : 'none';
+  if (va) va.style.display = view === 'activity' ? '' : 'none';
+  document.getElementById('ord-view-btn-orders')?.classList.toggle('on', view === 'orders');
+  document.getElementById('ord-view-btn-activity')?.classList.toggle('on', view === 'activity');
+  if (view === 'activity') {
+    if (typeof actAdminInit === 'function') actAdminInit();   // loads the ledger + starts its 15s poll
+  } else {
+    _ordersAutoTick();   // the list may have gone stale while the ledger was up
+  }
+}
+
+// ── The four stock cards — moves / out / in / hit zero, today, all channels.
+// Same /activity call the ledger makes (limit=1: only summary + digest are
+// read). Refreshes on the shared live nudge through _ordersAutoTick with the
+// KPI strip's 45s throttle; force=true on tab open. Amber (the .warn card and
+// the dot on the sub-view tab) shows only while something is actually at zero.
+let _ORD_STOCK_AT = 0;
+let _ORD_STOCK_DATA = null;
+let _ORD_STOCK_LANG_HOOKED = false;
+async function ordLoadStock(force) {
+  if (!document.getElementById('ord-minis')) return;
+  if (typeof can === 'function' && !can('activity:view')) return;
+  if (!force && Date.now() - _ORD_STOCK_AT < 45000) return;
+  _ORD_STOCK_AT = Date.now();
+  if (!_ORD_STOCK_LANG_HOOKED && window.onLangChange) { _ORD_STOCK_LANG_HOOKED = true; onLangChange(ordRenderStock); }
+  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  try {
+    const j = await api(`/api/retail-admin/activity?from=${todayGz}&to=${todayGz}&limit=1`);
+    const sum = j.summary || [];
+    // zeroed_total = exact count (the zeroed list itself is capped at 8);
+    // fall back to the list length against an older server mid-deploy.
+    const zero = (j.digest && (typeof j.digest.zeroed_total === 'number'
+      ? j.digest.zeroed_total : (j.digest.zeroed || []).length)) || 0;
+    _ORD_STOCK_DATA = {
+      moves: sum.reduce((a, s) => a + (s.events || 0), 0),
+      out:   sum.reduce((a, s) => a + (s.units_out || 0), 0),
+      inn:   sum.reduce((a, s) => a + (s.units_in || 0), 0),
+      zero,
+    };
+    ordRenderStock();
+  } catch (e) { /* silent — the cards are a bonus, the ledger is the source */ }
+}
+function ordRenderStock() {
+  const d = _ORD_STOCK_DATA; if (!d || !document.getElementById('ord-minis')) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('ord-mini-moves', d.moves.toLocaleString());
+  set('ord-mini-out',   d.out ? '−' + d.out.toLocaleString() : '0');
+  set('ord-mini-in',    d.inn ? '+' + d.inn.toLocaleString() : '0');
+  set('ord-mini-zero',  d.zero.toLocaleString());
+  set('ord-mini-moves-hint', cuT('open activity ›', '查看流水 ›'));
+  set('ord-mini-out-hint',   cuT('sold or synced out', '售出或同步出库'));
+  set('ord-mini-in-hint',    cuT('restocks', '补货入库'));
+  set('ord-mini-zero-hint',  d.zero ? cuT('see the names ›', '查看名称 ›') : cuT('nothing waiting', '无需处理'));
+  document.getElementById('ord-mini-zero-card')?.classList.toggle('warn', d.zero > 0);
+  const dot = document.getElementById('ord-view-dot');
+  if (dot) dot.hidden = !(d.zero > 0);
+}
+
 async function loadOrders(opts = {}) {
   const silent = !!opts.silent;
 
@@ -1067,6 +1137,10 @@ function _ordersAutoTick() {
   if (!tabActive || !tabActive.classList.contains('active')) return;
   const ae = document.activeElement;
   if (ae && ae !== document.body && ae.matches('input, select, textarea, [contenteditable="true"]')) return;
+  ordLoadStock();   // throttled (45s) — the stock cards ride the same rhythm
+  // While the Stock activity sub-view is up, its own 15s poll owns freshness —
+  // skip the hidden list refetch (it reloads the moment the view swaps back).
+  if (ORD_VIEW === 'activity') return;
   loadOrders({ silent: true });
   ordLoadKpis();   // throttled (45s) — keeps the today pulse live on the tab
 }
@@ -1100,6 +1174,7 @@ function _ordersLiveNudge() {
   if (ordersTabBtn) ordersTabBtn.addEventListener('click', () => {
     setTimeout(_ordersAutoTick, 50);
     ordLoadKpis(true);   // fresh today pulse on tab open
+    ordLoadStock(true);  // fresh stock cards on tab open too
     _markOrdersSeenNow();
     _markInvoicesSeenNow();   // fapiao requests live on this tab now too
   });

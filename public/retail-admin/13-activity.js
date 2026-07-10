@@ -2,6 +2,9 @@
 // Inventory activity ledger viewer — Tacet "read first" layout: digest cards
 // (hit zero / big moves / by channel) over a quiet ledger table, with date
 // range + channel filters and one-click CSV export.
+// Since 2026-07-10 this renders INSIDE the Orders tab (#ord-view-activity, the
+// "Stock activity" sub-view — ordShowView in 04-orders.js calls actAdminInit);
+// the old standalone rail tab is gone. Ids and behaviour are unchanged.
 // Reads /api/retail-admin/activity (over retail_stock_ledger). All times shown
 // are Guangzhou local (UTC+8), matching the server's day boundaries.
 // Spec: reference/inventory-activity-tacet-mockup.html (option C). Brand rules
@@ -97,14 +100,16 @@ async function actLoad(reset, silent) {
 
 // ── Live auto-refresh ────────────────────────────────────────────────────────
 // Stock moves constantly (orders, daemons, quick-stock). Poll the current view
-// while the Activity tab is the active, visible tab so the timeline stays live
-// without a manual reload. Paused when the tab is backgrounded/hidden, while a
-// load is in flight, or once the operator has paged past the first page (so an
-// auto-refresh never yanks them back to the top mid-scroll).
+// while the Stock activity sub-view is up on the active Orders tab, so the
+// timeline stays live without a manual reload. Paused when the tab is
+// backgrounded/hidden, while a load is in flight, or once the operator has
+// paged past the first page (so an auto-refresh never yanks them back to the
+// top mid-scroll).
 let _actPollTimer = null;
 function actTabVisible() {
-  return !document.hidden
-    && !!document.getElementById('tab-activity')?.classList.contains('active');
+  const va = document.getElementById('ord-view-activity');
+  return !document.hidden && !!va && va.style.display !== 'none'
+    && !!document.getElementById('tab-orders')?.classList.contains('active');
 }
 function actStartPolling() {
   if (_actPollTimer) return;

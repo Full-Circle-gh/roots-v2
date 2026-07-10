@@ -11626,6 +11626,21 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
         LEFT JOIN retail_stores  s ON s.id = l.store_id
        WHERE l.balance_after = 0 AND l.delta < 0
        ORDER BY l.id DESC LIMIT 8`).all(built.params);
+    // Exact count of the same set (the list above is capped at 8) — the Orders
+    // page stock cards show this number, so it must not undercount.
+    const zeroedTotal = tdb().prepare(`
+      WITH last AS (
+        SELECT l.product_id, l.store_id, MAX(l.id) AS last_id
+          FROM retail_stock_ledger l
+          LEFT JOIN store_products p ON p.id = l.product_id
+          LEFT JOIN retail_stores  s ON s.id = l.store_id
+         WHERE ${built.where}
+         GROUP BY l.product_id, l.store_id
+      )
+      SELECT COUNT(*) AS n
+        FROM last
+        JOIN retail_stock_ledger l ON l.id = last.last_id
+       WHERE l.balance_after = 0 AND l.delta < 0`).get(built.params).n;
     const big = tdb().prepare(`
       SELECT datetime(l.created_at,'+8 hours') AS ts_local,
              ${ACT_SOURCE_SQL} AS source,
@@ -11638,7 +11653,7 @@ router.get('/api/retail-admin/activity', requireRetailAdmin, (req, res) => {
        WHERE ${built.where} AND ABS(l.delta) >= 2
        ORDER BY ABS(l.delta) DESC, l.id DESC LIMIT 3`).all(built.params);
     res.json({ success: true, from: built.from, to: built.to, total, limit, offset, summary, rows,
-               digest: { zeroed, big } });
+               digest: { zeroed, big, zeroed_total: zeroedTotal } });
   } catch (e) {
     console.error('[activity]', e);
     res.status(500).json({ success: false, error: 'activity_failed', message: e.message });

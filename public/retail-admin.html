@@ -1190,10 +1190,9 @@
   <!-- Quick Stock moved into Settings → Operations (see #qs-home). No top-level tab. -->
 
 
-  <button data-tab="activity" onclick="actAdminInit()" style="order:5">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9l4 3 4-8 4 6 4-2v11"/></svg>
-    Activity · 库存流水
-  </button>
+  <!-- Activity left the rail 2026-07-10: the inventory ledger lives inside
+       Orders now (the "Stock activity" sub-view + the four stock cards).
+       Search still indexes it as a page (02-settings-ops.js buildIndex). -->
 
   <!-- The live-poll dot + sound toggle moved to the topbar cluster (#tb-cluster);
        Settings now sits in the rail list where Inbox used to be (order:11). -->
@@ -1309,12 +1308,15 @@
         <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
         <button type="button" class="td-hide-btn" onclick="dashArrangeHide('recap')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
+      <!-- The Recap's title sits on the paper like every other block's, with
+           its time stamp beside it and "Show the work" where the other blocks
+           keep their "Open …" link. The card below holds only the rows. -->
+      <div class="td-sec-head td-recap-head">
+        <h3 id="td-recap-title">While you were away · 您不在的这段时间</h3>
+        <span class="td-meta" id="td-recap-meta"></span>
+        <button class="td-ghost" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
+      </div>
       <section class="card td-card td-recap" id="td-recap">
-        <div class="td-recap-head">
-          <h3 id="td-recap-title">While you were away · 您不在的这段时间</h3>
-          <span class="td-meta" id="td-recap-meta"></span>
-          <button class="td-ghost" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
-        </div>
         <div class="td-recap-rows" id="td-recap-rows"><div class="td-muted">Loading… · 加载中…</div></div>
         <!-- "Show the work" unfolds here — the away window's events (tinted dusk)
              above a "you left here" line, the rest of today below. Rendered by
@@ -1329,7 +1331,12 @@
         <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
         <button type="button" class="td-hide-btn" onclick="dashArrangeHide('needs')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
-      <div class="td-kicker">Needs you · 需要您处理</div>
+      <!-- Same on-paper title as every other block (h3 in .td-sec-head), not
+           the old uppercase kicker: "NEEDS YOU" and "Today" sat two type
+           styles apart while naming the same kind of thing. -->
+      <div class="td-sec-head">
+        <h3>Needs you · 需要您处理</h3>
+      </div>
       <div id="td-attn" class="td-attn" aria-live="polite"></div>
     </div>
 
@@ -1498,13 +1505,14 @@
       </div>
       <!-- Channels today — the Activity strip folded into The Recap's
            "Show the work"; this square now shows today's revenue split by
-           channel (all stores). Rendered by dashChanRender (03-dashboard). -->
+           channel (all stores). Rendered by dashChanRender (03-dashboard).
+           Title on the paper, like every other block. -->
+      <div class="td-sec-head">
+        <h3>Channels · 渠道</h3>
+      </div>
       <section class="card td-card td-chan" id="td-chan-pane">
-        <div class="td-card-head">
-          <h3>Channels today · 今日渠道</h3>
-        </div>
         <div class="td-chan-list" id="td-chan-list"><div class="td-muted">Loading… · 加载中…</div></div>
-        <p class="td-chan-foot">All stores · 全部门店</p>
+        <p class="td-chan-foot">Today · All stores · 今日 · 全部门店</p>
       </section>
     </div>
 
@@ -1743,6 +1751,18 @@
   <section id="tab-orders">
     <h2>Orders · 订单</h2>
 
+    <!-- Sub-view switch: the order list ↔ the stock-activity ledger (the old
+         Activity page, folded in here 2026-07-10). Quiet text tabs, ink
+         underline on the active one; the amber dot appears when something hit
+         zero today. Hidden entirely for operators without activity:view —
+         their Orders page looks exactly as before. -->
+    <div class="ord-views" id="ord-views" data-cap="activity:view">
+      <button type="button" class="ord-view on" id="ord-view-btn-orders" onclick="ordShowView('orders')">Orders · 订单</button>
+      <button type="button" class="ord-view" id="ord-view-btn-activity" onclick="ordShowView('activity')"><i class="ord-view-dot" id="ord-view-dot" hidden></i>Stock activity · 库存流水</button>
+    </div>
+
+    <div id="ord-view-orders">
+
     <!-- Today's pulse — KPI strip on the shared fc-* layer. Reuses the same
          /dashboard?from=today&to=today call the dashboard hero makes (no extra
          backend). Orders + Revenue carry intraday sparklines; deltas compare to
@@ -1773,6 +1793,34 @@
     </div>
     <!-- Swipe-dot pager (phone only) — signals the KPI strip scrolls sideways. -->
     <div class="fc-kpi-dots" id="ord-kpi-dots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i></div>
+
+    <!-- Stock pulse — four small cards fed by the same /activity summary the
+         ledger uses (ordLoadStock, 04-orders.js). Every card is a door into
+         the Stock activity sub-view. Amber lives ONLY on the hit-zero card
+         and only while its count is above zero; values are JS-painted, the
+         hints too (they follow the live language via cuT). -->
+    <div class="ord-minis" id="ord-minis" data-cap="activity:view">
+      <button type="button" class="ord-mini" onclick="ordShowView('activity')">
+        <span class="lbl">Stock moves today · 今日库存变动</span>
+        <span class="val" id="ord-mini-moves">—</span>
+        <span class="hint" id="ord-mini-moves-hint" data-no-i18n></span>
+      </button>
+      <button type="button" class="ord-mini" onclick="ordShowView('activity')">
+        <span class="lbl">Units out · 出库</span>
+        <span class="val" id="ord-mini-out">—</span>
+        <span class="hint" id="ord-mini-out-hint" data-no-i18n></span>
+      </button>
+      <button type="button" class="ord-mini" onclick="ordShowView('activity')">
+        <span class="lbl">Units in · 入库</span>
+        <span class="val is-in" id="ord-mini-in">—</span>
+        <span class="hint" id="ord-mini-in-hint" data-no-i18n></span>
+      </button>
+      <button type="button" class="ord-mini" id="ord-mini-zero-card" onclick="ordShowView('activity')">
+        <span class="lbl">Hit zero · 已售罄</span>
+        <span class="val" id="ord-mini-zero">—</span>
+        <span class="hint" id="ord-mini-zero-hint" data-no-i18n></span>
+      </button>
+    </div>
 
     <!-- Status chip strip — click to filter, auto-loads -->
     <div class="status-chips" id="orders-status-chips" style="margin-bottom: var(--s3)">
@@ -2156,6 +2204,71 @@
          Before this existed the orders table simply stopped at the server's
          default 100 rows with nothing on screen saying so. -->
     <div id="ord-pager"></div>
+
+    </div><!-- /#ord-view-orders -->
+
+    <!-- ── Stock activity sub-view — the old Activity page, moved house
+         whole (2026-07-10): channel tabs, date range, search, digest, ledger,
+         CSV export, live 15s refresh. Markup and ids unchanged so
+         13-activity.js keeps working; only its visibility check learned the
+         new address (orders tab active + this view shown). -->
+    <div id="ord-view-activity" style="display:none">
+    <p class="helper" data-lang-block="en" style="margin: 0 0 var(--s4);">
+      What moved today, and what needs a look. Every stock change across every channel, one line each — pick a channel tab to filter; Export CSV downloads the view you're looking at. Times are Guangzhou local.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: 0 0 var(--s4);">
+      今天动了什么、哪里需要看一眼。各渠道的每一次库存变动，一行一条 —— 点渠道页签可筛选；导出 CSV 即当前视图。时间为广州本地时间。
+    </p>
+
+    <!-- Channel switcher: quiet text tabs, one per sales channel. Picking a
+         tab scopes the digest, ledger and export. Counts filled in by JS. -->
+    <div id="act-tabs"></div>
+
+    <div class="act-toolbar">
+      <input id="act-from" type="date" class="act-date" onchange="actLoad(true)">
+      <span class="act-arrow">→</span>
+      <input id="act-to" type="date" class="act-date" onchange="actLoad(true)">
+      <span class="act-quick">
+        <button type="button" onclick="actSetRange('today')">Today · 今天</button>
+        <button type="button" onclick="actSetRange('week')">7d · 近7天</button>
+        <button type="button" onclick="actSetRange('month')">30d · 近30天</button>
+      </span>
+      <span style="flex:1"></span>
+      <span class="act-search">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="act-search" type="text" placeholder="SKU / name / order · 货号 / 名称 / 订单" oninput="clearTimeout(window._actSearchT);window._actSearchT=setTimeout(()=>actLoad(true),300)">
+      </span>
+      <button class="act-export" type="button" onclick="actExportCsv()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+        <span>Export CSV · 导出</span>
+      </button>
+    </div>
+
+    <!-- Read-first digest: hit zero / big moves / by channel. Filled by JS. -->
+    <div id="act-digest" class="act-digest"></div>
+
+    <div id="act-summary" class="act-scope"></div>
+
+    <div class="act-tablewrap">
+      <table class="act-table">
+        <thead>
+          <tr>
+            <th>Time · 时间</th>
+            <th>Channel · 渠道</th>
+            <th>Store · 门店</th>
+            <th>Product · 商品</th>
+            <th class="r">Δ</th>
+            <th class="r">Left · 余量</th>
+            <th>Context · 备注</th>
+          </tr>
+        </thead>
+        <tbody id="act-tbody"></tbody>
+      </table>
+    </div>
+    <div class="act-foot">
+      <button id="act-more" class="act-ghost" type="button" onclick="actLoadMore()" style="display:none">Load more · 加载更多</button>
+    </div>
+    </div><!-- /#ord-view-activity -->
   </section>
 
   <!-- ─── CUSTOMERS ─── -->
@@ -8500,64 +8613,9 @@
     </div>
   </section>
 
-  <section id="tab-activity">
-    <h2>Inventory activity · 库存流水</h2>
-    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      What moved today, and what needs a look. Every stock change across every channel, one line each — pick a channel tab to filter; Export CSV downloads the view you're looking at. Times are Guangzhou local.
-    </p>
-    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      今天动了什么、哪里需要看一眼。各渠道的每一次库存变动，一行一条 —— 点渠道页签可筛选；导出 CSV 即当前视图。时间为广州本地时间。
-    </p>
-
-    <!-- Channel switcher: quiet text tabs, one per sales channel. Picking a
-         tab scopes the digest, ledger and export. Counts filled in by JS. -->
-    <div id="act-tabs"></div>
-
-    <div class="act-toolbar">
-      <input id="act-from" type="date" class="act-date" onchange="actLoad(true)">
-      <span class="act-arrow">→</span>
-      <input id="act-to" type="date" class="act-date" onchange="actLoad(true)">
-      <span class="act-quick">
-        <button type="button" onclick="actSetRange('today')">Today · 今天</button>
-        <button type="button" onclick="actSetRange('week')">7d · 近7天</button>
-        <button type="button" onclick="actSetRange('month')">30d · 近30天</button>
-      </span>
-      <span style="flex:1"></span>
-      <span class="act-search">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="act-search" type="text" placeholder="SKU / name / order · 货号 / 名称 / 订单" oninput="clearTimeout(window._actSearchT);window._actSearchT=setTimeout(()=>actLoad(true),300)">
-      </span>
-      <button class="act-export" type="button" onclick="actExportCsv()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
-        <span>Export CSV · 导出</span>
-      </button>
-    </div>
-
-    <!-- Read-first digest: hit zero / big moves / by channel. Filled by JS. -->
-    <div id="act-digest" class="act-digest"></div>
-
-    <div id="act-summary" class="act-scope"></div>
-
-    <div class="act-tablewrap">
-      <table class="act-table">
-        <thead>
-          <tr>
-            <th>Time · 时间</th>
-            <th>Channel · 渠道</th>
-            <th>Store · 门店</th>
-            <th>Product · 商品</th>
-            <th class="r">Δ</th>
-            <th class="r">Left · 余量</th>
-            <th>Context · 备注</th>
-          </tr>
-        </thead>
-        <tbody id="act-tbody"></tbody>
-      </table>
-    </div>
-    <div class="act-foot">
-      <button id="act-more" class="act-ghost" type="button" onclick="actLoadMore()" style="display:none">Load more · 加载更多</button>
-    </div>
-  </section>
+  <!-- The standalone Inventory-activity section moved into Orders
+       (#ord-view-activity, 2026-07-10) — same ids, same JS (13-activity.js),
+       reached from the "Stock activity" tab / the four stock cards there. -->
 
   <section id="tab-purchasing">
     <h2>Purchasing · 采购</h2>
