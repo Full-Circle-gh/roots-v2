@@ -2025,69 +2025,104 @@
      PRODUCTS TAB — mini-app product surface editor
      ═══════════════════════════════════════════════════════════════════ */
 
-  /* ── Recap band — replaces the 5-tile KPI strip. One calm hero count +
-        one-click jumps to sold-out / low / drafts. Colour = status only. ── */
-  /* Products wears the full Tacet skin (Inter + paper #FBF9F4 + ink), same as
-     Orders — the tab is now in the scope selector above. Paint the section paper
-     so the page ground matches the mockup, not the deeper shell paper. */
-  #tab-products > .t-ord-eyebrow { margin: 0 0 16px; }
+  /* ═══════════════════════════════════════════════════════════════════
+     PRODUCTS — the catalogue surface, built natively on Tacet.
+     Spec: reference/products-page-mockup.html ("Products page — Tacet",
+     locked). Rewritten 2026-07-10 from three stacked layers (a legacy
+     --bg-pane/--line base, plus a #tab-products override block that
+     re-stated every value) into this single layer written straight on the
+     --td-* tokens. Same markup, same ids, same behaviour — one source of
+     truth for the look, so a change lands in one place.
+
+     Colour discipline, Tacet:
+       · Ink is the only "chosen/active" colour on ordinary controls.
+       · Dusk means "Tacet did this for you" — it is spent ONLY on the
+         Guided-add wizard and on input focus (the Tacet input accent).
+         The locked mockup painted the row checkboxes and the "N sizes"
+         tag Dusk too; those are ordinary, so they are Ink/graphite here.
+       · Sage = healthy, amber = running low, brick = sold out. Nothing
+         else carries colour. A category is a filter, not a traffic light.
+     ═══════════════════════════════════════════════════════════════════ */
+
+  /* Paper ground bled over <main>'s padding so there's no grey frame ("crop"). */
+  #tab-products {
+    background: var(--td-paper);
+    margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
+    padding: calc(var(--s6) + 56px) var(--s6) var(--s7);
+    min-height: 100vh;
+  }
+  /* Page head — eyebrow · title · lede. The h2 inherits its size/weight from the
+     shared Tacet heading rule; only the rhythm is set here. */
+  #tab-products > .t-ord-eyebrow { margin: 0 0 4px; }
+  #tab-products > .pa-pagetitle { margin: 0; }
+  #tab-products > .pa-lede {
+    font-size: 14px; color: var(--td-text2); margin: 8px 0 22px; max-width: 640px;
+  }
+
+  /* ── Recap band — one calm hero count, then one-click jumps to the three
+        buckets that actually need someone. The numbers ARE the filters. ── */
   .pa-recap {
     display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
-    background: var(--bg-pane); border: 1px solid var(--line);
-    border-radius: var(--r-xl); padding: 22px 26px; margin-bottom: var(--s3);
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 14px; padding: 22px 26px; margin-bottom: var(--s3);
   }
   .pa-recap-hero { flex-shrink: 0; }
   .pa-recap-cap {
     font-family: var(--f-sans); font-size: 11px; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--tacet-sage-ink, #4A6249);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--td-sage-ink);
   }
   .pa-recap-n {
     font-size: 44px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05;
-    color: var(--text-1); font-variant-numeric: tabular-nums; margin-top: 6px;
+    color: var(--td-text); font-variant-numeric: tabular-nums; margin-top: 6px;
   }
-  .pa-recap-u { font-size: 13px; font-weight: 500; color: var(--text-3); letter-spacing: 0; }
-  .pa-recap-rule { width: 1px; align-self: stretch; background: var(--line); margin: 4px 0; }
+  .pa-recap-u { font-size: 13px; font-weight: 500; color: var(--td-text2); letter-spacing: 0; }
+  .pa-recap-rule { width: 1px; align-self: stretch; background: var(--td-border); margin: 4px 0; }
   .pa-recap-jump { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
   .pa-recap-jlbl {
     font-family: var(--f-sans); font-size: 11px; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-right: 8px;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2); margin-right: 8px;
   }
   .pa-jump {
     display: inline-flex; align-items: center; gap: 9px; padding: 8px 14px;
-    border: 1px solid transparent; border-radius: var(--r-lg); background: none;
-    cursor: pointer; color: var(--text-1); font-family: var(--f-sans); user-select: none;
-    transition: background .15s ease, border-color .15s ease;
+    border: 1px solid transparent; border-radius: 8px; background: none;
+    cursor: pointer; color: var(--td-text); font-family: var(--f-sans); user-select: none;
+    transition: background .18s cubic-bezier(.16,1,.3,1), border-color .18s cubic-bezier(.16,1,.3,1);
   }
-  .pa-jump:hover { background: var(--bg-elev-1); }
-  .pa-jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .pa-jump.pa-kpi-on { background: var(--bg-elev-1); border-color: var(--line); }
-  .pa-jump-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: #6B8E6F; }
-  .pa-jump-dot.is-out { background: var(--danger); }
-  .pa-jump-dot.is-low { background: var(--warn); }
-  .pa-jump-dot.is-draft { background: var(--text-3); }
+  .pa-jump:hover { background: var(--td-raised); }
+  .pa-jump:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+  .pa-jump.pa-kpi-on { background: var(--td-raised); border-color: var(--td-border); }
+  .pa-jump-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--td-sage); }
+  .pa-jump-dot.is-out { background: var(--td-brick); }
+  .pa-jump-dot.is-low { background: var(--td-amber); }
+  .pa-jump-dot.is-draft { background: var(--td-text2); }
   .pa-jump-n { font-size: 23px; font-weight: 600; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
-  .pa-jump-l { font-size: 13.5px; color: var(--text-3); font-weight: 500; white-space: nowrap; }
-  .pa-jump.pa-kpi-on .pa-jump-l { color: var(--text-1); }
+  .pa-jump-l { font-size: 13.5px; color: var(--td-text2); font-weight: 500; white-space: nowrap; }
+  .pa-jump.pa-kpi-on .pa-jump-l { color: var(--td-text); }
+
+  /* Low-stock threshold knob — lives in the sub-bar, out of the scan path. */
   .pa-lowknob {
     margin-left: auto; display: inline-flex; align-items: center; gap: 7px;
-    font-size: 12px; color: var(--text-3); white-space: nowrap;
+    font-size: 12.5px; color: var(--td-text2); white-space: nowrap;
   }
-  .pa-lowknob-lbl { font-weight: 600; color: var(--text-2); }
+  .pa-lowknob-lbl { font-weight: 500; color: var(--td-text2); }
   .pa-lowknob input {
-    width: 52px; padding: 5px 6px; border: 1px solid var(--line); border-radius: var(--r-md);
-    font-size: 13px; text-align: center; font-variant-numeric: tabular-nums;
-    background: var(--bg-app); color: var(--text-1);
+    width: 52px; padding: 5px 6px; border: 1px solid var(--td-border); border-radius: 6px;
+    font: 500 13px var(--f-sans); text-align: center; font-variant-numeric: tabular-nums;
+    background: var(--td-surface); color: var(--td-text);
   }
-  .pa-lowknob input:focus { outline: none; border-color: var(--accent); }
-  #pa-low-threshold-status { color: var(--accent); font-size: 11px; }
+  .pa-lowknob input:focus { outline: none; border-color: var(--td-dusk); }
+  #pa-low-threshold-status { color: var(--td-sage-ink); font-size: 11px; }
+
+  /* Context line under the band — only while a jump filter is on. */
   .pa-recap-banner {
     display: flex; align-items: center; gap: 8px; margin: 0 0 var(--s3); padding: 0 2px;
-    font-size: 13px; color: var(--text-2); font-family: var(--f-sans);
+    font-size: 13.5px; color: var(--td-text2); font-family: var(--f-sans);
   }
   .pa-recap-banner .rb-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .pa-recap-banner b { color: var(--text-1); font-weight: 600; }
-  .pa-recap-banner a { color: var(--accent); cursor: pointer; font-weight: 500; }
-  .pa-recap-banner a:hover { text-decoration: underline; }
+  .pa-recap-banner b { color: var(--td-text); font-weight: 600; }
+  .pa-recap-banner a { color: var(--td-text); cursor: pointer; font-weight: 500; text-decoration: underline;
+    text-decoration-color: var(--td-border); text-underline-offset: 3px; }
+  .pa-recap-banner a:hover { text-decoration-color: var(--td-text); }
   @media (max-width: 720px) {
     .pa-recap { gap: 14px; padding: 14px 16px; }
     .pa-recap-n { font-size: 30px; }
@@ -2095,134 +2130,170 @@
     .pa-lowknob { margin-left: 0; width: 100%; }
   }
 
-  /* Products page wears the pure-Tacet chrome from the locked mockup: Dusk is
-     the one CTA colour (Guided add = the AI action) and the segment controls go
-     neutral instead of brass. Scoped by id so the rest of the admin is untouched
-     — mirrors how #tab-sales makes its "Set up" the single Dusk element. */
-  #pa-wizard-btn.btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; box-shadow: none; }
-  #pa-wizard-btn.btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
-  #pa-view-seg .pa-view-btn.active { background: var(--bg-elev-2); color: var(--text-1); }
-  #pa-store-seg .pa-store-btns { background: var(--bg-elev-1); }
-  #pa-store-seg .pa-store-btn.active { background: var(--bg-pane); color: var(--text-1); box-shadow: 0 1px 2px rgba(18,22,26,.10); }
-  /* Sub-bar: store switcher left, low-stock knob right (always present). */
-  .pa-subbar { display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; margin-bottom: var(--s3); }
-  .pa-subbar .pa-store-seg { margin: 0; }
-  /* Match the locked mockup's toolbar: just list + grid, no Compact layout and
-     no display-options popover, so the controls read clean. Reversible — unhide
-     to restore Compact and the photo-crop / status / empty-photo options. */
-  #pa-view-seg .pa-view-btn[data-view="compact"] { display: none; }
-  .pa-toolbar .ovp-wrap { display: none; }
-  /* "N sizes" tag beside a variant product's name (list view) — quiet Dusk pill. */
-  .pa-sizes-pill { display: inline-flex; align-items: center; vertical-align: middle;
-    margin-left: 8px; padding: 1px 9px; border-radius: var(--r-pill, 999px); font-size: 11px;
-    font-weight: 500; background: var(--td-dusk-tint); color: var(--td-dusk); white-space: nowrap; }
-
+  /* ── Toolbar — search · category · add · guided add · layout ───────────── */
   .pa-toolbar {
-    display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    margin-bottom: var(--s4);
+    display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+    padding: 0; background: transparent; border: 0;
+    margin: 22px 0 var(--s4);
   }
-  .pa-toolbar input[type=text] { flex: 1; min-width: 220px; }
-  .pa-toolbar .pa-count {
-    font-size: 11px; color: var(--text-3);
-    font-variant-numeric: tabular-nums;
-    margin-left: auto;
+  .pa-toolbar input[type=text] {
+    flex: 1; min-width: 220px;
+    font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 8px; padding: 11px 14px 11px 40px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: left 14px center;
   }
-  /* Layout switcher — Grid / Compact / List. Squared segmented control in the
-     Full Circle language; the active segment fills Aged Brass. Sits in the
-     toolbar next to the "View" (display tweaks) popover. */
+  .pa-toolbar input[type=text]::placeholder { color: var(--td-text2); opacity: .7; }
+  .pa-toolbar input[type=text]:focus { outline: none; border-color: var(--td-dusk); }
+  #pa-filter, #pa-subfilter {
+    font: 400 14px var(--f-sans); color: var(--td-text); background: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 8px; padding: 11px 34px 11px 14px; cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 12px center;
+  }
+  #pa-filter:focus, #pa-subfilter:focus { outline: none; border-color: var(--td-dusk); }
+  /* Secondary buttons on this page: quiet surface + hairline, ink text. */
+  #tab-products .btn {
+    font: 500 14px var(--f-sans); border-radius: 8px; border: 1px solid var(--td-border);
+    background: var(--td-surface); color: var(--td-text); padding: 10px 16px; box-shadow: none;
+  }
+  #tab-products .btn:hover { background: var(--td-surface); border-color: var(--td-text2); }
+  #tab-products .btn svg { width: 16px; height: 16px; }
+  #tab-products .btn-sm { font-size: 13px; padding: 8px 14px; }
+  /* The ONE Dusk element on the page: Guided add is the wizard doing the work. */
+  #pa-wizard-btn.btn-primary {
+    background: var(--td-dusk); border-color: var(--td-dusk); color: #fff;
+    padding: 10px 16px; box-shadow: none;
+  }
+  #pa-wizard-btn.btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+
+  /* Layout switcher — list / grid. Compact + the display-options popover stay
+     hidden (locked mockup shows two); unhide to bring them back. */
   .pa-view-seg {
     display: inline-flex; flex-shrink: 0;
-    border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden;
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 8px; padding: 3px; gap: 2px;
   }
   .pa-view-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 30px; height: 30px; padding: 0;
-    background: var(--bg-pane); color: var(--text-3);
-    border: none; cursor: pointer;
-    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+    padding: 7px 9px; border-radius: 6px;
+    background: none; color: var(--td-text2); border: none; cursor: pointer;
+    transition: background .18s cubic-bezier(.16,1,.3,1), color .18s cubic-bezier(.16,1,.3,1);
   }
-  .pa-view-btn + .pa-view-btn { border-left: 1px solid var(--line); }
-  .pa-view-btn:hover { color: var(--text-1); background: var(--bg-elev-1); }
-  .pa-view-btn.active { background: var(--brass); color: #12161A; }
-  /* Locked while the editor is docked — list layout is forced. */
-  .pa-view-btn:disabled { opacity: .35; cursor: not-allowed; }
-  .pa-view-btn:disabled:hover { color: var(--text-3); background: var(--bg-pane); }
-  .pa-view-btn svg { display: block; }
+  .pa-view-btn:hover { background: var(--td-raised); color: var(--td-text); }
+  .pa-view-btn.active { background: var(--td-raised); color: var(--td-text); }
+  .pa-view-btn:disabled { opacity: .35; cursor: not-allowed; }        /* locked while the editor is docked */
+  .pa-view-btn:disabled:hover { color: var(--td-text2); background: none; }
+  .pa-view-btn svg { display: block; width: 16px; height: 16px; }
+  #pa-view-seg .pa-view-btn[data-view="compact"] { display: none; }
+  .pa-toolbar .ovp-wrap { display: none; }
 
+  /* "N sizes" tag beside a variant product's name. Informational, so it is
+     quiet cream — not Dusk (Dusk is reserved for automation). */
+  .pa-sizes-pill {
+    display: inline-flex; align-items: center; vertical-align: middle;
+    margin-left: 8px; padding: 1px 9px; border-radius: 999px; font-size: 11px;
+    font-weight: 500; background: var(--td-raised); color: var(--td-text2); white-space: nowrap;
+  }
+
+  /* ── Sub-bar — which store's stock we're reading, how many shown, the knob ── */
+  .pa-subbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: var(--s3); }
+  .pa-subbar .pa-store-seg { margin: 0; }
+  .pa-subbar .pa-count { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; margin-left: 0; }
+  .pa-store-seg {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin: 0 0 var(--s3); font-family: var(--f-sans);
+  }
+  .pa-store-seg .pa-store-lbl {
+    font-size: 12.5px; letter-spacing: 0; text-transform: none;
+    color: var(--td-text2); font-weight: 500;
+  }
+  .pa-store-seg .pa-store-btns {
+    display: inline-flex; gap: 2px; padding: 3px;
+    border: 1px solid var(--td-border); border-radius: 999px; background: var(--td-raised);
+  }
+  .pa-store-seg .pa-store-btn {
+    padding: 6px 15px; font-size: 13px; font-weight: 500; border: none; cursor: pointer;
+    background: none; color: var(--td-text2); border-radius: 999px; font-family: var(--f-sans);
+  }
+  .pa-store-seg .pa-store-btn.active {
+    background: var(--td-surface); color: var(--td-text);
+    box-shadow: 0 1px 2px rgba(17,26,43,.06);
+  }
+  .pa-store-seg .pa-store-hint { font-size: 11px; color: var(--td-text2); }
+
+  /* ── Grid view (cards) ─────────────────────────────────────────────────── */
   .pa-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: var(--s3);
+    grid-template-columns: repeat(auto-fill, minmax(212px, 1fr));
+    gap: 16px;
   }
-  /* Compact = denser grid, smaller cards (more per row). Same card markup, so
-     the "View" popover's crop / status tweaks still compose on top. */
   .pa-grid.pa-grid-compact { grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); }
   .pa-grid-compact .pa-card-body { padding: var(--s2) var(--s3) var(--s3); min-height: 0; }
   .pa-grid-compact .pa-card-name { font-size: 12px; -webkit-line-clamp: 1; }
   .pa-grid-compact .pa-card-sub  { font-size: 10px; }
   .pa-grid-compact .pa-pill { height: 18px; font-size: 8px; padding: 0 6px; }
 
-  /* List = one product per row: thumbnail + name/sub + status pills, text-dense
-     for scanning the full catalogue. #pa-grid swaps to this layout. */
+  /* ── Compact row list (shown while the editor is docked beside it) ─────── */
   .pa-list { display: flex; flex-direction: column; gap: 6px; }
   .pa-row {
     display: flex; align-items: center; gap: var(--s3);
     padding: 8px 12px;
-    background: var(--bg-pane); border: 1px solid var(--line-soft);
-    border-radius: var(--r-md); cursor: pointer;
-    transition: border-color var(--t-fast) ease, transform var(--t-fast) ease;
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 8px; cursor: pointer;
+    transition: border-color .18s cubic-bezier(.16,1,.3,1), transform .18s cubic-bezier(.16,1,.3,1);
   }
-  .pa-row:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+  .pa-row:hover { border-color: var(--td-text2); transform: translateY(-1px); }
   .pa-row-img {
     width: 44px; height: 44px; flex-shrink: 0;
-    border-radius: var(--r-sm); overflow: hidden;
-    background: var(--bg-elev-2);
-    display: flex; align-items: center; justify-content: center; color: var(--text-4);
+    border-radius: 10px; overflow: hidden;
+    background: var(--td-raised); border: 1px solid var(--td-border);
+    display: flex; align-items: center; justify-content: center; color: var(--td-text2);
   }
   .pa-row-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
-  .pa-row-img svg { width: 18px; height: 18px; opacity: .5; }
+  .pa-row-img svg { width: 20px; height: 20px; opacity: .5; }
   .pa-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  .pa-row-name { font-size: 13px; font-weight: 500; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pa-row-sub  { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pa-row-sub .pa-row-meta { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; }
+  .pa-row-name { font-size: 15px; font-weight: 500; color: var(--td-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pa-row-sub  { font-size: 12.5px; color: var(--td-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pa-row-sub .pa-row-meta { font-family: var(--f-sans); font-size: 12.5px; color: var(--td-text2); letter-spacing: 0; }
   .pa-row-pills { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
 
-  /* "Available on the shop" switch — flips is_published from the catalogue. */
+  /* "Available on the shop" switch — sage when live, quiet when not. */
   .pa-shop-toggle {
     position: relative; display: inline-flex; align-items: center;
-    width: 34px; height: 20px; flex-shrink: 0; cursor: pointer;
+    width: 38px; height: 22px; flex-shrink: 0; cursor: pointer;
   }
   .pa-shop-toggle input {
     position: absolute; inset: 0; width: 100%; height: 100%;
     margin: 0; opacity: 0; cursor: pointer;
   }
   .pa-shop-knob {
-    width: 34px; height: 20px; border-radius: 999px;
-    background: var(--line); transition: background .15s ease;
+    /* Off = the page's own hairline colour, so it reads "not on" in both themes
+       rather than glowing pale against the dark ground. */
+    width: 38px; height: 22px; border-radius: 999px;
+    background: var(--td-border); transition: background .18s cubic-bezier(.16,1,.3,1);
   }
   .pa-shop-knob::after {
     content: ''; position: absolute; top: 2px; left: 2px;
-    width: 16px; height: 16px; border-radius: 50%;
-    background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.25);
-    transition: transform .15s ease;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: #fff; box-shadow: 0 1px 2px rgba(17,26,43,.20);
+    transition: transform .18s cubic-bezier(.16,1,.3,1);
   }
-  .pa-shop-toggle.is-on .pa-shop-knob { background: #5B8C5A; }
-  .pa-shop-toggle.is-on .pa-shop-knob::after { transform: translateX(14px); }
-  /* Mixed family (some sizes live, some not) — brass instead of green. */
-  .pa-shop-toggle.is-mixed .pa-shop-knob { background: var(--brass, #B08D4A); }
+  .pa-shop-toggle.is-on .pa-shop-knob { background: var(--td-sage); }
+  .pa-shop-toggle.is-on .pa-shop-knob::after { transform: translateX(16px); }
+  /* Mixed family (some sizes live, some not) — amber: needs a look, not an error. */
+  .pa-shop-toggle.is-mixed .pa-shop-knob { background: var(--td-amber); }
   .pa-card-shop { display: flex; align-items: center; gap: 7px; margin-top: 8px; }
-  .pa-card-shop-lbl { font-size: 11px; color: var(--text-3); }
+  .pa-card-shop-lbl { font-size: 12px; color: var(--td-text2); }
 
-  /* ── Overview table (.pa-list-rich) — the full-width "products on the go"
-     landing list. One product per row laid out as real columns: photo · name ·
-     category · SKU · stock · price · status. Shown only when the editor is
-     closed; opening a product collapses back to the compact .pa-row above. */
+  /* ── Overview table (.pa-list-rich) — the landing list. Photo · name ·
+        category · SKU · stock · price · shop. Real columns, quiet hairlines. ── */
   .pa-list-rich {
     gap: 0;
-    border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden;
+    background: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden;
+    margin-top: 16px;
   }
   .pa-list-rich .pa-row, .pa-rowhead {
     display: grid;
@@ -2230,164 +2301,64 @@
     align-items: center; gap: var(--s3);
   }
   .pa-list-rich .pa-row {
-    border: none; border-bottom: 1px solid var(--line-soft); border-radius: 0;
-    padding: 8px 14px; transform: none;
+    background: transparent;
+    border: none; border-bottom: 1px solid var(--td-border); border-radius: 0;
+    padding: 12px 18px; transform: none;
   }
-  .pa-list-rich .pa-row:hover { transform: none; background: var(--bg-elev-1); border-color: var(--line-soft); }
+  .pa-list-rich .pa-row:hover { transform: none; background: var(--td-raised); border-color: var(--td-border); }
   .pa-list-rich .pa-row:last-child { border-bottom: none; }
-  .pa-list-rich .pa-row.is-selected { background: var(--bg-elev-1); }
+  .pa-list-rich .pa-row.is-selected { background: var(--td-raised); }
   .pa-rowhead {
-    padding: 9px 14px; background: var(--bg-elev-1);
-    border-bottom: 1px solid var(--line);
-    font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--text-4); font-weight: 600;
+    padding: 14px 18px; background: transparent;
+    border-bottom: 1px solid var(--td-border);
+    font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--td-text2); font-weight: 600;
   }
+  .pa-list-rich .pa-row-img { width: 44px; height: 44px; border-radius: 10px; }
+  .pa-list-rich .pa-row-name { font-size: 15px; font-weight: 500; }
   .pa-col-cat {
-    font-size: 12px; color: var(--text-2);
+    font-size: 14px; color: var(--td-text);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .pa-col-sku {
-    font-family: var(--f-mono); font-size: 11px; color: var(--text-4); letter-spacing: .03em;
+    font-family: var(--f-sans); font-size: 13px; color: var(--td-text2); letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .pa-col-muted { color: var(--text-4); }
+  .pa-col-muted { color: var(--td-text2); }
   .pa-col-price {
-    font-variant-numeric: tabular-nums; font-size: 13px; color: var(--text-1);
+    font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 500; color: var(--td-text);
     justify-self: end; white-space: nowrap;
   }
-  .pa-col-stock { font-size: 12px; }
-  /* Stock pill — green healthy · brass low (≤5) · red out (0). */
+  .pa-col-stock { font-size: 14px; }
+
+  /* Stock — sage healthy · amber low · brick sold out. */
   .pa-stock {
-    display: inline-flex; align-items: center; gap: 5px;
-    font-variant-numeric: tabular-nums; color: var(--text-2);
+    display: inline-flex; align-items: center; gap: 7px;
+    font-variant-numeric: tabular-nums; color: var(--td-text);
   }
-  .pa-stock-dot { width: 7px; height: 7px; border-radius: 50%; background: #6B8E6F; flex: none; }
-  .pa-stock.is-low .pa-stock-dot { background: var(--warn); }
-  .pa-stock.is-out { color: var(--danger); font-weight: 600; }
-  .pa-stock.is-out .pa-stock-dot { background: var(--danger); }
-  /* Editable per-store stock — shown in the Stock column when a single store is
-     picked in the switcher. Sits in the same 104px cell as the read-only pill. */
+  .pa-stock-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--td-sage); flex: none; }
+  .pa-stock.is-low .pa-stock-dot { background: var(--td-amber); }
+  .pa-stock.is-out { color: var(--td-brick); font-weight: 600; }
+  .pa-stock.is-out .pa-stock-dot { background: var(--td-brick); }
+  /* Editable per-store stock — replaces the pill when one store is picked. */
   .pa-stock-input {
     width: 72px; padding: 5px 8px; text-align: right;
-    font-variant-numeric: tabular-nums; font-size: 13px;
-    border: 1px solid var(--line); border-radius: 7px;
-    background: var(--bg-elev-1); color: var(--text-1);
-    font-family: var(--f-sans);
+    font: 400 13px var(--f-sans); font-variant-numeric: tabular-nums;
+    border: 1px solid var(--td-border); border-radius: 7px;
+    background: var(--td-surface); color: var(--td-text);
   }
-  .pa-stock-input:focus { outline: none; border-color: var(--brass, #B08D57); }
-  .pa-stock-input.is-saved { border-color: #6B8E6F; background: rgba(107,142,111,.10); }
-  .pa-stock-input.is-err   { border-color: var(--danger); background: rgba(200,60,60,.08); }
+  .pa-stock-input:focus { outline: none; border-color: var(--td-dusk); }
+  .pa-stock-input.is-saved { border-color: var(--td-sage); background: var(--td-sage-tint); }
+  .pa-stock-input.is-err   { border-color: var(--td-brick); background: var(--td-brick-tint); }
   .pa-stock-input::-webkit-outer-spin-button,
   .pa-stock-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  /* Variant family in store mode: the per-store total isn't inline-editable
-     (each size has its own count) — show it quiet with a lock affordance. */
-  .pa-stock-locked { color: var(--text-3); cursor: default; }
+  /* Variant family in store mode: the total isn't inline-editable (each size
+     has its own count) — show it quiet. */
+  .pa-stock-locked { color: var(--td-text2); cursor: default; }
 
-  /* Store switcher — "All · 全部 | Tianhe | Yuexiu" above the overview table.
-     Picks which store's stock the Stock column shows/edits. */
-  .pa-store-seg {
-    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-    margin: 0 0 var(--s3); font-family: var(--f-sans);
-  }
-  .pa-store-seg .pa-store-lbl {
-    font-size: 12.5px; letter-spacing: 0; text-transform: none;
-    color: var(--text-3); font-weight: 500;
-  }
-  /* Rounded pill segmented control (matches the mockup): cream track, white
-     active pill. The active fill is set by the #pa-store-seg override earlier. */
-  .pa-store-seg .pa-store-btns {
-    display: inline-flex; gap: 2px; padding: 3px;
-    border: 1px solid var(--line); border-radius: 999px; background: var(--bg-elev-1);
-  }
-  .pa-store-seg .pa-store-btn {
-    padding: 6px 15px; font-size: 13px; font-weight: 500; border: none; cursor: pointer;
-    background: none; color: var(--text-2); border-radius: 999px; font-family: var(--f-sans);
-  }
-  .pa-store-seg .pa-store-hint { font-size: 11px; color: var(--text-4); }
-  .pa-subbar .pa-count { font-size: 13px; color: var(--text-3); font-variant-numeric: tabular-nums; margin-left: 0; }
-
-  /* ═══════════════════════════════════════════════════════════════════
-     PRODUCTS — full Tacet port. Every value below is a direct copy of
-     reference/products-page-mockup.html, scoped to #tab-products so it fully
-     overrides the shared admin chrome (buttons/inputs/table/toggle). The tab
-     is already in the Tacet token scope (Inter + paper + ink) via the inline
-     skin block; this pins the component sizes/shapes to the mockup. Behaviour
-     is untouched — only the visual layer.
-     ═══════════════════════════════════════════════════════════════════ */
-
-  /* Paper ground bled over <main>'s padding so there's no grey frame ("crop"). */
-  #tab-products {
-    background: var(--bg-app);
-    margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
-    padding: calc(var(--s6) + 56px) var(--s6) var(--s7);
-    min-height: 100vh;
-  }
-
-  /* Toolbar — search + selects + buttons + view toggle */
-  #tab-products .pa-toolbar { gap: 12px; margin-top: 22px; }
-  #tab-products .pa-toolbar input[type=text] {
-    font: 400 15px var(--f-sans); color: var(--text-1); background: var(--bg-pane);
-    border: 1px solid var(--line); border-radius: 8px; padding: 11px 14px 11px 40px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-3.5-3.5'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: left 14px center;
-  }
-  #tab-products .pa-toolbar input[type=text]::placeholder { color: var(--text-3); opacity: .7; }
-  #tab-products .pa-toolbar input[type=text]:focus { outline: none; border-color: var(--td-dusk); }
-  #tab-products #pa-filter, #tab-products #pa-subfilter {
-    font: 400 14px var(--f-sans); color: var(--text-1); background: var(--bg-pane);
-    border: 1px solid var(--line); border-radius: 8px; padding: 11px 34px 11px 14px; cursor: pointer;
-    appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right 12px center;
-  }
-  #tab-products .btn {
-    font: 500 14px var(--f-sans); border-radius: 8px; border: 1px solid var(--line);
-    background: var(--bg-pane); color: var(--text-1); padding: 10px 16px; box-shadow: none;
-  }
-  #tab-products .btn:hover { background: var(--bg-pane); border-color: var(--text-2); }
-  #tab-products .btn svg { width: 16px; height: 16px; }
-  #tab-products #pa-wizard-btn.btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; padding: 10px 16px; }
-  #tab-products #pa-wizard-btn.btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
-  #tab-products .btn-sm { font-size: 13px; padding: 8px 14px; }
-  #tab-products .pa-view-seg { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px; padding: 3px; gap: 2px; }
-  #tab-products .pa-view-btn { padding: 7px 9px; border-radius: 6px; color: var(--text-3); border: none; background: none; }
-  #tab-products .pa-view-btn:hover { background: var(--bg-elev-1); color: var(--text-1); }
-  #tab-products .pa-view-btn.active { background: var(--bg-elev-1); color: var(--text-1); }
-
-  /* Table — card, header, rows, cells */
-  #tab-products .pa-list-rich { border: 1px solid var(--line); border-radius: 14px; margin-top: 16px; }
-  #tab-products .pa-rowhead {
-    background: transparent; border-bottom: 1px solid var(--line);
-    font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
-    color: var(--text-3); padding: 14px 18px;
-  }
-  #tab-products .pa-list-rich .pa-row { padding: 12px 18px; border-bottom: 1px solid var(--line); }
-  #tab-products .pa-list-rich .pa-row:hover { background: var(--bg-elev-1); }
-  #tab-products .pa-row-img { width: 44px; height: 44px; border-radius: 10px; background: var(--bg-elev-1); border: 1px solid var(--line); color: var(--text-3); }
-  #tab-products .pa-row-img svg { width: 20px; height: 20px; }
-  #tab-products .pa-row-name { font-size: 15px; font-weight: 500; color: var(--text-1); }
-  #tab-products .pa-row-sub { font-size: 12.5px; color: var(--text-3); }
-  #tab-products .pa-row-sub .pa-row-meta { font-family: var(--f-sans); font-size: 12.5px; letter-spacing: 0; color: var(--text-3); }
-  #tab-products .pa-col-cat { font-size: 14px; color: var(--text-1); }
-  #tab-products .pa-col-sku { font-family: var(--f-sans); font-size: 13px; color: var(--text-3); letter-spacing: 0; font-variant-numeric: tabular-nums; }
-  #tab-products .pa-col-stock { font-size: 14px; }
-  #tab-products .pa-stock { color: var(--text-1); gap: 7px; }
-  #tab-products .pa-stock-dot { width: 7px; height: 7px; background: #A3B49F; }
-  #tab-products .pa-stock.is-low .pa-stock-dot { background: var(--warn); }
-  #tab-products .pa-stock.is-out .pa-stock-dot { background: var(--danger); }
-  #tab-products .pa-col-price { font-size: 14px; font-weight: 500; color: var(--text-1); }
-
-  /* Shop toggle — mockup sage/grey, 38×22 with an 18px knob */
-  #tab-products .pa-shop-toggle { width: 38px; height: 22px; }
-  #tab-products .pa-shop-knob { width: 38px; height: 22px; background: #D8D3C7; }
-  #tab-products .pa-shop-knob::after { width: 18px; height: 18px; }
-  #tab-products .pa-shop-toggle.is-on .pa-shop-knob { background: #A3B49F; }
-  #tab-products .pa-shop-toggle.is-on .pa-shop-knob::after { transform: translateX(16px); }
-
-  /* Shop column: centre the toggle in its cell so it sits under the SHOP header
-     instead of hugging the right-aligned price next to it. The dup button is
-     pulled out of flow (absolute, hover-reveal) so it doesn't shift the toggle
-     off-centre. */
+  /* Shop column: centre the toggle under its header. The duplicate button is
+     pulled out of flow (hover-reveal) so it never shifts the toggle off-centre. */
   .pa-list-rich .pa-row-pills { justify-content: center; position: relative; }
   .pa-list-rich .pa-dup-row { position: absolute; right: 0; }
   .pa-rowhead .pa-col-shop { text-align: center; }
@@ -2402,13 +2373,14 @@
   }
   .pa-grip {
     display: flex; align-items: center; justify-content: center;
-    cursor: grab; color: var(--text-4); user-select: none; align-self: center;
+    cursor: grab; color: var(--td-text2); user-select: none; align-self: center;
   }
   .pa-grip svg { width: 13px; height: 14px; display: block; }
-  .pa-grip:hover { color: var(--text-2); }
+  .pa-grip:hover { color: var(--td-text); }
   .pa-grip:active { cursor: grabbing; }
   .pa-row.pa-row-dragging { opacity: .45; }
-  .pa-row.pa-row-drop { box-shadow: inset 0 2px 0 0 var(--brass, #B08D57); }
+  /* Drop line = ink. The row you're about to land on, not an alarm. */
+  .pa-row.pa-row-drop { box-shadow: inset 0 2px 0 0 var(--td-text); }
 
   /* ── Multi-select (bulk edit) ──────────────────────────────────────────────
      A leading checkbox column slides in when select-mode is armed (the "Select"
@@ -2420,20 +2392,21 @@
     grid-template-columns: 34px 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px;
   }
   .pa-selbox { display: flex; align-items: center; justify-content: center; }
-  .pa-selbox input { width: 16px; height: 16px; accent-color: var(--brass, #B08D57); cursor: pointer; margin: 0; }
+  /* Selection is an ordinary act, so it wears Ink — never Dusk. */
+  .pa-selbox input { width: 16px; height: 16px; accent-color: var(--td-text); cursor: pointer; margin: 0; }
   /* On a row the whole row handles the toggle, so the box is display-only. */
   .pa-list-rich .pa-row .pa-selbox input { pointer-events: none; }
   .pa-list-rich.pa-selecting .pa-row { cursor: pointer; }
-  .pa-list-rich .pa-row.is-sel { background: rgba(176,141,87,.09); }
-  .pa-list-rich .pa-row.is-sel:hover { background: rgba(176,141,87,.13); }
+  .pa-list-rich .pa-row.is-sel { background: var(--td-raised); }
+  .pa-list-rich .pa-row.is-sel:hover { background: var(--td-raised); box-shadow: inset 2px 0 0 0 var(--td-text); }
   /* Bulk action groups inside #pa-bulkbar when selecting. */
   .pa-bulk-grp { display: inline-flex; align-items: center; gap: 6px; }
-  .pa-bulk-grp .pa-bulk-lbl { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--text-4); font-weight: 600; }
-  .pa-bulk-sep { width: 1px; align-self: stretch; background: var(--line-soft); margin: 0 2px; }
+  .pa-bulk-grp .pa-bulk-lbl { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--td-text2); font-weight: 600; }
+  .pa-bulk-sep { width: 1px; align-self: stretch; background: var(--td-border); margin: 0 2px; }
 
   .pa-reorder-hint {
     display: flex; align-items: center; gap: 7px;
-    padding: 9px 4px 2px; font-size: 12px; color: var(--text-3);
+    padding: 9px 4px 2px; font-size: 12px; color: var(--td-text2);
   }
   .pa-reorder-hint svg { width: 14px; height: 14px; opacity: .6; flex: none; }
 
@@ -2522,9 +2495,9 @@
      wheel falls through to the page. */
   .pa-split-editor #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
   /* Empty state shown in the editor pane when no product is selected. */
-  .pd-empty { background: var(--bg-pane); border: 1px dashed var(--line-soft); border-radius: 12px; padding: 56px 24px; text-align: center; color: var(--text-3); font-family: var(--f-sans); }
-  .pd-empty .pd-empty-h { font-size: 13px; color: var(--text-2); margin: 0 0 6px; font-weight: 500; }
-  .pd-empty .pd-empty-sub { font-size: 12px; color: var(--text-4); margin: 0; }
+  .pd-empty { background: var(--td-surface); border: 1px dashed var(--td-border); border-radius: 14px; padding: 56px 24px; text-align: center; color: var(--td-text2); font-family: var(--f-sans); }
+  .pd-empty .pd-empty-h { font-size: 14px; color: var(--td-text); margin: 0 0 6px; font-weight: 500; }
+  .pd-empty .pd-empty-sub { font-size: 12.5px; color: var(--td-text2); margin: 0; }
 
   /* Product photo gallery (editor) — thumbnails, drag-to-reorder, first = main. */
   .pd-gallery { display: flex; flex-wrap: wrap; gap: 10px; min-height: 8px; }
@@ -2792,8 +2765,9 @@
   .opt-unlink { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 12px; line-height: 1; padding: 0 2px; flex: none; }
   .opt-unlink:hover { color: var(--brass); }
   .opt-picker { flex-basis: 100%; margin-top: 6px; }
-  /* "Bundle" card pill — flags a product that is sold as one but made of others. */
-  .pa-pill-bundle { background: color-mix(in srgb, var(--brass, #B08D4A) 18%, transparent); color: var(--brass, #B08D4A); }
+  /* "Bundle" card pill — flags a product that is sold as one but made of others.
+     A fact about how it's built, so it stays quiet cream rather than a colour. */
+  .pa-pill-bundle { background: rgba(246,243,236,.88); color: #58606E; border: 1px solid rgba(17,26,43,.12); }
   /* Order-line bundle "what's inside" pack list (admin order drawer). */
   /* Chosen customer options (dressing / paid extras) on an order line — the
      distinguishing info when two lines share a SKU. Brass + medium weight so a
@@ -2812,27 +2786,28 @@
   .oi-bndl-zh { color: var(--text-3); }
 
   .pa-card {
-    background: var(--bg-pane);
-    border: 1px solid var(--line-soft);
-    border-radius: var(--r-lg);
+    background: var(--td-surface);
+    border: 1px solid var(--td-border);
+    border-radius: 14px;
     overflow: hidden;
     cursor: pointer;
-    transition: border-color var(--t-fast) ease, transform var(--t-fast) ease;
+    transition: border-color .18s cubic-bezier(.16,1,.3,1), box-shadow .18s cubic-bezier(.16,1,.3,1);
     display: flex; flex-direction: column;
   }
-  .pa-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+  .pa-card:hover { box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04); }
+  .pa-card.is-selected { border-color: var(--td-text); box-shadow: 0 0 0 1px var(--td-text); }
   /* Quick-duplicate button — hover-revealed top-right on cards, trailing on rows. */
   .pa-card { position: relative; }
   .pa-dup {
     position: absolute; top: 6px; right: 6px; z-index: 3;
     width: 26px; height: 26px; padding: 0; display: none;
     align-items: center; justify-content: center;
-    border: 1px solid var(--line); border-radius: 6px;
-    background: var(--bg-pane); color: var(--text-2); cursor: pointer;
+    border: 1px solid var(--td-border); border-radius: 6px;
+    background: var(--td-surface); color: var(--td-text2); cursor: pointer;
     font-size: 13px; line-height: 1;
   }
   .pa-card:hover .pa-dup { display: flex; }
-  .pa-dup:hover { border-color: var(--brass, #B08D4A); color: var(--text-1); }
+  .pa-dup:hover { border-color: var(--td-text2); color: var(--td-text); }
   /* Upstream catalog mode (e.g. Roots): products + stock are owned by the
      kitchen app, so the mini-app backend never creates/duplicates products.
      Hide the catalog-write controls; clicking a card opens the page designer. */
@@ -2986,24 +2961,24 @@
   .feat-off p { font-size: 12px; color: var(--text-3); margin: 0 auto 16px; max-width: 46ch; line-height: 1.5; }
   .pa-dup-row {
     flex: none; width: 28px; height: 28px; padding: 0;
-    border: 1px solid var(--line); border-radius: 6px;
-    background: var(--bg-pane); color: var(--text-3); cursor: pointer;
+    border: 1px solid var(--td-border); border-radius: 6px;
+    background: var(--td-surface); color: var(--td-text2); cursor: pointer;
     font-size: 13px; line-height: 1; opacity: 0; transition: opacity .12s;
   }
   .pa-row:hover .pa-dup-row { opacity: 1; }
-  .pa-dup-row:hover { border-color: var(--brass, #B08D4A); color: var(--text-1); }
+  .pa-dup-row:hover { border-color: var(--td-text2); color: var(--td-text); }
   .pa-card-img {
-    aspect-ratio: 1 / 1;                 /* square crop — recommended Full Circle treatment */
-    background: var(--bg-elev-2);
+    aspect-ratio: 1 / 1;                 /* square crop is the default; the View popover offers 4:3 + full */
+    background: var(--td-raised);
     overflow: hidden;
     position: relative;
     display: flex; align-items: center; justify-content: center;
-    color: var(--text-4);
+    color: var(--td-text2);
   }
   .pa-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
   /* Undesigned products have no photography yet — keep the empty state minimal
      and honest: a faint broken-image glyph on the neutral placeholder ground. */
-  .pa-card-img-empty { display: flex; color: var(--text-4); opacity: .5; }
+  .pa-card-img-empty { display: flex; color: var(--td-text2); opacity: .5; }
   .pa-card-img-empty svg { display: block; }
   .pa-card-pills {
     position: absolute; top: 8px; left: 8px;
@@ -3018,43 +2993,46 @@
   /* Name clamps to two lines so long bilingual product names ("12pc Whole
      Wheat Wrap (XL - 10 inch)") stay readable without blowing out the card. */
   .pa-card-name {
-    font-size: 13px; font-weight: 500; color: var(--text-1); line-height: 1.25;
+    font-size: 14.5px; font-weight: 500; color: var(--td-text); line-height: 1.35;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
   .pa-card-sub  {
-    font-size: 11px; color: var(--text-3); line-height: 1.3;
+    font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--td-text2); line-height: 1.3;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .pa-card-meta { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); letter-spacing: .04em; }
+  .pa-card-meta { font-family: var(--f-sans); font-size: 12px; color: var(--td-text2); letter-spacing: 0;
+    font-variant-numeric: tabular-nums; text-transform: none; }
 
-  /* Status badges on cards — Full Circle brand treatment. Squared mono chips
-     with fixed brand colors: they overlay product photography, so they read
-     identically in both themes rather than following the theme tokens.
-     DESIGNED = Tea Green (has designer sections) · PLAIN = no sections yet ·
-     DRAFT = Aged Brass (not published to the mini-app). */
+  /* Status badges on cards. They sit ON product photography, so each carries an
+     opaque-enough ground to stay legible over any image in either theme — but
+     the hues are Tacet roles, not the old Full Circle brand colours:
+     DESIGNED = sage (healthy, has designer sections) · PLAIN = paper (neutral,
+     no sections yet) · DRAFT = amber (waiting on you) · VARIANTS = ink (a
+     fact, not a state) · SOLD OUT = brick (the one thing that's wrong). */
   .pa-pill {
     display: inline-flex; align-items: center; gap: 5px;
     box-sizing: border-box;
-    height: 22px; padding: 0 9px; border-radius: 3px;
-    font-family: var(--f-mono); font-size: 9px; font-weight: 400;
-    letter-spacing: .18em; text-transform: uppercase; line-height: 1;
+    height: 22px; padding: 0 9px; border-radius: 999px;
+    font-family: var(--f-sans); font-size: 10px; font-weight: 500;
+    letter-spacing: .1em; text-transform: uppercase; line-height: 1;
     backdrop-filter: blur(6px);
   }
   .pa-pill svg { display: block; flex-shrink: 0; }
-  .pa-pill-designed { background: #6B8E6F; color: #E8E5DC; }                       /* Tea Green · Deeper Paper */
-  .pa-pill-plain    { background: rgba(232, 229, 220, .70); color: rgba(18, 22, 26, .55);
-                      border: 1px solid rgba(18, 22, 26, .15); }
-  .pa-pill-draft    { background: rgba(176, 141, 74, .15); color: #B08D4A;
-                      border: 1px solid rgba(176, 141, 74, .30); }
-  .pa-pill-variants { background: rgba(18, 22, 26, .60); color: #E8E5DC; }          /* Dark chip — "N variants" on a collapsed variant family */
-  .pa-pill-oos      { background: rgba(182, 86, 86, .92); color: #fff; }            /* Red chip — a live size is out of stock */
+  .pa-pill-designed { background: var(--td-sage); color: #16210F; }
+  .pa-pill-plain    { background: rgba(251,249,244,.82); color: #58606E;
+                      border: 1px solid rgba(17,26,43,.12); }
+  .pa-pill-draft    { background: rgba(247,238,222,.92); color: #8A6425;
+                      border: 1px solid rgba(201,149,74,.32); }
+  .pa-pill-variants { background: rgba(17,26,43,.72); color: #FBF9F4; }
+  .pa-pill-oos      { background: var(--td-brick); color: #fff; }
 
   /* Empty state */
   .pa-empty {
     text-align: center; padding: var(--s7) var(--s4);
-    color: var(--text-3); font-size: 13px;
-    background: var(--bg-pane); border: 1px dashed var(--line);
-    border-radius: var(--r-lg);
+    color: var(--td-text2); font-size: 13.5px;
+    background: var(--td-surface); border: 1px dashed var(--td-border);
+    border-radius: 14px;
   }
 
   /* ── Products View tweaks (per-operator) — photo crop, status display,
