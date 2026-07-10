@@ -8088,6 +8088,31 @@
     .td-sec-foot { padding: 12px 22px; }
   }
 
+  /* ── The Running-low list, inside the Inventory card ──
+     Rows of real product names under the two numbers that describe them. It
+     sits between the vitals and the cream footer, so the footer still bleeds
+     to the card's rounded edge. Hidden entirely when everything is stocked. */
+  .td-inv-low { border-top: 1px solid var(--td-border); }
+  .td-inv-low[hidden] { display: none; }
+  .td-inv-low-head {
+    display: flex; align-items: center; gap: 10px;
+    padding: 14px 32px 6px; font-size: 12.5px; color: var(--td-text2);
+  }
+  .td-inv-low-head .td-store-sel { margin-left: auto; }
+  .td-inv-low .td-low-rows { transition: opacity .22s cubic-bezier(.16,1,.3,1); }
+  .td-inv-low .td-attn-row { padding-left: 32px; padding-right: 32px; }
+  .td-inv-low .td-attn-more { padding: 4px 32px 14px; }
+  .td-inv-low .td-attn-clear { padding: 10px 32px 16px; font-size: 13.5px; color: var(--td-text2); }
+  @media (max-width: 720px) {
+    .td-inv-low-head, .td-inv-low .td-attn-more,
+    .td-inv-low .td-attn-row { padding-left: 22px; padding-right: 22px; }
+  }
+
+  /* A block with nothing to say leaves the page — a shorter dashboard is the
+     good news. It stays in the DOM so Arrange mode can still reorder it. */
+  .td-block.is-quiet { display: none; }
+  body.td-arranging .td-block.is-quiet { display: block; opacity: .55; }
+
   /* ── Today — the hero block ──
      Revenue leads. The numeral is one step up from a section vital (44px vs
      34px) and stays Inter 500: it reads first because it stands alone above
