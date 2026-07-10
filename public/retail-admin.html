@@ -518,6 +518,70 @@
      raw state never paints. The failsafe below reveals it even if the JS
      never loads. */
   html:not([data-ui-lang]) body { visibility: hidden; }
+
+  /* ── Boot splash ────────────────────────────────────────────────────
+     The guard above blanks the page until the app JS stamps data-ui-lang,
+     which on a cold cache is a second or two of nothing. This fills it: the
+     Tacet mark drawing itself — the waveform settling onto the straight line
+     — then the Dusk dot landing and breathing until the shell is up.
+
+     Everything here is inline and self-contained: it must paint before
+     /assets/retail-admin.css and the JS parts have downloaded, so it can
+     neither use their custom properties nor wait for Fraunces (the wordmark
+     falls back to Georgia; it fades in at 900ms, by which time the webfont
+     has usually landed). `visibility:visible` is what lets it show through
+     the body guard, the same way #fc-pnotice does.
+
+     Sized by dividing the viewport by --ui-scale: the boot script puts a
+     `zoom` on <html>, and a fixed element at inset:0 would be scaled past the
+     viewport edge and grow the document. */
+  #boot-splash {
+    position: fixed; top: 0; left: 0;
+    width:  calc(100vw / var(--ui-scale, 1.1));
+    height: calc(100vh / var(--ui-scale, 1.1));
+    z-index: 100000;
+    visibility: visible;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: #F6F3EC;
+    transition: opacity 260ms ease-out;
+  }
+  html[data-theme="dark"] #boot-splash { background: #12161A; }
+  #boot-splash.bs-gone { opacity: 0; pointer-events: none; }
+
+  #boot-splash svg { width: 200px; height: auto; overflow: visible; }
+  #boot-splash svg path { stroke: #111A2B; }
+  html[data-theme="dark"] #boot-splash svg path { stroke: #E8E5DC; }
+
+  #boot-splash .bs-word {
+    font: 300 30px/1 Fraunces, Georgia, 'Times New Roman', serif;
+    letter-spacing: .34em;
+    padding-left: .34em;          /* optical: cancel the trailing letter-space */
+    color: #111A2B;
+    opacity: 0;
+    animation: bs-word 700ms cubic-bezier(.16, 1, .3, 1) 900ms forwards;
+  }
+  html[data-theme="dark"] #boot-splash .bs-word { color: #E8E5DC; }
+
+  /* The line draws left to right on a strong ease-out: motion settles, never bounces. */
+  #boot-splash .bs-wave {
+    stroke-dasharray: 100; stroke-dashoffset: 100;
+    animation: bs-draw 1250ms cubic-bezier(.16, 1, .3, 1) forwards;
+  }
+  /* Dusk lands last and breathes — the one thing on screen that says the
+     system is working. Nothing else here is Dusk. */
+  #boot-splash .bs-dot {
+    transform-origin: 305px 55px; transform: scale(0);
+    animation: bs-dot 460ms cubic-bezier(.16, 1, .3, 1) 1100ms forwards,
+               bs-breathe 2400ms ease-in-out 1600ms infinite;
+  }
+  @keyframes bs-draw    { to { stroke-dashoffset: 0; } }
+  @keyframes bs-dot     { to { transform: scale(1); } }
+  @keyframes bs-word    { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @keyframes bs-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    #boot-splash * { animation: none !important; opacity: 1 !important; transform: none !important; stroke-dashoffset: 0 !important; }
+  }
 </style>
 <script>
   // Failsafe for the anti-FOUC guard above: if the app JS hasn't booted within
@@ -536,6 +600,50 @@
 <!-- Restore the rail collapse state before first paint so the icon-only strip
      doesn't flash open on load. Full wiring lives in 01-core.js. -->
 <script>try{if(localStorage.getItem('ra:navCollapsed')==='1')document.body.classList.add('nav-collapsed');}catch(e){}</script>
+<!-- Boot splash — the Tacet mark, drawn. Covers the blank page the anti-FOUC
+     guard leaves behind while the CSS + JS parts download. Styles are in the
+     head; it leaves the moment the app stamps data-ui-lang on <html>. -->
+<div id="boot-splash" aria-hidden="true">
+  <svg viewBox="0 0 340 110" fill="none">
+    <path class="bs-wave" pathLength="100" d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke-width="7" stroke-linecap="round"/>
+    <circle class="bs-dot" cx="305" cy="55" r="9" fill="#6E67AF"/>
+  </svg>
+  <div class="bs-word">tacet</div>
+</div>
+<script>
+  // Take the splash down when the shell is up. data-ui-lang on <html> is the
+  // signal: the app JS stamps it once it has picked a language and un-hidden
+  // the body, so it marks the exact moment there is a real page underneath.
+  // The 3s anti-FOUC failsafe above stamps it too, which means a broken boot
+  // reveals the raw page rather than sitting behind a splash forever.
+  (function () {
+    var el = document.getElementById('boot-splash');
+    if (!el) return;
+    var left = false;
+    // On a warm cache the shell can be up in 300ms. Leaving then would yank a
+    // half-drawn waveform off the screen — a flash, worse than the blank page
+    // this replaces. Hold until the line has settled and the dot has landed
+    // (1250ms draw + 460ms dot, overlapping — 1560ms), then go.
+    var START = Date.now(), MIN_SHOW = 1560;
+    function leave() {
+      if (left) return;
+      var waited = Date.now() - START;
+      if (waited < MIN_SHOW) { setTimeout(leave, MIN_SHOW - waited); return; }
+      left = true;
+      obs.disconnect();
+      el.classList.add('bs-gone');
+      setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
+    }
+    var obs = new MutationObserver(function () {
+      if (document.documentElement.hasAttribute('data-ui-lang')) leave();
+    });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-ui-lang'] });
+    // Already stamped (warm cache, JS beat us here): go now.
+    if (document.documentElement.hasAttribute('data-ui-lang')) leave();
+    // Last resort: never hold the screen hostage, whatever happened.
+    setTimeout(leave, 8000);
+  })();
+</script>
 <!-- Platform notice bar (impersonation indicator + platform broadcasts).
      Self-contained: it fetches /api/backend/notices and renders a fixed top bar,
      independent of the app JS so it works even if a module fails. visibility is

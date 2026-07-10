@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tacet · Boot splash options</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Fraunces:opsz,wght@9..144,300;9..144,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --td-surface:    #18233A;
+    --td-raised:     #1E2A44;
+    --td-border:     #2A3550;
+    --td-text:       #FBF9F4;
+    --td-text2:      #9AA3B2;
+    --td-dusk:       #6E67AF;
+    --td-dusk-hi:    #7E77BF;
+    --td-canvas:     #141C2E;
+  }
+  :root[data-theme="light"] {
+    --td-surface:    #FFFFFF;
+    --td-raised:     #F6F3EC;
+    --td-border:     #E4E0D5;
+    --td-text:       #111A2B;
+    --td-text2:      #58606E;
+    --td-canvas:     #F6F3EC;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 40px 32px 96px;
+    background: var(--td-raised);
+    color: var(--td-text);
+    font: 400 15px/1.55 Inter, system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── page head ─────────────────────────────────────────────── */
+  .head { max-width: 1080px; margin: 0 auto 40px; }
+  .head h1 { font: 300 34px/1.1 Fraunces, Georgia, serif; margin: 0 0 8px; letter-spacing: -.01em; }
+  .head p { margin: 0; max-width: 62ch; color: var(--td-text2); }
+  .theme-btn {
+    position: fixed; top: 20px; right: 24px; z-index: 50;
+    background: var(--td-surface); color: var(--td-text);
+    border: 1px solid var(--td-border); border-radius: 8px;
+    padding: 8px 14px; font: 500 13px Inter, sans-serif; cursor: pointer;
+  }
+
+  /* ── option cards ──────────────────────────────────────────── */
+  .grid { max-width: 1080px; margin: 0 auto; display: grid; gap: 28px; }
+  .opt {
+    background: var(--td-surface);
+    border: 1px solid var(--td-border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .opt-head { padding: 20px 24px 16px; display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .opt-head h2 { font: 400 20px/1.2 Fraunces, Georgia, serif; margin: 0; }
+  .tag {
+    font: 500 11px/1 Inter, sans-serif; letter-spacing: .07em; text-transform: uppercase;
+    padding: 5px 9px; border-radius: 5px;
+    color: var(--td-dusk); background: color-mix(in srgb, var(--td-dusk) 12%, transparent);
+  }
+  .opt-head p { margin: 0; flex: 1 1 340px; color: var(--td-text2); font-size: 14px; }
+  .opt-head .replay {
+    background: none; border: 1px solid var(--td-border); border-radius: 7px;
+    color: var(--td-text2); font: 500 12px Inter, sans-serif;
+    padding: 6px 12px; cursor: pointer;
+  }
+  .opt-head .replay:hover { color: var(--td-text); }
+
+  /* the fake viewport the loader lives in */
+  .stage {
+    background: var(--td-canvas);
+    border-top: 1px solid var(--td-border);
+    height: 300px;
+    display: grid;
+    place-items: center;
+  }
+
+  /* ── the mark ──────────────────────────────────────────────── */
+  .mark { display: grid; place-items: center; gap: 22px; }
+  .mark svg { width: 200px; height: auto; display: block; overflow: visible; }
+  .mark svg path { stroke: var(--td-text); }
+  .wordmark {
+    font: 300 30px/1 Fraunces, Georgia, serif;
+    letter-spacing: .34em;
+    padding-left: .34em;      /* optical: cancel the trailing letter-space */
+    color: var(--td-text);
+  }
+
+  /* ═══ A · settle ══════════════════════════════════════════════
+     The waveform draws itself left to right and comes to rest on the
+     straight line. The Dusk dot lands last, then breathes while the
+     app keeps loading. Draw once, breathe forever. */
+  .a .wave    { stroke-dasharray: 100; stroke-dashoffset: 100; animation: draw 1250ms cubic-bezier(.16,1,.3,1) forwards; }
+  .a .dot     { transform-origin: 305px 55px; transform: scale(0); animation: dotIn 460ms cubic-bezier(.16,1,.3,1) 1100ms forwards, breathe 2400ms ease-in-out 1600ms infinite; }
+  .a .wordmark { opacity: 0; animation: fadeUp 700ms cubic-bezier(.16,1,.3,1) 900ms forwards; }
+
+  @keyframes draw    { to { stroke-dashoffset: 0; } }
+  @keyframes dotIn   { to { transform: scale(1); } }
+  @keyframes breathe { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+  @keyframes fadeUp  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ═══ B · quiet dot ═══════════════════════════════════════════
+     The finished mark, static. Only the Dusk dot breathes. Nothing
+     draws, nothing moves. The least you can show and still be alive. */
+  .b .mark    { opacity: 0; animation: fadeUp 600ms cubic-bezier(.16,1,.3,1) forwards; }
+  .b .dot     { transform-origin: 305px 55px; animation: breathe 2200ms ease-in-out infinite; }
+
+  /* ═══ C · pulse ═══════════════════════════════════════════════
+     The mark is at rest. A Dusk pulse travels the settled line, left
+     to right, and is absorbed by the dot. Loops for as long as the
+     wait lasts — a slow load never looks stuck. */
+  .c .mark      { opacity: 0; animation: fadeUp 600ms cubic-bezier(.16,1,.3,1) forwards; }
+  .c .pulse     { stroke: var(--td-dusk); stroke-dasharray: 7 100; stroke-dashoffset: 100; animation: travel 1900ms cubic-bezier(.4,0,.5,1) 500ms infinite; }
+  .c .dot       { transform-origin: 305px 55px; animation: catch 1900ms ease-out 500ms infinite; }
+  @keyframes travel { to { stroke-dashoffset: 0; } }
+  @keyframes catch  { 0%,84% { opacity: .55; transform: scale(1); } 92% { opacity: 1; transform: scale(1.35); } 100% { opacity: .55; transform: scale(1); } }
+
+  /* ═══ D · the line only ═══════════════════════════════════════
+     No waveform. A hairline grows from the centre out, the wordmark
+     rises through it, the dot arrives. The most restrained reading
+     of "runs in silence". */
+  .d .mark    { gap: 18px; }
+  .d .rule    { width: 200px; height: 2px; background: var(--td-text); border-radius: 2px; transform: scaleX(0); animation: grow 900ms cubic-bezier(.16,1,.3,1) forwards; position: relative; }
+  .d .rule::after {
+    content: ''; position: absolute; right: -4px; top: -3px;
+    width: 8px; height: 8px; border-radius: 50%; background: var(--td-dusk);
+    opacity: 0; animation: dotFade 400ms ease-out 880ms forwards, breathe 2400ms ease-in-out 1300ms infinite;
+  }
+  .d .wordmark { opacity: 0; animation: fadeUp 800ms cubic-bezier(.16,1,.3,1) 480ms forwards; }
+  @keyframes grow    { to { transform: scaleX(1); } }
+  @keyframes dotFade { to { opacity: 1; } }
+
+  /* Reduced motion: everything lands, nothing animates. */
+  @media (prefers-reduced-motion: reduce) {
+    .stage * { animation: none !important; opacity: 1 !important; transform: none !important; stroke-dashoffset: 0 !important; }
+  }
+
+  /* ── notes ─────────────────────────────────────────────────── */
+  .notes { max-width: 1080px; margin: 44px auto 0; }
+  .notes h3 { font: 400 19px/1.2 Fraunces, Georgia, serif; margin: 0 0 12px; }
+  .notes ul { margin: 0; padding-left: 20px; color: var(--td-text2); }
+  .notes li { margin-bottom: 8px; max-width: 76ch; }
+  .notes strong { color: var(--td-text); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<button class="theme-btn" id="themeBtn" type="button">Dark</button>
+
+<div class="head">
+  <h1>The first paint</h1>
+  <p>Right now the admin shows an empty page while the shell loads. Four ways to fill it, all built from the mark you already have: the waveform settling into a straight line, with the Dusk dot at its end. Dusk stays what it always means — the system is doing something.</p>
+</div>
+
+<div class="grid">
+
+  <!-- ══ A ══════════════════════════════════════════════════ -->
+  <section class="opt">
+    <div class="opt-head">
+      <h2>A · Settle</h2>
+      <span class="tag">Recommended</span>
+      <p>The waveform draws itself and comes to rest. The dot lands last and breathes until the app is ready. The brand story, told in 1.5 seconds.</p>
+      <button class="replay" type="button" data-replay="a">Replay</button>
+    </div>
+    <div class="stage" id="stage-a">
+      <div class="mark a">
+        <svg viewBox="0 0 340 110" fill="none">
+          <path class="wave" pathLength="100" d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke-width="7" stroke-linecap="round"/>
+          <circle class="dot" cx="305" cy="55" r="9" fill="#6E67AF"/>
+        </svg>
+        <div class="wordmark">tacet</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ B ══════════════════════════════════════════════════ -->
+  <section class="opt">
+    <div class="opt-head">
+      <h2>B · Quiet dot</h2>
+      <p>The finished mark, held still. Only the dot breathes. Nothing draws, nothing travels — the most silent option, and the cheapest to paint.</p>
+      <button class="replay" type="button" data-replay="b">Replay</button>
+    </div>
+    <div class="stage" id="stage-b">
+      <div class="mark b">
+        <svg viewBox="0 0 340 110" fill="none">
+          <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke-width="7" stroke-linecap="round"/>
+          <circle class="dot" cx="305" cy="55" r="9" fill="#6E67AF"/>
+        </svg>
+        <div class="wordmark">tacet</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ C ══════════════════════════════════════════════════ -->
+  <section class="opt">
+    <div class="opt-head">
+      <h2>C · Pulse</h2>
+      <p>The mark is already at rest. A Dusk pulse runs the settled line and is absorbed by the dot, over and over. Loops honestly — a slow load never looks frozen.</p>
+      <button class="replay" type="button" data-replay="c">Replay</button>
+    </div>
+    <div class="stage" id="stage-c">
+      <div class="mark c">
+        <svg viewBox="0 0 340 110" fill="none">
+          <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke-width="7" stroke-linecap="round"/>
+          <path class="pulse" pathLength="100" d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke-width="7" stroke-linecap="round"/>
+          <circle class="dot" cx="305" cy="55" r="9" fill="#6E67AF"/>
+        </svg>
+        <div class="wordmark">tacet</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ══ D ══════════════════════════════════════════════════ -->
+  <section class="opt">
+    <div class="opt-head">
+      <h2>D · The line only</h2>
+      <p>Drop the waveform. A hairline grows from the centre, the wordmark rises through it, the dot arrives. Reads as calm — but it throws away the mark that makes the brand.</p>
+      <button class="replay" type="button" data-replay="d">Replay</button>
+    </div>
+    <div class="stage" id="stage-d">
+      <div class="mark d">
+        <div class="rule"></div>
+        <div class="wordmark">tacet</div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="notes">
+  <h3>How it would work</h3>
+  <ul>
+    <li>The splash lives <strong>inline in retail-admin.html</strong> — its own markup and its own style block, above the stylesheet link. It has to paint before any CSS or JS file downloads, otherwise it can't cover the gap it exists to cover.</li>
+    <li>For the same reason it <strong>cannot wait for Fraunces</strong>. The wordmark falls back to Georgia until the webfont lands. Option A hides this well: the word fades in at 900ms, by which time the font is usually there.</li>
+    <li>The shell removes it once the rail and dashboard are painted: add a class to fade it out over 260ms, then drop the node. If the shell throws, the splash must still leave — a hard 8-second timeout, so a broken boot never looks like a hung one.</li>
+    <li>It reads the saved theme from localStorage before painting, so a dark-mode user never gets a white flash.</li>
+    <li><strong>A is my pick.</strong> B is silent but tells the user nothing is happening. C loops forever, which is the safest thing for a slow connection, but the pulse is busier than the brand wants. D is beautiful and throws away the waveform. A tells the brand story once, then falls back to a breathing dot — which is C's honesty without C's noise.</li>
+  </ul>
+</div>
+
+<script>
+  const root = document.documentElement;
+  const btn  = document.getElementById('themeBtn');
+  btn.addEventListener('click', () => {
+    const dark = root.getAttribute('data-theme') !== 'light';
+    root.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? 'Dark' : 'Light';
+  });
+
+  // Replay: clone the mark to restart every animation from zero.
+  document.querySelectorAll('[data-replay]').forEach(b => {
+    b.addEventListener('click', () => {
+      const stage = document.getElementById('stage-' + b.dataset.replay);
+      const mark  = stage.firstElementChild;
+      stage.replaceChild(mark.cloneNode(true), mark);
+    });
+  });
+</script>
+
+</body>
+</html>
