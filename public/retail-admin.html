@@ -53,7 +53,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-products, #tab-orders, #tab-invoices, #tab-customers, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -83,7 +83,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-products, #tab-orders, #tab-invoices, #tab-customers, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -611,19 +611,20 @@
   <div class="bs-word">tacet</div>
 </div>
 <script>
-  // Take the splash down when the shell is up. data-ui-lang on <html> is the
-  // signal: the app JS stamps it once it has picked a language and un-hidden
-  // the body, so it marks the exact moment there is a real page underneath.
-  // The 3s anti-FOUC failsafe above stamps it too, which means a broken boot
-  // reveals the raw page rather than sitting behind a splash forever.
+  // Take the splash down when the home actually has its numbers, not just when
+  // the shell is up. data-app-ready on <html> is the signal: the dashboard JS
+  // stamps it once BOTH the Today pulse (revenue) and The Recap have painted
+  // real data, so the operator never sees the empty "¥0 / All quiet" state flash
+  // in behind the mark. The 8s failsafe below covers a load that never arrives —
+  // a broken boot reveals the page rather than sitting behind the splash forever.
   (function () {
     var el = document.getElementById('boot-splash');
     if (!el) return;
     var left = false;
-    // On a warm cache the shell can be up in 300ms. Leaving then would yank a
-    // half-drawn waveform off the screen — a flash, worse than the blank page
-    // this replaces. Hold until the line has settled and the dot has landed
-    // (1250ms draw + 460ms dot, overlapping — 1560ms), then go.
+    // On a warm cache the data can be up in well under a second. Leaving then
+    // would yank a half-drawn waveform off the screen — a flash, worse than the
+    // blank page this replaces. Hold until the line has settled and the dot has
+    // landed (1250ms draw + 460ms dot, overlapping — 1560ms), then go.
     var START = Date.now(), MIN_SHOW = 1560;
     function leave() {
       if (left) return;
@@ -635,11 +636,11 @@
       setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 300);
     }
     var obs = new MutationObserver(function () {
-      if (document.documentElement.hasAttribute('data-ui-lang')) leave();
+      if (document.documentElement.hasAttribute('data-app-ready')) leave();
     });
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-ui-lang'] });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['data-app-ready'] });
     // Already stamped (warm cache, JS beat us here): go now.
-    if (document.documentElement.hasAttribute('data-ui-lang')) leave();
+    if (document.documentElement.hasAttribute('data-app-ready')) leave();
     // Last resort: never hold the screen hostage, whatever happened.
     setTimeout(leave, 8000);
   })();
@@ -3488,116 +3489,54 @@
     </div>
   </section>
 
-  <!-- ─── VOUCHERS / COUPONS ─── -->
+  <!-- ─── VOUCHERS / COUPONS — Tacet rebuild (Option A: one door, quiet rows).
+       One "New coupon" button opens the guided wizard (the old always-open
+       advanced form is gone); the table is the page; clicking a row opens the
+       side drawer where every per-coupon control lives. -->
   <section id="tab-vouchers">
-    <h2>Coupons · 优惠券</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
-      Coupons are either <b>code-redeemed</b> (customers type the code at checkout) or <b>public</b>
-      (browseable from the mini-app — no code needed). Three types: fixed ¥ off, percent off, or free shipping.
-      · 优惠券分为<b>凭码核销</b>(顾客在结算时输入优惠码)或<b>公开</b>(可在小程序中浏览,无需输入码)两种。共三种类型:固定 ¥ 减免、百分比折扣、或免运费。
-    </div>
-    <div class="card" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
-      <div style="min-width: 220px;">
-        <h3 style="font-size: 13px; margin: 0 0 4px;">Make a coupon — guided · 新建优惠券 · 向导</h3>
-        <div class="muted" style="font-size: 12px;">Answer a few simple questions. We set the tricky parts for you, warn you about clashes with coupons you already run, and show the card customers see. · 回答几个简单问题,我们替你设置复杂部分,提示与现有优惠券的冲突,并预览顾客看到的样子。</div>
+    <div class="td-head">
+      <div class="td-greet-col">
+        <h2 style="margin: 0">Coupons · 优惠券</h2>
+        <p class="td-greet-sub">Money off for your customers — typed as a code, picked up in the app, or applied for them. · 给顾客的优惠 — 输码使用、在小程序领取、或结账自动抵扣。</p>
       </div>
-      <button class="btn btn-primary" onclick="vwOpen()" style="white-space: nowrap;">Start · 开始</button>
-    </div>
-    <div class="card">
-      <h3 style="font-size: 13px; margin-bottom: 12px;">New coupon — advanced · 高级(逐项填写)</h3>
-      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Code · 编码</label>
-          <input type="text" id="v-code" placeholder="NEWBIE20" style="text-transform: uppercase; font-family: monospace; width: 160px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Type · 类型</label>
-          <select id="v-type" style="width: 160px;">
-            <option value="fixed_amount">¥ off · 减 ¥</option>
-            <option value="percent">% off · 百分比折扣</option>
-            <option value="free_shipping">Free shipping · 免运费</option>
-          </select>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Value · 数值</label>
-          <input type="number" id="v-value" placeholder="20" style="width: 120px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Min subtotal ¥ · 最低订单金额</label>
-          <input type="number" id="v-min" placeholder="0" style="width: 120px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Max uses · 最大可用次数</label>
-          <input type="number" id="v-max" placeholder="∞" style="width: 100px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Per customer · 每位顾客上限</label>
-          <input type="number" id="v-percust" value="1" style="width: 100px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Expires · 到期</label>
-          <input type="date" id="v-expires" style="width: 160px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked" title="If checked, customers see this coupon in a list and can apply it without typing the code. · 勾选后,顾客可在列表中看到此券,无需输入编码即可使用。">Public · 公开</label>
-          <label style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer; font-size: 12px;">
-            <input type="checkbox" id="v-public" style="margin: 0;">
-            <span class="muted">Browseable · 可浏览</span>
-          </label>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked" title="If checked, every newly-registered customer is automatically granted this voucher on their first sign-in. Used for welcome / Seed-tier perks. · 勾选后,新注册的顾客在首次登录时自动获得此券。用于新人/种子等级礼遇。">Auto-grant · 自动发放</label>
-          <label style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer; font-size: 12px;">
-            <input type="checkbox" id="v-auto-grant" style="margin: 0;">
-            <span class="muted">New signups · 新注册顾客</span>
-          </label>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked" title="If checked, this coupon is applied automatically at checkout for any eligible cart — no code, no claim. When several coupons qualify, the best one wins. · 勾选后,符合条件的订单结账时自动抵扣此券,无需输入或领取。多张可用时取最优。">Auto-apply · 自动抵扣</label>
-          <label style="display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md); cursor: pointer; font-size: 12px;">
-            <input type="checkbox" id="v-auto-apply" style="margin: 0;">
-            <span class="muted">Best one wins · 自动取最优</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px;">
-        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-          <label class="stacked">Public label · EN <span class="muted" style="font-weight: normal;">(shown to customers when Public)(公开时顾客可见)</span></label>
-          <input type="text" id="v-title-en" placeholder="¥20 off your first order" style="width: 100%;">
-        </div>
-        <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-          <label class="stacked">Public label · 中</label>
-          <input type="text" id="v-title-cn" placeholder="首单立减 ¥20" style="width: 100%;">
-        </div>
-        <button class="btn btn-primary" onclick="createVoucher()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Create · 创建
-        </button>
-      </div>
+      <span class="vch-spacer"></span>
+      <button class="btn vch-new" onclick="vwOpen()">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New coupon · 新建优惠券
+      </button>
     </div>
 
-    <h2>Active coupons · 启用中的优惠券</h2>
-    <style>
-      /* Keep each column title on one line and sitting on a common baseline,
-         so headers read as a clean aligned row instead of wrapping raggedly
-         ("MIN ¥" orphaning the ¥, single-line headers floating up). The table
-         already scrolls horizontally, so the extra width is fine. */
-      #vouchers-table th { white-space: nowrap; vertical-align: bottom; }
-      /* Keep cell values on one line too — "% off" / "¥ off" and the expiry
-         dates were breaking mid-value. The code column's badge stack still
-         wraps on its own (it's a flex-wrap container, unaffected by this). */
-      #vouchers-table td { white-space: nowrap; }
-    </style>
-    <div class="table-wrap">
-      <table id="vouchers-table">
-        <thead><tr>
-          <th>Code · 编码</th><th>Public label · 顾客可见名称</th><th>Type · 类型</th><th class="numeric">Value · 数值</th><th class="numeric">Min ¥ · 最低</th>
-          <th class="numeric">Used · 已用</th><th>Expires · 到期</th><th>Status · 状态</th><th></th>
-        </tr></thead>
-        <tbody><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
-      </table>
+    <div class="vch-body">
+      <div class="vch-toolbar">
+        <div class="vch-seg" id="vch-seg" data-no-i18n></div>
+        <label class="vch-search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="vch-q" data-ph-en="Find a code or label" data-ph-cn="搜索编码或标签" placeholder="Find a code or label" oninput="vchSearchInput(this.value)" autocomplete="off">
+        </label>
+      </div>
+
+      <div class="vch-card">
+        <table id="vouchers-table">
+          <thead><tr>
+            <th>Coupon · 优惠券</th><th>Gives · 优惠</th><th>Rules · 规则</th>
+            <th class="numeric">Used · 已用</th><th>Ends · 截止</th><th></th>
+          </tr></thead>
+          <tbody data-no-i18n><tr><td colspan="6" class="muted" style="padding: 14px;">Loading… · 加载中…</td></tr></tbody>
+        </table>
+      </div>
+      <div id="vch-offnote" data-no-i18n></div>
     </div>
+
+    <!-- Coupon detail drawer — facts, the three "how customers get it"
+         switches, label edit, grants, on/off. dw-dismiss = outside click
+         closes it; tr.vch-row is exempted in 04-orders.js so the opening
+         click doesn't instantly close it. -->
+    <aside id="vch-drawer" class="side-drawer dw-compact dw-dismiss" aria-hidden="true">
+      <button type="button" class="drawer-close" onclick="closeDrawer('#vch-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="drawer-body"><div id="vch-drawer-mount" data-no-i18n></div></div>
+    </aside>
 
     <!-- Grant-voucher modal — opens from the "Grant" action on each row. -->
     <div id="grant-modal-bg" class="pu-editor-bg">
@@ -3636,51 +3575,53 @@
         </div>
       </div>
     </div>
-    <!-- ─── Guided coupon wizard (additive; advanced form above is untouched) ─── -->
+    <!-- ─── Guided coupon wizard — the ONE door to coupon creation. Tacet
+         reskin: graphite icons, ink selected-states, amber only on the coupon
+         ticket accent + heads-up warnings, brick for clashes. -->
     <style>
-      #vw-bg .vw-kick { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--brass, #b08d4a); font-weight: 600; margin-bottom: 3px; }
+      #vw-bg .vw-kick { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); font-weight: 500; margin-bottom: 3px; }
       #vw-bg .pu-editor-head { padding: 18px 24px; }
-      #vw-bg #vw-title { font-size: 18px; }
-      .vw-lab { display: block; font-size: 13.5px; font-weight: 600; color: var(--ink, #1d1d1a); margin-bottom: 7px; }
-      .vw-help { font-size: 12px; color: var(--muted, #6b6b63); }
+      #vw-bg #vw-title { font-size: 18px; font-weight: 500; }
+      .vw-lab { display: block; font-size: 13.5px; font-weight: 500; color: var(--text-1); margin-bottom: 7px; }
+      .vw-help { font-size: 12px; color: var(--text-2); }
       .vw-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--line); }
       .vw-foot .btn { font-size: 14px; padding: 9px 18px; }
       .vw-dots { display: flex; gap: 7px; }
       .vw-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
-      .vw-dot.on { background: var(--brass, #b08d4a); }
+      .vw-dot.on { background: var(--text-1); }
       .vw-goals { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
       @media (max-width: 560px) { .vw-goals { grid-template-columns: 1fr; } }
-      .vw-goal { display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: var(--bg-input, #fff); cursor: pointer; text-align: left; font: inherit; color: inherit; }
-      .vw-goal:hover { border-color: var(--brass, #b08d4a); background: var(--bg-elev-1, #faf7f0); }
-      .vw-goal .vico { color: var(--brass, #b08d4a); flex: 0 0 auto; display: flex; }
-      .vw-goal .gt { font-weight: 600; font-size: 15px; }
-      .vw-goal .gs { font-size: 12.5px; color: var(--muted, #6b6b63); }
-      .vw-type { flex: 1; text-align: center; border: 1px solid var(--line); border-radius: 12px; padding: 20px 10px; background: var(--bg-input, #fff); cursor: pointer; }
-      .vw-type:hover { border-color: var(--brass, #b08d4a); }
-      .vw-type.on { border-color: var(--tea, #6B8E6F); box-shadow: inset 0 0 0 1px var(--tea, #6B8E6F); background: var(--bg-elev-1, #faf7f0); }
-      .vw-type .vico { color: var(--brass, #b08d4a); display: inline-flex; }
-      .vw-type.on .vico { color: var(--tea, #6B8E6F); }
-      .vw-type .tt { font-weight: 600; font-size: 14px; margin-top: 8px; }
-      .vw-type .ts { font-size: 12px; color: var(--muted, #6b6b63); margin-top: 3px; }
-      .vw-path { display: flex; gap: 13px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 15px; cursor: pointer; background: var(--bg-input, #fff); }
-      .vw-path:hover { border-color: var(--brass, #b08d4a); }
-      .vw-path.on { border-color: var(--tea, #6B8E6F); box-shadow: inset 0 0 0 1px var(--tea, #6B8E6F); background: var(--bg-elev-1, #faf7f0); }
-      .vw-path .vico { color: var(--brass, #b08d4a); flex: 0 0 auto; display: flex; }
-      .vw-path.on .vico { color: var(--tea, #6B8E6F); }
-      .vw-path .pt { font-weight: 600; font-size: 14px; }
-      .vw-path .ps { font-size: 12px; color: var(--muted, #6b6b63); margin-top: 2px; }
+      .vw-goal { display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: var(--bg-input); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+      .vw-goal:hover { border-color: var(--text-3); background: var(--bg-elev-1); }
+      .vw-goal .vico { color: var(--text-2); flex: 0 0 auto; display: flex; }
+      .vw-goal .gt { font-weight: 500; font-size: 15px; }
+      .vw-goal .gs { font-size: 12.5px; color: var(--text-2); }
+      .vw-type { flex: 1; text-align: center; border: 1px solid var(--line); border-radius: 12px; padding: 20px 10px; background: var(--bg-input); cursor: pointer; }
+      .vw-type:hover { border-color: var(--text-3); }
+      .vw-type.on { border-color: var(--text-1); box-shadow: inset 0 0 0 1px var(--text-1); background: var(--bg-elev-1); }
+      .vw-type .vico { color: var(--text-2); display: inline-flex; }
+      .vw-type.on .vico { color: var(--text-1); }
+      .vw-type .tt { font-weight: 500; font-size: 14px; margin-top: 8px; }
+      .vw-type .ts { font-size: 12px; color: var(--text-2); margin-top: 3px; }
+      .vw-path { display: flex; gap: 13px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 15px; cursor: pointer; background: var(--bg-input); }
+      .vw-path:hover { border-color: var(--text-3); }
+      .vw-path.on { border-color: var(--text-1); box-shadow: inset 0 0 0 1px var(--text-1); background: var(--bg-elev-1); }
+      .vw-path .vico { color: var(--text-2); flex: 0 0 auto; display: flex; }
+      .vw-path.on .vico { color: var(--text-1); }
+      .vw-path .pt { font-weight: 500; font-size: 14px; }
+      .vw-path .ps { font-size: 12px; color: var(--text-2); margin-top: 2px; }
       .vw-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); margin-left: auto; flex: 0 0 auto; }
-      .vw-path.on .vw-radio { border-color: var(--tea, #6B8E6F); background: var(--tea, #6B8E6F); box-shadow: inset 0 0 0 3px var(--bg-input, #fff); }
-      .vw-ticket { border: 1px solid var(--line); border-left: 5px solid var(--brass, #b08d4a); border-radius: 12px; padding: 24px 26px; background: var(--bg-input, #fff); }
-      .vw-tk-big { font-size: 32px; font-weight: 700; line-height: 1; }
-      .vw-tk-big span { font-size: 15px; font-weight: 600; color: var(--muted, #6b6b63); }
-      .vw-tk-sub { font-size: 12px; color: var(--muted, #6b6b63); margin-top: 6px; }
-      .vw-tk-ttl { font-size: 14.5px; font-weight: 600; margin-top: 16px; }
-      .vw-tk-exp { font-size: 11.5px; color: var(--muted, #6b6b63); margin-top: 6px; }
-      .vw-note { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-left: 3px solid var(--tea, #6B8E6F); border-radius: 9px; padding: 12px 14px; font-size: 13px; line-height: 1.5; }
-      .vw-note .ni { flex: 0 0 auto; color: var(--tea, #6B8E6F); margin-top: 1px; display: flex; }
-      .vw-note.brass { border-left-color: var(--brass, #b08d4a); } .vw-note.brass .ni { color: var(--brass, #b08d4a); }
-      .vw-note.red { border-left-color: #b2564b; } .vw-note.red .ni { color: #b2564b; }
+      .vw-path.on .vw-radio { border-color: var(--text-1); background: var(--text-1); box-shadow: inset 0 0 0 3px var(--bg-input); }
+      .vw-ticket { border: 1px solid var(--line); border-left: 5px solid var(--tacet-amber, #C9954A); border-radius: 12px; padding: 24px 26px; background: var(--bg-input); }
+      .vw-tk-big { font-size: 32px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+      .vw-tk-big span { font-size: 15px; font-weight: 500; color: var(--text-2); }
+      .vw-tk-sub { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+      .vw-tk-ttl { font-size: 14.5px; font-weight: 500; margin-top: 16px; }
+      .vw-tk-exp { font-size: 11.5px; color: var(--text-2); margin-top: 6px; }
+      .vw-note { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-left: 3px solid var(--tacet-sage, #A3B49F); border-radius: 9px; padding: 12px 14px; font-size: 13px; line-height: 1.5; }
+      .vw-note .ni { flex: 0 0 auto; color: var(--tacet-sage-ink, #4A6249); margin-top: 1px; display: flex; }
+      .vw-note.brass { border-left-color: var(--tacet-amber, #C9954A); } .vw-note.brass .ni { color: var(--tacet-amber-ink, #8A6425); }
+      .vw-note.red { border-left-color: var(--tacet-brick, #B4533E); } .vw-note.red .ni { color: var(--tacet-brick, #B4533E); }
       /* Step transitions — calm fade-out / fade-in-and-rise on the platform's zen ease. */
       #vw-body { transition: opacity .24s var(--ease-out, cubic-bezier(.16, 1, .3, 1)); }
       #vw-body.vw-leaving { opacity: 0; }

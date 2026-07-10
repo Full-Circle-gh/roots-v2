@@ -482,6 +482,22 @@ function tdTodayHours(labels) {
   el.innerHTML = marks.map(m => `<span>${m}</span>`).join('');
 }
 
+// ── Boot readiness ──────────────────────────────────────────────────────────
+// The boot splash (retail-admin.html) holds the Tacet mark until the home has
+// real numbers on screen, not just an empty shell. We stamp data-app-ready on
+// <html> once BOTH first loads that fill the visible home have painted — the
+// Today pulse (revenue) and The Recap. The splash leaves on that stamp; its own
+// 8s failsafe still covers a load that never arrives.
+const DASH_READY = { today: false, recap: false, done: false };
+function dashMarkReady(part) {
+  if (DASH_READY.done) return;
+  DASH_READY[part] = true;
+  if (DASH_READY.today && DASH_READY.recap) {
+    DASH_READY.done = true;
+    try { document.documentElement.setAttribute('data-app-ready', '1'); } catch (e) {}
+  }
+}
+
 async function dashHeroLoadToday(opts) {
   // Trailing-zero local-day in GZ (+8). Server tolerates same-day from/to and
   // returns 24 hourly trend buckets (revenue + orders) plus deltas-vs-yesterday.
@@ -512,6 +528,7 @@ async function dashHeroLoadToday(opts) {
     dashRenderSpark($('#db-today-new-spark'), trend.map(p => Number(p.new_customers || 0)), labels,
                     v => v + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'), false);
     dashHeroTodayRepaint();   // delta badges (language-aware)
+    dashMarkReady('today');   // one half of the boot-splash release signal
   } catch (e) {
     if (!DASH_HERO.todayData) dashBootRetry('today', dashHeroLoadToday);
   }
@@ -1332,6 +1349,7 @@ async function tdRecapLoad() {
     const j = await api(`/api/retail-admin/dashboard/activity?since=${since}&limit=500`);
     TD.recapEvents = (j.data && j.data.events) || [];
     tdRecapRender();
+    dashMarkReady('recap');   // other half of the boot-splash release signal
   } catch (e) {
     if (!TD.recapEvents && dashBootRetry('recap', tdRecapLoad)) return;
     host.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
