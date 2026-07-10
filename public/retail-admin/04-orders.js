@@ -955,7 +955,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div>${invoiceLine(o)}</td>
+        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
@@ -2956,9 +2956,28 @@ const COURIER_STALE_MS = 10 * 60 * 1000;
 // when there's no live courier job (JD parcel, off-system courier, non-local).
 function orderStatusPill(o) {
   const c = o.courier;
-  if (o.status === 'dispatched' && c) {
-    if (c.stage === 'awaiting_dispatch') return { cls: 'st-preparing',  label: cuT('Finding a rider', '正在找骑手') };
-    if (c.stage === 'in_transit')        return { cls: 'st-dispatched', label: cuT('On the way', '配送中') };
+  // A live same-city courier job (o.courier) is the ground truth of where the
+  // parcel physically is, and the order's own status can lag it in BOTH directions:
+  //   • our 'dispatched' flag flips when staff mark the order shipped — before a
+  //     rider is even on it — so it can read AHEAD of "finding a rider".
+  //   • a Meituan mirror's 'rider_pickup' ("Rider coming") is driven by Meituan's
+  //     status poll, which trails the Qingyun/JD rider by many minutes — and the
+  //     auto-deliver sweep only advances our own paid/preparing/dispatched orders,
+  //     never Meituan's rider_pickup — so it can read BEHIND, still saying "Rider
+  //     coming" over a parcel the rider dropped off long ago.
+  // Reconcile against the courier stage so the header pill can't contradict the
+  // live rider card rendered right below it. Terminal order states we own
+  // (cancelled/refunded) win outright and are never overridden.
+  if (c && o.status !== 'cancelled' && o.status !== 'refunded') {
+    // Rider has dropped off — never keep showing "Rider coming"/"Dispatched".
+    if (c.stage === 'delivered' && o.status !== 'delivered')
+      return { cls: 'st-delivered', label: humanStatus('delivered', o.fulfillment_type) };
+    // In-flight: surface the real rider stage for both our own dispatched orders
+    // and Meituan's "Rider coming" mirrors.
+    if (o.status === 'dispatched' || o.status === 'rider_pickup') {
+      if (c.stage === 'awaiting_dispatch') return { cls: 'st-preparing',  label: cuT('Finding a rider', '正在找骑手') };
+      if (c.stage === 'in_transit')        return { cls: 'st-dispatched', label: cuT('On the way', '配送中') };
+    }
   }
   return { cls: 'st-' + o.status, label: humanStatus(o.status, o.fulfillment_type) };
 }
@@ -3739,7 +3758,7 @@ function renderReadonlyOrder(o) {
         <div class="od-head-main">
           <div class="title-row">
             <b>${escapeHtml(o.order_no)}</b>
-            <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
+            ${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}
             <span class="pill" style="background: var(--bg-elev-1); color: var(--text-2);" title="${escapeHtml(chan)} orders are mirrored in for visibility — accept &amp; prepare them in ${escapeHtml(chan)}">${escapeHtml(chan)}${roTag}</span>
           </div>
           <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
