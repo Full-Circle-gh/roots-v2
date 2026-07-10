@@ -4157,6 +4157,15 @@
   td.status-cell .stack {
     display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center;
   }
+  /* Fapiao sub-line under the status pill. Brass = the invoice is still owed,
+     muted = it has been issued. Kept as text rather than a second pill so it
+     never competes with the order's own status. */
+  td.status-cell .ord-inv-line {
+    display: flex; align-items: center; gap: 5px; margin-top: 5px;
+    font-size: 11px; letter-spacing: .02em; color: var(--text-3); white-space: nowrap;
+  }
+  td.status-cell .ord-inv-line svg { width: 11px; height: 11px; flex: none; }
+  td.status-cell .ord-inv-line.is-owed { color: var(--brass); font-weight: 600; }
   /* Refund-pending badge — shown alongside the status pill on any row
      where refund_status is in the open pipeline. Makes the queue visible
      from every filter view, not just the dedicated chip. */

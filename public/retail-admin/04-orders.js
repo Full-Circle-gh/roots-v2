@@ -235,11 +235,25 @@ function refundBadge(o) {
   return `<span class="pill refund-pending" title="Open refund · 退款进行中 (${rs})">↩ ${label}</span>`;
 }
 
-// Invoice state does NOT ride the orders table — not as a pill in the Status
-// column, not as a summary strip under the row, not even inside the "Invoice"
-// filter view. The table is for logistics. A fapiao only ever surfaces inside
-// the order drawer, where it climbs to the top while it still needs issuing
-// (see renderOpenOrder) and sinks back down to the details once it is done.
+const ICON_INV_OWED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><line x1="8" y1="9" x2="16" y2="9"/></svg>';
+const ICON_INV_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><polyline points="8 12 11 15 16 9"/></svg>';
+
+// Fapiao sub-line under the status pill. Brass while the invoice is still
+// owed, muted once it has been issued — so the list tells "never asked" apart
+// from "asked and done" without opening a drawer. A row with no invoice
+// request renders nothing. This is the ONLY invoice mark the table carries:
+// no summary strip under the row, and the full detail (title, tax ID, email,
+// fapiao file, Copy for accounting) stays in the order drawer.
+function invoiceLine(o) {
+  if (!Number(o.needs_invoice)) return '';
+  const issued = o.invoice_status === 'issued';
+  const label = issued ? cuT('Invoice issued', '已开票') : cuT('Invoice to issue', '待开票');
+  const title = issued
+    ? cuT('Invoice issued for this order', '此订单已开票')
+    : cuT('Invoice requested — issue it from the order drawer', '顾客申请开票 — 请在订单详情中开票');
+  return `<div class="ord-inv-line${issued ? '' : ' is-owed'}" title="${escapeAttr(title)}">`
+    + `${issued ? ICON_INV_DONE : ICON_INV_OWED}${label}</div>`;
+}
 
 // Big, hard-to-miss banner at the top of the order drawer. Surfaces the
 // fact that this order has an open refund request even when the order's
@@ -941,7 +955,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div></td>
+        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div>${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
