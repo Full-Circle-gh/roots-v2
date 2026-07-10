@@ -237,44 +237,11 @@ function refundBadge(o) {
   return `<span class="pill refund-pending" title="Open refund · 退款进行中 (${rs})">↩ ${label}</span>`;
 }
 
-// Invoice state does NOT ride the orders table: the Status column belongs to
-// logistics. A fapiao only ever surfaces inside the order drawer, where it
-// climbs to the top while it still needs issuing (see renderOpenOrder) and
-// sinks back down to the details once it is done.
-
-// Full-width summary line under a row in the "Invoice" view — the 抬头 /
-// 税号 / status the accountant batches into the tax system, plus the same
-// "Copy for accounting" the drawer block has, so the whole queue clears
-// without opening a single drawer. Shares .order-row so click/Enter still
-// opens the drawer (the copy button stops its own propagation via the
-// delegated handler's interactive-child bail).
-function invoiceSubRow(o) {
-  if (!Number(o.needs_invoice)) return '';
-  const issued = o.invoice_status === 'issued';
-  const company = String(o.invoice_type || '').toLowerCase() === 'company';
-  const typeTag = company
-    ? `<span class="pill st-paid" style="font-size:11px;"><span class="dot"></span>${cuT('Company · 企业', '企业 · Company')}</span>`
-    : `<span class="pill st-refunded" style="font-size:11px;"><span class="dot"></span>${cuT('Personal · 个人', '个人 · Personal')}</span>`;
-  const stateTag = issued
-    ? `<span class="pill st-delivered" style="font-size:11px;"><span class="dot"></span>${cuT('Issued · 已开', '已开 · Issued')}</span>`
-    : `<span class="pill st-awaiting_restock" style="font-size:11px;"><span class="dot"></span>${cuT('To issue · 待开', '待开 · To issue')}</span>`;
-  return `
-      <tr class="order-row ord-inv-subrow${issued ? ' is-issued' : ''}" data-order-id="${o.id}">
-        <td colspan="10" style="padding: 4px 12px 10px; border-top: none;">
-          <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--text-2);">
-            ${typeTag}
-            <b style="color:var(--text-1);">${escapeHtml(o.invoice_title || '—')}</b>
-            ${company && o.invoice_tax_id ? `<span style="font-variant-numeric:tabular-nums;">${escapeHtml(o.invoice_tax_id)}</span>` : ''}
-            ${o.invoice_email ? `<span>${escapeHtml(o.invoice_email)}</span>` : ''}
-            ${stateTag}
-            ${issued && o.invoice_number ? `<span style="font-variant-numeric:tabular-nums;">${escapeHtml(o.invoice_number)}</span>` : ''}
-            <button type="button" class="db-btn" style="margin-left:auto; font-size:11px; padding:3px 10px;"
-              data-copy="${escapeAttr(invoiceAccountingText(o))}"
-              onclick="event.stopPropagation(); copyKicker(this, 'Invoice info · 开票信息')">${cuT('Copy for accounting · 复制开票信息', '复制开票信息')}</button>
-          </div>
-        </td>
-      </tr>`;
-}
+// Invoice state does NOT ride the orders table — not as a pill in the Status
+// column, not as a summary strip under the row, not even inside the "Invoice"
+// filter view. The table is for logistics. A fapiao only ever surfaces inside
+// the order drawer, where it climbs to the top while it still needs issuing
+// (see renderOpenOrder) and sinks back down to the details once it is done.
 
 // Big, hard-to-miss banner at the top of the order drawer. Surfaces the
 // fact that this order has an open refund request even when the order's
@@ -982,7 +949,7 @@ async function loadOrders(opts = {}) {
         <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div></td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
-      </tr>${status === 'needs_invoice' ? invoiceSubRow(o) : ''}`;
+      </tr>`;
     }).join('');
     ordTweaksApply();
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
