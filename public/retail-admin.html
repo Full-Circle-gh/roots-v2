@@ -53,7 +53,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -83,7 +83,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -4196,195 +4196,334 @@
     </div>
   </aside>
 
-  <!-- ─── BROADCASTS ─── -->
+  <!-- ═══ BROADCASTS — Tacet "one quiet feed" (Option C) ═══════════════════
+       Rebuilt from scratch 2026-07-10 (mockup: reference/broadcasts-redesign-mockup.html,
+       option C). One narrow column: a collapsed compose bar, one-line automatic-
+       updates row, then the whole history grouped by month with scheduled pinned
+       on top. Composing expands the bar in place into a staged form (Title/Body,
+       then Who / When / Opens decision rows). All endpoints, payloads, and the
+       input IDs sendBroadcast() reads are unchanged; this is a re-layout + reskin.
+       Tokens inherited from the Tacet skin scope (#tab-broadcasts added to it). -->
   <section id="tab-broadcasts">
     <style>
-      .bc-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: var(--s5); align-items: start; }
-      @media (max-width: 1100px) { .bc-grid { grid-template-columns: 1fr; } }
-      .bc-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: var(--s4); box-shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05); }
-      .bc-row { display: flex; gap: var(--s3); margin-bottom: var(--s3); }
-      .bc-row > * { flex: 1; min-width: 0; }
-      .bc-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
-      /* background-color (not the shorthand) so the global `select`
-         chevron image + no-repeat + right-aligned position survive. */
-      .bc-input, .bc-textarea, .bc-select { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; background-color: var(--bg-app); color: var(--text); }
-      .bc-select { padding-right: 32px; }
-      .bc-textarea { min-height: 70px; resize: vertical; }
-      .bc-actions { display: flex; gap: var(--s3); align-items: center; margin-top: var(--s4); }
-      .bc-audience { background: var(--bg-app); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--muted); border: 1px dashed var(--line); }
-      .bc-audience b { color: var(--text); font-size: 14px; }
-      .bc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-      .bc-chips-scroll { max-height: 96px; overflow-y: auto; }
-      .bc-chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text); background: var(--bg-app); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; cursor: pointer; white-space: nowrap; }
-      .bc-chip input { margin: 0; cursor: pointer; }
-      .bc-chip .muted { font-size: 11px; }
-      .bc-list { display: flex; flex-direction: column; gap: 10px; }
-      .bc-item { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-      .bc-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-      .bc-item-title { font-weight: 600; font-size: 14px; }
-      .bc-item-body { color: var(--muted); font-size: 12px; line-height: 1.5; margin-bottom: 6px; }
-      .bc-item-meta { display: flex; flex-wrap: wrap; gap: 10px; font-size: 11px; color: var(--muted); align-items: center; }
-      .bc-item-meta .sep { opacity: 0.4; }
-      .bc-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.03em; }
-      .bc-pill.sent      { background: rgba(80, 160, 80, 0.15); color: #2e7d32; }
-      .bc-pill.scheduled { background: rgba(70, 120, 200, 0.15); color: #1a56a8; }
-      .bc-pill.recalled  { background: rgba(180, 60, 60, 0.12); color: #b03030; }
-      .bc-pill.cancelled { background: rgba(120, 120, 120, 0.15); color: #555; }
+      #tab-broadcasts { --bx-radius:14px; }
+      .bx-wrap { max-width: 760px; margin: 0 auto; }
+
+      /* header */
+      .bx-eyebrow { font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--text-3); margin:0 0 6px; }
+      #tab-broadcasts h2.bx-title { font-family:var(--f-sans); font-weight:500; font-size:24px; letter-spacing:-.01em; color:var(--text-1); text-transform:none; margin:0; }
+      .bx-lede { font-size:14px; line-height:1.6; color:var(--text-2); margin:10px 0 24px; max-width:600px; }
+
+      /* generic card + control primitives */
+      .bx-card { background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--bx-radius); box-shadow:0 4px 16px rgba(17,26,43,.04); }
+      .bx-btn { font:inherit; font-size:13.5px; font-weight:500; line-height:1; border-radius:8px; border:1px solid transparent; cursor:pointer; display:inline-flex; align-items:center; gap:7px; padding:9px 14px; transition:.2s var(--ease-out,cubic-bezier(.16,1,.3,1)); white-space:nowrap; }
+      .bx-btn svg { width:15px; height:15px; }
+      .bx-btn.primary { background:var(--tacet-dusk); color:#fff; border-color:var(--tacet-dusk); }
+      .bx-btn.primary:hover { background:#5F58A0; }
+      .bx-btn.primary:disabled { opacity:.55; cursor:default; }
+      .bx-btn.secondary { background:var(--bg-pane); color:var(--text-1); border-color:var(--line); }
+      .bx-btn.secondary:hover { border-color:var(--text-3); }
+      .bx-btn.ghost { background:transparent; color:var(--text-2); }
+      .bx-btn.ghost:hover { color:var(--text-1); background:var(--bg-elev-1); }
+      .bx-btn.danger { background:transparent; color:var(--text-2); }
+      .bx-btn.danger:hover { color:var(--tacet-brick); background:var(--tacet-brick-tint); }
+      .bx-btn.sm { padding:5px 11px; font-size:12.5px; }
+
+      /* ── compose bar (collapsed) ── */
+      .bx-compose { margin-bottom:12px; }
+      .bx-composebar { width:100%; display:flex; align-items:center; gap:12px; padding:15px 18px; cursor:text; color:var(--text-2); font:inherit; font-size:14px; text-align:left; background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--bx-radius); box-shadow:0 4px 16px rgba(17,26,43,.04); }
+      .bx-composebar:hover { border-color:var(--text-3); }
+      .bx-composebar .ico { display:inline-flex; color:var(--text-3); flex-shrink:0; }
+      .bx-composebar .ico svg { width:17px; height:17px; }
+      .bx-composebar .grow { flex:1; }
+      .bx-composebar .aud { font-size:12.5px; color:var(--text-2); background:var(--bg-elev-1); border-radius:999px; padding:4px 12px; white-space:nowrap; }
+      #tab-broadcasts.bx-open .bx-composebar { display:none; }
+
+      /* ── compose form (expanded) ── */
+      .bx-form { display:none; padding:22px 24px; background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--bx-radius); box-shadow:0 4px 16px rgba(17,26,43,.04); }
+      #tab-broadcasts.bx-open .bx-form { display:block; animation:bxSettle .45s var(--ease-out,cubic-bezier(.16,1,.3,1)) both; }
+      @keyframes bxSettle { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+      .bx-form-head { display:flex; align-items:center; margin:0 0 16px; }
+      .bx-form-head .h { font-size:16px; font-weight:500; letter-spacing:-.01em; }
+      .bx-x { margin-left:auto; border:0; background:none; color:var(--text-3); cursor:pointer; padding:6px; border-radius:6px; display:inline-flex; }
+      .bx-x:hover { background:var(--bg-elev-1); color:var(--text-1); }
+      .bx-x svg { width:17px; height:17px; }
+
+      .bx-label { display:block; font-size:13px; font-weight:500; color:var(--text-1); margin:0 0 6px; }
+      .bx-label .opt { font-weight:400; color:var(--text-2); }
+      .bx-in, .bx-area, .bx-sel { width:100%; box-sizing:border-box; font:inherit; font-size:14px; line-height:1.5; color:var(--text-1); background:var(--bg-input); border:1px solid var(--line); border-radius:8px; padding:9px 12px; }
+      .bx-sel { padding-right:32px; }
+      .bx-in:focus, .bx-area:focus, .bx-sel:focus { outline:none; border-color:var(--tacet-dusk); }
+      .bx-area { min-height:64px; resize:vertical; }
+      .bx-two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      @media (max-width:560px){ .bx-two { grid-template-columns:1fr; } }
+      .bx-gap { height:14px; }
+
+      /* staged decision rows (Who / When / Opens) */
+      .bx-step { border-top:1px solid var(--line); }
+      .bx-step-head { display:flex; align-items:center; gap:12px; padding:13px 0; cursor:pointer; }
+      .bx-step-head .ico { color:var(--text-3); display:inline-flex; flex-shrink:0; }
+      .bx-step-head .ico svg { width:16px; height:16px; }
+      .bx-step-head .k { font-size:13px; color:var(--text-2); width:64px; flex-shrink:0; }
+      .bx-step-head .v { font-size:13.5px; font-weight:500; color:var(--text-1); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .bx-step-head .caret { color:var(--text-3); display:inline-flex; transition:transform .2s var(--ease-out,cubic-bezier(.16,1,.3,1)); }
+      .bx-step-head .caret svg { width:15px; height:15px; }
+      .bx-step.open .bx-step-head .caret { transform:rotate(180deg); }
+      .bx-step-body { display:none; padding:2px 0 16px 28px; }
+      .bx-step.open .bx-step-body { display:block; animation:bxSettle .35s var(--ease-out,cubic-bezier(.16,1,.3,1)) both; }
+
+      /* chips (tier / region) */
+      .bx-chips { display:flex; flex-wrap:wrap; gap:7px; }
+      .bx-chips.scroll { max-height:110px; overflow-y:auto; padding:1px; }
+      .bx-chip { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--text-1); background:var(--bg-pane); border:1px solid var(--line); border-radius:999px; padding:5px 12px; cursor:pointer; white-space:nowrap; user-select:none; transition:.15s var(--ease-out,cubic-bezier(.16,1,.3,1)); }
+      .bx-chip:hover { border-color:var(--text-3); }
+      .bx-chip input { position:absolute; opacity:0; width:0; height:0; }
+      .bx-chip:has(input:checked) { background:var(--tacet-ink); color:var(--tacet-paper); border-color:var(--tacet-ink); }
+      [data-theme="dark"] .bx-chip:has(input:checked) { background:var(--tacet-paper); color:var(--tacet-ink); border-color:var(--tacet-paper); }
+      .bx-chip .n { font-size:11.5px; opacity:.7; font-variant-numeric:tabular-nums; }
+
+      /* audience footer + send bar */
+      .bx-audbar { display:flex; align-items:center; gap:9px; background:var(--bg-elev-1); border:1px solid var(--line); border-radius:10px; padding:11px 14px; font-size:13px; color:var(--text-2); margin-top:18px; }
+      .bx-audbar svg { width:15px; height:15px; flex-shrink:0; color:var(--text-3); }
+      .bx-audbar b { color:var(--text-1); font-weight:500; font-variant-numeric:tabular-nums; }
+      .bx-audbar .dim { opacity:.4; margin:0 -3px; }
+      .bx-sendbar { display:flex; align-items:center; gap:10px; margin-top:16px; }
+      .bx-sendbar .status { font-size:12.5px; color:var(--text-2); margin-left:2px; }
+      .bx-sendbar .status .err { color:var(--tacet-brick); }
+      .bx-sendbar .status .ok  { color:var(--tacet-sage-ink); }
+
+      /* ── automatic updates row ── */
+      .bx-auto { margin-bottom:26px; }
+      .bx-auto-head { display:flex; align-items:center; gap:12px; padding:14px 18px; }
+      .bx-auto-head .ddot { width:8px; height:8px; border-radius:50%; background:var(--tacet-dusk); flex-shrink:0; animation:bxBreathe 2.4s var(--ease-out,cubic-bezier(.16,1,.3,1)) infinite; }
+      @keyframes bxBreathe { 0%,100%{opacity:1} 50%{opacity:.45} }
+      @media (prefers-reduced-motion:reduce){ .bx-auto-head .ddot { animation:none; } }
+      .bx-auto-head .sum { font-size:13.5px; color:var(--text-2); flex:1; min-width:0; }
+      .bx-auto-head .sum b { color:var(--text-1); font-weight:500; }
+      .bx-auto-panel { display:none; padding:2px 18px 6px; }
+      #tab-broadcasts .bx-auto.open .bx-auto-panel { display:block; animation:bxSettle .35s var(--ease-out,cubic-bezier(.16,1,.3,1)) both; }
+      .nc-row { display:flex; align-items:center; justify-content:space-between; gap:16px; padding:13px 0; border-top:1px solid var(--line); }
+      .nc-text { display:flex; flex-direction:column; gap:2px; min-width:0; }
+      .nc-title { font-size:13px; font-weight:500; color:var(--text-1); }
+      .nc-sub { font-size:11.5px; line-height:1.4; color:var(--text-2); }
+      /* toggle */
+      .bx-tgl { position:relative; width:36px; height:21px; flex-shrink:0; display:inline-block; }
+      .bx-tgl input { position:absolute; opacity:0; inset:0; margin:0; cursor:pointer; z-index:1; }
+      .bx-tgl .tr { position:absolute; inset:0; background:var(--line-strong); border-radius:999px; transition:.2s var(--ease-out,cubic-bezier(.16,1,.3,1)); }
+      .bx-tgl .tr::after { content:""; position:absolute; top:2px; left:2px; width:17px; height:17px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(17,26,43,.2); transition:.2s var(--ease-out,cubic-bezier(.16,1,.3,1)); }
+      .bx-tgl input:checked + .tr { background:var(--tacet-sage); }
+      .bx-tgl input:checked + .tr::after { left:17px; }
+
+      /* ── feed ── */
+      .bx-month { font-size:11px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin:26px 0 10px; }
+      .bx-month:first-child { margin-top:0; }
+      .bx-feed { overflow:hidden; }
+      .bx-item { display:flex; gap:16px; padding:16px 18px; border-top:1px solid var(--line); align-items:flex-start; }
+      .bx-item:first-child { border-top:0; }
+      .bx-item:hover { background:var(--bg-app); }
+      .bx-item:hover .bx-rowact { opacity:1; }
+      .bx-item .main { flex:1; min-width:0; }
+      .bx-tline { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+      .bx-item .ttl { font-size:14.5px; font-weight:500; letter-spacing:-.005em; color:var(--text-1); }
+      .bx-item .bdy { font-size:13px; line-height:1.5; color:var(--text-2); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+      .bx-meta { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-2); margin-top:7px; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
+      .bx-meta .dot { opacity:.4; }
+      .bx-meta .link { display:inline-flex; align-items:center; gap:4px; background:var(--bg-elev-1); border-radius:999px; padding:2px 9px; font-size:12px; color:var(--text-2); }
+      .bx-meta .link svg { width:11px; height:11px; }
+      .bx-rowact { display:flex; align-items:center; gap:6px; opacity:0; transition:.15s var(--ease-out,cubic-bezier(.16,1,.3,1)); flex-shrink:0; padding-top:1px; }
+      @media (hover:none){ .bx-rowact { opacity:1; } }
+
+      /* status pills */
+      .bx-pill { display:inline-flex; align-items:center; gap:5px; padding:2px 10px; border-radius:999px; font-size:12px; font-weight:500; white-space:nowrap; }
+      .bx-pill .pd { width:6px; height:6px; border-radius:50%; background:currentColor; flex-shrink:0; }
+      .bx-pill.sent      { background:var(--tacet-sage-tint);  color:var(--tacet-sage-ink); }
+      .bx-pill.scheduled { background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
+      .bx-pill.recalled  { background:var(--tacet-brick-tint); color:var(--tacet-brick); }
+      .bx-pill.cancelled { background:var(--bg-elev-1);        color:var(--text-2); }
+      .bx-pill.draft     { background:var(--bg-elev-1);        color:var(--text-2); }
+
+      .bx-empty { padding:40px 20px; text-align:center; }
+      .bx-empty .t { font-size:15px; color:var(--text-1); }
+      .bx-empty .s { font-size:13px; color:var(--text-2); margin-top:6px; }
     </style>
-    <h2>Broadcasts · 广播</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      Send a notification to every active mini-app customer at once. Schedule it for later or send right away.
-      Tapping the notification can deep-link to any internal mini-app page.
-      Recall pulls the broadcast back out of every customer's inbox.
-      · 一次性向所有活跃的小程序顾客发送通知。可定时发送，也可立即发送。点击通知能深度跳转到小程序内的任意页面。撤回会把这条广播从每位顾客的收件箱中收回。
-    </div>
 
-    <!-- Automatic notifications — operator chooses which system-generated
-         categories actually reach customers. Off = no in-app row and no
-         WeChat push. Broadcasts are always operator-initiated, so they're
-         not listed here. Saves to notifications.categories via PUT config. -->
-    <div class="bc-card" style="margin-bottom: var(--s5);">
-      <h3 style="margin: 0 0 4px; font-size: 15px;">Automatic notifications · 自动通知</h3>
-      <div class="muted" style="font-size: 12px; margin-bottom: var(--s4); line-height: 1.5;">
-        Choose which automatic updates customers receive. Turning one off stops both the in-app message and the WeChat push for that category. · 选择自动发送给顾客的通知类型。关闭后,该类通知的站内消息与微信推送都将停止。
-      </div>
-      <div id="notif-cat-rows">
-        <label class="nc-row">
-          <span class="nc-text">
-            <span class="nc-title">Order &amp; shipping · 订单与物流</span>
-            <span class="nc-sub muted">Paid, preparing, shipped, delivered, cancelled, tracking updates · 已支付、准备中、已发货、已送达、已取消、物流进度</span>
-          </span>
-          <span class="switch"><input type="checkbox" data-notif-cat="order" onchange="saveNotifCategory(this)"/><span class="slider"></span></span>
-        </label>
-        <label class="nc-row">
-          <span class="nc-text">
-            <span class="nc-title">Invoices · 发票</span>
-            <span class="nc-sub muted">Sent when an invoice is issued for an order · 订单开具发票时发送</span>
-          </span>
-          <span class="switch"><input type="checkbox" data-notif-cat="invoice" onchange="saveNotifCategory(this)"/><span class="slider"></span></span>
-        </label>
-        <label class="nc-row">
-          <span class="nc-text">
-            <span class="nc-title">Refunds · 退款</span>
-            <span class="nc-sub muted">Refund approved, paid, or declined · 退款通过、到账或被拒</span>
-          </span>
-          <span class="switch"><input type="checkbox" data-notif-cat="refund" onchange="saveNotifCategory(this)"/><span class="slider"></span></span>
-        </label>
-      </div>
-      <style>
-        #notif-cat-rows .nc-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s4); padding: 12px 0; border-top: 1px solid var(--line); cursor: pointer; }
-        #notif-cat-rows .nc-row:first-child { border-top: 0; }
-        #notif-cat-rows .nc-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-        #notif-cat-rows .nc-title { font-size: 13px; font-weight: 600; }
-        #notif-cat-rows .nc-sub { font-size: 11px; line-height: 1.4; }
-      </style>
-    </div>
+    <div class="bx-wrap">
 
-    <div class="bc-grid">
-      <!-- Composer -->
-      <div class="bc-card">
-        <h3 style="margin: 0 0 var(--s4); font-size: 15px;">New broadcast · 新广播</h3>
-        <div class="bc-row">
-          <div>
-            <label class="bc-label">Title (EN) · 标题(英文)</label>
-            <input id="bc-title-en" class="bc-input" type="text" maxlength="80" placeholder="e.g. New seasonal box">
+      <!-- header -->
+      <div class="bx-eyebrow">Mini app · 小程序</div>
+      <h2 class="bx-title">Broadcasts · 广播</h2>
+      <p class="bx-lede">Everything you've said to your customers, in one place. Write at the top; the rest is what's already gone out. · 你对顾客说过的每一条消息,都在这里。在顶部撰写,下方是已经发出的记录。</p>
+
+      <!-- ── compose ── -->
+      <div class="bx-compose">
+        <button type="button" class="bx-composebar" onclick="bxOpenCompose()">
+          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+          <span class="grow">Write a broadcast… · 撰写一条广播…</span>
+          <span class="aud" id="bx-audchip" data-no-i18n>Everyone active · now</span>
+        </button>
+
+        <div class="bx-form">
+          <div class="bx-form-head">
+            <span class="h">New broadcast · 新广播</span>
+            <button type="button" class="bx-x" onclick="bxCloseCompose()" aria-label="Close">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
           </div>
-          <div>
-            <label class="bc-label">标题 (中文)</label>
-            <input id="bc-title-cn" class="bc-input" type="text" maxlength="80" placeholder="例如:新一季礼盒">
+
+          <label class="bx-label">Title <span class="opt">— English and Chinese · 中英文标题</span></label>
+          <div class="bx-two">
+            <input id="bc-title-en" class="bx-in" type="text" maxlength="80" placeholder="e.g. New seasonal box">
+            <input id="bc-title-cn" class="bx-in" type="text" maxlength="80" placeholder="例如:新一季礼盒">
           </div>
-        </div>
-        <div class="bc-row">
-          <div>
-            <label class="bc-label">Body (EN, optional) · 正文(英文,选填)</label>
-            <textarea id="bc-body-en" class="bc-textarea" maxlength="400" placeholder="One short paragraph"></textarea>
+          <div class="bx-gap"></div>
+          <label class="bx-label">Body <span class="opt">— optional, one short line · 选填,一句话</span></label>
+          <div class="bx-two">
+            <textarea id="bc-body-en" class="bx-area" maxlength="400" placeholder="What should they know?"></textarea>
+            <textarea id="bc-body-cn" class="bx-area" maxlength="400" placeholder="一段简短的说明"></textarea>
           </div>
-          <div>
-            <label class="bc-label">正文 (中文,选填)</label>
-            <textarea id="bc-body-cn" class="bc-textarea" maxlength="400" placeholder="一段简短的说明"></textarea>
-          </div>
-        </div>
-        <div class="bc-row">
-          <div style="flex: 2;">
-            <label class="bc-label">Deep-link <span class="muted">(must start with <code>/pages/</code> — leave blank for none)</span> · 深链接(须以 /pages/ 开头,留空则无)</label>
-            <select id="bc-deeplink-preset" class="bc-select" onchange="bcDeeplinkPreset()">
-              <option value="">— No deep-link — · 无深链接</option>
-              <option value="/pages/shop/shop">Shop tab · 商城</option>
-              <option value="/pages/cart/cart">Cart · 购物车</option>
-              <option value="/pages/orders/orders">My orders · 我的订单</option>
-              <option value="/pages/coupons/coupons">Coupons · 优惠券</option>
-              <option value="/pages/membership/membership">Membership · 会员</option>
-              <option value="/pages/affiliate/affiliate">Refer a friend · 推广</option>
-              <option value="/pages/voting/voting">Your say · 投票</option>
-              <option value="/pages/topup/topup">Top up · 充值</option>
-              <option value="__custom__">Custom path… · 自定义路径…</option>
-            </select>
-            <input id="bc-deeplink" class="bc-input" type="text" placeholder="/pages/product/product?id=123" style="margin-top: 6px; display: none;">
-          </div>
-        </div>
-        <div class="bc-row">
-          <div>
-            <label class="bc-label">When · 发送时间</label>
-            <select id="bc-schedule-mode" class="bc-select" onchange="bcScheduleMode()">
-              <option value="now">Send now · 立即发送</option>
-              <option value="later">Schedule for later · 定时发送</option>
-            </select>
-            <input id="bc-schedule-at" class="bc-input" type="datetime-local" style="margin-top: 6px; display: none;">
-          </div>
-          <div>
-            <label class="bc-label">Activity · 客户活跃度</label>
-            <select id="bc-activity" class="bc-select" onchange="bcAudienceChanged()">
-              <option value="all">All active customers · 所有活跃客户</option>
-              <option value="buyers">Has ordered · 曾下单</option>
-              <option value="never">Never ordered · 从未下单</option>
-              <option value="active">Active — ordered in last 30d · 近30天下单</option>
-              <option value="lapsed">Lapsed — no order in 60d · 60天未下单</option>
-            </select>
-          </div>
-        </div>
-        <div class="bc-row">
-          <div>
-            <label class="bc-label">Membership tier · 会员等级 <span class="muted">(blank = all)</span>(留空 = 全部)</label>
-            <div class="bc-chips" id="bc-tiers">
-              <label class="bc-chip"><input type="checkbox" class="bc-tier" value="seed" onchange="bcAudienceChanged()"> Seed · 种子</label>
-              <label class="bc-chip"><input type="checkbox" class="bc-tier" value="sprout" onchange="bcAudienceChanged()"> Sprout · 萌芽</label>
-              <label class="bc-chip"><input type="checkbox" class="bc-tier" value="root" onchange="bcAudienceChanged()"> Root · 扎根</label>
-              <label class="bc-chip"><input type="checkbox" class="bc-tier" value="tree" onchange="bcAudienceChanged()"> Tree · 成树</label>
+
+          <div class="bx-gap"></div>
+
+          <!-- WHO -->
+          <div class="bx-step" id="bx-step-who">
+            <div class="bx-step-head" onclick="bxStep('who')">
+              <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
+              <span class="k">Who · 谁</span>
+              <span class="v" id="bx-who-sum" data-no-i18n>All active customers</span>
+              <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <div class="bx-step-body">
+              <label class="bx-label">Activity · 活跃度</label>
+              <select id="bc-activity" class="bx-sel" onchange="bcAudienceChanged()">
+                <option value="all">All active customers · 所有活跃客户</option>
+                <option value="buyers">Has ordered · 曾下单</option>
+                <option value="never">Never ordered · 从未下单</option>
+                <option value="active">Ordered in last 30 days · 近30天下单</option>
+                <option value="lapsed">No order in 60 days · 60天未下单</option>
+              </select>
+              <div class="bx-gap"></div>
+              <label class="bx-label">Membership tier <span class="opt">— none selected means everyone · 不选即全部</span></label>
+              <div class="bx-chips" id="bc-tiers">
+                <label class="bx-chip"><input type="checkbox" class="bc-tier" value="seed" onchange="bcAudienceChanged()"> Seed · 种子</label>
+                <label class="bx-chip"><input type="checkbox" class="bc-tier" value="sprout" onchange="bcAudienceChanged()"> Sprout · 萌芽</label>
+                <label class="bx-chip"><input type="checkbox" class="bc-tier" value="root" onchange="bcAudienceChanged()"> Root · 扎根</label>
+                <label class="bx-chip"><input type="checkbox" class="bc-tier" value="tree" onchange="bcAudienceChanged()"> Tree · 成树</label>
+              </div>
+              <div class="bx-gap"></div>
+              <label class="bx-label">Region <span class="opt">— by saved address, none means all · 按已保存地址,不选即全部</span></label>
+              <div class="bx-chips scroll" id="bc-regions">
+                <span style="font-size:12.5px;color:var(--text-2);">Loading… · 加载中…</span>
+              </div>
             </div>
           </div>
-          <div>
-            <label class="bc-label">Region · 地区 <span class="muted">(blank = all; by saved address)</span>(留空 = 全部;按已保存地址)</label>
-            <div class="bc-chips bc-chips-scroll" id="bc-regions">
-              <span class="muted" style="font-size:12px;">Loading…</span>
+
+          <!-- WHEN -->
+          <div class="bx-step" id="bx-step-when">
+            <div class="bx-step-head" onclick="bxStep('when')">
+              <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+              <span class="k">When · 时间</span>
+              <span class="v" id="bx-when-sum" data-no-i18n>Now</span>
+              <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <div class="bx-step-body">
+              <select id="bc-schedule-mode" class="bx-sel" onchange="bcScheduleMode()">
+                <option value="now">Send now · 立即发送</option>
+                <option value="later">Schedule for later · 定时发送</option>
+              </select>
+              <input id="bc-schedule-at" class="bx-in" type="datetime-local" style="margin-top:8px; display:none;" onchange="bxWhenChanged()">
             </div>
           </div>
-        </div>
-        <div class="bc-row">
-          <div style="flex: 1;">
-            <label class="bc-label">Audience · 接收人</label>
-            <div class="bc-audience" id="bc-audience">
-              <span id="bc-aud-summary">All active customers · 所有活跃顾客</span> · <b id="bc-aud-count">—</b>
-              <div style="margin-top: 2px; opacity: 0.8;">Blocked customers are skipped. · 已封禁顾客将被跳过。</div>
+
+          <!-- OPENS -->
+          <div class="bx-step" id="bx-step-opens">
+            <div class="bx-step-head" onclick="bxStep('opens')">
+              <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span>
+              <span class="k">Opens · 打开</span>
+              <span class="v" id="bx-opens-sum" data-no-i18n>Nothing — just the message</span>
+              <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+            </div>
+            <div class="bx-step-body">
+              <label class="bx-label">Tapping the notification opens · 点击通知后打开</label>
+              <select id="bc-deeplink-preset" class="bx-sel" onchange="bcDeeplinkPreset()">
+                <option value="">Nothing — just show the message · 不跳转,仅显示消息</option>
+                <option value="/pages/shop/shop">Shop · 商城</option>
+                <option value="/pages/cart/cart">Cart · 购物车</option>
+                <option value="/pages/orders/orders">My orders · 我的订单</option>
+                <option value="/pages/coupons/coupons">Coupons · 优惠券</option>
+                <option value="/pages/membership/membership">Membership · 会员</option>
+                <option value="/pages/affiliate/affiliate">Refer a friend · 推广</option>
+                <option value="/pages/voting/voting">Your say · 投票</option>
+                <option value="/pages/topup/topup">Top up · 充值</option>
+                <option value="__custom__">Custom page… · 自定义页面…</option>
+              </select>
+              <input id="bc-deeplink" class="bx-in" type="text" placeholder="/pages/product/product?id=123" style="margin-top:8px; display:none;" onchange="bxOpensChanged()">
             </div>
           </div>
-        </div>
-        <div class="bc-actions">
-          <button class="btn btn-primary" onclick="sendBroadcast()" id="bc-send-btn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/></svg>
-            <span id="bc-send-label">Send broadcast · 发送广播</span>
-          </button>
-          <button class="btn" onclick="bcResetComposer()">Reset · 重置</button>
-          <span id="bc-send-status" style="font-size: 12px; color: var(--muted);"></span>
+
+          <!-- audience count + send. The count is JS-set (data-no-i18n); the
+               surrounding words stay clean "EN · 中文" nodes for the walker. -->
+          <div class="bx-audbar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            <span id="bc-aud-summary" hidden></span>
+            <span>Reaches · 触达</span>
+            <b id="bc-aud-count" data-no-i18n>—</b>
+            <span class="dim">·</span>
+            <span>blocked customers are skipped · 已封禁顾客将被跳过</span>
+          </div>
+
+          <div class="bx-sendbar">
+            <button class="bx-btn primary" onclick="sendBroadcast()" id="bc-send-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l15-7v16L3 13v-2z"/><path d="M11 19a2 2 0 0 1-4 0v-4"/></svg>
+              <span id="bc-send-label" data-no-i18n>Send broadcast</span>
+            </button>
+            <button class="bx-btn ghost sm" onclick="bcResetComposer()">Clear · 清空</button>
+            <span id="bc-send-status" class="status"></span>
+          </div>
         </div>
       </div>
 
-      <!-- Past + scheduled list -->
-      <div>
-        <h3 style="margin: 0 0 var(--s4); font-size: 15px;">Past &amp; scheduled · 历史与定时</h3>
-        <div class="bc-list" id="bc-list">
-          <div class="muted" style="font-size: 12px;">Loading…</div>
+      <!-- ── automatic updates (folded to one row) ──
+           Operator chooses which system-generated categories reach customers.
+           Off = no in-app row and no WeChat push. Saves to notifications.categories
+           via PUT config. The Dusk breathing dot marks this as live automation. -->
+      <div class="bx-auto bx-card" id="bx-auto">
+        <div class="bx-auto-head">
+          <span class="ddot"></span>
+          <span class="sum" id="bx-auto-sum" data-no-i18n>Automatic updates</span>
+          <button type="button" class="bx-btn ghost sm" onclick="bxToggleAuto()" id="bx-auto-btn">Manage · 管理</button>
+        </div>
+        <div class="bx-auto-panel">
+          <div id="notif-cat-rows">
+            <label class="nc-row">
+              <span class="nc-text">
+                <span class="nc-title">Order &amp; shipping · 订单与物流</span>
+                <span class="nc-sub">Paid, preparing, shipped, delivered, cancelled, tracking · 已支付、准备中、已发货、已送达、已取消、物流进度</span>
+              </span>
+              <span class="bx-tgl"><input type="checkbox" data-notif-cat="order" onchange="saveNotifCategory(this)"/><span class="tr"></span></span>
+            </label>
+            <label class="nc-row">
+              <span class="nc-text">
+                <span class="nc-title">Invoices · 发票</span>
+                <span class="nc-sub">Sent when an invoice is issued for an order · 订单开具发票时发送</span>
+              </span>
+              <span class="bx-tgl"><input type="checkbox" data-notif-cat="invoice" onchange="saveNotifCategory(this)"/><span class="tr"></span></span>
+            </label>
+            <label class="nc-row">
+              <span class="nc-text">
+                <span class="nc-title">Refunds · 退款</span>
+                <span class="nc-sub">Refund approved, paid, or declined · 退款通过、到账或被拒</span>
+              </span>
+              <span class="bx-tgl"><input type="checkbox" data-notif-cat="refund" onchange="saveNotifCategory(this)"/><span class="tr"></span></span>
+            </label>
+          </div>
         </div>
       </div>
+
+      <!-- ── feed ── -->
+      <div class="bx-feed-root" id="bc-list">
+        <div style="font-size:13px;color:var(--text-2);">Loading… · 加载中…</div>
+      </div>
+
     </div>
   </section>
 

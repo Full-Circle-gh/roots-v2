@@ -1927,7 +1927,89 @@ async function deleteCategory(id, name, usage) {
 // ════════════════════════════════════════════════════════════════
 // BROADCASTS — operator-composed announcements that fan out to every
 // active (non-blocked) customer's notification inbox.
+//
+// Rebuilt 2026-07-11 as the Tacet "one quiet feed" (Option C): a
+// collapsed compose bar that expands in place into a staged form
+// (Title/Body → Who / When / Opens), a one-line automatic-updates
+// row, and the history grouped by month with scheduled pinned on top.
+// The endpoints, payloads, and the input IDs read on send are the
+// same as before; the composer just presents them differently.
 // ════════════════════════════════════════════════════════════════
+
+// Friendly names for the deep-link presets, used both in the composer
+// summary and on each feed row ("Opens Coupons").
+const BX_DEEPLINK_LABEL = {
+  '/pages/shop/shop':             ['Shop', '商城'],
+  '/pages/cart/cart':             ['Cart', '购物车'],
+  '/pages/orders/orders':         ['My orders', '我的订单'],
+  '/pages/coupons/coupons':       ['Coupons', '优惠券'],
+  '/pages/membership/membership': ['Membership', '会员'],
+  '/pages/affiliate/affiliate':   ['Refer a friend', '推广'],
+  '/pages/voting/voting':         ['Your say', '投票'],
+  '/pages/topup/topup':           ['Top up', '充值'],
+};
+function bxDeeplinkLabel(path) {
+  const m = BX_DEEPLINK_LABEL[path];
+  return m ? cuT(m[0], m[1]) : path;
+}
+
+const BX_MON_ABBR = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const BX_MON_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+function bxParseDate(str) {
+  if (!str) return null;
+  // Accept ISO or SQLite "YYYY-MM-DD HH:MM:SS".
+  const d = new Date(String(str).replace(' ', 'T'));
+  return isNaN(d.getTime()) ? null : d;
+}
+function bxMonthLabel(d) {
+  if (!d) return cuT('Earlier', '更早');
+  return cuT(BX_MON_FULL[d.getMonth()] + ' ' + d.getFullYear(), d.getFullYear() + '年' + (d.getMonth() + 1) + '月');
+}
+function bxFmtDate(str) {
+  const d = bxParseDate(str);
+  if (!d) return escapeHtml(str || '');
+  return cuT(BX_MON_ABBR[d.getMonth()] + ' ' + d.getDate(), (d.getMonth() + 1) + '月' + d.getDate() + '日');
+}
+function bxFmtDateTime(str) {
+  const d = bxParseDate(str);
+  if (!d) return escapeHtml(str || '');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return bxFmtDate(str) + ', ' + hh + ':' + mm;
+}
+
+// ── compose open / close ──────────────────────────────────────────
+function bxOpenCompose() {
+  const sec = $('#tab-broadcasts');
+  sec.classList.add('bx-open');
+  // Open the audience step so the operator sees who it reaches by default.
+  $('#bx-step-who').classList.remove('open');
+  loadBroadcastAudienceCount();
+  const t = $('#bc-title-en');
+  if (t) setTimeout(() => t.focus(), 40);
+}
+function bxCloseCompose() {
+  $('#tab-broadcasts').classList.remove('bx-open');
+  bcResetComposer();
+}
+// Expand / collapse one of the Who / When / Opens decision rows. Only
+// one open at a time keeps the form short.
+function bxStep(key) {
+  const row = $('#bx-step-' + key);
+  if (!row) return;
+  const wasOpen = row.classList.contains('open');
+  ['who', 'when', 'opens'].forEach(k => { const r = $('#bx-step-' + k); if (r) r.classList.remove('open'); });
+  if (!wasOpen) row.classList.add('open');
+}
+// Automatic-updates manage panel.
+function bxToggleAuto() {
+  const box = $('#bx-auto');
+  const open = box.classList.toggle('open');
+  const btn = $('#bx-auto-btn');
+  if (btn) btn.textContent = open ? cuT('Done', '完成') : cuT('Manage', '管理');
+}
+
+// ── deep-link ("Opens") ───────────────────────────────────────────
 function bcDeeplinkPreset() {
   const sel = $('#bc-deeplink-preset');
   const input = $('#bc-deeplink');
@@ -1939,11 +2021,28 @@ function bcDeeplinkPreset() {
     input.style.display = 'none';
     input.value = sel.value || '';
   }
+  bxOpensChanged();
 }
+function bxOpensChanged() {
+  const sel = $('#bc-deeplink-preset');
+  const custom = ($('#bc-deeplink').value || '').trim();
+  const sum = $('#bx-opens-sum');
+  if (!sum) return;
+  let label;
+  if (sel.value === '__custom__') {
+    label = custom || cuT('Custom page', '自定义页面');
+  } else if (sel.value) {
+    label = bxDeeplinkLabel(sel.value);
+  } else {
+    label = cuT('Nothing — just the message', '不跳转,仅消息');
+  }
+  sum.textContent = label;
+}
+
+// ── when ──────────────────────────────────────────────────────────
 function bcScheduleMode() {
   const sel = $('#bc-schedule-mode');
   const at  = $('#bc-schedule-at');
-  const lbl = $('#bc-send-label');
   if (sel.value === 'later') {
     at.style.display = '';
     if (!at.value) {
@@ -1952,24 +2051,41 @@ function bcScheduleMode() {
       d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
       at.value = d.toISOString().slice(0, 16);
     }
-    lbl.textContent = 'Schedule broadcast';
   } else {
     at.style.display = 'none';
-    lbl.textContent = 'Send broadcast';
   }
+  bxWhenChanged();
 }
+function bxWhenChanged() {
+  const mode = $('#bc-schedule-mode').value;
+  const at = $('#bc-schedule-at').value;
+  const sum = $('#bx-when-sum');
+  if (sum) {
+    sum.textContent = (mode === 'later' && at)
+      ? bxFmtDateTime(at)
+      : (mode === 'later' ? cuT('Pick a time', '选择时间') : cuT('Now', '立即'));
+  }
+  bxUpdateSendLabel();
+  bxUpdateAudChip();
+}
+
+// ── composer reset ────────────────────────────────────────────────
 function bcResetComposer() {
   ['bc-title-en','bc-title-cn','bc-body-en','bc-body-cn','bc-deeplink','bc-schedule-at'].forEach(k => { const el = $('#' + k); if (el) el.value = ''; });
   $('#bc-deeplink-preset').value = '';
   $('#bc-deeplink').style.display = 'none';
   $('#bc-schedule-mode').value = 'now';
   $('#bc-schedule-at').style.display = 'none';
-  $('#bc-send-label').textContent = 'Send broadcast';
   $('#bc-send-status').textContent = '';
   if ($('#bc-activity')) $('#bc-activity').value = 'all';
   document.querySelectorAll('.bc-tier:checked, .bc-city:checked').forEach(el => { el.checked = false; });
+  ['who', 'when', 'opens'].forEach(k => { const r = $('#bx-step-' + k); if (r) r.classList.remove('open'); });
+  bxWhenChanged();
+  bxOpensChanged();
   loadBroadcastAudienceCount();
 }
+
+// ── audience ──────────────────────────────────────────────────────
 function bcAudienceObj() {
   const activity = ($('#bc-activity') || {}).value || 'all';
   const tiers  = Array.from(document.querySelectorAll('.bc-tier:checked')).map(el => el.value);
@@ -1982,8 +2098,8 @@ function bcAudienceLabel(aud) {
     all:    T('All active customers', '所有活跃客户'),
     buyers: T('Has ordered', '曾下单'),
     never:  T('Never ordered', '从未下单'),
-    active: T('Active (last 30d)', '近30天活跃'),
-    lapsed: T('Lapsed (60d)', '60天未下单'),
+    active: T('Ordered in last 30 days', '近30天下单'),
+    lapsed: T('No order in 60 days', '60天未下单'),
   };
   const TIER = {
     seed: T('Seed', '种子'), sprout: T('Sprout', '萌芽'),
@@ -2002,19 +2118,51 @@ function bcAudienceLabel(aud) {
 }
 let _bcAudTimer = null;
 function bcAudienceChanged() {
+  const s = $('#bx-who-sum');
+  if (s) s.textContent = bcAudienceLabel(bcAudienceObj());   // instant echo
   clearTimeout(_bcAudTimer);
   _bcAudTimer = setTimeout(loadBroadcastAudienceCount, 250);
 }
+// Read the live headcount out of the count node (digits only).
+function bxAudCount() {
+  return ($('#bc-aud-count').textContent || '').replace(/[^0-9]/g, '');
+}
+function bxUpdateSendLabel() {
+  const lbl = $('#bc-send-label');
+  if (!lbl) return;
+  const mode = $('#bc-schedule-mode').value;
+  const n = bxAudCount();
+  const ppl = cuT(n + (n === '1' ? ' person' : ' people'), n + ' 位');
+  if (!n) {
+    lbl.textContent = mode === 'later' ? cuT('Schedule broadcast', '定时发送') : cuT('Send broadcast', '发送广播');
+  } else {
+    lbl.textContent = mode === 'later'
+      ? cuT('Schedule for ' + ppl, '定时发送给 ' + ppl)
+      : cuT('Send to ' + ppl, '发送给 ' + ppl);
+  }
+}
+function bxUpdateAudChip() {
+  const chip = $('#bx-audchip');
+  if (!chip) return;
+  const who = bcAudienceLabel(bcAudienceObj());
+  const mode = $('#bc-schedule-mode').value;
+  const at = $('#bc-schedule-at').value;
+  const when = (mode === 'later' && at) ? bxFmtDateTime(at) : (mode === 'later' ? cuT('scheduled', '定时') : cuT('now', '立即'));
+  chip.textContent = who + ' · ' + when;
+}
 async function loadBroadcastAudienceCount() {
   const aud = bcAudienceObj();
-  $('#bc-aud-summary').textContent = bcAudienceLabel(aud);
+  const whoSum = $('#bx-who-sum');
+  if (whoSum) whoSum.textContent = bcAudienceLabel(aud);
   try {
     const q = '?aud=' + encodeURIComponent(JSON.stringify(aud));
     const { data } = await api('/api/retail-admin/broadcasts/audience-count' + q);
-    $('#bc-aud-count').textContent = (data && data.count != null ? data.count : '0') + T(' customers', ' 位顾客');
+    $('#bc-aud-count').textContent = (data && data.count != null ? data.count : '0') + cuT(' people', ' 位');
   } catch (e) {
     $('#bc-aud-count').textContent = '?';
   }
+  bxUpdateSendLabel();
+  bxUpdateAudChip();
 }
 let _bcRegions = [];
 function bcCityEn(cityCn) {
@@ -2028,7 +2176,7 @@ async function loadBroadcastRegions() {
     const { data } = await api('/api/retail-admin/broadcasts/regions');
     _bcRegions = data || [];
     if (!_bcRegions.length) {
-      wrap.innerHTML = '<span class="muted" style="font-size:12px;">No saved addresses yet. · 暂无已保存地址。</span>';
+      wrap.innerHTML = '<span style="font-size:12.5px;color:var(--text-2);">No saved addresses yet. · 暂无已保存地址。</span>';
       return;
     }
     wrap.innerHTML = _bcRegions.map(r => {
@@ -2037,15 +2185,17 @@ async function loadBroadcastRegions() {
       const label = r.city_en
         ? `${escapeHtml(r.city_en)} · ${escapeHtml(r.city)}`
         : escapeHtml(r.city);
-      return `<label class="bc-chip"><input type="checkbox" class="bc-city" value="${escapeHtml(r.city)}" onchange="bcAudienceChanged()"> ${label} <span class="muted">${r.n}</span></label>`;
+      return `<label class="bx-chip"><input type="checkbox" class="bc-city" value="${escapeHtml(r.city)}" onchange="bcAudienceChanged()"> ${label} <span class="n">${r.n}</span></label>`;
     }).join('');
   } catch (e) {
-    wrap.innerHTML = '<span class="err" style="font-size:12px;">Failed to load regions. · 加载地区失败。</span>';
+    wrap.innerHTML = '<span style="font-size:12.5px;color:var(--tacet-brick);">Failed to load regions. · 加载地区失败。</span>';
   }
 }
-// Automatic-notification category switches. Read/write notifications.categories
-// on the shared storefront config. Missing entry = enabled (the server defaults
-// the same way), so an untouched store keeps today's behaviour.
+
+// ── automatic-notification switches ───────────────────────────────
+// Read/write notifications.categories on the shared storefront config.
+// Missing entry = enabled (the server defaults the same way), so an
+// untouched store keeps today's behaviour.
 async function loadNotifCategories() {
   try {
     const { data: c } = await api('/api/retail-admin/config');
@@ -2054,6 +2204,7 @@ async function loadNotifCategories() {
       el.checked = cats[el.dataset.notifCat] !== false;   // default on
     });
   } catch (e) { /* leave switches as-is */ }
+  bxRenderAutoSummary();
 }
 async function saveNotifCategory(el) {
   const cat = el.dataset.notifCat;
@@ -2064,62 +2215,163 @@ async function saveNotifCategory(el) {
     el.checked = !el.checked;   // revert the visual on failure
     toast('Save failed · 保存失败: ' + e.message, 'err');
   }
+  bxRenderAutoSummary();
 }
+// One-line summary of which automatic categories are on. Reads the live
+// checkbox state so it stays right after every toggle.
+function bxRenderAutoSummary() {
+  const sum = $('#bx-auto-sum');
+  if (!sum) return;
+  const NAME = { order: ['Order & shipping', '订单与物流'], invoice: ['Invoices', '发票'], refund: ['Refunds', '退款'] };
+  const on = [], off = [];
+  document.querySelectorAll('[data-notif-cat]').forEach(el => {
+    const n = NAME[el.dataset.notifCat];
+    if (!n) return;
+    (el.checked ? on : off).push(cuT(n[0], n[1]));
+  });
+  const parts = [];
+  parts.push('<b>' + cuT('Automatic updates', '自动通知') + '</b>');
+  if (on.length)  parts.push(cuT('on: ', '开启: ') + on.join(', '));
+  if (off.length) parts.push(cuT('off: ', '关闭: ') + off.join(', '));
+  sum.innerHTML = parts.join(' &nbsp;·&nbsp; ');
+}
+
+// ── the feed ──────────────────────────────────────────────────────
+let _bcData = [];
 async function loadBroadcasts() {
   const wrap = $('#bc-list');
   if (!wrap) return;
-  wrap.innerHTML = '<div class="muted" style="font-size: 12px;">Loading…</div>';
+  wrap.innerHTML = '<div style="font-size:13px;color:var(--text-2);">Loading… · 加载中…</div>';
   try {
     const { data } = await api('/api/retail-admin/broadcasts');
-    if (!data.length) {
-      wrap.innerHTML = '<div class="muted" style="font-size: 12px;">No broadcasts yet. · 暂无群发消息。</div>';
+    _bcData = data || [];
+    if (!_bcData.length) {
+      wrap.innerHTML =
+        '<div class="bx-empty">' +
+          '<div class="t">Nothing sent yet. · 暂无发送记录。</div>' +
+          '<div class="s">When you have something to say, write it above and it lands here. · 有话要说时,在上方撰写,记录会出现在这里。</div>' +
+        '</div>';
       return;
     }
-    wrap.innerHTML = data.map(b => {
-      const titleBits = [];
-      if (b.title_en) titleBits.push(escapeHtml(b.title_en));
-      if (b.title_cn) titleBits.push(escapeHtml(b.title_cn));
-      const title = titleBits.join(' · ') || '<span class="muted">(no title) · (无标题)</span>';
-      const bodyBits = [];
-      if (b.body_en) bodyBits.push(escapeHtml(b.body_en));
-      if (b.body_cn) bodyBits.push(escapeHtml(b.body_cn));
-      const body = bodyBits.join(' · ');
-      const status = b.status || 'sent';
-      const BC_STATUS_LABEL = { sent: 'SENT · 已发送', scheduled: 'SCHEDULED · 已排期', draft: 'DRAFT · 草稿', recalled: 'RECALLED · 已撤回', cancelled: 'CANCELLED · 已取消' };
-      const pill = `<span class="bc-pill ${status}">${BC_STATUS_LABEL[status] || status.toUpperCase()}</span>`;
-      const meta = [];
-      if (status === 'scheduled' && b.scheduled_for) meta.push('Scheduled for · 排期于 ' + escapeHtml(b.scheduled_for));
-      if (b.sent_at) meta.push('Sent · 已发送 ' + escapeHtml(b.sent_at));
-      if (b.recipient_count) meta.push(b.recipient_count + ' recipient' + (b.recipient_count === 1 ? '' : 's') + ' · ' + b.recipient_count + ' 位收件人');
-      if (b.audience && b.audience.charAt(0) === '{') {
-        try {
-          const aud = JSON.parse(b.audience);
-          if (aud.activity !== 'all' || (aud.tiers && aud.tiers.length) || (aud.cities && aud.cities.length)) {
-            meta.push('To · 发送对象: ' + escapeHtml(bcAudienceLabel(aud)));
-          }
-        } catch (_) {}
-      }
-      if (b.deeplink) meta.push('→ <code>' + escapeHtml(b.deeplink) + '</code>');
-      const canRecall = status === 'sent' || status === 'scheduled';
-      const recallLabel = status === 'scheduled' ? 'Cancel · 取消' : 'Recall · 撤回';
-      const recallBtn = canRecall
-        ? `<button class="btn btn-sm" onclick="recallBroadcast(${b.id}, '${status}')">${recallLabel}</button>`
-        : '';
-      return `
-        <div class="bc-item" data-id="${b.id}">
-          <div class="bc-item-head">
-            <div class="bc-item-title" data-no-i18n>${title}</div>
-            ${pill}
-            <div style="margin-left: auto;">${recallBtn}</div>
-          </div>
-          ${body ? `<div class="bc-item-body" data-no-i18n>${body}</div>` : ''}
-          <div class="bc-item-meta">${meta.join('<span class="sep">·</span>')}</div>
-        </div>`;
-    }).join('');
+    const scheduled = _bcData.filter(b => (b.status || 'sent') === 'scheduled')
+      .sort((a, b) => String(a.scheduled_for || '').localeCompare(String(b.scheduled_for || '')));
+    const rest = _bcData.filter(b => (b.status || 'sent') !== 'scheduled');
+
+    let html = '';
+    if (scheduled.length) {
+      html += '<div class="bx-month">' + cuT('Scheduled', '已排期') + '</div>';
+      html += '<div class="bx-feed bx-card">' + scheduled.map(bxFeedRow).join('') + '</div>';
+    }
+    // Group the rest by month of send (newest-first order preserved by API).
+    const order = [], byKey = {};
+    rest.forEach(b => {
+      const d = bxParseDate(b.sent_at || b.scheduled_for || b.created_at);
+      const key = d ? (d.getFullYear() + '-' + d.getMonth()) : 'earlier';
+      if (!byKey[key]) { byKey[key] = { label: bxMonthLabel(d), items: [] }; order.push(key); }
+      byKey[key].items.push(b);
+    });
+    order.forEach(key => {
+      html += '<div class="bx-month">' + escapeHtml(byKey[key].label) + '</div>';
+      html += '<div class="bx-feed bx-card">' + byKey[key].items.map(bxFeedRow).join('') + '</div>';
+    });
+    wrap.innerHTML = html;
   } catch (e) {
-    wrap.innerHTML = `<div class="err" style="font-size: 12px;">Failed · 失败: ${escapeHtml(e.message)}</div>`;
+    wrap.innerHTML = `<div style="font-size:13px;color:var(--tacet-brick);">Failed · 失败: ${escapeHtml(e.message)}</div>`;
   }
 }
+function bxFeedRow(b) {
+  const status = b.status || 'sent';
+  const titleBits = [];
+  if (b.title_en) titleBits.push(escapeHtml(b.title_en));
+  if (b.title_cn) titleBits.push(escapeHtml(b.title_cn));
+  const title = titleBits.join(' · ') || '<span style="color:var(--text-3);">(no title) · (无标题)</span>';
+  const bodyBits = [];
+  if (b.body_en) bodyBits.push(escapeHtml(b.body_en));
+  if (b.body_cn) bodyBits.push(escapeHtml(b.body_cn));
+  const body = bodyBits.join(' · ');
+
+  const PILL = {
+    sent:      cuT('Sent', '已发送'),
+    scheduled: cuT('Scheduled', '已排期'),
+    draft:     cuT('Draft', '草稿'),
+    recalled:  cuT('Recalled', '已撤回'),
+    cancelled: cuT('Cancelled', '已取消'),
+  };
+  let pillText = PILL[status] || status;
+  if (status === 'scheduled' && b.scheduled_for) pillText = cuT('Scheduled', '排期') + ' · ' + bxFmtDateTime(b.scheduled_for);
+  const pill = `<span class="bx-pill ${status}"><span class="pd"></span>${escapeHtml(pillText)}</span>`;
+
+  const meta = [];
+  if (status !== 'scheduled' && b.sent_at) meta.push(bxFmtDate(b.sent_at));
+  if (b.recipient_count) meta.push(cuT(b.recipient_count + (b.recipient_count === 1 ? ' person' : ' people'), b.recipient_count + ' 位'));
+  if (b.audience && String(b.audience).charAt(0) === '{') {
+    try {
+      const aud = JSON.parse(b.audience);
+      if (aud.activity !== 'all' || (aud.tiers && aud.tiers.length) || (aud.cities && aud.cities.length)) {
+        meta.push(escapeHtml(bcAudienceLabel(aud)));
+      }
+    } catch (_) {}
+  }
+  const metaHtml = meta.map((m, i) => (i ? '<span class="dot">·</span>' : '') + '<span>' + m + '</span>').join('');
+  const opensHtml = b.deeplink
+    ? '<span class="link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>' + cuT('Opens ', '打开 ') + escapeHtml(bxDeeplinkLabel(b.deeplink)) + '</span>'
+    : '';
+
+  // Actions by status: scheduled → Cancel; everything else → Send again
+  // (repopulates the composer), plus Recall while a sent broadcast is live.
+  let actions = '';
+  if (status === 'scheduled') {
+    actions = `<button class="bx-btn danger sm" onclick="recallBroadcast(${b.id}, 'scheduled')">${cuT('Cancel', '取消')}</button>`;
+  } else {
+    actions = `<button class="bx-btn ghost sm" onclick="bxSendAgain(${b.id})">${cuT('Send again', '再次发送')}</button>`;
+    if (status === 'sent') actions += `<button class="bx-btn danger sm" onclick="recallBroadcast(${b.id}, 'sent')">${cuT('Recall', '撤回')}</button>`;
+  }
+
+  return `
+    <div class="bx-item" data-id="${b.id}">
+      <div class="main">
+        <div class="bx-tline"><span class="ttl" data-no-i18n>${title}</span>${pill}</div>
+        ${body ? `<div class="bdy" data-no-i18n>${body}</div>` : ''}
+        <div class="bx-meta">${metaHtml}${opensHtml}</div>
+      </div>
+      <div class="bx-rowact">${actions}</div>
+    </div>`;
+}
+// Reuse a past broadcast's copy + audience as the starting point for a new one.
+function bxApplyAudience(aud) {
+  if ($('#bc-activity')) $('#bc-activity').value = aud.activity || 'all';
+  document.querySelectorAll('.bc-tier').forEach(el => { el.checked = !!(aud.tiers && aud.tiers.indexOf(el.value) !== -1); });
+  document.querySelectorAll('.bc-city').forEach(el => { el.checked = !!(aud.cities && aud.cities.indexOf(el.value) !== -1); });
+}
+function bxSendAgain(id) {
+  const b = _bcData.find(x => String(x.id) === String(id));
+  if (!b) return;
+  bxOpenCompose();
+  $('#bc-title-en').value = b.title_en || '';
+  $('#bc-title-cn').value = b.title_cn || '';
+  $('#bc-body-en').value = b.body_en || '';
+  $('#bc-body-cn').value = b.body_cn || '';
+  // Deep-link → preset if known, else custom.
+  const dl = b.deeplink || '';
+  const sel = $('#bc-deeplink-preset');
+  if (!dl) { sel.value = ''; $('#bc-deeplink').style.display = 'none'; $('#bc-deeplink').value = ''; }
+  else if (BX_DEEPLINK_LABEL[dl]) { sel.value = dl; $('#bc-deeplink').style.display = 'none'; $('#bc-deeplink').value = dl; }
+  else { sel.value = '__custom__'; $('#bc-deeplink').style.display = ''; $('#bc-deeplink').value = dl; }
+  // Audience.
+  let aud = { activity: 'all', tiers: [], cities: [] };
+  if (b.audience && String(b.audience).charAt(0) === '{') { try { aud = JSON.parse(b.audience); } catch (_) {} }
+  bxApplyAudience(aud);
+  // Always start "send now" — re-sends shouldn't inherit an old schedule time.
+  $('#bc-schedule-mode').value = 'now';
+  $('#bc-schedule-at').style.display = 'none';
+  $('#bc-schedule-at').value = '';
+  bxWhenChanged();
+  bxOpensChanged();
+  loadBroadcastAudienceCount();
+  $('#tab-broadcasts').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── send / recall ─────────────────────────────────────────────────
 async function sendBroadcast() {
   const title_en = $('#bc-title-en').value.trim();
   const title_cn = $('#bc-title-cn').value.trim();
@@ -2128,16 +2380,23 @@ async function sendBroadcast() {
   const deeplink = $('#bc-deeplink').value.trim();
   const mode     = $('#bc-schedule-mode').value;
   const scheduledRaw = mode === 'later' ? $('#bc-schedule-at').value : '';
+  const status = $('#bc-send-status');
 
   if (!title_en && !title_cn) {
-    $('#bc-send-status').innerHTML = '<span class="err">Add at least one title. · 请至少填写一个标题。</span>';
+    status.innerHTML = '<span class="err">Add at least one title. · 请至少填写一个标题。</span>';
     return;
   }
   if (deeplink && !deeplink.startsWith('/pages/')) {
-    $('#bc-send-status').innerHTML = '<span class="err">Deep-link must start with /pages/ · 深链需以 /pages/ 开头</span>';
+    status.innerHTML = '<span class="err">The custom page must start with /pages/ · 自定义页面需以 /pages/ 开头</span>';
+    bxStep('opens');
     return;
   }
-  const audCount = ($('#bc-aud-count').textContent || '').replace(/[^0-9]/g, '');
+  if (mode === 'later' && !scheduledRaw) {
+    status.innerHTML = '<span class="err">Pick a time to send. · 请选择发送时间。</span>';
+    bxStep('when');
+    return;
+  }
+  const audCount = bxAudCount();
   const verb = mode === 'later' ? 'Schedule' : 'Send';
   if (!confirm(`${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}? · 向 ${audCount || '所有活跃'} 位客户${verb === 'Schedule' ? '排期' : '发送'}此群发消息？`)) return;
 
@@ -2147,17 +2406,16 @@ async function sendBroadcast() {
     payload.scheduled_for = new Date(scheduledRaw).toISOString();
   }
   const btn = $('#bc-send-btn');
-  const status = $('#bc-send-status');
   btn.disabled = true;
-  status.textContent = 'Sending…';
+  status.textContent = cuT('Sending…', '发送中…');
   try {
     const { data } = await api('/api/retail-admin/broadcasts', { method: 'POST', body: payload });
     if (data.status === 'sent') {
-      status.innerHTML = `<span style="color: #2e7d32;">Sent to ${data.recipient_count} customer${data.recipient_count === 1 ? '' : 's'}. · 已发送给 ${data.recipient_count} 位客户。</span>`;
+      toast(cuT('Sent to ' + data.recipient_count + (data.recipient_count === 1 ? ' person' : ' people'), '已发送给 ' + data.recipient_count + ' 位顾客'));
     } else if (data.status === 'scheduled') {
-      status.innerHTML = '<span style="color: #1a56a8;">Scheduled. · 已排期。</span>';
+      toast(cuT('Scheduled', '已排期'));
     }
-    bcResetComposer();
+    bxCloseCompose();
     loadBroadcasts();
   } catch (e) {
     status.innerHTML = `<span class="err">Failed · 失败: ${escapeHtml(e.message)}</span>`;
@@ -2184,12 +2442,19 @@ document.querySelector('[data-tab="broadcasts"]').addEventListener('click', () =
   loadBroadcastRegions();
   loadBroadcastAudienceCount();
 });
-// Keep the audience summary in sync when the operator flips EN/CN. The region
-// chips re-translate themselves via the i18n text-node layer; this covers the
-// computed summary line, which isn't a static "EN · 中文" node.
+// Keep the computed (non-static) labels in sync when the operator flips EN/CN.
+// Static "EN · 中文" nodes re-translate themselves via the i18n text-node layer;
+// these are JS-built and need a manual refresh.
 if (window.onLangChange) onLangChange(() => {
-  const s = document.getElementById('bc-aud-summary');
-  if (s) s.textContent = bcAudienceLabel(bcAudienceObj());
+  const whoSum = document.getElementById('bx-who-sum');
+  if (whoSum) whoSum.textContent = bcAudienceLabel(bcAudienceObj());
+  bxWhenChanged();
+  bxOpensChanged();
+  bxUpdateAudChip();
+  bxRenderAutoSummary();
+  const autoBtn = document.getElementById('bx-auto-btn');
+  if (autoBtn) autoBtn.textContent = document.getElementById('bx-auto').classList.contains('open') ? cuT('Done', '完成') : cuT('Manage', '管理');
+  if (_bcData.length && document.getElementById('bc-list')) loadBroadcasts();
 });
 
 // ════════════════════════════════════════════════════════════════
