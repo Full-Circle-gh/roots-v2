@@ -6231,6 +6231,11 @@ if (_autoDispatchSweep.unref) _autoDispatchSweep.unref();
 // the rider's actual drop-off. The qingyun-daemon now reconciles completed orders
 // (order_status 50 已送达) back into delivery_jobs, so this sweep flips the roots
 // order to "delivered" the moment the courier actually reports the drop-off.
+// Includes Meituan mirrors stuck at 'rider_pickup' (Rider coming): Meituan's own
+// status poll trails the Qingyun rider and may never advance the mirror past
+// "rider coming" before the parcel is dropped, so without rider_pickup here the
+// order would sit in the Rider-coming bucket while its row already reads Delivered
+// off this same order_status>=50 signal.
 // Same side effects as the manual "Mark delivered" (delivered_at, per-parcel
 // mirror, customer notification / review prompt). Toggle:
 // storefront_config `delivery.qingyunAutoDeliver` (default on).
@@ -6242,7 +6247,7 @@ function autoDeliverQingyunForTenant() {
       `SELECT o.id AS id, o.status AS status
          FROM retail_orders o
          JOIN delivery_jobs j ON j.retail_order_id = o.id
-        WHERE o.status IN ('paid','preparing','dispatched')
+        WHERE o.status IN ('paid','preparing','dispatched','rider_pickup')
           AND j.order_status >= 50`
     ).all();
   } catch (e) {
@@ -6258,7 +6263,7 @@ function autoDeliverQingyunForTenant() {
               delivered_at  = CURRENT_TIMESTAMP,
               dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
               updated_at    = CURRENT_TIMESTAMP
-        WHERE id = ? AND status IN ('paid','preparing','dispatched')`
+        WHERE id = ? AND status IN ('paid','preparing','dispatched','rider_pickup')`
     ).run(o.id);
     if (claim.changes === 0) continue;
     try {

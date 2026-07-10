@@ -315,7 +315,7 @@ router.post('/auto-deliver-past-eta', (_req, res) => {
       UPDATE retail_orders
          SET status = 'delivered'
        WHERE channel = 'meituan'
-         AND status IN ('paid','preparing','dispatched')
+         AND status IN ('paid','preparing','dispatched','rider_pickup')
          AND channel_eta IS NOT NULL AND channel_eta != ''
          AND datetime(channel_eta, '+1 hour') <= datetime('now')
     `).run();
