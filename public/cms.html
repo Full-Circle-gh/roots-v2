@@ -5118,6 +5118,16 @@
       </button>
     </div>
     <div class="tweaks-pop" id="tweaks-pop" hidden>
+      <!-- Layout — Classic (three panes) vs Canvas-first (rail + floating
+           inspector + dock + seams). Switching reloads the editor so the
+           re-housing runs cleanly. Works whether standalone or embedded. -->
+      <div class="tw-group">
+        <div class="tw-label"><span class="i18n-en">Layout</span><span class="i18n-cn">布局</span></div>
+        <div class="tw-seg">
+          <button type="button" data-tweak="layout" data-val="classic" onclick="cmsSetLayout('classic')"><span class="i18n-en">Classic</span><span class="i18n-cn">经典</span></button>
+          <button type="button" data-tweak="layout" data-val="canvas" onclick="cmsSetLayout('canvas')"><span class="i18n-en">Canvas</span><span class="i18n-cn">画布</span></button>
+        </div>
+      </div>
       <div class="tw-group">
         <div class="tw-label"><span class="i18n-en">Surface</span><span class="i18n-cn">外观</span></div>
         <div class="tw-seg">
@@ -14849,6 +14859,18 @@ function cmsSetBackdrop(v) {
   cmsApplyBackdrop(v);
   cmsSyncTweakControls();
 }
+// Layout — persist the choice and reload so initCanvasLayout() re-houses the
+// editor from a clean slate (the classic ⇄ canvas move reparents elements, so
+// a reload is the simplest correct path). No-op when the value is unchanged.
+function cmsSetLayout(v) {
+  if (v !== 'classic' && v !== 'canvas') return;
+  const cur = (function () { try { return localStorage.getItem('cms-layout') || 'classic'; } catch (e) { return 'classic'; } })();
+  if (v === cur && (document.documentElement.dataset.layout || 'classic') === (v === 'canvas' ? 'canvas' : 'classic')) {
+    closeTweaksMenu(); return;
+  }
+  try { localStorage.setItem('cms-layout', v); } catch (e) {}
+  location.reload();
+}
 // Apply saved tweaks on boot (called from BOOTSTRAP after the palette +
 // canvas exist).
 function cmsApplyEditorTweaks() {
@@ -14861,7 +14883,8 @@ function cmsSyncTweakControls() {
   const theme = document.documentElement.getAttribute('data-theme') || 'dark';
   const lib   = cmsGetTweak(TWEAK_LIB_KEY, TWEAK_LIB_VALUES, 'cards');
   const bg    = cmsGetTweak(TWEAK_BG_KEY, TWEAK_BG_VALUES, 'paper');
-  const cur = { theme, lib, bg };
+  const layout = (document.documentElement.dataset.layout === 'canvas') ? 'canvas' : 'classic';
+  const cur = { theme, lib, bg, layout };
   document.querySelectorAll('#tweaks-pop [data-tweak]').forEach(btn => {
     btn.classList.toggle('active', cur[btn.dataset.tweak] === btn.dataset.val);
   });
