@@ -892,7 +892,7 @@ function dashOpenRestock() {
 }
 
 // "Open in Orders" on the Invoices-to-issue card → jump to the Orders tab
-// pre-filtered on the "Needs invoice" chip. The chips are static DOM, so no
+// pre-filtered on the "Invoice" chip. The chips are static DOM, so no
 // polling is needed — click the tab (fires its own load), then apply the chip
 // filter (setOrderStatus reloads with it).
 function dashOpenInvoices() {

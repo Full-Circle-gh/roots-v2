@@ -925,7 +925,7 @@
     Reports · 报表
   </button>
   <!-- Orders — the Invoices sub-tab is retired: invoices live inside Orders
-       now (the "Needs invoice" status chip + per-row summary + the drawer
+       now (the "Invoice" status chip + per-row summary + the drawer
        block). The unseen badge covers new orders AND new fapiao requests. -->
   <button data-tab="orders" style="order:4">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8l3 4v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7z"/><path d="M9 12h6M9 16h6"/></svg>
@@ -1501,7 +1501,7 @@
   </section>
 
   <!-- ─── ORDERS ───
-       (The standalone Invoices tab was folded in here: the "Needs invoice"
+       (The standalone Invoices tab was folded in here: the "Invoice"
        status chip filters the list to fapiao requests, each row carries the
        invoice summary, and issuing happens in the order drawer.) -->
   <section id="tab-orders">
@@ -1551,7 +1551,7 @@
       <div class="status-chip st-cancelled"              data-status="cancelled"        onclick="setOrderStatus(this)"><span class="dot"></span>Cancelled</div>
       <div class="status-chip st-refunded"               data-status="refunded"         onclick="setOrderStatus(this)"><span class="dot"></span>Refunded</div>
       <div class="status-chip st-refunded"               data-status="refunds_open"     onclick="setOrderStatus(this)" title="Pending refund requests · 待处理退款"><span class="dot"></span>Refund queue<span class="chip-ct alert" id="refund-queue-count"></span></div>
-      <div class="status-chip st-awaiting_restock"       data-status="needs_invoice"    onclick="setOrderStatus(this)" title="Invoice requests to issue · 待开发票"><span class="dot"></span>Needs invoice<span class="chip-ct alert" id="oc-needs_invoice"></span></div>
+      <div class="status-chip st-awaiting_restock"       data-status="needs_invoice"    onclick="setOrderStatus(this)" title="Orders with an invoice request — the count is the ones still to issue · 开票申请订单,计数为待开票"><span class="dot"></span>Invoice<span class="chip-ct alert" id="oc-needs_invoice"></span></div>
     </div>
 
     <!-- Channel chip strip — orthogonal to status. Filters the combined order

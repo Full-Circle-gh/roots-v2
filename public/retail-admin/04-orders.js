@@ -231,18 +231,26 @@ function refundBadge(o) {
   return `<span class="pill refund-pending" title="Open refund · 退款进行中 (${rs})">↩ ${label}</span>`;
 }
 
-// Fapiao badge — rides the status cell on every row that carries an invoice
-// request (the retired Invoices tab's queue is now the "Needs invoice" chip),
-// so an owed fapiao is visible from any filter without opening the drawer.
-// Issued requests go quiet: done work isn't a badge.
-function invoiceBadge(o) {
+const ICON_INV_OWED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><line x1="8" y1="9" x2="16" y2="9"/></svg>';
+const ICON_INV_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><polyline points="8 12 11 15 16 9"/></svg>';
+
+// Fapiao sub-line — sits under the status pill on every row that carries an
+// invoice request (the retired Invoices tab's queue is now the "Invoice" chip).
+// Brass while the invoice is still owed, muted once it has been issued, so the
+// list can tell "never asked" apart from "asked and done" without opening a
+// drawer. A row with no request renders nothing.
+function invoiceLine(o) {
   if (!Number(o.needs_invoice)) return '';
-  if (o.invoice_status === 'issued') return '';
-  return `<span class="pill st-awaiting_restock" title="${cuT('Invoice requested — issue it from the order drawer', '顾客申请开票 — 请在订单详情中开票')}">`
-    + `<span class="dot"></span>${cuT('needs invoice · 待开票', '待开票 · invoice')}</span>`;
+  const issued = o.invoice_status === 'issued';
+  const label = issued ? cuT('Invoice issued', '已开票') : cuT('Invoice to issue', '待开票');
+  const title = issued
+    ? cuT('Invoice issued for this order', '此订单已开票')
+    : cuT('Invoice requested — issue it from the order drawer', '顾客申请开票 — 请在订单详情中开票');
+  return `<div class="ord-inv-line${issued ? '' : ' is-owed'}" title="${escapeAttr(title)}">`
+    + `${issued ? ICON_INV_DONE : ICON_INV_OWED}${label}</div>`;
 }
 
-// Full-width summary line under a row in the "Needs invoice" view — the 抬头 /
+// Full-width summary line under a row in the "Invoice" view — the 抬头 /
 // 税号 / status the accountant batches into the tax system, plus the same
 // "Copy for accounting" the drawer block has, so the whole queue clears
 // without opening a single drawer. Shares .order-row so click/Enter still
@@ -916,7 +924,7 @@ async function loadOrders(opts = {}) {
       const emptyMsg = (status === 'refunds_open')
         ? `<h3>Nothing waiting. Enjoy it. · 无待处理退款</h3>`
         : (status === 'needs_invoice')
-        ? `<h3>No invoices owed · 无待开发票</h3>
+        ? `<h3>No invoice requests · 无开票申请</h3>
            <p class="muted">Orders show up here when a customer asks for an invoice. · 顾客申请开票的订单会显示在这里。</p>`
         : `<h3>No orders yet · 暂无订单</h3>
            <p class="muted">New orders settle in here from every channel. · 新订单会从各渠道汇聚到这里。</p>`;
@@ -979,7 +987,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${invoiceBadge(o)}${addonBadge(o)}</div></td>
+        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div>${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>${status === 'needs_invoice' ? invoiceSubRow(o) : ''}`;
