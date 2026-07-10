@@ -6042,8 +6042,16 @@ if (_bcSweep.unref) _bcSweep.unref();
 // passed today's eta+grace, never on a guessed prior/future day.
 const AUTO_DELIVER_DEFAULT_GRACE_MIN = 20;
 // Orders eligible to be auto-completed — anything still in the store's hands,
-// not already delivered/cancelled/refunded.
-const AUTO_DELIVER_FROM_STATUSES = ['paid', 'preparing', 'dispatched'];
+// not already delivered/cancelled/refunded. rider_pickup is a Meituan-only
+// mirror stage ("Rider coming"); it belongs here because Meituan's status poll
+// can strand a mirror at rider_pickup while the Qingyun courier has already
+// dropped off, and both auto-deliver sweeps must be able to close it out. Single
+// source of truth for BOTH sweeps below — an inline copy drifted once and left a
+// rider_pickup order reading Delivered in its row but "Rider coming" in the tab.
+const AUTO_DELIVER_FROM_STATUSES = ['paid', 'preparing', 'dispatched', 'rider_pickup'];
+// SQL IN(...) list built from the constant above. Safe to interpolate — every
+// element is a hardcoded literal, never user input.
+const AUTO_DELIVER_FROM_SQL = AUTO_DELIVER_FROM_STATUSES.map(s => `'${s}'`).join(',');
 
 function autoDeliverLocalEtaForTenant() {
   const graceMin = Number(cfgValue('delivery.autoDeliverEtaMinutes', AUTO_DELIVER_DEFAULT_GRACE_MIN));
@@ -6059,7 +6067,7 @@ function autoDeliverLocalEtaForTenant() {
                 ORDER BY sh.id ASC LIMIT 1) AS local_eta
          FROM retail_orders o
         WHERE o.fulfillment_type = 'delivery'
-          AND o.status IN ('paid','preparing','dispatched')
+          AND o.status IN (${AUTO_DELIVER_FROM_SQL})
           -- Defer to the real 青云 drop-off signal: if a Qingyun rider is being
           -- tracked live (delivery_jobs in-flight, updated recently), DON'T deliver
           -- off the ETA timer — the auto-deliver-qy sweep will flip it on the actual
@@ -6103,7 +6111,7 @@ function autoDeliverLocalEtaForTenant() {
               delivered_at  = CURRENT_TIMESTAMP,
               dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
               updated_at    = CURRENT_TIMESTAMP
-        WHERE id = ? AND status IN ('paid','preparing','dispatched')`
+        WHERE id = ? AND status IN (${AUTO_DELIVER_FROM_SQL})`
     ).run(o.id);
     if (claim.changes === 0) continue;
     // Keep per-parcel state in lockstep with the whole-order flip (mirrors the
@@ -6247,7 +6255,7 @@ function autoDeliverQingyunForTenant() {
       `SELECT o.id AS id, o.status AS status
          FROM retail_orders o
          JOIN delivery_jobs j ON j.retail_order_id = o.id
-        WHERE o.status IN ('paid','preparing','dispatched','rider_pickup')
+        WHERE o.status IN (${AUTO_DELIVER_FROM_SQL})
           AND j.order_status >= 50`
     ).all();
   } catch (e) {
@@ -6263,7 +6271,7 @@ function autoDeliverQingyunForTenant() {
               delivered_at  = CURRENT_TIMESTAMP,
               dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
               updated_at    = CURRENT_TIMESTAMP
-        WHERE id = ? AND status IN ('paid','preparing','dispatched','rider_pickup')`
+        WHERE id = ? AND status IN (${AUTO_DELIVER_FROM_SQL})`
     ).run(o.id);
     if (claim.changes === 0) continue;
     try {
