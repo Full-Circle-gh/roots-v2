@@ -467,6 +467,21 @@ async function dashHeroLoadPresence() {
   } catch (e) { /* silent — next tick retries */ }
 }
 
+// Hour marks under the Today day line. The chart has no axes — the big revenue
+// number above it is the y-axis — so this is the whole x. Four evenly-spaced
+// hour buckets ('HH:00' from the payload) and then "now" at the live end. A
+// day-range payload (bucket = 'YYYY-MM-DD') is not a day line, so it paints
+// nothing rather than a row of dates.
+function tdTodayHours(labels) {
+  const el = document.getElementById('td-today-hours'); if (!el) return;
+  const hourly = (labels || []).length > 2 && /^\d{2}:\d{2}$/.test(String(labels[0]));
+  if (!hourly) { el.textContent = ''; return; }
+  const n = labels.length, marks = [];
+  for (let i = 0; i < 4; i++) marks.push(labels[Math.round(i * (n - 1) / 4)]);
+  marks.push(cuT('now', '此刻'));
+  el.innerHTML = marks.map(m => `<span>${m}</span>`).join('');
+}
+
 async function dashHeroLoadToday(opts) {
   // Trailing-zero local-day in GZ (+8). Server tolerates same-day from/to and
   // returns 24 hourly trend buckets (revenue + orders) plus deltas-vs-yesterday.
@@ -483,10 +498,15 @@ async function dashHeroLoadToday(opts) {
     dashCountUp($('#db-today-new'), Number(k.new_customers || 0), undefined, dur);
     // Intraday sparklines — revenue (focal, breathing dot) and orders (static
     // dot) each plot their per-hour curve so the day's shape reads at a glance.
+    // The revenue curve is the Today block's day line; the other two only paint
+    // if their (mobile) hosts exist — dashRenderSpark no-ops on a missing node.
     const trend = data.trend || [];
     const labels = trend.map(p => String(p.bucket || ''));
+    // pulse=false: a breathing dot means "an automation is live" and its colour
+    // is Dusk. The day line is takings, not automation — its tip sits still.
     dashRenderSpark($('#db-today-spark'), trend.map(p => Number(p.revenue || 0)), labels,
-                    v => '¥' + Math.round(v).toLocaleString(), true);
+                    v => '¥' + Math.round(v).toLocaleString(), false);
+    tdTodayHours(labels);   // hour marks under the day line
     dashRenderSpark($('#db-today-ord-spark'), trend.map(p => Number(p.orders || 0)), labels,
                     v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);
     dashRenderSpark($('#db-today-new-spark'), trend.map(p => Number(p.new_customers || 0)), labels,
@@ -521,6 +541,8 @@ function dashHeroTodayRepaint() {
       note.textContent = cuT(`vs a typical ${EN}`, `对比平常的${CN}`);
     } else { note.textContent = ''; }
   }
+  // The day line's hour marks end in "now", which is a word — repaint it.
+  tdTodayHours((data.trend || []).map(p => String(p.bucket || '')));
   // The Orders / Customers section vitals this payload also feeds (avg order
   // value, visitors, visits, conversion) — language-aware, so they repaint here.
   if (typeof tdSecPaint === 'function') tdSecPaint();
@@ -1115,6 +1137,16 @@ function dashArrangeReset() {
   dashArrangeTray();
 }
 
+// Does this block share its row with another? Measured, not read off data-span,
+// because the responsive rules collapse the narrow spans to full width on small
+// screens — a block that spans 3 columns at 1280px spans all 6 at 900px, and the
+// drop seam has to follow what the operator actually sees.
+function dashBlockShares(block) {
+  const host = block.parentElement;
+  if (!host) return false;
+  return block.offsetWidth < host.clientWidth * 0.9;
+}
+
 // ── Drag to reorder (native HTML5 DnD, wired once) ──────────────────────────
 function dashArrangeWire() {
   const host = document.getElementById('td-blocks');
@@ -1143,9 +1175,10 @@ function dashArrangeWire() {
     dashArrangeClearMarkers();
     if (!over || over === _dashDragBlock || over.classList.contains('is-hidden')) return;
     const r = over.getBoundingClientRect();
-    // Full-width blocks read as vertical (before/after = above/below); side-by-side
-    // span-1 blocks read horizontally. Use whichever axis the target is wider on.
-    const horizontal = over.dataset.span === '1';
+    // Full-width blocks read as vertical (before/after = above/below); anything
+    // narrower shares its row, so it reads horizontally. The grid is six columns
+    // wide, so "full width" is span 6.
+    const horizontal = dashBlockShares(over);
     const after = horizontal ? (e.clientX - r.left) > r.width / 2 : (e.clientY - r.top) > r.height / 2;
     over.classList.add(after ? 'td-drop-after' : 'td-drop-before');
   });
@@ -1155,7 +1188,7 @@ function dashArrangeWire() {
     const over = e.target.closest('.td-block');
     if (!over || over === _dashDragBlock) { dashArrangeClearMarkers(); return; }
     const r = over.getBoundingClientRect();
-    const horizontal = over.dataset.span === '1';
+    const horizontal = dashBlockShares(over);
     const after = horizontal ? (e.clientX - r.left) > r.width / 2 : (e.clientY - r.top) > r.height / 2;
     if (after) over.after(_dashDragBlock); else over.before(_dashDragBlock);
     dashArrangeClearMarkers();

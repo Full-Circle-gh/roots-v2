@@ -7929,15 +7929,34 @@
 
   /* ════════════════════════════════════════════════════════════════
      THE DASHBOARD AS THE OPERATOR'S OWN SPACE — a draggable card grid.
-     Normal view is identical to before: Recap + Needs-you span the full
-     width, Revenue + Channels are span-1 and share a row. "Arrange" mode
-     (body.td-arranging) reveals a drag grip + a hide ✕ on each block, a
-     Dusk drop-seam while dragging, and a hidden-cards tray. Order + hidden
-     set persist per user. Controller: dashArrange* in 03-dashboard.js. ── */
-  .td-blocks { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+     Six columns. A block takes one column per thing it has to say, so a
+     card with two numbers is never stretched into a shape built for three:
+     Recap / Needs-you / Today take all six, Customers 4, Channels 2,
+     Inventory + Delivery 3 each. Rows close at six, and the flow is dense
+     so hiding a block in Arrange mode re-tiles the rest instead of leaving
+     a hole. "Arrange" mode (body.td-arranging) reveals a drag grip + a hide
+     ✕ on each block, a Dusk drop-seam while dragging, and a hidden-cards
+     tray. Order + hidden set persist per user. dashArrange* in 03-dashboard. */
+  .td-blocks {
+    display: grid; grid-template-columns: repeat(6, 1fr);
+    grid-auto-flow: row dense; gap: 16px; align-items: start;
+  }
   .td-block { position: relative; min-width: 0; }
-  .td-block[data-span="2"] { grid-column: 1 / -1; }
-  @media (max-width: 1000px) { .td-block[data-span="1"] { grid-column: 1 / -1; } }
+  .td-block[data-span="6"] { grid-column: span 6; }
+  .td-block[data-span="4"] { grid-column: span 4; }
+  .td-block[data-span="3"] { grid-column: span 3; }
+  .td-block[data-span="2"] { grid-column: span 2; }
+  .td-block[data-span="1"] { grid-column: span 1; }
+  /* Below the bento's comfortable width the narrow spans stop being legible:
+     Customers' three vitals and Channels' rows need room. Collapse to halves,
+     then to a single column on phones. */
+  @media (max-width: 1180px) {
+    .td-block[data-span="4"] { grid-column: span 6; }
+    .td-block[data-span="2"] { grid-column: span 3; }
+  }
+  @media (max-width: 1000px) {
+    .td-block[data-span="3"], .td-block[data-span="2"], .td-block[data-span="1"] { grid-column: span 6; }
+  }
   /* A block the operator has hidden — out of the grid entirely (its inner
      surfaces keep updating in the background so restoring is instant). */
   .td-block.is-hidden { display: none; }
@@ -8111,6 +8130,56 @@
     .td-sec-vital { padding: 20px 22px 16px; }
     .td-sec-vital + .td-sec-vital { border-left: 0; border-top: 1px solid var(--td-border); }
     .td-sec-foot { padding: 12px 22px; }
+  }
+
+  /* ── Today — the hero block ──
+     Revenue leads. The numeral is one step up from a section vital (44px vs
+     34px) and stays Inter 500: it reads first because it stands alone above
+     a hairline, not because it shouts. Fraunces never enters product UI. */
+  .td-today-body { padding: 28px 32px 24px; }
+  .td-today-body > .k { font-size: 13px; color: var(--td-text2); }
+  .td-today-body > .c { font-size: 12.5px; color: var(--td-text2); min-height: 20px; }
+  .td-today-body > .c .td-rev-note:empty { display: none; }
+  .td-today-lead {
+    font-size: 44px; font-weight: 500; letter-spacing: -.025em; line-height: 1.2;
+    color: var(--td-text); font-variant-numeric: tabular-nums; margin: 2px 0 3px;
+  }
+
+  /* The day line: today's revenue, hour by hour. Taller than a sparkline
+     because here the curve IS the content. The shared .db-spark-wrap gives it
+     the hover-scrub; we only lend it height and the sage ink. */
+  .td-today-line { margin-top: 22px; }
+  .td-today-line .db-spark-wrap.td-dayline { height: 104px; margin-top: 0; color: var(--td-sage); }
+  .td-today-line .db-spark-line { stroke-width: 2; }
+  /* The tip is a still ink dot. A breathing dot is Dusk and means "Tacet is
+     doing something" — the day's takings are not an automation. */
+  .td-today-line .db-spark-dot { background: var(--td-text); }
+  .td-today-hours {
+    display: flex; justify-content: space-between;
+    margin-top: 8px; font-size: 11.5px; color: var(--td-text2);
+    font-variant-numeric: tabular-nums;
+  }
+  .td-today-hours:empty { display: none; }
+
+  /* Orders and per-order sit behind one hairline under the chart. New
+     customers is deliberately absent — it belongs to the Customers block. */
+  .td-today-strip {
+    display: grid; grid-template-columns: 1fr 1fr;
+    border-top: 1px solid var(--td-border); margin-top: 24px;
+  }
+  .td-today-cell { padding: 16px 0 0; min-width: 0; }
+  .td-today-cell + .td-today-cell { border-left: 1px solid var(--td-border); padding-left: 24px; }
+  .td-today-cell .v {
+    font-size: 24px; font-weight: 500; letter-spacing: -.02em; line-height: 1.35;
+    color: var(--td-text); font-variant-numeric: tabular-nums;
+  }
+  .td-today-cell .k { font-size: 11.5px; color: var(--td-text2); }
+  .td-today-cell .c { font-size: 12px; color: var(--td-text2); min-height: 0; }
+
+  @media (max-width: 720px) {
+    .td-today-body { padding: 20px 22px 16px; }
+    .td-today-lead { font-size: 38px; }
+    .td-today-line .db-spark-wrap.td-dayline { height: 84px; }
   }
 
   /* Activity strip — clean prose rows: time · sentence · right-aligned amount,

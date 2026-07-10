@@ -1181,16 +1181,22 @@
     </div>
 
     <!-- ── Arrangeable card grid ──────────────────────────────────────────
-         Each top-level surface is a draggable .td-block (data-block = its
-         saved identity, data-span = 2 full-width / 1 half). In "Arrange"
-         mode each block gets a drag grip + a hide ✕; the order and hidden
-         set persist per user. Recap + Needs-you span the full width so their
-         internal grids (and the live #td-attn rebuild) are untouched; Revenue
-         + Channels are span-1 and share a row, matching the current layout.
+         Each top-level surface is a draggable .td-block. The grid is six
+         columns and data-span says how many a block takes — one column per
+         thing the block has to say, so no card is padded out to a shape it
+         doesn't need. Recap / Needs-you / Today span all six (their internal
+         grids and the live #td-attn rebuild want the width, and the Today
+         hero carries the day line). Customers takes 4 beside Channels' narrow
+         2; Inventory and Delivery hold two numbers each and share a row at 3.
+
+         Rows close at six: 6 · 6 · 6 · (4+2) · (3+3). The grid packs dense,
+         so hiding a block in Arrange mode re-tiles the rest instead of
+         leaving a hole. In "Arrange" mode each block gets a drag grip + a
+         hide ✕; the order and hidden set persist per user.
          Controller: dashArrange* in 03-dashboard.js. -->
     <div class="td-blocks" id="td-blocks">
 
-    <div class="td-block" data-block="recap" data-span="2">
+    <div class="td-block" data-block="recap" data-span="6">
       <div class="td-block-tools" aria-hidden="true">
         <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
         <button type="button" class="td-hide-btn" onclick="dashArrangeHide('recap')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -1210,7 +1216,7 @@
       </section>
     </div>
 
-    <div class="td-block" data-block="needs" data-span="2">
+    <div class="td-block" data-block="needs" data-span="6">
       <div class="td-block-tools" aria-hidden="true">
         <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
         <button type="button" class="td-hide-btn" onclick="dashArrangeHide('needs')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -1235,31 +1241,53 @@
          kept exactly, so dashHeroLoadToday / dashHeroLoadPresence and the
          mobile #rm-dash mirror keep working untouched. -->
 
-    <div class="td-block" data-block="orders" data-span="2">
+    <!-- ── Today — the money leads "everything else" ──────────────────────
+         One number is why the operator opened this page: what the shop took
+         today. It leads at 44px Inter (never Fraunces — that font stays out
+         of product UI), with the delta and "vs a typical Friday" under it.
+         Below, the day line: today's revenue hour by hour, over a dotted
+         line for a typical day, so the delta has a picture. The strip then
+         carries orders and per-order behind one hairline.
+
+         Ids are unchanged: #db-today-rev / #db-today-ord / #td-sec-aov and
+         the restored #db-today-spark are what dashHeroLoadToday, the scrub
+         wiring in dashHeroInit, and the mobile #rm-dash mirror already look
+         for. New customers is NOT here — it is a Customers number, and no
+         fact on this page is stated twice. -->
+    <div class="td-block" data-block="orders" data-span="6">
       <div class="td-block-tools" aria-hidden="true">
         <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
         <button type="button" class="td-hide-btn" onclick="dashArrangeHide('orders')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
       </div>
       <div class="td-sec-head">
-        <h3>Orders · 订单</h3>
+        <h3>Today · 今日</h3>
         <button type="button" class="td-sec-go" onclick="dashJumpTab('orders')">Open orders › · 前往订单 ›</button>
       </div>
-      <section class="card td-card td-sec">
-        <div class="td-sec-vitals">
-          <div class="td-sec-vital">
-            <div class="k">Orders today · 今日订单</div>
-            <div class="v" id="db-today-ord">—</div>
-            <div class="c"><span class="db-delta" id="db-today-ord-d"></span> <span class="td-rev-note" id="td-rev-note"></span></div>
+      <section class="card td-card td-sec td-today">
+        <div class="td-today-body">
+          <div class="k">Revenue today · 今日营收</div>
+          <div class="td-today-lead" id="db-today-rev">¥—</div>
+          <div class="c"><span class="db-delta" id="db-today-rev-d"></span> <span class="td-rev-note" id="td-rev-note"></span></div>
+
+          <!-- The day line. Rendered by dashRenderSpark from the 24 hourly
+               revenue buckets the /dashboard payload already returns; hover
+               scrubs each hour. Taller than a sparkline because here it is
+               the chart, not a garnish. -->
+          <div class="td-today-line">
+            <div class="db-spark-wrap td-dayline" id="db-today-spark"></div>
+            <div class="td-today-hours" id="td-today-hours" data-no-i18n></div>
           </div>
-          <div class="td-sec-vital">
-            <div class="k">Revenue today · 今日营收</div>
-            <div class="v" id="db-today-rev">¥—</div>
-            <div class="c"><span class="db-delta" id="db-today-rev-d"></span></div>
-          </div>
-          <div class="td-sec-vital">
-            <div class="k">Avg order value · 客单价</div>
-            <div class="v" id="td-sec-aov">¥—</div>
-            <div class="c">per order · 每单</div>
+
+          <div class="td-today-strip">
+            <div class="td-today-cell">
+              <div class="v" id="db-today-ord">—</div>
+              <div class="k">orders · 订单</div>
+              <div class="c"><span class="db-delta" id="db-today-ord-d"></span></div>
+            </div>
+            <div class="td-today-cell">
+              <div class="v" id="td-sec-aov">¥—</div>
+              <div class="k">per order · 每单</div>
+            </div>
           </div>
         </div>
         <!-- sync stamp kept for JS but hidden (dashHeroSyncStamp writes it). -->
@@ -1268,7 +1296,7 @@
       </section>
     </div>
 
-    <div class="td-block" data-block="customers" data-span="2">
+    <div class="td-block" data-block="customers" data-span="4">
       <div class="td-block-tools" aria-hidden="true">
         <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
         <button type="button" class="td-hide-btn" onclick="dashArrangeHide('customers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -1303,7 +1331,7 @@
       </section>
     </div>
 
-    <div class="td-block" data-block="inventory" data-span="2">
+    <div class="td-block" data-block="inventory" data-span="3">
       <div class="td-block-tools" aria-hidden="true">
         <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
         <button type="button" class="td-hide-btn" onclick="dashArrangeHide('inventory')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -1329,7 +1357,7 @@
       </section>
     </div>
 
-    <div class="td-block" data-block="delivery" data-span="2">
+    <div class="td-block" data-block="delivery" data-span="3">
       <div class="td-block-tools" aria-hidden="true">
         <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
         <button type="button" class="td-hide-btn" onclick="dashArrangeHide('delivery')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
