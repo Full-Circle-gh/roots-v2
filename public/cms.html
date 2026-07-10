@@ -3,13 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" id="meta-theme-color" content="#12161A">
-<title>Full Circle · Mini App Editor</title>
-<!-- Full Circle editor chrome type — IBM Plex Sans / Mono (+ SC for 中文).
-     Degrades to system fonts if the network blocks Google Fonts. -->
+<meta name="theme-color" id="meta-theme-color" content="#FBF9F4">
+<title>tacet · Mini App Editor</title>
+<!-- Tacet editor chrome type — Inter for every piece of UI, Fraunces for the
+     wordmark alone (brand voice never enters the product UI). Noto Sans SC
+     carries 中文 alongside Inter. Degrades to system fonts if Google Fonts
+     is blocked. The phone preview keeps its own Roots brand faces below. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Sans+SC:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
 <script>
   // Apply theme BEFORE first paint to prevent flash. Reads saved choice
   // first; otherwise honours the OS preference. Toggle logic lives at the
@@ -74,43 +76,74 @@
   @font-face { font-family: 'DF Yuan';      src: url('/assets/fonts/DFYuanW9.ttf')       format('truetype'); font-weight: 900; font-display: swap; }
 
   /* ═══════════════════════════════════════════════════════════════════
-     DESIGN TOKENS
+     TACET DESIGN TOKENS — v1.0, copied from Desktop\tacent\tacet-tokens.css
+     "Runs in silence." When in doubt, remove something.
+
+     Two rules govern everything below:
+       1. Paper is the room, Ink is the writing, Graphite is the whisper.
+       2. Dusk is the AI's colour. It means "Tacet did this for you."
+          At most one Dusk element per screen (two if you must). Ordinary
+          operator controls — pickers, tabs, chips, selections — are Ink or
+          Secondary, NEVER Dusk.
+
+     The legacy variable names (--bg-*, --accent, --brass …) are kept as
+     semantic aliases so the 9k lines of editor JS/CSS below keep working;
+     only what they point at has changed. Read them as roles, not colours:
+       --accent  = "selected / active / live"  → Ink
+       --brass   = "the one primary action"    → Dusk
      ═══════════════════════════════════════════════════════════════════ */
   :root {
-    /* ── Full Circle — Ink Charcoal surfaces, three elevation tiers ── */
-    --bg-app:     #12161A;   /* Ink Charcoal */
-    --bg-canvas:  #171B20;
-    --bg-pane:    #161A1F;
-    --bg-elev-1:  #1F252B;
-    --bg-elev-2:  #283038;
-    --bg-input:   #12161A;
-    --bg-overlay: rgba(8, 10, 12, .72);
+    /* ── Core palette ── */
+    --tacet-ink:      #111A2B;
+    --tacet-paper:    #FBF9F4;
+    --tacet-graphite: #58606E;
+    --tacet-dusk:     #6E67AF;  /* the AI's colour — scarce by design */
+    --tacet-sage:     #A3B49F;  /* success / all-clear only */
+    --tacet-amber:    #C9954A;  /* attention — never alarmist */
+    --tacet-brick:    #B4533E;  /* errors — never pure red */
+    --tacet-cream:    #F6F3EC;  /* raised surface on paper */
+    --tacet-border:   #E4E0D5;
+    --tacet-dusk-tint:  #EEEDF6;
+    --tacet-sage-tint:  #EDF1EC;
+    --tacet-amber-tint: #F7EEDE;
+    --tacet-brick-tint: #F6E7E3;
+    --tacet-sage-ink:   #4A6249;
+    --tacet-amber-ink:  #8A6425;
 
-    /* Borders — Deeper Paper alphas on the dark chrome */
-    --line-soft:  rgba(232, 229, 220, .06);
-    --line:       rgba(232, 229, 220, .10);
-    --line-strong: rgba(232, 229, 220, .16);
-    --ring:       rgba(107, 142, 111, .40);
+    /* ── Surfaces — Paper is the room; white cards sit on it ── */
+    --bg-app:     var(--tacet-paper);
+    --bg-canvas:  var(--tacet-paper);
+    --bg-pane:    #FFFFFF;
+    --bg-elev-1:  #FFFFFF;
+    --bg-elev-2:  var(--tacet-cream);
+    --bg-input:   #FFFFFF;
+    --bg-overlay: rgba(17, 26, 43, .24);
 
-    /* Text — Deeper Paper on Ink */
-    --text-1:     #E8E5DC;
-    --text-2:     rgba(232, 229, 220, .72);
-    --text-3:     rgba(232, 229, 220, .50);
-    --text-4:     rgba(232, 229, 220, .34);
+    /* Borders — a 1px line, never a shadow */
+    --line-soft:   var(--tacet-border);
+    --line:        var(--tacet-border);
+    --line-strong: #D6D1C2;
+    --ring:        transparent;   /* focus = Dusk border, no glow */
 
-    /* Brand accents — strict Tea + Brass. Tea = active/selected/live,
-       Brass = primary action (Publish/Save). Used SPARINGLY. */
-    --accent:     #6B8E6F;   /* Tea Green */
-    --accent-hi:  #7BA07F;
-    --accent-ink: #12161A;
-    --brass:      #B08D4A;   /* Aged Brass */
-    --brass-hi:   #C29B54;
-    --chrome-bg:  #12161A;   /* top bar stays Ink in both themes */
-    --chrome-fg:  #E8E5DC;
-    --danger:     #B65656;
-    --danger-soft: rgba(182, 86, 86, .14);
-    --warn:       #B08D4A;   /* attention = Brass, never amber/red */
-    --success:    #6B8E6F;   /* positive = Tea */
+    /* Text — Ink on Paper, Graphite for the quiet half */
+    --text-1: var(--tacet-ink);
+    --text-2: var(--tacet-graphite);
+    --text-3: var(--tacet-graphite);
+    --text-4: #8A909B;
+
+    /* Roles. --accent is "selected/active" (Ink). --brass is the single
+       primary action (Dusk). Nothing else may reach for Dusk. */
+    --accent:     var(--tacet-ink);
+    --accent-hi:  #263149;
+    --accent-ink: var(--tacet-paper);   /* what sits ON --accent */
+    --brass:      var(--tacet-dusk);
+    --brass-hi:   #5F58A0;
+    --chrome-bg:  #FFFFFF;
+    --chrome-fg:  var(--tacet-ink);
+    --danger:      var(--tacet-brick);
+    --danger-soft: var(--tacet-brick-tint);
+    --warn:        var(--tacet-amber);
+    --success:     var(--tacet-sage);
 
     /* Brand colors (for previewing customer-side blocks) */
     --b-lime: #CCD900; --b-forest: #365329; --b-olive: #6A6E2D; --b-oat: #F2E7DF;
@@ -118,24 +151,25 @@
     --b-corn: #F2CA6C; --b-sky: #B2CFED; --b-pea: #7BBD3B; --b-lotus: #EEB8E4;
     --b-pink: #F4B8CB; --b-citrus: #E7E74C; --b-white: #FFFFFF; --b-almond: #C37F4E;
 
-    /* Spacing scale */
+    /* Spacing — 8px base. When unsure, take the larger step. */
     --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 24px; --s7: 32px; --s8: 48px;
 
-    /* Radii */
-    --r-sm: 4px; --r-md: 6px; --r-lg: 10px; --r-xl: 14px;
+    /* Shape — 8px on controls, 14px on cards, 999px on badges. */
+    --r-sm: 6px; --r-md: 8px; --r-lg: 14px; --r-xl: 14px; --r-pill: 999px;
 
-    /* Shadows — brand favours 1px borders over elevation; keep these soft.
-       Phone bezel is Ink Charcoal hardware, not pure black. */
+    /* Shadow — at most one, and it is soft. No layers, ever.
+       The phone is Ink hardware resting on Paper. */
     --sh-1: none;
-    --sh-2: 0 2px 10px rgba(0, 0, 0, .22);
-    --sh-3: 0 12px 36px rgba(0, 0, 0, .34);
-    --sh-phone: 0 18px 50px rgba(0, 0, 0, .30), 0 0 0 8px #12161A, inset 0 0 0 1px rgba(232, 229, 220, .05);
+    --sh-2: 0 1px 2px rgba(17, 26, 43, .05), 0 4px 16px rgba(17, 26, 43, .04);
+    --sh-3: 0 10px 34px rgba(17, 26, 43, .14);
+    --sh-phone: 0 20px 50px rgba(17, 26, 43, .18), 0 0 0 8px var(--tacet-ink);
 
-    /* Typography — editor chrome is IBM Plex (Full Circle). Phone-preview
-       customer brand fonts (--bf-*) below are left untouched. */
-    --f-sans:  'IBM Plex Sans', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
-    --f-serif: 'New York', 'Iowan Old Style', Georgia, serif;
-    --f-mono:  'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
+    /* Typography — Inter runs the whole product UI at 400/500. Fraunces is
+       the brand voice and appears in exactly one place: the wordmark.
+       There is no Tacet mono; ids and hex codes borrow the system's. */
+    --f-sans:  'Inter', 'Noto Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, -apple-system, sans-serif;
+    --f-serif: 'Fraunces', Georgia, serif;
+    --f-mono:  ui-monospace, 'SF Mono', Menlo, Monaco, Consolas, monospace;
 
     /* Brand fonts — for the phone preview only. DF Yuan as CJK fallback. */
     --bf-bear:   'Bear Serif',   'DF Yuan', 'New York', Georgia, serif;
@@ -144,127 +178,88 @@
     --bf-aleo:   'Aleo',         'DF Yuan', Georgia, serif;
     --bf-yuan:   'DF Yuan', 'PingFang SC', 'Hiragino Sans GB', sans-serif;
 
-    /* Motion */
+    /* Motion — "everything settles". Strong ease-out, no bounce, no spring. */
     --ease-out: cubic-bezier(.16, 1, .3, 1);
-    --t-fast: 120ms;
-    --t-med:  220ms;
+    --t-fast: 200ms;
+    --t-med:  350ms;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
   }
 
   /* ═══════════════════════════════════════════════════════════════════
-     LIGHT THEME — opt-in via <html data-theme="light">. Pre-render
-     script in <head> sets the attribute before first paint so there's
-     no flash. Toggle persists to localStorage under `cms-theme`.
-     Mirrors the retail-admin oat-paper palette for cross-tool consistency.
+     DARK THEME — opt-in via <html data-theme="dark">. Paper and Ink swap;
+     every other role holds its meaning. The pre-render script in <head>
+     stamps the attribute before first paint, so there is no flash, and
+     the choice persists in localStorage under `cms-theme`. Light is the
+     default: Tacet is a paper product.
      ═══════════════════════════════════════════════════════════════════ */
-  :root[data-theme="light"] {
-    /* ── Full Circle light — Deeper Paper body, white cards. The sidebars
-       are a delineated area of the canvas (body tone), not floating cards;
-       cards inside them are white. The top bar stays Ink in both themes
-       (see --chrome-* + the Full Circle skin block below). ── */
-    --bg-app:     #E8E5DC;   /* Deeper Paper */
-    --bg-canvas:  #E1DDD2;   /* a touch deeper so the phone preview pops */
-    --bg-pane:    #E8E5DC;
-    --bg-elev-1:  #FFFFFF;   /* white cards */
-    --bg-elev-2:  #F2EFE6;
-    --bg-input:   #FFFFFF;
-    --bg-overlay: rgba(18, 22, 26, .48);
+  :root[data-theme="dark"] {
+    --bg-app:     var(--tacet-ink);
+    --bg-canvas:  var(--tacet-ink);
+    --bg-pane:    #18233A;
+    --bg-elev-1:  #18233A;
+    --bg-elev-2:  #1E2A44;
+    --bg-input:   #18233A;
+    --bg-overlay: rgba(9, 14, 24, .58);
 
-    /* Lines — Ink Charcoal alphas (brand: 1px @ ~8% in place of shadows). */
-    --line-soft:   rgba(18, 22, 26, .06);
-    --line:        rgba(18, 22, 26, .10);
-    --line-strong: rgba(18, 22, 26, .18);
-    --ring:        rgba(107, 142, 111, .40);
+    --line-soft:   #2A3550;
+    --line:        #2A3550;
+    --line-strong: #3A4767;
 
-    --text-1: #12161A;
-    --text-2: rgba(18, 22, 26, .72);
-    --text-3: rgba(18, 22, 26, .50);
-    --text-4: rgba(18, 22, 26, .34);
+    --text-1: var(--tacet-paper);
+    --text-2: #9AA3B2;
+    --text-3: #9AA3B2;
+    --text-4: #6F7A8C;
 
-    /* Tea + Brass carry across themes unchanged. */
-    --accent:     #6B8E6F;
-    --accent-hi:  #5E7E62;
-    --accent-ink: #12161A;
-    --brass:      #B08D4A;
-    --brass-hi:   #9D7C3F;
-    --lime:       #6B8E6F;
-    --warn:       #B08D4A;
-    --success:    #6B8E6F;
-    --danger:     #B65656;
-    --danger-soft: rgba(182, 86, 86, .12);
+    /* Selected/active inverts to Paper on the dark room; Dusk holds. */
+    --accent:     var(--tacet-paper);
+    --accent-hi:  #FFFFFF;
+    --accent-ink: var(--tacet-ink);
+    --chrome-bg:  #18233A;
+    --chrome-fg:  var(--tacet-paper);
 
-    /* Near-flat — brand uses borders, not elevation. */
-    --sh-1: none;
-    --sh-2: 0 1px 0 rgba(18, 22, 26, .05);
-    --sh-3: 0 8px 28px rgba(18, 22, 26, .10);
-    /* Phone bezel — Ink Charcoal hardware + a whisper of lift on paper. */
-    --sh-phone: 0 14px 40px rgba(18, 22, 26, .12), 0 0 0 8px #12161A, inset 0 0 0 1px rgba(232, 229, 220, .06);
+    --danger-soft: #351B14;
+    --sh-2: 0 1px 2px rgba(0, 0, 0, .28), 0 4px 16px rgba(0, 0, 0, .22);
+    --sh-3: 0 10px 34px rgba(0, 0, 0, .44);
+    --sh-phone: 0 20px 50px rgba(0, 0, 0, .40), 0 0 0 8px #0B121F;
   }
-  :root[data-theme="light"] body { color-scheme: light; }
-  :root[data-theme="light"] input,
-  :root[data-theme="light"] select,
-  :root[data-theme="light"] textarea { color-scheme: light; }
-  /* Make ::selection legible on the cream palette. */
-  :root[data-theme="light"] ::selection { background: rgba(107, 142, 111, .42); color: var(--text-1); }
-  /* Float toolbars + drop-zones use rgba-white assumptions that flip
-     poorly on cream — re-tint them with warm-dark alphas. */
-  :root[data-theme="light"] .block-toolbar {
-    background: rgba(28, 26, 18, .92);
-    color: #fbf8ee;
+  :root[data-theme="dark"] body { color-scheme: dark; }
+  :root[data-theme="dark"] input,
+  :root[data-theme="dark"] select,
+  :root[data-theme="dark"] textarea { color-scheme: dark; }
+  /* Tinted surfaces darken with the room. */
+  :root[data-theme="dark"] {
+    --tacet-cream:      #1E2A44;
+    --tacet-dusk-tint:  #262A4A;
+    --tacet-sage-tint:  #1E2C26;
+    --tacet-amber-tint: #33290F;
+    --tacet-brick-tint: #351B14;
+    --tacet-sage-ink:   #A3B49F;
+    --tacet-amber-ink:  #C9954A;
   }
-  /* Toolbar is dark in both themes, so its buttons must always render with
-     a light icon stroke. In light mode the cascade was inheriting
-     var(--text-2) (= dark ink) — invisible on the dark toolbar surface.
-     Force a light stroke + a brighter hover state. */
-  :root[data-theme="light"] .block-toolbar button { color: rgba(251, 248, 238, .82); }
-  :root[data-theme="light"] .block-toolbar button:hover {
-    background: rgba(255, 255, 255, .14);
-    color: #fff;
+  /* The floating block toolbar is Ink in the light room; on the dark room
+     it must lift off the canvas, so it borrows Paper. */
+  :root[data-theme="dark"] .block-toolbar {
+    background: var(--tacet-paper);
+    border-color: var(--tacet-border);
   }
-  :root[data-theme="light"] .block-toolbar .label { color: rgba(251, 248, 238, .55); }
-  :root[data-theme="light"] .block-toolbar .sep   { background: rgba(255, 255, 255, .14); }
-  /* Palette block tiles — Full Circle: white card, Ink hairline border,
-     icon in Tea Green on a quiet Ink backplate (matches the design's
-     block-library cards). */
-  :root[data-theme="light"] .palette-item {
-    background: #fff;
-    border-color: rgba(18, 22, 26, .08);
+  :root[data-theme="dark"] .block-toolbar button { color: var(--tacet-graphite); }
+  :root[data-theme="dark"] .block-toolbar button:hover {
+    background: var(--tacet-cream); color: var(--tacet-ink);
   }
-  :root[data-theme="light"] .palette-item:hover {
-    background: #fff;
-    border-color: rgba(107, 142, 111, .30);
+  :root[data-theme="dark"] .block-toolbar button.danger:hover {
+    background: var(--tacet-brick-tint); color: var(--tacet-brick);
   }
-  :root[data-theme="light"] .palette-item .icon {
-    background: rgba(18, 22, 26, .06);
-    color: var(--accent);
-  }
-  /* Inspector header icon — Tea on a quiet Ink backplate. */
-  :root[data-theme="light"] .inspector-head .type-row .icon {
-    background: rgba(107, 142, 111, .14);
-    color: var(--accent);
-  }
-  /* The canvas backdrop is now driven by [data-backdrop] (Tweaks ▸ Canvas
-     backdrop) and is theme-agnostic — no light-mode background-image reset
-     needed here (base canvas is flat by default). */
-  /* Scrollbar thumb on cream — the dark mode rgba(255,255,255,.09) is
-     invisible on light. Use a warm-dark alpha so the thumb has presence
-     without going harsh. */
-  :root[data-theme="light"] .pane::-webkit-scrollbar-thumb,
-  :root[data-theme="light"] .canvas::-webkit-scrollbar-thumb,
-  :root[data-theme="light"] .product-picker .list::-webkit-scrollbar-thumb {
-    background: rgba(30, 25, 5, .22);
-  }
-  :root[data-theme="light"] .pane::-webkit-scrollbar-thumb:hover {
-    background: rgba(30, 25, 5, .34);
-  }
-  /* Phone notch is iPhone-style hardware; keep it dark even in light mode. */
-  /* Brand-mark gradient stays lime — already cross-mode safe. */
+  :root[data-theme="dark"] .block-toolbar .label { color: var(--tacet-graphite); }
+  :root[data-theme="dark"] .block-toolbar .sep   { background: var(--tacet-border); }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; }
   body {
     font-family: var(--f-sans);
     font-size: 13px;
-    font-feature-settings: "ss01", "cv11";
     background: var(--bg-app);
     color: var(--text-1);
     overflow: hidden;
@@ -272,7 +267,11 @@
     -moz-osx-font-smoothing: grayscale;
   }
   button { font: inherit; }
-  ::selection { background: var(--ring); color: var(--text-1); }
+  /* Every number in this editor is tabular — ids, prices, counts, hex. */
+  .id, .price, code, kbd, input[type=number] {
+    font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+  }
+  ::selection { background: var(--tacet-dusk-tint); color: var(--text-1); }
 
   /* ═══════════════════════════════════════════════════════════════════
      TOPBAR
@@ -313,7 +312,7 @@
     border-radius: var(--r-md); transition: opacity .12s ease;
   }
   .brand-home:hover { opacity: .82; }
-  .brand-home:focus-visible { outline: 2px solid var(--brass, #B08D4A); outline-offset: 2px; }
+  .brand-home:focus-visible { outline: 2px solid var(--tacet-dusk); outline-offset: 2px; }
 
   /* Page picker — sits next to the brand title in the topbar */
   .page-picker {
@@ -399,22 +398,19 @@
     border-radius: var(--r-md);
     cursor: pointer;
   }
-  .page-menu .item:hover { background: var(--bg-elev-1); }
-  .page-menu .item.current { background: rgba(107, 142, 111, .08); }
-  .page-menu .item .name { font-size: 13px; font-weight: 600; color: var(--text-1); }
-  /* Active checkmark: lime-on-light was nearly invisible (lime accent
-     against pane bg = ~2:1 contrast). Render as a filled pill — lime fill
-     on light theme reads as a saturated yellow-green badge, and the dark
-     glyph inside passes AA at this size. Dark theme keeps the same pill
-     against the dark pane. */
+  .page-menu .item:hover { background: var(--bg-elev-2); }
+  .page-menu .item.current { background: var(--bg-elev-2); }
+  .page-menu .item .name { font-size: 13px; font-weight: 500; color: var(--text-1); }
+  /* The page you're on wears a quiet Ink tick — the same mark the rest of
+     the admin uses for "this one". Never a coloured badge. */
   .page-menu .item.current .name::after {
     content: '✓';
     display: inline-flex; align-items: center; justify-content: center;
     width: 16px; height: 16px;
     margin-left: 8px;
     background: var(--accent);
-    color: #1a1a1f;
-    font-size: 11px; font-weight: 900; line-height: 1;
+    color: var(--accent-ink);
+    font-size: 10px; font-weight: 600; line-height: 1;
     border-radius: 999px;
     vertical-align: -3px;
   }
@@ -481,9 +477,10 @@
     box-shadow: inset 0 0 0 1px rgba(0,0,0,.12);
   }
   .theme-menu .sw:hover { transform: scale(1.08); }
+  /* Chosen colour = an Ink ring, a hair off the swatch. No glow. */
   .theme-menu .sw.active {
-    border-color: var(--accent);
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,.12), 0 0 0 2px rgba(107, 142, 111, .25);
+    border-color: var(--bg-pane);
+    box-shadow: inset 0 0 0 1px rgba(17,26,43,.12), 0 0 0 2px var(--accent);
   }
   /* RESET / TRANS swatches used to render the literal text "RESET" / "TRANS"
      inside ~30px circles — at 9px font that bumps up against the circle's
@@ -498,12 +495,12 @@
     display: inline-flex; align-items: center; justify-content: center;
   }
   .theme-menu .sw.transparent {
-    background-color: #fff;
+    background-color: var(--bg-elev-1);
     background-image:
-      linear-gradient(45deg, #d6d3cc 25%, transparent 25%),
-      linear-gradient(-45deg, #d6d3cc 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #d6d3cc 75%),
-      linear-gradient(-45deg, transparent 75%, #d6d3cc 75%);
+      linear-gradient(45deg, var(--line-strong) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--line-strong) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--line-strong) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--line-strong) 75%);
     background-size: 8px 8px;
     background-position: 0 0, 0 4px, 4px -4px, -4px 0px;
   }
@@ -540,15 +537,16 @@
     background: var(--bg-elev-2);
     border-radius: 4px;
   }
+  /* Count badge — a tinted pill, never a shouting dot. */
   .design-check-picker .dc-badge {
     margin-left: auto; margin-right: 4px;
-    min-width: 16px; height: 16px; padding: 0 5px;
-    border-radius: 9px;
-    font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
-    color: #fff;
+    min-width: 16px; height: 16px; padding: 0 6px;
+    border-radius: 999px;
+    font-size: 10px; font-weight: 600; line-height: 16px; text-align: center;
+    font-variant-numeric: tabular-nums;
   }
-  .design-check-picker .dc-badge.critical { background: #e96174; }
-  .design-check-picker .dc-badge.warn     { background: #d29c2a; }
+  .design-check-picker .dc-badge.critical { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
+  .design-check-picker .dc-badge.warn     { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
   .design-check-menu .dc-summary {
     display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
     padding: 2px 2px 8px; margin-bottom: 8px;
@@ -558,9 +556,9 @@
   .design-check-menu .dc-summary .pill {
     padding: 1px 7px; border-radius: 9px; font-weight: 600; font-size: 10.5px;
   }
-  .design-check-menu .dc-summary .pill.critical { background: rgba(233, 97, 116, 0.18); color: #e96174; }
-  .design-check-menu .dc-summary .pill.warn     { background: rgba(242, 202, 108, 0.22); color: #c89535; }
-  .design-check-menu .dc-summary .pill.ok       { background: rgba(123, 189, 59, 0.18); color: #6aa430; }
+  .design-check-menu .dc-summary .pill.critical { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
+  .design-check-menu .dc-summary .pill.warn     { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
+  .design-check-menu .dc-summary .pill.ok       { background: var(--tacet-sage-tint);  color: var(--tacet-sage-ink); }
   .design-check-menu .dc-empty {
     text-align: center; padding: 18px 8px;
     color: var(--text-3); font-size: 12px; line-height: 1.5;
@@ -573,9 +571,9 @@
   .design-check-menu .dc-finding .dot {
     width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 6px;
   }
-  .design-check-menu .dc-finding .dot.critical { background: #e96174; }
-  .design-check-menu .dc-finding .dot.warn     { background: #d29c2a; }
-  .design-check-menu .dc-finding .dot.info     { background: #5d8acb; }
+  .design-check-menu .dc-finding .dot.critical { background: var(--tacet-brick); }
+  .design-check-menu .dc-finding .dot.warn     { background: var(--tacet-amber); }
+  .design-check-menu .dc-finding .dot.info     { background: var(--tacet-graphite); }
   .design-check-menu .dc-finding .dc-body { flex: 1; min-width: 0; }
   .design-check-menu .dc-finding .title {
     font-size: 12px; font-weight: 600; color: var(--text-1); line-height: 1.3;
@@ -592,12 +590,13 @@
     display: inline-flex; gap: 2px; vertical-align: middle;
   }
   .design-check-menu .dc-finding .swatch-pair i {
-    width: 10px; height: 10px; border-radius: 2px; display: inline-block;
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,.12);
+    width: 10px; height: 10px; border-radius: 3px; display: inline-block;
+    box-shadow: inset 0 0 0 1px rgba(17,26,43,.14);
   }
   .design-check-menu .dc-finding .locate {
     background: none; border: none; padding: 0; cursor: pointer;
-    font-size: 10.5px; color: var(--accent); font-weight: 600;
+    font-size: 10.5px; color: var(--text-2); font-weight: 500;
+    text-decoration: underline; text-underline-offset: 2px;
   }
   .design-check-menu .dc-finding .locate:hover { text-decoration: underline; }
   .design-check-menu .dc-footnote {
@@ -609,26 +608,31 @@
      panel. Sprout calls the design_check tool, reads block colours +
      findings, and proposes brand-token swaps. Result renders inline so
      the author never leaves the editor. */
+  /* Ask Sprout — the one Dusk-filled control in this panel. Dusk means
+     "Tacet did this for you", so it belongs to the AI and to nothing else.
+     Flat fill, no gradient: gradients are not part of this system. */
   .design-check-menu .dc-sprout-cta {
     display: flex; align-items: center; gap: 8px;
     width: 100%; margin-top: 10px;
-    padding: 9px 10px;
-    background: linear-gradient(135deg, rgba(107, 142, 111, 0.18), rgba(107, 142, 111, 0.08));
-    border: 1px solid rgba(107, 142, 111, 0.35);
-    border-radius: 8px;
-    color: var(--text-1);
-    font-size: 12px; font-weight: 600;
+    padding: 10px 12px;
+    background: var(--tacet-dusk);
+    border: 1px solid var(--tacet-dusk);
+    border-radius: var(--r-md);
+    color: #FFFFFF;
+    font-size: 12px; font-weight: 500;
     cursor: pointer;
     text-align: left;
-    transition: background var(--t-fast) ease, border-color var(--t-fast) ease;
+    transition: background var(--t-fast) var(--ease-out);
   }
-  .design-check-menu .dc-sprout-cta:hover {
-    background: linear-gradient(135deg, rgba(107, 142, 111, 0.28), rgba(107, 142, 111, 0.12));
-    border-color: rgba(107, 142, 111, 0.55);
-  }
+  .design-check-menu .dc-sprout-cta:hover { background: #5F58A0; border-color: #5F58A0; }
   .design-check-menu .dc-sprout-cta:disabled { opacity: 0.6; cursor: progress; }
-  .design-check-menu .dc-sprout-cta .em { font-size: 14px; }
-  .design-check-menu .dc-sprout-cta .sub { font-size: 10.5px; color: var(--text-3); font-weight: 400; margin-left: auto; }
+  /* The mark is a breathing Dusk dot on white, not an emoji. */
+  .design-check-menu .dc-sprout-cta .em {
+    width: 8px; height: 8px; border-radius: 50%; background: #FFFFFF;
+    font-size: 0; flex-shrink: 0;
+    animation: dc-sprout-flash 2.4s var(--ease-out) infinite;
+  }
+  .design-check-menu .dc-sprout-cta .sub { font-size: 10.5px; color: rgba(255,255,255,.72); font-weight: 400; margin-left: auto; }
   .design-check-menu .dc-sprout-result {
     margin-top: 10px;
     padding: 10px 11px;
@@ -673,17 +677,17 @@
     border-radius: 7px;
     transition: border-color var(--t-fast) ease, background var(--t-fast) ease;
   }
-  .design-check-menu .dc-apply-card:hover { border-color: rgba(107, 142, 111, 0.4); }
+  .design-check-menu .dc-apply-card:hover { border-color: var(--text-2); }
   .design-check-menu .dc-apply-card.applied {
-    background: rgba(123, 189, 59, 0.08);
-    border-color: rgba(123, 189, 59, 0.35);
+    background: var(--tacet-sage-tint);
+    border-color: transparent;
   }
   .design-check-menu .dc-apply-card .swap-swatches {
     display: inline-flex; align-items: center; gap: 4px;
   }
   .design-check-menu .dc-apply-card .swap-swatches i {
-    width: 14px; height: 14px; border-radius: 3px;
-    box-shadow: inset 0 0 0 1px rgba(0,0,0,.18);
+    width: 14px; height: 14px; border-radius: 4px;
+    box-shadow: inset 0 0 0 1px rgba(17,26,43,.14);
   }
   .design-check-menu .dc-apply-card .swap-swatches .arr {
     color: var(--text-3); font-size: 10px;
@@ -699,20 +703,23 @@
     font-size: 10.5px; color: var(--text-3);
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  /* Apply is an ordinary operator control, so it is Secondary: transparent,
+     1px border, Ink text. Dusk is spent on the Ask CTA above — never here. */
   .design-check-menu .dc-apply-card .swap-btn {
-    background: var(--accent, #CCD900); color: #1a1a17;
-    border: none; padding: 5px 11px; border-radius: 5px;
-    font-size: 11px; font-weight: 700; cursor: pointer;
-    transition: background var(--t-fast) ease;
+    background: var(--bg-elev-1); color: var(--text-1);
+    border: 1px solid var(--line); padding: 5px 11px; border-radius: var(--r-sm);
+    font-size: 11px; font-weight: 500; cursor: pointer;
+    transition: border-color var(--t-fast) var(--ease-out);
   }
-  .design-check-menu .dc-apply-card .swap-btn:hover { background: #b8c200; }
+  .design-check-menu .dc-apply-card .swap-btn:hover { border-color: var(--text-2); }
   .design-check-menu .dc-apply-card .swap-btn:disabled {
     background: var(--bg-elev-1); color: var(--text-3); cursor: progress;
   }
   .design-check-menu .dc-apply-card.applied .swap-btn {
-    background: rgba(123, 189, 59, 0.25); color: #6aa430; cursor: default;
+    background: transparent; border-color: transparent;
+    color: var(--tacet-sage-ink); cursor: default;
   }
-  .design-check-menu .dc-sprout-result strong { color: var(--accent, #CCD900); font-weight: 700; }
+  .design-check-menu .dc-sprout-result strong { color: var(--text-1); font-weight: 500; }
   .design-check-menu .dc-sprout-result code {
     background: var(--bg-elev-2); padding: 1px 5px; border-radius: 3px;
     font-size: 11px; color: var(--text-2);
@@ -726,25 +733,28 @@
   .design-check-menu .dc-sprout-result .dc-sprout-rerun {
     margin-left: auto;
     background: none; border: none; padding: 0; cursor: pointer;
-    color: var(--accent, #CCD900); font-size: 10.5px; font-weight: 600;
+    color: var(--text-2); font-size: 10.5px; font-weight: 500;
   }
-  .design-check-menu .dc-sprout-result .dc-sprout-err { color: #e96174; }
+  .design-check-menu .dc-sprout-result .dc-sprout-rerun:hover { color: var(--text-1); }
+  .design-check-menu .dc-sprout-result .dc-sprout-err { color: var(--tacet-brick); }
+  /* Thinking — the Dusk tint room with a breathing Dusk dot. No spinner. */
   .design-check-menu .dc-sprout-loading {
     margin-top: 10px;
     padding: 11px 12px;
-    background: var(--bg-elev-1);
-    border: 1px dashed var(--line);
-    border-radius: 8px;
-    font-size: 11.5px; color: var(--text-3);
+    background: var(--tacet-dusk-tint);
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    font-size: 11.5px; color: var(--tacet-dusk);
     display: flex; align-items: center; gap: 8px;
   }
   .design-check-menu .dc-sprout-loading .dot-flash {
-    width: 6px; height: 6px; background: var(--accent, #CCD900); border-radius: 50%;
-    animation: dc-sprout-flash 1s ease-in-out infinite;
+    width: 8px; height: 8px; background: var(--tacet-dusk); border-radius: 50%;
+    animation: dc-sprout-flash 2.4s var(--ease-out) infinite;
   }
+  /* The signature: live automation breathes, 1 → 0.45 → 1 over 2.4s. */
   @keyframes dc-sprout-flash {
-    0%, 100% { opacity: 0.3; transform: scale(0.8); }
-    50%      { opacity: 1;   transform: scale(1.1); }
+    0%, 100% { opacity: 1;    transform: scale(1); }
+    50%      { opacity: 0.45; transform: scale(0.8); }
   }
   .tabbar-menu .row-themes {
     display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;
@@ -763,9 +773,9 @@
   .tabbar-menu .theme-card.active { border-color: var(--accent); }
   /* Bottom-bar theme preview: 4 tiny coloured dots on a coloured strip */
   .tabbar-menu .theme-card .preview {
-    width: 100%; height: 22px; border-radius: 3px;
+    width: 100%; height: 22px; border-radius: 4px;
     display: flex; align-items: center; justify-content: center; gap: 3px;
-    border-top: 1px solid rgba(0,0,0,.08);
+    border-top: 1px solid rgba(17,26,43,.08);
   }
   .tabbar-menu .theme-card .preview span { width: 6px; height: 6px; border-radius: 50%; }
   .tabbar-menu .theme-card .name { font-size: 10px; color: var(--text-2); font-weight: 600; }
@@ -863,7 +873,7 @@
   .tabbar-menu .upload-cell .thumb {
     width: 30px; height: 30px;
     display: flex; align-items: center; justify-content: center;
-    background: rgba(255, 255, 255, .04); border-radius: 4px;
+    background: var(--bg-elev-2); border-radius: var(--r-sm);
   }
   .tabbar-menu .upload-cell .thumb img,
   .tabbar-menu .upload-cell .thumb svg { width: 26px; height: 26px; object-fit: contain; }
@@ -873,35 +883,38 @@
   .tabbar-menu .upload-cell .clear-x {
     position: absolute; top: 2px; right: 2px;
     width: 16px; height: 16px; border-radius: 50%;
-    background: rgba(0,0,0,.55); color: #fff;
+    background: var(--tacet-ink); color: var(--tacet-paper);
     font-size: 10px; line-height: 16px; text-align: center;
     border: none; cursor: pointer; padding: 0;
     display: none;
   }
   .tabbar-menu .upload-cell.has-custom .clear-x { display: block; }
 
+  /* Save state — a bare dot and a word. Sage = saved, Amber = something
+     is waiting, Brick = it didn't land. No border, no box: it is a
+     statement, not a control. */
   .status-pill {
     display: inline-flex; align-items: center; gap: var(--s2);
-    padding: 5px 10px 5px 8px;
-    background: rgba(255, 255, 255, .04);
-    border: 1px solid var(--line-soft);
-    border-radius: 999px;
+    padding: 5px 4px;
+    background: transparent;
+    border: 0;
     font-size: 12px;
     color: var(--text-2);
     white-space: nowrap;
     flex-shrink: 0;
-    transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
+    transition: color var(--t-fast) var(--ease-out);
   }
   .status-pill .dot {
-    width: 6px; height: 6px; border-radius: 50%; background: var(--text-3);
-    transition: background var(--t-fast) ease;
+    width: 7px; height: 7px; border-radius: 50%; background: var(--text-4);
+    transition: background var(--t-fast) var(--ease-out);
   }
-  .status-pill.clean .dot { background: var(--success); }
-  .status-pill.dirty .dot { background: var(--warn); }
-  .status-pill.dirty { color: var(--text-1); border-color: rgba(233, 163, 90, .22); }
-  .status-pill.saving .dot { background: var(--text-2); animation: pulse 1.2s ease-in-out infinite; }
-  .status-pill.err .dot { background: var(--danger); }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+  .status-pill.clean .dot { background: var(--tacet-sage); }
+  .status-pill.dirty .dot { background: var(--tacet-amber); }
+  .status-pill.dirty { color: var(--text-1); }
+  .status-pill.saving .dot { background: var(--text-2); animation: pulse 2.4s var(--ease-out) infinite; }
+  .status-pill.err .dot { background: var(--tacet-brick); }
+  .status-pill.err { color: var(--tacet-brick); }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 
   .grow { flex: 1; }
   .who { font-size: 12px; color: var(--text-3); }
@@ -912,37 +925,44 @@
   }
   .topbar-link:hover { background: var(--bg-elev-1); color: var(--text-1); }
 
-  /* Buttons */
+  /* ── Buttons ────────────────────────────────────────────────────────
+     Secondary is the default: transparent, 1px border, Ink text. Labels
+     are verbs. Nothing bounces on press — things settle.
+     ─────────────────────────────────────────────────────────────────── */
   .btn {
-    display: inline-flex; align-items: center; gap: 6px;
+    display: inline-flex; align-items: center; gap: 7px;
     font-size: 13px; font-weight: 500;
-    padding: 7px 12px;
+    padding: 8px 14px;
     border: 1px solid var(--line);
     background: var(--bg-elev-1);
     color: var(--text-1);
     border-radius: var(--r-md);
     cursor: pointer;
-    transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease, transform var(--t-fast) ease;
+    transition: background var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
     user-select: none;
   }
-  .btn:hover { background: var(--bg-elev-2); border-color: var(--line-strong); }
-  .btn:active { transform: translateY(1px); }
-  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn:hover { border-color: var(--text-2); }
+  .btn:focus-visible { outline: 2px solid var(--tacet-dusk); outline-offset: 2px; }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn:disabled:hover { border-color: var(--line); }
   .btn svg { width: 14px; height: 14px; flex-shrink: 0; }
+  /* Primary — Dusk fill, white text. Exactly one lives on this screen and
+     it is Publish. Do not reach for this class again. */
   .btn-primary {
-    background: var(--accent); color: var(--accent-ink);
-    border-color: var(--accent); font-weight: 600;
+    background: var(--brass); color: #FFFFFF;
+    border-color: var(--brass); font-weight: 500;
   }
-  .btn-primary:hover { background: var(--accent-hi); border-color: var(--accent-hi); }
+  .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
   .btn-ghost {
     background: transparent; border-color: transparent; color: var(--text-2);
   }
-  .btn-ghost:hover { background: var(--bg-elev-1); color: var(--text-1); border-color: transparent; }
+  .btn-ghost:hover { background: var(--bg-elev-2); color: var(--text-1); border-color: transparent; }
+  /* Destructive — outlined Brick, filling to a tint on hover. Never solid red. */
   .btn-danger {
-    background: transparent; color: var(--danger); border-color: rgba(232, 85, 106, .25);
+    background: transparent; color: var(--danger); border-color: var(--danger);
   }
   .btn-danger:hover { background: var(--danger-soft); border-color: var(--danger); }
-  .btn-icon { padding: 7px 8px; }
+  .btn-icon { padding: 8px; }
 
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
@@ -999,10 +1019,10 @@
   .palette-item:active { cursor: grabbing; transform: translateY(0); }
   .palette-item .icon {
     width: 32px; height: 32px;
-    background: rgba(107, 142, 111, .08);
+    background: var(--bg-elev-2);
     border-radius: var(--r-md);
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent);
+    color: var(--text-1);
     flex-shrink: 0;
   }
   .palette-item .icon svg { width: 18px; height: 18px; }
@@ -1025,7 +1045,7 @@
   .palette-item.pal-drop-target { position: relative; }
   .palette-item.pal-drop-target::before {
     content: ''; position: absolute; left: 0; right: 0; top: -3px;
-    height: 2px; background: var(--accent); border-radius: 1px;
+    height: 2px; background: var(--accent); border-radius: 999px;
   }
   .palette-reset-btn {
     background: transparent; border: 0;
@@ -1111,8 +1131,7 @@
   }
   .canvas[data-backdrop="studio"] {
     background-image:
-      radial-gradient(ellipse 72% 56% at 50% 40%, var(--bg-elev-1) 0%, transparent 60%),
-      radial-gradient(ellipse at bottom, rgba(54, 83, 41, .04), transparent 55%);
+      radial-gradient(ellipse 72% 56% at 50% 40%, var(--bg-elev-2) 0%, transparent 60%);
   }
   .phone {
     width: 390px;
@@ -1137,7 +1156,7 @@
     position: absolute;
     top: 12px; left: 50%; transform: translateX(-50%);
     width: 110px; height: 30px;
-    background: #0a0a0c;
+    background: var(--tacet-ink);
     border-radius: 0 0 18px 18px;
     z-index: 10;
   }
@@ -1160,17 +1179,16 @@
   .preview-menu { position: relative; display: inline-flex; z-index: 1000; }
   .btn-phone-preview {
     display: inline-flex; align-items: center; gap: 6px;
-    background: var(--bg-pane);
-    border: 1px solid var(--line-soft);
-    border-radius: 999px;
-    padding: 5px 12px;
-    font: 600 11px var(--f-sans);
-    letter-spacing: .04em;
-    color: var(--text-2);
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 7px 12px;
+    font: 500 12px var(--f-sans);
+    color: var(--text-1);
     cursor: pointer;
-    transition: color var(--t-fast) ease, border-color var(--t-fast) ease;
+    transition: border-color var(--t-fast) var(--ease-out);
   }
-  .btn-phone-preview:hover { color: var(--text-1); border-color: var(--text-2); }
+  .btn-phone-preview:hover { border-color: var(--text-2); }
   .preview-menu-pop {
     /* position: fixed so the popover lives in the viewport's own stacking
        context, not the canvas's — sidesteps all stacking-context quirks
@@ -1181,7 +1199,7 @@
     background: var(--bg-pane);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--sh-3);
     padding: 4px;
     z-index: 9999;
   }
@@ -1209,22 +1227,22 @@
     background: var(--bg-pane);
     border: 1px solid var(--line);
     border-radius: var(--r-md);
-    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+    box-shadow: var(--sh-3);
     padding: var(--s4) var(--s4) calc(var(--s4) - 2px);
     z-index: 9999;
     display: flex; flex-direction: column; gap: var(--s4);
   }
   .tweaks-pop[hidden] { display: none; }
   .tweaks-pop .tw-label {
-    font: 500 10px var(--f-mono);
-    letter-spacing: .22em; text-transform: uppercase;
-    color: var(--brass); margin-bottom: 7px;
+    font: 500 11px var(--f-sans);
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-3); margin-bottom: 7px;
   }
   .tweaks-pop .tw-seg {
     display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-    gap: 4px;
-    background: var(--bg-app);
-    border: 1px solid var(--line-soft);
+    gap: 3px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--line);
     border-radius: var(--r-md);
     padding: 3px;
   }
@@ -1232,11 +1250,14 @@
     border: 0; background: transparent; cursor: pointer;
     padding: 6px 8px; border-radius: var(--r-sm);
     font: 500 12px var(--f-sans); color: var(--text-2);
-    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+    transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
   }
-  .tweaks-pop .tw-seg button:hover { color: var(--text-1); background: var(--bg-elev-1); }
+  .tweaks-pop .tw-seg button:hover { color: var(--text-1); }
+  /* Selected segment = a raised white chip, not a colour fill. This is an
+     operator choice, so it stays monochrome — Dusk is only for the AI. */
   .tweaks-pop .tw-seg button.active {
-    background: var(--accent); color: var(--accent-ink); font-weight: 600;
+    background: var(--bg-pane); color: var(--text-1); font-weight: 500;
+    box-shadow: 0 1px 2px rgba(17,26,43,.08);
   }
 
   /* Phone-preview modal — full-screen scrim + centered card. The [hidden]
@@ -1244,7 +1265,7 @@
   .phone-preview-bg[hidden] { display: none !important; }
   .phone-preview-bg {
     position: fixed; inset: 0;
-    background: rgba(10, 10, 12, 0.72);
+    background: var(--bg-overlay);
     display: flex; align-items: center; justify-content: center;
     z-index: 9999;
   }
@@ -1256,7 +1277,7 @@
     border-radius: var(--r-lg);
     width: 480px; max-width: 92vw;
     max-height: 88vh; overflow-y: auto;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--sh-3);
   }
   .phone-preview-head {
     display: flex; align-items: flex-start; justify-content: space-between;
@@ -1271,14 +1292,14 @@
      have to parse DevTools jargon before they know whether this is the
      right modal for them. */
   .pp-lead {
-    background: rgba(107, 142, 111, .08);
-    border: 1px solid rgba(107, 142, 111, .25);
+    background: var(--bg-elev-2);
+    border: 1px solid var(--line);
     border-radius: var(--r-md);
     padding: 12px 14px;
     margin-bottom: 16px;
     font-size: 13px; color: var(--text-1); line-height: 1.5;
   }
-  .pp-lead b { color: var(--accent-hi, #6B8E6F); }
+  .pp-lead b { color: var(--text-1); font-weight: 600; }
   .pp-lead .pp-lead-sub { color: var(--text-2); font-size: 11.5px; margin-top: 4px; }
   /* Numbered step list — each step is a bordered row with a circled
      number on the left. Way easier to follow than a wall of inline
@@ -1302,8 +1323,8 @@
     position: absolute; top: 10px; left: 12px;
     width: 22px; height: 22px;
     display: inline-flex; align-items: center; justify-content: center;
-    background: var(--accent); color: #1a1a1a;
-    font: 700 11px var(--f-sans);
+    background: var(--accent); color: var(--accent-ink);
+    font: 500 11px var(--f-sans);
     border-radius: 50%;
   }
   .pp-steps .pp-step-cn {
@@ -1394,7 +1415,7 @@
     transition: color var(--t-fast) ease, background var(--t-fast) ease;
   }
   .lang-toggle button:hover { color: var(--text-1); }
-  .lang-toggle button.active { background: var(--accent); color: var(--accent-ink); }
+  .lang-toggle button.active { background: var(--bg-pane); color: var(--text-1); box-shadow: 0 1px 2px rgba(17,26,43,.08); }
   /* Editor-chrome i18n. Chrome labels carry both languages as paired
      .i18n-en / .i18n-cn spans; the EN/中 toggle sets <html data-cms-lang>
      and CSS shows only the active side — so customers' preview language and
@@ -1443,8 +1464,8 @@
     width: 8px; height: 8px; border-radius: 50%;
     background: var(--text-3); flex-shrink: 0;
   }
-  .link-status.linked .dot { background: var(--accent); }
-  .link-status.unlinked .dot { background: #f0b76b; }
+  .link-status.linked .dot { background: var(--tacet-sage); }
+  .link-status.unlinked .dot { background: var(--tacet-amber); }
   .link-status .msg { flex: 1; min-width: 0; color: var(--text-2); }
   .link-status .msg b { color: var(--text-1); font-weight: 600; }
   .link-status .msg .target {
@@ -1454,15 +1475,15 @@
     padding: 1px 6px; border-radius: 3px;
   }
   .link-status .action {
-    background: var(--accent); color: var(--accent-ink);
-    border: 0; padding: 6px 12px; border-radius: var(--r-md);
-    font: 700 11px var(--f-sans); letter-spacing: .04em;
+    background: var(--bg-elev-1); color: var(--text-1);
+    border: 1px solid var(--line); padding: 6px 12px; border-radius: var(--r-md);
+    font: 500 12px var(--f-sans);
     cursor: pointer;
     display: inline-flex; align-items: center; gap: 6px;
     flex-shrink: 0;
-    transition: background var(--t-fast) ease;
+    transition: border-color var(--t-fast) var(--ease-out);
   }
-  .link-status .action:hover { background: var(--accent-hi); }
+  .link-status .action:hover { border-color: var(--text-2); }
   .link-status .action svg { width: 12px; height: 12px; }
   .link-status .ghost {
     background: transparent; color: var(--text-2);
@@ -1481,7 +1502,7 @@
     outline-offset: -2px;
   }
   .block-wrap:active { cursor: grabbing; }
-  .block-wrap:hover { outline-color: rgba(26, 35, 20, .15); }
+  .block-wrap:hover { outline-color: rgba(110, 103, 175, .34); }
   /* Per-block chrome preview — mirrors the live mini-app .blk-outer rules.
      Frame: brand-colored outline (border-color set inline). Bleed: drop the
      per-block side gutter so the block reaches both phone edges. */
@@ -1507,10 +1528,10 @@
     border-radius: 0;
   }
   .block-wrap.selected {
-    /* Muted olive — was the full `--accent` (#6B8E6F) which read as
-       neon-bright against the cream canvas. The darker shade keeps a
-       brand-tinted selection without dominating the page. */
-    outline-color: #6B8E6F;
+    /* The selected block wears a Dusk ring — the editor's own colour laid
+       over the customer's page, so it never clashes with whatever brand
+       colours the block itself uses. */
+    outline-color: var(--tacet-dusk);
     outline-width: 1.5px;
     /* Sit the ring just outside the box (not the base -2px inset). Self-bg
        blocks (voting, etc.) fill to the wrap's top/bottom with their own
@@ -1518,7 +1539,7 @@
        — leaving only the corners + sides visible. Offset 0 keeps all four
        edges clear of the child. */
     outline-offset: 0;
-    box-shadow: 0 0 0 3px rgba(107, 142, 111, .08);
+    box-shadow: 0 0 0 3px var(--tacet-dusk-tint);
     z-index: 3;
   }
   /* Brief "ping" pulse when the user clicks Locate from the Design
@@ -1531,9 +1552,9 @@
     z-index: 4;
   }
   @keyframes dc-located-pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(107, 142, 111, .55), 0 0 0 0 rgba(107, 142, 111, .25); outline-color: #6B8E6F; }
-    35%  { box-shadow: 0 0 0 8px rgba(107, 142, 111, .35), 0 0 0 14px rgba(107, 142, 111, .12); outline-color: #6B8E6F; }
-    100% { box-shadow: 0 0 0 3px rgba(107, 142, 111, .08), 0 0 0 0 rgba(107, 142, 111, 0); outline-color: #6B8E6F; }
+    0%   { box-shadow: 0 0 0 0 rgba(110, 103, 175, .50), 0 0 0 0 rgba(110, 103, 175, .22); outline-color: var(--tacet-dusk); }
+    35%  { box-shadow: 0 0 0 8px rgba(110, 103, 175, .30), 0 0 0 14px rgba(110, 103, 175, .10); outline-color: var(--tacet-dusk); }
+    100% { box-shadow: 0 0 0 3px var(--tacet-dusk-tint), 0 0 0 0 rgba(110, 103, 175, 0); outline-color: var(--tacet-dusk); }
   }
   body.dragging .block-wrap.dragging-self {
     opacity: .35;
@@ -1544,42 +1565,42 @@
   /* Floating mini-toolbar — single instance, repositioned over the selected
      block. position:fixed so it floats free of `.phone`'s overflow:hidden
      clip (which would chop off any negative-top overlay). */
+  /* Floating toolbar — an Ink pill on Paper. No blur, no glass; the system
+     has one shadow and this borrows it. Its buttons carry Paper-toned icons. */
   .block-toolbar {
     position: fixed; z-index: 50;
     display: none;
-    background: rgba(22, 22, 26, .92);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, .08);
-    border-radius: var(--r-md);
+    background: var(--tacet-ink);
+    border: 1px solid var(--tacet-ink);
+    border-radius: var(--r-pill);
     padding: 4px;
     gap: 2px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, .35);
+    box-shadow: var(--sh-3);
     pointer-events: auto;
-    transition: opacity var(--t-fast) ease;
+    transition: opacity var(--t-fast) var(--ease-out);
   }
   /* Inside-block fallback (rare — block top is at the canvas edge with no
      room above). Slightly translucent so the block underneath still reads. */
   .block-toolbar.placement-inside { opacity: 0.88; }
   .block-toolbar button {
-    width: 26px; height: 26px;
+    width: 28px; height: 28px;
     background: transparent;
     border: 0;
-    color: var(--text-2);
-    border-radius: var(--r-sm);
+    color: rgba(251, 249, 244, .78);
+    border-radius: 50%;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: background var(--t-fast) ease, color var(--t-fast) ease;
+    transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
   }
-  .block-toolbar button:hover { background: rgba(255, 255, 255, .08); color: var(--text-1); }
-  .block-toolbar button.danger:hover { background: var(--danger-soft); color: var(--danger); }
+  .block-toolbar button:hover { background: rgba(251, 249, 244, .14); color: #FFFFFF; }
+  .block-toolbar button.danger:hover { background: rgba(180, 83, 62, .28); color: #E8A597; }
   .block-toolbar button svg { width: 14px; height: 14px; }
-  .block-toolbar .sep { width: 1px; height: 14px; background: rgba(255, 255, 255, .1); margin: 0 2px; align-self: center; }
+  .block-toolbar .sep { width: 1px; height: 14px; background: rgba(251, 249, 244, .16); margin: 0 2px; align-self: center; }
   .block-toolbar .label {
     display: flex; align-items: center;
     padding: 0 8px;
     font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
-    color: var(--text-3);
+    color: rgba(251, 249, 244, .55);
     font-family: var(--f-sans);
   }
 
@@ -1596,25 +1617,24 @@
     content: '';
     position: absolute; top: 50%; left: 22px; right: 22px;
     height: 2px; transform: translateY(-50%);
-    background: repeating-linear-gradient(90deg, rgba(107, 142, 111, .35) 0 6px, transparent 6px 12px);
-    border-radius: 1px;
+    background: repeating-linear-gradient(90deg, rgba(110, 103, 175, .40) 0 6px, transparent 6px 12px);
+    border-radius: 999px;
   }
   body.dragging .drop-zone.tail { height: 64px; }
   body.dragging .drop-zone.tail::after {
     top: 50%; left: 18px; right: 18px; height: 2px;
   }
-  .drop-zone.hover { height: 56px; background: rgba(107, 142, 111, .08); }
+  .drop-zone.hover { height: 56px; background: var(--tacet-dusk-tint); }
   .drop-zone.hover::after {
-    background: var(--accent);
+    background: var(--tacet-dusk);
     height: 2px;
-    box-shadow: 0 0 12px rgba(107, 142, 111, .4);
   }
   .drop-zone.hover::before {
     content: 'Drop here';
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    background: var(--accent); color: var(--accent-ink);
-    padding: 3px 10px; border-radius: 999px;
-    font: 600 10px var(--f-sans); letter-spacing: .08em; text-transform: uppercase;
+    background: var(--tacet-dusk); color: #FFFFFF;
+    padding: 4px 12px; border-radius: 999px;
+    font: 500 11px var(--f-sans);
     z-index: 2;
   }
   .drop-zone.tail.hover { height: 100px; }
@@ -1638,10 +1658,10 @@
   }
   .inspector-head .type-row .icon {
     width: 22px; height: 22px;
-    background: rgba(107, 142, 111, .1);
+    background: var(--bg-elev-2);
     border-radius: var(--r-sm);
     display: flex; align-items: center; justify-content: center;
-    color: var(--accent);
+    color: var(--text-1);
   }
   .inspector-head .type-row .icon svg { width: 13px; height: 13px; }
   .inspector-head .type {
@@ -1656,11 +1676,11 @@
      and the explanation appears exactly when you're editing that block. */
   .insp-note {
     margin: var(--s3) var(--s5) 0;
-    padding: var(--s2) var(--s3);
-    background: rgba(107, 142, 111, .08);
-    border: 1px solid var(--line-soft);
-    border-radius: var(--r-sm);
-    font-size: 11.5px; line-height: 1.45; color: var(--text-3);
+    padding: var(--s3);
+    background: var(--bg-elev-2);
+    border: 1px solid transparent;
+    border-radius: var(--r-md);
+    font-size: 11.5px; line-height: 1.45; color: var(--text-2);
   }
 
   .inspector-body { padding: var(--s4) var(--s5) var(--s7); }
@@ -1690,9 +1710,10 @@
     outline: none;
     transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
+  /* Focus = a Dusk border. No glow ring — the border alone says "here". */
   input:focus, select:focus, textarea:focus {
-    border-color: rgba(107, 142, 111, .45);
-    box-shadow: 0 0 0 3px var(--ring);
+    border-color: var(--tacet-dusk);
+    box-shadow: none;
   }
   input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
     border-color: var(--line-strong);
@@ -1700,7 +1721,7 @@
   textarea { min-height: 64px; resize: vertical; font-family: inherit; }
   select {
     appearance: none;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237d7a72' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'></polyline></svg>");
     background-repeat: no-repeat;
     background-position: right 10px center;
     padding-right: 32px;
@@ -1764,10 +1785,11 @@
     transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
   }
   .chip:hover { border-color: var(--line-strong); color: var(--text-1); }
+  /* Chosen chip = Ink fill, Paper text. A selection is monochrome. */
   .chip.on {
-    background: rgba(107, 142, 111, .15);
+    background: var(--accent);
     border-color: var(--accent);
-    color: var(--accent-hi);
+    color: var(--accent-ink);
   }
 
   /* Product picker — searchable list with checkbox-style selection */
@@ -1809,7 +1831,7 @@
   }
   .product-picker .item:last-child { border-bottom: 0; }
   .product-picker .item:hover { background: var(--bg-elev-1); }
-  .product-picker .item.on { background: rgba(107, 142, 111, .07); }
+  .product-picker .item.on { background: var(--bg-elev-2); }
   .product-picker .item .thumb {
     width: 36px; height: 36px;
     background: var(--bg-elev-2);
@@ -1863,11 +1885,11 @@
   }
   .product-picker .item .draft-tag {
     display: inline-block;
-    font-size: 9px; font-weight: 700; letter-spacing: .08em;
-    padding: 1px 5px; margin-left: 4px;
-    background: rgba(233, 163, 90, .18);
-    color: var(--warn);
-    border-radius: 2px;
+    font-size: 9px; font-weight: 600; letter-spacing: .08em;
+    padding: 1px 6px; margin-left: 4px;
+    background: var(--tacet-amber-tint);
+    color: var(--tacet-amber-ink);
+    border-radius: 999px;
     vertical-align: 1px;
   }
   .product-picker .foot {
@@ -1894,13 +1916,13 @@
   .target-picker .tp-chip {
     display: inline-flex; align-items: center; gap: 8px; max-width: 100%;
     padding: 4px 4px 4px 9px;
-    background: rgba(107, 142, 111, .10);
+    background: var(--bg-elev-2);
     border: 1px solid var(--line);
     border-radius: 999px; font-size: 12px;
   }
   .target-picker .tp-chip-kind {
-    font-size: 9px; font-weight: 700; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--accent); flex-shrink: 0;
+    font-size: 9px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--text-3); flex-shrink: 0;
   }
   .target-picker .tp-chip-label {
     color: var(--text-1);
@@ -1912,7 +1934,7 @@
     background: var(--bg-elev-2); color: var(--text-2);
     cursor: pointer; font-size: 14px; line-height: 1;
   }
-  .target-picker .tp-chip-clear:hover { background: var(--danger); color: #fff; }
+  .target-picker .tp-chip-clear:hover { background: var(--danger); color: var(--tacet-paper); }
   .target-picker .tp-group {
     padding: 6px 12px;
     font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
@@ -1923,17 +1945,17 @@
   .target-picker .item .thumb svg { width: 16px; height: 16px; }
   .target-picker .tp-tag {
     display: inline-block;
-    font-size: 9px; font-weight: 700; letter-spacing: .08em;
-    padding: 1px 5px; margin-left: 4px;
-    background: rgba(107, 142, 111, .18); color: var(--accent);
-    border-radius: 2px; vertical-align: 1px;
+    font-size: 9px; font-weight: 600; letter-spacing: .08em;
+    padding: 1px 6px; margin-left: 4px;
+    background: var(--bg-elev-2); color: var(--text-2);
+    border-radius: 999px; vertical-align: 1px;
   }
   .target-picker .foot { cursor: default; }
   .target-picker .tp-manual-toggle {
     color: var(--text-2); cursor: pointer; font-size: 11px;
     text-decoration: underline; text-underline-offset: 2px;
   }
-  .target-picker .tp-manual-toggle:hover { color: var(--accent); }
+  .target-picker .tp-manual-toggle:hover { color: var(--text-1); }
   .target-picker .tp-manual {
     padding: 8px 12px;
     border-top: 1px solid var(--line-soft);
@@ -1951,8 +1973,8 @@
     transition: border-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
   }
   .txt-pair-row:focus-within {
-    border-color: rgba(107, 142, 111, .45);
-    box-shadow: 0 0 0 3px var(--ring);
+    border-color: var(--tacet-dusk);
+    box-shadow: none;
   }
   .txt-pair-row .lang-tag {
     padding: 0 10px;
@@ -2009,7 +2031,7 @@
     transition: background var(--t-fast) ease, color var(--t-fast) ease, border-color var(--t-fast) ease;
   }
   .cta-remove:hover {
-    background: var(--danger-soft); color: var(--danger); border-color: rgba(232, 85, 106, .3);
+    background: var(--danger-soft); color: var(--danger); border-color: var(--danger);
   }
   .cta-remove svg { width: 12px; height: 12px; }
 
@@ -4464,15 +4486,11 @@
     transition: opacity var(--t-med) var(--ease-out), transform var(--t-med) var(--ease-out);
   }
   .toast.show { opacity: 1; transform: translate(-50%, 0); }
-  .toast.err {
-    background: rgba(120, 30, 40, .92);
-    border-color: var(--danger);
-    color: #fff;
-  }
-  .toast.ok {
-    background: rgba(54, 83, 41, .55);
-    border-color: var(--success);
-  }
+  /* Toast is an Ink bar on Paper in either theme — a quiet inline note,
+     never a coloured alert. Kind is carried by a small leading dot the JS
+     sets, not by dyeing the whole surface. */
+  .toast.err { border-color: var(--danger); }
+  .toast.ok  { border-color: var(--tacet-sage); }
 
   /* ═══════════════════════════════════════════════════════════════════
      MODAL
@@ -4545,16 +4563,16 @@
     user-select: none;
   }
   #tb-modal .opt:hover { border-color: var(--line-strong); background: var(--bg-elev-2); }
-  #tb-modal .opt.active { border-color: var(--accent); background: rgba(107,142,111,.06); box-shadow: 0 0 0 3px var(--ring); }
+  #tb-modal .opt.active { border-color: var(--tacet-dusk); background: var(--tacet-dusk-tint); box-shadow: none; }
   #tb-modal .opt.active .opt-screen { transform: translateY(-1px); }
-  #tb-modal .opt-screen { position: relative; height: 96px; background: #0f0f12; border-radius: 6px; margin-bottom: 6px; overflow: hidden; transition: transform 120ms; }
+  #tb-modal .opt-screen { position: relative; height: 96px; background: var(--bg-elev-2); border-radius: var(--r-sm); margin-bottom: 6px; overflow: hidden; transition: transform var(--t-fast) var(--ease-out); }
   #tb-modal .opt-label { font-size: 11px; font-weight: 600; color: var(--text-1); text-align: center; }
   #tb-modal .opt-sub { font-size: 10px; color: var(--text-3); text-align: center; margin-top: 2px; line-height: 1.4; }
   #tb-modal .ms-bar  { position: absolute; left: 4px; right: 4px; top: 4px; height: 8px; border-radius: 2px; }
-  #tb-modal .ms-hero { position: absolute; left: 4px; right: 4px; top: 16px; height: 22px; background: linear-gradient(135deg, #4a5d2e, #2c3a1d); border-radius: 3px; }
-  #tb-modal .ms-row  { position: absolute; left: 4px; right: 4px; height: 4px; background: #2a2a30; border-radius: 1px; }
-  #tb-modal .ms-tab  { position: absolute; bottom: 0; left: 0; right: 0; height: 16px; background: #f5f0e1; display: flex; align-items: center; justify-content: space-around; padding: 0 4px; }
-  #tb-modal .ms-tab span { width: 6px; height: 6px; background: #56544f; border-radius: 1px; }
+  #tb-modal .ms-hero { position: absolute; left: 4px; right: 4px; top: 16px; height: 22px; background: var(--text-4); border-radius: 3px; }
+  #tb-modal .ms-row  { position: absolute; left: 4px; right: 4px; height: 4px; background: var(--line-strong); border-radius: 1px; }
+  #tb-modal .ms-tab  { position: absolute; bottom: 0; left: 0; right: 0; height: 16px; background: var(--bg-pane); display: flex; align-items: center; justify-content: space-around; padding: 0 4px; }
+  #tb-modal .ms-tab span { width: 6px; height: 6px; background: var(--text-3); border-radius: 1px; }
   #tb-modal .ms-tab span.active { background: var(--accent); }
   #tb-modal .picker-source { display: none; }
   #tb-modal label.stacked { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); margin-bottom: 6px; }
@@ -4620,169 +4638,126 @@
   .help-card .close:hover { color: var(--text-1); }
 
   /* ═══════════════════════════════════════════════════════════════════
-     FULL CIRCLE SKIN — brand-language overrides layered on top of the
-     base chrome. Keeps the editor's IA + layout; restyles the surface.
-       · Top bar is Ink Charcoal in BOTH themes (the signature look).
-       · Wordmark FULL CIRCLE (Plex Sans bold caps) + brass middot.
-       · Ensō logo mark (brass + tea rings).
-       · Publish = Aged Brass (the one primary action). Tea = selection/live.
-       · Section labels in Plex Mono, Aged Brass, wide tracking.
-     The phone-preview customer brand (fonts + --b-* colours) is untouched.
+     TACET CHROME — the editor's surface, on Paper.
+       · Top bar is white on Paper, a single 1px underline. No dark bar.
+       · Wordmark is the lowercase `tacet` in Fraunces Light; the mark is
+         the waveform settling to a flat line with a Dusk dot (in markup).
+       · Publish is the one Dusk action. Selection / active read as Ink.
+       · Section labels are plain Inter caption in Graphite — no mono, no
+         coloured tracking.
+     The phone-preview customer brand (fonts + --b-* colours) is untouched:
+     Tacet is only the room the Roots phone sits in.
      ═══════════════════════════════════════════════════════════════════ */
   .topbar {
     background: var(--chrome-bg);
-    border-bottom: 1px solid rgba(232, 229, 220, .08);
+    border-bottom: 1px solid var(--line);
   }
   /* Brand lockup ------------------------------------------------------ */
   .topbar .brand { color: var(--chrome-fg); }
   .brand-mark {
     background: transparent;
-    border: 1px solid rgba(232, 229, 220, .15);
+    border: 0;
     box-shadow: none;
     color: var(--chrome-fg);
   }
+  /* The wordmark is the one place Fraunces is allowed. Lowercase, always. */
   .brand .wordmark {
-    font-weight: 700;
-    font-size: 11px;
+    font-family: var(--f-serif);
+    font-weight: 300;
+    font-size: 17px;
     letter-spacing: .18em;
-    text-transform: uppercase;
+    text-transform: lowercase;
     color: var(--chrome-fg);
   }
-  .brand .brass-dot { color: var(--brass); margin: 0 2px; font-weight: 700; }
+  .brand .brass-dot { color: var(--tacet-dusk); margin: 0 2px; font-weight: 400; }
   .brand .sub {
-    font-family: var(--f-mono);
-    font-size: 10px;
-    letter-spacing: .22em;
-    text-transform: uppercase;
-    color: rgba(232, 229, 220, .60);
+    font-family: var(--f-sans);
+    font-size: 11px;
+    letter-spacing: .04em;
+    text-transform: none;
+    color: var(--text-3);
     font-weight: 500;
   }
-  /* Editor switch — segmented toggle in the brand lockup that jumps between
-     the Mini App Editor (this page) and the Product Page Editor. Sits on the
-     always-dark chrome, so it uses fixed light-on-dark colours. */
+  /* Editor switch — segmented toggle jumping between the Mini App Editor
+     (this page) and the Product Page Editor. A cream track with a raised
+     white chip for the active side; no colour fill (it's a mode, not the
+     AI). Inter, sentence case — the old Plex Mono caps are gone. */
   .brand .fcsw {
     display: inline-flex; align-items: center; gap: 2px;
-    padding: 2px; border-radius: 8px;
-    background: rgba(232, 229, 220, .06);
-    border: 1px solid rgba(232, 229, 220, .12);
+    padding: 2px; border-radius: var(--r-md);
+    background: var(--bg-elev-2);
+    border: 1px solid var(--line);
   }
   .brand .fcsw-seg {
     display: inline-flex; align-items: center; gap: 6px;
-    font-family: var(--f-mono); font-size: 10px; letter-spacing: .14em;
-    text-transform: uppercase; font-weight: 600;
-    color: rgba(232, 229, 220, .58);
+    font-family: var(--f-sans); font-size: 12px; letter-spacing: 0;
+    text-transform: none; font-weight: 500;
+    color: var(--text-2);
     background: transparent; border: 1px solid transparent;
-    border-radius: 6px; padding: 5px 9px; cursor: pointer; white-space: nowrap;
-    transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+    border-radius: var(--r-sm); padding: 5px 10px; cursor: pointer; white-space: nowrap;
+    transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
   }
-  .brand button.fcsw-seg:hover { color: var(--chrome-fg); background: rgba(232, 229, 220, .07); }
+  .brand button.fcsw-seg:hover { color: var(--text-1); }
   .brand .fcsw-seg.fcsw-on {
-    color: var(--chrome-fg);
-    background: rgba(232, 229, 220, .12);
-    border-color: rgba(232, 229, 220, .14);
+    color: var(--text-1);
+    background: var(--bg-pane);
+    border-color: transparent;
+    box-shadow: 0 1px 2px rgba(17,26,43,.08);
     cursor: default;
   }
   .brand .fcsw-seg svg { width: 13px; height: 13px; flex-shrink: 0; }
   /* Embedded as a backend tab (iframe): the parent backend topbar already
      carries the brand, account, text-size, theme and language controls, so
      drop the whole duplicated cluster here and keep only the editor-specific
-     actions (PAGE picker, save status, Revert, Publish). This also shrinks the
-     dark bar down to a slim action strip. */
+     actions (PAGE picker, save status, Revert, Publish). */
   .is-embedded .brand,
   .is-embedded #who,
   .is-embedded #ui-scale-toggle,
   .is-embedded #theme-toggle,
   .is-embedded #lang-toggle { display: none; }
-  /* …and drop the always-Ink bar background so the strip blends into the
-     canvas (no black bar). Everything stays in place — only the chrome-tinted
-     colours flip to the theme's own surfaces/text so they stay readable on the
-     light canvas. Publish keeps its Brass fill. */
+  /* Standalone and embedded look the same now — both sit on Paper. Blend
+     the strip into the body so there's no seam under the parent's own bar. */
   .is-embedded .topbar {
     background: var(--bg-app);
     border-bottom: 1px solid var(--line);
   }
-  .is-embedded .topbar .page-picker {
-    background: var(--bg-pane); border-color: var(--line);
-  }
-  .is-embedded .topbar .page-picker:hover {
-    background: var(--bg-elev-2); border-color: var(--line-strong);
-  }
-  .is-embedded .topbar .page-picker > .name { color: var(--text-1); }
-  .is-embedded .topbar .page-picker > .label,
-  .is-embedded .topbar .page-picker > .chev { color: var(--text-3); }
-  .is-embedded .topbar .status-pill {
-    background: var(--bg-pane); border-color: var(--line); color: var(--text-3);
-  }
-  .is-embedded .topbar .btn {
-    color: var(--text-1); border-color: var(--line);
-  }
-  .is-embedded .topbar .btn:hover {
-    background: var(--bg-elev-2); border-color: var(--line-strong);
-  }
-  /* Top-bar controls on the dark chrome ------------------------------- */
+  /* Top-bar controls sit on white now, so they use the ordinary light
+     styling — no dark-chrome overrides needed. Only the two things that
+     carry meaning are named here. */
   .topbar .who {
-    font-family: var(--f-mono);
+    font-family: var(--f-sans);
     font-size: 11px;
-    letter-spacing: .04em;
-    color: rgba(232, 229, 220, .45);
+    letter-spacing: 0;
+    color: var(--text-3);
   }
-  .topbar .topbar-link { color: rgba(232, 229, 220, .60); }
-  .topbar .topbar-link:hover { background: rgba(232, 229, 220, .08); color: var(--chrome-fg); }
-  .topbar .btn {
-    background: transparent;
-    color: var(--chrome-fg);
-    border-color: rgba(232, 229, 220, .15);
-  }
-  .topbar .btn:hover { background: rgba(232, 229, 220, .08); border-color: rgba(232, 229, 220, .26); }
-  .topbar .btn-icon { color: rgba(232, 229, 220, .60); }
-  .topbar .page-picker {
-    background: rgba(232, 229, 220, .06);
-    border-color: rgba(232, 229, 220, .12);
-  }
-  .topbar .page-picker:hover { background: rgba(232, 229, 220, .10); border-color: rgba(232, 229, 220, .20); }
-  /* Scope to the picker's OWN chip — must not bleed into the dropdown
-     items below it (.page-menu .item .name), which sit on a paper card. */
-  .topbar .page-picker > .name { color: var(--chrome-fg); }
-  .topbar .page-picker > .label { color: rgba(232, 229, 220, .50); }
-  .topbar .page-picker > .chev { color: rgba(232, 229, 220, .50); }
-  /* Dropdown reads as a white card (brand: white surfaces + 1px borders),
-     not the paper body tone — so it lifts cleanly off the canvas. */
-  .page-menu { background: var(--bg-elev-1); border-color: var(--line); }
-  .page-menu .item .name { color: var(--text-1); }
-  .page-menu .item .desc { color: var(--text-3); }
-  .topbar .status-pill {
-    background: rgba(232, 229, 220, .06);
-    border-color: rgba(232, 229, 220, .10);
-    color: rgba(232, 229, 220, .70);
-  }
-  /* Publish — the single Aged Brass primary action -------------------- */
+  /* Publish — the single Dusk primary action. The one place the AI's
+     colour is spent on a button, because publishing is the deliberate act
+     the whole screen leads to. */
   .btn-primary {
     background: var(--brass);
     border-color: var(--brass);
-    color: #12161A;
+    color: #FFFFFF;
   }
   .btn-primary:hover { background: var(--brass-hi); border-color: var(--brass-hi); }
-  /* "Unsaved changes" — Tea Green pulsing dot (the system is live) ----- */
-  .status-pill.clean .dot,
-  .status-pill.dirty .dot { background: var(--accent); }
-  .status-pill.dirty {
-    color: rgba(232, 229, 220, .80);
-    border-color: rgba(107, 142, 111, .30);
-  }
+  /* Save state — a bare Sage / Amber dot; unsaved work breathes once,
+     slowly, the way everything in Tacet settles. */
+  .status-pill.clean .dot { background: var(--tacet-sage); }
   .status-pill.dirty .dot {
-    animation: fc-live-pulse 2.5s ease-in-out infinite;
+    background: var(--tacet-amber);
+    animation: fc-live-pulse 2.4s var(--ease-out) infinite;
   }
+  .status-pill.dirty { color: var(--text-1); }
   @keyframes fc-live-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(107, 142, 111, .45); }
-    50%      { box-shadow: 0 0 0 5px rgba(107, 142, 111, 0); }
+    0%, 100% { opacity: 1; }
+    50%      { opacity: .45; }
   }
-  /* Section labels — Plex Mono, Aged Brass, wide tracking ------------- */
+  /* Section labels — plain Inter caption in Graphite. No mono, no colour. */
   .pane-section h3 {
-    font-family: var(--f-mono);
-    font-size: 10px;
-    font-weight: 500;
-    letter-spacing: .26em;
-    color: var(--brass);
+    font-family: var(--f-sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    color: var(--text-3);
   }
 </style>
 </head>
@@ -4797,19 +4772,15 @@
        data-ti-en="Back to Mini App Backend" data-ti-cn="返回小程序后台"
        title="Back to Mini App Backend" aria-label="Back to Mini App Backend">
       <div class="brand-mark" aria-hidden="true">
-        <svg width="20" height="20" viewBox="0 0 24 24">
-          <!-- Outer Aged Brass ring, cut ~48°/228° -->
-          <circle cx="12" cy="12" r="10.8" fill="none" stroke="#B08D4A" stroke-width="0.55"
-                  stroke-dasharray="32 2 32 2" transform="rotate(48 12 12)"/>
-          <!-- Inner Tea Green ring, cut ~40°/220° (staggered) -->
-          <circle cx="12" cy="12" r="9" fill="none" stroke="#6B8E6F" stroke-width="0.55"
-                  stroke-dasharray="26.3 2 26.3 2" transform="rotate(40 12 12)"/>
-          <!-- Ensō — imperfect open circle in currentColor -->
-          <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1"
-                fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        <!-- Tacet mark: a waveform settling to a flat line, ending on the
+             Dusk dot. Stroke follows currentColor (Ink on Paper). -->
+        <svg width="30" height="18" viewBox="0 0 30 18" fill="none">
+          <path d="M1.5 9 C 3 1.5, 5 16.5, 6.8 9 C 8 4, 9.6 13.5, 10.9 9 C 11.9 5.8, 13.2 11.8, 14.3 9 C 15.1 7.2, 16.1 10.4, 17 9 L 24 9"
+                stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="27.4" cy="9" r="2" fill="#6E67AF"/>
         </svg>
       </div>
-      <span class="wordmark">FULL CIRCLE</span>
+      <span class="wordmark">tacet</span>
     </a>
     <span class="brass-dot" aria-hidden="true">·</span>
     <!-- Editor switch — replaces the old static "Mini App Editor" label so both
@@ -14388,7 +14359,7 @@ function cmsApplyThemeIcon() {
   if (showSun)  showSun.style.display  = t === 'dark'  ? '' : 'none';
   if (showMoon) showMoon.style.display = t === 'light' ? '' : 'none';
   const meta = $('#meta-theme-color');
-  if (meta) meta.setAttribute('content', t === 'light' ? '#E8E5DC' : '#12161A');
+  if (meta) meta.setAttribute('content', t === 'dark' ? '#111A2B' : '#FBF9F4');
 }
 function cmsSetTheme(next) {
   if (next !== 'light' && next !== 'dark') return;
@@ -14398,7 +14369,7 @@ function cmsSetTheme(next) {
   cmsSyncTweakControls();
 }
 function cmsToggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
   cmsSetTheme(current === 'dark' ? 'light' : 'dark');
 }
 cmsApplyThemeIcon();
@@ -14962,7 +14933,7 @@ document.addEventListener('keydown', (e) => {
     transition: color var(--t-fast) ease, background var(--t-fast) ease;
   }
   .lp-mode-seg button:hover { color: var(--text-1, #fff); }
-  .lp-mode-seg button.active { background: var(--accent, #6B8E6F); color: var(--accent-ink, #1a1a17); }
+  .lp-mode-seg button.active { background: var(--accent); color: var(--accent-ink); }
   .lp-head {
     padding: 14px 18px;
     display: flex; align-items: center; justify-content: space-between;
