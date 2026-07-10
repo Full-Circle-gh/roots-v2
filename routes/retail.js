@@ -375,6 +375,43 @@ router.get('/api/retail-admin/category-tree', requireRetailAdmin, (req, res) => 
   res.json({ success: true, data: getCategoryTree(tdb()) });
 });
 
+// How many products sit under each node of the tree, keyed by the node's stable
+// id — what the Categories shelf shows next to every rail row and subcategory,
+// and how it knows a node is invisible to shoppers (published = 0, since the
+// shop only renders categories that have published products).
+//   { counts: { <nodeId>: { n, published } } }
+// One GROUP BY over the catalogue, then mapped onto the saved tree's names.
+// Positional GROUP BY: a bare column alias can be shadowed by a real column.
+router.get('/api/retail-admin/category-counts', requireRetailAdmin, (req, res) => {
+  const rows = tdb().prepare(
+    `SELECT top_category AS t, COALESCE(subcategory, '') AS s,
+            COUNT(*) AS n, SUM(CASE WHEN is_published = 1 THEN 1 ELSE 0 END) AS pub
+       FROM store_products
+      WHERE COALESCE(is_active, 1) = 1
+      GROUP BY 1, 2`
+  ).all();
+  // name → tally, so an unsaved rename in the editor still reads the old row.
+  const byTop = new Map();          // topName -> { n, published }
+  const bySub = new Map();          // topName + ' ' + subName -> { n, published }
+  for (const r of rows) {
+    const top = (r.t || '').trim();
+    if (!top) continue;             // untagged products belong to no node
+    const acc = byTop.get(top) || { n: 0, published: 0 };
+    acc.n += r.n; acc.published += (r.pub || 0);
+    byTop.set(top, acc);
+    const sub = (r.s || '').trim();
+    if (sub) bySub.set(top + ' ' + sub, { n: r.n, published: r.pub || 0 });
+  }
+  const counts = {};
+  for (const t of getCategoryTree(tdb())) {
+    if (t.id) counts[t.id] = byTop.get(t.name) || { n: 0, published: 0 };
+    for (const s of (t.subs || [])) {
+      if (s.id) counts[s.id] = bySub.get(t.name + ' ' + s.name) || { n: 0, published: 0 };
+    }
+  }
+  res.json({ success: true, counts });
+});
+
 // Products tagged to a category — drives the per-category "Edit" detail panel
 // (Categories tab). Filter by top_category, optionally narrowed to a subcategory.
 // `?top=` + `?sub=''` (explicit empty) lists products under the top that have NO

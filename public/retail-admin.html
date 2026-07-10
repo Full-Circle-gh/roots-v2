@@ -1054,7 +1054,9 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 6a3 3 0 0 1 0 5"/><path d="M18 20c0-2.4-1-4.2-2.5-5"/></svg>
     Customers · 顾客
   </button>
-  <!-- Products → Categories (sub) -->
+  <!-- Products → Purchasing (sub). Categories left the rail on 2026-07-10 — it
+       is now a sub-view of Products, beside Stock activity, because a shelf is
+       a fact about the catalogue, not a place of its own. -->
   <div class="tabs-group nav-parent" data-group="products" style="order:9">
     <button class="nav-parent-link" data-tab="products">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l8-4 8 4-8 4-8-4z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></svg>
@@ -1062,10 +1064,6 @@
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
     <div class="tabs-popover">
-      <button data-tab="categories">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-        Categories · 分类
-      </button>
       <button data-tab="purchasing" onclick="puInit()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
         Purchasing · 采购
@@ -2904,9 +2902,10 @@
          active one; the amber dot appears when something hit zero today.
          Hidden entirely for operators without activity:view — their Products
          page looks exactly as before. -->
-    <div class="stk-views" id="stk-views" data-cap="activity:view">
+    <div class="stk-views" id="stk-views" data-cap="activity:view categories:view">
       <button type="button" class="stk-view on" id="stk-view-btn-catalog" onclick="prodShowView('catalog')">Catalogue · 目录</button>
-      <button type="button" class="stk-view" id="stk-view-btn-activity" onclick="prodShowView('activity')"><i class="stk-view-dot" id="stk-view-dot" hidden></i>Stock activity · 库存流水</button>
+      <button type="button" class="stk-view" id="stk-view-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')"><i class="stk-view-dot" id="stk-view-dot" hidden></i>Stock activity · 库存流水</button>
+      <button type="button" class="stk-view" id="stk-view-btn-categories" data-cap="categories:view" onclick="prodShowView('categories')">Categories · 分类</button>
     </div>
 
     <div id="prod-view-catalog">
@@ -3415,6 +3414,61 @@
     </div>
     </div><!-- /#prod-view-activity -->
 
+    <!-- ── Categories sub-view — the shelf. Rebuilt from scratch 2026-07-10 to
+         the Tacet canon and moved here from its own rail tab.
+
+         The left column IS the shop's left rail: the same categories, in the
+         same order, so dragging a row is literally rearranging the store. The
+         right pane holds everything about the one category you picked — its
+         name, its section headings, and the products standing on it — which is
+         why the old slide-in detail drawer is gone. One screen, one question:
+         is this shelf right?
+
+         Names are plain text at rest; clicking one opens a small rename card
+         (English + Chinese together). The breathing Dusk dot on that card is
+         the only Dusk on the page — re-tagging every product on a rename is
+         the one thing Tacet does for you here. -->
+    <div id="prod-view-categories" style="display:none">
+    <p class="helper" data-lang-block="en" style="margin: 0 0 var(--s4);">
+      How the shop shelves are arranged. Top categories are the left rail; subcategories are the section headings.
+      Rename anything and every product on it follows. A category with nothing published stays out of the shop on its own.
+    </p>
+    <p class="helper" data-lang-block="cn" style="margin: 0 0 var(--s4);">
+      店面货架的排列方式。主分类即左栏，子分类即区块标题。重命名后，该分类下的所有产品会自动跟随。没有上架产品的分类不会出现在店面。
+    </p>
+
+    <!-- Status line — one quiet sentence where three KPI tiles used to sit.
+         Counts come from the live (possibly unsaved) tree; the save state and
+         the two manual controls ride on the right. Painted by catRenderStatus(). -->
+    <!-- data-no-i18n on every JS-painted host: that text is already written in
+         the live language by cuT(), so the bilingual walker must keep its hands
+         off it (it would read an em-dashed phrase as an EN/CN pair). -->
+    <div class="cat2-status" id="cat2-status">
+      <div class="cat2-facts" id="cat2-facts" data-no-i18n></div>
+      <div class="cat2-status-end">
+        <span class="cat2-save" id="cat2-save" data-no-i18n></span>
+        <button class="cat2-btn cat2-btn-ghost" type="button" onclick="catLoad()" id="cat2-reload">Reload · 重新加载</button>
+        <button class="cat2-btn" type="button" onclick="catSave()" id="cat2-savenow">Save now · 立即保存</button>
+      </div>
+    </div>
+
+    <div class="cat2-shelf">
+      <aside class="cat2-rail">
+        <div class="cat2-railcap">Shop rail · 店面左栏</div>
+        <div id="cat2-rail" data-no-i18n></div>
+        <div class="cat2-railfoot">
+          <button class="cat2-btn cat2-btn-ghost cat2-btn-wide" type="button" onclick="catAddTop()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            <span>Add top category · 新增主分类</span>
+          </button>
+        </div>
+        <p class="cat2-railhint" data-lang-block="en">This is the rail your customers see. Drag a row to reorder it.</p>
+        <p class="cat2-railhint" data-lang-block="cn">这就是顾客看到的左栏。拖动行即可排序。</p>
+      </aside>
+      <section class="cat2-pane" id="cat2-pane" data-no-i18n></section>
+    </div>
+    </div><!-- /#prod-view-categories -->
+
     <!-- ─── Guided product wizard (additive; lives inside the Products tab so tab-switching never hides it) ─── -->
     <div id="pw-bg" class="pu-editor-bg">
       <div class="pu-editor vw" style="width: 760px; max-width: 94vw;">
@@ -3431,139 +3485,6 @@
       </div>
     </div>
   </section>
-
-  <!-- ─── CATEGORIES (2-level tree editor) ─── -->
-  <section id="tab-categories">
-    <style>
-      #cat-editor .cat-top { padding: var(--s4); transition: box-shadow var(--t-fast), opacity var(--t-fast); }
-      #cat-editor .cat-drag {
-        cursor: grab; user-select: none; color: var(--text-3); font-size: 16px;
-        line-height: 1; padding: 4px 3px; border-radius: var(--r-md); flex: 0 0 auto;
-      }
-      #cat-editor .cat-drag:hover { background: var(--bg-elev-1); color: var(--text-1); }
-      #cat-editor .cat-drag:active { cursor: grabbing; }
-      #cat-editor .cat-dragging { opacity: .45; }
-      #cat-editor .cat-subrow { transition: background var(--t-fast), box-shadow var(--t-fast), opacity var(--t-fast); }
-      /* Insertion line: a clear accent bar on the edge where the dragged row
-         will land. The list never folds or reflows during a drag (rows stay
-         steady) — this line is the single "lands here" cue. */
-      #cat-editor .cat-drop-before { box-shadow: 0 -3px 0 var(--accent) inset; }
-      #cat-editor .cat-drop-after  { box-shadow: 0  3px 0 var(--accent) inset; }
-      /* Gentle landing: the dropped row settles with a soft accent ring that
-         fades out. Inset ring (not background) so a top card keeps its pane
-         background while the cue dissolves. */
-      #cat-editor .cat-landed { animation: cat-land .7s ease-out; border-radius: var(--r-md); }
-      @keyframes cat-land {
-        from { box-shadow: 0 0 0 2px rgba(107,142,111,.45) inset; }
-        to   { box-shadow: 0 0 0 2px rgba(107,142,111,0) inset; }
-      }
-      @media (prefers-reduced-motion: reduce) {
-        #cat-editor .cat-landed { animation: none; }
-      }
-      /* Destructive controls stay quiet (neutral) at rest and only flush red on
-         hover — a wall of resting red fights the calm aesthetic (brief §6/§9). */
-      #cat-editor .cat-del { color: var(--text-3); }
-      #cat-editor .cat-del:hover { color: var(--danger); }
-      #cat-editor button.btn.cat-del:hover { background: var(--danger-soft); border-color: var(--danger); }
-      /* Name fields don't stretch edge-to-edge — capped so a row reads as a compact
-         EN/中文 label pair, not two long bars. */
-      #cat-editor .cat-name { flex: 1 1 200px; max-width: 300px; }
-      #cat-editor .cat-top-head .cat-name { font-weight: 700; }
-      #cat-editor .cat-subrow .cat-name { flex: 1 1 180px; max-width: 260px; }
-      #cat-editor .cat-subrow input { padding: 6px 9px; font-size: 13px; }
-      #cat-editor .cat-subs-kicker { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); margin: 2px 0 6px; }
-      #cat-editor button.btn-icon.cat-del { border: 1px solid var(--line); background: var(--bg-pane); border-radius: var(--r-md); padding: 4px 8px; }
-      #cat-editor button.btn-icon.cat-del:hover { background: var(--danger-soft); border-color: var(--danger); }
-      #cat-editor .cat-edit { white-space: nowrap; }
-
-      /* ── Per-category detail drawer ── */
-      .cat-detail-scrim { position: fixed; inset: 0; background: rgba(20,18,14,.42); opacity: 0; pointer-events: none; transition: opacity var(--t-fast); z-index: 60; }
-      .cat-detail-scrim.open { opacity: 1; pointer-events: auto; }
-      .cat-detail {
-        position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 94vw);
-        background: var(--bg-pane); border-left: 1px solid var(--line);
-        box-shadow: -12px 0 32px rgba(20,18,14,.18);
-        transform: translateX(100%); transition: transform var(--t-med, .22s) ease;
-        z-index: 61; display: flex; flex-direction: column;
-      }
-      .cat-detail.open { transform: translateX(0); }
-      .cat-detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: var(--s4); border-bottom: 1px solid var(--line); }
-      .cat-detail-kicker { font-family: var(--f-mono); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); }
-      .cat-detail-body { padding: var(--s4); overflow-y: auto; flex: 1; }
-      .cat-detail-body .cd-field { margin-bottom: var(--s4); }
-      .cat-detail-body .cd-field > label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 6px; }
-      .cat-detail-body .cd-field input { width: 100%; padding: 8px 11px; }
-      .cd-sec-title { font-weight: 700; margin: var(--s4) 0 8px; display: flex; align-items: center; gap: 8px; }
-      .cd-sec-title .cd-count { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); font-weight: 400; }
-      .cd-prod { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--line); }
-      .cd-prod:first-of-type { border-top: 0; }
-      .cd-prod-thumb { width: 38px; height: 38px; border-radius: var(--r-md); object-fit: cover; background: var(--bg-elev-1); flex: none; }
-      .cd-prod-thumb.placeholder { display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 14px; }
-      .cd-prod-name { flex: 1; min-width: 0; font-size: 13px; line-height: 1.3; }
-      .cd-prod-name .sku { color: var(--text-3); font-size: 11px; font-family: var(--f-mono); }
-      .cd-prod-unpub { font-size: 10px; color: var(--text-3); border: 1px solid var(--line); border-radius: 999px; padding: 1px 6px; margin-left: 6px; }
-      .cd-prod select { max-width: 190px; padding: 5px 8px; font-size: 12px; }
-      .cd-subchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; margin: 0 6px 6px 0; font-size: 12px; }
-      .cd-subchip .n { color: var(--text-3); font-family: var(--f-mono); font-size: 11px; }
-      .cat-detail-body .cd-empty { color: var(--text-3); font-size: 13px; padding: 10px 0; }
-    </style>
-    <h2>Categories · 分类</h2>
-    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      The shop's 2-level category structure — top categories (the left rail) and their subcategories (section headings).
-      Rename in English &amp; Chinese, add, remove, or reorder. <b>Renaming</b> automatically re-tags every product in that category.
-      The shop only shows categories that have published products.
-    </p>
-    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      店面的两级分类结构：主分类（左栏）与子分类（区块标题）。可中英文重命名、增删、排序。<b>重命名</b>会自动迁移该分类下的所有产品。店面仅显示有上架产品的分类。
-    </p>
-
-    <!-- Structure at a glance — shared fc-* summary, computed in-browser from the
-         live (possibly unsaved) catModel. The Empty tile flips to .alert because
-         the shop hides any category with no published products under it. -->
-    <div class="fc-kpis" id="cat-kpis">
-      <div class="fc-kpi accent">
-        <div class="lbl">Top categories · 主分类</div>
-        <div class="val" id="cat-kpi-top">—</div>
-        <div class="sub">left-rail sections · 左栏板块</div>
-      </div>
-      <div class="fc-kpi">
-        <div class="lbl">Subcategories · 子分类</div>
-        <div class="val" id="cat-kpi-sub">—</div>
-        <div class="sub">section headings · 区块标题</div>
-      </div>
-      <div class="fc-kpi" id="cat-kpi-empty-tile">
-        <div class="lbl">Empty · 空分类</div>
-        <div class="val" id="cat-kpi-empty">—</div>
-        <div class="sub" id="cat-kpi-empty-sub">&nbsp;</div>
-      </div>
-    </div>
-
-    <div class="card cat-bar" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;position:sticky;top:8px;z-index:5;">
-      <button class="btn btn-sm" type="button" onclick="catAddTop()">＋ Add top category · 新增主分类</button>
-      <span id="cat-dirty" class="muted" style="font-size:12px;"></span>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
-        <span class="muted" style="font-size:11px;">Changes save automatically · 更改自动保存</span>
-        <button class="btn btn-sm" type="button" onclick="catLoad()" id="cat-revert-btn" title="Reload the last-saved tree · 重新加载已保存版本">Reload · 重新加载</button>
-        <button class="btn btn-sm" type="button" onclick="catSave()" id="cat-save-btn" title="Save right now instead of waiting · 立即保存">Save now · 立即保存</button>
-      </div>
-    </div>
-
-    <div id="cat-editor" style="margin-top:var(--s4);"></div>
-  </section>
-
-  <!-- ─── Per-category detail drawer (slides in from the right when the operator
-       clicks "Edit" on a top category or subcategory) ─── -->
-  <div id="cat-detail-scrim" class="cat-detail-scrim" onclick="catCloseDetail()"></div>
-  <aside id="cat-detail" class="cat-detail" aria-hidden="true" aria-label="Edit category · 编辑分类">
-    <div class="cat-detail-head">
-      <div>
-        <div id="cat-detail-kicker" class="cat-detail-kicker">Category · 分类</div>
-        <h3 id="cat-detail-title" style="margin:2px 0 0;">—</h3>
-      </div>
-      <button class="btn-icon" type="button" title="Close · 关闭" onclick="catCloseDetail()" style="font-size:18px;">✕</button>
-    </div>
-    <div class="cat-detail-body" id="cat-detail-body"><!-- rendered by catRenderDetail() --></div>
-  </aside>
 
   <!-- ─── VOUCHERS / COUPONS ─── -->
   <section id="tab-vouchers">

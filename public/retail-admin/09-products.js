@@ -395,17 +395,23 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 // Which view is up is read straight off the DOM (actTabVisible in 13-activity
 // .js checks #prod-view-activity's display), so no state variable is kept here.
 // The tab always opens on the catalogue.
+// Three places live under Products: the catalogue, the stock ledger, and the
+// shelf (Categories, folded in 2026-07-10). A view the operator can't reach
+// falls back to the catalogue rather than showing an empty pane.
 function prodShowView(view) {
-  view = (view === 'activity' && (typeof can !== 'function' || can('activity:view'))) ? 'activity' : 'catalog';
-  const vc = document.getElementById('prod-view-catalog');
-  const va = document.getElementById('prod-view-activity');
-  if (vc) vc.style.display = view === 'catalog' ? '' : 'none';
-  if (va) va.style.display = view === 'activity' ? '' : 'none';
-  document.getElementById('stk-view-btn-catalog')?.classList.toggle('on', view === 'catalog');
-  document.getElementById('stk-view-btn-activity')?.classList.toggle('on', view === 'activity');
+  const allowed = (v, cap) => v === view && (typeof can !== 'function' || can(cap));
+  if (!allowed('activity', 'activity:view') && !allowed('categories', 'categories:view')) view = 'catalog';
+  const panes = { catalog: 'prod-view-catalog', activity: 'prod-view-activity', categories: 'prod-view-categories' };
+  for (const [v, id] of Object.entries(panes)) {
+    const el = document.getElementById(id);
+    if (el) el.style.display = v === view ? '' : 'none';
+    document.getElementById('stk-view-btn-' + v)?.classList.toggle('on', v === view);
+  }
   // actAdminInit loads the ledger and starts its own 15s poll; that poll asks
   // actTabVisible(), which checks this view is the one on screen.
   if (view === 'activity' && typeof actAdminInit === 'function') actAdminInit();
+  // The tree is fetched the first time the shelf is opened, never before.
+  if (view === 'categories' && typeof catLoad === 'function' && !catLoaded) catLoad();
 }
 
 // ── The four stock cards — moves / out / in / hit zero, today, all channels.

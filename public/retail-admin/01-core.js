@@ -732,28 +732,68 @@ window.toggleNavCollapse = toggleNavCollapse;
 setNavCollapsed(document.body.classList.contains('nav-collapsed'));
 // The vertical rail is an inline accordion — groups stay expanded while you
 // work in the content area, so the old click-outside-to-close handler is gone.
-// ── Categories editor ────────────────────────────────────────────────────
-// Loads the live 2-level tree, lets the operator rename (EN/CN), add, remove
-// and reorder tops + subs, then saves the whole tree back. Server migrates
-// product rows on rename (matched by stable id). Lazy-loaded on first open.
+// ── Categories — "the shelf" (Products → Categories sub-view) ─────────────
+// Rebuilt from scratch 2026-07-10 (was a standalone tab of paired input boxes).
+//
+// The left rail IS the shop's left rail: same categories, same order, so
+// dragging a row rearranges the store. The pane holds one category whole — its
+// name, its section headings, and the products standing on it — which is why
+// the old slide-in detail drawer is gone. Names are plain text until clicked;
+// clicking opens a rename card with the English and Chinese names side by side.
+// The tree saves itself ~1.2s after the last edit; the server re-tags every
+// product under a renamed node (matched by stable id), so a rename never
+// orphans a product. That re-tag is the only automation on the page, and the
+// only thing wearing Dusk.
 let catModel = [];        // working copy: [{ id, name, name_cn, subs:[{id,name,name_cn}] }]
 let catClean = '[]';      // JSON of the last-saved tree, for dirty tracking
 let catLoaded = false;
+let catCounts = {};       // nodeId -> { n, published }, from /category-counts
+let catSel = 0;           // index of the top category the pane is showing
+let catEdit = null;       // open rename card: { kind:'top'|'sub', ti, si, name, name_cn }
+let _catLangHooked = false;
+
+const CAT_ICON = {
+  grip: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+  pen:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  x:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+  box:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+};
+
+// Counts arrive keyed by the node's stable id, so an unsaved rename in the
+// editor doesn't have to match by name. A node that has never been saved has
+// no id, and therefore no products — null, not zero, so the pane can say "new".
+function catCount(node) { return (node && node.id && catCounts[node.id]) || null; }
 
 async function catLoad() {
   try {
-    const j = await api('/api/retail-admin/category-tree');
-    catModel = Array.isArray(j.data) ? JSON.parse(JSON.stringify(j.data)) : [];
+    const [tree, counts] = await Promise.all([
+      api('/api/retail-admin/category-tree'),
+      api('/api/retail-admin/category-counts').catch(() => ({ counts: {} })),
+    ]);
+    catModel = Array.isArray(tree.data) ? JSON.parse(JSON.stringify(tree.data)) : [];
     catClean = JSON.stringify(catModel);
+    catCounts = counts.counts || {};
     catLoaded = true;
-    catRender();
-    catUpdateDirty();
-  } catch (e) { toast('Failed to load categories · 加载分类失败', 'err'); }
+    catEdit = null;
+    if (catSel >= catModel.length) catSel = 0;
+    if (!_catLangHooked && window.onLangChange) { _catLangHooked = true; onLangChange(catRenderAll); }
+    catRenderAll();
+  } catch (e) { toast(cuT('Could not load the categories', '加载分类失败'), 'err'); }
 }
 
+// Re-read the counts after a save (new nodes just got ids; a removed node's
+// products keep their stale tag until re-assigned). Never blocks the render.
+async function catRefreshCounts() {
+  try { const j = await api('/api/retail-admin/category-counts'); catCounts = j.counts || {}; } catch (e) {}
+}
+
+// ── Dirty tracking + autosave ──────────────────────────────────────────────
+// Every top and sub needs an English name before the tree can be saved (mirrors
+// the server guard). Autosave waits silently until that holds — a half-typed
+// name never throws an error toast.
 function catIsDirty() { return JSON.stringify(catModel) !== catClean; }
-// Every top + sub needs an English name before the tree can be saved (mirrors
-// the server guard). Autosave waits silently until this holds — no error toast.
 function catIsValid() {
   for (const t of catModel) {
     if (!String(t.name || '').trim()) return false;
@@ -763,9 +803,6 @@ function catIsValid() {
 }
 let _catSaveTimer = null;
 let _catSaving = false;
-// Debounced autosave: fires ~1.2s after the last edit (rename/add/remove/reorder)
-// once the tree is dirty AND valid. The short pause lets a half-typed name settle
-// before we persist + re-tag products. A save already in flight reschedules.
 function catScheduleAutosave() {
   if (_catSaveTimer) clearTimeout(_catSaveTimer);
   _catSaveTimer = setTimeout(() => {
@@ -775,370 +812,445 @@ function catScheduleAutosave() {
   }, 1200);
 }
 function catUpdateDirty() {
-  const dirty = catIsDirty();
-  const el = $('#cat-dirty');
-  if (el) {
-    if (!dirty) { el.textContent = _catSaving ? '' : '✓ Saved · 已保存'; el.style.color = 'var(--muted)'; }
-    else if (!catIsValid()) { el.textContent = '● Add a name to auto-save · 填写名称后自动保存'; el.style.color = '#b45309'; }
-    else { el.textContent = '○ Saving… · 自动保存中'; el.style.color = 'var(--muted)'; }
-  }
-  if (dirty) catScheduleAutosave();
+  catRenderStatus();
+  if (catIsDirty()) catScheduleAutosave();
 }
-// Re-render the tree but keep the caret in whatever name field is focused, so an
-// autosave mid-session doesn't yank focus out of the input being typed into.
-function catRenderKeepFocus() {
-  const a = document.activeElement;
-  let rid = null, f = null, start = null, end = null;
-  if (a && a.matches && a.matches('#cat-editor input.cat-name')) {
-    const row = a.closest('.cat-top, .cat-subrow');
-    if (row) { rid = row.id; f = a.dataset.f; start = a.selectionStart; end = a.selectionEnd; }
+
+async function catSave(opts) {
+  const auto = !!(opts && opts.auto);
+  if (!catLoaded) return;
+  for (const t of catModel) {
+    if (!String(t.name || '').trim()) { if (!auto) toast(cuT('Every top category needs an English name', '主分类需填英文名'), 'err'); return; }
+    for (const s of (t.subs || [])) {
+      if (!String(s.name || '').trim()) { if (!auto) toast(cuT('Every subcategory needs an English name', '子分类需填英文名'), 'err'); return; }
+    }
   }
-  catRender();
-  if (rid && f) {
-    const el = document.querySelector('#' + rid + ' input[data-f="' + f + '"]');
-    if (el) { el.focus(); try { el.setSelectionRange(start, end); } catch (e) {} }
+  if (_catSaving) return;
+  _catSaving = true;
+  if (_catSaveTimer) { clearTimeout(_catSaveTimer); _catSaveTimer = null; }
+  catRenderStatus();
+  try {
+    const j = await api('/api/retail-admin/category-tree', { method: 'PUT', body: { tree: catModel } });
+    catModel = Array.isArray(j.data) ? JSON.parse(JSON.stringify(j.data)) : catModel;
+    catClean = JSON.stringify(catModel);
+    await catRefreshCounts();
+    // Invalidate the product editor's cached tree so its Shop-section /
+    // Subcategory dropdowns pick up the renamed, added or removed nodes.
+    if (typeof PA_CAT_TREE !== 'undefined') PA_CAT_TREE = [];
+    // A repaint would tear down an open rename card mid-typing, so an autosave
+    // that lands while one is open only refreshes the quiet status line.
+    if (catEdit) catRenderStatus(); else catRenderAll();
+    const moved = j.migrated || 0;
+    // Manual save always confirms. Autosave stays quiet unless it re-tagged
+    // products — a real side effect, worth a word.
+    if (!auto) toast(moved ? cuT(`Saved · ${moved} product${moved === 1 ? '' : 's'} re-tagged`, `已保存 · 迁移 ${moved} 个产品`) : cuT('Saved', '已保存'), 'ok');
+    else if (moved) toast(cuT(`${moved} product${moved === 1 ? '' : 's'} re-tagged`, `已迁移 ${moved} 个产品`), 'ok');
+  } catch (e) {
+    toast((e && e.message) ? cuT('Save failed: ' + e.message, '保存失败: ' + e.message) : cuT('Save failed', '保存失败'), 'err');
+  } finally {
+    _catSaving = false;
+    catUpdateDirty();   // refresh the line; reschedules if edits arrived mid-save
   }
 }
-// Update a field WITHOUT re-rendering (keeps input focus while typing).
-function catSet(ti, si, field, val) {
-  const node = si < 0 ? catModel[ti] : catModel[ti].subs[si];
+
+// ── The status line — one sentence where three KPI tiles used to be ────────
+// Tops, subs, and the one fact that costs money: which shelves the shop is
+// hiding because nothing published stands on them.
+function catRenderStatus() {
+  const facts = document.getElementById('cat2-facts');
+  const save = document.getElementById('cat2-save');
+  if (!facts) return;
+  let subs = 0;
+  const hidden = [];   // saved nodes with nothing published under them
+  for (const t of catModel) {
+    subs += (t.subs || []).length;
+    const tc = catCount(t);
+    if (tc && !tc.published) hidden.push(t.name);
+    for (const s of (t.subs || [])) {
+      const sc = catCount(s);
+      if (sc && !sc.published) hidden.push(s.name);
+    }
+  }
+  const sep = '<span class="cat2-fact-sep"></span>';
+  let shelfFact;
+  if (!hidden.length) {
+    shelfFact = `<span class="cat2-fact"><span class="cat2-fact-dot"></span><span class="k">${escapeHtml(cuT('every shelf is visible in the shop', '所有分类都显示在店面'))}</span></span>`;
+  } else if (hidden.length === 1) {
+    shelfFact = `<span class="cat2-fact warn"><span class="cat2-fact-dot"></span><span class="k">${escapeHtml(cuT(`“${hidden[0]}” is hidden — nothing published on it`, `“${hidden[0]}” 已隐藏 — 无上架产品`))}</span></span>`;
+  } else {
+    shelfFact = `<span class="cat2-fact warn"><span class="cat2-fact-dot"></span><span class="k">${escapeHtml(cuT(`${hidden.length} shelves hidden — nothing published on them`, `${hidden.length} 个分类已隐藏 — 无上架产品`))}</span></span>`;
+  }
+  facts.innerHTML =
+    `<span class="cat2-fact"><b>${fcNum(catModel.length)}</b>&nbsp;<span class="k">${escapeHtml(cuT('top categories', '主分类'))}</span></span>${sep}` +
+    `<span class="cat2-fact"><b>${fcNum(subs)}</b>&nbsp;<span class="k">${escapeHtml(cuT('subcategories', '子分类'))}</span></span>${sep}` +
+    shelfFact;
+  if (save) {
+    const dirty = catIsDirty();
+    let txt = '', wait = false;
+    if (_catSaving) txt = cuT('Saving…', '保存中…');
+    else if (!dirty) txt = cuT('Saved · changes save themselves', '已保存 · 更改自动保存');
+    else if (!catIsValid()) { txt = cuT('Add a name to save', '填写名称后保存'); wait = true; }
+    else txt = cuT('Saving…', '保存中…');
+    save.textContent = txt;
+    save.classList.toggle('wait', wait);
+  }
+}
+
+// ── The rail — the shop's own left column ──────────────────────────────────
+function catRenderRail() {
+  const host = document.getElementById('cat2-rail');
+  if (!host) return;
+  if (!catModel.length) {
+    host.innerHTML = `<div class="cat2-empty" style="padding:10px 18px">${escapeHtml(cuT('No categories yet', '暂无分类'))}</div>`;
+    return;
+  }
+  host.innerHTML = catModel.map((t, ti) => {
+    const c = catCount(t);
+    const dark = c && !c.published;
+    return `<button type="button" class="cat2-railrow cat2-row${ti === catSel ? ' on' : ''}" data-fk="t${catFk(t)}"
+        onclick="catSelect(${ti})"
+        ondragover="catDragOver(event,'top',${ti})" ondrop="catDrop(event,'top',${ti})" ondragleave="catDragLeave(event)">
+      <span class="cat2-grip" draggable="true" title="${escapeAttr(cuT('Drag to reorder', '拖动排序'))}"
+            onclick="event.stopPropagation()"
+            ondragstart="catDragStart(event,'top',${ti})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
+      <span class="nm">${escapeHtml(t.name || cuT('Untitled', '未命名'))}</span>
+      ${dark ? '<span class="cat2-fact-dot" title="' + escapeAttr(cuT('Hidden — nothing published', '已隐藏 — 无上架产品')) + '"></span>' : ''}
+      <span class="n">${c ? fcNum(c.n) : '—'}</span>
+    </button>`;
+  }).join('');
+}
+
+// ── The pane — one category, whole ─────────────────────────────────────────
+function catRenderPane() {
+  const host = document.getElementById('cat2-pane');
+  if (!host) return;
+  const t = catModel[catSel];
+  if (!t) {
+    host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Add a top category to start arranging the shop.', '新增一个主分类，开始整理店面。'))}</div>`;
+    return;
+  }
+  const c = catCount(t);
+  const subs = t.subs || [];
+  const pill = !c ? `<span class="cat2-pill cat2-pill-new">${escapeHtml(cuT('new — not saved yet', '新建 — 尚未保存'))}</span>`
+    : c.published ? `<span class="cat2-pill cat2-pill-live">${escapeHtml(cuT('visible in the shop', '显示在店面'))}</span>`
+    : `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('hidden — nothing published', '已隐藏 — 无上架产品'))}</span>`;
+
+  host.innerHTML = `
+    <div class="cat2-panehead cat2-row" id="cat2-tophead">
+      <div style="min-width:0">
+        <h3 tabindex="0" title="${escapeAttr(cuT('Click to rename', '点击重命名'))}" onclick="catOpenRename('top',${catSel},-1)">${escapeHtml(t.name || cuT('Untitled', '未命名'))}</h3>
+        <div class="cat2-panemeta">
+          <span>${escapeHtml(cuT(`${fcNum(subs.length)} subcategories`, `${fcNum(subs.length)} 个子分类`))}</span>
+          <span>·</span>
+          <span>${escapeHtml(c ? cuT(`${fcNum(c.n)} products`, `${fcNum(c.n)} 件产品`) : cuT('no products yet', '暂无产品'))}</span>
+          ${pill}
+        </div>
+      </div>
+      <div class="end">
+        <button class="cat2-btn cat2-btn-ghost" type="button" onclick="catOpenRename('top',${catSel},-1)">${CAT_ICON.pen}<span>${escapeHtml(cuT('Rename', '重命名'))}</span></button>
+        <button class="cat2-btn cat2-btn-danger" type="button" onclick="catRemoveTop(${catSel})">${escapeHtml(cuT('Remove', '删除'))}</button>
+      </div>
+    </div>
+    <div id="cat2-tophead-rename"></div>
+
+    <div class="cat2-sec">${escapeHtml(cuT('Subcategories — the section headings', '子分类 — 区块标题'))}</div>
+    <div id="cat2-subs">${subs.map((s, si) => catSubRowHtml(s, si)).join('')
+      || `<div class="cat2-empty">${escapeHtml(cuT('No section headings yet. Products land straight under the category.', '暂无区块标题。产品将直接归入该主分类。'))}</div>`}</div>
+    <button class="cat2-btn cat2-btn-ghost" type="button" style="margin-top:10px" onclick="catAddSub(${catSel})">${CAT_ICON.plus}<span>${escapeHtml(cuT('Add subcategory', '新增子分类'))}</span></button>
+
+    <div class="cat2-sec" style="margin-top:34px">${escapeHtml(cuT('Products on this shelf', '货架上的产品'))}</div>
+    <div id="cat2-prods"><div class="cat2-empty">${escapeHtml(cuT('Loading…', '加载中…'))}</div></div>
+  `;
+  catRenderOpenRename();
+  catLoadProducts();
+}
+
+function catSubRowHtml(s, si) {
+  const c = catCount(s);
+  const hidden = c && !c.published;
+  return `<div class="cat2-sub cat2-row" id="cat2-sub-${si}" data-fk="s${catFk(s)}"
+       ondragover="catDragOver(event,'sub',${si})" ondrop="catDrop(event,'sub',${si})" ondragleave="catDragLeave(event)">
+    <span class="cat2-grip" draggable="true" title="${escapeAttr(cuT('Drag to reorder', '拖动排序'))}"
+          ondragstart="catDragStart(event,'sub',${si})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
+    <span class="cat2-subname" tabindex="0" title="${escapeAttr(cuT('Click to rename', '点击重命名'))}" onclick="catOpenRename('sub',${catSel},${si})">${escapeHtml(s.name || cuT('Untitled', '未命名'))}</span>
+    ${hidden ? `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('hidden', '已隐藏'))}</span>` : ''}
+    <span class="n">${escapeHtml(c ? cuT(`${fcNum(c.n)} products`, `${fcNum(c.n)} 件产品`) : cuT('new', '新建'))}</span>
+    <span class="cat2-acts">
+      <button class="cat2-icon" type="button" title="${escapeAttr(cuT('Rename', '重命名'))}" onclick="catOpenRename('sub',${catSel},${si})">${CAT_ICON.pen}</button>
+      <button class="cat2-icon danger" type="button" title="${escapeAttr(cuT('Remove subcategory', '删除子分类'))}" onclick="catRemoveSub(${catSel},${si})">${CAT_ICON.x}</button>
+    </span>
+  </div>`;
+}
+
+function catRenderAll() { catRenderStatus(); catRenderRail(); catRenderPane(); }
+
+function catSelect(ti) {
+  if (ti === catSel) return;
+  catEdit = null;
+  catSel = ti;
+  catRenderRail(); catRenderPane();
+}
+
+// ── The rename card — English and Chinese together, in place ───────────────
+// Typing edits the live model (so the tree autosaves like every other change);
+// Cancel puts back the names the card opened with. The breathing Dusk dot is
+// the page's only Dusk: on save, the server re-tags every product underneath.
+function catOpenRename(kind, ti, si) {
+  const node = kind === 'sub' ? (catModel[ti] && catModel[ti].subs[si]) : catModel[ti];
   if (!node) return;
-  node[field] = val;
+  catEdit = { kind, ti, si, name: node.name || '', name_cn: node.name_cn || '' };
+  catRenderOpenRename();
+}
+function catCloseRename(revert) {
+  if (!catEdit) return;
+  const { kind, ti, si, name, name_cn } = catEdit;
+  const node = kind === 'sub' ? (catModel[ti] && catModel[ti].subs[si]) : catModel[ti];
+  catEdit = null;
+  if (revert && node) {
+    // A brand-new node cancelled before it was ever named leaves nothing behind.
+    if (!node.id && !String(name).trim()) {
+      if (kind === 'sub') catModel[ti].subs.splice(si, 1); else catModel.splice(ti, 1);
+      if (catSel >= catModel.length) catSel = Math.max(0, catModel.length - 1);
+      catRenderAll(); catUpdateDirty();
+      return;
+    }
+    node.name = name; node.name_cn = name_cn;
+  }
+  catRenderAll();
   catUpdateDirty();
 }
+async function catSaveRename() {
+  if (!catEdit) return;
+  const { kind, ti, si } = catEdit;
+  const node = kind === 'sub' ? catModel[ti].subs[si] : catModel[ti];
+  if (!node || !String(node.name || '').trim()) {
+    toast(cuT('Give it an English name first', '请先填写英文名'), 'err');
+    return;                            // the card stays open, waiting
+  }
+  catEdit = null;
+  catRenderAll();
+  await catSave();
+}
+// Live-edit the model as the operator types. No re-render — the caret stays put.
+function catRenameInput(field, val) {
+  if (!catEdit) return;
+  const { kind, ti, si } = catEdit;
+  const node = kind === 'sub' ? (catModel[ti] && catModel[ti].subs[si]) : catModel[ti];
+  if (!node) return;
+  node[field] = val;
+  // Keep the heading being renamed in step with the typing — and, for a top
+  // category, the rail row that names the same shelf.
+  if (field === 'name') {
+    const shown = val || cuT('Untitled', '未命名');
+    if (kind === 'sub') {
+      const live = document.querySelector(`#cat2-sub-${si} .cat2-subname`);
+      if (live) live.textContent = shown;
+    } else {
+      const head = document.querySelector('#cat2-tophead h3');
+      if (head) head.textContent = shown;
+      const rail = document.querySelector('.cat2-railrow.on .nm');
+      if (rail) rail.textContent = shown;
+    }
+  }
+  catUpdateDirty();
+}
+// Paint the card into the slot under whichever row is being renamed.
+function catRenderOpenRename() {
+  document.querySelectorAll('.cat2-rename').forEach(el => el.remove());
+  if (!catEdit || catEdit.ti !== catSel) return;
+  const { kind, si } = catEdit;
+  const node = kind === 'sub' ? catModel[catSel].subs[si] : catModel[catSel];
+  if (!node) { catEdit = null; return; }
+  const c = catCount(node);
+  const isSub = kind === 'sub';
+  const retag = c && c.n
+    ? `<span class="cat2-retag"><span class="cat2-retag-dot"></span>${escapeHtml(cuT(`${fcNum(c.n)} products re-tag themselves when you save`, `保存后 ${fcNum(c.n)} 件产品自动跟随`))}</span>`
+    : '';
+  const card = document.createElement('div');
+  card.className = 'cat2-rename';
+  card.innerHTML = `
+    <div class="cat2-rename-fields">
+      <div>
+        <label>${escapeHtml(isSub ? cuT('Subcategory name — English', '子分类名称 — 英文') : cuT('Category name — English', '主分类名称 — 英文'))}</label>
+        <input type="text" id="cat2-rename-en" value="${escapeAttr(node.name || '')}" oninput="catRenameInput('name', this.value)">
+      </div>
+      <div>
+        <label>${escapeHtml(isSub ? cuT('Subcategory name — Chinese', '子分类名称 — 中文') : cuT('Category name — Chinese', '主分类名称 — 中文'))}</label>
+        <input type="text" value="${escapeAttr(node.name_cn || '')}" oninput="catRenameInput('name_cn', this.value)">
+      </div>
+    </div>
+    <div class="cat2-rename-foot">
+      <button class="cat2-btn" type="button" onclick="catSaveRename()">${escapeHtml(cuT('Save name', '保存名称'))}</button>
+      <button class="cat2-btn cat2-btn-ghost" type="button" onclick="catCloseRename(true)">${escapeHtml(cuT('Cancel', '取消'))}</button>
+      ${retag}
+    </div>`;
+  const anchor = isSub ? document.getElementById('cat2-sub-' + si) : document.getElementById('cat2-tophead');
+  if (!anchor) return;
+  if (isSub) anchor.after(card); else document.getElementById('cat2-tophead-rename').append(card);
+  const en = document.getElementById('cat2-rename-en');
+  if (en) { en.focus(); en.select(); }
+}
+// Escape closes the card the way Cancel does.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !catEdit) return;
+  if (!document.querySelector('.cat2-rename')) return;
+  catCloseRename(true);
+});
+
+// ── Add / remove ───────────────────────────────────────────────────────────
 function catAddTop() {
   catModel.push({ id: '', name: '', name_cn: '', subs: [] });
-  catRender(); catUpdateDirty();
-  // focus the new top's EN input
-  const inp = document.querySelector(`#cat-top-${catModel.length - 1} input[data-f="name"]`);
-  if (inp) inp.focus();
+  catSel = catModel.length - 1;
+  catRenderStatus(); catRenderRail(); catRenderPane();
+  catOpenRename('top', catSel, -1);
 }
 function catRemoveTop(ti) {
   const t = catModel[ti]; if (!t) return;
+  // The shop needs at least one shelf; the server rejects an empty tree, so
+  // say so here instead of letting an autosave fail behind the operator's back.
+  if (catModel.length === 1) { toast(cuT('The shop needs at least one category', '店面至少需要一个主分类'), 'err'); return; }
   const n = (t.subs || []).length;
+  const name = t.name || cuT('this category', '该主分类');
   const msg = n
-    ? `Remove "${t.name || 'this category'}" and its ${n} subcategor${n === 1 ? 'y' : 'ies'}?\n删除该主分类及其 ${n} 个子分类？\n\nProducts keep their tag until re-assigned. · 产品标签保留，直到重新分配。`
-    : `Remove "${t.name || 'this category'}"? · 删除该主分类？`;
+    ? cuT(`Remove “${name}” and its ${n} subcategor${n === 1 ? 'y' : 'ies'}?\n\nProducts keep their tag until you re-assign them.`,
+          `删除“${name}”及其 ${n} 个子分类？\n\n产品标签保留，直到重新分配。`)
+    : cuT(`Remove “${name}”?`, `删除“${name}”？`);
   if (!confirm(msg)) return;
-  catModel.splice(ti, 1); catRender(); catUpdateDirty();
+  catEdit = null;
+  catModel.splice(ti, 1);
+  if (catSel >= catModel.length) catSel = Math.max(0, catModel.length - 1);
+  catRenderAll(); catUpdateDirty();
 }
 function catAddSub(ti) {
   catModel[ti].subs = catModel[ti].subs || [];
   catModel[ti].subs.push({ id: '', name: '', name_cn: '' });
-  catRender(); catUpdateDirty();
-  const subs = catModel[ti].subs;
-  const inp = document.querySelector(`#cat-sub-${ti}-${subs.length - 1} input[data-f="name"]`);
-  if (inp) inp.focus();
+  catRenderStatus(); catRenderPane();
+  catOpenRename('sub', ti, catModel[ti].subs.length - 1);
 }
 function catRemoveSub(ti, si) {
-  catModel[ti].subs.splice(si, 1); catRender(); catUpdateDirty();
+  const s = catModel[ti].subs[si]; if (!s) return;
+  const c = catCount(s);
+  if (c && c.n && !confirm(cuT(
+    `Remove “${s.name}”? Its ${c.n} product${c.n === 1 ? '' : 's'} stay in ${catModel[ti].name}, without a heading.`,
+    `删除“${s.name}”？其 ${c.n} 件产品仍留在“${catModel[ti].name}”，但不再归入任何区块。`))) return;
+  catEdit = null;
+  catModel[ti].subs.splice(si, 1);
+  catRenderStatus(); catRenderRail(); catRenderPane(); catUpdateDirty();
 }
 
-// Structure summary — computed in-browser from the live catModel (no fetch), so
-// it tracks unsaved adds/removes as the operator edits. Empty = top categories
-// with zero subs (a structural gap, since the shop hides empty categories).
-let _CAT_KPI_LANG_HOOKED = false;
-function catRenderKpis() {
-  if (!document.getElementById('cat-kpis')) return;
-  if (!_CAT_KPI_LANG_HOOKED && window.onLangChange) { _CAT_KPI_LANG_HOOKED = true; onLangChange(catRenderKpis); }
-  const tops = Array.isArray(catModel) ? catModel : [];
-  let subTotal = 0, empty = 0;
-  for (const t of tops) { const n = (t.subs || []).length; subTotal += n; if (!n) empty++; }
-  const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = fcNum(n); };
-  set('cat-kpi-top', tops.length);
-  set('cat-kpi-sub', subTotal);
-  set('cat-kpi-empty', empty);
-  const tile = document.getElementById('cat-kpi-empty-tile'); if (tile) tile.classList.toggle('alert', empty > 0);
-  const sub = document.getElementById('cat-kpi-empty-sub');
-  if (sub) sub.textContent = empty > 0 ? cuT('no subcategories yet', '尚无子分类') : cuT('all populated', '均有子分类');
-}
-
-function catRender() {
-  const host = $('#cat-editor'); if (!host) return;
-  catRenderKpis();
-  if (!catModel.length) {
-    host.innerHTML = `<div class="card" style="text-align:center;color:var(--muted);padding:28px;">No categories yet · 暂无分类<br><br><button class="btn btn-sm" type="button" onclick="catAddTop()">＋ Add top category · 新增主分类</button></div>`;
-    return;
-  }
-  host.innerHTML = catModel.map((t, ti) => {
-    const subs = (t.subs || []).map((s, si) => `
-      <div class="cat-subrow" id="cat-sub-${ti}-${si}" data-fk="s${catFk(s)}"
-           ondragover="catDragOver(event,'sub',${ti},${si})" ondrop="catDrop(event,'sub',${ti},${si})" ondragleave="catDragLeave(event)"
-           style="display:flex;gap:6px;align-items:center;padding:5px 0;">
-        <span class="cat-drag" draggable="true" title="Drag to reorder · 拖动排序"
-              ondragstart="catDragStart(event,'sub',${ti},${si})" ondragend="catDragEnd()">⠿</span>
-        <input type="text" class="input cat-name" data-f="name" value="${escapeAttr(s.name)}" placeholder="Subcategory (EN)" oninput="catSet(${ti},${si},'name',this.value)">
-        <input type="text" class="input cat-name" data-f="name_cn" value="${escapeAttr(s.name_cn)}" placeholder="子分类 (中文)" oninput="catSet(${ti},${si},'name_cn',this.value)">
-        <button class="btn btn-sm cat-edit" type="button" title="Edit this subcategory & its products · 编辑子分类及其产品" onclick="catOpenDetail('sub',${ti},${si})">Edit · 编辑</button>
-        <button class="btn-icon cat-del" type="button" title="Remove subcategory · 删除子分类" onclick="catRemoveSub(${ti},${si})">✕</button>
-      </div>`).join('');
-    return `
-    <div class="card cat-top" id="cat-top-${ti}" data-fk="t${catFk(t)}"
-         ondragover="catDragOver(event,'top',${ti})" ondrop="catDrop(event,'top',${ti})" ondragleave="catDragLeave(event)"
-         style="margin-bottom:var(--s4);">
-      <div class="cat-top-head" style="display:flex;gap:8px;align-items:center;margin-bottom:var(--s3);">
-        <span class="cat-drag cat-drag-top" draggable="true" title="Drag to reorder · 拖动排序"
-              ondragstart="catDragStart(event,'top',${ti})" ondragend="catDragEnd()">⠿</span>
-        <input type="text" class="input cat-name" data-f="name" value="${escapeAttr(t.name)}" placeholder="Top category (EN)" oninput="catSet(${ti},-1,'name',this.value)">
-        <input type="text" class="input cat-name" data-f="name_cn" value="${escapeAttr(t.name_cn)}" placeholder="主分类 (中文)" oninput="catSet(${ti},-1,'name_cn',this.value)">
-        <button class="btn btn-sm cat-edit" type="button" title="Edit this category & its products · 编辑分类及其产品" onclick="catOpenDetail('top',${ti})" style="margin-left:auto;">Edit · 编辑</button>
-        <button class="btn btn-sm cat-del" type="button" onclick="catRemoveTop(${ti})">Remove · 删除</button>
-      </div>
-      <div style="padding-left:34px;">
-        ${(t.subs || []).length ? `<div class="cat-subs-kicker">${(t.subs).length} subcategor${(t.subs).length === 1 ? 'y' : 'ies'} · 子分类</div>` : ''}
-        ${subs || '<div class="muted" style="font-size:12px;padding:4px 0;">No subcategories · 无子分类</div>'}
-        <button class="btn btn-sm" type="button" onclick="catAddSub(${ti})" style="margin-top:8px;">＋ Add subcategory · 新增子分类</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-// ── Drag-and-drop reordering ───────────────────────────────────────────────
-// Tops reorder among themselves; subs reorder only WITHIN their parent top
-// (no cross-parent move, which keeps the rename-migration model simple — a
-// reorder changes neither name nor parent, so it never touches product rows).
-//
-// Motion: every layout change (fold on dragstart, unfold on dragend, re-sort
-// on drop) is FLIP-animated so rows glide instead of snapping — same floating
-// feel as the orders manifest re-sort. Keys live in a WeakMap (not on the
-// model) so the save payload and dirty-diff never see them.
+// ── Drag to reorder ────────────────────────────────────────────────────────
+// Tops reorder in the rail; subs reorder within their own category. Nothing
+// moves between parents — a reorder changes neither name nor parent, so it
+// never touches a product row. The list never reflows mid-drag: one insertion
+// line marks the edge the row will land against, and the rows glide (FLIP) to
+// their new places on drop. That glide is the whole interaction's only motion.
 const _catFk = new WeakMap(); let _catFkSeq = 0;
 function catFk(o) { let k = _catFk.get(o); if (!k) { k = ++_catFkSeq; _catFk.set(o, k); } return k; }
-// Like flipReorder, but corrects nested rows (subrows inside an animating top
-// card) by subtracting the nearest animated ancestor's delta — both levels
-// share the same curve, so the composite still lands exactly.
-function catFlip(swap) {
-  const host = document.getElementById('cat-editor');
+function catFlip(hostId, swap) {
+  const host = document.getElementById(hostId);
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   if (!host || reduce) { swap(); return; }
   const first = new Map();
   host.querySelectorAll('[data-fk]').forEach(el => first.set(el.dataset.fk, el.getBoundingClientRect()));
   swap();
-  const els = Array.from(host.querySelectorAll('[data-fk]'));
-  const delta = new Map();
-  els.forEach(el => {
-    const a = first.get(el.dataset.fk);
-    if (!a) return;
+  const now = document.getElementById(hostId);
+  if (!now) return;
+  now.querySelectorAll('[data-fk]').forEach(el => {
+    const a = first.get(el.dataset.fk); if (!a) return;
     const b = el.getBoundingClientRect();
-    delta.set(el, { dx: a.left - b.left, dy: a.top - b.top });
-  });
-  els.forEach(el => {
-    const d = delta.get(el); if (!d) return;
-    let dx = d.dx, dy = d.dy;
-    for (let p = el.parentElement; p && p !== host; p = p.parentElement) {
-      const pd = delta.get(p);
-      if (pd) { dx -= pd.dx; dy -= pd.dy; break; }
-    }
-    if (!dx && !dy) return;
+    const dy = a.top - b.top;
+    if (!dy) return;
     el.style.transition = 'none';
-    el.style.transform = `translate(${dx}px, ${dy}px)`;
+    el.style.transform = `translateY(${dy}px)`;
     requestAnimationFrame(() => {
-      el.style.transition = 'transform 320ms cubic-bezier(.22,.61,.36,1)';
+      el.style.transition = 'transform 320ms cubic-bezier(.16,1,.3,1)';
       el.style.transform = '';
-      el.addEventListener('transitionend', () => {
-        el.style.transition = '';
-        el.style.transform = '';
-      }, { once: true });
+      el.addEventListener('transitionend', () => { el.style.transition = ''; el.style.transform = ''; }, { once: true });
     });
   });
 }
-let catDrag = null;   // { kind:'top'|'sub', ti, si }
-function catDragStart(ev, kind, ti, si) {
-  catDrag = { kind, ti, si };
+let catDrag = null;   // { kind:'top'|'sub', i }
+function catDragStart(ev, kind, i) {
+  catDrag = { kind, i };
   ev.dataTransfer.effectAllowed = 'move';
   try { ev.dataTransfer.setData('text/plain', kind); } catch (e) {}
-  const row = ev.target.closest('.cat-top, .cat-subrow');
-  // Float the whole row as the drag ghost (not just the ⠿ grip).
+  const row = ev.target.closest('.cat2-row');
   if (row && ev.dataTransfer.setDragImage) {
     try {
       const r = row.getBoundingClientRect();
       ev.dataTransfer.setDragImage(row, ev.clientX - r.left, ev.clientY - r.top);
     } catch (e) {}
   }
-  // Mark only the row being dragged (dimmed); the rest of the list stays
-  // EXACTLY where it is — no fold, no reflow — so the operator keeps their
-  // bearings and the live insertion line is the single source of "lands here".
-  // Done next tick so changing the row mid-dragstart can't cancel the drag.
-  setTimeout(() => { if (catDrag && row) row.classList.add('cat-dragging'); }, 0);
+  // Next tick: changing the row mid-dragstart would cancel the drag.
+  setTimeout(() => { if (catDrag && row) row.classList.add('cat2-dragging'); }, 0);
 }
 function catClearDropCues() {
-  $$('.cat-drop-before, .cat-drop-after').forEach(el => el.classList.remove('cat-drop-before', 'cat-drop-after'));
+  document.querySelectorAll('.cat2-drop-before, .cat2-drop-after')
+    .forEach(el => el.classList.remove('cat2-drop-before', 'cat2-drop-after'));
 }
 function catDragEnd() {
   catDrag = null;
-  $$('.cat-dragging').forEach(el => el.classList.remove('cat-dragging'));
+  document.querySelectorAll('.cat2-dragging').forEach(el => el.classList.remove('cat2-dragging'));
   catClearDropCues();
 }
-function catDragOver(ev, kind, ti, si) {
-  if (!catDrag || catDrag.kind !== kind) return;          // only same-kind drops
-  if (kind === 'sub' && catDrag.ti !== ti) return;        // subs stay in their top
-  ev.preventDefault();
-  ev.dataTransfer.dropEffect = 'move';
-  const row = ev.currentTarget;
-  // Draw the insertion line on the edge facing the move direction — that edge
-  // IS where the row will land (matches the splice in catDrop), so you see the
-  // exact slot before releasing.
-  const from = kind === 'top' ? catDrag.ti : catDrag.si;
-  const to   = kind === 'top' ? ti : si;
-  catClearDropCues();
-  if (to === from) return;            // hovering its own row → no line
-  row.classList.add(to < from ? 'cat-drop-before' : 'cat-drop-after');
-}
-function catDragLeave(ev) { ev.currentTarget.classList.remove('cat-drop-before', 'cat-drop-after'); }
-function catDrop(ev, kind, ti, si) {
+function catDragOver(ev, kind, i) {
   if (!catDrag || catDrag.kind !== kind) return;
   ev.preventDefault();
-  let moved = null;
-  if (kind === 'top') {
-    const from = catDrag.ti;
-    if (from !== ti) { moved = catModel.splice(from, 1)[0]; catModel.splice(ti, 0, moved); }
-  } else {
-    if (catDrag.ti !== ti) { catDragEnd(); return; }
-    const subs = catModel[ti].subs, from = catDrag.si;
-    if (from !== si) { moved = subs.splice(from, 1)[0]; subs.splice(si, 0, moved); }
-  }
-  // FLIP the re-sort so the rows glide from their old spots to their new ones
-  // — the only motion in the whole interaction, and it shows the result.
+  ev.dataTransfer.dropEffect = 'move';
+  catClearDropCues();
+  if (i === catDrag.i) return;
+  ev.currentTarget.classList.add(i < catDrag.i ? 'cat2-drop-before' : 'cat2-drop-after');
+}
+function catDragLeave(ev) { ev.currentTarget.classList.remove('cat2-drop-before', 'cat2-drop-after'); }
+function catDrop(ev, kind, i) {
+  if (!catDrag || catDrag.kind !== kind) return;
+  ev.preventDefault();
+  const from = catDrag.i;
   catDrag = null;
   catClearDropCues();
-  catFlip(() => { catRender(); });   // re-render drops the dragging/drop-cue classes
-  if (moved) {
-    const el = document.querySelector(`#cat-editor [data-fk="${kind === 'top' ? 't' : 's'}${catFk(moved)}"]`);
-    if (el) { el.classList.add('cat-landed'); el.addEventListener('animationend', () => el.classList.remove('cat-landed'), { once: true }); }
+  if (from === i) { catDragEnd(); return; }
+  if (kind === 'top') {
+    catEdit = null;
+    catFlip('cat2-rail', () => {
+      const moved = catModel.splice(from, 1)[0];
+      catModel.splice(i, 0, moved);
+      // The pane keeps showing the category the operator was looking at.
+      if (catSel === from) catSel = i;
+      else if (from < catSel && i >= catSel) catSel--;
+      else if (from > catSel && i <= catSel) catSel++;
+      catRenderRail();
+    });
+    catRenderPane();
+  } else {
+    catEdit = null;
+    catFlip('cat2-subs', () => {
+      const subs = catModel[catSel].subs;
+      const moved = subs.splice(from, 1)[0];
+      subs.splice(i, 0, moved);
+      const host = document.getElementById('cat2-subs');
+      if (host) host.innerHTML = subs.map((s, si) => catSubRowHtml(s, si)).join('');
+    });
   }
   catUpdateDirty();
 }
 
-async function catSave(opts) {
-  const auto = !!(opts && opts.auto);
-  // Client-side guards mirror the server: no blank names, no dups. On a manual
-  // save we tell the operator why; autosave just waits silently (it only fires
-  // when valid anyway) so a half-finished name never throws an error toast.
-  for (const t of catModel) {
-    if (!String(t.name || '').trim()) { if (!auto) toast('Every top category needs an English name · 主分类需填英文名', 'err'); return; }
-    for (const s of (t.subs || [])) {
-      if (!String(s.name || '').trim()) { if (!auto) toast('Every subcategory needs an English name · 子分类需填英文名', 'err'); return; }
-    }
-  }
-  if (_catSaving) return;
-  _catSaving = true;
-  if (_catSaveTimer) { clearTimeout(_catSaveTimer); _catSaveTimer = null; }
-  const btn = $('#cat-save-btn'); if (btn && !auto) { btn.disabled = true; btn.textContent = 'Saving… · 保存中'; }
-  const ind = $('#cat-dirty'); if (ind) { ind.textContent = '○ Saving… · 保存中'; ind.style.color = 'var(--muted)'; }
-  try {
-    const j = await api('/api/retail-admin/category-tree', { method: 'PUT', body: { tree: catModel } });
-    catModel = Array.isArray(j.data) ? JSON.parse(JSON.stringify(j.data)) : catModel;
-    catClean = JSON.stringify(catModel);
-    // Keep the operator's caret put when an autosave repaints mid-typing.
-    if (auto) catRenderKeepFocus(); else catRender();
-    // Invalidate the product-editor's cached tree so its Shop-section /
-    // Subcategory dropdowns pick up the renamed/added/removed nodes.
-    if (typeof PA_CAT_TREE !== 'undefined') PA_CAT_TREE = [];
-    const moved = j.migrated || 0;
-    // Manual save always confirms; autosave only speaks up when it re-tagged
-    // products (a real side effect worth surfacing), staying quiet otherwise.
-    if (!auto) toast(moved ? `Saved · ${moved} product${moved === 1 ? '' : 's'} re-tagged · 已保存，迁移 ${moved} 个产品` : 'Saved · 已保存', 'ok');
-    else if (moved) toast(`Auto-saved · ${moved} product${moved === 1 ? '' : 's'} re-tagged · 已自动保存，迁移 ${moved} 个产品`, 'ok');
-  } catch (e) {
-    toast((e && e.message) ? ('Save failed: ' + e.message) : 'Save failed · 保存失败', 'err');
-  } finally {
-    _catSaving = false;
-    if (btn && !auto) { btn.disabled = false; btn.textContent = 'Save changes · 保存'; }
-    catUpdateDirty();   // refresh the indicator; reschedules if edits arrived mid-save
-  }
+// ── The products standing on this shelf ────────────────────────────────────
+// Read against the LAST-SAVED name (products carry saved names, so an unsaved
+// rename wouldn't match until the tree lands). Twelve rows, then a door into
+// the catalogue — the pane answers "is this shelf right?", not "manage stock".
+const CAT_PROD_SHOWN = 12;
+let _catMoveTargets = [];    // flattened [{ top, sub }]; the <select> value is the index
+let _catProdReq = 0;
+
+function catCleanTree() { try { return JSON.parse(catClean); } catch (e) { return []; } }
+// The saved name of the selected top, matched by stable id. Null for a node
+// that has never been saved (it can have no products yet).
+function catSavedTopName() {
+  const t = catModel[catSel];
+  if (!t || !t.id) return null;
+  const saved = catCleanTree().find(x => x.id === t.id);
+  return saved ? saved.name : null;
 }
-
-// ── Per-category detail drawer ─────────────────────────────────────────────
-// Opened from the "Edit" button on any top/sub row. Lets the operator rename
-// (EN/CN, same bound model as the inline editor — persisted by Save changes)
-// AND see / quick-recategorize the products tagged to this category. Product
-// moves go straight to PATCH /products/:id; structure (names/order) still saves
-// through the whole-tree catSave(). Product queries + move targets read the
-// LAST-SAVED tree (catClean) because products are tagged with saved names — an
-// unsaved rename wouldn't match until you Save.
-let catDetail = null;        // { kind:'top'|'sub', ti, si }
-let _catMoveTargets = [];    // flattened [{top,sub}] for the move <select>; value = index
-
-function catCleanTree() { try { return JSON.parse(catClean); } catch { return []; } }
-
-// Resolve the saved (top, sub) names for the node being edited, matched by
-// stable id. Returns null for a brand-new/unsaved node (no products yet).
-function catSavedNames(kind, ti, si) {
-  const node = (kind === 'sub') ? (catModel[ti] && catModel[ti].subs[si]) : catModel[ti];
-  if (!node || !node.id) return null;
-  const tree = catCleanTree();
-  if (kind === 'top') { const t = tree.find(x => x.id === node.id); return t ? { top: t.name } : null; }
-  for (const t of tree) { const s = (t.subs || []).find(x => x.id === node.id); if (s) return { top: t.name, sub: s.name }; }
-  return null;
-}
-
-function catOpenDetail(kind, ti, si) {
-  catDetail = { kind, ti, si: si == null ? -1 : si };
-  document.getElementById('cat-detail-scrim').classList.add('open');
-  const aside = document.getElementById('cat-detail');
-  aside.classList.add('open'); aside.setAttribute('aria-hidden', 'false');
-  catRenderDetail();
-  catLoadDetailProducts();
-}
-function catCloseDetail() {
-  catDetail = null;
-  document.getElementById('cat-detail-scrim').classList.remove('open');
-  const aside = document.getElementById('cat-detail');
-  aside.classList.remove('open'); aside.setAttribute('aria-hidden', 'true');
-}
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && catDetail) catCloseDetail(); });
-
-function catRenderDetail() {
-  if (!catDetail) return;
-  const { kind, ti, si } = catDetail;
-  const node = kind === 'sub' ? (catModel[ti] && catModel[ti].subs[si]) : catModel[ti];
-  if (!node) { catCloseDetail(); return; }
-  const isSub = kind === 'sub';
-  document.getElementById('cat-detail-kicker').textContent = isSub
-    ? `Subcategory of ${catModel[ti].name || '—'} · 子分类`
-    : 'Top category · 主分类';
-  document.getElementById('cat-detail-title').textContent = node.name || (isSub ? 'New subcategory' : 'New category');
-  const saved = catSavedNames(kind, ti, si);
-  const fi = isSub ? si : -1;
-  const body = document.getElementById('cat-detail-body');
-  body.innerHTML = `
-    <div class="cd-field">
-      <label>${isSub ? 'Subcategory name (English) · 子分类名(英文)' : 'Category name (English) · 分类名(英文)'}</label>
-      <input type="text" class="input" value="${escapeAttr(node.name)}"
-             oninput="catSet(${ti},${fi},'name',this.value); catDetailTitleSync()">
-    </div>
-    <div class="cd-field">
-      <label>${isSub ? 'Subcategory name (中文)' : 'Category name (中文)'}</label>
-      <input type="text" class="input" value="${escapeAttr(node.name_cn)}"
-             oninput="catSet(${ti},${fi},'name_cn',this.value)">
-    </div>
-    ${catIsDirty() ? `<div class="cd-empty" style="color:var(--muted);">Name changes save automatically &amp; re-tag products. · 名称更改将自动保存并重新标记产品。</div>` : ''}
-    <div style="display:flex;gap:8px;margin-bottom:var(--s4);">
-      <button class="btn btn-sm" type="button" onclick="catSaveFromDetail()">Save now · 立即保存</button>
-      ${isSub ? '' : `<button class="btn btn-sm" type="button" onclick="catAddSub(${ti}); catRenderDetail()">＋ Add subcategory · 新增子分类</button>`}
-    </div>
-
-    ${!isSub ? `<div class="cd-sec-title">Subcategories <span class="cd-count" id="cd-subcounts"></span></div>
-      <div id="cd-subchips">${(node.subs || []).map(s => `<span class="cd-subchip">${escapeHtml(s.name)}<span class="n" data-sub="${escapeAttr(s.name)}">·</span></span>`).join('') || '<span class="cd-empty">No subcategories yet · 暂无子分类</span>'}</div>` : ''}
-
-    <div class="cd-sec-title">Products in this ${isSub ? 'subcategory' : 'category'} <span class="cd-count" id="cd-prod-count">…</span></div>
-    ${saved ? '' : '<div class="cd-empty">Save this category first to see and assign products. · 请先保存分类。</div>'}
-    <div id="cd-prod-list">${saved ? '<div class="cd-empty">Loading… · 加载中</div>' : ''}</div>
-  `;
-}
-function catDetailTitleSync() {
-  if (!catDetail) return;
-  const { kind, ti, si } = catDetail;
-  const node = kind === 'sub' ? catModel[ti].subs[si] : catModel[ti];
-  document.getElementById('cat-detail-title').textContent = node.name || '—';
-}
-async function catSaveFromDetail() {
-  await catSave();
-  if (catDetail) { catRenderDetail(); catLoadDetailProducts(); }
-}
-
-// Flatten the SAVED tree into move targets (products validate against the
-// live/saved tree server-side, so unsaved edits aren't offered as targets).
 function catBuildMoveTargets() {
   _catMoveTargets = [];
   for (const t of catCleanTree()) {
@@ -1149,52 +1261,53 @@ function catBuildMoveTargets() {
 function catMoveOptions(curTop, curSub) {
   return _catMoveTargets.map((tg, i) => {
     const sel = (tg.top === (curTop || '') && (tg.sub || '') === (curSub || '')) ? ' selected' : '';
-    const lbl = tg.sub ? `${tg.top} › ${tg.sub}` : `${tg.top} · (no sub)`;
+    // Never " · " — the bilingual walker would read that as an EN/CN pair and
+    // eat half the label. An em dash says the same thing and stays whole.
+    const lbl = tg.sub ? `${tg.top} › ${tg.sub}` : `${tg.top} — ${cuT('no heading', '无区块')}`;
     return `<option value="${i}"${sel}>${escapeHtml(lbl)}</option>`;
   }).join('');
 }
 
-async function catLoadDetailProducts() {
-  if (!catDetail) return;
-  const { kind, ti, si } = catDetail;
-  const saved = catSavedNames(kind, ti, si);
-  const list = document.getElementById('cd-prod-list');
-  const countEl = document.getElementById('cd-prod-count');
-  if (!saved) { if (countEl) countEl.textContent = '0'; return; }
+async function catLoadProducts() {
+  const host = document.getElementById('cat2-prods');
+  if (!host) return;
+  const top = catSavedTopName();
+  if (!top) {
+    host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Save this category, then its products can stand here.', '保存该分类后，产品即可归入此处。'))}</div>`;
+    return;
+  }
+  const req = ++_catProdReq;
   catBuildMoveTargets();
-  const qs = new URLSearchParams({ top: saved.top });
-  if (kind === 'sub') qs.set('sub', saved.sub || '');
   try {
-    const { data } = await api('/api/retail-admin/category-products?' + qs.toString());
+    const { data } = await api('/api/retail-admin/category-products?' + new URLSearchParams({ top }).toString());
+    if (req !== _catProdReq) return;    // the operator moved on to another shelf
     const rows = data || [];
-    if (countEl) countEl.textContent = String(rows.length);
-    // Top view: per-sub counts on the chips.
-    if (kind === 'top') {
-      const counts = {};
-      rows.forEach(p => { const k = (p.subcategory || '').trim() || 'none'; counts[k] = (counts[k] || 0) + 1; });
-      document.querySelectorAll('#cd-subchips .n[data-sub]').forEach(el => {
-        el.textContent = String(counts[el.getAttribute('data-sub')] || 0);
-      });
-      const sc = document.getElementById('cd-subcounts');
-      if (sc) sc.textContent = (counts['none'] ? `${counts['none']} unfiled · 未归类` : '');
+    if (!rows.length) {
+      host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Nothing stands on this shelf yet.', '该分类下暂无产品。'))}</div>`;
+      return;
     }
-    if (!list) return;
-    if (!rows.length) { list.innerHTML = '<div class="cd-empty">No products tagged here yet. · 此分类暂无产品。</div>'; return; }
-    list.innerHTML = rows.map(p => {
+    const shown = rows.slice(0, CAT_PROD_SHOWN);
+    host.innerHTML = shown.map(p => {
       const name = escapeHtml(p.name_en || p.name_cn || ('#' + p.id));
       const thumb = p.image_data
-        ? `<img class="cd-prod-thumb" src="${escapeAttr(p.image_data)}" alt="" loading="lazy">`
-        : '<div class="cd-prod-thumb placeholder">▢</div>';
-      return `<div class="cd-prod">
+        ? `<img class="cat2-thumb" src="${escapeAttr(p.image_data)}" alt="" loading="lazy">`
+        : `<span class="cat2-thumb">${CAT_ICON.box}</span>`;
+      const sub = (p.subcategory || '').trim();
+      return `<div class="cat2-prod">
         ${thumb}
-        <div class="cd-prod-name">${name}${p.sku ? ` <span class="sku">${escapeHtml(p.sku)}</span>` : ''}${p.is_published ? '' : '<span class="cd-prod-unpub">Hidden · 隐藏</span>'}</div>
-        <select title="Move to another category · 移动到其他分类" onchange="catMoveProduct(${p.id}, this)">
+        <span class="pn">${name}${p.is_published ? '' : ` <span class="psub">· ${escapeHtml(cuT('draft', '未上架'))}</span>`}</span>
+        <span class="psub">${escapeHtml(sub || cuT('no heading', '无区块'))}</span>
+        <select title="${escapeAttr(cuT('Move to another shelf', '移动到其他分类'))}" onchange="catMoveProduct(${p.id}, this)">
           ${catMoveOptions(p.top_category, p.subcategory)}
         </select>
       </div>`;
-    }).join('');
+    }).join('') +
+      `<button class="cat2-seeall" type="button" onclick="catSeeAll()">
+         <span>${escapeHtml(cuT(`See all ${fcNum(rows.length)} in the catalogue`, `在目录中查看全部 ${fcNum(rows.length)} 件`))}</span>${CAT_ICON.arrow}
+       </button>`;
   } catch (e) {
-    if (list) list.innerHTML = '<div class="cd-empty" style="color:var(--danger);">Failed to load products · 加载产品失败</div>';
+    if (req !== _catProdReq) return;
+    host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Could not load the products on this shelf.', '加载该分类的产品失败。'))}</div>`;
   }
 }
 
@@ -1204,20 +1317,38 @@ async function catMoveProduct(id, sel) {
   sel.disabled = true;
   try {
     await api('/api/retail-admin/products/' + id, { method: 'PATCH', body: { top_category: tg.top, subcategory: tg.sub || null } });
-    toast('Moved · 已移动', 'ok');
-    catLoadDetailProducts();   // product may have left this category — refresh
+    toast(cuT('Moved', '已移动'), 'ok');
+    await catRefreshCounts();
+    catRenderStatus(); catRenderRail();
+    catLoadProducts();   // the product may have left this shelf
   } catch (e) {
-    toast('Move failed · 移动失败', 'err');
+    toast(cuT('Could not move it', '移动失败'), 'err');
     sel.disabled = false;
   }
 }
 
-// Lazy-load the tree the first time the Categories tab is opened.
-(function () {
-  const btn = document.querySelector('.tabs [data-tab="categories"]');
-  if (btn) btn.addEventListener('click', () => { if (!catLoaded) catLoad(); });
-})();
-// Warn before leaving with unsaved category edits.
+// Hand the operator over to the catalogue, already filtered to this shelf.
+function catSeeAll() {
+  const top = catSavedTopName();
+  if (!top) return;
+  prodShowView('catalog');
+  const f = document.getElementById('pa-filter');
+  if (f && [...f.options].some(o => o.value === top)) {
+    f.value = top;
+    f.dispatchEvent(new Event('change'));
+  }
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// Open the shelf from anywhere (search results, deep links).
+function catGo() {
+  const btn = document.querySelector('.tabs [data-tab="products"]');
+  if (btn) btn.click();
+  prodShowView('categories');
+}
+window.catGo = catGo;
+
+// Warn before leaving with category edits that never landed.
 window.addEventListener('beforeunload', (e) => {
   if (catLoaded && catIsDirty()) { e.preventDefault(); e.returnValue = ''; }
 });

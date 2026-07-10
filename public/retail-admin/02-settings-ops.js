@@ -1091,6 +1091,15 @@ async function loadIntegrationsStatus() {
                    view: 'activity',
                    kw: 'stock activity inventory ledger movements history 库存 流水 activity' });
     }
+    // 1c) Categories left the rail on the same day and lives beside it — same
+    // hand-indexing, so typing "categories" still lands on the shelf.
+    if (document.getElementById('prod-view-categories')
+        && (typeof can !== 'function' || (can('products:view') && can('categories:view')))) {
+      items.push({ type: 'page', title: cuT('Categories', '分类'),
+                   crumb: cuT('Products', '产品'), tab: 'products', sub: null, anchor: null,
+                   view: 'categories',
+                   kw: 'categories category shelves subcategory tree rail sections 分类 子分类 categories' });
+    }
     // 2) External editor launchers in the Content group (open in a new tab)
     document.querySelectorAll('.tabs-popover button[onclick*="window.open"]').forEach(btn => {
       if (gatedOff(btn)) return;
