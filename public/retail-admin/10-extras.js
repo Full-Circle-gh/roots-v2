@@ -1764,19 +1764,32 @@ window.onLangChange(function () {
 })();
 
 // ════════════════════════════════════════════════════════════════
-// "New version available" banner — versionWatch
+// versionWatch — pick up a new build without asking
 // The backend shell is served no-store and registers no service worker, so a
 // plain reload always pulls fresh JS — but operators keep this tab open for
-// hours and otherwise never know a new build shipped. We poll /api/version
-// (a token that changes on every deploy / restart) and, when it differs from
-// what the page booted with, slide up a Reload banner. Button only: we never
-// auto-reload, so an operator mid-edit in a drawer is never interrupted.
+// hours and otherwise never know a new build shipped. We poll /api/version (a
+// token that changes on every deploy / restart) and, once it differs from what
+// the page booted with, reload silently — but ONLY at a moment where a reload
+// cannot cost the operator anything.
+//
+// That guard is the whole point. An earlier watcher hard-reloaded on refocus
+// and produced "the admin refreshes by itself": an operator halfway through an
+// order edit lost the edit and never learned why. So we wait for a safe moment
+// — the tab is out of sight, or it has sat untouched for a while — and in
+// either case no drawer is open, no field has been typed into, nothing is
+// mid-save. If the operator never steps away, we never reload. Sitting on an
+// old build is cheap; losing an edit is not.
 // ════════════════════════════════════════════════════════════════
 (function versionWatch() {
-  let bootVersion = null;     // token the page loaded with
-  let latestSeen = null;      // most recent token returned by the server
-  let dismissedFor = null;    // token the operator dismissed (suppress until a newer one)
-  let banner = null;
+  const IDLE_MS = 10 * 60 * 1000;   // untouched this long = safe to reload in place
+  const POLL_MS =  2 * 60 * 1000;
+
+  let bootVersion = null;   // token the page loaded with
+  let pending     = false;  // a newer build exists; waiting for a safe moment
+  let lastTouch   = Date.now();
+
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev =>
+    document.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
 
   async function fetchVersion() {
     try {
@@ -1785,59 +1798,57 @@ window.onLangChange(function () {
     } catch { return null; }
   }
 
-  function label(en, cn) {
-    return (typeof cuT === 'function') ? cuT(en, cn) : en;
+  // Anything on screen the operator could be part-way through.
+  function overlayOpen() {
+    return !!document.querySelector(
+      '.side-drawer.open, .drawer.open, [id$="-drawer"].open, [id$="-scrim"].open, ' +
+      '.modal.open, .modal.show, dialog[open]'
+    );
   }
 
-  function syncText() {
-    if (!banner) return;
-    banner.querySelector('.vb-text').textContent   = label('A newer version is ready', '有新版本了');
-    banner.querySelector('.vb-sub').textContent    = label('Refresh when you reach a good stopping point', '方便时刷新即可');
-    banner.querySelector('.vb-reload').textContent = label('Refresh', '刷新');
+  // A field typed into but not saved. defaultValue / defaultChecked hold what the
+  // markup (or the last render) put there, so a difference means a human changed it.
+  function unsavedEdits() {
+    for (const el of document.querySelectorAll('input, textarea, select')) {
+      if (el.disabled || el.readOnly || el.type === 'search' || el.type === 'hidden') continue;
+      if (el.tagName === 'SELECT') {
+        if ([...el.options].some(o => o.selected !== o.defaultSelected)) return true;
+      } else if (el.type === 'checkbox' || el.type === 'radio') {
+        if (el.checked !== el.defaultChecked) return true;
+      } else if (el.value !== el.defaultValue) return true;
+    }
+    return false;
   }
 
-  function showBanner() {
-    if (banner) { banner.classList.add('show'); return; }
-    banner = document.createElement('div');
-    banner.id = 'version-banner';
-    banner.setAttribute('role', 'status');
-    // Waveform already settled to a flat line + a Dusk dot: "the update is
-    // done in the background, only the refresh is left." Colours come from CSS
-    // (var() in SVG presentation attributes isn't reliable), so no fill here.
-    banner.innerHTML =
-      '<span class="vb-mark" aria-hidden="true">' +
-        '<svg width="26" height="16" viewBox="0 0 26 16" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-          '<path d="M1 8 Q3 8 4.5 5 T8 8 Q9.5 11 11 8 T14 8 L25 8" stroke-width="1.7" stroke-linecap="round"/>' +
-          '<circle cx="24" cy="8" r="2.4"/>' +
-        '</svg>' +
-      '</span>' +
-      '<span class="vb-body"><span class="vb-text"></span><span class="vb-sub"></span></span>' +
-      '<button class="vb-reload" type="button"></button>' +
-      '<button class="vb-close" type="button" aria-label="Dismiss" data-i18n-skip>✕</button>';
-    document.body.appendChild(banner);
-    syncText();
-    banner.querySelector('.vb-reload').onclick = () => location.reload();
-    banner.querySelector('.vb-close').onclick  = () => {
-      dismissedFor = latestSeen;   // suppress until an even newer version appears
-      banner.classList.remove('show');
-    };
-    // Keep the banner's wording correct if the operator flips EN/中文 while it's up.
-    if (typeof onLangChange === 'function') onLangChange(syncText);
-    requestAnimationFrame(() => banner.classList.add('show'));
+  function inFlight() {
+    return !!document.querySelector('button.busy, .btn.busy, [aria-busy="true"]');
+  }
+
+  function safeToReload() {
+    const away = document.visibilityState === 'hidden';
+    const idle = Date.now() - lastTouch > IDLE_MS;
+    if (!away && !idle) return false;
+    return !overlayOpen() && !unsavedEdits() && !inFlight();
+  }
+
+  function maybeReload() {
+    if (pending && safeToReload()) location.reload();
   }
 
   async function check() {
     const v = await fetchVersion();
     if (!v) return;
-    latestSeen = v;
     if (bootVersion === null) { bootVersion = v; return; }   // first read = baseline
-    if (v !== bootVersion && dismissedFor !== v) showBanner();
+    if (v !== bootVersion) pending = true;
+    maybeReload();
   }
 
-  check();                              // establish baseline on load
-  setInterval(check, 5 * 60 * 1000);    // re-check every 5 minutes
+  check();                                // establish baseline on load
+  setInterval(check, POLL_MS);
+  setInterval(maybeReload, 30 * 1000);    // idle can arrive between polls
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') check();   // and whenever the tab is refocused
+    if (document.visibilityState === 'hidden') maybeReload();   // reload behind their back, never under their hands
+    else { lastTouch = Date.now(); check(); }
   });
 })();
 

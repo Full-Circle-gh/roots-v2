@@ -7308,56 +7308,9 @@
 .pw-rev-v { flex: 1 1 auto; color: var(--ink, #1d1d1a); }
 .pw-warn { margin-top: 14px; padding: 10px 13px; border: 1px solid var(--brass, #b08d4a); border-radius: 9px; background: rgba(176,141,74,.08); font-size: 13px; }
 
-/* ═══════════════════════════════════════════════════════════════════
-   "New version available" prompt — the Quiet dock
-   Polls /api/version (see 10-extras.js versionWatch). When a new backend
-   build is deployed, every open operator tab settles this dock up from the
-   bottom. A fresh build is something the system did in the background, so it
-   wears Dusk (the automation colour) — not Brass — with a waveform that has
-   already settled to a flat line: the update is done, only the refresh is
-   left. Button only — never auto-reloads, so nobody loses an in-progress
-   edit. Calm fade/rise.
-   ═══════════════════════════════════════════════════════════════════ */
-#version-banner {
-  position: fixed; left: 50%; bottom: 24px; z-index: 4000;
-  transform: translate(-50%, 12px); opacity: 0;
-  transition: opacity .5s var(--ease-out), transform .5s var(--ease-out);
-  display: flex; align-items: center; gap: 14px;
-  width: min(520px, calc(100vw - 32px));
-  padding: 14px 14px 14px 18px;
-  background: var(--bg-pane); color: var(--text-1);
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: var(--sh-3);
-  font-family: var(--f-sans); font-size: 14px;
-  pointer-events: none;
-}
-#version-banner.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
-#version-banner .vb-mark { flex: none; display: flex; position: relative; top: 1px; }
-#version-banner .vb-mark path { stroke: var(--td-dusk); }
-#version-banner .vb-mark circle { fill: var(--td-dusk); }
-#version-banner .vb-body { min-width: 0; flex: 1 1 auto; display: flex; flex-direction: column; }
-#version-banner .vb-text { font-weight: 500; line-height: 1.3; }
-#version-banner .vb-sub { font-size: 12.5px; color: var(--text-3); line-height: 1.35; }
-#version-banner .vb-reload {
-  border: 0; cursor: pointer; white-space: nowrap; flex: none;
-  background: var(--td-dusk); color: #FFFFFF;
-  font-family: var(--f-sans); font-weight: 500; font-size: 14px;
-  padding: 8px 18px; border-radius: 8px;
-  transition: background var(--t-fast) var(--ease-out);
-}
-#version-banner .vb-reload:hover { background: var(--td-dusk-hi); }
-#version-banner .vb-close {
-  border: 0; cursor: pointer; background: transparent;
-  color: var(--text-3); font-size: 16px; line-height: 1; flex: none;
-  width: 26px; height: 26px; border-radius: 50%;
-  display: grid; place-items: center;
-  transition: color var(--t-fast) var(--ease-out), background var(--t-fast) var(--ease-out);
-}
-#version-banner .vb-close:hover { color: var(--text-1); background: color-mix(in srgb, var(--text-3) 18%, transparent); }
-@media (prefers-reduced-motion: reduce) {
-  #version-banner { transition: opacity .2s linear; transform: translate(-50%, 0); }
-}
+/* The "new version available" dock lived here. It is gone: versionWatch
+   (10-extras.js) now reloads silently once the tab is out of sight or idle
+   and nothing is unsaved, so there is nothing to show the operator. */
 
 /* ─────────────────────────────────────────────────────────────────────────
    New-tenant setup guide (part 17). "Open your store" checklist, dashboard
