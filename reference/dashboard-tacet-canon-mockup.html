@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Dashboard, built to the letter of the design system</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   TACET DESIGN TOKENS — v1.0  (verbatim from tacet-tokens.css)
+   "Runs in silence." — When in doubt, remove something.
+   ============================================================ */
+:root {
+  /* ---- Core palette ---- */
+  --tacet-ink:      #111A2B;
+  --tacet-paper:    #FBF9F4;
+  --tacet-graphite: #58606E;
+  --tacet-dusk:     #6E67AF;  /* the AI's color — scarce by design */
+  --tacet-sage:     #A3B49F;  /* success / all-clear only */
+  --tacet-amber:    #C9954A;  /* attention — never alarmist */
+  --tacet-brick:    #B4533E;  /* errors — never pure red */
+
+  /* ---- Derived tints ---- */
+  --tacet-cream:       #F6F3EC;
+  --tacet-border:      #E4E0D5;
+  --tacet-dusk-tint:   #EEEDF6;
+  --tacet-sage-tint:   #EDF1EC;
+  --tacet-amber-tint:  #F7EEDE;
+  --tacet-brick-tint:  #F6E7E3;
+
+  /* ---- Semantic ---- */
+  --bg:             var(--tacet-paper);
+  --surface:        #FFFFFF;
+  --surface-raised: var(--tacet-cream);
+  --text:           var(--tacet-ink);
+  --text-secondary: var(--tacet-graphite);
+  --border:         var(--tacet-border);
+  --accent:         var(--tacet-dusk);
+  --accent-tint:    var(--tacet-dusk-tint);
+  --ok:             var(--tacet-sage);
+  --ok-tint:        var(--tacet-sage-tint);
+  --warn:           var(--tacet-amber);
+  --warn-tint:      var(--tacet-amber-tint);
+  --danger:         var(--tacet-brick);
+  --danger-tint:    var(--tacet-brick-tint);
+
+  /* ---- Typography ---- */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-text:    "Inter", -apple-system, Arial, sans-serif;
+  --fs-display: 3.5rem;
+  --fs-headline: 2rem;
+  --fs-title: 1.125rem;    /* 18px */
+  --fs-body: 0.9375rem;    /* 15px */
+  --fs-caption: 0.8125rem; /* 13px */
+  --lh-body: 1.6;
+  --lh-tight: 1.15;
+
+  /* ---- Spacing (8px base) ---- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 16px;  --s-4: 24px;
+  --s-5: 32px; --s-6: 48px; --s-7: 64px;  --s-8: 96px;
+
+  /* ---- Shape ---- */
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --border-w: 1px;
+  --shadow-soft: 0 1px 2px rgba(17, 26, 43, 0.05), 0 4px 16px rgba(17, 26, 43, 0.04);
+
+  /* ---- Motion: "everything settles" ---- */
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-quick: 200ms;
+  --dur-settle: 350ms;
+  --dur-slow: 600ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+.t-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+.t-badge { font: 500 var(--fs-caption) var(--font-text); padding: 3px 12px;
+  border-radius: var(--radius-pill); display: inline-flex;
+  align-items: center; gap: 6px; }
+.t-badge--warn { background: var(--warn-tint); color: #8A6425; }
+
+.t-btn { font: 500 var(--fs-body) var(--font-text); padding: 10px 20px;
+  border-radius: var(--radius-control); border: var(--border-w) solid transparent;
+  cursor: pointer; transition: all var(--dur-quick) var(--ease-settle);
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  text-decoration: none; }
+.t-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.t-btn--secondary { background: transparent; color: var(--text);
+  border-color: var(--border); }
+.t-btn--secondary:hover { border-color: var(--text-secondary); }
+
+/* the dusk dot: automation activity indicator */
+.t-dot { width: 8px; height: 8px; border-radius: 50%;
+  background: var(--accent); display: inline-block;
+  animation: t-breathe 2.4s var(--ease-settle) infinite; }
+@keyframes t-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.8); }
+}
+
+/* settle-in entrance */
+.t-settle { animation: t-settle var(--dur-slow) var(--ease-settle) both; }
+@keyframes t-settle {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+</style>
+
+<style>
+/* ============================================================
+   DASHBOARD — everything below composes the tokens above.
+   Layout rule (§7): one screen, one question. The dashboard's
+   question is "is everything okay?" — so the order is fixed:
+   The Recap, then what needs you, then everything else.
+
+   The no-repeat rule from the last round still holds: every
+   fact has exactly one home on this page.
+   ============================================================ */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text); font-size: var(--fs-body);
+  line-height: var(--lh-body); color: var(--text); background: var(--bg);
+}
+
+/* ---- mockup note bar (not part of the product) ---- */
+.chrome {
+  background: var(--tacet-ink); color: rgba(251,249,244,0.72);
+  padding: var(--s-2) var(--s-4); font-size: var(--fs-caption);
+  display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 11px; color: rgba(251,249,244,0.5);
+}
+
+/* ---- topbar: the lockup, wave left of wordmark (§8) ---- */
+.topbar {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3) var(--s-5);
+  border-bottom: var(--border-w) solid var(--border); background: var(--bg);
+}
+.topbar .mark { height: 26px; width: auto; }
+.topbar .wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 20px; letter-spacing: 0.2em; color: var(--text);
+}
+
+/* ---- page scaffold: 1120 max (§7), 8-base rhythm ---- */
+.page { max-width: 1120px; margin: 0 auto; padding: var(--s-5) var(--s-5) var(--s-8); }
+.page-head { display: flex; align-items: baseline; gap: var(--s-3); margin-bottom: var(--s-4); }
+.page-head h1 { font: 500 var(--fs-title) var(--font-text); }
+.page-head .date { font-size: var(--fs-caption); color: var(--text-secondary); }
+
+/* ---- the bento: six columns, one column per thing a block
+        has to say. gap = 24 (--s-4). ---- */
+.bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--s-4); }
+.bento > section { display: flex; flex-direction: column; }
+.span-6 { grid-column: span 6; }
+.span-4 { grid-column: span 4; }
+.span-3 { grid-column: span 3; }
+.span-2 { grid-column: span 2; }
+.span-1 { grid-column: span 1; }
+
+.block-head { display: flex; align-items: baseline; gap: var(--s-3); margin-bottom: var(--s-3); }
+.block-head h2 { font: 500 var(--fs-title) var(--font-text); }
+.block-head .goto {
+  margin-left: auto; font-size: var(--fs-caption); color: var(--text-secondary);
+  text-decoration: none; transition: color var(--dur-quick) var(--ease-settle);
+}
+.block-head .goto:hover { color: var(--text); }
+
+/* cards: white on paper, 1px border, 14 radius, 24 pad (§5) */
+.card {
+  background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-soft);
+  overflow: hidden; display: flex; flex-direction: column; height: 100%;
+}
+
+.lbl { font-size: var(--fs-caption); color: var(--text-secondary); }
+.val { font-size: 32px; font-weight: 500; letter-spacing: -0.02em;
+  line-height: var(--lh-tight); padding: var(--s-1) 0; }
+.cmp { font-size: var(--fs-caption); color: var(--text-secondary); }
+.cmp .down { font-weight: 500; }        /* calm rule: down is never red */
+.cmp .up   { font-weight: 500; color: #4A6249; }
+
+.vitals { display: grid; }
+.vitals.three { grid-template-columns: 1fr 1fr 1fr; }
+.vitals.two   { grid-template-columns: 1fr 1fr; }
+.vitals.one   { grid-template-columns: 1fr; }
+.vital { padding: var(--s-4); }
+.vitals.three .vital + .vital,
+.vitals.two   .vital + .vital { border-left: var(--border-w) solid var(--border); }
+
+/* the attention line: raised cream strip at the card's foot */
+.foot {
+  display: flex; align-items: center; gap: var(--s-2); flex-wrap: wrap;
+  margin-top: auto; background: var(--surface-raised);
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-caption); color: var(--text-secondary);
+}
+.foot .dot { width: 6px; height: 6px; border-radius: var(--radius-pill);
+  background: var(--warn); flex: none; }
+.foot .dot.clear { background: var(--ok); }
+.foot a { color: var(--text); text-decoration: none; font-weight: 500; }
+.foot a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.foot .sep { color: var(--border); }
+.foot.warm { background: var(--warn-tint); color: #8A6425; }
+.foot.warm a { color: #8A6425; }
+
+/* ════════ The Recap — signature component (§5), first on the page.
+   Headline 18 Inter 500. Rows of what Tacet handled, each with a
+   Dusk dot. Numbers tabular. Ends with one dry-warm line.
+   This card is the page's Dusk budget — nothing else may use it. */
+.recap-head {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-4) var(--s-4) var(--s-2);
+}
+.recap-head h2 { font: 500 var(--fs-title) var(--font-text); }
+.recap-head .since { margin-left: auto; font-size: var(--fs-caption); color: var(--text-secondary); }
+.recap-rows { padding: var(--s-2) var(--s-4) var(--s-3); }
+.recap-row {
+  display: flex; align-items: baseline; gap: var(--s-3);
+  padding: var(--s-2) 0; font-size: var(--fs-body);
+}
+.recap-row .rdot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  flex: none; align-self: center;
+}
+.recap-row .what strong { font-weight: 500; }
+.recap-warm {
+  border-top: var(--border-w) solid var(--border);
+  padding: var(--s-3) var(--s-4);
+  font-size: var(--fs-caption); color: var(--text-secondary);
+}
+
+/* ════════ Running low — a list card, rows not numbers ════════ */
+.list-head {
+  display: flex; align-items: center; gap: var(--s-2);
+  padding: var(--s-4) var(--s-4) var(--s-2);
+  font-size: var(--fs-caption); color: var(--text-secondary);
+}
+.rows { padding-bottom: var(--s-2); }
+.row {
+  display: flex; align-items: baseline; gap: var(--s-3);
+  padding: var(--s-2) var(--s-4); font-size: var(--fs-body);
+  transition: background var(--dur-quick) var(--ease-settle);
+}
+.row:hover { background: var(--surface-raised); }
+.row .sku { font-size: var(--fs-caption); color: var(--text-secondary);
+  font-family: ui-monospace, monospace; }
+.row .qty { margin-left: auto; font-size: var(--fs-caption); color: var(--text-secondary); }
+.more { padding: var(--s-1) var(--s-4) var(--s-2); font-size: var(--fs-caption); }
+.more a { color: var(--text-secondary); text-decoration: none; }
+.more a:hover { color: var(--text); }
+
+/* ════════ Today — the money leads "everything else" ════════
+   Lead numeral is Inter 500, tabular — data, not display type.
+   Fraunces never enters product UI (§2). */
+.hero-body { padding: var(--s-4); }
+.hero-lead { font-size: 44px; font-weight: 500; letter-spacing: -0.025em;
+  line-height: var(--lh-tight); padding: var(--s-1) 0; }
+.hero-sub { font-size: var(--fs-caption); color: var(--text-secondary); }
+
+/* the day line: today's takings, hour by hour. It settles in
+   once — drawn like the waveform going still — and then it is
+   still. Flat sage fill, no gradient (§3: no gradients, ever).
+   The dotted line is a typical Friday, so "▲ 16%" has a picture.
+   No axes, no grid: the number above is the y-axis. */
+.dayline { margin-top: var(--s-4); }
+.dayline .frame { position: relative; height: 112px; }
+.dayline svg.plot { position: absolute; inset: 0; width: 100%; height: 100%; }
+.dayline .trace {
+  fill: none; stroke: var(--ok); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 900; stroke-dashoffset: 900;
+  animation: trace-in var(--dur-slow) var(--ease-settle) 350ms forwards;
+  animation-duration: 1800ms;
+}
+.dayline .fillflat {
+  fill: var(--tacet-sage); fill-opacity: 0.14; opacity: 0;
+  animation: fade-in var(--dur-slow) var(--ease-settle) 1400ms forwards;
+}
+.dayline .typical {
+  fill: none; stroke: var(--border); stroke-width: 1.5;
+  stroke-dasharray: 1 6; stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0; animation: fade-in var(--dur-slow) var(--ease-settle) 1700ms forwards;
+}
+.dayline .tip {
+  position: absolute; right: 0; top: 14px;
+  width: 6px; height: 6px; margin: -3px;
+  border-radius: 50%; background: var(--text);
+  opacity: 0; animation: fade-in var(--dur-settle) var(--ease-settle) 2100ms forwards;
+}
+@keyframes trace-in { to { stroke-dashoffset: 0; } }
+@keyframes fade-in  { to { opacity: 1; } }
+.dayline .hours {
+  display: flex; justify-content: space-between;
+  margin-top: var(--s-2); font-size: var(--fs-caption); color: var(--text-secondary);
+}
+
+.hero-strip {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border-top: var(--border-w) solid var(--border); margin-top: var(--s-4);
+}
+.hero-strip .cell { padding: var(--s-3) 0 0; }
+.hero-strip .cell + .cell { border-left: var(--border-w) solid var(--border); padding-left: var(--s-4); }
+.hero-strip .val { font-size: 24px; }
+
+/* one-number blocks stay narrow; the numeral holds its size */
+.span-1 .vital { padding: var(--s-4) var(--s-3); }
+.span-1 .val { font-size: 28px; }
+.span-1 .foot { padding: var(--s-3); }
+
+/* empty state inside a card: a compliment, and the flat line (§5) */
+.flatline { margin-top: var(--s-2); }
+.flatline svg { width: 56px; height: 8px; }
+
+/* staggered settle: sections arrive in reading order */
+.t-settle:nth-of-type(1) { animation-delay: 0ms; }
+.t-settle:nth-of-type(2) { animation-delay: 80ms; }
+.t-settle:nth-of-type(3) { animation-delay: 160ms; }
+.t-settle:nth-of-type(4) { animation-delay: 240ms; }
+.t-settle:nth-of-type(5) { animation-delay: 320ms; }
+.t-settle:nth-of-type(6) { animation-delay: 400ms; }
+.t-settle:nth-of-type(7) { animation-delay: 480ms; }
+.t-settle:nth-of-type(8) { animation-delay: 560ms; }
+.t-settle:nth-of-type(9) { animation-delay: 640ms; }
+
+/* the rule notes under the page (mockup annotation) */
+.note {
+  margin-top: var(--s-5); border-left: 2px solid var(--border);
+  padding: var(--s-1) 0 var(--s-1) var(--s-3);
+  font-size: var(--fs-caption); color: var(--text-secondary); max-width: 720px;
+}
+.note b { color: var(--text); font-weight: 500; }
+.note + .note { margin-top: var(--s-3); }
+
+@media (max-width: 940px) {
+  .bento { grid-template-columns: 1fr; }
+  .span-6, .span-4, .span-3, .span-2, .span-1 { grid-column: span 1; }
+  .vitals.three, .vitals.two { grid-template-columns: 1fr; }
+  .vitals.three .vital + .vital, .vitals.two .vital + .vital {
+    border-left: none; border-top: var(--border-w) solid var(--border);
+  }
+  .hero-lead { font-size: 38px; }
+  .page { padding: var(--s-4) var(--s-3) var(--s-7); }
+}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">Mockup</span>
+  <span>Dashboard rebuilt to the letter of the Tacet design system v1.0 — Recap first, one Dusk element, no gradients, 8-base spacing, 18/15/13 type.</span>
+</div>
+
+<!-- lockup: exact §8 mark, wave left of wordmark -->
+<div class="topbar">
+  <svg class="mark" viewBox="0 0 340 110" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55
+             C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55
+             C215 55, 260 55, 305 55"
+          stroke="#111A2B" stroke-width="3.5" stroke-linecap="round"/>
+    <circle cx="305" cy="55" r="5" fill="#6E67AF"/>
+  </svg>
+  <span class="wordmark">tacet</span>
+</div>
+
+<div class="page">
+  <div class="page-head">
+    <h1>Dashboard</h1>
+    <span class="date">Friday 10 July</span>
+  </div>
+
+  <div class="bento">
+
+    <!-- ══ 1. THE RECAP — the brand in component form, first thing on
+         the dashboard. The only Dusk on this page. ══ -->
+    <section class="span-6 t-settle">
+      <div class="card">
+        <div class="recap-head">
+          <span class="t-dot"></span>
+          <h2>While you were away</h2>
+          <span class="since">since 22:00 yesterday</span>
+        </div>
+        <div class="recap-rows">
+          <div class="recap-row">
+            <span class="rdot"></span>
+            <span class="what"><strong class="t-num">312</strong> stock changes pushed to Meituan. Both stores match.</span>
+          </div>
+          <div class="recap-row">
+            <span class="rdot"></span>
+            <span class="what"><strong class="t-num">5</strong> overnight orders imported and their receipts printed.</span>
+          </div>
+          <div class="recap-row">
+            <span class="rdot"></span>
+            <span class="what"><strong class="t-num">2</strong> deliveries confirmed after the rider arrived.</span>
+          </div>
+        </div>
+        <div class="recap-warm">You're welcome.</div>
+      </div>
+    </section>
+
+    <!-- ══ 2. NEEDS YOU — attention before everything else (§7) ══ -->
+    <section class="span-4 t-settle">
+      <div class="block-head"><h2>Running low</h2><a class="goto" href="#">Open products ›</a></div>
+      <div class="card">
+        <div class="list-head">
+          All stores
+          <span class="t-badge t-badge--warn t-num" style="margin-left:auto">34 low</span>
+        </div>
+        <div class="rows">
+          <div class="row"><div><div>Yunnan Crisp</div><div class="sku">4-800</div></div><span class="qty t-num">3 left</span></div>
+          <div class="row"><div><div>Arugula-Basil Pesto</div><div class="sku">1-20</div></div><span class="qty t-num">4 left</span></div>
+          <div class="row"><div><div>Beet Salad</div><div class="sku">1-310</div></div><span class="qty t-num">4 left</span></div>
+          <div class="row"><div><div>Coconut Yogurt, Plain</div><div class="sku">1-140</div></div><span class="qty t-num">4 left</span></div>
+          <div class="more"><a href="#">See all 34 ›</a></div>
+        </div>
+        <div class="foot warm"><span class="dot"></span><a href="#">Open restock</a></div>
+      </div>
+    </section>
+
+    <section class="span-2 t-settle">
+      <div class="block-head"><h2>Stock</h2></div>
+      <div class="card">
+        <div class="vitals one">
+          <div class="vital">
+            <div class="lbl">Out of stock</div>
+            <div class="val t-num">6</div>
+            <div class="cmp">nothing left to sell</div>
+          </div>
+        </div>
+        <div class="foot warm"><span class="dot"></span><a href="#">Restock these first</a></div>
+      </div>
+    </section>
+
+    <!-- ══ 3. EVERYTHING ELSE — the money leads it ══ -->
+    <section class="span-6 t-settle">
+      <div class="block-head"><h2>Today</h2><a class="goto" href="#">Open orders ›</a></div>
+      <div class="card">
+        <div class="hero-body">
+          <div class="lbl">Revenue today</div>
+          <div class="hero-lead t-num">¥2,274</div>
+          <div class="hero-sub"><span class="cmp"><span class="up">▲ 16%</span></span> vs a typical Friday</div>
+
+          <div class="dayline">
+            <div class="frame">
+              <svg class="plot" viewBox="0 0 640 112" preserveAspectRatio="none" aria-hidden="true">
+                <path class="typical"
+                  d="M0,106 C70,104 120,100 180,94 C250,86 300,76 370,64 C440,52 520,44 640,36"/>
+                <path class="fillflat"
+                  d="M0,108 C60,107 100,105 150,99 C210,91 240,68 300,60 C350,53 400,52 460,46 C520,40 580,26 640,14 L640,112 L0,112 Z"/>
+                <path class="trace"
+                  d="M0,108 C60,107 100,105 150,99 C210,91 240,68 300,60 C350,53 400,52 460,46 C520,40 580,26 640,14"/>
+              </svg>
+              <span class="tip"></span>
+            </div>
+            <div class="hours">
+              <span>8:00</span><span>11:00</span><span>14:00</span><span>17:00</span><span>now</span>
+            </div>
+          </div>
+
+          <div class="hero-strip">
+            <div class="cell">
+              <div class="val t-num">8</div>
+              <div class="lbl">orders</div>
+            </div>
+            <div class="cell">
+              <div class="val t-num">¥192.74</div>
+              <div class="lbl">per order</div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Nothing waiting.</div>
+      </div>
+    </section>
+
+    <!-- Customers: three numbers -> half -->
+    <section class="span-3 t-settle">
+      <div class="block-head"><h2>Customers</h2><a class="goto" href="#">Open customers ›</a></div>
+      <div class="card">
+        <div class="vitals three">
+          <div class="vital">
+            <div class="lbl">New today</div>
+            <div class="val t-num">9</div>
+            <div class="cmp">of 36 visitors</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Visits</div>
+            <div class="val t-num">79</div>
+            <div class="cmp">25 sessions</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Conversion</div>
+            <div class="val t-num">32.0%</div>
+            <div class="cmp">orders ÷ sessions</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> No one browsing right now.</div>
+      </div>
+    </section>
+
+    <!-- Money: the longer view; today lives in the hero -->
+    <section class="span-2 t-settle">
+      <div class="block-head"><h2>Money</h2><a class="goto" href="#">Open reports ›</a></div>
+      <div class="card">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">This week</div>
+            <div class="val t-num">¥14,806</div>
+            <div class="cmp"><span class="up">▲ 9%</span> vs last week</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">This month</div>
+            <div class="val t-num">¥58,420</div>
+            <div class="cmp">10 days in</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Books balance.</div>
+      </div>
+    </section>
+
+    <!-- Refunds: one number, and the flat line under a clear zero -->
+    <section class="span-1 t-settle">
+      <div class="block-head"><h2>Refunds</h2></div>
+      <div class="card">
+        <div class="vitals one">
+          <div class="vital">
+            <div class="lbl">Waiting on you</div>
+            <div class="val t-num">0</div>
+            <div class="flatline">
+              <svg viewBox="0 0 56 8" aria-hidden="true">
+                <path d="M2 4 L54 4" stroke="#A3B49F" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Clear.</div>
+      </div>
+    </section>
+
+    <!-- Channels: orders by channel — the mix, not the totals -->
+    <section class="span-3 t-settle">
+      <div class="block-head"><h2>Channels</h2><a class="goto" href="#">Open channels ›</a></div>
+      <div class="card">
+        <div class="vitals three">
+          <div class="vital">
+            <div class="lbl">Meituan</div>
+            <div class="val t-num">5</div>
+            <div class="cmp">orders today</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Mini app</div>
+            <div class="val t-num">2</div>
+            <div class="cmp">orders today</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Web store</div>
+            <div class="val t-num">1</div>
+            <div class="cmp">order today</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Both stores connected.</div>
+      </div>
+    </section>
+
+    <!-- Delivery: two numbers -->
+    <section class="span-2 t-settle">
+      <div class="block-head"><h2>Delivery</h2><a class="goto" href="#">Open orders ›</a></div>
+      <div class="card">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">Out for delivery</div>
+            <div class="val t-num">3</div>
+            <div class="cmp">riders on the way</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Rider coming</div>
+            <div class="val t-num">1</div>
+            <div class="cmp">have it ready</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Every delivery is on track.</div>
+      </div>
+    </section>
+
+    <!-- Invoices: one number, flat line, clear -->
+    <section class="span-1 t-settle">
+      <div class="block-head"><h2>Invoices</h2></div>
+      <div class="card">
+        <div class="vitals one">
+          <div class="vital">
+            <div class="lbl">To issue</div>
+            <div class="val t-num">0</div>
+            <div class="flatline">
+              <svg viewBox="0 0 56 8" aria-hidden="true">
+                <path d="M2 4 L54 4" stroke="#A3B49F" stroke-width="1.5" stroke-linecap="round"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Clear.</div>
+      </div>
+    </section>
+
+  </div>
+
+  <p class="note"><b>Order of the page (§7):</b> the dashboard answers one question — is everything okay. The Recap answers for the night, the amber row answers for right now, and everything after it is reference. Money leads the rest because it is the first thing a merchant checks when nothing is wrong.</p>
+  <p class="note"><b>The Dusk budget (§1):</b> one Dusk element — The Recap, whose breathing dot means the automations are alive and whose row dots mean "Tacet did this." The logo's dot in the topbar is part of the mark. Nothing else on the page may be purple.</p>
+  <p class="note"><b>The grid:</b> six columns, one column per number a block carries. Three numbers take half, two a third, one a sixth. Rows close: Recap 6 · low 4 + stock 2 · today 6 · customers 3 + money 2 + refunds 1 · channels 3 + delivery 2 + invoices 1.</p>
+  <p class="note"><b>Motion (§4):</b> everything settles once, in reading order, and then the page is still. The day line draws itself like the waveform going flat; its tip is a still ink dot, because the breathing dot belongs to Dusk alone. Reduced motion turns all of it off.</p>
+  <p class="note"><b>No repeats:</b> every fact has one home. New customers lives in Customers, today's revenue in the hero, the Recap holds what Tacet did overnight, and Channels shows the mix — never the totals again.</p>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Dashboard, rethinking the block shapes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET DASHBOARD — the blocks stop being identical rectangles.
+   Today every section gets the same full-width three-column card,
+   so a section with two numbers stretches to fill a card built for
+   three, and a section with nothing waiting takes as much of the
+   page as the section that needs you now.
+
+   Three ways out, all on tacet-tokens.css v1.0.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --amber-tint:  #F7EEDE;
+  --sage-tint:   #EDF1EC;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px; line-height: 1.6;
+  color: var(--ink); background: var(--paper);
+}
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+svg { display: block; }
+
+/* ---- mockup chrome (not part of the product) ---- */
+.chrome {
+  background: var(--ink); color: rgba(251,249,244,0.72);
+  padding: 9px 28px; font-size: 12.5px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5);
+}
+.optbar {
+  border-bottom: 1px solid var(--border); background: var(--paper);
+  padding: 26px 40px 22px; max-width: 1140px; margin: 0 auto;
+}
+.optbar h1 { font-size: 21px; font-weight: 500; letter-spacing: -0.01em; }
+.optbar p { font-size: 13.5px; color: var(--graphite); max-width: 640px; margin-top: 6px; }
+
+.opt { max-width: 1140px; margin: 0 auto; padding: 44px 40px 20px; }
+.opt-head { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 30px; }
+.opt-head .kicker {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: 10.5px; font-weight: 500; color: var(--graphite);
+}
+.opt-head h2 {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 27px; letter-spacing: -0.005em; margin-top: 3px;
+}
+.opt-head p { font-size: 13.5px; color: var(--graphite); max-width: 660px; margin-top: 7px; }
+.opt-head .pick {
+  display: inline-block; margin-top: 10px;
+  background: var(--sage-tint); color: var(--sage-ink);
+  border-radius: 999px; padding: 3px 11px;
+  font-size: 11.5px; font-weight: 500;
+}
+
+/* ---- shared card language ---- */
+.card {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r-card); box-shadow: var(--shadow-soft);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.block-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.block-head h3 { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+.block-head .goto {
+  margin-left: auto; font-size: 12.5px; color: var(--graphite);
+  text-decoration: none; transition: color 200ms var(--ease-settle);
+}
+.block-head .goto:hover { color: var(--ink); }
+
+.vitals { display: grid; flex: 1; }
+.vitals.three { grid-template-columns: 1fr 1fr 1fr; }
+.vitals.two   { grid-template-columns: 1fr 1fr; }
+.vitals.one   { grid-template-columns: 1fr; }
+.vital { padding: 26px 30px 22px; }
+.vitals.three .vital + .vital,
+.vitals.two   .vital + .vital { border-left: 1px solid rgba(228,224,213,0.65); }
+.lbl { font-size: 12.5px; color: var(--graphite); }
+.val { font-size: 32px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.35; }
+.val.sm { font-size: 25px; }
+.cmp { font-size: 12px; color: var(--graphite); }
+.cmp .down { font-weight: 500; }              /* calm rule: down is never red */
+.cmp .up   { font-weight: 500; color: var(--sage-ink); }
+
+.foot {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  background: var(--cream); padding: 12px 30px;
+  font-size: 13px; color: var(--graphite);
+}
+.foot .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--amber); flex: none; }
+.foot .dot.clear { background: var(--sage); }
+.foot a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.foot a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.foot .sep { color: var(--border); }
+
+/* ════════════════════════════════════════════════════════════
+   OPTION A — Bento by weight.
+   The grid is six columns. A block takes as many columns as it
+   has to say: three numbers -> full width, two numbers -> half,
+   and two halves share a row. No card is ever padded out.
+   ════════════════════════════════════════════════════════════ */
+.bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 26px 22px; }
+.bento > section { display: flex; flex-direction: column; }
+.span-6 { grid-column: span 6; }
+.span-4 { grid-column: span 4; }
+.span-3 { grid-column: span 3; }
+.span-2 { grid-column: span 2; }
+
+/* a two-column card gets bigger numerals — the space is real, not filler */
+.span-3 .val { font-size: 34px; }
+
+/* ════════════════════════════════════════════════════════════
+   OPTION B — Hero and tiles.
+   Today's takings lead at a size you can read across the room.
+   Everything else is a tile, and a tile only earns a second row
+   when it has a list to show.
+   ════════════════════════════════════════════════════════════ */
+.hero-wrap { display: grid; grid-template-columns: 1.55fr 1fr; gap: 22px; align-items: stretch; }
+.hero { padding: 32px 36px 28px; }
+.hero .lbl { font-size: 13px; }
+.hero .val { font-family: var(--font-display); font-weight: 300; font-size: 62px; line-height: 1.1; letter-spacing: -0.02em; margin: 6px 0 4px; }
+.hero .sub { font-size: 13px; color: var(--graphite); }
+.hero-strip {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  border-top: 1px solid rgba(228,224,213,0.65); margin-top: 26px;
+}
+.hero-strip div { padding: 16px 0 2px; }
+.hero-strip div + div { border-left: 1px solid rgba(228,224,213,0.65); padding-left: 20px; }
+.hero-strip .val { font-family: var(--font-text); font-size: 22px; font-weight: 500; margin: 0; }
+.hero-strip .lbl { font-size: 11.5px; }
+
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.tile { padding: 22px 24px 20px; }
+.tile .lbl { font-size: 12px; }
+.tile .val { font-size: 28px; }
+.tile-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12.5px; color: var(--graphite); }
+.tile-head svg { width: 15px; height: 15px; stroke: var(--graphite); fill: none; stroke-width: 1.5; }
+
+/* ════════════════════════════════════════════════════════════
+   OPTION C — Quiet sections shrink.
+   A section that needs nothing from you is one calm line.
+   A section that needs you now opens into a card. The page
+   re-shapes itself through the day, and the eye lands on the
+   only thing that is asking.
+   ════════════════════════════════════════════════════════════ */
+.stack { display: grid; grid-template-columns: repeat(6, 1fr); gap: 20px 22px; }
+.stack > section { grid-column: span 6; }
+.stack > section.half { grid-column: span 3; }
+
+.quiet {
+  display: flex; align-items: center; gap: 14px;
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  padding: 15px 24px; box-shadow: none;
+  transition: border-color 220ms var(--ease-settle);
+}
+.quiet:hover { border-color: #D8D3C5; }
+.quiet .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--sage); flex: none; }
+.quiet .name { font-size: 15px; font-weight: 500; }
+.quiet .say { font-size: 13px; color: var(--graphite); }
+.quiet .figs { margin-left: auto; display: flex; align-items: baseline; gap: 22px; }
+.quiet .fig { font-size: 13px; color: var(--graphite); }
+.quiet .fig b { font-weight: 500; color: var(--ink); font-size: 15px; margin-right: 5px; }
+.quiet .goto { font-size: 12.5px; color: var(--graphite); text-decoration: none; margin-left: 20px; }
+.quiet .goto:hover { color: var(--ink); }
+
+.awake { border-color: #DED8C8; }
+.awake .foot { background: var(--amber-tint); color: var(--amber-ink); }
+.awake .foot .dot { background: var(--amber); }
+
+/* the list card — a section with rows, not numbers */
+.rows { padding: 6px 0 10px; }
+.row {
+  display: flex; align-items: baseline; gap: 12px;
+  padding: 9px 30px; font-size: 14px;
+}
+.row:hover { background: var(--cream); }
+.row .who { font-weight: 400; }
+.row .sku { font-size: 11.5px; color: var(--graphite); font-family: ui-monospace, monospace; }
+.row .qty { margin-left: auto; font-size: 13px; color: var(--graphite); }
+.more { padding: 8px 30px 0; font-size: 12.5px; color: var(--graphite); }
+.more a { color: var(--graphite); text-decoration: none; }
+.more a:hover { color: var(--ink); }
+
+/* the rule note under each option */
+.note {
+  margin-top: 26px; border-left: 2px solid var(--border);
+  padding: 2px 0 2px 16px; font-size: 13px; color: var(--graphite); max-width: 700px;
+}
+.note b { color: var(--ink); font-weight: 500; }
+
+@media (max-width: 940px) {
+  .bento, .stack { grid-template-columns: 1fr; }
+  .span-6, .span-4, .span-3, .span-2, .stack > section.half { grid-column: span 1; }
+  .hero-wrap, .tiles { grid-template-columns: 1fr; }
+  .vitals.three, .vitals.two { grid-template-columns: 1fr; }
+  .vitals.three .vital + .vital, .vitals.two .vital + .vital {
+    border-left: none; border-top: 1px solid rgba(228,224,213,0.65);
+  }
+  .opt { padding: 32px 18px 12px; }
+  .optbar { padding: 22px 18px 18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">Mockup</span>
+  <span>Dashboard block shapes — three ways to stop every section being the same rectangle.</span>
+</div>
+
+<div class="optbar">
+  <h1>The blocks should not all be the same shape</h1>
+  <p>Right now Orders, Customers, Inventory and Delivery each get one full-width card with room for three numbers. Inventory and Delivery only have two, so the card is padded out. And a section with nothing waiting takes exactly as much of the page as the one that needs you. Below: three shapes, same tokens, same words.</p>
+</div>
+
+<!-- ══════════════════ OPTION A ══════════════════ -->
+<div class="opt">
+  <div class="opt-head">
+    <div class="kicker">Option A</div>
+    <h2>Bento by weight</h2>
+    <p>The page is a six-column grid. A block takes as many columns as it has things to say. Three numbers fill the width; two numbers take half, and two halves share a row. Nothing is stretched, nothing is padded.</p>
+  </div>
+
+  <div class="bento">
+    <!-- Orders: three vitals -> full width -->
+    <section class="span-6">
+      <div class="block-head"><h3>Orders</h3><a class="goto" href="#">Open orders ›</a></div>
+      <div class="card">
+        <div class="vitals three">
+          <div class="vital">
+            <div class="lbl">Orders today</div>
+            <div class="val num">8</div>
+            <div class="cmp"><span class="down">▼ 23%</span> vs a typical Friday</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Revenue today</div>
+            <div class="val num">¥2,274</div>
+            <div class="cmp"><span class="up">▲ 16%</span></div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Avg order value</div>
+            <div class="val num">¥192.74</div>
+            <div class="cmp">per order</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Nothing waiting.</div>
+      </div>
+    </section>
+
+    <!-- Inventory: two vitals -> half -->
+    <section class="span-3">
+      <div class="block-head"><h3>Inventory</h3><a class="goto" href="#">Open products ›</a></div>
+      <div class="card">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">Out of stock</div>
+            <div class="val num">6</div>
+            <div class="cmp">nothing left to sell</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Running low</div>
+            <div class="val num">28</div>
+            <div class="cmp">a few left</div>
+          </div>
+        </div>
+        <div class="foot">
+          <span class="dot"></span>
+          <a href="#">6 out of stock</a><span class="sep">·</span><a href="#">Open restock</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Delivery: two vitals -> half, shares the row -->
+    <section class="span-3">
+      <div class="block-head"><h3>Delivery</h3><a class="goto" href="#">Open orders ›</a></div>
+      <div class="card">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">Out for delivery</div>
+            <div class="val num">3</div>
+            <div class="cmp">riders on the way</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Rider coming</div>
+            <div class="val num">1</div>
+            <div class="cmp">have the order ready</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Every delivery is on track.</div>
+      </div>
+    </section>
+
+    <!-- Customers: three vitals, but the third is thin -> 4 cols -->
+    <section class="span-4">
+      <div class="block-head"><h3>Customers</h3><a class="goto" href="#">Open customers ›</a></div>
+      <div class="card">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">New customers today</div>
+            <div class="val num">9</div>
+            <div class="cmp">of 36 visitors</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Conversion</div>
+            <div class="val num">32.0%</div>
+            <div class="cmp">orders ÷ sessions</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> No one browsing right now.</div>
+      </div>
+    </section>
+
+    <!-- Visits: one vital -> narrow companion -->
+    <section class="span-2">
+      <div class="block-head"><h3>Visits</h3><a class="goto" href="#">Reports ›</a></div>
+      <div class="card">
+        <div class="vitals one">
+          <div class="vital">
+            <div class="lbl">Visits today</div>
+            <div class="val num">79</div>
+            <div class="cmp">25 sessions</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Quiet.</div>
+      </div>
+    </section>
+  </div>
+
+  <p class="note"><b>The rule the code follows:</b> a block asks for one column per number it carries, plus one for its attention line, and the grid packs them. Add a fourth number to Delivery tomorrow and it grows to full width on its own — nobody edits a layout.</p>
+</div>
+
+<!-- ══════════════════ OPTION B ══════════════════ -->
+<div class="opt">
+  <div class="opt-head">
+    <div class="kicker">Option B</div>
+    <h2>Hero and tiles</h2>
+    <p>One number is the reason you opened this page: what the shop took today. It leads, at a size you can read across the room. Everything else is a tile, and a tile only grows when it has a list to show you.</p>
+  </div>
+
+  <div class="hero-wrap">
+    <section>
+      <div class="block-head"><h3>Today</h3><a class="goto" href="#">Open orders ›</a></div>
+      <div class="card">
+        <div class="hero">
+          <div class="lbl">Revenue today</div>
+          <div class="val num">¥2,274</div>
+          <div class="sub"><span class="cmp"><span class="up">▲ 16%</span></span> vs a typical Friday</div>
+          <div class="hero-strip">
+            <div><div class="val num">8</div><div class="lbl">orders</div></div>
+            <div><div class="val num">¥192.74</div><div class="lbl">per order</div></div>
+            <div><div class="val num">9</div><div class="lbl">new customers</div></div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Nothing waiting.</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="block-head"><h3>Running low</h3><a class="goto" href="#">See all 34 ›</a></div>
+      <div class="card" style="flex:1">
+        <div class="rows">
+          <div class="row"><div><div class="who">Yunnan Crisp</div><div class="sku">4-800</div></div><span class="qty num">3 left</span></div>
+          <div class="row"><div><div class="who">Arugula-Basil Pesto</div><div class="sku">1-20</div></div><span class="qty num">4 left</span></div>
+          <div class="row"><div><div class="who">Beet Salad</div><div class="sku">1-310</div></div><span class="qty num">4 left</span></div>
+          <div class="row"><div><div class="who">Coconut Yogurt, Plain</div><div class="sku">1-140</div></div><span class="qty num">4 left</span></div>
+        </div>
+        <div class="foot" style="margin-top:auto">
+          <span class="dot"></span><a href="#">Open restock</a>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div class="tiles" style="margin-top:22px">
+    <section>
+      <div class="card tile">
+        <div class="tile-head">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>
+          Out of stock
+        </div>
+        <div class="val num">6</div>
+        <div class="lbl">nothing left to sell</div>
+      </div>
+    </section>
+    <section>
+      <div class="card tile">
+        <div class="tile-head">
+          <svg viewBox="0 0 24 24"><path d="M1 3h13v13H1z"/><path d="M14 8h4l3 3v5h-7z"/><circle cx="5.5" cy="19" r="2"/><circle cx="17.5" cy="19" r="2"/></svg>
+          Out for delivery
+        </div>
+        <div class="val num">3</div>
+        <div class="lbl">riders on the way</div>
+      </div>
+    </section>
+    <section>
+      <div class="card tile">
+        <div class="tile-head">
+          <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          Visits today
+        </div>
+        <div class="val num">79</div>
+        <div class="lbl">25 sessions · 32.0% convert</div>
+      </div>
+    </section>
+    <section>
+      <div class="card tile">
+        <div class="tile-head">
+          <svg viewBox="0 0 24 24"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          All clear
+        </div>
+        <div class="val sm num">3 of 3</div>
+        <div class="lbl">refunds, invoices, delivery</div>
+      </div>
+    </section>
+  </div>
+
+  <p class="note"><b>The rule the code follows:</b> the hero is fixed — it is always the money. Tiles are one number each and pack four to a row; a tile with rows to show (Running low) takes a tall slot beside the hero.</p>
+</div>
+
+<!-- ══════════════════ OPTION C ══════════════════ -->
+<div class="opt">
+  <div class="opt-head">
+    <div class="kicker">Option C</div>
+    <h2>Quiet sections shrink</h2>
+    <span class="pick">Recommended</span>
+    <p>A section that needs nothing from you is one calm line, with its numbers still on it. A section that is asking for something opens into a card. The page re-shapes itself through the day, and the only thing that grows is the thing you have to do.</p>
+  </div>
+
+  <div class="stack">
+    <!-- awake: inventory is asking -->
+    <section>
+      <div class="block-head"><h3>Inventory</h3><a class="goto" href="#">Open products ›</a></div>
+      <div class="card awake">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">Out of stock</div>
+            <div class="val num">6</div>
+            <div class="cmp">nothing left to sell</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Running low</div>
+            <div class="val num">28</div>
+            <div class="cmp">a few left</div>
+          </div>
+        </div>
+        <div class="rows" style="border-top:1px solid rgba(228,224,213,.65)">
+          <div class="row"><div><div class="who">Yunnan Crisp</div><div class="sku">4-800</div></div><span class="qty num">3 left</span></div>
+          <div class="row"><div><div class="who">Arugula-Basil Pesto</div><div class="sku">1-20</div></div><span class="qty num">4 left</span></div>
+          <div class="row"><div><div class="who">Beet Salad</div><div class="sku">1-310</div></div><span class="qty num">4 left</span></div>
+          <div class="more"><a href="#">See all 34 ›</a></div>
+        </div>
+        <div class="foot"><span class="dot"></span><a href="#">Open restock</a></div>
+      </div>
+    </section>
+
+    <!-- asleep: everything else is a line -->
+    <section>
+      <div class="quiet">
+        <span class="dot"></span>
+        <span class="name">Orders</span>
+        <span class="say">nothing waiting</span>
+        <span class="figs">
+          <span class="fig"><b class="num">8</b>today</span>
+          <span class="fig"><b class="num">¥2,274</b>taken</span>
+          <span class="fig"><b class="num">¥192.74</b>per order</span>
+        </span>
+        <a class="goto" href="#">Open ›</a>
+      </div>
+    </section>
+
+    <section>
+      <div class="quiet">
+        <span class="dot"></span>
+        <span class="name">Delivery</span>
+        <span class="say">every delivery on track</span>
+        <span class="figs">
+          <span class="fig"><b class="num">3</b>out</span>
+          <span class="fig"><b class="num">1</b>rider coming</span>
+        </span>
+        <a class="goto" href="#">Open ›</a>
+      </div>
+    </section>
+
+    <section>
+      <div class="quiet">
+        <span class="dot"></span>
+        <span class="name">Customers</span>
+        <span class="say">no one browsing right now</span>
+        <span class="figs">
+          <span class="fig"><b class="num">9</b>new</span>
+          <span class="fig"><b class="num">79</b>visits</span>
+          <span class="fig"><b class="num">32.0%</b>convert</span>
+        </span>
+        <a class="goto" href="#">Open ›</a>
+      </div>
+    </section>
+
+    <section>
+      <div class="quiet">
+        <span class="dot"></span>
+        <span class="name">Money</span>
+        <span class="say">no refunds, no invoices to issue</span>
+        <a class="goto" href="#" style="margin-left:auto">Open ›</a>
+      </div>
+    </section>
+  </div>
+
+  <p class="note"><b>The rule the code follows:</b> a section with an amber attention line opens; a section with a sage one collapses to a row and keeps its numbers. Two awake sections at once sit side by side at half width. On a bad morning the page is four cards; on a good one it is four lines and a lot of paper.</p>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Dashboard, hero and bento</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET DASHBOARD — B's shape, A's grid.
+   Today's takings lead in a wide card. Running low sits tall
+   beside it, because it has rows and not a number. Under them,
+   every other section takes as many columns as it has things
+   to say: three numbers -> half, two -> a third, one -> a sixth.
+
+   The numerals stay Inter, at the size the section cards already
+   use. Nothing is set in Fraunces. Nothing is padded out.
+
+   HOUSE RULE: every number appears once on this page. If a fact
+   belongs to a section, the hero does not repeat it. If a
+   section has a number for it, the all-clear list does not
+   mention it. Read the page top to bottom and you never learn
+   the same thing twice.
+   Tokens per tacet-tokens.css v1.0.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --amber-tint:  #F7EEDE;
+  --sage-tint:   #EDF1EC;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-text);
+  font-size: 15px; line-height: 1.6;
+  color: var(--ink); background: var(--paper);
+}
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+svg { display: block; }
+
+/* ---- mockup chrome (not part of the product) ---- */
+.chrome {
+  background: var(--ink); color: rgba(251,249,244,0.72);
+  padding: 9px 28px; font-size: 12.5px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5);
+}
+
+/* ---- product topbar (context only) ---- */
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 40px; border-bottom: 1px solid var(--border);
+  background: var(--paper);
+}
+.topbar .wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 19px; letter-spacing: 0.2em; color: var(--ink);
+}
+
+.page { max-width: 1120px; margin: 0 auto; padding: 34px 40px 120px; }
+.page-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 26px; }
+.page-head h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+.page-head .date { font-size: 13px; color: var(--graphite); }
+
+/* ---- shared card language ---- */
+.card {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r-card); box-shadow: var(--shadow-soft);
+  overflow: hidden; display: flex; flex-direction: column; height: 100%;
+}
+.block-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.block-head h2 { font-size: 17px; font-weight: 500; letter-spacing: -0.01em; }
+.block-head .goto {
+  margin-left: auto; font-size: 12.5px; color: var(--graphite);
+  text-decoration: none; transition: color 200ms var(--ease-settle);
+}
+.block-head .goto:hover { color: var(--ink); }
+
+.lbl { font-size: 12.5px; color: var(--graphite); }
+.val { font-size: 32px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.35; }
+.cmp { font-size: 12px; color: var(--graphite); }
+.cmp .down { font-weight: 500; }              /* calm rule: down is never red */
+.cmp .up   { font-weight: 500; color: var(--sage-ink); }
+
+.foot {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  margin-top: auto;
+  background: var(--cream); padding: 12px 26px;
+  font-size: 13px; color: var(--graphite);
+}
+.foot .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--amber); flex: none; }
+.foot .dot.clear { background: var(--sage); }
+.foot a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.foot a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.foot .sep { color: var(--border); }
+.foot.warm { background: var(--amber-tint); color: var(--amber-ink); }
+.foot.warm a { color: var(--amber-ink); }
+
+/* ════════ the hero row: takings wide, a list tall beside it ════════ */
+.hero-row { display: grid; grid-template-columns: 1.62fr 1fr; gap: 24px; margin-bottom: 30px; }
+.hero-row > section { display: flex; flex-direction: column; }
+
+.hero-body { padding: 28px 30px 26px; }
+.hero-body .lbl { font-size: 13px; }
+/* the lead number is one step up from a section card — no more.
+   Inter, 44px, same weight. It reads first because it is alone,
+   not because it is loud. */
+.hero-lead { font-size: 44px; font-weight: 500; letter-spacing: -0.025em; line-height: 1.2; margin: 2px 0 3px; }
+.hero-sub { font-size: 12.5px; color: var(--graphite); }
+
+/* ---- the day line: today's takings, hour by hour ----
+   One sage line climbing since open. It draws itself in when the
+   page settles, and the tip breathes — the only motion on the
+   page, and it is the shop being alive, not an ornament.
+   The faint dotted line is a typical Friday, so "▲ 16%" has a
+   picture. No axes, no grid: the number above is the y-axis. */
+.dayline { margin-top: 22px; }
+.dayline .frame { position: relative; height: 108px; }
+.dayline svg.plot { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+.dayline .trace {
+  fill: none; stroke: var(--sage); stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  stroke-dasharray: 900; stroke-dashoffset: 900;
+  animation: trace-in 2400ms var(--ease-settle) 300ms forwards;
+}
+.dayline .fill {
+  fill: url(#dayfill); opacity: 0;
+  animation: fill-in 1200ms var(--ease-settle) 1600ms forwards;
+}
+.dayline .typical {
+  fill: none; stroke: var(--border); stroke-width: 1.5;
+  stroke-dasharray: 1 6; stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0; animation: fill-in 900ms var(--ease-settle) 2000ms forwards;
+}
+@keyframes trace-in { to { stroke-dashoffset: 0; } }
+@keyframes fill-in  { to { opacity: 1; } }
+
+/* the live tip: a dot that breathes, slow as a resting pulse */
+.dayline .now {
+  position: absolute; right: 0; top: 14px;   /* sits on the line's end */
+  width: 7px; height: 7px; margin: -3.5px;
+  border-radius: 999px; background: var(--sage-ink);
+}
+.dayline .now::after {
+  content: ""; position: absolute; inset: -5px;
+  border-radius: 999px; border: 1.5px solid var(--sage);
+  animation: breathe 3200ms var(--ease-settle) infinite;
+}
+@keyframes breathe {
+  0%   { transform: scale(0.4); opacity: 0.9; }
+  70%  { transform: scale(1.15); opacity: 0; }
+  100% { transform: scale(1.15); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dayline .trace { animation: none; stroke-dashoffset: 0; }
+  .dayline .fill, .dayline .typical { animation: none; opacity: 1; }
+  .dayline .now::after { animation: none; opacity: 0; }
+}
+
+.dayline .hours {
+  display: flex; justify-content: space-between;
+  margin-top: 7px; font-size: 10.5px; color: var(--graphite);
+  letter-spacing: 0.04em;
+}
+
+/* two cells, not three: "new customers" belongs to Customers,
+   and it is not repeated here. */
+.hero-strip {
+  display: grid; grid-template-columns: 1fr 1fr;
+  border-top: 1px solid rgba(228,224,213,0.65);
+  margin-top: 24px; padding-top: 4px;
+}
+.hero-strip .cell { padding: 16px 0 0; }
+.hero-strip .cell + .cell { border-left: 1px solid rgba(228,224,213,0.65); padding-left: 24px; }
+.hero-strip .val { font-size: 24px; }
+.hero-strip .lbl { font-size: 11.5px; }
+
+/* the list card — rows, not numbers */
+.list-head {
+  display: flex; align-items: center; gap: 9px;
+  padding: 18px 24px 10px; font-size: 13px; color: var(--graphite);
+}
+.list-head svg { width: 15px; height: 15px; stroke: var(--graphite); fill: none; stroke-width: 1.5; flex: none; }
+.list-head .count {
+  margin-left: auto; background: var(--amber-tint); color: var(--amber-ink);
+  border-radius: 999px; padding: 1px 9px; font-size: 11.5px; font-weight: 500;
+}
+.rows { padding-bottom: 8px; }
+.row { display: flex; align-items: baseline; gap: 12px; padding: 8px 24px; font-size: 14px; }
+.row:hover { background: var(--cream); }
+.row .sku { font-size: 11.5px; color: var(--graphite); font-family: ui-monospace, monospace; }
+.row .qty { margin-left: auto; font-size: 13px; color: var(--graphite); }
+.more { padding: 6px 24px 2px; font-size: 12.5px; color: var(--graphite); }
+.more a { color: var(--graphite); text-decoration: none; }
+.more a:hover { color: var(--ink); }
+
+/* ════════ the bento: one column per thing the block has to say ════════ */
+.bento { display: grid; grid-template-columns: repeat(6, 1fr); gap: 26px 24px; }
+.bento > section { display: flex; flex-direction: column; }
+.span-3 { grid-column: span 3; }
+.span-2 { grid-column: span 2; }
+.span-1 { grid-column: span 1; }
+
+.vitals { display: grid; }
+.vitals.three { grid-template-columns: 1fr 1fr 1fr; }
+.vitals.two   { grid-template-columns: 1fr 1fr; }
+.vitals.one   { grid-template-columns: 1fr; }
+.vital { padding: 24px 26px 20px; }
+.vitals.three .vital + .vital,
+.vitals.two   .vital + .vital { border-left: 1px solid rgba(228,224,213,0.65); }
+
+/* a one-number block is narrow — the numeral does not shrink with it */
+.span-1 .vital { padding: 22px 20px 18px; }
+.span-1 .val { font-size: 28px; }
+.span-1 .foot { padding: 12px 20px; }
+
+.note {
+  margin-top: 34px; border-left: 2px solid var(--border);
+  padding: 2px 0 2px 16px; font-size: 13px; color: var(--graphite); max-width: 720px;
+}
+.note b { color: var(--ink); font-weight: 500; }
+.note + .note { margin-top: 12px; }
+
+@media (max-width: 940px) {
+  .hero-row, .bento { grid-template-columns: 1fr; }
+  .span-3, .span-2, .span-1 { grid-column: span 1; }
+  .vitals.three, .vitals.two { grid-template-columns: 1fr; }
+  .vitals.three .vital + .vital, .vitals.two .vital + .vital {
+    border-left: none; border-top: 1px solid rgba(228,224,213,0.65);
+  }
+  .hero-lead { font-size: 38px; }
+  .page { padding: 24px 16px 96px; }
+}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">Mockup</span>
+  <span>Dashboard — hero and bento. Every number appears exactly once.</span>
+</div>
+
+<div class="topbar"><span class="wordmark">tacet</span></div>
+
+<div class="page">
+  <div class="page-head">
+    <h1>Dashboard</h1>
+    <span class="date">Friday 10 July</span>
+  </div>
+
+  <!-- ══ HERO ROW: the money, and the one list that is asking ══
+       Money only. Customer counts live in the Customers block. -->
+  <div class="hero-row">
+    <section>
+      <div class="block-head"><h2>Today</h2><a class="goto" href="#">Open orders ›</a></div>
+      <div class="card">
+        <div class="hero-body">
+          <div class="lbl">Revenue today</div>
+          <div class="hero-lead num">¥2,274</div>
+          <div class="hero-sub"><span class="up" style="font-weight:500;color:var(--sage-ink)">▲ 16%</span> vs a typical Friday</div>
+
+          <div class="dayline">
+            <div class="frame">
+              <svg class="plot" viewBox="0 0 640 108" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <linearGradient id="dayfill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="#A3B49F" stop-opacity="0.22"/>
+                    <stop offset="100%" stop-color="#A3B49F" stop-opacity="0"/>
+                  </linearGradient>
+                </defs>
+                <!-- a typical Friday, for scale — ends lower, quietly -->
+                <path class="typical"
+                  d="M0,104 C70,102 120,98 180,92 C250,84 300,74 370,62 C440,50 520,42 640,34"/>
+                <!-- today: flat till open, lunch climb, quiet afternoon, evening lift -->
+                <path class="fill"
+                  d="M0,106 C60,105 100,103 150,97 C210,89 240,66 300,58 C350,51 400,50 460,44 C520,38 580,24 640,14 L640,108 L0,108 Z"/>
+                <path class="trace"
+                  d="M0,106 C60,105 100,103 150,97 C210,89 240,66 300,58 C350,51 400,50 460,44 C520,38 580,24 640,14"/>
+              </svg>
+              <span class="now"></span>
+            </div>
+            <div class="hours">
+              <span>8:00</span><span>11:00</span><span>14:00</span><span>17:00</span><span class="num">now</span>
+            </div>
+          </div>
+
+          <div class="hero-strip">
+            <div class="cell">
+              <div class="val num">8</div>
+              <div class="lbl">orders</div>
+            </div>
+            <div class="cell">
+              <div class="val num">¥192.74</div>
+              <div class="lbl">per order</div>
+            </div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Nothing waiting.</div>
+      </div>
+    </section>
+
+    <section>
+      <div class="block-head"><h2>Running low</h2><a class="goto" href="#">See all 34 ›</a></div>
+      <div class="card">
+        <div class="list-head">
+          <svg viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>
+          All stores
+          <span class="count num">34</span>
+        </div>
+        <div class="rows">
+          <div class="row"><div><div>Yunnan Crisp</div><div class="sku">4-800</div></div><span class="qty num">3 left</span></div>
+          <div class="row"><div><div>Arugula-Basil Pesto</div><div class="sku">1-20</div></div><span class="qty num">4 left</span></div>
+          <div class="row"><div><div>Beet Salad</div><div class="sku">1-310</div></div><span class="qty num">4 left</span></div>
+          <div class="row"><div><div>Coconut Yogurt, Plain</div><div class="sku">1-140</div></div><span class="qty num">4 left</span></div>
+          <div class="more"><a href="#">See all 34 ›</a></div>
+        </div>
+        <div class="foot warm"><span class="dot"></span><a href="#">Open restock</a></div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ══ BENTO ROW 1 — 3 + 2 + 1 = 6 ══ -->
+  <div class="bento">
+
+    <!-- Customers: three numbers -> half the width.
+         Owns every customer figure, including new today. -->
+    <section class="span-3">
+      <div class="block-head"><h2>Customers</h2><a class="goto" href="#">Open customers ›</a></div>
+      <div class="card">
+        <div class="vitals three">
+          <div class="vital">
+            <div class="lbl">New today</div>
+            <div class="val num">9</div>
+            <div class="cmp">of 36 visitors</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Visits</div>
+            <div class="val num">79</div>
+            <div class="cmp">25 sessions</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Conversion</div>
+            <div class="val num">32.0%</div>
+            <div class="cmp">orders ÷ sessions</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> No one browsing right now.</div>
+      </div>
+    </section>
+
+    <!-- Channels: two numbers -> a third. Owns "connected". -->
+    <section class="span-2">
+      <div class="block-head"><h2>Channels</h2><a class="goto" href="#">Open channels ›</a></div>
+      <div class="card">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">Meituan orders</div>
+            <div class="val num">5</div>
+            <div class="cmp">of 8 today</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Stock pushed</div>
+            <div class="val num">312</div>
+            <div class="cmp">in the last hour</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Both stores connected.</div>
+      </div>
+    </section>
+
+    <!-- Out of stock: one number -> a sixth.
+         Running low is the card above; this is the harder fact. -->
+    <section class="span-1">
+      <div class="block-head"><h2>Stock</h2></div>
+      <div class="card">
+        <div class="vitals one">
+          <div class="vital">
+            <div class="lbl">Out of stock</div>
+            <div class="val num">6</div>
+            <div class="cmp">nothing left to sell</div>
+          </div>
+        </div>
+        <div class="foot warm"><span class="dot"></span><a href="#">Restock</a></div>
+      </div>
+    </section>
+
+    <!-- ══ BENTO ROW 2 — 2 + 2 + 1 + 1 = 6 ══ -->
+
+    <!-- Delivery: two numbers -> a third -->
+    <section class="span-2">
+      <div class="block-head"><h2>Delivery</h2><a class="goto" href="#">Open orders ›</a></div>
+      <div class="card">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">Out for delivery</div>
+            <div class="val num">3</div>
+            <div class="cmp">riders on the way</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Rider coming</div>
+            <div class="val num">1</div>
+            <div class="cmp">have it ready</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Every delivery is on track.</div>
+      </div>
+    </section>
+
+    <!-- Money: the longer view. Today's revenue is the hero,
+         so this card never repeats it. -->
+    <section class="span-2">
+      <div class="block-head"><h2>Money</h2><a class="goto" href="#">Reports ›</a></div>
+      <div class="card">
+        <div class="vitals two">
+          <div class="vital">
+            <div class="lbl">Taken this week</div>
+            <div class="val num">¥14,806</div>
+            <div class="cmp"><span class="up">▲ 9%</span> vs last week</div>
+          </div>
+          <div class="vital">
+            <div class="lbl">Taken this month</div>
+            <div class="val num">¥58,420</div>
+            <div class="cmp">10 days in</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Books balance.</div>
+      </div>
+    </section>
+
+    <!-- Refunds: one number -> a sixth.
+         Replaces the "Refunds — none waiting" line in the old
+         all-clear list. Same fact, one home. -->
+    <section class="span-1">
+      <div class="block-head"><h2>Refunds</h2></div>
+      <div class="card">
+        <div class="vitals one">
+          <div class="vital">
+            <div class="lbl">Waiting on you</div>
+            <div class="val num">0</div>
+            <div class="cmp">none to approve</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Clear.</div>
+      </div>
+    </section>
+
+    <!-- Invoices: one number -> a sixth. Same idea. -->
+    <section class="span-1">
+      <div class="block-head"><h2>Invoices</h2></div>
+      <div class="card">
+        <div class="vitals one">
+          <div class="vital">
+            <div class="lbl">To issue</div>
+            <div class="val num">0</div>
+            <div class="cmp">nothing owed</div>
+          </div>
+        </div>
+        <div class="foot"><span class="dot clear"></span> Clear.</div>
+      </div>
+    </section>
+
+  </div>
+
+  <p class="note"><b>The rule the grid follows:</b> six columns. A block asks for one column per number it carries, and packs into the row. Three numbers take half the page, two take a third, one takes a sixth. Add a number to Delivery tomorrow and it widens on its own — nobody edits a layout.</p>
+  <p class="note"><b>The rule the hero follows:</b> the lead number is always the money, and it is Inter at 44px — one step up from a section card, not a poster. It reads first because it stands alone above a hairline, not because it shouts. Beside it goes whichever list is asking loudest today; on a calm day that slot holds Recent orders instead.</p>
+  <p class="note"><b>The rule the line follows:</b> the day line is the only thing on the page that moves. It draws itself in once when the page settles, and then the tip breathes — a slow pulse, the shop being alive. The dotted line is a typical Friday, so the "▲ 16%" above has a picture. No axes, no gridlines, no tooltips: the big number is the y-axis, and the hour marks are the x. If the user asked for reduced motion, it is simply a drawn line.</p>
+  <p class="note"><b>The rule that stops repeats:</b> every fact has exactly one home. New customers is a Customers number, so the hero strip dropped it and now carries two cells. Today's revenue is the hero, so Money shows the week and the month instead. Refunds and Invoices each got their own narrow block, so the old all-clear list — which said the same three things in words — is gone.</p>
+</div>
+
+</body>
+</html>
