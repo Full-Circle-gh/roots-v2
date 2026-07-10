@@ -5086,24 +5086,24 @@
            phone-frame on this same canvas is the *editor stage*, not a
            "preview", so it doesn't appear in this menu. -->
       <div class="preview-menu" id="preview-menu">
-        <button class="btn-phone-preview" id="btn-preview-menu" onclick="togglePreviewMenu()" data-ti-en="See what the customer will see" data-ti-cn="顾客视角" title="See what the customer will see">
+        <button class="btn-phone-preview" id="btn-preview-menu" onclick="togglePreviewMenu()" data-ti-en="See your page in the real app or website before you publish" data-ti-cn="发布前,在真实小程序或网页中查看你的页面" title="See your page in the real app or website before you publish">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
-          <span class="i18n-en">Preview</span><span class="i18n-cn">预览</span>
+          <span class="i18n-en">See it live</span><span class="i18n-cn">查看实际效果</span>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 12px; height: 12px; margin-left: 2px;"><polyline points="6 9 12 15 18 9"/></svg>
         </button>
         <div class="preview-menu-pop" id="preview-menu-pop" hidden>
           <button type="button" onclick="closePreviewMenu(); openLivePreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><rect x="2" y="4" width="20" height="14" rx="2"/><line x1="8" y1="20" x2="16" y2="20"/><line x1="12" y1="18" x2="12" y2="20"/></svg>
             <div>
-              <div class="pm-title"><span class="i18n-en">H5 mirror (web)</span><span class="i18n-cn">H5 镜像(网页)</span></div>
-              <div class="pm-sub"><span class="i18n-en">The /storefront renderer in a side panel</span><span class="i18n-cn">在侧栏中显示 /storefront 渲染</span></div>
+              <div class="pm-title"><span class="i18n-en">As a web page</span><span class="i18n-cn">网页版</span></div>
+              <div class="pm-sub"><span class="i18n-en">Opens your page like a website, next to the editor</span><span class="i18n-cn">在编辑器旁,像网站一样打开你的页面</span></div>
             </div>
           </button>
           <button type="button" onclick="closePreviewMenu(); openPhonePreview()">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><rect x="5" y="2" width="14" height="20" rx="2.5"/><line x1="12" y1="18" x2="12" y2="18.01"/></svg>
             <div>
-              <div class="pm-title"><span class="i18n-en">On phone (WeChat / QR)</span><span class="i18n-cn">真机(微信 / 扫码)</span></div>
-              <div class="pm-sub"><span class="i18n-en">Scan to open the real mini app in draft mode</span><span class="i18n-cn">扫码以草稿模式打开真实小程序</span></div>
+              <div class="pm-title"><span class="i18n-en">On your phone</span><span class="i18n-cn">在手机上</span></div>
+              <div class="pm-sub"><span class="i18n-en">Scan a code to open it in WeChat, as customers see it</span><span class="i18n-cn">扫码在微信中打开,与顾客所见一致</span></div>
             </div>
           </button>
         </div>
