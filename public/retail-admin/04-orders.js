@@ -1780,6 +1780,22 @@ function routingNote(reason) {
   if (r === 'out_of_city')       return 'out-of-city warehouse · 外地仓发货';
   return ''; // only_store / nearest / unknown — nothing worth showing
 }
+// Companion to routingNote: on a 缺货 reroute, name the SKUs the NEARER store
+// was short on, so ops sees WHY it moved (which item to restock/rebalance)
+// instead of an opaque "改派(缺货)". Empty for non-rerouted orders. The pids are
+// this order's own cart items, so o.items resolves their names.
+function rerouteShortNote(o) {
+  let pids = [];
+  try { pids = JSON.parse(o.reroute_short_pids || '[]') || []; } catch {}
+  if (!pids.length) return '';
+  const byId = new Map((o.items || []).map(it => [it.product_id, it]));
+  const names = pids.map(pid => {
+    const it = byId.get(pid);
+    return it ? orderItemNames(it) : `#${pid}`;
+  }).join('、');
+  return `<div class="sub" style="color: var(--text-3);">`
+    + `${cuT('nearer store was short on', '就近门店缺货')}: ${escapeHtml(names)}</div>`;
+}
 // Warning line for orders whose shipping store can't currently cover every item
 // (set at checkout on out-of-city / scheduled-later orders that skipped the
 // stock gate — see fulfillment_short_pids). Names the short items so the office
@@ -3889,6 +3905,7 @@ function renderOpenOrder(o) {
               <div class="kicker">Fulfilled by · 出货门店</div>
               <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
               <div class="sub">${escapeHtml(o.store_name_cn || '')}${routingNote(o.routing_reason) ? ' · ' + routingNote(o.routing_reason) : ''}${(o.channel && o.channel.toLowerCase() !== 'wechat') ? ' · ' + escapeHtml(o.channel) : ''}</div>
+              ${rerouteShortNote(o)}
               ${o.routed_by_distance === 0 ? `<div class="sub" style="color: var(--warn); font-weight: 600;">⚠ ${cuT('routed by area — address not locatable, verify store','按区域派单 · 地址无法定位,请核对门店')}</div>` : ''}
             </div>` : ''}
           </div>

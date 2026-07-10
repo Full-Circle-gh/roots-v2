@@ -2960,6 +2960,11 @@ addColumn('retail_orders', 'awaiting_restock_pids',   'TEXT');
 // the order is accepted as normal, but the office is told to restock/transfer
 // into the shipping warehouse before the fulfilment date. NULL = fully covered.
 addColumn('retail_orders', 'fulfillment_short_pids',  'TEXT');
+// JSON array of product ids the NEARER store was short on when this order was
+// rerouted to a farther store (routing_reason='fallback_no_stock'). Purely
+// diagnostic — turns an opaque "改派(缺货)" into "short at nearest: X, Y" in the
+// order drawer. NULL for orders that weren't rerouted for stock.
+addColumn('retail_orders', 'reroute_short_pids',  'TEXT');
 // Fulfillment path: 'delivery' (default — ship to customer address) or
 // 'pickup' (customer collects from a chosen store, no address/shipping fee).
 // For pickup orders store_id holds the customer-chosen store, scheduled_for +

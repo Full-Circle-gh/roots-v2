@@ -6434,6 +6434,59 @@ function cancelStalePendingOrdersForTenant() {
   return cancelled;
 }
 
+// When a customer places a new order, the still-unpaid orders they left behind
+// that were HOLDING stock this new order needed are superseded — the new order
+// borrowed past their reservations (see ownPendingOrderIds at checkout), so
+// those holds are now stale duplicates for the same customer. Cancel them
+// eagerly (instead of waiting for the unpaid-timeout reaper) so the freed stock
+// isn't double-claimed and the customer isn't left with a dead unpaid twin.
+// Same reversal lifecycle as cancelStalePendingOrdersForTenant. Scoped to:
+//   • this customer's own orders, • still pending_payment, • holding an ACTIVE
+//   reservation on a product in the NEW cart, • not the new order itself.
+// An unrelated pending cart (no overlapping held item) is left untouched. Runs
+// OUTSIDE the checkout tx — the release/reverse helpers open their own
+// transactions. Returns the cancelled order ids. Best-effort per order.
+function supersedeUnpaidOrdersForCustomer(customerId, keepOrderId, cartPids) {
+  const pids = [...new Set((cartPids || []).filter(id => id != null))];
+  if (!customerId || !pids.length) return [];
+  const ph = pids.map(() => '?').join(',');
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT DISTINCT r.order_id AS id
+         FROM retail_stock_reservations r
+         JOIN retail_orders o ON o.id = r.order_id
+        WHERE o.customer_id = ?
+          AND o.status = 'pending_payment'
+          AND r.status = 'active'
+          AND r.order_id != ?
+          AND r.product_id IN (${ph})`
+    ).all(customerId, keepOrderId, ...pids);
+  } catch (e) { console.warn('[supersede.query]', e.message); return []; }
+
+  const cancelled = [];
+  for (const o of rows) {
+    // Atomic claim: only the writer that wins the pending_payment → cancelled
+    // flip runs the once-only reversals (a payment callback that just landed
+    // leaves changes===0, so we never cancel an order that actually got paid).
+    const flipped = tdb().prepare(
+      "UPDATE retail_orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancelled_reason = 'superseded_by_new_order', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
+    ).run(o.id);
+    if (flipped.changes === 0) continue;
+    tdb().prepare(
+      "UPDATE retail_payments SET status = 'cancelled' WHERE order_id = ? AND status = 'pending'"
+    ).run(o.id);
+    try { reverseOrderRedeem(o.id); }  catch (e) { console.error('[supersede.reverseRedeem]',  o.id, e.message); }
+    try { reverseOrderBalance(o.id); } catch (e) { console.error('[supersede.reverseBalance]', o.id, e.message); }
+    try { reverseOrderVoucher(o.id); } catch (e) { console.error('[supersede.reverseVoucher]', o.id, e.message); }
+    try { inventory.releaseOrderReservations(o.id, { reason: 'superseded_by_new_order' }); }
+    catch (e) { console.error('[supersede.release]', o.id, e.message); }
+    try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: 'pending_payment', to: 'cancelled', reason: 'superseded_by_new_order' }, null); } catch {}
+    cancelled.push(o.id);
+  }
+  return cancelled;
+}
+
 // Every 15 min, walk every active tenant and cancel its stale unpaid orders.
 // Best-effort: a per-tenant failure never aborts the others.
 function tickCancelStalePending() {
@@ -8234,6 +8287,17 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     return res.status(400).json({ success: false, error: 'invalid_fallback_choice' });
   }
 
+  // This customer's OWN still-unpaid orders hold soft reservations. Left to
+  // count, they make the customer's NEXT order read as out-of-stock at the
+  // nearest store and bounce it to a farther one as a spurious "改派(缺货)"
+  // reroute (the classic "I placed an order, didn't pay, ordered again, and it
+  // shipped from the wrong store" case). Ignore this customer's own pending
+  // holds in shortage analysis + routing + reservation below so their new order
+  // can reuse that stock. Scoped to THIS customer only — others' holds still block.
+  const ownPendingOrderIds = tdb().prepare(
+    "SELECT id FROM retail_orders WHERE customer_id = ? AND status = 'pending_payment'"
+  ).all(req.customer.id).map(r => r.id);
+
   // Mutated cart per choice. resolved → mutatedItems.
   let mutatedItems  = resolved.slice();
   let awaitingRestockPids = null;
@@ -8256,6 +8320,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       address,
       items: expandStockLines(resolved),
       deliverySlotId, channel: 'wechat',
+      ignoreOrderIds: ownPendingOrderIds,
     });
     if (a.error === 'no_active_store') {
       return res.status(503).json({ success: false, error: 'no_active_store' });
@@ -8393,6 +8458,8 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // routed_by_distance: 1 = store chosen by real GPS distance, 0 = coarse
   // fallback (no address coords), null = N/A (pickup / out-of-city pin / etc.).
   let fulfillingStore, routingReason, routedByDistance = null;
+  // Diagnostic: on a 缺货 reroute, the SKUs the nearer store was short on.
+  let rerouteShortPids = null;
   if (isPickup) {
     // Customer picked the store explicitly — no routing. Stock availability
     // is enforced by reserveForOrder below (throws insufficient_stock).
@@ -8405,6 +8472,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       address,
       items: expandStockLines(resolved),
       deliverySlotId, channel: 'wechat',
+      ignoreOrderIds: ownPendingOrderIds,
     });
     if (!a.nearest?.store && !a.resolved?.store) return res.status(503).json({ success: false, error: 'no_active_store' });
     fulfillingStore = a.nearest?.store || a.resolved?.store;
@@ -8416,6 +8484,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       channel: 'wechat',
       acceptFallback,
       ignoreStock: !stockGate,
+      ignoreOrderIds: ownPendingOrderIds,       // don't let their own unpaid hold reroute them
     });
     if (routing.error === 'no_active_store') {
       return res.status(503).json({ success: false, error: 'no_active_store' });
@@ -8457,6 +8526,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
                     : routing.reason;
     // Genuine proximity routing — record whether real distance drove it.
     routedByDistance = routing.routed_by_distance ? 1 : 0;
+    // Genuine reroute (nearer store short) — remember which SKUs so the order
+    // drawer can say WHY it moved instead of a bare "改派(缺货)".
+    if (routing.reason === 'fallback_no_stock' && routing.nearest_short_pids?.length) {
+      rerouteShortPids = routing.nearest_short_pids;
+    }
   }
 
   // Out-of-Guangzhou orders all ship from the single out-of-city warehouse
@@ -8906,6 +8980,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         orderId,
         items: expandStockLines(resolved),   // a bundle reserves its COMPONENTS, not itself
         channel: 'wechat',
+        ignoreOrderIds: ownPendingOrderIds,  // reuse stock this customer's own unpaid order is sitting on
       });
     }
 
@@ -9018,6 +9093,31 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       });
     }
   } catch (e) { console.warn('[batch notice]', e.message); }
+
+  // Record which SKUs the nearer store was short on, so a "改派(缺货)" reroute
+  // names its cause in the order drawer. Best-effort — never fails the order.
+  if (rerouteShortPids?.length) {
+    try {
+      tdb().prepare('UPDATE retail_orders SET reroute_short_pids = ? WHERE id = ?')
+        .run(JSON.stringify(rerouteShortPids), orderId);
+    } catch (e) { console.warn('[reroute short pids]', e.message); }
+  }
+
+  // Auto-cancel this customer's now-superseded unpaid orders — the ones whose
+  // held stock this new order just took over (same customer, overlapping item,
+  // still pending_payment). Frees the redundant holds and reverses any
+  // points/voucher/balance they consumed, exactly like the unpaid-timeout
+  // reaper. Runs here (post-commit, outside the order tx) because the
+  // release/reverse helpers open their own transactions. Best-effort — never
+  // fails the order that was just placed. Only overlapping-hold orders, so an
+  // unrelated pending cart the customer still means to pay is left alone.
+  if (!isWaitFlow && ownPendingOrderIds.length) {
+    try {
+      const cartPids = expandStockLines(resolved).map(l => l.product_id);
+      const superseded = supersedeUnpaidOrdersForCustomer(req.customer.id, orderId, cartPids);
+      if (superseded.length) console.log('[checkout] superseded unpaid orders', superseded, 'by', orderId);
+    } catch (e) { console.warn('[checkout supersede]', e.message); }
+  }
 
   const order = loadOrderForCustomer(orderId, req.customer.id, `${req.protocol}://${req.get('host')}`);
   res.json({ success: true, data: order });
@@ -16792,7 +16892,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.routed_by_distance, o.channel, o.fulfillment_type,
                     o.channel_status, o.channel_status_at, o.channel_eta,
-                    o.fulfillment_short_pids,
+                    o.fulfillment_short_pids, o.reroute_short_pids,
                     (SELECT COUNT(*) FROM retail_order_addons ad
                        WHERE ad.order_id = o.id AND ad.status = 'success') AS addon_count,
                     o.scheduled_for, o.delivery_slot_label, o.delivery_slot_kind,
@@ -23313,10 +23413,17 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
       else _agg.set(it.product_id, (_agg.get(it.product_id) || 0) + it.qty);
     }
     const cleanItems = [..._agg.entries()].map(([product_id, qty]) => ({ product_id, qty }));
+    // Ignore this customer's own unpaid holds so the preview doesn't warn them
+    // out-of-stock (and offer a needless wait/reroute) over stock their own
+    // pending order is sitting on — matches the real checkout routing below.
+    const quotePendingOrderIds = tdb().prepare(
+      "SELECT id FROM retail_orders WHERE customer_id = ? AND status = 'pending_payment'"
+    ).all(req.customer.id).map(r => r.id);
     const analysis = inventory.analyzeShortage({
       address, items: cleanItems,
       deliverySlotId: body.delivery_slot_id || null,
       channel: 'wechat',
+      ignoreOrderIds: quotePendingOrderIds,
     });
     // Bundle carts can't use the per-item 5-option modal (checkout refuses it).
     // Collapse any shortage to a plain no_stock so the mini-app just shows
