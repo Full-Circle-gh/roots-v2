@@ -10812,6 +10812,22 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
   }
 });
 
+// ── 60-second dashboard memo ────────────────────────────────────────────────
+// The dashboard build below runs ~28 synchronous aggregate queries; on
+// better-sqlite3 every one blocks the event loop for the whole process, so
+// each build stalls every other request (admin cards, shoppers, daemons'
+// webhooks) behind it. Each open admin tab re-asks every 60s, so N viewers
+// used to cost N full builds a minute — the memo makes them cost one.
+// Freshness: _dashLiveTick (the SSE activity poller) calls dashMemoBust the
+// moment a tenant's orders/customers/pickups move, so "today" numbers still
+// update within its 5s cadence; with no dashboards open the TTL handles it.
+const _dashMemo = new Map();               // tenant|from|to|store → { at, body }
+const DASH_MEMO_TTL = 60 * 1000;
+function dashMemoBust(tenantId) {
+  const pre = `${tenantId}|`;
+  for (const k of _dashMemo.keys()) if (k.startsWith(pre)) _dashMemo.delete(k);
+}
+
 router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const TZ    = '+8 hours';
   // gzgrocery is a wholesale pickup channel whose revenue is folded in via the
@@ -10839,6 +10855,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to   || '') ? req.query.to   : toDefault;
   const spanDays = Math.round((new Date(to) - new Date(from)) / 86400000) + 1;
   const hourly = from === to;  // single-day view → hour-of-day curve
+
+  // Serve the memo when fresh (see note above the route). store_id is part of
+  // the key defensively — the handler doesn't scope by store yet, but a future
+  // store filter must never be answered from another store's cached copy.
+  const memoKey = `${currentTenantId() || ROOTS_TENANT_ID}|${from}|${to}|${req.query.store_id || ''}`;
+  const memoHit = _dashMemo.get(memoKey);
+  if (memoHit && Date.now() - memoHit.at < DASH_MEMO_TTL) return res.json(memoHit.body);
 
   // Preceding window of equal length, for delta arrows.
   const prevTo   = new Date(new Date(from).getTime() - 86400000).toISOString().slice(0, 10);
@@ -11292,7 +11315,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const conversion = vis.sessions > 0 ? (kpi.orders / vis.sessions) * 100 : null;
   const pct = (cur, prev) => (prev > 0 ? Math.round(((cur - prev) / prev) * 1000) / 10 : null);
 
-  res.json({
+  const dashBody = {
     success: true,
     data: {
       window: { from, to, span_days: spanDays, granularity: hourly ? 'hour' : 'day' },
@@ -11338,7 +11361,12 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       checkout,
       articleViews,
     },
-  });
+  };
+  _dashMemo.set(memoKey, { at: Date.now(), body: dashBody });
+  if (_dashMemo.size > 50) {          // sweep stale windows so the map stays small
+    for (const [k, v] of _dashMemo) if (Date.now() - v.at >= DASH_MEMO_TTL) _dashMemo.delete(k);
+  }
+  res.json(dashBody);
 });
 
 // ── Dashboard: live presence (global concurrent viewers) ──────────────────
@@ -11900,6 +11928,9 @@ function _dashLiveTick() {
     if (prev === undefined) { _dashLiveMark.set(tid, sig); continue; }  // baseline, no nudge
     if (sig === prev) continue;
     _dashLiveMark.set(tid, sig);
+    // Activity moved — drop this tenant's dashboard memo BEFORE nudging the
+    // clients, so the refetch the nudge triggers rebuilds fresh numbers.
+    dashMemoBust(tid);
     const frame = `event: activity\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`;
     for (const s of _dashLiveSubs) {
       if (s.tenantId !== tid) continue;

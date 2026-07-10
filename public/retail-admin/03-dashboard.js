@@ -196,8 +196,10 @@ function dashZenScrollTo(el, opts) {
   requestAnimationFrame(step);
 }
 
-// Set the date inputs from a range key and reload.
-function dashSetRange(key) {
+// Set the date inputs from a range key and reload. opts.defer sets the window
+// without pulling the deep Reports build — used at desktop boot, where the
+// pull waits for the first real Reports visit (reportsInit).
+function dashSetRange(key, opts) {
   $$('#db-range-seg button').forEach(b => b.classList.toggle('active', b.dataset.range === key));
   const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   let from = today;
@@ -206,6 +208,7 @@ function dashSetRange(key) {
   if (key === '90') from = new Date(Date.now() + 8 * 3600 * 1000 - 89 * 86400000).toISOString().slice(0, 10);
   $('#db-from').value = from;
   $('#db-to').value = today;
+  if (opts && opts.defer) { dashRangeLabel(); return; }
   dashLoad();
 }
 
@@ -243,7 +246,9 @@ function dashStoreQS() {
 }
 // A store pick re-pulls every store-scoped surface at once.
 function dashStoreChange() {
-  dashLoad();                         // Reports KPIs + charts
+  // Reports KPIs + charts — but never trigger the deferred deep build early;
+  // it stays parked until the first Reports visit (reportsInit).
+  if (DASH_DATA || DASH_REPORTS_SEEN) dashLoad();
   dashHeroLoadToday({ slow: false }); // Today pulse KPIs/sparklines
   if (typeof tdOpsLoad === 'function') tdOpsLoad(); // attention cards
 }
@@ -294,9 +299,13 @@ function dashInit() {
     if (DASH_DATA) { dashRenderHeadlines(); dashRenderFacts(); }
     dashReadRender(); dashNotesRender(); dashAskChipsRender(); dashAskRender();
   });
-  // Initial 30d load — fills the Reports charts (hidden until visited) AND
-  // DASH_DATA, which the phone dashboard (rmRenderDash) renders from.
-  dashSetRange('30');
+  // Initial 30d window. On a phone (≤720px) the pull happens at boot because
+  // the phone dashboard (rmRenderDash) renders straight from DASH_DATA. On
+  // desktop the deep Reports build (~28 aggregate queries) is DEFERRED to the
+  // first Reports visit — at boot it used to queue ahead of the visible cards
+  // and was the main reason the dashboard sat on "Loading…".
+  const phoneDash = window.matchMedia && window.matchMedia('(max-width: 720px)').matches;
+  dashSetRange('30', { defer: !phoneDash });
   dashHeroInit();      // today pulse: presence + today KPIs + activity polling
   tdInit();            // Tacet dashboard: The Recap + attention cards + date
 }
@@ -322,6 +331,18 @@ function reportsInit() {
 // ════════════════════════════════════════════════════════════════
 const DASH_HERO = { presence:null, channels:null, today:null, lastSync:0 };
 const DASH_HERO_INTERVALS = { presence: 15000, channels: 60000, today: 60000 };
+
+// One quick (3s) retry per surface when its FIRST load fails — without this a
+// tripped boot request left the card on "Loading…"/"¥—" until the next 60s
+// poll, and a manual page refresh was genuinely the fastest fix. Later poll
+// failures stay silent as before (last good numbers are already on screen).
+const DASH_BOOT_RETRIED = {};
+function dashBootRetry(key, fn) {
+  if (DASH_BOOT_RETRIED[key]) return false;
+  DASH_BOOT_RETRIED[key] = true;
+  setTimeout(fn, 3000);
+  return true;
+}
 
 function dashHeroInit() {
   // Single bootstrap — once wired, the timers + visibility listener carry it.
@@ -480,7 +501,9 @@ async function dashHeroLoadToday(opts) {
     dashRenderSpark($('#db-today-new-spark'), trend.map(p => Number(p.new_customers || 0)), labels,
                     v => v + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'), false);
     dashHeroTodayRepaint();   // delta badges (language-aware)
-  } catch (e) { /* silent */ }
+  } catch (e) {
+    if (!DASH_HERO.todayData) dashBootRetry('today', dashHeroLoadToday);
+  }
 }
 
 // Repaint the language-dependent bit of the Today mini-row — the delta badges
@@ -671,7 +694,9 @@ async function dashChanLoad() {
     dashChanRender();
     dashHeroSyncStamp();
   } catch (e) {
-    // Keep the last good split on a poll error; only the first load reports.
+    // Keep the last good split on a poll error; only the first load reports —
+    // and even then, one quick retry goes out before "Failed to load" shows.
+    if (!DASH_HERO.chan && dashBootRetry('chan', dashChanLoad)) return;
     const host = $('#td-chan-list');
     if (host && !DASH_HERO.chan) host.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
   }
@@ -1273,6 +1298,7 @@ async function tdRecapLoad() {
     TD.recapEvents = (j.data && j.data.events) || [];
     tdRecapRender();
   } catch (e) {
+    if (!TD.recapEvents && dashBootRetry('recap', tdRecapLoad)) return;
     host.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
   }
 }
@@ -1488,7 +1514,9 @@ async function tdOpsLoad() {
       TD.stockOps = null;
     }
     tdAttnRender();
-  } catch (e) { /* silent — next tick retries */ }
+  } catch (e) {
+    if (!DASH_OPS) dashBootRetry('ops', tdOpsLoad);   // else next 60s tick retries
+  }
 }
 
 // Tone-coloured line icons for the attention-card headers (24-box, currentColor
@@ -1928,6 +1956,7 @@ async function dashLoad() {
     if (first) dashRenderAll();
     else dashSwapWithFade(dashRenderAll);
   } catch (e) {
+    if (!DASH_DATA && dashBootRetry('dash', dashLoad)) return;
     $('#db-kpis').innerHTML = `<div class="db-muted">Failed to load · 加载失败: ${escapeHtml(e.message)}</div>`;
   }
 }

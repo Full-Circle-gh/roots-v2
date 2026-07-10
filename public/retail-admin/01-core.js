@@ -53,7 +53,30 @@ async function api(path, opts = {}) {
     headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(opts.body);
   }
-  const r = await fetch(path, { credentials: 'same-origin', ...opts, headers });
+  // GET requests carry a hard time limit (opts.timeoutMs, default 20s) so a
+  // stalled fetch can't pin a card on "Loading…" forever — it fails, and the
+  // caller's retry / next poll takes over. Writes are exempt: aborting a POST
+  // mid-flight would report "failed" for a mutation that may have landed.
+  const method = (opts.method || 'GET').toUpperCase();
+  let abortTimer = null;
+  if (!opts.signal && method === 'GET' && typeof AbortController !== 'undefined') {
+    const ac = new AbortController();
+    opts.signal = ac.signal;
+    abortTimer = setTimeout(() => ac.abort(), opts.timeoutMs || 20000);
+  }
+  let r;
+  try {
+    r = await fetch(path, { credentials: 'same-origin', ...opts, headers });
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      const t = new Error('request timed out');
+      t.code = 'timeout';
+      throw t;
+    }
+    throw e;
+  } finally {
+    if (abortTimer) clearTimeout(abortTimer);
+  }
   if (r.status === 401) { location.href = '/backend/login'; throw new Error('401'); }
   const j = await r.json().catch(() => ({ success: false, error: 'bad_response', status: r.status }));
   if (!j.success) {
