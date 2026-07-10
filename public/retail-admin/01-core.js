@@ -4,7 +4,7 @@
    retail-admin.html — LOAD ORDER MATTERS. Cross-file globals (cuT, cuLang,
    DASH_VIEW, rm* mobile renderers…) live in other parts or in the inline
    script blocks still in the HTML, hence the eslint no-undef opt-out.
-   Contents: bootstrap ($/$$, ICONS, toast/api/escape helpers, payment labels), tab switcher, editor-iframe lazy-load, kitchen-categories editor (cat*) */
+   Contents: bootstrap ($/$$, ICONS, toast/api/escape helpers, payment labels), live-push hub (retailLiveSubscribe), tab switcher, editor-iframe lazy-load, kitchen-categories editor (cat*) */
 const $  = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
@@ -1238,3 +1238,45 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
   window.scrollTo({ top: document.querySelector('.tabs').offsetTop - 8, behavior: 'smooth' });
 }));
 
+
+// ── Live push (SSE): one shared connection for the whole admin ──────────
+// The server holds /api/retail-admin/stream open and emits an `activity`
+// event whenever this tenant's orders / customers / wholesale rows move.
+// It detects that by re-reading a cheap watermark off the DB, NOT by
+// hooking the code that writes — so it also catches rows written by the
+// separate Meituan and gzgrocery daemon processes, which an in-process
+// write hook could never see.
+//
+// Every page subscribes through here instead of opening its own
+// EventSource, so one admin session holds exactly one socket no matter how
+// many tabs are wired up. Subscribers get called on `activity` and once
+// after a reconnect (events may have been missed while the socket was
+// down). They should treat the call as "something changed, go refetch",
+// never as the change itself — no payload is delivered.
+const _LIVE = { es: null, opened: false, subs: new Set() };
+
+function retailLiveSubscribe(fn) {
+  _LIVE.subs.add(fn);
+  retailLiveConnect();
+  return () => _LIVE.subs.delete(fn);   // unsubscribe
+}
+
+function retailLiveConnect() {
+  if (_LIVE.es || typeof EventSource === 'undefined') return;
+  let es;
+  try { es = new EventSource('/api/retail-admin/stream'); }
+  catch (e) { return; }                 // no live push; callers keep their backstop poll
+  _LIVE.es = es;
+  const fan = (reason) => {
+    for (const fn of _LIVE.subs) { try { fn(reason); } catch (e) { /* one bad subscriber must not starve the rest */ } }
+  };
+  es.addEventListener('activity', () => fan('activity'));
+  // Skip the very first open — the page that just subscribed has loaded its
+  // own data already. Later opens are reconnects, so catch up.
+  es.addEventListener('open', () => {
+    if (_LIVE.opened) fan('reconnect');
+    _LIVE.opened = true;
+  });
+  // On error EventSource reconnects by itself. Keep the handle so we never
+  // stack sockets; dropping it here would let the next subscribe open a second.
+}

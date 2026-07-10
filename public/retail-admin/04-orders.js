@@ -150,12 +150,18 @@ function debouncedLoadOrders() {
 }
 
 // ── Auto-refresh state ─────────────────────────────────────────────────
-// The Orders tab polls /api/retail-admin/orders every ORDERS_POLL_MS so
-// new orders appear on staff screens without anyone clicking refresh.
+// New orders reach the screen by live push: the admin-wide SSE hub
+// (retailLiveSubscribe, 01-core.js) nudges us when anything moves and we
+// refetch. Nobody clicks refresh; there is no button. Worst-case latency is
+// the server's 5s watermark tick plus the 400ms debounce below, so ~5s —
+// bounded by that tick, not by anything on this page.
+// ORDERS_POLL_MS is only a backstop for the stretch when that socket is
+// down and reconnecting, so it is deliberately slow — speeding it back up
+// would add load without making anything more current.
 // Fingerprint check skips DOM rebuilds when nothing changed — no flicker.
 // We also remember the set of order IDs we've already shown so we can
 // flash + toast genuinely-new arrivals (vs. the first paint).
-const ORDERS_POLL_MS = 12000;
+const ORDERS_POLL_MS = 60000;
 let _ORDERS_AUTO_TIMER = null;
 let _ORDERS_LAST_FP = null;
 let _ORDERS_LAST_FP_KEY = '';        // filter signature for the FP
@@ -1046,11 +1052,25 @@ function toggleOrdersLive() {
   if (!_ORDERS_LIVE_PAUSED) _ordersAutoTick();
 }
 
-// Start the poller once. Wired listeners refresh immediately when the
-// user comes back to the tab/window so they don't have to wait a tick.
+// Coalesce a burst of live nudges into one refetch. Several rows can land in
+// the same instant (a daemon importing a batch), and the server's watermark
+// tick can fire mid-batch — one fetch a moment later sees all of them.
+let _ORDERS_LIVE_DEBOUNCE = null;
+function _ordersLiveNudge() {
+  clearTimeout(_ORDERS_LIVE_DEBOUNCE);
+  // _ordersAutoTick already declines when paused, hidden, off-tab, or the
+  // operator is typing — nothing to guard here.
+  _ORDERS_LIVE_DEBOUNCE = setTimeout(_ordersAutoTick, 400);
+}
+
+// Start the live subscription + backstop poller once. Wired listeners refresh
+// immediately when the user comes back to the tab/window, since _ordersAutoTick
+// declines to fetch while hidden and the list may have gone stale meanwhile.
 (function _startOrdersPoller() {
   if (window._ordersPollerWired) return;
   window._ordersPollerWired = true;
+  // Live push — the primary path. New orders appear on their own.
+  if (typeof retailLiveSubscribe === 'function') retailLiveSubscribe(_ordersLiveNudge);
   if (_ORDERS_AUTO_TIMER) clearInterval(_ORDERS_AUTO_TIMER);
   _ORDERS_AUTO_TIMER = setInterval(_ordersAutoTick, ORDERS_POLL_MS);
   // Tick the "Xs ago" label every 5s even between fetches.

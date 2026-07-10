@@ -402,29 +402,15 @@ function dashHeroRefreshAll() {
 }
 
 // ── Live push (SSE) ────────────────────────────────────────────────────────
-// One persistent connection to /api/retail-admin/stream. The server sends an
-// `activity` nudge whenever the tenant's order / customer / wholesale streams
-// move — INCLUDING rows written by the separate Meituan / gzgrocery daemon
-// processes, which an in-process write hook could never see — so the recap,
-// the open feed, and Channels-today update the moment something happens, with
-// no visible refresh and no per-client polling. The browser's EventSource
-// auto-reconnects on drop; the 60s backstop polls above cover the rare gap
-// while the socket is down.
+// Subscribe to the admin-wide live hub (retailLiveSubscribe, 01-core.js). It
+// nudges us whenever the tenant's order / customer / wholesale streams move,
+// so the recap, the open feed, and Channels-today update the moment something
+// happens, with no visible refresh and no per-client polling. The hub also
+// nudges once after a reconnect, covering events missed while the socket was
+// down; the 60s backstop polls above cover the gap if the hub never connects.
 function dashLiveConnect() {
-  if (DASH_HERO._sse || typeof EventSource === 'undefined') return;
-  let es;
-  try { es = new EventSource('/api/retail-admin/stream'); }
-  catch (e) { return; }
-  DASH_HERO._sse = es;
-  es.addEventListener('activity', () => dashLiveNudge());
-  // A reconnect can mean events were missed while the socket was down — do one
-  // catch-up refresh on re-open, but skip the very first open (init loaded).
-  es.addEventListener('open', () => {
-    if (DASH_HERO._sseOpened) dashLiveNudge();
-    DASH_HERO._sseOpened = true;
-  });
-  // On error EventSource retries by itself; keep the handle so we don't stack
-  // connections.
+  if (DASH_HERO._sse) return;
+  DASH_HERO._sse = retailLiveSubscribe(() => dashLiveNudge());   // holds the unsubscribe fn
 }
 // Coalesce a burst of nudges into one refresh, and defer while the tab is
 // hidden so a returning operator gets a single refresh, not a backlog.

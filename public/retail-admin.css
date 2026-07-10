@@ -8947,3 +8947,34 @@ body.pos-store-manager .td-block[data-block="channels"] { display: none; }
   body.pos-customer-service #rm-dash,
   body.pos-dispatch #rm-dash { display: none; }
 }
+
+/* ── Orders live dot ──────────────────────────────────────────────────────
+   Replaces the old Refresh button. The Orders list updates itself over the
+   admin's live connection, so the operator needs a state, not a control:
+   a slow green pulse means "receiving". Click to pause (dim, static); the
+   title carries the last-update time for anyone who wants the detail. */
+.live-dot {
+  flex: none;
+  width: 26px; height: 26px;
+  padding: 0; border: 0; border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  display: grid; place-items: center;
+}
+.live-dot::before {
+  content: '';
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--success);
+  animation: live-dot-pulse 2.8s ease-in-out infinite;
+}
+/* Paused: no motion, and drained of colour so it reads as "off", not "ok". */
+.live-dot.paused::before {
+  background: var(--text-3, var(--line-strong));
+  animation: none;
+}
+.live-dot:hover::before { transform: scale(1.15); }
+@keyframes live-dot-pulse {
+  0%, 100% { opacity: .38; transform: scale(.86); }
+  50%      { opacity: 1;   transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .live-dot::before { animation: none; opacity: 1; } }
