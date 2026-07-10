@@ -5279,8 +5279,8 @@
 
         <div class="field">
           <label class="stacked">Wordmark text fallback · 文字备用</label>
-          <input type="text" id="cfg-footer-wordmark-text" placeholder="Full Circle">
-          <div class="muted">Shown only when no image is uploaded. Default · 默认: Full Circle.</div>
+          <input type="text" id="cfg-footer-wordmark-text" placeholder="Roots">
+          <div class="muted">Shown only when no image is uploaded. Default · 默认: Roots.</div>
         </div>
 
         <div class="pd-row2">
@@ -5288,8 +5288,8 @@
           <div class="field"><label class="stacked">Tagline CN · 宣传语(中文)</label><input type="text" id="cfg-footer-tagline-cn" placeholder="用代码,带来清晰"></div>
         </div>
         <div class="pd-row2">
-          <div class="field"><label class="stacked">Credit line EN · 落款(英文)</label><input type="text" id="cfg-footer-credit-en" placeholder="Powered by Full Circle"></div>
-          <div class="field"><label class="stacked">Credit line CN · 落款(中文)</label><input type="text" id="cfg-footer-credit-cn" placeholder="由 Full Circle 提供技术支持"></div>
+          <div class="field"><label class="stacked">Credit line EN · 落款(英文)</label><input type="text" id="cfg-footer-credit-en" placeholder="Powered by Roots"></div>
+          <div class="field"><label class="stacked">Credit line CN · 落款(中文)</label><input type="text" id="cfg-footer-credit-cn" placeholder="由 Roots 提供技术支持"></div>
         </div>
       </div>
 
@@ -7394,7 +7394,7 @@ async function saveDraft() {
     toast('Save failed: ' + e.message, 'err');
   }
 }
-// Clicking the FULL CIRCLE logo / wordmark returns to the Mini App Backend
+// Clicking the tacet logo / wordmark returns to the Mini App Backend
 // dashboard. Flush any pending draft save first (mirrors switchPage) so
 // in-flight edits aren't lost on the way out.
 async function goToBackend(e) {
