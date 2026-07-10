@@ -6535,7 +6535,7 @@
        search box + store filter + refresh button were all redundant on the
        narrow mobile layout — drop the entire row. */
     #tab-orders .table-wrap { display: none; }
-    #ord-view-orders > .row { display: none; }
+    #tab-orders > .row { display: none; }
 
     /* Pin the status-filter bar directly under the topbar at ALL scroll
        positions. In source order the KPI rail sits BETWEEN the topbar and the
@@ -6547,11 +6547,7 @@
        redundant on phones (the bottom nav already labels the tab) — hide it. */
     #tab-orders.active { display: flex; flex-direction: column; }
     #tab-orders > h2 { display: none; }
-    /* The order-list content sits inside #ord-view-orders now (its sibling is
-       the Stock activity sub-view) — the chips-first flex trick rides on that
-       wrapper instead of the section. */
-    #ord-view-orders { display: flex; flex-direction: column; }
-    #ord-view-orders > #orders-status-chips { order: -1; }
+    #tab-orders > #orders-status-chips { order: -1; }
 
     /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
     #ord-kpis {
@@ -7627,7 +7623,7 @@
   /* Chart accents inside these sections follow Tacet's functional colours
      (amber warns, brick errors). --accent (tea) stays for chart lines —
      it is close kin to sage and keeps contrast in both themes. */
-  #tab-dashboard, #tab-reports, #tab-sales, #ord-view-activity {
+  #tab-dashboard, #tab-reports, #tab-sales, #prod-view-activity {
     --brass: var(--td-amber);
     --danger: var(--td-brick-ink);
     /* Render the whole dashboard in Inter (like the mockup). The Inter remap in
@@ -8964,48 +8960,48 @@
      Reuses the shared --td-* tokens (dark default / light via
      [data-theme="light"]), same as dashboard/reports/sales.
      ═══════════════════════════════════════════════════════════════════ */
-  #ord-view-activity .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  #prod-view-activity .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 
-  /* ── Orders sub-views (Orders ↔ Stock activity) + the four stock cards ──
+  /* ── Products sub-views (Catalogue ↔ Stock activity) + the four stock cards ──
      The switcher speaks the same quiet-tab language as #act-tabs below (ink
      underline, no colour — a view is a place, not a status). The cards echo
-     the fc-kpi surface one size down; amber appears ONLY on the hit-zero
+     the pa-recap surface one size down; amber appears ONLY on the hit-zero
      card while its count is above zero, matching the ledger's one-amber
      rule. Everything rides the shared --td-* tokens so both themes work. */
-  .ord-views { display: flex; flex-wrap: wrap; gap: 2px;
+  .stk-views { display: flex; flex-wrap: wrap; gap: 2px;
     border-bottom: 1px solid var(--td-border, #E4E0D5); margin: 0 0 var(--s4, 16px); }
-  .ord-view { appearance: none; background: none; border: none;
+  .stk-view { appearance: none; background: none; border: none;
     border-bottom: 2px solid transparent; margin-bottom: -1px;
     font: 500 13.5px var(--f-sans); color: var(--td-text2, #58606E);
     padding: 8px 12px 10px; cursor: pointer; white-space: nowrap;
     display: inline-flex; align-items: center; gap: 7px;
     transition: color .2s cubic-bezier(.16,1,.3,1); }
-  .ord-view:hover { color: var(--td-text, #111A2B); }
-  .ord-view.on { color: var(--td-text, #111A2B); font-weight: 600;
+  .stk-view:hover { color: var(--td-text, #111A2B); }
+  .stk-view.on { color: var(--td-text, #111A2B); font-weight: 600;
     border-bottom-color: var(--td-text, #111A2B); }
-  .ord-view-dot { width: 7px; height: 7px; border-radius: 50%; flex: none;
+  .stk-view-dot { width: 7px; height: 7px; border-radius: 50%; flex: none;
     background: var(--td-amber, #C9954A); }
 
-  .ord-minis { display: grid; grid-template-columns: repeat(4, 1fr);
-    gap: 10px; margin: 0 0 var(--s3, 12px); }
-  .ord-mini { appearance: none; text-align: left; cursor: pointer;
+  .stk-minis { display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 10px; margin: 0 0 var(--s4, 16px); }
+  .stk-mini { appearance: none; text-align: left; cursor: pointer;
     display: flex; flex-direction: column; gap: 1px; min-width: 0;
     background: var(--td-surface, #fff); border: 1px solid var(--td-border, #E4E0D5);
     border-radius: 12px; padding: 10px 14px;
     font-family: var(--f-sans); color: var(--td-text, #111A2B);
     transition: border-color .2s cubic-bezier(.16,1,.3,1); }
-  .ord-mini:hover { border-color: var(--td-text2, #58606E); }
-  .ord-mini .lbl { font-size: 11.5px; color: var(--td-text2, #58606E);
+  .stk-mini:hover { border-color: var(--td-text2, #58606E); }
+  .stk-mini .lbl { font-size: 11.5px; color: var(--td-text2, #58606E);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .ord-mini .val { font-size: 19px; font-weight: 600; line-height: 1.3;
+  .stk-mini .val { font-size: 19px; font-weight: 600; line-height: 1.3;
     font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-  .ord-mini .val.is-in { color: var(--td-sage-ink, #4A6249); }
-  .ord-mini .hint { font-size: 11px; color: var(--td-text2, #58606E); min-height: 14px;
+  .stk-mini .val.is-in { color: var(--td-sage-ink, #4A6249); }
+  .stk-mini .hint { font-size: 11px; color: var(--td-text2, #58606E); min-height: 14px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-  .ord-mini.warn { background: var(--td-amber-tint, #F7EEDE); }
-  .ord-mini.warn .val,
-  .ord-mini.warn .hint { color: var(--td-amber-ink, #8A6425); }
-  @media (max-width: 760px) { .ord-minis { grid-template-columns: 1fr 1fr; } }
+  .stk-mini.warn { background: var(--td-amber-tint, #F7EEDE); }
+  .stk-mini.warn .val,
+  .stk-mini.warn .hint { color: var(--td-amber-ink, #8A6425); }
+  @media (max-width: 760px) { .stk-minis { grid-template-columns: 1fr 1fr; } }
 
   /* channel tabs */
   #act-tabs { display: flex; flex-wrap: wrap; gap: 2px;

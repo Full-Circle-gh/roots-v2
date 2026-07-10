@@ -2,9 +2,10 @@
 // Inventory activity ledger viewer — Tacet "read first" layout: digest cards
 // (hit zero / big moves / by channel) over a quiet ledger table, with date
 // range + channel filters and one-click CSV export.
-// Since 2026-07-10 this renders INSIDE the Orders tab (#ord-view-activity, the
-// "Stock activity" sub-view — ordShowView in 04-orders.js calls actAdminInit);
-// the old standalone rail tab is gone. Ids and behaviour are unchanged.
+// Since 2026-07-10 this renders INSIDE the Products tab (#prod-view-activity,
+// the "Stock activity" sub-view — prodShowView in 09-products.js calls
+// actAdminInit); the old standalone rail tab is gone. Ids and behaviour are
+// unchanged, so everything below is the original ledger code.
 // Reads /api/retail-admin/activity (over retail_stock_ledger). All times shown
 // are Guangzhou local (UTC+8), matching the server's day boundaries.
 // Spec: reference/inventory-activity-tacet-mockup.html (option C). Brand rules
@@ -100,16 +101,16 @@ async function actLoad(reset, silent) {
 
 // ── Live auto-refresh ────────────────────────────────────────────────────────
 // Stock moves constantly (orders, daemons, quick-stock). Poll the current view
-// while the Stock activity sub-view is up on the active Orders tab, so the
+// while the Stock activity sub-view is up on the active Products tab, so the
 // timeline stays live without a manual reload. Paused when the tab is
 // backgrounded/hidden, while a load is in flight, or once the operator has
 // paged past the first page (so an auto-refresh never yanks them back to the
 // top mid-scroll).
 let _actPollTimer = null;
 function actTabVisible() {
-  const va = document.getElementById('ord-view-activity');
+  const va = document.getElementById('prod-view-activity');
   return !document.hidden && !!va && va.style.display !== 'none'
-    && !!document.getElementById('tab-orders')?.classList.contains('active');
+    && !!document.getElementById('tab-products')?.classList.contains('active');
 }
 function actStartPolling() {
   if (_actPollTimer) return;

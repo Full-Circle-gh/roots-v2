@@ -1081,13 +1081,13 @@ async function loadIntegrationsStatus() {
       items.push(it);
       if (tab !== 'config') indexCards('#tab-' + tab, it, items);
     });
-    // 1b) Stock activity lives inside Orders (no rail button of its own since
+    // 1b) Stock activity lives inside Products (no rail button of its own since
     // 2026-07-10) — index it by hand so typing "activity" still jumps straight
     // to the ledger. `view` makes go() open the sub-view after the tab click.
-    if (document.getElementById('ord-view-activity')
-        && (typeof can !== 'function' || (can('orders:view') && can('activity:view')))) {
+    if (document.getElementById('prod-view-activity')
+        && (typeof can !== 'function' || (can('products:view') && can('activity:view')))) {
       items.push({ type: 'page', title: cuT('Stock activity', '库存流水'),
-                   crumb: cuT('Orders', '订单'), tab: 'orders', sub: null, anchor: null,
+                   crumb: cuT('Products', '产品'), tab: 'products', sub: null, anchor: null,
                    view: 'activity',
                    kw: 'stock activity inventory ledger movements history 库存 流水 activity' });
     }
@@ -1278,8 +1278,8 @@ async function loadIntegrationsStatus() {
     }
     const tabBtn = it.tab && document.querySelector('.tabs [data-tab="' + it.tab + '"]');
     if (tabBtn) tabBtn.click();
-    // Sub-view hop (Stock activity inside Orders) — after the tab is active.
-    if (it.view && typeof ordShowView === 'function') ordShowView(it.view);
+    // Sub-view hop (Stock activity inside Products) — after the tab is active.
+    if (it.view && typeof prodShowView === 'function') prodShowView(it.view);
     if (it.sub) {
       const subBtn = document.querySelector('#settings-nav button[data-sub="' + it.sub + '"]');
       if (subBtn) subBtn.click();

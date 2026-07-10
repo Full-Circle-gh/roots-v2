@@ -380,7 +380,92 @@ const PA_PAGE_PRESETS = [
 
 document.querySelector('[data-tab="products"]').addEventListener('click', () => {
   if (!PA_LOADED) { PA_LOADED = true; paLoad(); }
+  prodLoadStock(true);   // fresh stock cards on tab open
 });
+
+// ════════════════════════════════════════════════════════════════
+// STOCK ACTIVITY — the ledger lives inside Products (moved here
+// 2026-07-10; stock belongs with the products it counts). Two
+// sub-views: the catalogue and the ledger. The four stock cards
+// under the Recap band are doors into the ledger.
+// The ledger itself is rendered by 13-activity.js (act* / #act-*);
+// this file only owns the switch and the cards.
+// ════════════════════════════════════════════════════════════════
+
+// Which view is up is read straight off the DOM (actTabVisible in 13-activity
+// .js checks #prod-view-activity's display), so no state variable is kept here.
+// The tab always opens on the catalogue.
+function prodShowView(view) {
+  view = (view === 'activity' && (typeof can !== 'function' || can('activity:view'))) ? 'activity' : 'catalog';
+  const vc = document.getElementById('prod-view-catalog');
+  const va = document.getElementById('prod-view-activity');
+  if (vc) vc.style.display = view === 'catalog' ? '' : 'none';
+  if (va) va.style.display = view === 'activity' ? '' : 'none';
+  document.getElementById('stk-view-btn-catalog')?.classList.toggle('on', view === 'catalog');
+  document.getElementById('stk-view-btn-activity')?.classList.toggle('on', view === 'activity');
+  // actAdminInit loads the ledger and starts its own 15s poll; that poll asks
+  // actTabVisible(), which checks this view is the one on screen.
+  if (view === 'activity' && typeof actAdminInit === 'function') actAdminInit();
+}
+
+// ── The four stock cards — moves / out / in / hit zero, today, all channels.
+// Same /activity call the ledger makes (limit=1: only summary + digest are
+// read, never the rows). Where the Recap band above says what the catalogue
+// IS, these say what MOVED. Throttled to 45s; force=true on tab open. Amber
+// (the .warn card + the dot on the sub-view tab) shows only while something
+// is actually sitting at zero.
+let _PROD_STOCK_AT = 0;
+let _PROD_STOCK_DATA = null;
+let _PROD_STOCK_LANG_HOOKED = false;
+async function prodLoadStock(force) {
+  if (!document.getElementById('stk-minis')) return;
+  if (typeof can === 'function' && !can('activity:view')) return;
+  if (!force && Date.now() - _PROD_STOCK_AT < 45000) return;
+  _PROD_STOCK_AT = Date.now();
+  if (!_PROD_STOCK_LANG_HOOKED && window.onLangChange) { _PROD_STOCK_LANG_HOOKED = true; onLangChange(prodRenderStock); }
+  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  try {
+    const j = await api(`/api/retail-admin/activity?from=${todayGz}&to=${todayGz}&limit=1`);
+    const sum = j.summary || [];
+    // zeroed_total = exact count (digest.zeroed itself is capped at 8 rows);
+    // fall back to the list length against an older server mid-deploy.
+    const zero = (j.digest && (typeof j.digest.zeroed_total === 'number'
+      ? j.digest.zeroed_total : (j.digest.zeroed || []).length)) || 0;
+    _PROD_STOCK_DATA = {
+      moves: sum.reduce((a, s) => a + (s.events || 0), 0),
+      out:   sum.reduce((a, s) => a + (s.units_out || 0), 0),
+      inn:   sum.reduce((a, s) => a + (s.units_in || 0), 0),
+      zero,
+    };
+    prodRenderStock();
+  } catch (e) { /* silent — the cards are a bonus, the ledger is the source */ }
+}
+function prodRenderStock() {
+  const d = _PROD_STOCK_DATA; if (!d || !document.getElementById('stk-minis')) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('stk-mini-moves', d.moves.toLocaleString());
+  set('stk-mini-out',   d.out ? '−' + d.out.toLocaleString() : '0');
+  set('stk-mini-in',    d.inn ? '+' + d.inn.toLocaleString() : '0');
+  set('stk-mini-zero',  d.zero.toLocaleString());
+  set('stk-mini-moves-hint', cuT('open activity ›', '查看流水 ›'));
+  set('stk-mini-out-hint',   cuT('sold or synced out', '售出或同步出库'));
+  set('stk-mini-in-hint',    cuT('restocks', '补货入库'));
+  set('stk-mini-zero-hint',  d.zero ? cuT('see the names ›', '查看名称 ›') : cuT('nothing waiting', '无需处理'));
+  document.getElementById('stk-mini-zero-card')?.classList.toggle('warn', d.zero > 0);
+  const dot = document.getElementById('stk-view-dot');
+  if (dot) dot.hidden = !(d.zero > 0);
+}
+
+// Live push: stock moves constantly (orders, daemons, quick-stock). The
+// admin-wide SSE hub nudges us; the 45s throttle keeps it cheap. Only repaint
+// while the Products tab is actually on screen.
+if (typeof retailLiveSubscribe === 'function') {
+  retailLiveSubscribe(() => {
+    if (document.hidden) return;
+    if (!document.getElementById('tab-products')?.classList.contains('active')) return;
+    prodLoadStock();
+  });
+}
 
 document.getElementById('pa-search').addEventListener('input', _paDebouncedRender);
 document.getElementById('pa-filter').addEventListener('change', () => {
