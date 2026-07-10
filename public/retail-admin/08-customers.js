@@ -173,7 +173,7 @@ async function cuLoad() {
       const isNew = r.created_at && cuGzDay(r.created_at) === today;
       const nameHtml = r.nickname
         ? escapeHtml(r.nickname)
-        : '<span class="cul-empty"></span>';
+        : '<span class="cul-empty">—</span>';
       return `
       <tr class="cul-row${r.is_blocked ? ' is-blocked' : ''}" onclick="cuOpenDetail(${r.id})">
         <td>
@@ -217,7 +217,6 @@ async function cuLoad() {
     },
     onSize: s => { CU_PAGE_SIZE = s; CU_PAGE = 1; cuLoad(); },
   });
-  cuViewApply();  // keep the View-tweak classes on #cu-table after each render
   if (window.rmRenderCustomerCards) rmRenderCustomerCards(rows);  // phone card list (same data)
 }
 
@@ -1304,49 +1303,6 @@ function cuFmtSeen(iso) {
 function cuMonogram(nickname) {
   const ch = Array.from(String(nickname || '').trim())[0];
   return ch ? escapeHtml(ch.toUpperCase()) : '·';
-}
-
-// ── Customers list · per-operator View tweaks (mirrors the Orders pattern) ──
-// Classes ride on #cu-table (they persist across re-renders) so changes apply
-// live. The old "recent login" row tint is gone: the Last seen column already
-// says "Today", so the tint said it a second time and left the table blotchy.
-const CU_VIEW_DEFAULTS = { badgeStyle: 'pill', emptyLabel: 'dash' };
-function cuViewLoad() {
-  try { return { ...CU_VIEW_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-customer-tweaks') || '{}')) }; }
-  catch (e) { return { ...CU_VIEW_DEFAULTS }; }
-}
-let CU_VIEW = cuViewLoad();
-function cuViewApply() {
-  const tbl = document.getElementById('cu-table'); if (!tbl) return;
-  tbl.classList.remove('cb-pill', 'cb-square', 'cb-underline', 'ce-dash', 'ce-noname', 'ce-guest');
-  tbl.classList.add('cb-' + CU_VIEW.badgeStyle, 'ce-' + CU_VIEW.emptyLabel);
-}
-function cuTweakSet(key, val) {
-  CU_VIEW[key] = val;
-  try { localStorage.setItem('retail-admin-customer-tweaks', JSON.stringify(CU_VIEW)); } catch (e) {}
-  cuViewApply();
-  cuTweakSyncPanel();
-}
-function cuTweakSyncPanel() {
-  const pop = document.getElementById('cu-view-pop'); if (!pop) return;
-  const vals = { badgeStyle: CU_VIEW.badgeStyle, emptyLabel: CU_VIEW.emptyLabel };
-  pop.querySelectorAll('.ovp-seg').forEach(seg => {
-    const k = seg.getAttribute('data-tw');
-    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === vals[k]));
-  });
-}
-function cuTweakToggle() {
-  const pop = document.getElementById('cu-view-pop'); if (!pop) return;
-  if (pop.hidden) { pop.hidden = false; cuTweakSyncPanel(); setTimeout(() => document.addEventListener('mousedown', cuTweakOutside), 0); }
-  else { cuTweakClose(); }
-}
-function cuTweakClose() {
-  const pop = document.getElementById('cu-view-pop'); if (pop) pop.hidden = true;
-  document.removeEventListener('mousedown', cuTweakOutside);
-}
-function cuTweakOutside(e) {
-  const w = e.target.closest && e.target.closest('.ovp-wrap');
-  if (!w) cuTweakClose();
 }
 
 function cuFmtDate(iso) {

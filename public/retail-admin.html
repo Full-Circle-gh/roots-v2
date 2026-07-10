@@ -2041,15 +2041,13 @@
          those names meant the old cascade repainted this page. A fresh prefix
          nothing else can reach is the whole point of building it from scratch. */
 
-      /* Head — title, then Refresh / View / New customer. */
+      /* Head — title, then New customer. */
       #tab-customers .cul-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
       #tab-customers .cul-head h2 {
         margin: 0; font-family: var(--f-sans); font-weight: 500; font-size: 24px;
         letter-spacing: -.01em; color: var(--text-1); text-transform: none;
       }
       #tab-customers .cul-head .sp { flex: 1; }
-      #tab-customers .cul-head .btn-icon { padding: 8px 10px; }
-      #tab-customers .cul-head .btn-icon svg { width: 16px; height: 16px; margin: 0; }
 
       /* Stat strip — slim cards. Blocked hides itself at zero (an empty state
          shouldn't own a card) and only turns amber when it's real. */
@@ -2155,22 +2153,8 @@
       #cu-table td.cul-last { color: var(--text-2); font-size: 13px; white-space: nowrap; text-align: right; }
       #cu-table td.muted[colspan] { padding: 30px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
 
-      /* ── Customers list · per-operator View tweaks ──────────────────────
-         Classes live on #cu-table (they persist across tbody re-renders); the
-         row template adds .cul-empty so the empty label flips with no re-render.
-         The old "recent login" row tint is gone — the Last seen column already
-         says "Today", so tinting the row said it twice and left the table
-         blotchy. */
-      #cu-table.cb-square .cul-pill:not(.blocked) { border-radius: 4px; padding: 3px 9px; }
-      #cu-table.cb-underline .cul-pill:not(.blocked) {
-        background: none; border: 0; border-radius: 0;
-        border-bottom: 1.5px solid var(--line-strong);
-        padding: 0 0 1px; color: var(--text-2);
-      }
+      /* A customer who signed in but never set a name. */
       #cu-table .cul-empty { color: var(--text-3); }
-      #cu-table.ce-dash   .cul-empty::after { content: '—'; }
-      #cu-table.ce-noname .cul-empty::after { content: 'No name yet'; }
-      #cu-table.ce-guest  .cul-empty::after { content: 'Guest'; }
 
       /* Narrow desktop / tablet: the strip stacks before the table scrolls. */
       @media (max-width: 900px) {
@@ -2461,40 +2445,13 @@
 
     <!-- LIST VIEW (always visible; detail opens as a side-drawer overlay) -->
     <div>
-      <!-- Head — the title, then the three things an operator does from here. -->
+      <!-- Head — the title and the one thing an operator does from here.
+           Refresh is gone: the roster loads on open and reloads itself after
+           every write. The View pop-over (tier-badge shape, empty-value label)
+           is gone too — per-operator chrome nobody asked for. -->
       <div class="cul-head">
         <h2>Customers · 顾客</h2>
         <span class="sp"></span>
-        <button class="btn btn-icon" onclick="cuLoad(); cuLoadKpis(true)" title="Refresh · 刷新" aria-label="Refresh">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
-        </button>
-        <!-- View options (tweaks) — tier badge, recent-login highlight, empty
-             values. Per-operator, persisted to localStorage. -->
-        <div class="ovp-wrap">
-          <button class="btn" id="cu-view-btn" onclick="cuTweakToggle()" aria-haspopup="true" title="Display options · 显示选项">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-            View · 视图
-          </button>
-          <div id="cu-view-pop" class="ovp" hidden>
-            <div class="ovp-head">Display options · 显示选项</div>
-            <div class="ovp-group">
-              <div class="ovp-label">Tier badge · 等级标签</div>
-              <div class="ovp-seg" data-tw="badgeStyle">
-                <button data-v="pill"      onclick="cuTweakSet('badgeStyle','pill')">Pill · 胶囊</button>
-                <button data-v="square"    onclick="cuTweakSet('badgeStyle','square')">Square · 方形</button>
-                <button data-v="underline" onclick="cuTweakSet('badgeStyle','underline')">Underline · 下划线</button>
-              </div>
-            </div>
-            <div class="ovp-group">
-              <div class="ovp-label">Empty values · 空值</div>
-              <div class="ovp-seg" data-tw="emptyLabel">
-                <button data-v="dash"   onclick="cuTweakSet('emptyLabel','dash')">— · 横线</button>
-                <button data-v="noname" onclick="cuTweakSet('emptyLabel','noname')">No name yet · 暂无姓名</button>
-                <button data-v="guest"  onclick="cuTweakSet('emptyLabel','guest')">Guest · 访客</button>
-              </div>
-            </div>
-          </div>
-        </div>
         <button class="btn btn-primary" onclick="cuOpenCreate()" title="Add a walk-in / phone-order customer · 添加到店或电话下单的顾客">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New customer · 新增顾客
