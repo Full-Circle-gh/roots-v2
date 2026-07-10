@@ -1682,7 +1682,7 @@
     </select>
 
     <div class="row" style="margin-bottom: var(--s4)">
-      <select id="orders-store" onchange="loadOrders()">
+      <select id="orders-store" onchange="ordFilterChanged()">
         <option value="">All stores · 全部门店</option>
       </select>
       <input type="text" id="orders-q" oninput="debouncedLoadOrders()" data-ph-en="Search order #, name, phone…" data-ph-cn="搜索订单号、姓名、电话…" placeholder="Search order #, name, phone…" style="flex: 1; min-width: 220px">
@@ -2012,6 +2012,14 @@
          Built to match design bundle: mobile/orders-a.html + fc-mobile.css. -->
     <!-- Variant B blend — phone-only Sort toolbar (raises a bottom sheet). -->
     <div id="rm-orders-cards" aria-live="polite"></div>
+
+    <!-- Pager mount. Painted by the shared rmRenderPager() (01-core.js) on
+         every loadOrders(). Sits AFTER the phone card list so it lands under
+         the rows in both layouts (the desktop table above it is display:none
+         on phones, the cards are display:none on desktop).
+         Before this existed the orders table simply stopped at the server's
+         default 100 rows with nothing on screen saying so. -->
+    <div id="ord-pager"></div>
   </section>
 
   <!-- ─── CUSTOMERS ─── -->
@@ -2581,13 +2589,10 @@
            Built to match design bundle: mobile/customers-a.html + fc-cust.css. -->
       <div id="rm-cu-cards" aria-live="polite"></div>
 
-      <div class="row" id="cu-pager" style="margin-top: var(--s3); justify-content: space-between;">
-        <div class="muted" id="cu-total" style="font-size: 12px;"></div>
-        <div class="row" style="gap: 8px;">
-          <button class="btn btn-sm" onclick="cuPage(-1)" id="cu-prev">‹ Prev</button>
-          <button class="btn btn-sm" onclick="cuPage(1)"  id="cu-next">Next · 下一页 ›</button>
-        </div>
-      </div>
+      <!-- Pager mount. Painted by the shared rmRenderPager() (01-core.js) on
+           every cuLoad(); empty until the first load, and empty again whenever
+           no customer matches — the empty state owns the screen then. -->
+      <div id="cu-pager" style="margin-top: var(--s3);"></div>
     </div>
 
     <!-- (Customer detail drawer lives at the global level, alongside #order-drawer) -->

@@ -6813,8 +6813,10 @@
   #rm-cu-cards { display: none; }
   #cu-mob-tiers { display: none; }
   @media (max-width: 720px) {
-    /* Hide the desktop table, pager and the whole filter/search toolbar on
-       phones — the search row and tier chips aren't wanted in the mobile view. */
+    /* Hide the desktop table and the whole filter/search toolbar on phones —
+       the search row and tier chips aren't wanted in the mobile view.
+       The PAGER stays: it stacks (see .t-pager's own phone rules). Hiding it
+       here used to strand phone operators on page 1 of the roster. */
     #tab-customers .table-wrap { display: none; }
     #cu-pager { display: none; }
     #cu-toolbar { display: none; }
@@ -9023,4 +9025,89 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
   body.pos-warehouse #rm-dash,
   body.pos-customer-service #rm-dash,
   body.pos-dispatch #rm-dash { display: none; }
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SHARED PAGER — Orders · Customers  (markup: rmRenderPager, 01-core.js)
+   Built to the Tacet system on the existing --td-* tokens, so it swaps
+   with the light/dark theme like every other Tacet surface.
+
+   The one rule worth stating out loud: there is NO Dusk in this bar.
+   Dusk (#6E67AF) means "Tacet did this for you" — automation. Turning a
+   page is the operator's own hand, so every control is a Secondary
+   button: transparent fill, 1px border, ink text. The only Dusk allowed
+   near a pager is the focus ring, which is a system affordance.
+   ════════════════════════════════════════════════════════════════════ */
+.t-pager {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 24px; padding: 16px;
+  background: var(--td-raised);
+  border-top: 1px solid var(--td-border);
+  border-radius: 0 0 8px 8px;
+  /* Inter, stated outright rather than inherited. The Tacet skin scope
+     (#tacet-orders-skin) covers #tab-orders but NOT #tab-customers, so a
+     pager that leaned on the ambient --f-sans would render in Inter under
+     Orders and IBM Plex under Customers — the same component, two faces.
+     Tacet is Inter for all product UI; the component carries it itself. */
+  font-family: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+}
+.t-pager-count {
+  font-size: 13px; color: var(--td-text2); white-space: nowrap;
+}
+.t-pager-count b {
+  color: var(--td-text); font-weight: 500;
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+}
+.t-pager-right { display: flex; align-items: center; gap: 24px; }
+.t-pager-nav   { display: flex; align-items: center; gap: 8px; }
+.t-pager-pos {
+  font-size: 13px; color: var(--td-text2);
+  font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+  min-width: 58px; text-align: center; white-space: nowrap;
+}
+
+.t-pager-btn {
+  font-family: inherit; font-size: 13px; font-weight: 500;
+  color: var(--td-text); background: transparent;
+  border: 1px solid var(--td-border); border-radius: 8px;
+  padding: 7px 14px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: border-color 200ms cubic-bezier(.16, 1, .3, 1);
+}
+.t-pager-btn:hover:not(:disabled) { border-color: var(--td-text2); }
+.t-pager-btn:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+.t-pager-btn:disabled { opacity: .35; cursor: not-allowed; }
+.t-pager-btn svg {
+  width: 13px; height: 13px; flex: none;
+  stroke: currentColor; fill: none;
+}
+
+.t-pager-size {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--td-text2); white-space: nowrap;
+}
+.t-pager-size select {
+  font-family: inherit; font-size: 13px; color: var(--td-text);
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: 8px; padding: 6px 8px; cursor: pointer;
+  transition: border-color 200ms cubic-bezier(.16, 1, .3, 1);
+}
+.t-pager-size select:focus { outline: none; border-color: var(--td-dusk); }
+
+/* Phone (≤720px) — the pager STAYS. It stacks: count on its own line, then
+   full-width Prev/Next targets. The page-size selector drops away, because
+   50 is right for a card list and a choice nobody makes is clutter.
+   (Before this, #cu-pager was display:none here — which stranded phone
+   operators on page 1 of the customer list forever.) */
+@media (max-width: 720px) {
+  .t-pager { flex-direction: column; align-items: stretch; gap: 12px; }
+  .t-pager-count { text-align: center; white-space: normal; }
+  .t-pager-right { justify-content: space-between; gap: 12px; }
+  .t-pager-size  { display: none; }
+  .t-pager-nav   { flex: 1; justify-content: space-between; }
+  .t-pager-btn   { flex: 1; justify-content: center; padding: 10px 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .t-pager-btn, .t-pager-size select { transition: none; }
 }

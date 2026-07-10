@@ -1280,3 +1280,85 @@ function retailLiveConnect() {
   // On error EventSource reconnects by itself. Keep the handle so we never
   // stack sockets; dropping it here would let the next subscribe open a second.
 }
+
+// ── Shared pager (Orders · Customers) ──────────────────────────────────
+// One renderer so the paged lists cannot drift apart. Built to the Tacet
+// system: every control is a Secondary button (transparent, 1px border, ink
+// text). Deliberately NO Dusk anywhere in this bar — Dusk means "Tacet did
+// this for you", and turning a page is the operator's own hand, not
+// automation. Styling lives in retail-admin.css under `.t-pager`.
+//
+// EN/CN ride as separate data-lang-block spans (never glued into one string),
+// so the language toggle swaps them without a re-render.
+const PAGER_ICON_PREV = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+const PAGER_ICON_NEXT = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>';
+
+function _pagerNum(n) { return Number(n || 0).toLocaleString('en-US'); }
+function _pagerLang(en, cn) {
+  return `<span data-lang-block="en">${en}</span><span data-lang-block="cn">${cn}</span>`;
+}
+
+// mount   — the container element (or its id)
+// o.page / o.pageSize / o.total — current window
+// o.sizes — page-size choices, e.g. [50,100,200]; omit to hide the selector
+// o.onPage(nextPage) / o.onSize(nextSize) — callbacks; the caller reloads
+// o.noun  — {en, cn} plural noun for the single-page line ("orders" / "订单")
+function rmRenderPager(mount, o) {
+  const el = (typeof mount === 'string') ? document.getElementById(mount) : mount;
+  if (!el) return;
+  const total = Math.max(0, Number(o.total || 0));
+  const size  = Math.max(1, Number(o.pageSize || 50));
+
+  // Nothing matched — the empty state speaks for the screen; a pager reading
+  // "0 of 0" beside it would just be noise.
+  if (!total) { el.innerHTML = ''; return; }
+
+  const pages = Math.max(1, Math.ceil(total / size));
+  const page  = Math.min(pages, Math.max(1, Number(o.page || 1)));
+  const from  = (page - 1) * size + 1;
+  const to    = Math.min(total, page * size);
+
+  const sizeSel = (o.sizes && o.sizes.length) ? `
+    <label class="t-pager-size">
+      ${_pagerLang('Per page', '每页')}
+      <select data-pager-size>
+        ${o.sizes.map(v => `<option value="${v}"${Number(v) === size ? ' selected' : ''}>${v}</option>`).join('')}
+      </select>
+    </label>` : '';
+
+  // One page of results → the count stands alone. A pager showing "1 / 1"
+  // between two dead buttons tells the operator nothing they can act on.
+  const nav = (pages <= 1) ? '' : `
+    <div class="t-pager-nav">
+      <button type="button" class="t-pager-btn" data-pager-prev ${page <= 1 ? 'disabled' : ''}>
+        ${PAGER_ICON_PREV}${_pagerLang('Prev', '上一页')}
+      </button>
+      <span class="t-pager-pos">${page} / ${pages}</span>
+      <button type="button" class="t-pager-btn" data-pager-next ${page >= pages ? 'disabled' : ''}>
+        ${_pagerLang('Next', '下一页')}${PAGER_ICON_NEXT}
+      </button>
+    </div>`;
+
+  const nEn = (o.noun && o.noun.en) || 'results';
+  const nCn = (o.noun && o.noun.cn) || '条';
+  const count = (pages <= 1)
+    ? _pagerLang(`Showing all <b>${_pagerNum(total)}</b> ${nEn}`,
+                 `共 <b>${_pagerNum(total)}</b> ${nCn}`)
+    : _pagerLang(`Showing <b>${_pagerNum(from)}–${_pagerNum(to)}</b> of <b>${_pagerNum(total)}</b>`,
+                 `显示 <b>${_pagerNum(from)}–${_pagerNum(to)}</b> / 共 <b>${_pagerNum(total)}</b>`);
+
+  el.innerHTML = `
+    <div class="t-pager">
+      <span class="t-pager-count">${count}</span>
+      <div class="t-pager-right">${sizeSel}${nav}</div>
+    </div>`;
+
+  const prev = el.querySelector('[data-pager-prev]');
+  const next = el.querySelector('[data-pager-next]');
+  const sel  = el.querySelector('[data-pager-size]');
+  if (prev) prev.onclick = () => { if (page > 1) o.onPage(page - 1); };
+  if (next) next.onclick = () => { if (page < pages) o.onPage(page + 1); };
+  // Changing page size re-anchors to page 1 — the operator's old offset means
+  // nothing once the window resizes under it.
+  if (sel)  sel.onchange = () => o.onSize(parseInt(sel.value, 10));
+}

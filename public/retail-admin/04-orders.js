@@ -8,11 +8,60 @@
 // ════════════════════════════════════════════════════════════════
 // ORDERS
 // ════════════════════════════════════════════════════════════════
+// ── Paging ─────────────────────────────────────────────────────────────
+// The list is server-paged (LIMIT/OFFSET). Before this existed it asked for
+// no limit, silently got the server's default 100 newest rows, and every
+// older order was unreachable from this screen.
+//
+// ORD_PAGE survives an ordinary loadOrders() on purpose: most of the ~30
+// callers are "I just changed an order, repaint the list", and yanking the
+// operator back to page 1 mid-scan would be worse than the bug we fixed.
+// Only a genuine filter change resets it — see ordFilterChanged().
+let ORD_PAGE = 1;
+let ORD_PAGE_SIZE = 50;
+let ORD_TOTAL = 0;
+let _ordClampRetry = false;   // guards the one refetch when a page falls off the end
+
+// A filter re-cuts the result set, so the current page number no longer
+// points at the same orders. Start over at page 1.
+function ordFilterChanged() {
+  ORD_PAGE = 1;
+  loadOrders();
+}
+
+// The pager under the orders table (and under the phone card list — same
+// mount, it sits after both). Shared renderer, see rmRenderPager in 01-core.js.
+function ordRenderPager() {
+  rmRenderPager('ord-pager', {
+    page: ORD_PAGE, pageSize: ORD_PAGE_SIZE, total: ORD_TOTAL,
+    sizes: [50, 100, 200],
+    noun: { en: 'orders', cn: '个订单' },
+    onPage: p => {
+      ORD_PAGE = p;
+      // A new page is a new set of rows: clear the arrival baseline so the
+      // incoming orders don't all flash "NEW" and fire the chime at once.
+      _ORDERS_SEEN_IDS = null;
+      _ORDERS_NOTIFIED_IDS = null;
+      _ORDERS_LAST_FP = null;
+      loadOrders();
+      // The operator clicked a pager at the bottom of a long list — put the top
+      // of the new page under their eyes instead of leaving them at the foot.
+      // Scroll to whichever list is actually on screen: the table is
+      // display:none on phones, and scrollIntoView on a hidden node does nothing.
+      const tbl   = document.getElementById('orders-table');
+      const cards = document.getElementById('rm-orders-cards');
+      const target = (cards && cards.offsetParent) ? cards : tbl;
+      if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    },
+    onSize: s => { ORD_PAGE_SIZE = s; ORD_PAGE = 1; _ORDERS_LAST_FP = null; loadOrders(); },
+  });
+}
+
 function setOrderStatus(chip) {
   const value = chip.dataset.status || '';
   $('#orders-status').value = value;
   $$('#orders-status-chips .status-chip').forEach(el => el.classList.toggle('active', el === chip));
-  loadOrders();
+  ordFilterChanged();
 }
 // Channel facet — orthogonal to status. Filters the combined list by origin
 // (mini app / web / Meituan); '' = all channels.
@@ -21,7 +70,7 @@ function setOrderChannel(chip) {
   const hid = document.getElementById('orders-channel');
   if (hid) hid.value = value;
   $$('#orders-channel-chips .status-chip').forEach(el => el.classList.toggle('active', el === chip));
-  loadOrders();
+  ordFilterChanged();
 }
 // Which non-storefront channels are shown read-only in the combined list — the
 // storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For
@@ -146,7 +195,7 @@ window.ordCustomerLines = ordCustomerLines;
 let _ordersSearchTimer = null;
 function debouncedLoadOrders() {
   clearTimeout(_ordersSearchTimer);
-  _ordersSearchTimer = setTimeout(loadOrders, 350);
+  _ordersSearchTimer = setTimeout(ordFilterChanged, 350);   // a new search starts at page 1
 }
 
 // ── Auto-refresh state ─────────────────────────────────────────────────
@@ -842,6 +891,11 @@ async function loadOrders(opts = {}) {
     if (channel) qs.set('channel', channel);
     if (q)       qs.set('q', q);
     if (storeId) qs.set('store_id', storeId);
+    // The page window. Sending these is what makes orders past the first 100
+    // reachable at all — the server was already honouring limit/offset, the
+    // list just never asked for a second page.
+    qs.set('limit',  ORD_PAGE_SIZE);
+    qs.set('offset', (ORD_PAGE - 1) * ORD_PAGE_SIZE);
     const tbody = $('#orders-table tbody');
     if (!silent) {
       tbody.innerHTML = '<tr><td colspan="10" class="muted">Loading…</td></tr>';
@@ -869,6 +923,21 @@ async function loadOrders(opts = {}) {
     // top. Drop on the floor.
     if (myReq !== _ORDERS_REQ_ID) return;
 
+    ORD_TOTAL = Number(j.meta && j.meta.total) || 0;
+
+    // The page can fall off the end of the list under the operator: cancel the
+    // last order on page 26, or let a status filter's queue drain while it's
+    // open, and offset now points past the final row. Snap to the last real
+    // page and refetch once, rather than painting a blank table.
+    const ordPages = Math.max(1, Math.ceil(ORD_TOTAL / ORD_PAGE_SIZE));
+    if (ORD_PAGE > ordPages && !_ordClampRetry) {
+      ORD_PAGE = ordPages;
+      _ordClampRetry = true;
+      _ORDERS_IN_FLIGHT = false;   // release before recursing, or the silent guard bails
+      try { return await loadOrders(opts); }
+      finally { _ordClampRetry = false; }
+    }
+
     // Reset FP store when the filter changes — different filter, different
     // baseline. Also reset the seen-id set so we don't fake-flash rows that
     // just came into view from a filter switch.
@@ -879,6 +948,12 @@ async function loadOrders(opts = {}) {
       _ORDERS_SEEN_IDS = null;
       _ORDERS_NOTIFIED_IDS = null;
     }
+
+    // Paint the pager before the fingerprint gate below. The fingerprint only
+    // covers the rows on THIS page, so an order leaving the filter from some
+    // other page would change the total while the rows stay identical — the
+    // count would silently rot behind an early return.
+    ordRenderPager();
 
     const fp = _ordersFp(j.data);
     if (silent && fp === _ORDERS_LAST_FP && tbody.querySelector('tr.order-row, .empty-state')) {
@@ -2199,7 +2274,7 @@ async function ensureOrdersStoreFilter() {
     sel.innerHTML = '<option value="">All stores · 全部门店</option>' +
       stores.map(s => `<option value="${s.id}">${escapeHtml(s.name_en || s.code)}</option>`).join('');
     if (prev) sel.value = prev;
-    // Change handler is now an inline onchange="loadOrders()" on the element.
+    // Change handler is an inline onchange="ordFilterChanged()" on the element.
     ORDERS_STORE_FILTER_LOADED = true;
   } catch (e) { /* silent — filter just stays minimal */ }
 }
@@ -2756,7 +2831,7 @@ function renderShipmentCard(o, s) {
       ${renderItemsTable(s.items, false)}
       ${actions}
       ${mode === 'local'
-        ? (!['dispatched', 'delivered'].includes(s.state || 'pending') && ['paid', 'preparing'].includes(o.status) ? renderLocalEtaCard(o, s) : '')
+        ? (!['dispatched', 'delivered'].includes(s.state || 'pending') && ['paid', 'preparing'].includes(o.status) && !courierCardHoisted(o, s) ? renderLocalEtaCard(o, s) : '')
         : ''}
       ${(mode === 'land' && o.gz_method_toggle)
         ? (!['dispatched', 'delivered'].includes(s.state || 'pending') && ['paid', 'preparing'].includes(o.status) ? renderShipmentTrackingCard(o, s) : '')
@@ -2777,6 +2852,21 @@ function renderShipmentCard(o, s) {
 // Carrier parcels hoist their tracking card; local (Guangzhou same-city) parcels
 // hoist their ETA card. Multi-parcel orders stack one card per shipped parcel,
 // each labelled. Returns '' when nothing is shipped yet.
+// A rider booked on a same-city parcel — still being found, or already on the way
+// — is the live thing the operator watches, even while staff haven't marked the
+// parcel dispatched yet. In that state the courier card (rider, map, ETA) hoists
+// to the top of the drawer instead of sitting buried under the items table, and
+// the inline copy inside the shipment card is dropped so it isn't rendered twice.
+// Only the FIRST local parcel takes it: o.courier is one job for the whole order
+// and its card carries order-scoped DOM ids (the map mount, the carrier list).
+function courierCardHoisted(o, s) {
+  if ((s.mode || 'local') !== 'local') return false;
+  if (['dispatched', 'delivered'].includes(s.state || 'pending')) return false;
+  if (!['awaiting_dispatch', 'in_transit'].includes(o.courier?.stage)) return false;
+  const all = o.shipments || [];
+  return all.findIndex(x => (x.mode || 'local') === 'local') === all.indexOf(s);
+}
+
 function hoistedTracking(o) {
   const all = o.shipments || [];
   const multi = all.length > 1;
@@ -2785,7 +2875,7 @@ function hoistedTracking(o) {
     // Supplier parcels render their own tracking card inline (always visible,
     // even before "dispatch"), so they're never hoisted here.
     if (mode === 'supplier') return '';
-    if (!['dispatched', 'delivered'].includes(s.state || 'pending')) return '';
+    if (!['dispatched', 'delivered'].includes(s.state || 'pending') && !courierCardHoisted(o, s)) return '';
     // Fold the shipping mode into the parcel label so it's self-identifying —
     // "Parcel 2 · Land" tells the two parcels apart (air is faster + drives the
     // perishable-delay warning) far better than a bare number. cuT single-lang

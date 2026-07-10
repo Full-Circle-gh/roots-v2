@@ -16935,22 +16935,28 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
           LEFT JOIN retail_customers c ON c.id = o.customer_id
           LEFT JOIN retail_stores    s ON s.id = o.store_id
           LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
-              WHERE 1=1`;
+              `;
+  // The filter clause is built once and reused by BOTH the page query and the
+  // COUNT that feeds the list's pager, so the two can never disagree about
+  // which orders match. Anything appended here must be expressible against
+  // `retail_orders o LEFT JOIN retail_customers c` alone — that pair is all
+  // the COUNT below joins.
+  let filterSql = 'WHERE 1=1';
   const params = [];
   // Channel facet. Meituan mirror rows (see routes/meituan-internal.js) now ride
   // this combined list read-only instead of being excluded; an explicit
   // ?channel narrows to one. Mini-app orders carry the 'wechat' default.
-  if (channel) { sql += ` AND COALESCE(NULLIF(o.channel,''),'wechat') = ?`; params.push(channel); }
+  if (channel) { filterSql += ` AND COALESCE(NULLIF(o.channel,''),'wechat') = ?`; params.push(channel); }
   // `refunds_open` is a pseudo-status that pulls every order currently in
   // the refund pipeline regardless of primary status — so open requests
   // are reachable from the main orders table, not only the chip view.
   if (status === 'refunds_open') {
-    sql += " AND o.refund_status IN ('pending','reviewing','approved')";
+    filterSql += " AND o.refund_status IN ('pending','reviewing','approved')";
   } else if (status === 'needs_invoice') {
     // Pseudo-status: every order carrying a fapiao request, whatever its
     // primary status. Dead orders drop out (a cancelled order owes no fapiao);
     // issued ones stay browsable in this view but sort below the open work.
-    sql += ` AND o.needs_invoice = 1
+    filterSql += ` AND o.needs_invoice = 1
              AND o.status NOT IN ('cancelled','pending_payment')`;
   } else if (status === 'paid') {
     // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
@@ -16960,7 +16966,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     // is out, so the leftover parcel can't be forgotten. It still appears in the
     // Dispatched tab too — same order, two worklists. The EXISTS matches a parcel
     // that is NOT delivered, NOT in transit and NOT even dispatched = still owed.
-    sql += ` AND (o.status = 'paid' OR (o.status = 'dispatched' AND EXISTS (
+    filterSql += ` AND (o.status = 'paid' OR (o.status = 'dispatched' AND EXISTS (
                SELECT 1 FROM retail_shipments shx
                 WHERE shx.order_id = o.id
                   AND shx.delivered_at IS NULL
@@ -16968,15 +16974,27 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                   AND shx.dispatched_at IS NULL
                   AND COALESCE(shx.tracking_number,'') = '')))`;
   } else if (status) {
-    sql += ' AND o.status = ?'; params.push(status);
+    filterSql += ' AND o.status = ?'; params.push(status);
   }
-  if (store_id) { sql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
+  if (store_id) { filterSql += ' AND o.store_id = ?'; params.push(parseInt(store_id, 10)); }
   if (q) {
-    sql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
+    filterSql += ' AND (o.order_no LIKE ? OR o.recipient_name LIKE ? OR o.recipient_phone LIKE ? OR c.nickname LIKE ?)';
     const s = `%${q}%`; params.push(s, s, s, s);
   }
-  if (from) { sql += ' AND o.placed_at >= ?'; params.push(from); }
-  if (to)   { sql += ' AND o.placed_at <= ?'; params.push(to); }
+  if (from) { filterSql += ' AND o.placed_at >= ?'; params.push(from); }
+  if (to)   { filterSql += ' AND o.placed_at <= ?'; params.push(to); }
+
+  // How many orders match, ignoring the page window. Without this the list
+  // silently truncated at `limit` with nothing on screen saying so — orders
+  // past the first page simply could not be reached.
+  const total = tdb().prepare(
+    `SELECT COUNT(*) AS n
+       FROM retail_orders o
+  LEFT JOIN retail_customers c ON c.id = o.customer_id
+       ${filterSql}`
+  ).get(...params).n;
+
+  sql += filterSql;
   // The Needs-invoice view is a work queue: un-issued requests first (oldest
   // debt at the very top), issued history below. Everything else stays newest-first.
   sql += (status === 'needs_invoice')
