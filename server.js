@@ -226,7 +226,7 @@ app.get('/pos-manifest.webmanifest', (req, res) => {
 });
 
 // Favicon — browsers request these at the site root. Served from public/.
-['favicon.ico','favicon.svg','favicon-32.png','apple-touch-icon.png'].forEach(name => {
+['favicon.ico','favicon.svg','favicon-32.png','apple-touch-icon.png','tacet-favicon.svg'].forEach(name => {
   app.get('/' + name, (req, res) => {
     res.set('Cache-Control', 'public, max-age=604800');
     res.sendFile(path.join(__dirname, 'public', name));
