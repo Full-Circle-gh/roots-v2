@@ -231,24 +231,10 @@ function refundBadge(o) {
   return `<span class="pill refund-pending" title="Open refund · 退款进行中 (${rs})">↩ ${label}</span>`;
 }
 
-const ICON_INV_OWED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><line x1="8" y1="9" x2="16" y2="9"/></svg>';
-const ICON_INV_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><polyline points="8 12 11 15 16 9"/></svg>';
-
-// Fapiao sub-line — sits under the status pill on every row that carries an
-// invoice request (the retired Invoices tab's queue is now the "Invoice" chip).
-// Brass while the invoice is still owed, muted once it has been issued, so the
-// list can tell "never asked" apart from "asked and done" without opening a
-// drawer. A row with no request renders nothing.
-function invoiceLine(o) {
-  if (!Number(o.needs_invoice)) return '';
-  const issued = o.invoice_status === 'issued';
-  const label = issued ? cuT('Invoice issued', '已开票') : cuT('Invoice to issue', '待开票');
-  const title = issued
-    ? cuT('Invoice issued for this order', '此订单已开票')
-    : cuT('Invoice requested — issue it from the order drawer', '顾客申请开票 — 请在订单详情中开票');
-  return `<div class="ord-inv-line${issued ? '' : ' is-owed'}" title="${escapeAttr(title)}">`
-    + `${issued ? ICON_INV_DONE : ICON_INV_OWED}${label}</div>`;
-}
+// Invoice state does NOT ride the orders table: the Status column belongs to
+// logistics. A fapiao only ever surfaces inside the order drawer, where it
+// climbs to the top while it still needs issuing (see renderOpenOrder) and
+// sinks back down to the details once it is done.
 
 // Full-width summary line under a row in the "Invoice" view — the 抬头 /
 // 税号 / status the accountant batches into the tax system, plus the same
@@ -987,7 +973,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div>${invoiceLine(o)}</td>
+        <td class="status-cell"><div class="stack"><span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>${refundBadge(o)}${addonBadge(o)}</div></td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>${status === 'needs_invoice' ? invoiceSubRow(o) : ''}`;
@@ -3895,6 +3881,12 @@ function renderOpenOrder(o) {
         ${drawerRefundBanner(o)}
         ${renderRefundPanel(o)}
 
+        <!-- Fapiao still owed = work the operator has to do, so it rides at the
+             top where the eye lands. Once issued it is just a record: it drops
+             back into the details grid below and logistics keeps the top. -->
+        ${(o.needs_invoice && o.invoice_status !== 'issued')
+          ? `<div style="margin-bottom: var(--s4);">${renderInvoiceBlock(o)}</div>` : ''}
+
         <!-- Order total — placement is an operator View tweak: a full-width
              hero banner here (default), an inline tile in the info grid, or a
              sticky footer receipt at the bottom. -->
@@ -3942,7 +3934,7 @@ function renderOpenOrder(o) {
           ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
-          ${o.needs_invoice ? renderInvoiceBlock(o) : ''}
+          ${(o.needs_invoice && o.invoice_status === 'issued') ? renderInvoiceBlock(o) : ''}
         </div>
 
         <div class="order-items">
