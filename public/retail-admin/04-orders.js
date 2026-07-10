@@ -172,8 +172,6 @@ let _ORDERS_SEEN_IDS = null;         // null = first-paint baseline not set
 // is when there's actually something to process.
 let _ORDERS_NOTIFIED_IDS = null;     // null = first-paint baseline not set
 let _ORDERS_IN_FLIGHT = false;
-let _ORDERS_LAST_OK_AT = 0;
-let _ORDERS_LIVE_PAUSED = false;
 // Monotonic request token. Every loadOrders call grabs the next id; after
 // its fetch resolves, it renders only if its id still equals the current
 // counter. Otherwise a newer call has started (e.g. user clicked a chip
@@ -857,9 +855,6 @@ async function loadOrders(opts = {}) {
     // top. Drop on the floor.
     if (myReq !== _ORDERS_REQ_ID) return;
 
-    _ORDERS_LAST_OK_AT = Date.now();
-    _paintOrdersLivePill();
-
     // Reset FP store when the filter changes — different filter, different
     // baseline. Also reset the seen-id set so we don't fake-flash rows that
     // just came into view from a filter switch.
@@ -968,13 +963,13 @@ async function loadOrders(opts = {}) {
   }
 }
 
-// ── Poller: live updates without rebuilding the page ───────────────────
-// Skips when: the Orders tab isn't active, the document is hidden, the
-// user is mid-input/select, or the live pill has been paused. Safe to
+// ── Refetch gate ───────────────────────────────────────────────────────
+// Live updates are always on — there is no pause and no indicator. Skips
+// only when the work would be wasted or destructive: the Orders tab isn't
+// active, the document is hidden, or the user is mid-input/select. Safe to
 // call while drawers/modals are open — fingerprint check means we only
 // touch the DOM when something actually changed.
 function _ordersAutoTick() {
-  if (_ORDERS_LIVE_PAUSED) return;
   if (document.hidden) return;
   const tabActive = document.getElementById('tab-orders');
   if (!tabActive || !tabActive.classList.contains('active')) return;
@@ -984,49 +979,14 @@ function _ordersAutoTick() {
   ordLoadKpis();   // throttled (45s) — keeps the today pulse live on the tab
 }
 
-function _paintOrdersLivePill() {
-  // Compact dot indicator next to the Settings gear. Green pulsing
-  // when live, dim/static when paused — no label, the dot IS the
-  // status. Tooltip shows the last-refresh timestamp for users who
-  // want the detail without it cluttering the chrome.
-  const dot = document.getElementById('orders-live-dot');
-  if (!dot) return;
-  dot.classList.toggle('paused', _ORDERS_LIVE_PAUSED);
-  // Built in the active language only — this title is (re)set by JS on every
-  // tick, and JS attribute writes don't fire the i18n MutationObserver, so a
-  // bilingual "EN · CN" string here would never get split and would show both
-  // languages at once. cuT() picks the live language instead.
-  const T = window.cuT || ((en) => en);
-  if (_ORDERS_LIVE_PAUSED) {
-    dot.title = T('Paused — click to resume', '已暂停 — 点击恢复');
-    return;
-  }
-  if (!_ORDERS_LAST_OK_AT) {
-    dot.title = T('Live — click to pause', '实时 — 点击暂停');
-    return;
-  }
-  const age = Math.max(0, Math.round((Date.now() - _ORDERS_LAST_OK_AT) / 1000));
-  const ageStr = age < 5 ? T('just now', '刚刚')
-              : age < 60 ? T(`${age}s ago`, `${age} 秒前`)
-              : T(`${Math.floor(age/60)}m ago`, `${Math.floor(age/60)} 分钟前`);
-  dot.title = T(`Live — last update ${ageStr} — click to pause`,
-                `实时 — 最后更新 ${ageStr} — 点击暂停`);
-}
-
-function toggleOrdersLive() {
-  _ORDERS_LIVE_PAUSED = !_ORDERS_LIVE_PAUSED;
-  _paintOrdersLivePill();
-  if (!_ORDERS_LIVE_PAUSED) _ordersAutoTick();
-}
-
 // Coalesce a burst of live nudges into one refetch. Several rows can land in
 // the same instant (a daemon importing a batch), and the server's watermark
 // tick can fire mid-batch — one fetch a moment later sees all of them.
 let _ORDERS_LIVE_DEBOUNCE = null;
 function _ordersLiveNudge() {
   clearTimeout(_ORDERS_LIVE_DEBOUNCE);
-  // _ordersAutoTick already declines when paused, hidden, off-tab, or the
-  // operator is typing — nothing to guard here.
+  // _ordersAutoTick already declines when hidden, off-tab, or the operator is
+  // typing — nothing to guard here.
   _ORDERS_LIVE_DEBOUNCE = setTimeout(_ordersAutoTick, 400);
 }
 
@@ -1040,8 +1000,6 @@ function _ordersLiveNudge() {
   if (typeof retailLiveSubscribe === 'function') retailLiveSubscribe(_ordersLiveNudge);
   if (_ORDERS_AUTO_TIMER) clearInterval(_ORDERS_AUTO_TIMER);
   _ORDERS_AUTO_TIMER = setInterval(_ordersAutoTick, ORDERS_POLL_MS);
-  // Tick the "Xs ago" label every 5s even between fetches.
-  setInterval(_paintOrdersLivePill, 5000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) _ordersAutoTick(); });
   window.addEventListener('focus', _ordersAutoTick);
   // When the user switches back to the Orders tab, refresh right away AND
