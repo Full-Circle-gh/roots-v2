@@ -8051,6 +8051,66 @@
   .td-cell .v { font-size: 21px; font-weight: 500; color: var(--td-text); font-variant-numeric: tabular-nums; }
   .td-cell .k { font-size: 13px; color: var(--td-text2); margin-top: 3px; }
 
+  /* ── Section summary blocks (td-sec-*) ──
+     One block per section of the admin. The title sits on the paper with a
+     quiet "Open …" link; the card below holds only numbers, split by hairline
+     columns so nothing crowds; the cream footer carries the section's single
+     attention line. Padding is deliberately generous — this surface exists to
+     be read at a glance, not scanned. */
+  .td-sec-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+  .td-sec-head h3 { margin: 0; font-size: 18px; font-weight: 500; letter-spacing: -.01em; color: var(--td-text); }
+  .td-sec-go {
+    margin-left: auto; border: 0; background: none; cursor: pointer;
+    font-family: inherit; font-size: 13px; color: var(--td-text2);
+    padding: 2px 0; transition: color .2s cubic-bezier(.16,1,.3,1);
+  }
+  .td-sec-go:hover { color: var(--td-text); }
+
+  /* The card itself carries no padding — the vitals and the footer own it, so
+     the cream footer can bleed to the card's rounded edges. */
+  #tab-dashboard .card.td-card.td-sec { padding: 0; overflow: hidden; }
+  .td-sec { animation: td-settle .6s cubic-bezier(.16,1,.3,1) .1s both; }
+
+  .td-sec-vitals { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .td-sec-vitals[data-n="2"] { grid-template-columns: repeat(2, 1fr); }
+  .td-sec-vital { padding: 28px 32px 24px; min-width: 0; }
+  .td-sec-vital + .td-sec-vital { border-left: 1px solid var(--td-border); }
+  .td-sec-vital .k { font-size: 13px; color: var(--td-text2); }
+  .td-sec-vital .v {
+    font-size: 34px; font-weight: 500; letter-spacing: -.02em; line-height: 1.35;
+    color: var(--td-text); font-variant-numeric: tabular-nums;
+  }
+  .td-sec-vital .c { font-size: 12.5px; color: var(--td-text2); min-height: 20px; }
+  .td-sec-vital .c .db-delta { font-size: 12.5px; }
+  .td-sec-vital .c .td-rev-note:empty { display: none; }
+
+  /* The one attention line. Amber dot = something waits, sage = all clear.
+     Empty (no data yet) collapses so the card doesn't show a bare strip. */
+  .td-sec-foot {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    background: var(--td-raised); border-top: 1px solid var(--td-border);
+    padding: 13px 32px; font-size: 13.5px; color: var(--td-text2);
+  }
+  .td-sec-foot:empty { display: none; }
+  .td-sec-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--td-amber); flex: none; }
+  .td-sec-dot.is-clear { background: var(--td-sage); }
+  .td-sec-foot .td-sec-link {
+    border: 0; background: none; cursor: pointer; padding: 0;
+    font-family: inherit; font-size: 13.5px; font-weight: 500; color: var(--td-text);
+  }
+  .td-sec-foot .td-sec-link:hover { text-decoration: underline; text-underline-offset: 2px; }
+  .td-sec-foot .td-sec-sep { color: var(--td-border); }
+  /* The live-browsing indicator sits in the Customers footer — it already
+     pushes itself right with margin-left:auto, which we don't want here. */
+  .td-sec-foot .td-live { margin-left: 0; }
+
+  @media (max-width: 720px) {
+    .td-sec-vitals, .td-sec-vitals[data-n="2"] { grid-template-columns: 1fr; }
+    .td-sec-vital { padding: 20px 22px 16px; }
+    .td-sec-vital + .td-sec-vital { border-left: 0; border-top: 1px solid var(--td-border); }
+    .td-sec-foot { padding: 12px 22px; }
+  }
+
   /* Activity strip — clean prose rows: time · sentence · right-aligned amount,
      no icon, first-order pill only. Toggle reveals the full day (scrolls inside
      the card past ~360px so the page below stays reachable). */
@@ -8931,16 +8991,20 @@
    DASHBOARDS BY POSITION — body.pos-<position> is set at boot from
    the operator's role (02-settings-ops bootstrap).
    · warehouse / customer-service / dispatch see NO revenue: the
-     Recap, the Today pulse and the Channels split are removed — the
-     "Needs you" attention cards (filtered per position in
-     03-dashboard tdAttnRender) ARE their dashboard.
+     Recap, the Orders + Customers section blocks and the Channels
+     split are removed — the "Needs you" attention cards (filtered
+     per position in 03-dashboard tdAttnRender) ARE their dashboard.
+     They keep the section block that matches their job: warehouse
+     gets Inventory, dispatch gets Delivery, customer-service gets
+     Delivery (mirroring DASH_POS_CARDS in 03-dashboard.js).
    · On phones those positions keep this same card surface instead of
      the revenue-led mobile variant (#rm-dash).
    · store-manager keeps the full pulse but locked to their store, so
      the tenant-wide Channels square (no store filter) is dropped.
    ════════════════════════════════════════════════════════════════ */
 body.pos-warehouse .td-block[data-block="recap"], body.pos-customer-service .td-block[data-block="recap"], body.pos-dispatch .td-block[data-block="recap"],
-body.pos-warehouse .td-block[data-block="revenue"], body.pos-customer-service .td-block[data-block="revenue"], body.pos-dispatch .td-block[data-block="revenue"],
+body.pos-warehouse .td-block[data-block="orders"], body.pos-customer-service .td-block[data-block="orders"], body.pos-dispatch .td-block[data-block="orders"],
+body.pos-warehouse .td-block[data-block="customers"], body.pos-customer-service .td-block[data-block="customers"], body.pos-dispatch .td-block[data-block="customers"],
 body.pos-warehouse .td-block[data-block="channels"], body.pos-customer-service .td-block[data-block="channels"], body.pos-dispatch .td-block[data-block="channels"],
 body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot,
 /* role-restricted views are fixed — the Arrange control is hidden for them */
@@ -8948,6 +9012,10 @@ body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, b
   display: none;
 }
 body.pos-store-manager .td-block[data-block="channels"] { display: none; }
+/* Each restricted position keeps only the section block it works in. */
+body.pos-dispatch .td-block[data-block="inventory"],
+body.pos-customer-service .td-block[data-block="inventory"],
+body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
 @media (max-width: 720px) {
   body.pos-warehouse #tab-dashboard .td-wrap,
   body.pos-customer-service #tab-dashboard .td-wrap,

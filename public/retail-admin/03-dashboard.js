@@ -521,6 +521,9 @@ function dashHeroTodayRepaint() {
       note.textContent = cuT(`vs a typical ${EN}`, `对比平常的${CN}`);
     } else { note.textContent = ''; }
   }
+  // The Orders / Customers section vitals this payload also feeds (avg order
+  // value, visitors, visits, conversion) — language-aware, so they repaint here.
+  if (typeof tdSecPaint === 'function') tdSecPaint();
 }
 // Integer when whole, else one decimal — keeps "/day" averages readable.
 function dashTrim(n) {
@@ -961,12 +964,13 @@ function tdInit() {
   tdDateRender();
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (greeting, date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); dashStockDrawerRender(); });
+  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashStockDrawerRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
+  tdSecCountsLoad();
   if (!TD._opsTimer) {
-    TD._opsTimer = setInterval(() => { if (!document.hidden) tdOpsLoad(); }, 60000);
+    TD._opsTimer = setInterval(() => { if (!document.hidden) { tdOpsLoad(); tdSecCountsLoad(); } }, 60000);
   }
   // Restore the operator's saved card arrangement, wire drag, and paint the
   // language-aware Arrange chrome. Repaint the chrome + tray on a language flip.
@@ -984,14 +988,21 @@ function tdInit() {
 // Products view tweaks). The dynamic #td-attn card grid keeps rebuilding
 // inside its block untouched, so live updates survive any arrangement.
 // ════════════════════════════════════════════════════════════════
-const DASH_LAYOUT_KEY = 'retail-admin-dash-layout';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'revenue', 'channels'];
+// Key bumped to -v2 when the dashboard became section blocks: a saved order
+// from before names a "revenue" block that no longer exists, and would strand
+// the four new blocks at the tail. A fresh key hands everyone the new default
+// once; their own arrangement then re-saves over it.
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v2';
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'customers', 'inventory', 'delivery', 'channels'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
-  recap:    ['While you were away', '您不在的这段时间'],
-  needs:    ['Needs you', '需要您处理'],
-  revenue:  ['Revenue', '营业额'],
-  channels: ['Channels today', '今日渠道'],
+  recap:     ['While you were away', '您不在的这段时间'],
+  needs:     ['Needs you', '需要您处理'],
+  orders:    ['Orders', '订单'],
+  customers: ['Customers', '客户'],
+  inventory: ['Inventory', '库存'],
+  delivery:  ['Delivery', '配送'],
+  channels:  ['Channels today', '今日渠道'],
 };
 let DASH_ARRANGING = false;
 let _dashDragBlock = null;
@@ -1505,8 +1516,117 @@ async function tdOpsLoad() {
       TD.stockOps = null;
     }
     tdAttnRender();
+    tdSecPaint();
   } catch (e) {
     if (!DASH_OPS) dashBootRetry('ops', tdOpsLoad);   // else next 60s tick retries
+  }
+}
+
+// ── Section summary blocks (td-sec-*) ──────────────────────────────────────
+// Each block answers one question about one section of the admin: how is it
+// doing (the vitals) and does it need me (the footer's single attention line).
+// Nothing here fetches the numbers twice — the vitals come from the Today
+// payload dashHeroLoadToday already holds, the stock counts from the same
+// /dashboard/ops snapshot the "Needs you" cards use, and the order queues from
+// one cheap /order-status-counts call (the strip on the Orders page uses it too).
+let TD_SEC_COUNTS = null;
+
+async function tdSecCountsLoad() {
+  try {
+    const j = await api('/api/retail-admin/order-status-counts' + dashStoreQS().replace(/^&/, '?'));
+    TD_SEC_COUNTS = j.data || null;
+    tdSecPaint();
+  } catch (e) { /* silent — the 60s tick retries; the footer just stays quiet */ }
+}
+
+// One text node per attention item, in the order an operator would work them.
+// `href` is a thunk so the deep link runs on click, not at build time.
+function tdSecFootHtml(items) {
+  const live = items.filter(it => it.n > 0);
+  if (!live.length) {
+    return `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Nothing waiting.', '暂无待办。'))}`;
+  }
+  const sep = '<span class="td-sec-sep">·</span>';
+  return `<span class="td-sec-dot"></span>` + live.map(it =>
+    `<button type="button" class="td-sec-link" onclick="${it.go}">${escapeHtml(it.label(it.n))}</button>`
+  ).join(sep);
+}
+
+// Jump to the Orders tab and apply one of its status chips. The chips are
+// static DOM, so no polling — click the tab, then the chip (which reloads the
+// list with the filter). Mirrors dashOpenInvoices, generalised to any status.
+function tdSecOpenOrders(status) {
+  dashJumpTab('orders');
+  const chip = document.querySelector(`#orders-status-chips .status-chip[data-status="${status}"]`);
+  if (chip && typeof setOrderStatus === 'function' && !chip.classList.contains('active')) setOrderStatus(chip);
+}
+
+function tdSecPaint() {
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+
+  // ── Orders + Customers vitals from the Today payload ──
+  // The headline numbers (#db-today-ord / -rev / -new) are owned by
+  // dashHeroLoadToday's count-up; we only fill the ones it doesn't touch.
+  const today = (DASH_HERO && DASH_HERO.todayData) || null;
+  if (today) {
+    const k = today.kpis || {};
+    const aov = Number(k.aov || 0);
+    set('td-sec-aov', aov ? '¥' + (Math.round(aov * 100) / 100).toLocaleString() : '¥—');
+    const visitors = Number(k.visitors || 0);
+    set('td-sec-visitors', visitors
+      ? cuT(`of ${visitors.toLocaleString()} visitors`, `共 ${visitors.toLocaleString()} 访客`)
+      : cuT('no visitors yet', '暂无访客'));
+    set('td-sec-visits', Number(k.visits || 0).toLocaleString());
+    const sessions = Number(k.sessions || 0);
+    set('td-sec-sessions', sessions
+      ? sessions.toLocaleString() + ' ' + cuT('sessions', '会话')
+      : cuT('no data yet', '暂无数据'));
+    set('td-sec-conv', k.conversion_rate == null ? '—' : Number(k.conversion_rate).toFixed(1) + '%');
+  }
+
+  // ── Inventory vitals from the ops snapshot ──
+  const oos = ((DASH_OPS || {}).out_of_stock || {}).count || 0;
+  const low = ((DASH_OPS || {}).low_stock || {}).count || 0;
+  if (DASH_OPS) { set('td-sec-oos', String(oos)); set('td-sec-low', String(low)); }
+
+  // ── Delivery vitals from the order status counts ──
+  const c = TD_SEC_COUNTS || {};
+  if (TD_SEC_COUNTS) {
+    set('td-sec-dispatched', String(Number(c.dispatched || 0)));
+    set('td-sec-riderpickup', String(Number(c.rider_pickup || 0)));
+  }
+
+  // ── The three attention lines ──
+  // Orders: only what an operator clears by hand, in the order they'd do it.
+  const ordersFoot = document.getElementById('td-sec-orders-foot');
+  if (ordersFoot && TD_SEC_COUNTS) {
+    ordersFoot.innerHTML = tdSecFootHtml([
+      { n: Number(c.preparing || 0),        go: "tdSecOpenOrders('preparing')",        label: n => cuT(`${n} preparing`, `${n} 单备货中`) },
+      { n: Number(c.awaiting_restock || 0), go: "tdSecOpenOrders('awaiting_restock')", label: n => cuT(`${n} awaiting restock`, `${n} 单待补货`) },
+      { n: Number(c.refunds_open || 0),     go: "tdSecOpenOrders('refunds_open')",     label: n => cuT(`${n} in the refund queue`, `${n} 单待退款`) },
+      { n: Number(c.needs_invoice || 0),    go: "dashOpenInvoices()",                  label: n => cuT(`${n} ${n === 1 ? 'invoice' : 'invoices'} to issue`, `${n} 张待开票`) },
+    ]);
+  }
+
+  // Inventory: out-of-stock is the emergency; low stock is the nudge. Either
+  // way the line ends on the restock deep link.
+  const invFoot = document.getElementById('td-sec-inventory-foot');
+  if (invFoot && DASH_OPS) {
+    invFoot.innerHTML = (oos + low) === 0
+      ? `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Everything is stocked.', '库存充足。'))}`
+      : `<span class="td-sec-dot"></span>`
+        + (oos ? `<button type="button" class="td-sec-link" onclick="dashStockDrawerOpen(event)">${escapeHtml(cuT(`${oos} out of stock`, `${oos} 项已售罄`))}</button><span class="td-sec-sep">·</span>` : '')
+        + `<button type="button" class="td-sec-link" onclick="dashOpenRestock()">${escapeHtml(cuT('Open restock', '前往补货'))}</button>`;
+  }
+
+  // Delivery: the carrier's own "needs a call" flags — the same signal the
+  // brick attention card raises, said in one line.
+  const delFoot = document.getElementById('td-sec-delivery-foot');
+  if (delFoot && DASH_OPS) {
+    const alerts = ((DASH_OPS.delivery_alerts || {}).count) || 0;
+    delFoot.innerHTML = alerts === 0
+      ? `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Every delivery is on track.', '配送一切正常。'))}`
+      : `<span class="td-sec-dot"></span><button type="button" class="td-sec-link" onclick="tdSecOpenOrders('dispatched')">${escapeHtml(cuT(`${alerts} ${alerts === 1 ? 'delivery needs' : 'deliveries need'} a call`, `${alerts} 单配送需要联系`))}</button>`;
   }
 }
 
@@ -1964,6 +2084,7 @@ function dashRefresh() {
   });
   dashHeroLoadPresence();
   dashHeroLoadToday({ slow: true });
+  tdSecCountsLoad();   // the section footers' queues (preparing, invoices, …)
   dashLoad();
 }
 

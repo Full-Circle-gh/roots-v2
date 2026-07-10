@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Dashboard, section summary blocks (Option A)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET DASHBOARD — full page in the chosen Option A rhythm.
+   One block per section of the app. Each block:
+     · section title on the paper + "Open …" link
+     · one card: three vitals behind hairline columns
+     · cream footer: the attention line (amber dot = something
+       waiting, sage dot = all clear)
+   Tokens per tacet-tokens.css v1.0 — when in doubt, remove something.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --amber-tint:  #F7EEDE;
+  --sage-tint:   #EDF1EC;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- mockup note bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink);
+  color: rgba(251,249,244,0.72);
+  padding: 9px 28px; font-size: 12.5px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5);
+}
+
+/* ---- product topbar (context only) ---- */
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 40px; border-bottom: 1px solid var(--border);
+  background: var(--paper);
+}
+.topbar .wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 19px; letter-spacing: 0.2em; color: var(--ink);
+}
+
+/* ---- page scaffold ---- */
+.page { max-width: 900px; margin: 0 auto; padding: 36px 40px 140px; }
+.page-head { display: flex; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+.page-head h1 { font-size: 22px; font-weight: 500; letter-spacing: -0.01em; }
+.page-head .date { font-size: 13px; color: var(--graphite); }
+
+/* ════════ Option A block ════════ */
+.block { margin-top: 40px; }
+.block-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 14px; }
+.block-head h2 { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
+.block-head .goto {
+  margin-left: auto; font-size: 13px; color: var(--graphite);
+  text-decoration: none; transition: color 200ms var(--ease-settle);
+}
+.block-head .goto:hover { color: var(--ink); }
+
+.card {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r-card); box-shadow: var(--shadow-soft);
+  overflow: hidden;
+}
+.vitals { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+.vital { padding: 30px 36px 26px; }
+.vital + .vital { border-left: 1px solid rgba(228,224,213,0.65); }
+.lbl { font-size: 13px; color: var(--graphite); }
+.val { font-size: 34px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.35; }
+.cmp { font-size: 12.5px; color: var(--graphite); }
+.cmp .down { font-weight: 500; }   /* calm rule: down is never red */
+.cmp .up   { font-weight: 500; color: var(--sage-ink); }
+
+.foot {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  background: var(--cream); padding: 13px 36px;
+  font-size: 13.5px; color: var(--graphite);
+}
+.foot .dot { width: 6px; height: 6px; border-radius: 999px; background: var(--amber); flex: none; }
+.foot .dot.clear { background: var(--sage); }
+.foot a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.foot a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.foot .sep { color: var(--border); }
+
+@media (max-width: 720px) {
+  .page { padding: 24px 16px 96px; }
+  .vitals { grid-template-columns: 1fr; }
+  .vital { padding: 22px 24px 18px; }
+  .vital + .vital { border-left: none; border-top: 1px solid rgba(228,224,213,0.65); }
+  .foot { padding: 12px 24px; }
+}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">Mockup</span>
+  <span>Dashboard — Option A applied to the whole page. One block per section: three vitals, one attention line.</span>
+</div>
+
+<div class="topbar">
+  <span class="wordmark">tacet</span>
+</div>
+
+<div class="page">
+  <div class="page-head">
+    <h1>Dashboard</h1>
+    <span class="date">Friday 10 July</span>
+  </div>
+
+  <!-- ── ORDERS ── -->
+  <section class="block">
+    <div class="block-head">
+      <h2>Orders</h2>
+      <a class="goto" href="#">Open orders ›</a>
+    </div>
+    <div class="card">
+      <div class="vitals">
+        <div class="vital">
+          <div class="lbl">Orders today</div>
+          <div class="val num">3</div>
+          <div class="cmp"><span class="down">▼ 71%</span> vs a typical Friday</div>
+        </div>
+        <div class="vital">
+          <div class="lbl">Revenue today</div>
+          <div class="val num">¥1,107</div>
+          <div class="cmp"><span class="down">▼ 44%</span></div>
+        </div>
+        <div class="vital">
+          <div class="lbl">Avg order value</div>
+          <div class="val num">¥369</div>
+          <div class="cmp">per order</div>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="dot"></span>
+        <a href="#">2 preparing</a><span class="sep">·</span>
+        <a href="#">1 awaiting restock</a><span class="sep">·</span>
+        <a href="#">3 invoices to issue</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CUSTOMERS ── -->
+  <section class="block">
+    <div class="block-head">
+      <h2>Customers</h2>
+      <a class="goto" href="#">Open customers ›</a>
+    </div>
+    <div class="card">
+      <div class="vitals">
+        <div class="vital">
+          <div class="lbl">New customers today</div>
+          <div class="val num">6</div>
+          <div class="cmp">of 212 visitors</div>
+        </div>
+        <div class="vital">
+          <div class="lbl">Returning share</div>
+          <div class="val num">38%</div>
+          <div class="cmp">of today's orders</div>
+        </div>
+        <div class="vital">
+          <div class="lbl">Visits today</div>
+          <div class="val num">341</div>
+          <div class="cmp"><span class="up">▲ 12%</span> vs a typical Friday</div>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="dot clear"></span>
+        Nothing waiting.
+      </div>
+    </div>
+  </section>
+
+  <!-- ── INVENTORY ── -->
+  <section class="block">
+    <div class="block-head">
+      <h2>Inventory</h2>
+      <a class="goto" href="#">Open products ›</a>
+    </div>
+    <div class="card">
+      <div class="vitals">
+        <div class="vital">
+          <div class="lbl">Out of stock</div>
+          <div class="val num">2</div>
+          <div class="cmp">of 143 live products</div>
+        </div>
+        <div class="vital">
+          <div class="lbl">Running low</div>
+          <div class="val num">8</div>
+          <div class="cmp">3 or fewer left</div>
+        </div>
+        <div class="vital">
+          <div class="lbl">Stock pushes today</div>
+          <div class="val num">312</div>
+          <div class="cmp">to Meituan and Guanyi</div>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="dot"></span>
+        <a href="#">2 out of stock</a><span class="sep">·</span>
+        <a href="#">Open restock</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── DELIVERY ── -->
+  <section class="block">
+    <div class="block-head">
+      <h2>Delivery</h2>
+      <a class="goto" href="#">Open orders ›</a>
+    </div>
+    <div class="card">
+      <div class="vitals">
+        <div class="vital">
+          <div class="lbl">Riders out now</div>
+          <div class="val num">1</div>
+          <div class="cmp">order #563, on the way</div>
+        </div>
+        <div class="vital">
+          <div class="lbl">Delivered today</div>
+          <div class="val num">2</div>
+          <div class="cmp">all on time</div>
+        </div>
+        <div class="vital">
+          <div class="lbl">Avg time to door</div>
+          <div class="val num">34 min</div>
+          <div class="cmp">from paid to delivered</div>
+        </div>
+      </div>
+      <div class="foot">
+        <span class="dot clear"></span>
+        Nothing waiting.
+      </div>
+    </div>
+  </section>
+
+</div>
+</body>
+</html>
