@@ -3892,6 +3892,30 @@ db.exec(`
   );
 `);
 
+// Per-order action commands the admin enqueues for the daemon to click on Meituan
+// (currently only 接单 / accept). Same hand-off pattern as meituan_sync_queue: the
+// web server can't drive the daemon's Playwright Chrome, so it writes a row and the
+// daemon drains it. GATED by MEITUAN_WRITEBACK on the daemon — with the flag off the
+// rows just sit pending and nothing is ever clicked on the live merchant account.
+// UNIQUE(order, action) makes a double-tap idempotent (a second accept can't refire).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS meituan_order_actions (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    retail_order_id   INTEGER NOT NULL,
+    meituan_order_no  TEXT NOT NULL,
+    store_code        TEXT NOT NULL,
+    action_type       TEXT NOT NULL,          -- accept (only, for now)
+    status            TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|done|error
+    attempts          INTEGER NOT NULL DEFAULT 0,
+    last_error        TEXT,
+    requested_by      TEXT,
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
+    processed_at      DATETIME,
+    UNIQUE(meituan_order_no, action_type),
+    FOREIGN KEY (retail_order_id) REFERENCES retail_orders(id) ON DELETE CASCADE
+  );
+`);
+
 // Append-only log of all sync events (order polls, stock pushes) for the
 // admin sync-status panel and debugging.
 db.exec(`

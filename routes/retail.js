@@ -17271,7 +17271,46 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     }
   } catch (e) { /* delivery_jobs missing (pre-migration) — no courier block */ }
 
+  // Whether the daemon will actually execute a queued Meituan action. The drawer
+  // hides the Accept button when this is off, so staff can't queue a click that
+  // will never fire. A pending accept still lands in meituan_order_actions either way.
+  o.meituan_writeback = process.env.MEITUAN_WRITEBACK === '1';
+
   res.json({ success: true, data: o });
+});
+
+// Queue a Meituan write-back action for the daemon to click (currently only 接单).
+// The web server can't drive the daemon's Playwright Chrome, so it writes a row and
+// the daemon drains it — but ONLY when MEITUAN_WRITEBACK=1. Idempotent: a second tap
+// on the same order re-arms the same row rather than queueing a duplicate click.
+router.post('/api/retail-admin/orders/:id/meituan-action', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const action = String((req.body && req.body.action) || '').trim();
+  if (action !== 'accept') return res.status(400).json({ success: false, error: 'bad_action' });
+  // Resolve the Meituan order number (view id) + store via the import mirror.
+  const link = tdb().prepare(
+    `SELECT i.meituan_order_no, o.store_id, o.channel
+       FROM meituan_order_import i JOIN retail_orders o ON o.id = i.retail_order_id
+      WHERE i.retail_order_id = ?`
+  ).get(id);
+  if (!link || link.channel !== 'meituan') {
+    return res.status(404).json({ success: false, error: 'not_a_meituan_order' });
+  }
+  const store = tdb().prepare('SELECT code FROM retail_stores WHERE id = ?').get(link.store_id);
+  try {
+    tdb().prepare(`
+      INSERT INTO meituan_order_actions
+        (retail_order_id, meituan_order_no, store_code, action_type, requested_by)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(meituan_order_no, action_type)
+      DO UPDATE SET status='pending', attempts=0, last_error=NULL, created_at=CURRENT_TIMESTAMP
+    `).run(id, link.meituan_order_no, store ? store.code : null, action,
+           (req.backendUser && req.backendUser.username) || 'admin');
+  } catch (e) {
+    console.error('[meituan-action]', e.message);
+    return res.status(500).json({ success: false, error: 'enqueue_failed' });
+  }
+  res.json({ success: true, data: { queued: action, writeback_enabled: process.env.MEITUAN_WRITEBACK === '1' } });
 });
 
 // ── Fapiao issuance (Phase 3a) ──────────────────────────────────────────────

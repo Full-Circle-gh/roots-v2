@@ -60,6 +60,11 @@ const ORDER_SWEEP_DAYS = Number(process.env.MEITUAN_SWEEP_DAYS) || 3; // window 
 // Import-only by default: pull orders into roots (records + stock) but do NOT
 // click "accept" on Meituan. Set MEITUAN_AUTO_ACCEPT=1 in .env to re-enable.
 const AUTO_ACCEPT    = process.env.MEITUAN_AUTO_ACCEPT === '1';
+// Operator-initiated write-back (currently just 接单 from the order drawer). OFF by
+// default: staff can queue an accept, but the daemon leaves it PENDING and clicks
+// nothing on the live merchant account until MEITUAN_WRITEBACK=1. Distinct from
+// AUTO_ACCEPT, which blanket-accepts every incoming order without a human.
+const WRITEBACK      = process.env.MEITUAN_WRITEBACK === '1';
 const QUEUE_CHECK_MS = 10_000;  // how often to process the stock push queue
 // Re-persist each store's live session to disk this often (while logged in) so a
 // CRASH — which skips the graceful close() that normally saves — still leaves a
@@ -886,6 +891,54 @@ async function processListingJobs() {
   }
 }
 
+// Drain operator-queued per-order actions and click them on Meituan. GATED by
+// MEITUAN_WRITEBACK — with the flag off this returns before touching the DB or a
+// browser, so shipping it cannot disturb the live sync. Only 'accept' is supported:
+// browser.acceptOrder finds the card carrying that order number and clicks a button
+// whose text is EXACTLY 接单/确认接单, so it can't press the wrong control; when it
+// can't find one it just returns false. A miss is transient (Meituan may not have
+// rendered the card yet) → retry up to 3×, then the row lands terminal 'error'.
+async function processOrderActions() {
+  if (!WRITEBACK) return;   // master switch off → never click, rows stay pending
+
+  const jobs = db.prepare(`
+    SELECT * FROM meituan_order_actions
+     WHERE status = 'pending' AND attempts < 3
+     ORDER BY created_at
+     LIMIT 10
+  `).all().filter(j => !SKIP_STORES.includes(j.store_code));
+  if (!jobs.length) return;
+
+  for (const job of jobs) {
+    db.prepare(`UPDATE meituan_order_actions SET status='processing', attempts=attempts+1 WHERE id=?`).run(job.id);
+    try {
+      if (job.action_type !== 'accept') {
+        db.prepare(`UPDATE meituan_order_actions SET status='error', last_error='unknown_action', processed_at=CURRENT_TIMESTAMP WHERE id=?`).run(job.id);
+        continue;
+      }
+      const browser = await getBrowser(job.store_code);
+      const ok = await browser.acceptOrder(job.meituan_order_no);
+      if (ok) {
+        db.prepare(`UPDATE meituan_order_actions SET status='done', last_error=NULL, processed_at=CURRENT_TIMESTAMP WHERE id=?`).run(job.id);
+        logSync(job.store_code, 'order_action', 'ok', { action: 'accept', order: job.meituan_order_no });
+        log(job.store_code, `accepted ${job.meituan_order_no} on operator request`);
+      } else {
+        // Button not found — leave pending so a later poll retries; after 3 tries the
+        // attempts guard above stops picking it up and it needs a human on Meituan.
+        const done = job.attempts + 1 >= 3;
+        db.prepare(`UPDATE meituan_order_actions SET status=?, last_error='accept_button_not_found', processed_at=CURRENT_TIMESTAMP WHERE id=?`)
+          .run(done ? 'error' : 'pending', job.id);
+        logSync(job.store_code, 'order_action', done ? 'error' : 'warn', { action: 'accept', order: job.meituan_order_no }, 'accept button not found');
+        log(job.store_code, `accept ${done ? 'FAILED' : 'retry'} for ${job.meituan_order_no} — button not found`);
+      }
+    } catch (err) {
+      db.prepare(`UPDATE meituan_order_actions SET status='pending', last_error=? WHERE id=?`).run(String(err.message).slice(0, 200), job.id);
+      logSync(job.store_code, 'order_action', 'error', { action: job.action_type }, err.message);
+      log(job.store_code, `processOrderActions error: ${err.message}`);
+    }
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function internalSecret() {
@@ -1094,6 +1147,10 @@ async function main() {
 
     // Handle any on-demand listing-scrape requests from the admin tab
     await processListingJobs();
+
+    // Drain operator-queued accepts. No-op unless MEITUAN_WRITEBACK=1. Wrapped so a
+    // fault here can never take down the stock/order sync above.
+    try { await processOrderActions(); } catch (e) { log('daemon', `processOrderActions crashed: ${e.message}`); }
 
     // Apply any pending open/close command + refresh live status for the toggle UI.
     for (const s of stores) {
