@@ -3583,27 +3583,81 @@
       #vw-bg .pu-editor-head { padding: 18px 24px; }
       #vw-bg #vw-title { font-size: 18px; font-weight: 500; }
       .vw-lab { display: block; font-size: 13.5px; font-weight: 500; color: var(--text-1); margin-bottom: 7px; }
-      .vw-help { font-size: 12px; color: var(--text-2); }
-      .vw-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--line); }
+      .vw-help { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+      .vw-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 24px; border-top: 1px solid var(--line); background: var(--bg-app); }
       .vw-foot .btn { font-size: 14px; padding: 9px 18px; }
       .vw-dots { display: flex; gap: 7px; }
       .vw-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); }
       .vw-dot.on { background: var(--text-1); }
-      .vw-goals { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      @media (max-width: 560px) { .vw-goals { grid-template-columns: 1fr; } }
-      .vw-goal { display: flex; align-items: center; gap: 14px; border: 1px solid var(--line); border-radius: 12px; padding: 18px; background: var(--bg-input); cursor: pointer; text-align: left; font: inherit; color: inherit; }
-      .vw-goal:hover { border-color: var(--text-3); background: var(--bg-elev-1); }
-      .vw-goal .vico { color: var(--text-2); flex: 0 0 auto; display: flex; }
-      .vw-goal .gt { font-weight: 500; font-size: 15px; }
-      .vw-goal .gs { font-size: 12.5px; color: var(--text-2); }
-      .vw-type { flex: 1; text-align: center; border: 1px solid var(--line); border-radius: 12px; padding: 20px 10px; background: var(--bg-input); cursor: pointer; }
+      /* the single Dusk action per wizard screen — "Tacet turns it on for you" */
+      .vw-cta { background: var(--tacet-dusk); border-color: var(--tacet-dusk); color: #fff; font-weight: 500; }
+      .vw-cta:hover { background: #605AA0; border-color: #605AA0; color: #fff; }
+
+      /* two panes: the question on the left, the living ticket on the right */
+      .vw-panes { display: grid; grid-template-columns: minmax(0,1fr) 264px; gap: 26px; align-items: start; }
+      .vw-ticketpane { position: sticky; top: 0; }
+      .vw-tick-cap { font-size: 10.5px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); margin-bottom: 9px; }
+      @media (max-width: 640px) { .vw-panes { grid-template-columns: 1fr; } .vw-ticketpane { position: static; } }
+
+      /* the ticket — what the customer sees, torn like a real coupon */
+      .vw-ticket { background: var(--tacet-cream); border: none; border-radius: 12px; padding: 20px 20px 16px; position: relative; }
+      .vw-tk-big { font-size: 30px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
+      .vw-tk-big small { font-size: 15px; font-weight: 400; color: var(--text-2); margin-left: 2px; }
+      .vw-tk-cond { font-size: 13px; color: var(--text-2); margin-top: 2px; }
+      .vw-tk-ttl { font-size: 14px; font-weight: 500; margin-top: 12px; }
+      .vw-tear { border-top: 1px dashed var(--line-strong); margin: 14px -20px 12px; position: relative; }
+      .vw-tear::before, .vw-tear::after { content: ""; position: absolute; top: -7px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg-pane); }
+      .vw-tear::before { left: -7px; } .vw-tear::after { right: -7px; }
+      .vw-tk-who { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+      .vw-tk-who b { color: var(--text-1); font-weight: 500; }
+      .vw-codechip { display: inline-block; margin-top: 11px; font-family: var(--f-mono); font-size: 12.5px; letter-spacing: .04em; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
+      .vw-headsup { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+
+      /* heads-up notes (live clash / overlap warnings) */
+      .vw-note { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-left: 3px solid var(--tacet-sage, #A3B49F); border-radius: 9px; padding: 11px 13px; font-size: 12.5px; line-height: 1.5; }
+      .vw-note .ni { flex: 0 0 auto; color: var(--tacet-sage-ink, #4A6249); margin-top: 1px; display: flex; }
+      .vw-note.brass { border-left-color: var(--tacet-amber, #C9954A); } .vw-note.brass .ni { color: var(--tacet-amber-ink, #8A6425); }
+      .vw-note.red { border-left-color: var(--tacet-brick, #B4533E); } .vw-note.red .ni { color: var(--tacet-brick, #B4533E); }
+
+      /* screen 1 — the door */
+      .vw-doors { display: flex; flex-direction: column; gap: 10px; }
+      .vw-door { display: flex; align-items: center; gap: 15px; border: 1px solid var(--line); border-radius: 12px; padding: 15px 17px; background: var(--bg-input); cursor: pointer; text-align: left; font: inherit; color: inherit; width: 100%; transition: border-color .2s var(--ease-out, ease), background .2s var(--ease-out, ease); }
+      .vw-door:hover { border-color: var(--text-3); background: var(--bg-elev-1); }
+      .vw-door .vico { color: var(--text-2); flex: 0 0 auto; display: flex; }
+      .vw-door-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+      .vw-door-txt .dt { font-weight: 500; font-size: 14.5px; }
+      .vw-door-txt .ds { font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+      .vw-preset { margin-left: auto; text-align: right; flex: 0 0 auto; font-size: 12px; color: var(--text-2); line-height: 1.4; padding-left: 12px; }
+      .vw-preset b { display: block; color: var(--text-1); font-weight: 500; font-size: 13px; }
+      .vw-door.fresh { border-style: dashed; background: transparent; }
+      .vw-door.fresh:hover { background: var(--bg-elev-1); }
+
+      /* screen 2 — the deal */
+      .vw-kinds { display: flex; gap: 10px; margin-top: 10px; }
+      .vw-type { flex: 1; text-align: center; border: 1px solid var(--line); border-radius: 12px; padding: 18px 10px; background: var(--bg-input); cursor: pointer; transition: border-color .2s var(--ease-out, ease); }
       .vw-type:hover { border-color: var(--text-3); }
       .vw-type.on { border-color: var(--text-1); box-shadow: inset 0 0 0 1px var(--text-1); background: var(--bg-elev-1); }
       .vw-type .vico { color: var(--text-2); display: inline-flex; }
       .vw-type.on .vico { color: var(--text-1); }
       .vw-type .tt { font-weight: 500; font-size: 14px; margin-top: 8px; }
       .vw-type .ts { font-size: 12px; color: var(--text-2); margin-top: 3px; }
-      .vw-path { display: flex; gap: 13px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 15px; cursor: pointer; background: var(--bg-input); }
+      .vw-amount { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 9px; }
+      .vw-amt-box { display: flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-input); overflow: hidden; }
+      .vw-amt-box .unit { padding: 9px 12px; font-size: 15px; color: var(--text-2); background: var(--bg-elev-1); border-right: 1px solid var(--line); }
+      .vw-amt-box input { border: none; outline: none; width: 84px; padding: 9px 12px; font: inherit; font-size: 16px; font-weight: 500; color: var(--text-1); background: transparent; }
+      .vw-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+      .vw-chip { font: inherit; font-size: 13px; color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: 999px; padding: 5px 13px; cursor: pointer; transition: border-color .2s var(--ease-out, ease), color .2s, background .2s; }
+      .vw-chip:hover { border-color: var(--text-3); color: var(--text-1); }
+      .vw-chip.on { background: var(--text-1); border-color: var(--text-1); color: var(--bg-pane); }
+      .vw-answered { margin-top: 22px; padding: 12px 15px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 10px; display: flex; align-items: center; gap: 12px; font-size: 13px; line-height: 1.5; }
+      .vw-answered .vico { color: var(--text-2); flex: 0 0 auto; display: flex; }
+      .vw-answered b { font-weight: 500; }
+      .vw-chg { margin-left: auto; flex: 0 0 auto; }
+      .btn.btn-ghost.vw-chg { padding: 5px 11px; font-size: 12.5px; }
+
+      /* screen (fresh only) — who gets it */
+      .vw-paths { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+      .vw-path { display: flex; gap: 13px; align-items: center; border: 1px solid var(--line); border-radius: 12px; padding: 15px; cursor: pointer; background: var(--bg-input); transition: border-color .2s var(--ease-out, ease); }
       .vw-path:hover { border-color: var(--text-3); }
       .vw-path.on { border-color: var(--text-1); box-shadow: inset 0 0 0 1px var(--text-1); background: var(--bg-elev-1); }
       .vw-path .vico { color: var(--text-2); flex: 0 0 auto; display: flex; }
@@ -3612,16 +3666,35 @@
       .vw-path .ps { font-size: 12px; color: var(--text-2); margin-top: 2px; }
       .vw-radio { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); margin-left: auto; flex: 0 0 auto; }
       .vw-path.on .vw-radio { border-color: var(--text-1); background: var(--text-1); box-shadow: inset 0 0 0 3px var(--bg-input); }
-      .vw-ticket { border: 1px solid var(--line); border-left: 5px solid var(--tacet-amber, #C9954A); border-radius: 12px; padding: 24px 26px; background: var(--bg-input); }
-      .vw-tk-big { font-size: 32px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
-      .vw-tk-big span { font-size: 15px; font-weight: 500; color: var(--text-2); }
-      .vw-tk-sub { font-size: 12px; color: var(--text-2); margin-top: 6px; }
-      .vw-tk-ttl { font-size: 14.5px; font-weight: 500; margin-top: 16px; }
-      .vw-tk-exp { font-size: 11.5px; color: var(--text-2); margin-top: 6px; }
-      .vw-note { display: flex; gap: 10px; align-items: flex-start; border: 1px solid var(--line); border-left: 3px solid var(--tacet-sage, #A3B49F); border-radius: 9px; padding: 12px 14px; font-size: 13px; line-height: 1.5; }
-      .vw-note .ni { flex: 0 0 auto; color: var(--tacet-sage-ink, #4A6249); margin-top: 1px; display: flex; }
-      .vw-note.brass { border-left-color: var(--tacet-amber, #C9954A); } .vw-note.brass .ni { color: var(--tacet-amber-ink, #8A6425); }
-      .vw-note.red { border-left-color: var(--tacet-brick, #B4533E); } .vw-note.red .ni { color: var(--tacet-brick, #B4533E); }
+      .vw-homerow { margin-top: 12px; padding: 11px 14px; background: var(--bg-elev-1); border-radius: 10px; display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+      .vw-homerow .btn { padding: 6px 14px; font-size: 13px; }
+      .vw-seg-on, .vw-seg-on:hover { background: var(--text-1); border-color: var(--text-1); color: var(--bg-pane); }
+
+      /* screen 3 — the small print, as plain sentences */
+      .vw-sent { border-bottom: 1px solid var(--line); padding: 14px 2px; }
+      .vw-sent:last-of-type { border-bottom: none; }
+      .vw-sent .row { display: flex; align-items: center; gap: 12px; }
+      .vw-sent .txt { font-size: 14px; line-height: 1.5; }
+      .vw-sent .txt b { font-weight: 500; }
+      .vw-sent .editrow { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+      .vw-inl { width: 62px; border: 1px solid var(--line); border-radius: 6px; padding: 3px 7px; font: inherit; font-weight: 500; color: var(--text-1); background: var(--bg-input); outline: none; }
+      .vw-inl:focus { border-color: var(--tacet-dusk); }
+      .vw-date { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font: inherit; font-size: 13px; color: var(--text-1); background: var(--bg-input); outline: none; }
+      .vw-stepper { display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-input); overflow: hidden; }
+      .vw-stepper button { border: none; background: transparent; width: 30px; height: 32px; cursor: pointer; color: var(--text-2); font-size: 16px; line-height: 1; }
+      .vw-stepper button:hover { color: var(--text-1); background: var(--bg-elev-1); }
+      .vw-stepper .n { min-width: 32px; text-align: center; font-weight: 500; font-size: 14px; }
+
+      /* screen 4 — turn it on */
+      .vw-recap { font-size: 16px; line-height: 1.6; max-width: 44ch; margin-bottom: 22px; }
+      .vw-recap b { font-weight: 500; }
+      .vw-field { margin-bottom: 15px; }
+      .vw-field label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+      .vw-field label .sub { font-weight: 400; color: var(--text-2); }
+      .vw-field input { width: 100%; max-width: 340px; border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; font: inherit; font-size: 14px; color: var(--text-1); background: var(--bg-input); outline: none; }
+      .vw-field input:focus { border-color: var(--tacet-dusk); }
+      .vw-field input.code { font-family: var(--f-mono); letter-spacing: .05em; text-transform: uppercase; max-width: 220px; }
+
       /* Step transitions — calm fade-out / fade-in-and-rise on the platform's zen ease. */
       #vw-body { transition: opacity .24s var(--ease-out, cubic-bezier(.16, 1, .3, 1)); }
       #vw-body.vw-leaving { opacity: 0; }
@@ -3633,7 +3706,7 @@
       <div class="pu-editor vw" style="width: 880px; max-width: 94vw;">
         <div class="pu-editor-head">
           <div>
-            <div class="vw-kick">NEW COUPON · 新建优惠券</div>
+            <div class="vw-kick" id="vw-kick">NEW COUPON · 新建优惠券</div>
             <h3 id="vw-title" style="margin: 0; font-size: 15px;">Make a coupon · 新建优惠券</h3>
           </div>
           <button class="btn" onclick="vwClose()">Close · 关闭</button>

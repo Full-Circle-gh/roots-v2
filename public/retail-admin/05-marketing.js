@@ -376,16 +376,21 @@ async function revokeGrant(grantId) {
 
 // ════════════════════════════════════════════════════════════════
 // GUIDED COUPON WIZARD — a plain-language, draft-first front door to
-// coupon creation. ADDITIVE: the advanced form above stays untouched.
-// One plain "who gets it" choice maps to is_public / auto_grant_signup /
-// auto_apply; a smart heads-up reads the live coupons and explains
-// clashes & overlaps; everything saves through the existing POST endpoint
-// (is_active:false = draft). Copy is bilingual + deliberately simple for
-// non-native-English operators. See feature_voucher_wizard (memory).
+// coupon creation. Two-pane flow: the question on the left, a live
+// customer's-eye ticket + heads-up on the right, on every step.
+//   door → deal → small print → turn it on     (ready-made paths)
+//   door → deal → who → small print → turn it on   (Start fresh only)
+// A ready-made door pre-answers "who gets it" (shown as one editable
+// line on the deal step); the who step only appears for Start fresh or
+// when the operator taps "Change". "who" maps to is_public /
+// auto_grant_signup / auto_apply; the heads-up reads the live coupons
+// and explains clashes & overlaps from the very first step; everything
+// saves through the existing POST endpoint (is_active:false = draft).
+// Copy is bilingual + deliberately simple for non-native-English
+// operators. See feature_voucher_wizard (memory).
 // ════════════════════════════════════════════════════════════════
 let _vw = null;          // the coupon being built (wizard state)
 let _vwVouchers = [];     // snapshot of existing coupons, for the heads-up
-const VW_STEPS = ['deal', 'who', 'rules', 'review'];  // (front door is separate)
 
 // Inline line-icons (Tabler-style, stroke = currentColor) so the wizard matches
 // the backend's monochrome icon language instead of coloured emoji.
@@ -411,12 +416,31 @@ function vwIcon(name, size) {
     + 'stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">' + (VW_ICONS[name] || '') + '</svg>';
 }
 
+// The steps that make up the flow. Ready-made doors pre-answer "who gets it",
+// so that step is hidden unless the operator started fresh OR tapped "Change".
+function vwSteps() { return _vw.showWho ? ['deal', 'who', 'rules', 'review'] : ['deal', 'rules', 'review']; }
+const VW_TITLES = {
+  front:  'Make a coupon · 新建优惠券',
+  deal:   'The deal · 优惠内容',
+  who:    'Who gets it · 谁可以用',
+  rules:  'The small print · 使用规则',
+  review: 'Turn it on · 开启优惠券',
+};
+const VW_GOAL_KICK = {
+  welcome: 'Welcome gift · 新人礼',
+  sale: 'Store sale · 店铺促销',
+  public: 'Anyone can use · 人人可领',
+  shipping: 'Free shipping · 免运费',
+  fresh: 'Start fresh · 从头开始',
+};
+
 async function vwOpen() {
   _vw = {
-    goal: null, step: 'front',
+    goal: null, step: 'front', showWho: false,
     type: 'fixed_amount', value: 20,
     path: 'public', showOnHome: false,
-    min: 0, expires: '', perCust: 1, maxUses: '',
+    min: 0, setMin: false, expires: '', endChip: 'none',
+    perCust: 1, maxUses: '', setMax: false,
     code: '', title_en: '', title_cn: '',
     codeEdited: false, labelEdited: false,
   };
@@ -444,8 +468,8 @@ document.addEventListener('keydown', (e) => {
 });
 // Step navigation fades the current step out, swaps content while invisible,
 // then fades + rises the next step in — matching the platform's calm zen motion.
-// In-step re-renders (vwSetType/vwSetPath…) call vwRender() directly, so only
-// Next/Back/goal-pick animate. Respects prefers-reduced-motion.
+// In-step re-renders (vwSetType/vwPickAmt…) call vwRender() directly, so only
+// Next/Back/door-pick animate. Respects prefers-reduced-motion.
 function vwGoto(step) {
   if (!_vw) return;
   const body = $('#vw-body');
@@ -464,7 +488,8 @@ function vwGoto(step) {
   }, 240);
 }
 
-// Preset state from a chosen goal, then drop into the first step.
+// Preset state from a chosen door, then drop into the first step. A ready-made
+// door also answers "who gets it"; only "fresh" surfaces that as its own step.
 function vwApplyGoal(goal) {
   _vw.goal = goal;
   if (goal === 'welcome')       Object.assign(_vw, { type: 'fixed_amount', value: 20, path: 'welcome', showOnHome: true });
@@ -472,8 +497,27 @@ function vwApplyGoal(goal) {
   else if (goal === 'public')   Object.assign(_vw, { type: 'fixed_amount', value: 10, path: 'public', showOnHome: false });
   else if (goal === 'shipping') Object.assign(_vw, { type: 'free_shipping', value: 0, path: 'auto', showOnHome: false });
   else                          Object.assign(_vw, { type: 'fixed_amount', value: 0, path: 'public', showOnHome: false }); // fresh
+  _vw.showWho = (goal === 'fresh');
   _vw.codeEdited = false; _vw.labelEdited = false;
+  _vw.min = 0; _vw.setMin = false; _vw.expires = ''; _vw.endChip = 'none'; _vw.perCust = 1; _vw.maxUses = ''; _vw.setMax = false;
   vwGoto('deal');
+}
+
+// ── navigation ──
+function vwNext() {
+  const steps = vwSteps();
+  const next = steps[steps.indexOf(_vw.step) + 1];
+  if (!next) return;
+  if (_vw.step === 'deal'  && !vwCommitDeal())  return;
+  if (_vw.step === 'rules' && !vwCommitRules()) return;
+  if (next === 'review') vwPrepReview();
+  vwGoto(next);
+}
+function vwBack() {
+  const steps = vwSteps();
+  const i = steps.indexOf(_vw.step);
+  if (i <= 0) { vwGoto('front'); return; }
+  vwGoto(steps[i - 1]);
 }
 
 // ── small derived bits ──
@@ -482,7 +526,7 @@ function vwBigValue() {
   if (_vw.type === 'percent') return (Number(_vw.value) || 0) + '%';
   return '¥' + (Number(_vw.value) || 0);
 }
-function vwBigUnit() { return _vw.type === 'free_shipping' ? 'shipping' : 'off'; }
+function vwBigUnit() { return _vw.type === 'free_shipping' ? 'shipping · 免运' : 'off · 立减'; }
 function vwGenCode() {
   const v = Number(_vw.value) || 0;
   if (_vw.type === 'free_shipping') return 'FREESHIP';
@@ -509,80 +553,106 @@ function vwFlags() {
   };
 }
 
-function vwTicketHtml() {
-  const minTxt = Number(_vw.min) > 0 ? ('orders ¥' + Number(_vw.min) + '+ · 满 ¥' + Number(_vw.min)) : 'any order · 无门槛';
-  const who = _vw.path === 'welcome' ? 'new customers · 新顾客'
-            : _vw.path === 'auto'   ? 'automatic, no code · 自动,无需编码'
-            : _vw.path === 'public' ? 'anyone can use · 人人可用'
-            : 'customers you pick · 你指定的顾客';
-  const exp = _vw.expires ? ('Ends ' + _vw.expires) : 'No end date · 永久';
-  // The big number already shows the value, so only show the marketing label
-  // when it ADDS something (a welcome phrase, or a label the operator edited) —
-  // never echo "5% off" twice. Computed live so it tracks the value as you type.
-  const ttl = _vw.labelEdited ? (_vw.title_en || '') : vwGenLabelEn();
-  const echo = _vw.type === 'percent' ? ((Number(_vw.value) || 0) + '% off')
-             : _vw.type === 'fixed_amount' ? ('¥' + (Number(_vw.value) || 0) + ' off')
-             : 'free shipping';
-  const showTtl = ttl && ttl.trim().toLowerCase() !== echo.toLowerCase();
-  return '<div class="vw-ticket" id="vw-ticket"><div class="vw-tk-big" id="vw-tk-big">' + vwBigValue() + ' <span>' + vwBigUnit() + '</span></div>'
-    + '<div class="vw-tk-sub">' + minTxt + '</div>'
-    + (showTtl ? '<div class="vw-tk-ttl">' + escapeHtml(ttl) + '</div>' : '')
-    + '<div class="vw-tk-exp">' + who + ' · ' + escapeHtml(exp) + '</div></div>';
+// ── the living ticket (right pane) ──
+function vwCondPlain() {
+  const min = Number(_vw.min) || 0;
+  if (_vw.path === 'welcome') return min > 0 ? ('first order over ¥' + min + ' · 首单满 ¥' + min) : 'their first order · 首单';
+  return min > 0 ? ('orders ¥' + min + '+ · 满 ¥' + min) : 'any order · 任意订单';
+}
+function vwTicketWho() {
+  const who = _vw.path === 'welcome' ? 'New customers · 新顾客'
+            : _vw.path === 'auto'    ? 'Automatic · 自动应用'
+            : _vw.path === 'pick'    ? 'Customers you pick · 指定顾客'
+            : 'Anyone · 人人可用';
+  const per = Number(_vw.perCust) > 1 ? (' · ' + Number(_vw.perCust) + '× each · 每人 ' + Number(_vw.perCust) + ' 次') : ' · once each · 每人一次';
+  const end = _vw.expires ? (' · ends ' + _vw.expires + ' · 至 ' + _vw.expires) : ' · no end date · 永久';
+  return '<b>' + escapeHtml(who) + '</b>' + escapeHtml(per) + escapeHtml(end);
+}
+function vwTicketHtml(opts) {
+  opts = opts || {};
+  // The big number already shows the value; only echo the marketing label when
+  // the operator has actually written one (never repeat "5% off" twice).
+  const label = (_vw.labelEdited && (_vw.title_en || _vw.title_cn))
+    ? '<div class="vw-tk-ttl">' + escapeHtml(_vw.title_en || _vw.title_cn) + '</div>' : '';
+  const code = (opts.showCode && _vw.code) ? '<span class="vw-codechip">' + escapeHtml(_vw.code) + '</span>' : '';
+  return '<div class="vw-ticket">'
+    + '<div class="vw-tk-big">' + vwBigValue() + ' <small>' + vwBigUnit() + '</small></div>'
+    + '<div class="vw-tk-cond">' + vwCondPlain() + '</div>'
+    + label
+    + '<div class="vw-tear"></div>'
+    + '<div class="vw-tk-who">' + vwTicketWho() + '</div>'
+    + code + '</div>';
+}
+// Re-render only the right pane (ticket + heads-up) so typing in a left-pane
+// field never loses focus.
+function vwRefreshTicket() {
+  const p = document.querySelector('.vw-ticketpane');
+  if (!p) return;
+  p.innerHTML = '<div class="vw-tick-cap">What the customer sees · 顾客看到的</div>'
+    + vwTicketHtml({ showCode: _vw.step === 'review' }) + vwHeadsUpHtml();
 }
 
-function vwDots(active) {
-  return '<div class="vw-dots">' + VW_STEPS.map(s => '<span class="vw-dot' + (s === active ? ' on' : '') + '"></span>').join('') + '</div>';
-}
-function vwFoot(backStep, nextFn, active) {
-  return '<button class="btn" onclick="vwGoto(\'' + backStep + '\')">Back · 返回</button>'
-    + vwDots(active)
-    + '<button class="btn btn-primary" onclick="' + nextFn + '">Next · 下一步</button>';
-}
-
+// ── render ──
 function vwRender() {
-  const title = $('#vw-title'), body = $('#vw-body'), foot = $('#vw-foot');
+  const title = $('#vw-title'), kick = $('#vw-kick'), body = $('#vw-body'), foot = $('#vw-foot');
   const s = _vw.step;
+  title.textContent = VW_TITLES[s] || VW_TITLES.front;
+  if (kick) kick.textContent = _vw.goal ? ('NEW COUPON · ' + VW_GOAL_KICK[_vw.goal]) : 'NEW COUPON · 新建优惠券';
   foot.style.display = (s === 'front') ? 'none' : 'flex';
-  if (s === 'front') {
-    title.textContent = 'Make a coupon · 新建优惠券';
-    body.innerHTML = vwFrontHtml();
-  } else if (s === 'deal') {
-    title.textContent = 'The deal · 优惠内容';
-    body.innerHTML = vwDealHtml();
-    foot.innerHTML = vwFoot('front', 'vwNextDeal()', 'deal');
-  } else if (s === 'who') {
-    title.textContent = 'Who gets it · 谁可以用';
-    body.innerHTML = vwWhoHtml();
-    foot.innerHTML = vwFoot('deal', 'vwNextWho()', 'who');
-  } else if (s === 'rules') {
-    title.textContent = 'Rules & dates · 规则与日期';
-    body.innerHTML = vwRulesHtml();
-    foot.innerHTML = vwFoot('who', 'vwNextRules()', 'rules');
-  } else if (s === 'review') {
-    title.textContent = 'Review · 确认';
-    body.innerHTML = vwReviewHtml();
-    foot.innerHTML = '<button class="btn" onclick="vwGoto(\'rules\')">Back · 返回</button>' + vwDots('review')
-      + '<span style="display:flex;gap:8px;">'
-      + '<button class="btn" onclick="vwSave(true)">Save &amp; turn on · 保存并开启</button>'
-      + '<button class="btn btn-primary" onclick="vwSave(false)">Save as draft · 存为草稿</button></span>';
+  if (s === 'front') { body.innerHTML = vwFrontHtml(); return; }
+  if (s === 'deal')        body.innerHTML = vwPanes(vwDealHtml());
+  else if (s === 'who')    body.innerHTML = vwPanes(vwWhoHtml());
+  else if (s === 'rules')  body.innerHTML = vwPanes(vwRulesHtml());
+  else if (s === 'review') body.innerHTML = vwPanes(vwReviewHtml(), { review: true });
+  foot.innerHTML = vwFootHtml();
+}
+function vwPanes(leftHtml, opts) {
+  opts = opts || {};
+  return '<div class="vw-panes"><div class="vw-left">' + leftHtml + '</div>'
+    + '<div class="vw-ticketpane"><div class="vw-tick-cap">What the customer sees · 顾客看到的</div>'
+    + vwTicketHtml({ showCode: !!opts.review }) + vwHeadsUpHtml() + '</div></div>';
+}
+function vwFootHtml() {
+  const steps = vwSteps();
+  const dots = '<div class="vw-dots">' + steps.map(s => '<span class="vw-dot' + (s === _vw.step ? ' on' : '') + '"></span>').join('') + '</div>';
+  const back = '<button class="btn" onclick="vwBack()">Back · 返回</button>';
+  if (_vw.step === 'review') {
+    return back + dots
+      + '<span style="display:flex; gap:8px;">'
+      + '<button class="btn" onclick="vwSave(false)">Save as draft · 存为草稿</button>'
+      + '<button class="btn vw-cta" onclick="vwSave(true)">Turn it on · 开启</button></span>';
   }
+  return back + dots + '<button class="btn" onclick="vwNext()">Next · 下一步</button>';
 }
 
+// ── screen 1: the door ──
 function vwFrontHtml() {
   const goals = [
-    ['welcome', 'gift', 'Welcome gift · 新人礼', 'A thank-you for new customers · 给新顾客的感谢'],
-    ['sale', 'tag', 'Store sale · 店铺促销', 'An automatic discount, no code needed · 自动折扣,无需编码'],
-    ['public', 'ticket', 'A coupon anyone can use · 人人可领', 'People find it and tap to save · 顾客自己领取'],
-    ['shipping', 'truck', 'Free shipping · 免运费', 'Take the delivery fee off · 减免运费'],
-    ['fresh', 'pencil', 'Start fresh · 从头开始', 'Set it up myself · 自己设置'],
+    ['welcome', 'gift', 'Welcome gift · 新人礼', 'Lands in every new customer\'s coupons. · 自动进入新顾客账户。', '¥20 off · 立减', 'their first order · 首单'],
+    ['sale', 'tag', 'Store sale · 店铺促销', 'Applied for them at checkout — no code. · 结账自动,无需编码。', '10% off · 折扣', 'everything · 全场'],
+    ['public', 'ticket', 'A coupon anyone can use · 人人可领', 'Shows in the app; people tap to save. · 顾客自行领取。', '¥10 off · 立减', 'any order · 任意订单'],
+    ['shipping', 'truck', 'Free shipping · 免运费', 'Take the delivery fee off. · 减免运费。', '¥0 delivery · 免运', 'every order · 每单'],
   ];
+  const cards = goals.map(g => '<button class="vw-door" onclick="vwApplyGoal(\'' + g[0] + '\')">'
+    + '<span class="vico">' + vwIcon(g[1], 24) + '</span>'
+    + '<span class="vw-door-txt"><span class="dt">' + g[2] + '</span><span class="ds">' + g[3] + '</span></span>'
+    + '<span class="vw-preset"><b>' + g[4] + '</b>' + g[5] + '</span></button>').join('');
+  const fresh = '<button class="vw-door fresh" onclick="vwApplyGoal(\'fresh\')">'
+    + '<span class="vico">' + vwIcon('pencil', 20) + '</span>'
+    + '<span class="vw-door-txt"><span class="dt">Start fresh · 从头开始</span><span class="ds">Answer every question yourself. · 全部自己设置。</span></span></button>';
   return '<div class="vw-lab" style="margin-bottom:2px;">What do you want to do? · 你想做什么?</div>'
-    + '<div class="vw-goals">'
-    + goals.map(g => '<button class="vw-goal" onclick="vwApplyGoal(\'' + g[0] + '\')"><span class="vico">' + vwIcon(g[1], 26) + '</span>'
-        + '<span><span class="gt">' + g[2] + '</span><br><span class="gs">' + g[3] + '</span></span></button>').join('')
-    + '</div>';
+    + '<div class="vw-doors">' + cards + fresh + '</div>'
+    + '<div class="vw-help" style="margin-top:14px;">Every choice is a starting point — change anything on the next screens. · 都是起点,后面都能改。</div>';
 }
 
+// ── screen 2: the deal ──
+function vwWhoIcon() { return _vw.path === 'welcome' ? 'gift' : _vw.path === 'auto' ? 'bolt' : _vw.path === 'pick' ? 'users' : 'ticket'; }
+function vwWhoPlain() {
+  if (_vw.path === 'welcome') return '<b>New customers · 新顾客</b> get it automatically when they join. · 加入时自动获得。';
+  if (_vw.path === 'auto')    return '<b>Applied for everyone · 自动应用</b> at checkout — no code needed. · 结账自动,无需编码。';
+  if (_vw.path === 'pick')    return '<b>Customers you pick · 你指定的顾客</b> — chosen after saving. · 保存后由你挑选。';
+  return '<b>Anyone · 人人可用</b> can find it in the app and tap to save. · 在小程序内自行领取。';
+}
 function vwDealHtml() {
   const types = [
     ['fixed_amount', 'coin', 'Money off · 立减', 'a set ¥ amount · 固定金额'],
@@ -590,113 +660,192 @@ function vwDealHtml() {
     ['free_shipping', 'truck', 'Free shipping · 免运费', 'no delivery fee · 不收运费'],
   ];
   const cards = types.map(t => '<div class="vw-type' + (_vw.type === t[0] ? ' on' : '') + '" onclick="vwSetType(\'' + t[0] + '\')">'
-    + '<span class="vico">' + vwIcon(t[1], 28) + '</span><div class="tt">' + t[2] + '</div><div class="ts">' + t[3] + '</div></div>').join('');
-  const valBox = _vw.type === 'free_shipping' ? ''
-    : '<div class="field" style="margin:0;max-width:260px;"><label class="vw-lab">How much do they save? · 优惠多少? (' + (_vw.type === 'percent' ? '%' : '¥') + ')</label>'
-      + '<input type="number" id="vw-value" value="' + (_vw.value || '') + '" oninput="vwLiveValue(this.value)" style="width:100%;"></div>';
-  return vwTicketHtml()
-    + '<div class="field" style="margin:0;"><label class="vw-lab">What kind of discount? · 哪种优惠?</label>'
-    + '<div style="display:flex;gap:12px;">' + cards + '</div></div>'
-    + valBox
-    + '<div class="vw-help">The box shows ¥ or % so it is never mixed up. · 输入框会显示 ¥ 或 %,不会弄错。</div>';
+    + '<span class="vico">' + vwIcon(t[1], 26) + '</span><div class="tt">' + t[2] + '</div><div class="ts">' + t[3] + '</div></div>').join('');
+  let amt = '';
+  if (_vw.type !== 'free_shipping') {
+    const unit = _vw.type === 'percent' ? '%' : '¥';
+    const presets = _vw.type === 'percent' ? [5, 10, 20] : [10, 20, 50];
+    const chips = presets.map(p => '<button class="vw-chip' + (Number(_vw.value) === p ? ' on' : '') + '" onclick="vwPickAmt(' + p + ')">' + p + '</button>').join('');
+    amt = '<div class="vw-lab" style="margin-top:22px;">How much do they save? · 优惠多少?</div>'
+      + '<div class="vw-amount"><span class="vw-amt-box"><span class="unit">' + unit + '</span>'
+      + '<input id="vw-value" type="text" inputmode="numeric" value="' + escapeAttr(String(_vw.value || '')) + '" oninput="vwLiveValue(this.value)"></span>'
+      + '<span class="vw-chips" id="vw-amt-chips">' + chips + '</span></div>';
+  }
+  let answered = '';
+  if (!_vw.showWho) {
+    answered = '<div class="vw-answered"><span class="vico">' + vwIcon(vwWhoIcon(), 18) + '</span>'
+      + '<span>' + vwWhoPlain() + '</span>'
+      + '<button class="btn btn-ghost vw-chg" onclick="vwChangeWho()">Change · 更改</button></div>';
+  }
+  return '<div class="vw-lab">What kind of discount? · 哪种优惠?</div>'
+    + '<div class="vw-kinds">' + cards + '</div>' + amt + answered;
 }
-function vwSetType(t) { _vw.type = t; if (t === 'free_shipping') _vw.value = 0; vwRender(); }
+function vwSetType(t) {
+  _vw.type = t;
+  if (t === 'free_shipping') _vw.value = 0;
+  else if (!(Number(_vw.value) > 0)) _vw.value = (t === 'percent' ? 10 : 20);
+  vwRender();
+}
+function vwPickAmt(v) { _vw.value = v; vwRender(); }
 function vwLiveValue(v) {
   _vw.value = v;
-  const t = document.getElementById('vw-ticket');
-  if (t) t.outerHTML = vwTicketHtml();   // re-render the whole preview so every line tracks (not just the big number)
+  vwRefreshTicket();
+  document.querySelectorAll('#vw-amt-chips .vw-chip').forEach(c => c.classList.toggle('on', Number(c.textContent) === Number(v)));
 }
-function vwNextDeal() {
-  if (_vw.type !== 'free_shipping') {
-    const v = Number(_vw.value);
-    if (!(v > 0)) { toast('Enter how much they save · 请填写优惠金额', 'err'); return; }
-    if (_vw.type === 'percent' && v > 100) { toast('Percent can be at most 100 · 折扣最多 100%', 'err'); return; }
-  }
-  vwGoto('who');
-}
+function vwChangeWho() { _vw.showWho = true; vwGoto('who'); }
 
+// ── who gets it (fresh path, or via "Change") ──
 function vwWhoHtml() {
   const paths = [
-    ['auto', 'bolt', 'Automatic — no code needed · 自动 — 无需编码', 'Everyone gets it at checkout. The best deal wins. · 所有人结账时都享,自动取最优'],
-    ['public', 'ticket', 'Anyone can use it · 人人可用', 'Shows in the app; a shared code also works. · 显示在小程序,分享的码也能用'],
-    ['welcome', 'gift', 'A welcome gift for new customers · 新人礼', 'Goes into new customers’ coupons; they tap it at checkout. · 自动进入新顾客的优惠券,结账时使用'],
-    ['pick', 'users', 'I choose who gets it · 我来指定', 'You pick the customers after saving. · 保存后你来挑选顾客'],
+    ['auto', 'bolt', 'Applied for everyone · 自动应用', 'At checkout the best deal is applied. No code. · 结账自动取最优,无需编码。'],
+    ['public', 'ticket', 'Anyone can use it · 人人可用', 'Shows in the app; a shared code also works. · 显示在小程序,分享码也能用。'],
+    ['welcome', 'gift', 'A welcome gift · 新人礼', 'Lands in every new customer\'s coupons. · 自动进入新顾客账户。'],
+    ['pick', 'users', 'I choose who gets it · 我来指定', 'Pick the customers after saving. · 保存后挑选顾客。'],
   ];
-  let html = vwTicketHtml()
-    + '<div class="field" style="margin:0;"><label class="vw-lab">How do customers get it? · 顾客怎么获得?</label>'
-    + '<div style="display:flex;flex-direction:column;gap:10px;">'
+  let html = '<div class="vw-lab">How do customers get it? · 顾客怎么获得?</div>'
+    + '<div class="vw-paths">'
     + paths.map(p => '<div class="vw-path' + (_vw.path === p[0] ? ' on' : '') + '" onclick="vwSetPath(\'' + p[0] + '\')">'
         + '<span class="vico">' + vwIcon(p[1], 22) + '</span><span><span class="pt">' + p[2] + '</span><br><span class="ps">' + p[3] + '</span></span>'
         + '<span class="vw-radio"></span></div>').join('')
-    + '</div></div>';
+    + '</div>';
   if (_vw.path === 'welcome') {
-    html += '<div style="padding:11px 13px;background:var(--bg-elev-1);border-radius:8px;display:flex;justify-content:space-between;align-items:center;gap:12px;">'
-      + '<span style="font-size:12.5px;">Also show it on the home page? · 也在首页展示?</span>'
+    html += '<div class="vw-homerow"><span>Also show it on the home page? · 也在首页展示?</span>'
       + '<span style="display:flex;gap:6px;">'
-      + '<button class="btn' + (!_vw.showOnHome ? ' btn-primary' : '') + '" onclick="vwSetHome(false)">No · 否</button>'
-      + '<button class="btn' + (_vw.showOnHome ? ' btn-primary' : '') + '" onclick="vwSetHome(true)">Yes · 是</button></span></div>';
+      + '<button class="btn' + (!_vw.showOnHome ? ' vw-seg-on' : '') + '" onclick="vwSetHome(false)">No · 否</button>'
+      + '<button class="btn' + (_vw.showOnHome ? ' vw-seg-on' : '') + '" onclick="vwSetHome(true)">Yes · 是</button></span></div>';
   }
   return html;
 }
 function vwSetPath(p) { _vw.path = p; vwRender(); }
 function vwSetHome(b) { _vw.showOnHome = b; vwRender(); }
-function vwNextWho() { vwGoto('rules'); }
 
+// ── screen 3: the small print (plain sentences, good defaults) ──
+function vwEndPlain() {
+  if (_vw.endChip === 'none') return 'Runs <b>until you turn it off</b>. · 一直有效,直到你停用。';
+  if (_vw.endChip === '1w')   return 'Ends in <b>one week</b>. · 一周后结束。';
+  if (_vw.endChip === '1m')   return 'Ends in <b>one month</b>. · 一月后结束。';
+  return _vw.expires ? ('Ends <b>' + escapeHtml(_vw.expires) + '</b>. · 到期结束。') : 'Pick the last day it works. · 选择截止日期。';
+}
 function vwRulesHtml() {
-  const f = (lab, id, val, ph, type) => '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">' + lab
-    + '</label><input type="' + (type || 'number') + '" id="' + id + '" value="' + escapeAttr(String(val)) + '" placeholder="' + (ph || '') + '" oninput="vwLiveRules()" onchange="vwLiveRules()" style="width:100%;"></div>';
-  return vwTicketHtml()
-    + '<div class="vw-help">These already have good defaults. Change only what you want. · 这些已有合适的默认值,只改你想改的。</div>'
-    + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
-      + f('Smallest order to use it (¥) · 最低订单金额', 'vw-min', (_vw.min || ''), '0 = any order · 0 = 任意订单')
-      + f('Last day it works · 截止日期', 'vw-expires', (_vw.expires || ''), 'empty = never', 'date')
-    + '</div>'
-    + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
-      + f('How many times can one person use it? · 每人可用几次?', 'vw-percust', (_vw.perCust != null ? _vw.perCust : 1), '1')
-      + f('How many coupons in total? · 总共多少张?', 'vw-maxuses', (_vw.maxUses || ''), 'empty = no limit · 留空 = 不限')
-    + '</div>';
+  const minRow = _vw.setMin
+    ? '<div class="vw-sent"><div class="row"><span class="txt">Works on orders ¥<input id="vw-min" class="vw-inl" type="text" inputmode="numeric" value="' + escapeAttr(String(_vw.min || '')) + '" oninput="vwLiveMin(this.value)"> and up. · 满额可用。</span>'
+      + '<button class="btn btn-ghost vw-chg" onclick="vwUnsetMin()">Any order · 任意</button></div></div>'
+    : '<div class="vw-sent"><div class="row"><span class="txt">Works on <b>any order size</b>. · 任意订单金额可用。</span>'
+      + '<button class="btn btn-ghost vw-chg" onclick="vwSetMinOn()">Set a minimum · 设最低金额</button></div></div>';
+
+  const endChips = [['none', 'No end date · 永久'], ['1w', 'One week · 一周'], ['1m', 'One month · 一月'], ['pick', 'Pick a day · 选日期']];
+  const chips = endChips.map(c => '<button class="vw-chip' + (_vw.endChip === c[0] ? ' on' : '') + '" onclick="vwPickEnd(\'' + c[0] + '\')">' + c[1] + '</button>').join('');
+  const pick = _vw.endChip === 'pick'
+    ? '<input id="vw-expires" class="vw-date" type="date" value="' + escapeAttr(_vw.expires || '') + '" oninput="vwLiveDate(this.value)">' : '';
+  const endRow = '<div class="vw-sent"><div class="row"><span class="txt">' + vwEndPlain() + '</span></div>'
+    + '<div class="editrow"><span class="vw-chips">' + chips + '</span>' + pick + '</div></div>';
+
+  const pc = Number(_vw.perCust) || 1;
+  const pcRow = '<div class="vw-sent"><div class="row"><span class="txt">Each customer can use it <b>' + (pc === 1 ? 'once · 一次' : pc + ' times · ' + pc + ' 次') + '</b>.</span>'
+    + '<span class="vw-stepper vw-chg"><button onclick="vwStep(-1)">−</button><span class="n num">' + pc + '</span><button onclick="vwStep(1)">+</button></span></div></div>';
+
+  const maxRow = _vw.setMax
+    ? '<div class="vw-sent"><div class="row"><span class="txt">Only <input id="vw-maxuses" class="vw-inl" type="text" inputmode="numeric" value="' + escapeAttr(String(_vw.maxUses || '')) + '" oninput="vwLiveMax(this.value)"> can be used in total. · 总数上限。</span>'
+      + '<button class="btn btn-ghost vw-chg" onclick="vwUnsetMax()">No limit · 不限</button></div></div>'
+    : '<div class="vw-sent"><div class="row"><span class="txt"><b>No limit</b> on total uses. · 总数不限。</span>'
+      + '<button class="btn btn-ghost vw-chg" onclick="vwSetMaxOn()">Set a limit · 设上限</button></div></div>';
+
+  return '<div class="vw-help" style="margin-bottom:6px;">Good defaults are set. Change only what you want. · 已有合适的默认值,只改你想改的。</div>'
+    + minRow + endRow + pcRow + maxRow;
 }
-// Live-reflect the rules fields (min spend, end date, limits) into the preview
-// ticket as the operator types — same as the deal value.
-function vwLiveRules() {
-  _vw.min = Number($('#vw-min').value) || 0;
-  _vw.expires = $('#vw-expires').value || '';
-  // Clamp to a minimum of 1: an explicit 0 here used to be stored and read by
-  // the backend as "no per-person cap" (unlimited) — the exact opposite of what
-  // an operator answering "how many times can one person use it?" with 0 means.
-  _vw.perCust = $('#vw-percust').value !== '' ? Math.max(1, parseInt($('#vw-percust').value, 10) || 1) : 1;
-  _vw.maxUses = $('#vw-maxuses').value || '';
-  const t = document.getElementById('vw-ticket');
-  if (t) t.outerHTML = vwTicketHtml();
+function vwDateFrom(days) { const d = new Date(); d.setDate(d.getDate() + days); return d.toISOString().slice(0, 10); }
+function vwPickEnd(k) {
+  _vw.endChip = k;
+  if (k === 'none') _vw.expires = '';
+  else if (k === '1w') _vw.expires = vwDateFrom(7);
+  else if (k === '1m') _vw.expires = vwDateFrom(30);
+  else _vw.expires = _vw.expires || vwDateFrom(30);
+  vwRender();
 }
-function vwNextRules() {
-  _vw.min = Number($('#vw-min').value) || 0;
-  _vw.expires = $('#vw-expires').value || '';
-  // Clamp to a minimum of 1: an explicit 0 here used to be stored and read by
-  // the backend as "no per-person cap" (unlimited) — the exact opposite of what
-  // an operator answering "how many times can one person use it?" with 0 means.
-  _vw.perCust = $('#vw-percust').value !== '' ? Math.max(1, parseInt($('#vw-percust').value, 10) || 1) : 1;
-  _vw.maxUses = $('#vw-maxuses').value || '';
+function vwLiveDate(v) { _vw.expires = v; vwRefreshTicket(); }
+function vwStep(d) { _vw.perCust = Math.max(1, (Number(_vw.perCust) || 1) + d); vwRender(); }
+function vwSetMinOn() { _vw.setMin = true; if (!(Number(_vw.min) > 0)) _vw.min = ''; vwRender(); }
+function vwUnsetMin() { _vw.setMin = false; _vw.min = 0; vwRender(); }
+function vwLiveMin(v) { _vw.min = Number(v) || 0; vwRefreshTicket(); }
+function vwSetMaxOn() { _vw.setMax = true; vwRender(); }
+function vwUnsetMax() { _vw.setMax = false; _vw.maxUses = ''; vwRender(); }
+function vwLiveMax(v) { _vw.maxUses = v; vwRefreshTicket(); }
+
+// ── commit + validate on the way forward ──
+function vwCommitDeal() {
+  if (_vw.type !== 'free_shipping') {
+    const el = $('#vw-value'); if (el) _vw.value = el.value;
+    const v = Number(_vw.value);
+    if (!(v > 0)) { toast('Enter how much they save · 请填写优惠金额', 'err'); return false; }
+    if (_vw.type === 'percent' && v > 100) { toast('Percent can be at most 100 · 折扣最多 100%', 'err'); return false; }
+  }
+  return true;
+}
+function vwCommitRules() {
+  if (_vw.setMin) { const el = $('#vw-min'); if (el) _vw.min = Number(el.value) || 0; } else _vw.min = 0;
+  if (_vw.setMax) { const el = $('#vw-maxuses'); if (el) _vw.maxUses = el.value; } else _vw.maxUses = '';
+  if (_vw.endChip === 'pick') { const el = $('#vw-expires'); if (el) _vw.expires = el.value || ''; }
   if (_vw.expires) {
     const d = new Date(_vw.expires + 'T23:59:59');
-    if (d < new Date()) { toast('That end date has passed — pick a later one · 到期日已过,请选更晚的日期', 'err'); return; }
+    if (d < new Date()) { toast('That end date has passed — pick a later one · 到期日已过,请选更晚的日期', 'err'); return false; }
   }
+  return true;
+}
+function vwPrepReview() {
   if (!_vw.codeEdited || !_vw.code) _vw.code = vwGenCode();
   if (!_vw.labelEdited) { _vw.title_en = vwGenLabelEn(); _vw.title_cn = vwGenLabelCn(); }
-  vwGoto('review');
 }
 
+// ── screen 4: turn it on ──
+function vwRecapSentence() {
+  const val = vwBigValue() + (_vw.type === 'free_shipping' ? '' : ' off');
+  const who = _vw.path === 'welcome' ? 'New customers · 新顾客'
+            : _vw.path === 'auto'    ? 'Everyone · 所有人'
+            : _vw.path === 'pick'    ? 'Customers you pick · 你指定的顾客'
+            : 'Anyone in the app · 小程序内任何人';
+  const min = Number(_vw.min) > 0 ? (' on orders ¥' + Number(_vw.min) + '+ · 满 ¥' + Number(_vw.min)) : '';
+  const how = _vw.path === 'auto'    ? ' — applied automatically · 自动应用'
+            : _vw.path === 'welcome' ? ' — placed in their coupons · 自动进入账户'
+            : _vw.path === 'pick'    ? ' — after you pick them · 保存后挑选'
+            : ' — they tap to save · 顾客自行领取';
+  const per = Number(_vw.perCust) > 1 ? (', up to ' + Number(_vw.perCust) + ' times each · 每人限 ' + Number(_vw.perCust) + ' 次') : ', once each · 每人一次';
+  const end = _vw.expires ? (', until ' + _vw.expires + ' · 至 ' + _vw.expires) : ', until you turn it off · 直到你停用';
+  return '<b>' + escapeHtml(who) + '</b> get <b>' + escapeHtml(val) + '</b>' + escapeHtml(min) + escapeHtml(how) + escapeHtml(per) + escapeHtml(end) + '.';
+}
+function vwReviewHtml() {
+  const flags = vwFlags();
+  let fields = '<div class="vw-field"><label>Coupon code · 优惠码 <span class="sub">— made for you, change it if you like · 已自动生成</span></label>'
+    + '<input id="vw-code" class="code" type="text" value="' + escapeAttr(_vw.code) + '" oninput="vwEditCode(this.value)"></div>';
+  // A customer-facing label only matters when a customer ever sees the coupon —
+  // i.e. not for a silent auto-applied store sale.
+  if (_vw.path !== 'auto') {
+    fields += '<div class="vw-field"><label>What customers see · 顾客看到 <span class="sub">— shown on the ticket · 显示在券面</span></label>'
+      + '<input id="vw-title-en" type="text" value="' + escapeAttr(_vw.title_en || '') + '" oninput="vwEditLabel()" placeholder="English"></div>'
+      + '<div class="vw-field"><input id="vw-title-cn" type="text" value="' + escapeAttr(_vw.title_cn || '') + '" oninput="vwEditLabel()" placeholder="中文"></div>';
+  }
+  return '<div class="vw-recap">' + vwRecapSentence() + '</div>' + fields;
+}
+function vwEditCode(v) { _vw.code = v.toUpperCase(); _vw.codeEdited = true; vwRefreshTicket(); }
+function vwEditLabel() {
+  const en = $('#vw-title-en'), cn = $('#vw-title-cn');
+  if (en) _vw.title_en = en.value;
+  if (cn) _vw.title_cn = cn.value;
+  _vw.labelEdited = true;
+  vwRefreshTicket();
+}
+
+// ── heads-up: read the live coupons and explain, in plain words, how this one
+// will behave next to them. Grounded in the real resolution rules (best-one-wins,
+// no stacking, signup grants, code revive). Live from the very first step —
+// uses the generated code until the operator types their own. ──
 function vwDiscAt(v, sub) {
   if (v.type === 'fixed_amount') return Math.min(Number(v.value) || 0, sub);
   if (v.type === 'percent') return sub * (Math.max(0, Math.min(100, Number(v.value) || 0))) / 100;
   return 0; // free shipping value depends on the live fee — not comparable here
 }
-// Read the live coupons and explain, in plain words, how this one will behave
-// next to them. Grounded in the real resolution rules (best-one-wins, no
-// stacking, signup grants, code revive).
 function vwHeadsUp() {
   const notes = [];
-  const code = (_vw.code || '').toUpperCase();
+  const code = ((_vw.code || vwGenCode()) || '').toUpperCase();
   const flags = vwFlags();
   const active = _vwVouchers.filter(v => v.is_active);
   const clash = _vwVouchers.find(v => String(v.code).toUpperCase() === code);
@@ -738,51 +887,19 @@ function vwHeadsUp() {
   }
   return notes;
 }
-
-// The heads-up notes depend on _vw.code, which is editable on the Review step —
-// so render them through this helper and re-run it when the code changes (see
-// vwEditCode), otherwise the "live" clash detection would stay frozen on the
-// code that was generated when Review first rendered.
 function vwHeadsUpHtml() {
   const notes = vwHeadsUp();
-  return notes.length
-    ? '<div style="display:flex;flex-direction:column;gap:9px;">' + notes.map(n =>
-        '<div class="vw-note ' + (n.tone || '') + '"><span class="ni">' + (n.icon || '•') + '</span><span>' + n.html + '</span></div>').join('') + '</div>'
-    : '<div class="muted" style="font-size:12px;">No clashes with your live coupons. · 与现有优惠券无冲突。</div>';
-}
-function vwReviewHtml() {
-  const flags = vwFlags();
-  const notesHtml = '<div id="vw-headsup">' + vwHeadsUpHtml() + '</div>';
-  const labelFields = flags.is_public
-    ? '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">What customers see (English) · 顾客看到的文字(英文)</label><input type="text" id="vw-title-en" value="' + escapeAttr(_vw.title_en || '') + '" oninput="vwEditLabel()" style="width:100%;"></div>'
-      + '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">What customers see (Chinese) · 顾客看到的文字(中文)</label><input type="text" id="vw-title-cn" value="' + escapeAttr(_vw.title_cn || '') + '" oninput="vwEditLabel()" style="width:100%;"></div>'
-    : '';
-  return vwTicketHtml()
-    + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
-      + '<div class="field" style="margin:0;flex:1;min-width:200px;"><label class="vw-lab">Coupon code · 优惠码</label><input type="text" id="vw-code" value="' + escapeAttr(_vw.code) + '" oninput="vwEditCode(this.value)" style="width:100%;font-family:var(--f-mono);text-transform:uppercase;"></div>'
-      + labelFields
-    + '</div>'
-    + '<div class="vw-lab" style="margin-bottom:0;">Heads up · 提示</div>'
-    + notesHtml;
-}
-function vwEditCode(v) {
-  _vw.code = v.toUpperCase(); _vw.codeEdited = true;
-  // Re-run the live clash/auto-apply detection against the newly typed code.
-  const h = document.getElementById('vw-headsup');
-  if (h) h.innerHTML = vwHeadsUpHtml();
-}
-function vwEditLabel() {
-  const en = $('#vw-title-en'), cn = $('#vw-title-cn');
-  if (en) _vw.title_en = en.value;
-  if (cn) _vw.title_cn = cn.value;
-  _vw.labelEdited = true;
+  if (!notes.length) return '';
+  return '<div class="vw-headsup" id="vw-headsup">' + notes.map(n =>
+    '<div class="vw-note ' + (n.tone || '') + '"><span class="ni">' + (n.icon || '') + '</span><span>' + n.html + '</span></div>').join('') + '</div>';
 }
 
+// ── save ──
 async function vwSave(activate) {
   const flags = vwFlags();
   const code = (_vw.code || '').trim().toUpperCase();
   if (!code) { toast('Code required · 请填写编码', 'err'); return; }
-  if (flags.is_public && !((_vw.title_en || '').trim() || (_vw.title_cn || '').trim())) {
+  if (_vw.path !== 'auto' && !((_vw.title_en || '').trim() || (_vw.title_cn || '').trim())) {
     toast('Add a label customers see (EN or 中) · 请填写顾客看到的标签', 'err'); return;
   }
   const clash = _vwVouchers.find(v => String(v.code).toUpperCase() === code);
