@@ -3721,17 +3721,21 @@ function renderReadonlyOrder(o) {
   const cust = (typeof ordCustomerLines === 'function') ? ordCustomerLines(o) : { name: o.nickname || o.recipient_name || '—', phone: o.recipient_phone || '' };
   const chan = ordChannelLabel(o);
   const hasCust = (cust.name && cust.name !== '—') || cust.phone;
-  // Same-city courier (Qingyun) live tracking. Meituan's own delivery is fulfilled
-  // by a Qingyun rider, so once the daemon links this mirrored order to its waybill
-  // (via the platform order number) we show the SAME live rider card + AMap map our
-  // own orders use — the point of running a Meituan order from here. Read-only: no
-  // dispatch/compare button (that's the write-back wave), just watch the rider. The
-  // map element mounts via mountCourierMap(o) in the shared open-order flow.
-  const c = o.courier;
-  const cDelivered = !!(c && c.stage === 'delivered');
-  const cMeta = c && (cDelivered ? COURIER_STAGE.delivered : COURIER_STAGE[c.stage]);
-  const cStale = !cDelivered && !!(c && c.stage === 'in_transit' && courierAgeMs(c.updated_at) > COURIER_STALE_MS);
-  const courierCard = cMeta ? renderCourierStatusCard(o, c, cMeta, cStale, cDelivered) : '';
+  // Same-city courier (Qingyun). Meituan's own delivery is fulfilled by a Qingyun
+  // rider, so once the daemon links this mirrored order to its waybill (via the
+  // platform order number) we show the SAME live rider card + AMap map our own
+  // orders use — AND the same courier picker. A Meituan order now lands in Qingyun
+  // as a 待配送 delivery (自动分单), and the dispatch routes already resolve an order's
+  // Qingyun id via delivery_jobs, so staff can compare carriers and call a rider
+  // straight from here — no fragile Meituan button-press needed. renderQyDispatch
+  // renders card + map + the compare/dispatch button, and hides the button once a
+  // rider is genuinely on the way. Gated on o.courier: an order with no Qingyun
+  // delivery has nothing to dispatch. The map mounts via mountCourierMap(o).
+  const courierBlock = o.courier ? renderQyDispatch(o) : '';
+  // Once the order carries a dispatchable Qingyun delivery, "view only" is no longer
+  // true — staff can call the rider from right here. Keep the tag only for orders we
+  // genuinely can't act on (accept/prepare still live on the platform either way).
+  const roTag = o.courier ? '' : ` · ${cuT('view only', '只读')}`;
   mount.innerHTML = `
     <div class="order-card odd-${ODV.density}">
       <div class="order-head">
@@ -3739,13 +3743,13 @@ function renderReadonlyOrder(o) {
           <div class="title-row">
             <b>${escapeHtml(o.order_no)}</b>
             <span class="pill st-${o.status}"><span class="dot"></span>${humanStatus(o.status, o.fulfillment_type)}</span>
-            <span class="pill" style="background: var(--bg-elev-1); color: var(--text-2);" title="${escapeHtml(chan)} orders are mirrored in for visibility — fulfil them in ${escapeHtml(chan)}">${escapeHtml(chan)} · ${cuT('view only', '只读')}</span>
+            <span class="pill" style="background: var(--bg-elev-1); color: var(--text-2);" title="${escapeHtml(chan)} orders are mirrored in for visibility — accept &amp; prepare them in ${escapeHtml(chan)}">${escapeHtml(chan)}${roTag}</span>
           </div>
           <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
         </div>
       </div>
 
-      ${courierCard}
+      ${courierBlock}
 
       <div class="order-detail">
         ${o.store_code ? `<div>
