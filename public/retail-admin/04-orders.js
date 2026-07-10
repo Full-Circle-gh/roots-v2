@@ -2115,11 +2115,11 @@ function pinIcon(size = 13) {
 // (split-parcel rollup, air-delay badge, missing-waybill warning, urgency tags).
 function renderDeliveryCell(o) {
   // Mirrored ledger rows (Meituan / gzgrocery): we don't fulfil them. Surface
-  // the platform's delivery ETA while the order is still in flight; once it's
-  // done (or never carried an ETA) there's nothing we own to show — a bare dash,
-  // not a second "view only" (the Channel column already carries that tag).
+  // the platform's delivery time — the ETA while in flight, and the same time
+  // read back as the arrival once it lands, which is what the drawer shows.
+  // Voided orders never arrived, so they keep the bare dash.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
-    if (o.channel_eta && !['delivered', 'cancelled', 'refunded'].includes(o.status)) {
+    if (o.channel_eta && !['cancelled', 'refunded'].includes(o.status)) {
       return renderTrackingCell(o);
     }
     return '<span class="muted">—</span>';
@@ -2161,16 +2161,20 @@ function renderTrackingCell(o) {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
   }
   // Read-only channels (Meituan): Meituan owns the rider, so we have no waybill —
-  // show the platform's delivery ETA instead, and never the "missing waybill"
-  // warning below (which doesn't apply). Hide once the order is done/void.
+  // show the platform's delivery time instead, and never the "missing waybill"
+  // warning below (which doesn't apply). Once the order lands, the same time
+  // stays put as the arrival — quiet grey, since nothing is pending any more.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
     // Live Qingyun rider stage (Wave A): Meituan's delivery IS a Qingyun rider we
     // now track, so prefer the real stage + ETA over the platform's static ETA.
     const live = renderCourierListLine(o);
     if (live) return live;
-    if (o.channel_eta && !['delivered', 'cancelled', 'refunded'].includes(o.status)) {
-      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#5C7A4E;">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(o.channel_eta))}</span></div>
-              <div class="muted" style="font-size:10px; margin-top:2px;">${cuT('arrival','预计送达')}</div>`;
+    if (o.channel_eta && !['cancelled', 'refunded'].includes(o.status)) {
+      const done = o.status === 'delivered';
+      const colour = done ? 'var(--text-3)' : '#5C7A4E';
+      const label = done ? cuT('arrived', '已送达') : cuT('arrival', '预计送达');
+      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:${colour};">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(o.channel_eta))}</span></div>
+              <div class="muted" style="font-size:10px; margin-top:2px;">${label}</div>`;
     }
     return '<span class="muted">—</span>';
   }
