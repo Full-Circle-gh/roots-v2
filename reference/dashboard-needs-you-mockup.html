@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Needs you: split it, or fold it away</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   "Needs you" holds two cards. Since the section blocks landed,
+   both say things the page already says somewhere else.
+
+   · Running low  — the only place with product NAMES, but its
+                    count duplicates the Inventory block.
+   · All clear    — duplicates the sage footer line under every
+                    single block. It is a summary of "nothing".
+
+   Below: what each becomes.
+   ============================================================ */
+:root {
+  --ink:#111A2B; --paper:#FBF9F4; --graphite:#58606E;
+  --sage:#A3B49F; --amber:#C9954A;
+  --cream:#F6F3EC; --border:#E4E0D5;
+  --amber-tint:#F7EEDE; --sage-tint:#EDF1EC;
+  --sage-ink:#4A6249; --amber-ink:#8A6425;
+  --r-card:14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
+  --ease: cubic-bezier(.16,1,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Inter",-apple-system,Arial,sans-serif;font-size:15px;line-height:1.6;color:var(--ink);background:var(--paper)}
+.num{font-variant-numeric:tabular-nums}
+svg{display:block}
+
+.chrome{background:var(--ink);color:rgba(251,249,244,.72);padding:9px 28px;font-size:12.5px;display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.chrome .tag{letter-spacing:.14em;text-transform:uppercase;font-weight:500;font-size:10.5px;color:rgba(251,249,244,.5)}
+
+.wrap{max-width:1120px;margin:0 auto;padding:34px 40px 90px}
+.opt-head{border-bottom:1px solid var(--border);padding-bottom:14px;margin:46px 0 28px}
+.opt-head:first-of-type{margin-top:8px}
+.opt-head .kicker{letter-spacing:.14em;text-transform:uppercase;font-size:10.5px;font-weight:500;color:var(--graphite)}
+.opt-head h2{font-size:21px;font-weight:500;letter-spacing:-.01em;margin-top:3px}
+.opt-head p{font-size:13.5px;color:var(--graphite);max-width:680px;margin-top:7px}
+.pick{display:inline-block;margin-top:9px;background:var(--sage-tint);color:var(--sage-ink);border-radius:999px;padding:3px 11px;font-size:11.5px;font-weight:500}
+.kill{background:var(--amber-tint);color:var(--amber-ink)}
+
+/* card language */
+.card{background:#fff;border:1px solid var(--border);border-radius:var(--r-card);box-shadow:var(--shadow-soft);overflow:hidden;display:flex;flex-direction:column}
+.sec-head{display:flex;align-items:baseline;gap:12px;margin-bottom:12px}
+.sec-head h3{font-size:17px;font-weight:500;letter-spacing:-.01em}
+.sec-head .goto{margin-left:auto;font-size:12.5px;color:var(--graphite);text-decoration:none}
+.sec-head .goto:hover{color:var(--ink)}
+
+.vitals{display:grid;grid-template-columns:1fr 1fr}
+.vital{padding:24px 26px 20px}
+.vital + .vital{border-left:1px solid rgba(228,224,213,.65)}
+.k{font-size:12.5px;color:var(--graphite)}
+.v{font-size:32px;font-weight:500;letter-spacing:-.02em;line-height:1.35}
+.c{font-size:12px;color:var(--graphite)}
+
+.foot{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:auto;background:var(--cream);padding:12px 26px;font-size:13px;color:var(--graphite)}
+.foot .dot{width:6px;height:6px;border-radius:999px;background:var(--amber);flex:none}
+.foot .dot.clear{background:var(--sage)}
+.foot a{color:var(--ink);text-decoration:none;font-weight:500}
+.foot.warm{background:var(--amber-tint);color:var(--amber-ink)}
+.foot.warm a{color:var(--amber-ink)}
+
+/* the low-stock rows */
+.rows{border-top:1px solid rgba(228,224,213,.65)}
+.row{display:flex;align-items:baseline;gap:12px;padding:9px 26px;font-size:14px}
+.row:hover{background:var(--cream)}
+.row .sku{font-size:11.5px;color:var(--graphite);font-family:ui-monospace,monospace}
+.row .qty{margin-left:auto;font-size:13px;color:var(--graphite)}
+.row .qty.out{color:var(--amber-ink);font-weight:500}
+.more{padding:8px 26px 12px;font-size:12.5px;color:var(--graphite)}
+.more a{color:var(--graphite);text-decoration:none}
+.rows-head{display:flex;align-items:center;gap:10px;padding:16px 26px 8px;font-size:12.5px;color:var(--graphite)}
+.rows-head .store{margin-left:auto;border:1px solid var(--border);border-radius:999px;padding:3px 11px;font-size:12px;color:var(--graphite);background:#fff}
+
+/* the "before" — today's two cards */
+.before{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.attn-head{display:flex;align-items:center;gap:10px;padding:20px 24px 12px;font-size:15px;font-weight:500}
+.attn-head svg{width:17px;height:17px;fill:none;stroke-width:1.6}
+.attn-head .amber{stroke:var(--amber)}
+.attn-head .sage{stroke:var(--sage-ink)}
+.attn-head .count{margin-left:auto;background:var(--amber-tint);color:var(--amber-ink);border-radius:999px;padding:1px 10px;font-size:12px}
+.clear-line{display:flex;align-items:center;gap:10px;padding:6px 24px;font-size:14px}
+.clear-line svg{width:15px;height:15px;stroke:var(--sage);fill:none;stroke-width:1.75;flex:none}
+.clear-line .say{margin-left:auto;font-size:12.5px;color:var(--graphite)}
+.btn{display:inline-block;margin:14px 24px 20px;border:1px solid var(--border);background:#fff;border-radius:8px;padding:8px 15px;font:500 13px inherit;color:var(--ink);cursor:pointer}
+.dup{outline:2px dashed var(--amber);outline-offset:3px;border-radius:var(--r-card)}
+.dup-note{font-size:12px;color:var(--amber-ink);margin-top:9px}
+
+/* state columns */
+.states{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:8px}
+.state-lbl{font-size:12px;letter-spacing:.1em;text-transform:uppercase;color:var(--graphite);font-weight:500;margin-bottom:12px}
+.paper{background:var(--cream);border-radius:16px;padding:20px}
+.gap-note{margin-top:14px;font-size:13px;color:var(--graphite);text-align:center;padding:26px 10px;border:1px dashed var(--border);border-radius:12px}
+
+.note{margin-top:24px;border-left:2px solid var(--border);padding:2px 0 2px 16px;font-size:13px;color:var(--graphite);max-width:720px}
+.note b{color:var(--ink);font-weight:500}
+.note + .note{margin-top:10px}
+
+@media (max-width:900px){.before,.states{grid-template-columns:1fr}.wrap{padding:24px 16px 60px}}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">Mockup</span>
+  <span>Needs you — both cards now repeat something the page already says. Here is what each becomes.</span>
+</div>
+
+<div class="wrap">
+
+  <!-- ══ WHAT IS THERE NOW ══ -->
+  <div class="opt-head">
+    <div class="kicker">What is there now</div>
+    <h2>Two cards, both repeating the page</h2>
+    <p>Since every section block grew its own footer line, "Needs you" says nothing new. The count on Running low is the Inventory block's number. All clear is a list of the sage footers you can already see under Delivery and Orders.</p>
+  </div>
+
+  <div class="before">
+    <div class="card dup">
+      <div class="attn-head">
+        <svg class="amber" viewBox="0 0 24 24"><path d="M3 7l9-4 9 4v10l-9 4-9-4z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>
+        Running low
+        <span class="store" style="margin-left:auto;margin-right:10px">All stores ⌄</span>
+        <span class="count num" style="margin-left:0">35</span>
+      </div>
+      <div class="row"><div><div>Jackfruit Chips</div><div class="sku">2-480</div></div><span class="qty out">out</span></div>
+      <div class="row"><div><div>Lemongrass Kombucha</div><div class="sku">2-60</div></div><span class="qty out">out</span></div>
+      <div class="row"><div><div>Seitan</div><div class="sku">3-145</div></div><span class="qty out">out</span></div>
+      <div class="more"><a href="#">1–4 of 35 · see all ›</a></div>
+      <button class="btn">Open restock</button>
+    </div>
+
+    <div class="card dup">
+      <div class="attn-head">
+        <svg class="sage" viewBox="0 0 24 24"><path d="M9 11l3 3L20 6"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        All clear
+      </div>
+      <div class="clear-line"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Delivery<span class="say">on track</span></div>
+      <div class="clear-line"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Refunds<span class="say">none waiting</span></div>
+      <div class="clear-line"><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>Invoices<span class="say">none to issue</span></div>
+      <div style="flex:1;min-height:60px"></div>
+    </div>
+  </div>
+  <p class="dup-note">Dashed = says something a block below already says.</p>
+
+  <!-- ══ THE PROPOSAL ══ -->
+  <div class="opt-head">
+    <div class="kicker">The proposal</div>
+    <h2>Give the list to Inventory. Delete All clear.</h2>
+    <span class="pick">Recommended</span>
+    <p>Running low is the only place on the dashboard that names actual products — that is worth keeping, so it moves inside the Inventory block, under the two numbers it belongs to. One block, one subject, and it drags as one thing. All clear goes away entirely: every block already ends in its own sage line, so a card that gathers those lines up and repeats them is a summary of nothing happening.</p>
+  </div>
+
+  <div class="states">
+    <div>
+      <div class="state-lbl">A bad morning</div>
+      <div class="paper">
+        <div class="sec-head"><h3>Inventory</h3><a class="goto" href="#">Open products ›</a></div>
+        <div class="card">
+          <div class="vitals">
+            <div class="vital"><div class="k">Out of stock</div><div class="v num">6</div><div class="c">nothing left to sell</div></div>
+            <div class="vital"><div class="k">Running low</div><div class="v num">29</div><div class="c">a few left</div></div>
+          </div>
+          <div class="rows">
+            <div class="rows-head">Lowest first <span class="store">All stores ⌄</span></div>
+            <div class="row"><div><div>Jackfruit Chips</div><div class="sku">2-480</div></div><span class="qty out">out</span></div>
+            <div class="row"><div><div>Lemongrass Kombucha</div><div class="sku">2-60</div></div><span class="qty out">out</span></div>
+            <div class="row"><div><div>Seitan</div><div class="sku">3-145</div></div><span class="qty num">3 left</span></div>
+            <div class="more"><a href="#">See all 35 ›</a></div>
+          </div>
+          <div class="foot warm"><span class="dot"></span><a href="#">Open restock</a></div>
+        </div>
+        <div class="gap-note">Delivery, Refunds and Invoices are quiet,<br>so nothing about them appears here at all.</div>
+      </div>
+    </div>
+
+    <div>
+      <div class="state-lbl">A calm morning</div>
+      <div class="paper">
+        <div class="sec-head"><h3>Inventory</h3><a class="goto" href="#">Open products ›</a></div>
+        <div class="card">
+          <div class="vitals">
+            <div class="vital"><div class="k">Out of stock</div><div class="v num">0</div><div class="c">nothing left to sell</div></div>
+            <div class="vital"><div class="k">Running low</div><div class="v num">0</div><div class="c">a few left</div></div>
+          </div>
+          <div class="foot"><span class="dot clear"></span> Everything is stocked.</div>
+        </div>
+        <div class="gap-note">No list, no "Needs you", no "All clear".<br>The page is shorter on a good day —<br>that <em>is</em> the signal.</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note"><b>Can you still move them?</b> Yes, and better than now. Today the two cards are locked inside one "Needs you" block — you drag the pair or neither. After this, the low-stock list rides with the Inventory block, which you already drag and hide like any other. There is no second thing to arrange, because there is no second card.</p>
+  <p class="note"><b>Are both still necessary?</b> The list, yes — it is the only place product names appear. The card, no. "All clear" was written when the blocks had no footers; now every block ends with its own sage line, and Tacet's rule is that silence means fine. A card that exists to announce that three things are fine is the loudest quiet thing on the page.</p>
+  <p class="note"><b>What "Needs you" becomes.</b> A row that only exists when Delivery, Refunds or Invoices actually need you — the same cards as today, minus stock, minus All clear. On a calm morning the heading is not there at all.</p>
+
+</div>
+</body>
+</html>
