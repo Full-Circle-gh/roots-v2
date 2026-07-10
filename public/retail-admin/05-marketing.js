@@ -6,135 +6,251 @@
    script blocks still in the HTML, hence the eslint no-undef opt-out.
    Contents: vouchers/coupons + grants, snippets editor, storefront settings + feature gates + customer service, social proof, shop categories, broadcasts, pop-ups */
 // ════════════════════════════════════════════════════════════════
-// VOUCHERS / COUPONS
+// VOUCHERS / COUPONS — Tacet rebuild (Option A: one door, quiet rows).
+// The table is the page: a Running/Off/All segment + search over quiet
+// rows; clicking a row opens the side drawer (#vch-drawer) where every
+// per-coupon control lives — the three "how customers get it" switches,
+// label edit, end date, grants, on/off. Creation has ONE door: the
+// guided wizard (vwOpen, further down this file). All strings render
+// through cuT and the dynamic mounts carry data-no-i18n, so the page
+// language is picked at render time (never glued EN+CN).
 // ════════════════════════════════════════════════════════════════
+let _vchData = [];        // last fetch of /vouchers
+let _vchFilter = 'on';    // 'on' | 'off' | 'all'
+let _vchQ = '';           // live search text
+let _vchQTimer = null;
+let _vchOpenId = null;    // coupon currently shown in the drawer
+
+// "Running" = switched on AND not past its end date. Matches the server's
+// own live check (checkout eligibility, revive-on-reuse).
+function vchLive(v) {
+  return !!v.is_active && !(v.expires_at && new Date(v.expires_at) <= new Date());
+}
+function vchGives(v) {
+  if (v.type === 'free_shipping') return cuT('Free shipping', '免运费');
+  if (v.type === 'percent') return cuT((Number(v.value) || 0) + '% off', (Number(v.value) || 0) + '% 折扣');
+  return cuT('¥' + fmt(v.value) + ' off', '立减 ¥' + fmt(v.value));
+}
+function vchLabel(v) {
+  return (typeof cuLang === 'function' && cuLang() === 'cn')
+    ? (v.title_cn || v.title_en || '')
+    : (v.title_en || v.title_cn || '');
+}
+function vchRules(v) {
+  const parts = [];
+  if (Number(v.min_subtotal) > 0) parts.push(cuT('Orders over ¥' + fmt(v.min_subtotal), '满 ¥' + fmt(v.min_subtotal)));
+  const per = Number(v.per_customer_limit);
+  if (per === 1) parts.push(cuT('once each', '每人一次'));
+  else if (per > 1) parts.push(cuT(per + ' each', '每人 ' + per + ' 次'));
+  if (v.max_uses != null) parts.push(cuT(v.max_uses + ' total', '共 ' + v.max_uses + ' 张'));
+  return parts.length ? parts.join(cuT(' · ', '、')) : '—';
+}
+function vchEndsHtml(v) {
+  if (!v.expires_at) return '<span class="vch-end">—</span>';
+  const d = new Date(v.expires_at);
+  const txt = formatDateOnly(v.expires_at);
+  if (d <= new Date()) return '<span class="vch-end amber">' + cuT('Ended ', '已结束 ') + txt + '</span>';
+  const soon = (d - Date.now()) < 7 * 864e5;   // ending inside a week = quiet amber
+  return '<span class="vch-end' + (soon ? ' amber' : '') + '">' + txt + '</span>';
+}
+function vchPillsHtml(v) {
+  const pills = [];
+  // Dusk is scarce and means "the system does this for you" — auto-apply
+  // is exactly that, so it is the one Dusk pill (breathing dot per canon).
+  if (v.auto_apply) pills.push('<span class="vch-pill dusk"><span class="dot"></span>' + cuT('Applied for them', '自动抵扣') + '</span>');
+  if (v.is_public) pills.push('<span class="vch-pill">' + cuT('In the app', '小程序可领') + '</span>');
+  if (v.auto_grant_signup) pills.push('<span class="vch-pill">' + cuT('New signups', '新客自动发') + '</span>');
+  if (v.grant_count) pills.push('<span class="vch-pill">' + cuT('Given ', '已发 ') + (v.grant_used_count || 0) + '/' + v.grant_count + '</span>');
+  return pills.length ? '<div class="vch-pills">' + pills.join('') + '</div>' : '';
+}
+
 async function loadVouchers() {
-  const tbody = $('#vouchers-table tbody');
-  tbody.innerHTML = '<tr><td colspan="9" class="muted">Loading…</td></tr>';
   try {
     const { data } = await api('/api/retail-admin/vouchers');
-    if (!data.length) {
-      tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="icon">' + ICONS.empty + '</div><h3>No coupons yet · 暂无优惠券</h3><p class="muted">Create one above to start running promos. · 在上方创建一张以开启活动。</p></div></td></tr>';
-      return;
-    }
-    tbody.innerHTML = data.map(v => {
-      const labelBits = [];
-      if (v.title_en) labelBits.push(escapeHtml(v.title_en));
-      if (v.title_cn) labelBits.push(escapeHtml(v.title_cn));
-      const label = labelBits.length
-        ? labelBits.join(' · ')
-        : '<span class="muted">—</span>';
-      const publicBadge = v.is_public
-        ? '<span class="pill pub" style="font-size: 10px;">PUBLIC · 公开</span>'
-        : '';
-      const autoBadge = v.auto_grant_signup
-        ? '<span class="pill info" style="font-size: 10px;" title="Auto-granted to every new signup · 每位新注册自动发放">AUTO · 自动</span>'
-        : '';
-      const autoApplyBadge = v.auto_apply
-        ? '<span class="pill pub" style="font-size: 10px;" title="Applied automatically at checkout (best one wins) · 结账时自动抵扣(取最优)">AUTO-APPLY · 自动抵扣</span>'
-        : '';
-      const grantBadge = v.grant_count
-        ? `<span class="pill info" style="font-size: 10px;">GRANTED · 已发放 ${v.grant_used_count || 0}/${v.grant_count}</span>`
-        : '';
-      return `
-      <tr data-id="${v.id}">
-        <td><div style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px;"><span style="font-family: var(--f-mono); font-weight: 700">${escapeHtml(v.code)}</span>${publicBadge}${autoBadge}${autoApplyBadge}${grantBadge}</div></td>
-        <td style="font-size: 12px;">${label}</td>
-        <td class="muted">${v.type === 'fixed_amount' ? '¥ off · 立减' : v.type === 'percent' ? '% off · 折扣' : 'Free ship · 免运费'}</td>
-        <td class="numeric">${v.type === 'percent' ? v.value + '%' : (v.type === 'free_shipping' ? '—' : '¥' + fmt(v.value))}</td>
-        <td class="numeric muted">${v.min_subtotal ? '¥' + fmt(v.min_subtotal) : '—'}</td>
-        <td class="numeric">${v.used_count}${v.max_uses != null ? ' / ' + v.max_uses : ''}</td>
-        <td class="muted">${formatDateOnly(v.expires_at)}</td>
-        <td><span class="pill ${v.is_active ? 'pub' : 'draft'}"><span class="dot"></span>${v.is_active ? 'Active · 生效中' : 'Inactive · 已停用'}</span></td>
-        <td style="white-space: nowrap;">
-          <button class="btn btn-sm" onclick='openGrantModal(${v.id}, ${JSON.stringify(v.code)})'>Grant · 发放</button>
-          <button class="btn btn-sm" onclick="togglePublic(${v.id}, ${v.is_public ? 0 : 1})">${v.is_public ? 'Make private · 设为私有' : 'Make public · 设为公开'}</button>
-          <button class="btn btn-sm" onclick="toggleAutoGrant(${v.id}, ${v.auto_grant_signup ? 0 : 1})" title="Auto-grant to every new signup · 为每位新注册自动发放">${v.auto_grant_signup ? 'Stop auto-grant · 停止自动发放' : 'Auto-grant · 自动发放'}</button>
-          <button class="btn btn-sm" onclick="toggleAutoApply(${v.id}, ${v.auto_apply ? 0 : 1})" title="Apply automatically at checkout — best coupon wins, no code needed · 结账时自动抵扣 — 取最优券,无需编码">${v.auto_apply ? 'Stop auto-apply · 停止自动抵扣' : 'Auto-apply · 自动抵扣'}</button>
-          <button class="btn btn-sm" onclick="toggleVoucher(${v.id}, ${v.is_active ? 0 : 1})">${v.is_active ? 'Disable · 停用' : 'Enable · 启用'}</button>
-        </td>
-      </tr>`;
+    _vchData = data || [];
+    vchRender();
+    // Keep an open drawer in step with fresh data (e.g. after a grant).
+    const dw = document.getElementById('vch-drawer');
+    if (_vchOpenId != null && dw && dw.classList.contains('open')) vchDrawerRender();
+  } catch (e) {
+    const tbody = $('#vouchers-table tbody');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="err" style="padding: 14px;">' + cuT('Failed to load: ', '加载失败:') + escapeHtml(e.message) + '</td></tr>';
+  }
+}
+
+function vchSetFilter(f) { _vchFilter = f; vchRender(); }
+function vchSearchInput(val) {
+  clearTimeout(_vchQTimer);
+  _vchQTimer = setTimeout(() => { _vchQ = val; vchRender(); }, 150);
+}
+
+function vchRender() {
+  const tbody = $('#vouchers-table tbody');
+  if (!tbody) return;
+  const q = _vchQ.trim().toLowerCase();
+  const match = v => !q
+    || String(v.code || '').toLowerCase().includes(q)
+    || String(v.title_en || '').toLowerCase().includes(q)
+    || String(v.title_cn || '').toLowerCase().includes(q);
+  const on = _vchData.filter(v => vchLive(v) && match(v));
+  const off = _vchData.filter(v => !vchLive(v) && match(v));
+
+  // Segment — counts track the search so the numbers never lie.
+  const seg = $('#vch-seg');
+  if (seg) {
+    const btn = (key, lab, n) => '<button type="button" class="vch-segbtn' + (_vchFilter === key ? ' on' : '') + '" onclick="vchSetFilter(\'' + key + '\')">' + lab + ' <span class="n">' + n + '</span></button>';
+    seg.innerHTML = btn('on', cuT('Running', '生效中'), on.length)
+      + btn('off', cuT('Off', '已停用'), off.length)
+      + btn('all', cuT('All', '全部'), on.length + off.length);
+  }
+
+  const list = _vchFilter === 'on' ? on : _vchFilter === 'off' ? off : on.concat(off);
+  if (!list.length) {
+    const msg = _vchData.length
+      ? (q ? cuT('Nothing matches.', '没有匹配的优惠券。') : cuT('Nothing here.', '这里没有优惠券。'))
+      : cuT('No coupons yet. The button up top walks you through your first one.', '还没有优惠券。点右上角按钮,几步即可创建第一张。');
+    tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">' + ICONS.empty + '</div><p class="muted" style="margin: 6px 0 0;">' + msg + '</p></div></td></tr>';
+  } else {
+    tbody.innerHTML = list.map(v => {
+      const live = vchLive(v);
+      const offPill = (!live && _vchFilter === 'all')
+        ? '<span class="vch-pill">' + (v.is_active ? cuT('Ended', '已到期') : cuT('Off', '已停用')) + '</span>' : '';
+      const label = vchLabel(v);
+      const go = live || v.is_active
+        ? '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>'
+        : '<button type="button" class="btn btn-sm" onclick="vchTurn(' + v.id + ', 1)">' + cuT('Turn on', '开启') + '</button>';
+      return '<tr class="vch-row' + (live ? '' : ' is-off') + '" data-id="' + v.id + '" onclick="vchRowClick(event, ' + v.id + ')">'
+        + '<td><div class="vch-code">' + escapeHtml(v.code) + offPill + '</div>'
+        + (label ? '<div class="vch-lbl">' + escapeHtml(label) + '</div>' : '')
+        + '</td>'
+        + '<td><div class="vch-gives">' + vchGives(v) + '</div>' + vchPillsHtml(v) + '</td>'
+        + '<td class="vch-rules">' + vchRules(v) + '</td>'
+        + '<td class="numeric vch-used">' + v.used_count + (v.max_uses != null ? ' / ' + v.max_uses : '') + '</td>'
+        + '<td>' + vchEndsHtml(v) + '</td>'
+        + '<td class="vch-go">' + go + '</td>'
+        + '</tr>';
     }).join('');
-  } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
+  }
+
+  // Under the Running view, one quiet line owns up to what's tucked away.
+  const note = $('#vch-offnote');
+  if (note) {
+    note.innerHTML = (_vchFilter === 'on' && off.length)
+      ? cuT(off.length + (off.length === 1 ? ' coupon is' : ' coupons are') + ' off — ', off.length + ' 张优惠券已停用 — ')
+        + '<button type="button" onclick="vchSetFilter(\'off\')">' + cuT('view', '查看') + '</button>'
+      : '';
   }
 }
 
-async function createVoucher() {
-  const body = {
-    code: $('#v-code').value.trim().toUpperCase(),
-    type: $('#v-type').value,
-    value: Number($('#v-value').value) || 0,
-    min_subtotal: Number($('#v-min').value) || 0,
-    max_uses: $('#v-max').value ? Number($('#v-max').value) : null,
-    per_customer_limit: Number($('#v-percust').value) || 0,
-    expires_at: $('#v-expires').value.trim() || null,
-    is_public: $('#v-public').checked,
-    auto_grant_signup: $('#v-auto-grant').checked,
-    auto_apply: $('#v-auto-apply').checked,
-    title_en: $('#v-title-en').value.trim() || null,
-    title_cn: $('#v-title-cn').value.trim() || null,
-  };
-  if (!body.code) { toast('Code required · 请填写编码', 'err'); return; }
-  if (body.is_public && !body.title_en && !body.title_cn) {
-    toast('Public coupons need a label (EN or 中) · 公开优惠券需要填写标签', 'err'); return;
-  }
-  try {
-    // Reusing the code of an expired/disabled coupon revives that row
-    // (reused:true) rather than erroring — surface that so the operator knows
-    // the old coupon was repurposed, not duplicated.
-    const r = await api('/api/retail-admin/vouchers', { method: 'POST', body });
-    toast(r.reused ? ('Reused code · 已复用编码 ' + body.code) : ('Created · 已创建 ' + body.code));
-    ['v-code', 'v-value', 'v-min', 'v-max', 'v-expires', 'v-title-en', 'v-title-cn']
-      .forEach(id => $('#' + id).value = '');
-    $('#v-percust').value = '1';
-    $('#v-public').checked = false;
-    $('#v-auto-grant').checked = false;
-    $('#v-auto-apply').checked = false;
-    await loadVouchers();
-  } catch (e) {
-    const msg = e.message === 'code_active'
-      ? 'A live coupon already uses this code — disable it first · 已有生效中的优惠券使用此编码,请先停用'
-      : e.message === 'code_exists' ? 'Code already exists · 编码已存在'
-      : e.message;
-    toast('Failed · 失败: ' + msg, 'err');
-  }
+// Row click → drawer. Bail when the click landed on an interactive child
+// (the Turn-on button) so it keeps working.
+function vchRowClick(e, id) {
+  if (e.target.closest('button, a, input, select, label')) return;
+  vchOpen(id);
+}
+function vchOpen(id) {
+  _vchOpenId = id;
+  vchDrawerRender();
+  openDrawer('#vch-drawer');
+}
+onDrawerClose('#vch-drawer', () => {
+  _vchOpenId = null;
+  const m = document.getElementById('vch-drawer-mount');
+  if (m) m.innerHTML = '';
+});
+
+function vchDrawerRender() {
+  const mount = document.getElementById('vch-drawer-mount');
+  if (!mount) return;
+  const v = _vchData.find(x => x.id === _vchOpenId);
+  if (!v) { closeDrawer('#vch-drawer'); return; }
+  const live = vchLive(v);
+  const expired = !!(v.expires_at && new Date(v.expires_at) <= new Date());
+  const status = live
+    ? '<span class="vch-pill sage"><span class="dot"></span>' + cuT('Running', '生效中') + '</span>'
+    : '<span class="vch-pill">' + (v.is_active ? cuT('Ended', '已到期') : cuT('Off', '已停用')) + '</span>';
+  const sw = (field, on, title, desc, dusk) =>
+    '<div class="vch-swrow">'
+    + '<button type="button" class="vch-sw' + (on ? ' on' : '') + (dusk && on ? ' dusk' : '') + '" role="switch" aria-checked="' + !!on + '" onclick="vchToggle(' + v.id + ', \'' + field + '\', ' + (on ? 0 : 1) + ')"></button>'
+    + '<div><div class="t">' + title + '</div><div class="d">' + desc + '</div></div>'
+    + '</div>';
+  const dateVal = v.expires_at ? String(v.expires_at).slice(0, 10) : '';
+  mount.innerHTML =
+    '<div class="vch-dw-head"><span class="vch-dw-code">' + escapeHtml(v.code) + '</span>' + status + '</div>'
+    + (expired && v.is_active ? '<div class="vch-note amber">' + cuT('This coupon ended. Set a new end date below to run it again.', '优惠券已到期。在下方设置新的截止日期即可重新生效。') + '</div>' : '')
+    + '<div class="vch-facts">'
+    + '<div class="vch-fact"><span class="k">' + cuT('Gives', '优惠') + '</span><span class="v">' + vchGives(v) + '</span></div>'
+    + '<div class="vch-fact"><span class="k">' + cuT('On orders over', '最低订单金额') + '</span><span class="v">' + (Number(v.min_subtotal) > 0 ? '¥' + fmt(v.min_subtotal) : cuT('Any order', '无门槛')) + '</span></div>'
+    + '<div class="vch-fact"><span class="k">' + cuT('Used', '已使用') + '</span><span class="v">' + v.used_count + (v.max_uses != null ? ' / ' + v.max_uses : '') + '</span></div>'
+    + '<div class="vch-fact"><span class="k">' + cuT('Per customer', '每人限用') + '</span><span class="v">' + (Number(v.per_customer_limit) > 0 ? v.per_customer_limit + cuT(v.per_customer_limit === 1 ? ' time' : ' times', ' 次') : cuT('No limit', '不限')) + '</span></div>'
+    + '<div class="vch-fact"><span class="k">' + cuT('Ends', '截止') + '</span><span class="v"><input type="date" class="vch-date" value="' + dateVal + '" onchange="vchSetExpiry(' + v.id + ', this.value)"></span></div>'
+    + '</div>'
+    + '<div class="vch-kicker">' + cuT('How customers get it', '顾客怎么获得') + '</div>'
+    + sw('is_public', !!v.is_public,
+        cuT('Show in the app', '在小程序展示'),
+        cuT('Anyone can find it and tap to save — no code needed.', '顾客可自行领取,无需输入编码。'))
+    + sw('auto_grant_signup', !!v.auto_grant_signup,
+        cuT('Give to new signups', '发给新注册顾客'),
+        cuT('Lands in every new customer’s coupons automatically.', '自动进入每位新顾客的优惠券。'))
+    + sw('auto_apply', !!v.auto_apply,
+        cuT('Apply it for them', '自动抵扣'),
+        cuT('At checkout the best coupon is applied — no code, no tap.', '结账时自动使用最优的一张,无需操作。'), true)
+    + '<div class="vch-kicker">' + cuT('What customers see', '顾客看到的文字') + '</div>'
+    + (v.is_public && !(v.title_en || v.title_cn) ? '<div class="vch-note amber" style="margin: 0 0 8px;">' + cuT('Public coupons need a label customers can read.', '公开优惠券需要顾客能看懂的标签。') + '</div>' : '')
+    + '<div class="vch-labels">'
+    + '<input type="text" id="vch-lbl-en" value="' + escapeAttr(v.title_en || '') + '" placeholder="' + escapeAttr(cuT('English — e.g. ¥20 off your first order', '英文标签')) + '">'
+    + '<input type="text" id="vch-lbl-cn" value="' + escapeAttr(v.title_cn || '') + '" placeholder="' + escapeAttr(cuT('Chinese — e.g. 首单立减 ¥20', '中文标签,如 首单立减 ¥20')) + '">'
+    + '<button type="button" class="btn btn-sm" onclick="vchSaveLabel(' + v.id + ')">' + cuT('Save label', '保存标签') + '</button>'
+    + '</div>'
+    + '<div class="vch-kicker">' + cuT('Give it out', '发放') + '</div>'
+    + '<div class="vch-grants">'
+    + '<span class="d">' + (v.grant_count
+        ? cuT('Given to ' + v.grant_count + (v.grant_count === 1 ? ' customer' : ' customers') + ', ' + (v.grant_used_count || 0) + ' used.', '已发放给 ' + v.grant_count + ' 位顾客,' + (v.grant_used_count || 0) + ' 张已使用。')
+        : cuT('Hand it to specific customers — it lands in their coupons, no code needed.', '发给指定顾客,直接进入他们的优惠券,无需编码。')) + '</span>'
+    + '<button type="button" class="btn btn-sm" onclick=\'openGrantModal(' + v.id + ', ' + JSON.stringify(String(v.code)) + ')\'>' + cuT('Give to a customer', '发放给顾客') + '</button>'
+    + '</div>'
+    + '<div class="vch-dw-foot">'
+    + (v.is_active
+        ? '<button type="button" class="btn vch-off-btn" onclick="vchTurn(' + v.id + ', 0)">' + cuT('Turn off', '停用') + '</button>'
+        : '<button type="button" class="btn btn-primary" onclick="vchTurn(' + v.id + ', 1)">' + cuT('Turn on', '开启') + '</button>')
+    + '<span class="d">' + cuT('Turning it off keeps its history.', '停用会保留历史记录,可随时重新开启。') + '</span>'
+    + '</div>';
 }
 
-async function toggleVoucher(id, value) {
-  try {
-    await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body: { is_active: !!value } });
-    await loadVouchers();
-  } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
-  }
+async function vchPatch(id, body) {
+  await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body });
+  await loadVouchers();
 }
-
-async function togglePublic(id, value) {
-  try {
-    await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body: { is_public: !!value } });
-    await loadVouchers();
-  } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
-  }
+async function vchToggle(id, field, value) {
+  try { await vchPatch(id, { [field]: !!value }); }
+  catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
 }
-async function toggleAutoGrant(id, value) {
+async function vchSetExpiry(id, value) {
   try {
-    await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body: { auto_grant_signup: !!value } });
-    toast(value ? 'Auto-grant enabled · 已开启自动发放' : 'Auto-grant disabled · 已关闭自动发放');
-    await loadVouchers();
-  } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
-  }
+    await vchPatch(id, { expires_at: value || null });
+    toast(value ? cuT('End date set', '已更新截止日期') : cuT('No end date — runs until turned off', '已改为无截止日期'));
+  } catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
 }
-async function toggleAutoApply(id, value) {
+async function vchSaveLabel(id) {
+  const en = $('#vch-lbl-en'), cn = $('#vch-lbl-cn');
   try {
-    await api('/api/retail-admin/vouchers/' + id, { method: 'PATCH', body: { auto_apply: !!value } });
-    toast(value ? 'Auto-apply enabled · 已开启自动抵扣' : 'Auto-apply disabled · 已关闭自动抵扣');
-    await loadVouchers();
-  } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    await vchPatch(id, { title_en: (en && en.value.trim()) || null, title_cn: (cn && cn.value.trim()) || null });
+    toast(cuT('Label saved', '标签已保存'));
+  } catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
+}
+async function vchTurn(id, on) {
+  const v = _vchData.find(x => x.id === id);
+  // Turning on a coupon that's past its end date would leave it dead anyway —
+  // open it and point at the date instead of pretending the switch worked.
+  if (on && v && v.expires_at && new Date(v.expires_at) <= new Date()) {
+    if (_vchOpenId !== id) vchOpen(id);
+    toast(cuT('It already ended — set a new end date first', '优惠券已到期 — 请先设置新的截止日期'), 'err');
+    return;
   }
+  try {
+    await vchPatch(id, { is_active: !!on });
+    toast(on ? cuT('On — customers can use it now', '已开启') : cuT('Turned off', '已停用'));
+  } catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
 }
 
 // ─── Grant-voucher modal ────────────────────────────────────────────────

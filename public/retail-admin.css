@@ -9459,3 +9459,161 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
     margin-top: 12px;
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   TACET COUPONS (vch-*) — Option A rebuild: one door, quiet rows.
+   #tab-vouchers sits in the tacet-orders-skin token scope (inline style
+   in retail-admin.html), so --bg-pane / --line / --text-* / --tacet-*
+   already resolve to Tacet values here, light and dark. Dusk budget on
+   this screen: the New-coupon CTA + the auto-apply pill/switch ("the
+   system applies it for them") — nothing else.
+   ════════════════════════════════════════════════════════════════════ */
+/* Paper ground while the tab is active, like the other Tacet pages. */
+body:has(#tab-vouchers.active) { background: var(--td-paper); }
+
+/* Centered 1120px column like Dashboard/Reports/Sales. */
+#tab-vouchers .td-head, #tab-vouchers .vch-body {
+  max-width: 1120px; margin-left: auto; margin-right: auto;
+}
+#tab-vouchers .td-head { align-items: flex-start; flex-wrap: wrap; margin-bottom: 20px; }
+.vch-spacer { flex: 1; }
+
+/* The screen's one Dusk element — creation CTA (mirrors #tab-orders .t-cta). */
+.vch-new { background: var(--tacet-dusk); border-color: var(--tacet-dusk); color: #fff; gap: 7px; white-space: nowrap; }
+.vch-new:hover { background: #605AA0; border-color: #605AA0; color: #fff; }
+.vch-new svg { flex: none; }
+
+/* ── toolbar: segment + search ── */
+.vch-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 4px 0 14px; }
+.vch-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--bg-pane); }
+.vch-segbtn {
+  border: 0; background: transparent; font: 500 13px var(--f-sans);
+  color: var(--text-2); padding: 6px 14px; cursor: pointer;
+  transition: background var(--t-med, .2s) var(--ease-out, ease);
+}
+.vch-segbtn:hover { color: var(--text-1); }
+.vch-segbtn.on { background: var(--text-1); color: var(--bg-pane); }
+.vch-segbtn .n { opacity: .55; font-variant-numeric: tabular-nums; }
+.vch-search {
+  display: flex; align-items: center; gap: 8px; margin-left: auto;
+  background: var(--bg-pane); border: 1px solid var(--line); border-radius: 8px;
+  padding: 0 10px; color: var(--text-2); min-width: 230px;
+}
+.vch-search:focus-within { border-color: var(--tacet-dusk); }
+.vch-search svg { width: 14px; height: 14px; flex: none; }
+.vch-search input {
+  border: 0; background: transparent; padding: 8px 0; width: 100%;
+  font: 400 13.5px var(--f-sans); color: var(--text-1); outline: none;
+}
+
+/* ── the table ── */
+.vch-card {
+  background: var(--bg-pane); border: 1px solid var(--line);
+  border-radius: 14px; overflow: hidden; overflow-x: auto;
+}
+#vouchers-table { width: 100%; border-collapse: collapse; }
+#vouchers-table thead th {
+  text-align: left; background: var(--bg-pane); color: var(--text-2);
+  font-family: var(--f-sans); font-weight: 500; font-size: 11.5px;
+  letter-spacing: .02em; text-transform: none; white-space: nowrap;
+  padding: 12px 14px 9px; border-bottom: 1px solid var(--line);
+}
+#vouchers-table tbody td {
+  padding: 13px 14px; border-bottom: 1px solid var(--line);
+  font-size: 13.5px; color: var(--text-1); vertical-align: middle;
+}
+#vouchers-table tbody tr:last-child td { border-bottom: none; }
+tr.vch-row { cursor: pointer; transition: background var(--t-med, .2s) var(--ease-out, ease); }
+tr.vch-row:hover td { background: var(--bg-elev-1); }
+tr.vch-row.is-off .vch-code, tr.vch-row.is-off .vch-gives { color: var(--text-2); }
+.vch-code {
+  font-family: var(--f-mono); font-weight: 500; font-size: 13px;
+  letter-spacing: .03em; color: var(--text-1);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.vch-lbl { font-size: 12.5px; color: var(--text-2); margin-top: 2px; }
+.vch-gives { font-weight: 500; color: var(--text-1); white-space: nowrap; }
+.vch-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.vch-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 500 11.5px var(--f-sans); line-height: 1; padding: 4px 9px;
+  border-radius: 999px; background: var(--bg-elev-1); color: var(--text-2);
+  white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+.vch-pill .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.vch-pill.sage { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
+.vch-pill.dusk { background: var(--tacet-dusk-tint, #EEEDF6); color: var(--tacet-dusk); }
+.vch-pill.dusk .dot { animation: vchBreathe 2.4s cubic-bezier(.16, 1, .3, 1) infinite; }
+@keyframes vchBreathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .vch-pill.dusk .dot { animation: none; } }
+.vch-rules, .vch-end { font-size: 13px; color: var(--text-2); white-space: nowrap; }
+.vch-used { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vch-end { font-variant-numeric: tabular-nums; }
+.vch-end.amber { color: var(--tacet-amber-ink); }
+.vch-go { text-align: right; color: var(--text-3); white-space: nowrap; }
+.vch-go svg { display: inline-block; vertical-align: middle; }
+#vch-offnote { margin-top: 14px; font-size: 13px; color: var(--text-2); }
+#vch-offnote:empty { display: none; }
+#vch-offnote button {
+  border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; color: var(--text-1); text-decoration: underline; text-underline-offset: 3px;
+}
+
+/* ── the coupon drawer ── */
+#vch-drawer .drawer-body { padding-top: 26px; }
+.vch-kicker {
+  font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--text-2); margin: 24px 0 4px;
+}
+.vch-dw-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding-right: 40px; }
+.vch-dw-code { font-family: var(--f-mono); font-weight: 500; font-size: 17px; letter-spacing: .03em; color: var(--text-1); }
+.vch-note { margin-top: 12px; padding: 10px 13px; border-radius: 8px; font-size: 12.5px; line-height: 1.5; }
+.vch-note.amber { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
+.vch-facts { margin-top: 14px; }
+.vch-fact {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px;
+  padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px;
+}
+.vch-fact:last-child { border-bottom: none; }
+.vch-fact .k { color: var(--text-2); }
+.vch-fact .v { font-weight: 500; color: var(--text-1); text-align: right; font-variant-numeric: tabular-nums; }
+.vch-date {
+  border: 1px solid var(--line); background: var(--bg-input); color: var(--text-1);
+  border-radius: 8px; padding: 5px 8px; font: 400 13px var(--f-sans);
+}
+.vch-date:focus { outline: none; border-color: var(--tacet-dusk); }
+.vch-swrow { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
+.vch-swrow .t { font-size: 13.5px; font-weight: 500; color: var(--text-1); }
+.vch-swrow .d { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+.vch-sw {
+  flex: none; width: 36px; height: 21px; border-radius: 999px; border: 0; padding: 0;
+  background: var(--line-strong); position: relative; margin-top: 2px; cursor: pointer;
+  transition: background var(--t-med, .2s) var(--ease-out, ease);
+}
+.vch-sw::after {
+  content: ""; position: absolute; top: 2.5px; left: 3px; width: 16px; height: 16px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(17, 26, 43, .25);
+  transition: left .2s cubic-bezier(.16, 1, .3, 1);
+}
+.vch-sw.on { background: var(--text-1); }
+.vch-sw.on.dusk { background: var(--tacet-dusk); }
+.vch-sw.on::after { left: 17px; }
+.vch-labels { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.vch-labels input {
+  width: 100%; border: 1px solid var(--line); background: var(--bg-input);
+  color: var(--text-1); border-radius: 8px; padding: 8px 10px; font: 400 13px var(--f-sans);
+}
+.vch-labels input:focus { outline: none; border-color: var(--tacet-dusk); }
+.vch-labels .btn { align-self: flex-start; }
+.vch-grants { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }
+.vch-grants .d { font-size: 12.5px; color: var(--text-2); line-height: 1.5; }
+.vch-grants .btn { flex: none; }
+.vch-dw-foot { display: flex; align-items: center; gap: 12px; margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); }
+.vch-dw-foot .d { font-size: 12px; color: var(--text-2); }
+.vch-off-btn { color: var(--tacet-brick); border-color: var(--tacet-brick); background: transparent; }
+.vch-off-btn:hover { background: var(--tacet-brick-tint); color: var(--tacet-brick); border-color: var(--tacet-brick); }
+
+@media (max-width: 720px) {
+  .vch-search { min-width: 0; width: 100%; margin-left: 0; }
+  #vouchers-table thead th:nth-child(3), #vouchers-table tbody td:nth-child(3) { display: none; }
+}
