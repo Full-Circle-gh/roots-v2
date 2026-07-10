@@ -242,6 +242,10 @@ router.post('/update-order-status', (req, res) => {
     ).get(String(meituanOrderNo));
     if (!imp || !imp.retail_order_id) return res.json({ ok: true, changed: false, reason: 'not_mirrored' });
 
+    // Snapshot the order BEFORE we advance it — the restock below keys off the
+    // PREVIOUS status, which is what makes it idempotent under a repeating poll.
+    const prev = db.prepare('SELECT status, store_id FROM retail_orders WHERE id = ?').get(imp.retail_order_id);
+
     // A terminal label also advances the internal status so the order leaves the
     // Paid worklist for Delivered/Cancelled/Refunded; in-progress leaves it alone.
     const internal = internalStatusForChannel(desc);
@@ -256,7 +260,38 @@ router.post('/update-order-status', (req, res) => {
               OR (? IS NOT NULL AND COALESCE(channel_eta,'') != ?))
     `).run(desc, internal, etaVal, imp.retail_order_id, desc, internal, etaVal, etaVal);
 
-    res.json({ ok: true, changed: r.changes > 0 });
+    // Meituan voided the order → give the stock back. Ingest deducted it (ledgered)
+    // and nothing else ever returned it, so without this EVERY cancel drifts our count
+    // low — which then under-reports to Meituan + Guanyi on the next push. Runs only on
+    // the transition into cancelled/refunded (prev status was neither), so a poll that
+    // re-reads the same 订单取消 label can never restock twice. Best-effort: a restock
+    // failure must not fail the status write, or the order would stick on a stale label.
+    let restocked = 0;
+    const alreadyVoid = !!prev && ['cancelled', 'refunded'].includes(prev.status);
+    if (prev && !alreadyVoid && (internal === 'cancelled' || internal === 'refunded')) {
+      try {
+        const lines = db.prepare(
+          'SELECT product_id, name_en, qty FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL'
+        ).all(imp.retail_order_id);
+        for (const it of lines) {
+          const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?')
+            .get(prev.store_id, it.product_id);
+          const oldQ = cur ? cur.physical_qty : 0;
+          inventory.adjustStock({
+            storeId: prev.store_id, productId: it.product_id,
+            newPhysicalQty: oldQ + it.qty,
+            actorLabel: 'Meituan cancel',
+            reason: 'meituan_cancel',
+            note: `Meituan ${String(meituanOrderNo)} ${internal} — restored ${it.name_en} x${it.qty}`,
+          });
+          restocked++;
+        }
+      } catch (e) {
+        console.error('[meituan-internal] restock on cancel failed:', e.message);
+      }
+    }
+
+    res.json({ ok: true, changed: r.changes > 0, restocked });
   } catch (err) {
     console.error('[meituan-internal] update-order-status error:', err.message);
     res.status(500).json({ error: err.message });
