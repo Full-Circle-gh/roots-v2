@@ -1302,7 +1302,8 @@ function _pagerLang(en, cn) {
 // o.page / o.pageSize / o.total — current window
 // o.sizes — page-size choices, e.g. [50,100,200]; omit to hide the selector
 // o.onPage(nextPage) / o.onSize(nextSize) — callbacks; the caller reloads
-// o.noun  — {en, cn} plural noun for the single-page line ("orders" / "订单")
+// o.noun  — nouns for the single-page line: {en, one, cn}. `one` is the English
+//           singular ("order"); Chinese doesn't inflect, so there's no cn twin.
 function rmRenderPager(mount, o) {
   const el = (typeof mount === 'string') ? document.getElementById(mount) : mount;
   if (!el) return;
@@ -1318,11 +1319,16 @@ function rmRenderPager(mount, o) {
   const from  = (page - 1) * size + 1;
   const to    = Math.min(total, page * size);
 
-  const sizeSel = (o.sizes && o.sizes.length) ? `
+  // The size selector earns its place only when it can change what's on screen.
+  // With 1 order and sizes of 50/100/200 every choice shows the same one row,
+  // so the control is pure furniture — when in doubt, remove something.
+  const sizes = (o.sizes || []).filter(v => Number.isFinite(Number(v)));
+  const sizeUseful = sizes.length > 1 && total > Math.min(...sizes.map(Number));
+  const sizeSel = sizeUseful ? `
     <label class="t-pager-size">
       ${_pagerLang('Per page', '每页')}
       <select data-pager-size>
-        ${o.sizes.map(v => `<option value="${v}"${Number(v) === size ? ' selected' : ''}>${v}</option>`).join('')}
+        ${sizes.map(v => `<option value="${v}"${Number(v) === size ? ' selected' : ''}>${v}</option>`).join('')}
       </select>
     </label>` : '';
 
@@ -1339,10 +1345,14 @@ function rmRenderPager(mount, o) {
       </button>
     </div>`;
 
-  const nEn = (o.noun && o.noun.en) || 'results';
-  const nCn = (o.noun && o.noun.cn) || '条';
+  // "Showing all 1 orders" reads like a bug. One row gets the singular, and
+  // drops the "all" with it — there is no "all" of one.
+  const nMany = (o.noun && o.noun.en)  || 'results';
+  const nOne  = (o.noun && o.noun.one) || nMany;
+  const nCn   = (o.noun && o.noun.cn)  || '条';
   const count = (pages <= 1)
-    ? _pagerLang(`Showing all <b>${_pagerNum(total)}</b> ${nEn}`,
+    ? _pagerLang(total === 1 ? `Showing <b>1</b> ${nOne}`
+                             : `Showing all <b>${_pagerNum(total)}</b> ${nMany}`,
                  `共 <b>${_pagerNum(total)}</b> ${nCn}`)
     : _pagerLang(`Showing <b>${_pagerNum(from)}–${_pagerNum(to)}</b> of <b>${_pagerNum(total)}</b>`,
                  `显示 <b>${_pagerNum(from)}–${_pagerNum(to)}</b> / 共 <b>${_pagerNum(total)}</b>`);

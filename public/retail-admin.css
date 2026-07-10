@@ -9163,7 +9163,12 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
    ════════════════════════════════════════════════════════════════════ */
 .t-pager {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 24px; padding: 16px;
+  /* Wrap rather than crush. Flex items shrink by default, and a <select>
+     shrinks its CONTENT box while keeping its 40px of padding — so in a narrow
+     pane the digits vanish under the chevron before anything visibly "breaks".
+     Given a row-gap the right-hand controls drop to a second line instead. */
+  flex-wrap: wrap;
+  gap: 12px 24px; padding: 16px;
   background: var(--td-raised);
   border-top: 1px solid var(--td-border);
   border-radius: 0 0 8px 8px;
@@ -9174,15 +9179,30 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
      Tacet is Inter for all product UI; the component carries it itself. */
   font-family: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
 }
+/* The count is the only thing allowed to give ground: it may shrink and, at
+   the very end, wrap. Everything on the right is a control — controls keep
+   their size or the operator can't hit them. */
 .t-pager-count {
-  font-size: 13px; color: var(--td-text2); white-space: nowrap;
+  font-size: 13px; color: var(--td-text2);
+  flex: 1 1 auto; min-width: 0;
 }
 .t-pager-count b {
   color: var(--td-text); font-weight: 500;
   font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+  white-space: nowrap;   /* never split "1,251–1,284" across two lines */
 }
-.t-pager-right { display: flex; align-items: center; gap: 24px; }
-.t-pager-nav   { display: flex; align-items: center; gap: 8px; }
+.t-pager-right {
+  display: flex; align-items: center; gap: 12px 24px;
+  margin-left: auto;
+  /* In a cramped pane "Per page" and the nav together outgrow the bar. Let them
+     stack, right-aligned, rather than push each other out past its edge.
+     `flex: 0 1 auto` + min-width:0 is what makes that wrap possible: a
+     non-shrinkable item is sized to its max-content, so its children would
+     never be handed a narrower box to wrap inside, and the group would spill. */
+  flex: 0 1 auto; min-width: 0;
+  flex-wrap: wrap; justify-content: flex-end;
+}
+.t-pager-nav { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .t-pager-pos {
   font-size: 13px; color: var(--td-text2);
   font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
@@ -9195,6 +9215,7 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
   border: 1px solid var(--td-border); border-radius: 8px;
   padding: 7px 14px; cursor: pointer;
   display: inline-flex; align-items: center; gap: 6px;
+  flex: 0 0 auto; white-space: nowrap;   /* phone rule below re-flexes these */
   transition: border-color 200ms cubic-bezier(.16, 1, .3, 1);
 }
 .t-pager-btn:hover:not(:disabled) { border-color: var(--td-text2); }
@@ -9208,11 +9229,23 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
 .t-pager-size {
   display: inline-flex; align-items: center; gap: 8px;
   font-size: 13px; color: var(--td-text2); white-space: nowrap;
+  flex: 0 0 auto;
 }
 .t-pager-size select {
   font-family: inherit; font-size: 13px; color: var(--td-text);
-  background: var(--td-surface); border: 1px solid var(--td-border);
-  border-radius: 8px; padding: 6px 8px; cursor: pointer;
+  /* background-COLOR only, never the `background` shorthand: the app paints the
+     dropdown chevron as a background-image on `select`, and the shorthand would
+     wipe it out. The right padding is that chevron's gutter — remove it (as a
+     flat `padding: 6px 8px` did) and the chevron lands on top of the number.
+     `:root[data-theme=light] select` outranks this rule anyway, so the image
+     returns whatever we do here; give it room rather than a fight. */
+  background-color: var(--td-surface);
+  border: 1px solid var(--td-border);
+  border-radius: 8px; padding: 6px 30px 6px 10px; cursor: pointer;
+  /* Never shrink. A flex <select> collapses its content box first and keeps
+     its padding, so under pressure the digits slide under the chevron and the
+     control reads as a clipped blob. min-width holds 3 digits + both gutters. */
+  flex: 0 0 auto; min-width: 72px;
   transition: border-color 200ms cubic-bezier(.16, 1, .3, 1);
 }
 .t-pager-size select:focus { outline: none; border-color: var(--td-dusk); }
@@ -9224,11 +9257,13 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
    operators on page 1 of the customer list forever.) */
 @media (max-width: 720px) {
   .t-pager { flex-direction: column; align-items: stretch; gap: 12px; }
-  .t-pager-count { text-align: center; white-space: normal; }
-  .t-pager-right { justify-content: space-between; gap: 12px; }
+  .t-pager-count { text-align: center; }
+  /* margin-left:auto is the desktop right-align; in this column it would stop
+     the row stretching and shrink the tap targets back to content width. */
+  .t-pager-right { justify-content: space-between; gap: 12px; margin-left: 0; }
   .t-pager-size  { display: none; }
-  .t-pager-nav   { flex: 1; justify-content: space-between; }
-  .t-pager-btn   { flex: 1; justify-content: center; padding: 10px 16px; }
+  .t-pager-nav   { flex: 1 1 auto; justify-content: space-between; }
+  .t-pager-btn   { flex: 1 1 auto; justify-content: center; padding: 10px 16px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

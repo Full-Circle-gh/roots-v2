@@ -204,7 +204,7 @@ async function cuLoad() {
   rmRenderPager('cu-pager', {
     page: CU_PAGE, pageSize: CU_PAGE_SIZE, total: CU_TOTAL,
     sizes: [20, 50, 100],
-    noun: { en: 'customers', cn: '位客户' },
+    noun: { en: 'customers', one: 'customer', cn: '位客户' },
     onPage: p => {
       CU_PAGE = p;
       cuLoad();
