@@ -14902,10 +14902,15 @@ function toggleTweaksMenu() {
   if (!pop || !btn) return;
   if (pop.hidden) {
     if (pop.parentNode !== document.body) document.body.appendChild(pop);
-    // Unhide BEFORE measuring so offsetWidth is real (right-align to button).
+    // Unhide BEFORE measuring so offsetWidth/offsetHeight are real.
     pop.hidden = false;
     const r = btn.getBoundingClientRect();
-    pop.style.top  = (r.bottom + 6) + 'px';
+    // Open below the button, but flip ABOVE it when there's no room — e.g.
+    // the canvas-first dock sits at the bottom of the screen, so a downward
+    // menu would fall off the edge and be invisible.
+    const ph = pop.offsetHeight || 160;
+    const below = r.bottom + 6;
+    pop.style.top  = (below + ph > window.innerHeight - 8) ? (r.top - ph - 6) + 'px' : below + 'px';
     pop.style.left = Math.max(8, r.right - pop.offsetWidth) + 'px';
     cmsSyncTweakControls();
     setTimeout(() => document.addEventListener('click', _closeTweaksOnOutside, true), 0);
@@ -14943,11 +14948,15 @@ function togglePreviewMenu() {
     // sub-context were leading candidates). Body-level guarantees no
     // ancestor can ever obscure it.
     if (pop.parentNode !== document.body) document.body.appendChild(pop);
+    pop.hidden = false;                         // unhide first so offsetHeight is real
     const r = btn.getBoundingClientRect();
-    pop.style.top   = (r.bottom + 6) + 'px';
     pop.style.left  = 'auto';
     pop.style.right = (window.innerWidth - r.right) + 'px';
-    pop.hidden = false;
+    // Flip ABOVE the button when a downward menu wouldn't fit — the dock in
+    // canvas-first mode lives at the bottom of the screen.
+    const ph = pop.offsetHeight || 140;
+    const below = r.bottom + 6;
+    pop.style.top = (below + ph > window.innerHeight - 8) ? (r.top - ph - 6) + 'px' : below + 'px';
     setTimeout(() => {
       document.addEventListener('click', _previewMenuOutside, { capture: true });
       window.addEventListener('resize', closePreviewMenu, { once: true });
