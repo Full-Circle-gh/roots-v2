@@ -173,26 +173,26 @@ async function cuLoad() {
       const isNew = r.created_at && cuGzDay(r.created_at) === today;
       const nameHtml = r.nickname
         ? escapeHtml(r.nickname)
-        : '<span class="cu-empty"></span>';
+        : '<span class="cul-empty"></span>';
       return `
-      <tr class="cu-row${r.is_blocked ? ' is-blocked' : ''}" data-recency="${cuRecency(r.last_login_at)}" onclick="cuOpenDetail(${r.id})">
+      <tr class="cul-row${r.is_blocked ? ' is-blocked' : ''}" onclick="cuOpenDetail(${r.id})">
         <td>
-          <div class="cu-who">
-            <span class="cu-mono" data-no-i18n>${cuMonogram(r.nickname)}</span>
-            <span class="who-main">
+          <div class="cul-who">
+            <span class="cul-mono" data-no-i18n>${cuMonogram(r.nickname)}</span>
+            <span class="main">
               <span class="nm">${nameHtml}
-                ${isNew ? `<span class="cu-new">${cuT('New', '新客')}</span>` : ''}
-                ${r.is_blocked ? `<span class="cu-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}
+                ${isNew ? `<span class="cul-new">${cuT('New', '新客')}</span>` : ''}
+                ${r.is_blocked ? `<span class="cul-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}
               </span>
               ${r.phone ? `<span class="ph" data-no-i18n>${escapeHtml(r.phone)}</span>` : ''}
             </span>
           </div>
         </td>
-        <td><span class="cu-pill tier-${tier}">${tier}</span></td>
-        <td class="numeric cu-num ${(r.orders_count || 0) === 0 ? 'is-zero' : ''}">${r.orders_count || 0}</td>
-        <td class="numeric cu-num ${(r.points_balance || 0) === 0 ? 'is-zero' : ''}">${r.points_balance || 0}</td>
-        <td class="numeric cu-num ${Number(r.balance || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.balance || 0).toFixed(2)}</td>
-        <td class="cu-last" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
+        <td><span class="cul-pill tier-${tier}">${tier}</span></td>
+        <td class="numeric cul-num ${(r.orders_count || 0) === 0 ? 'is-zero' : ''}">${r.orders_count || 0}</td>
+        <td class="numeric cul-num ${(r.points_balance || 0) === 0 ? 'is-zero' : ''}">${r.points_balance || 0}</td>
+        <td class="numeric cul-num ${Number(r.balance || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.balance || 0).toFixed(2)}</td>
+        <td class="cul-last" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
       </tr>`;
     }).join('');
   }
@@ -391,7 +391,7 @@ function renderDiagnosticsBlock(diag) {
   }
 
   const errBadge = (diag && diag.error_count_7d > 0)
-    ? `<span class="cu-pill blocked">${diag.error_count_7d} ${cuT('errors in 7 days', '近7天报错')}</span>`
+    ? `<span class="cul-pill blocked">${diag.error_count_7d} ${cuT('errors in 7 days', '近7天报错')}</span>`
     : `<span class="cu-pill">${cuT('No errors in 7 days', '近7天无报错')}</span>`;
 
   const logRows = logs.length
@@ -678,7 +678,7 @@ function cuRenderDetail() {
           '顾客 #' + c.id + (cuFmtDate(c.created_at) ? ' · ' + cuFmtDate(c.created_at) + ' 加入' : '')))}</div>
         <div class="cux-name">${escapeHtml(c.nickname || '—')}
           <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(c.tier_key || 'seed')}</span>
-          ${c.is_blocked ? '<span class="cu-pill blocked">Blocked · 已封禁</span>' : ''}
+          ${c.is_blocked ? '<span class="cul-pill blocked">Blocked · 已封禁</span>' : ''}
         </div>
         ${(c.phone || c.email) ? `<div class="cux-phone" data-no-i18n>
           ${c.phone ? `${escapeHtml(c.phone)}<button class="cux-copy" title="Copy · 复制" onclick="cuCopyText('${escapeAttr(c.phone)}')">${copyIco}</button>` : ''}
@@ -1306,21 +1306,11 @@ function cuMonogram(nickname) {
   return ch ? escapeHtml(ch.toUpperCase()) : '·';
 }
 
-// Recency bucket for the Last-login highlight tweak: 'today' / 'week' / 'old'.
-function cuRecency(iso) {
-  if (!iso) return 'old';
-  const d = new Date((typeof iso === 'string' && iso.indexOf('T') < 0 ? iso.replace(' ', 'T') + 'Z' : iso));
-  if (isNaN(d)) return 'old';
-  const start = new Date(); start.setHours(0, 0, 0, 0);
-  if (d.getTime() >= start.getTime()) return 'today';
-  if (Date.now() - d.getTime() <= 7 * 24 * 3600 * 1000) return 'week';
-  return 'old';
-}
-
 // ── Customers list · per-operator View tweaks (mirrors the Orders pattern) ──
-// Imported from the Claude Design Customers List tweaks. Classes ride on
-// #cu-table (persists across re-renders) so changes apply live.
-const CU_VIEW_DEFAULTS = { badgeStyle: 'pill', recentHighlight: 'today', emptyLabel: 'dash' };
+// Classes ride on #cu-table (they persist across re-renders) so changes apply
+// live. The old "recent login" row tint is gone: the Last seen column already
+// says "Today", so the tint said it a second time and left the table blotchy.
+const CU_VIEW_DEFAULTS = { badgeStyle: 'pill', emptyLabel: 'dash' };
 function cuViewLoad() {
   try { return { ...CU_VIEW_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-customer-tweaks') || '{}')) }; }
   catch (e) { return { ...CU_VIEW_DEFAULTS }; }
@@ -1328,8 +1318,8 @@ function cuViewLoad() {
 let CU_VIEW = cuViewLoad();
 function cuViewApply() {
   const tbl = document.getElementById('cu-table'); if (!tbl) return;
-  tbl.classList.remove('cb-pill', 'cb-square', 'cb-underline', 'cu-rh-off', 'cu-rh-today', 'cu-rh-week', 'ce-dash', 'ce-noname', 'ce-guest');
-  tbl.classList.add('cb-' + CU_VIEW.badgeStyle, 'cu-rh-' + CU_VIEW.recentHighlight, 'ce-' + CU_VIEW.emptyLabel);
+  tbl.classList.remove('cb-pill', 'cb-square', 'cb-underline', 'ce-dash', 'ce-noname', 'ce-guest');
+  tbl.classList.add('cb-' + CU_VIEW.badgeStyle, 'ce-' + CU_VIEW.emptyLabel);
 }
 function cuTweakSet(key, val) {
   CU_VIEW[key] = val;
@@ -1339,7 +1329,7 @@ function cuTweakSet(key, val) {
 }
 function cuTweakSyncPanel() {
   const pop = document.getElementById('cu-view-pop'); if (!pop) return;
-  const vals = { badgeStyle: CU_VIEW.badgeStyle, recentHighlight: CU_VIEW.recentHighlight, emptyLabel: CU_VIEW.emptyLabel };
+  const vals = { badgeStyle: CU_VIEW.badgeStyle, emptyLabel: CU_VIEW.emptyLabel };
   pop.querySelectorAll('.ovp-seg').forEach(seg => {
     const k = seg.getAttribute('data-tw');
     seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === vals[k]));

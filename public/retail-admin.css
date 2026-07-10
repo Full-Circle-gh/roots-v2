@@ -6827,8 +6827,8 @@
       scroll-snap-type: x proximity; padding-bottom: 6px;
     }
     #cu-stats::-webkit-scrollbar { display: none; }
-    #cu-stats > .cu-stat { flex: 0 0 62%; min-width: 160px; scroll-snap-align: start; }
-    #cu-stats > .cu-stat.is-hidden { display: none; }
+    #cu-stats > .cul-stat { flex: 0 0 62%; min-width: 160px; scroll-snap-align: start; }
+    #cu-stats > .cul-stat.is-hidden { display: none; }
 
     /* Tier filter → sticky single-row chip scroller, always reachable. Pins to
        top:0 (not 56px) now that the brand bar scrolls away on phones, so it sits

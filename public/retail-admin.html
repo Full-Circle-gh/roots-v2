@@ -2034,60 +2034,66 @@
          The drawer skin (cux-*) further down is unchanged.
          ══════════════════════════════════════════════════════════════════ */
 
+      /* Everything on this page is namespaced `cul-` (customers list) and NOT
+         `cu-`. The old Full Circle sheet already owns `.cu-bar` (a chart bar,
+         painted with --accent) and `:root[data-theme="light"] .cu-pill.tier-*`
+         (tea/brass tiers, and specific enough to beat a plain class). Reusing
+         those names meant the old cascade repainted this page. A fresh prefix
+         nothing else can reach is the whole point of building it from scratch. */
+
       /* Head — title, then Refresh / View / New customer. */
-      #tab-customers .cu-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
-      #tab-customers .cu-head h2 {
+      #tab-customers .cul-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+      #tab-customers .cul-head h2 {
         margin: 0; font-family: var(--f-sans); font-weight: 500; font-size: 24px;
         letter-spacing: -.01em; color: var(--text-1); text-transform: none;
       }
-      #tab-customers .cu-head .sp { flex: 1; }
-      #tab-customers .cu-head .btn-icon { padding: 8px 10px; }
-      #tab-customers .cu-head .btn-icon svg { width: 16px; height: 16px; margin: 0; }
+      #tab-customers .cul-head .sp { flex: 1; }
+      #tab-customers .cul-head .btn-icon { padding: 8px 10px; }
+      #tab-customers .cul-head .btn-icon svg { width: 16px; height: 16px; margin: 0; }
 
-      /* Stat strip — three slim cards. Blocked hides itself at zero (an empty
-         state shouldn't own a card) and only turns amber when it's real. */
-      #tab-customers .cu-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
-      #tab-customers .cu-stat {
+      /* Stat strip — slim cards. Blocked hides itself at zero (an empty state
+         shouldn't own a card) and only turns amber when it's real. */
+      #tab-customers .cul-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+      #tab-customers .cul-stat {
         background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px;
         padding: 16px 20px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0;
       }
-      #tab-customers .cu-stat .lbl {
+      #tab-customers .cul-stat .lbl {
         font-size: 11px; font-weight: 500; letter-spacing: .1em;
         text-transform: uppercase; color: var(--text-2);
       }
-      #tab-customers .cu-stat .fig {
+      #tab-customers .cul-stat .fig {
         font-size: 26px; font-weight: 500; line-height: 1.25; color: var(--text-1);
         font-variant-numeric: tabular-nums;
       }
-      #tab-customers .cu-stat .fig.quiet { font-weight: 400; color: var(--text-2); }
-      #tab-customers .cu-stat .sub { font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 9px; min-width: 0; }
-      #tab-customers .cu-stat .sub .fc-spark-wrap { flex: 0 0 76px; height: 16px; margin: 0; opacity: 1; }
-      #tab-customers .cu-stat.is-hidden { display: none; }
+      #tab-customers .cul-stat .sub { font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 9px; min-width: 0; }
+      #tab-customers .cul-stat .sub .fc-spark-wrap { flex: 0 0 76px; height: 16px; margin: 0; opacity: 1; }
+      #tab-customers .cul-stat.is-hidden { display: none; }
       /* Attention, never alarm: amber tint, amber ink, no red. */
-      #tab-customers .cu-stat.alert { background: var(--tacet-amber-tint); border-color: rgba(201,149,74,.45); }
-      #tab-customers .cu-stat.alert :is(.lbl, .fig, .sub) { color: var(--tacet-amber-ink); }
+      #tab-customers .cul-stat.alert { background: var(--tacet-amber-tint); border-color: rgba(201,149,74,.45); }
+      #tab-customers .cul-stat.alert :is(.lbl, .fig, .sub) { color: var(--tacet-amber-ink); }
 
       /* Filter bar — search, the cuts you actually reach for, then the selects. */
-      #tab-customers .cu-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-      #tab-customers .cu-bar .sp { flex: 1; }
-      #tab-customers .cu-search { position: relative; flex: 0 1 300px; min-width: 210px; }
-      #tab-customers .cu-search input { width: 100%; padding-left: 34px; }
-      #tab-customers .cu-search > svg {
+      #tab-customers .cul-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+      #tab-customers .cul-bar .sp { flex: 1; }
+      #tab-customers .cul-search { position: relative; flex: 0 1 300px; min-width: 210px; }
+      #tab-customers .cul-search input { width: 100%; padding-left: 34px; }
+      #tab-customers .cul-search > svg {
         position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
         width: 15px; height: 15px; color: var(--text-3); pointer-events: none;
       }
-      #tab-customers .cu-segs { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-      #tab-customers .cu-seg {
+      #tab-customers .cul-segs { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+      #tab-customers .cul-seg {
         font: 500 12.5px var(--f-sans); color: var(--text-2);
         background: var(--bg-pane); border: 1px solid var(--line);
         border-radius: 999px; padding: 6px 14px; cursor: pointer;
         transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
       }
-      #tab-customers .cu-seg:hover { border-color: var(--text-3); color: var(--text-1); }
-      #tab-customers .cu-seg.on { background: var(--text-1); border-color: var(--text-1); color: var(--bg-pane); }
-      #tab-customers .cu-seg.warn { background: var(--tacet-amber-tint); border-color: rgba(201,149,74,.45); color: var(--tacet-amber-ink); }
-      #tab-customers .cu-seg.warn.on { background: var(--tacet-amber-ink); border-color: var(--tacet-amber-ink); color: var(--tacet-paper); }
-      #tab-customers .cu-seg .ct { margin-left: 6px; font-weight: 400; font-variant-numeric: tabular-nums; opacity: .8; }
+      #tab-customers .cul-seg:hover { border-color: var(--text-3); color: var(--text-1); }
+      #tab-customers .cul-seg.on { background: var(--text-1); border-color: var(--text-1); color: var(--bg-pane); }
+      #tab-customers .cul-seg.warn { background: var(--tacet-amber-tint); border-color: rgba(201,149,74,.45); color: var(--tacet-amber-ink); }
+      #tab-customers .cul-seg.warn.on { background: var(--tacet-amber-ink); border-color: var(--tacet-amber-ink); color: var(--tacet-paper); }
+      #tab-customers .cul-seg .ct { margin-left: 6px; font-weight: 400; font-variant-numeric: tabular-nums; opacity: .8; }
 
       /* Roster — one paper card, hairline rows, calm hover. */
       #tab-customers .table-wrap {
@@ -2095,43 +2101,39 @@
         overflow: hidden; overflow-x: auto;
         box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
       }
-      #cu-table { border-collapse: collapse; width: 100%; }
+      #cu-table { border-collapse: collapse; width: 100%; background: var(--bg-pane); }
       #cu-table thead th {
         background: var(--bg-elev-1); color: var(--text-2); font-family: var(--f-sans);
         font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
         padding: 12px 16px; border-bottom: 1px solid var(--line); white-space: nowrap;
       }
-      #cu-table tbody td { border-bottom: 1px solid var(--line); padding: 12px 16px; font-size: 14px; color: var(--text-1); vertical-align: middle; }
+      #cu-table tbody td { background: var(--bg-pane); border-bottom: 1px solid var(--line); padding: 12px 16px; font-size: 14px; color: var(--text-1); vertical-align: middle; }
       #cu-table tbody tr:last-child td { border-bottom: none; }
-      #cu-table tbody tr.cu-row { cursor: pointer; transition: background var(--t-med) var(--ease-out); }
-      #cu-table tbody tr.cu-row:hover td { background: var(--bg-app); }
+      #cu-table tbody tr.cul-row { cursor: pointer; transition: background var(--t-med) var(--ease-out); }
+      #cu-table tbody tr.cul-row:hover td { background: var(--bg-app); }
       /* A blocked customer stays in the roster but stops competing for the eye. */
-      #cu-table tbody tr.cu-row.is-blocked td { opacity: .62; }
+      #cu-table tbody tr.cul-row.is-blocked td { opacity: .62; }
 
       /* Customer cell — monogram, name (+ New badge), phone underneath.
          The old "#" id column and its own Phone column are gone: ids live in
          the drawer, and one identity belongs in one cell. */
-      .cu-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
-      .cu-mono {
+      #cu-table .cul-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      #cu-table .cul-mono {
         width: 30px; height: 30px; border-radius: 50%; flex: none;
         background: var(--bg-elev-1); border: 1px solid var(--line);
         display: flex; align-items: center; justify-content: center;
         font-size: 12.5px; font-weight: 500; color: var(--text-2);
       }
-      .cu-who .who-main { min-width: 0; }
-      .cu-who .nm { font-weight: 500; line-height: 1.3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      .cu-who .ph { font-size: 12.5px; color: var(--text-2); line-height: 1.4; font-variant-numeric: tabular-nums; }
-      .cu-new { font-size: 11px; font-weight: 500; border-radius: 999px; padding: 1px 8px;
+      #cu-table .cul-who .main { min-width: 0; }
+      #cu-table .cul-who .nm { font-weight: 500; line-height: 1.3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      #cu-table .cul-who .ph { font-size: 12.5px; color: var(--text-2); line-height: 1.4; font-variant-numeric: tabular-nums; }
+      #cu-table .cul-new { font-size: 11px; font-weight: 500; border-radius: 999px; padding: 1px 8px;
         background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
 
       /* Tier pill. Seed — the tier everyone starts on — stays quiet cream; only
          an EARNED tier takes colour, so an upgraded customer stands out. */
-      .cu-pill {
+      #cu-table .cul-pill {
         display: inline-flex; align-items: center;
-        /* Space between a label and its value span (Joined / Last login).
-           Flex strips the whitespace between text runs, so gap restores it.
-           Single-text pills have one flex item, so this is a no-op for them. */
-        gap: .4em;
         padding: 3px 11px;
         font-family: var(--f-sans);
         font-size: 12px; font-weight: 500; letter-spacing: 0; text-transform: capitalize;
@@ -2139,45 +2141,40 @@
         border: 1px solid transparent;
         background: var(--bg-elev-1); color: var(--text-2);
       }
-      .cu-pill.tier-seed   { border-color: var(--line); }
-      .cu-pill.tier-sprout { background: var(--tacet-sage-tint);  color: var(--tacet-sage-ink); }
-      .cu-pill.tier-root,
-      .cu-pill.tier-tree   { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
-      .cu-pill.blocked     { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
+      #cu-table .cul-pill.tier-seed   { border-color: var(--line); }
+      #cu-table .cul-pill.tier-sprout { background: var(--tacet-sage-tint);  color: var(--tacet-sage-ink); }
+      #cu-table .cul-pill.tier-root,
+      #cu-table .cul-pill.tier-tree   { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
+      #cu-table .cul-pill.blocked     { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
 
       /* Figures: tabular, right-aligned, and zeros fade back so real balances
          carry the weight. A page of ¥0.00 shouldn't shout. */
       #cu-table :is(td, th).numeric { text-align: right; }
-      #cu-table td.cu-num { font-variant-numeric: tabular-nums; }
-      #cu-table td.cu-num.is-zero { color: var(--text-3); opacity: .7; }
-      #cu-table td.cu-last { color: var(--text-2); font-size: 13px; white-space: nowrap; text-align: right; }
+      #cu-table td.cul-num { font-variant-numeric: tabular-nums; }
+      #cu-table td.cul-num.is-zero { color: var(--text-3); opacity: .7; }
+      #cu-table td.cul-last { color: var(--text-2); font-size: 13px; white-space: nowrap; text-align: right; }
       #cu-table td.muted[colspan] { padding: 30px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
 
       /* ── Customers list · per-operator View tweaks ──────────────────────
          Classes live on #cu-table (they persist across tbody re-renders); the
-         row template adds data-recency + .cu-empty so the highlight + empty
-         label flip live with no re-render. */
-      #cu-table.cb-square .cu-pill:not(.blocked) { border-radius: 4px; padding: 3px 9px; }
-      #cu-table.cb-underline .cu-pill:not(.blocked) {
+         row template adds .cul-empty so the empty label flips with no re-render.
+         The old "recent login" row tint is gone — the Last seen column already
+         says "Today", so tinting the row said it twice and left the table
+         blotchy. */
+      #cu-table.cb-square .cul-pill:not(.blocked) { border-radius: 4px; padding: 3px 9px; }
+      #cu-table.cb-underline .cul-pill:not(.blocked) {
         background: none; border: 0; border-radius: 0;
         border-bottom: 1.5px solid var(--line-strong);
         padding: 0 0 1px; color: var(--text-2);
       }
-      #cu-table.cu-rh-today tr.cu-row[data-recency="today"] td,
-      #cu-table.cu-rh-week  tr.cu-row[data-recency="today"] td,
-      #cu-table.cu-rh-week  tr.cu-row[data-recency="week"] td  { background: var(--bg-elev-1); }
-      #cu-table.cu-rh-today tr.cu-row[data-recency="today"] .cu-last,
-      #cu-table.cu-rh-week  tr.cu-row[data-recency="today"] .cu-last,
-      #cu-table.cu-rh-week  tr.cu-row[data-recency="week"]  .cu-last { color: var(--tacet-sage-ink); }
-      .cu-empty { color: var(--text-3); }
-      #cu-table.ce-dash   .cu-empty::after { content: '—'; }
-      #cu-table.ce-noname .cu-empty::after { content: 'No name yet'; }
-      #cu-table.ce-guest  .cu-empty::after { content: 'Guest'; }
-      #cu-table:is(.ce-noname, .ce-guest) .cu-empty { font-weight: 400; }
+      #cu-table .cul-empty { color: var(--text-3); }
+      #cu-table.ce-dash   .cul-empty::after { content: '—'; }
+      #cu-table.ce-noname .cul-empty::after { content: 'No name yet'; }
+      #cu-table.ce-guest  .cul-empty::after { content: 'Guest'; }
 
       /* Narrow desktop / tablet: the strip stacks before the table scrolls. */
       @media (max-width: 900px) {
-        #tab-customers .cu-stats { grid-template-columns: 1fr 1fr; }
+        #tab-customers .cul-stats { grid-template-columns: 1fr 1fr; }
       }
 
       /* ── Drawer-only leftovers from the old page (diagnostics tile). ── */
@@ -2223,7 +2220,7 @@
          neatly with the digits. */
       .cu-kv b .rv-star { font-size: .82em; color: var(--accent); margin-left: 1px; }
 
-      /* Drawer avatar (the list uses a monogram, see .cu-mono above). */
+      /* Drawer avatar (the list uses a monogram, see .cul-mono above). */
       .cu-avatar { width: 56px; height: 56px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--bg-elev-1); color: var(--text-3); object-fit: cover; }
 
       /* Open section heading for the chart / top items / addresses. */
@@ -2352,6 +2349,13 @@
       #cu-drawer .cux-copy svg { width: 11px; height: 11px; }
       #cu-drawer .cux-copy:hover { color: var(--text-1); border-color: var(--line-strong); }
 
+      /* Drawer pills (.cu-pill) — the roster uses .cul-pill instead. This base
+         carries the layout; the id-scoped rules below carry the Tacet skin and
+         outrank the old `:root[data-theme="light"] .cu-pill.*` tea/brass rules
+         in retail-admin.css. The gap spaces a label from its value ("Joined
+         2026-07-03"); flex would otherwise eat the whitespace between them. */
+      .cu-pill { display: inline-flex; align-items: center; gap: .4em; }
+
       /* Pills — quiet rounded chips (tier stays sage; blocked brick). */
       #cu-drawer .cu-pill { font-family: var(--f-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: capitalize; border-radius: 999px; padding: 4px 13px; border: none; background: var(--bg-elev-1); color: var(--text-2); }
       /* Seed is where everyone starts, so it stays quiet; earned tiers colour. */
@@ -2458,7 +2462,7 @@
     <!-- LIST VIEW (always visible; detail opens as a side-drawer overlay) -->
     <div>
       <!-- Head — the title, then the three things an operator does from here. -->
-      <div class="cu-head">
+      <div class="cul-head">
         <h2>Customers · 顾客</h2>
         <span class="sp"></span>
         <button class="btn btn-icon" onclick="cuLoad(); cuLoadKpis(true)" title="Refresh · 刷新" aria-label="Refresh">
@@ -2482,14 +2486,6 @@
               </div>
             </div>
             <div class="ovp-group">
-              <div class="ovp-label">Recent login · 最近登录</div>
-              <div class="ovp-seg" data-tw="recentHighlight">
-                <button data-v="off"   onclick="cuTweakSet('recentHighlight','off')">Off · 关闭</button>
-                <button data-v="today" onclick="cuTweakSet('recentHighlight','today')">Today · 今天</button>
-                <button data-v="week"  onclick="cuTweakSet('recentHighlight','week')">Week · 本周</button>
-              </div>
-            </div>
-            <div class="ovp-group">
               <div class="ovp-label">Empty values · 空值</div>
               <div class="ovp-seg" data-tw="emptyLabel">
                 <button data-v="dash"   onclick="cuTweakSet('emptyLabel','dash')">— · 横线</button>
@@ -2508,13 +2504,13 @@
       <!-- Roster pulse — three figures, no more. "Active base" is gone: it was
            always total minus blocked. The Blocked card hides itself at zero and
            only turns amber when it's real. -->
-      <div class="cu-stats" id="cu-stats">
-        <div class="cu-stat">
+      <div class="cul-stats" id="cu-stats">
+        <div class="cul-stat">
           <div class="lbl">Total customers · 顾客总数</div>
           <div class="fig" id="cu-kpi-total">—</div>
           <div class="sub">all accounts · 全部账户</div>
         </div>
-        <div class="cu-stat">
+        <div class="cul-stat">
           <div class="lbl">New today · 今日新增</div>
           <div class="fig" id="cu-kpi-new">—</div>
           <div class="sub">
@@ -2522,7 +2518,7 @@
             <span id="cu-kpi-new-word" data-no-i18n>&nbsp;</span>
           </div>
         </div>
-        <div class="cu-stat is-hidden" id="cu-kpi-blocked-tile">
+        <div class="cul-stat is-hidden" id="cu-kpi-blocked-tile">
           <div class="lbl">Blocked · 已封禁</div>
           <div class="fig" id="cu-kpi-blocked">—</div>
           <div class="sub" id="cu-kpi-blocked-sub">&nbsp;</div>
@@ -2544,16 +2540,16 @@
       <!-- Filter bar — search, the cuts an operator actually reaches for, then
            tier + sort. The old "Include blocked" checkbox is gone: the Blocked
            chip appears only when someone is blocked, and selects them. -->
-      <div class="cu-bar" id="cu-toolbar">
-        <span class="cu-search">
+      <div class="cul-bar" id="cu-toolbar">
+        <span class="cul-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
           <input type="text" id="cu-q" data-ph-en="Name, phone, openid, or order #…" data-ph-cn="姓名、电话、openid 或订单号…" placeholder="Name, phone, openid, or order #…" oninput="cuSearchDebounced()">
         </span>
-        <span class="cu-segs" id="cu-segs">
-          <button type="button" class="cu-seg on" data-seg=""         onclick="cuSegment(this,'')">All · 全部</button>
-          <button type="button" class="cu-seg"    data-seg="new_week" onclick="cuSegment(this,'new_week')">New this week · 本周新客</button>
-          <button type="button" class="cu-seg"    data-seg="sleeping" onclick="cuSegment(this,'sleeping')">Sleeping 60d+ · 沉睡 60 天</button>
-          <button type="button" class="cu-seg warn" data-seg="blocked" id="cu-seg-blocked" hidden onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct" id="cu-seg-blocked-ct" data-no-i18n></span></button>
+        <span class="cul-segs" id="cu-segs">
+          <button type="button" class="cul-seg on" data-seg=""         onclick="cuSegment(this,'')">All · 全部</button>
+          <button type="button" class="cul-seg"    data-seg="new_week" onclick="cuSegment(this,'new_week')">New this week · 本周新客</button>
+          <button type="button" class="cul-seg"    data-seg="sleeping" onclick="cuSegment(this,'sleeping')">Sleeping 60d+ · 沉睡 60 天</button>
+          <button type="button" class="cul-seg warn" data-seg="blocked" id="cu-seg-blocked" hidden onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct" id="cu-seg-blocked-ct" data-no-i18n></span></button>
         </span>
         <span class="sp"></span>
         <select id="cu-tier" onchange="cuFilterChanged()">

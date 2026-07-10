@@ -3587,7 +3587,7 @@ document.addEventListener('click', (e) => {
   // .td-attn-row / .td-attn-go = the "Needs you" attention-card rows + their
   // action button (Delivery needs a call, Refunds waiting, Invoices to issue),
   // which likewise open the order drawer on click.
-  if (e.target.closest('tr.order-row, tr.cu-row, .db-feed-row, .td-attn-row, .td-attn-go, .rm-ocard, .rm-cucard, .rm-sheet')) return;
+  if (e.target.closest('tr.order-row, tr.cul-row, .db-feed-row, .td-attn-row, .td-attn-go, .rm-ocard, .rm-cucard, .rm-sheet')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
   closeDrawer(open[open.length - 1]);
