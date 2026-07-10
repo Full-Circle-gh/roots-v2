@@ -4134,98 +4134,6 @@
     100% { background: transparent;              box-shadow: inset 0   0 0 transparent; }
   }
   tbody tr.row-flash { animation: row-flash 1.6s ease-out 1; }
-  /* ══ Orders as Tacet cards (desktop) ════════════════════════════════════
-     The orders list is a stack of order cards. The <table> stays only as a
-     plain vertical skeleton — one full-width <td> per order — so every bit of
-     existing wiring keeps working untouched: the delegated click/Enter → drawer,
-     the is-fresh arrival flash, is-unread, sort tweaks, and the empty/loading
-     states. All the look lives on .ocard. (.table-wrap is display:none on phones,
-     which fall back to #rm-orders-cards — so these rules never double-render.) */
-  #orders-table { border-collapse: separate; border-spacing: 0 14px; }
-  #orders-table thead { display: none; }
-  #orders-table tbody td { border: none !important; padding: 0 !important; background: transparent !important; }
-  #orders-table tbody tr.order-row:hover td { background: transparent !important; }
-
-  .ocard {
-    background: var(--bg-pane); border: 1px solid var(--line);
-    border-radius: var(--r-lg); padding: 18px 20px;
-    transition: box-shadow var(--t-med) var(--ease-out), border-color var(--t-med) var(--ease-out);
-  }
-  .order-row:hover .ocard { border-color: var(--line-strong); box-shadow: 0 4px 16px rgba(0,0,0,.05); }
-  .order-row:focus-visible { outline: none; }
-  .order-row:focus-visible .ocard { outline: 2px solid var(--ring, rgba(107,142,111,.55)); outline-offset: 2px; }
-  .order-row--ro .ocard { border-style: dashed; }
-
-  /* head line — identity · channel · when · total · status. Numerals are
-     proportional sans with tabular figures (matches the mockup), not the mono
-     face — mono read as a different, techier type. */
-  .ocard-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-  .ocard-no { font-family: var(--f-sans); font-variant-numeric: tabular-nums; font-size: 18px; font-weight: 600; letter-spacing: .01em; color: var(--text-1); }
-  .ocard-chan { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-2); }
-  .ocard-chan svg { width: 14px; height: 14px; flex: none; }
-  .ocard-when { font-size: 11.5px; color: var(--text-3); }
-  .ocard-total { margin-left: auto; font-family: var(--f-sans); font-variant-numeric: tabular-nums; font-weight: 600; font-size: 18px; letter-spacing: .01em; color: var(--text-1); }
-  .ocard-head .pill { flex: none; font-size: 12.5px; font-weight: 500; padding: 3px 12px; }
-
-  /* three facts — Customer / Ship to / Delivery */
-  .ocard-facts {
-    display: grid; grid-template-columns: 1.4fr 1fr 1.3fr; gap: 22px;
-    margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--line-soft);
-  }
-  .ocard-fact .lab { font-size: 11px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--text-3); margin-bottom: 5px; }
-  .ocard-fact .v { font-size: 15px; font-weight: 500; color: var(--text-1); line-height: 1.35; }
-  .ocard-sub { font-size: 12.5px; color: var(--text-2); margin-top: 3px; }
-  @media (max-width: 1000px) { .ocard-facts { grid-template-columns: 1fr 1fr; } }
-
-  /* arrival flash + unread accent live on the card — the old <td> wash sits
-     behind the opaque card, so it would be invisible now. */
-  @keyframes ocard-flash {
-    0%   { box-shadow: inset 0 0 0 999px rgba(107,142,111,.22); }
-    100% { box-shadow: inset 0 0 0 999px rgba(107,142,111,0); }
-  }
-  .order-row.is-fresh .ocard { animation: ocard-flash 6s ease-out 1; }
-  .order-row.is-unread .ocard { box-shadow: inset 3px 0 0 var(--accent); }
-
-  /* ── Invoice zone, nested inside the order card ──
-     The fapiao 抬头 / 税号 used to float as a bare row under the order with no
-     visual tie — you couldn't tell whose invoice was whose. It now sits inside
-     the card it belongs to: a tinted panel with a left accent and the title
-     leading, 税号/email folded beneath. Theme-aware via the elev tokens. */
-  .ord-inv-panel {
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-    margin-top: 15px;
-    background: var(--bg-elev-1);
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--accent);
-    border-radius: 8px; padding: 11px 14px;
-    font-size: 12.5px; color: var(--text-2);
-  }
-  .ord-inv-panel.is-issued { border-left-color: var(--line-strong); opacity: .8; }
-  .ord-inv-label {
-    display: inline-flex; align-items: center; gap: 7px; flex: none;
-    font-size: 10px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase;
-    color: var(--text-3);
-  }
-  .ord-inv-label svg { flex: none; color: var(--warn); }
-  .ord-inv-body { display: flex; flex-direction: column; gap: 1px; flex: 1 1 auto; min-width: 180px; }
-  .ord-inv-body b { color: var(--text-1); font-weight: 600; font-size: 13px; }
-  .ord-inv-meta { color: var(--text-2); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
-  /* Invoice type (Company / Personal) is a category, not a status — a quiet
-     neutral pill (never the brick "refunded" red it borrowed before). The dot
-     carries the only tint: coral for a person, dusk for a company. */
-  .pill.inv-type { background: var(--bg-elev-2); color: var(--text-2); border-color: var(--line); font-weight: 500; font-size: 11px; }
-  .pill.inv-per .dot { background: var(--st-refunded); }
-  .pill.inv-co  .dot { background: #6E67AF; }
-  /* Copy button — white, bordered, ink text + copy glyph (matches the mockup;
-     not the grey db-btn chip). */
-  .ord-inv-copy {
-    flex: none; display: inline-flex; align-items: center; gap: 7px;
-    background: var(--bg-pane); border: 1px solid var(--line); color: var(--text-1);
-    border-radius: 8px; padding: 7px 13px; font: 500 13px var(--f-sans); cursor: pointer;
-    transition: border-color var(--t-fast) ease;
-  }
-  .ord-inv-copy svg { color: var(--text-3); flex: none; }
-  .ord-inv-copy:hover { border-color: var(--line-strong); }
   /* Unread order — a Tea "NEW" chip + bold order#/customer + a soft Tea wash
      over the whole row, persisting from arrival until any operator opens the
      detail (server seen_at). The wash is an inset box-shadow so it layers above
@@ -4233,7 +4141,7 @@
      specificity fight. Complements the one-shot 6s arrival flash above. */
   .ord-no { font-family: var(--f-mono); font-weight: 600; }
   tr.order-row.is-unread td { box-shadow: inset 0 0 0 999px rgba(107, 142, 111, .12); }
-  tr.order-row.is-unread .ocard-no,
+  tr.order-row.is-unread .ord-no,
   tr.order-row.is-unread .ord-cust { font-weight: 700; color: var(--text-1); }
   .new-chip {
     display: inline-block; vertical-align: middle; margin-right: 8px;
