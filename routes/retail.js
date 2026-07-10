@@ -12647,7 +12647,10 @@ router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (
 router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const q              = String(req.query.q || '').trim();
   const tier           = String(req.query.tier || '').trim();
-  const includeBlocked = req.query.includeBlocked === '1';
+  const segment        = String(req.query.segment || '').trim();
+  // The roster asks for one segment at a time; the stat strip still calls this
+  // with includeBlocked=1 (pageSize=1) purely to count every account.
+  const includeBlocked = req.query.includeBlocked === '1' || segment === 'blocked';
   const sort           = String(req.query.sort || 'recent_login');
   const page           = Math.max(1, parseInt(req.query.page, 10) || 1);
   const pageSize       = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
@@ -12657,6 +12660,14 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const params = [];
   if (!includeBlocked) where.push('is_blocked = 0');
   if (tier)            { where.push('tier_key = ?'); params.push(tier); }
+
+  // Roster segments — the cuts an operator actually reaches for. Timestamps are
+  // UTC text, so SQLite's datetime() comparisons work on them directly.
+  // "Sleeping" falls back to the join date for a customer who never logged in,
+  // so an old account that never came back still surfaces.
+  if      (segment === 'blocked')  where.push('is_blocked = 1');
+  else if (segment === 'new_week') where.push("created_at >= datetime('now', '-7 days')");
+  else if (segment === 'sleeping') where.push("COALESCE(last_login_at, created_at) < datetime('now', '-60 days')");
 
   if (q) {
     const like = '%' + q + '%';
@@ -17051,7 +17062,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
       for (const r of rows) { const c = byOrder.get(r.id); if (c) r.courier = c; }
     }
   } catch (e) { /* delivery_jobs missing (pre-migration) — list simply shows no live stage */ }
-  res.json({ success: true, data: rows, meta: { limit, offset } });
+  res.json({ success: true, data: rows, meta: { limit, offset, total } });
 });
 
 // Open-work counts for the orders status-chip strip. Deliberately covers ONLY

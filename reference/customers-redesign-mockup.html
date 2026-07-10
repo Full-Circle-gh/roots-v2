@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Customers redesign mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET CUSTOMERS REDESIGN — static mockup, no live data.
+   Chrome bar toggles: layout option (A quiet header / B stat strip)
+   and data state (all clear / 3 blocked).
+   Tokens per tacet-tokens.css v1.0 — when in doubt, remove something.
+   Dusk appears ZERO times on this page: nothing here is automation.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --dusk-tint:   #EEEDF6;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- state machinery (CSS only) ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+
+#opt-a:checked ~ .frame .only-b { display: none !important; }
+#opt-b:checked ~ .frame .only-a { display: none !important; }
+#st-clear:checked   ~ .frame .when-blocked { display: none !important; }
+#st-blocked:checked ~ .frame .when-clear   { display: none !important; }
+
+#opt-a:checked      ~ .frame .chrome label[for="opt-a"],
+#opt-b:checked      ~ .frame .chrome label[for="opt-b"],
+#st-clear:checked   ~ .frame .chrome label[for="st-clear"],
+#st-blocked:checked ~ .frame .chrome label[for="st-blocked"] {
+  background: var(--paper); color: var(--ink);
+}
+
+/* ---- mockup chrome bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink);
+  color: rgba(251,249,244,0.75);
+  display: flex; align-items: center; gap: 24px;
+  padding: 10px 28px;
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5);
+}
+.chrome .seg { display: inline-flex; border: 1px solid rgba(251,249,244,0.25); border-radius: 999px; overflow: hidden; }
+.chrome .seg label {
+  padding: 3px 14px; cursor: pointer; color: rgba(251,249,244,0.75);
+  transition: background 200ms var(--ease-settle);
+}
+
+/* ---- product topbar (context only) ---- */
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 40px;
+  border-bottom: 1px solid var(--border);
+  background: var(--paper);
+}
+.topbar .wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 19px; letter-spacing: 0.2em; color: var(--ink);
+}
+.topbar .crumb { margin-left: auto; font-size: 13px; color: var(--graphite); }
+
+/* ---- page scaffold ---- */
+.page { max-width: 1120px; margin: 0 auto; padding: 40px 40px 96px; }
+
+.page-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.page-head h1 { font-size: 21px; font-weight: 500; letter-spacing: -0.01em; }
+.page-head .spacer { margin-left: auto; }
+
+/* ---- Option A: quiet header — one summary sentence, no cards ---- */
+.summary-line { margin: 6px 0 28px; font-size: 14px; color: var(--graphite); }
+.summary-line b { font-weight: 500; color: var(--ink); }
+.summary-line .warn { color: var(--amber-ink); font-weight: 500; }
+
+/* ---- Option B: slim stat strip ---- */
+.stat-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 20px 0 28px; }
+.stat {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  padding: 16px 20px 14px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.stat .lbl {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--graphite);
+}
+.stat .fig { font-size: 26px; font-weight: 500; line-height: 1.2; }
+.stat .fig.quiet { color: var(--graphite); font-weight: 400; }
+.stat .sub { font-size: 12.5px; color: var(--graphite); display: flex; align-items: center; gap: 8px; }
+.stat .sub svg { flex: none; }
+.stat.attention { border-color: #EAD9BC; background: var(--amber-tint); }
+.stat.attention .fig { color: var(--amber-ink); }
+.stat.attention .lbl, .stat.attention .sub { color: var(--amber-ink); }
+
+/* ---- buttons ---- */
+.btn {
+  font: 500 13.5px var(--font-text); color: var(--ink);
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--r-control); padding: 7px 16px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: border-color 200ms var(--ease-settle), background 200ms var(--ease-settle);
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--graphite); }
+.btn svg { flex: none; }
+.btn-ghost { border-color: transparent; color: var(--graphite); padding: 7px 10px; }
+.btn-ghost:hover { color: var(--ink); background: var(--cream); border-color: transparent; }
+.btn-solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn-solid:hover { background: #202D47; border-color: #202D47; }
+
+/* ---- filter bar ---- */
+.filters {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.search {
+  position: relative; width: 300px;
+}
+.search input {
+  font: 400 13.5px var(--font-text); color: var(--ink);
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-control);
+  padding: 8px 12px 8px 34px; width: 100%;
+  transition: border-color 200ms var(--ease-settle);
+}
+.search input::placeholder { color: var(--graphite); opacity: 0.7; }
+.search input:focus { outline: none; border-color: var(--graphite); }
+.search svg { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--graphite); }
+
+.chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.chip {
+  font: 500 12.5px var(--font-text); color: var(--graphite);
+  border: 1px solid var(--border); background: transparent;
+  border-radius: 999px; padding: 5px 14px; cursor: pointer;
+  transition: all 200ms var(--ease-settle);
+}
+.chip:hover { border-color: var(--graphite); color: var(--ink); }
+.chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.chip.blocked { color: var(--amber-ink); border-color: #EAD9BC; background: var(--amber-tint); }
+
+.select {
+  font: 400 13.5px var(--font-text); color: var(--ink);
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-control);
+  padding: 8px 12px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.select .cv { color: var(--graphite); }
+
+/* ---- table ---- */
+.tablecard {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  overflow: hidden; box-shadow: var(--shadow-soft);
+}
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+thead th {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--graphite); text-align: left;
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
+  background: var(--cream);
+}
+thead th.r, td.r { text-align: right; }
+tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: none; }
+tbody tr { cursor: pointer; transition: background 200ms var(--ease-settle); }
+tbody tr:hover { background: var(--paper); }
+
+.who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.ava {
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  background: var(--cream); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12.5px; font-weight: 500; color: var(--graphite);
+}
+.who .nm { font-weight: 500; line-height: 1.3; display: flex; align-items: center; gap: 8px; }
+.who .nm.none { font-weight: 400; color: var(--graphite); }
+.who .ph { font-size: 12.5px; color: var(--graphite); line-height: 1.4; }
+
+.pill {
+  font: 500 12px var(--font-text); border-radius: 999px; padding: 2px 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.pill.tier   { background: var(--cream); color: var(--graphite); border: 1px solid var(--border); }
+.pill.tier.up{ background: var(--sage-tint); color: var(--sage-ink); border-color: #DCE5DA; }
+.pill.new    { background: var(--sage-tint); color: var(--sage-ink); }
+.pill.block  { background: var(--brick-tint); color: var(--brick); }
+
+td .zero { color: var(--graphite); opacity: 0.55; }
+td.last { color: var(--graphite); font-size: 13px; white-space: nowrap; }
+tr.dim td { opacity: 0.6; }
+
+.tfoot {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 16px; font-size: 12.5px; color: var(--graphite);
+  border-top: 1px solid var(--border); background: #fff;
+}
+.tfoot .pages { margin-left: auto; display: inline-flex; gap: 4px; }
+.tfoot .pg {
+  min-width: 26px; height: 26px; border-radius: 6px; border: 1px solid transparent;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.tfoot .pg.on { border-color: var(--border); background: var(--cream); color: var(--ink); font-weight: 500; }
+.tfoot .pg:hover { border-color: var(--border); }
+
+/* ---- to-discuss panel (mockup annotation, not product) ---- */
+.kicker {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--graphite);
+  margin: 56px 0 14px;
+}
+.discuss { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+.dcard {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  padding: 20px;
+}
+.dcard h3 { font-size: 13px; font-weight: 500; margin-bottom: 10px; letter-spacing: 0.02em; }
+.dcard ul { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.dcard li { font-size: 13px; color: var(--graphite); line-height: 1.5; padding-left: 18px; position: relative; }
+.dcard li::before {
+  content: ""; position: absolute; left: 0; top: 8px;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--border);
+}
+.dcard li b { color: var(--ink); font-weight: 500; }
+.dcard li .rec { color: var(--sage-ink); font-weight: 500; }
+.dcard li .ask { color: var(--amber-ink); font-weight: 500; }
+
+.note { margin-top: 28px; font-size: 13px; color: var(--graphite); max-width: 620px; }
+
+@media (max-width: 900px) {
+  .stat-strip, .discuss { grid-template-columns: 1fr; }
+  .search { width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<input class="state" type="radio" name="opt" id="opt-a">
+<input class="state" type="radio" name="opt" id="opt-b" checked>
+<input class="state" type="radio" name="st" id="st-clear" checked>
+<input class="state" type="radio" name="st" id="st-blocked">
+
+<div class="frame">
+
+  <div class="chrome">
+    <span class="tag">Customers redesign — mockup</span>
+    <span class="seg">
+      <label for="opt-a">A · Quiet header</label>
+      <label for="opt-b">B · Stat strip</label>
+    </span>
+    <span class="seg">
+      <label for="st-clear">All clear</label>
+      <label for="st-blocked">3 blocked</label>
+    </span>
+  </div>
+
+  <div class="topbar">
+    <span class="wordmark">tacet</span>
+    <span class="crumb">Run &nbsp;/&nbsp; Customers</span>
+  </div>
+
+  <div class="page">
+
+    <!-- ── Page head: title left, the three controls right ─────────── -->
+    <div class="page-head">
+      <h1>Customers</h1>
+      <span class="spacer"></span>
+      <button class="btn btn-ghost" title="Refresh">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.3"/><path d="M21 3v6h-6"/></svg>
+      </button>
+      <button class="btn btn-ghost">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h6"/></svg>
+        View
+      </button>
+      <button class="btn btn-solid">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        New customer
+      </button>
+    </div>
+
+    <!-- ── OPTION A: the numbers become one quiet sentence ─────────── -->
+    <div class="only-a">
+      <p class="summary-line">
+        <b class="num">552</b> customers ·
+        <span class="num"><b>6</b> new today</span>, quieter than usual
+        <span class="when-clear">· none blocked</span>
+        <span class="when-blocked">· <span class="warn num">3 blocked</span></span>
+      </p>
+    </div>
+
+    <!-- ── OPTION B: three slim tiles, no duplicate "active base" ──── -->
+    <div class="only-b">
+      <div class="stat-strip">
+        <div class="stat">
+          <span class="lbl">Total customers</span>
+          <span class="fig num">552</span>
+          <span class="sub">all accounts</span>
+        </div>
+        <div class="stat">
+          <span class="lbl">New today</span>
+          <span class="fig num">6</span>
+          <span class="sub">
+            <svg width="72" height="16" viewBox="0 0 72 16" fill="none"><path d="M1 12 C10 12 14 11 20 10 C28 8 30 4 36 7 C42 10 50 12 58 12 C64 12 68 12 71 12" stroke="#58606E" stroke-width="1.3" stroke-linecap="round"/><circle cx="71" cy="12" r="2" fill="#111A2B"/></svg>
+            fewer than usual
+          </span>
+        </div>
+        <div class="stat when-clear">
+          <span class="lbl">Blocked</span>
+          <span class="fig quiet">none</span>
+          <span class="sub">nothing needs you here</span>
+        </div>
+        <div class="stat attention when-blocked">
+          <span class="lbl">Blocked</span>
+          <span class="fig num">3</span>
+          <span class="sub">tap to review</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Filter bar: search + segment chips + two selects ────────── -->
+    <div class="filters">
+      <span class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+        <input type="text" placeholder="Name, phone, or order #">
+      </span>
+      <span class="chips">
+        <button class="chip on">All</button>
+        <button class="chip">New this week</button>
+        <button class="chip">Sleeping 60d+</button>
+        <button class="chip blocked when-blocked">Blocked · 3</button>
+      </span>
+      <span class="spacer" style="margin-left: auto;"></span>
+      <button class="select">All tiers <span class="cv">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+      </button>
+      <button class="select">Recent login <span class="cv">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+      </button>
+    </div>
+
+    <!-- ── The roster ───────────────────────────────────────────────── -->
+    <div class="tablecard">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 34%;">Customer</th>
+            <th>Tier</th>
+            <th class="r">Orders</th>
+            <th class="r">Points</th>
+            <th class="r">Wallet ¥</th>
+            <th class="r">Last seen</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="dim when-blocked">
+            <td><span class="who"><span class="ava">M</span><span><span class="nm">Marco <span class="pill block">Blocked</span></span><span class="ph">13802116644</span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num">2</td>
+            <td class="r num">6</td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Today 15:02</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">S</span><span><span class="nm">Soraya Maragnes <span class="pill new">New</span></span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num">1</td>
+            <td class="r num">3</td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Today 14:35</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">R</span><span><span class="nm">Roxy <span class="pill new">New</span></span><span class="ph">787481609</span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num">1</td>
+            <td class="r num">1</td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Today 14:05</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">·</span><span><span class="nm none">No name yet</span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num"><span class="zero">0</span></td>
+            <td class="r num"><span class="zero">0</span></td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Today 13:55</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">J</span><span><span class="nm">Jessica 王洁心</span><span class="ph">17792718097</span></span></span></td>
+            <td><span class="pill tier up">Sprout</span></td>
+            <td class="r num">14</td>
+            <td class="r num">320</td>
+            <td class="r num">120.00</td>
+            <td class="r last">Today 13:40</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">C</span><span><span class="nm">Caroline Griffin</span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num">1</td>
+            <td class="r num">3</td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Today 12:06</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">I</span><span><span class="nm">Irma</span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num"><span class="zero">0</span></td>
+            <td class="r num"><span class="zero">0</span></td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Today 11:57</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">·</span><span><span class="nm none">No name yet</span><span class="ph">13638543304</span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num"><span class="zero">0</span></td>
+            <td class="r num"><span class="zero">0</span></td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Today 09:23</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">T</span><span><span class="nm">Tamir</span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num">1</td>
+            <td class="r num"><span class="zero">0</span></td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Today 06:56</td>
+          </tr>
+          <tr>
+            <td><span class="who"><span class="ava">C</span><span><span class="nm">Chantelle</span></span></span></td>
+            <td><span class="pill tier">Seed</span></td>
+            <td class="r num">1</td>
+            <td class="r num">4</td>
+            <td class="r num"><span class="zero">0.00</span></td>
+            <td class="r last">Yesterday 23:24</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="tfoot">
+        <span class="num">552 customers · 20 per page</span>
+        <span class="pages">
+          <span class="pg on num">1</span><span class="pg num">2</span><span class="pg num">3</span>
+          <span class="pg">…</span><span class="pg num">28</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- ── Annotation: what changed and what's open ─────────────────── -->
+    <div class="kicker">To discuss — not part of the page</div>
+    <div class="discuss">
+      <div class="dcard">
+        <h3>Removed</h3>
+        <ul>
+          <li><b>“#” ID column.</b> Raw IDs stay out of view; search still finds them and the drawer shows the full record. <span class="rec">recommend</span></li>
+          <li><b>“Active base” card.</b> It always equals total minus blocked — a duplicate number. <span class="rec">recommend</span></li>
+          <li><b>“Blocked 0” card.</b> An empty state shouldn’t own a card. Blocked appears only when it exists (flip the toggle above). <span class="rec">recommend</span></li>
+          <li><b>“Include blocked” checkbox.</b> Replaced by the amber Blocked chip that only shows when the count is above zero. <span class="rec">recommend</span></li>
+          <li><b>Red ▼43% delta.</b> Fewer signups isn’t an alarm. It becomes the words “quieter than usual” in graphite. <span class="rec">recommend</span></li>
+        </ul>
+      </div>
+      <div class="dcard">
+        <h3>Changed</h3>
+        <ul>
+          <li><b>Phone lives under the name.</b> One column instead of two; em-dashes disappear.</li>
+          <li><b>Base tier goes quiet.</b> Seed renders as a plain cream pill; only earned tiers (Sprout+) get the sage tint, so an upgraded customer stands out.</li>
+          <li><b>Last login → “Last seen”.</b> Today 14:35 / Yesterday 23:24 / Jul 3 — no repeated dates.</li>
+          <li><b>Zeros dim.</b> A page of ¥0.00 shouldn’t shout as loud as real balances.</li>
+          <li><b>New customer button is ink, not gold.</b> Dusk stays reserved for automation; this page has none.</li>
+        </ul>
+      </div>
+      <div class="dcard">
+        <h3>Built · still open</h3>
+        <ul>
+          <li><b>Segment chips.</b> Built. All / New this week / Sleeping 60d+, backed by a new segment filter on the customers API. Blocked joins them only when someone is blocked. <span class="rec">built</span></li>
+          <li><b>“New” badge</b> on customers who joined today. Built — the New-today figure is now visible in the roster itself. <span class="rec">built</span></li>
+          <li><b>“No name yet”</b> is now a choice in the View menu. Default stays the plain dash so nobody’s saved preference shifts. <span class="rec">built</span></li>
+          <li><b>Lifetime spend column.</b> Not built — swapping out Wallet is a call about what operators actually read. Your decision. <span class="ask">open</span></li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="note">Dusk appears zero times on this page — nothing here is automation. The one dark button is ink. Option B (shown) is what got built: tiles you can scan from across the room, with the Blocked tile appearing only when it’s real. Option A is kept above for comparison — it answers the same question in one line.</p>
+
+  </div>
+</div>
+</body>
+</html>

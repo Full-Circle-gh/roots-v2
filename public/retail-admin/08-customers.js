@@ -16,23 +16,44 @@ let CU_TOTAL = 0;
 let CU_CURRENT = null;      // detail data for currently-open customer
 let CU_ADJUST_KIND = null;  // 'points' | 'wallet'
 let cuSearchTimer = null;
+// Roster segment — '' | 'new_week' | 'sleeping' | 'blocked'. The cuts an
+// operator actually reaches for, one tap each. 'blocked' replaces the old
+// "Include blocked" checkbox: the chip only exists when someone IS blocked.
+let CU_SEGMENT = '';
 
 function cuSearchDebounced() {
   clearTimeout(cuSearchTimer);
   cuSearchTimer = setTimeout(() => { CU_PAGE = 1; cuLoad(); }, 220);
 }
 
-// ── Customers KPI strip — roster pulse on the shared fc-* layer ──────────
+// Any filter change re-cuts the roster, so the operator's page number is
+// meaningless against the new result set — go back to the first page. (Search
+// already does this via cuSearchDebounced; tier/sort/segment used to keep the
+// old page and could land the operator on an empty one.)
+function cuFilterChanged() {
+  CU_PAGE = 1;
+  cuLoad();
+}
+
+function cuSegment(btn, seg) {
+  CU_SEGMENT = seg;
+  const bar = document.getElementById('cu-segs');
+  if (bar) bar.querySelectorAll('.cu-seg').forEach(b => b.classList.toggle('on', b === btn));
+  cuFilterChanged();
+}
+
+// ── Customers stat strip — three figures, then the roster ────────────────
 // Two cheap fetches: the today dashboard (new_customers + baseline delta +
 // hourly sparkline, plus a tiers snapshot whose sum is the non-blocked base)
 // and a single customers count (includeBlocked=1, pageSize=1) for the grand
-// total. Blocked = total − active base, so no third call is needed.
+// total. Blocked = total − active base, so no third call is needed. The old
+// "Active base" card showed exactly that subtraction and is gone.
 let _CU_KPI_AT = 0;
 let _CU_KPI_DASH = null;
 let _CU_KPI_TOTAL = null;
 let _CU_KPI_LANG_HOOKED = false;
 async function cuLoadKpis(force) {
-  if (!document.getElementById('cu-kpis')) return;
+  if (!document.getElementById('cu-stats')) return;
   if (!force && Date.now() - _CU_KPI_AT < 45000) return;
   _CU_KPI_AT = Date.now();
   if (!_CU_KPI_LANG_HOOKED && window.onLangChange) { _CU_KPI_LANG_HOOKED = true; onLangChange(cuRepaintKpis); }
@@ -47,83 +68,155 @@ async function cuLoadKpis(force) {
     cuRenderKpis();
   } catch (e) {}
 }
+// Blocked count, cached for the segment chip (cuLoad paints it too).
+let _CU_BLOCKED = 0;
+function cuBlockedCount() {
+  const d = _CU_KPI_DASH; if (!d) return 0;
+  const activeBase = (d.tiers || []).reduce((s, t) => s + Number(t.n || 0), 0);
+  const total = _CU_KPI_TOTAL != null ? _CU_KPI_TOTAL : activeBase;
+  return Math.max(0, total - activeBase);
+}
 function cuRenderKpis() {
   const d = _CU_KPI_DASH; if (!d) return;
   const activeBase = (d.tiers || []).reduce((s, t) => s + Number(t.n || 0), 0);
   const total = _CU_KPI_TOTAL != null ? _CU_KPI_TOTAL : activeBase;
-  const blocked = Math.max(0, total - activeBase);
+  _CU_BLOCKED = Math.max(0, total - activeBase);
   dashCountUp($('#cu-kpi-total'), total);
   dashCountUp($('#cu-kpi-new'), Number(d.kpis && d.kpis.new_customers || 0));
-  dashCountUp($('#cu-kpi-active'), activeBase);
-  dashCountUp($('#cu-kpi-blocked'), blocked);
-  const bTile = $('#cu-kpi-blocked-tile'); if (bTile) bTile.classList.toggle('alert', blocked > 0);
+  // Nobody blocked = nothing to show. An empty state shouldn't own a card, so
+  // the tile (and its swipe dot, and the filter chip) simply aren't there.
+  const bTile = $('#cu-kpi-blocked-tile');
+  if (bTile) {
+    bTile.classList.toggle('is-hidden', _CU_BLOCKED === 0);
+    bTile.classList.toggle('alert', _CU_BLOCKED > 0);
+    if (_CU_BLOCKED > 0) dashCountUp($('#cu-kpi-blocked'), _CU_BLOCKED);
+  }
+  const dots = document.getElementById('cu-stat-dots');
+  if (dots) {
+    const pips = dots.querySelectorAll('i');
+    if (pips[2]) pips[2].style.display = _CU_BLOCKED > 0 ? '' : 'none';
+  }
+  const chip = $('#cu-seg-blocked');
+  if (chip) {
+    chip.hidden = _CU_BLOCKED === 0;
+    const ct = $('#cu-seg-blocked-ct'); if (ct) ct.textContent = _CU_BLOCKED || '';
+    // The last blocked customer was just unblocked while that chip was active —
+    // fall back to All rather than leaving the operator on an empty roster.
+    if (_CU_BLOCKED === 0 && CU_SEGMENT === 'blocked') {
+      const all = document.querySelector('#cu-segs .cu-seg[data-seg=""]');
+      if (all) cuSegment(all, '');
+    }
+  }
   cuRepaintKpis();
 }
 function cuRepaintKpis() {
   const d = _CU_KPI_DASH; if (!d) return;
   const k = d.kpis || {}, b = d.baseline || null, trend = d.trend || [];
-  fcSetDelta('#cu-kpi-new-d', b && b.new_customers, Number(k.new_customers || 0), b && b.days,
-             v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
   fcRenderSpark($('#cu-kpi-new-spark'), trend.map(p => Number(p.new_customers || 0)), trend.map(p => p.bucket),
                 v => v + ' ' + cuT(v === 1 ? 'signup' : 'signups', '注册'), true);
-  const activeBase = (d.tiers || []).reduce((s, t) => s + Number(t.n || 0), 0);
-  const total = _CU_KPI_TOTAL != null ? _CU_KPI_TOTAL : activeBase;
-  const blocked = Math.max(0, total - activeBase);
+  // Fewer signups than usual is not an alarm — no red arrow, no percentage.
+  // Say it in words, in graphite, and keep the number in the tooltip.
+  const word = $('#cu-kpi-new-word');
+  if (word) {
+    const cur  = Number(k.new_customers || 0);
+    const base = b && b.new_customers;
+    let text = '', tip = '';
+    if (!cur) text = cuT('none yet today', '今日暂无');
+    else if (!base || base.delta == null) text = cuT('no baseline yet', '暂无基准');
+    else {
+      const delta = Math.round(base.delta);
+      text = delta > 15 ? cuT('busier than usual', '比平时更多')
+           : delta < -15 ? cuT('quieter than usual', '比平时更少')
+           : cuT('about usual', '与平时相当');
+      tip = cuT(`${dashTrim(base.avg)}/day over the last ${b.days} days`,
+                `近 ${b.days} 日均值 ${dashTrim(base.avg)}/日`);
+    }
+    word.textContent = text;
+    word.title = tip;
+  }
   const bsub = $('#cu-kpi-blocked-sub');
-  if (bsub) bsub.textContent = blocked > 0 ? cuT('restricted · 受限', '受限账户') : cuT('none blocked · 无封禁', '无封禁');
+  if (bsub) bsub.textContent = cuT('tap the chip to review', '点标签查看');
 }
 async function cuLoad() {
   const params = new URLSearchParams({
     q: $('#cu-q').value.trim(),
     tier: $('#cu-tier').value,
     sort: $('#cu-sort').value,
-    includeBlocked: $('#cu-blocked').checked ? '1' : '0',
+    segment: CU_SEGMENT,
     page: CU_PAGE,
     pageSize: CU_PAGE_SIZE
   });
   const tbody = $('#cu-table tbody');
-  tbody.innerHTML = '<tr><td colspan="8" class="muted">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="6" class="muted">Loading…</td></tr>';
   let j;
   try {
     const res = await fetch('/api/retail-admin/customers?' + params);
     j = await res.json();
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Network error. · 网络错误。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">Network error. · 网络错误。</td></tr>';
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
     return;
   }
   if (!j.success) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Failed to load. · 加载失败。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">Failed to load. · 加载失败。</td></tr>';
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
     return;
   }
   CU_TOTAL = j.total || 0;
   const rows = j.data || [];
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">No customers found. · 未找到客户。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="muted">No customers found. · 未找到客户。</td></tr>';
   } else {
-    tbody.innerHTML = rows.map(r => `
-      <tr class="cu-row" data-recency="${cuRecency(r.last_login_at)}" style="cursor: pointer;" onclick="cuOpenDetail(${r.id})">
-        <td class="muted">${r.id}</td>
+    const today = cuGzDay(Date.now());
+    tbody.innerHTML = rows.map(r => {
+      const tier = escapeHtml(r.tier_key || 'seed');
+      const isNew = r.created_at && cuGzDay(r.created_at) === today;
+      const nameHtml = r.nickname
+        ? escapeHtml(r.nickname)
+        : '<span class="cu-empty"></span>';
+      return `
+      <tr class="cu-row${r.is_blocked ? ' is-blocked' : ''}" data-recency="${cuRecency(r.last_login_at)}" onclick="cuOpenDetail(${r.id})">
         <td>
-          <div style="font-weight: 500;">${r.nickname ? escapeHtml(r.nickname) : '<span class="cu-empty"></span>'}</div>
+          <div class="cu-who">
+            <span class="cu-mono" data-no-i18n>${cuMonogram(r.nickname)}</span>
+            <span class="who-main">
+              <span class="nm">${nameHtml}
+                ${isNew ? `<span class="cu-new">${cuT('New', '新客')}</span>` : ''}
+                ${r.is_blocked ? `<span class="cu-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}
+              </span>
+              ${r.phone ? `<span class="ph" data-no-i18n>${escapeHtml(r.phone)}</span>` : ''}
+            </span>
+          </div>
         </td>
-        <td>${escapeHtml(r.phone || '—')}</td>
-        <td>
-          <span class="cu-pill tier-${escapeHtml(r.tier_key || 'seed')}">${escapeHtml(r.tier_key || 'seed')}</span>
-          ${r.is_blocked ? ' <span class="cu-pill blocked">Blocked · 已封禁</span>' : ''}
-        </td>
+        <td><span class="cu-pill tier-${tier}">${tier}</span></td>
         <td class="numeric cu-num ${(r.orders_count || 0) === 0 ? 'is-zero' : ''}">${r.orders_count || 0}</td>
         <td class="numeric cu-num ${(r.points_balance || 0) === 0 ? 'is-zero' : ''}">${r.points_balance || 0}</td>
         <td class="numeric cu-num ${Number(r.balance || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.balance || 0).toFixed(2)}</td>
-        <td class="muted cu-last">${cuFmtTime(r.last_login_at) || '—'}</td>
-      </tr>
-    `).join('');
+        <td class="cu-last" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
+      </tr>`;
+    }).join('');
   }
+  // Clamp: blocking a customer (or toggling "include blocked") can shrink the
+  // roster under the operator's feet and leave CU_PAGE past the last page.
+  // Snap back and refetch once rather than painting an empty table.
   const pages = Math.max(1, Math.ceil(CU_TOTAL / CU_PAGE_SIZE));
-  $('#cu-total').textContent = CU_TOTAL ? `${CU_TOTAL} total · 共 ${CU_TOTAL} 位 · page ${CU_PAGE} of ${pages} · 第 ${CU_PAGE}/${pages} 页` : '';
-  $('#cu-prev').disabled = CU_PAGE <= 1;
-  $('#cu-next').disabled = CU_PAGE >= pages;
+  if (CU_PAGE > pages) { CU_PAGE = pages; return cuLoad(); }
+  rmRenderPager('cu-pager', {
+    page: CU_PAGE, pageSize: CU_PAGE_SIZE, total: CU_TOTAL,
+    sizes: [20, 50, 100],
+    noun: { en: 'customers', cn: '位客户' },
+    onPage: p => {
+      CU_PAGE = p;
+      cuLoad();
+      // Land on the top of the new page, not the foot of it. The desktop table
+      // is display:none on phones, so scroll whichever list is really visible.
+      const tbl   = document.getElementById('cu-table');
+      const cards = document.getElementById('rm-cu-cards');
+      const target = (cards && cards.offsetParent) ? cards : tbl;
+      if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    },
+    onSize: s => { CU_PAGE_SIZE = s; CU_PAGE = 1; cuLoad(); },
+  });
   cuViewApply();  // keep the View-tweak classes on #cu-table after each render
   if (window.rmRenderCustomerCards) rmRenderCustomerCards(rows);  // phone card list (same data)
 }
@@ -137,12 +230,6 @@ function cuMobTier(btn, v) {
   const bar = document.getElementById('cu-mob-tiers');
   if (bar) bar.querySelectorAll('.cu-tchip').forEach(b => b.classList.toggle('on', b === btn));
   CU_PAGE = 1;
-  cuLoad();
-}
-
-function cuPage(d) {
-  const pages = Math.max(1, Math.ceil(CU_TOTAL / CU_PAGE_SIZE));
-  CU_PAGE = Math.min(pages, Math.max(1, CU_PAGE + d));
   cuLoad();
 }
 
@@ -982,7 +1069,8 @@ async function cuToggleBlock() {
       toast('Unblocked · 已解封');
     } catch { return; }
   }
-  cuLoadKpis(true);   // blocked/active counts changed — refresh the strip
+  cuLoadKpis(true);   // blocked count changed — refresh the strip + its chip
+  cuLoad();           // …and the roster: a blocked customer leaves the default cut
   cuOpenDetail(c.id);
 }
 
@@ -1188,6 +1276,34 @@ function cuFmtTime(iso) {
   // Single source of truth — Guangzhou (UTC+8) formatting, correct on any
   // machine regardless of the browser's own timezone.
   return formatDate(iso);
+}
+
+// Guangzhou calendar day ('YYYY-MM-DD') for a UTC timestamp or epoch ms.
+// formatDate already does the UTC→Asia/Shanghai hop; take its date half.
+function cuGzDay(v) {
+  if (v == null || v === '') return '';
+  if (typeof v === 'number') return new Date(v + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  return (formatDate(v) || '').slice(0, 10);
+}
+
+// List "Last seen" — Today 14:35 / Yesterday 23:24 / 2026-07-03. The roster is
+// mostly today and yesterday, so repeating the date on every row is noise.
+function cuFmtSeen(iso) {
+  if (!iso) return cuT('never', '从未');
+  const s = formatDate(iso);
+  if (!s) return '—';
+  const day = s.slice(0, 10), clock = s.slice(11);
+  if (day === cuGzDay(Date.now()))                    return cuT('Today', '今天') + ' ' + clock;
+  if (day === cuGzDay(Date.now() - 24 * 3600 * 1000)) return cuT('Yesterday', '昨天') + ' ' + clock;
+  return day;
+}
+
+// Monogram for the roster's identity cell — first letter of the nickname, or a
+// quiet middot when there's no name yet. Array.from so an emoji or a Chinese
+// character survives as one glyph instead of a broken surrogate half.
+function cuMonogram(nickname) {
+  const ch = Array.from(String(nickname || '').trim())[0];
+  return ch ? escapeHtml(ch.toUpperCase()) : '·';
 }
 
 // Recency bucket for the Last-login highlight tweak: 'today' / 'week' / 'old'.

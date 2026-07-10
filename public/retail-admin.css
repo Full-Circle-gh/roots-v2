@@ -6818,17 +6818,17 @@
        The PAGER stays: it stacks (see .t-pager's own phone rules). Hiding it
        here used to strand phone operators on page 1 of the roster. */
     #tab-customers .table-wrap { display: none; }
-    #cu-pager { display: none; }
     #cu-toolbar { display: none; }
 
-    /* KPI strip → horizontal snap rail (override the Phase 2 2-up grid). */
-    #cu-kpis {
+    /* Stat strip → horizontal snap rail (override the desktop 3-up grid). */
+    #cu-stats {
       display: flex; grid-template-columns: none;
       gap: 10px; overflow-x: auto; -webkit-overflow-scrolling: touch;
       scroll-snap-type: x proximity; padding-bottom: 6px;
     }
-    #cu-kpis::-webkit-scrollbar { display: none; }
-    #cu-kpis > .fc-kpi { flex: 0 0 47%; min-width: 150px; scroll-snap-align: start; }
+    #cu-stats::-webkit-scrollbar { display: none; }
+    #cu-stats > .cu-stat { flex: 0 0 62%; min-width: 160px; scroll-snap-align: start; }
+    #cu-stats > .cu-stat.is-hidden { display: none; }
 
     /* Tier filter → sticky single-row chip scroller, always reachable. Pins to
        top:0 (not 56px) now that the brand bar scrolls away on phones, so it sits
