@@ -3465,7 +3465,9 @@
         <p class="cat2-railhint" data-lang-block="en">This is the rail your customers see. Drag a row to reorder it.</p>
         <p class="cat2-railhint" data-lang-block="cn">这就是顾客看到的左栏。拖动行即可排序。</p>
       </aside>
-      <section class="cat2-pane" id="cat2-pane" data-no-i18n></section>
+      <!-- a DIV, not a <section>: the global `section{display:none}` tab-switch
+           rule would hide any nested <section> that isn't .active -->
+      <div class="cat2-pane" id="cat2-pane" data-no-i18n></div>
     </div>
     </div><!-- /#prod-view-categories -->
 
