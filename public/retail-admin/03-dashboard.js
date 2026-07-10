@@ -1615,6 +1615,13 @@ function tdSecPaint() {
       ? sessions.toLocaleString() + ' ' + cuT('sessions', '会话')
       : cuT('no data yet', '暂无数据'));
     set('td-sec-conv', k.conversion_rate == null ? '—' : Number(k.conversion_rate).toFixed(1) + '%');
+    // Refunds — the only number in the Today strip that is money leaving. On a
+    // good day it reads 0 and says so plainly rather than showing a rate of 0%.
+    const refunded = Number(k.refunded_orders || 0);
+    set('td-today-refunded', String(refunded));
+    set('td-today-refund-rate', refunded
+      ? cuT(`${Number(k.refund_rate || 0).toFixed(1)}% of orders`, `占订单 ${Number(k.refund_rate || 0).toFixed(1)}%`)
+      : cuT('nothing sent back', '无退款'));
   }
 
   // ── Inventory vitals from the ops snapshot ──
@@ -1634,6 +1641,10 @@ function tdSecPaint() {
   const ordersFoot = document.getElementById('td-sec-orders-foot');
   if (ordersFoot && TD_SEC_COUNTS) {
     ordersFoot.innerHTML = tdSecFootHtml([
+      // Paid and untouched — nobody has started it yet. This is the most urgent
+      // thing on the page and it had no home until now: the operator saw
+      // "preparing" but never the orders waiting to BE prepared.
+      { n: Number(c.paid || 0),             go: "tdSecOpenOrders('paid')",             label: n => cuT(`${n} to start`, `${n} 单待处理`) },
       { n: Number(c.preparing || 0),        go: "tdSecOpenOrders('preparing')",        label: n => cuT(`${n} preparing`, `${n} 单备货中`) },
       { n: Number(c.awaiting_restock || 0), go: "tdSecOpenOrders('awaiting_restock')", label: n => cuT(`${n} awaiting restock`, `${n} 单待补货`) },
       { n: Number(c.refunds_open || 0),     go: "tdSecOpenOrders('refunds_open')",     label: n => cuT(`${n} in the refund queue`, `${n} 单待退款`) },

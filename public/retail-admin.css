@@ -7789,8 +7789,11 @@
 
   /* ── The Recap ── */
   .td-recap { margin-top: 0; }
-  .td-recap-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 18px; }
-  .td-recap-head h3 { margin: 0; font-size: 18px; font-weight: 500; color: var(--td-text); }
+  /* The head is a .td-sec-head on the paper now (title left, "Show the work"
+     where other blocks keep their "Open …" link) — it only adds the time
+     stamp and pushes the control to the right edge. */
+  .td-recap-head { gap: 14px; flex-wrap: wrap; }
+  .td-recap-head .td-ghost { margin-left: auto; }
   .td-recap-rows { display: grid; gap: 12px; }
   .td-recap-row { display: flex; align-items: baseline; gap: 12px; font-size: 15px; color: var(--td-text); }
   .td-recap-row b { font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -8017,9 +8020,10 @@
   body.td-arranging .td-block .td-attn,
   body.td-arranging .td-block .td-kicker { pointer-events: none; }
   body.td-arranging .td-block .card { border-style: dashed; border-color: var(--td-dusk); }
+  /* Every block now titles itself with an on-paper .td-sec-head; drop it clear
+     of the tools bar while arranging. (.td-recap-head carries both classes.) */
   body.td-arranging .td-block .td-card-head,
-  body.td-arranging .td-block .td-recap-head { padding-top: 16px; }
-  body.td-arranging .td-block[data-block="needs"] .td-kicker { margin-top: 26px; }
+  body.td-arranging .td-block .td-sec-head { padding-top: 16px; }
 
   .td-block.td-dragging { opacity: .5; }
   .td-block.td-dragging .card { box-shadow: 0 8px 28px rgba(17,26,43,.16); border-style: solid; }
@@ -8167,7 +8171,7 @@
   /* Orders and per-order sit behind one hairline under the chart. New
      customers is deliberately absent — it belongs to the Customers block. */
   .td-today-strip {
-    display: grid; grid-template-columns: 1fr 1fr;
+    display: grid; grid-template-columns: repeat(3, 1fr);
     border-top: 1px solid var(--td-border); margin-top: 24px;
   }
   .td-today-cell { padding: 16px 0 0; min-width: 0; }
@@ -8183,6 +8187,12 @@
     .td-today-body { padding: 20px 22px 16px; }
     .td-today-lead { font-size: 38px; }
     .td-today-line .db-spark-wrap.td-dayline { height: 84px; }
+    /* Three cells behind hairlines is a desktop shape — stack them on a phone. */
+    .td-today-strip { grid-template-columns: 1fr; }
+    .td-today-cell + .td-today-cell {
+      border-left: 0; border-top: 1px solid var(--td-border);
+      padding-left: 0; margin-top: 14px; padding-top: 14px;
+    }
   }
 
   /* Activity strip — clean prose rows: time · sentence · right-aligned amount,

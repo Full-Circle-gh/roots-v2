@@ -1403,6 +1403,16 @@
               <div class="v" id="td-sec-aov">¥—</div>
               <div class="k">Avg order value · 客单价</div>
             </div>
+            <!-- The one way money leaves. Reads 0 on a good day, which is the
+                 point: the strip says what today's takings are made of, and a
+                 refund is the only number here that isn't revenue coming in.
+                 kpis.refunded_orders + kpis.refund_rate — already in the
+                 payload, no new call. -->
+            <div class="td-today-cell">
+              <div class="v" id="td-today-refunded">—</div>
+              <div class="k">Refunded · 已退款</div>
+              <div class="c" id="td-today-refund-rate" data-no-i18n></div>
+            </div>
           </div>
         </div>
         <!-- sync stamp kept for JS but hidden (dashHeroSyncStamp writes it). -->
