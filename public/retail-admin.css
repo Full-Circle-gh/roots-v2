@@ -9244,41 +9244,67 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
   .t-pager-btn, .t-pager-size select { transition: none; }
 }
 
-/* ── The pager is the list card's foot, not a bar floating under it ──────
-   #ord-pager / #cu-pager are siblings of their .table-wrap card (the phone
-   card list sits between them in the DOM, display:none on desktop). Left
-   alone, a 14px-rounded card sat directly on top of a square-cornered cream
-   bar with an 8px bottom radius — the corners never met.
+/* ══ THE LIST CARD — Orders · Customers ═════════════════════════════════
+   ONE surface holds the table, the phone card list, and the pager footer.
+   The card owns the border, the radius and the lift; `overflow: hidden`
+   clips every child to the corner, so the footer's corners are the card's
+   corners by construction. There is no seam to align.
 
-   So: the card gives up its bottom corners and bottom border, and the pager
-   grows the side borders and the bottom radius that finish the shape. One
-   card, one outline, corners that line up. On phones the card is hidden, so
-   the pager closes all four of its own corners instead.               */
-#tab-orders    > .table-wrap,
-#tab-customers   .table-wrap {
-  border-bottom: 0;
-  border-bottom-left-radius: 0;
-  border-bottom-right-radius: 0;
+   This replaces an earlier attempt that left the pager a SIBLING of the
+   table and tried to make two boxes agree: square the card's bottom, round
+   the pager's. It could never hold. `#tab-orders .table-wrap` is declared
+   in an inline <style> further down the document at the same specificity as
+   any rule here, so it re-rounded the card's bottom corners on source order
+   and the notch came back. Nesting removes the argument instead of winning it.
+
+   The inner .table-wrap keeps overflow-x:auto: a wide table scrolls inside
+   the card, and the footer stays put rather than sliding off sideways.   */
+.list-card {
+  background: var(--bg-pane);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(18, 22, 26, .05), 0 8px 22px rgba(18, 22, 26, .07);
 }
+
+/* Strip the card chrome off the nested table wrapper — the .list-card is the
+   card now. The id prefix outranks the inline `#tab-orders .table-wrap` /
+   `#tab-customers .table-wrap` rules (1,2,0) vs (1,1,0), so this holds no
+   matter where those rules sit in the document. */
+#tab-orders    .list-card > .table-wrap,
+#tab-customers .list-card > .table-wrap {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+  overflow-x: auto;
+}
+
+/* The footer. A hairline above it, nothing else — the card draws the rest. */
 #ord-pager .t-pager,
 #cu-pager  .t-pager {
-  /* --line, not --td-border. The card above is drawn with var(--line), and the
-     Tacet skin only remaps that token inside #tab-orders. On #tab-customers
-     --line is still the old translucent grey, so a hardcoded --td-border put
-     two different greys either side of the seam. Borrow the card's own. */
-  border: 1px solid var(--line);
-  border-radius: 0 0 14px 14px;
-  /* Match the card's ambient lift so the joined shape reads as one surface.
-     Only the lower half of the card's shadow is visible past the seam, and
-     the pager is opaque and later in the DOM, so the two never stack. */
-  box-shadow: 0 8px 22px rgba(18, 22, 26, .07);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  margin: 0;
 }
 
 @media (max-width: 720px) {
-  /* The desktop table card is display:none here, so nothing sits above the
-     pager to bind to — it becomes its own fully-rounded card. */
+  /* Phones show the card list, not the table. The mobile rows carry their own
+     surfaces, so the list card steps back to a plain container and the pager
+     becomes its own rounded card beneath them. */
+  .list-card {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
   #ord-pager .t-pager,
   #cu-pager  .t-pager {
+    border: 1px solid var(--line);
     border-radius: 14px;
     margin-top: 12px;
   }
