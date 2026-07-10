@@ -6434,6 +6434,59 @@ function cancelStalePendingOrdersForTenant() {
   return cancelled;
 }
 
+// When a customer places a new order, the still-unpaid orders they left behind
+// that were HOLDING stock this new order needed are superseded — the new order
+// borrowed past their reservations (see ownPendingOrderIds at checkout), so
+// those holds are now stale duplicates for the same customer. Cancel them
+// eagerly (instead of waiting for the unpaid-timeout reaper) so the freed stock
+// isn't double-claimed and the customer isn't left with a dead unpaid twin.
+// Same reversal lifecycle as cancelStalePendingOrdersForTenant. Scoped to:
+//   • this customer's own orders, • still pending_payment, • holding an ACTIVE
+//   reservation on a product in the NEW cart, • not the new order itself.
+// An unrelated pending cart (no overlapping held item) is left untouched. Runs
+// OUTSIDE the checkout tx — the release/reverse helpers open their own
+// transactions. Returns the cancelled order ids. Best-effort per order.
+function supersedeUnpaidOrdersForCustomer(customerId, keepOrderId, cartPids) {
+  const pids = [...new Set((cartPids || []).filter(id => id != null))];
+  if (!customerId || !pids.length) return [];
+  const ph = pids.map(() => '?').join(',');
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT DISTINCT r.order_id AS id
+         FROM retail_stock_reservations r
+         JOIN retail_orders o ON o.id = r.order_id
+        WHERE o.customer_id = ?
+          AND o.status = 'pending_payment'
+          AND r.status = 'active'
+          AND r.order_id != ?
+          AND r.product_id IN (${ph})`
+    ).all(customerId, keepOrderId, ...pids);
+  } catch (e) { console.warn('[supersede.query]', e.message); return []; }
+
+  const cancelled = [];
+  for (const o of rows) {
+    // Atomic claim: only the writer that wins the pending_payment → cancelled
+    // flip runs the once-only reversals (a payment callback that just landed
+    // leaves changes===0, so we never cancel an order that actually got paid).
+    const flipped = tdb().prepare(
+      "UPDATE retail_orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancelled_reason = 'superseded_by_new_order', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'pending_payment'"
+    ).run(o.id);
+    if (flipped.changes === 0) continue;
+    tdb().prepare(
+      "UPDATE retail_payments SET status = 'cancelled' WHERE order_id = ? AND status = 'pending'"
+    ).run(o.id);
+    try { reverseOrderRedeem(o.id); }  catch (e) { console.error('[supersede.reverseRedeem]',  o.id, e.message); }
+    try { reverseOrderBalance(o.id); } catch (e) { console.error('[supersede.reverseBalance]', o.id, e.message); }
+    try { reverseOrderVoucher(o.id); } catch (e) { console.error('[supersede.reverseVoucher]', o.id, e.message); }
+    try { inventory.releaseOrderReservations(o.id, { reason: 'superseded_by_new_order' }); }
+    catch (e) { console.error('[supersede.release]', o.id, e.message); }
+    try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: 'pending_payment', to: 'cancelled', reason: 'superseded_by_new_order' }, null); } catch {}
+    cancelled.push(o.id);
+  }
+  return cancelled;
+}
+
 // Every 15 min, walk every active tenant and cancel its stale unpaid orders.
 // Best-effort: a per-tenant failure never aborts the others.
 function tickCancelStalePending() {
@@ -9048,6 +9101,22 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       tdb().prepare('UPDATE retail_orders SET reroute_short_pids = ? WHERE id = ?')
         .run(JSON.stringify(rerouteShortPids), orderId);
     } catch (e) { console.warn('[reroute short pids]', e.message); }
+  }
+
+  // Auto-cancel this customer's now-superseded unpaid orders — the ones whose
+  // held stock this new order just took over (same customer, overlapping item,
+  // still pending_payment). Frees the redundant holds and reverses any
+  // points/voucher/balance they consumed, exactly like the unpaid-timeout
+  // reaper. Runs here (post-commit, outside the order tx) because the
+  // release/reverse helpers open their own transactions. Best-effort — never
+  // fails the order that was just placed. Only overlapping-hold orders, so an
+  // unrelated pending cart the customer still means to pay is left alone.
+  if (!isWaitFlow && ownPendingOrderIds.length) {
+    try {
+      const cartPids = expandStockLines(resolved).map(l => l.product_id);
+      const superseded = supersedeUnpaidOrdersForCustomer(req.customer.id, orderId, cartPids);
+      if (superseded.length) console.log('[checkout] superseded unpaid orders', superseded, 'by', orderId);
+    } catch (e) { console.warn('[checkout supersede]', e.message); }
   }
 
   const order = loadOrderForCustomer(orderId, req.customer.id, `${req.protocol}://${req.get('host')}`);
