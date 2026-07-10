@@ -1762,9 +1762,78 @@ function tdLowRotStart() {
   TD._lowRotTimer = setInterval(tdLowRotTick, TD_LOW_ROT_MS);
 }
 
+// ── The Running-low list, inside the Inventory block ───────────────────────
+// It was an attention card in "Needs you"; its count only ever repeated the
+// Inventory block's own number. The list is worth keeping — it is the one
+// place on the dashboard that names products — so it lives under the numbers
+// it describes. Everything stocked → the node renders nothing and is hidden,
+// and the block is just its two vitals and a sage footer.
+// Reuses the same rolling window (#td-low-rows) and store filter as before.
+function tdInvLowRender() {
+  const host = document.getElementById('td-inv-low'); if (!host) return;
+  TD_LOW_POOL = [];
+  const hide = () => { host.hidden = true; host.innerHTML = ''; tdLowRotStop(); };
+  if (!DASH_OPS || !dashPosWants('stock')) return hide();
+
+  const allLow = ((DASH_OPS.low_stock || {}).count || 0) + ((DASH_OPS.out_of_stock || {}).count || 0);
+  if (!allLow) return hide();
+
+  // The counts above are all-stores (so the list appears whenever ANY store is
+  // short); the rows honour the store picked in the header dropdown.
+  const src = (TD.stockStore && TD.stockOps) ? TD.stockOps : DASH_OPS;
+  const low = src.low_stock || { count: 0, items: [] };
+  const oos = src.out_of_stock || { count: 0, items: [] };
+  const cnt = low.count + oos.count;
+  const storeSel = (TD.stores && TD.stores.length >= 2 && !window.RA_STORE_LOCK) ? tdStoreSelectHtml() : '';
+
+  let rowsHtml, moreText;
+  if (cnt === 0) {
+    // A store the operator picked that happens to be fully stocked.
+    rowsHtml = `<div class="td-attn-clear">${cuT('All stocked at this store', '此门店库存充足')}</div>`;
+    moreText = '';
+  } else {
+    // Ordered pool the window rolls through: out-of-stock first, then low.
+    TD_LOW_POOL = [
+      ...(oos.items || []).map(it => ({ ...it, _oos: true })),
+      ...(low.items || []),
+    ];
+    TD._lowCnt = cnt;
+    if (TD.lowRotAt >= TD_LOW_POOL.length) TD.lowRotAt = 0;
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const willRotate = TD_LOW_POOL.length > TD_LOW_WIN && !reduce;
+    if (!willRotate) TD.lowRotAt = 0;
+    const chev = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
+    rowsHtml = `<div id="td-low-rows" class="td-low-rows"${willRotate ? ' onmouseenter="tdLowPause()" onmouseleave="tdLowResume()" onfocusin="tdLowPause()" onfocusout="tdLowResume()"' : ''}>${tdLowWindowHtml()}</div>`;
+    if (willRotate) {
+      moreText = `<button type="button" class="td-attn-more-link" data-no-i18n onclick="dashStockDrawerOpen(event)"><span id="td-low-pos">${tdLowPosText()}</span>${chev}</button>`;
+    } else {
+      const restN = cnt - Math.min(TD_LOW_WIN, TD_LOW_POOL.length);
+      const at = TD.stockStore ? ' ' + cuT('at ' + tdStockStoreName(), '· ' + tdStockStoreName()) : '';
+      moreText = restN > 0
+        ? `<button type="button" class="td-attn-more-link" data-no-i18n onclick="dashStockDrawerOpen(event)">${cuT(`and ${restN} more${at}`, `另有 ${restN} 项${TD.stockStore ? ' · ' + tdStockStoreName() : ''}`)}${chev}</button>`
+        : '';
+    }
+  }
+
+  host.hidden = false;
+  // No title: the block is already called Inventory and the vital above says
+  // "Running low". A store filter only when there's more than one store.
+  host.innerHTML =
+    `<div class="td-inv-low-head"><span>${cuT('Lowest first', '库存最少优先')}</span>${storeSel}</div>`
+    + rowsHtml
+    + (moreText ? `<div class="td-attn-more">${moreText}</div>` : '');
+  // The rows node was just recreated — (re)start the rolling window against it.
+  // The timer belongs to this list now, not to the attention strip: a day with
+  // no attention cards must still roll the low-stock window.
+  tdLowRotStart();
+}
+
 function tdAttnRender() {
   const host = document.getElementById('td-attn'); if (!host) return;
-  TD_LOW_POOL = [];   // rebuilt below when the Running-low card is present
+  // The stock list is the Inventory block's business now — paint it from the
+  // same ops snapshot, on every path that repaints this (poll, SSE, store
+  // change, language toggle).
+  tdInvLowRender();
   if (!DASH_OPS) {
     host.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
     return;
@@ -1775,56 +1844,9 @@ function tdAttnRender() {
   if (refCell) refCell.textContent = String((DASH_OPS.refunds && DASH_OPS.refunds.count) || 0);
   const cards = [];
 
-  // Stock first (left, like the mockup) — out-of-stock rows before the lowest
-  // counts. The card shows whenever ANY store has low stock; its list + count
-  // reflect the store picked in the header dropdown (all stores by default).
-  const allLow = ((DASH_OPS.low_stock || {}).count || 0) + ((DASH_OPS.out_of_stock || {}).count || 0);
-  if (allLow && dashPosWants('stock')) {
-    const src = (TD.stockStore && TD.stockOps) ? TD.stockOps : DASH_OPS;
-    const low = src.low_stock || { count: 0, items: [] };
-    const oos = src.out_of_stock || { count: 0, items: [] };
-    const cnt = low.count + oos.count;
-    // A store-locked operator's ops pull is already scoped — no store dropdown.
-    const storeSel = (TD.stores && TD.stores.length >= 2 && !window.RA_STORE_LOCK) ? tdStoreSelectHtml() : '';
-    let rowsHtml, moreText;
-    if (cnt === 0) {
-      // Picked a store that's fully stocked — say so rather than showing nothing.
-      rowsHtml = `<div class="td-attn-clear">${cuT('All stocked at this store', '此门店库存充足')}</div>`;
-      moreText = '';
-    } else {
-      // Ordered pool the window rolls through: out-of-stock first, then low.
-      // The _oos tag lets tdLowRowHtml pick the right label ("out" vs "N left").
-      TD_LOW_POOL = [
-        ...(oos.items || []).map(it => ({ ...it, _oos: true })),
-        ...(low.items || []),
-      ];
-      TD._lowCnt = cnt;
-      // A shorter pool than the last tick (SSE restock) can leave the saved
-      // index past the end — snap it back so the first window shows.
-      if (TD.lowRotAt >= TD_LOW_POOL.length) TD.lowRotAt = 0;
-      const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      const willRotate = TD_LOW_POOL.length > TD_LOW_WIN && !reduce;
-      if (!willRotate) TD.lowRotAt = 0;   // static list always starts at the top
-      const chev = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
-      // Rows live in an id'd, pause-on-hover box so the timer can cross-fade just
-      // this slice (see tdLowRotTick) without rebuilding the whole card.
-      rowsHtml = `<div id="td-low-rows" class="td-low-rows"${willRotate ? ' onmouseenter="tdLowPause()" onmouseleave="tdLowResume()" onfocusin="tdLowPause()" onfocusout="tdLowResume()"' : ''}>${tdLowWindowHtml()}</div>`;
-      if (willRotate) {
-        // The more-link doubles as a live "5–8 of 32" position + see-all handle.
-        moreText = `<button type="button" class="td-attn-more-link" data-no-i18n onclick="dashStockDrawerOpen(event)"><span id="td-low-pos">${tdLowPosText()}</span>${chev}</button>`;
-      } else {
-        // Static (reduced-motion or a short list) — the classic "and N more".
-        const restN = cnt - Math.min(TD_LOW_WIN, TD_LOW_POOL.length);
-        const at = TD.stockStore ? ' ' + cuT('at ' + tdStockStoreName(), '· ' + tdStockStoreName()) : '';
-        moreText = restN > 0
-          ? `<button type="button" class="td-attn-more-link" data-no-i18n onclick="dashStockDrawerOpen(event)">${cuT(`and ${restN} more${at}`, `另有 ${restN} 项${TD.stockStore ? ' · ' + tdStockStoreName() : ''}`)}${chev}</button>`
-          : '';
-      }
-    }
-    cards.push(tdAttnCard('amber', 'box', cuT('Running low', '库存告急'), cnt, rowsHtml, moreText,
-      `<button type="button" class="td-attn-go" onclick="dashOpenRestock()">${cuT('Open restock', '前往补货')}</button>`,
-      storeSel));
-  }
+  // Stock is no longer a card here — the list moved into the Inventory block
+  // (tdInvLowRender), whose own "N out of stock · Open restock" footer already
+  // carries the amber dot. Nothing about stock is repeated in this strip.
 
   // Delivery — the brick "needs a call" card only when the carrier has flagged a
   // problem. When it's clear there's no card here; the calm channels are folded
@@ -1915,40 +1937,22 @@ function tdAttnRender() {
       `<button type="button" class="td-attn-go" onclick="dashOpenInvoices()">${cuT('Open in Orders', '前往订单')}</button>`));
   }
 
-  // All clear — one calm roll-up of the watched channels that have nothing
-  // waiting, folded into a single card rather than one "all good" card each.
-  // It only appears beside a real alert (cards.length): when EVERYTHING is
-  // clear there are no cards at all, and the full-width "Nothing needs you"
-  // state below takes over instead — so the roll-up never competes with it.
-  // The channels listed are exactly the alert channels that raise a card here,
-  // so each one shows either as an alert card or as a tick — never both.
-  if (cards.length) {
-    const clearTick = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>';
-    const clear = [];
-    const clearRow = (nm, val) =>
-      `<div class="td-attn-ok-row"><span class="tick" aria-hidden="true">${clearTick}</span><span class="nm">${nm}</span><span class="val">${val}</span></div>`;
-    if (!da.count && dashPosWants('delivery'))  clear.push(clearRow(cuT('Delivery', '配送'), cuT('on track', '一切正常')));
-    if (!rf.count && dashPosWants('refunds'))   clear.push(clearRow(cuT('Refunds', '退款'), cuT('none waiting', '无待处理')));
-    if (!inv.count && dashPosWants('invoices')) clear.push(clearRow(cuT('Invoices', '发票'), cuT('none to issue', '无需开具')));
-    if (clear.length) {
-      cards.push(tdAttnCard('ok', 'check', cuT('All clear', '一切正常'), '', clear.join(''), ''));
-    }
-  }
+  // There is no "All clear" card. It was written when the blocks had no
+  // footers; now every block ends in its own sage line ("Every delivery is on
+  // track", "Nothing waiting"), so a card that gathers those lines up and
+  // repeats them announces only that nothing is happening. Silence says that.
 
+  // Nothing waiting → the whole block leaves the page: heading, card and all.
+  // A shorter dashboard IS the good news. The block stays in the DOM (hidden
+  // by CSS) so Arrange mode can still show and reorder it.
+  const block = host.closest('.td-block');
   if (!cards.length) {
-    // The empty state is a compliment, not an apology — the settled waveform.
-    host.innerHTML = `<section class="card td-card td-clear">
-      <svg viewBox="0 0 340 24" aria-hidden="true"><path d="M10 12 C80 12, 180 12, 330 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.45"/></svg>
-      <p>${cuT('Nothing needs you. Enjoy it.', '没有需要您处理的事，请安心。')}</p>
-      <p class="sub">${cuT('Cards appear here the moment something does.', '一旦有事项需要处理，会立即在这里显示。')}</p>
-    </section>`;
-    tdLowRotStop();   // no card → no window to roll
+    host.innerHTML = '';
+    if (block) block.classList.add('is-quiet');
     return;
   }
+  if (block) block.classList.remove('is-quiet');
   host.innerHTML = `<div class="td-attn-grid">${cards.join('')}</div>`;
-  // The rows node was just recreated; (re)start the rolling window against it.
-  // No-ops when the pool is short, reduced-motion, or there's no Running-low card.
-  tdLowRotStart();
 }
 
 // ── Running-low stock drawer ────────────────────────────────────────────────
