@@ -5736,16 +5736,23 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
 // the inspector floated beside the selected block, the device/preview
 // controls docked under the phone, and "+" seams between blocks. Every
 // feature is the SAME element with the SAME handler — only its home moves —
-// so nothing the classic editor can do is lost. Enabled with ?layout=canvas
-// (remembered), turned back off with ?layout=classic. No-op by default, so
-// shipping this can never disturb the live three-pane editor.
+// so nothing the classic editor can do is lost.
+//
+// Canvas-first is now THE editor: it's the default everyone gets. The old
+// three-pane layout stays only as an opt-out safety valve (Tweaks ▸ Layout ▸
+// Classic, or ?layout=classic) — kept because the editor usually runs embedded
+// in an iframe where a URL fallback can't reach it, so a visible switch is the
+// only way back if something ever looks off. Once canvas is proven in real
+// use this fallback can be deleted outright.
 // ═══════════════════════════════════════════════════════════════════════
 function cfLayoutMode() {
   try {
     const q = new URLSearchParams(location.search).get('layout');
     if (q === 'canvas' || q === 'classic') { localStorage.setItem('cms-layout', q); return q; }
-    return localStorage.getItem('cms-layout') || 'classic';
-  } catch (e) { return 'classic'; }
+    // Default is canvas. Only an explicit opt-out (via the Tweaks toggle,
+    // which writes 'classic') falls back to the old three-pane layout.
+    return localStorage.getItem('cms-layout') === 'classic' ? 'classic' : 'canvas';
+  } catch (e) { return 'canvas'; }
 }
 
 function initCanvasLayout() {
