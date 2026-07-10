@@ -129,11 +129,14 @@ const MT_STATUS = {
   '待骑手取货': { en: 'Awaiting pickup',  tone: 'dispatched' },
   '待取货':     { en: 'Awaiting pickup',  tone: 'dispatched' },
   '骑手已取货': { en: 'Rider en route',   tone: 'dispatched' },
+  '骑手已取餐': { en: 'Rider en route',   tone: 'dispatched' },
   '配送中':     { en: 'Delivering',       tone: 'dispatched' },
   '派送中':     { en: 'Delivering',       tone: 'dispatched' },
   '已送达':     { en: 'Delivered',        tone: 'delivered' },
   '用户已收货': { en: 'Delivered',        tone: 'delivered' },
+  '用户已收餐': { en: 'Delivered',        tone: 'delivered' },
   '已收货':     { en: 'Delivered',        tone: 'delivered' },
+  '已收餐':     { en: 'Delivered',        tone: 'delivered' },
   '已签收':     { en: 'Delivered',        tone: 'delivered' },
   '妥投':       { en: 'Delivered',        tone: 'delivered' },
   '已妥投':     { en: 'Delivered',        tone: 'delivered' },
@@ -167,8 +170,8 @@ function channelStatusMeta(desc) {
   if (/退款|退货/.test(d))                { tone = 'refunded';        en = 'Refund'; }
   else if (/拒收|拒签|派送失败|投递失败|配送异常/.test(d)) { tone = 'cancelled'; en = 'Delivery failed'; }
   else if (/取消/.test(d))                { tone = 'cancelled';       en = 'Cancelled'; }
-  else if (/完成|送达|签收|收货|妥投/.test(d)) { tone = 'delivered';       en = 'Delivered'; }
-  else if (/配送|派送|派件|骑手|取货|揽收|运输/.test(d))   { tone = 'dispatched';      en = 'Delivering'; }
+  else if (/完成|送达|签收|收货|收餐|妥投/.test(d)) { tone = 'delivered';   en = 'Delivered'; }
+  else if (/配送|派送|派件|骑手|取货|取餐|揽收|运输/.test(d)) { tone = 'dispatched';  en = 'Delivering'; }
   else if (/拣货|备货|发货|制作/.test(d))   { tone = 'preparing';       en = 'Preparing'; }
   else if (/待支付|未支付|待付款/.test(d))  { tone = 'pending_payment'; en = 'Unpaid'; }
   return { en, cn: d, tone };
