@@ -9265,3 +9265,43 @@ body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .t-pager-btn, .t-pager-size select { transition: none; }
 }
+
+/* ── The pager is the list card's foot, not a bar floating under it ──────
+   #ord-pager / #cu-pager are siblings of their .table-wrap card (the phone
+   card list sits between them in the DOM, display:none on desktop). Left
+   alone, a 14px-rounded card sat directly on top of a square-cornered cream
+   bar with an 8px bottom radius — the corners never met.
+
+   So: the card gives up its bottom corners and bottom border, and the pager
+   grows the side borders and the bottom radius that finish the shape. One
+   card, one outline, corners that line up. On phones the card is hidden, so
+   the pager closes all four of its own corners instead.               */
+#tab-orders    > .table-wrap,
+#tab-customers   .table-wrap {
+  border-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+#ord-pager .t-pager,
+#cu-pager  .t-pager {
+  /* --line, not --td-border. The card above is drawn with var(--line), and the
+     Tacet skin only remaps that token inside #tab-orders. On #tab-customers
+     --line is still the old translucent grey, so a hardcoded --td-border put
+     two different greys either side of the seam. Borrow the card's own. */
+  border: 1px solid var(--line);
+  border-radius: 0 0 14px 14px;
+  /* Match the card's ambient lift so the joined shape reads as one surface.
+     Only the lower half of the card's shadow is visible past the seam, and
+     the pager is opaque and later in the DOM, so the two never stack. */
+  box-shadow: 0 8px 22px rgba(18, 22, 26, .07);
+}
+
+@media (max-width: 720px) {
+  /* The desktop table card is display:none here, so nothing sits above the
+     pager to bind to — it becomes its own fully-rounded card. */
+  #ord-pager .t-pager,
+  #cu-pager  .t-pager {
+    border-radius: 14px;
+    margin-top: 12px;
+  }
+}
