@@ -3717,18 +3717,6 @@ function renderReadonlyOrder(o) {
   // true — staff can call the rider from right here. Keep the tag only for orders we
   // genuinely can't act on (accept/prepare still live on the platform either way).
   const roTag = o.courier ? '' : ` · ${cuT('view only', '只读')}`;
-  // Accept (接单) — shown only for a Meituan order still sitting in 待接单, and only
-  // when the daemon is actually wired to click (o.meituan_writeback), so staff can
-  // never queue an action that would silently never fire. Tianhe auto-accepts server
-  // side (Meituan Retail), so its orders never wait in 待接单 and the button simply
-  // never appears there — it's Yuexiu that needs this.
-  const awaitingAccept = /待接单/.test(String(o.channel_status || ''));
-  const acceptBtn = (o.meituan_writeback && awaitingAccept)
-    ? `<div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">
-         <button class="btn btn-primary" id="mt-accept-${o.id}" onclick="mtAcceptOrder(${o.id}, this)">${cuT('Accept order', '接单')}</button>
-         <div class="muted" style="font-size:11px; margin-top:6px;">${cuT('Clicks 接单 on Meituan. The status updates within a few seconds.', '将在美团点击"接单",状态数秒后更新。')}</div>
-       </div>`
-    : '';
   mount.innerHTML = `
     <div class="order-card odd-${ODV.density}">
       <div class="order-head">
@@ -3778,35 +3766,7 @@ function renderReadonlyOrder(o) {
             : `<div class="muted" style="padding: 8px 0;">${cuT('No line items captured', '未记录商品明细')}</div>`}
         </div>
       </div>
-      ${acceptBtn}
     </div>`;
-}
-
-// Queue an 接单 (accept) click on Meituan for this mirrored order. The daemon owns the
-// logged-in Meituan browser, so we only enqueue here; it drains within ~10s, clicks the
-// card's 接单 button, and Meituan's own status label flips on the next order poll (the
-// drawer/list refresh picks it up). Idempotent server-side, so a double tap is harmless.
-async function mtAcceptOrder(orderId, btn) {
-  if (!confirm(cuT('Accept this order on Meituan?', '确认在美团接单?'))) return;
-  const label = cuT('Accept order', '接单');
-  if (btn) { btn.disabled = true; btn.textContent = cuT('Accepting…', '接单中…'); }
-  try {
-    const r = await fetch(`/api/retail-admin/orders/${orderId}/meituan-action`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'accept' }),
-    });
-    const j = await r.json();
-    if (!j.success) throw new Error(j.error || 'failed');
-    if (j.data && j.data.writeback_enabled === false) {
-      toast(cuT('Queued, but Meituan write-back is switched off', '已排队,但美团回写未开启'), 'err');
-      if (btn) { btn.disabled = false; btn.textContent = label; }
-      return;
-    }
-    toast(cuT('Accepting on Meituan…', '正在美团接单…'));
-  } catch (e) {
-    toast(cuT('Could not accept — do it on Meituan', '接单失败 — 请在美团操作'), 'err');
-    if (btn) { btn.disabled = false; btn.textContent = label; }
-  }
 }
 
 // Romanise a Chinese city name for the English view of the split note (the
