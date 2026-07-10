@@ -38,7 +38,7 @@ function cuFilterChanged() {
 function cuSegment(btn, seg) {
   CU_SEGMENT = seg;
   const bar = document.getElementById('cu-segs');
-  if (bar) bar.querySelectorAll('.cu-seg').forEach(b => b.classList.toggle('on', b === btn));
+  if (bar) bar.querySelectorAll('.cul-seg').forEach(b => b.classList.toggle('on', b === btn));
   cuFilterChanged();
 }
 
@@ -103,7 +103,7 @@ function cuRenderKpis() {
     // The last blocked customer was just unblocked while that chip was active —
     // fall back to All rather than leaving the operator on an empty roster.
     if (_CU_BLOCKED === 0 && CU_SEGMENT === 'blocked') {
-      const all = document.querySelector('#cu-segs .cu-seg[data-seg=""]');
+      const all = document.querySelector('#cu-segs .cul-seg[data-seg=""]');
       if (all) cuSegment(all, '');
     }
   }
