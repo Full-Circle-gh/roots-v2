@@ -14251,9 +14251,18 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT f.id, f.customer_id, f.customer_name, f.message,
             f.photos_json, f.page_context, f.app_version, f.created_at, f.kind,
+            f.initiated_by, f.root_author_name,
             f.last_customer_msg_at, f.last_admin_msg_at, f.admin_read_at,
             c.nickname AS nickname, c.avatar_url AS customer_avatar,
             (SELECT COUNT(*) FROM retail_feedback_messages m WHERE m.feedback_id = f.id) AS reply_count,
+            -- The newest turn in the thread. Without this the row can only show
+            -- the root message, which on a staff-initiated thread is the
+            -- operator's own opener — replaying their words back at them and
+            -- hiding the customer's answer. NULL until somebody replies.
+            (SELECT m.body        FROM retail_feedback_messages m WHERE m.feedback_id = f.id ORDER BY m.id DESC LIMIT 1) AS last_body,
+            (SELECT m.author      FROM retail_feedback_messages m WHERE m.feedback_id = f.id ORDER BY m.id DESC LIMIT 1) AS last_author,
+            (SELECT m.author_name FROM retail_feedback_messages m WHERE m.feedback_id = f.id ORDER BY m.id DESC LIMIT 1) AS last_author_name,
+            (SELECT m.created_at  FROM retail_feedback_messages m WHERE m.feedback_id = f.id ORDER BY m.id DESC LIMIT 1) AS last_at,
             -- The customer is waiting if their latest turn is newer than the
             -- last time an operator opened the thread (covers a brand-new
             -- report — admin_read_at NULL — and a fresh follow-up alike).
@@ -14261,15 +14270,26 @@ router.get('/api/retail-admin/feedback', requireRetailAdmin, (req, res) => {
                OR datetime(COALESCE(f.last_customer_msg_at, f.created_at)) > datetime(f.admin_read_at)) AS needs_reply
        FROM retail_feedback f
   LEFT JOIN retail_customers c ON c.id = f.customer_id
-   ORDER BY COALESCE(f.last_customer_msg_at, f.created_at) DESC
+   ORDER BY COALESCE(f.last_customer_msg_at, f.last_admin_msg_at, f.created_at) DESC
       LIMIT ? OFFSET ?`
-  ).all(limit, offset).map(f => ({
-    ...f,
-    photos: parseJsonArray(f.photos_json),
-    photos_json: undefined,
-    replied: !!f.last_admin_msg_at,
-    needs_reply: !!f.needs_reply,
-  }));
+  ).all(limit, offset).map(f => {
+    // No replies yet → the newest turn is the root. initiated_by says who wrote
+    // it: the customer on a bug report, an operator on a direct message.
+    const rootIsAdmin = (f.initiated_by || 'customer') === 'admin';
+    const hasReply = f.last_author != null;
+    return {
+      ...f,
+      photos: parseJsonArray(f.photos_json),
+      photos_json: undefined,
+      initiated_by: f.initiated_by || 'customer',
+      last_body: hasReply ? f.last_body : f.message,
+      last_author: hasReply ? f.last_author : (rootIsAdmin ? 'admin' : 'customer'),
+      last_author_name: hasReply ? f.last_author_name : (rootIsAdmin ? f.root_author_name : null),
+      last_at: hasReply ? f.last_at : f.created_at,
+      replied: !!f.last_admin_msg_at,
+      needs_reply: !!f.needs_reply,
+    };
+  });
   const total = tdb().prepare('SELECT COUNT(*) AS n FROM retail_feedback').get().n;
   res.json({ success: true, data: rows, meta: { total, limit, offset } });
 });

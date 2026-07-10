@@ -5804,6 +5804,20 @@
       #tab-feedback .pill.neutral, #fb-drawer .pill.neutral { color: var(--text-2); }
       #tab-feedback .pill.warn { background: rgba(242,202,108,.14); border-color: rgba(242,202,108,.30); color: var(--st-preparing, #d9a441); }
       #tab-feedback .pill.ok   { background: rgba(128,196,98,.12);  border-color: rgba(128,196,98,.30);  color: #80c462; }
+      /* Feedback list rows open a conversation — say so on hover. */
+      #feedback-table tbody tr.fb-row { cursor: pointer; }
+      #feedback-table tbody tr.fb-row:hover { background: var(--bg-elev-2, #f1efe9); }
+      /* The newest turn leads the row. A customer turn gets the accent rule so
+         an answer waiting on staff reads without opening the thread. */
+      .fb-row-opener {
+        font-size: 11px; color: var(--text-2); opacity: .75; margin-bottom: 5px;
+        max-width: 520px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      }
+      .fb-row-last { max-width: 520px; padding-left: 9px; border-left: 2px solid var(--border); }
+      .fb-row-last-cust { border-left-color: var(--st-preparing, #d9a441); }
+      .fb-row-who { font-size: 10px; color: var(--text-2); opacity: .8; margin-bottom: 2px; }
+      .fb-row-body { font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+      .fb-row-last-cust .fb-row-body { font-weight: 500; }
       .fb-thread { display: flex; flex-direction: column; gap: 10px; }
       .fb-msg { max-width: 86%; padding: 9px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; }
       .fb-msg-meta { font-size: 10px; opacity: .65; margin-bottom: 3px; }

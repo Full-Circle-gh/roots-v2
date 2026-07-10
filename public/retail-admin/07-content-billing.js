@@ -1525,19 +1525,39 @@ function renderFeedbackRow(f) {
   const kindTag = f.kind === 'message'
     ? `<span class="pill neutral" style="font-size: 10px;">${cuT('✉ Message', '✉ 消息')}</span>`
     : '';
+  // The row leads with the newest turn, not the thread root. On a thread staff
+  // started, the root is the operator's own opener — showing it means the
+  // customer's answer never appears anywhere in this table.
+  const fromCustomer = f.last_author !== 'admin';
+  const lastWho = fromCustomer
+    ? cuT('Customer', '顾客')
+    : (f.last_author_name ? escapeHtml(f.last_author_name) : cuT('Store', '商家'));
+  const lastWhen = f.last_at ? escapeHtml(f.last_at.slice(0, 16)) : '';
+  // Once there are replies the root is no longer on screen, so keep one clipped
+  // line of it for context on what the thread is about.
+  const openerHtml = f.reply_count > 0
+    ? `<div class="fb-row-opener">${escapeHtml(f.message || '')}</div>`
+    : '';
   return `
-    <tr data-id="${f.id}" onclick="openFeedbackThread(${f.id})" style="cursor: pointer;">
+    <tr data-id="${f.id}" onclick="openFeedbackThread(${f.id})" class="fb-row" title="${escapeAttr(cuT('Open conversation', '打开对话'))}">
       <td>
         <div>${escapeHtml(customer)}</div>
         <div class="muted" style="font-size: 10px;">#${f.customer_id}</div>
       </td>
       <td>
-        <div style="font-size: 12px; line-height: 1.4; max-width: 520px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(f.message || '')}</div>
+        ${openerHtml}
+        <div class="fb-row-last ${fromCustomer ? 'fb-row-last-cust' : 'fb-row-last-admin'}">
+          <div class="fb-row-who">${lastWho}${lastWhen ? ' · ' + lastWhen : ''}</div>
+          <div class="fb-row-body">${escapeHtml(f.last_body || '')}</div>
+        </div>
         ${photosHtml ? `<div style="margin-top: 8px;">${photosHtml}</div>` : ''}
         <div style="margin-top: 6px; display: flex; gap: 8px; align-items: center;">${kindTag}${feedbackStatusPill(f)}${replyTag}</div>
       </td>
       <td>${ctx}${ver}</td>
-      <td class="muted" style="font-size: 11px; white-space: nowrap;">${f.created_at ? f.created_at.slice(0, 16) : ''}</td>
+      <td class="muted" style="font-size: 11px; white-space: nowrap;">
+        ${f.last_at ? escapeHtml(f.last_at.slice(0, 16)) : ''}
+        ${f.reply_count > 0 && f.created_at ? `<div style="font-size: 10px; opacity: .7; margin-top: 3px;">${cuT('opened', '发起于')} ${escapeHtml(f.created_at.slice(0, 10))}</div>` : ''}
+      </td>
     </tr>`;
 }
 
