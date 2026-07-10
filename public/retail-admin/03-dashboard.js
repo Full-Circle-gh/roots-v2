@@ -304,8 +304,13 @@ function dashInit() {
   // desktop the deep Reports build (~28 aggregate queries) is DEFERRED to the
   // first Reports visit — at boot it used to queue ahead of the visible cards
   // and was the main reason the dashboard sat on "Loading…".
-  const phoneDash = window.matchMedia && window.matchMedia('(max-width: 720px)').matches;
-  dashSetRange('30', { defer: !phoneDash });
+  const phoneMq = window.matchMedia && window.matchMedia('(max-width: 720px)');
+  dashSetRange('30', { defer: !(phoneMq && phoneMq.matches) });
+  // …and if a desktop window is later narrowed past the phone breakpoint, the
+  // phone dashboard needs the data it was never sent. Pull it once, on cross.
+  if (phoneMq && phoneMq.addEventListener) {
+    phoneMq.addEventListener('change', e => { if (e.matches && !DASH_DATA) dashLoad(); });
+  }
   dashHeroInit();      // today pulse: presence + today KPIs + activity polling
   tdInit();            // Tacet dashboard: The Recap + attention cards + date
 }
