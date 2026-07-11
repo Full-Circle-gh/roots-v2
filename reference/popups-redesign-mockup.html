@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Pop-ups redesign mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET POP-UPS REDESIGN — static mockup, no live data.
+   Chrome bar toggles: layout option (A poster wall / B quiet
+   list / C customer's eye) and data state (4 pop-ups / empty).
+   Tokens per tacet-tokens.css v1.0 — when in doubt, remove
+   something. Dusk appears ONCE on this page: the New pop-up
+   CTA (same precedent as Orders' "New order").
+   Colour is status, never decoration: sage = live, amber =
+   scheduled, graphite = off, brick = delete only.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --dusk-tint:   #EEEDF6;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --text-3: #8A8B8E;
+
+  --font-text: "Inter", -apple-system, "PingFang SC", "Hiragino Sans GB", system-ui, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- state machinery (CSS only) ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+
+#opt-a:checked ~ .frame .only-b,
+#opt-a:checked ~ .frame .only-c { display: none !important; }
+#opt-b:checked ~ .frame .only-a,
+#opt-b:checked ~ .frame .only-c { display: none !important; }
+#opt-c:checked ~ .frame .only-a,
+#opt-c:checked ~ .frame .only-b { display: none !important; }
+#st-filled:checked ~ .frame .when-empty  { display: none !important; }
+#st-empty:checked  ~ .frame .when-filled { display: none !important; }
+
+#opt-a:checked     ~ .frame .chrome label[for="opt-a"],
+#opt-b:checked     ~ .frame .chrome label[for="opt-b"],
+#opt-c:checked     ~ .frame .chrome label[for="opt-c"],
+#st-filled:checked ~ .frame .chrome label[for="st-filled"],
+#st-empty:checked  ~ .frame .chrome label[for="st-empty"] {
+  background: var(--paper); color: var(--ink);
+}
+
+/* ---- mockup chrome bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink);
+  color: rgba(251,249,244,0.75);
+  display: flex; align-items: center; gap: 20px;
+  padding: 10px 28px;
+  font-size: 12.5px;
+  flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 50;
+}
+.chrome .tag {
+  font-family: var(--font-display);
+  font-weight: 300; font-size: 15px; letter-spacing: 0.02em;
+  color: var(--paper);
+}
+.chrome .grp { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.chrome .grp-name { opacity: 0.55; margin-right: 2px; text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.1em; }
+.chrome label {
+  cursor: pointer;
+  border: 1px solid rgba(251,249,244,0.25);
+  border-radius: 999px;
+  padding: 3px 12px;
+  transition: background 0.2s var(--ease-settle);
+  white-space: nowrap;
+}
+.chrome label:hover { border-color: rgba(251,249,244,0.6); }
+
+/* ---- page frame ---- */
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 40px 28px 24px;
+  animation: settle 0.5s var(--ease-settle) both;
+}
+@keyframes settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .page, .frame section { animation: none !important; } }
+
+/* ---- shared page header ---- */
+.head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 30px; flex-wrap: wrap; }
+.eyebrow {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--text-3); margin: 0 0 6px;
+}
+h1 { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.25; }
+.lede { font-size: 14px; color: var(--graphite); margin-top: 8px; max-width: 560px; }
+
+.btn {
+  font: inherit; font-size: 13.5px; font-weight: 500; line-height: 1;
+  border-radius: var(--r-control); border: 1px solid transparent;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 7px;
+  padding: 10px 16px; white-space: nowrap;
+  transition: 0.2s var(--ease-settle);
+}
+.btn svg { width: 15px; height: 15px; }
+.btn.dusk { background: var(--dusk); color: #fff; }
+.btn.dusk:hover { background: #5F58A0; }
+.btn.inkbtn { background: var(--ink); color: var(--paper); }
+.btn.inkbtn:hover { background: var(--graphite); }
+.btn.ghost { background: transparent; color: var(--graphite); border-color: var(--border); }
+.btn.ghost:hover { border-color: var(--text-3); color: var(--ink); }
+.btn.brickbtn { background: transparent; color: var(--brick); border: none; }
+.btn.brickbtn:hover { background: var(--brick-tint); }
+
+/* ---- shared bits: group labels, status word, switch ---- */
+.group-label {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-3); margin: 26px 0 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.group-label:first-of-type { margin-top: 0; }
+.group-label .ct { color: var(--text-3); letter-spacing: 0; font-weight: 400; }
+
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+.st .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.st.live  { color: var(--sage-ink); }  .st.live .dot  { background: var(--sage); }
+.st.sched { color: var(--amber-ink); } .st.sched .dot { background: var(--amber); }
+.st.off   { color: var(--graphite); } .st.off .dot   { background: #C9C6BC; }
+
+.sw {
+  width: 36px; height: 21px; border-radius: 999px; background: #D9D4C7;
+  position: relative; cursor: pointer; flex-shrink: 0;
+  transition: background 0.2s var(--ease-settle);
+}
+.sw::after {
+  content: ""; position: absolute; top: 2.5px; left: 3px;
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(17,26,43,0.2);
+  transition: left 0.2s var(--ease-settle);
+}
+.sw.on { background: var(--ink); }
+.sw.on::after { left: 17px; }
+
+/* ---- storefront mini-preview (the thing customers see) ----
+   Content colours here belong to the STOREFRONT, not the admin:
+   the green CTA is the shop's brand button, shown as-is. */
+.pv {
+  background: #F2E7DF;
+  background-image: repeating-linear-gradient(0deg, rgba(0,0,0,0.035) 0 1px, transparent 1px 12px);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.pv-modal {
+  width: 74%; background: #fff; border-radius: 10px; padding: 10px 10px 12px;
+  text-align: center; position: relative;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+}
+.pv-x {
+  position: absolute; top: 6px; right: 6px; width: 14px; height: 14px;
+  border-radius: 50%; background: rgba(0,0,0,0.16); color: #fff;
+  font-size: 9px; line-height: 14px; text-align: center;
+}
+.pv-img { width: 100%; aspect-ratio: 1.7; border-radius: 6px; margin-bottom: 8px; }
+.pv-img.cold-brew { background: linear-gradient(140deg, #C8A87B 0%, #8A5A33 55%, #3E2A1B 100%); }
+.pv-img.spring    { background: linear-gradient(140deg, #B9C9A6 0%, #7E9668 60%, #47603C 100%); }
+.pv-title { font-weight: 600; font-size: 11px; color: #1a1a17; line-height: 1.3; }
+.pv-body  { font-size: 9px; color: #5a564f; margin-top: 4px; line-height: 1.45; }
+.pv-cta {
+  display: inline-block; margin-top: 8px; padding: 5px 14px; border-radius: 999px;
+  background: #365329; color: #fff; font-size: 9px; font-weight: 600;
+}
+
+/* ══════════════════════════════════════════════════════════
+   OPTION A — poster wall (visual-first grid)
+   ══════════════════════════════════════════════════════════ */
+.wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; }
+.poster {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft); overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column;
+  transition: border-color 0.2s var(--ease-settle), transform 0.25s var(--ease-settle);
+}
+.poster:hover { border-color: var(--text-3); transform: translateY(-2px); }
+.poster .pv { height: 168px; border-bottom: 1px solid var(--border); }
+.poster.is-off .pv { filter: grayscale(0.6); opacity: 0.55; }
+.poster-body { padding: 13px 15px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.poster-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.poster-name { font-size: 14px; font-weight: 500; line-height: 1.35; }
+.poster-meta { font-size: 12.5px; color: var(--graphite); line-height: 1.5; }
+.poster-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 9px; }
+.poster-when { font-size: 12px; color: var(--text-3); }
+.poster-when b { font-weight: 500; color: var(--graphite); }
+
+/* ══════════════════════════════════════════════════════════
+   OPTION B — one quiet list (broadcasts kin)
+   ══════════════════════════════════════════════════════════ */
+.col { max-width: 720px; margin: 0 auto; }
+.list-card {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft); overflow: hidden;
+}
+.list-group {
+  padding: 12px 20px 6px;
+  font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3);
+}
+.list-group ~ .list-group { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 14px; }
+.rowi {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 20px; cursor: pointer;
+  transition: background 0.15s var(--ease-settle);
+}
+.rowi:hover { background: var(--cream); }
+.rowi .thumb {
+  width: 46px; height: 60px; border-radius: 8px; border: 1px solid var(--border);
+  flex-shrink: 0; overflow: hidden;
+}
+.rowi .thumb .pv { width: 100%; height: 100%; }
+.rowi .thumb .pv-modal { width: 78%; padding: 4px 3px 5px; border-radius: 4px; box-shadow: 0 2px 6px rgba(0,0,0,0.18); }
+.rowi .thumb .pv-img { aspect-ratio: 1.9; border-radius: 2px; margin-bottom: 2px; }
+.rowi .thumb .pv-line { height: 3px; border-radius: 2px; background: #D8D3C8; margin: 2px 3px 0; }
+.rowi .thumb .pv-line.short { width: 55%; margin-left: auto; margin-right: auto; }
+.rowi .thumb .pv-pill { width: 40%; height: 5px; border-radius: 3px; background: #365329; margin: 3px auto 0; }
+.rowi.is-off .thumb { filter: grayscale(0.6); opacity: 0.55; }
+.rowi-main { flex: 1; min-width: 0; }
+.rowi-name { font-size: 14px; font-weight: 500; }
+.rowi-meta { font-size: 12.5px; color: var(--graphite); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rowi-side { display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+.rowi-side .again { font-size: 12.5px; font-weight: 500; color: var(--graphite); border: 1px solid var(--border); border-radius: 999px; padding: 4px 12px; background: #fff; }
+.rowi-side .again:hover { border-color: var(--text-3); color: var(--ink); }
+
+/* ══════════════════════════════════════════════════════════
+   OPTION C — customer's eye (list + what actually shows)
+   ══════════════════════════════════════════════════════════ */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
+.eye {
+  position: sticky; top: 64px;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.phone-wrap {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft); padding: 22px; display: flex; flex-direction: column; align-items: center; gap: 12px;
+}
+.phone {
+  width: 208px; height: 400px; background: #2a2a30; border-radius: 26px; padding: 9px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+}
+.phone-screen { background: #F2E7DF; width: 100%; height: 100%; border-radius: 18px; overflow: hidden; position: relative; }
+.phone-screen .pv { position: absolute; inset: 0; }
+.phone-cap { font-size: 12px; color: var(--text-3); text-align: center; }
+.phone-cap b { font-weight: 500; color: var(--graphite); }
+
+.pagemap {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft); padding: 18px 20px 14px;
+}
+.pagemap h3 { font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+.pagemap .sub { font-size: 12px; color: var(--text-3); margin-bottom: 8px; }
+.map-row {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  padding: 8px 0; border-top: 1px solid var(--cream); font-size: 12.5px;
+}
+.map-row .pg { color: var(--graphite); flex-shrink: 0; }
+.map-row .who { font-weight: 500; text-align: right; }
+.map-row .who.none { font-weight: 400; color: var(--text-3); }
+.map-note {
+  margin-top: 10px; padding: 9px 12px; border-radius: var(--r-control);
+  background: var(--amber-tint); color: var(--amber-ink);
+  font-size: 12px; line-height: 1.5;
+}
+
+/* ---- empty state (shared across options) ---- */
+.empty { max-width: 720px; margin: 0 auto; text-align: center; padding: 34px 0 10px; }
+.empty h2 { font-size: 18px; font-weight: 500; }
+.empty p { font-size: 13.5px; color: var(--graphite); margin: 8px auto 24px; max-width: 400px; }
+.starters { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: left; }
+.starter {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft); padding: 18px; cursor: pointer;
+  transition: border-color 0.2s var(--ease-settle), transform 0.25s var(--ease-settle);
+}
+.starter:hover { border-color: var(--text-3); transform: translateY(-2px); }
+.starter svg { width: 20px; height: 20px; color: var(--graphite); margin-bottom: 10px; }
+.starter .s-name { font-size: 13.5px; font-weight: 500; }
+.starter .s-sub { font-size: 12px; color: var(--text-3); margin-top: 3px; line-height: 1.5; }
+.empty .blank { margin-top: 18px; font-size: 12.5px; color: var(--text-3); }
+.empty .blank a { color: var(--graphite); font-weight: 500; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+
+/* ══════════════════════════════════════════════════════════
+   EDITOR FIGURE — one drawer, three steps (same in all options)
+   ══════════════════════════════════════════════════════════ */
+.section-title {
+  max-width: 1080px; margin: 26px auto 0; padding: 26px 28px 0;
+  border-top: 1px solid var(--border);
+}
+.section-title .eyebrow { margin-bottom: 4px; }
+.section-title p { font-size: 13.5px; color: var(--graphite); max-width: 640px; margin-top: 6px; }
+
+.editor-fig {
+  max-width: 1080px; margin: 22px auto 0; padding: 0 28px;
+}
+.drawer {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft); overflow: hidden;
+  display: grid; grid-template-columns: minmax(0, 1fr) 330px;
+}
+.drawer-form { padding: 22px 26px 18px; border-right: 1px solid var(--border); }
+.drawer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+.drawer-head .t { font-size: 16px; font-weight: 500; }
+.drawer-head .x { color: var(--text-3); font-size: 16px; line-height: 1; cursor: pointer; }
+
+.step { border: 1px solid var(--border); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+.step-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; background: #fff; }
+.step-no {
+  width: 20px; height: 20px; border-radius: 50%; background: var(--ink); color: var(--paper);
+  font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.step.closed .step-no { background: var(--cream); color: var(--graphite); border: 1px solid var(--border); }
+.step-name { font-size: 13.5px; font-weight: 500; }
+.step-sum { margin-left: auto; font-size: 12.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.step-body { padding: 4px 16px 16px; }
+
+.f-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.f-label { font-size: 12px; font-weight: 500; color: var(--graphite); margin-bottom: 5px; display: block; }
+.f-label .opt { font-weight: 400; color: var(--text-3); }
+.f-input {
+  border: 1px solid var(--border); border-radius: var(--r-control); background: #fff;
+  padding: 8px 11px; font-size: 13px; color: var(--ink); min-height: 36px;
+  display: flex; align-items: center;
+}
+.f-input.placeholder { color: var(--text-3); }
+.f-drop {
+  border: 1.5px dashed var(--border); border-radius: var(--r-control);
+  padding: 14px; text-align: center; font-size: 12.5px; color: var(--text-3);
+  margin-top: 10px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  font-size: 12px; font-weight: 500; border: 1px solid var(--border); border-radius: 999px;
+  padding: 4px 12px; color: var(--graphite); background: #fff; cursor: pointer;
+}
+.chip.on { background: var(--ink); border-color: var(--ink); color: var(--paper); }
+
+.drawer-foot {
+  grid-column: 1 / -1; border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px; padding: 13px 20px;
+}
+.drawer-foot .spacer { flex: 1; }
+
+.drawer-preview { padding: 22px; background: var(--cream); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+
+/* ---- notes ---- */
+.notes { max-width: 1080px; margin: 34px auto 0; padding: 26px 28px 60px; border-top: 1px solid var(--border); }
+.notes .eyebrow { margin-bottom: 12px; }
+.note { font-size: 13.5px; color: var(--graphite); max-width: 680px; margin-bottom: 12px; }
+.note b { color: var(--ink); font-weight: 500; }
+
+/* ---- responsive ---- */
+@media (max-width: 900px) {
+  .split { grid-template-columns: 1fr; }
+  .eye { position: static; }
+  .drawer { grid-template-columns: 1fr; }
+  .drawer-form { border-right: none; border-bottom: 1px solid var(--border); }
+}
+@media (max-width: 640px) {
+  .page { padding: 28px 16px 16px; }
+  .starters { grid-template-columns: 1fr; }
+  .rowi-side .again { display: none; }
+  .rowi-meta { white-space: normal; }
+  .section-title, .editor-fig, .notes { padding-left: 16px; padding-right: 16px; }
+  .f-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<input class="state" type="radio" name="opt" id="opt-a">
+<input class="state" type="radio" name="opt" id="opt-b" checked>
+<input class="state" type="radio" name="opt" id="opt-c">
+<input class="state" type="radio" name="st" id="st-filled" checked>
+<input class="state" type="radio" name="st" id="st-empty">
+
+<div class="frame">
+
+  <div class="chrome">
+    <span class="tag">tacet</span>
+    <div class="grp">
+      <span class="grp-name">Layout</span>
+      <label for="opt-a">A · Poster wall</label>
+      <label for="opt-b">B · Quiet list</label>
+      <label for="opt-c">C · Customer's eye</label>
+    </div>
+    <div class="grp">
+      <span class="grp-name">State</span>
+      <label for="st-filled">4 pop-ups</label>
+      <label for="st-empty">Empty</label>
+    </div>
+  </div>
+
+  <div class="page">
+
+    <!-- shared header — same in every option -->
+    <div class="head">
+      <div>
+        <p class="eyebrow">Marketing</p>
+        <h1>Pop-ups · 弹窗</h1>
+        <p class="lede">A message customers see once when they open your store — an announcement, a coupon, a closure notice. · 顾客打开店铺时看到的一条消息。</p>
+      </div>
+      <button class="btn dusk">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New pop-up · 新建弹窗
+      </button>
+    </div>
+
+    <!-- ════════ OPTION A — poster wall ════════ -->
+    <div class="only-a when-filled">
+      <p class="group-label">Live · 进行中 <span class="ct">1</span></p>
+      <div class="wall">
+        <div class="poster">
+          <div class="pv">
+            <div class="pv-modal">
+              <div class="pv-x">×</div>
+              <div class="pv-img cold-brew"></div>
+              <div class="pv-title">Summer cold-brew bundle</div>
+              <div class="pv-body">3 bottles for the price of 2, this week only.</div>
+              <div class="pv-cta">Shop now · 立即购买</div>
+            </div>
+          </div>
+          <div class="poster-body">
+            <div class="poster-top">
+              <div class="poster-name">Summer cold-brew · 夏日冷萃</div>
+              <span class="st live"><span class="dot"></span>Live</span>
+            </div>
+            <div class="poster-meta">Home + Shop · on open · once per customer</div>
+            <div class="poster-foot">
+              <span class="sw on"></span>
+              <span class="poster-when num">Ends <b>Aug 3</b> · in 23 days</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="group-label">Scheduled · 待开始 <span class="ct">1</span></p>
+      <div class="wall">
+        <div class="poster">
+          <div class="pv">
+            <div class="pv-modal">
+              <div class="pv-x">×</div>
+              <div class="pv-title">Closed Jul 15–17 · 歇业通知</div>
+              <div class="pv-body">Orders placed during the break ship on the 18th.</div>
+              <div class="pv-cta">Got it · 知道了</div>
+            </div>
+          </div>
+          <div class="poster-body">
+            <div class="poster-top">
+              <div class="poster-name">Holiday closure · 歇业通知</div>
+              <span class="st sched"><span class="dot"></span>Scheduled</span>
+            </div>
+            <div class="poster-meta">All pages · on open · once per day</div>
+            <div class="poster-foot">
+              <span class="sw on"></span>
+              <span class="poster-when num">Starts <b>Jul 15</b> · in 4 days</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="group-label">Off · 已停用 <span class="ct">2</span></p>
+      <div class="wall">
+        <div class="poster is-off">
+          <div class="pv">
+            <div class="pv-modal">
+              <div class="pv-x">×</div>
+              <div class="pv-title">Enjoying your order?</div>
+              <div class="pv-body">A quick review helps small kitchens like ours.</div>
+              <div class="pv-cta">Leave a review · 去评价</div>
+            </div>
+          </div>
+          <div class="poster-body">
+            <div class="poster-top">
+              <div class="poster-name">Review nudge · 邀请评价</div>
+              <span class="st off"><span class="dot"></span>Off</span>
+            </div>
+            <div class="poster-meta">Order success · after 3 s · once per customer</div>
+            <div class="poster-foot">
+              <span class="sw"></span>
+              <span class="poster-when">Never ran</span>
+            </div>
+          </div>
+        </div>
+        <div class="poster is-off">
+          <div class="pv">
+            <div class="pv-modal">
+              <div class="pv-x">×</div>
+              <div class="pv-img spring"></div>
+              <div class="pv-title">Spring tea festival</div>
+              <div class="pv-body">First-flush greens are in.</div>
+              <div class="pv-cta">Browse teas · 看看茶</div>
+            </div>
+          </div>
+          <div class="poster-body">
+            <div class="poster-top">
+              <div class="poster-name">Spring tea festival · 春茶节</div>
+              <span class="st off"><span class="dot"></span>Ended</span>
+            </div>
+            <div class="poster-meta">Home · on open · once per customer</div>
+            <div class="poster-foot">
+              <span class="sw"></span>
+              <span class="poster-when num">Ended <b>Jun 1</b></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ OPTION B — one quiet list ════════ -->
+    <div class="only-b when-filled">
+      <div class="col">
+        <div class="list-card">
+          <p class="list-group">Live · 进行中</p>
+          <div class="rowi">
+            <div class="thumb"><div class="pv"><div class="pv-modal"><div class="pv-img cold-brew"></div><div class="pv-line"></div><div class="pv-line short"></div><div class="pv-pill"></div></div></div></div>
+            <div class="rowi-main">
+              <div class="rowi-name">Summer cold-brew · 夏日冷萃</div>
+              <div class="rowi-meta num">Home + Shop · on open · once per customer · ends Aug 3</div>
+            </div>
+            <div class="rowi-side">
+              <span class="st live"><span class="dot"></span>Live</span>
+              <span class="sw on"></span>
+            </div>
+          </div>
+
+          <p class="list-group">Scheduled · 待开始</p>
+          <div class="rowi">
+            <div class="thumb"><div class="pv"><div class="pv-modal"><div class="pv-line"></div><div class="pv-line"></div><div class="pv-line short"></div><div class="pv-pill"></div></div></div></div>
+            <div class="rowi-main">
+              <div class="rowi-name">Holiday closure · 歇业通知</div>
+              <div class="rowi-meta num">All pages · once per day · Jul 15 → Jul 17 · starts in 4 days</div>
+            </div>
+            <div class="rowi-side">
+              <span class="st sched"><span class="dot"></span>Scheduled</span>
+              <span class="sw on"></span>
+            </div>
+          </div>
+
+          <p class="list-group">Off · 已停用</p>
+          <div class="rowi is-off">
+            <div class="thumb"><div class="pv"><div class="pv-modal"><div class="pv-line"></div><div class="pv-line short"></div><div class="pv-pill"></div></div></div></div>
+            <div class="rowi-main">
+              <div class="rowi-name">Review nudge · 邀请评价</div>
+              <div class="rowi-meta">Order success · after 3 s · once per customer</div>
+            </div>
+            <div class="rowi-side">
+              <span class="st off"><span class="dot"></span>Off</span>
+              <span class="sw"></span>
+            </div>
+          </div>
+          <div class="rowi is-off">
+            <div class="thumb"><div class="pv"><div class="pv-modal"><div class="pv-img spring"></div><div class="pv-line short"></div><div class="pv-pill"></div></div></div></div>
+            <div class="rowi-main">
+              <div class="rowi-name">Spring tea festival · 春茶节</div>
+              <div class="rowi-meta num">Home · ended Jun 1</div>
+            </div>
+            <div class="rowi-side">
+              <span class="again">Run again · 再次投放</span>
+              <span class="st off"><span class="dot"></span>Ended</span>
+              <span class="sw"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ OPTION C — customer's eye ════════ -->
+    <div class="only-c when-filled">
+      <div class="split">
+        <div>
+          <div class="list-card">
+            <p class="list-group">Live · 进行中</p>
+            <div class="rowi">
+              <div class="thumb"><div class="pv"><div class="pv-modal"><div class="pv-img cold-brew"></div><div class="pv-line"></div><div class="pv-line short"></div><div class="pv-pill"></div></div></div></div>
+              <div class="rowi-main">
+                <div class="rowi-name">Summer cold-brew · 夏日冷萃</div>
+                <div class="rowi-meta num">Home + Shop · on open · once per customer · ends Aug 3</div>
+              </div>
+              <div class="rowi-side">
+                <span class="st live"><span class="dot"></span>Live</span>
+                <span class="sw on"></span>
+              </div>
+            </div>
+
+            <p class="list-group">Scheduled · 待开始</p>
+            <div class="rowi">
+              <div class="thumb"><div class="pv"><div class="pv-modal"><div class="pv-line"></div><div class="pv-line"></div><div class="pv-line short"></div><div class="pv-pill"></div></div></div></div>
+              <div class="rowi-main">
+                <div class="rowi-name">Holiday closure · 歇业通知</div>
+                <div class="rowi-meta num">All pages · once per day · Jul 15 → Jul 17</div>
+              </div>
+              <div class="rowi-side">
+                <span class="st sched"><span class="dot"></span>Scheduled</span>
+                <span class="sw on"></span>
+              </div>
+            </div>
+
+            <p class="list-group">Off · 已停用</p>
+            <div class="rowi is-off">
+              <div class="thumb"><div class="pv"><div class="pv-modal"><div class="pv-line"></div><div class="pv-line short"></div><div class="pv-pill"></div></div></div></div>
+              <div class="rowi-main">
+                <div class="rowi-name">Review nudge · 邀请评价</div>
+                <div class="rowi-meta">Order success · after 3 s · once per customer</div>
+              </div>
+              <div class="rowi-side">
+                <span class="st off"><span class="dot"></span>Off</span>
+                <span class="sw"></span>
+              </div>
+            </div>
+            <div class="rowi is-off">
+              <div class="thumb"><div class="pv"><div class="pv-modal"><div class="pv-img spring"></div><div class="pv-line short"></div><div class="pv-pill"></div></div></div></div>
+              <div class="rowi-main">
+                <div class="rowi-name">Spring tea festival · 春茶节</div>
+                <div class="rowi-meta num">Home · ended Jun 1</div>
+              </div>
+              <div class="rowi-side">
+                <span class="st off"><span class="dot"></span>Ended</span>
+                <span class="sw"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="eye">
+          <div class="phone-wrap">
+            <div class="phone">
+              <div class="phone-screen">
+                <div class="pv">
+                  <div class="pv-modal">
+                    <div class="pv-x">×</div>
+                    <div class="pv-img cold-brew"></div>
+                    <div class="pv-title">Summer cold-brew bundle</div>
+                    <div class="pv-body">3 bottles for the price of 2, this week only.</div>
+                    <div class="pv-cta">Shop now · 立即购买</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="phone-cap">What a customer sees on <b>Home</b> today · 今天首页顾客看到的</p>
+          </div>
+
+          <div class="pagemap">
+            <h3>Today on your store · 今日投放</h3>
+            <p class="sub">Which pop-up fires on each page right now.</p>
+            <div class="map-row"><span class="pg">Home · 首页</span><span class="who">Summer cold-brew</span></div>
+            <div class="map-row"><span class="pg">Shop · 商店</span><span class="who">Summer cold-brew</span></div>
+            <div class="map-row"><span class="pg">Order success</span><span class="who none">—</span></div>
+            <div class="map-row"><span class="pg">Everywhere else</span><span class="who none">—</span></div>
+            <div class="map-note num">From Jul 15, the holiday closure shows on every page — including Home, where it replaces the cold-brew pop-up while both are live.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════════ EMPTY STATE — shared across options ════════ -->
+    <div class="empty when-empty">
+      <h2>Nothing pops up yet · 还没有弹窗</h2>
+      <p>Start from one of the three jobs pop-ups actually do, or begin blank.</p>
+      <div class="starters">
+        <div class="starter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>
+          <div class="s-name">Announce something · 发布公告</div>
+          <div class="s-sub">New arrivals, restock, an event. Image + one line + a button.</div>
+        </div>
+        <div class="starter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4L12 22l-8.6-8.6a2 2 0 0 1 0-2.8L11 3h5l5 5v3.4a2 2 0 0 1-.4 2z"/><circle cx="15.5" cy="8.5" r="1.5"/></svg>
+          <div class="s-name">Offer a coupon · 发优惠券</div>
+          <div class="s-sub">Pairs with a coupon from Marketing → Coupons. Shows once per customer.</div>
+        </div>
+        <div class="starter">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <div class="s-name">Holiday closure · 歇业通知</div>
+          <div class="s-sub">Text only, every page, once per day, with start and end dates set.</div>
+        </div>
+      </div>
+      <p class="blank">or <a>start from a blank pop-up · 从空白开始</a></p>
+    </div>
+
+  </div>
+
+  <!-- ════════ EDITOR — same drawer in every option ════════ -->
+  <div class="section-title">
+    <p class="eyebrow">The editor — same in all three options</p>
+    <p>One drawer, three steps in the order you think about them: what it says, where it shows, when it fires. The live phone preview stays. Internal name, the Enabled checkbox and Dismissible move out of the way — the list switch owns on/off, the name auto-fills from the title, Dismissible lives under Advanced (default on).</p>
+  </div>
+
+  <div class="editor-fig">
+    <div class="drawer">
+      <div class="drawer-form">
+        <div class="drawer-head">
+          <span class="t">New pop-up · 新建弹窗</span>
+          <span class="x">✕</span>
+        </div>
+
+        <div class="step">
+          <div class="step-head">
+            <span class="step-no">1</span>
+            <span class="step-name">What it says · 内容</span>
+          </div>
+          <div class="step-body">
+            <div class="f-drop">Drop an image, or leave empty for a text-only pop-up · 拖入图片,或留空为纯文字</div>
+            <div class="f-row">
+              <div><span class="f-label">Title · 标题 (EN)</span><div class="f-input">Summer cold-brew bundle</div></div>
+              <div><span class="f-label">标题 (中文)</span><div class="f-input">夏日冷萃套装</div></div>
+            </div>
+            <div class="f-row">
+              <div><span class="f-label">Body · 正文 (EN)</span><div class="f-input">3 bottles for the price of 2…</div></div>
+              <div><span class="f-label">正文 (中文)</span><div class="f-input placeholder">一两句简短文字</div></div>
+            </div>
+            <div class="f-row">
+              <div><span class="f-label">Button · 按钮 <span class="opt">optional</span></span><div class="f-input">Shop now · 立即购买</div></div>
+              <div><span class="f-label">It opens · 跳转</span><div class="f-input">Shop tab · 商城页</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="step closed">
+          <div class="step-head">
+            <span class="step-no">2</span>
+            <span class="step-name">Where · 显示位置</span>
+            <span class="step-sum">Home + Shop</span>
+          </div>
+          <div class="step-body">
+            <div class="chips">
+              <span class="chip">All pages</span><span class="chip on">Home</span><span class="chip on">Shop</span><span class="chip">Cart</span><span class="chip">Checkout</span><span class="chip">Order success</span><span class="chip">Me</span><span class="chip">Membership</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="step closed">
+          <div class="step-head">
+            <span class="step-no">3</span>
+            <span class="step-name">When · 显示时机</span>
+            <span class="step-sum num">On open · once per customer · Jul 12 → Aug 3</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="drawer-preview">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="pv">
+              <div class="pv-modal">
+                <div class="pv-x">×</div>
+                <div class="pv-img cold-brew"></div>
+                <div class="pv-title">Summer cold-brew bundle</div>
+                <div class="pv-body">3 bottles for the price of 2, this week only.</div>
+                <div class="pv-cta">Shop now · 立即购买</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="phone-cap">Updates as you type · 实时预览</p>
+      </div>
+
+      <div class="drawer-foot">
+        <button class="btn brickbtn">Delete · 删除</button>
+        <span class="spacer"></span>
+        <button class="btn ghost">Cancel · 取消</button>
+        <button class="btn inkbtn">Save · 保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ NOTES ════════ -->
+  <div class="notes">
+    <p class="eyebrow">What changed, and why</p>
+    <p class="note"><b>Removed:</b> the three-sentence header paragraph (now one lede) · the per-card Edit button (the whole card opens the editor, like Orders rows) · the status pill crammed next to the name (one status word + the switch say it once) · in the editor: the Internal-name field (auto-filled from the title), the Enabled checkbox (the list switch owns it), and Dismissible as a top-level toggle (Advanced, default on).</p>
+    <p class="note"><b>Added:</b> you can finally <b>see</b> each pop-up from the list — poster in A, thumbnail in B/C · grouping by what matters (Live first, then Scheduled, then Off) · countdown language ("ends in 23 days", "starts in 4 days") instead of bare dates · an empty state that starts the three real jobs — announce, coupon, closure — instead of a magnifying glass · "Run again" on ended pop-ups (duplicate with fresh dates) · C only: "Today on your store", which pop-up actually fires on each page, with a quiet amber note when two overlap.</p>
+    <p class="note"><b>Colour discipline:</b> Dusk appears once — the New pop-up CTA (the screen's one primary, same as Orders' New order). Sage means live, amber means scheduled, graphite means off. Brick exists only on Delete inside the editor. Nothing on this page is decorated.</p>
+    <p class="note"><b>Same data, same API:</b> every option reads the exact fields the current page saves (name, pages, trigger, frequency, window, content, CTA). This is a re-layout, not a schema change — the rebuild swaps markup and CSS, and savePopup() keeps its payload.</p>
+  </div>
+
+</div>
+
+</body>
+</html>
