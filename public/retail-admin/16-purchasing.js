@@ -1,14 +1,27 @@
 /* eslint-disable no-undef, no-func-assign, no-self-assign */
-/* retail-admin app JS — part 16.
+/* retail-admin app JS — part 16.  Rebuilt 2026-07-11 (Tacet "quiet ledger").
    All parts share ONE global scope and are loaded sequentially by
    retail-admin.html — LOAD ORDER MATTERS. Cross-file globals (api, toast,
-   fmt, escapeHtml, applyCapGates, goTab…) live in 01-core.js.
-   Contents: Purchasing tab (pu*) — the online store's buying department.
-   Suppliers master (shared with the kitchen app's supplier records) +
-   retail purchase orders: create → order → receive. Received quantities
-   post into store stock (and fan out to channel sync) server-side; costs
-   auto-post to Finance → Expenses. Endpoints: /api/retail-admin/suppliers*
-   + /api/retail-admin/purchases* (routes/retail-purchasing.js). */
+   fmt, escapeHtml, cuT, applyCapGates, prodShowView…) live in 01-core.js.
+
+   Purchasing — the store's buying department — now lives INSIDE Products as a
+   sub-view (#prod-view-purchasing, beside Categories). The whole surface is
+   painted here into #pu2-root; screens swap inside that one node:
+     orders   — the quiet ledger (Option A from the locked mockup)
+     wizard   — new / edit order, three small steps
+     receive  — one PO: tick in what arrived → stock + Finance
+     suppliers— the supplier ledger
+     supplier — one supplier: form + paperwork + their orders
+     import   — bring suppliers in from a spreadsheet (CSV)
+
+   Design rules (tacet-tokens): colour is status, never decoration; the ONLY
+   Dusk on any screen is the two automations (cost posts to Finance by itself,
+   counts go into stock by itself). Status words are written for humans —
+   Requested→Draft, Ordered→Ordered, Delivered→Received — while the wire values
+   the server speaks are unchanged.
+
+   Endpoints: /api/retail-admin/suppliers* + /api/retail-admin/purchases*
+   (routes/retail-purchasing.js) + /api/retail-admin/stores* (retail-inventory). */
 
 (function () {
   'use strict';
@@ -16,44 +29,100 @@
   const esc = (typeof escapeHtml === 'function')
     ? escapeHtml
     : (s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
+  const T = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
+  const money = n => '¥' + fmt(Number(n) || 0);
+  // "Today" in the store's clock (GZ = UTC+8) so a delivery due today never
+  // reads as late just because the browser is on UTC.
+  const todayGz = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 
-  const money = n => '¥' + fmt(n);
-  const today = () => new Date().toISOString().slice(0, 10);
+  // ── module state ──────────────────────────────────────────────────────────
+  let _init = false;
+  let _langHooked = false;
+  let _stores = [];          // active retail_stores
+  let _suppliers = [];       // supplier rows (active; +disabled when asked)
+  let _showDisabled = false;
+  let _pos = [];             // PO header rows
+  const _prodCache = {};     // storeId → stock rows (picker + suggestions)
+  let _hist = {};            // store_product_id → last-paid, for the open PO
+  let _screen = 'orders';    // orders | wizard | receive | suppliers | supplier | import
+  let _seg = 'open';         // orders segment: open | received | all
+  let _supSeg = 'active';    // suppliers segment: active | disabled
+  let _edit = null;          // draft PO in the wizard
+  let _wstep = 1;            // wizard step 1..3
+  let _po = null;            // PO open on the receive screen
+  let _sup = null;           // supplier open on the form
+  let _imp = null;           // parsed CSV preview { rows, headers }
 
-  let _initiated = false;
-  let _stores = [];        // retail_stores rows
-  let _suppliers = [];     // suppliers list rows
-  let _pos = [];           // PO header rows
-  const _prodCache = {};   // storeId → product list (picker source)
-  let _po = null;          // open PO detail (manage view)
-  let _hist = {};          // store_product_id → {previous, stats} for open PO
-  let _edit = null;        // PO being created/edited
-  let _sup = null;         // supplier being created/edited
+  const root = () => document.getElementById('pu2-root');
 
-  // ── Entry ────────────────────────────────────────────────────────────────
-  window.puInit = async function () {
-    if (_initiated) { puRefresh(); return; }
-    _initiated = true;
-    await Promise.all([puLoadStores(), puLoadSuppliers(), puLoadPOs()]);
+  // ── icons (monochrome line SVG — never emoji) ─────────────────────────────
+  const I = {
+    plus:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+    back:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg>',
+    check:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M20 6L9 17l-5-5"/></svg>',
+    up:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>',
+    down:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
+    box:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>',
+    send:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
   };
-  async function puRefresh() {
-    try { await Promise.all([puLoadSuppliers(), puLoadPOs()]); } catch (_) {}
+
+  // ── status → plain word + pill tone ───────────────────────────────────────
+  function statusWord(status) {
+    return ({
+      Requested: T('Draft', '草稿'),
+      Ordered:   T('Ordered', '已下单'),
+      Delivered: T('Received', '已收货'),
+      Cancelled: T('Cancelled', '已取消'),
+    })[status] || status;
+  }
+  function isLate(p) {
+    return p.status === 'Ordered' && p.delivery_date && p.delivery_date < todayGz();
+  }
+  function statusPill(p) {
+    if (isLate(p)) return `<span class="pu2-pill amber"><span class="dot"></span>${esc(T('Late', '已逾期'))}</span>`;
+    if (p.status === 'Delivered') return `<span class="pu2-pill sage"><span class="dot"></span>${esc(statusWord(p.status))}</span>`;
+    if (p.status === 'Ordered')   return `<span class="pu2-pill grey"><span class="dot"></span>${esc(statusWord(p.status))}</span>`;
+    return `<span class="pu2-pill grey">${esc(statusWord(p.status))}</span>`;
+  }
+  const storeLabel = p => esc([p.store_name_en, p.store_name_cn].filter(Boolean).join(' · ') || '—');
+  const nameLabel = it => esc([it.name_en, it.name_cn].filter(Boolean).join(' · ') || '—');
+
+  // ── entry (idempotent — prodShowView calls this every time the tab opens) ──
+  window.puInit = async function () {
+    if (!root()) return;
+    if (!_langHooked && window.onLangChange) { _langHooked = true; onLangChange(() => paint()); }
+    if (_init) { refresh(); return; }
+    _init = true;
+    root().innerHTML = `<div class="pu2-loading">${esc(T('Loading…', '加载中…'))}</div>`;
+    await Promise.all([loadStores(), loadSuppliers(), loadPOs()]);
+    _screen = 'orders';
+    paint();
+  };
+  async function refresh() {
+    try { await Promise.all([loadSuppliers(), loadPOs()]); } catch (_) {}
+    if (_screen === 'orders' || _screen === 'suppliers') paint();
   }
 
-  async function puLoadStores() {
+  async function loadStores() {
     try {
       const r = await api('/api/retail-admin/stores');
       _stores = (r.data || []).filter(s => s.is_active);
-      const sel = document.getElementById('pu-filter-store');
-      if (sel && _stores.length > 1) {
-        sel.hidden = false;
-        sel.innerHTML = '<option value="">All stores · 全部门店</option>' +
-          _stores.map(s => `<option value="${s.id}">${esc(s.name_en || s.code)} · ${esc(s.name_cn || '')}</option>`).join('');
-      }
-    } catch (e) { toast(e.message, 'err'); }
+    } catch (e) { _stores = []; }
   }
-
-  async function puProducts(storeId) {
+  async function loadSuppliers() {
+    try {
+      const r = await api('/api/retail-admin/suppliers' + (_showDisabled ? '?all=1' : ''));
+      _suppliers = r.data || [];
+    } catch (e) { _suppliers = []; }
+  }
+  async function loadPOs() {
+    try {
+      const r = await api('/api/retail-admin/purchases');
+      _pos = r.data || [];
+    } catch (e) { _pos = []; }
+  }
+  async function products(storeId) {
     if (!_prodCache[storeId]) {
       const r = await api('/api/retail-admin/stores/' + storeId + '/stock');
       _prodCache[storeId] = r.data || [];
@@ -61,294 +130,458 @@
     return _prodCache[storeId];
   }
 
-  // ── Sub-view switch ──────────────────────────────────────────────────────
-  window.puShowView = function (v) {
-    document.getElementById('pu-view-pos').style.display = v === 'pos' ? '' : 'none';
-    document.getElementById('pu-view-suppliers').style.display = v === 'suppliers' ? '' : 'none';
-    document.getElementById('pu-nav-pos').classList.toggle('btn-primary', v === 'pos');
-    document.getElementById('pu-nav-suppliers').classList.toggle('btn-primary', v === 'suppliers');
-  };
-
-  // ═══ Purchase orders ══════════════════════════════════════════════════════
-
-  async function puLoadPOs() {
-    try {
-      const r = await api('/api/retail-admin/purchases');
-      _pos = r.data || [];
-      puRenderKPIs();
-      puFilterPOs();
-    } catch (e) { toast(e.message, 'err'); }
+  // ── paint dispatch ────────────────────────────────────────────────────────
+  function paint() {
+    if (!root()) return;
+    if (_screen === 'orders')     paintOrders();
+    else if (_screen === 'wizard')    paintWizard();
+    else if (_screen === 'receive')   paintReceive();
+    else if (_screen === 'suppliers') paintSuppliers();
+    else if (_screen === 'supplier')  paintSupplier();
+    else if (_screen === 'import')    paintImport();
+    try { applyCapGates(); } catch (_) {}
   }
 
-  function puRenderKPIs() {
-    const open = _pos.filter(p => p.status === 'Requested' || p.status === 'Ordered').length;
-    const awaiting = _pos.filter(p => p.status === 'Ordered').length;
-    const m = today().slice(0, 7);
-    const monthTotal = _pos
-      .filter(p => (p.date || '').slice(0, 7) === m && (p.status === 'Ordered' || p.status === 'Delivered'))
-      .reduce((s, p) => s + (Number(p.total_cost) || 0), 0);
-    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-    set('pu-kpi-open', open);
-    set('pu-kpi-awaiting', awaiting);
-    set('pu-kpi-month', money(monthTotal));
-    set('pu-kpi-suppliers', _suppliers.filter(s => s.is_active).length);
+  function backBtn(label, fn) {
+    return `<button class="pu2-btn ghost sm" onclick="${fn}"><span class="pu2-ic">${I.back}</span>${esc(label)}</button>`;
   }
 
-  const STATUS_CHIP = {
-    Requested: ['Requested · 待下单', 'background:#f0efe9;color:#555'],
-    Ordered:   ['Ordered · 已下单',   'background:#e8f0fe;color:#1a56b0'],
-    Delivered: ['Delivered · 已到货', 'background:#e6f4ea;color:#1e7d3c'],
-    Cancelled: ['Cancelled · 已取消', 'background:#fdeaea;color:#b03030'],
-  };
-  function chip(status) {
-    const [label, style] = STATUS_CHIP[status] || [status, ''];
-    return `<span style="display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;white-space:nowrap;${style}">${esc(label)}</span>`;
-  }
-
-  window.puFilterPOs = function () {
-    const q = (document.getElementById('pu-search').value || '').toLowerCase().trim();
-    const st = document.getElementById('pu-filter-status').value;
-    const storeSel = document.getElementById('pu-filter-store');
-    const storeId = storeSel && !storeSel.hidden ? parseInt(storeSel.value, 10) || null : null;
-    const rows = _pos.filter(p => {
-      if (st && p.status !== st) return false;
-      if (storeId && p.store_id !== storeId) return false;
-      if (q && !(`${p.po_number} ${p.supplier || ''}`.toLowerCase().includes(q))) return false;
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ORDERS — the quiet ledger
+  // ═══════════════════════════════════════════════════════════════════════════
+  function segRows() {
+    return _pos.filter(p => {
+      if (_seg === 'open')     return p.status === 'Requested' || p.status === 'Ordered';
+      if (_seg === 'received') return p.status === 'Delivered';
       return true;
     });
-    const body = document.getElementById('pu-pos-body');
-    const count = document.getElementById('pu-count');
-    if (count) count.textContent = rows.length + ' / ' + _pos.length;
+  }
+  function paintOrders() {
+    const openN = _pos.filter(p => p.status === 'Requested' || p.status === 'Ordered').length;
+    const rcvN  = _pos.filter(p => p.status === 'Delivered').length;
+    const lateN = _pos.filter(isLate).length;
+    const m = todayGz().slice(0, 7);
+    const monthSpend = _pos
+      .filter(p => (p.date || '').slice(0, 7) === m && (p.status === 'Ordered' || p.status === 'Delivered'))
+      .reduce((s, p) => s + (Number(p.total_cost) || 0), 0);
+    const supN = _suppliers.filter(s => s.is_active).length;
+
+    root().innerHTML = `
+      <p class="pu2-lede" data-lang-block="en">Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.</p>
+      <p class="pu2-lede" data-lang-block="cn">向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。</p>
+
+      <div class="pu2-statline">
+        <button class="pu2-stat link${_seg === 'open' ? ' on' : ''}" onclick="puSeg('open')"><b class="pu2-num">${openN}</b>${esc(T('open', '进行中'))}</button>
+        <button class="pu2-stat link warn" onclick="puSeg('open')" ${lateN ? '' : 'style="display:none"'}><b class="pu2-num">${lateN}</b>${esc(T('late', '逾期'))}</button>
+        <span class="pu2-stat"><b class="pu2-num">${money(monthSpend)}</b>${esc(T('spent this month', '本月采购'))}</span>
+        <button class="pu2-stat link" onclick="puScreenSuppliers()"><b class="pu2-num">${supN}</b>${esc(T('suppliers', '供应商'))}</button>
+      </div>
+
+      <div class="pu2-toolbar">
+        <span class="pu2-segbar" id="pu2-seg">
+          <span class="pu2-seg${_seg === 'open' ? ' on' : ''}" onclick="puSeg('open')">${esc(T('Open', '进行中'))} <span class="n pu2-num">${openN}</span></span>
+          <span class="pu2-seg${_seg === 'received' ? ' on' : ''}" onclick="puSeg('received')">${esc(T('Received', '已收货'))} <span class="n pu2-num">${rcvN}</span></span>
+          <span class="pu2-seg${_seg === 'all' ? ' on' : ''}" onclick="puSeg('all')">${esc(T('All', '全部'))} <span class="n pu2-num">${_pos.length}</span></span>
+        </span>
+        <span class="pu2-search">
+          <span class="pu2-ic">${I.search}</span>
+          <input id="pu2-q" type="text" placeholder="${esc(T('Find an order, supplier or product', '搜索采购单、供应商或商品'))}" oninput="puFilter()" autocomplete="off">
+        </span>
+        <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrder()"><span class="pu2-ic">${I.plus}</span>${esc(T('New order', '新建采购单'))}</button>
+      </div>
+
+      <div class="pu2-card">
+        <table class="pu2-tbl">
+          <thead><tr>
+            <th>${esc(T('Order', '单号'))}</th>
+            <th>${esc(T('Supplier', '供应商'))}</th>
+            <th>${esc(T('Store', '门店'))}</th>
+            <th class="right">${esc(T('Items', '商品'))}</th>
+            <th class="right">${esc(T('Total', '金额'))}</th>
+            <th>${esc(T('Arrives', '到货'))}</th>
+            <th>${esc(T('Status', '状态'))}</th>
+          </tr></thead>
+          <tbody id="pu2-rows"></tbody>
+        </table>
+      </div>`;
+    renderOrderRows();
+  }
+
+  function renderOrderRows() {
+    const body = document.getElementById('pu2-rows');
+    if (!body) return;
+    const q = (document.getElementById('pu2-q')?.value || '').toLowerCase().trim();
+    let rows = segRows();
+    if (q) rows = rows.filter(p => `${p.po_number} ${p.supplier || ''}`.toLowerCase().includes(q));
+
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="7" class="muted" style="padding:24px;text-align:center">No purchase orders · 暂无采购单</td></tr>';
+      // Empty ledger with no orders at all → the teaching empty state. A filtered
+      // empty (search / segment) → a plain one-liner, no lesson needed.
+      body.innerHTML = `<tr><td colspan="7">${_pos.length ? emptyLine() : emptyState()}</td></tr>`;
       return;
     }
-    body.innerHTML = rows.map(p => `
-      <tr style="cursor:pointer" onclick="puOpenPO(${p.id})">
-        <td><b>${esc(p.po_number)}</b></td>
-        <td>${esc(p.date || '')}</td>
-        <td>${esc(p.supplier || '—')}</td>
-        <td>${esc(p.store_name_en || '')}${p.store_name_cn ? ' · ' + esc(p.store_name_cn) : ''}</td>
-        <td style="text-align:right">${p.line_count || 0}${p.received_lines ? ` <span class="muted">(${p.received_lines}✓)</span>` : ''}</td>
-        <td style="text-align:right">${money(p.total_cost)}</td>
-        <td>${chip(p.status)}</td>
-      </tr>`).join('');
-  };
-
-  function showPOPage(show) {
-    document.getElementById('pu-pos-list').style.display = show ? 'none' : '';
-    document.getElementById('pu-kpis').style.display = show ? 'none' : '';
-    document.getElementById('pu-po-page').style.display = show ? '' : 'none';
+    body.innerHTML = rows.map(p => {
+      const arrives = isLate(p)
+        ? `<span class="pu2-num" style="color:var(--td-amber-ink)">${esc(p.delivery_date)} — ${esc(T('late', '逾期'))}</span>`
+        : `<span class="pu2-num">${esc(p.delivery_date || '—')}</span>`;
+      const rcv = p.received_lines ? ` <span class="sub" style="display:inline">· ${p.received_lines} ${esc(T('in', '入库'))}</span>` : '';
+      return `<tr onclick="puOpenPO(${p.id})">
+        <td><div class="pu2-mono">${esc(p.po_number)}</div><div class="sub pu2-num">${esc(p.date || '')}</div></td>
+        <td>${esc(p.supplier || T('No supplier', '未指定供应商'))}</td>
+        <td>${storeLabel(p)}</td>
+        <td class="right pu2-num">${p.line_count || 0}${rcv}</td>
+        <td class="right pu2-num">${money(p.total_cost)}</td>
+        <td>${arrives}</td>
+        <td>${statusPill(p)}</td>
+      </tr>`;
+    }).join('');
   }
-  window.puBackToList = function () {
-    _po = null; _edit = null;
-    showPOPage(false);
-    puLoadPOs();
-  };
+  function emptyLine() {
+    return `<div class="pu2-emptyline">${esc(T('Nothing here — try another filter.', '这里没有内容——换个筛选试试。'))}</div>`;
+  }
+  function emptyState() {
+    return `<div class="pu2-empty">
+      <div class="pu2-empty-ico">${I.box}</div>
+      <h3>${esc(T('No orders yet', '还没有采购单'))}</h3>
+      <p>${esc(T('An order is a list of what you’re buying from one supplier for one store. Tacet does the bookkeeping for you.', '一张采购单就是你向某个供应商、为某家门店采购的清单。记账的事交给 Tacet。'))}</p>
+      <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrder()">${esc(T('Start your first order', '创建第一张采购单'))}</button>
+      <div class="pu2-empty-steps">
+        <div class="pu2-empty-step"><div class="ico">${I.plus}</div><b>${esc(T('1 · Build it', '1 · 建单'))}</b>${esc(T('Pick a supplier and add products — running-low items are suggested for you.', '选择供应商并添加商品——库存偏低的会自动推荐。'))}</div>
+        <div class="pu2-empty-step"><div class="ico">${I.send}</div><b>${esc(T('2 · Place it', '2 · 下单'))}</b>${esc(T('Mark it ordered. The cost posts to Finance on its own.', '标记已下单,采购金额会自动记入财务。'))}</div>
+        <div class="pu2-empty-step"><div class="ico">${I.check}</div><b>${esc(T('3 · Tick it in', '3 · 收货'))}</b>${esc(T('When the boxes arrive, confirm the counts — stock updates everywhere.', '到货时确认数量——库存自动同步到各处。'))}</div>
+      </div>
+    </div>`;
+  }
 
-  // ── New / edit (Requested) ───────────────────────────────────────────────
-  window.puNewPO = function () {
-    _po = null;
+  window.puSeg = function (seg) {
+    _seg = seg;
+    document.querySelectorAll('#pu2-seg .pu2-seg').forEach((el, i) => {
+      el.classList.toggle('on', ['open', 'received', 'all'][i] === seg);
+    });
+    document.querySelectorAll('.pu2-statline .pu2-stat.link').forEach(el => el.classList.remove('on'));
+    renderOrderRows();
+  };
+  window.puFilter = renderOrderRows;
+  window.puScreenSuppliers = function () { _screen = 'suppliers'; paint(); };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  NEW / EDIT ORDER — the three-step wizard
+  // ═══════════════════════════════════════════════════════════════════════════
+  window.puNewOrder = function () {
     _edit = {
-      id: null, po_number: null, date: today(), delivery_date: '',
+      id: null, po_number: null, date: todayGz(), delivery_date: '',
       supplier: '', store_id: _stores[0]?.id || null, notes: '', items: [],
     };
-    renderEditPage();
-    showPOPage(true);
+    _wstep = 1; _screen = 'wizard'; paint();
   };
 
   window.puOpenPO = async function (id) {
     try {
       const r = await api('/api/retail-admin/purchases/' + id);
-      _po = r.data;
-      _hist = {};
-      if (_po.status === 'Requested') {
+      const po = r.data;
+      if (po.status === 'Requested') {
+        // A draft is still being built → reopen it in the wizard.
         _edit = {
-          id: _po.id, po_number: _po.po_number, date: _po.date,
-          delivery_date: _po.delivery_date || '', supplier: _po.supplier || '',
-          store_id: _po.store_id, notes: _po.notes || '',
-          items: _po.items.map(i => ({
+          id: po.id, po_number: po.po_number, date: po.date,
+          delivery_date: po.delivery_date || '', supplier: po.supplier || '',
+          store_id: po.store_id, notes: po.notes || '',
+          items: (po.items || []).map(i => ({
             store_product_id: i.store_product_id, name_en: i.name_en, name_cn: i.name_cn,
             sku: i.sku, qty: i.qty, unit: i.unit, cost_per_unit: i.cost_per_unit,
             expense_category: i.expense_category || '', purchase_channel: i.purchase_channel || '',
             current_stock: i.current_stock,
           })),
         };
-        renderEditPage();
+        _wstep = 2; _screen = 'wizard'; paint();
       } else {
-        _edit = null;
-        renderManagePage();
+        // Placed / received / cancelled → the receive & manage screen.
+        _po = po; _hist = {}; _screen = 'receive'; paint();
         api('/api/retail-admin/purchases/' + id + '/history')
-          .then(h => { _hist = h.data || {}; renderManagePage(); })
+          .then(h => { _hist = h.data || {}; if (_screen === 'receive' && _po && _po.id === id) paint(); })
           .catch(() => {});
       }
-      showPOPage(true);
     } catch (e) { toast(e.message, 'err'); }
   };
 
+  function paintWizard() {
+    const e = _edit;
+    const step = _wstep;
+    const dot = n => (n < step
+      ? `<span class="st done"><span class="n">${I.check}</span>${wStepName(n)}</span>`
+      : `<span class="st${n === step ? ' on' : ''}"><span class="n">${n}</span>${wStepName(n)}</span>`);
+    root().innerHTML = `
+      <div class="pu2-wizhead">
+        ${backBtn(T('Orders', '采购单'), 'puBackOrders()')}
+        <h1>${e.id ? esc(e.po_number) : esc(T('New order', '新建采购单'))}</h1>
+        <div class="pu2-wsteps">
+          ${dot(1)}<span class="dash"></span>${dot(2)}<span class="dash"></span>${dot(3)}
+        </div>
+      </div>
+      <div id="pu2-wizbody"></div>`;
+    if (step === 1) wizStep1();
+    else if (step === 2) wizStep2();
+    else wizStep3();
+  }
+  function wStepName(n) {
+    return esc([T('From & to', '来源与门店'), T('What to buy', '采购内容'), T('Review & place', '确认下单')][n - 1]);
+  }
+
   function supplierOptions(selected) {
-    return '<option value="">No supplier · 不指定</option>' + _suppliers
+    return `<option value="">${esc(T('No supplier — mixed / one-off', '不指定 —— 混合/一次性'))}</option>` + _suppliers
       .filter(s => s.is_active || s.name === selected)
       .map(s => `<option value="${esc(s.name)}"${s.name === selected ? ' selected' : ''}>${esc(s.name)}${s.name_cn ? ' · ' + esc(s.name_cn) : ''}</option>`)
       .join('');
   }
-
-  function renderEditPage() {
-    const e = _edit;
-    const el = document.getElementById('pu-po-page');
-    el.innerHTML = `
-      <div class="row" style="gap:8px;align-items:center;margin-bottom:var(--s3);flex-wrap:wrap">
-        <button class="btn btn-sm" onclick="puBackToList()">← Back · 返回</button>
-        <h3 style="margin:0">${e.id ? esc(e.po_number) : 'New purchase order · 新建采购单'}</h3>
-        ${e.id ? chip('Requested') : ''}
-      </div>
-      <div class="row" style="gap:12px;flex-wrap:wrap;margin-bottom:var(--s3)">
-        <label style="font-size:13px">Date · 日期<br><input type="date" id="pu-e-date" value="${esc(e.date)}"></label>
-        <label style="font-size:13px">Expected · 预计到货<br><input type="date" id="pu-e-delivery" value="${esc(e.delivery_date || '')}"></label>
-        <label style="font-size:13px">Supplier · 供应商<br><select id="pu-e-supplier">${supplierOptions(e.supplier)}</select></label>
-        <label style="font-size:13px">Deliver to store · 收货门店<br>
-          <select id="pu-e-store" onchange="puEditStoreChanged()">
-            ${_stores.map(s => `<option value="${s.id}"${s.id === e.store_id ? ' selected' : ''}>${esc(s.name_en || s.code)} · ${esc(s.name_cn || '')}</option>`).join('')}
-          </select></label>
-      </div>
-      <label style="font-size:13px;display:block;margin-bottom:var(--s3)">Notes · 备注<br>
-        <input type="text" id="pu-e-notes" value="${esc(e.notes || '')}" style="width:min(560px,100%)"></label>
-
-      <div style="position:relative;max-width:560px;margin-bottom:var(--s2)">
-        <input type="text" id="pu-picker" placeholder="Add product — search name / SKU · 添加商品——搜索名称/货号"
-               style="width:100%" oninput="puPickerInput()" autocomplete="off">
-        <div id="pu-picker-list" style="display:none;position:absolute;z-index:30;left:0;right:0;top:100%;max-height:280px;overflow:auto;background:var(--panel,#fff);border:1px solid var(--border,#ddd);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12)"></div>
-      </div>
-
-      <div style="overflow-x:auto">
-        <table class="data-table" style="min-width:820px;font-size:13px">
-          <thead><tr>
-            <th>Product · 商品</th><th style="text-align:right">In stock · 现库存</th>
-            <th style="width:90px">Qty · 数量</th><th style="width:80px">Unit · 单位</th>
-            <th style="width:110px">Cost/unit · 单价</th><th style="width:150px">Category · 支出分类</th>
-            <th style="width:120px">Channel · 采购渠道</th><th style="text-align:right">Total · 小计</th><th></th>
-          </tr></thead>
-          <tbody id="pu-e-lines"></tbody>
-          <tfoot><tr>
-            <td colspan="7" style="text-align:right"><b>Total · 合计</b></td>
-            <td style="text-align:right"><b id="pu-e-total"></b></td><td></td>
-          </tr></tfoot>
-        </table>
-      </div>
-      <datalist id="pu-cat-list">
-        <option value="门店进货 Retail stock"></option>
-        <option value="包装 Packaging"></option>
-        <option value="运费 Shipping"></option>
-        <option value="其他 Other"></option>
-      </datalist>
-
-      <div class="row" style="gap:8px;margin-top:var(--s4);flex-wrap:wrap">
-        <button class="btn btn-primary" data-cap="purchasing:edit" onclick="puSavePO(false)">Save · 保存</button>
-        <button class="btn" data-cap="purchasing:edit" onclick="puSavePO(true)">Save &amp; mark ordered · 保存并标记已下单</button>
-        ${e.id ? '<button class="btn" data-cap="purchasing:edit" style="color:#b03030" onclick="puSetStatus(\'Cancelled\')">Cancel PO · 取消采购单</button>' : ''}
-      </div>`;
-    renderEditLines();
-    try { applyCapGates(); } catch (_) {}
+  function storeOptions(selected) {
+    return _stores.map(s => `<option value="${s.id}"${s.id === selected ? ' selected' : ''}>${esc(s.name_en || s.code)}${s.name_cn ? ' · ' + esc(s.name_cn) : ''}</option>`).join('');
   }
 
-  function renderEditLines() {
-    const body = document.getElementById('pu-e-lines');
+  function wizStep1() {
+    const e = _edit;
+    document.getElementById('pu2-wizbody').innerHTML = `
+      <div class="pu2-card pu2-wizcard">
+        <div class="pu2-fgrid">
+          <label class="pu2-f">
+            <span class="lbl">${esc(T('Supplier', '供应商'))}</span>
+            <select class="pu2-input" id="pu2-w-supplier">${supplierOptions(e.supplier)}</select>
+            <span class="hint">${esc(T('Optional — leave empty for a mixed or one-off buy.', '可选 —— 混合或一次性采购可留空。'))}</span>
+          </label>
+          <label class="pu2-f">
+            <span class="lbl">${esc(T('Deliver to', '收货门店'))}</span>
+            <select class="pu2-input" id="pu2-w-store">${storeOptions(e.store_id)}</select>
+          </label>
+          <label class="pu2-f">
+            <span class="lbl">${esc(T('Expected arrival', '预计到货'))}</span>
+            <input class="pu2-input" type="date" id="pu2-w-delivery" value="${esc(e.delivery_date || '')}">
+            <span class="hint">${esc(T('We’ll flag the order if this date passes.', '超过该日期后,订单会被标记逾期。'))}</span>
+          </label>
+          <label class="pu2-f">
+            <span class="lbl">${esc(T('Note', '备注'))}</span>
+            <input class="pu2-input" type="text" id="pu2-w-notes" value="${esc(e.notes || '')}" placeholder="${esc(T('Anything the receiver should know', '收货人需要知道的信息'))}">
+          </label>
+        </div>
+        <div class="pu2-wizfoot">
+          <button class="pu2-btn ghost" onclick="puBackOrders()">${esc(T('Cancel', '取消'))}</button>
+          <span class="spacer"></span>
+          <button class="pu2-btn primary" onclick="puWizNext(2)">${esc(T('Next — what to buy', '下一步 —— 采购内容'))}</button>
+        </div>
+      </div>`;
+  }
+
+  // read step-1 fields off the DOM into state (called on every step change)
+  function grabStep1() {
+    const g = id => document.getElementById(id);
+    if (g('pu2-w-supplier')) _edit.supplier = g('pu2-w-supplier').value || '';
+    if (g('pu2-w-store'))    _edit.store_id = parseInt(g('pu2-w-store').value, 10) || _edit.store_id;
+    if (g('pu2-w-delivery')) _edit.delivery_date = g('pu2-w-delivery').value || '';
+    if (g('pu2-w-notes'))    _edit.notes = g('pu2-w-notes').value || '';
+  }
+
+  window.puWizNext = function (n) {
+    if (_wstep === 1) grabStep1();
+    _wstep = n; paintWizard();
+  };
+  window.puWizStep = function (n) { _wstep = n; paintWizard(); };
+  window.puBackOrders = function () { _edit = null; _screen = 'orders'; paint(); };
+
+  function wizStep2() {
+    const e = _edit;
+    const st = _stores.find(s => s.id === e.store_id);
+    const storeName = st ? (st.name_en || st.code) : '';
+    document.getElementById('pu2-wizbody').innerHTML = `
+      <div class="pu2-card pu2-wizcard pu2-recap">
+        <span>${esc(T('Supplier', '供应商'))}: <b>${esc(e.supplier || T('none', '不指定'))}</b></span>
+        <span>${esc(T('Deliver to', '收货'))}: <b>${esc(storeName)}</b></span>
+        <span>${esc(T('Expected', '预计'))}: <b class="pu2-num">${esc(e.delivery_date || '—')}</b></span>
+        <button class="pu2-link" onclick="puWizStep(1)">${esc(T('Change', '修改'))}</button>
+      </div>
+
+      <div class="pu2-card pu2-wizcard">
+        <div class="pu2-f" style="max-width:520px;position:relative">
+          <span class="lbl">${esc(T('Add products', '添加商品'))}</span>
+          <span class="pu2-search full">
+            <span class="pu2-ic">${I.search}</span>
+            <input id="pu2-picker" type="text" placeholder="${esc(T('Search by name or SKU', '按名称或货号搜索'))}" oninput="puPickerInput()" autocomplete="off">
+          </span>
+          <div id="pu2-picker-list" class="pu2-picker-list" style="display:none"></div>
+        </div>
+
+        <div id="pu2-suggest"></div>
+
+        <table class="pu2-tbl pu2-lines" style="margin-top:18px">
+          <thead><tr>
+            <th>${esc(T('Product', '商品'))}</th>
+            <th class="right">${esc(T('On shelf', '现库存'))}</th>
+            <th>${esc(T('Quantity', '数量'))}</th>
+            <th class="right">${esc(T('Cost each', '单价'))}</th>
+            <th class="right">${esc(T('Line total', '小计'))}</th>
+            <th></th>
+          </tr></thead>
+          <tbody id="pu2-linebody"></tbody>
+        </table>
+
+        <div class="pu2-wizfoot">
+          <button class="pu2-btn ghost" onclick="puWizStep(1)">${esc(T('Back', '上一步'))}</button>
+          <span class="spacer"></span>
+          <button class="pu2-btn" onclick="puSaveDraft()">${esc(T('Save as draft', '存为草稿'))}</button>
+          <button class="pu2-btn primary" onclick="puWizNext(3)">${esc(T('Review order', '确认订单'))}</button>
+        </div>
+      </div>`;
+    renderLines();
+    renderSuggestions();
+  }
+
+  async function renderSuggestions() {
+    const host = document.getElementById('pu2-suggest');
+    if (!host) return;
+    let list = [];
+    try { list = await products(_edit.store_id); } catch (_) { return; }
+    const have = new Set(_edit.items.map(it => it.store_product_id));
+    const low = list
+      .filter(p => !have.has(p.product_id))
+      .map(p => ({ p, gap: (p.safety_buffer > 0 ? p.safety_buffer : 5) - p.physical_qty }))
+      .filter(x => x.gap > 0)
+      .sort((a, b) => b.gap - a.gap)
+      .slice(0, 4);
+    if (!low.length) { host.innerHTML = ''; return; }
+    host.innerHTML = `
+      <div class="pu2-kicker">${esc(T('Running low here', '此门店库存偏低'))}</div>
+      ${low.map(({ p }) => `
+        <div class="pu2-sugrow">
+          <span>${nameLabel(p)}</span>
+          <span class="low pu2-num">${p.physical_qty} ${esc(T('left', '剩余'))}${p.safety_buffer > 0 ? ` · ${esc(T('buffer', '安全库存'))} ${p.safety_buffer}` : ''}</span>
+          <button class="pu2-btn sm" onclick="puPick(${p.product_id})">${esc(T('Add', '添加'))}</button>
+        </div>`).join('')}`;
+  }
+
+  function renderLines() {
+    const body = document.getElementById('pu2-linebody');
     if (!body) return;
     if (!_edit.items.length) {
-      body.innerHTML = '<tr><td colspan="9" class="muted" style="padding:18px;text-align:center">No lines yet — search a product above · 尚无商品——在上方搜索添加</td></tr>';
-    } else {
-      body.innerHTML = _edit.items.map((it, i) => `
-        <tr>
-          <td>${esc(it.name_en || '')}${it.name_cn ? ' · ' + esc(it.name_cn) : ''}<div class="muted" style="font-size:11px">${esc(it.sku || '')}</div></td>
-          <td style="text-align:right" class="muted">${it.current_stock != null ? it.current_stock : '—'}</td>
-          <td><input type="number" min="0" step="1" value="${esc(it.qty ?? 1)}" style="width:70px" onchange="puLineChanged(${i},'qty',this.value)"></td>
-          <td><input type="text" value="${esc(it.unit || 'pcs')}" style="width:60px" onchange="puLineChanged(${i},'unit',this.value)"></td>
-          <td><input type="number" min="0" step="0.01" value="${esc(it.cost_per_unit ?? 0)}" style="width:90px" onchange="puLineChanged(${i},'cost_per_unit',this.value)"></td>
-          <td><input type="text" list="pu-cat-list" value="${esc(it.expense_category || '')}" style="width:140px" onchange="puLineChanged(${i},'expense_category',this.value)"></td>
-          <td><input type="text" value="${esc(it.purchase_channel || '')}" style="width:110px" onchange="puLineChanged(${i},'purchase_channel',this.value)"></td>
-          <td style="text-align:right">${money((parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0))}</td>
-          <td><button class="btn btn-sm" title="Remove · 移除" onclick="puRemoveLine(${i})">✕</button></td>
-        </tr>`).join('');
+      body.innerHTML = `<tr class="pu2-noline"><td colspan="6">${esc(T('No products yet — search or pick a suggestion above.', '还没有商品——在上方搜索或选择推荐。'))}</td></tr>`;
+      return;
     }
+    body.innerHTML = _edit.items.map((it, i) => {
+      const lineTotal = (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0);
+      return `<tr>
+        <td>${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}</td>
+        <td class="right pu2-num" style="color:var(--td-text2)">${it.current_stock != null ? it.current_stock : '—'}</td>
+        <td>
+          <span class="pu2-qty">
+            <button type="button" class="pm" onclick="puQty(${i},-1)">−</button>
+            <input type="number" min="0" step="1" class="pu2-num" value="${esc(it.qty ?? 1)}" onchange="puLine(${i},'qty',this.value)">
+            <button type="button" class="pm" onclick="puQty(${i},1)">+</button>
+          </span>
+        </td>
+        <td class="right">
+          <span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" value="${esc(it.cost_per_unit ?? 0)}" onchange="puLine(${i},'cost_per_unit',this.value)"></span>
+          ${lastPaid(it)}
+        </td>
+        <td class="right pu2-num">${money(lineTotal)}</td>
+        <td class="right"><button class="pu2-btn ghost sm" title="${esc(T('Remove', '移除'))}" onclick="puRemoveLine(${i})">✕</button></td>
+      </tr>`;
+    }).join('');
     const total = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0), 0);
-    const t = document.getElementById('pu-e-total');
-    if (t) t.textContent = money(total);
+    const units = _edit.items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
+    body.insertAdjacentHTML('beforeend', `
+      <tr class="pu2-totrow">
+        <td colspan="4">${_edit.items.length} ${esc(T('products', '商品'))} · ${units} ${esc(T('units', '件'))}</td>
+        <td class="right pu2-num">${money(total)}</td><td></td>
+      </tr>`);
+  }
+  function lastPaid(it) {
+    const h = _hist[it.store_product_id];
+    if (!h || !h.previous) return '';
+    return `<div class="pu2-lasthint pu2-num">${esc(T('last paid', '上次'))} ${money(h.previous.cost_per_unit)}</div>`;
   }
 
-  window.puLineChanged = function (i, field, value) {
+  window.puLine = function (i, field, val) {
     if (!_edit || !_edit.items[i]) return;
-    _edit.items[i][field] = value;
-    renderEditLines();
+    _edit.items[i][field] = val;
+    renderLines();
+  };
+  window.puQty = function (i, delta) {
+    if (!_edit || !_edit.items[i]) return;
+    _edit.items[i].qty = Math.max(0, (parseFloat(_edit.items[i].qty) || 0) + delta);
+    renderLines();
   };
   window.puRemoveLine = function (i) {
     if (!_edit) return;
     _edit.items.splice(i, 1);
-    renderEditLines();
-  };
-  window.puEditStoreChanged = function () {
-    if (!_edit) return;
-    _edit.store_id = parseInt(document.getElementById('pu-e-store').value, 10);
-    // Shelf-qty context on existing lines belongs to the old store — refresh it.
-    puProducts(_edit.store_id).then(list => {
-      const byId = new Map(list.map(p => [p.product_id, p]));
-      for (const it of _edit.items) {
-        const p = it.store_product_id ? byId.get(it.store_product_id) : null;
-        it.current_stock = p ? p.physical_qty : null;
-      }
-      renderEditLines();
-    }).catch(() => {});
+    renderLines(); renderSuggestions();
   };
 
-  let _pickerTimer = null;
+  let _pickT = null;
   window.puPickerInput = function () {
-    clearTimeout(_pickerTimer);
-    _pickerTimer = setTimeout(async () => {
-      const q = (document.getElementById('pu-picker').value || '').toLowerCase().trim();
-      const list = document.getElementById('pu-picker-list');
+    clearTimeout(_pickT);
+    _pickT = setTimeout(async () => {
+      const q = (document.getElementById('pu2-picker')?.value || '').toLowerCase().trim();
+      const list = document.getElementById('pu2-picker-list');
+      if (!list) return;
       if (!q) { list.style.display = 'none'; return; }
       let prods = [];
-      try { prods = await puProducts(_edit.store_id); } catch (e) { toast(e.message, 'err'); return; }
-      const hits = prods.filter(p =>
-        `${p.name_en || ''} ${p.name_cn || ''} ${p.sku || ''}`.toLowerCase().includes(q)).slice(0, 30);
-      if (!hits.length) {
-        list.innerHTML = '<div class="muted" style="padding:10px 12px">No match · 无匹配</div>';
-      } else {
-        list.innerHTML = hits.map(p => `
-          <div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid var(--border,#eee)"
-               onclick="puPickProduct(${p.product_id})">
-            ${esc(p.name_en || '')}${p.name_cn ? ' · ' + esc(p.name_cn) : ''}
-            <span class="muted" style="font-size:11px;margin-left:6px">${esc(p.sku || '')} · stock ${p.physical_qty}</span>
-          </div>`).join('');
-      }
+      try { prods = await products(_edit.store_id); } catch (e) { toast(e.message, 'err'); return; }
+      const hits = prods.filter(p => `${p.name_en || ''} ${p.name_cn || ''} ${p.sku || ''}`.toLowerCase().includes(q)).slice(0, 30);
+      list.innerHTML = hits.length
+        ? hits.map(p => `<div class="pu2-pick" onclick="puPick(${p.product_id})">${nameLabel(p)}<span class="sub pu2-mono">${esc(p.sku || '')} · ${esc(T('stock', '库存'))} ${p.physical_qty}</span></div>`).join('')
+        : `<div class="pu2-pick muted">${esc(T('No match', '无匹配'))}</div>`;
       list.style.display = '';
     }, 150);
   };
-  window.puPickProduct = async function (productId) {
-    const prods = await puProducts(_edit.store_id);
+  window.puPick = async function (productId) {
+    const prods = await products(_edit.store_id);
     const p = prods.find(x => x.product_id === productId);
     if (!p) return;
     const existing = _edit.items.find(it => it.store_product_id === productId);
-    if (existing) { existing.qty = (parseFloat(existing.qty) || 0) + 1; }
-    else {
-      _edit.items.push({
-        store_product_id: p.product_id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
-        qty: 1, unit: 'pcs', cost_per_unit: 0, expense_category: '门店进货 Retail stock',
-        purchase_channel: '', current_stock: p.physical_qty,
-      });
-    }
-    document.getElementById('pu-picker').value = '';
-    document.getElementById('pu-picker-list').style.display = 'none';
-    renderEditLines();
+    if (existing) existing.qty = (parseFloat(existing.qty) || 0) + 1;
+    else _edit.items.push({
+      store_product_id: p.product_id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
+      qty: 1, unit: 'pcs', cost_per_unit: 0, expense_category: '门店进货 Retail stock',
+      purchase_channel: '', current_stock: p.physical_qty,
+    });
+    const pk = document.getElementById('pu2-picker');
+    if (pk) pk.value = '';
+    const pl = document.getElementById('pu2-picker-list');
+    if (pl) pl.style.display = 'none';
+    renderLines(); renderSuggestions();
   };
 
-  window.puSavePO = async function (markOrdered) {
-    if (!_edit) return;
-    const body = {
-      date: document.getElementById('pu-e-date').value || today(),
-      delivery_date: document.getElementById('pu-e-delivery').value || null,
-      supplier: document.getElementById('pu-e-supplier').value || null,
-      store_id: parseInt(document.getElementById('pu-e-store').value, 10),
-      notes: document.getElementById('pu-e-notes').value || null,
+  function wizStep3() {
+    const e = _edit;
+    const st = _stores.find(s => s.id === e.store_id);
+    const storeName = st ? (st.name_en || st.code) : '';
+    const total = e.items.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0), 0);
+    const units = e.items.reduce((s, it) => s + (parseFloat(it.qty) || 0), 0);
+    const empty = !e.items.length;
+    document.getElementById('pu2-wizbody').innerHTML = `
+      <div class="pu2-card pu2-wizcard">
+        <div class="pu2-reviewline">
+          ${e.items.length} ${esc(T('products', '商品'))} · ${units} ${esc(T('units', '件'))} · <b class="pu2-num">${money(total)}</b>
+          — ${esc(T('from', '来自'))} <b>${esc(e.supplier || T('no supplier', '不指定供应商'))}</b>,
+          ${esc(T('to', '送至'))} <b>${esc(storeName)}</b>,
+          ${esc(T('expected', '预计'))} <b class="pu2-num">${esc(e.delivery_date || '—')}</b>.
+        </div>
+        ${empty ? `<p class="pu2-warnline">${esc(T('Add at least one product before placing the order.', '下单前请至少添加一件商品。'))}</p>` : `
+        <div class="pu2-autonote">
+          <span class="dot"></span>
+          <span>${esc(T('When you place the order,', '下单后,'))} <b>${money(total)} ${esc(T('posts to Finance → Expenses by itself.', '会自动记入财务 → 支出。'))}</b> ${esc(T('Nothing touches stock until the goods arrive and you tick them in.', '在到货并勾选收货之前,库存不会有任何变动。'))}</span>
+        </div>`}
+        <div class="pu2-wizfoot">
+          <button class="pu2-btn ghost" onclick="puWizStep(2)">${esc(T('Back', '上一步'))}</button>
+          <span class="spacer"></span>
+          <button class="pu2-btn" onclick="puSaveDraft()">${esc(T('Save as draft', '存为草稿'))}</button>
+          <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puPlace()" ${empty ? 'disabled' : ''}>${esc(T('Place order', '确认下单'))}</button>
+        </div>
+      </div>`;
+  }
+
+  function wizBody() {
+    return {
+      date: _edit.date || todayGz(),
+      delivery_date: _edit.delivery_date || null,
+      supplier: _edit.supplier || null,
+      store_id: _edit.store_id,
+      notes: _edit.notes || null,
       items: _edit.items.map(it => ({
         store_product_id: it.store_product_id, name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,
         qty: parseFloat(it.qty) || 0, unit: it.unit || 'pcs',
@@ -356,334 +589,402 @@
         expense_category: it.expense_category || null, purchase_channel: it.purchase_channel || null,
       })),
     };
-    if (!body.items.length) { toast('Add at least one product · 请先添加商品', 'err'); return; }
+  }
+  async function saveWiz(markOrdered) {
+    if (_wstep === 1) grabStep1();
+    const body = wizBody();
+    if (!body.items.length) { toast(T('Add at least one product', '请先添加商品'), 'err'); return null; }
+    let id = _edit.id;
+    if (id) await api('/api/retail-admin/purchases/' + id, { method: 'PUT', body });
+    else { const r = await api('/api/retail-admin/purchases', { method: 'POST', body }); id = r.id; }
+    if (markOrdered) await api('/api/retail-admin/purchases/' + id + '/status', { method: 'PUT', body: { status: 'Ordered' } });
+    return id;
+  }
+  window.puSaveDraft = async function () {
     try {
-      let id = _edit.id;
-      if (id) await api('/api/retail-admin/purchases/' + id, { method: 'PUT', body });
-      else {
-        const r = await api('/api/retail-admin/purchases', { method: 'POST', body });
-        id = r.id;
-      }
-      if (markOrdered) {
-        await api('/api/retail-admin/purchases/' + id + '/status', { method: 'PUT', body: { status: 'Ordered' } });
-      }
-      toast('Saved ✓', 'ok');
-      puOpenPO(id);
+      const id = await saveWiz(false);
+      if (id == null) return;
+      toast(T('Saved as draft ✓', '已存为草稿 ✓'), 'ok');
+      await loadPOs(); puBackOrders();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.puPlace = async function () {
+    try {
+      const id = await saveWiz(true);
+      if (id == null) return;
+      toast(T('Order placed ✓', '已下单 ✓'), 'ok');
+      await loadPOs(); puOpenPO(id);
     } catch (e) { toast(e.message, 'err'); }
   };
 
-  // ── Manage (Ordered / Delivered / Cancelled) ─────────────────────────────
-  function histHint(spId) {
-    const h = _hist[spId];
-    if (!h || !h.previous) return '';
-    return `<div class="muted" style="font-size:11px">Last · 上次 ${money(h.previous.cost_per_unit)} (${esc(h.previous.po_number)})</div>`;
-  }
-
-  function renderManagePage() {
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  RECEIVE — one PO
+  // ═══════════════════════════════════════════════════════════════════════════
+  function paintReceive() {
     const p = _po;
-    if (!p) return;
-    const el = document.getElementById('pu-po-page');
+    if (!p) { _screen = 'orders'; paint(); return; }
     const canReceive = p.status === 'Ordered' || p.status === 'Delivered';
     const expTotal = (p.expenses || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
-    el.innerHTML = `
-      <div class="row" style="gap:8px;align-items:center;margin-bottom:var(--s3);flex-wrap:wrap">
-        <button class="btn btn-sm" onclick="puBackToList()">← Back · 返回</button>
-        <h3 style="margin:0">${esc(p.po_number)}</h3>
-        ${chip(p.status)}
-        <span class="muted" style="font-size:13px">${esc(p.date || '')} · ${esc(p.supplier || 'no supplier · 未指定供应商')} · ${esc(p.store_name_en || '')}${p.store_name_cn ? ' · ' + esc(p.store_name_cn) : ''}</span>
+    root().innerHTML = `
+      <div class="pu2-wizhead">
+        ${backBtn(T('Orders', '采购单'), 'puBackOrders()')}
+        <h1 class="pu2-mono" style="font-size:21px">${esc(p.po_number)}</h1>
+        ${statusPill(p)}
       </div>
-      ${p.notes ? `<p class="helper" style="margin-top:0">${esc(p.notes)}</p>` : ''}
+      <div class="pu2-rcvsub pu2-num">${esc(p.supplier || T('No supplier', '未指定供应商'))} → ${storeLabel(p)} · ${esc(T('placed', '下单'))} ${esc(p.date || '')}${p.delivery_date ? ` · ${esc(T('expected', '预计'))} ${esc(p.delivery_date)}` : ''} · ${money(p.total_cost || (p.items || []).reduce((s, i) => s + (i.qty || 0) * (i.cost_per_unit || 0), 0))}</div>
+      ${p.notes ? `<p class="pu2-notes">${esc(p.notes)}</p>` : ''}
 
-      <div style="overflow-x:auto">
-        <table class="data-table" style="min-width:900px;font-size:13px">
+      <div class="pu2-card">
+        <table class="pu2-tbl pu2-lines">
           <thead><tr>
-            <th>Product · 商品</th><th style="text-align:right">Ordered · 订购</th>
-            <th style="text-align:right">Cost/unit · 单价</th>
-            <th style="width:100px">Received · 实收</th><th style="width:90px">Damaged · 破损</th>
-            <th style="width:150px">Tracking · 运单号</th>
-            <th style="width:130px">Invoice · 发票</th>
-            <th style="text-align:right">In stock · 已入库</th>
+            <th>${esc(T('Product', '商品'))}</th>
+            <th class="right">${esc(T('Ordered', '订购'))}</th>
+            <th>${esc(T('Arrived', '实收'))}</th>
+            <th>${esc(T('Damaged', '破损'))}</th>
+            <th>${esc(T('Tracking no.', '运单号'))}</th>
+            <th>${esc(T('Invoice', '发票'))}</th>
+            <th class="right">${esc(T('In stock', '已入库'))}</th>
           </tr></thead>
           <tbody>
-            ${p.items.map(it => `
-              <tr data-line="${it.id}">
-                <td>${esc(it.name_en || '')}${it.name_cn ? ' · ' + esc(it.name_cn) : ''}
-                    <div class="muted" style="font-size:11px">${esc(it.sku || '')}</div></td>
-                <td style="text-align:right">${it.qty} ${esc(it.unit || '')}<div class="muted" style="font-size:11px">${money((it.qty || 0) * (it.cost_per_unit || 0))}</div></td>
-                <td style="text-align:right">${money(it.cost_per_unit)}${histHint(it.store_product_id)}</td>
-                <td><input type="number" min="0" step="1" class="pu-r-qty" placeholder="${it.qty}"
-                     value="${it.qty_received != null ? it.qty_received : ''}" style="width:80px" ${canReceive ? '' : 'disabled'}></td>
-                <td><input type="number" min="0" step="1" class="pu-r-dmg"
-                     value="${it.damaged_qty || ''}" style="width:70px" ${canReceive ? '' : 'disabled'}></td>
-                <td><input type="text" class="pu-r-track" value="${esc(it.tracking_number || '')}" style="width:140px" ${canReceive ? '' : 'disabled'}></td>
-                <td><select class="pu-r-inv" ${canReceive ? '' : 'disabled'}>
-                    <option value="not_received"${it.invoice_status === 'not_received' ? ' selected' : ''}>awaiting · 待收</option>
-                    <option value="received"${it.invoice_status === 'received' ? ' selected' : ''}>received · 已收</option>
-                    <option value="no_invoice"${it.invoice_status === 'no_invoice' ? ' selected' : ''}>none · 无发票</option>
-                  </select></td>
-                <td style="text-align:right">${(it.stock_applied_qty || 0) > 0 ? '✓ ' + it.stock_applied_qty : '—'}
-                    ${it.current_stock != null ? `<div class="muted" style="font-size:11px">shelf · 现货 ${it.current_stock}</div>` : ''}</td>
-              </tr>`).join('')}
+            ${(p.items || []).map(it => receiveRow(it, canReceive)).join('')}
           </tbody>
         </table>
       </div>
 
-      <div class="row" style="gap:8px;margin-top:var(--s4);flex-wrap:wrap">
-        ${canReceive ? '<button class="btn btn-primary" data-cap="purchasing:receive" onclick="puSaveReceive()">Save receive → stock · 保存收货并入库</button>' : ''}
-        ${p.status === 'Ordered' ? '<button class="btn" data-cap="purchasing:receive" onclick="puSetStatus(\'Delivered\')">All arrived · 全部到货</button>' : ''}
-        ${p.status === 'Ordered' ? '<button class="btn" data-cap="purchasing:edit" onclick="puSetStatus(\'Requested\')">Back to requested · 退回待下单</button>' : ''}
-        ${p.status !== 'Cancelled' && p.status !== 'Delivered' ? '<button class="btn" data-cap="purchasing:edit" style="color:#b03030" onclick="puSetStatus(\'Cancelled\')">Cancel PO · 取消采购单</button>' : ''}
+      ${canReceive ? `<div class="pu2-autonote">
+        <span class="dot"></span>
+        <span><b>${esc(T('Confirmed counts go into', '确认的数量会自动计入'))} ${storeLabel(p)} ${esc(T('stock by themselves', '门店库存'))}</b> ${esc(T('and sync out to every sales channel. Damaged units are kept out of stock.', ',并同步到各销售渠道。破损数量不计入库存。'))}</span>
+      </div>` : ''}
+
+      <div class="pu2-actions">
+        ${canReceive ? `<button class="pu2-btn primary" data-cap="purchasing:receive" onclick="puReceiveSave()">${esc(T('Confirm delivery', '确认收货'))}</button>` : ''}
+        ${p.status === 'Ordered' ? `<button class="pu2-btn" data-cap="purchasing:receive" onclick="puAllArrived()">${esc(T('All arrived as ordered', '全部按订单到货'))}</button>` : ''}
+        ${p.status === 'Ordered' ? `<button class="pu2-btn ghost" data-cap="purchasing:edit" onclick="puSetStatus('Requested')">${esc(T('Back to draft', '退回草稿'))}</button>` : ''}
+        ${p.status === 'Delivered' ? `<button class="pu2-btn" data-cap="purchasing:edit" onclick="puReorder(${p.id})">${esc(T('Order again', '再次采购'))}</button>` : ''}
+        <span class="spacer"></span>
+        ${p.status !== 'Cancelled' && p.status !== 'Delivered' ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puSetStatus('Cancelled')">${esc(T('Cancel order', '取消采购单'))}</button>` : ''}
       </div>
 
-      <div style="margin-top:var(--s4);border:1px solid var(--border,#e0ddd5);border-radius:8px;padding:10px 12px;max-width:560px">
-        <b style="font-size:13px">Finance · 财务</b>
+      <div class="pu2-fin">
+        <b>${esc(T('Finance', '财务'))}</b>
         ${(p.expenses || []).length
-          ? `<div style="font-size:13px;margin-top:6px">${p.expenses.map(x => `${esc(x.category || '')} — ${money(x.amount)}`).join('<br>')}
-             <div class="muted" style="margin-top:4px">Posted to Expenses · 已记入支出 · ${money(expTotal)}</div></div>`
-          : '<div class="muted" style="font-size:13px;margin-top:6px">Posts when the PO is marked ordered · 标记已下单后自动记入支出</div>'}
+          ? `<div class="pu2-num">${p.expenses.map(x => `${esc(x.category || '')} — ${money(x.amount)}`).join('<br>')}<div class="sub">${esc(T('Posted to Expenses', '已记入支出'))} · ${money(expTotal)}</div></div>`
+          : `<div class="sub">${esc(T('Posts to Expenses when the order is placed.', '下单后自动记入支出。'))}</div>`}
       </div>`;
-    try { applyCapGates(); } catch (_) {}
+  }
+  function receiveRow(it, canReceive) {
+    const applied = (it.stock_applied_qty || 0) > 0 ? `✓ ${it.stock_applied_qty}` : '—';
+    const dis = canReceive ? '' : 'disabled';
+    const priceNote = it.cost_per_unit != null
+      ? `${money(it.cost_per_unit)} ${esc(T('each', '每件'))}` : '';
+    return `<tr data-line="${it.id}">
+      <td>${nameLabel(it)}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
+      <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
+      <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
+      <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
+      <td><input type="text" class="pu2-input pu2-rt" value="${esc(it.tracking_number || '')}" style="width:130px" ${dis}></td>
+      <td><select class="pu2-input pu2-ri" ${dis}>
+        <option value="not_received"${it.invoice_status === 'not_received' ? ' selected' : ''}>${esc(T('Awaiting', '待收'))}</option>
+        <option value="received"${it.invoice_status === 'received' ? ' selected' : ''}>${esc(T('Received', '已收'))}</option>
+        <option value="no_invoice"${it.invoice_status === 'no_invoice' ? ' selected' : ''}>${esc(T('None', '无发票'))}</option>
+      </select></td>
+      <td class="right pu2-num">${applied}${it.current_stock != null ? `<div class="sub">${esc(T('shelf', '现货'))} ${it.current_stock}</div>` : ''}</td>
+    </tr>`;
   }
 
-  window.puSetStatus = async function (status) {
-    const id = _po ? _po.id : (_edit && _edit.id);
-    if (!id) return;
-    if (status === 'Cancelled' && !confirm('Cancel this purchase order? · 确定取消该采购单？')) return;
-    try {
-      await api('/api/retail-admin/purchases/' + id + '/status', { method: 'PUT', body: { status } });
-      toast('Saved ✓', 'ok');
-      puOpenPO(id);
-    } catch (e) { toast(e.message, 'err'); }
-  };
-
-  window.puSaveReceive = async function () {
+  window.puReceiveSave = async function () {
     if (!_po) return;
     const receipts = [];
-    document.querySelectorAll('#pu-po-page tr[data-line]').forEach(tr => {
+    document.querySelectorAll('#pu2-root tr[data-line]').forEach(tr => {
       receipts.push({
         line_id: parseInt(tr.dataset.line, 10),
-        qty_received: tr.querySelector('.pu-r-qty').value === '' ? null : tr.querySelector('.pu-r-qty').value,
-        damaged_qty: tr.querySelector('.pu-r-dmg').value || 0,
-        tracking_number: tr.querySelector('.pu-r-track').value,
-        invoice_status: tr.querySelector('.pu-r-inv').value,
+        qty_received: tr.querySelector('.pu2-rq').value === '' ? null : tr.querySelector('.pu2-rq').value,
+        damaged_qty: tr.querySelector('.pu2-rd').value || 0,
+        tracking_number: tr.querySelector('.pu2-rt').value,
+        invoice_status: tr.querySelector('.pu2-ri').value,
       });
     });
     try {
       const r = await api('/api/retail-admin/purchases/' + _po.id + '/receive', { method: 'PUT', body: { receipts } });
       const bits = [];
-      if (r.stock_lines_adjusted) bits.push(`stock updated ×${r.stock_lines_adjusted} · 库存已更新`);
-      if (r.missing_lines) bits.push(`${r.missing_lines} short · 短缺`);
-      if (r.damaged_lines) bits.push(`${r.damaged_lines} damaged · 破损`);
-      toast('Received ✓ ' + (bits.length ? '— ' + bits.join(' · ') : ''), 'ok', 4000);
+      if (r.stock_lines_adjusted) bits.push(T(`stock updated ×${r.stock_lines_adjusted}`, `库存已更新 ×${r.stock_lines_adjusted}`));
+      if (r.missing_lines) bits.push(T(`${r.missing_lines} short`, `${r.missing_lines} 短缺`));
+      if (r.damaged_lines) bits.push(T(`${r.damaged_lines} damaged`, `${r.damaged_lines} 破损`));
+      toast(T('Received ✓', '已收货 ✓') + (bits.length ? ' — ' + bits.join(' · ') : ''), 'ok', 4000);
       puOpenPO(_po.id);
     } catch (e) { toast(e.message, 'err'); }
   };
-
-  // ═══ Suppliers ═════════════════════════════════════════════════════════════
-
-  window.puLoadSuppliers = async function (rerender) {
+  window.puAllArrived = function () { puSetStatus('Delivered'); };
+  window.puSetStatus = async function (status) {
+    if (!_po) return;
+    if (status === 'Cancelled' && !confirm(T('Cancel this order?', '确定取消该采购单？'))) return;
     try {
-      const all = document.getElementById('pu-sup-inactive')?.checked ? '?all=1' : '';
-      const r = await api('/api/retail-admin/suppliers' + all);
-      _suppliers = r.data || [];
-      puRenderSuppliers();
-      if (rerender !== true) puRenderKPIs();
+      await api('/api/retail-admin/purchases/' + _po.id + '/status', { method: 'PUT', body: { status } });
+      toast(T('Saved ✓', '已保存 ✓'), 'ok');
+      await loadPOs(); puOpenPO(_po.id);
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.puReorder = async function (id) {
+    try {
+      const r = await api('/api/retail-admin/purchases/' + id);
+      const po = r.data;
+      _edit = {
+        id: null, po_number: null, date: todayGz(), delivery_date: '',
+        supplier: po.supplier || '', store_id: po.store_id || _stores[0]?.id || null, notes: '',
+        items: (po.items || []).map(i => ({
+          store_product_id: i.store_product_id, name_en: i.name_en, name_cn: i.name_cn, sku: i.sku,
+          qty: i.qty, unit: i.unit || 'pcs', cost_per_unit: i.cost_per_unit,
+          expense_category: i.expense_category || '', purchase_channel: i.purchase_channel || '',
+          current_stock: i.current_stock,
+        })),
+      };
+      _wstep = 2; _screen = 'wizard'; paint();
     } catch (e) { toast(e.message, 'err'); }
   };
 
-  window.puRenderSuppliers = function () {
-    const q = (document.getElementById('pu-sup-search')?.value || '').toLowerCase().trim();
-    const rows = _suppliers.filter(s =>
-      !q || `${s.name} ${s.name_cn || ''} ${s.contact_name || ''}`.toLowerCase().includes(q));
-    const body = document.getElementById('pu-sup-body');
-    const count = document.getElementById('pu-sup-count');
-    if (count) count.textContent = rows.length + ' / ' + _suppliers.length;
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  SUPPLIERS — the ledger
+  // ═══════════════════════════════════════════════════════════════════════════
+  function paintSuppliers() {
+    const activeN = _suppliers.filter(s => s.is_active).length;
+    const disabledN = _suppliers.filter(s => !s.is_active).length;
+    root().innerHTML = `
+      <div class="pu2-head">
+        <div>
+          <p class="pu2-lede" data-lang-block="en" style="margin:0">Who you buy from — contacts, payment terms and their paperwork, all in one place.</p>
+          <p class="pu2-lede" data-lang-block="cn" style="margin:0">你的供货来源 —— 联系人、付款条件和资质文件,集中在一处。</p>
+        </div>
+        <span class="spacer"></span>
+        <button class="pu2-btn" data-cap="purchasing:edit" onclick="puImportOpen()"><span class="pu2-ic">${I.up}</span>${esc(T('Import CSV', '导入 CSV'))}</button>
+        <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewSupplier()"><span class="pu2-ic">${I.plus}</span>${esc(T('New supplier', '新建供应商'))}</button>
+      </div>
+
+      <div class="pu2-toolbar">
+        <span class="pu2-segbar" id="pu2-supseg">
+          <span class="pu2-seg${_supSeg === 'active' ? ' on' : ''}" onclick="puSupSeg('active')">${esc(T('Active', '启用'))} <span class="n pu2-num">${activeN}</span></span>
+          <span class="pu2-seg${_supSeg === 'disabled' ? ' on' : ''}" onclick="puSupSeg('disabled')">${esc(T('Disabled', '停用'))} <span class="n pu2-num">${_showDisabled ? disabledN : '·'}</span></span>
+        </span>
+        <span class="pu2-search">
+          <span class="pu2-ic">${I.search}</span>
+          <input id="pu2-supq" type="text" placeholder="${esc(T('Find a supplier or contact', '搜索供应商或联系人'))}" oninput="puSupFilter()" autocomplete="off">
+        </span>
+      </div>
+
+      <div class="pu2-card">
+        <table class="pu2-tbl">
+          <thead><tr>
+            <th>${esc(T('Supplier', '供应商'))}</th>
+            <th>${esc(T('Contact', '联系人'))}</th>
+            <th>${esc(T('You pay', '付款'))}</th>
+            <th class="right">${esc(T('Orders', '采购单'))}</th>
+            <th>${esc(T('Rating', '评分'))}</th>
+          </tr></thead>
+          <tbody id="pu2-suprows"></tbody>
+        </table>
+      </div>`;
+    renderSupplierRows();
+  }
+  function rateDots(n) {
+    n = Math.min(5, Math.max(0, parseInt(n, 10) || 0));
+    let out = '<span class="pu2-rate">';
+    for (let i = 0; i < 5; i++) out += `<i class="${i < n ? '' : 'off'}"></i>`;
+    return out + '</span>';
+  }
+  function renderSupplierRows() {
+    const body = document.getElementById('pu2-suprows');
     if (!body) return;
+    const q = (document.getElementById('pu2-supq')?.value || '').toLowerCase().trim();
+    let rows = _suppliers.filter(s => _supSeg === 'disabled' ? !s.is_active : s.is_active);
+    if (q) rows = rows.filter(s => `${s.name} ${s.name_cn || ''} ${s.contact_name || ''}`.toLowerCase().includes(q));
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="6" class="muted" style="padding:24px;text-align:center">No suppliers · 暂无供应商</td></tr>';
+      body.innerHTML = `<tr><td colspan="5"><div class="pu2-emptyline">${esc(_supSeg === 'disabled' && !_showDisabled ? T('Turn on the Disabled tab to load these.', '点击停用标签加载。') : T('No suppliers here.', '暂无供应商。'))}</div></td></tr>`;
       return;
     }
-    body.innerHTML = rows.map(s => `
-      <tr style="cursor:pointer${s.is_active ? '' : ';opacity:.55'}" onclick="puOpenSupplier(${s.id})">
-        <td><b>${esc(s.name)}</b>${s.name_cn ? ' · ' + esc(s.name_cn) : ''}
-            ${s.is_active ? '' : ' <span class="muted" style="font-size:11px">(disabled · 已停用)</span>'}
-            ${s.doc_count ? `<span class="muted" style="font-size:11px;margin-left:6px">${s.doc_count} file${s.doc_count === 1 ? '' : 's'} · ${s.doc_count}份文件</span>` : ''}</td>
-        <td>${esc(s.contact_name || '—')}${s.contact_phone ? `<div class="muted" style="font-size:11px">${esc(s.contact_phone)}</div>` : ''}</td>
-        <td>${esc(s.payment_terms || '—')}${s.payment_method ? `<div class="muted" style="font-size:11px">${esc(s.payment_method)}</div>` : ''}</td>
-        <td>${esc(s.channel_type || '—')}</td>
-        <td style="text-align:right">${s.po_count || 0}${s.last_po_date ? `<div class="muted" style="font-size:11px">${esc(s.last_po_date)}</div>` : ''}</td>
-        <td>${'★'.repeat(s.rating || 0)}${'☆'.repeat(5 - (s.rating || 0))}</td>
-      </tr>`).join('');
-  };
-
-  function showSupPage(show) {
-    document.getElementById('pu-sup-list').style.display = show ? 'none' : '';
-    document.getElementById('pu-sup-page').style.display = show ? '' : 'none';
+    body.innerHTML = rows.map(s => {
+      const pay = [s.payment_terms, s.payment_method].filter(Boolean);
+      const files = s.doc_count ? `${s.doc_count} ${esc(T('files on record', '份资质文件'))}` : '';
+      const sub = [s.products_supplied ? esc(s.products_supplied) : '', files].filter(Boolean).join(' · ');
+      return `<tr onclick="puOpenSupplier(${s.id})">
+        <td><b>${esc(s.name)}</b>${s.name_cn ? ` · ${esc(s.name_cn)}` : ''}${sub ? `<div class="sub">${sub}</div>` : ''}</td>
+        <td>${esc(s.contact_name || '—')}${s.contact_phone ? `<div class="sub pu2-num">${esc(s.contact_phone)}</div>` : ''}</td>
+        <td>${pay.length ? esc(pay[0]) : '—'}${pay[1] ? `<div class="sub">${esc(pay[1])}</div>` : ''}</td>
+        <td class="right pu2-num">${s.po_count || 0}${s.last_po_date ? `<div class="sub">${esc(s.last_po_date)}</div>` : ''}</td>
+        <td>${rateDots(s.rating)}</td>
+      </tr>`;
+    }).join('');
   }
-  window.puSupBack = function () { _sup = null; showSupPage(false); puLoadSuppliers(); };
+  window.puSupSeg = async function (seg) {
+    _supSeg = seg;
+    if (seg === 'disabled' && !_showDisabled) { _showDisabled = true; await loadSuppliers(); }
+    paint();
+  };
+  window.puSupFilter = renderSupplierRows;
 
-  window.puNewSupplier = function () { _sup = { id: null }; renderSupplierPage(); showSupPage(true); };
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  ONE SUPPLIER — form + paperwork + their orders
+  // ═══════════════════════════════════════════════════════════════════════════
+  window.puNewSupplier = function () { _sup = { id: null, is_active: true }; _screen = 'supplier'; paint(); };
   window.puOpenSupplier = async function (id) {
     try {
       const r = await api('/api/retail-admin/suppliers/' + id);
-      _sup = r.data;
-      renderSupplierPage();
-      showSupPage(true);
+      _sup = r.data; _screen = 'supplier'; paint();
     } catch (e) { toast(e.message, 'err'); }
   };
+  window.puBackSuppliers = async function () { _sup = null; _screen = 'suppliers'; await loadSuppliers(); paint(); };
 
-  function field(label, id, value, extra) {
-    return `<label style="font-size:13px">${label}<br><input type="text" id="${id}" value="${esc(value || '')}" ${extra || ''}></label>`;
-  }
-
-  function renderSupplierPage() {
+  const CH_OPTS = ['', 'taobao', 'alibaba', 'wechat', 'phone', 'website', 'other'];
+  function paintSupplier() {
     const s = _sup;
-    const el = document.getElementById('pu-sup-page');
-    el.innerHTML = `
-      <div class="row" style="gap:8px;align-items:center;margin-bottom:var(--s3);flex-wrap:wrap">
-        <button class="btn btn-sm" onclick="puSupBack()">← Back · 返回</button>
-        <h3 style="margin:0">${s.id ? esc(s.name) : 'New supplier · 新建供应商'}</h3>
-      </div>
-      <div class="row" style="gap:12px;flex-wrap:wrap;margin-bottom:var(--s3)">
-        ${field('Name · 名称', 'pu-s-name', s.name)}
-        ${field('中文名', 'pu-s-name-cn', s.name_cn)}
-        ${field('Contact · 联系人', 'pu-s-contact', s.contact_name)}
-        ${field('Phone · 电话', 'pu-s-phone', s.contact_phone)}
-        ${field('WeChat · 微信', 'pu-s-wechat', s.contact_wechat)}
-      </div>
-      <div class="row" style="gap:12px;flex-wrap:wrap;margin-bottom:var(--s3)">
-        ${field('Payment terms · 付款条件', 'pu-s-terms', s.payment_terms, 'list="pu-terms-list"')}
-        ${field('Payment method · 付款方式', 'pu-s-method', s.payment_method, 'list="pu-method-list"')}
-        <label style="font-size:13px">Channel · 渠道<br>
-          <select id="pu-s-chtype">
-            ${['', 'taobao', 'alibaba', 'wechat', 'phone', 'website', 'other'].map(v =>
-              `<option value="${v}"${(s.channel_type || '') === v ? ' selected' : ''}>${v || '—'}</option>`).join('')}
-          </select></label>
-        ${field('Channel link · 渠道链接', 'pu-s-chlink', s.channel_link, 'style="width:260px"')}
-        <label style="font-size:13px">Rating · 评分<br>
-          <select id="pu-s-rating">${[0, 1, 2, 3, 4, 5].map(v =>
-            `<option value="${v}"${(s.rating || 0) === v ? ' selected' : ''}>${'★'.repeat(v) || '—'}</option>`).join('')}</select></label>
-      </div>
-      <datalist id="pu-terms-list"><option value="Prepay 预付"></option><option value="COD 货到付款"></option><option value="Net 15"></option><option value="Net 30"></option></datalist>
-      <datalist id="pu-method-list"><option value="WeChat 微信"></option><option value="Alipay 支付宝"></option><option value="Bank 银行转账"></option><option value="Cash 现金"></option></datalist>
-      <div class="row" style="gap:12px;flex-wrap:wrap;margin-bottom:var(--s3)">
-        <label style="font-size:13px">Products supplied · 供应商品<br>
-          <textarea id="pu-s-products" rows="2" style="width:min(420px,90vw)">${esc(s.products_supplied || '')}</textarea></label>
-        <label style="font-size:13px">Price notes · 价格备注<br>
-          <textarea id="pu-s-prices" rows="2" style="width:min(420px,90vw)">${esc(s.price_info || '')}</textarea></label>
-        <label style="font-size:13px">Notes · 备注<br>
-          <textarea id="pu-s-notes" rows="2" style="width:min(420px,90vw)">${esc(s.notes || '')}</textarea></label>
-      </div>
-      <div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:var(--s4)">
-        <button class="btn btn-primary" data-cap="purchasing:edit" onclick="puSaveSupplier()">Save · 保存</button>
-        ${s.id ? `<button class="btn" data-cap="purchasing:edit" style="color:${s.is_active ? '#b03030' : '#1e7d3c'}" onclick="puToggleSupplierActive()">${s.is_active ? 'Disable · 停用' : 'Enable · 启用'}</button>` : ''}
+    root().innerHTML = `
+      <div class="pu2-wizhead">
+        ${backBtn(T('Suppliers', '供应商'), 'puBackSuppliers()')}
+        <h1>${s.id ? esc(s.name) : esc(T('New supplier', '新建供应商'))}</h1>
+        ${s.id && !s.is_active ? `<span class="pu2-pill grey">${esc(T('Disabled', '已停用'))}</span>` : ''}
       </div>
 
-      ${s.id ? `
-      <div style="border:1px solid var(--border,#e0ddd5);border-radius:8px;padding:10px 12px;max-width:640px;margin-bottom:var(--s4)">
-        <b style="font-size:13px">Documents · 资质文件</b>
-        <div id="pu-s-docs" style="margin-top:6px;font-size:13px">
-          ${(s.documents || []).length ? s.documents.map(d => `
-            <div class="row" style="gap:8px;align-items:center;padding:4px 0">
-              <span class="muted" style="font-size:11px;min-width:74px">${esc(d.kind)}</span>
-              <span style="flex:1">${esc(d.label || d.filename || 'file')}</span>
-              <button class="btn btn-sm" onclick="puViewDoc(${d.id})">View · 查看</button>
-              <button class="btn btn-sm" data-cap="purchasing:edit" onclick="puDeleteDoc(${d.id})">✕</button>
-            </div>`).join('') : '<div class="muted">None yet · 暂无</div>'}
+      <div class="pu2-card pu2-formcard">
+        <div class="pu2-fgroup">
+          <div class="pu2-kicker">${esc(T('Who they are', '基本信息'))}</div>
+          <div class="pu2-fgrid">
+            <label class="pu2-f"><span class="lbl">${esc(T('Name', '名称'))}</span><input class="pu2-input" id="pu2-s-name" value="${esc(s.name || '')}"><span class="hint">${esc(T('The only thing we need to save.', '唯一必填项。'))}</span></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('中文名', '中文名'))}</span><input class="pu2-input" id="pu2-s-namecn" value="${esc(s.name_cn || '')}"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('What they supply', '供应商品'))}</span><input class="pu2-input" id="pu2-s-supplies" value="${esc(s.products_supplied || '')}" placeholder="${esc(T('e.g. tofu, soy milk, miso', '如:豆腐、豆浆、味噌'))}"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Contact person', '联系人'))}</span><input class="pu2-input" id="pu2-s-contact" value="${esc(s.contact_name || '')}"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Phone', '电话'))}</span><input class="pu2-input" id="pu2-s-phone" value="${esc(s.contact_phone || '')}"></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('WeChat', '微信'))}</span><input class="pu2-input" id="pu2-s-wechat" value="${esc(s.contact_wechat || '')}"></label>
+          </div>
         </div>
-        <div class="row" style="gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap" data-cap="purchasing:edit">
-          <select id="pu-doc-kind">
-            <option value="license">License · 营业执照</option>
-            <option value="permit">Permit · 许可证</option>
-            <option value="payment_qr">Payment QR · 收款码</option>
-            <option value="other">Other · 其他</option>
-          </select>
-          <input type="text" id="pu-doc-label" placeholder="Label · 说明" style="width:150px">
-          <input type="file" id="pu-doc-file" accept="image/*,application/pdf" style="max-width:220px">
-          <button class="btn btn-sm" onclick="puUploadDoc()">Upload · 上传</button>
+
+        <div class="pu2-fgroup">
+          <div class="pu2-kicker">${esc(T('How you pay them', '付款方式'))}</div>
+          <div class="pu2-fgrid">
+            <label class="pu2-f"><span class="lbl">${esc(T('When', '付款时点'))}</span><input class="pu2-input" id="pu2-s-terms" list="pu2-terms" value="${esc(s.payment_terms || '')}"><span class="hint">${esc(T('Prepay · On delivery · Net 15 · Net 30', '预付 · 货到付款 · 月结15 · 月结30'))}</span></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('How', '付款渠道'))}</span><input class="pu2-input" id="pu2-s-method" list="pu2-methods" value="${esc(s.payment_method || '')}"><span class="hint">${esc(T('WeChat · Alipay · Bank transfer · Cash', '微信 · 支付宝 · 银行转账 · 现金'))}</span></label>
+          </div>
+        </div>
+
+        <div class="pu2-fgroup">
+          <div class="pu2-kicker">${esc(T('Where you order', '采购渠道'))}</div>
+          <div class="pu2-fgrid">
+            <label class="pu2-f"><span class="lbl">${esc(T('Ordering channel', '渠道'))}</span>
+              <select class="pu2-input" id="pu2-s-chtype">${CH_OPTS.map(v => `<option value="${v}"${(s.channel_type || '') === v ? ' selected' : ''}>${v || T('—', '—')}</option>`).join('')}</select></label>
+            <label class="pu2-f"><span class="lbl">${esc(T('Link', '链接'))}</span><input class="pu2-input" id="pu2-s-chlink" value="${esc(s.channel_link || '')}" placeholder="${esc(T('Shop or catalogue URL', '店铺或目录链接'))}"></label>
+            ${s.id ? `<label class="pu2-f"><span class="lbl">${esc(T('Rating', '评分'))}</span>
+              <select class="pu2-input" id="pu2-s-rating">${[0, 1, 2, 3, 4, 5].map(v => `<option value="${v}"${(s.rating || 0) === v ? ' selected' : ''}>${v ? '★'.repeat(v) : T('Not rated yet', '暂未评分')}</option>`).join('')}</select>
+              <span class="hint">${esc(T('Rate them after you’ve worked together.', '合作之后再评分。'))}</span></label>` : ''}
+            <label class="pu2-f" style="grid-column:1 / -1"><span class="lbl">${esc(T('Notes', '备注'))}</span><textarea class="pu2-input" id="pu2-s-notes" rows="2" placeholder="${esc(T('Minimum order, delivery days, price quirks…', '起订量、送货日、价格说明……'))}">${esc(s.notes || '')}</textarea></label>
+          </div>
+        </div>
+
+        <datalist id="pu2-terms"><option value="Prepay 预付"></option><option value="COD 货到付款"></option><option value="Net 15"></option><option value="Net 30"></option></datalist>
+        <datalist id="pu2-methods"><option value="WeChat 微信"></option><option value="Alipay 支付宝"></option><option value="Bank 银行转账"></option><option value="Cash 现金"></option></datalist>
+
+        <div class="pu2-wizfoot">
+          ${s.id ? `<button class="pu2-btn ${s.is_active ? 'danger' : ''}" data-cap="purchasing:edit" onclick="puSupToggle()">${s.is_active ? esc(T('Disable', '停用')) : esc(T('Enable', '启用'))}</button>` : `<button class="pu2-btn ghost" onclick="puBackSuppliers()">${esc(T('Cancel', '取消'))}</button>`}
+          <span class="spacer"></span>
+          <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puSupSave()">${esc(T('Save supplier', '保存'))}</button>
         </div>
       </div>
 
-      <div style="border:1px solid var(--border,#e0ddd5);border-radius:8px;padding:10px 12px;max-width:640px">
-        <b style="font-size:13px">Recent POs · 最近采购单</b>
-        <div style="margin-top:6px;font-size:13px">
-          ${(s.recent_pos || []).length ? s.recent_pos.map(p => `
-            <div class="row" style="gap:8px;align-items:center;padding:3px 0;cursor:pointer"
-                 onclick="puShowView('pos');puOpenPO(${p.id})">
-              <b>${esc(p.po_number)}</b><span class="muted">${esc(p.date || '')}</span>
-              <span style="flex:1;text-align:right">${money(p.total)}</span>${chip(p.status)}
-            </div>`).join('') : '<div class="muted">None yet · 暂无</div>'}
-        </div>
-      </div>` : ''}`;
-    try { applyCapGates(); } catch (_) {}
+      ${s.id ? supplierExtras(s) : ''}`;
   }
+  function supplierExtras(s) {
+    return `
+      <div class="pu2-card pu2-block">
+        <b>${esc(T('Paperwork', '资质文件'))}</b>
+        <div class="pu2-docs">
+          ${(s.documents || []).length ? s.documents.map(d => `
+            <div class="pu2-docrow">
+              <span class="sub" style="min-width:74px">${esc(d.kind)}</span>
+              <span style="flex:1">${esc(d.label || d.filename || 'file')}</span>
+              <button class="pu2-btn sm" onclick="puViewDoc(${d.id})">${esc(T('View', '查看'))}</button>
+              <button class="pu2-btn ghost sm" data-cap="purchasing:edit" onclick="puDeleteDoc(${d.id})">✕</button>
+            </div>`).join('') : `<div class="sub">${esc(T('None yet — licence, permits, payment QR. Drag a file in.', '暂无 —— 营业执照、许可证、收款码。拖入文件即可。'))}</div>`}
+        </div>
+        <div class="pu2-docadd" data-cap="purchasing:edit">
+          <select class="pu2-input" id="pu2-doc-kind">
+            <option value="license">${esc(T('License', '营业执照'))}</option>
+            <option value="permit">${esc(T('Permit', '许可证'))}</option>
+            <option value="payment_qr">${esc(T('Payment QR', '收款码'))}</option>
+            <option value="other">${esc(T('Other', '其他'))}</option>
+          </select>
+          <input class="pu2-input" type="text" id="pu2-doc-label" placeholder="${esc(T('Label', '说明'))}" style="width:150px">
+          <input type="file" id="pu2-doc-file" accept="image/*,application/pdf">
+          <button class="pu2-btn sm" onclick="puUploadDoc()">${esc(T('Upload', '上传'))}</button>
+        </div>
+      </div>
 
-  function supFormBody() {
+      <div class="pu2-card pu2-block">
+        <b>${esc(T('Orders with them', '与其采购单'))}</b>
+        <div class="pu2-recentpos">
+          ${(s.recent_pos || []).length ? s.recent_pos.map(p => `
+            <div class="pu2-recentpo" onclick="puOpenPO(${p.id})">
+              <b class="pu2-mono">${esc(p.po_number)}</b><span class="sub pu2-num">${esc(p.date || '')}</span>
+              <span style="flex:1;text-align:right" class="pu2-num">${money(p.total)}</span>${statusPill(p)}
+            </div>`).join('') : `<div class="sub">${esc(T('None yet.', '暂无。'))}</div>`}
+        </div>
+      </div>`;
+  }
+  function supBody() {
+    const v = id => (document.getElementById(id)?.value || '').trim();
     return {
-      name: document.getElementById('pu-s-name').value.trim(),
-      name_cn: document.getElementById('pu-s-name-cn').value.trim() || null,
-      contact_name: document.getElementById('pu-s-contact').value.trim() || null,
-      contact_phone: document.getElementById('pu-s-phone').value.trim() || null,
-      contact_wechat: document.getElementById('pu-s-wechat').value.trim() || null,
-      payment_terms: document.getElementById('pu-s-terms').value.trim() || null,
-      payment_method: document.getElementById('pu-s-method').value.trim() || null,
-      channel_type: document.getElementById('pu-s-chtype').value || null,
-      channel_link: document.getElementById('pu-s-chlink').value.trim() || null,
-      rating: parseInt(document.getElementById('pu-s-rating').value, 10) || 0,
-      products_supplied: document.getElementById('pu-s-products').value.trim() || null,
-      price_info: document.getElementById('pu-s-prices').value.trim() || null,
-      notes: document.getElementById('pu-s-notes').value.trim() || null,
+      name: v('pu2-s-name'),
+      name_cn: v('pu2-s-namecn') || null,
+      products_supplied: v('pu2-s-supplies') || null,
+      contact_name: v('pu2-s-contact') || null,
+      contact_phone: v('pu2-s-phone') || null,
+      contact_wechat: v('pu2-s-wechat') || null,
+      payment_terms: v('pu2-s-terms') || null,
+      payment_method: v('pu2-s-method') || null,
+      channel_type: document.getElementById('pu2-s-chtype')?.value || null,
+      channel_link: v('pu2-s-chlink') || null,
+      rating: document.getElementById('pu2-s-rating') ? parseInt(document.getElementById('pu2-s-rating').value, 10) || 0 : (_sup.rating || 0),
+      notes: v('pu2-s-notes') || null,
     };
   }
-
-  window.puSaveSupplier = async function () {
-    const body = supFormBody();
-    if (!body.name) { toast('Name is required · 名称必填', 'err'); return; }
+  window.puSupSave = async function () {
+    const body = supBody();
+    if (!body.name) { toast(T('Name is required', '名称必填'), 'err'); return; }
     try {
       if (_sup.id) await api('/api/retail-admin/suppliers/' + _sup.id, { method: 'PUT', body });
-      else {
-        const r = await api('/api/retail-admin/suppliers', { method: 'POST', body });
-        _sup.id = r.id;
-      }
-      toast('Saved ✓', 'ok');
+      else { const r = await api('/api/retail-admin/suppliers', { method: 'POST', body }); _sup.id = r.id; }
+      toast(T('Saved ✓', '已保存 ✓'), 'ok');
+      await loadSuppliers();
       puOpenSupplier(_sup.id);
     } catch (e) {
-      toast(e.code === 'name_taken' ? 'Name already exists · 名称已存在' : e.message, 'err');
+      toast(e.code === 'name_taken' ? T('Name already exists', '名称已存在') : e.message, 'err');
     }
   };
-
-  window.puToggleSupplierActive = async function () {
+  window.puSupToggle = async function () {
     if (!_sup?.id) return;
     try {
       await api('/api/retail-admin/suppliers/' + _sup.id, { method: 'PUT', body: { is_active: !_sup.is_active } });
-      toast('Saved ✓', 'ok');
+      toast(T('Saved ✓', '已保存 ✓'), 'ok');
+      await loadSuppliers();
       puOpenSupplier(_sup.id);
     } catch (e) { toast(e.message, 'err'); }
   };
-
   window.puUploadDoc = function () {
-    const file = document.getElementById('pu-doc-file').files[0];
-    if (!file) { toast('Choose a file first · 请先选择文件', 'err'); return; }
-    if (file.size > 10 * 1024 * 1024) { toast('Max 10MB · 最大10MB', 'err'); return; }
+    const file = document.getElementById('pu2-doc-file')?.files[0];
+    if (!file) { toast(T('Choose a file first', '请先选择文件'), 'err'); return; }
+    if (file.size > 10 * 1024 * 1024) { toast(T('Max 10MB', '最大10MB'), 'err'); return; }
     const reader = new FileReader();
     reader.onload = async () => {
       try {
         await api('/api/retail-admin/suppliers/' + _sup.id + '/documents', {
           method: 'POST',
           body: {
-            kind: document.getElementById('pu-doc-kind').value,
-            label: document.getElementById('pu-doc-label').value.trim() || null,
-            filename: file.name, mime_type: file.type, size_bytes: file.size,
-            data: reader.result,
+            kind: document.getElementById('pu2-doc-kind').value,
+            label: document.getElementById('pu2-doc-label').value.trim() || null,
+            filename: file.name, mime_type: file.type, size_bytes: file.size, data: reader.result,
           },
         });
-        toast('Uploaded ✓', 'ok');
+        toast(T('Uploaded ✓', '已上传 ✓'), 'ok');
         puOpenSupplier(_sup.id);
       } catch (e) { toast(e.message, 'err'); }
     };
     reader.readAsDataURL(file);
   };
-
   window.puViewDoc = async function (docId) {
     try {
       const r = await api('/api/retail-admin/suppliers/' + _sup.id + '/documents/' + docId);
@@ -693,7 +994,6 @@
         const img = document.getElementById('rv-lightbox-img');
         if (box && img) { img.src = d.data; box.style.display = 'flex'; return; }
       }
-      // PDFs / other files: hand the browser a blob URL in a new tab.
       const [head, b64] = d.data.split(',');
       const mime = d.mime_type || (head.match(/^data:([^;]+)/) || [])[1] || 'application/octet-stream';
       const bytes = atob(b64);
@@ -702,20 +1002,210 @@
       window.open(URL.createObjectURL(new Blob([arr], { type: mime })), '_blank');
     } catch (e) { toast(e.message, 'err'); }
   };
-
   window.puDeleteDoc = async function (docId) {
-    if (!confirm('Delete this document? · 确定删除该文件？')) return;
+    if (!confirm(T('Delete this document?', '确定删除该文件？'))) return;
     try {
       await api('/api/retail-admin/suppliers/' + _sup.id + '/documents/' + docId, { method: 'DELETE' });
-      toast('Deleted ✓', 'ok');
+      toast(T('Deleted ✓', '已删除 ✓'), 'ok');
       puOpenSupplier(_sup.id);
     } catch (e) { toast(e.message, 'err'); }
   };
 
-  // Close the product-picker dropdown on outside click.
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  IMPORT SUPPLIERS FROM CSV
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Column header → supplier field. Aliases keep it forgiving for hand-made files.
+  const CSV_MAP = {
+    name: 'name', 'name_cn': 'name_cn', 'chinese name': 'name_cn', '中文名': 'name_cn',
+    contact: 'contact_name', 'contact person': 'contact_name', 'contact_name': 'contact_name',
+    phone: 'contact_phone', tel: 'contact_phone', wechat: 'contact_wechat', weixin: 'contact_wechat',
+    'pay_when': 'payment_terms', terms: 'payment_terms', 'payment terms': 'payment_terms',
+    'pay_how': 'payment_method', method: 'payment_method', 'payment method': 'payment_method',
+    channel: 'channel_type', link: 'channel_link', url: 'channel_link',
+    supplies: 'products_supplied', products: 'products_supplied', notes: 'notes',
+  };
+  window.puImportOpen = function () { _imp = null; _screen = 'import'; paint(); };
+  window.puBackToSuppliers = async function () { _imp = null; _screen = 'suppliers'; await loadSuppliers(); paint(); };
+
+  function paintImport() {
+    root().innerHTML = `
+      <div class="pu2-wizhead">
+        ${backBtn(T('Suppliers', '供应商'), 'puBackToSuppliers()')}
+        <h1>${esc(T('Import suppliers', '导入供应商'))}</h1>
+      </div>
+      <div class="pu2-card" style="padding:6px 28px">
+        <div class="pu2-impsteps">
+          <div class="pu2-impstep">
+            <span class="n">1</span>
+            <div>
+              <h3>${esc(T('Download the template', '下载模板'))}</h3>
+              <p>${esc(T('A small spreadsheet with the right column names already in the first row. Open it in Excel, WPS or Numbers — it includes two example suppliers you can overwrite.', '一个已经在第一行写好列名的小表格。用 Excel、WPS 或 Numbers 打开 —— 里面有两个示例供应商,直接覆盖即可。'))}</p>
+              <button class="pu2-btn" onclick="puDownloadTemplate()"><span class="pu2-ic">${I.down}</span>${esc(T('Download template (.csv)', '下载模板 (.csv)'))}</button>
+              <div class="pu2-csvpeek"><b>name</b>, name_cn, contact, phone, wechat, pay_when, pay_how, channel, link, supplies, notes<br>Guangzhou Bean Works, , Mr. Liang, 13800000000, liang_beans, On delivery, WeChat, taobao, , tofu; soy milk, delivers Tue/Fri</div>
+            </div>
+          </div>
+          <div class="pu2-impstep">
+            <span class="n">2</span>
+            <div>
+              <h3>${esc(T('Fill it in — one supplier per row', '填写 —— 每行一个供应商'))}</h3>
+              <ul class="pu2-implist">
+                <li>${esc(T('Only the name column must be filled. Leave anything else empty.', '只有 name 列必填,其余可留空。'))}</li>
+                <li>${esc(T('Keep the first row (the column names) exactly as it is.', '保持第一行(列名)不变。'))}</li>
+                <li>${esc(T('Already have the supplier? Use the same name — we update it instead of making a double.', '已有该供应商?用相同名称 —— 我们会更新而不是新建重复项。'))}</li>
+                <li>${esc(T('When done: File → Save As → CSV. Excel may warn about the format — choose Keep.', '完成后:文件 → 另存为 → CSV。Excel 可能提示格式 —— 选择“保留”。'))}</li>
+              </ul>
+            </div>
+          </div>
+          <div class="pu2-impstep">
+            <span class="n">3</span>
+            <div style="flex:1;min-width:0">
+              <h3>${esc(T('Upload and check', '上传并核对'))}</h3>
+              <p>${esc(T('Choose your file. We show what will happen to every row — nothing is saved until you press Import.', '选择文件。我们会显示每一行将发生什么 —— 在你点击导入前不会保存任何内容。'))}</p>
+              <label class="pu2-drop">
+                <span class="pu2-ic big">${I.up}</span>
+                <b>${esc(T('Click to choose your CSV', '点击选择 CSV 文件'))}</b>
+                <span>${esc(T('Up to 1,000 rows · .csv only', '最多 1000 行 · 仅限 .csv'))}</span>
+                <input type="file" accept=".csv,text/csv" style="display:none" onchange="puCsvFile(this)">
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="pu2-imp-preview"></div>`;
+    if (_imp) renderImportPreview();
+  }
+
+  // Minimal RFC-ish CSV parser: handles quoted fields, commas + newlines inside
+  // quotes, and doubled "" escapes. Good enough for hand-made supplier sheets.
+  function parseCSV(text) {
+    const rows = [];
+    let row = [], field = '', inQ = false;
+    text = text.replace(/^﻿/, '');
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (inQ) {
+        if (c === '"') { if (text[i + 1] === '"') { field += '"'; i++; } else inQ = false; }
+        else field += c;
+      } else if (c === '"') inQ = true;
+      else if (c === ',') { row.push(field); field = ''; }
+      else if (c === '\r') { /* ignore */ }
+      else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+      else field += c;
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows.filter(r => r.some(c => String(c).trim() !== ''));
+  }
+
+  window.puCsvFile = function (input) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const grid = parseCSV(String(reader.result));
+        if (grid.length < 2) { toast(T('That file has no supplier rows.', '文件中没有供应商数据行。'), 'err'); return; }
+        const headers = grid[0].map(h => String(h).trim().toLowerCase());
+        const byName = new Map(_suppliers.map(s => [s.name.trim().toLowerCase(), s]));
+        const rows = grid.slice(0, 1001).slice(1).map((cells, idx) => {
+          const rec = {};
+          headers.forEach((h, ci) => { const f = CSV_MAP[h]; if (f) rec[f] = String(cells[ci] ?? '').trim() || null; });
+          const name = (rec.name || '').trim();
+          const existing = name ? byName.get(name.toLowerCase()) : null;
+          return {
+            line: idx + 2, rec, name,
+            action: !name ? 'skip' : (existing ? 'update' : 'new'),
+            existingId: existing ? existing.id : null,
+          };
+        });
+        _imp = { headers, rows, filename: file.name };
+        renderImportPreview();
+      } catch (e) { toast(e.message, 'err'); }
+    };
+    reader.readAsText(file);
+  };
+
+  function renderImportPreview() {
+    const host = document.getElementById('pu2-imp-preview');
+    if (!host || !_imp) return;
+    const rows = _imp.rows;
+    const news = rows.filter(r => r.action === 'new').length;
+    const upds = rows.filter(r => r.action === 'update').length;
+    const skips = rows.filter(r => r.action === 'skip').length;
+    const willImport = news + upds;
+    const badge = (cls, n, label) => n ? `<span class="pu2-pill ${cls}"><span class="dot"></span>${n} ${esc(label)}</span>` : '';
+    host.innerHTML = `
+      <div class="pu2-kicker">${esc(T('Check before importing', '导入前核对'))}</div>
+      <div class="pu2-card" style="padding:22px 28px">
+        <div><b>${esc(_imp.filename)}</b> — ${rows.length} ${esc(T('rows read.', '行已读取。'))}</div>
+        <div class="pu2-prevsum">
+          ${badge('sage', news, T('new', '新增'))}
+          ${badge('amber', upds, T('will update existing', '更新已有'))}
+          ${badge('brick', skips, T('skipped — no name', '跳过 —— 无名称'))}
+        </div>
+        <table class="pu2-tbl">
+          <thead><tr><th>${esc(T('Row', '行'))}</th><th>${esc(T('Supplier', '供应商'))}</th><th>${esc(T('Contact', '联系人'))}</th><th>${esc(T('You pay', '付款'))}</th><th>${esc(T('What happens', '结果'))}</th></tr></thead>
+          <tbody>
+            ${rows.map(r => {
+              const cls = r.action === 'new' ? 'prev-ok' : r.action === 'update' ? 'prev-upd' : 'prev-skip';
+              const pay = [r.rec.payment_terms, r.rec.payment_method].filter(Boolean).join(' · ');
+              const what = r.action === 'new'
+                ? `<span class="pu2-pill sage">${esc(T('New', '新增'))}</span>`
+                : r.action === 'update'
+                  ? `<span class="pu2-pill amber">${esc(T('Updates existing', '更新已有'))}</span>`
+                  : `<span class="pu2-pill brick">${esc(T('Skipped — name is empty', '跳过 —— 名称为空'))}</span>`;
+              return `<tr class="${cls}">
+                <td class="pu2-num">${r.line}</td>
+                <td>${esc(r.name || '—')}${r.rec.name_cn ? ` · ${esc(r.rec.name_cn)}` : ''}</td>
+                <td>${esc(r.rec.contact_name || '—')}${r.rec.contact_phone ? ` · <span class="pu2-num">${esc(r.rec.contact_phone)}</span>` : ''}</td>
+                <td>${pay ? esc(pay) : '—'}</td>
+                <td>${what}</td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+        <div class="pu2-wizfoot">
+          <button class="pu2-btn ghost" onclick="puImportOpen()">${esc(T('Choose a different file', '换一个文件'))}</button>
+          <span class="spacer"></span>
+          <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puImportRun()" ${willImport ? '' : 'disabled'}>${esc(T('Import', '导入'))} ${willImport} ${esc(T('suppliers', '个供应商'))}</button>
+        </div>
+      </div>`;
+    try { applyCapGates(); } catch (_) {}
+  }
+
+  window.puDownloadTemplate = function () {
+    const header = 'name,name_cn,contact,phone,wechat,pay_when,pay_how,channel,link,supplies,notes';
+    const ex1 = 'Guangzhou Bean Works,,Mr. Liang,13800000000,liang_beans,On delivery,WeChat,taobao,,tofu; soy milk,delivers Tue/Fri';
+    const ex2 = 'Fresh Fields Produce,,Ms. Chen,13900000000,,Net 15,Bank transfer,phone,,vegetables; herbs,';
+    const csv = '﻿' + [header, ex1, ex2].join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'suppliers-template.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+  };
+
+  window.puImportRun = async function () {
+    if (!_imp) return;
+    const jobs = _imp.rows.filter(r => r.action !== 'skip');
+    if (!jobs.length) return;
+    let ok = 0, fail = 0;
+    for (const r of jobs) {
+      const body = { ...r.rec, name: r.name };
+      try {
+        if (r.action === 'update' && r.existingId) await api('/api/retail-admin/suppliers/' + r.existingId, { method: 'PUT', body });
+        else await api('/api/retail-admin/suppliers', { method: 'POST', body });
+        ok++;
+      } catch (e) { fail++; }
+    }
+    toast(T(`Imported ${ok} suppliers`, `已导入 ${ok} 个供应商`) + (fail ? T(` · ${fail} failed`, ` · ${fail} 个失败`) : '') + ' ✓', fail ? 'err' : 'ok', 4000);
+    await loadSuppliers();
+    _imp = null; _screen = 'suppliers'; paint();
+  };
+
+  // Close the wizard product-picker on an outside click.
   document.addEventListener('click', (e) => {
-    const list = document.getElementById('pu-picker-list');
-    if (list && list.style.display !== 'none' && !e.target.closest('#pu-picker') && !e.target.closest('#pu-picker-list')) {
+    const list = document.getElementById('pu2-picker-list');
+    if (list && list.style.display !== 'none' && !e.target.closest('#pu2-picker') && !e.target.closest('#pu2-picker-list')) {
       list.style.display = 'none';
     }
   });

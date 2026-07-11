@@ -1055,22 +1055,14 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 6a3 3 0 0 1 0 5"/><path d="M18 20c0-2.4-1-4.2-2.5-5"/></svg>
     Customers · 顾客
   </button>
-  <!-- Products → Purchasing (sub). Categories left the rail on 2026-07-10 — it
-       is now a sub-view of Products, beside Stock activity, because a shelf is
-       a fact about the catalogue, not a place of its own. -->
-  <div class="tabs-group nav-parent" data-group="products" style="order:9">
-    <button class="nav-parent-link" data-tab="products">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l8-4 8 4-8 4-8-4z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></svg>
-      Products · 产品
-      <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-    </button>
-    <div class="tabs-popover">
-      <button data-tab="purchasing" onclick="puInit()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        Purchasing · 采购
-      </button>
-    </div>
-  </div>
+  <!-- Products. Categories (2026-07-10) and Purchasing (2026-07-11) are both
+       sub-views of Products now — reached from the sub-view tabs on the page,
+       not the rail — because a shelf and a supplier order are facts about the
+       catalogue, not places of their own. So Products is a plain rail link. -->
+  <button data-tab="products" style="order:9">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l8-4 8 4-8 4-8-4z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></svg>
+    Products · 产品
+  </button>
 
   <!-- Editor → Content pages. The parent opens the Mini App Editor (embedded
        /cms); its children are the mini-app content surfaces folded in from the
@@ -2903,10 +2895,11 @@
          active one; the amber dot appears when something hit zero today.
          Hidden entirely for operators without activity:view — their Products
          page looks exactly as before. -->
-    <div class="stk-views" id="stk-views" data-cap="activity:view categories:view">
+    <div class="stk-views" id="stk-views" data-cap="activity:view categories:view purchasing:view">
       <button type="button" class="stk-view on" id="stk-view-btn-catalog" onclick="prodShowView('catalog')">Catalogue · 目录</button>
       <button type="button" class="stk-view" id="stk-view-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')"><i class="stk-view-dot" id="stk-view-dot" hidden></i>Stock activity · 库存流水</button>
       <button type="button" class="stk-view" id="stk-view-btn-categories" data-cap="categories:view" onclick="prodShowView('categories')">Categories · 分类</button>
+      <button type="button" class="stk-view" id="stk-view-btn-purchasing" data-cap="purchasing:view" onclick="prodShowView('purchasing')">Purchasing · 采购</button>
     </div>
 
     <div id="prod-view-catalog">
@@ -3471,6 +3464,17 @@
       <div class="cat2-pane" id="cat2-pane" data-no-i18n></div>
     </div>
     </div><!-- /#prod-view-categories -->
+
+    <!-- Purchasing — the store's buying department, folded into Products
+         2026-07-11 (a supplier order is a fact about the catalogue). The whole
+         surface is painted by 16-purchasing.js into #pu2-root; screens (orders
+         ledger / new-order wizard / receiving / suppliers / supplier form /
+         CSV import) swap inside it. data-no-i18n because every string is
+         already written in the live language by cuT() — the bilingual walker
+         must keep its hands off. -->
+    <div id="prod-view-purchasing" style="display:none">
+      <div id="pu2-root" data-no-i18n></div>
+    </div><!-- /#prod-view-purchasing -->
 
     <!-- ─── Guided product wizard (additive; lives inside the Products tab so tab-switching never hides it) ─── -->
     <div id="pw-bg" class="pu-editor-bg">
@@ -8731,104 +8735,9 @@
        (#prod-view-activity, 2026-07-10) — same ids, same JS (13-activity.js),
        reached from the "Stock activity" tab / the four stock cards there. -->
 
-  <section id="tab-purchasing">
-    <h2>Purchasing · 采购</h2>
-    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      The store's buying department. Keep supplier records, raise purchase orders, and receive goods — received quantities go straight into store stock and sync out to every sales channel. Order costs post to Finance automatically.
-    </p>
-    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      门店采购部。管理供应商档案、创建采购单、收货入库 —— 收货数量直接计入门店库存并同步到各销售渠道。采购金额自动记入财务支出。
-    </p>
-
-    <!-- Sub-view switch: purchase orders ↔ suppliers -->
-    <div class="row" style="gap:8px;margin-bottom:var(--s4);flex-wrap:wrap">
-      <button id="pu-nav-pos" class="btn btn-sm btn-primary" onclick="puShowView('pos')">Purchase orders · 采购单</button>
-      <button id="pu-nav-suppliers" class="btn btn-sm" onclick="puShowView('suppliers')">Suppliers · 供应商</button>
-    </div>
-
-    <!-- ── Purchase orders ── -->
-    <div id="pu-view-pos">
-      <div class="fc-kpis" id="pu-kpis">
-        <div class="fc-kpi accent">
-          <div class="lbl">Open POs · 进行中</div>
-          <div class="val" id="pu-kpi-open">—</div>
-          <div class="sub">requested + ordered · 待订+已订</div>
-        </div>
-        <div class="fc-kpi">
-          <div class="lbl">Awaiting goods · 待收货</div>
-          <div class="val" id="pu-kpi-awaiting">—</div>
-          <div class="sub">ordered, not received · 已下单未到货</div>
-        </div>
-        <div class="fc-kpi">
-          <div class="lbl">This month · 本月采购</div>
-          <div class="val" id="pu-kpi-month">—</div>
-          <div class="sub" id="pu-kpi-month-sub">posted to Finance · 已记入财务</div>
-        </div>
-        <div class="fc-kpi">
-          <div class="lbl">Suppliers · 供应商</div>
-          <div class="val" id="pu-kpi-suppliers">—</div>
-          <div class="sub">active · 启用中</div>
-        </div>
-      </div>
-
-      <div id="pu-pos-list">
-        <div class="pa-toolbar">
-          <input id="pu-search" type="text" placeholder="Search PO / supplier / product · 搜索采购单/供应商/商品" oninput="puFilterPOs()">
-          <select id="pu-filter-status" onchange="puFilterPOs()">
-            <option value="">All statuses · 全部状态</option>
-            <option value="Requested">Requested · 待下单</option>
-            <option value="Ordered">Ordered · 已下单</option>
-            <option value="Delivered">Delivered · 已到货</option>
-            <option value="Cancelled">Cancelled · 已取消</option>
-          </select>
-          <select id="pu-filter-store" onchange="puFilterPOs()" hidden></select>
-          <div id="pu-count" class="pa-count"></div>
-          <button class="btn btn-sm btn-primary" data-cap="purchasing:edit" onclick="puNewPO()">+ New PO · 新建采购单</button>
-        </div>
-        <div style="overflow-x:auto">
-          <table class="data-table" style="min-width:760px;font-size:13px">
-            <thead><tr>
-              <th>PO · 单号</th><th>Date · 日期</th><th>Supplier · 供应商</th><th>Store · 门店</th>
-              <th style="text-align:right">Lines · 行</th><th style="text-align:right">Total · 金额</th><th>Status · 状态</th>
-            </tr></thead>
-            <tbody id="pu-pos-body">
-              <tr><td colspan="7" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- One PO — create/edit/receive; rendered by 15-purchasing.js -->
-      <div id="pu-po-page" style="display:none"></div>
-    </div>
-
-    <!-- ── Suppliers ── -->
-    <div id="pu-view-suppliers" style="display:none">
-      <div id="pu-sup-list">
-      <div class="pa-toolbar">
-        <input id="pu-sup-search" type="text" placeholder="Search suppliers · 搜索供应商" oninput="puRenderSuppliers()">
-        <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
-          <input type="checkbox" id="pu-sup-inactive" onchange="puLoadSuppliers(true)"> Show disabled · 显示停用
-        </label>
-        <div id="pu-sup-count" class="pa-count"></div>
-        <button class="btn btn-sm btn-primary" data-cap="purchasing:edit" onclick="puNewSupplier()">+ New supplier · 新建供应商</button>
-      </div>
-      <div style="overflow-x:auto">
-        <table class="data-table" style="min-width:720px;font-size:13px">
-          <thead><tr>
-            <th>Supplier · 供应商</th><th>Contact · 联系人</th><th>Terms · 付款条件</th>
-            <th>Channel · 渠道</th><th style="text-align:right">POs · 采购单</th><th>Rating · 评分</th>
-          </tr></thead>
-          <tbody id="pu-sup-body">
-            <tr><td colspan="6" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
-      </div>
-      <!-- One supplier — edit form + documents; rendered by 15-purchasing.js -->
-      <div id="pu-sup-page" style="display:none"></div>
-    </div>
-  </section>
+  <!-- Purchasing moved into Products as a sub-view (#prod-view-purchasing,
+       2026-07-11). Its whole UI is rendered by 16-purchasing.js into #pu2-root
+       up there; no standalone section lives here any more. -->
 
   <section id="tab-guanyi">
     <h2>gzgrocery 同步 · Guanyi Sync</h2>

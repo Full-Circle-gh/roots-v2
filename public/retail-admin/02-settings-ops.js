@@ -1100,6 +1100,19 @@ async function loadIntegrationsStatus() {
                    view: 'categories',
                    kw: 'categories category shelves subcategory tree rail sections 分类 子分类 categories' });
     }
+    // 1d) Purchasing folded into Products 2026-07-11 (was a rail tab) — hand-index
+    // it, and "Suppliers", so both still surface in search after the move.
+    if (document.getElementById('prod-view-purchasing')
+        && (typeof can !== 'function' || (can('products:view') && can('purchasing:view')))) {
+      items.push({ type: 'page', title: cuT('Purchasing', '采购'),
+                   crumb: cuT('Products', '产品'), tab: 'products', sub: null, anchor: null,
+                   view: 'purchasing',
+                   kw: 'purchasing purchase orders po buying restock receive goods 采购 采购单 进货' });
+      items.push({ type: 'page', title: cuT('Suppliers', '供应商'),
+                   crumb: cuT('Products', '产品'), tab: 'products', sub: null, anchor: null,
+                   view: 'purchasing',
+                   kw: 'suppliers vendor supplier contacts import csv 供应商 供货商' });
+    }
     // 2) External editor launchers in the Content group (open in a new tab)
     document.querySelectorAll('.tabs-popover button[onclick*="window.open"]').forEach(btn => {
       if (gatedOff(btn)) return;

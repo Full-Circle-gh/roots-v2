@@ -400,8 +400,12 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 // falls back to the catalogue rather than showing an empty pane.
 function prodShowView(view) {
   const allowed = (v, cap) => v === view && (typeof can !== 'function' || can(cap));
-  if (!allowed('activity', 'activity:view') && !allowed('categories', 'categories:view')) view = 'catalog';
-  const panes = { catalog: 'prod-view-catalog', activity: 'prod-view-activity', categories: 'prod-view-categories' };
+  if (!allowed('activity', 'activity:view') && !allowed('categories', 'categories:view')
+      && !allowed('purchasing', 'purchasing:view')) view = 'catalog';
+  const panes = {
+    catalog: 'prod-view-catalog', activity: 'prod-view-activity',
+    categories: 'prod-view-categories', purchasing: 'prod-view-purchasing',
+  };
   for (const [v, id] of Object.entries(panes)) {
     const el = document.getElementById(id);
     if (el) el.style.display = v === view ? '' : 'none';
@@ -412,6 +416,8 @@ function prodShowView(view) {
   if (view === 'activity' && typeof actAdminInit === 'function') actAdminInit();
   // The tree is fetched the first time the shelf is opened, never before.
   if (view === 'categories' && typeof catLoad === 'function' && !catLoaded) catLoad();
+  // Purchasing owns its own lazy-load + refresh (puInit is idempotent).
+  if (view === 'purchasing' && typeof puInit === 'function') puInit();
 }
 
 // ── The four stock cards — moves / out / in / hit zero, today, all channels.
