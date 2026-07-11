@@ -1020,18 +1020,19 @@ function tdInit() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// ARRANGE MODE — the dashboard as the operator's own space.
-// Each top-level surface is a .td-block[data-block]; the operator can drag
-// them into any order and hide the ones they don't want. The order + hidden
-// set persist per user in localStorage (same convention as the Orders /
-// Products view tweaks). The dynamic #td-attn card grid keeps rebuilding
-// inside its block untouched, so live updates survive any arrangement.
+// SELF-ARRANGING BENTO — the dashboard as the operator's own space.
+// Rebuilt from the dashboard-bento mockup. Each .td-block[data-block]
+// declares the shapes it may take; a small packing solver picks one
+// shape per VISIBLE block so every row fills the six-column grid,
+// whatever the operator hides or reorders. The block is then placed
+// absolutely at the solved rect and its content adapts to the shape
+// via [data-tier] (retail-admin.css). Order + hidden set persist per
+// user; live data keeps landing in the blocks' inner ids untouched.
+// Proven to tile every subset with no gap/overlap (headless solver test).
 // ════════════════════════════════════════════════════════════════
-// Key bumped to -v2 when the dashboard became section blocks: a saved order
-// from before names a "revenue" block that no longer exists, and would strand
-// the four new blocks at the tail. A fresh key hands everyone the new default
-// once; their own arrangement then re-saves over it.
-const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v2';
+// Key bumped to -v3: the saved shape is now solver-chosen, so a stored
+// order/hidden set stays valid but everyone gets the fresh default once.
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v3';
 const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'customers', 'inventory', 'delivery', 'channels'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
@@ -1043,8 +1044,28 @@ const DASH_BLOCK_TITLES = {
   delivery:  ['Delivery', '配送'],
   channels:  ['Channels today', '今日渠道'],
 };
+
+// The grid: six columns, 16px gutters, 120px row unit (h1 = 120, h2 = 256).
+const DASH_COLS = 6, DASH_GAP = 16, DASH_ROW = 120;
+// Shape menus [w,h] in grid units, preferred first. recap/needs/orders prefer
+// tall shapes so the default gives them height; every block keeps {2,3,4}-wide
+// options so exact 6-unit partitions always exist. Tuned + headless-verified.
+const DASH_SHAPES = {
+  recap:     [[6,2],[4,2],[3,2],[6,1],[4,1],[3,1],[2,1]],
+  needs:     [[6,2],[4,2],[3,2],[6,1],[4,1],[3,1],[2,1]],
+  orders:    [[4,2],[3,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
+  customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
+  inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
+  delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
+  channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
+};
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, delivery: 1, channels: 2 };
+
 let DASH_ARRANGING = false;
-let _dashDragBlock = null;
+let DASH_ORDER = [...DASH_BLOCK_DEFAULT];
+let DASH_HIDDEN = new Set();
+let _dashRects = {};
+let _dashDrag = null;
 
 function dashLayoutLoad() {
   try {
@@ -1055,46 +1076,171 @@ function dashLayoutLoad() {
 function dashLayoutSave(order, hidden) {
   try { localStorage.setItem(DASH_LAYOUT_KEY, JSON.stringify({ order, hidden })); } catch (e) {}
 }
-// Persist whatever the DOM currently shows (order of blocks + which are hidden).
-function dashArrangePersist() {
-  const host = document.getElementById('td-blocks'); if (!host) return;
-  const blocks = [...host.querySelectorAll('.td-block')];
-  const order  = blocks.map(b => b.dataset.block);
-  const hidden = blocks.filter(b => b.classList.contains('is-hidden')).map(b => b.dataset.block);
-  dashLayoutSave(order, hidden);
+function dashArrangePersist() { dashLayoutSave(DASH_ORDER, [...DASH_HIDDEN]); }
+
+// ── the packing solver (identical algorithm to the mockup) ──────────────────
+function dashPrefScore(id, w, h) {
+  const S = DASH_SHAPES[id]; if (!S) return null;
+  const i = S.findIndex(s => s[0] === w && s[1] === h);
+  if (i < 0) return null;
+  // preference order primary; priority only nudges area as a tiebreak
+  return (S.length - i) * 20 + (DASH_PRI[id] || 1) * (w * h);
+}
+function dashGenBands(ids, i, emit) {
+  (function rec1(k, cells, sum, score) {
+    if (k >= ids.length) return;
+    for (const [w, h] of DASH_SHAPES[ids[k]]) {
+      if (h !== 1) continue;
+      const s2 = sum + w; if (s2 > DASH_COLS) continue;
+      const sc = score + dashPrefScore(ids[k], w, 1);
+      const cl = cells.concat([{ idx: k, w }]);
+      if (s2 >= 2) emit({ h: 1, cells: cl, sum: s2, score: sc - (DASH_COLS - s2) * 70, next: k + 1 });
+      rec1(k + 1, cl, s2, sc);
+    }
+  })(i, [], 0, 0);
+  (function rec2(k, slots, sum, score) {
+    if (slots.length && sum >= 4) emit({ h: 2, slots, sum, score: score - (DASH_COLS - sum) * 70, next: k });
+    if (k >= ids.length || sum >= DASH_COLS) return;
+    const a = ids[k];
+    for (const [w, h] of DASH_SHAPES[a]) {
+      if (h !== 2 || sum + w > DASH_COLS) continue;
+      rec2(k + 1, slots.concat([{ type: 'one', idx: k, w }]), sum + w, score + dashPrefScore(a, w, 2));
+    }
+    if (k + 1 < ids.length) {
+      const b = ids[k + 1];
+      const aw = new Set(DASH_SHAPES[a].filter(s => s[1] === 1).map(s => s[0]));
+      for (const [w, h] of DASH_SHAPES[b]) {
+        if (h !== 1 || !aw.has(w) || sum + w > DASH_COLS) continue;
+        rec2(k + 2, slots.concat([{ type: 'pair', a: k, b: k + 1, w }]), sum + w,
+          score + dashPrefScore(a, w, 1) + dashPrefScore(b, w, 1) + 6);
+      }
+    }
+  })(i, [], 0, 0);
+}
+function dashSolve(ids) {
+  const N = ids.length, memo = new Array(N + 1);
+  function best(i) {
+    if (i === N) return { score: 0, bands: [] };
+    if (memo[i] !== undefined) return memo[i];
+    let bs = null; const opts = [];
+    dashGenBands(ids, i, b => opts.push(b));
+    for (const b of opts) {
+      const r = best(b.next); if (!r) continue;
+      const sc = b.score + r.score;
+      if (!bs || sc > bs.score) bs = { score: sc, bands: [b].concat(r.bands) };
+    }
+    return (memo[i] = bs);
+  }
+  return best(0);
+}
+function dashTier(uw, uh) {
+  if (uh === 1) return uw <= 3 ? 'a' : 'b';
+  if (uw === 2) return 'c';
+  if (uw === 3) return 'd';
+  return 'e';
 }
 
-// Reorder the blocks in the DOM to the saved order and apply the hidden set.
-// Any block missing from the saved order keeps its markup order at the tail
-// (new blocks added in a future release surface rather than vanish).
-function dashArrangeApply() {
-  const host = document.getElementById('td-blocks'); if (!host) return;
-  const { order, hidden } = dashLayoutLoad();
-  const seq = (order && order.length) ? order : DASH_BLOCK_DEFAULT;
-  seq.forEach(key => {
-    const el = host.querySelector(`.td-block[data-block="${key}"]`);
-    if (el) host.appendChild(el);   // re-append in saved order
-  });
-  const hide = new Set(hidden || []);
+// ── solve the current visible set into pixel rectangles ─────────────────────
+function dashComputeRects() {
+  const host = document.getElementById('td-blocks');
+  if (!host) return { rects: {}, height: 0 };
+  // A block with nothing to say marks itself .is-quiet (e.g. Needs-you on a
+  // calm day) and drops out of the layout — unless arranging, where quiet
+  // blocks reappear dimmed so they can still be reordered.
+  const present = new Set([...host.querySelectorAll('.td-block')]
+    .filter(b => DASH_ARRANGING || !b.classList.contains('is-quiet'))
+    .map(b => b.dataset.block));
+  const ids = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && present.has(id));
+  if (!ids.length) return { rects: {}, height: 0 };
+  let sol = dashSolve(ids);
+  if (!sol) sol = { bands: ids.map((id, k) => ({ h: 1, cells: [{ idx: k, w: 6 }], sum: 6, next: k + 1 })) };
+  const W = host.clientWidth || 1088;
+  const unit = (W - (DASH_COLS - 1) * DASH_GAP) / DASH_COLS;
+  const rects = {}; let y = 0;
+  for (const band of sol.bands) {
+    const slots = band.h === 1
+      ? band.cells.map(c => ({ units: c.w, parts: [{ idx: c.idx, row: 0, rows: 1 }] }))
+      : band.slots.map(s => s.type === 'one'
+          ? { units: s.w, parts: [{ idx: s.idx, row: 0, rows: 2 }] }
+          : { units: s.w, parts: [{ idx: s.a, row: 0, rows: 1 }, { idx: s.b, row: 1, rows: 1 }] });
+    const n = slots.length, avail = W - (n - 1) * DASH_GAP; let x = 0;
+    for (const slot of slots) {
+      const wpx = band.sum === DASH_COLS ? slot.units * unit + (slot.units - 1) * DASH_GAP : avail * slot.units / band.sum;
+      const effW = Math.max(2, Math.min(6, Math.round((wpx + DASH_GAP) / (unit + DASH_GAP))));
+      for (const part of slot.parts) {
+        rects[ids[part.idx]] = {
+          x, y: y + part.row * (DASH_ROW + DASH_GAP), w: wpx,
+          h: part.rows * DASH_ROW + (part.rows - 1) * DASH_GAP,
+          tier: dashTier(effW, part.rows),
+        };
+      }
+      x += wpx + DASH_GAP;
+    }
+    y += (band.h === 2 ? 2 * DASH_ROW + DASH_GAP : DASH_ROW) + DASH_GAP;
+  }
+  return { rects, height: Math.max(0, y - DASH_GAP) };
+}
+
+// Paint the solved layout: absolutely position every visible block, tag its
+// tier for the adaptive CSS, and hide the rest. skipId keeps a block being
+// dragged under the pointer (its left/top are driven by the drag instead).
+function dashRender(skipId) {
+  const host = document.getElementById('td-blocks');
+  if (!host) return;
+  // Below the bento's comfortable width the solver is bypassed (CSS stacks the
+  // blocks in one column); clear inline geometry so the stylesheet can.
+  if (window.matchMedia && window.matchMedia('(max-width: 1000px)').matches) {
+    host.style.height = '';
+    host.querySelectorAll('.td-block').forEach(el => {
+      el.classList.toggle('is-hidden', DASH_HIDDEN.has(el.dataset.block));
+      el.style.left = el.style.top = el.style.width = el.style.height = '';
+      el.removeAttribute('data-tier');
+    });
+    host.classList.add('td-solved');
+    dashArrangeTray();
+    return;
+  }
+  const { rects, height } = dashComputeRects();
+  _dashRects = rects;
+  host.style.height = height + 'px';
   host.querySelectorAll('.td-block').forEach(el => {
-    el.classList.toggle('is-hidden', hide.has(el.dataset.block));
+    // is-hidden tracks the user's hide only; .is-quiet (auto-empty) keeps its
+    // own class so a block that fills again isn't stranded hidden.
+    el.classList.toggle('is-hidden', DASH_HIDDEN.has(el.dataset.block));
+    const r = rects[el.dataset.block];
+    if (!r) { el.style.left = el.style.top = el.style.width = el.style.height = ''; el.removeAttribute('data-tier'); return; }
+    el.dataset.tier = r.tier;
+    if (el.dataset.block === skipId) return;
+    el.style.left = r.x + 'px'; el.style.top = r.y + 'px';
+    el.style.width = r.w + 'px'; el.style.height = r.h + 'px';
   });
+  host.classList.add('td-solved');
   dashArrangeTray();
 }
 
-// Enter / leave Arrange mode. Blocks become draggable only while arranging;
+// Restore the saved arrangement (order + hidden), then paint. Any block missing
+// from the saved order surfaces at the tail (new blocks in a later release
+// appear rather than vanish); unknown ids are dropped.
+function dashArrangeApply() {
+  const { order, hidden } = dashLayoutLoad();
+  const known = DASH_BLOCK_DEFAULT;
+  const seq = (order && order.length ? order : DASH_BLOCK_DEFAULT).filter(id => known.includes(id));
+  known.forEach(id => { if (!seq.includes(id)) seq.push(id); });
+  DASH_ORDER = seq;
+  DASH_HIDDEN = new Set((hidden || []).filter(id => known.includes(id)));
+  dashRender();
+}
+
+// Enter / leave Arrange mode. Blocks are draggable only while arranging;
 // leaving saves the layout.
 function dashArrangeToggle() {
   DASH_ARRANGING = !DASH_ARRANGING;
   document.body.classList.toggle('td-arranging', DASH_ARRANGING);
-  const host = document.getElementById('td-blocks');
-  if (host) host.querySelectorAll('.td-block').forEach(b => { b.draggable = DASH_ARRANGING; });
   dashArrangeChromePaint();
   if (!DASH_ARRANGING) dashArrangePersist();
 }
 
-// Paint the language-aware Arrange chrome: the button label (Arrange ⇄ Done),
-// the hint line, the reset link, and any hidden-card tray chips.
+// Paint the language-aware Arrange chrome (button label, hint, reset, tray).
 function dashArrangeChromePaint() {
   const lbl = document.getElementById('td-arrange-lbl');
   if (lbl) lbl.textContent = DASH_ARRANGING ? cuT('Done', '完成') : cuT('Arrange', '整理');
@@ -1108,29 +1254,24 @@ function dashArrangeChromePaint() {
 }
 
 function dashArrangeHide(key) {
-  const el = document.querySelector(`.td-block[data-block="${key}"]`);
-  if (!el) return;
-  el.classList.add('is-hidden');
+  DASH_HIDDEN.add(key);
+  dashRender();
   dashArrangePersist();
-  dashArrangeTray();
 }
 function dashArrangeShow(key) {
-  const host = document.getElementById('td-blocks');
-  const el = host && host.querySelector(`.td-block[data-block="${key}"]`);
-  if (!el) return;
-  el.classList.remove('is-hidden');
-  host.appendChild(el);   // restored cards land at the end
+  DASH_HIDDEN.delete(key);
+  DASH_ORDER = DASH_ORDER.filter(id => id !== key).concat([key]);  // restored cards land at the end
+  dashRender();
   dashArrangePersist();
-  dashArrangeTray();
 }
 
-// Render the hidden-cards tray (a row of "+ add back" chips). The tray only
-// shows in Arrange mode (CSS), and only when it has items.
+// Render the hidden-cards tray (a row of "+ add back" chips). Shown only in
+// Arrange mode (CSS), and only when it has items.
 function dashArrangeTray() {
   const tray = document.getElementById('td-tray');
-  const row  = document.getElementById('td-tray-row');
+  const row = document.getElementById('td-tray-row');
   if (!tray || !row) return;
-  const hidden = [...document.querySelectorAll('.td-block.is-hidden')].map(b => b.dataset.block);
+  const hidden = DASH_ORDER.filter(id => DASH_HIDDEN.has(id));
   tray.classList.toggle('has-items', hidden.length > 0);
   row.innerHTML = hidden.map(key => {
     const t = DASH_BLOCK_TITLES[key];
@@ -1142,79 +1283,65 @@ function dashArrangeTray() {
 }
 
 // Reset to the shipped default: forget the saved layout, un-hide everything,
-// restore the markup order.
+// restore the default order.
 function dashArrangeReset() {
   try { localStorage.removeItem(DASH_LAYOUT_KEY); } catch (e) {}
-  const host = document.getElementById('td-blocks'); if (!host) return;
-  DASH_BLOCK_DEFAULT.forEach(key => {
-    const el = host.querySelector(`.td-block[data-block="${key}"]`);
-    if (el) { el.classList.remove('is-hidden'); host.appendChild(el); }
-  });
-  host.querySelectorAll('.td-block').forEach(b => { b.draggable = DASH_ARRANGING; });
-  dashArrangeTray();
+  DASH_ORDER = [...DASH_BLOCK_DEFAULT];
+  DASH_HIDDEN = new Set();
+  dashRender();
 }
 
-// Does this block share its row with another? Measured, not read off data-span,
-// because the responsive rules collapse the narrow spans to full width on small
-// screens — a block that spans 3 columns at 1280px spans all 6 at 900px, and the
-// drop seam has to follow what the operator actually sees.
-function dashBlockShares(block) {
-  const host = block.parentElement;
-  if (!host) return false;
-  return block.offsetWidth < host.clientWidth * 0.9;
-}
-
-// ── Drag to reorder (native HTML5 DnD, wired once) ──────────────────────────
+// ── drag to reorder (pointer-based, wired once, arrange-gated) ───────────────
 function dashArrangeWire() {
   const host = document.getElementById('td-blocks');
-  if (!host || host._dndWired) return;
-  host._dndWired = true;
-
-  host.addEventListener('dragstart', e => {
-    if (!DASH_ARRANGING) return;
-    const b = e.target.closest('.td-block');
-    if (!b) return;
-    _dashDragBlock = b;
-    b.classList.add('td-dragging');
-    e.dataTransfer.effectAllowed = 'move';
-    try { e.dataTransfer.setData('text/plain', b.dataset.block); } catch (err) {}
-  });
-  host.addEventListener('dragend', () => {
-    if (_dashDragBlock) _dashDragBlock.classList.remove('td-dragging');
-    dashArrangeClearMarkers();
-    _dashDragBlock = null;
-    dashArrangePersist();
-  });
-  host.addEventListener('dragover', e => {
-    if (!_dashDragBlock) return;
-    e.preventDefault();
-    const over = e.target.closest('.td-block');
-    dashArrangeClearMarkers();
-    if (!over || over === _dashDragBlock || over.classList.contains('is-hidden')) return;
-    const r = over.getBoundingClientRect();
-    // Full-width blocks read as vertical (before/after = above/below); anything
-    // narrower shares its row, so it reads horizontally. The grid is six columns
-    // wide, so "full width" is span 6.
-    const horizontal = dashBlockShares(over);
-    const after = horizontal ? (e.clientX - r.left) > r.width / 2 : (e.clientY - r.top) > r.height / 2;
-    over.classList.add(after ? 'td-drop-after' : 'td-drop-before');
-  });
-  host.addEventListener('drop', e => {
-    if (!_dashDragBlock) return;
-    e.preventDefault();
-    const over = e.target.closest('.td-block');
-    if (!over || over === _dashDragBlock) { dashArrangeClearMarkers(); return; }
-    const r = over.getBoundingClientRect();
-    const horizontal = dashBlockShares(over);
-    const after = horizontal ? (e.clientX - r.left) > r.width / 2 : (e.clientY - r.top) > r.height / 2;
-    if (after) over.after(_dashDragBlock); else over.before(_dashDragBlock);
-    dashArrangeClearMarkers();
-    dashArrangePersist();
-  });
+  if (!host || host._bentoWired) return;
+  host._bentoWired = true;
+  host.querySelectorAll('.td-block').forEach(el => dashWireBlock(el, host));
+  window.addEventListener('resize', () => dashRender());
+  if (window.ResizeObserver) {
+    let w = host.clientWidth;
+    new ResizeObserver(() => { if (host.clientWidth !== w) { w = host.clientWidth; dashRender(); } }).observe(host);
+  }
 }
-function dashArrangeClearMarkers() {
-  document.querySelectorAll('.td-block.td-drop-before, .td-block.td-drop-after')
-    .forEach(b => b.classList.remove('td-drop-before', 'td-drop-after'));
+function dashWireBlock(el, host) {
+  el.addEventListener('pointerdown', e => {
+    if (!DASH_ARRANGING || e.button !== 0) return;
+    if (e.target.closest('.bn-hide')) return;   // the hide ✕ handles its own click
+    const r = _dashRects[el.dataset.block]; if (!r) return;
+    _dashDrag = { id: el.dataset.block, el, sx: e.clientX, sy: e.clientY, ox: r.x, oy: r.y, live: false };
+    try { el.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  el.addEventListener('pointermove', e => {
+    if (!_dashDrag || _dashDrag.el !== el) return;
+    const dx = e.clientX - _dashDrag.sx, dy = e.clientY - _dashDrag.sy;
+    if (!_dashDrag.live) { if (Math.hypot(dx, dy) < 7) return; _dashDrag.live = true; el.classList.add('td-dragging'); }
+    el.style.left = (_dashDrag.ox + dx) + 'px';
+    el.style.top = (_dashDrag.oy + dy) + 'px';
+    const box = host.getBoundingClientRect(), px = e.clientX - box.left, py = e.clientY - box.top;
+    const others = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && id !== _dashDrag.id);
+    let ins = others.length;
+    for (let j = 0; j < others.length; j++) {
+      const q = _dashRects[others[j]]; if (!q) continue;
+      const cx = q.x + q.w / 2, cy = q.y + q.h / 2;
+      if (py < q.y - 4 || (py < q.y + q.h && px < cx && py < cy + q.h / 2)) { ins = j; break; }
+      if (py < cy && px < cx) { ins = j; break; }
+    }
+    const visOrder = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id));
+    const target = [...others]; target.splice(ins, 0, _dashDrag.id);
+    if (target.join() !== visOrder.join()) {
+      DASH_ORDER = target.concat(DASH_ORDER.filter(id => DASH_HIDDEN.has(id)));
+      dashRender(_dashDrag.id);
+    }
+  });
+  const finish = () => {
+    if (!_dashDrag || _dashDrag.el !== el) return;
+    const live = _dashDrag.live;
+    el.classList.remove('td-dragging');
+    _dashDrag = null;
+    if (live) { dashRender(); dashArrangePersist(); }
+  };
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
 }
 
 // Load the store list once so the Running-low card can offer a per-store filter.
@@ -1964,13 +2091,18 @@ function tdAttnRender() {
   // A shorter dashboard IS the good news. The block stays in the DOM (hidden
   // by CSS) so Arrange mode can still show and reorder it.
   const block = host.closest('.td-block');
+  const wasQuiet = block && block.classList.contains('is-quiet');
   if (!cards.length) {
     host.innerHTML = '';
     if (block) block.classList.add('is-quiet');
+    // Needs-you just emptied — re-solve so the bento closes its gap.
+    if (!wasQuiet && typeof dashRender === 'function') dashRender();
     return;
   }
   if (block) block.classList.remove('is-quiet');
   host.innerHTML = `<div class="td-attn-grid">${cards.join('')}</div>`;
+  // Needs-you just appeared — re-solve so it takes its place in the layout.
+  if (wasQuiet && typeof dashRender === 'function') dashRender();
 }
 
 // ── Running-low stock drawer ────────────────────────────────────────────────

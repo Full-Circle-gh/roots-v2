@@ -1294,234 +1294,165 @@
          Controller: dashArrange* in 03-dashboard.js. -->
     <div class="td-blocks" id="td-blocks">
 
-    <div class="td-block" data-block="recap" data-span="6">
-      <div class="td-block-tools" aria-hidden="true">
-        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
-        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('recap')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <!-- The Recap's title sits on the paper like every other block's, with
-           its time stamp beside it and "Show the work" where the other blocks
-           keep their "Open …" link. The card below holds only the rows. -->
-      <div class="td-sec-head td-recap-head">
-        <h3 id="td-recap-title">While you were away · 您不在的这段时间</h3>
-        <span class="td-meta" id="td-recap-meta"></span>
-        <button class="td-ghost" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
-      </div>
-      <section class="card td-card td-recap" id="td-recap">
-        <div class="td-recap-rows" id="td-recap-rows"><div class="td-muted">Loading… · 加载中…</div></div>
-        <!-- "Show the work" unfolds here — the away window's events (tinted dusk)
-             above a "you left here" line, the rest of today below. Rendered by
-             tdRecapToggleWork/tdRecapWorkRender (03-dashboard). -->
-        <div class="td-recap-work" id="td-recap-work" hidden></div>
-        <p class="td-recap-close" id="td-recap-close" hidden></p>
-      </section>
-    </div>
+      <!-- ══════════ Cards rebuilt from the bento mockup (bn-*). The .td-block
+           wrapper + data-block stay as the solver/arrange contract; each card's
+           visible surface is fresh bn-* markup. Every data-target id + bilingual
+           "EN · 中文" label is preserved, so the existing loaders (tdRecapRender,
+           tdAttnRender, dashHeroLoadToday, tdSecPaint, dashChanRender,
+           dashRenderSpark) keep painting untouched. Content adapts to the solved
+           shape via [data-tier] + .detail/.detail2 (retail-admin.css). ══════════ -->
 
-    <div class="td-block" data-block="needs" data-span="6">
-      <div class="td-block-tools" aria-hidden="true">
-        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
-        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('needs')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <!-- Same on-paper title as every other block (h3 in .td-sec-head), not
-           the old uppercase kicker: "NEEDS YOU" and "Today" sat two type
-           styles apart while naming the same kind of thing. -->
-      <div class="td-sec-head">
-        <h3>Needs you · 需要您处理</h3>
-      </div>
-      <div id="td-attn" class="td-attn" aria-live="polite"></div>
-    </div>
-
-    <!-- ── Section summary blocks (td-sec-*) ──────────────────────────────
-         One block per section of the admin: three (or two) vitals behind
-         hairline columns, then a cream footer carrying the one attention
-         line for that section — amber dot when something waits, sage when
-         nothing does. Every footer item deep-links into the section it
-         names. Painted by tdSecPaint() in 03-dashboard.js from the data the
-         dashboard already pulls (today's KPIs, /dashboard/ops, and the
-         orders status counts).
-
-         The old span-1 "Revenue" card is gone: its numbers are the Orders
-         block's vitals now, and its live-browsing indicator moved to the
-         Customers footer where it belongs. The element ids it owned
-         (#db-today-rev, #db-today-ord, #db-today-new, #db-live-num …) are
-         kept exactly, so dashHeroLoadToday / dashHeroLoadPresence and the
-         mobile #rm-dash mirror keep working untouched. -->
-
-    <!-- ── Today — the money leads "everything else" ──────────────────────
-         One number is why the operator opened this page: what the shop took
-         today. It leads at 44px Inter (never Fraunces — that font stays out
-         of product UI), with the delta and "vs a typical Friday" under it.
-         Below, the day line: today's revenue hour by hour, over a dotted
-         line for a typical day, so the delta has a picture. The strip then
-         carries orders and per-order behind one hairline.
-
-         Ids are unchanged: #db-today-rev / #db-today-ord / #td-sec-aov and
-         the restored #db-today-spark are what dashHeroLoadToday, the scrub
-         wiring in dashHeroInit, and the mobile #rm-dash mirror already look
-         for. New customers is NOT here — it is a Customers number, and no
-         fact on this page is stated twice. -->
-    <div class="td-block" data-block="orders" data-span="6">
-      <div class="td-block-tools" aria-hidden="true">
-        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
-        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('orders')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div class="td-sec-head">
-        <h3>Today · 今日</h3>
-        <button type="button" class="td-sec-go" onclick="dashJumpTab('orders')">Open orders › · 前往订单 ›</button>
-      </div>
-      <section class="card td-card td-sec td-today">
-        <div class="td-today-body">
-          <div class="k">Revenue today · 今日营收</div>
-          <div class="td-today-lead" id="db-today-rev">¥—</div>
-          <div class="c"><span class="db-delta" id="db-today-rev-d"></span> <span class="td-rev-note" id="td-rev-note"></span></div>
-
-          <!-- The day line. Rendered by dashRenderSpark from the 24 hourly
-               revenue buckets the /dashboard payload already returns; hover
-               scrubs each hour. Taller than a sparkline because here it is
-               the chart, not a garnish. -->
-          <div class="td-today-line">
-            <div class="db-spark-wrap td-dayline" id="db-today-spark"></div>
-            <div class="td-today-hours" id="td-today-hours" data-no-i18n></div>
-          </div>
-
-          <div class="td-today-strip">
-            <div class="td-today-cell">
-              <div class="v" id="db-today-ord">—</div>
-              <div class="k">Orders · 订单</div>
-              <div class="c"><span class="db-delta" id="db-today-ord-d"></span></div>
+      <!-- The Recap — owns the page's Dusk -->
+      <div class="td-block" data-block="recap">
+        <button class="bn-hide" onclick="dashArrangeHide('recap')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+              <h3 id="td-recap-title" data-no-i18n>While you were away · 您不在的这段时间</h3>
+              <span class="bn-meta" id="td-recap-meta" data-no-i18n></span>
+              <button class="bn-go" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
             </div>
-            <div class="td-today-cell">
-              <div class="v" id="td-sec-aov">¥—</div>
-              <div class="k">Avg order value · 客单价</div>
-            </div>
-            <!-- The one way money leaves. Reads 0 on a good day, which is the
-                 point: the strip says what today's takings are made of, and a
-                 refund is the only number here that isn't revenue coming in.
-                 kpis.refunded_orders + kpis.refund_rate — already in the
-                 payload, no new call. -->
-            <div class="td-today-cell">
-              <div class="v" id="td-today-refunded">—</div>
-              <div class="k">Refunded · 已退款</div>
-              <div class="c" id="td-today-refund-rate" data-no-i18n></div>
+            <div class="bn-body">
+              <div class="bn-recap-rows" id="td-recap-rows"><div class="td-muted">Loading… · 加载中…</div></div>
+              <div class="td-recap-work detail2" id="td-recap-work" hidden></div>
+              <p class="td-recap-close detail2" id="td-recap-close" hidden></p>
             </div>
           </div>
         </div>
-        <!-- sync stamp kept for JS but hidden (dashHeroSyncStamp writes it). -->
-        <span class="db-hero-sync" id="db-hero-sync" hidden></span>
-        <div class="td-sec-foot" id="td-sec-orders-foot" data-no-i18n></div>
-      </section>
-    </div>
+      </div>
 
-    <div class="td-block" data-block="customers" data-span="4">
-      <div class="td-block-tools" aria-hidden="true">
-        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
-        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('customers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div class="td-sec-head">
-        <h3>Customers · 客户</h3>
-        <button type="button" class="td-sec-go" onclick="dashJumpTab('customers')">Open customers › · 前往客户 ›</button>
-      </div>
-      <section class="card td-card td-sec">
-        <div class="td-sec-vitals">
-          <div class="td-sec-vital">
-            <div class="k">New customers today · 今日新客</div>
-            <div class="v" id="db-today-new">—</div>
-            <div class="c" id="td-sec-visitors" data-no-i18n></div>
-          </div>
-          <div class="td-sec-vital">
-            <div class="k">Visits today · 今日访问</div>
-            <div class="v" id="td-sec-visits">—</div>
-            <div class="c" id="td-sec-sessions" data-no-i18n></div>
-          </div>
-          <div class="td-sec-vital">
-            <div class="k">Conversion · 转化率</div>
-            <div class="v" id="td-sec-conv">—</div>
-            <div class="c">orders ÷ sessions · 订单 ÷ 会话</div>
+      <!-- Needs you (auto-hides itself via .is-quiet when nothing waits) -->
+      <div class="td-block" data-block="needs">
+        <button class="bn-hide" onclick="dashArrangeHide('needs')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+              <h3>Needs you · 需要您处理</h3>
+            </div>
+            <div class="bn-body">
+              <div id="td-attn" class="td-attn bn-attn" aria-live="polite"></div>
+            </div>
           </div>
         </div>
-        <!-- The live-browsing indicator lives here now: how many people are on
-             the shop this second is a Customers fact, not a revenue one. -->
-        <div class="td-sec-foot">
-          <span class="td-live is-zero" id="td-live"><i class="td-live-dot" aria-hidden="true"></i><b class="td-live-num" id="db-live-num">0</b><span class="td-live-lbl" id="td-live-lbl"></span></span>
-        </div>
-      </section>
-    </div>
+      </div>
 
-    <div class="td-block" data-block="inventory" data-span="3">
-      <div class="td-block-tools" aria-hidden="true">
-        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
-        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('inventory')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div class="td-sec-head">
-        <h3>Inventory · 库存</h3>
-        <button type="button" class="td-sec-go" onclick="dashJumpTab('products')">Open products › · 前往商品 ›</button>
-      </div>
-      <section class="card td-card td-sec">
-        <div class="td-sec-vitals" data-n="2">
-          <div class="td-sec-vital">
-            <div class="k">Out of stock · 已售罄</div>
-            <div class="v" id="td-sec-oos">—</div>
-            <div class="c">nothing left to sell · 无货可卖</div>
+      <!-- Today — revenue leads, the day line, orders / avg / refunded behind it -->
+      <div class="td-block" data-block="orders">
+        <button class="bn-hide" onclick="dashArrangeHide('orders')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l5-5 4 3 7-8"/><path d="M3 21h18"/></svg>
+              <h3>Today · 今日</h3>
+              <button type="button" class="bn-go" onclick="dashJumpTab('orders')">Open orders › · 前往订单 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bn-lead-k">Revenue today · 今日营收</div>
+              <div class="bn-rev-row">
+                <span class="bn-val t-num" id="db-today-rev">¥—</span>
+                <span class="bn-cmp"><span class="db-delta" id="db-today-rev-d"></span> <span class="bn-rev-note detail" id="td-rev-note"></span></span>
+              </div>
+              <div class="bn-dayline detail">
+                <div class="db-spark-wrap td-dayline" id="db-today-spark"></div>
+                <div class="bn-hours detail2" id="td-today-hours" data-no-i18n></div>
+              </div>
+              <div class="bn-vitals detail2">
+                <div class="bn-v"><div class="bn-vv t-num" id="db-today-ord">—</div><div class="bn-vl">Orders · 订单</div><div class="bn-vc"><span class="db-delta" id="db-today-ord-d"></span></div></div>
+                <div class="bn-v"><div class="bn-vv t-num" id="td-sec-aov">¥—</div><div class="bn-vl">Avg order value · 客单价</div></div>
+                <div class="bn-v"><div class="bn-vv t-num" id="td-today-refunded">—</div><div class="bn-vl">Refunded · 已退款</div><div class="bn-vc" id="td-today-refund-rate" data-no-i18n></div></div>
+              </div>
+            </div>
           </div>
-          <div class="td-sec-vital">
-            <div class="k">Running low · 库存告急</div>
-            <div class="v" id="td-sec-low">—</div>
-            <div class="c">a few left · 剩余不多</div>
-          </div>
+          <span class="db-hero-sync" id="db-hero-sync" hidden></span>
+          <div class="td-sec-foot detail" id="td-sec-orders-foot" data-no-i18n></div>
         </div>
-        <!-- The low-stock list used to be its own card up in "Needs you". It is
-             the only place on the dashboard that names actual products, so it
-             lives here now, under the two numbers it describes — one block, one
-             subject, dragged and hidden as one thing. When everything is stocked
-             it renders nothing at all. Painted by tdInvLowRender. -->
-        <div class="td-inv-low" id="td-inv-low" hidden></div>
-        <div class="td-sec-foot" id="td-sec-inventory-foot" data-no-i18n></div>
-      </section>
-    </div>
+      </div>
 
-    <div class="td-block" data-block="delivery" data-span="3">
-      <div class="td-block-tools" aria-hidden="true">
-        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
-        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('delivery')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-      </div>
-      <div class="td-sec-head">
-        <h3>Delivery · 配送</h3>
-        <button type="button" class="td-sec-go" onclick="dashJumpTab('orders')">Open orders › · 前往订单 ›</button>
-      </div>
-      <section class="card td-card td-sec">
-        <div class="td-sec-vitals" data-n="2">
-          <div class="td-sec-vital">
-            <div class="k">Out for delivery · 配送中</div>
-            <div class="v" id="td-sec-dispatched">—</div>
-            <div class="c">riders on the way · 骑手在途</div>
+      <!-- Customers -->
+      <div class="td-block" data-block="customers">
+        <button class="bn-hide" onclick="dashArrangeHide('customers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg>
+              <h3>Customers · 客户</h3>
+              <button type="button" class="bn-go" onclick="dashJumpTab('customers')">Open customers › · 前往客户 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bn-vitals">
+                <div class="bn-v"><div class="bn-vl">New customers today · 今日新客</div><div class="bn-val t-num" id="db-today-new">—</div><div class="bn-vc detail2" id="td-sec-visitors" data-no-i18n></div></div>
+                <div class="bn-v"><div class="bn-vl">Visits today · 今日访问</div><div class="bn-val t-num" id="td-sec-visits">—</div><div class="bn-vc detail2" id="td-sec-sessions" data-no-i18n></div></div>
+                <div class="bn-v"><div class="bn-vl">Conversion · 转化率</div><div class="bn-val t-num" id="td-sec-conv">—</div><div class="bn-vc detail2">orders ÷ sessions · 订单 ÷ 会话</div></div>
+              </div>
+            </div>
           </div>
-          <div class="td-sec-vital">
-            <div class="k">Rider coming · 骑手来取</div>
-            <div class="v" id="td-sec-riderpickup">—</div>
-            <div class="c">have the order ready · 请备好订单</div>
+          <div class="td-sec-foot detail">
+            <span class="td-live is-zero" id="td-live"><i class="td-live-dot" aria-hidden="true"></i><b class="td-live-num" id="db-live-num">0</b><span class="td-live-lbl" id="td-live-lbl"></span></span>
           </div>
         </div>
-        <div class="td-sec-foot" id="td-sec-delivery-foot" data-no-i18n></div>
-      </section>
-    </div>
+      </div>
 
-    <div class="td-block" data-block="channels" data-span="2">
-      <div class="td-block-tools" aria-hidden="true">
-        <span class="td-grip" title="Drag to move"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.5"/><circle cx="15" cy="6" r="1.5"/><circle cx="9" cy="12" r="1.5"/><circle cx="15" cy="12" r="1.5"/><circle cx="9" cy="18" r="1.5"/><circle cx="15" cy="18" r="1.5"/></svg></span>
-        <button type="button" class="td-hide-btn" onclick="dashArrangeHide('channels')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <!-- Inventory -->
+      <div class="td-block" data-block="inventory">
+        <button class="bn-hide" onclick="dashArrangeHide('inventory')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>
+              <h3>Inventory · 库存</h3>
+              <button type="button" class="bn-go" onclick="dashJumpTab('products')">Open products › · 前往商品 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bn-vitals">
+                <div class="bn-v"><div class="bn-vl">Out of stock · 已售罄</div><div class="bn-val t-num" id="td-sec-oos">—</div><div class="bn-vc detail2">nothing left to sell · 无货可卖</div></div>
+                <div class="bn-v"><div class="bn-vl">Running low · 库存告急</div><div class="bn-val t-num" id="td-sec-low">—</div><div class="bn-vc detail2">a few left · 剩余不多</div></div>
+              </div>
+              <div class="td-inv-low detail2" id="td-inv-low" hidden></div>
+            </div>
+          </div>
+          <div class="td-sec-foot detail" id="td-sec-inventory-foot" data-no-i18n></div>
+        </div>
       </div>
-      <!-- Channels today — the Activity strip folded into The Recap's
-           "Show the work"; this square now shows today's revenue split by
-           channel (all stores). Rendered by dashChanRender (03-dashboard).
-           Title on the paper, like every other block. -->
-      <div class="td-sec-head">
-        <h3>Channels · 渠道</h3>
+
+      <!-- Delivery -->
+      <div class="td-block" data-block="delivery">
+        <button class="bn-hide" onclick="dashArrangeHide('delivery')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+              <h3>Delivery · 配送</h3>
+              <button type="button" class="bn-go" onclick="dashJumpTab('orders')">Open orders › · 前往订单 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bn-vitals">
+                <div class="bn-v"><div class="bn-vl">Out for delivery · 配送中</div><div class="bn-val t-num" id="td-sec-dispatched">—</div><div class="bn-vc detail2">riders on the way · 骑手在途</div></div>
+                <div class="bn-v"><div class="bn-vl">Rider coming · 骑手来取</div><div class="bn-val t-num" id="td-sec-riderpickup">—</div><div class="bn-vc detail2">have the order ready · 请备好订单</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="td-sec-foot detail" id="td-sec-delivery-foot" data-no-i18n></div>
+        </div>
       </div>
-      <section class="card td-card td-chan" id="td-chan-pane">
-        <div class="td-chan-list" id="td-chan-list"><div class="td-muted">Loading… · 加载中…</div></div>
-        <p class="td-chan-foot">Today · All stores · 今日 · 全部门店</p>
-      </section>
-    </div>
+
+      <!-- Channels today -->
+      <div class="td-block" data-block="channels">
+        <button class="bn-hide" onclick="dashArrangeHide('channels')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h12"/><path d="M4 17h8"/></svg>
+              <h3>Channels · 渠道</h3>
+            </div>
+            <div class="bn-body">
+              <div class="td-chan-list bn-chan-list" id="td-chan-list"><div class="td-muted">Loading… · 加载中…</div></div>
+              <p class="td-chan-foot detail2">Today · All stores · 今日 · 全部门店</p>
+            </div>
+          </div>
+        </div>
+      </div>
 
     </div>
     <!-- end .td-blocks -->
