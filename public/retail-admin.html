@@ -53,7 +53,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #tab-sharing, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -83,7 +83,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #tab-sharing, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -5910,58 +5910,151 @@
     </div>
   </section>
 
-  <!-- ─── SHARE CARDS — per-page WeChat forward thumbnails ─── -->
+  <!-- ─── SHARE CARDS — per-page WeChat forward thumbnails (Tacet) ───
+       Spec: reference/share-cards-tacet-mockup.html, direction B "Chat-true".
+       Each slot pairs its controls with a depiction of the actual WeChat
+       forward card (title + picture + mini-program foot) so the office sees
+       exactly what customers see. The depiction is data-no-i18n — it shows
+       customer-facing strings, not admin copy — so its text is set from JS
+       (10-extras.js, sh*) and re-set on language switch. -->
   <section id="tab-sharing">
-    <h2>Share cards · 分享卡片</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      When a customer forwards a page into a WeChat chat, this is the picture on the card. Set one per page. Best shape is wide (5:4 — about 500×400). Leave a page empty to use the page's own look. · 顾客把页面转发到微信聊天时,卡片上显示的图片。每个页面单独设置。建议比例 5:4(约 500×400)。留空则使用该页面自带的样式。
-    </div>
+    <style>
+      .sh-wrap { max-width: 760px; margin: 0 auto; }
 
-    <div class="card" style="margin-bottom: var(--s4);">
-      <!-- Home / store -->
-      <div class="field" style="margin: 0 0 20px;">
-        <label class="stacked">Home page · 首页</label>
-        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Shown when someone forwards the store's home page (without a referral code). · 转发店铺首页(不含推荐码)时显示。</div>
-        <input type="hidden" id="sh-home">
-        <div id="sh-home-preview"></div>
-        <div class="row" style="gap: 8px; margin-top: 8px;">
-          <button class="btn btn-sm" onclick="document.getElementById('sh-home-file').click()">Upload picture · 上传图片</button>
-          <input type="file" id="sh-home-file" accept="image/png,image/jpeg" style="display: none;">
+      /* header (same pattern as Broadcasts) */
+      .sh-eyebrow { font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--text-3); margin:0 0 6px; }
+      #tab-sharing h2.sh-title { font-family:var(--f-sans); font-weight:500; font-size:24px; letter-spacing:-.01em; color:var(--text-1); text-transform:none; margin:0; }
+      .sh-lede { font-size:14px; line-height:1.6; color:var(--text-2); margin:10px 0 24px; max-width:600px; }
+
+      /* slot card — controls left, chat depiction right */
+      .sh-slot { display:grid; grid-template-columns:1fr 300px; background:var(--bg-pane); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 16px rgba(17,26,43,.04); overflow:hidden; }
+      .sh-slot + .sh-slot { margin-top:16px; }
+      .sh-edit { padding:22px 24px; display:flex; flex-direction:column; align-items:flex-start; gap:8px; }
+      .sh-name { font-size:16px; font-weight:500; color:var(--text-1); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+      .sh-chip { font-size:12px; font-weight:500; padding:2px 10px; border-radius:999px; white-space:nowrap; }
+      .sh-chip.custom { background:var(--tacet-sage-tint); color:var(--tacet-sage-ink); }
+      .sh-chip.default { background:var(--bg-elev-1); color:var(--text-2); }
+      .sh-hint { font-size:13px; line-height:1.6; color:var(--text-2); max-width:46ch; }
+      .sh-btns { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+      .sh-btn { font:inherit; font-size:13.5px; font-weight:500; line-height:1; border-radius:8px; border:1px solid var(--line); background:var(--bg-pane); color:var(--text-1); cursor:pointer; display:inline-flex; align-items:center; gap:7px; padding:9px 14px; transition:.2s var(--ease-out); white-space:nowrap; }
+      .sh-btn:hover { border-color:var(--text-3); }
+      .sh-btn:focus-visible { outline:2px solid var(--tacet-dusk); outline-offset:2px; }
+      .sh-btn.primary { background:var(--tacet-dusk); color:#fff; border-color:var(--tacet-dusk); }
+      .sh-btn.primary:hover { background:#5F58A0; }
+      .sh-btn.ghost { background:transparent; border-color:transparent; color:var(--text-2); }
+      .sh-btn.ghost:hover { color:var(--tacet-brick); background:var(--tacet-brick-tint); }
+
+      /* WeChat depiction — deliberately foreign material. Fixed WeChat greys:
+         light chat in light theme, WeChat's own dark greys in dark theme. */
+      #tab-sharing .wx { background:#EBEBEB; border-left:1px solid var(--line); padding:20px; display:flex; flex-direction:column; gap:8px; align-items:flex-start; justify-content:center; }
+      #tab-sharing .wx-cap { font-size:11px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:#8A8B8E; }
+      #tab-sharing .wx-card { background:#FFFFFF; border-radius:6px; width:100%; max-width:240px; box-shadow:0 1px 2px rgba(0,0,0,.08); overflow:hidden; font-family:-apple-system,'PingFang SC','Helvetica Neue',Arial,sans-serif; }
+      #tab-sharing .wx-title { padding:9px 11px 7px; font-size:14px; line-height:1.35; color:#1a1a1a; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+      #tab-sharing .wx-img { aspect-ratio:5/4; background:#F2F2F2; }
+      #tab-sharing .wx-img img { width:100%; height:100%; object-fit:cover; display:block; }
+      #tab-sharing .wx-own { width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:#999; font-size:12px; text-align:center; padding:12px; line-height:1.5; box-sizing:border-box; }
+      #tab-sharing .wx-foot { display:flex; align-items:center; gap:5px; padding:6px 11px; border-top:1px solid #F0F0F0; font-size:11px; color:#B0B0B0; }
+      #tab-sharing .wx-foot .dot { width:12px; height:12px; border-radius:50%; background:#5BC466; flex:none; }
+      [data-theme="dark"] #tab-sharing .wx { background:#191919; }
+      [data-theme="dark"] #tab-sharing .wx-cap { color:#7E8798; }
+      [data-theme="dark"] #tab-sharing .wx-card { background:#2C2C2C; box-shadow:none; }
+      [data-theme="dark"] #tab-sharing .wx-title { color:#D5D5D5; }
+      [data-theme="dark"] #tab-sharing .wx-img { background:#242424; }
+      [data-theme="dark"] #tab-sharing .wx-own { color:#7F7F7F; }
+      [data-theme="dark"] #tab-sharing .wx-foot { border-top-color:#3A3A3A; color:#7F7F7F; }
+      @media (max-width:720px) {
+        .sh-slot { grid-template-columns:1fr; }
+        #tab-sharing .wx { border-left:none; border-top:1px solid var(--line); align-items:center; }
+      }
+
+      /* invite card link-out — its picture lives in Marketing → Affiliate */
+      .sh-linkout { display:flex; align-items:center; gap:12px; width:100%; box-sizing:border-box; margin-top:16px; padding:14px 20px; font:inherit; font-size:13px; text-align:left; color:var(--text-2); background:var(--bg-elev-1); border:1px solid var(--line); border-radius:14px; cursor:pointer; transition:border-color .2s var(--ease-out); }
+      .sh-linkout:hover { border-color:var(--text-3); }
+      .sh-linkout b { color:var(--text-1); font-weight:500; }
+      .sh-linkout svg { width:15px; height:15px; flex:none; }
+      .sh-linkout .arr { margin-left:auto; }
+
+      /* save bar — only exists once something changed */
+      .sh-savebar { display:none; align-items:center; gap:10px; margin-top:16px; padding:12px 16px 12px 20px; background:var(--bg-pane); border:1px solid var(--line); border-radius:14px; box-shadow:0 4px 16px rgba(17,26,43,.04); }
+      .sh-savebar.on { display:flex; animation:shSettle .35s var(--ease-out) both; }
+      @keyframes shSettle { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+      .sh-savebar .msg { font-size:13px; color:var(--text-2); }
+      .sh-savebar .grow { flex:1; }
+    </style>
+
+    <div class="sh-wrap">
+      <div class="sh-eyebrow">Mini app · 小程序</div>
+      <h2 class="sh-title">Share cards · 分享卡片</h2>
+      <p class="sh-lede">The picture on the card when a customer forwards a page into a WeChat chat. Wide 5:4 works best — about 500 × 400. · 顾客把页面转发到微信聊天时,卡片上显示的图片。建议横向 5:4 — 约 500 × 400。</p>
+
+      <!-- Home -->
+      <div class="sh-slot">
+        <div class="sh-edit">
+          <div class="sh-name">Home page · 首页 <span class="sh-chip" id="sh-home-chip" data-no-i18n></span></div>
+          <div class="sh-hint">Any forward of the store's home page (without a referral code). · 转发店铺首页(不含推荐码)时显示。</div>
+          <div class="sh-btns" id="sh-home-btns" data-no-i18n></div>
+        </div>
+        <div class="wx" data-no-i18n>
+          <span class="wx-cap sh-wx-cap"></span>
+          <div class="wx-card">
+            <div class="wx-title" id="sh-home-title"></div>
+            <div class="wx-img" id="sh-home-img"></div>
+            <div class="wx-foot"><span class="dot"></span>Roots</div>
+          </div>
         </div>
       </div>
 
-      <!-- Product -->
-      <div class="field" style="margin: 0 0 20px;">
-        <label class="stacked">Product page · 商品页</label>
-        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Fallback for product shares. Each product still prefers its own photo when it has one — this fills in when it doesn't. · 商品分享的备用图。商品有自己的图片时优先用商品图,没有时才用这张。</div>
-        <input type="hidden" id="sh-product">
-        <div id="sh-product-preview"></div>
-        <div class="row" style="gap: 8px; margin-top: 8px;">
-          <button class="btn btn-sm" onclick="document.getElementById('sh-product-file').click()">Upload picture · 上传图片</button>
-          <input type="file" id="sh-product-file" accept="image/png,image/jpeg" style="display: none;">
+      <!-- Product fallback -->
+      <div class="sh-slot">
+        <div class="sh-edit">
+          <div class="sh-name">Product pages · 商品页 <span class="sh-chip" id="sh-product-chip" data-no-i18n></span></div>
+          <div class="sh-hint">Fallback only — a product's own photo always wins when it has one. This fills in for products without a photo. The card's title is the product's name. · 仅作备用 — 商品有自己的图片时始终优先,没有图片的商品才用这张。卡片标题为商品名称。</div>
+          <div class="sh-btns" id="sh-product-btns" data-no-i18n></div>
+        </div>
+        <div class="wx" data-no-i18n>
+          <span class="wx-cap sh-wx-cap"></span>
+          <div class="wx-card">
+            <div class="wx-title" id="sh-product-title"></div>
+            <div class="wx-img" id="sh-product-img"></div>
+            <div class="wx-foot"><span class="dot"></span>Roots</div>
+          </div>
         </div>
       </div>
 
       <!-- Voting -->
-      <div class="field" style="margin: 0;">
-        <label class="stacked">Voting page · 投票页</label>
-        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Shown when someone forwards the community polls page. · 转发社区投票页时显示。</div>
-        <input type="hidden" id="sh-voting">
-        <div id="sh-voting-preview"></div>
-        <div class="row" style="gap: 8px; margin-top: 8px;">
-          <button class="btn btn-sm" onclick="document.getElementById('sh-voting-file').click()">Upload picture · 上传图片</button>
-          <input type="file" id="sh-voting-file" accept="image/png,image/jpeg" style="display: none;">
+      <div class="sh-slot">
+        <div class="sh-edit">
+          <div class="sh-name">Voting page · 投票页 <span class="sh-chip" id="sh-voting-chip" data-no-i18n></span></div>
+          <div class="sh-hint">The community polls page. The card's title is the featured poll question. · 社区投票页。卡片标题为当前精选投票问题。</div>
+          <div class="sh-btns" id="sh-voting-btns" data-no-i18n></div>
+        </div>
+        <div class="wx" data-no-i18n>
+          <span class="wx-cap sh-wx-cap"></span>
+          <div class="wx-card">
+            <div class="wx-title" id="sh-voting-title"></div>
+            <div class="wx-img" id="sh-voting-img"></div>
+            <div class="wx-foot"><span class="dot"></span>Roots</div>
+          </div>
         </div>
       </div>
 
-      <div style="margin-top: 16px;">
-        <button class="btn btn-primary" onclick="shSave()">Save share cards · 保存分享卡片</button>
+      <button type="button" class="sh-linkout" onclick="goTab('affiliate')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M21 3 10 14"/><path d="M20 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/></svg>
+        <span><b>Invite / referral card · 邀请 / 推荐卡片</b> — has its own picture, set in Marketing → Affiliate · — 图片在「营销 → 分销」单独设置</span>
+        <span class="arr">→</span>
+      </button>
+
+      <div class="sh-savebar" id="sh-savebar">
+        <span class="msg" id="sh-savebar-msg" data-no-i18n></span>
+        <span class="grow"></span>
+        <button type="button" class="sh-btn" onclick="shDiscard()">Discard · 放弃</button>
+        <button type="button" class="sh-btn primary" onclick="shSave()">Save · 保存</button>
       </div>
     </div>
 
-    <div class="muted" style="font-size: 11px; line-height: 1.5;">
-      The <b>invite / referral</b> card has its own picture in <b>Marketing → Affiliate</b>. · <b>邀请 / 推荐</b>卡片的图片在<b>“营销 → 分销”</b>单独设置。
-    </div>
+    <input type="file" id="sh-home-file" accept="image/png,image/jpeg" style="display: none;">
+    <input type="file" id="sh-product-file" accept="image/png,image/jpeg" style="display: none;">
+    <input type="file" id="sh-voting-file" accept="image/png,image/jpeg" style="display: none;">
   </section>
 
   <!-- ─── AFFILIATE ─── -->

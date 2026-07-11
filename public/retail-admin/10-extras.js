@@ -194,29 +194,79 @@ document.querySelector('[data-tab="affiliate"]').addEventListener('click', () =>
 
 // ════════════════════════════════════════════════════════════════
 // SHARE CARDS — per-page WeChat forward thumbnails (Home / Product /
-// Voting). Stored as config keys sharing.<key> (relative media paths);
-// the customer /api/retail/config endpoint absolutizes them for WeChat.
+// Voting). Tacet rebuild, spec: reference/share-cards-tacet-mockup.html
+// direction B "Chat-true": each slot renders a depiction of the real
+// WeChat forward card, and Save appears only once something changed.
+//
+// Stored as config keys sharing.<key> (relative media paths); the
+// customer /api/retail/config endpoint absolutizes them for WeChat.
 // The affiliate invite card keeps its own picture (affiliate.shareImage).
 // Reuses the same media-upload endpoint as the affiliate share image.
+//
+// The chat depiction is data-no-i18n (it shows what the CUSTOMER sees,
+// not admin copy), so all its strings — and the JS-rendered buttons /
+// chips — are picked with cuT() here and re-rendered on language switch.
 // ════════════════════════════════════════════════════════════════
 const SH_KEYS = ['home', 'product', 'voting'];
 let SHARING_LOADED = false;
+let SH_SAVED = { home: '', product: '', voting: '' };  // as last loaded/saved
+let SH_CUR   = { home: '', product: '', voting: '' };  // as edited
 
-function shRenderPreview(key) {
-  const url = $('#sh-' + key).value;
-  const box = $('#sh-' + key + '-preview');
-  if (!box) return;
-  if (!url) {
-    box.innerHTML = '<div class="muted" style="font-size: 11px;">No custom picture — using the page\'s own look. · 暂无自定义图片 — 使用该页面自带样式。</div>';
-    return;
-  }
-  box.innerHTML = `<img src="${escapeAttr(url)}" alt="" style="width: 250px; aspect-ratio: 5 / 4; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--bg2);">
-    <div style="margin-top: 6px;"><button class="btn btn-sm" onclick="shClear('${key}')">Remove picture · 移除图片</button></div>`;
+// Preview titles mirror what the mini-app actually puts on the card
+// (miniapp/pages/*/onShareAppMessage). Product shows an example name;
+// voting shows the no-featured-poll fallback.
+function shPreviewTitle(key) {
+  if (key === 'home')    return cuT('Roots · plant-forward food', 'Roots · 植物食物');
+  if (key === 'product') return cuT('Sourdough country loaf', '乡村酸面包');
+  return 'Vote with Roots';
 }
 
-function shClear(key) {
-  $('#sh-' + key).value = '';
-  shRenderPreview(key);
+function shRender() {
+  for (const key of SH_KEYS) {
+    const url = SH_CUR[key];
+    const chip = $('#sh-' + key + '-chip');
+    if (chip) {
+      chip.textContent = url ? cuT('Custom picture', '自定义图片') : cuT("Page's own look", '页面自带样式');
+      chip.classList.toggle('custom', !!url);
+      chip.classList.toggle('default', !url);
+    }
+    const btns = $('#sh-' + key + '-btns');
+    if (btns) {
+      btns.innerHTML = url
+        ? `<button type="button" class="sh-btn" onclick="document.getElementById('sh-${key}-file').click()">${cuT('Replace picture', '更换图片')}</button>
+           <button type="button" class="sh-btn ghost" onclick="shRemove('${key}')">${cuT('Remove', '移除')}</button>`
+        : `<button type="button" class="sh-btn" onclick="document.getElementById('sh-${key}-file').click()">${cuT('Upload picture', '上传图片')}</button>`;
+    }
+    const img = $('#sh-' + key + '-img');
+    if (img) {
+      img.innerHTML = url
+        ? `<img src="${escapeAttr(url)}" alt="">`
+        : `<div class="wx-own">${cuT('No picture set — WeChat snapshots the page itself', '未设置图片 — 微信将截取页面本身')}</div>`;
+    }
+    const title = $('#sh-' + key + '-title');
+    if (title) title.textContent = shPreviewTitle(key);
+  }
+  document.querySelectorAll('#tab-sharing .sh-wx-cap').forEach(el => {
+    el.textContent = cuT('In a chat', '聊天中的样子');
+  });
+  // Save bar: only present when the edits differ from what's stored.
+  const dirty = SH_KEYS.filter(k => SH_CUR[k] !== SH_SAVED[k]).length;
+  const bar = $('#sh-savebar');
+  if (bar) bar.classList.toggle('on', dirty > 0);
+  const msg = $('#sh-savebar-msg');
+  if (msg && dirty > 0) {
+    msg.textContent = cuT(dirty === 1 ? '1 unsaved change' : dirty + ' unsaved changes', dirty + ' 项未保存');
+  }
+}
+
+function shRemove(key) {
+  SH_CUR[key] = '';
+  shRender();
+}
+
+function shDiscard() {
+  SH_CUR = { ...SH_SAVED };
+  shRender();
 }
 
 async function shUpload(key, file) {
@@ -227,9 +277,8 @@ async function shUpload(key, file) {
     const r = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
     const j = await r.json();
     if (!j.success) { toast('Upload failed · 上传失败: ' + (j.error || ''), 'err'); return; }
-    $('#sh-' + key).value = j.data.url;
-    shRenderPreview(key);
-    toast('Uploaded — remember to Save · 已上传 — 请记得保存');
+    SH_CUR[key] = String(j.data.url || '');
+    shRender();
   } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
 }
 
@@ -237,10 +286,9 @@ async function shLoad() {
   try {
     const r = await api('/api/retail-admin/config');
     const sharing = (r.data && r.data.sharing) || {};
-    for (const key of SH_KEYS) {
-      $('#sh-' + key).value = String(sharing[key] || '');
-      shRenderPreview(key);
-    }
+    for (const key of SH_KEYS) SH_SAVED[key] = String(sharing[key] || '');
+    SH_CUR = { ...SH_SAVED };
+    shRender();
   } catch (e) {
     toast('Settings load failed · 加载设置失败: ' + e.message, 'err');
   }
@@ -248,9 +296,11 @@ async function shLoad() {
 
 async function shSave() {
   const body = {};
-  for (const key of SH_KEYS) body['sharing.' + key] = String($('#sh-' + key).value || '').trim();
+  for (const key of SH_KEYS) body['sharing.' + key] = String(SH_CUR[key] || '').trim();
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
+    SH_SAVED = { ...SH_CUR };
+    shRender();
     toast('Share cards saved · 分享卡片已保存');
   } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); }
 }
@@ -267,6 +317,12 @@ document.addEventListener('change', e => {
 document.querySelector('[data-tab="sharing"]').addEventListener('click', () => {
   if (!SHARING_LOADED) { SHARING_LOADED = true; shLoad(); }
 });
+
+// Language switch re-picks the cuT()-rendered strings (chips, buttons,
+// chat depiction). No-op until the tab has loaded once.
+if (typeof onLangChange === 'function') {
+  onLangChange(() => { if (SHARING_LOADED) shRender(); });
+}
 
 // ── Theme toggle (light / dark) ──
 // The pre-render script in <head> already set data-theme so paint is
