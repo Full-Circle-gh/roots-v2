@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Dashboard, self-arranging bento (the live surface, built from scratch)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET TOKENS (verbatim from tacet-tokens.css)
+   ============================================================ */
+:root{
+  --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
+  --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
+  --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
+  --tacet-dusk-tint:#EEEDF6; --tacet-sage-tint:#EDF1EC; --tacet-amber-tint:#F7EEDE; --tacet-brick-tint:#F6E7E3;
+  --bg:var(--tacet-paper); --surface:#FFFFFF; --surface-raised:var(--tacet-cream);
+  --text:var(--tacet-ink); --text-secondary:var(--tacet-graphite); --border:var(--tacet-border);
+  --accent:var(--tacet-dusk); --accent-tint:var(--tacet-dusk-tint);
+  --ok:var(--tacet-sage); --ok-tint:var(--tacet-sage-tint); --ok-ink:#4A6249;
+  --warn:var(--tacet-amber); --warn-tint:var(--tacet-amber-tint); --warn-ink:#8A6425;
+  --danger:var(--tacet-brick); --danger-tint:var(--tacet-brick-tint);
+  --font-display:"Fraunces",Georgia,serif; --font-text:"Inter",-apple-system,Arial,sans-serif;
+  --radius-card:14px; --radius-control:8px; --radius-pill:999px;
+  --shadow-soft:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
+  --shadow-lift:0 10px 30px rgba(17,26,43,.16);
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font-text);font-size:15px;line-height:1.55;color:var(--text);background:var(--bg)}
+.t-num{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+svg.ico{stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* dusk dot — automation only, spent entirely on The Recap */
+.bn-dusk{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none;align-self:center;animation:breathe 2.4s var(--ease) infinite}
+@keyframes breathe{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+
+/* ---- mockup chrome ---- */
+.chrome{background:var(--tacet-ink);color:rgba(251,249,244,.72);padding:8px 24px;font-size:13px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.chrome .tag{letter-spacing:.14em;text-transform:uppercase;font-weight:500;font-size:11px;color:rgba(251,249,244,.5)}
+.chrome .sep{color:rgba(251,249,244,.3)} .chrome .spacer{flex:1}
+.chrome .reset{color:rgba(251,249,244,.72);background:none;border:none;font-size:13px;cursor:pointer;font-family:var(--font-text)}
+.chrome .reset:hover{color:#fff}
+.switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.switch input{display:none}
+.switch .track{width:32px;height:18px;border-radius:999px;background:rgba(251,249,244,.22);position:relative;flex:none;transition:background .2s var(--ease)}
+.switch .track::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .2s var(--ease)}
+.switch input:checked + .track{background:var(--warn)} .switch input:checked + .track::after{left:16px}
+
+.topbar{display:flex;align-items:center;gap:16px;padding:16px 32px;border-bottom:1px solid var(--border);background:var(--bg)}
+.topbar .mark{height:22px;width:auto;color:var(--text)}
+.topbar .wordmark{font-family:var(--font-display);font-weight:300;font-size:20px;letter-spacing:.2em;color:var(--text)}
+
+.page{max-width:1180px;margin:0 auto;padding:32px 32px 96px}
+.page-head{display:flex;align-items:baseline;gap:16px;margin-bottom:2px}
+.page-head h1{font:500 22px/1.2 var(--font-text);letter-spacing:-.01em}
+.page-head .spacer{flex:1}
+.page-head .arrange{display:inline-flex;align-items:center;gap:7px;font:500 13px var(--font-text);color:var(--text-secondary);background:transparent;border:1px solid var(--border);border-radius:999px;padding:6px 13px;cursor:pointer;transition:all .2s var(--ease)}
+.page-head .arrange svg{width:15px;height:15px}
+.page-head .arrange:hover{color:var(--text);border-color:var(--text-secondary)}
+body.arranging .page-head .arrange{background:var(--accent);border-color:var(--accent);color:#fff}
+.page-head .date{font-size:13px;color:var(--text-secondary)}
+.page-sub{font-size:13px;color:var(--text-secondary);margin-bottom:24px}
+
+.hint{display:none;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--accent);margin:0 0 18px}
+body.arranging .hint{display:flex}
+.hint .reset2{margin-left:auto;color:var(--text-secondary);background:none;border:none;font:500 12.5px var(--font-text);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+
+.tray{display:none;margin:0 0 22px;align-items:center;flex-wrap:wrap;gap:8px}
+body.arranging .tray.has-items{display:flex}
+.tray .lbl{font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text-secondary);margin-right:4px}
+.chip{display:inline-flex;align-items:center;gap:8px;border:1px dashed var(--border);border-radius:999px;padding:5px 8px 5px 14px;font-size:13px;color:var(--text-secondary);background:var(--surface-raised);cursor:pointer;font-family:var(--font-text)}
+.chip .add{width:20px;height:20px;border-radius:50%;background:var(--accent-tint);color:var(--accent);display:inline-flex;align-items:center;justify-content:center}
+.chip .add svg{width:12px;height:12px}
+.chip:hover .add{background:var(--accent);color:#fff}
+
+/* ============================================================
+   THE BOARD — solver positions cards absolutely
+   ============================================================ */
+.board{position:relative;transition:height .46s var(--ease)}
+.card{
+  position:absolute;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-card);
+  box-shadow:var(--shadow-soft);overflow:hidden;display:flex;flex-direction:column;
+  transition:left .46s var(--ease),top .46s var(--ease),width .46s var(--ease),height .46s var(--ease),box-shadow .2s var(--ease);
+}
+body.arranging .card{cursor:grab}
+body.arranging .card .go,body.arranging .card a,body.arranging .card button:not(.hide){pointer-events:none}
+.card.dragging{z-index:40;box-shadow:var(--shadow-lift);cursor:grabbing;transition:box-shadow .2s var(--ease)}
+.inner{padding:16px 20px;display:flex;flex-direction:column;flex:1;min-height:0}
+.head{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex:none}
+.head svg.ico{width:16px;height:16px;color:var(--text-secondary);flex:none}
+.head h3{font:500 15px var(--font-text);white-space:nowrap}
+.head .go{margin-left:auto;font-size:13px;color:var(--text-secondary);background:none;border:0;cursor:pointer;font-family:var(--font-text);white-space:nowrap}
+.head .go:hover{color:var(--text)}
+.head .badge{margin-left:8px;font:500 11.5px var(--font-text);padding:2px 9px;border-radius:999px;background:var(--warn-tint);color:var(--warn-ink);white-space:nowrap;display:none}
+body.needsyou .card[data-id="inventory"] .badge{display:inline-flex}
+.hide{position:absolute;top:10px;right:10px;width:24px;height:24px;border-radius:50%;border:1px solid var(--border);background:var(--surface);color:var(--text-secondary);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;opacity:0;transition:opacity .16s var(--ease)}
+.hide svg{width:13px;height:13px}
+.card:hover .hide,body.arranging .hide{opacity:1}
+.hide:hover{color:var(--danger);border-color:var(--danger);background:var(--danger-tint)}
+.body{flex:1;min-height:0;display:flex;flex-direction:column}
+
+/* the drop-slot preview (Dusk = Tacet acting for you) */
+.ghost{position:absolute;border:1.5px dashed var(--accent);border-radius:var(--radius-card);background:var(--accent-tint);opacity:0;pointer-events:none;z-index:1;transition:left .35s var(--ease),top .35s var(--ease),width .35s var(--ease),height .35s var(--ease),opacity .2s var(--ease)}
+.ghost.on{opacity:.55}
+
+/* ---- content atoms ---- */
+.val{font-family:var(--font-text);font-weight:500;letter-spacing:-.02em;line-height:1.12;font-variant-numeric:tabular-nums}
+.card[data-t="a"] .val,.card[data-t="b"] .val{font-size:26px}
+.card[data-t="c"] .val{font-size:30px}
+.card[data-t="d"] .val,.card[data-t="e"] .val{font-size:38px}
+.dim{color:var(--text-secondary)} .cap{font-size:13px;color:var(--text-secondary)}
+.cmp{font-size:13px;color:var(--text-secondary);white-space:nowrap} .cmp .down{font-weight:500;color:var(--text)}
+.strip{display:flex;align-items:center;gap:16px;flex:1;min-height:0;overflow:hidden;white-space:nowrap}
+.strip .mid{color:var(--border)}
+.dot{width:6px;height:6px;border-radius:50%;flex:none;align-self:center}
+.dot.amber{background:var(--warn)} .dot.sage{background:var(--ok)} .dot.graphite{background:var(--text-secondary)}
+.rows{display:flex;flex-direction:column}
+.rowline{display:flex;align-items:center;gap:8px;padding:5px 0;font-size:14px;border-bottom:1px solid rgba(228,224,213,.55)}
+.rowline:last-child{border-bottom:none}
+.rowline .amt{margin-left:auto;color:var(--text-secondary);font-size:13px}
+.rowline .sku{font-size:12.5px;color:var(--text-secondary)}
+.opill{margin-left:auto;font:500 11.5px var(--font-text);padding:2px 9px;border-radius:999px;background:var(--surface-raised);color:var(--text-secondary)}
+.opill.amber{background:var(--warn-tint);color:var(--warn-ink)} .opill.sage{background:var(--ok-tint);color:var(--ok-ink)}
+.vitals{display:flex;align-items:stretch;gap:0}
+.vitals .v{flex:1;min-width:0}
+.vitals .v + .v{border-left:1px solid var(--border);padding-left:16px;margin-left:16px}
+.vitals .v .vl{font-size:13px;color:var(--text-secondary);white-space:nowrap}
+.vitals .v .vc{font-size:12px;color:var(--text-secondary)}
+.chan{padding:5px 0}
+.chan .cl{display:flex;align-items:baseline;font-size:14px}
+.chan .cl .co{margin-left:7px;font-size:12.5px;color:var(--text-secondary)}
+.chan .cl .cv{margin-left:auto;color:var(--text-secondary)}
+.bar{height:4px;border-radius:3px;background:var(--surface-raised);margin-top:5px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:3px;background:var(--ok)}
+.spark{width:80px;height:26px;margin-left:auto;align-self:center;flex:none}
+.spark svg{width:100%;height:100%;display:block}
+.chart{flex:1;min-height:30px;margin-top:8px}
+.chart svg{width:100%;height:100%;display:block}
+.warm{margin-top:auto;padding-top:10px;font-size:13px;color:var(--text-secondary);flex:none}
+.foot{display:flex;align-items:center;gap:8px;margin:14px -20px -16px;padding:11px 20px;background:var(--surface-raised);font-size:13px;color:var(--text-secondary);flex:none}
+.foot.warmft{background:var(--warn-tint);color:var(--warn-ink)}
+.foot .fdot{width:6px;height:6px;border-radius:50%;background:var(--warn);flex:none}
+.foot .fdot.clear{background:var(--ok)}
+.foot a{color:inherit;text-decoration:none;font-weight:500;margin-left:auto;cursor:pointer}
+.foot a:hover{text-decoration:underline;text-underline-offset:2px}
+.foot .sep{color:var(--border)}
+.attn{display:flex;flex-direction:column;gap:8px}
+.attn-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:var(--surface-raised);font-size:14px}
+.attn-item .amt{margin-left:auto;color:var(--text-secondary);font-size:13px}
+
+/* ---------- tier adaptation: one source of content, restyled by shape ----------
+   a=strip narrow(h1,≤3)  b=strip wide(h1,≥4)  c=tall narrow(2)  d=tall(3)  e=large(≥4)
+   .detail = the parts only a tall card has room for. */
+/* .detail = shown on tall cards (c/d/e). .detail2 = only large ones (d/e).
+   [data-lead] = the compact form, shown only on strip cards (a/b). */
+.card[data-t="a"] .detail,.card[data-t="b"] .detail{display:none}
+.card[data-t="a"] .detail2,.card[data-t="b"] .detail2,.card[data-t="c"] .detail2{display:none}
+.card[data-t="c"] [data-lead],.card[data-t="d"] [data-lead],.card[data-t="e"] [data-lead]{display:none}
+.card[data-t="c"] .vc{display:none}
+/* narrow tall: stack vitals, dividers go top not left */
+.card[data-t="c"] .vitals{flex-direction:column}
+.card[data-t="c"] .vitals .v + .v{border-left:0;border-top:1px solid var(--border);padding-left:0;margin-left:0;padding-top:10px;margin-top:10px}
+
+.card{animation:settle .6s var(--ease) both}
+@keyframes settle{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.explain{margin-top:48px;border-top:1px solid var(--border);padding-top:24px}
+.explain .kicker{font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--text-secondary);margin-bottom:8px}
+.explain p{font-size:13px;color:var(--text-secondary);max-width:660px;margin-bottom:4px}
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">tacet · mockup · live surface</span>
+  <span class="sep">·</span>
+  <span>The real dashboard, built fresh from the bento. Hide with ×, drag to reorder — it re-solves so any set tiles clean.</span>
+  <span class="spacer"></span>
+  <label class="switch"><input type="checkbox" id="alert-toggle"><span class="track"></span><span>Something needs you</span></label>
+  <span class="sep">·</span>
+  <button class="reset" id="reset-btn">Reset</button>
+</div>
+
+<div class="topbar">
+  <svg class="mark" viewBox="0 0 52 24" fill="none" aria-hidden="true"><path d="M1 12 h10 c3 0 3 -8 6 -8 s3 16 6 16 s3 -13 5 -13 s3 6 5 6 h12" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+  <span class="wordmark">tacet</span>
+</div>
+
+<div class="page">
+  <div class="page-head">
+    <h1>Happy weekend, Asher</h1>
+    <span class="spacer"></span>
+    <span class="date">Saturday 11 July</span>
+    <button class="arrange" id="arrange-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span id="arrange-lbl">Arrange</span></button>
+  </div>
+  <div class="page-sub">Here's your Saturday.</div>
+
+  <div class="hint" id="hint"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg><span>Drag cards to reorder. Hide the ones you don't need — they wait in the tray below.</span><button class="reset2" id="reset2">Reset to default</button></div>
+  <div class="tray" id="tray"><span class="lbl">Hidden cards</span></div>
+
+  <div class="board" id="board">
+    <div class="ghost" id="ghost"></div>
+
+    <!-- ══ The Recap — owns the page's Dusk ══ -->
+    <div class="card" data-id="recap">
+      <button class="hide" onclick="hide('recap')"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head"><svg class="ico" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg><h3>While you were away</h3><span class="go" style="pointer-events:none">last 30 min</span></div>
+        <div class="body">
+          <div class="strip" data-lead><span class="bn-dusk"></span><span class="val">3</span><span class="dim cap">handled, quietly</span></div>
+          <div class="detail rows">
+            <div class="rowline"><span class="bn-dusk"></span>1 order paid<span class="amt t-num">¥180</span></div>
+            <div class="rowline"><span class="bn-dusk"></span>1 new customer joined</div>
+            <div class="rowline"><span class="bn-dusk"></span>6 gzgrocery pickups recorded</div>
+          </div>
+          <div class="detail2 warm">Handled quietly. You're welcome.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ Needs you ══ -->
+    <div class="card" data-id="needs">
+      <button class="hide" onclick="hide('needs')"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head"><svg class="ico" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg><h3>Needs you</h3></div>
+        <div class="body">
+          <div class="attn">
+            <div class="attn-item"><span class="dot amber"></span>1 order waiting to start<span class="amt">Mini app · #2041</span></div>
+            <div class="attn-item"><span class="dot amber"></span>6 products out of stock<span class="amt">Open restock ›</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ Today — revenue + day line ══ -->
+    <div class="card" data-id="orders">
+      <button class="hide" onclick="hide('orders')"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head"><svg class="ico" viewBox="0 0 24 24"><path d="M4 17l5-5 4 3 7-8"/><path d="M3 21h18"/></svg><h3>Today</h3><span class="go">Open orders ›</span></div>
+        <div class="body">
+          <div class="cap">Revenue today</div>
+          <div style="display:flex;align-items:baseline;gap:12px;flex:none">
+            <span class="val t-num">¥879</span>
+            <span class="cmp"><span class="down">▾ 58%</span> <span class="detail" style="display:inline">vs a typical Saturday</span></span>
+            <span class="spark detail"><svg viewBox="0 0 300 80" preserveAspectRatio="none"><path d="M0 74 L90 74 C104 74 108 62 116 58 C124 54 128 70 136 72 C156 76 164 38 178 28 C186 22 190 44 196 54 C204 67 210 20 220 13 C227 8 233 42 240 60 C247 73 256 74 300 74" fill="none" stroke="#A3B49F" stroke-width="3"/></svg></span>
+          </div>
+          <div class="chart detail"><svg viewBox="0 0 300 80" preserveAspectRatio="none"><path d="M0 74 L90 74 C104 74 108 62 116 58 C124 54 128 70 136 72 C156 76 164 38 178 28 C186 22 190 44 196 54 C204 67 210 20 220 13 C227 8 233 42 240 60 C247 73 256 74 300 74 L300 80 L0 80 Z" fill="#A3B49F" fill-opacity=".14"/><path d="M0 74 L90 74 C104 74 108 62 116 58 C124 54 128 70 136 72 C156 76 164 38 178 28 C186 22 190 44 196 54 C204 67 210 20 220 13 C227 8 233 42 240 60 C247 73 256 74 300 74" fill="none" stroke="#A3B49F" stroke-width="2"/></svg></div>
+          <div class="detail2 vitals" style="flex:none;margin-top:12px">
+            <div class="v"><div class="vl">Orders</div><div class="t-num" style="font-weight:500">2</div></div>
+            <div class="v"><div class="vl">Avg order</div><div class="t-num" style="font-weight:500">¥237.9</div></div>
+            <div class="v"><div class="vl">Refunded</div><div class="t-num" style="font-weight:500">0</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ Customers ══ -->
+    <div class="card" data-id="customers">
+      <button class="hide" onclick="hide('customers')"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg><h3>Customers</h3><span class="go">Open customers ›</span></div>
+        <div class="body">
+          <div class="vitals" style="flex:none">
+            <div class="v"><div class="vl">New today</div><div class="val t-num">5</div><div class="vc detail">of 9 visitors</div></div>
+            <div class="v"><div class="vl">Visits</div><div class="val t-num">12</div><div class="vc detail">7 sessions</div></div>
+            <div class="v"><div class="vl">Conversion</div><div class="val t-num">28.6%</div><div class="vc detail">orders ÷ sessions</div></div>
+          </div>
+          <div class="detail2 warm">5 of 9 visitors were first-timers</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ Inventory ══ -->
+    <div class="card" data-id="inventory">
+      <button class="hide" onclick="hide('inventory')"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head"><svg class="ico" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg><h3>Inventory</h3><span class="badge">needs you</span></div>
+        <div class="body">
+          <div class="vitals" style="flex:none">
+            <div class="v"><div class="vl">Out of stock</div><div class="val t-num">6</div><div class="vc detail">nothing left to sell</div></div>
+            <div class="v"><div class="vl">Running low</div><div class="val t-num">28</div><div class="vc detail">a few left</div></div>
+          </div>
+          <div class="detail2 rows" style="margin-top:10px">
+            <div class="rowline cap">Kombucha — Passion Fruit<span class="amt t-num">2 left</span></div>
+            <div class="rowline cap">Pesto 'Chicken' Wrap<span class="amt t-num">2 left</span></div>
+          </div>
+          <div class="detail foot warmft"><span class="fdot"></span>6 out of stock<span class="sep">·</span><a>Open restock</a></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ Delivery ══ -->
+    <div class="card" data-id="delivery">
+      <button class="hide" onclick="hide('delivery')"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head"><svg class="ico" viewBox="0 0 24 24"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg><h3>Delivery</h3><span class="go">Open orders ›</span></div>
+        <div class="body">
+          <div class="vitals" style="flex:none">
+            <div class="v"><div class="vl">Out for delivery</div><div class="val t-num">1</div><div class="vc detail">riders on the way</div></div>
+            <div class="v"><div class="vl">Rider coming</div><div class="val t-num">0</div><div class="vc detail">have the order ready</div></div>
+          </div>
+          <div class="detail foot"><span class="fdot clear"></span>1 on the way<span class="sep">·</span><a>Open orders</a></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══ Channels ══ -->
+    <div class="card" data-id="channels">
+      <button class="hide" onclick="hide('channels')"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h12"/><path d="M4 17h8"/></svg><h3>Channels</h3></button>
+      <div class="inner">
+        <div class="head"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h12"/><path d="M4 17h8"/></svg><h3>Channels</h3></div>
+        <div class="body">
+          <div class="strip" data-lead><span class="val t-num">3</span><span class="dim cap">channels · ¥879</span></div>
+          <div class="detail" style="flex:1;min-height:0">
+            <div class="chan"><div class="cl">gzgrocery pickup<span class="co">12 orders</span><span class="cv t-num">¥403.2</span></div><div class="bar"><i style="width:46%"></i></div></div>
+            <div class="chan"><div class="cl">Mini app<span class="co">1 order</span><span class="cv t-num">¥295.8</span></div><div class="bar"><i style="width:34%"></i></div></div>
+            <div class="chan"><div class="cl">Meituan<span class="co">1 order</span><span class="cv t-num">¥180</span></div><div class="bar"><i style="width:20%"></i></div></div>
+          </div>
+          <div class="detail2 warm">Today · All stores</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explain">
+    <div class="kicker">Built from scratch, from the bento</div>
+    <p>Every card declares a few shapes it may take. A packing solver picks one per visible card so each row fills the six-column grid — whatever you hide or reorder.</p>
+    <p>Content is designed for the shape, not stretched: a small card is the headline number; a large one earns the chart, the list, the breakdown. Flip "Something needs you" to watch Inventory reach for a bigger slot.</p>
+  </div>
+</div>
+
+<script>
+/* ===== the real dashboard's 7 cards ===== */
+const CARDS=[
+  {id:'recap',    pr:2,shapes:[[6,2],[4,2],[3,2],[6,1],[4,1],[3,1],[2,1]]},
+  {id:'needs',    pr:2,shapes:[[6,2],[4,2],[3,2],[6,1],[4,1],[3,1],[2,1]]},
+  {id:'orders',   pr:3,shapes:[[4,2],[3,2],[6,2],[2,2],[4,1],[3,1],[2,1]]},
+  {id:'customers',pr:1,shapes:[[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]]},
+  {id:'inventory',pr:2,shapes:[[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]]},
+  {id:'delivery', pr:1,shapes:[[2,1],[3,1],[4,1],[2,2],[6,1]]},
+  {id:'channels', pr:2,shapes:[[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]]},
+];
+const ALERT={inventory:[[4,2],[3,2],[6,2],[2,2],[3,1],[2,1]]};
+const GAP=16,ROW=132,COLS=6;
+const TITLES={recap:'While you were away',needs:'Needs you',orders:'Today',customers:'Customers',inventory:'Inventory',delivery:'Delivery',channels:'Channels'};
+const DEFAULT=CARDS.map(c=>c.id);
+let order=[...DEFAULT],hidden=new Set(),alertDay=false,arranging=false,rects={},drag=null;
+const board=document.getElementById('board'),tray=document.getElementById('tray'),ghost=document.getElementById('ghost');
+const els={};document.querySelectorAll('.card').forEach(el=>els[el.dataset.id]=el);
+const byId={};CARDS.forEach(c=>byId[c.id]=c);
+function shapes(c){return alertDay&&ALERT[c.id]?ALERT[c.id]:c.shapes}
+function pri(c){return alertDay&&c.id==='inventory'?9:c.pr}
+function score(c,w,h){const S=shapes(c),i=S.findIndex(s=>s[0]===w&&s[1]===h);return i<0?null:(S.length-i)*20+pri(c)*w*h}
+function genBands(cs,i,emit){
+  (function r1(k,cells,sum,sc){if(k>=cs.length)return;for(const[w,h]of shapes(cs[k])){if(h!==1)continue;const s2=sum+w;if(s2>COLS)continue;const nsc=sc+score(cs[k],w,1);const cl=cells.concat([{idx:k,w}]);if(s2>=2)emit({h:1,cells:cl,sum:s2,score:nsc-(COLS-s2)*70,next:k+1});r1(k+1,cl,s2,nsc)}})(i,[],0,0);
+  (function r2(k,slots,sum,sc){if(slots.length&&sum>=4)emit({h:2,slots,sum,score:sc-(COLS-sum)*70,next:k});if(k>=cs.length||sum>=COLS)return;const a=cs[k];for(const[w,h]of shapes(a)){if(h!==2||sum+w>COLS)continue;r2(k+1,slots.concat([{type:'one',idx:k,w}]),sum+w,sc+score(a,w,2))}if(k+1<cs.length){const b=cs[k+1],aw=new Set(shapes(a).filter(s=>s[1]===1).map(s=>s[0]));for(const[w,h]of shapes(b)){if(h!==1||!aw.has(w)||sum+w>COLS)continue;r2(k+2,slots.concat([{type:'pair',a:k,b:k+1,w}]),sum+w,sc+score(a,w,1)+score(b,w,1)+6)}}})(i,[],0,0);
+}
+function solve(cs){const N=cs.length,memo=new Array(N+1);function best(i){if(i===N)return{score:0,bands:[]};if(memo[i]!==undefined)return memo[i];let bs=null,opts=[];genBands(cs,i,b=>opts.push(b));for(const b of opts){const r=best(b.next);if(!r)continue;const sc=b.score+r.score;if(!bs||sc>bs.score)bs={score:sc,bands:[b].concat(r.bands)}}return memo[i]=bs}return best(0)}
+function tier(uw,uh){if(uh===1)return uw<=3?'a':'b';if(uw===2)return'c';if(uw===3)return'd';return'e'}
+function compute(){
+  const ids=order.filter(id=>!hidden.has(id));const cs=ids.map(id=>byId[id]);
+  if(!cs.length)return{p:{},height:0};
+  let sol=solve(cs);if(!sol)sol={bands:cs.map((c,k)=>({h:1,cells:[{idx:k,w:6}],sum:6,next:k+1}))};
+  const W=board.clientWidth||1116,unit=(W-(COLS-1)*GAP)/COLS,p={};let y=0;
+  for(const band of sol.bands){
+    const slots=band.h===1?band.cells.map(c=>({units:c.w,parts:[{idx:c.idx,row:0,rows:1}]})):band.slots.map(s=>s.type==='one'?{units:s.w,parts:[{idx:s.idx,row:0,rows:2}]}:{units:s.w,parts:[{idx:s.a,row:0,rows:1},{idx:s.b,row:1,rows:1}]});
+    const n=slots.length,avail=W-(n-1)*GAP;let x=0;
+    for(const slot of slots){const wpx=band.sum===COLS?slot.units*unit+(slot.units-1)*GAP:avail*slot.units/band.sum;const effW=Math.max(2,Math.min(6,Math.round((wpx+GAP)/(unit+GAP))));for(const part of slot.parts)p[ids[part.idx]]={x,y:y+part.row*(ROW+GAP),w:wpx,h:part.rows*ROW+(part.rows-1)*GAP,t:tier(effW,part.rows)};x+=wpx+GAP}
+    y+=(band.h===2?2*ROW+GAP:ROW)+GAP;
+  }
+  return{p,height:Math.max(0,y-GAP)};
+}
+function render(skip){const{p,height}=compute();rects=p;board.style.height=height+'px';
+  for(const c of CARDS){const el=els[c.id],r=p[c.id];if(!r){el.style.display='none';continue}el.style.display='flex';el.dataset.t=r.t;if(c.id===skip)continue;el.style.left=r.x+'px';el.style.top=r.y+'px';el.style.width=r.w+'px';el.style.height=r.h+'px'}
+  renderTray();
+}
+function renderTray(){tray.querySelectorAll('.chip').forEach(c=>c.remove());let any=false;for(const c of CARDS){if(!hidden.has(c.id))continue;any=true;const chip=document.createElement('button');chip.className='chip';chip.innerHTML=TITLES[c.id]+' <span class="add"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>';chip.onclick=()=>{hidden.delete(c.id);render()};tray.appendChild(chip)}tray.classList.toggle('has-items',any)}
+function hide(id){hidden.add(id);render()}
+/* drag */
+document.querySelectorAll('.card').forEach(el=>{
+  el.addEventListener('pointerdown',e=>{if(!arranging||e.button!==0||e.target.closest('.hide'))return;const r=rects[el.dataset.id];if(!r)return;drag={id:el.dataset.id,el,sx:e.clientX,sy:e.clientY,ox:r.x,oy:r.y,live:false};el.setPointerCapture(e.pointerId)});
+  el.addEventListener('pointermove',e=>{if(!drag||drag.el!==el)return;const dx=e.clientX-drag.sx,dy=e.clientY-drag.sy;if(!drag.live){if(Math.hypot(dx,dy)<7)return;drag.live=true;el.classList.add('dragging');ghost.classList.add('on')}el.style.left=(drag.ox+dx)+'px';el.style.top=(drag.oy+dy)+'px';
+    const br=board.getBoundingClientRect(),px=e.clientX-br.left,py=e.clientY-br.top,others=order.filter(id=>!hidden.has(id)&&id!==drag.id);let ins=others.length;
+    for(let j=0;j<others.length;j++){const q=rects[others[j]];if(!q)continue;const cx=q.x+q.w/2,cy=q.y+q.h/2;if(py<q.y-4||(py<q.y+q.h&&px<cx&&py<cy+q.h/2)){ins=j;break}if(py<cy&&px<cx){ins=j;break}}
+    const vis=order.filter(id=>!hidden.has(id)),target=[...others];target.splice(ins,0,drag.id);
+    if(target.join()!==vis.join()){order=target.concat(order.filter(id=>hidden.has(id)));render(drag.id)}
+    const gp=rects[drag.id];if(gp){ghost.style.left=gp.x+'px';ghost.style.top=gp.y+'px';ghost.style.width=gp.w+'px';ghost.style.height=gp.h+'px'}});
+  const fin=()=>{if(!drag||drag.el!==el)return;const live=drag.live;el.classList.remove('dragging');ghost.classList.remove('on');drag=null;if(live)render()};
+  el.addEventListener('pointerup',fin);el.addEventListener('pointercancel',fin);
+});
+document.getElementById('arrange-btn').onclick=()=>{arranging=!arranging;document.body.classList.toggle('arranging',arranging);document.getElementById('arrange-lbl').textContent=arranging?'Done':'Arrange'};
+document.getElementById('alert-toggle').addEventListener('change',e=>{alertDay=e.target.checked;document.body.classList.toggle('needsyou',alertDay);render()});
+document.getElementById('reset-btn').onclick=()=>{order=[...DEFAULT];hidden=new Set();alertDay=false;arranging=false;document.body.classList.remove('needsyou','arranging');document.getElementById('alert-toggle').checked=false;document.getElementById('arrange-lbl').textContent='Arrange';render()};
+document.getElementById('reset2').onclick=()=>{order=[...DEFAULT];hidden=new Set();render()};
+window.addEventListener('resize',()=>render());
+if(window.ResizeObserver){let w=board.clientWidth;new ResizeObserver(()=>{if(board.clientWidth!==w){w=board.clientWidth;render()}}).observe(board)}
+render();
+</script>
+</body>
+</html>

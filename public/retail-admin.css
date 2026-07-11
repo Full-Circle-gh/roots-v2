@@ -7894,38 +7894,140 @@
   .td-clear p.sub { margin-top: 4px; font-size: 13px; color: var(--td-text2); }
 
   /* ════════════════════════════════════════════════════════════════
-     THE DASHBOARD AS THE OPERATOR'S OWN SPACE — a draggable card grid.
-     Six columns. A block takes one column per thing it has to say, so a
-     card with two numbers is never stretched into a shape built for three:
-     Recap / Needs-you / Today take all six, Customers 4, Channels 2,
-     Inventory + Delivery 3 each. Rows close at six, and the flow is dense
-     so hiding a block in Arrange mode re-tiles the rest instead of leaving
-     a hole. "Arrange" mode (body.td-arranging) reveals a drag grip + a hide
-     ✕ on each block, a Dusk drop-seam while dragging, and a hidden-cards
-     tray. Order + hidden set persist per user. dashArrange* in 03-dashboard. */
-  .td-blocks {
-    display: grid; grid-template-columns: repeat(6, 1fr);
-    grid-auto-flow: row dense; gap: 16px; align-items: start;
+     THE DASHBOARD AS THE OPERATOR'S OWN SPACE — a self-arranging bento,
+     rebuilt from scratch off the dashboard-bento mockup (bn-*). Each card
+     declares the shapes it may take; a packing solver (dashCompute*/dashRender
+     in 03-dashboard) picks one per VISIBLE card so every row fills the six
+     columns whatever the operator hides or reorders, then positions the card
+     absolutely at the solved rect. Content adapts to the shape via [data-tier]
+     + .detail (tall cards) / .detail2 (large cards only). Cards morph between
+     shapes; order + hidden set persist per user. Below 1000px the solver is
+     bypassed and the cards stack in one column. The .td-block wrapper +
+     data-block stay as the solver/arrange contract; the visible surface is
+     fresh bn-* markup, and the data ids inside are painted by the same loaders
+     as before. dashArrange*/dashRender in 03-dashboard. */
+  .td-blocks { position: relative; }
+  .td-block {
+    position: absolute; min-width: 0;
+    transition: left .46s cubic-bezier(.16,1,.3,1), top .46s cubic-bezier(.16,1,.3,1),
+      width .46s cubic-bezier(.16,1,.3,1), height .46s cubic-bezier(.16,1,.3,1);
+    animation: td-settle .6s cubic-bezier(.16,1,.3,1) both;
   }
-  .td-block { position: relative; min-width: 0; }
-  .td-block[data-span="6"] { grid-column: span 6; }
-  .td-block[data-span="4"] { grid-column: span 4; }
-  .td-block[data-span="3"] { grid-column: span 3; }
-  .td-block[data-span="2"] { grid-column: span 2; }
-  .td-block[data-span="1"] { grid-column: span 1; }
-  /* Below the bento's comfortable width the narrow spans stop being legible:
-     Customers' three vitals and Channels' rows need room. Collapse to halves,
-     then to a single column on phones. */
-  @media (max-width: 1180px) {
-    .td-block[data-span="4"] { grid-column: span 6; }
-    .td-block[data-span="2"] { grid-column: span 3; }
-  }
-  @media (max-width: 1000px) {
-    .td-block[data-span="3"], .td-block[data-span="2"], .td-block[data-span="1"] { grid-column: span 6; }
-  }
-  /* A block the operator has hidden — out of the grid entirely (its inner
-     surfaces keep updating in the background so restoring is instant). */
+  @media (prefers-reduced-motion: reduce) { .td-block { transition: none; } }
+  /* Before the solver's first paint the cards have no geometry — stack them so
+     they never pile at 0,0 for a frame. dashRender adds .td-solved. */
+  .td-blocks:not(.td-solved) .td-block { position: static; margin-bottom: 16px; }
   .td-block.is-hidden { display: none; }
+
+  /* the card: white on paper, 1px, 14r, one soft shadow; clips so no card's
+     content ever spills its neighbour. Fills the solved tile under nothing. */
+  .bn-card {
+    position: relative; width: 100%; height: 100%;
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 14px; box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .bn-inner { padding: 16px 20px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  .bn-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex: none; }
+  .bn-head .bn-ico { width: 16px; height: 16px; color: var(--td-text2); flex: none; }
+  .bn-head h3 { margin: 0; font: 500 15px var(--f-sans); color: var(--td-text); white-space: nowrap; }
+  .bn-meta { font-size: 12.5px; color: var(--td-text2); white-space: nowrap; }
+  .bn-go { margin-left: auto; font-family: var(--f-sans); font-size: 13px; color: var(--td-text2);
+    background: none; border: 0; cursor: pointer; white-space: nowrap; padding: 0;
+    transition: color .2s cubic-bezier(.16,1,.3,1); }
+  .bn-go:hover { color: var(--td-text); }
+  .bn-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+  /* hover-× hide (mockup style). Always on while arranging. */
+  .bn-hide {
+    position: absolute; top: 10px; right: 10px; z-index: 3;
+    width: 24px; height: 24px; border-radius: 999px; border: 1px solid var(--td-border);
+    background: var(--td-surface); color: var(--td-text2);
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+    opacity: 0; transition: opacity .16s cubic-bezier(.16,1,.3,1);
+  }
+  .bn-hide svg { width: 13px; height: 13px; }
+  .td-block:hover .bn-hide, body.td-arranging .bn-hide { opacity: 1; }
+  .bn-hide:hover { color: var(--td-brick-ink); border-color: var(--td-brick); background: var(--td-brick-tint); }
+
+  /* the lead numeral — Inter 500, tabular, sized by tier (never Fraunces) */
+  .bn-val { font-family: var(--f-sans); font-weight: 500; letter-spacing: -.02em; line-height: 1.12;
+    color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .td-block[data-tier="a"] .bn-val, .td-block[data-tier="b"] .bn-val { font-size: 26px; }
+  .td-block[data-tier="c"] .bn-val { font-size: 30px; }
+  .td-block[data-tier="d"] .bn-val, .td-block[data-tier="e"] .bn-val { font-size: 38px; }
+
+  /* Today's revenue lead */
+  .bn-lead-k { font-size: 12.5px; color: var(--td-text2); flex: none; }
+  .bn-rev-row { display: flex; align-items: baseline; gap: 12px; flex: none; margin: 1px 0 2px; }
+  .bn-cmp { font-size: 13px; color: var(--td-text2); white-space: nowrap; }
+  .bn-rev-note { color: var(--td-text2); }
+
+  /* the day line — the shared spark wrap lends the hover-scrub; we lend height
+     + sage ink. The tip is a still ink dot (a breathing dot is Dusk). */
+  .bn-dayline { flex: 1; min-height: 30px; margin-top: 10px; display: flex; flex-direction: column; }
+  .bn-dayline .db-spark-wrap.td-dayline { flex: 1; height: auto; min-height: 56px; margin-top: 0; color: var(--td-sage); }
+  .bn-dayline .db-spark-line { stroke-width: 2; }
+  .bn-dayline .db-spark-dot { background: var(--td-text); }
+  .bn-hours { display: flex; justify-content: space-between; margin-top: 6px;
+    font-size: 11.5px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .bn-hours:empty { display: none; }
+
+  /* vitals — numbers split by hairlines; stack when the card is narrow-tall */
+  .bn-vitals { display: flex; align-items: stretch; gap: 0; flex: none; }
+  .bn-v { flex: 1; min-width: 0; }
+  .bn-v + .bn-v { border-left: 1px solid var(--td-border); padding-left: 16px; margin-left: 16px; }
+  .bn-vl { font-size: 12.5px; color: var(--td-text2); white-space: nowrap; }
+  .bn-vv { font-size: 21px; font-weight: 500; letter-spacing: -.01em; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .bn-vc { font-size: 12px; color: var(--td-text2); }
+  .bn-vc:empty { display: none; }
+
+  /* generated-content wrappers fill + clip inside the tile */
+  .bn-recap-rows, .bn-attn { flex: 1; min-height: 0; overflow: hidden; }
+  .bn-chan-list { flex: 1; min-height: 0; }
+
+  /* footers (painted by tdSecPaint) bleed to the card's rounded foot */
+  .td-block .td-sec-foot { margin-top: auto; padding: 11px 20px; }
+  .td-block .td-chan-foot { margin-top: 10px; }
+  .td-block .td-inv-low { margin-top: 8px; }
+
+  /* ── tier adaptation: one source of content, restyled by shape ──
+     a=strip narrow(≤3)  b=strip wide(≥4)  c=tall narrow(2)  d=tall(3)  e=large(≥4) */
+  .td-block[data-tier="a"] .detail, .td-block[data-tier="b"] .detail { display: none; }
+  .td-block[data-tier="a"] .detail2, .td-block[data-tier="b"] .detail2, .td-block[data-tier="c"] .detail2 { display: none; }
+  .td-block[data-tier="c"] .bn-vitals { flex-direction: column; }
+  .td-block[data-tier="c"] .bn-v + .bn-v {
+    border-left: 0; border-top: 1px solid var(--td-border);
+    padding-left: 0; margin-left: 0; padding-top: 10px; margin-top: 10px;
+  }
+  .td-block[data-tier="c"] .bn-vc { display: none; }
+
+  /* arrange mode: the whole card is the drag surface, so swallow clicks on its
+     inner controls (they'd open drawers mid-drag); the hide ✕ stays live. */
+  body.td-arranging .td-block { cursor: grab; }
+  body.td-arranging .td-block .bn-card { pointer-events: none; }
+  body.td-arranging .td-block .bn-hide { pointer-events: auto; }
+  body.td-arranging .td-block .bn-card { border-style: dashed; border-color: var(--td-dusk); }
+  .td-block.td-dragging { z-index: 40; }
+  .td-block.td-dragging .bn-card { box-shadow: 0 10px 30px rgba(17,26,43,.16); border-style: solid; }
+
+  /* Below the bento's comfortable width the solver is bypassed (dashRender
+     clears the inline geometry); cards return to a single stacked column at
+     natural height, and the tier folding is dropped so nothing is cut. Under
+     720px the whole desktop surface hides in favour of #rm-dash. */
+  @media (max-width: 1000px) {
+    .td-blocks { position: static; display: flex; flex-direction: column; gap: 16px; height: auto !important; }
+    .td-block {
+      position: static; width: auto !important; height: auto !important;
+      left: auto !important; top: auto !important; transition: none;
+    }
+    .bn-card { overflow: visible; }
+    .td-block[data-tier] .detail, .td-block[data-tier] .detail2 { display: revert; }
+    .td-block[data-tier="c"] .bn-vitals { flex-direction: row; }
+    .td-block[data-tier="c"] .bn-v + .bn-v { border-top: 0; border-left: 1px solid var(--td-border); padding: 0 0 0 16px; margin: 0 0 0 16px; }
+    .td-block[data-tier="c"] .bn-vc { display: block; }
+    .bn-dayline .db-spark-wrap.td-dayline { min-height: 96px; }
+  }
 
   /* Arrange / Done control in the dashboard header. */
   .td-arrange-btn {
