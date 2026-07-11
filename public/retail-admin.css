@@ -7604,9 +7604,12 @@
      --bg-pane so they're untouched. Other tabs keep the admin's default tan. */
   :root { --td-paper: #111A2B; }
   :root[data-theme="light"] { --td-paper: #FBF9F4; }
-  body:has(#tab-dashboard.active),
-  body:has(#tab-reports.active),
-  body:has(#tab-sales.active) { background: var(--td-paper); }
+  /* Paint the whole page ground in warm Paper on every admin tab — not just the
+     Tacet dashboards — so no tab ever shows the darker tan --bg-app (it was
+     leaking as a dark strip on the left when the sidebar folded, and made the
+     Orders ground read heavier than Reports). Topbar + sidebar keep their own
+     --bg-pane, so this only repaints the content gutter. */
+  body { background: var(--td-paper); }
 
   /* ════════════════════════════════════════════════════════════════════
      TACET SKIN — top bar + account menu (chrome reskin, slice one).
