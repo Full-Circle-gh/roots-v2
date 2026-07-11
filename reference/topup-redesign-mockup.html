@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <title>tacet — Top-up redesign mockups</title>
 </head>
 <body>
@@ -105,7 +105,10 @@ body {
   font-family: var(--font-text); font-size: 15px; line-height: 1.6;
   color: var(--ink);
 }
-.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+/* Numbers: always the clean sans (Inter), never the serif display face.
+   Tabular so columns of figures line up; the display serif stays for words. */
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum";
+  font-family: var(--font-text); letter-spacing: 0; }
 a { color: inherit; }
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 button:focus-visible, label:focus-visible, input:focus-visible {
@@ -236,7 +239,7 @@ button:focus-visible, label:focus-visible, input:focus-visible {
   font-family: var(--font-display); font-size: 22px; font-weight: 400;
   line-height: 1.45; max-width: 34em; text-wrap: balance; margin-bottom: 8px;
 }
-.qa-recap strong { font-weight: 400; border-bottom: 2px solid var(--sage); padding-bottom: 1px; }
+.qa-recap strong { font-weight: 500; border-bottom: 2px solid var(--sage); padding-bottom: 1px; }
 .qa-recap-sub { font-family: var(--font-text); font-size: 13px; color: var(--graphite); margin-bottom: 36px; max-width: 46em; }
 .qa-recap-sub a { text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border); }
 .qa-recap-sub a:hover { text-decoration-color: var(--graphite); }
@@ -253,7 +256,7 @@ button:focus-visible, label:focus-visible, input:focus-visible {
 .qa-pkg:last-child { border-bottom: 0; }
 .qa-pkg.off { opacity: 0.55; }
 .qa-amt {
-  font-family: var(--font-display); font-size: 21px; width: 96px; flex: none;
+  font-size: 19px; font-weight: 500; width: 96px; flex: none;
   letter-spacing: -0.01em;
 }
 .qa-bonus { width: 84px; flex: none; font-size: 13px; color: var(--sage-ink); font-weight: 500; }
@@ -324,7 +327,7 @@ button:focus-visible, label:focus-visible, input:focus-visible {
   font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500;
   color: var(--graphite); display: flex; align-items: center; gap: 8px;
 }
-.sb-stat .v { font-family: var(--font-display); font-size: 26px; margin-top: 2px; letter-spacing: -0.01em; }
+.sb-stat .v { font-size: 25px; font-weight: 600; margin-top: 2px; letter-spacing: -0.015em; }
 .sb-stat .s { font-size: 12px; color: var(--graphite); }
 .sb-stat .s .att { color: var(--amber-ink); font-weight: 500; }
 
@@ -342,7 +345,7 @@ button:focus-visible, label:focus-visible, input:focus-visible {
   font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 500;
   color: var(--graphite);
 }
-.sb-tile .amt { font-family: var(--font-display); font-size: 34px; line-height: 1.1; letter-spacing: -0.015em; }
+.sb-tile .amt { font-size: 32px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em; }
 .sb-tile .bonus { font-size: 14px; color: var(--sage-ink); font-weight: 500; }
 .sb-tile .titles { font-size: 12.5px; color: var(--graphite); line-height: 1.5; margin-top: 6px; min-height: 38px; }
 .sb-tile .foot {
