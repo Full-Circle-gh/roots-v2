@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Membership &amp; points redesign mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET MEMBERSHIP & POINTS REDESIGN — static mockup, no live data.
+   Chrome bar toggles the layout option:
+     A — one column: rules as sentences, tiers as cards
+     B — settings form + tier rows, sticky shopper preview
+   Tokens per tacet-tokens.css v1.0 — when in doubt, remove something.
+   Dusk appears ZERO times on this page: nothing here is automation.
+
+   What the redesign removes (vs. the current #tab-membership):
+     · the 8-column tier spreadsheet (perks collapse to 1 char/line on phones)
+     · the exposed "Key" column — key derives from Name EN, shown read-only
+     · the three-sentence intro + per-field essays → one short line each
+   What it adds:
+     · a plain-¥ outcome line so the operator can sanity-check the math
+     · member counts per tier (context for choosing thresholds)
+     · inline amber hints instead of save-time toast errors
+     · Option B: the shopper's Membership card, live beside the form
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- state machinery (CSS only) ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+#opt-a:checked ~ .frame .only-b { display: none !important; }
+#opt-b:checked ~ .frame .only-a { display: none !important; }
+#opt-a:checked ~ .frame .chrome label[for="opt-a"],
+#opt-b:checked ~ .frame .chrome label[for="opt-b"] {
+  background: var(--paper); color: var(--ink);
+}
+
+/* ---- mockup chrome bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink);
+  color: rgba(251,249,244,0.75);
+  display: flex; align-items: center; gap: 24px;
+  padding: 10px 28px;
+  font-size: 12.5px;
+  flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5);
+}
+.chrome .seg { display: inline-flex; border: 1px solid rgba(251,249,244,0.25); border-radius: 999px; overflow: hidden; }
+.chrome .seg label {
+  padding: 3px 14px; cursor: pointer; color: rgba(251,249,244,0.75);
+  transition: background 200ms var(--ease-settle);
+}
+.chrome .hint { margin-left: auto; color: rgba(251,249,244,0.4); }
+
+/* ---- product topbar (context only) ---- */
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 40px;
+  border-bottom: 1px solid var(--border);
+  background: var(--paper);
+}
+.topbar .wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 19px; letter-spacing: 0.2em; color: var(--ink);
+}
+.topbar .crumb { margin-left: auto; font-size: 13px; color: var(--graphite); }
+
+/* ---- page scaffold: 1120 max, 8-base rhythm ---- */
+.page { max-width: 1120px; margin: 0 auto; padding: 40px 40px 96px; }
+
+.page-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.page-head h1 { font-size: 21px; font-weight: 500; letter-spacing: -0.01em; }
+.page-head .spacer { margin-left: auto; }
+.page-sub { margin: 6px 0 0; font-size: 14px; color: var(--graphite); max-width: 68ch; }
+
+/* master switch — program shown to shoppers or not */
+.master { display: inline-flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--graphite); }
+.master b { font-weight: 500; color: var(--ink); }
+
+.switch {
+  width: 40px; height: 24px; border-radius: 999px; border: 0; padding: 0;
+  background: #D9D5CA; position: relative; cursor: pointer; flex: none;
+  transition: background 200ms var(--ease-settle);
+}
+.switch .knob {
+  position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(17,26,43,0.25);
+  transition: left 200ms var(--ease-settle);
+}
+.switch.on { background: var(--ink); }
+.switch.on .knob { left: 19px; }
+.switch:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* ---- shared vocabulary ---- */
+.eyebrow {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 11px; color: var(--graphite);
+  margin: 40px 0 6px;
+}
+.eyebrow .cn { letter-spacing: 0.08em; }
+.section-sub { font-size: 13.5px; color: var(--graphite); margin: 0 0 16px; max-width: 68ch; }
+
+.card {
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r-card); box-shadow: var(--shadow-soft);
+}
+
+input[type="text"], input[type="number"], select, textarea {
+  font: inherit; font-size: 14px; color: var(--ink);
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r-control); padding: 7px 10px;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+input[type="number"] { font-variant-numeric: tabular-nums; }
+
+.btn {
+  font: 500 14px var(--font-text); padding: 9px 18px;
+  border-radius: var(--r-control); border: 1px solid transparent;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  transition: all 200ms var(--ease-settle);
+}
+.btn-primary { background: var(--ink); color: var(--paper); }
+.btn-primary:hover { background: #1E2A42; }
+.btn-secondary { background: transparent; color: var(--ink); border-color: var(--border); }
+.btn-secondary:hover { border-color: var(--graphite); }
+.btn-quiet { background: none; border: 0; color: var(--graphite); font-size: 13px; padding: 4px 0; cursor: pointer; }
+.btn-quiet:hover { color: var(--ink); }
+.btn-danger { background: none; border: 0; color: var(--brick); font-size: 13px; cursor: pointer; padding: 4px 0; }
+.btn-danger:hover { text-decoration: underline; }
+
+.hint-amber {
+  display: inline-flex; align-items: baseline; gap: 8px;
+  background: var(--amber-tint); color: var(--amber-ink);
+  border-radius: var(--r-control); padding: 6px 12px;
+  font-size: 13px; line-height: 1.5;
+}
+
+/* card footer with the single save action */
+.card-foot {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 24px; border-top: 1px solid var(--border);
+  background: var(--cream); border-radius: 0 0 var(--r-card) var(--r-card);
+}
+.card-foot .note-l { font-size: 12.5px; color: var(--graphite); }
+.card-foot .sp { margin-left: auto; }
+
+/* ============================================================
+   OPTION A — rules as sentences, tiers as cards
+   ============================================================ */
+.rules { padding: 8px 24px; }
+.rule-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+  font-size: 15px;
+}
+.rule-row:last-of-type { border-bottom: 0; }
+.rule-row .in-num { width: 72px; text-align: center; }
+.rule-row .in-num.wide { width: 88px; }
+.rule-row select { padding-right: 28px; }
+.rule-row .why { flex-basis: 100%; font-size: 12.5px; color: var(--graphite); margin-top: 2px; }
+.rule-row .why-inline { font-size: 13px; color: var(--graphite); }
+
+.outcome {
+  margin: 6px 24px 20px; padding: 12px 16px;
+  background: var(--cream); border-radius: var(--r-control);
+  font-size: 13.5px; color: var(--graphite); line-height: 1.6;
+}
+.outcome b { font-weight: 500; color: var(--ink); }
+
+/* tier cards */
+.tier-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 16px; margin-top: 16px;
+}
+.tier {
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft); padding: 18px 20px 14px;
+  display: flex; flex-direction: column; gap: 6px;
+}
+.tier.editing { border-color: var(--graphite); }
+.tier-head { display: flex; align-items: baseline; gap: 8px; }
+.tier-name { font-size: 16px; font-weight: 500; }
+.tier-name .cn { font-size: 13px; font-weight: 400; color: var(--graphite); margin-left: 4px; }
+.tier-mult {
+  margin-left: auto; font-size: 12.5px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  background: var(--cream); border-radius: 999px; padding: 2px 10px;
+  color: var(--graphite); white-space: nowrap;
+}
+.tier-from { font-size: 13px; color: var(--graphite); }
+.tier-from b { font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tier-members {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--graphite); font-variant-numeric: tabular-nums;
+}
+.tier-members .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sage); flex: none; }
+.tier-perks { list-style: none; margin: 6px 0 4px; flex: 1; }
+.tier-perks li {
+  font-size: 13px; color: var(--ink); padding: 3px 0 3px 16px; position: relative;
+}
+.tier-perks li::before {
+  content: ""; position: absolute; left: 2px; top: 11px;
+  width: 5px; height: 5px; border-radius: 50%; background: var(--border);
+}
+.tier-edit { align-self: flex-start; }
+
+/* the inline tier editor (one open at a time) */
+.tier-editor { margin-top: 16px; padding: 20px 24px 16px; border-color: var(--graphite); }
+.tier-editor .cap {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: var(--graphite); margin-bottom: 14px;
+}
+.field-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 16px; }
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field label { font-size: 12px; font-weight: 500; color: var(--graphite); }
+.field .aff { display: flex; align-items: center; gap: 6px; }
+.field .aff .u { font-size: 13px; color: var(--graphite); }
+.field input, .field textarea { width: 100%; }
+.field textarea { resize: vertical; min-height: 92px; line-height: 1.55; }
+.field .fh { font-size: 12px; color: var(--graphite); }
+.field-grid .field.half { grid-column: span 2; }
+.tier-editor-foot {
+  display: flex; align-items: center; gap: 16px; margin-top: 16px;
+  padding-top: 14px; border-top: 1px solid var(--border);
+}
+.tier-editor-foot .keynote { font-size: 12px; color: var(--graphite); }
+.tier-editor-foot .keynote code {
+  font-family: ui-monospace, Menlo, monospace; font-size: 11.5px;
+  background: var(--cream); border-radius: 4px; padding: 1px 6px;
+}
+.tier-editor-foot .sp { margin-left: auto; }
+
+.tier-save-row { display: flex; align-items: center; gap: 16px; margin-top: 20px; }
+.tier-save-row .note-l { font-size: 12.5px; color: var(--graphite); }
+.tier-save-row .sp { margin-left: auto; }
+
+/* ============================================================
+   OPTION B — form + tier rows, sticky shopper preview
+   ============================================================ */
+.b-grid { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+.b-main { min-width: 0; }
+.b-main .eyebrow:first-child { margin-top: 0; }
+
+.setting-rows { padding: 4px 24px; }
+.setting {
+  display: flex; align-items: center; gap: 20px;
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+}
+.setting:last-child { border-bottom: 0; }
+.setting .s-main { flex: 1; min-width: 0; }
+.setting .s-name { font-size: 14px; font-weight: 500; }
+.setting .s-sub { font-size: 12.5px; color: var(--graphite); margin-top: 1px; }
+.setting .s-ctl { display: flex; align-items: center; gap: 8px; flex: none; font-size: 13.5px; color: var(--graphite); }
+.setting .s-ctl input[type="number"] { width: 72px; text-align: center; }
+.setting .s-col { flex-direction: column; align-items: flex-end; gap: 6px; }
+
+/* tier rows */
+.tier-rows { margin-top: 16px; }
+.trow {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 24px; border-bottom: 1px solid var(--border);
+}
+.trow:last-of-type { border-bottom: 0; }
+.trow .t-main { flex: 1; min-width: 0; }
+.trow .t-nm { font-size: 14.5px; font-weight: 500; }
+.trow .t-nm .cn { font-weight: 400; color: var(--graphite); font-size: 13px; margin-left: 4px; }
+.trow .t-meta { font-size: 12.5px; color: var(--graphite); margin-top: 1px; font-variant-numeric: tabular-nums; }
+.trow .tier-mult { margin-left: 0; }
+.trow .chev { color: var(--graphite); flex: none; transition: transform 200ms var(--ease-settle); }
+.trow-editor { padding: 6px 24px 20px; border-bottom: 1px solid var(--border); background: var(--cream); }
+.trow-editor .field-grid { grid-template-columns: repeat(2, 1fr); }
+.trow-editor .field.half { grid-column: span 2; }
+
+/* shopper preview — the mini-app Membership card, ink on paper */
+.preview-wrap { position: sticky; top: 24px; }
+.preview-cap {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 11px; color: var(--graphite); margin-bottom: 6px;
+}
+.preview-sub { font-size: 12.5px; color: var(--graphite); margin-bottom: 12px; }
+.pv {
+  background: var(--ink); color: var(--paper);
+  border-radius: var(--r-card); padding: 22px 22px 18px;
+  box-shadow: var(--shadow-soft);
+}
+.pv .pv-kicker {
+  letter-spacing: 0.18em; text-transform: uppercase;
+  font-size: 10px; font-weight: 500; color: rgba(251,249,244,0.55);
+}
+.pv .pv-tier { font-size: 22px; font-weight: 500; margin-top: 8px; }
+.pv .pv-tier .cn { font-size: 15px; font-weight: 400; color: rgba(251,249,244,0.65); margin-left: 6px; }
+.pv .pv-balance { font-size: 13.5px; color: rgba(251,249,244,0.75); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.pv .pv-balance b { color: var(--paper); font-weight: 500; }
+.pv .pv-bar {
+  height: 5px; border-radius: 999px; background: rgba(251,249,244,0.18);
+  margin-top: 16px; overflow: hidden;
+}
+.pv .pv-bar i { display: block; height: 100%; width: 62%; background: var(--sage); border-radius: 999px; }
+.pv .pv-progress { font-size: 12px; color: rgba(251,249,244,0.65); margin-top: 7px; font-variant-numeric: tabular-nums; }
+.pv .pv-progress b { color: var(--paper); font-weight: 500; }
+.pv-ladder { list-style: none; margin-top: 16px; border-top: 1px solid rgba(251,249,244,0.14); }
+.pv-ladder li {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid rgba(251,249,244,0.1);
+  font-size: 13px; color: rgba(251,249,244,0.72); font-variant-numeric: tabular-nums;
+}
+.pv-ladder li:last-child { border-bottom: 0; }
+.pv-ladder .mk {
+  width: 18px; height: 18px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 10px; border: 1px solid rgba(251,249,244,0.3); color: rgba(251,249,244,0.55);
+}
+.pv-ladder li.reached .mk { background: var(--sage); border-color: var(--sage); color: var(--ink); }
+.pv-ladder li.here { color: var(--paper); font-weight: 500; }
+.pv-ladder li.here .mk { border-color: var(--paper); color: var(--paper); }
+.pv-ladder .r { margin-left: auto; font-size: 12px; color: rgba(251,249,244,0.5); }
+
+/* ---- rule notes under the page (mockup annotation) ---- */
+.note { margin-top: 16px; font-size: 13px; color: var(--graphite); max-width: 640px; line-height: 1.65; }
+.note:first-of-type { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); }
+.note b { font-weight: 500; color: var(--ink); }
+
+@media (max-width: 900px) {
+  .page { padding: 24px 20px 72px; }
+  .topbar { padding: 14px 20px; }
+  .b-grid { grid-template-columns: 1fr; }
+  .preview-wrap { position: static; }
+  .field-grid { grid-template-columns: repeat(2, 1fr); }
+  .setting { flex-wrap: wrap; }
+  .setting .s-ctl { margin-left: 0; }
+}
+@media (max-width: 560px) {
+  .field-grid { grid-template-columns: 1fr; }
+  .field-grid .field.half { grid-column: auto; }
+  .tier-grid { grid-template-columns: 1fr; }
+  .tier-save-row { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<input class="state" type="radio" name="opt" id="opt-a" checked>
+<input class="state" type="radio" name="opt" id="opt-b">
+
+<div class="frame">
+  <div class="chrome">
+    <span class="tag">tacet mockup — loyalty · membership &amp; points</span>
+    <span class="seg">
+      <label for="opt-a">A · sentences + tier cards</label>
+      <label for="opt-b">B · form + shopper preview</label>
+    </span>
+    <span class="hint">static mockup — no live data</span>
+  </div>
+
+  <div class="topbar">
+    <span class="wordmark">tacet</span>
+    <span class="crumb">Loyalty &amp; Wallet → Membership &amp; points · 会员积分</span>
+  </div>
+
+  <div class="page">
+
+    <!-- ── shared page head ─────────────────────────────────── -->
+    <div class="page-head">
+      <h1>Membership &amp; points</h1>
+      <span class="spacer"></span>
+      <span class="master"><b>Shown to shoppers</b> · 已对顾客展示
+        <button class="switch on" role="switch" aria-checked="true" aria-label="Membership &amp; points shown to shoppers"><span class="knob"></span></button>
+      </span>
+    </div>
+    <p class="page-sub">Points your shoppers earn on every order, and the Roots Club tiers that multiply them. Tiers climb automatically with lifetime spend.</p>
+
+    <!-- ══════════════════════════════════════════════════════
+         OPTION A — one column. The rules read as sentences;
+         the ladder reads as cards, tallest tier last.
+         ══════════════════════════════════════════════════════ -->
+    <section class="only-a">
+
+      <div class="eyebrow">How points work <span class="cn">· 积分规则</span></div>
+      <p class="section-sub">Four rules. The grey line under the card shows what they add up to.</p>
+
+      <div class="card">
+        <div class="rules">
+          <div class="rule-row">
+            <span>Customers earn</span>
+            <input class="in-num num" type="number" value="1" min="1" aria-label="Points earned">
+            <span>point for every ¥</span>
+            <input class="in-num num" type="number" value="100" min="1" aria-label="Yuan spent">
+            <span>of</span>
+            <select aria-label="Earn basis">
+              <option selected>what they pay · 实付金额</option>
+              <option>order value before discounts · 折前金额</option>
+            </select>
+          </div>
+          <div class="rule-row">
+            <span>Each point is worth ¥</span>
+            <input class="in-num num" type="number" value="1.00" step="0.01" min="0.01" max="1" aria-label="Point value">
+            <span>at checkout.</span>
+          </div>
+          <div class="rule-row">
+            <span>Points expire</span>
+            <input class="in-num num" type="number" value="2" min="0" aria-label="Expiry months">
+            <span>months after they're earned.</span>
+            <span class="why-inline">0 = never expire.</span>
+            <span class="why"><span class="hint-amber">2 months is short — most stores give 12–24, or 0 so points never expire.</span></span>
+          </div>
+          <div class="rule-row">
+            <button class="switch" role="switch" aria-checked="false" aria-label="Points can pay for shipping"><span class="knob"></span></button>
+            <span>Points can pay for shipping · 积分可抵运费</span>
+            <span class="why-inline">Off — shipping is always paid in cash.</span>
+          </div>
+        </div>
+        <div class="outcome num">
+          So a <b>¥200</b> order earns <b>2 points = ¥2</b> off a future order (1% back).
+          A Tree member at 1.3× earns <b>2.6 points</b> on the same order.
+        </div>
+        <div class="card-foot">
+          <span class="note-l">Applies to new orders only.</span>
+          <span class="sp"></span>
+          <button class="btn btn-primary">Save points rules · 保存</button>
+        </div>
+      </div>
+
+      <div class="eyebrow">Roots Club tiers <span class="cn">· 会员等级</span></div>
+      <p class="section-sub">Shoppers reach a tier by lifetime spend and keep it. The lowest tier starts at ¥0 so everyone belongs somewhere.</p>
+
+      <div class="tier-grid">
+        <div class="tier">
+          <div class="tier-head">
+            <span class="tier-name">Seed<span class="cn">种子</span></span>
+            <span class="tier-mult num">1.0× points</span>
+          </div>
+          <div class="tier-from num">from <b>¥0</b> — everyone starts here</div>
+          <span class="tier-members num"><span class="dot"></span>186 members</span>
+          <ul class="tier-perks">
+            <li>Earn points on every order</li>
+            <li>Member-only offers</li>
+          </ul>
+          <button class="btn-quiet tier-edit">Edit tier</button>
+        </div>
+
+        <div class="tier editing">
+          <div class="tier-head">
+            <span class="tier-name">Sprout<span class="cn">幼苗</span></span>
+            <span class="tier-mult num">1.1× points</span>
+          </div>
+          <div class="tier-from num">from <b>¥4,000</b> lifetime spend</div>
+          <span class="tier-members num"><span class="dot"></span>42 members</span>
+          <ul class="tier-perks">
+            <li>1.1× points on everything</li>
+            <li>Early access to new drops</li>
+          </ul>
+          <button class="btn-quiet tier-edit">Editing below ↓</button>
+        </div>
+
+        <div class="tier">
+          <div class="tier-head">
+            <span class="tier-name">Root<span class="cn">根</span></span>
+            <span class="tier-mult num">1.2× points</span>
+          </div>
+          <div class="tier-from num">from <b>¥6,000</b> lifetime spend</div>
+          <span class="tier-members num"><span class="dot"></span>17 members</span>
+          <ul class="tier-perks">
+            <li>1.2× points on everything</li>
+            <li>Free shipping over ¥199</li>
+            <li>Birthday gift</li>
+          </ul>
+          <button class="btn-quiet tier-edit">Edit tier</button>
+        </div>
+
+        <div class="tier">
+          <div class="tier-head">
+            <span class="tier-name">Tree<span class="cn">大树</span></span>
+            <span class="tier-mult num">1.3× points</span>
+          </div>
+          <div class="tier-from num">from <b>¥10,000</b> lifetime spend</div>
+          <span class="tier-members num"><span class="dot"></span>6 members</span>
+          <ul class="tier-perks">
+            <li>1.3× points on everything</li>
+            <li>Free shipping, no minimum</li>
+            <li>Birthday gift</li>
+            <li>First taste of new products</li>
+          </ul>
+          <button class="btn-quiet tier-edit">Edit tier</button>
+        </div>
+      </div>
+
+      <!-- one tier open for editing at a time -->
+      <div class="card tier-editor">
+        <div class="cap">Editing — Sprout · 幼苗</div>
+        <div class="field-grid">
+          <div class="field">
+            <label for="a-nm-en">Name (English)</label>
+            <input id="a-nm-en" type="text" value="Sprout">
+          </div>
+          <div class="field">
+            <label for="a-nm-cn">Name (中文)</label>
+            <input id="a-nm-cn" type="text" value="幼苗">
+          </div>
+          <div class="field">
+            <label for="a-th">Reached at lifetime spend</label>
+            <span class="aff"><span class="u">¥</span><input id="a-th" class="num" type="number" value="4000" min="0" step="100"></span>
+          </div>
+          <div class="field">
+            <label for="a-mu">Points multiplier</label>
+            <span class="aff"><input id="a-mu" class="num" type="number" value="1.1" min="0.1" max="10" step="0.1"><span class="u">×</span></span>
+            <span class="fh">1.0 = base rate</span>
+          </div>
+          <div class="field half">
+            <label for="a-pk-en">Perks — one per line (English)</label>
+            <textarea id="a-pk-en">1.1× points on everything
+Early access to new drops</textarea>
+          </div>
+          <div class="field half">
+            <label for="a-pk-cn">Perks — one per line (中文)</label>
+            <textarea id="a-pk-cn">全场 1.1 倍积分
+新品优先购</textarea>
+          </div>
+        </div>
+        <div class="tier-editor-foot">
+          <span class="keynote">Key <code>sprout</code> — set automatically from the English name.</span>
+          <span class="sp"></span>
+          <button class="btn-danger">Remove tier</button>
+          <button class="btn btn-secondary">Done</button>
+        </div>
+      </div>
+
+      <div class="tier-save-row">
+        <button class="btn btn-secondary">+ Add tier · 添加等级</button>
+        <span class="note-l">Tiers sort themselves by spend when you save. Everyone's tier updates automatically.</span>
+        <span class="sp"></span>
+        <button class="btn btn-primary">Save tiers · 保存等级</button>
+      </div>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════
+         OPTION B — settings + tier rows on the left,
+         the shopper's own Membership card pinned on the right.
+         ══════════════════════════════════════════════════════ -->
+    <section class="only-b">
+      <div class="b-grid" style="margin-top: 32px;">
+        <div class="b-main">
+
+          <div class="eyebrow">How points work <span class="cn">· 积分规则</span></div>
+          <div class="card">
+            <div class="setting-rows">
+              <div class="setting">
+                <div class="s-main">
+                  <div class="s-name">Earn rate</div>
+                  <div class="s-sub">Base rate before tier multipliers.</div>
+                </div>
+                <div class="s-ctl num">
+                  <input type="number" value="1" min="1" aria-label="Points earned"> pt per ¥
+                  <input type="number" value="100" min="1" aria-label="Yuan spent">
+                </div>
+              </div>
+              <div class="setting">
+                <div class="s-main">
+                  <div class="s-name">Counted on</div>
+                  <div class="s-sub">What the ¥ amount refers to.</div>
+                </div>
+                <div class="s-ctl">
+                  <select aria-label="Earn basis">
+                    <option selected>what the customer pays</option>
+                    <option>order value before discounts</option>
+                  </select>
+                </div>
+              </div>
+              <div class="setting">
+                <div class="s-main">
+                  <div class="s-name">Point value</div>
+                  <div class="s-sub">What one point is worth at checkout.</div>
+                </div>
+                <div class="s-ctl num">¥ <input type="number" value="1.00" step="0.01" min="0.01" max="1" aria-label="Point value"></div>
+              </div>
+              <div class="setting">
+                <div class="s-main">
+                  <div class="s-name">Points expire after</div>
+                  <div class="s-sub">0 = never expire. Applies to new earns only.</div>
+                </div>
+                <div class="s-ctl s-col">
+                  <span class="num"><input type="number" value="2" min="0" aria-label="Expiry months"> months</span>
+                  <span class="hint-amber">Short — most stores give 12–24.</span>
+                </div>
+              </div>
+              <div class="setting">
+                <div class="s-main">
+                  <div class="s-name">Points can pay for shipping</div>
+                  <div class="s-sub">Off — shipping is always paid in cash.</div>
+                </div>
+                <div class="s-ctl">
+                  <button class="switch" role="switch" aria-checked="false" aria-label="Points can pay for shipping"><span class="knob"></span></button>
+                </div>
+              </div>
+            </div>
+            <div class="card-foot">
+              <span class="note-l num">A ¥200 order earns <b style="font-weight:500;color:var(--ink)">2 pts = ¥2</b> back (1%).</span>
+              <span class="sp"></span>
+              <button class="btn btn-primary">Save points rules</button>
+            </div>
+          </div>
+
+          <div class="eyebrow">Roots Club tiers <span class="cn">· 会员等级</span></div>
+          <div class="card tier-rows">
+            <div class="trow">
+              <div class="t-main">
+                <div class="t-nm">Seed<span class="cn">种子</span></div>
+                <div class="t-meta">from ¥0 · 186 members · 2 perks</div>
+              </div>
+              <span class="tier-mult num">1.0×</span>
+              <span class="chev">›</span>
+            </div>
+            <div class="trow" style="border-bottom: 0;">
+              <div class="t-main">
+                <div class="t-nm">Sprout<span class="cn">幼苗</span></div>
+                <div class="t-meta">from ¥4,000 · 42 members · 2 perks</div>
+              </div>
+              <span class="tier-mult num">1.1×</span>
+              <span class="chev" style="transform: rotate(90deg);">›</span>
+            </div>
+            <div class="trow-editor">
+              <div class="field-grid">
+                <div class="field">
+                  <label for="b-nm-en">Name (English)</label>
+                  <input id="b-nm-en" type="text" value="Sprout">
+                </div>
+                <div class="field">
+                  <label for="b-nm-cn">Name (中文)</label>
+                  <input id="b-nm-cn" type="text" value="幼苗">
+                </div>
+                <div class="field">
+                  <label for="b-th">Reached at lifetime spend</label>
+                  <span class="aff"><span class="u">¥</span><input id="b-th" class="num" type="number" value="4000" min="0" step="100"></span>
+                </div>
+                <div class="field">
+                  <label for="b-mu">Points multiplier</label>
+                  <span class="aff"><input id="b-mu" class="num" type="number" value="1.1" min="0.1" max="10" step="0.1"><span class="u">×</span></span>
+                </div>
+                <div class="field half">
+                  <label for="b-pk-en">Perks — one per line (English)</label>
+                  <textarea id="b-pk-en">1.1× points on everything
+Early access to new drops</textarea>
+                </div>
+                <div class="field half">
+                  <label for="b-pk-cn">Perks — one per line (中文)</label>
+                  <textarea id="b-pk-cn">全场 1.1 倍积分
+新品优先购</textarea>
+                </div>
+              </div>
+              <div class="tier-editor-foot" style="border-top: 0; margin-top: 12px; padding-top: 0;">
+                <span class="keynote">Key <code>sprout</code> — automatic.</span>
+                <span class="sp"></span>
+                <button class="btn-danger">Remove tier</button>
+                <button class="btn btn-secondary">Done</button>
+              </div>
+            </div>
+            <div class="trow">
+              <div class="t-main">
+                <div class="t-nm">Root<span class="cn">根</span></div>
+                <div class="t-meta">from ¥6,000 · 17 members · 3 perks</div>
+              </div>
+              <span class="tier-mult num">1.2×</span>
+              <span class="chev">›</span>
+            </div>
+            <div class="trow">
+              <div class="t-main">
+                <div class="t-nm">Tree<span class="cn">大树</span></div>
+                <div class="t-meta">from ¥10,000 · 6 members · 4 perks</div>
+              </div>
+              <span class="tier-mult num">1.3×</span>
+              <span class="chev">›</span>
+            </div>
+            <div class="card-foot">
+              <button class="btn btn-secondary">+ Add tier</button>
+              <span class="note-l">Sorted by spend on save.</span>
+              <span class="sp"></span>
+              <button class="btn btn-primary">Save tiers</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- what the shopper sees, always in view while editing -->
+        <div class="preview-wrap">
+          <div class="preview-cap">What shoppers see <span style="letter-spacing:0.08em">· 顾客所见</span></div>
+          <div class="preview-sub">The mini-app Membership page, reflecting your edits. Example: a member with ¥4,850 lifetime spend.</div>
+          <div class="pv">
+            <div class="pv-kicker">Roots Club</div>
+            <div class="pv-tier">Sprout<span class="cn">幼苗</span></div>
+            <div class="pv-balance num"><b>128 pts</b> ≈ ¥128 to spend</div>
+            <div class="pv-bar"><i></i></div>
+            <div class="pv-progress num"><b>¥4,850</b> lifetime — ¥1,150 to Root</div>
+            <ul class="pv-ladder num">
+              <li class="reached"><span class="mk">✓</span>Seed<span class="r">¥0</span></li>
+              <li class="here"><span class="mk">●</span>Sprout — you're here<span class="r">1.1×</span></li>
+              <li><span class="mk"></span>Root<span class="r">¥6,000</span></li>
+              <li><span class="mk"></span>Tree<span class="r">¥10,000</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── mockup annotations (not part of the product) ─────── -->
+    <p class="note"><b>What went away:</b> the 8-column tier spreadsheet (on a phone the perks boxes render one character per line), the exposed Key column (the key derives from the English name and shows read-only in the editor), and the three paragraphs of intro copy — every control now gets one short line, and only where it earns its place.</p>
+    <p class="note"><b>What's new:</b> a plain-¥ outcome line so the operator can sanity-check the math at a glance; member counts on each tier (context for choosing thresholds); amber hints inline while you type instead of toast errors at save time; and in Option B, the shopper's own Membership card pinned beside the form.</p>
+    <p class="note"><b>The Dusk budget:</b> zero. Nothing on this page is automation, so nothing on it may be purple. Sage marks members present and tiers reached; amber flags the one setting worth a second look; the only dark buttons are ink.</p>
+    <p class="note"><b>Field parity:</b> both options carry every stored field — earn pair, earn basis, point value (redeem rate), expiry months, points-cover-shipping, and per-tier key / names EN+CN / threshold / multiplier / perks EN+CN. Two save buttons remain two saves, matching the two config blobs behind them.</p>
+
+  </div>
+</div>
+
+<script>
+  // Mockup-only behaviour: switches flip, nothing persists.
+  document.querySelectorAll('.switch').forEach(function (s) {
+    s.addEventListener('click', function () {
+      s.classList.toggle('on');
+      s.setAttribute('aria-checked', s.classList.contains('on') ? 'true' : 'false');
+    });
+  });
+</script>
+</body>
+</html>
