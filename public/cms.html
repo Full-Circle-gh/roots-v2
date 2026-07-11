@@ -5933,6 +5933,31 @@ function _positionDesignMenu(menu) {
   // copy + a Locate button — picker-width (~200px) would cramp them.
   // Capped at viewport width minus a margin so it never spills offscreen.
   const wantsWide = menu.id === 'design-check-menu';
+  const isCanvas = document.documentElement.dataset.layout === 'canvas';
+
+  // In canvas layout the drawer is only ~288px, so the tall/wide findings
+  // report can't drop under its row without overhanging the panel and
+  // reading as a stray card. Slide it out as a flyout hugging the drawer's
+  // right edge, top-aligned to the DESIGN CHECK row, so it looks like an
+  // attached panel. (Only DESIGN CHECK — the swatch pickers stay dropdowns.)
+  if (wantsWide && isCanvas) {
+    const drawer = picker.closest('.pane.left');
+    const dr = (drawer || picker).getBoundingClientRect();
+    const width = Math.min(340, window.innerWidth - dr.right - margin - 8);
+    menu.style.left  = (dr.right + 8) + 'px';
+    menu.style.width = width + 'px';
+    const h = menu.offsetHeight || 240;
+    let top = r.top;
+    if (top + h + margin > vh) top = Math.max(margin, vh - h - margin);
+    menu.style.top = top + 'px';
+    return;
+  }
+
+  // Drop down from the picker, aligned to its left edge + same width as
+  // the picker (CSS sets width: r.width via the design-pickers rule).
+  // DESIGN CHECK widens to ~340px because each row carries bilingual
+  // copy + a Locate button — picker-width (~200px) would cramp them.
+  // Capped at viewport width minus a margin so it never spills offscreen.
   const width = wantsWide
     ? Math.min(340, window.innerWidth - r.left - margin)
     : r.width;

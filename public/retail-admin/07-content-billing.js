@@ -1629,37 +1629,62 @@ async function sendFeedbackReply() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// FLASH SALES TAB — schedule per-product flash-sale windows
+// FLASH SALES TAB — Tacet rebuild (Option C: timeline + guided wizard).
+// The page is a timeline of sales (Live now → Scheduled → Ended) down the
+// left, with a quiet "launch card" on the right that opens the one door to
+// creation: a 4-step wizard (Product → Price → Clock → Start). Every value
+// has a good default; only a product and an end time are ever required.
+// All creation/edit goes through the same PUT /products/:id/flash-sale
+// endpoint; DELETE reverts a product to its regular price. Bilingual copy
+// (En · 中) deliberately plain for non-native operators.
 // ═══════════════════════════════════════════════════════════════════
 let FLASH_LOADED = false;
-let _fsProducts = null;       // cache of published products (for the picker)
+let _fsProducts = null;          // cache of published products (for the wizard)
+let _fsRows = [];                // last-loaded flash-sale rows
+let _fsClockSkew = 0;            // server_time_ms − Date.now() at load
+let _fsTick = null;              // countdown refresh interval
 
-function fsLocalDatetime(iso) {
-  // Convert ISO (UTC) → 'YYYY-MM-DDTHH:mm' in local time for the picker.
-  if (!iso) return '';
-  let d;
-  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(iso)) {
-    d = new Date(iso.replace(' ', 'T') + 'Z');
-  } else {
-    d = new Date(iso);
-  }
-  if (isNaN(d.getTime())) return '';
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+function fsNow() { return Date.now() + _fsClockSkew; }
+function fsPad(n) { return String(n).padStart(2, '0'); }
+
+// SQLite 'YYYY-MM-DD HH:MM:SS' (UTC) or ISO → epoch ms.
+function fsToMs(s) {
+  if (!s) return null;
+  if (typeof s === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)) s = s.replace(' ', 'T') + 'Z';
+  const t = new Date(s).getTime();
+  return Number.isFinite(t) ? t : null;
+}
+// epoch ms → local 'YYYY-MM-DD HH:mm' for display.
+function fsWhen(ms) {
+  if (ms == null) return null;
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${fsPad(d.getMonth() + 1)}-${fsPad(d.getDate())} ${fsPad(d.getHours())}:${fsPad(d.getMinutes())}`;
+}
+// epoch ms → local 'YYYY-MM-DDTHH:mm' for datetime-local inputs.
+function fsLocalInput(ms) {
+  if (ms == null) return '';
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${fsPad(d.getMonth() + 1)}-${fsPad(d.getDate())}T${fsPad(d.getHours())}:${fsPad(d.getMinutes())}`;
+}
+// Human "in 4h 12m" / "in 3d 4h" from a delta.
+function fsRel(deltaMs) {
+  let s = Math.floor(deltaMs / 1000);
+  if (s <= 0) return null;
+  const d = Math.floor(s / 86400); s -= d * 86400;
+  const h = Math.floor(s / 3600); s -= h * 3600;
+  const m = Math.floor(s / 60);
+  if (d > 0) return cuT(`${d}d ${h}h`, `${d}天${h}小时`);
+  if (h > 0) return cuT(`${h}h ${m}m`, `${h}小时${m}分`);
+  return cuT(`${m}m`, `${m}分钟`);
 }
 
-function fsFormatWindow(starts, ends) {
-  function fmt(s) {
-    if (!s) return null;
-    const d = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(s)
-      ? new Date(s.replace(' ', 'T') + 'Z') : new Date(s);
-    if (isNaN(d.getTime())) return null;
-    const pad = n => String(n).padStart(2, '0');
-    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  }
-  const s = fmt(starts), e = fmt(ends);
-  if (!e) return '<span class="muted">—</span>';
-  return `<span style="font-family: var(--f-mono); font-size: 11px;">${s ? escapeHtml(s) : '<span class="muted">now</span>'} → ${escapeHtml(e)}</span>`;
+function fsThumbHtml(p) {
+  const src = p && (p.image_url || p.image_data) || '';
+  if (src) return `<img src="${escapeAttr(src)}" alt="">`;
+  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
+}
+function fsName(p) {
+  return [p.name_en, p.name_cn].filter(Boolean).join(' · ') || ('#' + p.id);
 }
 
 async function fsEnsureProducts() {
@@ -1667,289 +1692,15 @@ async function fsEnsureProducts() {
   try {
     const j = await api('/api/retail-admin/products?published=1');
     _fsProducts = (j.data || []).filter(p => p.is_published);
-  } catch {
-    _fsProducts = [];
-  }
+  } catch { _fsProducts = []; }
   return _fsProducts;
 }
 
-// Currently-selected product object (or null). Picker shows it in the trigger
-// and `fsUpdatePriceHint()` reads `.sell_price` for the discount math.
-let _fsSelected = null;
-let _fsPickerFocusIdx = -1;
-let _fsPickerOpen = false;
-
-function fsThumbHtml(p) {
-  const src = p && (p.image_url || p.image_data) || '';
-  if (src) return `<img src="${escapeAttr(src)}" alt="">`;
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
-}
-
-function fsRenderPickerTrigger() {
-  const thumb = $('#fs-picker-thumb');
-  const label = $('#fs-picker-label');
-  const hidden = $('#fs-product');
-  if (_fsSelected) {
-    thumb.innerHTML = fsThumbHtml(_fsSelected);
-    const name = [_fsSelected.name_en, _fsSelected.name_cn].filter(Boolean).join(' · ') || ('#' + _fsSelected.id);
-    const sku = _fsSelected.sku ? `<span class="sku">[${escapeHtml(_fsSelected.sku)}]</span>` : '';
-    const price = _fsSelected.sell_price ? `<span class="pr">¥${fmt(_fsSelected.sell_price)}</span>` : '';
-    label.classList.remove('empty');
-    label.innerHTML = `${escapeHtml(name)}${sku}${price}`;
-    hidden.value = String(_fsSelected.id);
-  } else {
-    thumb.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
-    label.classList.add('empty');
-    label.textContent = '— pick a product · 选择产品 —';
-    hidden.value = '';
-  }
-}
-
-async function fsPickerRenderList(filter) {
-  const list = await fsEnsureProducts();
-  const q = (filter || '').trim().toLowerCase();
-  const filtered = q
-    ? list.filter(p => `${p.name_en || ''} ${p.name_cn || ''} ${p.sku || ''}`.toLowerCase().includes(q))
-    : list;
-  const mount = $('#fs-picker-list');
-  if (!filtered.length) {
-    mount.innerHTML = `<div class="fs-picker-empty">${q ? 'No products match · 无匹配产品 — try a different search.' : 'No products in the system yet · 系统中暂无产品。'}</div>`;
-    _fsPickerFocusIdx = -1;
-    return;
-  }
-  mount.innerHTML = filtered.slice(0, 200).map((p, i) => {
-    const name = [p.name_en, p.name_cn].filter(Boolean).join(' · ') || ('#' + p.id);
-    const subBits = [];
-    if (p.sku) subBits.push(p.sku);
-    if (p.size) subBits.push(p.size);
-    const sub = subBits.join(' · ');
-    const price = p.sell_price ? `¥${fmt(p.sell_price)}` : '';
-    const isSel = _fsSelected && _fsSelected.id === p.id ? ' selected' : '';
-    const draft = !p.is_published ? ' draft' : '';
-    return `<div class="fs-picker-item${isSel}${draft}" data-id="${p.id}" data-idx="${i}">
-      <div class="thumb">${fsThumbHtml(p)}</div>
-      <div class="info">
-        <div class="name">${escapeHtml(name)}</div>
-        ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
-      </div>
-      ${price ? `<div class="price">${price}</div>` : ''}
-    </div>`;
-  }).join('');
-  _fsPickerFocusIdx = -1;
-  mount.querySelectorAll('.fs-picker-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const id = parseInt(el.dataset.id, 10);
-      const product = filtered.find(p => p.id === id);
-      if (product) fsPickProduct(product);
-    });
-  });
-}
-
-function fsPickProduct(product) {
-  _fsSelected = product || null;
-  fsRenderPickerTrigger();
-  fsPickerClose();
-  fsUpdatePriceHint();
-}
-
-function fsPickerOpen() {
-  if (_fsPickerOpen) return;
-  const picker = $('#fs-picker');
-  if (picker.classList.contains('disabled')) return;
-  picker.classList.add('open');
-  $('#fs-picker-pop').hidden = false;
-  $('#fs-picker-search').value = '';
-  _fsPickerOpen = true;
-  fsPickerRenderList('');
-  setTimeout(() => $('#fs-picker-search').focus(), 0);
-}
-
-function fsPickerClose() {
-  if (!_fsPickerOpen) return;
-  $('#fs-picker').classList.remove('open');
-  $('#fs-picker-pop').hidden = true;
-  _fsPickerOpen = false;
-}
-
-function fsPickerToggle() {
-  _fsPickerOpen ? fsPickerClose() : fsPickerOpen();
-}
-
-document.addEventListener('click', (e) => {
-  // Close picker when click lands outside it.
-  if (!_fsPickerOpen) return;
-  if (e.target.closest('#fs-picker')) return;
-  fsPickerClose();
-});
-
-async function fsPopulateProductSelect(selectedId) {
-  const list = await fsEnsureProducts();
-  if (selectedId != null && selectedId !== '') {
-    _fsSelected = list.find(p => String(p.id) === String(selectedId)) || null;
-  } else {
-    _fsSelected = null;
-  }
-  fsRenderPickerTrigger();
-  fsUpdatePriceHint();
-}
-
-function fsUpdatePriceHint() {
-  const regular = Number(_fsSelected?.sell_price) || 0;
-  const flash = Number($('#fs-price').value) || 0;
-  const hint = $('#fs-price-hint');
-  if (!_fsSelected) { hint.textContent = ''; return; }
-  if (!regular) { hint.textContent = `${escapeHtml(_fsSelected.name_en || '')} has no regular price set — set one in the kitchen admin first. · 该产品未设置原价，请先在后厨后台设置。`; return; }
-  if (!flash) {
-    hint.innerHTML = `Regular price: <b>¥${fmt(regular)}</b>. Enter a lower price above to activate the discount. · 原价 ¥${fmt(regular)}，在上方输入更低的价格以启用折扣。`;
-    return;
-  }
-  if (flash >= regular) {
-    hint.innerHTML = `<span class="err">Flash price (¥${fmt(flash)}) must be lower than regular ¥${fmt(regular)} or the discount won't apply. · 秒杀价必须低于原价，否则折扣不生效。</span>`;
-    return;
-  }
-  const off = regular - flash;
-  const pct = Math.round((off / regular) * 100);
-  hint.innerHTML = `Saves <b>¥${fmt(off)}</b> (${pct}% off) vs regular ¥${fmt(regular)}. · 比原价省 ¥${fmt(off)}（${pct}% off）。`;
-}
-
-// ─── Datetime quick-pick chips ─────────────────────────────────────────
-function fsPad(n) { return String(n).padStart(2, '0'); }
-function fsDateToLocalInput(d) {
-  return `${d.getFullYear()}-${fsPad(d.getMonth() + 1)}-${fsPad(d.getDate())}T${fsPad(d.getHours())}:${fsPad(d.getMinutes())}`;
-}
-function fsParseLocalInput(s) {
-  if (!s) return null;
-  const d = new Date(s);
-  return isNaN(d.getTime()) ? null : d;
-}
-function fsApplyQuick(spec) {
-  const [field, action] = spec.split(':');
-  const el = field === 'starts' ? $('#fs-starts') : $('#fs-ends');
-  if (action === 'clear') { el.value = ''; return; }
-  if (action === 'now') { el.value = fsDateToLocalInput(new Date()); return; }
-  if (action === 'tomorrow-9') {
-    const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0);
-    el.value = fsDateToLocalInput(d); return;
-  }
-  // +1h | +6h | +24h | +3d | +7d
-  const m = action.match(/^\+(\d+)([hd])$/);
-  if (!m) return;
-  const n = parseInt(m[1], 10);
-  // Ends-at deltas anchor to the current Starts value when set, else now.
-  // Starts-at +1h anchors to now (so the chip means "an hour from now").
-  let base;
-  if (field === 'ends') {
-    base = fsParseLocalInput($('#fs-starts').value) || new Date();
-  } else {
-    base = new Date();
-  }
-  const ms = m[2] === 'h' ? n * 3600 * 1000 : n * 86400 * 1000;
-  el.value = fsDateToLocalInput(new Date(base.getTime() + ms));
-}
-document.addEventListener('click', e => {
-  const chip = e.target.closest('[data-fs-quick]');
-  if (!chip) return;
-  e.preventDefault();
-  fsApplyQuick(chip.dataset.fsQuick);
-});
-
-function fsCancelEdit() {
-  fsPickerClose();
-  $('#fs-edit-product-id').value = '';
-  $('#fs-form-title').textContent = cuT('New flash sale', '新建秒杀');
-  $('#fs-save-label').textContent = cuT('Save flash sale', '保存秒杀');
-  $('#fs-cancel-btn').style.display = 'none';
-  $('#fs-picker').classList.remove('disabled');
-  _fsSelected = null;
-  fsRenderPickerTrigger();
-  $('#fs-price').value = '';
-  $('#fs-stock').value = '';
-  $('#fs-starts').value = '';
-  $('#fs-ends').value = '';
-  $('#fs-no-coupon').checked = false;
-  fsUpdatePriceHint();
-}
-
-function fsStartEdit(row) {
-  fsPickerClose();
-  $('#fs-edit-product-id').value = row.id;
-  $('#fs-form-title').textContent = cuT('Edit flash sale — ', '编辑秒杀 — ') + (row.name_en || ('#' + row.id));
-  $('#fs-save-label').textContent = cuT('Update flash sale', '更新秒杀');
-  $('#fs-cancel-btn').style.display = '';
-  $('#fs-picker').classList.add('disabled');
-  fsPopulateProductSelect(row.id);
-  $('#fs-price').value = row.flash_price || '';
-  $('#fs-stock').value = row.flash_stock_limit ?? '';
-  $('#fs-starts').value = fsLocalDatetime(row.flash_starts_at);
-  $('#fs-ends').value = fsLocalDatetime(row.flash_ends_at);
-  $('#fs-no-coupon').checked = !!row.no_coupon_on_flash;
-  fsUpdatePriceHint();
-  document.querySelector('#tab-flash .card').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-async function fsSave() {
-  const productId = $('#fs-edit-product-id').value || $('#fs-product').value;
-  if (!productId) { toast('Pick a product first · 请先选择产品', 'err'); return; }
-  const price = Number($('#fs-price').value);
-  if (!(price > 0)) { toast('Flash price required · 请填写秒杀价', 'err'); return; }
-  const endsLocal = $('#fs-ends').value;
-  if (!endsLocal) { toast('End time required · 请填写结束时间', 'err'); return; }
-  const startsLocal = $('#fs-starts').value;
-  const body = {
-    flash_price: price,
-    flash_ends_at: new Date(endsLocal).toISOString(),
-    flash_starts_at: startsLocal ? new Date(startsLocal).toISOString() : null,
-    flash_stock_limit: $('#fs-stock').value ? Number($('#fs-stock').value) : null,
-    no_coupon_on_flash: $('#fs-no-coupon').checked ? 1 : 0,
-  };
-  try {
-    await api(`/api/retail-admin/products/${productId}/flash-sale`, { method: 'PUT', body });
-    toast('Flash sale saved · 秒杀已保存');
-    fsCancelEdit();
-    await fsLoadList();
-  } catch (e) {
-    const map = {
-      flash_price_invalid: 'Flash price must be greater than 0 · 秒杀价必须大于 0',
-      flash_ends_at_required: 'End time required · 请填写结束时间',
-      flash_ends_at_invalid: 'End time invalid · 结束时间无效',
-      flash_starts_at_invalid: 'Start time invalid · 开始时间无效',
-      flash_starts_after_ends: 'Start time must be before end time · 开始时间必须早于结束时间',
-      flash_stock_limit_invalid: 'Stock cap must be a positive number · 库存上限必须为正数',
-    };
-    toast('Failed · 失败: ' + (map[e.message] || e.message), 'err');
-  }
-}
-
-async function fsClearSale(productId, name) {
-  if (!confirm(`Clear the flash sale on "${name}"?\n\nThe product will revert to its regular price immediately. This can't be undone. · 清除 "${name}" 的秒杀？\n\n商品将立即恢复原价，此操作无法撤销。`)) return;
-  try {
-    await api(`/api/retail-admin/products/${productId}/flash-sale`, { method: 'DELETE' });
-    toast('Flash sale cleared · 秒杀已清除');
-    if ($('#fs-edit-product-id').value === String(productId)) fsCancelEdit();
-    await fsLoadList();
-  } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
-  }
-}
-
-const FS_STATE_PILL = {
-  // Flash window status — uses the shared semantic pill variants so the
-  // strip matches Vouchers, Orders, Reviews, etc. Don't reintroduce
-  // inline styles here; add a new .pill.* variant if you need a new tone.
-  get active()   { return `<span class="pill success"><span class="dot"></span>${cuT('ACTIVE','进行中')}</span>`; },
-  get upcoming() { return `<span class="pill info"><span class="dot"></span>${cuT('UPCOMING','即将开始')}</span>`; },
-  get ended()    { return `<span class="pill neutral"><span class="dot"></span>${cuT('ENDED','已结束')}</span>`; },
-  none:     '<span class="muted">—</span>',
-};
-
-// Mirror "any flash sale currently active" onto the Flash sales nav row as a
-// LIVE pill, the same way body.vot-open drives the Voting OPEN pill.
+// ─── Nav LIVE pill — mirror "a flash sale is active" onto the nav row ─────
 function fsUpdateNavState(rows) {
   const live = (rows || []).some(p => p.flash_state === 'active' && p.is_published);
   document.body.classList.toggle('fs-live', live);
 }
-// Seed the nav LIVE pill at startup so it reflects reality before the operator
-// ever opens the Flash sales tab (the full list lazy-loads on first tab open).
 async function fsInitNavState() {
   try {
     const r = await fetch('/api/retail-admin/flash-sales', { credentials: 'same-origin' });
@@ -1958,81 +1709,580 @@ async function fsInitNavState() {
   } catch (e) { /* leave nav as-is if the probe fails */ }
 }
 
+// ════════════════════════════════════════════════════════════════
+// THE TIMELINE (left column)
+// ════════════════════════════════════════════════════════════════
+function fsCountdown(row, now) {
+  const st = row.flash_state;
+  const ends = fsToMs(row.flash_ends_at);
+  const starts = fsToMs(row.flash_starts_at);
+  if (st === 'active' && ends != null) {
+    const r = fsRel(ends - now);
+    return r ? cuT('ends in ', '') + '<span class="fs2-cd" data-end="' + ends + '">' + r + cuT('', '后结束') + '</span>' : '';
+  }
+  if (st === 'upcoming' && starts != null) {
+    const r = fsRel(starts - now);
+    return r ? cuT('starts in ', '') + '<span class="fs2-cd" data-start="' + starts + '">' + r + cuT('', '后开始') + '</span>' : '';
+  }
+  return '';
+}
+
+function fsRowHtml(p, now) {
+  const st = p.flash_state;
+  const dim = st === 'ended' ? ' dim' : '';
+  const name = fsName(p);
+  const sku = p.sku ? `<span class="sk">[${escapeHtml(p.sku)}]</span>` : '';
+  const draft = !p.is_published ? ` <span class="fs2-badge ended">${cuT('DRAFT', '草稿')}</span>` : '';
+
+  // Sub line under the name — window + live countdown.
+  let sub = '';
+  const cd = fsCountdown(p, now);
+  const startW = fsWhen(fsToMs(p.flash_starts_at));
+  const endW = fsWhen(fsToMs(p.flash_ends_at));
+  if (st === 'active')        sub = (cd ? cd + ' · ' : '') + escapeHtml(startW ? startW : cuT('now', '现在')) + ' → ' + escapeHtml(endW || '');
+  else if (st === 'upcoming') sub = (cd ? cd + ' · ' : '') + escapeHtml(startW || '') + ' → ' + escapeHtml(endW || '');
+  else                        sub = escapeHtml(startW || cuT('now', '现在')) + ' → ' + escapeHtml(endW || '');
+
+  // Sold / cap + meter.
+  const sold = Number(p.flash_sold) || 0;
+  const cap = p.flash_stock_limit;
+  let soldHtml = '';
+  if (cap != null) {
+    const pct = cap > 0 ? Math.min(100, Math.round((sold / cap) * 100)) : 0;
+    soldHtml = `<b>${sold}</b> / ${cap}<div class="fs2-meter"><i style="width:${pct}%"></i></div>`;
+  } else {
+    soldHtml = st === 'ended' ? `<b>${sold}</b> ${cuT('sold', '已售')}` : cuT('no cap', '不限量');
+  }
+
+  // Badge + row actions per state.
+  let badge = '', acts = '';
+  if (st === 'active') {
+    badge = `<span class="fs2-badge live"><span class="dot"></span>${cuT('Live', '进行中')}</span>`;
+    acts = `<button class="btn btn-sm" onclick='fsEndNow(${p.id}, ${JSON.stringify(name)})'>${cuT('End now', '立即结束')}</button>`;
+  } else if (st === 'upcoming') {
+    badge = `<span class="fs2-badge sched">${cuT('Scheduled', '已排期')}</span>`;
+    acts = `<button class="btn btn-sm" onclick="fsEdit(${p.id})">${cuT('Edit', '编辑')}</button>`
+         + `<button class="btn btn-sm" onclick='fsClearSale(${p.id}, ${JSON.stringify(name)})'>${cuT('Cancel', '取消')}</button>`;
+  } else {
+    badge = `<span class="fs2-badge ended">${cuT('Ended', '已结束')}</span>`;
+    acts = `<button class="btn btn-sm" onclick="fsAgain(${p.id})">${cuT('Run again', '再来一次')}</button>`
+         + `<button class="btn btn-sm" onclick='fsClearSale(${p.id}, ${JSON.stringify(name)})'>${cuT('Clear', '清除')}</button>`;
+  }
+
+  return `<div class="fs2-row${dim}" data-id="${p.id}">
+    <div class="fs2-thumb">${fsThumbHtml(p)}</div>
+    <div class="fs2-who">
+      <div class="n">${escapeHtml(name)} ${sku}${draft}</div>
+      <div class="s">${sub}</div>
+    </div>
+    <div class="fs2-meta">
+      <div class="fs2-price"><span class="f">¥${fmt(p.flash_price)}</span><span class="r">¥${fmt(p.sell_price)}</span></div>
+      <div class="fs2-sold">${soldHtml}</div>
+      <div class="fs2-acts">${badge}${acts}</div>
+    </div>
+  </div>`;
+}
+
+function fsGroupHtml(title, rows, now, live) {
+  if (!rows.length) return '';
+  return `<div class="fs2-group${live ? ' live' : ''}">
+    <span class="fs2-gdot"></span>
+    <div class="fs2-kicker">${title}</div>
+    <div class="fs2-card">${rows.map(p => fsRowHtml(p, now)).join('')}</div>
+  </div>`;
+}
+
+function fsRenderTimeline() {
+  const mount = document.getElementById('fs2-timeline');
+  if (!mount) return;
+  const now = fsNow();
+  const active = _fsRows.filter(p => p.flash_state === 'active');
+  const upcoming = _fsRows.filter(p => p.flash_state === 'upcoming');
+  const ended = _fsRows.filter(p => p.flash_state === 'ended');
+
+  if (!_fsRows.length) {
+    mount.innerHTML = `<div class="fs2-card"><div class="fs2-empty">
+      <div class="lead">${cuT('No flash sales yet', '暂无秒杀')}</div>
+      <div class="sub">${cuT('Press New flash sale to put a product on the clock.', '点击“新建秒杀”让某个产品限时降价。')}</div>
+    </div></div>`;
+    return;
+  }
+  mount.innerHTML =
+      fsGroupHtml(cuT('Live now', '进行中'), active, now, true)
+    + fsGroupHtml(cuT('Scheduled', '已排期'), upcoming, now, false)
+    + fsGroupHtml(cuT('Ended · last 30 days', '已结束 · 近30天'), ended, now, false);
+}
+
+// Refresh only the countdown spans (cheap, every 30s) so the clock stays live
+// without re-rendering the whole list or losing anything.
+function fsRefreshCountdowns() {
+  const now = fsNow();
+  document.querySelectorAll('#fs2-timeline .fs2-cd').forEach(el => {
+    const end = el.getAttribute('data-end');
+    const start = el.getAttribute('data-start');
+    if (end != null) { const r = fsRel(Number(end) - now); if (r) el.innerHTML = r + cuT('', '后结束'); }
+    else if (start != null) { const r = fsRel(Number(start) - now); if (r) el.innerHTML = r + cuT('', '后开始'); }
+  });
+}
+
 async function fsLoadList() {
-  const table = $('#fs-table');
-  const tbody = $('#fs-table tbody');
-  tbody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+  const mount = document.getElementById('fs2-timeline');
+  if (mount) mount.innerHTML = `<div class="fs2-card"><div class="fs2-empty"><div class="sub">${cuT('Loading…', '加载中…')}</div></div></div>`;
   try {
-    const { data } = await api('/api/retail-admin/flash-sales');
-    fsUpdateNavState(data);
-    if (!data.length) {
-      if (table) table.classList.add('is-empty');
-      tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">${ICONS.empty}</div><h3>No flash sales yet · 暂无秒杀</h3><p class="muted">Set one up above to start a flash-sale event. · 请在上方设置以开启秒杀活动。</p></div></td></tr>`;
-      return;
-    }
-    if (table) table.classList.remove('is-empty');
-    tbody.innerHTML = data.map(p => {
-      const name = [p.name_en, p.name_cn].filter(Boolean).join(' · ') || ('#' + p.id);
-      const sku = p.sku ? ` <span class="muted" style="font-size: 11px;">[${escapeHtml(p.sku)}]</span>` : '';
-      const draft = !p.is_published ? ' <span class="pill draft" style="font-size:9px;">DRAFT · 草稿</span>' : '';
-      const sold = p.flash_sold || 0;
-      const cap = p.flash_stock_limit;
-      return `<tr data-id="${p.id}">
-        <td>${escapeHtml(name)}${sku}${draft}</td>
-        <td class="numeric"><b>¥${fmt(p.flash_price)}</b></td>
-        <td class="numeric muted" style="text-decoration: line-through;">¥${fmt(p.sell_price)}</td>
-        <td>${fsFormatWindow(p.flash_starts_at, p.flash_ends_at)}</td>
-        <td class="numeric">${sold}${cap != null ? ' / ' + cap : ' / ∞'}</td>
-        <td>${FS_STATE_PILL[p.flash_state] || FS_STATE_PILL.none}</td>
-        <td style="white-space: nowrap;">
-          <button class="btn btn-sm" onclick='fsStartEdit(${JSON.stringify(p)})'>Edit · 编辑</button>
-          <button class="btn btn-sm" onclick='fsClearSale(${p.id}, ${JSON.stringify(name)})'>Clear · 清除</button>
-        </td>
-      </tr>`;
-    }).join('');
+    const res = await api('/api/retail-admin/flash-sales');
+    _fsRows = res.data || [];
+    if (res.meta && res.meta.server_time_ms) _fsClockSkew = res.meta.server_time_ms - Date.now();
+    fsUpdateNavState(_fsRows);
+    fsRenderTimeline();
+    if (_fsTick) clearInterval(_fsTick);
+    _fsTick = setInterval(fsRefreshCountdowns, 30000);
   } catch (e) {
-    if (table) table.classList.add('is-empty');
-    tbody.innerHTML = `<tr><td colspan="7" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
+    if (mount) mount.innerHTML = `<div class="fs2-card"><div class="fs2-empty"><div class="sub err">${cuT('Failed to load', '加载失败')}: ${escapeHtml(e.message)}</div></div></div>`;
   }
 }
 
-document.addEventListener('input', e => {
-  if (e.target.id === 'fs-price') fsUpdatePriceHint();
-});
-document.addEventListener('change', e => {
-  if (e.target.id === 'fs-product') fsUpdatePriceHint();
+// ─── row actions ─────────────────────────────────────────────────────────
+async function fsClearSale(productId, name) {
+  const msg = cuT(
+    `Clear the flash sale on "${name}"?\n\nThe product returns to its regular price and the sale leaves this list. This can't be undone.`,
+    `清除 "${name}" 的秒杀？\n\n商品将恢复原价，此活动会从列表中移除，且无法撤销。`);
+  if (!confirm(msg)) return;
+  try {
+    await api(`/api/retail-admin/products/${productId}/flash-sale`, { method: 'DELETE' });
+    toast(cuT('Flash sale cleared', '秒杀已清除'));
+    await fsLoadList();
+  } catch (e) { toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
+}
+async function fsEndNow(productId, name) {
+  const msg = cuT(
+    `End the flash sale on "${name}" now?\n\nThe regular price comes back immediately.`,
+    `立即结束 "${name}" 的秒杀？\n\n将马上恢复原价。`);
+  if (!confirm(msg)) return;
+  try {
+    await api(`/api/retail-admin/products/${productId}/flash-sale`, { method: 'DELETE' });
+    toast(cuT('Flash sale ended', '秒杀已结束'));
+    await fsLoadList();
+  } catch (e) { toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
+}
+function fsEdit(id) { const row = _fsRows.find(r => r.id === id); if (row) fwOpen(row, 'edit'); }
+function fsAgain(id) { const row = _fsRows.find(r => r.id === id); if (row) fwOpen(row, 'again'); }
+
+// ════════════════════════════════════════════════════════════════
+// THE WIZARD  (Product → Price → Clock → Start)
+// ════════════════════════════════════════════════════════════════
+let _fw = null;            // wizard state, or null when closed
+let _fwVouchers = [];      // snapshot of live coupons, for the heads-up note
+
+const FW_ICONS = {
+  box: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',
+  search: '<circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 15 14"/>',
+  ticket: '<path d="M15 5l0 2"/><path d="M15 11l0 2"/><path d="M15 17l0 2"/><path d="M5 5h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-3a2 2 0 0 0 0 -4v-3a2 2 0 0 1 2 -2"/>',
+  alert: '<path d="M12 9v4"/><path d="M10.363 3.591l-8.106 13.534a1.914 1.914 0 0 0 1.636 2.871h16.214a1.914 1.914 0 0 0 1.636 -2.87l-8.106 -13.536a1.914 1.914 0 0 0 -3.274 0z"/><path d="M12 16h.01"/>',
+};
+function fwIcon(name, size) {
+  size = size || 18;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">${FW_ICONS[name] || ''}</svg>`;
+}
+
+const FW_TITLES = {
+  product: cuT('Which product goes on sale?', '哪个产品参加秒杀?'),
+  price:   cuT('The price', '价格'),
+  clock:   cuT('The clock', '时间'),
+  review:  cuT('Start it', '开启'),
+};
+function fwSteps() { return _fw.mode === 'new' ? ['product', 'price', 'clock', 'review'] : ['price', 'clock', 'review']; }
+
+async function fwOpen(row, mode) {
+  mode = mode || 'new';
+  _fw = {
+    mode, step: mode === 'new' ? 'product' : 'price',
+    product: null, psearch: '',
+    price: '', pct: null,
+    cap: '', capOn: false,
+    endChip: 'tonight', endsCustom: '',
+    startChip: 'now', startsCustom: '',
+    noCoupon: false,
+  };
+  if (row) {
+    _fw.product = {
+      id: row.id, name_en: row.name_en, name_cn: row.name_cn, sku: row.sku,
+      sell_price: row.sell_price, image_url: row.image_url, image_data: row.image_data,
+    };
+    if (mode === 'edit') {
+      _fw.price = row.flash_price || '';
+      _fw.cap = row.flash_stock_limit ?? ''; _fw.capOn = row.flash_stock_limit != null;
+      _fw.noCoupon = !!row.no_coupon_on_flash;
+      _fw.endChip = 'custom'; _fw.endsCustom = fsLocalInput(fsToMs(row.flash_ends_at));
+      if (row.flash_starts_at) { _fw.startChip = 'custom'; _fw.startsCustom = fsLocalInput(fsToMs(row.flash_starts_at)); }
+    }
+  }
+  document.getElementById('fw-bg').classList.add('show');
+  fwRender();
+  // Load the product catalogue, then refresh the list in place so the product
+  // step doesn't sit on "Loading…" after the cache warms on first open.
+  await fsEnsureProducts();
+  if (!_fw) return;
+  if (_fw.step === 'product') {
+    const el = document.getElementById('fw-plist');
+    if (el) el.innerHTML = fwProductListHtml(_fw.psearch);
+  }
+  try { const r = await api('/api/retail-admin/vouchers'); _fwVouchers = r.data || []; }
+  catch { _fwVouchers = []; }
+  if (_fw) fwRefreshRight();
+}
+function fwClose() {
+  const body = document.getElementById('fw-body');
+  if (body) body.classList.remove('vw-leaving', 'vw-entering');
+  document.getElementById('fw-bg').classList.remove('show');
+  _fw = null;
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !_fw) return;
+  const bg = document.getElementById('fw-bg');
+  if (bg && bg.classList.contains('show')) fwClose();
 });
 
+// Calm fade-out / swap / fade-in-and-rise — parity with the coupon wizard.
+function fwGoto(step) {
+  if (!_fw) return;
+  const body = document.getElementById('fw-body');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (!body || reduce) { _fw.step = step; fwRender(); if (body) body.scrollTop = 0; return; }
+  body.classList.remove('vw-entering');
+  body.classList.add('vw-leaving');
+  setTimeout(() => {
+    if (!_fw) return;
+    _fw.step = step; fwRender(); body.scrollTop = 0;
+    body.classList.remove('vw-leaving');
+    void body.offsetWidth;
+    body.classList.add('vw-entering');
+  }, 240);
+}
+function fwNext() {
+  const steps = fwSteps();
+  const next = steps[steps.indexOf(_fw.step) + 1];
+  if (!next) return;
+  if (_fw.step === 'price' && !fwCommitPrice()) return;
+  if (_fw.step === 'clock' && !fwCommitClock()) return;
+  fwGoto(next);
+}
+function fwBack() {
+  const steps = fwSteps();
+  const i = steps.indexOf(_fw.step);
+  if (i <= 0) { fwClose(); return; }
+  fwGoto(steps[i - 1]);
+}
+
+// ─── derived values ──────────────────────────────────────────────────────
+function fwRegular() { return Number(_fw.product && _fw.product.sell_price) || 0; }
+function fwPriceNum() { return Number(_fw.price) || 0; }
+function fwOffPct() { const r = fwRegular(), f = fwPriceNum(); return (r > 0 && f > 0 && f < r) ? Math.round(((r - f) / r) * 100) : 0; }
+function fwTonight() {
+  const d = new Date(fsNow()); d.setHours(22, 0, 0, 0);
+  if (d.getTime() <= fsNow()) d.setDate(d.getDate() + 1);
+  return d;
+}
+function fwStartsDate() {
+  if (_fw.startChip === 'now') return null;
+  if (_fw.startChip === 'tomorrow9') { const d = new Date(fsNow()); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; }
+  return _fw.startsCustom ? new Date(_fw.startsCustom) : null;
+}
+function fwEndsDate() {
+  if (_fw.endChip === 'custom') return _fw.endsCustom ? new Date(_fw.endsCustom) : null;
+  if (_fw.endChip === 'tonight') return fwTonight();
+  const m = _fw.endChip.match(/^\+(\d+)([hd])$/);
+  if (!m) return null;
+  const base = fwStartsDate() || new Date(fsNow());
+  const ms = (m[2] === 'h' ? +m[1] * 3600 : +m[1] * 86400) * 1000;
+  return new Date(base.getTime() + ms);
+}
+
+// ─── render ──────────────────────────────────────────────────────────────
+function fwRender() {
+  const kick = document.getElementById('fw-kick');
+  const title = document.getElementById('fw-title');
+  const body = document.getElementById('fw-body');
+  const foot = document.getElementById('fw-foot');
+  const s = _fw.step;
+  title.textContent = FW_TITLES[s] || '';
+  if (kick) kick.textContent = _fw.product
+    ? (cuT('FLASH SALE', '秒杀') + ' · ' + fsName(_fw.product))
+    : cuT('NEW FLASH SALE', '新建秒杀');
+  if (s === 'product') { body.innerHTML = fwProductHtml(); foot.innerHTML = fwFootHtml(); return; }
+  if (s === 'price')  body.innerHTML = fwPanes(fwPriceHtml());
+  else if (s === 'clock') body.innerHTML = fwPanes(fwClockHtml());
+  else if (s === 'review') body.innerHTML = fwPanes(fwReviewHtml(), true);
+  foot.innerHTML = fwFootHtml();
+}
+function fwPanes(leftHtml, review) {
+  return `<div class="vw-panes"><div class="vw-left">${leftHtml}</div>`
+    + `<div class="vw-ticketpane"><div class="vw-tick-cap">${cuT('What the customer sees', '顾客看到的')}</div>`
+    + fwShelfHtml() + (review ? fwHeadsUpHtml() : '') + `</div></div>`;
+}
+function fwFootHtml() {
+  const steps = fwSteps();
+  const dots = '<div class="vw-dots">' + steps.map(s => '<span class="vw-dot' + (s === _fw.step ? ' on' : '') + '"></span>').join('') + '</div>';
+  const backLabel = fwSteps().indexOf(_fw.step) <= 0 ? cuT('Cancel', '取消') : cuT('Back', '返回');
+  const back = `<button class="btn" onclick="fwBack()">${backLabel}</button>`;
+  if (_fw.step === 'product') return back + dots + `<span style="width:1px"></span>`;
+  if (_fw.step === 'review') {
+    const future = !!fwStartsDate();
+    const cta = future ? cuT('Schedule it', '排期开启') : cuT('Start the sale', '开启秒杀');
+    return back + dots + `<button class="btn vw-cta" onclick="fwSave()">${cta}</button>`;
+  }
+  return back + dots + `<button class="btn" onclick="fwNext()">${cuT('Next', '下一步')}</button>`;
+}
+
+// ─── step: product ───────────────────────────────────────────────────────
+function fwProductHtml() {
+  return `<div class="fw-search">${fwIcon('search', 15)}`
+    + `<input type="text" id="fw-psearch" autocomplete="off" placeholder="${escapeAttr(cuT('Search by name or SKU…', '按名称或货号搜索…'))}" oninput="fwFilterProducts(this.value)"></div>`
+    + `<div class="fw-plist" id="fw-plist">${fwProductListHtml('')}</div>`
+    + `<div class="fw-plist-cap">${cuT('Pick any published product. Its regular price is shown on the right.', '选择任意已上架产品,原价显示在右侧。')}</div>`;
+}
+function fwProductListHtml(q) {
+  const list = _fsProducts || [];
+  q = (q || '').trim().toLowerCase();
+  const filtered = q
+    ? list.filter(p => `${p.name_en || ''} ${p.name_cn || ''} ${p.sku || ''}`.toLowerCase().includes(q))
+    : list;
+  if (!list.length) return `<div class="fw-empty">${cuT('Loading products…', '正在加载产品…')}</div>`;
+  if (!filtered.length) return `<div class="fw-empty">${cuT('No products match — try another search.', '无匹配产品 — 换个关键词。')}</div>`;
+  return filtered.slice(0, 200).map(p => {
+    const subBits = []; if (p.sku) subBits.push(p.sku); if (p.size) subBits.push(p.size);
+    const price = p.sell_price ? `<b>¥${fmt(p.sell_price)}</b>${cuT('regular', '原价')}` : '';
+    return `<button class="fw-prow" onclick="fwPick(${p.id})">
+      <span class="th">${fsThumbHtml(p)}</span>
+      <span><span class="pn">${escapeHtml(fsName(p))}</span>${subBits.length ? `<span class="ps">${escapeHtml(subBits.join(' · '))}</span>` : ''}</span>
+      ${price ? `<span class="pr">${price}</span>` : ''}
+    </button>`;
+  }).join('');
+}
+function fwFilterProducts(q) {
+  _fw.psearch = q;
+  const el = document.getElementById('fw-plist');
+  if (el) el.innerHTML = fwProductListHtml(q);
+}
+function fwPick(id) {
+  const p = (_fsProducts || []).find(x => x.id === id);
+  if (!p) return;
+  _fw.product = p;
+  if (!(fwPriceNum() > 0)) { _fw.price = ''; _fw.pct = null; }
+  fwGoto('price');
+}
+
+// ─── step: price ─────────────────────────────────────────────────────────
+function fwPriceHtml() {
+  const reg = fwRegular();
+  const pcts = [10, 20, 30, 50];
+  const chips = pcts.map(p => `<button class="vw-chip${_fw.pct === p ? ' on' : ''}" onclick="fwPickPct(${p})">−${p}%</button>`).join('');
+  let math = '';
+  if (reg > 0 && fwPriceNum() > 0) {
+    if (fwPriceNum() >= reg) math = `<div class="fw-math err">${cuT('Flash price must be lower than the regular price.', '秒杀价必须低于原价。')}</div>`;
+    else math = `<div class="fw-math">${cuT('Regular', '原价')} ¥${fmt(reg)} → ${cuT('customers save', '顾客省')} <b>¥${fmt(reg - fwPriceNum())} (${fwOffPct()}%)</b>.</div>`;
+  } else if (reg > 0) {
+    math = `<div class="fw-math">${cuT('Regular price', '原价')} ¥${fmt(reg)}. ${cuT('Enter a lower price, or pick a discount.', '输入更低的价格,或选择折扣。')}</div>`;
+  }
+
+  // Cap sentence.
+  let capRow;
+  if (!_fw.capOn) {
+    capRow = `<div class="row"><span class="txt">${cuT('Sell <b>as many as stock allows</b>.', '<b>不限量</b>,按库存出售。')}</span>`
+      + `<button class="btn btn-ghost vw-chg" onclick="fwCapOn(true)">${cuT('Cap it', '限量')}</button></div>`;
+  } else {
+    const caps = [20, 50, 100];
+    const capChips = caps.map(c => `<button class="vw-chip${Number(_fw.cap) === c ? ' on' : ''}" onclick="fwPickCap(${c})">${c}</button>`).join('');
+    capRow = `<div class="row"><span class="txt">${cuT('Stop after selling', '售出以下数量后停止')}</span>`
+      + `<span class="vw-stepper vw-chg"><button onclick="fwCapStep(-10)">−</button><span class="n num">${Number(_fw.cap) || 0}</span><button onclick="fwCapStep(10)">+</button></span></div>`
+      + `<div class="editrow"><span class="vw-chips">${capChips}</span>`
+      + `<button class="btn btn-ghost vw-chg" onclick="fwCapOn(false)">${cuT('No cap', '不限量')}</button></div>`;
+  }
+
+  return `<div class="vw-lab">${cuT('What is the flash price?', '秒杀价是多少?')}</div>`
+    + `<div class="vw-amount"><span class="vw-amt-box"><span class="unit">¥</span>`
+    + `<input id="fw-price" type="text" inputmode="decimal" value="${escapeAttr(String(_fw.price || ''))}" oninput="fwLivePrice(this.value)"></span>`
+    + `<span class="vw-chips" id="fw-pct-chips">${chips}</span></div>`
+    + math
+    + `<div class="vw-sent" style="margin-top:22px; border-top:1px solid var(--line); border-bottom:none;">${capRow}</div>`;
+}
+function fwLivePrice(v) {
+  _fw.price = v; _fw.pct = null;
+  const m = document.querySelector('#tab-flash .fw-math');
+  // Recompute the math + chip highlight without losing input focus.
+  document.querySelectorAll('#fw-pct-chips .vw-chip').forEach(c => c.classList.remove('on'));
+  const reg = fwRegular();
+  if (m) {
+    if (reg > 0 && fwPriceNum() > 0) {
+      m.classList.toggle('err', fwPriceNum() >= reg);
+      m.innerHTML = fwPriceNum() >= reg
+        ? cuT('Flash price must be lower than the regular price.', '秒杀价必须低于原价。')
+        : `${cuT('Regular', '原价')} ¥${fmt(reg)} → ${cuT('customers save', '顾客省')} <b>¥${fmt(reg - fwPriceNum())} (${fwOffPct()}%)</b>.`;
+    }
+  }
+  fwRefreshRight();
+}
+function fwPickPct(p) {
+  const reg = fwRegular();
+  _fw.pct = p;
+  _fw.price = reg > 0 ? (Math.round(reg * (1 - p / 100) * 100) / 100) : '';
+  fwRender();
+}
+function fwCapOn(on) { _fw.capOn = on; if (on && !(Number(_fw.cap) > 0)) _fw.cap = 50; fwRender(); }
+function fwPickCap(c) { _fw.cap = c; fwRender(); }
+function fwCapStep(d) { _fw.cap = Math.max(0, (Number(_fw.cap) || 0) + d); fwRender(); }
+function fwCommitPrice() {
+  if (!(fwPriceNum() > 0)) { toast(cuT('Enter a flash price', '请输入秒杀价'), 'err'); return false; }
+  if (fwRegular() > 0 && fwPriceNum() >= fwRegular()) { toast(cuT('Flash price must be lower than regular', '秒杀价必须低于原价'), 'err'); return false; }
+  return true;
+}
+
+// ─── step: clock ─────────────────────────────────────────────────────────
+function fwClockHtml() {
+  const ends = [
+    ['+1h', cuT('In 1 hour', '1小时后')],
+    ['+6h', cuT('In 6 hours', '6小时后')],
+    ['tonight', cuT('Tonight 22:00', '今晚 22:00')],
+    ['+3d', cuT('In 3 days', '3天后')],
+    ['+7d', cuT('In 7 days', '7天后')],
+    ['custom', cuT('Pick a time', '自定义')],
+  ];
+  const endChips = ends.map(e => `<button class="vw-chip${_fw.endChip === e[0] ? ' on' : ''}" onclick="fwEndChip('${e[0]}')">${e[1]}</button>`).join('');
+  let endCustom = '';
+  if (_fw.endChip === 'custom') {
+    endCustom = `<div class="editrow"><input type="datetime-local" class="vw-date" value="${escapeAttr(_fw.endsCustom)}" onchange="fwSetEndCustom(this.value)"></div>`;
+  }
+  const ed = fwEndsDate();
+  const sd = fwStartsDate();
+  let runline = '';
+  if (ed) {
+    const base = sd ? sd.getTime() : fsNow();
+    const rel = fsRel(ed.getTime() - base);
+    runline = `<div class="fw-math">${cuT('Runs', '持续')} ${escapeHtml(fsWhen(base))} → ${escapeHtml(fsWhen(ed.getTime()))}${rel ? ` — ${cuT('about', '约')} ${rel}` : ''}.</div>`;
+  }
+
+  const starts = [
+    ['now', cuT('Now', '现在')],
+    ['tomorrow9', cuT('Tomorrow 09:00', '明天 09:00')],
+    ['custom', cuT('Pick a time', '自定义')],
+  ];
+  const startChips = starts.map(s => `<button class="vw-chip${_fw.startChip === s[0] ? ' on' : ''}" onclick="fwStartChip('${s[0]}')">${s[1]}</button>`).join('');
+  let startCustom = '';
+  if (_fw.startChip === 'custom') {
+    startCustom = `<div class="editrow" style="margin-top:8px;"><input type="datetime-local" class="vw-date" value="${escapeAttr(_fw.startsCustom)}" onchange="fwSetStartCustom(this.value)"></div>`;
+  }
+
+  return `<div class="vw-lab">${cuT('When does it end?', '什么时候结束?')}</div>`
+    + `<div class="vw-chips" style="margin-top:6px;">${endChips}</div>${endCustom}${runline}`
+    + `<div class="vw-sent" style="margin-top:22px; border-top:1px solid var(--line);">`
+    + `<div class="row"><span class="txt">${_fw.startChip === 'now' ? cuT('Starts <b>now</b>, when you turn it on.', '<b>现在</b>开始,开启即生效。') : cuT('Starts later.', '稍后开始。')}</span></div>`
+    + `<div class="editrow"><span class="vw-chips">${startChips}</span></div>${startCustom}</div>`
+    + `<div class="vw-sent">`
+    + `<div class="row"><span class="txt">${_fw.noCoupon ? cuT('Coupons <b>stay off</b> this price.', '优惠券<b>不叠加</b>此价格。') : cuT('Coupons <b>can stack</b> on this price.', '优惠券<b>可叠加</b>此价格。')}</span>`
+    + `<button class="btn btn-ghost vw-chg" onclick="fwToggleCoupon()">${_fw.noCoupon ? cuT('Let them stack', '允许叠加') : cuT('Keep them off', '禁止叠加')}</button></div>`
+    + `<div class="row" style="margin-top:2px;"><span class="txt" style="font-size:12px;color:var(--text-3);">${cuT('Keeping coupons off protects your margin on a deep discount.', '禁止叠加可在深度折扣时保住利润。')}</span></div></div>`;
+}
+function fwEndChip(k) { _fw.endChip = k; if (k === 'custom' && !_fw.endsCustom) { const d = fwTonight(); _fw.endsCustom = fsLocalInput(d.getTime()); } fwRender(); }
+function fwSetEndCustom(v) { _fw.endsCustom = v; fwRefreshRight(); const q = document.querySelector('#tab-flash .fw-math'); if (q) fwRender(); }
+function fwStartChip(k) { _fw.startChip = k; if (k === 'custom' && !_fw.startsCustom) { const d = new Date(fsNow()); _fw.startsCustom = fsLocalInput(d.getTime()); } fwRender(); }
+function fwSetStartCustom(v) { _fw.startsCustom = v; fwRender(); }
+function fwToggleCoupon() { _fw.noCoupon = !_fw.noCoupon; fwRender(); }
+function fwCommitClock() {
+  const ed = fwEndsDate();
+  if (!ed || isNaN(ed.getTime())) { toast(cuT('Set an end time', '请设置结束时间'), 'err'); return false; }
+  const sd = fwStartsDate();
+  if (sd && sd.getTime() >= ed.getTime()) { toast(cuT('Start must be before end', '开始须早于结束'), 'err'); return false; }
+  if (ed.getTime() <= fsNow() && !sd) { toast(cuT('End time is in the past', '结束时间已过'), 'err'); return false; }
+  return true;
+}
+
+// ─── step: review ────────────────────────────────────────────────────────
+function fwReviewHtml() {
+  const sd = fwStartsDate(), ed = fwEndsDate();
+  const startTxt = sd ? escapeHtml(fsWhen(sd.getTime())) : cuT('now', '现在');
+  const endTxt = ed ? escapeHtml(fsWhen(ed.getTime())) : '—';
+  const capTxt = _fw.capOn && Number(_fw.cap) > 0
+    ? cuT(`a cap of ${Number(_fw.cap)}`, `上限 ${Number(_fw.cap)} 件`)
+    : cuT('no stock cap', '不限量');
+  const coup = _fw.noCoupon ? cuT('Coupons stay off this price.', '优惠券不叠加此价格。') : cuT('Coupons can stack on this price.', '优惠券可叠加此价格。');
+  return `<div class="vw-recap">`
+    + cuT(`<b>${escapeHtml(fsName(_fw.product))}</b> drops to <b>¥${fmt(fwPriceNum())}</b> — ${fwOffPct()}% off — starting <span class="u">${startTxt}</span>, until <span class="u">${endTxt}</span>, with <span class="u">${capTxt}</span>.`,
+           `<b>${escapeHtml(fsName(_fw.product))}</b> 降至 <b>¥${fmt(fwPriceNum())}</b> — ${fwOffPct()}% off — 从 <span class="u">${startTxt}</span> 起,至 <span class="u">${endTxt}</span> 止,<span class="u">${capTxt}</span>。`)
+    + `</div>`
+    + `<div class="vw-help">${coup} ${cuT('When the clock runs out, the regular price comes back on its own. You can end it early any time.', '倒计时结束后自动恢复原价。你也可以随时提前结束。')}</div>`;
+}
+
+// ─── right pane: the shelf preview + heads-up ────────────────────────────
+function fwShelfHtml() {
+  const p = _fw.product;
+  const img = (p && (p.image_url || p.image_data))
+    ? `<img src="${escapeAttr(p.image_url || p.image_data)}" alt="">`
+    : fwIcon('box', 30);
+  const reg = fwRegular();
+  const f = fwPriceNum();
+  const ed = fwEndsDate();
+  const sd = fwStartsDate();
+  let cd = cuT('Flash · counting down', '秒杀 · 倒计时');
+  if (ed) {
+    if (sd) cd = cuT('Starts ', '') + escapeHtml(fsWhen(sd.getTime())) + cuT('', ' 开始');
+    else { const r = fsRel(ed.getTime() - fsNow()); cd = r ? cuT('Ends in ', '') + r + cuT('', '后结束') : cuT('Flash · counting down', '秒杀 · 倒计时'); }
+  }
+  return `<div class="fw-shelf">
+    <div class="img">${img}</div>
+    <div class="nm">${escapeHtml(p ? fsName(p) : cuT('Your product', '你的产品'))}</div>
+    <div class="pc"><span class="f">¥${fmt(f || 0)}</span>${reg > 0 ? `<span class="r">¥${fmt(reg)}</span>` : ''}</div>
+    <div class="rw"><span class="fw-cd"><span class="dot"></span>${cd}</span>${fwOffPct() ? `<span class="save">${cuT('save', '省')} ${fwOffPct()}%</span>` : ''}</div>
+  </div>`;
+}
+function fwHeadsUpHtml() {
+  const notes = [];
+  notes.push(`<div class="vw-note"><span class="ni">${fwIcon('ticket', 15)}</span><span>${cuT('The homepage <b>Flash sale</b> block shows this with a live countdown once it starts.', '秒杀开始后会在首页<b>秒杀板块</b>实时倒计时展示。')}</span></div>`);
+  const liveCoupon = (_fwVouchers || []).some(v => v && v.is_active && (v.auto_apply || v.is_public));
+  if (liveCoupon && !_fw.noCoupon) {
+    notes.push(`<div class="vw-note brass"><span class="ni">${fwIcon('alert', 15)}</span><span>${cuT('A sitewide coupon is live — it will stack on this flash price. Keep coupons off to protect your margin.', '有全场优惠券进行中 — 会叠加在秒杀价上。禁止叠加可保住利润。')}</span></div>`);
+  }
+  return `<div class="vw-headsup">${notes.join('')}</div>`;
+}
+// Re-render only the right pane so typing on the left never loses focus.
+function fwRefreshRight() {
+  const pane = document.querySelector('#fw-body .vw-ticketpane');
+  if (!pane) return;
+  pane.innerHTML = `<div class="vw-tick-cap">${cuT('What the customer sees', '顾客看到的')}</div>`
+    + fwShelfHtml() + (_fw.step === 'review' ? fwHeadsUpHtml() : '');
+}
+
+// ─── save ────────────────────────────────────────────────────────────────
+async function fwSave() {
+  if (!_fw.product) { toast(cuT('Pick a product first', '请先选择产品'), 'err'); return; }
+  if (!fwCommitPrice() || !fwCommitClock()) return;
+  const ends = fwEndsDate();
+  const starts = fwStartsDate();
+  const body = {
+    flash_price: fwPriceNum(),
+    flash_ends_at: ends.toISOString(),
+    flash_starts_at: starts ? starts.toISOString() : null,
+    flash_stock_limit: (_fw.capOn && Number(_fw.cap) > 0) ? Number(_fw.cap) : null,
+    no_coupon_on_flash: _fw.noCoupon ? 1 : 0,
+  };
+  try {
+    await api(`/api/retail-admin/products/${_fw.product.id}/flash-sale`, { method: 'PUT', body });
+    toast(starts ? cuT('Flash sale scheduled', '秒杀已排期') : cuT('Flash sale started', '秒杀已开启'));
+    fwClose();
+    await fsLoadList();
+  } catch (e) {
+    const map = {
+      flash_price_invalid: cuT('Flash price must be greater than 0', '秒杀价必须大于 0'),
+      flash_ends_at_required: cuT('End time required', '请填写结束时间'),
+      flash_ends_at_invalid: cuT('End time invalid', '结束时间无效'),
+      flash_starts_at_invalid: cuT('Start time invalid', '开始时间无效'),
+      flash_starts_after_ends: cuT('Start must be before end', '开始须早于结束'),
+      flash_stock_limit_invalid: cuT('Stock cap must be a positive number', '库存上限必须为正数'),
+    };
+    toast(cuT('Failed', '失败') + ': ' + (map[e.message] || e.message), 'err');
+  }
+}
+
+// ─── boot: lazy-load the timeline on first tab open ──────────────────────
 document.querySelector('[data-tab="flash"]').addEventListener('click', () => {
-  if (!FLASH_LOADED) {
-    FLASH_LOADED = true;
-    fsPopulateProductSelect();
-    fsLoadList();
-  }
+  if (!FLASH_LOADED) { FLASH_LOADED = true; fsLoadList(); }
 });
-
-// Wire picker trigger + search + keyboard.
-document.addEventListener('DOMContentLoaded', () => {
-  const trigger = document.getElementById('fs-picker-trigger');
-  if (trigger) {
-    trigger.addEventListener('click', () => fsPickerToggle());
-    trigger.addEventListener('keydown', e => {
-      if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
-        e.preventDefault();
-        fsPickerOpen();
-      }
-    });
-  }
-  const search = document.getElementById('fs-picker-search');
-  if (search) {
-    let _t;
-    search.addEventListener('input', () => {
-      clearTimeout(_t);
-      _t = setTimeout(() => fsPickerRenderList(search.value), 60);
-    });
-    search.addEventListener('keydown', e => {
-      if (e.key === 'Escape') { e.preventDefault(); fsPickerClose(); trigger?.focus(); }
-    });
-  }
-});
-
