@@ -9895,3 +9895,222 @@ tr.vch-row.is-off .vch-code, tr.vch-row.is-off .vch-gives { color: var(--text-2)
   .vch-search { min-width: 0; width: 100%; margin-left: 0; }
   #vouchers-table thead th:nth-child(3), #vouchers-table tbody td:nth-child(3) { display: none; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   TACET MEMBERSHIP & POINTS (mp-*) — Option A rebuild.
+   #tab-membership joins the #tacet-orders-skin token scope (retail-admin
+   .html), so --bg-pane / --line / --text-* / --tacet-* already resolve to
+   Tacet values here, light and dark. The points rules read as editable
+   sentences; the Roots Club ladder reads as cards with one inline editor
+   open at a time (replaces the old 8-column spreadsheet).
+   Dusk budget on this screen: ZERO — nothing here is automation. Sage
+   marks members present / tiers reached; amber flags a setting worth a
+   second look; the only solid buttons are ink (the surface, inverted).
+   ════════════════════════════════════════════════════════════════════ */
+/* Paper ground while the tab is active, like the other Tacet pages. */
+body:has(#tab-membership.active) { background: var(--td-paper); }
+
+#tab-membership .mp { max-width: 1120px; }
+#tab-membership .mp-eyebrow {
+  font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-3); margin: 34px 0 6px;
+}
+#tab-membership .mp-eyebrow:first-child { margin-top: 8px; }
+#tab-membership .mp-section-sub {
+  font-size: 13px; color: var(--text-2); margin: 0 0 16px; max-width: 70ch; line-height: 1.6;
+}
+
+#tab-membership .mp-card {
+  background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px;
+  overflow: hidden;
+}
+
+/* ── rules as sentences ── */
+#tab-membership .mp-rules { padding: 6px 22px; }
+#tab-membership .mp-rule {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 15px 0; border-bottom: 1px solid var(--line-soft);
+  font-size: 15px; color: var(--text-1); line-height: 1.5;
+}
+#tab-membership .mp-rule:last-child { border-bottom: 0; }
+#tab-membership .mp-why { font-size: 13px; color: var(--text-3); }
+#tab-membership .mp-in {
+  font: inherit; font-size: 14px; font-variant-numeric: tabular-nums;
+  color: var(--text-1); background: var(--bg-input);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 9px; width: 74px; text-align: center;
+}
+#tab-membership .mp-rule select {
+  font: inherit; font-size: 14px; color: var(--text-1); background: var(--bg-input);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 28px 7px 10px;
+}
+#tab-membership .mp-in:focus-visible,
+#tab-membership .mp-rule select:focus-visible,
+#tab-membership .mp-field input:focus-visible,
+#tab-membership .mp-field textarea:focus-visible {
+  outline: 2px solid var(--tacet-ink); outline-offset: 1px; border-color: var(--text-2);
+}
+[data-theme="dark"] #tab-membership .mp-in:focus-visible,
+[data-theme="dark"] #tab-membership .mp-rule select:focus-visible,
+[data-theme="dark"] #tab-membership .mp-field input:focus-visible,
+[data-theme="dark"] #tab-membership .mp-field textarea:focus-visible {
+  outline-color: var(--text-1);
+}
+
+/* amber inline hint (attention, never alarmist) */
+#tab-membership .mp-hint {
+  display: inline-flex; align-items: baseline; gap: 6px;
+  background: var(--tacet-amber-tint); color: var(--tacet-amber-ink);
+  border-radius: 8px; padding: 5px 11px; font-size: 12.5px; line-height: 1.5;
+}
+#tab-membership .mp-hint[hidden] { display: none; }
+
+/* the shipping switch — a styled checkbox */
+#tab-membership .mp-switch {
+  position: relative; display: inline-flex; flex: none;
+  width: 40px; height: 24px; cursor: pointer;
+}
+#tab-membership .mp-switch input {
+  position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer;
+}
+#tab-membership .mp-knob {
+  position: absolute; inset: 0; border-radius: 999px; background: var(--line-strong);
+  transition: background 200ms cubic-bezier(.16,1,.3,1);
+}
+#tab-membership .mp-knob::after {
+  content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+  border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(17,26,43,.3);
+  transition: left 200ms cubic-bezier(.16,1,.3,1);
+}
+#tab-membership .mp-switch input:checked + .mp-knob { background: var(--tacet-ink); }
+[data-theme="dark"] #tab-membership .mp-switch input:checked + .mp-knob { background: var(--tacet-sage); }
+#tab-membership .mp-switch input:checked + .mp-knob::after { left: 19px; }
+#tab-membership .mp-switch input:focus-visible + .mp-knob { outline: 2px solid var(--tacet-ink); outline-offset: 2px; }
+
+/* outcome line — the grey sentence that does the math */
+#tab-membership .mp-outcome {
+  margin: 0 22px 18px; padding: 12px 16px; background: var(--tacet-cream);
+  border-radius: 8px; font-size: 13.5px; color: var(--text-2); line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+#tab-membership .mp-outcome b { font-weight: 600; color: var(--text-1); }
+
+/* card foot + save row */
+#tab-membership .mp-card-foot {
+  display: flex; align-items: center; gap: 16px;
+  padding: 13px 22px; border-top: 1px solid var(--line); background: var(--tacet-cream);
+}
+#tab-membership .mp-foot-note { font-size: 12.5px; color: var(--text-3); }
+#tab-membership .mp-foot-sp { margin-left: auto; }
+
+#tab-membership .mp-btn {
+  font: 500 14px var(--f-sans); padding: 9px 18px; border-radius: 8px;
+  border: 1px solid transparent; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  transition: all 160ms cubic-bezier(.16,1,.3,1);
+}
+#tab-membership .mp-btn-primary { background: var(--text-1); color: var(--bg-pane); }
+#tab-membership .mp-btn-primary:hover { opacity: .9; }
+#tab-membership .mp-btn-secondary { background: transparent; color: var(--text-1); border-color: var(--line-strong); }
+#tab-membership .mp-btn-secondary:hover { border-color: var(--text-2); }
+#tab-membership .mp-btn-quiet {
+  background: none; border: 0; color: var(--text-3); font: 500 13px var(--f-sans);
+  padding: 4px 0; cursor: pointer;
+}
+#tab-membership .mp-btn-quiet:hover { color: var(--text-1); }
+#tab-membership .mp-btn-danger {
+  background: none; border: 0; color: var(--tacet-brick); font: 500 13px var(--f-sans);
+  padding: 4px 0; cursor: pointer;
+}
+#tab-membership .mp-btn-danger:hover { text-decoration: underline; }
+#tab-membership .mp-btn:focus-visible,
+#tab-membership .mp-btn-quiet:focus-visible,
+#tab-membership .mp-btn-danger:focus-visible { outline: 2px solid var(--tacet-ink); outline-offset: 2px; }
+[data-theme="dark"] #tab-membership .mp-btn:focus-visible { outline-color: var(--text-1); }
+
+/* ── tier cards ── */
+#tab-membership .mp-tier-cards {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(232px, 1fr)); gap: 14px;
+}
+#tab-membership .mp-tier {
+  background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px;
+  padding: 17px 19px 14px; display: flex; flex-direction: column; gap: 6px;
+}
+#tab-membership .mp-tier.editing { border-color: var(--text-2); box-shadow: 0 0 0 1px var(--text-2); }
+#tab-membership .mp-tier-head { display: flex; align-items: baseline; gap: 8px; }
+#tab-membership .mp-tier-name { font-size: 16px; font-weight: 600; color: var(--text-1); }
+#tab-membership .mp-tier-name .cn { font-size: 13px; font-weight: 400; color: var(--text-3); margin-left: 4px; }
+#tab-membership .mp-tier-mult {
+  margin-left: auto; font-size: 12.5px; font-weight: 500; font-variant-numeric: tabular-nums;
+  background: var(--tacet-cream); border-radius: 999px; padding: 2px 10px;
+  color: var(--text-2); white-space: nowrap;
+}
+#tab-membership .mp-tier-from { font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+#tab-membership .mp-tier-from b { font-weight: 600; color: var(--text-1); }
+#tab-membership .mp-tier-members {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12.5px; color: var(--text-3); font-variant-numeric: tabular-nums;
+}
+#tab-membership .mp-tier-members .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--tacet-sage); flex: none; }
+#tab-membership .mp-tier-perks { list-style: none; margin: 6px 0 6px; padding: 0; flex: 1; }
+#tab-membership .mp-tier-perks li {
+  font-size: 13px; color: var(--text-1); padding: 3px 0 3px 15px; position: relative; line-height: 1.5;
+}
+#tab-membership .mp-tier-perks li::before {
+  content: ""; position: absolute; left: 2px; top: 10px; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--line-strong);
+}
+#tab-membership .mp-tier-perks .mp-perks-empty { color: var(--text-4); padding-left: 0; }
+#tab-membership .mp-tier-perks .mp-perks-empty::before { display: none; }
+#tab-membership .mp-tier-edit { align-self: flex-start; }
+
+/* ── inline tier editor ── */
+#tab-membership .mp-editor {
+  background: var(--bg-pane); border: 1px solid var(--text-2); border-radius: 14px;
+  padding: 19px 22px 16px; margin-top: 14px;
+}
+#tab-membership .mp-editor-cap {
+  font-size: 10.5px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--text-3); margin-bottom: 14px;
+}
+#tab-membership .mp-field-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px 16px; }
+#tab-membership .mp-field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+#tab-membership .mp-field.half { grid-column: span 2; }
+#tab-membership .mp-field label { font-size: 12px; font-weight: 500; color: var(--text-2); }
+#tab-membership .mp-field input, #tab-membership .mp-field textarea {
+  font: inherit; font-size: 14px; color: var(--text-1); background: var(--bg-input);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; width: 100%;
+}
+#tab-membership .mp-field textarea { resize: vertical; min-height: 88px; line-height: 1.55; }
+#tab-membership .mp-field .mp-aff { display: flex; align-items: center; gap: 6px; }
+#tab-membership .mp-field .mp-aff .u { font-size: 14px; color: var(--text-3); }
+#tab-membership .mp-field .mp-aff input { font-variant-numeric: tabular-nums; }
+#tab-membership .mp-field .fh { font-size: 12px; color: var(--text-3); }
+#tab-membership .mp-editor-foot {
+  display: flex; align-items: center; gap: 16px; margin-top: 16px;
+  padding-top: 14px; border-top: 1px solid var(--line);
+}
+#tab-membership .mp-editor-foot .mp-key { font-size: 12px; color: var(--text-3); }
+#tab-membership .mp-editor-foot .mp-key code {
+  font-family: var(--f-mono, ui-monospace, Menlo, monospace); font-size: 11.5px;
+  background: var(--tacet-cream); border-radius: 4px; padding: 1px 6px; color: var(--text-2);
+}
+#tab-membership .mp-editor-foot .mp-foot-sp { margin-left: auto; }
+
+/* ── save row under the ladder ── */
+#tab-membership .mp-tier-save {
+  display: flex; align-items: center; gap: 16px; margin-top: 20px; flex-wrap: wrap;
+}
+#tab-membership .mp-tier-save .mp-foot-note { flex: 1; min-width: 220px; }
+#tab-membership .mp-tier-empty {
+  grid-column: 1 / -1; padding: 22px; text-align: center; color: var(--text-3);
+  font-size: 13px; border: 1px dashed var(--line-strong); border-radius: 14px;
+}
+
+@media (max-width: 720px) {
+  #tab-membership .mp-field-grid { grid-template-columns: repeat(2, 1fr); }
+  #tab-membership .mp-field.half { grid-column: 1 / -1; }
+  #tab-membership .mp-tier-cards { grid-template-columns: 1fr; }
+  #tab-membership .mp-editor-foot { flex-wrap: wrap; }
+  #tab-membership .mp-editor-foot .mp-foot-sp { margin-left: 0; flex-basis: 100%; }
+}

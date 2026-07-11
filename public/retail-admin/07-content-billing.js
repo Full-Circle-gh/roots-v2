@@ -716,8 +716,67 @@ async function loadPointsSettings() {
     if ($('#pts-point-value'))    $('#pts-point-value').value   = (1 / redeemRate).toFixed(2);
     if ($('#pts-expiry-months'))  $('#pts-expiry-months').value = pts.expiryMonths ?? 12;
     if ($('#pts-cover-shipping')) $('#pts-cover-shipping').checked = !!pts.coverShipping;
-    if ($('#pts-ratemsg'))        $('#pts-ratemsg').textContent = '¥' + earnSpend;
+    try { mpOutcome(); } catch {}
   } catch {}
+}
+
+// ── The grey "what it adds up to" line + the short-expiry amber hint ──────────
+// Reads the four points inputs live (oninput) and the top tier's multiplier
+// from RCTIER_STATE, and writes a plain-¥ worked example so the operator can
+// sanity-check the rules without doing the math. Everything degrades to a base
+// (1.0×) sentence before the tier ladder has loaded.
+function mpFmt(n) {
+  if (!Number.isFinite(n)) return '0';
+  const r = Math.round(n * 100) / 100;
+  return Number.isInteger(r) ? String(r) : String(r).replace(/0+$/, '').replace(/\.$/, '');
+}
+function mpTopTier() {
+  if (!Array.isArray(RCTIER_STATE) || !RCTIER_STATE.length) return null;
+  return RCTIER_STATE.reduce((top, t) =>
+    (Number(t.points_mult) || 1) > (Number(top.points_mult) || 1) ? t : top, RCTIER_STATE[0]);
+}
+function mpOutcome() {
+  const out = $('#pts-outcome');
+  const earnPoints = Math.max(0, parseFloat($('#pts-earn-points')?.value) || 0);
+  const earnSpend  = Math.max(1, parseFloat($('#pts-earn-spend')?.value) || 100);
+  const pointValue = Math.max(0, parseFloat($('#pts-point-value')?.value) || 0);
+  const SAMPLE = 200;
+  const basePts = (SAMPLE / earnSpend) * earnPoints;
+  const baseVal = basePts * pointValue;
+  const pct     = SAMPLE > 0 ? (baseVal / SAMPLE) * 100 : 0;
+  if (out) {
+    if (!earnPoints || !pointValue) {
+      out.innerHTML = escapeHtml(cuT(
+        'Set an earn rate and point value above to see what an order gives back.',
+        '在上方填写积分速率与积分价值,即可预览一笔订单的回馈。'));
+    } else {
+      const top = mpTopTier();
+      const topMult = top ? (Number(top.points_mult) || 1) : 1;
+      const topName = top ? (cuLang() === 'cn' ? (top.name_cn || top.name_en) : (top.name_en || top.name_cn)) : '';
+      let s = cuT(
+        `So a ¥${SAMPLE} order earns <b>${mpFmt(basePts)} points = ¥${mpFmt(baseVal)}</b> off a future order (${mpFmt(pct)}% back).`,
+        `一笔 ¥${SAMPLE} 订单可得 <b>${mpFmt(basePts)} 积分 = ¥${mpFmt(baseVal)}</b>,可抵扣后续订单(回馈 ${mpFmt(pct)}%)。`);
+      if (top && topMult > 1) {
+        s += ' ' + cuT(
+          `A ${escapeHtml(topName)} member at ${mpFmt(topMult)}× earns <b>${mpFmt(basePts * topMult)} points</b> on the same order.`,
+          `${escapeHtml(topName)} 会员按 ${mpFmt(topMult)} 倍,同一订单可得 <b>${mpFmt(basePts * topMult)} 积分</b>。`);
+      }
+      out.innerHTML = s;
+    }
+  }
+  // Short-expiry nudge — attention, never alarmist.
+  const hint = $('#pts-expiry-hint');
+  if (hint) {
+    const months = parseInt($('#pts-expiry-months')?.value, 10);
+    if (Number.isFinite(months) && months > 0 && months < 6) {
+      hint.textContent = cuT(
+        'Short — most stores give 12–24, or 0 so points never expire.',
+        '偏短 — 多数商家设 12–24 个月,或设 0 让积分永不过期。');
+      hint.hidden = false;
+    } else {
+      hint.hidden = true;
+    }
+  }
 }
 
 async function loadTopupPackages() {
@@ -793,7 +852,7 @@ async function savePointsSettings() {
   };
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body });
-    if ($('#pts-ratemsg')) $('#pts-ratemsg').textContent = '¥' + body['points.earnSpend'];
+    try { mpOutcome(); } catch {}
     toast('Saved · 已保存');
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }
@@ -810,6 +869,8 @@ const RCTIER_DEFAULTS = [
   { key: 'tree',   name_en: 'Tree',   name_cn: '大树', threshold: 5000, points_mult: 2.0, perks_en: ['20% off all orders', 'Early access to drops', 'Free shipping (no minimum)', 'Birthday gift', 'Exclusive tasting events'], perks_cn: ['全场 20% 折扣', '新品优先购', '免邮 (无门槛)', '生日礼物', '专属品鉴活动'] },
 ];
 let RCTIER_STATE = [];
+let RCTIER_EDITING = -1;   // index of the tier open in the inline editor, -1 = none
+let RCTIER_COUNTS = null;  // { seed: 186, ... } live member counts, or null if unavailable
 async function loadRctiers() {
   try {
     const r = await api('/api/retail-admin/config');
@@ -828,28 +889,127 @@ async function loadRctiers() {
   } catch {
     RCTIER_STATE = RCTIER_DEFAULTS.map(t => ({ ...t, perks_en: t.perks_en.slice(), perks_cn: t.perks_cn.slice() }));
   }
+  RCTIER_EDITING = -1;
   renderRctiersTable();
+  try { mpOutcome(); } catch {}   // top-tier multiplier feeds the worked example
+  loadTierCounts();               // fire-and-forget; re-renders cards when it lands
 }
-function renderRctiersTable() {
-  const tbody = document.querySelector('#rctier-table tbody');
-  if (!tbody) return;
+
+// Live per-tier member counts — pure context for choosing thresholds. Degrades
+// silently (RCTIER_COUNTS stays null → no member line) if the endpoint is absent.
+async function loadTierCounts() {
+  try {
+    const r = await api('/api/retail-admin/tier-counts');
+    RCTIER_COUNTS = (r && r.data && typeof r.data === 'object') ? r.data : null;
+  } catch { RCTIER_COUNTS = null; }
+  renderRctierCards();
+}
+
+// Key is derived from the English name and shown read-only — stable once set so
+// renaming a tier never orphans the customers already stamped with its key.
+function rctierKey(t) {
+  if (t && t.key) return t.key;
+  return String((t && t.name_en) || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function renderRctiersTable() { renderRctierCards(); renderRctierEditor(); }
+
+function renderRctierCards() {
+  const host = document.querySelector('#rctier-cards');
+  if (!host) return;
   if (!RCTIER_STATE.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted" style="padding: 8px;">No tiers — click "+ Add tier" to create one. · 暂无会员等级 — 点击"+ Add tier"创建。</td></tr>';
+    host.innerHTML = `<div class="mp-tier-empty">${escapeHtml(cuT('No tiers yet — add one to start the ladder.', '暂无等级 — 添加一个以开始等级体系。'))}</div>`;
     return;
   }
-  tbody.innerHTML = RCTIER_STATE.map((t, i) => `
-    <tr>
-      <td style="padding: 4px 8px;"><input type="text" value="${escapeAttr(t.key)}" oninput="updateRctier(${i},'key',this.value)" style="width: 100%;" placeholder="seed"></td>
-      <td style="padding: 4px 8px;"><input type="text" value="${escapeAttr(t.name_en)}" oninput="updateRctier(${i},'name_en',this.value)" style="width: 100%;"></td>
-      <td style="padding: 4px 8px;"><input type="text" value="${escapeAttr(t.name_cn)}" oninput="updateRctier(${i},'name_cn',this.value)" style="width: 100%;"></td>
-      <td style="padding: 4px 8px;"><input type="number" value="${t.threshold}" min="0" step="1" oninput="updateRctier(${i},'threshold',this.value)" style="width: 100%;"></td>
-      <td style="padding: 4px 8px;"><input type="number" value="${t.points_mult ?? 1}" min="0.1" max="10" step="0.1" oninput="updateRctier(${i},'points_mult',this.value)" style="width: 100%;" title="Points-earn multiplier: 1.0 = no boost, 2.0 = double points per ¥ spent"></td>
-      <td style="padding: 4px 8px;"><textarea rows="3" oninput="updateRctier(${i},'perks_en',this.value)" style="width: 100%; resize: vertical; font: inherit;">${escapeHtml((t.perks_en || []).join('\n'))}</textarea></td>
-      <td style="padding: 4px 8px;"><textarea rows="3" oninput="updateRctier(${i},'perks_cn',this.value)" style="width: 100%; resize: vertical; font: inherit;">${escapeHtml((t.perks_cn || []).join('\n'))}</textarea></td>
-      <td style="padding: 4px 8px;"><button class="btn" onclick="removeRctier(${i})">×</button></td>
-    </tr>
-  `).join('');
+  const cn = (typeof cuLang === 'function') && cuLang() === 'cn';
+  const lowIdx = RCTIER_STATE.reduce((lo, t, i) => (Number(t.threshold) || 0) < (Number(RCTIER_STATE[lo].threshold) || 0) ? i : lo, 0);
+  host.innerHTML = RCTIER_STATE.map((t, i) => {
+    const nameEn = t.name_en || cuT('Untitled tier', '未命名等级');
+    const nameCn = t.name_cn && t.name_cn !== t.name_en ? `<span class="cn">${escapeHtml(t.name_cn)}</span>` : '';
+    const mult = mpFmt(Number(t.points_mult) || 1);
+    const from = (i === lowIdx || (Number(t.threshold) || 0) === 0)
+      ? cuT('from <b>¥0</b> — everyone starts here', '从 <b>¥0</b> 起 — 人人有份')
+      : cuT(`from <b>¥${Number(t.threshold || 0).toLocaleString('en-US')}</b> lifetime spend`, `累计消费 <b>¥${Number(t.threshold || 0).toLocaleString('en-US')}</b> 起`);
+    let members = '';
+    if (RCTIER_COUNTS) {
+      const n = Number(RCTIER_COUNTS[rctierKey(t)] || 0);
+      members = `<span class="mp-tier-members"><span class="dot"></span>${escapeHtml(cuT(n === 1 ? '1 member' : `${n.toLocaleString('en-US')} members`, `${n.toLocaleString('en-US')} 名会员`))}</span>`;
+    }
+    const perks = cn ? (t.perks_cn.length ? t.perks_cn : t.perks_en) : (t.perks_en.length ? t.perks_en : t.perks_cn);
+    const perksHtml = perks && perks.length
+      ? perks.map(p => `<li>${escapeHtml(p)}</li>`).join('')
+      : `<li class="mp-perks-empty">${escapeHtml(cuT('No perks yet', '暂无权益'))}</li>`;
+    const editing = (i === RCTIER_EDITING);
+    const editBtn = editing
+      ? `<span class="mp-btn-quiet">${escapeHtml(cuT('Editing below ↓', '正在下方编辑 ↓'))}</span>`
+      : `<button class="mp-btn-quiet mp-tier-edit" onclick="mpEditTier(${i})">${escapeHtml(cuT('Edit tier', '编辑等级'))}</button>`;
+    return `
+      <div class="mp-tier${editing ? ' editing' : ''}">
+        <div class="mp-tier-head">
+          <span class="mp-tier-name">${escapeHtml(nameEn)}${nameCn}</span>
+          <span class="mp-tier-mult">${escapeHtml(cuT(mult + '× points', mult + '× 积分'))}</span>
+        </div>
+        <div class="mp-tier-from">${from}</div>
+        ${members}
+        <ul class="mp-tier-perks">${perksHtml}</ul>
+        ${editBtn}
+      </div>`;
+  }).join('');
 }
+
+function renderRctierEditor() {
+  const host = document.querySelector('#rctier-editor');
+  if (!host) return;
+  const i = RCTIER_EDITING;
+  const t = RCTIER_STATE[i];
+  if (!t) { host.innerHTML = ''; return; }
+  const capName = t.name_en || t.name_cn || cuT('New tier', '新等级');
+  host.innerHTML = `
+    <div class="mp-editor">
+      <div class="mp-editor-cap">${escapeHtml(cuT('Editing', '编辑中'))} — ${escapeHtml(capName)}</div>
+      <div class="mp-field-grid">
+        <div class="mp-field">
+          <label>${escapeHtml(cuT('Name (English)', '名称(英文)'))}</label>
+          <input type="text" value="${escapeAttr(t.name_en)}" oninput="updateRctier(${i},'name_en',this.value)">
+        </div>
+        <div class="mp-field">
+          <label>${escapeHtml(cuT('Name (中文)', '名称(中文)'))}</label>
+          <input type="text" value="${escapeAttr(t.name_cn)}" oninput="updateRctier(${i},'name_cn',this.value)">
+        </div>
+        <div class="mp-field">
+          <label>${escapeHtml(cuT('Reached at lifetime spend', '达到门槛(累计消费)'))}</label>
+          <span class="mp-aff"><span class="u">¥</span><input type="number" min="0" step="100" value="${escapeAttr(t.threshold)}" oninput="updateRctier(${i},'threshold',this.value)"></span>
+        </div>
+        <div class="mp-field">
+          <label>${escapeHtml(cuT('Points multiplier', '积分倍率'))}</label>
+          <span class="mp-aff"><input type="number" min="0.1" max="10" step="0.1" value="${escapeAttr(t.points_mult ?? 1)}" oninput="updateRctier(${i},'points_mult',this.value)"><span class="u">×</span></span>
+          <span class="fh">${escapeHtml(cuT('1.0 = base rate', '1.0 = 基础速率'))}</span>
+        </div>
+        <div class="mp-field half">
+          <label>${escapeHtml(cuT('Perks — one per line (English)', '权益 — 每行一条(英文)'))}</label>
+          <textarea oninput="updateRctier(${i},'perks_en',this.value)">${escapeHtml((t.perks_en || []).join('\n'))}</textarea>
+        </div>
+        <div class="mp-field half">
+          <label>${escapeHtml(cuT('Perks — one per line (中文)', '权益 — 每行一条(中文)'))}</label>
+          <textarea oninput="updateRctier(${i},'perks_cn',this.value)">${escapeHtml((t.perks_cn || []).join('\n'))}</textarea>
+        </div>
+      </div>
+      <div class="mp-editor-foot">
+        <span class="mp-key">${escapeHtml(cuT('Key', '标识'))} <code>${escapeHtml(rctierKey(t) || '—')}</code> — ${escapeHtml(cuT('set automatically from the English name.', '由英文名称自动生成。'))}</span>
+        <span class="mp-foot-sp"></span>
+        <button class="mp-btn-danger" onclick="removeRctier(${i})">${escapeHtml(cuT('Remove tier', '删除等级'))}</button>
+        <button class="mp-btn mp-btn-secondary" onclick="mpCloseEditor()">${escapeHtml(cuT('Done', '完成'))}</button>
+      </div>
+    </div>`;
+}
+
+function mpEditTier(i) {
+  RCTIER_EDITING = (RCTIER_EDITING === i) ? -1 : i;
+  renderRctiersTable();
+  if (RCTIER_EDITING >= 0) document.querySelector('#rctier-editor .mp-editor')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function mpCloseEditor() { RCTIER_EDITING = -1; renderRctiersTable(); }
+
 function updateRctier(i, field, value) {
   if (!RCTIER_STATE[i]) return;
   if (field === 'threshold') {
@@ -864,47 +1024,59 @@ function updateRctier(i, field, value) {
       : 1.0;
   } else if (field === 'perks_en' || field === 'perks_cn') {
     RCTIER_STATE[i][field] = String(value || '').split('\n').map(s => s.trim()).filter(Boolean);
-  } else if (field === 'key') {
-    RCTIER_STATE[i].key = String(value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
   } else {
     RCTIER_STATE[i][field] = String(value || '');
   }
+  // Refresh the card summaries + the worked example live. The editor DOM is a
+  // separate container, so re-rendering the cards never steals the caret.
+  renderRctierCards();
+  try { mpOutcome(); } catch {}
 }
 function addRctierRow() {
-  // New row defaults to the next ¥1000 jump above the current top tier so the
-  // ladder stays monotonic without the operator doing the math.
+  // New tier defaults to the next ¥1000 jump above the current top tier so the
+  // ladder stays monotonic without the operator doing the math, and opens for
+  // editing straight away.
   const top = RCTIER_STATE.reduce((m, t) => Math.max(m, Number(t.threshold) || 0), 0);
   RCTIER_STATE.push({
     key: '', name_en: '', name_cn: '', threshold: top + 1000,
     points_mult: 1.0, perks_en: [], perks_cn: [],
   });
+  RCTIER_EDITING = RCTIER_STATE.length - 1;
   renderRctiersTable();
+  document.querySelector('#rctier-editor .mp-editor')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function removeRctier(i) {
   const t = RCTIER_STATE[i];
   if (!t) return;
-  if (!confirm(`Remove tier "${t.name_en || t.key || '(unnamed)'}"? · 删除等级?`)) return;
+  if (!confirm(cuT(`Remove tier "${t.name_en || t.name_cn || '(unnamed)'}"?`, `删除等级"${t.name_cn || t.name_en || '(未命名)'}"?`))) return;
   RCTIER_STATE.splice(i, 1);
+  if (RCTIER_EDITING === i) RCTIER_EDITING = -1;
+  else if (RCTIER_EDITING > i) RCTIER_EDITING -= 1;
   renderRctiersTable();
+  try { mpOutcome(); } catch {}
 }
 async function saveRctiers() {
-  // Validate: every row needs a unique key, at least one row, and the lowest
+  // Derive a key for any tier that hasn't got one yet (new tiers), from its
+  // English name. Existing tiers keep their stored key so customer tier_key
+  // references stay valid across renames.
+  for (const t of RCTIER_STATE) { if (!t.key) t.key = rctierKey(t); }
+  // Validate: every tier needs a unique key, at least one tier, and the lowest
   // threshold must be 0 (otherwise low-spend customers have no tier).
   const keys = new Set();
   for (const t of RCTIER_STATE) {
-    if (!t.key) return toast('Every tier needs a key (e.g. seed) · 每个等级需要一个标识', 'err');
-    if (keys.has(t.key)) return toast(`Duplicate tier key "${t.key}" · 等级标识重复`, 'err');
+    if (!t.key) return toast('Every tier needs an English name · 每个等级需要英文名称', 'err');
+    if (keys.has(t.key)) return toast(cuT(`Two tiers resolve to the same key "${t.key}" — rename one.`, `两个等级标识重复"${t.key}" — 请重命名其一。`), 'err');
     keys.add(t.key);
   }
   if (!RCTIER_STATE.length) return toast('At least one tier is required · 至少需要一个等级', 'err');
   const lowest = RCTIER_STATE.reduce((m, t) => Math.min(m, Number(t.threshold) || 0), Infinity);
-  if (lowest !== 0) return toast('The lowest tier threshold must be 0 · 最低等级门槛必须为 0', 'err');
+  if (lowest !== 0) return toast('The lowest tier must start at ¥0 · 最低等级门槛必须为 0', 'err');
   // Sort by threshold ascending so storage matches what customers see.
   const sorted = RCTIER_STATE.slice().sort((a, b) => (Number(a.threshold) || 0) - (Number(b.threshold) || 0));
   try {
     await api('/api/retail-admin/config', { method: 'PUT', body: { 'roots_club.tiers': sorted } });
     toast('Tiers saved · 已保存');
-    await loadRctiers();   // re-read so the table reflects the canonical sorted form
+    await loadRctiers();   // re-read so the cards reflect the canonical sorted form
   } catch (e) { toast('Save failed · 保存失败: '+e.message, 'err'); }
 }
 
