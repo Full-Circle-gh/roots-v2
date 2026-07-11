@@ -2573,7 +2573,11 @@ function renderPopups() {
       <span class="em-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg></span>
       <h3>The app is quiet · 暂无弹窗</h3>
       <p>Add one when you have something worth interrupting for — a promo, a review nudge, a holiday notice. · 有值得打扰顾客的事时再新建一个——活动、邀请评价或歇业通知。</p>
-    </div>` + `<div class="pg-gal" style="grid-column: 1 / -1; margin-top: 18px;">${newTile}</div>`;
+      <button class="pg-btn primary" style="margin-top: 20px;" onclick="openPopupEditor()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        New pop-up · 新建弹窗
+      </button>
+    </div>`;
     return;
   }
 

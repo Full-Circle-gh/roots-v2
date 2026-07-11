@@ -53,7 +53,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-membership, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-membership, #tab-vouchers, #tab-broadcasts, #tab-sharing, #tab-popups, #pu-editor-bg, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -83,7 +83,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-membership, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-membership, #tab-vouchers, #tab-broadcasts, #tab-sharing, #tab-popups, #pu-editor-bg, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -3670,53 +3670,98 @@
         min-height: 100vh;
       }
 
-      /* ── page head + two-column shell ── */
-      #tab-flash .fs2-wrap { display: grid; grid-template-columns: minmax(0,1fr) 380px; gap: 24px; align-items: start; margin-top: 20px; }
-      @media (max-width: 980px) { #tab-flash .fs2-wrap { grid-template-columns: 1fr; } }
+      /* ── page head: greeting + primary create button ── */
+      #tab-flash .fsm-head { display: flex; align-items: flex-start; gap: 20px; }
+      #tab-flash .fsm-new { margin-left: auto; flex: none; background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); font-weight: 500; padding: 8px 16px; white-space: nowrap; }
+      #tab-flash .fsm-new:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
+      [data-theme="dark"] #tab-flash .fsm-new:hover { background: #EAE7DF; border-color: #EAE7DF; color: var(--bg-app); }
+      #tab-flash .fsm-new svg { width: 15px; height: 15px; }
 
-      /* ── the composer lives on the right, stuck below the admin chrome ── */
-      #tab-flash .fs2-side { position: sticky; top: 72px; }
-      @media (max-width: 980px) { #tab-flash .fs2-side { position: static; order: -1; } }
+      /* ── single full-width column ── */
+      #tab-flash .fsm-wrap { margin-top: 22px; }
+      .fsm-sec { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
+      .fsm-sec2 { margin-top: 34px; }
+      .fsm-secn { font-size: 12px; color: var(--text-3); font-family: var(--f-mono); }
+      .fsm-kick { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); }
 
-      /* ── timeline (left column) ── */
-      .fs2-group { position: relative; padding-left: 22px; }
-      .fs2-group + .fs2-group { margin-top: 26px; }
-      .fs2-group::before { content: ""; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 1px; background: var(--line); }
-      .fs2-gdot { position: absolute; left: 1px; top: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--bg-app); border: 1.5px solid var(--text-3); }
-      .fs2-group.live .fs2-gdot { background: var(--tacet-dusk); border-color: var(--tacet-dusk); }
-      .fs2-kicker { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); margin-bottom: 10px; }
-      .fs2-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; }
-      .fs2-row { display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 14px 16px; }
-      .fs2-row + .fs2-row { border-top: 1px solid var(--line-soft); }
-      .fs2-row.dim { opacity: .68; }
-      .fs2-thumb { width: 44px; height: 44px; border-radius: 10px; background: var(--bg-elev-1); overflow: hidden; display: grid; place-items: center; color: var(--text-4); }
-      .fs2-thumb img { width: 100%; height: 100%; object-fit: cover; }
-      .fs2-thumb svg { width: 18px; height: 18px; }
-      .fs2-who { min-width: 0; }
-      .fs2-who .n { font-size: 14px; font-weight: 500; line-height: 1.3; }
-      .fs2-who .n .sk { color: var(--text-3); font-family: var(--f-mono); font-size: 11px; margin-left: 4px; font-weight: 400; }
-      .fs2-who .s { font-size: 12px; color: var(--text-3); margin-top: 3px; }
-      .fs2-meta { display: flex; align-items: center; gap: 18px; }
-      @media (max-width: 640px) { .fs2-meta .fs2-price, .fs2-meta .fs2-sold { display: none; } }
-      .fs2-price { text-align: right; font-family: var(--f-mono); min-width: 78px; }
-      .fs2-price .f { font-size: 14px; font-weight: 600; color: var(--text-1); }
-      .fs2-price .r { font-size: 12px; color: var(--text-3); text-decoration: line-through; display: block; }
-      .fs2-sold { font-size: 12px; color: var(--text-2); font-family: var(--f-mono); min-width: 66px; }
-      .fs2-sold b { color: var(--text-1); }
-      .fs2-meter { height: 3px; border-radius: 2px; background: var(--bg-elev-1); margin-top: 6px; overflow: hidden; max-width: 90px; }
-      .fs2-meter i { display: block; height: 100%; background: var(--text-3); }
-      .fs2-acts { display: flex; align-items: center; gap: 8px; }
-      .fs2-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 3px 11px; white-space: nowrap; }
-      .fs2-badge.live { background: var(--tacet-dusk-tint, #EEEDF6); color: var(--tacet-dusk); }
-      .fs2-badge.sched { background: var(--bg-elev-1); color: var(--text-2); }
-      .fs2-badge.ended { background: transparent; border: 1px solid var(--line); color: var(--text-3); }
-      .fs2-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-      .fs2-badge.live .dot { animation: fs2Breathe 2.4s var(--ease-out, cubic-bezier(.16,1,.3,1)) infinite; }
-      .fs2-empty { padding: 40px 20px; text-align: center; }
-      .fs2-empty .lead { font-size: 14px; color: var(--text-1); margin-bottom: 4px; }
-      .fs2-empty .sub { font-size: 12.5px; color: var(--text-3); }
-      @keyframes fs2Breathe { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
-      @media (prefers-reduced-motion: reduce) { .fs2-badge.live .dot { animation: none; } }
+      /* badges (dot breathes only where it means "automation": live + auto-revert) */
+      .fsm-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 3px 11px; white-space: nowrap; }
+      .fsm-badge.live { background: var(--tacet-dusk-tint, #EEEDF6); color: var(--tacet-dusk); }
+      .fsm-badge.sched { background: var(--bg-elev-1); color: var(--text-2); }
+      .fsm-badge.ended { background: transparent; border: 1px solid var(--line); color: var(--text-3); }
+      .fsm-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+      .fsm-badge.live .fsm-dot, .fsm-auto .fsm-dot { animation: fsmBreathe 2.4s var(--ease-out, cubic-bezier(.16,1,.3,1)) infinite; }
+      @keyframes fsmBreathe { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+
+      /* ── live hero tiles ── */
+      .fsm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
+      @media (max-width: 760px) { .fsm-grid { grid-template-columns: 1fr; } }
+      .fsm-hero { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 20px; }
+      .fsm-hero-top { display: flex; align-items: flex-start; gap: 14px; }
+      .fsm-thumb { width: 58px; height: 58px; border-radius: 10px; flex: none; background: var(--bg-elev-1); overflow: hidden; display: grid; place-items: center; color: var(--text-4); }
+      .fsm-thumb img { width: 100%; height: 100%; object-fit: cover; }
+      .fsm-thumb svg { width: 20px; height: 20px; }
+      .fsm-who { min-width: 0; flex: 1; }
+      .fsm-name { font-size: 15px; font-weight: 500; line-height: 1.3; }
+      .fsm-sk { color: var(--text-3); font-family: var(--f-mono); font-size: 11px; margin-left: 4px; font-weight: 400; }
+      .fsm-prc { margin-top: 5px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+      .fsm-now { font-weight: 600; color: var(--text-1); font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+      .fsm-hero .fsm-now { font-size: 16px; }
+      .fsm-was { font-size: 13px; color: var(--text-3); text-decoration: line-through; font-family: var(--f-mono); }
+      .fsm-off { font-size: 11.5px; color: var(--tacet-sage-ink, #4A6249); background: var(--tacet-sage-tint, #EDF1EC); border-radius: 999px; padding: 1px 8px; }
+      .fsm-cd-row { margin: 18px 0 4px; display: flex; align-items: baseline; gap: 9px; }
+      .fsm-cd { font-size: 29px; font-weight: 500; letter-spacing: -.01em; color: var(--tacet-dusk); font-family: var(--f-mono); line-height: 1; font-variant-numeric: tabular-nums; }
+      .fsm-cd-lab { font-size: 12px; color: var(--text-3); min-width: 0; }
+      .fsm-auto { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--tacet-dusk); white-space: nowrap; }
+      .fsm-sold { display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--text-2); margin: 14px 0 7px; font-family: var(--f-mono); }
+      .fsm-sold b { color: var(--text-1); font-weight: 600; }
+      .fsm-meter { height: 4px; border-radius: 3px; background: var(--bg-elev-1); overflow: hidden; }
+      .fsm-meter i { display: block; height: 100%; background: var(--text-1); border-radius: 3px; transition: width .4s var(--ease-out, ease); }
+      .fsm-meter.hot i { background: var(--tacet-amber, #C9954A); }
+      .fsm-hero-foot { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+      .fsm-win { font-size: 12px; color: var(--text-3); font-family: var(--f-mono); margin-left: auto; }
+      .fsm-none { background: var(--bg-pane); border: 1px dashed var(--line); border-radius: var(--r-xl); padding: 26px 20px; text-align: center; font-size: 13px; color: var(--text-3); }
+
+      /* ── scheduled + recent table ── */
+      .fsm-table { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; }
+      .fsm-thead, .fsm-trow { display: grid; grid-template-columns: minmax(0,1fr) 150px 120px 110px 108px; gap: 16px; align-items: center; padding: 12px 18px; }
+      .fsm-thead { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); border-bottom: 1px solid var(--line); background: var(--bg-elev-1); }
+      .fsm-trow + .fsm-trow { border-top: 1px solid var(--line-soft); }
+      .fsm-trow.dim { opacity: .62; }
+      .fsm-tw { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      .fsm-tthumb { width: 38px; height: 38px; border-radius: 8px; flex: none; background: var(--bg-elev-1); overflow: hidden; display: grid; place-items: center; color: var(--text-4); }
+      .fsm-tthumb img { width: 100%; height: 100%; object-fit: cover; }
+      .fsm-tthumb svg { width: 15px; height: 15px; }
+      .fsm-tmeta { min-width: 0; }
+      .fsm-tname { font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .fsm-tsub { font-size: 11px; color: var(--text-3); font-family: var(--f-mono); }
+      .fsm-tcell { font-size: 12.5px; color: var(--text-2); font-family: var(--f-mono); }
+      .fsm-tcell .fsm-now { font-size: 13px; }
+      .fsm-tact { text-align: right; display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+      @media (max-width: 760px) {
+        .fsm-thead { display: none; }
+        .fsm-trow { grid-template-columns: minmax(0,1fr) auto; }
+        .fsm-trow .fsm-cw, .fsm-trow .fsm-cs { display: none; }
+      }
+
+      /* ── empty state ── */
+      .fsm-empty { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 52px 24px; text-align: center; }
+      .fsm-emark { width: 38px; height: 38px; margin: 0 auto 14px; color: var(--text-3); }
+      .fsm-empty .lead { font-size: 16px; color: var(--text-1); margin-bottom: 5px; }
+      .fsm-empty .sub { font-size: 13px; color: var(--text-3); max-width: 380px; margin: 0 auto; }
+      .fsm-empty .fsm-new { display: inline-flex; margin: 18px auto 0; }
+      @media (prefers-reduced-motion: reduce) { .fsm-badge.live .fsm-dot, .fsm-auto .fsm-dot, .fsm-meter i { animation: none; transition: none; } }
+
+      /* ── create / edit drawer (houses the composer) ── */
+      .fsd-scrim { position: fixed; inset: 0; background: rgba(17,26,43,.28); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease-out, ease); z-index: 1200; }
+      .fsd-scrim.on { opacity: 1; pointer-events: auto; }
+      .fsd-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 440px; max-width: 92vw; background: var(--bg-app); border-left: 1px solid var(--line); box-shadow: -8px 0 40px rgba(17,26,43,.16); transform: translateX(100%); transition: transform .35s var(--ease-out, ease); z-index: 1201; display: flex; flex-direction: column; }
+      .fsd-drawer.on { transform: translateX(0); }
+      .fsd-x { position: absolute; top: 16px; right: 16px; z-index: 2; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-pane); display: grid; place-items: center; cursor: pointer; color: var(--text-3); }
+      .fsd-x:hover { border-color: var(--text-3); color: var(--text-1); }
+      .fsd-x svg { width: 15px; height: 15px; }
+      .fsd-drawer .fsc { flex: 1; min-height: 0; overflow-y: auto; border: none; border-radius: 0; padding: 22px; }
+      @media (prefers-reduced-motion: reduce) { .fsd-scrim, .fsd-drawer { transition: none; } }
 
       /* ════ COMPOSER (right column) — always-open stepped form, mockup C ════ */
       .fsc { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 24px; display: flex; flex-direction: column; gap: 20px; }
@@ -3799,21 +3844,28 @@
       .fsc-cancel:hover { border-color: transparent; background: transparent; text-decoration: underline; }
     </style>
 
-    <div class="td-head">
+    <div class="td-head fsm-head">
       <div class="td-greet-col">
         <h2 style="margin: 0">Flash sales · 限时秒杀</h2>
         <p class="td-greet-sub">A discounted price with a clock on it. Customers see the flash price in the mini app until the timer runs out or the stock cap is hit — whichever comes first. · 给产品加上倒计时的降价。顾客在小程序中看到秒杀价,直到倒计时结束或库存售罄为止——以先到者为准。</p>
       </div>
+      <button class="btn fsm-new" onclick="fsNewSale()" data-no-i18n>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span>New flash sale · 新建秒杀</span>
+      </button>
     </div>
 
-    <div class="fs2-wrap">
-      <div class="fs2-main" id="fs2-timeline" data-no-i18n></div>
+    <!-- Single full-width column: live hero band + scheduled/recent table. -->
+    <div class="fsm-wrap" id="fs2-timeline" data-no-i18n></div>
 
-      <aside class="fs2-side">
-        <!-- The composer is always open, stepped 1-2-3, rendered by fscRender(). -->
-        <div class="fsc" id="fsc-form" data-no-i18n></div>
-      </aside>
-    </div>
+    <!-- Create / edit drawer — houses the stepped composer, rendered by fscRender(). -->
+    <div class="fsd-scrim" id="fsd-scrim" onclick="fsCloseComposer()"></div>
+    <aside class="fsd-drawer" id="fsd-drawer" aria-hidden="true" data-no-i18n>
+      <button class="fsd-x" onclick="fsCloseComposer()" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <div class="fsc" id="fsc-form"></div>
+    </aside>
   </section>
 
   <!-- ─── COPY / SNIPPETS ─── -->
@@ -6098,6 +6150,8 @@
       .af2-badge .bdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
       .af2-badge.wait { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
       .af2-badge.done { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
+      .af2-badge.earn { background: var(--tacet-dusk-tint); color: var(--tacet-dusk); }
+      .af2-badge.earn .bdot { animation: af2Breathe 2.4s var(--ease-out) infinite; }
       .af2-badge.void { background: transparent; border: 1px solid var(--line); color: var(--text-3); }
 
       .af2-empty { padding: 44px 20px; text-align: center; }
