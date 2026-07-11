@@ -3721,109 +3721,154 @@
     </div>
   </section>
 
-  <!-- ─── FLASH SALES (秒杀) ─── -->
+  <!-- ─── FLASH SALES (秒杀) — Tacet rebuild (Option C: timeline + wizard).
+       The page is a timeline of sales down the left; the quiet launch card on
+       the right opens the ONE door to creation — the 4-step guided wizard
+       (#fw-bg). No always-open form. All creation/edit runs through the same
+       PUT /products/:id/flash-sale endpoint the wizard calls. -->
   <section id="tab-flash">
-    <h2>Flash sales · 限时秒杀</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
-      Put a product on flash sale by setting a discounted price and an end time. Customers see the flash price (with the regular price struck through) in the mini app until the clock runs out or the stock cap is hit — whichever comes first. The <b>Flash sale</b> CMS block surfaces active sales on the homepage with a live countdown. · 为产品设置秒杀价和结束时间即可上架限时秒杀。顾客在小程序中会看到秒杀价（原价划线显示），直到倒计时结束或库存售罄为止——以先到者为准。<b>Flash sale</b> CMS 板块会在首页展示进行中的秒杀并带实时倒计时。
+    <style>
+      /* ── page head + two-column shell ── */
+      #tab-flash .fs2-wrap { display: grid; grid-template-columns: minmax(0,1fr) 320px; gap: 24px; align-items: start; margin-top: 20px; }
+      @media (max-width: 900px) { #tab-flash .fs2-wrap { grid-template-columns: 1fr; } }
+
+      /* ── launch card (holds the one wizard button) ── */
+      #tab-flash .fs2-side { position: sticky; top: 72px; }
+      @media (max-width: 900px) { #tab-flash .fs2-side { position: static; order: -1; } }
+      .fs2-launch { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 22px; }
+      .fs2-launch .lt { font-size: 15px; font-weight: 500; }
+      .fs2-launch .ld { font-size: 12.5px; color: var(--text-2); line-height: 1.5; margin: 6px 0 16px; }
+      .fs2-steps { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 11.5px; color: var(--text-3); margin-bottom: 18px; }
+      .fs2-steps .sep { width: 10px; height: 1px; background: var(--line-strong); }
+      .fs2-new { width: 100%; justify-content: center; background: var(--tacet-dusk); border-color: var(--tacet-dusk); color: #fff; font-weight: 500; padding: 10px 16px; font-size: 14px; }
+      .fs2-new:hover { background: #605AA0; border-color: #605AA0; color: #fff; }
+      .fs2-after { font-size: 11.5px; color: var(--text-3); line-height: 1.5; margin-top: 12px; }
+
+      /* ── timeline (left column) ── */
+      .fs2-group { position: relative; padding-left: 22px; }
+      .fs2-group + .fs2-group { margin-top: 26px; }
+      .fs2-group::before { content: ""; position: absolute; left: 5px; top: 6px; bottom: 6px; width: 1px; background: var(--line); }
+      .fs2-gdot { position: absolute; left: 1px; top: 3px; width: 9px; height: 9px; border-radius: 50%; background: var(--bg-app); border: 1.5px solid var(--text-3); }
+      .fs2-group.live .fs2-gdot { background: var(--tacet-dusk); border-color: var(--tacet-dusk); }
+      .fs2-kicker { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-2); margin-bottom: 10px; }
+      .fs2-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; }
+      .fs2-row { display: grid; grid-template-columns: 44px minmax(0,1fr) auto; gap: 14px; align-items: center; padding: 14px 16px; }
+      .fs2-row + .fs2-row { border-top: 1px solid var(--line-soft); }
+      .fs2-row.dim { opacity: .68; }
+      .fs2-thumb { width: 44px; height: 44px; border-radius: 10px; background: var(--bg-elev-1); overflow: hidden; display: grid; place-items: center; color: var(--text-4); }
+      .fs2-thumb img { width: 100%; height: 100%; object-fit: cover; }
+      .fs2-thumb svg { width: 18px; height: 18px; }
+      .fs2-who { min-width: 0; }
+      .fs2-who .n { font-size: 14px; font-weight: 500; line-height: 1.3; }
+      .fs2-who .n .sk { color: var(--text-3); font-family: var(--f-mono); font-size: 11px; margin-left: 4px; font-weight: 400; }
+      .fs2-who .s { font-size: 12px; color: var(--text-3); margin-top: 3px; }
+      .fs2-meta { display: flex; align-items: center; gap: 18px; }
+      @media (max-width: 640px) { .fs2-meta .fs2-price, .fs2-meta .fs2-sold { display: none; } }
+      .fs2-price { text-align: right; font-family: var(--f-mono); min-width: 78px; }
+      .fs2-price .f { font-size: 14px; font-weight: 600; color: var(--text-1); }
+      .fs2-price .r { font-size: 12px; color: var(--text-3); text-decoration: line-through; display: block; }
+      .fs2-sold { font-size: 12px; color: var(--text-2); font-family: var(--f-mono); min-width: 66px; }
+      .fs2-sold b { color: var(--text-1); }
+      .fs2-meter { height: 3px; border-radius: 2px; background: var(--bg-elev-1); margin-top: 6px; overflow: hidden; max-width: 90px; }
+      .fs2-meter i { display: block; height: 100%; background: var(--text-3); }
+      .fs2-acts { display: flex; align-items: center; gap: 8px; }
+      .fs2-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; font-weight: 500; border-radius: 999px; padding: 3px 11px; white-space: nowrap; }
+      .fs2-badge.live { background: var(--tacet-dusk-tint, #EEEDF6); color: var(--tacet-dusk); }
+      .fs2-badge.sched { background: var(--bg-elev-1); color: var(--text-2); }
+      .fs2-badge.ended { background: transparent; border: 1px solid var(--line); color: var(--text-3); }
+      .fs2-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+      .fs2-badge.live .dot { animation: fs2Breathe 2.4s var(--ease-out, cubic-bezier(.16,1,.3,1)) infinite; }
+      .fs2-empty { padding: 40px 20px; text-align: center; }
+      .fs2-empty .lead { font-size: 14px; color: var(--text-1); margin-bottom: 4px; }
+      .fs2-empty .sub { font-size: 12.5px; color: var(--text-3); }
+      @keyframes fs2Breathe { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+      @media (prefers-reduced-motion: reduce) { .fs2-badge.live .dot, .fw-cd .dot { animation: none; } }
+
+      /* ── wizard: flash-specific pieces (chrome reuses the shared .vw-* system) ── */
+      #fw-bg .vw-kick { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-2); font-weight: 500; margin-bottom: 3px; }
+      #fw-bg .pu-editor-head { padding: 18px 24px; }
+      #fw-body { transition: opacity .24s var(--ease-out, cubic-bezier(.16,1,.3,1)); }
+      #fw-body.vw-leaving { opacity: 0; }
+      #fw-body.vw-entering { animation: vwStepIn .45s var(--ease-out, cubic-bezier(.16,1,.3,1)); }
+      @media (prefers-reduced-motion: reduce) { #fw-body, #fw-body.vw-leaving, #fw-body.vw-entering { transition: none; animation: none; opacity: 1; } }
+      .fw-math { font-size: 12.5px; color: var(--text-2); margin-top: 11px; line-height: 1.5; }
+      .fw-math b { color: var(--tacet-sage-ink, #4A6249); font-weight: 500; }
+      .fw-math.err { color: var(--danger); }
+
+      /* product step — search + list */
+      .fw-search { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg-input); padding: 9px 12px; color: var(--text-3); }
+      .fw-search input { border: none; outline: none; flex: 1; font: inherit; font-size: 14px; color: var(--text-1); background: transparent; }
+      .fw-search svg { flex: none; }
+      .fw-plist { margin-top: 12px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; max-height: 344px; overflow-y: auto; }
+      .fw-prow { display: flex; align-items: center; gap: 13px; width: 100%; text-align: left; background: var(--bg-input); border: none; font: inherit; color: inherit; cursor: pointer; padding: 11px 14px; transition: background .15s ease; }
+      .fw-prow + .fw-prow { border-top: 1px solid var(--line-soft); }
+      .fw-prow:hover { background: var(--bg-elev-1); }
+      .fw-prow .th { width: 38px; height: 38px; border-radius: 8px; flex: none; background: var(--bg-elev-1); overflow: hidden; display: grid; place-items: center; color: var(--text-4); }
+      .fw-prow .th img { width: 100%; height: 100%; object-fit: cover; }
+      .fw-prow .th svg { width: 16px; height: 16px; }
+      .fw-prow .pn { font-size: 13.5px; font-weight: 500; }
+      .fw-prow .ps { display: block; font-size: 11.5px; color: var(--text-3); font-family: var(--f-mono); margin-top: 2px; }
+      .fw-prow .pr { margin-left: auto; text-align: right; font-size: 11px; color: var(--text-3); font-family: var(--f-mono); flex: none; }
+      .fw-prow .pr b { display: block; color: var(--text-1); font-weight: 600; font-size: 13px; }
+      .fw-plist-cap { font-size: 12px; color: var(--text-3); margin-top: 10px; }
+      .fw-empty { padding: 24px; text-align: center; color: var(--text-3); font-size: 12.5px; }
+
+      /* right pane — the shelf preview (what the customer sees) */
+      .fw-shelf { background: var(--tacet-cream); border-radius: 12px; padding: 16px; }
+      .fw-shelf .img { height: 96px; border-radius: 9px; background: var(--bg-pane); display: grid; place-items: center; color: var(--text-4); margin-bottom: 11px; overflow: hidden; }
+      .fw-shelf .img img { width: 100%; height: 100%; object-fit: cover; }
+      .fw-shelf .nm { font-size: 13.5px; font-weight: 500; line-height: 1.3; }
+      .fw-shelf .pc { display: flex; align-items: baseline; gap: 8px; margin-top: 5px; font-family: var(--f-mono); }
+      .fw-shelf .pc .f { font-size: 22px; font-weight: 600; }
+      .fw-shelf .pc .r { font-size: 12.5px; color: var(--text-3); text-decoration: line-through; }
+      .fw-shelf .rw { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+      .fw-shelf .save { font-size: 12px; color: var(--tacet-sage-ink, #4A6249); font-family: var(--f-mono); }
+      .fw-cd { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 500; padding: 3px 10px; border-radius: 999px; background: var(--tacet-dusk-tint, #EEEDF6); color: var(--tacet-dusk); }
+      .fw-cd .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: fs2Breathe 2.4s var(--ease-out, cubic-bezier(.16,1,.3,1)) infinite; }
+    </style>
+
+    <div class="td-head">
+      <div class="td-greet-col">
+        <h2 style="margin: 0">Flash sales · 限时秒杀</h2>
+        <p class="td-greet-sub">A discounted price with a clock on it. Customers see the flash price in the mini app until the timer runs out or the stock cap is hit — whichever comes first. · 给产品加上倒计时的降价。顾客在小程序中看到秒杀价,直到倒计时结束或库存售罄为止——以先到者为准。</p>
+      </div>
     </div>
 
-    <div class="card">
-      <h3 id="fs-form-title" style="font-size: 13px; margin-bottom: 14px;">New flash sale · 新建秒杀</h3>
-      <input type="hidden" id="fs-edit-product-id" value="">
-      <input type="hidden" id="fs-product" value="">
+    <div class="fs2-wrap">
+      <div class="fs2-main" id="fs2-timeline" data-no-i18n></div>
 
-      <div class="fs-form-grid">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Product · 产品</label>
-          <div class="fs-picker" id="fs-picker">
-            <div class="fs-picker-trigger" id="fs-picker-trigger" tabindex="0">
-              <div class="fs-picker-thumb" id="fs-picker-thumb">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              </div>
-              <div class="fs-picker-label empty" id="fs-picker-label">— pick a product — · 选择产品</div>
-              <svg class="fs-picker-chev" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-            <div class="fs-picker-pop" id="fs-picker-pop" hidden>
-              <div class="fs-picker-search">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" id="fs-picker-search" placeholder="Search by name, 中文, or SKU…" autocomplete="off">
-              </div>
-              <div class="fs-picker-list" id="fs-picker-list"></div>
-            </div>
+      <aside class="fs2-side">
+        <div class="fs2-launch">
+          <div class="lt">New flash sale · 新建秒杀</div>
+          <div class="ld">Four quick steps. Only two answers are ever required — a product and an end time. · 四步搞定,只有两项必填 — 产品和结束时间。</div>
+          <div class="fs2-steps">
+            <span>Product · 产品</span><span class="sep"></span>
+            <span>Price · 价格</span><span class="sep"></span>
+            <span>Clock · 时间</span><span class="sep"></span>
+            <span>Start · 开启</span>
           </div>
+          <button class="btn fs2-new" onclick="fwOpen()">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            New flash sale · 新建秒杀
+          </button>
+          <div class="fs2-after">When a sale ends, the regular price comes back on its own. · 秒杀结束后自动恢复原价。</div>
         </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Flash price ¥ · 秒杀价</label>
-          <input type="number" id="fs-price" step="0.01" placeholder="29.90" style="width: 100%;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Stock cap · 库存上限</label>
-          <input type="number" id="fs-stock" placeholder="∞" style="width: 100%;">
-        </div>
-      </div>
-
-      <div class="fs-time-grid">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Starts at <span class="muted" style="font-weight: normal;">· 可选,默认即时</span></label>
-          <div class="fs-dt-wrap">
-            <input type="datetime-local" id="fs-starts" class="fs-dt-input">
-            <div class="fs-quick-row">
-              <span class="fs-quick-chip" data-fs-quick="starts:now">Now · 现在</span>
-              <span class="fs-quick-chip" data-fs-quick="starts:+1h">+1h</span>
-              <span class="fs-quick-chip" data-fs-quick="starts:tomorrow-9">Tomorrow 09:00 · 明天 09:00</span>
-              <span class="fs-quick-chip" data-fs-quick="starts:clear">Clear · 清除</span>
-            </div>
-          </div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Ends at <span class="muted" style="font-weight: normal;">· 必填</span></label>
-          <div class="fs-dt-wrap">
-            <input type="datetime-local" id="fs-ends" class="fs-dt-input">
-            <div class="fs-quick-row">
-              <span class="fs-quick-chip" data-fs-quick="ends:+1h">+1h</span>
-              <span class="fs-quick-chip" data-fs-quick="ends:+6h">+6h</span>
-              <span class="fs-quick-chip" data-fs-quick="ends:+24h">+24h</span>
-              <span class="fs-quick-chip" data-fs-quick="ends:+3d">+3d</span>
-              <span class="fs-quick-chip" data-fs-quick="ends:+7d">+7d</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div id="fs-price-hint" class="muted" style="font-size: 11px; margin-top: 14px;"></div>
-
-      <label style="display:inline-flex;align-items:flex-start;gap:8px;cursor:pointer;font-weight:500;margin-top:14px;line-height:1.4;">
-        <input type="checkbox" id="fs-no-coupon" style="width:15px;height:15px;margin-top:1px;flex:none;">
-        <span>Don't let coupons stack on this flash price · 不允许优惠券叠加秒杀价
-          <span class="muted" style="display:block;font-weight:normal;font-size:11px;margin-top:2px;">While this flash sale is live, sitewide coupons skip this product — protects margin on a deep discount. · 秒杀进行期间，全场优惠券对此商品不生效。</span>
-        </span>
-      </label>
-
-      <div class="fs-action-row">
-        <div class="spacer"></div>
-        <button class="btn" id="fs-cancel-btn" onclick="fsCancelEdit()" style="display: none;">Cancel edit · 取消编辑</button>
-        <button class="btn btn-primary" onclick="fsSave()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          <span id="fs-save-label">Save flash sale</span>
-        </button>
-      </div>
+      </aside>
     </div>
 
-    <h2 style="margin-top: var(--s5);">Active &amp; scheduled</h2>
-    <div class="table-wrap">
-      <table id="fs-table">
-        <thead><tr>
-          <th>Product · 产品</th>
-          <th class="numeric">Flash ¥ · 秒杀价</th>
-          <th class="numeric">Regular ¥ · 原价</th>
-          <th>Window · 时段</th>
-          <th class="numeric">Sold / Cap · 已售 / 上限</th>
-          <th>State · 状态</th>
-          <th></th>
-        </tr></thead>
-        <tbody><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
-      </table>
+    <!-- ── the guided wizard (Product → Price → Clock → Start) ── -->
+    <div id="fw-bg" class="pu-editor-bg">
+      <div class="pu-editor fw" style="width: 860px; max-width: 94vw;">
+        <div class="pu-editor-head">
+          <div>
+            <div class="vw-kick" id="fw-kick">NEW FLASH SALE · 新建秒杀</div>
+            <h3 id="fw-title" style="margin: 0; font-size: 18px; font-weight: 500;">Which product goes on sale? · 哪个产品参加秒杀</h3>
+          </div>
+          <button class="btn" onclick="fwClose()">Close · 关闭</button>
+        </div>
+        <div id="fw-body" data-no-i18n style="display: flex; flex-direction: column; gap: 18px; padding: 26px 24px 24px; max-height: 78vh; overflow: auto;"></div>
+        <div id="fw-foot" class="vw-foot"></div>
+      </div>
     </div>
   </section>
 
