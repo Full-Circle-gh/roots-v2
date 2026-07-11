@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Share cards redesign mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   SHARE CARDS — Tacet redesign, static mockup, no live code.
+   Three directions, same three slots (Home / Product / Voting):
+     A · Quiet rows   — one row per page: thumb, purpose, actions.
+                        Save appears only once something changed.
+     B · Chat-true    — every slot previewed as the ACTUAL WeChat
+                        forward card (title + picture + miniapp
+                        foot), so the office sees what customers see.
+     C · Drop tiles   — the picture IS the control: three 5:4
+                        dropzones, click or drop to set, hover to
+                        replace or remove.
+   Everywhere: the intro paragraph collapses to one line, the
+   affiliate footnote becomes a link-out row, and each slot states
+   its fallback ("page's own look") instead of a bare empty box.
+   Tokens per tacet-tokens.css v1.0. CSS-only, no JS.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --dusk-tint:   #EEEDF6;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", "Noto Sans SC", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", "Noto Sans SC", Georgia, serif;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- state machinery (radio toggles, no JS) ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+
+#opt-a:checked ~ .frame .page-b,
+#opt-a:checked ~ .frame .page-c,
+#opt-b:checked ~ .frame .page-a,
+#opt-b:checked ~ .frame .page-c,
+#opt-c:checked ~ .frame .page-a,
+#opt-c:checked ~ .frame .page-b { display: none; }
+
+#lang-en:checked ~ .frame .zh { display: none; }
+#lang-zh:checked ~ .frame .en { display: none; }
+
+#opt-a:checked ~ .frame .chrome label[for="opt-a"],
+#opt-b:checked ~ .frame .chrome label[for="opt-b"],
+#opt-c:checked ~ .frame .chrome label[for="opt-c"],
+#lang-en:checked ~ .frame .chrome label[for="lang-en"],
+#lang-zh:checked ~ .frame .chrome label[for="lang-zh"] {
+  background: var(--paper); color: var(--ink);
+}
+.chrome .note { display: none; }
+#opt-a:checked ~ .frame .chrome .note-a,
+#opt-b:checked ~ .frame .chrome .note-b,
+#opt-c:checked ~ .frame .chrome .note-c { display: inline; }
+
+/* ---- mockup chrome (not part of the product) ---- */
+.chrome {
+  background: var(--ink); color: rgba(251,249,244,0.72);
+  padding: 8px 24px; font-size: 13px;
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 11px; color: rgba(251,249,244,0.5);
+}
+.chrome .seg { display: inline-flex; border: 1px solid rgba(251,249,244,0.25); border-radius: 999px; overflow: hidden; }
+.chrome .seg label {
+  padding: 3px 14px; cursor: pointer; font-size: 12px;
+  color: rgba(251,249,244,0.72);
+}
+.chrome .seg label:hover { color: var(--paper); }
+
+/* ---- topbar ---- */
+.topbar {
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 32px;
+  border-bottom: 1px solid var(--border); background: var(--paper);
+}
+.topbar .wordmark { font-family: var(--font-display); font-weight: 300; font-size: 20px; letter-spacing: 0.02em; }
+.topbar .crumb { color: var(--graphite); font-size: 13px; }
+.topbar .crumb b { color: var(--ink); font-weight: 500; }
+
+main { max-width: 860px; margin: 0 auto; padding: 40px 32px 96px; }
+
+.page-head { margin-bottom: 32px; }
+.page-head h1 {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 32px; line-height: 1.15; text-wrap: balance;
+}
+.page-head p { color: var(--graphite); font-size: 14px; margin-top: 8px; max-width: 60ch; }
+
+/* ---- shared atoms ---- */
+.card {
+  background: #FFFFFF; border: 1px solid var(--border);
+  border-radius: var(--r-card); box-shadow: var(--shadow-soft);
+}
+
+.chip {
+  font-size: 12px; font-weight: 500; padding: 2px 10px;
+  border-radius: 999px; display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap;
+}
+.chip-custom { background: var(--sage-tint); color: var(--sage-ink); }
+.chip-default { background: var(--cream); color: var(--graphite); }
+
+.btn {
+  font: 500 14px var(--font-text); padding: 8px 16px;
+  border-radius: var(--r-control); border: 1px solid var(--border);
+  background: transparent; color: var(--ink); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: border-color 200ms var(--ease-settle);
+}
+.btn:hover { border-color: var(--graphite); }
+.btn:focus-visible { outline: 2px solid var(--dusk); outline-offset: 2px; }
+.btn-primary { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.btn-primary:hover { border-color: var(--ink); opacity: 0.9; }
+.btn-quiet {
+  border: none; padding: 4px 6px; font-size: 13px; color: var(--graphite);
+  text-decoration: underline; text-underline-offset: 3px;
+  text-decoration-color: var(--border);
+}
+.btn-quiet:hover { color: var(--ink); border: none; }
+.btn-quiet.danger:hover { color: var(--brick); }
+
+/* thumbs — always 5:4, the shape teaches itself */
+.thumb { aspect-ratio: 5 / 4; border-radius: var(--r-control); overflow: hidden;
+  border: 1px solid var(--border); background: var(--cream); flex: none; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.thumb-empty {
+  aspect-ratio: 5 / 4; border-radius: var(--r-control);
+  border: 1px dashed var(--border); background: var(--cream);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--graphite); flex: none;
+}
+
+/* link-out row: the invite card lives elsewhere */
+.linkout {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 20px; margin-top: 16px;
+  border: 1px solid var(--border); border-radius: var(--r-card);
+  background: var(--cream); color: var(--graphite); font-size: 13px;
+  text-decoration: none; transition: border-color 200ms var(--ease-settle);
+}
+.linkout:hover { border-color: var(--graphite); }
+.linkout b { color: var(--ink); font-weight: 500; }
+.linkout .arrow { margin-left: auto; color: var(--graphite); flex: none; }
+
+/* dirty-save bar: appears only once something changed */
+.savebar {
+  display: flex; align-items: center; gap: 16px;
+  margin-top: 24px; padding: 12px 20px;
+  border: 1px solid var(--border); border-radius: var(--r-card);
+  background: #FFFFFF; box-shadow: var(--shadow-soft);
+}
+.savebar .msg { font-size: 13px; color: var(--graphite); }
+.savebar .spacer { flex: 1; }
+
+.foot-hint { margin-top: 24px; font-size: 12px; color: var(--graphite); }
+
+/* ============================================================
+   OPTION A — QUIET ROWS
+   ============================================================ */
+.rows { display: flex; flex-direction: column; }
+.row-item {
+  display: flex; align-items: center; gap: 20px;
+  padding: 20px 24px;
+}
+.row-item + .row-item { border-top: 1px solid var(--border); }
+.row-item .thumb, .row-item .thumb-empty { width: 130px; }
+.row-item .meta { flex: 1; min-width: 0; }
+.row-item .meta .name { font-weight: 500; font-size: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.row-item .meta .hint { color: var(--graphite); font-size: 13px; margin-top: 2px; max-width: 48ch; }
+.row-item .acts { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+
+/* ============================================================
+   OPTION B — CHAT-TRUE PREVIEW
+   ============================================================ */
+.chat-sections { display: flex; flex-direction: column; gap: 24px; }
+.chat-row { display: grid; grid-template-columns: 1fr 320px; }
+.chat-row .edit { padding: 24px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.chat-row .edit .name { font-weight: 500; font-size: 16px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chat-row .edit .hint { color: var(--graphite); font-size: 13px; max-width: 44ch; }
+.chat-row .edit .btns { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+/* the WeChat chat inset — deliberately foreign material, framed */
+.wx {
+  background: #EBEBEB; border-left: 1px solid var(--border);
+  border-radius: 0 var(--r-card) var(--r-card) 0;
+  padding: 20px; display: flex; flex-direction: column; gap: 8px;
+  align-items: flex-start; justify-content: center;
+}
+.wx-card {
+  background: #FFFFFF; border-radius: 6px; width: 240px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+}
+.wx-card .wx-title {
+  padding: 9px 11px 7px; font-size: 14px; line-height: 1.35; color: #1a1a1a;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.wx-card .wx-img { aspect-ratio: 5 / 4; background: #F2F2F2; }
+.wx-card .wx-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wx-card .wx-img .wx-own {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  color: #999; font-size: 12px; text-align: center; padding: 12px; line-height: 1.5;
+}
+.wx-card .wx-foot {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 11px; border-top: 1px solid #F0F0F0;
+  font-size: 11px; color: #B0B0B0;
+}
+.wx-card .wx-foot .dot { width: 12px; height: 12px; border-radius: 50%;
+  background: conic-gradient(#5BC466, #4CA755, #5BC466); flex: none; }
+.wx-cap { font-size: 11px; color: var(--graphite); letter-spacing: 0.08em; text-transform: uppercase; }
+
+@media (max-width: 720px) {
+  .chat-row { grid-template-columns: 1fr; }
+  .wx { border-left: none; border-top: 1px solid var(--border); border-radius: 0 0 var(--r-card) var(--r-card); align-items: center; }
+}
+
+/* ============================================================
+   OPTION C — DROP TILES
+   ============================================================ */
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+@media (max-width: 720px) { .tiles { grid-template-columns: 1fr; } }
+.tile { display: flex; flex-direction: column; gap: 10px; }
+.tile .drop {
+  aspect-ratio: 5 / 4; border-radius: var(--r-card);
+  border: 1px solid var(--border); background: #FFFFFF;
+  position: relative; overflow: hidden; cursor: pointer;
+  box-shadow: var(--shadow-soft);
+  transition: border-color 200ms var(--ease-settle);
+}
+.tile .drop:hover { border-color: var(--graphite); }
+.tile .drop img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile .drop .hover-acts {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 8px;
+  background: rgba(17,26,43,0.45); opacity: 0; transition: opacity 200ms var(--ease-settle);
+}
+.tile .drop:hover .hover-acts, .tile .drop:focus-within .hover-acts { opacity: 1; }
+.tile .drop .hover-acts .btn { background: var(--paper); border-color: var(--paper); font-size: 13px; padding: 6px 14px; }
+.tile .drop-empty {
+  aspect-ratio: 5 / 4; border-radius: var(--r-card);
+  border: 1px dashed var(--border); background: var(--cream);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  color: var(--graphite); font-size: 13px; cursor: pointer; text-align: center; padding: 16px;
+  transition: border-color 200ms var(--ease-settle), color 200ms var(--ease-settle);
+}
+.tile .drop-empty:hover { border-color: var(--dusk); color: var(--dusk); }
+.tile .t-name { font-weight: 500; font-size: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tile .t-hint { color: var(--graphite); font-size: 12.5px; line-height: 1.5; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<input type="radio" name="opt" id="opt-a" class="state" checked>
+<input type="radio" name="opt" id="opt-b" class="state">
+<input type="radio" name="opt" id="opt-c" class="state">
+<input type="radio" name="lang" id="lang-en" class="state" checked>
+<input type="radio" name="lang" id="lang-zh" class="state">
+
+<div class="frame">
+
+<div class="chrome">
+  <span class="tag">tacet mockup · share cards</span>
+  <span class="seg">
+    <label for="opt-a">A · Quiet rows</label>
+    <label for="opt-b">B · Chat-true</label>
+    <label for="opt-c">C · Drop tiles</label>
+  </span>
+  <span class="seg">
+    <label for="lang-en">EN</label>
+    <label for="lang-zh">中文</label>
+  </span>
+  <span class="note note-a">One row per page — thumb, purpose, actions. Save appears only after a change.</span>
+  <span class="note note-b">What you see is what they get — every slot previewed as the real WeChat forward card, title included.</span>
+  <span class="note note-c">The picture is the control — three 5:4 tiles, click or drop to set, hover to replace.</span>
+</div>
+
+<div class="topbar">
+  <span class="wordmark">tacet</span>
+  <span class="crumb"><span class="en">Marketing · <b>Share cards</b></span><span class="zh">营销 · <b>分享卡片</b></span></span>
+</div>
+
+<main>
+
+<div class="page-head">
+  <h1><span class="en">Share cards</span><span class="zh">分享卡片</span></h1>
+  <p>
+    <span class="en">The picture on the card when a customer forwards a page into a WeChat chat. Wide 5:4 works best — about 500 × 400.</span>
+    <span class="zh">顾客把页面转发到微信聊天时，卡片上显示的图片。建议横向 5:4 — 约 500 × 400。</span>
+  </p>
+</div>
+
+<!-- ============================================================
+     OPTION A — QUIET ROWS
+     ============================================================ -->
+<div class="page page-a">
+
+  <div class="card rows">
+
+    <!-- Home: has a custom picture -->
+    <div class="row-item">
+      <div class="thumb"><img src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 400'%3E%3Crect width='500' height='400' fill='%233F4A2E'/%3E%3Ctext x='250' y='150' font-family='Georgia,serif' font-size='28' fill='%23D9DA7B' text-anchor='middle' letter-spacing='6'%3EWELCOME TO%3C/text%3E%3Ctext x='250' y='250' font-family='Georgia,serif' font-weight='bold' font-size='96' fill='%23D9DA7B' text-anchor='middle'%3EROOTS%3C/text%3E%3Ctext x='250' y='310' font-family='Georgia,serif' font-size='18' fill='%23A8AB61' text-anchor='middle'%3EFood Made from Food · From Soil to Soul%3C/text%3E%3C/svg%3E" alt=""></div>
+      <div class="meta">
+        <div class="name">
+          <span class="en">Home page</span><span class="zh">首页</span>
+          <span class="chip chip-custom"><span class="en">Custom picture</span><span class="zh">自定义图片</span></span>
+        </div>
+        <div class="hint">
+          <span class="en">Any forward of the store's home page (without a referral code).</span>
+          <span class="zh">转发店铺首页（不含推荐码）时显示。</span>
+        </div>
+      </div>
+      <div class="acts">
+        <button class="btn-quiet btn"><span class="en">Replace</span><span class="zh">更换</span></button>
+        <button class="btn-quiet btn danger"><span class="en">Remove</span><span class="zh">移除</span></button>
+      </div>
+    </div>
+
+    <!-- Product: empty, uses fallback -->
+    <div class="row-item">
+      <div class="thumb-empty" style="width: 130px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L7 20"/></svg>
+      </div>
+      <div class="meta">
+        <div class="name">
+          <span class="en">Product pages</span><span class="zh">商品页</span>
+          <span class="chip chip-default"><span class="en">Page's own look</span><span class="zh">页面自带样式</span></span>
+        </div>
+        <div class="hint">
+          <span class="en">Fallback only — a product's own photo always wins when it has one.</span>
+          <span class="zh">仅作备用 — 商品有自己的图片时始终优先。</span>
+        </div>
+      </div>
+      <div class="acts">
+        <button class="btn"><span class="en">Upload</span><span class="zh">上传</span></button>
+      </div>
+    </div>
+
+    <!-- Voting: empty -->
+    <div class="row-item">
+      <div class="thumb-empty" style="width: 130px;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L7 20"/></svg>
+      </div>
+      <div class="meta">
+        <div class="name">
+          <span class="en">Voting page</span><span class="zh">投票页</span>
+          <span class="chip chip-default"><span class="en">Page's own look</span><span class="zh">页面自带样式</span></span>
+        </div>
+        <div class="hint">
+          <span class="en">The community polls page.</span>
+          <span class="zh">社区投票页。</span>
+        </div>
+      </div>
+      <div class="acts">
+        <button class="btn"><span class="en">Upload</span><span class="zh">上传</span></button>
+      </div>
+    </div>
+
+  </div>
+
+  <a class="linkout" href="#">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M21 3 10 14"/><path d="M20 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/></svg>
+    <span class="en"><b>Invite / referral card</b> — has its own picture, set in Marketing → Affiliate</span>
+    <span class="zh"><b>邀请 / 推荐卡片</b> — 图片在「营销 → 分销」单独设置</span>
+    <span class="arrow">→</span>
+  </a>
+
+  <div class="savebar">
+    <span class="msg">
+      <span class="en">1 unsaved change</span>
+      <span class="zh">1 项未保存</span>
+    </span>
+    <span class="spacer"></span>
+    <button class="btn"><span class="en">Discard</span><span class="zh">放弃</span></button>
+    <button class="btn btn-primary"><span class="en">Save</span><span class="zh">保存</span></button>
+  </div>
+  <div class="foot-hint">
+    <span class="en">The save bar only appears once something changed; the page is otherwise still.</span>
+    <span class="zh">仅在有改动时显示保存栏；平时页面保持安静。</span>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     OPTION B — CHAT-TRUE PREVIEW
+     ============================================================ -->
+<div class="page page-b">
+
+  <div class="chat-sections">
+
+    <!-- Home -->
+    <div class="card chat-row">
+      <div class="edit">
+        <div class="name">
+          <span class="en">Home page</span><span class="zh">首页</span>
+          <span class="chip chip-custom"><span class="en">Custom picture</span><span class="zh">自定义图片</span></span>
+        </div>
+        <div class="hint">
+          <span class="en">Any forward of the store's home page (without a referral code).</span>
+          <span class="zh">转发店铺首页（不含推荐码）时显示。</span>
+        </div>
+        <div class="btns">
+          <button class="btn"><span class="en">Replace picture</span><span class="zh">更换图片</span></button>
+          <button class="btn-quiet btn danger"><span class="en">Remove</span><span class="zh">移除</span></button>
+        </div>
+      </div>
+      <div class="wx">
+        <span class="wx-cap"><span class="en">In a chat</span><span class="zh">聊天中的样子</span></span>
+        <div class="wx-card">
+          <div class="wx-title"><span class="en">Roots · plant-forward food</span><span class="zh">Roots · 植物食物</span></div>
+          <div class="wx-img"><img src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 400'%3E%3Crect width='500' height='400' fill='%233F4A2E'/%3E%3Ctext x='250' y='150' font-family='Georgia,serif' font-size='28' fill='%23D9DA7B' text-anchor='middle' letter-spacing='6'%3EWELCOME TO%3C/text%3E%3Ctext x='250' y='250' font-family='Georgia,serif' font-weight='bold' font-size='96' fill='%23D9DA7B' text-anchor='middle'%3EROOTS%3C/text%3E%3Ctext x='250' y='310' font-family='Georgia,serif' font-size='18' fill='%23A8AB61' text-anchor='middle'%3EFood Made from Food · From Soil to Soul%3C/text%3E%3C/svg%3E" alt=""></div>
+          <div class="wx-foot"><span class="dot"></span>Roots</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Product -->
+    <div class="card chat-row">
+      <div class="edit">
+        <div class="name">
+          <span class="en">Product pages</span><span class="zh">商品页</span>
+          <span class="chip chip-default"><span class="en">Page's own look</span><span class="zh">页面自带样式</span></span>
+        </div>
+        <div class="hint">
+          <span class="en">Fallback only — a product's own photo always wins when it has one. This fills in for products without a photo.</span>
+          <span class="zh">仅作备用 — 商品有自己的图片时始终优先；没有图片的商品才用这张。</span>
+        </div>
+        <div class="btns">
+          <button class="btn"><span class="en">Upload picture</span><span class="zh">上传图片</span></button>
+        </div>
+      </div>
+      <div class="wx">
+        <span class="wx-cap"><span class="en">In a chat</span><span class="zh">聊天中的样子</span></span>
+        <div class="wx-card">
+          <div class="wx-title"><span class="en">Sourdough country loaf</span><span class="zh">乡村酸面包</span></div>
+          <div class="wx-img"><div class="wx-own"><span class="en">No picture set — WeChat snapshots the page itself</span><span class="zh">未设置图片 — 微信将截取页面本身</span></div></div>
+          <div class="wx-foot"><span class="dot"></span>Roots</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voting -->
+    <div class="card chat-row">
+      <div class="edit">
+        <div class="name">
+          <span class="en">Voting page</span><span class="zh">投票页</span>
+          <span class="chip chip-default"><span class="en">Page's own look</span><span class="zh">页面自带样式</span></span>
+        </div>
+        <div class="hint">
+          <span class="en">The community polls page. The card's title is the featured poll question.</span>
+          <span class="zh">社区投票页。卡片标题为当前精选投票问题。</span>
+        </div>
+        <div class="btns">
+          <button class="btn"><span class="en">Upload picture</span><span class="zh">上传图片</span></button>
+        </div>
+      </div>
+      <div class="wx">
+        <span class="wx-cap"><span class="en">In a chat</span><span class="zh">聊天中的样子</span></span>
+        <div class="wx-card">
+          <div class="wx-title"><span class="en">What should we bake next?</span><span class="zh">下一款烤什么好？</span></div>
+          <div class="wx-img"><div class="wx-own"><span class="en">No picture set — WeChat snapshots the page itself</span><span class="zh">未设置图片 — 微信将截取页面本身</span></div></div>
+          <div class="wx-foot"><span class="dot"></span>Roots</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <a class="linkout" href="#">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M21 3 10 14"/><path d="M20 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/></svg>
+    <span class="en"><b>Invite / referral card</b> — has its own picture, set in Marketing → Affiliate</span>
+    <span class="zh"><b>邀请 / 推荐卡片</b> — 图片在「营销 → 分销」单独设置</span>
+    <span class="arrow">→</span>
+  </a>
+
+  <div class="savebar">
+    <span class="msg">
+      <span class="en">1 unsaved change</span>
+      <span class="zh">1 项未保存</span>
+    </span>
+    <span class="spacer"></span>
+    <button class="btn"><span class="en">Discard</span><span class="zh">放弃</span></button>
+    <button class="btn btn-primary"><span class="en">Save</span><span class="zh">保存</span></button>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     OPTION C — DROP TILES
+     ============================================================ -->
+<div class="page page-c">
+
+  <div class="tiles">
+
+    <!-- Home -->
+    <div class="tile">
+      <div class="drop" tabindex="0">
+        <img src="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 400'%3E%3Crect width='500' height='400' fill='%233F4A2E'/%3E%3Ctext x='250' y='150' font-family='Georgia,serif' font-size='28' fill='%23D9DA7B' text-anchor='middle' letter-spacing='6'%3EWELCOME TO%3C/text%3E%3Ctext x='250' y='250' font-family='Georgia,serif' font-weight='bold' font-size='96' fill='%23D9DA7B' text-anchor='middle'%3EROOTS%3C/text%3E%3Ctext x='250' y='310' font-family='Georgia,serif' font-size='18' fill='%23A8AB61' text-anchor='middle'%3EFood Made from Food · From Soil to Soul%3C/text%3E%3C/svg%3E" alt="">
+        <div class="hover-acts">
+          <button class="btn"><span class="en">Replace</span><span class="zh">更换</span></button>
+          <button class="btn"><span class="en">Remove</span><span class="zh">移除</span></button>
+        </div>
+      </div>
+      <div>
+        <div class="t-name">
+          <span class="en">Home page</span><span class="zh">首页</span>
+          <span class="chip chip-custom"><span class="en">Custom</span><span class="zh">自定义</span></span>
+        </div>
+        <div class="t-hint">
+          <span class="en">Any forward of the store's home page.</span>
+          <span class="zh">转发店铺首页时显示。</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Product -->
+    <div class="tile">
+      <div class="drop-empty" tabindex="0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 8 5-5 5 5"/><path d="M5 20h14"/></svg>
+        <span><span class="en">Upload or drop a picture<br>5:4 · about 500 × 400</span><span class="zh">上传或拖入图片<br>5:4 · 约 500 × 400</span></span>
+      </div>
+      <div>
+        <div class="t-name">
+          <span class="en">Product pages</span><span class="zh">商品页</span>
+          <span class="chip chip-default"><span class="en">Page's own look</span><span class="zh">页面自带样式</span></span>
+        </div>
+        <div class="t-hint">
+          <span class="en">Fallback only — a product's own photo wins when it has one.</span>
+          <span class="zh">仅作备用 — 商品有自己的图片时优先。</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Voting -->
+    <div class="tile">
+      <div class="drop-empty" tabindex="0">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 8 5-5 5 5"/><path d="M5 20h14"/></svg>
+        <span><span class="en">Upload or drop a picture<br>5:4 · about 500 × 400</span><span class="zh">上传或拖入图片<br>5:4 · 约 500 × 400</span></span>
+      </div>
+      <div>
+        <div class="t-name">
+          <span class="en">Voting page</span><span class="zh">投票页</span>
+          <span class="chip chip-default"><span class="en">Page's own look</span><span class="zh">页面自带样式</span></span>
+        </div>
+        <div class="t-hint">
+          <span class="en">The community polls page.</span>
+          <span class="zh">社区投票页。</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <a class="linkout" href="#">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M21 3 10 14"/><path d="M20 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/></svg>
+    <span class="en"><b>Invite / referral card</b> — has its own picture, set in Marketing → Affiliate</span>
+    <span class="zh"><b>邀请 / 推荐卡片</b> — 图片在「营销 → 分销」单独设置</span>
+    <span class="arrow">→</span>
+  </a>
+
+  <div class="savebar">
+    <span class="msg">
+      <span class="en">1 unsaved change</span>
+      <span class="zh">1 项未保存</span>
+    </span>
+    <span class="spacer"></span>
+    <button class="btn"><span class="en">Discard</span><span class="zh">放弃</span></button>
+    <button class="btn btn-primary"><span class="en">Save</span><span class="zh">保存</span></button>
+  </div>
+
+</div>
+
+</main>
+
+</div>
+
+</body>
+</html>
