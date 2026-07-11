@@ -1187,6 +1187,15 @@ function dashComputeRects() {
 function dashRender(skipId) {
   const host = document.getElementById('td-blocks');
   if (!host) return;
+  // If the host has no measurable width yet (dashboard laid out before the tab
+  // is shown / the rail's margin transition has settled), a solve here would
+  // use dashComputeRects' phantom 1088px fallback and paint a grid too wide for
+  // the real column — the load-time "clipped left column". Defer to the next
+  // frame instead; the ResizeObserver re-solves once the width lands.
+  if (host.clientWidth === 0 && !window.matchMedia('(max-width: 1000px)').matches) {
+    requestAnimationFrame(() => dashRender(skipId));
+    return;
+  }
   // Below the bento's comfortable width the solver is bypassed (CSS stacks the
   // blocks in one column); clear inline geometry so the stylesheet can.
   if (window.matchMedia && window.matchMedia('(max-width: 1000px)').matches) {
@@ -1302,6 +1311,10 @@ function dashArrangeWire() {
     let w = host.clientWidth;
     new ResizeObserver(() => { if (host.clientWidth !== w) { w = host.clientWidth; dashRender(); } }).observe(host);
   }
+  // Re-solve once webfonts + the rail's margin transition have fully settled —
+  // the initial solve can run against a not-yet-final width, and with the morph
+  // scoped to Arrange mode this correction snaps rather than sliding.
+  if (document.readyState !== 'complete') window.addEventListener('load', () => dashRender(), { once: true });
 }
 function dashWireBlock(el, host) {
   el.addEventListener('pointerdown', e => {
