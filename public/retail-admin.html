@@ -3671,14 +3671,17 @@
       }
 
       /* ── page head: greeting + primary create button ── */
-      #tab-flash .fsm-head { display: flex; align-items: flex-start; gap: 20px; }
+      /* Cap the page to a centred column so it reads like the mockup instead of
+         sprawling the full admin width (rows thin out, columns drift apart).
+         Tacet canon = 1120px max web. */
+      #tab-flash .fsm-head { display: flex; align-items: flex-start; gap: 20px; max-width: 1120px; margin-inline: auto; }
       #tab-flash .fsm-new { margin-left: auto; flex: none; background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); font-weight: 500; padding: 8px 16px; white-space: nowrap; }
       #tab-flash .fsm-new:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
       [data-theme="dark"] #tab-flash .fsm-new:hover { background: #EAE7DF; border-color: #EAE7DF; color: var(--bg-app); }
       #tab-flash .fsm-new svg { width: 15px; height: 15px; }
 
-      /* ── single full-width column ── */
-      #tab-flash .fsm-wrap { margin-top: 22px; }
+      /* ── centred content column ── */
+      #tab-flash .fsm-wrap { margin-top: 22px; max-width: 1120px; margin-inline: auto; }
       .fsm-sec { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
       .fsm-sec2 { margin-top: 34px; }
       .fsm-secn { font-size: 12px; color: var(--text-3); font-family: var(--f-mono); }
