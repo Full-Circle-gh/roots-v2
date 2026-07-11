@@ -5872,6 +5872,11 @@ function cfOpenDrawer(which) {
   // 'check' reuses the Design section (CSS folds the other knobs away).
   leftPane.classList.toggle('cf-show-design', which === 'design');
   leftPane.classList.toggle('cf-show-check', which === 'check');
+  // A drawer switch invalidates the findings' fixed position (the DESIGN
+  // CHECK row moves as siblings show/hide), and the rail buttons stopPropagation
+  // so the picker's own outside-click closer never fires. Collapse the findings
+  // on every switch; check-mode re-opens them explicitly.
+  document.getElementById('design-check-menu')?.classList.remove('open');
   const head = leftPane.querySelector('.cf-drawer-head .t');
   if (head) head.textContent =
       which === 'blocks' ? T('Add a block', '添加模块')
@@ -5894,6 +5899,7 @@ function cfCloseDrawer() {
   const leftPane = document.querySelector('.pane.left');
   if (!leftPane) return;
   leftPane.classList.remove('cf-open', 'cf-show-blocks', 'cf-show-design', 'cf-show-check');
+  document.getElementById('design-check-menu')?.classList.remove('open');
   document.querySelectorAll('.drop-zone.cf-seam-open').forEach(z => z.classList.remove('cf-seam-open'));
   document.getElementById('cf-rail-add')  ?.classList.remove('on');
   document.getElementById('cf-rail-style')?.classList.remove('on');
