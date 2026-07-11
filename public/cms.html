@@ -422,6 +422,34 @@
   }
   .page-menu .item.item-editor .name { display: inline-flex; align-items: center; gap: 7px; }
   .page-menu .item.item-editor .name svg { width: 14px; height: 14px; color: var(--text-3); flex-shrink: 0; }
+  /* Layout switch (Classic ⇄ Canvas) — set-once page-level choice, parked at
+     the foot of the menu so the dock no longer needs a Tweaks button. Segment
+     styling matches the old Tweaks popover: monochrome, raised-chip active. */
+  .page-menu .pm-layout { padding: 6px 8px 4px; }
+  .page-menu .pm-layout-label {
+    font: 500 11px var(--f-sans);
+    letter-spacing: .08em; text-transform: uppercase;
+    color: var(--text-3); margin-bottom: 7px;
+  }
+  .page-menu .pm-layout-seg {
+    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
+    gap: 3px;
+    background: var(--bg-elev-2);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 3px;
+  }
+  .page-menu .pm-layout-seg button {
+    border: 0; background: transparent; cursor: pointer;
+    padding: 6px 8px; border-radius: var(--r-sm);
+    font: 500 12px var(--f-sans); color: var(--text-2);
+    transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  }
+  .page-menu .pm-layout-seg button:hover { color: var(--text-1); }
+  .page-menu .pm-layout-seg button.active {
+    background: var(--bg-pane); color: var(--text-1); font-weight: 500;
+    box-shadow: 0 1px 2px rgba(17,26,43,.08);
+  }
 
   /* Theme picker — sibling of page-picker, sets the mini-app page bg. */
   .theme-picker {
@@ -1220,45 +1248,8 @@
   .preview-menu-pop .pm-title { font-size: 12px; font-weight: 600; }
   .preview-menu-pop .pm-sub   { font-size: 10.5px; color: var(--text-3); margin-top: 2px; line-height: 1.35; }
 
-  /* ─── Tweaks popover (Surface / Block library / Canvas backdrop) ─── */
-  .tweaks-pop {
-    position: fixed;            /* coords set by JS at open (getBoundingClientRect) */
-    min-width: 232px;
-    background: var(--bg-pane);
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    box-shadow: var(--sh-3);
-    padding: var(--s4) var(--s4) calc(var(--s4) - 2px);
-    z-index: 9999;
-    display: flex; flex-direction: column; gap: var(--s4);
-  }
-  .tweaks-pop[hidden] { display: none; }
-  .tweaks-pop .tw-label {
-    font: 500 11px var(--f-sans);
-    letter-spacing: .08em; text-transform: uppercase;
-    color: var(--text-3); margin-bottom: 7px;
-  }
-  .tweaks-pop .tw-seg {
-    display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-    gap: 3px;
-    background: var(--bg-elev-2);
-    border: 1px solid var(--line);
-    border-radius: var(--r-md);
-    padding: 3px;
-  }
-  .tweaks-pop .tw-seg button {
-    border: 0; background: transparent; cursor: pointer;
-    padding: 6px 8px; border-radius: var(--r-sm);
-    font: 500 12px var(--f-sans); color: var(--text-2);
-    transition: background var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
-  }
-  .tweaks-pop .tw-seg button:hover { color: var(--text-1); }
-  /* Selected segment = a raised white chip, not a colour fill. This is an
-     operator choice, so it stays monochrome — Dusk is only for the AI. */
-  .tweaks-pop .tw-seg button.active {
-    background: var(--bg-pane); color: var(--text-1); font-weight: 500;
-    box-shadow: 0 1px 2px rgba(17,26,43,.08);
-  }
+  /* The Tweaks popover was retired — its lone remaining control (the layout
+     switch) moved into the PAGE menu (see .page-menu .pm-layout above). */
 
   /* Phone-preview modal — full-screen scrim + centered card. The [hidden]
      attribute is undone by display:flex, so we explicitly re-hide it. */
@@ -5108,29 +5099,10 @@
           </button>
         </div>
       </div>
-      <!-- Tweaks — editor-view preferences imported from the Claude Design
-           "Tweaks" panel. Surface / Block library / Canvas backdrop, each
-           persisted in localStorage. -->
-      <button class="btn-phone-preview" id="btn-tweaks" onclick="toggleTweaksMenu()" data-ti-en="Editor view tweaks" data-ti-cn="编辑器视图微调" title="Editor view tweaks">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="9" cy="6" r="2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="2" fill="currentColor" stroke="none"/><circle cx="8" cy="18" r="2" fill="currentColor" stroke="none"/></svg>
-        <span class="i18n-en">Tweaks</span><span class="i18n-cn">微调</span>
-      </button>
-    </div>
-    <div class="tweaks-pop" id="tweaks-pop" hidden>
-      <!-- Layout — Classic (three panes) vs Canvas-first (rail + floating
-           inspector + dock + seams). Switching reloads the editor so the
-           re-housing runs cleanly. Works whether standalone or embedded. -->
-      <!-- Only the Layout switch lives here now. The editor-view tweaks
-           (Surface / Block library / Canvas backdrop) were removed at the
-           owner's request to keep this menu to one clear job: choosing
-           between the Classic three-pane editor and the Canvas-first one. -->
-      <div class="tw-group">
-        <div class="tw-label"><span class="i18n-en">Layout</span><span class="i18n-cn">布局</span></div>
-        <div class="tw-seg">
-          <button type="button" data-tweak="layout" data-val="classic" onclick="cmsSetLayout('classic')"><span class="i18n-en">Classic</span><span class="i18n-cn">经典</span></button>
-          <button type="button" data-tweak="layout" data-val="canvas" onclick="cmsSetLayout('canvas')"><span class="i18n-en">Canvas</span><span class="i18n-cn">画布</span></button>
-        </div>
-      </div>
+      <!-- The Tweaks button (and its popover) were removed here. Its only
+           remaining job — the Classic ⇄ Canvas layout switch — now lives at
+           the bottom of the PAGE menu, next to the page it applies to, so the
+           dock stays to just Device + See it live. See buildPagePicker(). -->
     </div>
     <div class="link-status" id="link-status" hidden></div>
     <div class="phone" data-platform="ios">
@@ -6004,12 +5976,33 @@ function buildPagePicker() {
         ${B('Products', '产品')}
       </div>
       <div class="desc">${B("Edit an individual product's detail page", '编辑单个产品的详情页')}</div>
+    </div>
+    <div class="menu-sep"></div>
+    <div class="pm-layout">
+      <div class="pm-layout-label"><span class="i18n-en">Layout</span><span class="i18n-cn">布局</span></div>
+      <div class="pm-layout-seg" id="pm-layout-seg">
+        <button type="button" data-val="classic"><span class="i18n-en">Classic</span><span class="i18n-cn">经典</span></button>
+        <button type="button" data-val="canvas"><span class="i18n-en">Canvas</span><span class="i18n-cn">画布</span></button>
+      </div>
     </div>`;
 
   const picker = $('#page-picker');
   picker.addEventListener('click', e => {
-    if (e.target.closest('.item')) return;  // item clicks handled below
+    if (e.target.closest('.item')) return;      // item clicks handled below
+    if (e.target.closest('.pm-layout')) return; // layout switch handled below
     menu.classList.toggle('open');
+  });
+
+  // Layout switch (Classic ⇄ Canvas) — lives at the foot of this menu now that
+  // the dock's Tweaks button is gone. Reflect the current mode, and let each
+  // segment flip it (cmsSetLayout reloads only when the value actually changes).
+  const layoutMode = (document.documentElement.dataset.layout === 'canvas') ? 'canvas' : 'classic';
+  menu.querySelectorAll('#pm-layout-seg button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.val === layoutMode);
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      cmsSetLayout(btn.dataset.val);
+    });
   });
   // Close on outside click
   document.addEventListener('click', e => {
@@ -14853,7 +14846,7 @@ function cmsSetLayout(v) {
   if (v !== 'classic' && v !== 'canvas') return;
   const cur = (function () { try { return localStorage.getItem('cms-layout') || 'classic'; } catch (e) { return 'classic'; } })();
   if (v === cur && (document.documentElement.dataset.layout || 'classic') === (v === 'canvas' ? 'canvas' : 'classic')) {
-    closeTweaksMenu(); return;
+    return;  // already in this mode — nothing to do
   }
   try { localStorage.setItem('cms-layout', v); } catch (e) {}
   location.reload();
@@ -14876,38 +14869,6 @@ function cmsSyncTweakControls() {
     btn.classList.toggle('active', cur[btn.dataset.tweak] === btn.dataset.val);
   });
 }
-function toggleTweaksMenu() {
-  const pop = document.getElementById('tweaks-pop');
-  const btn = document.getElementById('btn-tweaks');
-  if (!pop || !btn) return;
-  if (pop.hidden) {
-    if (pop.parentNode !== document.body) document.body.appendChild(pop);
-    // Unhide BEFORE measuring so offsetWidth/offsetHeight are real.
-    pop.hidden = false;
-    const r = btn.getBoundingClientRect();
-    // Open below the button, but flip ABOVE it when there's no room — e.g.
-    // the canvas-first dock sits at the bottom of the screen, so a downward
-    // menu would fall off the edge and be invisible.
-    const ph = pop.offsetHeight || 160;
-    const below = r.bottom + 6;
-    pop.style.top  = (below + ph > window.innerHeight - 8) ? (r.top - ph - 6) + 'px' : below + 'px';
-    pop.style.left = Math.max(8, r.right - pop.offsetWidth) + 'px';
-    cmsSyncTweakControls();
-    setTimeout(() => document.addEventListener('click', _closeTweaksOnOutside, true), 0);
-  } else {
-    closeTweaksMenu();
-  }
-}
-function closeTweaksMenu() {
-  const pop = document.getElementById('tweaks-pop');
-  if (pop) pop.hidden = true;
-  document.removeEventListener('click', _closeTweaksOnOutside, true);
-}
-function _closeTweaksOnOutside(e) {
-  if (e.target.closest('#tweaks-pop') || e.target.closest('#btn-tweaks')) return;
-  closeTweaksMenu();
-}
-
 // ─── Live Preview drawer ────────────────────────────────────────────────
 // Same affordance as in /retail-admin: opens /storefront (the customer-
 // facing published mini-app) in a phone-shaped iframe so you can sanity-
@@ -15437,7 +15398,6 @@ document.addEventListener('keydown', (e) => {
   .fc-preview-embed .pane.left,
   .fc-preview-embed .pane.right,
   .fc-preview-embed .canvas-meta,
-  .fc-preview-embed .tweaks-pop,
   .fc-preview-embed .link-status,
   .fc-preview-embed .preview-menu,
   .fc-preview-embed #floating-toolbar,
