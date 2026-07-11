@@ -3837,28 +3837,107 @@
   <!-- ─── POP-UPS ─── -->
   <section id="tab-popups">
     <style>
-      .pu-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
-      .pu-card {
-        background: var(--bg-pane);
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        padding: 14px 16px;
-        display: grid; grid-template-columns: 36px 1fr auto; align-items: start; gap: 12px;
-      }
-      .pu-card .pu-toggle {
-        margin-top: 2px;
-      }
-      .pu-card .pu-meta { color: var(--text-3); font-size: 11px; margin-top: 4px; line-height: 1.5; }
-      .pu-card .pu-name { font-weight: 600; }
-      .pu-card .pu-actions { display: flex; gap: 6px; }
-      .pu-status-pill {
-        display: inline-flex; align-items: center; gap: 5px;
-        padding: 1px 7px; border-radius: 999px;
-        font-size: 10px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase;
-      }
-      .pu-status-pill.on   { background: rgba(128, 196, 98, .12); color: #80c462; }
-      .pu-status-pill.off  { background: var(--bg-elev-2); color: var(--text-3); }
-      .pu-status-pill.sched{ background: rgba(242,202,108,.14); color: var(--st-preparing); }
+      /* ═══ Pop-ups — Tacet "preview gallery" (Option A) ═══════════════════
+         Rebuilt 2026-07-11 (mockup: reference/popups-redesign-mockup.html,
+         option A). The list becomes a gallery: every pop-up is drawn on a
+         phone exactly as customers meet it. The editor leads with the message
+         and folds where/when/how-often/runs into quiet decision rows. All
+         #pu-* input IDs and the config payload are unchanged — this is a
+         re-layout + Tacet reskin. Scoped tokens inherit the global --tacet-*
+         set; preview device deliberately keeps the Roots mini-app look
+         (green CTA) since that is what the customer actually sees. */
+      #tab-popups { --pg-radius: 14px; --ease-pg: cubic-bezier(.16,1,.3,1); }
+
+      /* header */
+      .pg-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 22px; }
+      .pg-head .grow { flex: 1; min-width: 260px; }
+      .pg-eyebrow { font-size: 11px; font-weight: 500; letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); margin: 0 0 6px; }
+      #tab-popups h2.pg-title { font-family: var(--f-sans); font-weight: 500; font-size: 24px; letter-spacing: -.01em; color: var(--text-1); text-transform: none; margin: 0; }
+      .pg-lede { font-size: 14px; line-height: 1.6; color: var(--text-2); margin: 10px 0 0; max-width: 620px; }
+
+      /* buttons */
+      .pg-btn { font: inherit; font-size: 13.5px; font-weight: 500; line-height: 1; border-radius: 8px; border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; transition: .2s var(--ease-pg); white-space: nowrap; }
+      .pg-btn svg { width: 15px; height: 15px; }
+      .pg-btn.primary { background: var(--tacet-dusk); color: #fff; border-color: var(--tacet-dusk); }
+      .pg-btn.primary:hover { background: #5F58A0; }
+      .pg-btn.secondary { background: var(--bg-pane); color: var(--text-1); border-color: var(--line); }
+      .pg-btn.secondary:hover { border-color: var(--text-3); }
+      .pg-btn.ghost { background: transparent; color: var(--text-2); }
+      .pg-btn.ghost:hover { color: var(--text-1); background: var(--bg-elev-1); }
+      .pg-btn.sm { padding: 5px 11px; font-size: 12.5px; }
+
+      /* filter tabs */
+      .pg-ftabs { display: flex; align-items: center; gap: 4px; margin: 0 0 18px; }
+      .pg-ftabs button { border: 0; background: none; font: inherit; font-size: 13px; font-weight: 500; color: var(--text-2); padding: 6px 12px; border-radius: 999px; cursor: pointer; transition: .15s var(--ease-pg); }
+      .pg-ftabs button.act { background: var(--tacet-ink); color: var(--tacet-paper); }
+      [data-theme="dark"] .pg-ftabs button.act { background: var(--tacet-paper); color: var(--tacet-ink); }
+      .pg-ftabs button:not(.act):hover { background: var(--bg-elev-1); color: var(--text-1); }
+      .pg-ftabs .count { margin-left: auto; font-size: 13px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+
+      /* gallery grid */
+      .pg-gal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+      @media (max-width: 1040px) { .pg-gal { grid-template-columns: repeat(2, 1fr); } }
+      @media (max-width: 620px)  { .pg-gal { grid-template-columns: 1fr; } }
+      .pg-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--pg-radius); box-shadow: 0 4px 16px rgba(17,26,43,.04); overflow: hidden; transition: .2s var(--ease-pg); }
+      .pg-card:hover { border-color: var(--text-3); }
+      .pg-card.is-off { opacity: .72; }
+      .pg-card .pvwrap { padding: 16px 16px 0; }
+      .pg-foot { padding: 13px 16px 15px; }
+      .pg-name { font-size: 14px; font-weight: 600; color: var(--text-1); letter-spacing: -.005em; }
+      .pg-sent { font-size: 12.5px; color: var(--text-2); margin-top: 4px; line-height: 1.45; }
+      .pg-sent b { font-weight: 600; color: var(--text-1); }
+      .pg-row { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+      .pg-act { margin-left: auto; display: flex; align-items: center; gap: 4px; opacity: 0; transition: .15s var(--ease-pg); }
+      .pg-card:hover .pg-act { opacity: 1; }
+      @media (hover: none) { .pg-act { opacity: 1; } }
+      .pg-iconbtn { width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-pane); display: inline-flex; align-items: center; justify-content: center; color: var(--text-3); cursor: pointer; transition: .15s var(--ease-pg); }
+      .pg-iconbtn:hover { color: var(--text-1); border-color: var(--text-3); }
+      .pg-iconbtn svg { width: 14px; height: 14px; }
+
+      /* status pills */
+      .pg-pill { font-size: 11.5px; font-weight: 500; padding: 2px 10px; border-radius: 999px; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+      .pg-pill .pdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+      .pg-pill.live  { background: var(--tacet-sage-tint);  color: var(--tacet-sage-ink); }
+      .pg-pill.sched { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
+      .pg-pill.ended { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
+      .pg-pill.off   { background: var(--bg-elev-1); color: var(--text-3); }
+
+      /* toggle */
+      .pg-tgl { position: relative; width: 36px; height: 21px; flex-shrink: 0; display: inline-block; }
+      .pg-tgl input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; z-index: 1; }
+      .pg-tgl .tr { position: absolute; inset: 0; background: var(--line-strong); border-radius: 999px; transition: .2s var(--ease-pg); }
+      .pg-tgl .tr::after { content: ""; position: absolute; top: 2px; left: 2px; width: 17px; height: 17px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(17,26,43,.2); transition: .2s var(--ease-pg); }
+      .pg-tgl input:checked + .tr { background: var(--tacet-sage); }
+      .pg-tgl input:checked + .tr::after { left: 17px; }
+
+      /* "new" tile */
+      .pg-newtile { border: 1px dashed var(--line); border-radius: var(--pg-radius); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--text-2); cursor: pointer; min-height: 268px; transition: .2s var(--ease-pg); background: transparent; font: inherit; font-size: 13.5px; font-weight: 500; }
+      .pg-newtile:hover { border-color: var(--tacet-dusk); color: var(--tacet-dusk); background: var(--tacet-dusk-tint); }
+      .pg-newtile .plus { width: 38px; height: 38px; border-radius: 50%; background: var(--tacet-dusk-tint); color: var(--tacet-dusk); display: flex; align-items: center; justify-content: center; }
+      .pg-newtile .plus svg { width: 19px; height: 19px; }
+
+      /* mini preview device — deliberately the Roots mini-app look */
+      .pg-pv { position: relative; width: 100%; aspect-ratio: 5 / 6; border-radius: 14px; overflow: hidden; background: linear-gradient(180deg, #20283a, #151d2c); }
+      .pg-pv-lines { position: absolute; inset: 0; padding: 16px; opacity: .16; }
+      .pg-pv-lines i { display: block; height: 8px; border-radius: 4px; background: #fff; margin-bottom: 9px; }
+      .pg-pv-lines i:nth-child(1) { width: 52%; } .pg-pv-lines i:nth-child(2) { width: 88%; }
+      .pg-pv-lines i:nth-child(3) { width: 74%; } .pg-pv-lines i:nth-child(4) { width: 90%; }
+      .pg-pv-lines i:nth-child(5) { width: 40%; }
+      .pg-pv-scrim { position: absolute; inset: 0; background: rgba(17,26,43,.42); }
+      .pg-pop { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 80%; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 12px 30px rgba(0,0,0,.28); }
+      .pg-pop-x { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; border-radius: 50%; background: rgba(0,0,0,.14); color: #fff; display: flex; align-items: center; justify-content: center; z-index: 2; }
+      .pg-pop-x svg { width: 11px; height: 11px; }
+      .pg-pop-img { height: 74px; background: #f2e7df no-repeat center/cover; }
+      .pg-pop-body { padding: 13px 14px 15px; text-align: center; }
+      .pg-pop-t { font-size: 13.5px; font-weight: 700; color: #1a1a17; line-height: 1.3; word-break: break-word; }
+      .pg-pop-b { font-size: 11.5px; color: #5a564f; margin-top: 5px; line-height: 1.45; word-break: break-word; }
+      .pg-pop-cta { display: inline-block; margin-top: 12px; padding: 7px 18px; border-radius: 999px; background: #365329; color: #fff; font-size: 11px; font-weight: 600; }
+
+      /* empty state — complimentary, never apologetic */
+      .pg-empty { text-align: center; padding: 56px 24px; border: 1px dashed var(--line); border-radius: var(--pg-radius); }
+      .pg-empty .em-ic { width: 46px; height: 46px; border-radius: 50%; background: var(--bg-elev-1); color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+      .pg-empty h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-1); }
+      .pg-empty p { margin: 6px auto 0; font-size: 13.5px; color: var(--text-2); max-width: 420px; line-height: 1.55; }
       .pu-editor-bg {
         position: fixed; left: 0; right: 0; top: 0; bottom: 0;
         background: var(--bg-overlay);
@@ -3974,38 +4053,77 @@
         background: rgba(0,0,0,.18); color: #fff;
         font-size: 12px; line-height: 18px; text-align: center;
       }
-      .pu-page-chip {
-        display: inline-flex; align-items: center;
-        padding: 4px 10px; border-radius: 999px;
-        background: var(--bg-elev-1);
-        border: 1px solid var(--line);
-        font-size: 11px; color: var(--text-2);
-        cursor: pointer; user-select: none;
-        margin: 3px;
+      /* ── editor: message-first fields + staged decision rows ── */
+      .pg-ed-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 0 0 12px; }
+      .pg-ed-eyebrow.gap { margin-top: 26px; }
+      .pg-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-1); margin: 0 0 6px; }
+      .pg-label .opt { font-weight: 400; color: var(--text-2); }
+      .pu-editor-body .pg-in, .pu-editor-body .pg-area, .pu-editor-body .pg-sel {
+        width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; line-height: 1.5;
+        color: var(--text-1); background-color: var(--bg-input); border: 1px solid var(--line);
+        border-radius: 8px; padding: 10px 13px;
       }
-      .pu-page-chip.on {
-        background: rgba(107,142,111,.14);
-        border-color: var(--accent);
-        color: var(--accent-hi);
-      }
-      .pu-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-      .pu-form-row .field { margin: 0; }
+      .pu-editor-body .pg-sel { padding-right: 32px; }
+      .pu-editor-body .pg-in:focus, .pu-editor-body .pg-area:focus, .pu-editor-body .pg-sel:focus { outline: none; border-color: var(--tacet-dusk); }
+      .pg-area { min-height: 58px; resize: vertical; font-family: inherit; }
+      .pg-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      @media (max-width: 560px) { .pg-two { grid-template-columns: 1fr; } }
+      .pg-gap { height: 16px; }
+      .pg-hint { font-size: 12px; color: var(--text-3); margin-top: 6px; line-height: 1.5; }
+
+      /* image dropper */
+      .pg-drop { display: flex; align-items: center; gap: 11px; border: 1px dashed var(--line); border-radius: 10px; padding: 12px 14px; color: var(--text-2); font-size: 13px; cursor: pointer; transition: .15s var(--ease-pg); }
+      .pg-drop:hover { border-color: var(--tacet-dusk); color: var(--tacet-dusk); }
+      .pg-drop svg { width: 18px; height: 18px; flex-shrink: 0; }
+      #pu-image-preview img { max-width: 240px; max-height: 160px; border-radius: 8px; border: 1px solid var(--line); }
+      #pu-image-preview .btn { margin-top: 6px; }
+
+      /* staged decision rows */
+      .pg-steps { margin-top: 8px; }
+      .pg-step { border-top: 1px solid var(--line); }
+      .pg-step:last-of-type { border-bottom: 1px solid var(--line); }
+      .pg-step-head { display: flex; align-items: center; gap: 12px; padding: 15px 2px; cursor: pointer; user-select: none; }
+      .pg-step-head .ic { color: var(--text-3); display: inline-flex; flex-shrink: 0; }
+      .pg-step-head .ic svg { width: 16px; height: 16px; }
+      .pg-step-head .k { font-size: 13px; color: var(--text-2); width: 96px; flex-shrink: 0; }
+      .pg-step-head .v { font-size: 13.5px; font-weight: 500; color: var(--text-1); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .pg-step-head .caret { color: var(--text-3); display: inline-flex; transition: transform .2s var(--ease-pg); }
+      .pg-step-head .caret svg { width: 15px; height: 15px; }
+      .pg-step.open .pg-step-head .caret { transform: rotate(180deg); }
+      .pg-step-body { display: none; padding: 2px 2px 18px 30px; }
+      .pg-step.open .pg-step-body { display: block; animation: pgSettle .35s var(--ease-pg) both; }
+      @keyframes pgSettle { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+      .pg-check { display: flex; align-items: center; gap: 9px; padding: 7px 0; font-size: 13.5px; color: var(--text-1); }
+      .pg-check input { accent-color: var(--tacet-ink); width: 15px; height: 15px; }
+
+      /* page chips (class name kept — renderPopupPageChips() depends on it) */
+      .pu-page-chip { display: inline-flex; align-items: center; padding: 5px 12px; border-radius: 999px; background: var(--bg-pane); border: 1px solid var(--line); font-size: 12.5px; color: var(--text-1); cursor: pointer; user-select: none; margin: 0 6px 6px 0; transition: .15s var(--ease-pg); }
+      .pu-page-chip:hover { border-color: var(--text-3); }
+      .pu-page-chip.on { background: var(--tacet-ink); border-color: var(--tacet-ink); color: var(--tacet-paper); }
+      [data-theme="dark"] .pu-page-chip.on { background: var(--tacet-paper); border-color: var(--tacet-paper); color: var(--tacet-ink); }
     </style>
 
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-      <div>
-        <h2 style="margin: 0;">Pop-ups · 弹窗</h2>
-        <div class="muted" style="font-size: 12px; line-height: 1.5; margin-top: 4px;">
-          Show a modal to customers on any page. Useful for announcements, coupon offers, restock alerts, holiday closures. · 在任意页面向顾客弹出一个对话框。适合发布公告、优惠券、补货提醒、节假日歇业通知等。
-        </div>
+    <div class="pg-head">
+      <div class="grow">
+        <div class="pg-eyebrow">Mini app · 小程序</div>
+        <h2 class="pg-title">Pop-ups · 弹窗</h2>
+        <p class="pg-lede">A card that greets people when they open a page — a promo, a reminder, a holiday notice. You see each one exactly as customers do. · 顾客打开页面时弹出的一张卡片——活动、提醒或歇业通知。所见即顾客所见。</p>
       </div>
-      <button class="btn btn-primary" onclick="openPopupEditor()">
+      <button class="pg-btn primary" onclick="openPopupEditor()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         New pop-up · 新建弹窗
       </button>
     </div>
 
-    <div id="popups-list" class="pu-list">
+    <div class="pg-ftabs" id="pu-ftabs">
+      <button class="act" data-filter="all" onclick="setPopupFilter('all')">All · 全部</button>
+      <button data-filter="live" onclick="setPopupFilter('live')">Live · 进行中</button>
+      <button data-filter="sched" onclick="setPopupFilter('sched')">Scheduled · 待开始</button>
+      <button data-filter="off" onclick="setPopupFilter('off')">Off · 已停用</button>
+      <span class="count" id="pu-count"></span>
+    </div>
+
+    <div id="popups-list" class="pg-gal">
       <div class="muted">Loading… · 加载中…</div>
     </div>
   </section>
@@ -4019,142 +4137,150 @@
       </button>
     </div>
     <div class="pu-editor-body">
-        <!-- form -->
+        <!-- form: the message leads; the rules fold into quiet rows -->
         <div class="pu-form">
           <input type="hidden" id="pu-id">
 
-          <div class="group-card">
-            <div class="group-card-head"><h3>Basics · 基本信息</h3></div>
-            <div class="field">
-              <label class="stacked">Internal name (admin only) · 内部名称(仅管理员可见)</label>
-              <input type="text" id="pu-name" placeholder="e.g. 'Spring promo · home'" style="width: 100%;">
-            </div>
-            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center; margin-top: 8px;">
-              <input type="checkbox" id="pu-enabled"> Enabled — show this pop-up to customers · 启用 — 向顾客显示此弹窗
-            </label>
-            <label class="row" style="gap: 8px; padding: 6px 0; align-items: center;">
-              <input type="checkbox" id="pu-dismissible" checked> Dismissible — show a close button · 可关闭 — 显示关闭按钮
-            </label>
+          <label class="pg-label" style="margin-bottom: 6px;">Internal name <span class="opt">— admin only, never shown to customers · 仅管理员可见</span></label>
+          <input type="text" id="pu-name" class="pg-in" placeholder="e.g. Spring promo · home">
+
+          <div class="pg-ed-eyebrow gap">The message · 内容</div>
+
+          <label class="pg-label">Picture <span class="opt">— optional · 可选</span></label>
+          <label class="pg-drop" for="pu-image-file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            <span>Add or replace an image · 添加或替换图片</span>
+          </label>
+          <input type="file" id="pu-image-file" accept="image/*" style="display: none;">
+          <input type="hidden" id="pu-image_url">
+          <div id="pu-image-preview" style="margin-top: 10px;"></div>
+
+          <div class="pg-gap"></div>
+          <label class="pg-label">Headline · 标题</label>
+          <div class="pg-two">
+            <input type="text" id="pu-title_en" class="pg-in" placeholder="Welcome to Roots">
+            <input type="text" id="pu-title_cn" class="pg-in" placeholder="欢迎来到 Roots">
+          </div>
+          <div class="pg-hint">English · 中文 — customers see one, based on their WeChat language. · 顾客按微信语言看到其中一种。</div>
+
+          <div class="pg-gap"></div>
+          <label class="pg-label">Message <span class="opt">— optional, one or two short lines · 可选,一两句</span></label>
+          <div class="pg-two">
+            <textarea id="pu-body_en" class="pg-area" placeholder="One or two short lines."></textarea>
+            <textarea id="pu-body_cn" class="pg-area" placeholder="一两句简短文字。"></textarea>
           </div>
 
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Where to show · 显示位置</h3>
-              <div class="muted">Pick one or more pages. "All pages" overrides the rest. · 选择一个或多个页面;"全部页面"将覆盖其他选项。</div>
-            </div>
-            <div id="pu-pages" style="margin-top: 6px;">
-              <!-- chips injected -->
-            </div>
+          <div class="pg-gap"></div>
+          <label class="pg-label">Button <span class="opt">— optional · 可选</span></label>
+          <div class="pg-two">
+            <input type="text" id="pu-cta_label_en" class="pg-in" placeholder="Shop now">
+            <input type="text" id="pu-cta_label_cn" class="pg-in" placeholder="立即购买">
           </div>
+          <div style="height: 10px;"></div>
+          <select id="pu-cta_target_kind" class="pg-sel">
+            <option value="">— No button, just close · 无按钮,仅关闭</option>
+            <option value="shop">Opens Shop tab · 打开商城页</option>
+            <option value="cart">Opens Cart tab · 打开购物车页</option>
+            <option value="home">Opens Home tab · 打开首页</option>
+            <option value="me">Opens Me tab · 打开我的</option>
+            <option value="membership">Opens Membership page · 打开会员页</option>
+            <option value="promotions">Opens CMS page · Promotions</option>
+            <option value="about">Opens CMS page · About</option>
+            <option value="categories">Opens CMS page · Categories</option>
+            <option value="product">Opens a specific product… · 指定产品…</option>
+            <option value="category">Opens a specific category… · 指定分类…</option>
+          </select>
+          <!-- Secondary picker: product -->
+          <div id="pu-cta_product_wrap" style="margin-top: 8px; display: none;">
+            <input type="text" id="pu-cta_product_search" class="pg-in" placeholder="Type to search products by name or SKU… · 按名称或货号搜索" style="margin-bottom: 6px;">
+            <select id="pu-cta_target_product" size="6" class="pg-sel" style="font-family: var(--f-mono); font-size: 12px;"></select>
+          </div>
+          <!-- Secondary picker: category -->
+          <div id="pu-cta_category_wrap" style="margin-top: 8px; display: none;">
+            <select id="pu-cta_target_category" class="pg-sel"></select>
+          </div>
+          <input type="hidden" id="pu-cta_target">
+          <div class="pg-hint" id="pu-cta_target_preview"></div>
 
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>When to show · 显示时机</h3>
-              <div class="muted">Trigger fires on every page open; the frequency rule decides whether it actually displays. · 每次打开页面都会触发;频率规则决定是否真的弹出。</div>
+          <!-- the rules: quiet decision rows, opened only to change -->
+          <div class="pg-ed-eyebrow gap">The rules · 规则</div>
+          <div class="pg-steps">
+
+            <div class="pg-step open" data-step="where">
+              <div class="pg-step-head" onclick="togglePopupStep(this)">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg></span>
+                <span class="k">Where · 位置</span>
+                <span class="v" id="pu-sum-where">—</span>
+                <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+              </div>
+              <div class="pg-step-body">
+                <div class="pg-hint" style="margin: 0 0 10px;">Pick one or more pages. "All pages" overrides the rest. · 选择一个或多个页面;"全部页面"将覆盖其余选项。</div>
+                <div id="pu-pages"><!-- chips injected --></div>
+              </div>
             </div>
-            <div class="pu-form-row">
-              <div class="field">
-                <label class="stacked">Trigger · 触发条件</label>
-                <select id="pu-trigger" style="width: 100%;">
-                  <option value="on_load">Immediately on page open · 打开页面即弹出</option>
-                  <option value="after_seconds">After N seconds · N 秒后弹出</option>
+
+            <div class="pg-step" data-step="when">
+              <div class="pg-step-head" onclick="togglePopupStep(this)">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+                <span class="k">When · 时机</span>
+                <span class="v" id="pu-sum-when">—</span>
+                <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
+              </div>
+              <div class="pg-step-body">
+                <label class="pg-label">Appears · 触发时机</label>
+                <select id="pu-trigger" class="pg-sel">
+                  <option value="on_load">The moment the page opens · 打开页面即弹出</option>
+                  <option value="after_seconds">A few seconds after · 数秒后弹出</option>
                 </select>
-              </div>
-              <div class="field" id="pu-delay-wrap">
-                <label class="stacked">Delay (seconds) · 延时(秒)</label>
-                <input type="number" id="pu-delay" min="0" value="3" style="width: 100%;">
-              </div>
-            </div>
-            <div class="pu-form-row" style="margin-top: 8px;">
-              <div class="field">
-                <label class="stacked">Frequency · 频率</label>
-                <select id="pu-frequency" style="width: 100%;">
-                  <option value="once">Once per customer ever · 每位顾客仅一次</option>
-                  <option value="daily">Once per day · 每天一次</option>
+                <div id="pu-delay-wrap" style="margin-top: 12px;">
+                  <label class="pg-label">Delay in seconds · 延时(秒)</label>
+                  <input type="number" id="pu-delay" min="0" value="3" class="pg-in">
+                </div>
+                <label class="pg-label" style="margin-top: 14px;">How often · 频率</label>
+                <select id="pu-frequency" class="pg-sel">
+                  <option value="once">Once per customer, ever · 每位顾客仅一次</option>
+                  <option value="daily">Once a day · 每天一次</option>
                   <option value="session">Once per app session · 每次打开小程序一次</option>
                   <option value="every_visit">Every time the page opens · 每次打开页面</option>
                 </select>
               </div>
-              <div class="field"></div>
             </div>
-            <div class="pu-form-row" style="margin-top: 8px;">
-              <div class="field">
-                <label class="stacked">Start date (optional) · 开始日期(可选)</label>
-                <input type="date" id="pu-start_at" style="width: 100%;">
-              </div>
-              <div class="field">
-                <label class="stacked">End date (optional) · 结束日期(可选)</label>
-                <input type="date" id="pu-end_at" style="width: 100%;">
-              </div>
-            </div>
-          </div>
 
-          <div class="group-card">
-            <div class="group-card-head"><h3>Content · 内容</h3></div>
-            <div class="field">
-              <label class="stacked">Image (optional) · 图片(可选)</label>
-              <input type="file" id="pu-image-file" accept="image/*">
-              <input type="hidden" id="pu-image_url">
-              <div id="pu-image-preview" style="margin-top: 8px;"></div>
-            </div>
-            <div class="pu-form-row" style="margin-top: 12px;">
-              <div class="field">
-                <label class="stacked">Title (EN) · 标题(英文)</label>
-                <input type="text" id="pu-title_en" placeholder="Welcome to Roots" style="width: 100%;">
+            <div class="pg-step" data-step="runs">
+              <div class="pg-step-head" onclick="togglePopupStep(this)">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+                <span class="k">Runs · 起止</span>
+                <span class="v" id="pu-sum-runs">—</span>
+                <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
               </div>
-              <div class="field">
-                <label class="stacked">标题 (中文)</label>
-                <input type="text" id="pu-title_cn" placeholder="欢迎来到 Roots" style="width: 100%;">
-              </div>
-            </div>
-            <div class="pu-form-row" style="margin-top: 8px;">
-              <div class="field">
-                <label class="stacked">Body (EN) · 正文(英文)</label>
-                <textarea id="pu-body_en" placeholder="One or two short lines." rows="3" style="width: 100%; font-family: inherit;"></textarea>
-              </div>
-              <div class="field">
-                <label class="stacked">正文 (中文)</label>
-                <textarea id="pu-body_cn" placeholder="一两句简短文字。" rows="3" style="width: 100%; font-family: inherit;"></textarea>
+              <div class="pg-step-body">
+                <div class="pg-two">
+                  <div>
+                    <label class="pg-label">Start · 开始 <span class="opt">(optional)</span></label>
+                    <input type="date" id="pu-start_at" class="pg-in">
+                  </div>
+                  <div>
+                    <label class="pg-label">End · 结束 <span class="opt">(optional)</span></label>
+                    <input type="date" id="pu-end_at" class="pg-in">
+                  </div>
+                </div>
+                <div class="pg-hint">Leave blank to run until you turn it off. · 留空则一直显示,直到你停用它。</div>
               </div>
             </div>
-            <div class="pu-form-row" style="margin-top: 8px;">
-              <div class="field">
-                <label class="stacked">CTA label (EN, optional) · 按钮文字(英文,可选)</label>
-                <input type="text" id="pu-cta_label_en" placeholder="Shop now" style="width: 100%;">
+
+            <div class="pg-step" data-step="options">
+              <div class="pg-step-head" onclick="togglePopupStep(this)">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg></span>
+                <span class="k">Options · 选项</span>
+                <span class="v" id="pu-sum-options">—</span>
+                <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
               </div>
-              <div class="field">
-                <label class="stacked">按钮文字 (中文)</label>
-                <input type="text" id="pu-cta_label_cn" placeholder="立即购买" style="width: 100%;">
+              <div class="pg-step-body">
+                <label class="pg-check"><input type="checkbox" id="pu-enabled"> Live — show this to customers now · 启用 — 立即向顾客显示</label>
+                <label class="pg-check"><input type="checkbox" id="pu-dismissible" checked> Closable — show a close button · 可关闭 — 显示关闭按钮</label>
               </div>
             </div>
-            <div class="field" style="margin-top: 8px;">
-              <label class="stacked">CTA destination (optional) · 按钮跳转(可选)</label>
-              <select id="pu-cta_target_kind" style="width: 100%;">
-                <option value="">— Just dismiss (no destination) · 仅关闭(无跳转)</option>
-                <option value="shop">Shop tab · 商城页</option>
-                <option value="cart">Cart tab · 购物车页</option>
-                <option value="home">Home tab · 首页</option>
-                <option value="me">Me tab · 我的</option>
-                <option value="membership">Membership page · 会员页</option>
-                <option value="promotions">CMS page · Promotions</option>
-                <option value="about">CMS page · About</option>
-                <option value="categories">CMS page · Categories</option>
-                <option value="product">A specific product… · 指定产品…</option>
-                <option value="category">A specific category… · 指定分类…</option>
-              </select>
-              <!-- Secondary picker: product -->
-              <div id="pu-cta_product_wrap" style="margin-top: 8px; display: none;">
-                <input type="text" id="pu-cta_product_search" placeholder="Type to search products by name or SKU…"
-                       style="width: 100%; margin-bottom: 6px;">
-                <select id="pu-cta_target_product" size="6" style="width: 100%; font-family: var(--f-mono); font-size: 12px;"></select>
-              </div>
-              <!-- Secondary picker: category -->
-              <div id="pu-cta_category_wrap" style="margin-top: 8px; display: none;">
-                <select id="pu-cta_target_category" style="width: 100%;"></select>
-              </div>
-              <input type="hidden" id="pu-cta_target">
-              <div class="muted" style="font-size: 11px; margin-top: 6px;" id="pu-cta_target_preview"></div>
-            </div>
+
           </div>
         </div>
 

@@ -2490,57 +2490,189 @@ async function loadPopups() {
   }
 }
 
-function popupWindowStatus(p) {
+// Active-language pick with a safe fallback (cuT may not be defined yet).
+const puT = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
+let _puFilter = 'all';
+
+// Status resolved to one class + one label, so the pill reads at a glance.
+function puStatus(p) {
   const today = new Date().toISOString().slice(0, 10);
-  if (p.start_at && today < p.start_at) return { kind: 'sched', label: 'Scheduled · 待开始 ' + p.start_at };
-  if (p.end_at   && today > p.end_at)   return { kind: 'off',   label: 'Ended · 已结束 ' + p.end_at };
-  if (p.enabled) return { kind: 'on',  label: 'Live · 进行中' };
-  return { kind: 'off', label: 'Disabled · 已停用' };
+  if (!p.enabled)                        return { cls: 'off',   dot: false, label: puT('Off', '已停用') };
+  if (p.start_at && today < p.start_at)  return { cls: 'sched', dot: true,  label: puT('Starts ', '待开始 ') + p.start_at };
+  if (p.end_at   && today > p.end_at)    return { cls: 'ended', dot: true,  label: puT('Ended ', '已结束 ') + p.end_at };
+  return { cls: 'live', dot: true, label: puT('Live', '进行中') };
+}
+
+// The pop-up drawn on a phone, exactly as the customer meets it. English copy
+// preferred (mirrors the drawer's live preview); data-no-i18n so the language
+// walker never rewrites the customer-facing text.
+function puMiniPreview(p) {
+  const title = escapeHtml((p.title_en || p.title_cn || puT('Pop-up title', '弹窗标题')).slice(0, 80));
+  const body  = escapeHtml((p.body_en  || p.body_cn  || '').slice(0, 140));
+  const cta   = escapeHtml((p.cta_label_en || p.cta_label_cn || '').slice(0, 30));
+  const img   = p.image_url ? String(p.image_url).replace(/'/g, '%27') : '';
+  const x = p.dismissible !== false
+    ? '<div class="pg-pop-x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>' : '';
+  return `<div class="pg-pv" data-no-i18n>
+    <div class="pg-pv-lines"><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="pg-pv-scrim"></div>
+    <div class="pg-pop">
+      ${x}
+      ${img ? `<div class="pg-pop-img" style="background-image:url('${img}')"></div>` : ''}
+      <div class="pg-pop-body">
+        <div class="pg-pop-t">${title}</div>
+        ${body ? `<div class="pg-pop-b">${body}</div>` : ''}
+        ${cta ? `<div class="pg-pop-cta">${cta}</div>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+// One plain line under each card: where it shows · how often · what it opens.
+function puSentence(p) {
+  const pageLabel = k => ((PAGE_KEYS.find(([kk]) => kk === k) || [])[1]) || k;
+  let where;
+  if (!p.pages || !p.pages.length)      where = puT('No page picked', '未选择页面');
+  else if (p.pages.includes('all'))     where = 'All pages · 全部页面';
+  else                                  where = p.pages.map(pageLabel).join(' · ');
+  const freq = ({
+    once: 'shows once · 仅一次', daily: 'daily · 每天一次',
+    session: 'once a session · 每次会话', every_visit: 'every visit · 每次访问',
+  })[p.frequency] || p.frequency || '';
+  const t = (p.cta_target || '').trim();
+  const opens = (t && (p.cta_label_en || p.cta_label_cn)) ? ` · → ${escapeHtml(ctaTargetLabel(t))}` : '';
+  return `<b>${escapeHtml(where)}</b> · ${escapeHtml(freq)}${opens}`;
+}
+
+function popupMatchesFilter(p) {
+  if (_puFilter === 'all') return true;
+  const cls = puStatus(p).cls;
+  if (_puFilter === 'off') return cls === 'off' || cls === 'ended';
+  return cls === _puFilter;
+}
+
+function setPopupFilter(f) {
+  _puFilter = f;
+  document.querySelectorAll('#pu-ftabs button').forEach(b => b.classList.toggle('act', b.dataset.filter === f));
+  renderPopups();
 }
 
 function renderPopups() {
   const mount = $('#popups-list');
+  const countEl = $('#pu-count');
+  if (countEl) countEl.textContent = _popups.length + ' ' + puT(_popups.length === 1 ? 'pop-up' : 'pop-ups', '个弹窗');
+  document.querySelectorAll('#pu-ftabs button').forEach(b => b.classList.toggle('act', b.dataset.filter === _puFilter));
+
+  const newTile = `<button class="pg-newtile" onclick="openPopupEditor()">
+    <span class="plus"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></span>
+    <span>New pop-up · 新建弹窗</span>
+  </button>`;
+
   if (!_popups.length) {
-    mount.innerHTML = `<div class="empty-state">
-      <div class="icon">${ICONS.empty}</div>
-      <h3>No pop-ups yet · 暂无弹窗</h3>
-      <p class="muted">Create one to announce a promo, request a review, or warn about a holiday. · 创建一个弹窗用于活动公告、邀请评价或假期提醒。</p>
-    </div>`;
+    mount.innerHTML = `<div class="pg-empty" style="grid-column: 1 / -1;">
+      <span class="em-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 9h16"/></svg></span>
+      <h3>The app is quiet · 暂无弹窗</h3>
+      <p>Add one when you have something worth interrupting for — a promo, a review nudge, a holiday notice. · 有值得打扰顾客的事时再新建一个——活动、邀请评价或歇业通知。</p>
+    </div>` + `<div class="pg-gal" style="grid-column: 1 / -1; margin-top: 18px;">${newTile}</div>`;
     return;
   }
-  mount.innerHTML = _popups.map((p) => {
-    const st = popupWindowStatus(p);
-    const pages = (p.pages && p.pages.length) ? p.pages.map(k => PAGE_KEYS.find(([kk]) => kk === k)?.[1] || k).join(' · ') : '(no pages selected) · (未选择页面)';
-    const freq = ({ once: 'Once ever · 仅一次', daily: 'Once/day · 每天一次', session: 'Once/session · 每次会话一次', every_visit: 'Every visit · 每次访问' })[p.frequency] || p.frequency || 'once';
-    const trig = p.trigger === 'after_seconds' ? `After ${p.delay_seconds || 3}s · ${p.delay_seconds || 3}秒后` : 'On open · 打开时';
-    return `
-      <div class="pu-card">
-        <label class="pu-toggle" title="Enable / disable · 启用 / 停用">
-          <input type="checkbox" ${p.enabled ? 'checked' : ''} onchange="togglePopup('${escapeAttr(p.id)}', this.checked)">
-        </label>
-        <div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <div class="pu-name">${escapeHtml(p.name || '(untitled) · (未命名)')}</div>
-            <span class="pu-status-pill ${st.kind}">${escapeHtml(st.label)}</span>
-          </div>
-          <div class="pu-meta">
-            ${escapeHtml(pages)} · ${escapeHtml(trig)} · ${escapeHtml(freq)}
-            ${p.title_en ? ' · "<i>' + escapeHtml((p.title_en || '').slice(0, 60)) + '</i>"' : ''}
-          </div>
+
+  const visible = _popups.filter(popupMatchesFilter);
+  const cards = visible.map((p) => {
+    const st = puStatus(p);
+    const id = escapeAttr(p.id);
+    const name = escapeHtml(p.name || puT('Untitled pop-up', '未命名弹窗'));
+    return `<div class="pg-card ${st.cls === 'off' || st.cls === 'ended' ? 'is-off' : ''}">
+      <div class="pvwrap">${puMiniPreview(p)}</div>
+      <div class="pg-foot">
+        <div class="pg-name">${name}</div>
+        <div class="pg-sent">${puSentence(p)}</div>
+        <div class="pg-row">
+          <span class="pg-pill ${st.cls}">${st.dot ? '<span class="pdot"></span>' : ''}${escapeHtml(st.label)}</span>
+          <label class="pg-tgl" title="${puT('Turn on / off', '启用 / 停用')}">
+            <input type="checkbox" ${p.enabled ? 'checked' : ''} onchange="togglePopup('${id}', this.checked)">
+            <span class="tr"></span>
+          </label>
+          <span class="pg-act">
+            <button class="pg-iconbtn" title="${puT('Edit', '编辑')}" onclick="openPopupEditor('${id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+            <button class="pg-iconbtn" title="${puT('Duplicate', '复制')}" onclick="duplicatePopup('${id}')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+          </span>
         </div>
-        <div class="pu-actions">
-          <button class="btn btn-sm" onclick="openPopupEditor('${escapeAttr(p.id)}')">${ICONS.open}Edit · 编辑</button>
-        </div>
-      </div>`;
+      </div>
+    </div>`;
   }).join('');
+
+  const emptyFilter = !visible.length
+    ? `<div class="pg-empty" style="grid-column: 1 / -1;"><p>${puT('Nothing in this filter yet.', '此筛选下暂无内容。')}</p></div>`
+    : '';
+
+  mount.innerHTML = cards + emptyFilter + newTile;
 }
 
 async function togglePopup(id, enabled) {
   const p = _popups.find(x => x.id === id);
   if (!p) return;
   p.enabled = !!enabled;
-  await savePopupsArray();
-  renderPopups();
+  try {
+    await savePopupsArray();
+    renderPopups();
+  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); renderPopups(); }
+}
+
+// Spin off a seasonal variant — a fresh id, "(copy)" on the name, left off so
+// nothing goes live by accident. Opens the editor straight away.
+async function duplicatePopup(id) {
+  const src = _popups.find(x => x.id === id);
+  if (!src) return;
+  const copy = JSON.parse(JSON.stringify(src));
+  copy.id = uid();
+  copy.enabled = false;
+  copy.name = (src.name || puT('Untitled', '未命名')) + puT(' (copy)', '(副本)');
+  _popups.unshift(copy);
+  try {
+    await savePopupsArray();
+    renderPopups();
+    openPopupEditor(copy.id);
+    toast(puT('Duplicated · edit the copy', '已复制 · 编辑副本'));
+  } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); }
+}
+
+// Collapsible decision rows in the editor.
+function togglePopupStep(headEl) {
+  const step = headEl.closest('.pg-step');
+  if (step) step.classList.toggle('open');
+}
+
+// Keep each collapsed row's one-line summary honest as fields change.
+function refreshPopupStepSummaries() {
+  const set = (sel, txt) => { const el = $(sel); if (el) el.textContent = txt; };
+  // Where
+  const pages = (typeof selectedPopupPages === 'function') ? selectedPopupPages() : [];
+  let where;
+  if (!pages.length)               where = puT('No page picked', '未选择页面');
+  else if (pages.includes('all'))  where = puT('All pages', '全部页面');
+  else                             where = pages.map(k => ((PAGE_KEYS.find(([kk]) => kk === k) || [])[1] || k)).join(' · ');
+  set('#pu-sum-where', where);
+  // When
+  const trig  = $('#pu-trigger').value;
+  const delay = Number($('#pu-delay').value) || 0;
+  const trigLabel = trig === 'after_seconds' ? puT('After ' + delay + 's', delay + '秒后') : puT('On open', '打开即弹');
+  const freqLabel = ({
+    once: puT('once per person', '每人一次'), daily: puT('once a day', '每天一次'),
+    session: puT('once a session', '每次会话'), every_visit: puT('every visit', '每次访问'),
+  })[$('#pu-frequency').value] || '';
+  set('#pu-sum-when', trigLabel + ' · ' + freqLabel);
+  // Runs
+  const s = $('#pu-start_at').value, e = $('#pu-end_at').value;
+  let runs;
+  if (!s && !e)   runs = puT('Always, until turned off', '一直,直到停用');
+  else if (s && e) runs = s + ' → ' + e;
+  else if (s)     runs = puT('From ', '从 ') + s;
+  else            runs = puT('Until ', '至 ') + e;
+  set('#pu-sum-runs', runs);
+  // Options
+  const on = $('#pu-enabled').checked, dis = $('#pu-dismissible').checked;
+  set('#pu-sum-options', (on ? puT('Live', '进行中') : puT('Off', '已停用')) + ' · ' + (dis ? puT('closable', '可关闭') : puT('not closable', '不可关闭')));
 }
 
 function blankPopup() {
@@ -2589,6 +2721,9 @@ function openPopupEditor(id) {
   renderPopupImagePreview();
   updatePopupPreview();
   $('#pu-delay-wrap').style.display = $('#pu-trigger').value === 'after_seconds' ? '' : 'none';
+  // Reset the staged rows: only "Where" opens; the rest collapse to summaries.
+  document.querySelectorAll('#pu-editor-bg .pg-step').forEach(s => s.classList.toggle('open', s.dataset.step === 'where'));
+  refreshPopupStepSummaries();
   openDrawer('#pu-editor-bg');
 }
 function closePopupEditor() { closeDrawer('#pu-editor-bg'); }
@@ -2742,6 +2877,7 @@ function renderPopupPageChips(selected) {
         el.classList.toggle('on');
         wrap.querySelector('.pu-page-chip[data-page="all"]').classList.remove('on');
       }
+      refreshPopupStepSummaries();
     });
   });
 }
@@ -2791,10 +2927,10 @@ function updatePopupPreview() {
   $('#pu-preview-close').style.display = dismissible ? '' : 'none';
 }
 
-document.addEventListener('input',  e => { if (e.target.id?.startsWith('pu-')) updatePopupPreview(); });
+document.addEventListener('input',  e => { if (e.target.id?.startsWith('pu-')) { updatePopupPreview(); refreshPopupStepSummaries(); } });
 document.addEventListener('change', e => {
   if (e.target.id === 'pu-trigger') $('#pu-delay-wrap').style.display = e.target.value === 'after_seconds' ? '' : 'none';
-  if (e.target.id?.startsWith('pu-')) updatePopupPreview();
+  if (e.target.id?.startsWith('pu-')) { updatePopupPreview(); refreshPopupStepSummaries(); }
   if (e.target.id === 'pu-image-file' && e.target.files?.[0]) uploadPopupImage(e.target.files[0]);
 });
 
