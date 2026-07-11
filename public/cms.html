@@ -4799,6 +4799,13 @@
   /* The drawer shows one section at a time depending on the rail button. */
   html[data-layout="canvas"] .pane.left.cf-show-design .pane-section:not(.cf-sec-design),
   html[data-layout="canvas"] .pane.left.cf-show-blocks .pane-section:not(.cf-sec-blocks) { display: none; }
+  /* The shield opens a FOCUSED Design-check view: same Design section, but
+     the sibling knobs (Design heading + BACKGROUND / TAB BAR / THEME & BRAND
+     pickers) fold away so only the DESIGN CHECK row + its findings remain.
+     Keeps the shield distinct from the droplet's full Page-style panel. */
+  html[data-layout="canvas"] .pane.left.cf-show-check .pane-section:not(.cf-sec-design) { display: none; }
+  html[data-layout="canvas"] .pane.left.cf-show-check .cf-sec-design > h3,
+  html[data-layout="canvas"] .pane.left.cf-show-check .design-pickers > .theme-picker:not(.design-check-picker) { display: none; }
   html[data-layout="canvas"] .pane.right { display: none; }
 
   /* ── the rail ── */
@@ -5774,12 +5781,14 @@ function initCanvasLayout() {
   if (railStyle) railStyle.addEventListener('click', e => { e.stopPropagation(); cfToggleDrawer('design'); });
   if (railCheck) railCheck.addEventListener('click', e => {
     e.stopPropagation();
-    cfOpenDrawer('design');
-    // Expand the Design-check menu inside the drawer so a click on the
-    // shield lands you straight on the findings.
-    const dc = document.getElementById('design-check-picker');
-    const menu = document.getElementById('design-check-menu');
-    if (dc && menu && !menu.classList.contains('open')) dc.click();
+    const wasOpen = leftPane.classList.contains('cf-open') && leftPane.classList.contains('cf-show-check');
+    cfToggleDrawer('check');
+    // On open, expand the findings so the shield lands you straight on them.
+    if (!wasOpen) {
+      const dc = document.getElementById('design-check-picker');
+      const menu = document.getElementById('design-check-menu');
+      if (dc && menu && !menu.classList.contains('open')) dc.click();
+    }
   });
   if (railHelp)  railHelp.addEventListener('click', e => { e.stopPropagation(); cfShowHelp(); });
 
@@ -5860,26 +5869,35 @@ function cfOpenDrawer(which) {
   if (!leftPane) return;
   leftPane.classList.add('cf-open');
   leftPane.classList.toggle('cf-show-blocks', which === 'blocks');
+  // 'check' reuses the Design section (CSS folds the other knobs away).
   leftPane.classList.toggle('cf-show-design', which === 'design');
+  leftPane.classList.toggle('cf-show-check', which === 'check');
   const head = leftPane.querySelector('.cf-drawer-head .t');
-  if (head) head.textContent = which === 'blocks' ? T('Add a block', '添加模块') : T('Page style', '页面样式');
+  if (head) head.textContent =
+      which === 'blocks' ? T('Add a block', '添加模块')
+    : which === 'check'  ? T('Design check', '设计检查')
+    :                      T('Page style', '页面样式');
   document.getElementById('cf-rail-add')  ?.classList.toggle('on', which === 'blocks');
   document.getElementById('cf-rail-style')?.classList.toggle('on', which === 'design');
+  document.getElementById('cf-rail-check')?.classList.toggle('on', which === 'check');
 }
 function cfToggleDrawer(which) {
   const leftPane = document.querySelector('.pane.left');
   if (!leftPane) return;
-  const showing = leftPane.classList.contains('cf-open') &&
-    leftPane.classList.contains(which === 'blocks' ? 'cf-show-blocks' : 'cf-show-design');
+  const cls = which === 'blocks' ? 'cf-show-blocks'
+            : which === 'check'  ? 'cf-show-check'
+            :                      'cf-show-design';
+  const showing = leftPane.classList.contains('cf-open') && leftPane.classList.contains(cls);
   if (showing) cfCloseDrawer(); else cfOpenDrawer(which);
 }
 function cfCloseDrawer() {
   const leftPane = document.querySelector('.pane.left');
   if (!leftPane) return;
-  leftPane.classList.remove('cf-open', 'cf-show-blocks', 'cf-show-design');
+  leftPane.classList.remove('cf-open', 'cf-show-blocks', 'cf-show-design', 'cf-show-check');
   document.querySelectorAll('.drop-zone.cf-seam-open').forEach(z => z.classList.remove('cf-seam-open'));
   document.getElementById('cf-rail-add')  ?.classList.remove('on');
   document.getElementById('cf-rail-style')?.classList.remove('on');
+  document.getElementById('cf-rail-check')?.classList.remove('on');
   cfPendingInsert = null;
 }
 function cfShowHelp() {
