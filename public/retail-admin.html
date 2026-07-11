@@ -4280,45 +4280,45 @@
 
       /* ── compose bar (collapsed) ── */
       .bx-compose { margin-bottom:12px; }
-      .bx-composebar { width:100%; display:flex; align-items:center; gap:12px; padding:15px 18px; cursor:text; color:var(--text-2); font:inherit; font-size:14px; text-align:left; background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--bx-radius); box-shadow:0 4px 16px rgba(17,26,43,.04); }
+      .bx-composebar { width:100%; display:flex; align-items:center; gap:12px; padding:17px 20px; cursor:text; color:var(--text-2); font:inherit; font-size:14px; text-align:left; background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--bx-radius); box-shadow:0 4px 16px rgba(17,26,43,.04); }
       .bx-composebar:hover { border-color:var(--text-3); }
-      .bx-composebar .ico { display:inline-flex; color:var(--text-3); flex-shrink:0; }
-      .bx-composebar .ico svg { width:17px; height:17px; }
-      .bx-composebar .grow { flex:1; }
+      .bx-composebar .bx-ico { display:inline-flex; color:var(--text-3); flex-shrink:0; }
+      .bx-composebar .bx-ico svg { width:17px; height:17px; }
+      .bx-composebar .bx-grow { flex:1; }
       .bx-composebar .aud { font-size:12.5px; color:var(--text-2); background:var(--bg-elev-1); border-radius:999px; padding:4px 12px; white-space:nowrap; }
       #tab-broadcasts.bx-open .bx-composebar { display:none; }
 
       /* ── compose form (expanded) ── */
-      .bx-form { display:none; padding:22px 24px; background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--bx-radius); box-shadow:0 4px 16px rgba(17,26,43,.04); }
+      .bx-form { display:none; padding:26px 28px; background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--bx-radius); box-shadow:0 4px 16px rgba(17,26,43,.04); }
       #tab-broadcasts.bx-open .bx-form { display:block; animation:bxSettle .45s var(--ease-out,cubic-bezier(.16,1,.3,1)) both; }
       @keyframes bxSettle { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-      .bx-form-head { display:flex; align-items:center; margin:0 0 16px; }
+      .bx-form-head { display:flex; align-items:center; margin:0 0 20px; }
       .bx-form-head .h { font-size:16px; font-weight:500; letter-spacing:-.01em; }
       .bx-x { margin-left:auto; border:0; background:none; color:var(--text-3); cursor:pointer; padding:6px; border-radius:6px; display:inline-flex; }
       .bx-x:hover { background:var(--bg-elev-1); color:var(--text-1); }
       .bx-x svg { width:17px; height:17px; }
 
-      .bx-label { display:block; font-size:13px; font-weight:500; color:var(--text-1); margin:0 0 6px; }
-      .bx-label .opt { font-weight:400; color:var(--text-2); }
-      .bx-in, .bx-area, .bx-sel { width:100%; box-sizing:border-box; font:inherit; font-size:14px; line-height:1.5; color:var(--text-1); background:var(--bg-input); border:1px solid var(--line); border-radius:8px; padding:9px 12px; }
-      .bx-sel { padding-right:32px; }
-      .bx-in:focus, .bx-area:focus, .bx-sel:focus { outline:none; border-color:var(--tacet-dusk); }
+      .bx-label { display:block; font-size:13px; font-weight:500; color:var(--text-1); margin:0 0 8px; }
+      .bx-label .bx-opt { font-weight:400; color:var(--text-2); }
+      #tab-broadcasts .bx-in, #tab-broadcasts .bx-area, #tab-broadcasts .bx-sel { width:100%; box-sizing:border-box; font:inherit; font-size:14px; line-height:1.5; color:var(--text-1); background-color:var(--bg-input); border:1px solid var(--line); border-radius:8px; padding:11px 14px; }
+      #tab-broadcasts .bx-sel { padding-right:32px; background-color:var(--bg-input); }
+      #tab-broadcasts .bx-in:focus, #tab-broadcasts .bx-area:focus, #tab-broadcasts .bx-sel:focus { outline:none; border-color:var(--tacet-dusk); }
       .bx-area { min-height:64px; resize:vertical; }
-      .bx-two { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      .bx-two { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
       @media (max-width:560px){ .bx-two { grid-template-columns:1fr; } }
-      .bx-gap { height:14px; }
+      .bx-gap { height:20px; }
 
       /* staged decision rows (Who / When / Opens) */
       .bx-step { border-top:1px solid var(--line); }
-      .bx-step-head { display:flex; align-items:center; gap:12px; padding:13px 0; cursor:pointer; }
-      .bx-step-head .ico { color:var(--text-3); display:inline-flex; flex-shrink:0; }
-      .bx-step-head .ico svg { width:16px; height:16px; }
-      .bx-step-head .k { font-size:13px; color:var(--text-2); width:64px; flex-shrink:0; }
-      .bx-step-head .v { font-size:13.5px; font-weight:500; color:var(--text-1); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .bx-step-head { display:flex; align-items:center; gap:12px; padding:15px 0; cursor:pointer; }
+      .bx-step-head .bx-ico { color:var(--text-3); display:inline-flex; flex-shrink:0; }
+      .bx-step-head .bx-ico svg { width:16px; height:16px; }
+      .bx-step-head .bx-k { font-size:13px; color:var(--text-2); width:64px; flex-shrink:0; }
+      .bx-step-head .bx-v { font-size:13.5px; font-weight:500; color:var(--text-1); flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
       .bx-step-head .caret { color:var(--text-3); display:inline-flex; transition:transform .2s var(--ease-out,cubic-bezier(.16,1,.3,1)); }
       .bx-step-head .caret svg { width:15px; height:15px; }
       .bx-step.open .bx-step-head .caret { transform:rotate(180deg); }
-      .bx-step-body { display:none; padding:2px 0 16px 28px; }
+      .bx-step-body { display:none; padding:4px 0 20px 30px; }
       .bx-step.open .bx-step-body { display:block; animation:bxSettle .35s var(--ease-out,cubic-bezier(.16,1,.3,1)) both; }
 
       /* chips (tier / region) */
@@ -4329,14 +4329,14 @@
       .bx-chip input { position:absolute; opacity:0; width:0; height:0; }
       .bx-chip:has(input:checked) { background:var(--tacet-ink); color:var(--tacet-paper); border-color:var(--tacet-ink); }
       [data-theme="dark"] .bx-chip:has(input:checked) { background:var(--tacet-paper); color:var(--tacet-ink); border-color:var(--tacet-paper); }
-      .bx-chip .n { font-size:11.5px; opacity:.7; font-variant-numeric:tabular-nums; }
+      .bx-chip .bx-n { font-size:11.5px; opacity:.7; font-variant-numeric:tabular-nums; }
 
       /* audience footer + send bar */
-      .bx-audbar { display:flex; align-items:center; gap:9px; background:var(--bg-elev-1); border:1px solid var(--line); border-radius:10px; padding:11px 14px; font-size:13px; color:var(--text-2); margin-top:18px; }
+      .bx-audbar { display:flex; align-items:center; gap:9px; background:var(--bg-elev-1); border:1px solid var(--line); border-radius:10px; padding:13px 16px; font-size:13px; color:var(--text-2); margin-top:22px; }
       .bx-audbar svg { width:15px; height:15px; flex-shrink:0; color:var(--text-3); }
       .bx-audbar b { color:var(--text-1); font-weight:500; font-variant-numeric:tabular-nums; }
-      .bx-audbar .dim { opacity:.4; margin:0 -3px; }
-      .bx-sendbar { display:flex; align-items:center; gap:10px; margin-top:16px; }
+      .bx-audbar .bx-dim { opacity:.4; margin:0 -3px; }
+      .bx-sendbar { display:flex; align-items:center; gap:10px; margin-top:20px; }
       .bx-sendbar .status { font-size:12.5px; color:var(--text-2); margin-left:2px; }
       .bx-sendbar .status .err { color:var(--tacet-brick); }
       .bx-sendbar .status .ok  { color:var(--tacet-sage-ink); }
@@ -4376,9 +4376,9 @@
       .bx-item .ttl { font-size:14.5px; font-weight:500; letter-spacing:-.005em; color:var(--text-1); }
       .bx-item .bdy { font-size:13px; line-height:1.5; color:var(--text-2); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
       .bx-meta { display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--text-2); margin-top:7px; flex-wrap:wrap; font-variant-numeric:tabular-nums; }
-      .bx-meta .dot { opacity:.4; }
-      .bx-meta .link { display:inline-flex; align-items:center; gap:4px; background:var(--bg-elev-1); border-radius:999px; padding:2px 9px; font-size:12px; color:var(--text-2); }
-      .bx-meta .link svg { width:11px; height:11px; }
+      .bx-meta .bx-dot { opacity:.4; }
+      .bx-meta .bx-link { display:inline-flex; align-items:center; gap:4px; background:var(--bg-elev-1); border-radius:999px; padding:2px 9px; font-size:12px; color:var(--text-2); }
+      .bx-meta .bx-link svg { width:11px; height:11px; }
       .bx-rowact { display:flex; align-items:center; gap:6px; opacity:0; transition:.15s var(--ease-out,cubic-bezier(.16,1,.3,1)); flex-shrink:0; padding-top:1px; }
       @media (hover:none){ .bx-rowact { opacity:1; } }
 
@@ -4406,8 +4406,8 @@
       <!-- ── compose ── -->
       <div class="bx-compose">
         <button type="button" class="bx-composebar" onclick="bxOpenCompose()">
-          <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
-          <span class="grow">Write a broadcast… · 撰写一条广播…</span>
+          <span class="bx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+          <span class="bx-grow">Write a broadcast… · 撰写一条广播…</span>
           <span class="aud" id="bx-audchip" data-no-i18n>Everyone active · now</span>
         </button>
 
@@ -4419,13 +4419,13 @@
             </button>
           </div>
 
-          <label class="bx-label">Title <span class="opt">— English and Chinese · 中英文标题</span></label>
+          <label class="bx-label">Title <span class="bx-opt">— English and Chinese · 中英文标题</span></label>
           <div class="bx-two">
             <input id="bc-title-en" class="bx-in" type="text" maxlength="80" placeholder="e.g. New seasonal box">
             <input id="bc-title-cn" class="bx-in" type="text" maxlength="80" placeholder="例如:新一季礼盒">
           </div>
           <div class="bx-gap"></div>
-          <label class="bx-label">Body <span class="opt">— optional, one short line · 选填,一句话</span></label>
+          <label class="bx-label">Body <span class="bx-opt">— optional, one short line · 选填,一句话</span></label>
           <div class="bx-two">
             <textarea id="bc-body-en" class="bx-area" maxlength="400" placeholder="What should they know?"></textarea>
             <textarea id="bc-body-cn" class="bx-area" maxlength="400" placeholder="一段简短的说明"></textarea>
@@ -4436,9 +4436,9 @@
           <!-- WHO -->
           <div class="bx-step" id="bx-step-who">
             <div class="bx-step-head" onclick="bxStep('who')">
-              <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
-              <span class="k">Who · 谁</span>
-              <span class="v" id="bx-who-sum" data-no-i18n>All active customers</span>
+              <span class="bx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg></span>
+              <span class="bx-k">Who · 谁</span>
+              <span class="bx-v" id="bx-who-sum" data-no-i18n>All active customers</span>
               <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
             </div>
             <div class="bx-step-body">
@@ -4451,7 +4451,7 @@
                 <option value="lapsed">No order in 60 days · 60天未下单</option>
               </select>
               <div class="bx-gap"></div>
-              <label class="bx-label">Membership tier <span class="opt">— none selected means everyone · 不选即全部</span></label>
+              <label class="bx-label">Membership tier <span class="bx-opt">— none selected means everyone · 不选即全部</span></label>
               <div class="bx-chips" id="bc-tiers">
                 <label class="bx-chip"><input type="checkbox" class="bc-tier" value="seed" onchange="bcAudienceChanged()"> Seed · 种子</label>
                 <label class="bx-chip"><input type="checkbox" class="bc-tier" value="sprout" onchange="bcAudienceChanged()"> Sprout · 萌芽</label>
@@ -4459,7 +4459,7 @@
                 <label class="bx-chip"><input type="checkbox" class="bc-tier" value="tree" onchange="bcAudienceChanged()"> Tree · 成树</label>
               </div>
               <div class="bx-gap"></div>
-              <label class="bx-label">Region <span class="opt">— by saved address, none means all · 按已保存地址,不选即全部</span></label>
+              <label class="bx-label">Region <span class="bx-opt">— by saved address, none means all · 按已保存地址,不选即全部</span></label>
               <div class="bx-chips scroll" id="bc-regions">
                 <span style="font-size:12.5px;color:var(--text-2);">Loading… · 加载中…</span>
               </div>
@@ -4469,9 +4469,9 @@
           <!-- WHEN -->
           <div class="bx-step" id="bx-step-when">
             <div class="bx-step-head" onclick="bxStep('when')">
-              <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
-              <span class="k">When · 时间</span>
-              <span class="v" id="bx-when-sum" data-no-i18n>Now</span>
+              <span class="bx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+              <span class="bx-k">When · 时间</span>
+              <span class="bx-v" id="bx-when-sum" data-no-i18n>Now</span>
               <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
             </div>
             <div class="bx-step-body">
@@ -4486,9 +4486,9 @@
           <!-- OPENS -->
           <div class="bx-step" id="bx-step-opens">
             <div class="bx-step-head" onclick="bxStep('opens')">
-              <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span>
-              <span class="k">Opens · 打开</span>
-              <span class="v" id="bx-opens-sum" data-no-i18n>Nothing — just the message</span>
+              <span class="bx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span>
+              <span class="bx-k">Opens · 打开</span>
+              <span class="bx-v" id="bx-opens-sum" data-no-i18n>Nothing — just the message</span>
               <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
             </div>
             <div class="bx-step-body">
@@ -4516,7 +4516,7 @@
             <span id="bc-aud-summary" hidden></span>
             <span>Reaches · 触达</span>
             <b id="bc-aud-count" data-no-i18n>—</b>
-            <span class="dim">·</span>
+            <span class="bx-dim">·</span>
             <span>blocked customers are skipped · 已封禁顾客将被跳过</span>
           </div>
 

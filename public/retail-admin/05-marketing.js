@@ -2185,7 +2185,7 @@ async function loadBroadcastRegions() {
       const label = r.city_en
         ? `${escapeHtml(r.city_en)} · ${escapeHtml(r.city)}`
         : escapeHtml(r.city);
-      return `<label class="bx-chip"><input type="checkbox" class="bc-city" value="${escapeHtml(r.city)}" onchange="bcAudienceChanged()"> ${label} <span class="n">${r.n}</span></label>`;
+      return `<label class="bx-chip"><input type="checkbox" class="bc-city" value="${escapeHtml(r.city)}" onchange="bcAudienceChanged()"> ${label} <span class="bx-n">${r.n}</span></label>`;
     }).join('');
   } catch (e) {
     wrap.innerHTML = '<span style="font-size:12.5px;color:var(--tacet-brick);">Failed to load regions. · 加载地区失败。</span>';
@@ -2312,9 +2312,9 @@ function bxFeedRow(b) {
       }
     } catch (_) {}
   }
-  const metaHtml = meta.map((m, i) => (i ? '<span class="dot">·</span>' : '') + '<span>' + m + '</span>').join('');
+  const metaHtml = meta.map((m, i) => (i ? '<span class="bx-dot">·</span>' : '') + '<span>' + m + '</span>').join('');
   const opensHtml = b.deeplink
-    ? '<span class="link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>' + cuT('Opens ', '打开 ') + escapeHtml(bxDeeplinkLabel(b.deeplink)) + '</span>'
+    ? '<span class="bx-link"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>' + cuT('Opens ', '打开 ') + escapeHtml(bxDeeplinkLabel(b.deeplink)) + '</span>'
     : '';
 
   // Actions by status: scheduled → Cancel; everything else → Send again
