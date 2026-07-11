@@ -559,6 +559,19 @@
      swatch pickers; override here so finding rows don't cramp. */
   .design-pickers .design-check-menu,
   .design-check-menu { max-width: 360px !important; max-height: 520px; overflow-y: auto; }
+  /* In CANVAS the findings drop down inside the Page-style column (JS anchors
+     them at the DESIGN CHECK row's left + width). Strip the popover chrome so
+     they read as a seamless section of the panel, not a card pasted on top:
+     no border / shadow / rounded corners, panel-matched background, butted
+     flush under the row. (Classic layout keeps the floating-card look.) */
+  html[data-layout="canvas"] .design-check-menu {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: var(--bg-pane);
+    padding: 2px 0 12px;
+    margin-top: 0;
+  }
   .design-check-picker .swatch {
     display: inline-flex; align-items: center; justify-content: center;
     font-size: 11px; font-weight: 700; color: var(--text-2);
