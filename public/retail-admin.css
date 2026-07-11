@@ -7975,7 +7975,7 @@
 
   /* the day line — the shared spark wrap lends the hover-scrub; we lend height
      + sage ink. The tip is a still ink dot (a breathing dot is Dusk). */
-  .bn-dayline { flex: 1; min-height: 30px; margin-top: 10px; display: flex; flex-direction: column; }
+  .bn-dayline { flex: 1; min-height: 30px; margin-top: 10px; display: flex; flex-direction: column; overflow: hidden; }
   .bn-dayline .db-spark-wrap.td-dayline { flex: 1; height: auto; min-height: 56px; margin-top: 0; color: var(--td-sage); }
   .bn-dayline .db-spark-line { stroke-width: 2; }
   .bn-dayline .db-spark-dot { background: var(--td-text); }
