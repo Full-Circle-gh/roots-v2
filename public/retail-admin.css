@@ -7899,7 +7899,7 @@
   /* ════════════════════════════════════════════════════════════════
      THE DASHBOARD AS THE OPERATOR'S OWN SPACE — a self-arranging bento,
      rebuilt from scratch off the dashboard-bento mockup (bn-*). Each card
-     declares the shapes it may take; a packing solver (dashCompute*/dashRender
+     declares the shapes it may take; a packing solver (dashCompute* / dashRender
      in 03-dashboard) picks one per VISIBLE card so every row fills the six
      columns whatever the operator hides or reorders, then positions the card
      absolutely at the solved rect. Content adapts to the shape via [data-tier]
@@ -7908,7 +7908,7 @@
      bypassed and the cards stack in one column. The .td-block wrapper +
      data-block stay as the solver/arrange contract; the visible surface is
      fresh bn-* markup, and the data ids inside are painted by the same loaders
-     as before. dashArrange*/dashRender in 03-dashboard. */
+     as before. dashArrange* / dashRender in 03-dashboard. */
   .td-blocks { position: relative; }
   .td-block {
     position: absolute; min-width: 0;
