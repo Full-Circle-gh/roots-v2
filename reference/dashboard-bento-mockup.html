@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Self-arranging dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   TACET DESIGN TOKENS — v1.0 (verbatim from tacet-tokens.css)
+   "Runs in silence." — When in doubt, remove something.
+   ============================================================ */
+:root {
+  --tacet-ink:      #111A2B;
+  --tacet-paper:    #FBF9F4;
+  --tacet-graphite: #58606E;
+  --tacet-dusk:     #6E67AF;
+  --tacet-sage:     #A3B49F;
+  --tacet-amber:    #C9954A;
+  --tacet-brick:    #B4533E;
+
+  --tacet-cream:      #F6F3EC;
+  --tacet-border:     #E4E0D5;
+  --tacet-dusk-tint:  #EEEDF6;
+  --tacet-sage-tint:  #EDF1EC;
+  --tacet-amber-tint: #F7EEDE;
+  --tacet-brick-tint: #F6E7E3;
+
+  --bg:             var(--tacet-paper);
+  --surface:        #FFFFFF;
+  --surface-raised: var(--tacet-cream);
+  --text:           var(--tacet-ink);
+  --text-secondary: var(--tacet-graphite);
+  --border:         var(--tacet-border);
+  --accent:         var(--tacet-dusk);
+  --accent-tint:    var(--tacet-dusk-tint);
+  --ok:             var(--tacet-sage);
+  --ok-tint:        var(--tacet-sage-tint);
+  --warn:           var(--tacet-amber);
+  --warn-tint:      var(--tacet-amber-tint);
+  --danger:         var(--tacet-brick);
+  --danger-tint:    var(--tacet-brick-tint);
+  --ok-ink:         #4A6249;
+  --warn-ink:       #8A6425;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-text:    "Inter", -apple-system, Arial, sans-serif;
+  --fs-title: 1.125rem;    /* 18px */
+  --fs-body: 0.9375rem;    /* 15px */
+  --fs-caption: 0.8125rem; /* 13px */
+  --lh-body: 1.6;
+  --lh-tight: 1.15;
+
+  --s-1: 4px;  --s-2: 8px;  --s-3: 16px;  --s-4: 24px;
+  --s-5: 32px; --s-6: 48px; --s-7: 64px;  --s-8: 96px;
+
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --border-w: 1px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --shadow-lift: 0 10px 30px rgba(17,26,43,0.16);
+
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-quick: 200ms;
+  --dur-settle: 350ms;
+  --dur-slow: 600ms;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text); font-size: var(--fs-body);
+  line-height: var(--lh-body); color: var(--text); background: var(--bg);
+}
+.t-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+svg.ico { stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ---- the dusk dot: automation activity (scarce — Recap only) ---- */
+.t-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  flex: none; align-self: center;
+  animation: t-breathe 2.4s var(--ease-settle) infinite;
+}
+@keyframes t-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.8); }
+}
+
+/* ============================================================
+   MOCKUP CHROME (not part of the product)
+   ============================================================ */
+.chrome {
+  background: var(--tacet-ink); color: rgba(251,249,244,0.72);
+  padding: var(--s-2) var(--s-4); font-size: var(--fs-caption);
+  display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 11px; color: rgba(251,249,244,0.5);
+}
+.chrome .sep { color: rgba(251,249,244,0.3); }
+.chrome .spacer { flex: 1; }
+.chrome .reset {
+  color: rgba(251,249,244,0.72); background: none; border: none;
+  font-size: var(--fs-caption); cursor: pointer; font-family: var(--font-text);
+}
+.chrome .reset:hover { color: #fff; }
+.switch { display: inline-flex; align-items: center; gap: var(--s-2); cursor: pointer; user-select: none; }
+.switch input { display: none; }
+.switch .track {
+  width: 32px; height: 18px; border-radius: var(--radius-pill);
+  background: rgba(251,249,244,0.22); position: relative; flex: none;
+  transition: background var(--dur-quick) var(--ease-settle);
+}
+.switch .track::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 14px; height: 14px; border-radius: 50%; background: #fff;
+  transition: left var(--dur-quick) var(--ease-settle);
+}
+.switch input:checked + .track { background: var(--warn); }
+.switch input:checked + .track::after { left: 16px; }
+
+/* ---- topbar: waveform mark left of the wordmark (§8) ---- */
+.topbar {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3) var(--s-5);
+  border-bottom: var(--border-w) solid var(--border); background: var(--bg);
+}
+.topbar .mark { height: 22px; width: auto; color: var(--text); }
+.topbar .wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 20px; letter-spacing: 0.2em; color: var(--text);
+}
+
+/* ---- page scaffold: 1120 max (§7), 8-base rhythm ---- */
+.page { max-width: 1120px; margin: 0 auto; padding: var(--s-5) var(--s-5) var(--s-8); }
+.page-head { display: flex; align-items: baseline; gap: var(--s-3); margin-bottom: 2px; }
+.page-head h1 { font: 500 22px/1.2 var(--font-text); letter-spacing: -0.01em; }
+.page-head .spacer { flex: 1; }
+.page-head .date { font-size: var(--fs-caption); color: var(--text-secondary); }
+.page-sub { font-size: var(--fs-caption); color: var(--text-secondary); margin-bottom: var(--s-4); }
+
+/* ---- hidden-card tray ---- */
+.tray { display: none; margin: 0 0 var(--s-4); align-items: center; flex-wrap: wrap; gap: var(--s-2); }
+.tray.has-items { display: flex; }
+.tray .lbl {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-secondary); margin-right: var(--s-1);
+}
+.chip {
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  border: var(--border-w) dashed var(--border); border-radius: var(--radius-pill);
+  padding: 5px 8px 5px 14px; font-size: var(--fs-caption); color: var(--text-secondary);
+  background: var(--surface-raised); cursor: pointer; font-family: var(--font-text);
+  transition: border-color var(--dur-quick) var(--ease-settle), color var(--dur-quick) var(--ease-settle);
+}
+.chip .add {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: var(--surface); border: var(--border-w) solid var(--border); color: var(--text-secondary);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.chip .add svg { width: 12px; height: 12px; }
+.chip:hover { border-color: var(--text-secondary); color: var(--text); }
+.chip:hover .add { border-color: var(--text-secondary); color: var(--text); }
+
+/* ============================================================
+   THE BOARD — cards are placed by the packing solver
+   ============================================================ */
+.board { position: relative; transition: height var(--dur-slow) var(--ease-settle); }
+.board.empty::after {
+  content: "Nothing here. Bring a card back from the tray above.";
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: var(--fs-body); color: var(--text-secondary);
+  border: var(--border-w) dashed var(--border); border-radius: var(--radius-card);
+}
+
+.card {
+  position: absolute;
+  background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-soft);
+  overflow: hidden; display: flex; flex-direction: column;
+  cursor: grab; touch-action: none;
+  transition:
+    left var(--dur-slow) var(--ease-settle), top var(--dur-slow) var(--ease-settle),
+    width var(--dur-slow) var(--ease-settle), height var(--dur-slow) var(--ease-settle),
+    box-shadow var(--dur-quick) var(--ease-settle);
+}
+.card.dragging {
+  transition: box-shadow var(--dur-quick) var(--ease-settle);
+  z-index: 40; box-shadow: var(--shadow-lift); cursor: grabbing;
+}
+/* drop-slot preview while dragging (the one place Dusk shows outside the Recap —
+   it is Tacet acting for you, which is exactly what Dusk means) */
+.ghost {
+  position: absolute; border: 1.5px dashed var(--accent);
+  border-radius: var(--radius-card); background: var(--accent-tint);
+  opacity: 0; pointer-events: none; z-index: 1;
+  transition: left var(--dur-settle) var(--ease-settle), top var(--dur-settle) var(--ease-settle),
+    width var(--dur-settle) var(--ease-settle), height var(--dur-settle) var(--ease-settle),
+    opacity var(--dur-quick) var(--ease-settle);
+}
+.ghost.on { opacity: 0.55; }
+
+.card .inner { padding: 18px 20px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.card .head { display: flex; align-items: center; gap: var(--s-2); margin-bottom: var(--s-2); flex: none; }
+.card .head svg.ico { width: 16px; height: 16px; color: var(--text-secondary); flex: none; }
+.card .head h3 { font: 500 var(--fs-body) var(--font-text); white-space: nowrap; }
+.card .head .badge {
+  margin-left: var(--s-2); font: 500 11.5px var(--font-text);
+  padding: 2px 9px; border-radius: var(--radius-pill);
+  background: var(--warn-tint); color: var(--warn-ink); white-space: nowrap;
+  display: none;
+}
+body.needsyou .card[data-id="inventory"] .head .badge { display: inline-flex; }
+.card .head .since { margin-left: auto; font-size: var(--fs-caption); color: var(--text-secondary); white-space: nowrap; }
+
+/* hide × — appears on hover */
+.card .hide {
+  position: absolute; top: 10px; right: 10px;
+  width: 24px; height: 24px; border-radius: 50%;
+  border: var(--border-w) solid var(--border); background: var(--surface); color: var(--text-secondary);
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; opacity: 0; transition: opacity 160ms var(--ease-settle);
+}
+.card .hide svg { width: 13px; height: 13px; }
+.card:hover .hide { opacity: 1; }
+.card .hide:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-tint); }
+
+.card .body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* the cream attention strip at a card's foot (§5) */
+.foot {
+  display: flex; align-items: center; gap: var(--s-2);
+  margin: 14px -20px -18px; padding: 11px 20px;
+  background: var(--surface-raised); font-size: var(--fs-caption); color: var(--text-secondary);
+  flex: none;
+}
+.foot.warm { background: var(--warn-tint); color: var(--warn-ink); }
+.foot .fdot { width: 6px; height: 6px; border-radius: 50%; background: var(--warn); flex: none; }
+.foot .fdot.clear { background: var(--ok); }
+.foot a { color: inherit; text-decoration: none; font-weight: 500; margin-left: auto; cursor: pointer; }
+.foot a:hover { text-decoration: underline; text-underline-offset: 2px; }
+.foot .sep { color: var(--border); }
+
+/* ---------- shape tiers ----------
+   a = strip narrow (h1,w≤3)   b = strip wide (h1,w≥4)
+   c = tall w2                 d = tall w3          e = large (h2,w≥4)
+   Each variant element lists the tiers it must NOT appear in. */
+.card[data-t="a"] .no-a, .card[data-t="b"] .no-b,
+.card[data-t="c"] .no-c, .card[data-t="d"] .no-d,
+.card[data-t="e"] .no-e { display: none !important; }
+
+/* ---------- shared content atoms ---------- */
+.val { font-family: var(--font-text); font-weight: 500; letter-spacing: -0.02em;
+  line-height: var(--lh-tight); font-variant-numeric: tabular-nums; }
+.card[data-t="a"] .val, .card[data-t="b"] .val { font-size: 26px; }
+.card[data-t="c"] .val { font-size: 34px; }
+.card[data-t="d"] .val, .card[data-t="e"] .val { font-size: 40px; }
+.dim { color: var(--text-secondary); }
+.cap { font-size: var(--fs-caption); color: var(--text-secondary); }
+/* calm rule (§color): a fall is never red — just a quiet mark */
+.cmp { font-size: var(--fs-caption); color: var(--text-secondary); white-space: nowrap; }
+.cmp .down { font-weight: 500; color: var(--text); }
+
+.strip { display: flex; align-items: center; gap: var(--s-3); flex: 1; min-height: 0; overflow: hidden; white-space: nowrap; }
+.strip .mid { color: var(--border); }
+.dot { width: 6px; height: 6px; border-radius: 50%; flex: none; align-self: center; }
+.dot.amber { background: var(--warn); }
+.dot.sage { background: var(--ok); }
+.dot.graphite { background: var(--text-secondary); }
+
+.rows { display: flex; flex-direction: column; }
+.rowline { display: flex; align-items: center; gap: var(--s-2); padding: 6px 0; font-size: var(--fs-body);
+  border-bottom: var(--border-w) solid rgba(228,224,213,0.55); }
+.rowline:last-child { border-bottom: none; }
+.rowline .amt { margin-left: auto; color: var(--text-secondary); font-size: var(--fs-caption); }
+.rowline .sku { font-size: var(--fs-caption); color: var(--text-secondary); }
+.opill { margin-left: auto; font: 500 11.5px var(--font-text); padding: 2px 9px; border-radius: var(--radius-pill);
+  background: var(--surface-raised); color: var(--text-secondary); }
+.opill.amber { background: var(--warn-tint); color: var(--warn-ink); }
+.opill.sage { background: var(--ok-tint); color: var(--ok-ink); }
+
+/* vitals: numbers split by hairline dividers (§ vitals) */
+.vitals { display: flex; align-items: stretch; gap: 0; }
+.vitals .v { flex: 1; min-width: 0; }
+.vitals .v + .v { border-left: var(--border-w) solid var(--border); padding-left: var(--s-3); margin-left: var(--s-3); }
+.vitals .v .vl { font-size: var(--fs-caption); color: var(--text-secondary); white-space: nowrap; }
+
+/* thin channel bars (sage = healthy flow, not Dusk) */
+.chan { padding: 5px 0; }
+.chan .cl { display: flex; align-items: baseline; font-size: var(--fs-body); }
+.chan .cl .co { margin-left: 7px; font-size: var(--fs-caption); color: var(--text-secondary); }
+.chan .cl .cv { margin-left: auto; color: var(--text-secondary); }
+.bar { height: 3px; border-radius: 3px; background: var(--surface-raised); margin-top: 5px; overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 3px; background: var(--ok); }
+
+/* revenue: sparkline + settling day-line, sage, no gradient (§3) */
+.spark { width: 82px; height: 26px; margin-left: auto; align-self: center; flex: none; }
+.spark svg { width: 100%; height: 100%; display: block; }
+.chart { flex: 1; min-height: 30px; margin-top: var(--s-2); }
+.chart svg { width: 100%; height: 100%; display: block; }
+
+/* The Recap warm sign-off (one dry-warm line, §voice) */
+.warm { margin-top: auto; padding-top: 10px; font-size: var(--fs-caption); color: var(--text-secondary); flex: none; }
+
+/* settle-in on load */
+.card { animation: settle var(--dur-slow) var(--ease-settle) both; }
+@keyframes settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ---- explainer ---- */
+.explain { margin-top: var(--s-6); border-top: var(--border-w) solid var(--border); padding-top: var(--s-4); }
+.explain .kicker { font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-secondary); margin-bottom: var(--s-2); }
+.explain p { font-size: var(--fs-caption); color: var(--text-secondary); max-width: 640px; margin-bottom: var(--s-1); }
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">tacet · mockup</span>
+  <span class="sep">·</span>
+  <span>Hide a card with ×, drag to reorder — the layout re-solves so any set of cards tiles clean.</span>
+  <span class="spacer"></span>
+  <label class="switch">
+    <input type="checkbox" id="alert-toggle">
+    <span class="track"></span>
+    <span>Something needs you</span>
+  </label>
+  <span class="sep">·</span>
+  <button class="reset" id="reset-btn">Reset</button>
+</div>
+
+<div class="topbar">
+  <svg class="mark" viewBox="0 0 52 24" fill="none" aria-hidden="true">
+    <path d="M1 12 h10 c3 0 3 -8 6 -8 s3 16 6 16 s3 -13 5 -13 s3 6 5 6 h12"
+      stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>
+  <span class="wordmark">tacet</span>
+</div>
+
+<div class="page">
+  <div class="page-head">
+    <h1>Happy weekend, Asher</h1>
+    <span class="spacer"></span>
+    <span class="date">Saturday 11 July</span>
+  </div>
+  <div class="page-sub">Here's your Saturday.</div>
+
+  <div class="tray" id="tray"><span class="lbl">In the tray</span></div>
+
+  <div class="board" id="board">
+    <div class="ghost" id="ghost"></div>
+
+    <!-- ══════════ The Recap — signature card, owns the page's Dusk ══════════ -->
+    <div class="card" data-id="recap">
+      <button class="hide" title="Hide"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+          <h3>The Recap</h3>
+          <span class="since no-a">last 30 min</span>
+        </div>
+        <div class="body">
+          <!-- narrow strip -->
+          <div class="strip no-b no-c no-d no-e">
+            <span class="t-dot"></span><span class="val">3</span><span class="dim cap">handled, quietly</span>
+          </div>
+          <!-- wide strip -->
+          <div class="strip no-a no-c no-d no-e">
+            <span class="t-dot"></span><span>1 order paid — <span class="t-num">¥180</span></span>
+            <span class="mid">·</span>
+            <span class="t-dot"></span><span>1 new customer</span>
+            <span class="mid">·</span>
+            <span class="t-dot"></span><span>6 gzgrocery pickups</span>
+          </div>
+          <!-- tall: the feed -->
+          <div class="rows no-a no-b">
+            <div class="rowline"><span class="t-dot"></span>1 order paid<span class="amt t-num">¥180</span></div>
+            <div class="rowline"><span class="t-dot"></span>1 new customer joined</div>
+            <div class="rowline"><span class="t-dot"></span>6 gzgrocery pickups recorded</div>
+          </div>
+          <div class="warm no-a no-b">Handled quietly. You're welcome.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ Revenue today ══════════ -->
+    <div class="card" data-id="revenue">
+      <button class="hide" title="Hide"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M4 17l5-5 4 3 7-8"/><path d="M3 21h18"/></svg>
+          <h3>Revenue today</h3>
+        </div>
+        <div class="body">
+          <div style="display:flex; align-items:baseline; gap:12px; flex:none;">
+            <span class="val t-num">¥879</span>
+            <span class="cmp"><span class="down">▾ 58%</span> <span class="no-a">vs a typical Saturday</span></span>
+            <span class="spark no-a no-c no-d no-e"><svg viewBox="0 0 300 80" preserveAspectRatio="none"><path d="M0 74 L90 74 C104 74 108 62 116 58 C124 54 128 70 136 72 C156 76 164 38 178 28 C186 22 190 44 196 54 C204 67 210 20 220 13 C227 8 233 42 240 60 C247 73 256 74 300 74" fill="none" stroke="#A3B49F" stroke-width="3"/></svg></span>
+          </div>
+          <div class="chart no-a no-b">
+            <svg viewBox="0 0 300 80" preserveAspectRatio="none">
+              <path d="M0 74 L90 74 C104 74 108 62 116 58 C124 54 128 70 136 72 C156 76 164 38 178 28 C186 22 190 44 196 54 C204 67 210 20 220 13 C227 8 233 42 240 60 C247 73 256 74 300 74 L300 80 L0 80 Z" fill="#A3B49F" fill-opacity="0.14"/>
+              <path d="M0 74 L90 74 C104 74 108 62 116 58 C124 54 128 70 136 72 C156 76 164 38 178 28 C186 22 190 44 196 54 C204 67 210 20 220 13 C227 8 233 42 240 60 C247 73 256 74 300 74" fill="none" stroke="#A3B49F" stroke-width="2"/>
+            </svg>
+          </div>
+          <div class="vitals no-a no-b no-c" style="flex:none; margin-top:12px;">
+            <div class="v"><div class="vl">Orders</div><div class="t-num" style="font-weight:500;">2</div></div>
+            <div class="v"><div class="vl">Avg order</div><div class="t-num" style="font-weight:500;">¥237.9</div></div>
+            <div class="v no-d"><div class="vl">Refunded</div><div class="t-num" style="font-weight:500;">0</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ Inventory ══════════ -->
+    <div class="card" data-id="inventory">
+      <button class="hide" title="Hide"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>
+          <h3>Inventory</h3>
+          <span class="badge">needs you</span>
+        </div>
+        <div class="body">
+          <!-- strips -->
+          <div class="strip no-c no-d no-e">
+            <span class="val t-num">6</span><span class="dim cap">out of stock</span>
+            <span class="mid">·</span>
+            <span class="val t-num">28</span><span class="dim cap">running low</span>
+          </div>
+          <!-- tall: split numbers, then lowest-first list -->
+          <div class="vitals no-a no-b" style="flex:none;">
+            <div class="v"><div class="vl">Out of stock</div><div class="val t-num">6</div></div>
+            <div class="v"><div class="vl">Running low</div><div class="val t-num">28</div></div>
+          </div>
+          <div class="rows no-a no-b no-c" style="margin-top:10px;">
+            <div class="rowline cap">Kombucha — Passion Fruit<span class="amt t-num">2 left</span></div>
+            <div class="rowline cap">Pesto 'Chicken' Wrap<span class="amt t-num">2 left</span></div>
+            <div class="rowline cap no-d">Shawarma Wrap<span class="amt t-num">2 left</span></div>
+          </div>
+          <div class="foot no-a no-b">
+            <span class="fdot"></span>6 out of stock<span class="sep">·</span><a>Open restock</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ Channels ══════════ -->
+    <div class="card" data-id="channels">
+      <button class="hide" title="Hide"><svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h12"/><path d="M4 17h8"/></svg></button>
+      <div class="inner">
+        <div class="head">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M4 12h12"/><path d="M4 17h8"/></svg>
+          <h3>Channels</h3>
+        </div>
+        <div class="body">
+          <div class="strip no-b no-c no-d no-e">
+            <span class="val t-num">3</span><span class="dim cap">channels · ¥879</span>
+          </div>
+          <div class="strip no-a no-c no-d no-e">
+            <span>gzgrocery <span class="dim t-num">¥403</span></span>
+            <span class="mid">·</span>
+            <span>Mini app <span class="dim t-num">¥296</span></span>
+            <span class="mid">·</span>
+            <span>Meituan <span class="dim t-num">¥180</span></span>
+          </div>
+          <div class="no-a no-b">
+            <div class="chan"><div class="cl">gzgrocery pickup<span class="co">12 orders</span><span class="cv t-num">¥403.2</span></div><div class="bar"><i style="width:46%;"></i></div></div>
+            <div class="chan"><div class="cl">Mini app<span class="co">1 order</span><span class="cv t-num">¥295.8</span></div><div class="bar"><i style="width:34%;"></i></div></div>
+            <div class="chan"><div class="cl">Meituan<span class="co">1 order</span><span class="cv t-num">¥180</span></div><div class="bar"><i style="width:20%;"></i></div></div>
+          </div>
+          <div class="warm no-a no-b">Today</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ Customers ══════════ -->
+    <div class="card" data-id="customers">
+      <button class="hide" title="Hide"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head">
+          <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg>
+          <h3>Customers</h3>
+        </div>
+        <div class="body">
+          <div class="strip no-b no-c no-d no-e">
+            <span class="val t-num">5</span><span class="dim cap">new today</span>
+          </div>
+          <div class="strip no-a no-c no-d no-e">
+            <span><span class="t-num" style="font-weight:500;">5</span> new</span>
+            <span class="mid">·</span>
+            <span><span class="t-num" style="font-weight:500;">12</span> visits</span>
+            <span class="mid">·</span>
+            <span><span class="t-num" style="font-weight:500;">28.6%</span> conversion</span>
+          </div>
+          <div class="vitals no-a no-b" style="flex:none;">
+            <div class="v"><div class="vl">New today</div><div class="val t-num">5</div></div>
+            <div class="v"><div class="vl">Visits</div><div class="val t-num">12</div></div>
+            <div class="v no-c"><div class="vl">Conversion</div><div class="val t-num">28.6%</div></div>
+          </div>
+          <div class="warm no-a no-b">5 of 9 visitors were first-timers</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ Orders ══════════ -->
+    <div class="card" data-id="orders">
+      <button class="hide" title="Hide"><svg class="ico" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+      <div class="inner">
+        <div class="head">
+          <svg class="ico" viewBox="0 0 24 24"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6"/><path d="M9 12h6"/></svg>
+          <h3>Orders</h3>
+        </div>
+        <div class="body">
+          <div class="strip no-c no-d no-e">
+            <span class="dot amber"></span><span><span class="t-num" style="font-weight:500;">1</span> to start</span>
+            <span class="mid">·</span>
+            <span class="dot sage"></span><span><span class="t-num" style="font-weight:500;">1</span> preparing</span>
+          </div>
+          <div class="rows no-a no-b">
+            <div class="rowline">#2041 <span class="sku">Mini app</span><span class="opill amber">to start</span></div>
+            <div class="rowline">#2040 <span class="sku">Meituan</span><span class="opill sage">preparing</span></div>
+          </div>
+          <div class="foot no-a no-b">
+            <span class="fdot"></span>1 waiting to start<span class="sep">·</span><a>Open orders</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="explain">
+    <div class="kicker">How it fits</div>
+    <p>Every card declares a few shapes it may take — a wide strip, a small tile, a tall panel. A packing solver picks one shape per card so each row comes out exactly full, whatever you hide or reorder.</p>
+    <p>The content is designed for each shape, not stretched: a small revenue tile is just the number; a large one earns the curve and the breakdown.</p>
+    <p>When something needs you, that card reaches for a bigger slot and the quiet ones settle around it. Flip the switch above to watch.</p>
+  </div>
+</div>
+
+<script>
+/* ================= card catalogue =================
+   shapes: [w,h] in grid units (6 wide, rows 1 or 2 tall),
+   ordered by preference. pr nudges a card toward more area. */
+const CARDS = [
+  { id: 'recap',     pr: 2, shapes: [[4,2],[3,2],[4,1],[6,1],[6,2],[3,1],[2,2],[2,1]] },
+  { id: 'revenue',   pr: 3, shapes: [[4,2],[3,2],[2,2],[4,1],[3,1],[2,1]] },
+  { id: 'inventory', pr: 2, shapes: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]] },
+  { id: 'channels',  pr: 1, shapes: [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]] },
+  { id: 'customers', pr: 1, shapes: [[3,1],[2,1],[4,1],[3,2],[2,2],[6,1]] },
+  { id: 'orders',    pr: 2, shapes: [[2,1],[3,1],[4,1],[2,2],[6,1]] },
+];
+/* when the day needs you, Inventory reaches for the big slots */
+const ALERT_SHAPES = [[4,2],[3,2],[6,2],[2,2],[3,1],[2,1]];
+
+const GAP = 24, ROW = 128, COLS = 6;   // GAP = --s-4, 6-column bento
+const DEFAULT_ORDER = CARDS.map(c => c.id);
+
+let order  = [...DEFAULT_ORDER];
+let hidden = new Set();
+let alertDay = false;
+
+const board = document.getElementById('board');
+const tray  = document.getElementById('tray');
+const ghost = document.getElementById('ghost');
+const els = {}; document.querySelectorAll('.card').forEach(el => els[el.dataset.id] = el);
+const byId = {}; CARDS.forEach(c => byId[c.id] = c);
+
+function shapesFor(card){ return (alertDay && card.id === 'inventory') ? ALERT_SHAPES : card.shapes; }
+function priFor(card){ return (alertDay && card.id === 'inventory') ? 9 : card.pr; }
+function prefScore(card, w, h){
+  const S = shapesFor(card);
+  const i = S.findIndex(s => s[0] === w && s[1] === h);
+  if (i < 0) return null;
+  // preference order is primary; priority only nudges area as a tiebreak
+  return (S.length - i) * 20 + priFor(card) * (w * h);
+}
+
+/* ================= the solver =================
+   Partition the ordered cards into horizontal bands that each fill 6
+   units. Band height 1 = cards side by side. Band height 2 = tall cards,
+   or two strip cards stacked into one 2-tall slot. Bands short of 6
+   units are allowed but heavily penalised, so the page always fills. */
+function genBands(cards, i, emit){
+  (function rec1(k, cells, sum, score){
+    if (k >= cards.length) return;
+    for (const [w, h] of shapesFor(cards[k])){
+      if (h !== 1) continue;
+      const s2 = sum + w; if (s2 > COLS) continue;
+      const sc = score + prefScore(cards[k], w, 1);
+      const cl = cells.concat([{ idx: k, w }]);
+      if (s2 >= 2) emit({ h: 1, cells: cl, sum: s2, score: sc - (COLS - s2) * 70, next: k + 1 });
+      rec1(k + 1, cl, s2, sc);
+    }
+  })(i, [], 0, 0);
+
+  (function rec2(k, slots, sum, score){
+    if (slots.length && sum >= 4) emit({ h: 2, slots, sum, score: score - (COLS - sum) * 70, next: k });
+    if (k >= cards.length || sum >= COLS) return;
+    const a = cards[k];
+    for (const [w, h] of shapesFor(a)){
+      if (h !== 2 || sum + w > COLS) continue;
+      rec2(k + 1, slots.concat([{ type: 'one', idx: k, w }]), sum + w, score + prefScore(a, w, 2));
+    }
+    if (k + 1 < cards.length){
+      const b = cards[k + 1];
+      const aw = new Set(shapesFor(a).filter(s => s[1] === 1).map(s => s[0]));
+      for (const [w, h] of shapesFor(b)){
+        if (h !== 1 || !aw.has(w) || sum + w > COLS) continue;
+        rec2(k + 2, slots.concat([{ type: 'pair', a: k, b: k + 1, w }]), sum + w,
+          score + prefScore(a, w, 1) + prefScore(b, w, 1) + 6);
+      }
+    }
+  })(i, [], 0, 0);
+}
+
+function solveLayout(cards){
+  const N = cards.length, memo = new Array(N + 1);
+  function best(i){
+    if (i === N) return { score: 0, bands: [] };
+    if (memo[i] !== undefined) return memo[i];
+    let bs = null; const options = [];
+    genBands(cards, i, b => options.push(b));
+    for (const b of options){
+      const r = best(b.next); if (!r) continue;
+      const sc = b.score + r.score;
+      if (!bs || sc > bs.score) bs = { score: sc, bands: [b].concat(r.bands) };
+    }
+    memo[i] = bs; return bs;
+  }
+  return best(0);
+}
+
+function computePlacements(){
+  const ids = order.filter(id => !hidden.has(id));
+  const cards = ids.map(id => byId[id]);
+  const placements = {};
+  if (!cards.length) return { placements, height: 180 };
+
+  let sol = solveLayout(cards);
+  if (!sol) sol = { bands: cards.map((c, k) => ({ h: 1, cells: [{ idx: k, w: 6 }], sum: 6, next: k + 1 })) };
+
+  const W = board.clientWidth || 1040;
+  const unit = (W - (COLS - 1) * GAP) / COLS;
+  let y = 0;
+  for (const band of sol.bands){
+    const slots = band.h === 1
+      ? band.cells.map(c => ({ units: c.w, parts: [{ idx: c.idx, row: 0, rows: 1 }] }))
+      : band.slots.map(s => s.type === 'one'
+          ? { units: s.w, parts: [{ idx: s.idx, row: 0, rows: 2 }] }
+          : { units: s.w, parts: [{ idx: s.a, row: 0, rows: 1 }, { idx: s.b, row: 1, rows: 1 }] });
+    const n = slots.length, avail = W - (n - 1) * GAP;
+    let x = 0;
+    for (const slot of slots){
+      const wpx = band.sum === COLS ? slot.units * unit + (slot.units - 1) * GAP : avail * slot.units / band.sum;
+      const effW = Math.max(2, Math.min(6, Math.round((wpx + GAP) / (unit + GAP))));
+      for (const part of slot.parts){
+        placements[cards[part.idx].id] = {
+          x, y: y + part.row * (ROW + GAP), w: wpx,
+          h: part.rows * ROW + (part.rows - 1) * GAP, uw: effW, uh: part.rows,
+        };
+      }
+      x += wpx + GAP;
+    }
+    y += (band.h === 2 ? 2 * ROW + GAP : ROW) + GAP;
+  }
+  return { placements, height: y - GAP };
+}
+
+function tierOf(uw, uh){
+  if (uh === 1) return uw <= 3 ? 'a' : 'b';
+  if (uw === 2) return 'c';
+  if (uw === 3) return 'd';
+  return 'e';
+}
+
+let lastPlacements = {};
+function render(skipId){
+  const { placements, height } = computePlacements();
+  lastPlacements = placements;
+  board.style.height = height + 'px';
+  board.classList.toggle('empty', !Object.keys(placements).length);
+  for (const card of CARDS){
+    const el = els[card.id], p = placements[card.id];
+    if (!p){ el.style.display = 'none'; continue; }
+    el.style.display = 'flex';
+    el.dataset.t = tierOf(p.uw, p.uh);
+    if (card.id === skipId) continue;
+    el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+    el.style.width = p.w + 'px'; el.style.height = p.h + 'px';
+  }
+  renderTray();
+}
+
+function renderTray(){
+  tray.querySelectorAll('.chip').forEach(c => c.remove());
+  let any = false;
+  for (const card of CARDS){
+    if (!hidden.has(card.id)) continue;
+    any = true;
+    const chip = document.createElement('button');
+    chip.className = 'chip';
+    chip.innerHTML = titleOf(card.id) +
+      ' <span class="add"><svg class="ico" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>';
+    chip.addEventListener('click', () => { hidden.delete(card.id); render(); });
+    tray.appendChild(chip);
+  }
+  tray.classList.toggle('has-items', any);
+}
+function titleOf(id){ return els[id].querySelector('.head h3').textContent; }
+
+/* ---- hide ---- */
+document.querySelectorAll('.card .hide').forEach(btn => {
+  btn.addEventListener('click', e => { e.stopPropagation(); hidden.add(btn.closest('.card').dataset.id); render(); });
+  btn.addEventListener('pointerdown', e => e.stopPropagation());
+});
+
+/* ---- drag to reorder ---- */
+let drag = null;
+document.querySelectorAll('.card').forEach(el => {
+  el.addEventListener('pointerdown', e => {
+    if (e.button !== 0) return;
+    const p = lastPlacements[el.dataset.id]; if (!p) return;
+    drag = { id: el.dataset.id, el, sx: e.clientX, sy: e.clientY, ox: p.x, oy: p.y, live: false };
+    el.setPointerCapture(e.pointerId);
+  });
+  el.addEventListener('pointermove', e => {
+    if (!drag || drag.el !== el) return;
+    const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+    if (!drag.live){ if (Math.hypot(dx, dy) < 7) return; drag.live = true; el.classList.add('dragging'); ghost.classList.add('on'); }
+    el.style.left = (drag.ox + dx) + 'px'; el.style.top = (drag.oy + dy) + 'px';
+    const br = board.getBoundingClientRect(), px = e.clientX - br.left, py = e.clientY - br.top;
+    const others = order.filter(id => !hidden.has(id) && id !== drag.id);
+    let ins = others.length;
+    for (let j = 0; j < others.length; j++){
+      const q = lastPlacements[others[j]]; if (!q) continue;
+      const cy = q.y + q.h / 2, cx = q.x + q.w / 2;
+      if (py < q.y - 4 || (py < q.y + q.h && px < cx && py < cy + q.h / 2)){ ins = j; break; }
+      if (py < cy && px < cx){ ins = j; break; }
+    }
+    const visOrder = order.filter(id => !hidden.has(id));
+    const target = [...others]; target.splice(ins, 0, drag.id);
+    if (target.join() !== visOrder.join()){
+      order = target.concat(order.filter(id => hidden.has(id)));
+      render(drag.id);
+    }
+    const gp = lastPlacements[drag.id];
+    if (gp){ ghost.style.left = gp.x + 'px'; ghost.style.top = gp.y + 'px'; ghost.style.width = gp.w + 'px'; ghost.style.height = gp.h + 'px'; }
+  });
+  const finish = () => { if (!drag || drag.el !== el) return; const live = drag.live; el.classList.remove('dragging'); ghost.classList.remove('on'); drag = null; if (live) render(); };
+  el.addEventListener('pointerup', finish);
+  el.addEventListener('pointercancel', finish);
+});
+
+/* ---- demo controls ---- */
+document.getElementById('alert-toggle').addEventListener('change', e => {
+  alertDay = e.target.checked; document.body.classList.toggle('needsyou', alertDay); render();
+});
+document.getElementById('reset-btn').addEventListener('click', () => {
+  order = [...DEFAULT_ORDER]; hidden = new Set(); alertDay = false;
+  document.getElementById('alert-toggle').checked = false; document.body.classList.remove('needsyou'); render();
+});
+window.addEventListener('resize', () => render());
+/* re-solve whenever the board's own width changes — e.g. a scrollbar
+   appearing or disappearing as cards reflow — so rows always fill exactly */
+if (window.ResizeObserver) {
+  let bw = board.clientWidth;
+  new ResizeObserver(() => { if (board.clientWidth !== bw) { bw = board.clientWidth; render(); } }).observe(board);
+}
+render();
+</script>
+</body>
+</html>
