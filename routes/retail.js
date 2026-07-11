@@ -13887,6 +13887,21 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
        LIMIT ? OFFSET ?`
   ).all(...params, pageSize, offset);
 
+  // Per-row "still earning" flag: a converted friend whose referrer is still
+  // inside the lifetime-share window (rate on, and within `months` of joining).
+  // Lets the ledger show the dusk "Still earning" badge vs plain "Rewarded".
+  {
+    const s0 = affiliateSettings();
+    const rate0 = Number(s0.lifetimeRatePercent) || 0;
+    const months0 = Number(s0.lifetimeMonths) || 0;
+    let cutoff = null;
+    if (rate0 > 0 && months0 > 0) { cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months0); }
+    for (const row of rows) {
+      row.lifetime_active = (rate0 > 0 && row.status === 'ordered'
+        && (months0 === 0 || (cutoff && new Date(String(row.joined_at).replace(' ', 'T')) >= cutoff))) ? 1 : 0;
+    }
+  }
+
   const agg = tdb().prepare(
     `SELECT
        COUNT(*) AS total,
@@ -13897,7 +13912,47 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
        FROM retail_referrals`
   ).get();
 
-  res.json({ success: true, data: rows, page, pageSize, total, summary: agg });
+  // Extra figures for the admin dashboard tiles. All tenant-scoped via tdb().
+  const s = affiliateSettings();
+  const rate   = Number(s.lifetimeRatePercent) || 0;
+  const months = Number(s.lifetimeMonths) || 0;
+
+  // "Still earning" = converted friends whose referrer still earns lifetime
+  // share from them: only when the rate is on, and (if a window is set) the
+  // friend joined within `months` of now. months = 0 means "forever".
+  let still_earning = 0;
+  if (rate > 0) {
+    still_earning = months > 0
+      ? tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals WHERE status = 'ordered' AND joined_at >= datetime('now', ?)`).get(`-${months} months`).n
+      : tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals WHERE status = 'ordered'`).get().n;
+  }
+
+  // Lifetime commissions actually credited (not clawed back). Older tenants may
+  // predate the table, so guard it.
+  let lifetime_paid = 0;
+  try {
+    lifetime_paid = tdb().prepare(
+      `SELECT COALESCE(SUM(commission_amount), 0) AS s FROM retail_lifetime_commissions WHERE reversed_at IS NULL`
+    ).get().s;
+  } catch { /* table not present on this tenant */ }
+
+  // Friends joined this calendar month vs last, for the "+N vs last" delta.
+  const jm = tdb().prepare(
+    `SELECT
+       COALESCE(SUM(CASE WHEN joined_at >= date('now','start of month') THEN 1 ELSE 0 END), 0) AS this_month,
+       COALESCE(SUM(CASE WHEN joined_at >= date('now','start of month','-1 month') AND joined_at < date('now','start of month') THEN 1 ELSE 0 END), 0) AS last_month
+       FROM retail_referrals`
+  ).get();
+
+  const summary = {
+    ...agg,
+    still_earning,
+    lifetime_paid:     Number(Number(lifetime_paid || 0).toFixed(2)),
+    joined_this_month: jm.this_month || 0,
+    joined_last_month: jm.last_month || 0,
+  };
+
+  res.json({ success: true, data: rows, page, pageSize, total, summary });
 });
 
 // Manual edit: change status (mark void / restore), or override the reward

@@ -156,13 +156,22 @@ async function afLoadReferrals() {
     const s = r.summary || {};
 
     const pct = Number(s.total) > 0 ? Math.round((Number(s.converted) / Number(s.total)) * 100) : 0;
+    const jThis = Number(s.joined_this_month || 0), jLast = Number(s.joined_last_month || 0);
+    const delta = jThis - jLast;
+    const vsLast = delta > 0 ? afT('+' + delta + ' vs last month', '较上月 +' + delta)
+                 : delta < 0 ? afT(delta + ' vs last month', '较上月 ' + delta)
+                 : afT('level with last month', '与上月持平');
+    const totalPaid = (Number(s.paid_out) || 0) + (Number(s.lifetime_paid) || 0);
+    const paidSub = Number(s.lifetime_paid) > 0
+      ? afT('incl. ¥' + fmt(s.lifetime_paid) + ' lifetime', '含 ¥' + fmt(s.lifetime_paid) + ' 长期分成')
+      : afT('to referrer wallets', '入推荐人钱包');
     const stat = (k, v, d) =>
       `<div class="af2-stat"><div class="af2-sk">${k}</div><div class="af2-sv">${v}</div>${d ? `<div class="af2-sd">${d}</div>` : ''}</div>`;
     $('#af-stats').innerHTML =
-      stat(afT('Friends joined', '好友加入'), Number(s.total || 0), '') +
+      stat(afT('Friends joined', '好友加入'), Number(s.total || 0), vsLast) +
       stat(afT('First orders', '首单转化'),   Number(s.converted || 0), afT(pct + '% converted', pct + '% 转化')) +
-      stat(afT('Rewards paid', '已发奖励'),   '¥' + fmt(s.paid_out || 0), afT('to referrer wallets', '入推荐人钱包')) +
-      stat(afT('Waiting', '待首单'),          Number(s.joined || 0), afT('no first order yet', '尚未首单'));
+      stat(afT('Rewards paid', '已发奖励'),   '¥' + fmt(totalPaid), paidSub) +
+      stat(afT('Still earning', '持续分成'),  Number(s.still_earning || 0), afT('within lifetime window', '在分成周期内'));
 
     if (!rows.length) {
       const filtering = !!status || !!q;
@@ -210,7 +219,7 @@ async function afLoadReferrals() {
           </div>
         </td>
         <td class="af2-hide-sm"><span class="af2-code">${escapeHtml(r.code_used || '')}</span></td>
-        <td>${afStatusBadge(r.status)}</td>
+        <td>${afStatusBadge(r)}</td>
         <td class="af2-r"><span class="${amtCls}">¥${fmt(r.reward_amount || 0)}</span></td>
         <td class="af2-hide-sm"><span class="af2-when">${escapeHtml(afRelTime(r.joined_at))}</span></td>
         <td class="af2-actcell"><span class="af2-acts">${acts}</span></td>
@@ -223,8 +232,15 @@ async function afLoadReferrals() {
   }
 }
 
-function afStatusBadge(status) {
-  if (status === 'ordered') return `<span class="af2-badge done"><span class="bdot"></span>${afT('Rewarded', '已奖励')}</span>`;
+function afStatusBadge(r) {
+  const status = (r && typeof r === 'object') ? r.status : r;
+  if (status === 'ordered') {
+    // "Still earning" uses inline Dusk styling (reusing the shipped .af2-badge
+    // base + af2Breathe keyframe) so this doesn't need a retail-admin.html edit.
+    return (r && r.lifetime_active)
+      ? `<span class="af2-badge" style="background:var(--tacet-dusk-tint);color:var(--tacet-dusk);"><span class="bdot" style="animation:af2Breathe 2.4s var(--ease-out) infinite;"></span>${afT('Still earning', '持续分成')}</span>`
+      : `<span class="af2-badge done"><span class="bdot"></span>${afT('Rewarded', '已奖励')}</span>`;
+  }
   if (status === 'void')    return `<span class="af2-badge void">${afT('Voided', '已作废')}</span>`;
   return `<span class="af2-badge wait"><span class="bdot"></span>${afT('Waiting for first order', '待首单')}</span>`;
 }
