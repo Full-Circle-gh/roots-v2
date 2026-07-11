@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Affiliate redesign mockups</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET AFFILIATE REDESIGN — static mockup, no live data.
+   Chrome bar toggles: Option A (ledger first, deal aside) ·
+   Option B (the deal is a sentence) · Option C (two rooms).
+   Tokens per tacet-tokens.css v1.0 — when in doubt, remove something.
+
+   The Dusk budget (§1): ONE Dusk element per option — the breathing
+   dot beside "Running", because the referral program is the system
+   working by itself. Nothing else may be purple.
+   Colour is status, never decoration (§3): sage = reward paid,
+   amber = waiting on a first order, brick = voided. Fraunces never
+   enters product UI (§2) — Inter only.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --dusk-tint:   #EEEDF6;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", -apple-system, "Segoe UI", Arial, sans-serif;
+  --mono: "SF Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink);
+  background: var(--paper);
+}
+
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* ---- option switch machinery (CSS only) ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+
+#opt-a:checked ~ .frame .page-b, #opt-a:checked ~ .frame .page-c,
+#opt-a:checked ~ .frame .note-b, #opt-a:checked ~ .frame .note-c { display: none; }
+#opt-b:checked ~ .frame .page-a, #opt-b:checked ~ .frame .page-c,
+#opt-b:checked ~ .frame .note-a, #opt-b:checked ~ .frame .note-c { display: none; }
+#opt-c:checked ~ .frame .page-a, #opt-c:checked ~ .frame .page-b,
+#opt-c:checked ~ .frame .note-a, #opt-c:checked ~ .frame .note-b { display: none; }
+
+#opt-a:checked ~ .chrome label[for="opt-a"],
+#opt-b:checked ~ .chrome label[for="opt-b"],
+#opt-c:checked ~ .chrome label[for="opt-c"] {
+  color: var(--paper); border-color: rgba(251,249,244,0.65);
+}
+
+/* Option C's two rooms */
+#c-set:checked ~ .frame .c-room-act { display: none; }
+#c-act:checked ~ .frame .c-room-set { display: none; }
+#c-act:checked ~ .frame .c-seg label[for="c-act"],
+#c-set:checked ~ .frame .c-seg label[for="c-set"] {
+  background: #FFFFFF; color: var(--ink); box-shadow: var(--shadow-soft);
+}
+
+/* ---- chrome bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink); color: rgba(251,249,244,0.72);
+  padding: 10px 20px; font-size: 13px;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 30;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 11px; color: rgba(251,249,244,0.5);
+}
+.chrome label {
+  cursor: pointer; border: 1px solid rgba(251,249,244,0.22);
+  border-radius: 999px; padding: 3px 14px; color: rgba(251,249,244,0.6);
+  transition: color 0.2s var(--ease-settle), border-color 0.2s var(--ease-settle);
+  white-space: nowrap;
+}
+.chrome label:hover { color: var(--paper); }
+
+/* ---- page scaffold ---- */
+.page { max-width: 1080px; margin: 0 auto; padding: 36px 24px 72px; }
+
+.head { margin-bottom: 26px; }
+.head h1 { font-size: 23px; font-weight: 500; line-height: 1.25; letter-spacing: -0.01em; }
+.head .sub { font-size: 13.5px; color: var(--graphite); margin-top: 6px; max-width: 62ch; }
+
+/* ---- shared: cards ---- */
+.card {
+  background: #FFFFFF; border: 1px solid var(--border);
+  border-radius: var(--r-card); overflow: hidden;
+}
+
+/* ---- shared: the running switch + dusk dot ---- */
+.run-row { display: flex; align-items: center; gap: 10px; }
+.run-lbl { font-size: 13.5px; font-weight: 500; }
+.run-state { font-size: 12px; color: var(--graphite); display: inline-flex; align-items: center; gap: 7px; }
+.dusk-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--dusk);
+  display: inline-block; animation: breathe 2.4s var(--ease-settle) infinite;
+}
+@keyframes breathe { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.82); } }
+.sw {
+  width: 36px; height: 21px; border-radius: 999px; background: var(--ink);
+  position: relative; flex: none; cursor: pointer; margin-left: auto;
+}
+.sw::after {
+  content: ""; position: absolute; top: 2.5px; left: 17.5px;
+  width: 16px; height: 16px; border-radius: 50%; background: var(--paper);
+}
+
+/* ---- shared: status badges ---- */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 500; border-radius: 999px;
+  padding: 2.5px 11px; white-space: nowrap;
+}
+.badge.paid { background: var(--sage-tint); color: var(--sage-ink); }
+.badge.open { background: var(--amber-tint); color: var(--amber-ink); }
+.badge.void { background: transparent; border: 1px solid var(--border); color: var(--graphite); }
+
+/* ---- shared: ledger rows ---- */
+.lrow {
+  display: grid; grid-template-columns: 38px minmax(0,1fr) auto;
+  gap: 13px; align-items: center; padding: 13px 16px;
+}
+.lrow + .lrow { border-top: 1px solid #EFECE3; }
+.lrow.dim { opacity: 0.62; }
+.lrow .disc {
+  width: 38px; height: 38px; border-radius: 50%; background: var(--cream);
+  border: 1px solid var(--border); display: grid; place-items: center;
+  font-size: 12.5px; font-weight: 500; color: var(--graphite);
+}
+.lrow .who { min-width: 0; }
+.lrow .who .n { font-size: 14px; font-weight: 500; line-height: 1.35; }
+.lrow .who .n .arr { color: var(--graphite); font-weight: 400; padding: 0 3px; }
+.lrow .who .s { font-size: 12px; color: var(--graphite); margin-top: 2px; }
+.lrow .who .s code { font-family: var(--mono); font-size: 11px; background: var(--cream); border-radius: 5px; padding: 1px 6px; }
+.lrow .right { text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.lrow .amt { font-family: var(--mono); font-size: 13.5px; font-weight: 600; }
+.lrow .amt.pending { color: var(--graphite); font-weight: 400; }
+.lrow .acts { font-size: 12px; color: var(--graphite); }
+.lrow .acts a { color: var(--graphite); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--border); }
+.lrow .acts a:hover { color: var(--ink); }
+.lrow .acts a.danger { color: var(--brick); text-decoration-color: var(--brick-tint); }
+
+/* ---- shared: search field ---- */
+.search {
+  display: flex; align-items: center; gap: 9px;
+  background: #FFFFFF; border: 1px solid var(--border); border-radius: var(--r-control);
+  padding: 8px 12px; color: var(--graphite); font-size: 13.5px;
+}
+.search svg { flex: none; }
+
+/* ---- shared: quiet inputs ---- */
+.f-lbl { font-size: 12px; font-weight: 500; margin-bottom: 5px; display: block; }
+.f-lbl .cn { color: var(--graphite); font-weight: 400; }
+.f-in {
+  width: 100%; font: 400 14px var(--font-text); color: var(--ink);
+  background: #FFFFFF; border: 1px solid var(--border); border-radius: var(--r-control);
+  padding: 8px 11px; outline: none;
+}
+.f-in:focus { border-color: var(--dusk); }
+.f-in.mono { font-family: var(--mono); font-size: 13.5px; }
+.f-help { font-size: 11.5px; color: var(--graphite); margin-top: 4px; line-height: 1.5; }
+
+.btn-primary {
+  font: 500 14px var(--font-text); color: var(--paper); background: var(--ink);
+  border: 1px solid var(--ink); border-radius: var(--r-control);
+  padding: 9px 20px; cursor: pointer; white-space: nowrap;
+}
+.btn-primary:hover { background: #24304A; }
+.btn-quiet {
+  font: 400 13px var(--font-text); color: var(--graphite); background: transparent;
+  border: 1px solid var(--border); border-radius: var(--r-control);
+  padding: 6px 14px; cursor: pointer;
+}
+.btn-quiet:hover { color: var(--ink); border-color: var(--graphite); }
+
+/* ---- shared: WeChat share-card preview ---- */
+.wxcard { max-width: 260px; }
+.wxcard .bubble {
+  background: #FFFFFF; border: 1px solid var(--border); border-radius: 10px;
+  overflow: hidden; box-shadow: var(--shadow-soft);
+}
+.wxcard .bubble .t { font-size: 12.5px; font-weight: 500; padding: 9px 11px 7px; line-height: 1.4; }
+.wxcard .pic {
+  aspect-ratio: 5 / 4; background: linear-gradient(160deg, var(--cream), #EAE5D8);
+  display: grid; place-items: center; position: relative;
+}
+.wxcard .pic svg { width: 44px; height: 44px; color: #C9C2B0; }
+.wxcard .pic .code {
+  position: absolute; left: 10px; bottom: 10px;
+  font-family: var(--mono); font-size: 11px; background: rgba(17,26,43,0.82);
+  color: var(--paper); border-radius: 6px; padding: 3px 9px; letter-spacing: 0.05em;
+}
+.wxcard .bubble .src { font-size: 10.5px; color: var(--graphite); padding: 6px 11px 8px; border-top: 1px solid #F1EEE5; }
+.wxcard .cap { font-size: 11.5px; color: var(--graphite); margin-top: 8px; line-height: 1.5; }
+.wxcard .cap a { color: var(--graphite); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--border); }
+
+/* ============================================================
+   OPTION A — ledger first, deal aside
+   ============================================================ */
+.a-grid { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 24px; align-items: start; }
+.a-side { position: sticky; top: 60px; }
+
+.a-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.a-stat {
+  background: transparent; border: 1px solid var(--border); border-radius: 999px;
+  padding: 5px 15px; display: inline-flex; align-items: baseline; gap: 8px;
+  font-size: 12.5px; color: var(--graphite); cursor: pointer;
+  transition: border-color 0.2s var(--ease-settle);
+}
+.a-stat b { font-family: var(--mono); font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.a-stat:hover { border-color: var(--graphite); }
+.a-stat.on { background: var(--ink); color: rgba(251,249,244,0.75); border-color: var(--ink); }
+.a-stat.on b { color: var(--paper); }
+.a-paid { margin-left: auto; font-size: 12.5px; color: var(--graphite); align-self: center; }
+.a-paid b { font-family: var(--mono); color: var(--ink); font-weight: 600; }
+
+.a-search { margin-bottom: 14px; }
+
+.deal-card { background: #FFFFFF; border: 1px solid var(--border); border-radius: var(--r-card); padding: 20px; }
+.deal-card .run-row { padding-bottom: 14px; border-bottom: 1px solid #EFECE3; margin-bottom: 14px; }
+.deal-sent { font-size: 14.5px; line-height: 1.65; }
+.deal-sent b { font-weight: 600; font-family: var(--mono); font-size: 13.5px; background: var(--cream); border-radius: 5px; padding: 1px 6px; white-space: nowrap; }
+.deal-sent-cn { font-size: 12.5px; color: var(--graphite); margin-top: 8px; line-height: 1.7; }
+.deal-adjust {
+  margin-top: 14px; font-size: 12.5px; color: var(--graphite);
+}
+.deal-adjust summary { cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.deal-adjust summary::-webkit-details-marker { display: none; }
+.deal-adjust summary .chev { transition: transform 0.2s var(--ease-settle); font-size: 10px; }
+.deal-adjust[open] summary .chev { transform: rotate(90deg); }
+.deal-adjust summary:hover { color: var(--ink); }
+.deal-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+.deal-fields .wide { grid-column: 1 / -1; }
+.deal-card .wxcard { margin-top: 18px; padding-top: 16px; border-top: 1px solid #EFECE3; max-width: none; }
+.deal-card .wxcard .bubble { max-width: 230px; }
+.deal-foot { margin-top: 18px; display: flex; align-items: center; gap: 12px; }
+.deal-foot .note { font-size: 11.5px; color: var(--graphite); line-height: 1.45; }
+
+/* ============================================================
+   OPTION B — the deal is a sentence
+   ============================================================ */
+.b-hero { background: #FFFFFF; border: 1px solid var(--border); border-radius: var(--r-card); padding: 24px; margin-bottom: 22px; }
+.b-hero-top { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.b-kicker { font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; color: var(--graphite); }
+.b-hero-grid { display: grid; grid-template-columns: minmax(0,1fr) 240px; gap: 28px; align-items: start; }
+.b-sent { font-size: 17.5px; line-height: 1.75; max-width: 56ch; }
+.blank {
+  font-family: var(--mono); font-size: 15.5px; font-weight: 600;
+  background: var(--cream); border-bottom: 1.5px solid var(--ink);
+  border-radius: 6px 6px 0 0; padding: 1px 8px 0; cursor: text; white-space: nowrap;
+}
+.b-sent-cn { font-size: 13px; color: var(--graphite); margin-top: 12px; line-height: 1.8; max-width: 60ch; }
+.b-foot { display: flex; align-items: center; gap: 14px; margin-top: 20px; padding-top: 16px; border-top: 1px solid #EFECE3; }
+.b-foot .note { font-size: 11.5px; color: var(--graphite); }
+
+.b-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.b-seg { display: inline-flex; background: var(--cream); border: 1px solid var(--border); border-radius: 999px; padding: 3px; gap: 2px; }
+.b-seg span {
+  font-size: 12.5px; color: var(--graphite); border-radius: 999px;
+  padding: 4px 14px; cursor: pointer; white-space: nowrap;
+}
+.b-seg span b { font-family: var(--mono); font-weight: 600; margin-left: 5px; }
+.b-seg span.on { background: #FFFFFF; color: var(--ink); box-shadow: var(--shadow-soft); }
+.b-bar .search { flex: 1; min-width: 200px; }
+.b-bar .paid { font-size: 12.5px; color: var(--graphite); white-space: nowrap; }
+.b-bar .paid b { font-family: var(--mono); color: var(--ink); font-weight: 600; }
+
+/* ============================================================
+   OPTION C — two rooms
+   ============================================================ */
+.c-seg {
+  display: inline-flex; background: var(--cream); border: 1px solid var(--border);
+  border-radius: 999px; padding: 3px; gap: 2px; margin-bottom: 24px;
+}
+.c-seg label {
+  font-size: 13px; color: var(--graphite); border-radius: 999px;
+  padding: 5px 18px; cursor: pointer; white-space: nowrap;
+  transition: color 0.2s var(--ease-settle);
+}
+.c-seg label:hover { color: var(--ink); }
+
+.c-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 22px; }
+.c-kpi { background: #FFFFFF; border: 1px solid var(--border); border-radius: var(--r-card); padding: 16px 18px; }
+.c-kpi .l { font-size: 12px; color: var(--graphite); }
+.c-kpi .v { font-family: var(--mono); font-size: 24px; font-weight: 600; margin-top: 2px; line-height: 1.2; }
+.c-kpi .s { font-size: 11.5px; color: var(--graphite); margin-top: 4px; }
+.c-kpi .s.good { color: var(--sage-ink); }
+.c-funnel { height: 5px; border-radius: 3px; background: var(--cream); margin-top: 10px; overflow: hidden; }
+.c-funnel i { display: block; height: 100%; width: 75%; background: var(--sage); border-radius: 3px; }
+
+.c-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.c-bar .search { flex: 1; min-width: 200px; }
+.c-bar select {
+  font: 400 13.5px var(--font-text); color: var(--ink); background: #FFFFFF;
+  border: 1px solid var(--border); border-radius: var(--r-control); padding: 8px 11px; outline: none;
+}
+
+.c-form { max-width: 580px; }
+.c-form .card { padding: 20px; overflow: visible; }
+.c-form .card + .card { margin-top: 14px; }
+.c-form h3 { font-size: 13.5px; font-weight: 500; margin-bottom: 4px; }
+.c-form .g-sub { font-size: 12px; color: var(--graphite); margin-bottom: 14px; }
+.c-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.c-preview {
+  background: var(--cream); border: 1px dashed var(--border); border-radius: var(--r-card);
+  padding: 14px 18px; font-size: 13px; line-height: 1.65; margin-bottom: 14px;
+}
+.c-preview .k { font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 500; color: var(--graphite); display: block; margin-bottom: 4px; }
+.c-preview b { font-weight: 600; }
+.c-save { margin-top: 18px; display: flex; align-items: center; gap: 12px; }
+.c-save .note { font-size: 11.5px; color: var(--graphite); }
+
+/* ---- mockup notes ---- */
+.notes { max-width: 1080px; margin: 0 auto; padding: 0 24px 64px; }
+.notes .note {
+  font-size: 13px; color: var(--graphite); line-height: 1.7;
+  border-top: 1px solid var(--border); padding: 14px 2px; max-width: 78ch;
+}
+.notes .note b { color: var(--ink); font-weight: 500; }
+
+/* ---- responsive ---- */
+@media (max-width: 960px) {
+  .a-grid { grid-template-columns: 1fr; }
+  .a-side { position: static; order: -1; }
+  .b-hero-grid { grid-template-columns: 1fr; }
+  .c-kpis { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .page { padding: 26px 14px 56px; }
+  .lrow { grid-template-columns: minmax(0,1fr) auto; }
+  .lrow .disc { display: none; }
+  .a-paid { margin-left: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+</style>
+</head>
+<body>
+
+<input class="state" type="radio" name="opt" id="opt-a" checked>
+<input class="state" type="radio" name="opt" id="opt-b">
+<input class="state" type="radio" name="opt" id="opt-c">
+<input class="state" type="radio" name="croom" id="c-act" checked>
+<input class="state" type="radio" name="croom" id="c-set">
+
+<div class="chrome">
+  <span class="tag">tacet · affiliate redesign</span>
+  <label for="opt-a">A — ledger first</label>
+  <label for="opt-b">B — the deal is a sentence</label>
+  <label for="opt-c">C — two rooms</label>
+</div>
+
+<div class="frame">
+
+<!-- ════════════════ OPTION A ════════════════ -->
+<div class="page page-a">
+  <div class="head">
+    <h1>Refer a friend · 推荐好友</h1>
+    <div class="sub">Customers share a personal code; when the friend places a first paid order, both sides get a wallet reward. · 顾客分享专属邀请码,好友完成首单后双方都获得钱包奖励。</div>
+  </div>
+
+  <div class="a-grid">
+    <div class="a-main">
+      <!-- stats double as the status filter -->
+      <div class="a-stats">
+        <span class="a-stat on">All · 全部 <b class="num">128</b></span>
+        <span class="a-stat">Waiting · 待首单 <b class="num">24</b></span>
+        <span class="a-stat">Rewarded · 已奖励 <b class="num">96</b></span>
+        <span class="a-stat">Voided · 已作废 <b class="num">8</b></span>
+        <span class="a-paid">Paid out · 已发 <b class="num">¥3,420</b></span>
+      </div>
+
+      <div class="search a-search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        Code, referrer or friend name / phone… · 邀请码、推荐人或好友姓名/电话…
+      </div>
+
+      <div class="card">
+        <div class="lrow">
+          <div class="disc">王</div>
+          <div class="who">
+            <div class="n">王小雨 <span class="arr">→</span> 陈嘉</div>
+            <div class="s"><code>ROOTS-WXY3</code> · first order #10482 paid · Jul 2 · 首单已付款</div>
+          </div>
+          <div class="right">
+            <span class="badge paid">Rewarded · 已奖励</span>
+            <span class="amt num">¥15</span>
+          </div>
+        </div>
+        <div class="lrow">
+          <div class="disc">L</div>
+          <div class="who">
+            <div class="n">Leo Martins <span class="arr">→</span> 李婷</div>
+            <div class="s"><code>ROOTS-LEO8</code> · joined Jul 8, no order yet · 已加入,待首单</div>
+          </div>
+          <div class="right">
+            <span class="badge open">Waiting · 待首单</span>
+            <span class="acts"><a href="#">Adjust ¥ · 改奖励</a> · <a href="#" class="danger">Void · 作废</a></span>
+          </div>
+        </div>
+        <div class="lrow">
+          <div class="disc">张</div>
+          <div class="who">
+            <div class="n">张一诺 <span class="arr">→</span> Sam K.</div>
+            <div class="s"><code>ROOTS-ZYN1</code> · joined Jul 10, no order yet · 已加入,待首单</div>
+          </div>
+          <div class="right">
+            <span class="badge open">Waiting · 待首单</span>
+            <span class="acts"><a href="#">Adjust ¥ · 改奖励</a> · <a href="#" class="danger">Void · 作废</a></span>
+          </div>
+        </div>
+        <div class="lrow">
+          <div class="disc">王</div>
+          <div class="who">
+            <div class="n">王小雨 <span class="arr">→</span> 赵磊</div>
+            <div class="s"><code>ROOTS-WXY3</code> · first order #10391 paid · Jul 5 · 首单已付款</div>
+          </div>
+          <div class="right">
+            <span class="badge paid">Rewarded · 已奖励</span>
+            <span class="amt num">¥15</span>
+          </div>
+        </div>
+        <div class="lrow dim">
+          <div class="disc">陈</div>
+          <div class="who">
+            <div class="n">陈嘉 <span class="arr">→</span> 阿福</div>
+            <div class="s"><code>ROOTS-CJ22</code> · voided Jun 30 — same person, two accounts · 已作废——同一人双账号</div>
+          </div>
+          <div class="right">
+            <span class="badge void">Voided · 已作废</span>
+            <span class="acts"><a href="#">Restore · 恢复</a></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="a-side">
+      <div class="deal-card">
+        <div class="run-row">
+          <div>
+            <div class="run-lbl">Referral program · 推荐计划</div>
+            <div class="run-state"><span class="dusk-dot"></span> Running · 运行中</div>
+          </div>
+          <span class="sw" role="switch" aria-checked="true" tabindex="0"></span>
+        </div>
+
+        <div class="deal-sent">
+          Friends get <b>¥15</b> off their first order. The referrer gets <b>¥15</b> back — then <b>5%</b> of every reorder for <b>12 months</b>.
+        </div>
+        <div class="deal-sent-cn">好友首单立减 ¥15;推荐人获得 ¥15 返现,之后 12 个月内每笔复购再得 5% 分成。</div>
+
+        <details class="deal-adjust" open>
+          <summary><span class="chev">▶</span> Adjust the deal · 调整规则</summary>
+          <div class="deal-fields">
+            <div>
+              <label class="f-lbl">Friend (¥) <span class="cn">· 好友</span></label>
+              <input class="f-in mono num" value="15">
+            </div>
+            <div>
+              <label class="f-lbl">Referrer (¥) <span class="cn">· 推荐人</span></label>
+              <input class="f-in mono num" value="15">
+            </div>
+            <div>
+              <label class="f-lbl">Share (%) <span class="cn">· 分成</span></label>
+              <input class="f-in mono num" value="5">
+            </div>
+            <div>
+              <label class="f-lbl">Months <span class="cn">· 月数</span></label>
+              <input class="f-in mono num" value="12">
+            </div>
+            <div class="wide">
+              <label class="f-lbl">Code prefix <span class="cn">· 邀请码前缀</span></label>
+              <input class="f-in mono" value="ROOTS-">
+              <div class="f-help">New codes only — existing codes keep working. · 仅作用于新码,已有邀请码不变。</div>
+            </div>
+          </div>
+        </details>
+
+        <div class="wxcard">
+          <div class="bubble">
+            <div class="t">给你留了 ¥15 — Roots Kitchen 新人礼</div>
+            <div class="pic">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 21c-4.5-2.5-7-5.5-7-9a7 7 0 0 1 14 0c0 3.5-2.5 6.5-7 9z"/><path d="M12 3v18"/></svg>
+              <span class="code">ROOTS-WXY3</span>
+            </div>
+            <div class="src">Roots Kitchen 小程序</div>
+          </div>
+          <div class="cap">What a forwarded invite looks like in WeChat — amount and code are added automatically. <a href="#">Change picture · 换图</a> · 好友在微信里看到的邀请卡片,金额和邀请码自动生成。</div>
+        </div>
+
+        <div class="deal-foot">
+          <button class="btn-primary">Save · 保存</button>
+          <div class="note">Applies to new referrals only. · 仅对新推荐生效。</div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<!-- ════════════════ OPTION B ════════════════ -->
+<div class="page page-b">
+  <div class="head">
+    <h1>Refer a friend · 推荐好友</h1>
+    <div class="sub">Customers share a personal code; when the friend places a first paid order, both sides get a wallet reward. · 顾客分享专属邀请码,好友完成首单后双方都获得钱包奖励。</div>
+  </div>
+
+  <div class="b-hero">
+    <div class="b-hero-top">
+      <span class="b-kicker">The deal · 规则</span>
+      <span class="run-state"><span class="dusk-dot"></span> Running · 运行中</span>
+      <span class="sw" role="switch" aria-checked="true" tabindex="0"></span>
+    </div>
+    <div class="b-hero-grid">
+      <div>
+        <div class="b-sent">
+          A friend who joins with a code gets <span class="blank num">¥15</span> off their first order.
+          The customer who invited them gets <span class="blank num">¥15</span> back —
+          then <span class="blank num">5%</span> of every reorder for <span class="blank num">12 months</span>.
+          Codes start with <span class="blank">ROOTS-</span>.
+        </div>
+        <div class="b-sent-cn">好友凭邀请码加入,首单立减 ¥15;邀请人获得 ¥15 返现,之后 12 个月内每笔复购再得 5% 分成。邀请码以 ROOTS- 开头。</div>
+      </div>
+      <div class="wxcard">
+        <div class="bubble">
+          <div class="t">给你留了 ¥15 — Roots Kitchen 新人礼</div>
+          <div class="pic">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 21c-4.5-2.5-7-5.5-7-9a7 7 0 0 1 14 0c0 3.5-2.5 6.5-7 9z"/><path d="M12 3v18"/></svg>
+            <span class="code">ROOTS-WXY3</span>
+          </div>
+          <div class="src">Roots Kitchen 小程序</div>
+        </div>
+        <div class="cap">The invite in WeChat — amount and code added automatically. <a href="#">Change picture · 换图</a></div>
+      </div>
+    </div>
+    <div class="b-foot">
+      <button class="btn-primary">Save · 保存</button>
+      <div class="note">Every number above is editable in place. Changes apply to new referrals only. · 上方数字可直接点击修改,仅对新推荐生效。</div>
+    </div>
+  </div>
+
+  <div class="b-bar">
+    <div class="b-seg">
+      <span class="on">All · 全部 <b class="num">128</b></span>
+      <span>Waiting · 待首单 <b class="num">24</b></span>
+      <span>Rewarded · 已奖励 <b class="num">96</b></span>
+      <span>Voided · 已作废 <b class="num">8</b></span>
+    </div>
+    <div class="search">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      Code, referrer or friend… · 邀请码、推荐人或好友…
+    </div>
+    <span class="paid">Paid out · 已发 <b class="num">¥3,420</b></span>
+  </div>
+
+  <div class="card">
+    <div class="lrow">
+      <div class="disc">王</div>
+      <div class="who">
+        <div class="n">王小雨 <span class="arr">→</span> 陈嘉</div>
+        <div class="s"><code>ROOTS-WXY3</code> · first order #10482 paid · Jul 2 · 首单已付款</div>
+      </div>
+      <div class="right">
+        <span class="badge paid">Rewarded · 已奖励</span>
+        <span class="amt num">¥15</span>
+      </div>
+    </div>
+    <div class="lrow">
+      <div class="disc">L</div>
+      <div class="who">
+        <div class="n">Leo Martins <span class="arr">→</span> 李婷</div>
+        <div class="s"><code>ROOTS-LEO8</code> · joined Jul 8, no order yet · 已加入,待首单</div>
+      </div>
+      <div class="right">
+        <span class="badge open">Waiting · 待首单</span>
+        <span class="acts"><a href="#">Adjust ¥ · 改奖励</a> · <a href="#" class="danger">Void · 作废</a></span>
+      </div>
+    </div>
+    <div class="lrow">
+      <div class="disc">张</div>
+      <div class="who">
+        <div class="n">张一诺 <span class="arr">→</span> Sam K.</div>
+        <div class="s"><code>ROOTS-ZYN1</code> · joined Jul 10, no order yet · 已加入,待首单</div>
+      </div>
+      <div class="right">
+        <span class="badge open">Waiting · 待首单</span>
+        <span class="acts"><a href="#">Adjust ¥ · 改奖励</a> · <a href="#" class="danger">Void · 作废</a></span>
+      </div>
+    </div>
+    <div class="lrow dim">
+      <div class="disc">陈</div>
+      <div class="who">
+        <div class="n">陈嘉 <span class="arr">→</span> 阿福</div>
+        <div class="s"><code>ROOTS-CJ22</code> · voided Jun 30 — same person, two accounts · 已作废——同一人双账号</div>
+      </div>
+      <div class="right">
+        <span class="badge void">Voided · 已作废</span>
+        <span class="acts"><a href="#">Restore · 恢复</a></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ OPTION C ════════════════ -->
+<div class="page page-c">
+  <div class="head">
+    <h1>Refer a friend · 推荐好友</h1>
+    <div class="sub">Customers share a personal code; when the friend places a first paid order, both sides get a wallet reward. · 顾客分享专属邀请码,好友完成首单后双方都获得钱包奖励。</div>
+  </div>
+
+  <div class="c-seg">
+    <label for="c-act">Activity · 活动</label>
+    <label for="c-set">Settings · 设置</label>
+  </div>
+
+  <!-- room 1: activity -->
+  <div class="c-room-act">
+    <div class="c-kpis">
+      <div class="c-kpi">
+        <div class="l">Friends invited · 受邀好友</div>
+        <div class="v num">128</div>
+        <div class="s">24 still waiting on a first order · 24 位待首单</div>
+      </div>
+      <div class="c-kpi">
+        <div class="l">Placed a first order · 已下首单</div>
+        <div class="v num">96</div>
+        <div class="s good">75% of invites convert · 转化率 75%</div>
+        <div class="c-funnel"><i></i></div>
+      </div>
+      <div class="c-kpi">
+        <div class="l">Rewards paid out · 已发奖励</div>
+        <div class="v num">¥3,420</div>
+        <div class="s">to 41 referrers' wallets · 入 41 位推荐人钱包</div>
+      </div>
+    </div>
+
+    <div class="c-bar">
+      <select><option>All statuses · 全部状态</option><option>Waiting · 待首单</option><option>Rewarded · 已奖励</option><option>Voided · 已作废</option></select>
+      <div class="search">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        Code, referrer or friend… · 邀请码、推荐人或好友…
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="lrow">
+        <div class="disc">王</div>
+        <div class="who">
+          <div class="n">王小雨 <span class="arr">→</span> 陈嘉</div>
+          <div class="s"><code>ROOTS-WXY3</code> · first order #10482 paid · Jul 2 · 首单已付款</div>
+        </div>
+        <div class="right">
+          <span class="badge paid">Rewarded · 已奖励</span>
+          <span class="amt num">¥15</span>
+        </div>
+      </div>
+      <div class="lrow">
+        <div class="disc">L</div>
+        <div class="who">
+          <div class="n">Leo Martins <span class="arr">→</span> 李婷</div>
+          <div class="s"><code>ROOTS-LEO8</code> · joined Jul 8, no order yet · 已加入,待首单</div>
+        </div>
+        <div class="right">
+          <span class="badge open">Waiting · 待首单</span>
+          <span class="acts"><a href="#">Adjust ¥ · 改奖励</a> · <a href="#" class="danger">Void · 作废</a></span>
+        </div>
+      </div>
+      <div class="lrow">
+        <div class="disc">张</div>
+        <div class="who">
+          <div class="n">张一诺 <span class="arr">→</span> Sam K.</div>
+          <div class="s"><code>ROOTS-ZYN1</code> · joined Jul 10, no order yet · 已加入,待首单</div>
+        </div>
+        <div class="right">
+          <span class="badge open">Waiting · 待首单</span>
+          <span class="acts"><a href="#">Adjust ¥ · 改奖励</a> · <a href="#" class="danger">Void · 作废</a></span>
+        </div>
+      </div>
+      <div class="lrow dim">
+        <div class="disc">陈</div>
+        <div class="who">
+          <div class="n">陈嘉 <span class="arr">→</span> 阿福</div>
+          <div class="s"><code>ROOTS-CJ22</code> · voided Jun 30 — same person, two accounts · 已作废——同一人双账号</div>
+        </div>
+        <div class="right">
+          <span class="badge void">Voided · 已作废</span>
+          <span class="acts"><a href="#">Restore · 恢复</a></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- room 2: settings -->
+  <div class="c-room-set">
+    <div class="c-form">
+      <div class="c-preview">
+        <span class="k">What customers are told · 顾客看到的说明</span>
+        Friends get <b>¥15</b> off their first order; you get <b>¥15</b> back, then <b>5%</b> of their reorders for <b>12 months</b>.
+        · 好友首单立减 ¥15,你得 ¥15 返现,之后 12 个月内每笔复购再得 5%。
+      </div>
+
+      <div class="card">
+        <div class="run-row">
+          <div>
+            <div class="run-lbl">Referral program · 推荐计划</div>
+            <div class="run-state"><span class="dusk-dot"></span> Running — codes work, rewards pay out · 运行中</div>
+          </div>
+          <span class="sw" role="switch" aria-checked="true" tabindex="0"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>First-order rewards · 首单奖励</h3>
+        <div class="g-sub">Paid once, when the friend's first order is paid. · 好友首单付款后各发一次。</div>
+        <div class="c-2col">
+          <div>
+            <label class="f-lbl">Friend gets (¥) <span class="cn">· 好友得</span></label>
+            <input class="f-in mono num" value="15">
+          </div>
+          <div>
+            <label class="f-lbl">Referrer gets (¥) <span class="cn">· 推荐人得</span></label>
+            <input class="f-in mono num" value="15">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Reorder share · 复购分成</h3>
+        <div class="g-sub">From the friend's second order onward, the referrer keeps earning. Set 0 to turn off. · 从好友第二单起持续分成,设 0 关闭。</div>
+        <div class="c-2col">
+          <div>
+            <label class="f-lbl">Share of each reorder (%) <span class="cn">· 每单分成</span></label>
+            <input class="f-in mono num" value="5">
+          </div>
+          <div>
+            <label class="f-lbl">For (months, 0 = forever) <span class="cn">· 月数,0 为永久</span></label>
+            <input class="f-in mono num" value="12">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>The invite · 邀请卡片</h3>
+        <div class="g-sub">Codes start with the prefix; the card is what friends see in WeChat. · 邀请码以前缀开头,卡片是好友在微信看到的样子。</div>
+        <div class="c-2col">
+          <div>
+            <label class="f-lbl">Code prefix <span class="cn">· 邀请码前缀</span></label>
+            <input class="f-in mono" value="ROOTS-">
+            <div class="f-help">New codes only. · 仅作用于新码。</div>
+          </div>
+          <div class="wxcard">
+            <div class="bubble">
+              <div class="t">给你留了 ¥15 — Roots Kitchen 新人礼</div>
+              <div class="pic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M12 21c-4.5-2.5-7-5.5-7-9a7 7 0 0 1 14 0c0 3.5-2.5 6.5-7 9z"/><path d="M12 3v18"/></svg>
+                <span class="code">ROOTS-WXY3</span>
+              </div>
+              <div class="src">Roots Kitchen 小程序</div>
+            </div>
+            <div class="cap"><a href="#">Change picture · 换图</a></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-save">
+        <button class="btn-primary">Save settings · 保存设置</button>
+        <div class="note">Applies to new referrals only. · 仅对新推荐生效。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /frame -->
+
+<div class="notes frame-notes">
+  <p class="note"><b>What every option removes:</b> the five-paragraph explainer (now one sub-line), the # id column, the manual Refresh button, the separate "Rewarded" date column (folded into each row's one-line story), and the "turn it on in Settings → Features" detour — the switch lives on the page it controls.</p>
+  <p class="note"><b>What every option adds:</b> the deal restated as one human sentence (so the merchant reads what customers are actually promised), a real WeChat share-card preview with the auto-added ¥ and code (instead of a bare image box), a conversion read (96 of 128 ordered), and status names that say what they mean — Waiting / Rewarded / Voided instead of JOINED / ORDERED / VOID.</p>
+  <p class="note"><b>A — ledger first (§7 one screen, one question):</b> the page's question is "is the program bringing orders?" so referrals lead and the stats double as the filter — no duplicate summary strip. The deal sits aside, sticky, always visible while scrolling the ledger; the same shell as Flash sales, so Marketing feels like one family.</p>
+  <p class="note"><b>B — the deal is a sentence:</b> settings stop looking like a form. Five numbers live inside the promise itself, edited in place; below the fold the page is pure activity. The boldest of the three — quietest to read, least conventional to build.</p>
+  <p class="note"><b>C — two rooms:</b> configure and monitor are different errands, so they get different rooms. Activity opens with the three numbers that say whether the program works; Settings is a calm one-column form you visit twice a year. Most conventional, most familiar.</p>
+  <p class="note"><b>The Dusk budget (§1):</b> one Dusk element per option — the breathing dot beside "Running", because a referral program is the shop working by itself. Sage is spent only on "reward paid", amber only on "waiting", brick only on Void. Nothing is decorated.</p>
+</div>
+
+</body>
+</html>
