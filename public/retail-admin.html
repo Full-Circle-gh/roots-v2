@@ -53,7 +53,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-membership, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -83,7 +83,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-membership, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -6434,87 +6434,70 @@
     </div>
   </section>
 
-  <!-- ─── MEMBERSHIP TIERS — Roots Club ladder ─── -->
+  <!-- ─── MEMBERSHIP & POINTS — Roots Club (Option A rebuild) ───
+       The feature on/off bar + "off" card are injected as this section's
+       first children by mountFeatureControls() (05-marketing.js); they carry
+       the feature name + one-line description, so this content starts straight
+       at the rules. Tier cards + the single inline editor render into
+       #rctier-cards / #rctier-editor from 07-content-billing.js. -->
   <section id="tab-membership" data-feat="membership">
-    <h2>Membership &amp; points · 会员积分</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      How points are earned and what they're worth, plus the Roots Club tier ladder that multiplies them. <b>Base rate:</b> every <span id="pts-ratemsg">¥100</span> spent earns 1 point at a <b>1.0×</b> tier — each tier earns this base × its <b>Points ×</b> below (so a 1.3× tier earns 30% more). · 积分如何获取、价值几何,以及在此基础上叠加倍率的会员等级体系。基础速率:每消费 ¥100 在 1.0 倍等级得 1 积分;各等级按其「积分倍率」叠加(1.3 倍则多得 30%)。
-    </div>
+    <div class="mp">
 
-    <!-- Points settings — the global loyalty rules. Moved here from Top-up so
-         they sit beside the tier "Points ×" multiplier that builds on them. -->
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 12px;">Points settings · 积分规则</h3>
-      <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Earn rule · 积分获取规则</label>
-          <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-top: 2px;">
-            <span>Earn</span>
-            <input type="number" id="pts-earn-points" placeholder="1" min="1" style="width: 70px;">
-            <span>point(s) per ¥</span>
-            <input type="number" id="pts-earn-spend" placeholder="100" min="1" style="width: 90px;">
-            <span>spent</span>
+      <div class="mp-eyebrow">How points work · 积分规则</div>
+      <p class="mp-section-sub">Four rules. The grey line under the card shows what they add up to. · 四条规则;卡片下方灰字显示最终效果。</p>
+
+      <div class="mp-card">
+        <div class="mp-rules">
+          <div class="mp-rule">
+            <span>Customers earn · 顾客获得</span>
+            <input class="mp-in" type="number" id="pts-earn-points" min="1" value="1" oninput="mpOutcome()" aria-label="Points earned">
+            <span>point for every ¥ · 积分,每消费 ¥</span>
+            <input class="mp-in" type="number" id="pts-earn-spend" min="1" value="100" oninput="mpOutcome()" aria-label="Yuan spent">
+            <span>of · 的</span>
+            <select id="pts-earn-base" aria-label="Earn basis">
+              <option value="paid">what they pay · 实付金额</option>
+              <option value="subtotal">order value before discounts · 折前金额</option>
+            </select>
           </div>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Base rate, before tier multiplier. e.g. 1 point per ¥100 = 1% at a 1.0× tier. · 基础速率(未含等级倍率)。例:每消费 ¥100 在 1.0 倍等级得 1 积分。</div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Earn points on · 积分计算基准</label>
-          <select id="pts-earn-base" style="width: 240px; padding: 6px;">
-            <option value="paid">What the customer pays · 实付金额(折后)</option>
-            <option value="subtotal">Order value before discounts · 折前订单金额</option>
-          </select>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">"What the customer pays" counts the amount left after coupons and points. "Before discounts" counts the full goods value. · "实付金额"按优惠券和积分抵扣后的金额计;"折前订单金额"按商品原价计。</div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Point value · 积分价值</label>
-          <div style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding-top: 2px;">
-            <span>1 point = ¥</span>
-            <input type="number" id="pts-point-value" placeholder="1.00" min="0.01" max="1" step="0.01" style="width: 100px;">
+          <div class="mp-rule">
+            <span>Each point is worth ¥ · 每积分价值 ¥</span>
+            <input class="mp-in" type="number" id="pts-point-value" min="0.01" max="1" step="0.01" value="1.00" oninput="mpOutcome()" aria-label="Point value">
+            <span>at checkout. · (结账时抵扣)。</span>
           </div>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Sets what every point is worth (incl. top-up bonus pts). · 决定每个积分(含充值赠送)的价值。</div>
+          <div class="mp-rule">
+            <span>Points expire · 积分有效期</span>
+            <input class="mp-in" type="number" id="pts-expiry-months" min="0" value="12" oninput="mpOutcome()" aria-label="Expiry months">
+            <span>months after they're earned. · 个月。</span>
+            <span class="mp-why">0 = never expire · 0 为永不过期</span>
+            <span class="mp-hint" id="pts-expiry-hint" hidden></span>
+          </div>
+          <div class="mp-rule">
+            <label class="mp-switch"><input type="checkbox" id="pts-cover-shipping" aria-label="Points can pay for shipping"><span class="mp-knob"></span></label>
+            <span>Points can pay for shipping · 积分可抵运费</span>
+            <span class="mp-why">Off — shipping is always paid in cash · 关闭时运费以现金支付</span>
+          </div>
         </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Expire after (months) · 积分有效期(月)</label>
-          <input type="number" id="pts-expiry-months" placeholder="12" min="0" style="width: 140px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">0 = never expire. Applies to new earns only. · 0 = 永不过期;仅对新获取的积分生效。</div>
+        <div class="mp-outcome" id="pts-outcome"></div>
+        <div class="mp-card-foot">
+          <span class="mp-foot-note">Applies to new orders only. · 仅对新订单生效。</span>
+          <span class="mp-foot-sp"></span>
+          <button class="mp-btn mp-btn-primary" onclick="savePointsSettings()">Save points rules · 保存积分规则</button>
         </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Points cover shipping · 积分可抵运费</label>
-          <label style="display:inline-flex; align-items:center; gap:8px; padding-top: 4px;">
-            <input type="checkbox" id="pts-cover-shipping">
-            <span class="muted" style="font-size: 12px;">Allow points to pay the shipping line · 允许积分支付运费</span>
-          </label>
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Off = customer always pays shipping in cash. · 关闭时,运费始终以现金支付。</div>
-        </div>
-        <button class="btn btn-primary" onclick="savePointsSettings()">Save points settings · 保存积分设置</button>
       </div>
-    </div>
 
-    <h3 style="font-size: 13px; margin: 0 0 8px;">Membership tiers · 会员等级</h3>
-    <div class="muted" style="font-size: 12px; margin-top: -2px; margin-bottom: var(--s4); line-height: 1.5;">
-      The Roots Club ladder shown on the mini-app Membership page. Threshold = minimum lifetime spend (¥) to reach the tier; the lowest threshold should be 0. Perks are one bullet per line. Tiers are sorted by threshold automatically when you save. Each customer's tier auto-promotes from their lifetime spend — no manual override. · 小程序“会员”页展示的等级体系。门槛 = 累计消费(¥)下限,最低需为 0;权益每行一条;保存后按门槛自动排序。每位顾客的等级根据累计消费自动升级。
-    </div>
+      <div class="mp-eyebrow">Roots Club tiers · 会员等级</div>
+      <p class="mp-section-sub">Shoppers reach a tier by lifetime spend and keep it — the lowest tier starts at ¥0 so everyone belongs somewhere. Each tier multiplies the points earned above. · 顾客按累计消费达到并保留等级;最低等级从 ¥0 起,人人有份。各等级在上述基础上叠加积分倍率。</p>
 
-    <div class="card" style="margin-bottom: var(--s4);">
-      <table id="rctier-table" style="width: 100%; border-collapse: collapse; font-size: 12px;">
-        <thead>
-          <tr style="text-align: left;">
-            <th style="padding: 6px 8px; width: 90px;">Key · 标识</th>
-            <th style="padding: 6px 8px;">Name EN</th>
-            <th style="padding: 6px 8px;">Name CN · 中文名</th>
-            <th style="padding: 6px 8px; width: 110px;">Threshold ¥ · 门槛</th>
-            <th style="padding: 6px 8px; width: 100px;" title="Multiplier on points earned per ¥ spent. 1.0 = no boost; 2.0 = double points. Range 0.1–10.">Points × · 积分倍率</th>
-            <th style="padding: 6px 8px;">Perks EN (one per line)</th>
-            <th style="padding: 6px 8px;">Perks CN · 权益(每行一条)</th>
-            <th style="padding: 6px 8px; width: 60px;"></th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <div style="display: flex; gap: 8px; margin-top: 12px;">
-        <button class="btn" onclick="addRctierRow()">+ Add tier · 添加等级</button>
-        <button class="btn btn-primary" onclick="saveRctiers()" style="margin-left: auto;">Save tiers · 保存等级</button>
+      <div class="mp-tier-cards" id="rctier-cards"></div>
+      <div id="rctier-editor"></div>
+
+      <div class="mp-tier-save">
+        <button class="mp-btn mp-btn-secondary" onclick="addRctierRow()">+ Add tier · 添加等级</button>
+        <span class="mp-foot-note">Tiers sort by spend when you save. Everyone's tier updates automatically from their lifetime spend. · 保存后按门槛排序;顾客等级依累计消费自动更新。</span>
+        <span class="mp-foot-sp"></span>
+        <button class="mp-btn mp-btn-primary" onclick="saveRctiers()">Save tiers · 保存等级</button>
       </div>
+
     </div>
   </section>
 

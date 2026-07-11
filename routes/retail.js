@@ -15142,6 +15142,25 @@ router.get('/api/retail-admin/config', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: loadConfig() });
 });
 
+// Live per-tier member counts — context for the Membership tier editor so the
+// operator can see how many customers sit in each band while setting thresholds.
+// Blocked accounts are excluded (they can't earn or spend). Read-only, cheap
+// GROUP BY; degrades to {} on any error so the page never breaks over it.
+router.get('/api/retail-admin/tier-counts', requireRetailAdmin, (req, res) => {
+  try {
+    const rows = tdb().prepare(
+      `SELECT COALESCE(tier_key, 'seed') AS tier, COUNT(*) AS n
+         FROM retail_customers WHERE is_blocked = 0
+        GROUP BY tier`).all();
+    const counts = {};
+    for (const r of rows) counts[r.tier] = r.n;
+    res.json({ success: true, data: counts });
+  } catch (e) {
+    console.error('[retail-admin/tier-counts]', e.message);
+    res.json({ success: true, data: {} });
+  }
+});
+
 // Body: { 'fees.freeShippingThreshold': 449, 'theme.accent': 'forest-kale', … }
 // Each entry is a dotted key; value is anything JSON-serialisable. Whole
 // thing applied in one txn so partial failures roll back.
