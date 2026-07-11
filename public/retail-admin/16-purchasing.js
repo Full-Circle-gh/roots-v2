@@ -167,9 +167,7 @@
     const supN = _suppliers.filter(s => s.is_active).length;
 
     root().innerHTML = `
-      <p class="pu2-lede" data-lang-block="en">Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.</p>
-      <p class="pu2-lede" data-lang-block="cn">向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。</p>
-
+      <!-- Lede moved to the ⓘ next to the page title (prodSetHelp, 09-products.js). -->
       <div class="pu2-statline">
         <button class="pu2-stat link${_seg === 'open' ? ' on' : ''}" onclick="puSeg('open')"><b class="pu2-num">${openN}</b>${esc(T('open', '进行中'))}</button>
         <button class="pu2-stat link warn" onclick="puSeg('open')" ${lateN ? '' : 'style="display:none"'}><b class="pu2-num">${lateN}</b>${esc(T('late', '逾期'))}</button>

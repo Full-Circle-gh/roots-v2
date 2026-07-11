@@ -418,7 +418,63 @@ function prodShowView(view) {
   if (view === 'categories' && typeof catLoad === 'function' && !catLoaded) catLoad();
   // Purchasing owns its own lazy-load + refresh (puInit is idempotent).
   if (view === 'purchasing' && typeof puInit === 'function') puInit();
+  // The ⓘ next to the title carries this view's "what is this" copy.
+  prodSetHelp(view);
 }
+
+// ── Page help — the per-tab "what is this" copy that used to stand under the
+// heading now lives behind the ⓘ next to the title. One icon, contextual: its
+// text follows whichever sub-view is on screen, and repaints with the language.
+// Kept here (not as a standing paragraph) because a user needs it once. ──
+const PROD_VIEW_HELP = {
+  catalog: [
+    'Photo, category, SKU, stock and price in one scannable list. Search or filter, click any product to open it.',
+    '照片、分类、货号、库存和价格，一目了然。搜索或筛选，点击任意商品即可打开。'],
+  activity: [
+    "What moved today, and what needs a look. Every stock change across every channel, one line each — pick a channel tab to filter; Export CSV downloads the view you're looking at. Times are Guangzhou local.",
+    '今天动了什么、哪里需要看一眼。各渠道的每一次库存变动，一行一条 —— 点渠道页签可筛选；导出 CSV 即当前视图。时间为广州本地时间。'],
+  categories: [
+    'How the shop shelves are arranged. Top categories are the left rail; subcategories are the section headings. Rename anything and every product on it follows. A category with nothing published stays out of the shop on its own.',
+    '店面货架的排列方式。主分类即左栏，子分类即区块标题。重命名后，该分类下的所有产品会自动跟随。没有上架产品的分类不会出现在店面。'],
+  purchasing: [
+    'Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.',
+    '向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。'],
+};
+let _prodHelpView = 'catalog';
+function prodSetHelp(view) {
+  _prodHelpView = PROD_VIEW_HELP[view] ? view : 'catalog';
+  const el = document.getElementById('pa-info-text');
+  if (!el) return;
+  const pair = PROD_VIEW_HELP[_prodHelpView];
+  el.textContent = (typeof cuT === 'function') ? cuT(pair[0], pair[1]) : pair[0];
+}
+// Click/tap toggles the tooltip open (hover + keyboard focus are handled in
+// CSS); an outside click closes it. Sticky-open is what makes it usable on
+// touch, where :hover never fires.
+function prodToggleHelp(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const wrap = document.getElementById('pa-info-wrap'); if (!wrap) return;
+  const open = wrap.classList.toggle('open');
+  document.getElementById('pa-info-btn')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  if (open) setTimeout(() => document.addEventListener('click', prodCloseHelp), 0);
+  else document.removeEventListener('click', prodCloseHelp);
+}
+function prodCloseHelp(e) {
+  const wrap = document.getElementById('pa-info-wrap'); if (!wrap) return;
+  if (e && wrap.contains(e.target)) return;
+  wrap.classList.remove('open');
+  document.getElementById('pa-info-btn')?.setAttribute('aria-expanded', 'false');
+  document.removeEventListener('click', prodCloseHelp);
+}
+// Paint the default (catalogue) help on load and keep it in the live language.
+(function initProdHelp() {
+  const boot = () => {
+    prodSetHelp(_prodHelpView);
+    if (window.onLangChange) onLangChange(() => prodSetHelp(_prodHelpView));
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot, { once: true });
+  else boot();
+})();
 
 // ── The four stock cards — moves / out / in / hit zero, today, all channels.
 // Same /activity call the ledger makes (limit=1: only summary + digest are

@@ -2055,8 +2055,41 @@
      shared Tacet heading rule; only the rhythm is set here. */
   #tab-products > .t-ord-eyebrow { margin: 0 0 4px; }
   #tab-products > .pa-pagetitle { margin: 0; }
-  #tab-products > .pa-lede {
-    font-size: 14px; color: var(--td-text2); margin: 8px 0 22px; max-width: 640px;
+  /* Title row + ⓘ. The old standing lede is gone; its "what is this" copy now
+     rides in the tooltip below, one-time teaching text kept out of the way. */
+  #tab-products > .pa-head-row {
+    display: flex; align-items: center; gap: 8px; margin: 0 0 22px;
+  }
+  #tab-products > .pa-head-row > .pa-pagetitle { margin: 0; }
+  .pa-info-wrap { position: relative; display: inline-flex; align-items: center; }
+  .pa-info {
+    appearance: none; background: none; border: none; margin: 0; padding: 4px;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 0; border-radius: 50%; cursor: pointer;
+    color: var(--td-text2, #6b6b60); transition: color .15s ease, background .15s ease;
+  }
+  .pa-info svg { width: 19px; height: 19px; display: block; }
+  .pa-info:hover, .pa-info:focus-visible {
+    color: var(--td-text, #1a1a17); background: var(--td-surface, #f0ede4); outline: none;
+  }
+  .pa-info-pop {
+    position: absolute; top: calc(100% + 8px); left: 0; z-index: 60;
+    width: max-content; max-width: min(340px, calc(100vw - 48px));
+    background: var(--td-paper, #fbfaf6); color: var(--td-text2, #55554c);
+    border: 1px solid var(--td-border, #e4e0d5); border-radius: 12px;
+    box-shadow: 0 8px 28px rgba(20, 20, 15, .14);
+    padding: 12px 14px; font-size: 13px; line-height: 1.55;
+    opacity: 0; visibility: hidden; transform: translateY(-4px); pointer-events: none;
+    transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s;
+  }
+  .pa-info-wrap:hover .pa-info-pop,
+  .pa-info-wrap:focus-within .pa-info-pop,
+  .pa-info-wrap.open .pa-info-pop {
+    opacity: 1; visibility: visible; transform: none; pointer-events: auto;
+    transition: opacity .16s ease, transform .16s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .pa-info-pop { transition: opacity .16s ease; transform: none; }
   }
 
   /* ── Recap band — one calm hero count, then one-click jumps to the three
