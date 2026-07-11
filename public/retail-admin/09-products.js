@@ -422,31 +422,42 @@ function prodShowView(view) {
   prodSetHelp(view);
 }
 
-// ── Page help — the per-tab "what is this" copy that used to stand under the
-// heading now lives behind the ⓘ next to the title. One icon, contextual: its
-// text follows whichever sub-view is on screen, and repaints with the language.
-// Kept here (not as a standing paragraph) because a user needs it once. ──
-const PROD_VIEW_HELP = {
-  catalog: [
-    'Photo, category, SKU, stock and price in one scannable list. Search or filter, click any product to open it.',
-    '照片、分类、货号、库存和价格，一目了然。搜索或筛选，点击任意商品即可打开。'],
-  activity: [
-    "What moved today, and what needs a look. Every stock change across every channel, one line each — pick a channel tab to filter; Export CSV downloads the view you're looking at. Times are Guangzhou local.",
-    '今天动了什么、哪里需要看一眼。各渠道的每一次库存变动，一行一条 —— 点渠道页签可筛选；导出 CSV 即当前视图。时间为广州本地时间。'],
-  categories: [
-    'How the shop shelves are arranged. Top categories are the left rail; subcategories are the section headings. Rename anything and every product on it follows. A category with nothing published stays out of the shop on its own.',
-    '店面货架的排列方式。主分类即左栏，子分类即区块标题。重命名后，该分类下的所有产品会自动跟随。没有上架产品的分类不会出现在店面。'],
-  purchasing: [
-    'Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.',
-    '向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。'],
+// ── Page header — both the title and the ⓘ tooltip follow whichever sub-view
+// is on screen. The title says WHERE you are (Catalogue / Stock activity /
+// Categories / Purchasing); the ⓘ carries that view's one-time "what is this"
+// copy, kept out of the way because a user needs it once. Both repaint with the
+// live language. ──
+const PROD_VIEW_META = {
+  catalog: {
+    title: ['Your catalogue', '您的目录'],
+    help: ['Photo, category, SKU, stock and price in one scannable list. Search or filter, click any product to open it.',
+           '照片、分类、货号、库存和价格，一目了然。搜索或筛选，点击任意商品即可打开。'],
+  },
+  activity: {
+    title: ['Stock activity', '库存流水'],
+    help: ["What moved today, and what needs a look. Every stock change across every channel, one line each — pick a channel tab to filter; Export CSV downloads the view you're looking at. Times are Guangzhou local.",
+           '今天动了什么、哪里需要看一眼。各渠道的每一次库存变动，一行一条 —— 点渠道页签可筛选；导出 CSV 即当前视图。时间为广州本地时间。'],
+  },
+  categories: {
+    title: ['Categories', '分类'],
+    help: ['How the shop shelves are arranged. Top categories are the left rail; subcategories are the section headings. Rename anything and every product on it follows. A category with nothing published stays out of the shop on its own.',
+           '店面货架的排列方式。主分类即左栏，子分类即区块标题。重命名后，该分类下的所有产品会自动跟随。没有上架产品的分类不会出现在店面。'],
+  },
+  purchasing: {
+    title: ['Purchasing', '采购'],
+    help: ['Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.',
+           '向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。'],
+  },
 };
 let _prodHelpView = 'catalog';
 function prodSetHelp(view) {
-  _prodHelpView = PROD_VIEW_HELP[view] ? view : 'catalog';
-  const el = document.getElementById('pa-info-text');
-  if (!el) return;
-  const pair = PROD_VIEW_HELP[_prodHelpView];
-  el.textContent = (typeof cuT === 'function') ? cuT(pair[0], pair[1]) : pair[0];
+  _prodHelpView = PROD_VIEW_META[view] ? view : 'catalog';
+  const m = PROD_VIEW_META[_prodHelpView];
+  const say = (pair) => (typeof cuT === 'function') ? cuT(pair[0], pair[1]) : pair[0];
+  const title = document.getElementById('pa-pagetitle');
+  if (title) title.textContent = say(m.title);
+  const help = document.getElementById('pa-info-text');
+  if (help) help.textContent = say(m.help);
 }
 // Click/tap toggles the tooltip open (hover + keyboard focus are handled in
 // CSS); an outside click closes it. Sticky-open is what makes it usable on
