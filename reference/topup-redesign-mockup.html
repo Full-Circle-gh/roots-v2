@@ -269,7 +269,7 @@ button:focus-visible, label:focus-visible, input:focus-visible {
 
 /* one row shown open in edit mode */
 .qa-editrow { background: var(--raised); padding: 16px 20px; border-bottom: 1px solid var(--border); }
-.qa-editgrid { display: grid; grid-template-columns: 110px 110px 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.qa-editgrid { display: grid; grid-template-columns: 110px 110px 1fr; gap: 12px; margin-bottom: 14px; }
 .qa-field label {
   display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
   font-weight: 500; color: var(--graphite); margin-bottom: 5px;
@@ -298,7 +298,7 @@ button:focus-visible, label:focus-visible, input:focus-visible {
   color: var(--graphite); margin: 22px 0 6px;
 }
 .qa-tx {
-  display: grid; grid-template-columns: 52px 1fr 110px 70px 130px; gap: 14px;
+  display: grid; grid-template-columns: 52px 1fr 104px 52px 176px; gap: 16px;
   align-items: center; padding: 11px 4px; border-bottom: 1px solid var(--border);
   font-size: 14px;
 }
@@ -455,7 +455,7 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width
 <input class="opt-radio" type="radio" name="opt" id="opt-c">
 
 <div class="chrome">
-  <span class="tag">tacet · top-up 充值 — redesign</span>
+  <span class="tag">tacet · top-up — redesign</span>
   <label for="opt-a" tabindex="0">A — Quiet ledger</label>
   <label for="opt-b" tabindex="0">B — Storefront mirror</label>
   <label for="opt-c" tabindex="0">C — Workbench</label>
@@ -466,439 +466,438 @@ table.tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width
 <!-- ════════════ OPTION A — QUIET LEDGER ════════════ -->
 <section class="view view-a">
   <header class="pg-head">
-    <div class="pg-kicker">Loyalty &amp; Wallet · 会员与钱包</div>
-    <h1 class="pg-title">Top-up · 充值</h1>
-  </header>
+    <div class="pg-kicker">Loyalty &amp; Wallet</div>
+    <h1 class="pg-title">Top-up</h1>
+</header>
 
   <p class="qa-recap">This month members topped up <strong class="num">¥8,200</strong> across <strong class="num">5</strong> top-ups and took <strong class="num">610</strong> bonus points.</p>
-  <p class="qa-recap-sub">Wallet ¥ credits 1:1; bonus points ride on top. Point value and expiry live in <a href="#">Membership &amp; points · 会员积分</a>.</p>
+  <p class="qa-recap-sub">Wallet ¥ credits 1:1; bonus points ride on top. Point value and expiry live in <a href="#">Membership &amp; points</a>.</p>
 
   <section class="card qa-pkgs" style="margin-top: 32px;">
     <div class="qa-pkgs-head">
-      <h2 class="sec-title">Packages <span class="cn">充值套餐</span></h2>
-      <button class="btn-primary">＋ New package · 新建套餐</button>
-    </div>
+      <h2 class="sec-title">Packages </h2>
+      <button class="btn-primary"> New package</button>
+  </div>
 
     <div class="qa-pkg">
       <span class="qa-amt num">¥1,000</span>
       <span class="qa-bonus num">+50 pts</span>
-      <span class="qa-titles"><span class="en">¥1,000 wallet + 50 bonus pts</span><span class="zh">充1000送50积分</span></span>
-      <label class="sw on" tabindex="0"><i></i><small>Active · 启用</small></label>
+      <span class="qa-titles"><span class="en">¥1,000 wallet + 50 bonus pts</span></span>
+      <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
       <button class="qa-pkg-edit" aria-label="Edit package">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-      </button>
-    </div>
+    </button>
+  </div>
 
     <!-- the same row, opened for editing — tap the pencil, edit in place -->
     <div class="qa-editrow">
       <div class="qa-editgrid">
-        <div class="qa-field"><label>Amount ¥ · 金额</label><input type="number" value="2000"></div>
-        <div class="qa-field"><label>Bonus pts · 赠送积分</label><input type="number" value="150"></div>
-        <div class="qa-field"><label>Title · EN</label><input type="text" value="¥2,000 wallet + 150 bonus pts"></div>
-        <div class="qa-field"><label>Title · 中文</label><input type="text" value="充2000送150积分"></div>
-      </div>
-      <div class="row">
-        <button class="btn-primary" style="background: var(--ink);">Save · 保存</button>
-        <button class="btn-quiet">Cancel · 取消</button>
-        <button class="qa-del">Delete package · 删除</button>
-      </div>
+        <div class="qa-field"><label>Amount ¥</label><input type="number" value="2000"></div>
+        <div class="qa-field"><label>Bonus pts</label><input type="number" value="150"></div>
+        <div class="qa-field"><label>Title</label><input type="text" value="¥2,000 wallet + 150 bonus pts"></div>
     </div>
+      <div class="row">
+        <button class="btn-primary" style="background: var(--ink);">Save</button>
+        <button class="btn-quiet">Cancel</button>
+        <button class="qa-del">Delete package</button>
+    </div>
+  </div>
 
     <div class="qa-pkg">
       <span class="qa-amt num">¥3,000</span>
       <span class="qa-bonus num">+255 pts</span>
-      <span class="qa-titles"><span class="en">¥3,000 wallet + 255 bonus pts</span><span class="zh">充3000送255积分</span></span>
-      <label class="sw on" tabindex="0"><i></i><small>Active · 启用</small></label>
+      <span class="qa-titles"><span class="en">¥3,000 wallet + 255 bonus pts</span></span>
+      <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
       <button class="qa-pkg-edit" aria-label="Edit package">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-      </button>
-    </div>
+    </button>
+  </div>
 
     <div class="qa-pkg off">
       <span class="qa-amt num">¥5,000</span>
       <span class="qa-bonus num">+500 pts</span>
-      <span class="qa-titles"><span class="en">¥5,000 wallet + 500 bonus pts</span><span class="zh">充5000送500积分</span></span>
-      <label class="sw" tabindex="0"><i></i><small>Off · 停用</small></label>
+      <span class="qa-titles"><span class="en">¥5,000 wallet + 500 bonus pts</span></span>
+      <label class="sw" tabindex="0"><i></i><small>Off</small></label>
       <button class="qa-pkg-edit" aria-label="Edit package">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
-      </button>
-    </div>
-  </section>
+    </button>
+  </div>
+</section>
 
   <div class="qa-lhead">
-    <h2 class="sec-title">Activity <span class="cn">充值记录</span></h2>
+    <h2 class="sec-title">Activity </h2>
     <div class="qa-chips">
-      <button class="qa-chip sel">All · 全部</button>
-      <button class="qa-chip">Paid · 已付 3</button>
-      <button class="qa-chip">Pending · 待付 2</button>
-      <button class="qa-chip">Wallet spend · 消费 1</button>
-    </div>
+      <button class="qa-chip sel">All</button>
+      <button class="qa-chip">Paid <span class="num">3</span></button>
+      <button class="qa-chip">Pending <span class="num">2</span></button>
+      <button class="qa-chip">Wallet spend <span class="num">1</span></button>
   </div>
+</div>
 
-  <div class="qa-day">Wed 9 Jul · 周三</div>
+  <div class="qa-day">Wed 9 Jul</div>
   <div class="qa-tx">
     <span class="qa-tx-time num">13:57</span>
-    <span class="qa-tx-who"><span class="who">阿明 · 138****2201</span><span class="ref">FCTU17836054…</span></span>
+    <span class="qa-tx-who"><span class="who">Ming Li · 138****2201</span><span class="ref">FCTU17836054…</span></span>
     <span class="qa-tx-amt num">¥2,000.00</span>
     <span class="qa-tx-bonus num">+150</span>
-    <span class="qa-tx-st"><span class="st-pending">Pending · 待付</span><button class="btn-ghost">Mark paid</button></span>
-  </div>
+    <span class="qa-tx-st"><span class="st-pending">Pending</span><button class="btn-ghost">Mark paid</button></span>
+</div>
   <div class="qa-tx">
     <span class="qa-tx-time num">10:12</span>
     <span class="qa-tx-who"><span class="who">Laura W. · 137****8834</span><span class="ref">FCTU17836011…</span></span>
     <span class="qa-tx-amt num">¥1,000.00</span>
     <span class="qa-tx-bonus num">+50</span>
-    <span class="qa-tx-st"><span class="st-paid">Paid · 已付</span></span>
-  </div>
+    <span class="qa-tx-st"><span class="st-paid">Paid</span></span>
+</div>
 
-  <div class="qa-day">Mon 6 Jul · 周一</div>
+  <div class="qa-day">Mon 6 Jul</div>
   <div class="qa-tx">
     <span class="qa-tx-time num">10:56</span>
-    <span class="qa-tx-who"><span class="who">崔崔 · 138****1147</span><span class="ref">orderspend:5…</span></span>
+    <span class="qa-tx-who"><span class="who">Cui Chen · 138****1147</span><span class="ref">orderspend:5…</span></span>
     <span class="qa-tx-amt num neg">−¥199.50</span>
     <span class="qa-tx-bonus num zero">—</span>
-    <span class="qa-tx-st"><span class="st-spend">Wallet spend · 消费</span></span>
-  </div>
+    <span class="qa-tx-st"><span class="st-spend">Wallet spend</span></span>
+</div>
 
-  <div class="qa-day">Fri 4 Jul · 周五</div>
+  <div class="qa-day">Fri 4 Jul</div>
   <div class="qa-tx">
     <span class="qa-tx-time num">23:37</span>
     <span class="qa-tx-who"><span class="who">Tom H. · 186****0925</span><span class="ref">FCTU17832082…</span></span>
     <span class="qa-tx-amt num">¥3,000.00</span>
     <span class="qa-tx-bonus num">+255</span>
-    <span class="qa-tx-st"><span class="st-paid">Paid · 已付</span></span>
-  </div>
+    <span class="qa-tx-st"><span class="st-paid">Paid</span></span>
+</div>
   <div class="qa-tx">
     <span class="qa-tx-time num">16:02</span>
-    <span class="qa-tx-who"><span class="who">阿明 · 138****2201</span><span class="ref">FCTU17831809…</span></span>
+    <span class="qa-tx-who"><span class="who">Ming Li · 138****2201</span><span class="ref">FCTU17831809…</span></span>
     <span class="qa-tx-amt num">¥2,000.00</span>
     <span class="qa-tx-bonus num">+150</span>
-    <span class="qa-tx-st"><span class="st-pending">Pending · 待付</span><button class="btn-ghost">Mark paid</button></span>
-  </div>
+    <span class="qa-tx-st"><span class="st-pending">Pending</span><button class="btn-ghost">Mark paid</button></span>
+</div>
   <div class="qa-tx">
     <span class="qa-tx-time num">14:11</span>
     <span class="qa-tx-who"><span class="who">Priya S. · 158****7712</span><span class="ref">FCTU17831742…</span></span>
     <span class="qa-tx-amt num">¥2,200.00</span>
     <span class="qa-tx-bonus num">+205</span>
-    <span class="qa-tx-st"><span class="st-paid">Paid · 已付</span></span>
-  </div>
+    <span class="qa-tx-st"><span class="st-paid">Paid</span></span>
+</div>
 
-  <div class="qa-fold">9 abandoned attempts hidden (opened checkout, never paid) · 已隐藏 9 条未支付的尝试 — <button>show · 显示</button></div>
+  <div class="qa-fold">9 abandoned attempts hidden (opened checkout, never paid) — <button>show</button></div>
 
   <div class="changes">
     <b>Option A — what changed vs. today.</b>
     <ul>
       <li><b>Added:</b> a one-line monthly recap (the page's only summary) · status filter chips · “Mark paid” surfaced on pending rows · day-grouped ledger · wallet-spend rows labelled instead of mixed in · abandoned checkout attempts folded away.</li>
       <li><b>Removed:</b> the always-open create form (now behind “New package”) · the grid of raw editable inputs — rows read quietly, editing happens in place · the full-width out-trade column (now small print under the customer, tap to copy).</li>
-    </ul>
-  </div>
+  </ul>
+</div>
 </section>
 
 <!-- ════════════ OPTION B — STOREFRONT MIRROR ════════════ -->
 <section class="view view-b">
   <header class="pg-head">
-    <div class="pg-kicker">Loyalty &amp; Wallet · 会员与钱包</div>
-    <h1 class="pg-title">Top-up · 充值</h1>
-  </header>
+    <div class="pg-kicker">Loyalty &amp; Wallet</div>
+    <h1 class="pg-title">Top-up</h1>
+</header>
 
   <div class="sb-stats">
     <div class="card sb-stat">
-      <div class="k">Topped up this month · 本月充值</div>
+      <div class="k">Topped up this month</div>
       <div class="v num">¥8,200</div>
-      <div class="s">5 top-ups · <span class="att">2 pending 待付</span></div>
-    </div>
+      <div class="s">5 top-ups · <span class="att">2 pending</span></div>
+  </div>
     <div class="card sb-stat">
-      <div class="k">Bonus points given · 赠送积分</div>
+      <div class="k">Bonus points given</div>
       <div class="v num">610</div>
       <div class="s">worth ¥6.10 at current point value</div>
-    </div>
+  </div>
     <div class="card sb-stat">
-      <div class="k">Wallet balance held · 钱包余额</div>
+      <div class="k">Wallet balance held</div>
       <div class="v num">¥23,410</div>
       <div class="s">across 41 members · money owed as goods</div>
-    </div>
   </div>
+</div>
 
   <div class="sb-sechead">
-    <h2 class="sec-title">Packages <span class="cn">充值套餐</span></h2>
-  </div>
-  <p class="sb-note">Shown exactly as members see them in the mini app — same order, same tier labels. Drag to reorder. · 与小程序中展示一致,可拖动排序。</p>
+    <h2 class="sec-title">Packages </h2>
+</div>
+  <p class="sb-note">Shown exactly as members see them in the mini app — same order, same tier labels. Drag to reorder.</p>
 
   <div class="sb-grid">
     <div class="card sb-tile">
-      <span class="sb-tier">Starter · 入门</span>
+      <span class="sb-tier">Starter</span>
       <span class="amt num">¥1,000</span>
-      <span class="bonus num">+50 bonus pts · 送50积分</span>
-      <span class="titles">¥1,000 wallet + 50 bonus pts<br>充1000送50积分</span>
+      <span class="bonus num">+50 bonus pts</span>
+      <span class="titles">¥1,000 wallet + 50 bonus pts</span>
       <div class="foot">
         <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
-        <button class="btn-quiet">Edit · 编辑</button>
-      </div>
+        <button class="btn-quiet">Edit</button>
     </div>
-    <div class="card sb-tile">
-      <span class="sb-tier">Regular · 常规</span>
-      <span class="amt num">¥2,000</span>
-      <span class="bonus num">+150 bonus pts · 送150积分</span>
-      <span class="titles">¥2,000 wallet + 150 bonus pts<br>充2000送150积分</span>
-      <div class="foot">
-        <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
-        <button class="btn-quiet">Edit · 编辑</button>
-      </div>
-    </div>
-    <div class="card sb-tile">
-      <span class="sb-tier">Plus · 高级</span>
-      <span class="amt num">¥3,000</span>
-      <span class="bonus num">+255 bonus pts · 送255积分</span>
-      <span class="titles">¥3,000 wallet + 255 bonus pts<br>充3000送255积分</span>
-      <div class="foot">
-        <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
-        <button class="btn-quiet">Edit · 编辑</button>
-      </div>
-    </div>
-    <div class="card sb-tile">
-      <span class="sb-best">Best value · 最划算</span>
-      <span class="sb-tier">Top tier · 顶级</span>
-      <span class="amt num">¥5,000</span>
-      <span class="bonus num">+500 bonus pts · 送500积分</span>
-      <span class="titles">¥5,000 wallet + 500 bonus pts<br>充5000送500积分</span>
-      <div class="foot">
-        <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
-        <button class="btn-quiet">Edit · 编辑</button>
-      </div>
-    </div>
-    <button class="sb-new">
-      <span class="plus">＋</span>
-      New package · 新建套餐
-    </button>
   </div>
+    <div class="card sb-tile">
+      <span class="sb-tier">Regular</span>
+      <span class="amt num">¥2,000</span>
+      <span class="bonus num">+150 bonus pts</span>
+      <span class="titles">¥2,000 wallet + 150 bonus pts</span>
+      <div class="foot">
+        <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
+        <button class="btn-quiet">Edit</button>
+    </div>
+  </div>
+    <div class="card sb-tile">
+      <span class="sb-tier">Plus</span>
+      <span class="amt num">¥3,000</span>
+      <span class="bonus num">+255 bonus pts</span>
+      <span class="titles">¥3,000 wallet + 255 bonus pts</span>
+      <div class="foot">
+        <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
+        <button class="btn-quiet">Edit</button>
+    </div>
+  </div>
+    <div class="card sb-tile">
+      <span class="sb-best">Best value</span>
+      <span class="sb-tier">Top tier</span>
+      <span class="amt num">¥5,000</span>
+      <span class="bonus num">+500 bonus pts</span>
+      <span class="titles">¥5,000 wallet + 500 bonus pts</span>
+      <div class="foot">
+        <label class="sw on" tabindex="0"><i></i><small>Active</small></label>
+        <button class="btn-quiet">Edit</button>
+    </div>
+  </div>
+    <button class="sb-new">
+      <span class="plus"></span>
+      New package
+  </button>
+</div>
 
   <div class="sb-sechead">
-    <h2 class="sec-title">Activity <span class="cn">充值记录</span></h2>
-  </div>
+    <h2 class="sec-title">Activity </h2>
+</div>
   <div class="sb-filters">
     <label class="sb-search">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
-      <input placeholder="Name, phone or trade # · 姓名/手机号/单号">
-    </label>
+      <input placeholder="Name, phone or trade #">
+  </label>
     <select class="sb-select">
-      <option>Paid + pending · 已付与待付</option>
-      <option>Paid only · 仅已付</option>
-      <option>Pending only · 仅待付</option>
-      <option>Everything incl. abandoned · 全部</option>
-    </select>
-  </div>
+      <option>Paid + pending</option>
+      <option>Paid only</option>
+      <option>Pending only</option>
+      <option>Everything incl. abandoned</option>
+  </select>
+</div>
 
   <div class="tbl-wrap">
     <table class="tbl">
       <thead>
         <tr>
-          <th>When · 时间</th><th>Customer · 顾客</th>
-          <th class="r">¥</th><th class="r">Bonus · 赠送</th>
-          <th>Status · 状态</th><th></th>
-        </tr>
-      </thead>
+          <th>When</th><th>Customer</th>
+          <th class="r">¥</th><th class="r">Bonus</th>
+          <th>Status</th><th></th>
+      </tr>
+    </thead>
       <tbody>
         <tr>
           <td class="num">9 Jul 13:57</td>
-          <td>阿明 · 138****2201<span class="sub mono">FCTU17836054412</span></td>
+          <td>Ming Li · 138****2201<span class="sub mono">FCTU17836054412</span></td>
           <td class="r num">2,000.00</td><td class="r num">+150</td>
-          <td><span class="pill pill-amber">Pending · 待付</span></td>
-          <td class="r"><button class="btn-ghost">Mark paid · 标记已付</button></td>
-        </tr>
+          <td><span class="pill pill-amber">Pending</span></td>
+          <td class="r"><button class="btn-ghost">Mark paid</button></td>
+      </tr>
         <tr>
           <td class="num">9 Jul 10:12</td>
           <td>Laura W. · 137****8834<span class="sub mono">FCTU17836011208</span></td>
           <td class="r num">1,000.00</td><td class="r num">+50</td>
-          <td><span class="pill pill-sage">Paid · 已付</span></td>
+          <td><span class="pill pill-sage">Paid</span></td>
           <td></td>
-        </tr>
+      </tr>
         <tr>
           <td class="num">6 Jul 10:56</td>
-          <td>崔崔 · 138****1147<span class="sub mono">orderspend:5518</span></td>
+          <td>Cui Chen · 138****1147<span class="sub mono">orderspend:5518</span></td>
           <td class="r num">−199.50</td><td class="r num">—</td>
-          <td><span class="pill pill-plain">Wallet spend · 消费</span></td>
+          <td><span class="pill pill-plain">Wallet spend</span></td>
           <td></td>
-        </tr>
+      </tr>
         <tr>
           <td class="num">4 Jul 23:37</td>
           <td>Tom H. · 186****0925<span class="sub mono">FCTU17832082091</span></td>
           <td class="r num">3,000.00</td><td class="r num">+255</td>
-          <td><span class="pill pill-sage">Paid · 已付</span></td>
+          <td><span class="pill pill-sage">Paid</span></td>
           <td></td>
-        </tr>
+      </tr>
         <tr>
           <td class="num">4 Jul 16:02</td>
-          <td>阿明 · 138****2201<span class="sub mono">FCTU17831809344</span></td>
+          <td>Ming Li · 138****2201<span class="sub mono">FCTU17831809344</span></td>
           <td class="r num">2,000.00</td><td class="r num">+150</td>
-          <td><span class="pill pill-amber">Pending · 待付</span></td>
-          <td class="r"><button class="btn-ghost">Mark paid · 标记已付</button></td>
-        </tr>
+          <td><span class="pill pill-amber">Pending</span></td>
+          <td class="r"><button class="btn-ghost">Mark paid</button></td>
+      </tr>
         <tr>
           <td class="num">4 Jul 14:11</td>
           <td>Priya S. · 158****7712<span class="sub mono">FCTU17831742551</span></td>
           <td class="r num">2,200.00</td><td class="r num">+205</td>
-          <td><span class="pill pill-sage">Paid · 已付</span></td>
+          <td><span class="pill pill-sage">Paid</span></td>
           <td></td>
-        </tr>
-      </tbody>
-    </table>
-    <div class="tbl-foot"><button class="btn-ghost">Load older · 加载更早</button></div>
-  </div>
+      </tr>
+    </tbody>
+  </table>
+    <div class="tbl-foot"><button class="btn-ghost">Load older</button></div>
+</div>
 
   <div class="changes">
     <b>Option B — what changed vs. today.</b>
     <ul>
       <li><b>Added:</b> three summary tiles — including <b>wallet balance held</b>, the liability number this page never showed · packages rendered as the same tiles customers see (order = mini-app order, “Best value” tag included) · search + a status filter that hides abandoned attempts by default · “Mark paid” beside every pending row.</li>
       <li><b>Removed:</b> the always-open create form (a dashed “new” tile instead) · raw inputs in tables — package editing opens the tile, transactions are read-only · the dedicated out-trade column (small print under the customer).</li>
-    </ul>
-  </div>
+  </ul>
+</div>
 </section>
 
 <!-- ════════════ OPTION C — WORKBENCH ════════════ -->
 <section class="view view-c">
   <header class="pg-head">
-    <div class="pg-kicker">Loyalty &amp; Wallet · 会员与钱包</div>
-    <h1 class="pg-title">Top-up · 充值</h1>
-  </header>
+    <div class="pg-kicker">Loyalty &amp; Wallet</div>
+    <h1 class="pg-title">Top-up</h1>
+</header>
 
   <div class="card wb-needs">
     <div class="wb-needs-head">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="7.5" x2="12" y2="12.5"/><circle cx="12" cy="16" r="0.5" fill="var(--amber)"/></svg>
-      <span class="t">2 top-ups waiting on WeChat confirmation <span class="cn">· 2笔充值待微信确认</span></span>
-    </div>
+      <span class="t">2 top-ups waiting on WeChat confirmation</span>
+  </div>
     <div class="wb-needs-row">
-      <span class="who">阿明 · 138****2201</span>
+      <span class="who">Ming Li · 138****2201</span>
       <span class="mono">FCTU17836054412</span>
       <span class="mono num">9 Jul 13:57</span>
       <span class="amt num">¥2,000.00</span>
-      <button class="btn-ghost">Verify &amp; mark paid · 核实并标记</button>
-    </div>
+      <button class="btn-ghost">Verify &amp; mark paid</button>
+  </div>
     <div class="wb-needs-row">
-      <span class="who">阿明 · 138****2201</span>
+      <span class="who">Ming Li · 138****2201</span>
       <span class="mono">FCTU17831809344</span>
       <span class="mono num">4 Jul 16:02</span>
       <span class="amt num">¥2,000.00</span>
-      <button class="btn-ghost">Verify &amp; mark paid · 核实并标记</button>
-    </div>
+      <button class="btn-ghost">Verify &amp; mark paid</button>
   </div>
+</div>
   <!-- when nothing is stuck, the strip collapses to one sage line:
-  <div class="wb-allclear">✓ Nothing waiting — all top-ups confirmed. · 一切正常,所有充值均已确认。</div> -->
+  <div class="wb-allclear">✓ Nothing waiting — all top-ups confirmed.</div> -->
 
   <div class="wb-statline num">
-    <span>This month · 本月 <b>¥8,200</b> topped up</span>
+    <span>This month <b>¥8,200</b> topped up</span>
     <span><b>5</b> top-ups</span>
     <span><b>610</b> bonus pts given</span>
-    <span>Wallet held · 钱包余额 <b>¥23,410</b></span>
-  </div>
+    <span>Wallet held <b>¥23,410</b></span>
+</div>
 
   <div class="wb-sechead">
-    <h2 class="sec-title">Packages <span class="cn">充值套餐</span></h2>
-    <button class="btn-primary">＋ New package · 新建套餐</button>
-  </div>
+    <h2 class="sec-title">Packages </h2>
+    <button class="btn-primary"> New package</button>
+</div>
   <div class="tbl-wrap wb-pkg-tbl">
     <table class="tbl">
       <thead>
-        <tr><th></th><th>Package · 套餐</th><th class="r">Amount ¥ · 金额</th><th class="r">Bonus pts · 赠送</th><th>Active · 启用</th><th></th></tr>
-      </thead>
+        <tr><th></th><th>Package</th><th class="r">Amount ¥</th><th class="r">Bonus pts</th><th>Active</th><th></th></tr>
+    </thead>
       <tbody>
         <tr>
           <td class="wb-drag" title="Drag to reorder">⠿</td>
-          <td class="wb-pkg-name">¥1,000 wallet + 50 bonus pts<span class="zh">充1000送50积分</span></td>
+          <td class="wb-pkg-name">¥1,000 wallet + 50 bonus pts</td>
           <td class="r num">1,000</td><td class="r num">50</td>
           <td><label class="sw on" tabindex="0"><i></i></label></td>
           <td class="r"><button class="wb-kebab" aria-label="More actions">⋯</button></td>
-        </tr>
+      </tr>
         <tr>
           <td class="wb-drag" title="Drag to reorder">⠿</td>
-          <td class="wb-pkg-name">¥2,000 wallet + 150 bonus pts<span class="zh">充2000送150积分</span></td>
+          <td class="wb-pkg-name">¥2,000 wallet + 150 bonus pts</td>
           <td class="r num">2,000</td><td class="r num">150</td>
           <td><label class="sw on" tabindex="0"><i></i></label></td>
           <td class="r"><button class="wb-kebab" aria-label="More actions">⋯</button></td>
-        </tr>
+      </tr>
         <tr>
           <td class="wb-drag" title="Drag to reorder">⠿</td>
-          <td class="wb-pkg-name">¥3,000 wallet + 255 bonus pts<span class="zh">充3000送255积分</span></td>
+          <td class="wb-pkg-name">¥3,000 wallet + 255 bonus pts</td>
           <td class="r num">3,000</td><td class="r num">255</td>
           <td><label class="sw on" tabindex="0"><i></i></label></td>
           <td class="r"><button class="wb-kebab" aria-label="More actions">⋯</button></td>
-        </tr>
+      </tr>
         <tr>
           <td class="wb-drag" title="Drag to reorder">⠿</td>
-          <td class="wb-pkg-name">¥5,000 wallet + 500 bonus pts<span class="zh">充5000送500积分</span></td>
+          <td class="wb-pkg-name">¥5,000 wallet + 500 bonus pts</td>
           <td class="r num">5,000</td><td class="r num">500</td>
           <td><label class="sw" tabindex="0"><i></i></label></td>
           <td class="r"><button class="wb-kebab" aria-label="More actions">⋯</button></td>
-        </tr>
-      </tbody>
-    </table>
-  </div>
+      </tr>
+    </tbody>
+  </table>
+</div>
 
   <div class="wb-sechead">
-    <h2 class="sec-title">Activity <span class="cn">充值记录</span></h2>
+    <h2 class="sec-title">Activity </h2>
     <div class="sb-filters" style="margin: 0;">
       <label class="sb-search" style="min-width: 170px;">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.5" y2="16.5"/></svg>
-        <input placeholder="Search · 搜索">
-      </label>
+        <input placeholder="Search">
+    </label>
       <select class="sb-select">
-        <option>Hide abandoned · 隐藏未支付尝试</option>
-        <option>Show everything · 显示全部</option>
-      </select>
-    </div>
+        <option>Hide abandoned</option>
+        <option>Show everything</option>
+    </select>
   </div>
+</div>
 
   <div class="tbl-wrap">
     <table class="tbl">
       <thead>
         <tr>
-          <th>When · 时间</th><th>Customer · 顾客</th>
+          <th>When</th><th>Customer</th>
           <th class="r">¥</th><th class="r">Bonus</th>
-          <th>Method · 方式</th><th>Status · 状态</th><th>Trade # · 单号</th>
-        </tr>
-      </thead>
+          <th>Method</th><th>Status</th><th>Trade #</th>
+      </tr>
+    </thead>
       <tbody>
         <tr>
-          <td class="num">9 Jul 13:57</td><td>阿明 · 138****2201</td>
+          <td class="num">9 Jul 13:57</td><td>Ming Li · 138****2201</td>
           <td class="r num">2,000.00</td><td class="r num">+150</td>
-          <td>WeChat</td><td><span class="st-pending">Pending · 待付</span></td>
+          <td>WeChat</td><td><span class="st-pending">Pending</span></td>
           <td class="mono">FCTU17836054412</td>
-        </tr>
+      </tr>
         <tr>
           <td class="num">9 Jul 10:12</td><td>Laura W. · 137****8834</td>
           <td class="r num">1,000.00</td><td class="r num">+50</td>
-          <td>WeChat</td><td><span class="st-paid">Paid · 已付</span></td>
+          <td>WeChat</td><td><span class="st-paid">Paid</span></td>
           <td class="mono">FCTU17836011208</td>
-        </tr>
+      </tr>
         <tr>
-          <td class="num">6 Jul 10:56</td><td>崔崔 · 138****1147</td>
+          <td class="num">6 Jul 10:56</td><td>Cui Chen · 138****1147</td>
           <td class="r num">−199.50</td><td class="r num">—</td>
-          <td>Wallet</td><td><span class="st-spend">Spend · 消费</span></td>
+          <td>Wallet</td><td><span class="st-spend">Spend</span></td>
           <td class="mono">orderspend:5518</td>
-        </tr>
+      </tr>
         <tr>
           <td class="num">4 Jul 23:37</td><td>Tom H. · 186****0925</td>
           <td class="r num">3,000.00</td><td class="r num">+255</td>
-          <td>WeChat</td><td><span class="st-paid">Paid · 已付</span></td>
+          <td>WeChat</td><td><span class="st-paid">Paid</span></td>
           <td class="mono">FCTU17832082091</td>
-        </tr>
+      </tr>
         <tr>
           <td class="num">4 Jul 14:11</td><td>Priya S. · 158****7712</td>
           <td class="r num">2,200.00</td><td class="r num">+205</td>
-          <td>WeChat</td><td><span class="st-paid">Paid · 已付</span></td>
+          <td>WeChat</td><td><span class="st-paid">Paid</span></td>
           <td class="mono">FCTU17831742551</td>
-        </tr>
-      </tbody>
-    </table>
-    <div class="tbl-foot"><button class="btn-ghost">Load older · 加载更早</button></div>
-  </div>
+      </tr>
+    </tbody>
+  </table>
+    <div class="tbl-foot"><button class="btn-ghost">Load older</button></div>
+</div>
 
   <div class="changes">
     <b>Option C — what changed vs. today.</b>
     <ul>
       <li><b>Added:</b> a “needs you” strip at the top — stuck payments become the page's first job, with verify-and-mark-paid right there (collapses to a quiet all-clear line when empty) · a one-line stat row incl. wallet balance held · drag-to-reorder packages · search + an “abandoned hidden by default” filter.</li>
       <li><b>Removed:</b> the always-open create form (behind “New package”) · inline inputs in the packages table (edit via the ⋯ menu; Active stays a one-tap switch) · duplicate EN/CN title columns — one package column, both languages stacked.</li>
-    </ul>
-  </div>
+  </ul>
+</div>
 </section>
 
 </div>
