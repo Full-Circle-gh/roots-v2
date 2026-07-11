@@ -1883,7 +1883,7 @@ function fscBlank() {
     price: '', pct: null, cap: '',
     endChip: 'tonight', endsCustom: '', endEdit: false, winTouched: false,
     startLater: false, startChip: 'now', startsCustom: '',
-    noCoupon: false,
+    noCoupon: true,   // mockup C defaults the "keep coupons off" switch ON (protects margin)
   };
 }
 

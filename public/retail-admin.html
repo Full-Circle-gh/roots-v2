@@ -3729,6 +3729,16 @@
        through PUT /products/:id/flash-sale; DELETE reverts to the regular price. -->
   <section id="tab-flash">
     <style>
+      /* Paper ground bled over <main>'s padding so there's no grey frame — same
+         trick #tab-products uses, else the tan body (--bg-app base #E8E5DC) shows
+         through and the page reads muddy instead of Tacet cream. */
+      #tab-flash {
+        background: var(--bg-app);
+        margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
+        padding: calc(var(--s6) + 56px) var(--s6) var(--s7);
+        min-height: 100vh;
+      }
+
       /* ── page head + two-column shell ── */
       #tab-flash .fs2-wrap { display: grid; grid-template-columns: minmax(0,1fr) 380px; gap: 24px; align-items: start; margin-top: 20px; }
       @media (max-width: 980px) { #tab-flash .fs2-wrap { grid-template-columns: 1fr; } }
