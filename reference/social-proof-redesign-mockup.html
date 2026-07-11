@@ -1,0 +1,1214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Social proof, three ways</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+/* ============================================================
+   TACET DESIGN TOKENS — v1.0 (verbatim from tacet-tokens.css)
+   "Runs in silence." — When in doubt, remove something.
+   ============================================================ */
+:root {
+  --tacet-ink:      #111A2B;
+  --tacet-paper:    #FBF9F4;
+  --tacet-graphite: #58606E;
+  --tacet-dusk:     #6E67AF;  /* the AI's color — scarce by design */
+  --tacet-sage:     #A3B49F;  /* success / all-clear only */
+  --tacet-amber:    #C9954A;  /* attention — never alarmist */
+  --tacet-brick:    #B4533E;  /* errors — never pure red */
+
+  --tacet-cream:      #F6F3EC;
+  --tacet-border:     #E4E0D5;
+  --tacet-dusk-tint:  #EEEDF6;
+  --tacet-sage-tint:  #EDF1EC;
+  --tacet-amber-tint: #F7EEDE;
+  --tacet-brick-tint: #F6E7E3;
+
+  --bg:             var(--tacet-paper);
+  --surface:        #FFFFFF;
+  --surface-raised: var(--tacet-cream);
+  --text:           var(--tacet-ink);
+  --text-secondary: var(--tacet-graphite);
+  --border:         var(--tacet-border);
+  --accent:         var(--tacet-dusk);
+  --accent-tint:    var(--tacet-dusk-tint);
+  --ok:             var(--tacet-sage);
+  --ok-tint:        var(--tacet-sage-tint);
+  --warn:           var(--tacet-amber);
+  --warn-tint:      var(--tacet-amber-tint);
+  --danger:         var(--tacet-brick);
+  --danger-tint:    var(--tacet-brick-tint);
+  --ok-ink:         #4A6249;
+  --warn-ink:       #8A6425;
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-text:    "Inter", -apple-system, Arial, sans-serif;
+  --fs-title: 1.125rem;
+  --fs-body: 0.9375rem;
+  --fs-caption: 0.8125rem;
+  --lh-body: 1.6;
+  --lh-tight: 1.15;
+
+  --s-1: 4px;  --s-2: 8px;  --s-3: 16px;  --s-4: 24px;
+  --s-5: 32px; --s-6: 48px; --s-7: 64px;  --s-8: 96px;
+
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --border-w: 1px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --shadow-lift: 0 10px 30px rgba(17,26,43,0.16);
+
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-quick: 200ms;
+  --dur-settle: 350ms;
+  --dur-slow: 600ms;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--font-text); font-size: var(--fs-body);
+  line-height: var(--lh-body); color: var(--text); background: var(--bg);
+}
+.t-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+button { font-family: var(--font-text); }
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* the dusk dot — here it marks ONE thing: numbers Tacet is inventing for you */
+.t-dot {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  flex: none; display: inline-block; vertical-align: middle;
+  animation: t-breathe 2.4s var(--ease-settle) infinite;
+}
+@keyframes t-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(0.8); }
+}
+
+/* ============================================================
+   MOCKUP CHROME (not part of the product)
+   ============================================================ */
+.chrome {
+  background: var(--tacet-ink); color: rgba(251,249,244,0.72);
+  padding: var(--s-2) var(--s-4); font-size: var(--fs-caption);
+  display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 90;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 11px; color: rgba(251,249,244,0.5);
+}
+.chrome .spacer { flex: 1; }
+.opt-tab {
+  background: none; border: 1px solid rgba(251,249,244,0.25); color: rgba(251,249,244,0.72);
+  border-radius: var(--radius-pill); padding: 4px 14px; font-size: var(--fs-caption);
+  cursor: pointer; transition: all var(--dur-quick) var(--ease-settle);
+}
+.opt-tab:hover { color: #fff; border-color: rgba(251,249,244,0.5); }
+.opt-tab.active { background: var(--tacet-paper); color: var(--tacet-ink); border-color: var(--tacet-paper); }
+
+.topbar {
+  display: flex; align-items: center; gap: var(--s-3);
+  padding: var(--s-3) var(--s-5);
+  border-bottom: var(--border-w) solid var(--border); background: var(--bg);
+}
+.topbar .wordmark {
+  font-family: var(--font-display); font-weight: 300;
+  font-size: 20px; letter-spacing: 0.2em; color: var(--text);
+}
+
+.page { max-width: 980px; margin: 0 auto; padding: var(--s-5) var(--s-4) var(--s-8); }
+main { display: none; }
+main.active { display: block; animation: t-settle var(--dur-slow) var(--ease-settle) both; }
+@keyframes t-settle {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-head { display: flex; align-items: center; gap: var(--s-3); margin-bottom: 4px; }
+.page-head h1 { font: 500 22px/1.2 var(--font-text); letter-spacing: -0.01em; }
+.page-head .spacer { flex: 1; }
+.page-sub { font-size: var(--fs-caption); color: var(--text-secondary); margin-bottom: var(--s-4); max-width: 60ch; }
+
+/* master switch (ink when on — it's the merchant's hand, not automation) */
+.switch { display: inline-flex; align-items: center; gap: var(--s-2); cursor: pointer; user-select: none; }
+.switch input { display: none; }
+.switch .track {
+  width: 36px; height: 20px; border-radius: var(--radius-pill);
+  background: var(--border); position: relative; flex: none;
+  transition: background var(--dur-quick) var(--ease-settle);
+}
+.switch .track::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(17,26,43,0.2);
+  transition: left var(--dur-quick) var(--ease-settle);
+}
+.switch input:checked + .track { background: var(--tacet-ink); }
+.switch input:checked + .track::after { left: 18px; }
+.switch .lbl { font-size: var(--fs-caption); color: var(--text-secondary); }
+
+/* shared controls */
+.n-in {
+  width: 64px; padding: 7px 8px; border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-control); font: 400 var(--fs-body) var(--font-text);
+  background: var(--surface); color: var(--text); text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.n-in:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.t-in {
+  padding: 7px 10px; border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-control); font: 400 var(--fs-caption) var(--font-text);
+  background: var(--surface); color: var(--text);
+}
+.t-in:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.f-lbl {
+  display: block; font-size: 11px; font-weight: 500; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text-secondary); margin-bottom: 6px;
+}
+.hint { font-size: var(--fs-caption); color: var(--text-secondary); }
+.unit { font-size: var(--fs-caption); color: var(--text-secondary); }
+
+.btn-ink {
+  background: var(--tacet-ink); color: var(--tacet-paper); border: none;
+  border-radius: var(--radius-control); padding: 10px 22px;
+  font: 500 var(--fs-body) var(--font-text); cursor: pointer;
+  display: inline-flex; align-items: center; gap: var(--s-2);
+  transition: opacity var(--dur-quick) var(--ease-settle);
+}
+.btn-ink:hover { opacity: 0.88; }
+.btn-quiet {
+  background: transparent; color: var(--text); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-control); padding: 9px 18px;
+  font: 500 var(--fs-caption) var(--font-text); cursor: pointer;
+  transition: border-color var(--dur-quick) var(--ease-settle);
+}
+.btn-quiet:hover { border-color: var(--text-secondary); }
+
+/* in the real page this sits sticky at the viewport bottom; static here so
+   full-page screenshots stay honest */
+.save-bar {
+  margin-top: var(--s-5); padding: var(--s-3) 0; background: var(--bg);
+  display: flex; align-items: center; gap: var(--s-3);
+}
+.save-note { font-size: var(--fs-caption); color: var(--ok-ink); opacity: 0; transition: opacity var(--dur-settle) var(--ease-settle); }
+.save-note.show { opacity: 1; }
+
+/* moved-away chip */
+.moved {
+  margin-top: var(--s-4); display: flex; align-items: center; gap: var(--s-2);
+  font-size: var(--fs-caption); color: var(--text-secondary);
+  border: var(--border-w) dashed var(--border); border-radius: var(--radius-card);
+  padding: 10px 14px; background: var(--surface-raised);
+}
+.moved b { font-weight: 500; color: var(--text); }
+.moved a { color: var(--text); }
+
+/* designer's note at the bottom of each option */
+.note {
+  margin-top: var(--s-6); border-top: var(--border-w) solid var(--border);
+  padding-top: var(--s-4); font-size: var(--fs-caption); color: var(--text-secondary);
+  max-width: 68ch;
+}
+.note b { color: var(--text); font-weight: 500; }
+
+/* ── mini widget samples (what the customer actually sees) ── */
+.mini {
+  background: var(--surface-raised); border: var(--border-w) solid var(--border);
+  border-radius: 10px; padding: 10px; display: flex; align-items: center; justify-content: center;
+  min-height: 52px; overflow: hidden;
+}
+.mini .toast {
+  background: var(--surface); border-radius: 10px; box-shadow: var(--shadow-soft);
+  border: var(--border-w) solid var(--border);
+  padding: 6px 10px; font-size: 11.5px; display: flex; align-items: center; gap: 8px; white-space: nowrap;
+}
+.mini .toast .who { font-weight: 600; }
+.mini .toast .ago { color: var(--text-secondary); }
+.mini .pill {
+  font-size: 11.5px; padding: 3px 10px; border-radius: var(--radius-pill);
+  background: var(--surface); border: var(--border-w) solid var(--border); white-space: nowrap;
+}
+.mini .pill.warm { background: var(--warn-tint); border-color: transparent; color: var(--warn-ink); font-weight: 500; }
+.mini .cardlet {
+  width: 74px; border-radius: 8px; overflow: hidden; background: var(--surface);
+  border: var(--border-w) solid var(--border); position: relative;
+}
+.mini .cardlet .ph { height: 40px; background: linear-gradient(135deg, var(--tacet-sage-tint), var(--tacet-amber-tint)); }
+.mini .cardlet .nm { font-size: 9px; padding: 3px 5px; color: var(--text-secondary); }
+.mini .cardlet .cap {
+  position: absolute; top: 0; left: 0; background: var(--tacet-ink); color: var(--tacet-paper);
+  font-size: 8px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 0 0 8px 0;
+}
+
+/* ============================================================
+   OPTION A — THE CONSOLE (quiet rows, one page, no drawers)
+   ============================================================ */
+.a-list { display: flex; flex-direction: column; gap: 10px; }
+.a-row {
+  background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-soft);
+  transition: border-color var(--dur-quick) var(--ease-settle);
+}
+.a-row.off { background: transparent; box-shadow: none; }
+.a-row.off .mini { opacity: 0.45; filter: grayscale(0.4); }
+.a-row.off .a-name { color: var(--text-secondary); }
+.a-head {
+  display: grid; grid-template-columns: 190px 1fr auto auto; gap: var(--s-3);
+  align-items: center; padding: 14px 16px; cursor: pointer;
+}
+.a-name { font-weight: 500; }
+.a-where { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-top: 1px; }
+.a-sum { font-size: var(--fs-caption); color: var(--text-secondary); margin-top: 3px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.a-chev {
+  color: var(--text-secondary); transition: transform var(--dur-settle) var(--ease-settle);
+  display: flex; align-items: center;
+}
+.a-row.open .a-chev { transform: rotate(180deg); }
+.a-body {
+  display: none; border-top: var(--border-w) solid var(--border);
+  padding: var(--s-3) var(--s-3) var(--s-3) calc(190px + var(--s-3) + 16px);
+}
+.a-row.open .a-body { display: block; animation: t-settle var(--dur-settle) var(--ease-settle) both; }
+.a-fields { display: flex; gap: var(--s-4); flex-wrap: wrap; align-items: flex-end; }
+.a-field .row-in { display: flex; align-items: center; gap: 7px; }
+.a-body .hint { margin-top: 10px; max-width: 56ch; }
+.a-fine {
+  margin-top: var(--s-3); border-top: var(--border-w) dashed var(--border); padding-top: 12px;
+}
+.a-fine > summary {
+  list-style: none; cursor: pointer; font-size: var(--fs-caption); color: var(--text-secondary);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.a-fine > summary::-webkit-details-marker { display: none; }
+.a-fine > summary:hover { color: var(--text); }
+.a-fine[open] > summary { margin-bottom: 12px; }
+.a-manual { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.a-manual .m-row {
+  display: grid; grid-template-columns: 90px 1fr 90px auto; gap: 8px; align-items: center;
+}
+.a-manual .m-row .x {
+  background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 15px;
+  padding: 4px;
+}
+.a-manual .m-row .x:hover { color: var(--danger); }
+@media (max-width: 720px) {
+  .a-head { grid-template-columns: 1fr auto auto; }
+  .a-head .mini { display: none; }
+  .a-body { padding-left: var(--s-3); }
+}
+
+/* ============================================================
+   OPTION B — THE STAGE (phone preview drives the page)
+   ============================================================ */
+.b-wrap { display: grid; grid-template-columns: 320px 1fr; gap: var(--s-5); align-items: start; }
+@media (max-width: 860px) { .b-wrap { grid-template-columns: 1fr; } }
+.b-stage { position: sticky; top: 56px; }
+.b-views { display: flex; gap: 6px; margin-bottom: var(--s-3); }
+.b-view-tab {
+  flex: 1; background: transparent; border: var(--border-w) solid var(--border);
+  color: var(--text-secondary); border-radius: var(--radius-pill); padding: 6px 0;
+  font-size: var(--fs-caption); cursor: pointer;
+  transition: all var(--dur-quick) var(--ease-settle);
+}
+.b-view-tab.active { background: var(--tacet-ink); border-color: var(--tacet-ink); color: var(--tacet-paper); }
+.phone {
+  width: 300px; margin: 0 auto; background: var(--tacet-ink); border-radius: 38px;
+  padding: 10px; box-shadow: var(--shadow-lift);
+}
+.phone .screen {
+  background: var(--bg); border-radius: 30px; height: 560px; overflow: hidden; position: relative;
+}
+.pv { position: absolute; inset: 0; display: none; flex-direction: column; }
+.pv.active { display: flex; animation: t-settle var(--dur-settle) var(--ease-settle) both; }
+.pv .apphead {
+  padding: 18px 16px 10px; display: flex; align-items: center; gap: 8px;
+}
+.pv .apphead .logo { width: 22px; height: 22px; border-radius: 50%; background: var(--tacet-sage); }
+.pv .apphead .nm { font-size: 13px; font-weight: 600; }
+.pv .banner {
+  margin: 4px 14px 12px; height: 92px; border-radius: 12px;
+  background: linear-gradient(120deg, var(--tacet-amber-tint), var(--tacet-sage-tint));
+  display: flex; align-items: flex-end; padding: 10px;
+}
+.pv .banner span { font-size: 10px; color: var(--warn-ink); font-weight: 600; letter-spacing: 0.06em; }
+.pv .sect { font-size: 11px; font-weight: 600; margin: 0 16px 8px; }
+.pv .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 14px; }
+.pcard {
+  background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: 12px; overflow: hidden; position: relative;
+}
+.pcard .img { height: 78px; }
+.pcard:nth-child(odd) .img { background: linear-gradient(135deg, var(--tacet-sage-tint), var(--tacet-amber-tint)); }
+.pcard:nth-child(even) .img { background: linear-gradient(135deg, var(--tacet-amber-tint), var(--tacet-brick-tint)); }
+.pcard .b { padding: 7px 9px 9px; }
+.pcard .t { font-size: 10.5px; font-weight: 500; line-height: 1.3; }
+.pcard .p { font-size: 11px; font-weight: 600; margin-top: 3px; }
+.pcard .sold-cap {
+  position: absolute; top: 0; left: 0; background: var(--tacet-ink); color: var(--tacet-paper);
+  font-size: 8.5px; font-weight: 600; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 0 0 9px 0;
+}
+.pv .ticker {
+  position: absolute; left: 12px; right: 12px; bottom: 14px;
+  background: var(--surface); border-radius: 12px; box-shadow: var(--shadow-lift);
+  padding: 9px 12px; font-size: 11px; display: flex; align-items: center; gap: 8px;
+}
+.pv .ticker .who { font-weight: 600; }
+.pv .ticker .ago { color: var(--text-secondary); font-size: 10px; }
+.pv .ticker .x { margin-left: auto; color: var(--text-secondary); }
+/* product view */
+.pv .pimg { height: 200px; background: linear-gradient(135deg, var(--tacet-sage-tint), var(--tacet-amber-tint)); }
+.pv .pbody { padding: 14px 16px; }
+.pv .ptitle { font-size: 15px; font-weight: 600; }
+.pv .pprice { font-size: 17px; font-weight: 600; margin: 4px 0 10px; }
+.proofline {
+  display: flex; align-items: center; gap: 7px; font-size: 11px;
+  color: var(--text-secondary); padding: 5px 0;
+}
+.proofline .pp {
+  padding: 2px 9px; border-radius: var(--radius-pill); background: var(--warn-tint);
+  color: var(--warn-ink); font-weight: 500; font-size: 10.5px;
+}
+.proofline.viewers .pp { background: var(--tacet-sage-tint); color: var(--ok-ink); }
+.proofline.last .pp { background: var(--surface-raised); color: var(--text-secondary); }
+.pv .buy {
+  margin-top: 14px; background: var(--tacet-ink); color: var(--tacet-paper);
+  text-align: center; border-radius: 10px; padding: 10px; font-size: 12px; font-weight: 500;
+}
+.hidden { display: none !important; }
+
+.b-controls { display: flex; flex-direction: column; gap: var(--s-4); }
+.b-group-lbl {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--text-secondary); margin-bottom: -12px;
+}
+.b-card {
+  background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-soft); padding: 14px 16px;
+}
+.b-card.off { background: transparent; box-shadow: none; }
+.b-card-head { display: flex; align-items: center; gap: var(--s-3); }
+.b-card-head .nm { font-weight: 500; flex: 1; }
+.b-essent { display: flex; gap: var(--s-4); flex-wrap: wrap; align-items: flex-end; margin-top: 12px; }
+.b-card.off .b-essent, .b-card.off .b-fine { display: none; }
+.b-fine { margin-top: 12px; border-top: var(--border-w) dashed var(--border); padding-top: 10px; }
+.b-fine > summary {
+  list-style: none; cursor: pointer; font-size: var(--fs-caption); color: var(--text-secondary);
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.b-fine > summary::-webkit-details-marker { display: none; }
+.b-fine[open] > summary { margin-bottom: 12px; }
+
+/* ============================================================
+   OPTION C — THE DIAL (one decision, then switches + wizard)
+   ============================================================ */
+.c-hero { margin-bottom: var(--s-5); }
+.c-hero h2 { font: 400 var(--fs-title)/1.3 var(--font-text); margin-bottom: 4px; }
+.c-hero .hint { margin-bottom: var(--s-3); }
+.c-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+@media (max-width: 720px) { .c-presets { grid-template-columns: 1fr; } }
+.c-preset {
+  text-align: left; background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-card); padding: 16px; cursor: pointer;
+  box-shadow: var(--shadow-soft); position: relative;
+  transition: border-color var(--dur-quick) var(--ease-settle), transform var(--dur-quick) var(--ease-settle);
+  font-family: var(--font-text);
+}
+.c-preset:hover { transform: translateY(-1px); }
+.c-preset.sel { border-color: var(--tacet-ink); }
+.c-preset.sel::after {
+  content: "✓"; position: absolute; top: 12px; right: 14px;
+  width: 20px; height: 20px; border-radius: 50%; background: var(--tacet-ink);
+  color: var(--tacet-paper); font-size: 11px; display: flex; align-items: center; justify-content: center;
+}
+.c-preset .nm { font-weight: 500; font-size: var(--fs-body); }
+.c-preset .de { font-size: var(--fs-caption); color: var(--text-secondary); margin-top: 4px; line-height: 1.5; }
+.c-preset .sample { margin-top: 10px; font-size: 11.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.c-widgets { display: flex; flex-direction: column; gap: 8px; }
+.c-wrow {
+  background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-soft);
+  padding: 12px 16px; display: grid; grid-template-columns: 1fr auto auto; gap: var(--s-3); align-items: center;
+}
+.c-wrow.off { background: transparent; box-shadow: none; }
+.c-wrow.off .nm { color: var(--text-secondary); }
+.c-wrow .nm { font-weight: 500; }
+.c-wrow .sum { font-size: var(--fs-caption); color: var(--text-secondary); margin-top: 2px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.c-adjust {
+  background: none; border: none; font-size: var(--fs-caption); color: var(--text-secondary);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--border);
+}
+.c-adjust:hover { color: var(--text); }
+.c-wdetail { grid-column: 1 / -1; border-top: var(--border-w) dashed var(--border); padding-top: 12px; display: none; }
+.c-wrow.open .c-wdetail { display: block; animation: t-settle var(--dur-settle) var(--ease-settle) both; }
+
+.c-banner {
+  display: flex; align-items: center; gap: var(--s-3);
+  background: var(--accent-tint); border-radius: var(--radius-card);
+  padding: 14px 16px; margin-bottom: var(--s-4);
+}
+.c-banner .tx { flex: 1; font-size: var(--fs-caption); color: var(--text); }
+.c-banner .tx b { font-weight: 500; }
+.c-banner button {
+  background: var(--tacet-ink); color: var(--tacet-paper); border: none;
+  border-radius: var(--radius-control); padding: 8px 16px; font: 500 var(--fs-caption) var(--font-text);
+  cursor: pointer;
+}
+
+/* wizard overlay */
+.wiz-bg {
+  position: fixed; inset: 0; background: rgba(17,26,43,0.45); z-index: 100;
+  display: none; align-items: center; justify-content: center; padding: var(--s-4);
+}
+.wiz-bg.open { display: flex; }
+.wiz {
+  background: var(--bg); border-radius: var(--radius-card); box-shadow: var(--shadow-lift);
+  width: 100%; max-width: 560px; padding: var(--s-5); max-height: 88vh; overflow: auto;
+}
+.wiz .steps {
+  display: flex; align-items: center; gap: 8px; margin-bottom: var(--s-4);
+  font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-secondary);
+}
+.wiz .steps .st { display: flex; align-items: center; gap: 6px; }
+.wiz .steps .n {
+  width: 20px; height: 20px; border-radius: 50%; border: var(--border-w) solid var(--border);
+  display: flex; align-items: center; justify-content: center; font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.wiz .steps .st.on .n { background: var(--tacet-ink); border-color: var(--tacet-ink); color: var(--tacet-paper); }
+.wiz .steps .st.done .n { background: var(--ok-tint); border-color: transparent; color: var(--ok-ink); }
+.wiz .steps .bar { flex: 1; height: 1px; background: var(--border); }
+.wiz h3 { font: 400 var(--fs-title)/1.3 var(--font-text); margin-bottom: 4px; }
+.wiz .hint { margin-bottom: var(--s-3); }
+.wiz-pane { display: none; }
+.wiz-pane.active { display: block; animation: t-settle var(--dur-settle) var(--ease-settle) both; }
+.wiz .c-presets { grid-template-columns: 1fr; }
+.wiz-widgets { display: flex; flex-direction: column; gap: 8px; }
+.wiz-wrow {
+  display: flex; align-items: center; gap: var(--s-3); background: var(--surface);
+  border: var(--border-w) solid var(--border); border-radius: var(--radius-control); padding: 10px 14px;
+}
+.wiz-wrow .nm { flex: 1; font-size: var(--fs-caption); }
+.wiz-wrow .nm b { font-weight: 500; font-size: var(--fs-body); display: block; }
+.wiz-foot { display: flex; align-items: center; gap: var(--s-3); margin-top: var(--s-4); }
+.wiz-foot .spacer { flex: 1; }
+.wiz-skip { background: none; border: none; color: var(--text-secondary); font-size: var(--fs-caption); cursor: pointer; }
+.wiz-skip:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">tacet · social proof — three ways</span>
+  <span class="spacer"></span>
+  <button class="opt-tab active" data-opt="a">A — The console</button>
+  <button class="opt-tab" data-opt="b">B — The stage</button>
+  <button class="opt-tab" data-opt="c">C — The dial</button>
+</div>
+
+<div class="topbar"><span class="wordmark">tacet</span></div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     OPTION A — THE CONSOLE
+     One quiet list. Each widget is a row you can read at a glance:
+     what the customer sees (live sample), whether it's on, and a
+     one-line summary of how it's tuned. Open a row for the two or
+     three numbers that matter; everything expert hides in Fine-tune.
+     ═══════════════════════════════════════════════════════════ -->
+<main id="opt-a" class="active">
+  <div class="page">
+    <div class="page-head">
+      <h1>Social proof</h1>
+      <span class="spacer"></span>
+      <label class="switch"><input type="checkbox" checked id="a-master"><span class="track"></span><span class="lbl">On across the mini app</span></label>
+    </div>
+    <p class="page-sub">Small signs of life customers see while they shop. Real activity always comes first — the <span class="t-dot"></span> marks numbers Tacet fills in for you on quiet days.</p>
+
+    <div class="a-list" id="a-list">
+
+      <!-- 1 · bought count -->
+      <div class="a-row" data-w="bc">
+        <div class="a-head">
+          <div class="mini"><span class="pill warm t-num">12 bought today</span></div>
+          <div>
+            <div class="a-name">People bought this <span class="a-where">· product page</span></div>
+            <div class="a-sum" data-sum>Shows from 2 buyers &nbsp;·&nbsp; <span class="t-dot"></span> fill-in 6–15 extra a day</div>
+          </div>
+          <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+          <span class="a-chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>
+        <div class="a-body">
+          <div class="a-fields">
+            <div class="a-field">
+              <label class="f-lbl">Fill-in — extra buyers a day</label>
+              <div class="row-in"><input class="n-in" value="6"> <span class="unit">to</span> <input class="n-in" value="15"></div>
+            </div>
+          </div>
+          <p class="hint">Climbs through the day like real orders do, on top of the true count. Busy products climb faster. Set 0–0 to show real buyers only.</p>
+          <details class="a-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Fine-tune — when the line appears</summary>
+            <div class="a-fields">
+              <div class="a-field"><label class="f-lbl">Min today</label><input class="n-in" value="2"></div>
+              <div class="a-field"><label class="f-lbl">Min this week</label><input class="n-in" value="2"></div>
+              <div class="a-field"><label class="f-lbl">Min this month</label><input class="n-in" value="1"></div>
+              <div class="a-field"><label class="f-lbl">Min all-time</label><input class="n-in" value="2"></div>
+            </div>
+            <p class="hint">The line shows the narrowest window that clears its minimum, and hides rather than show a weak number.</p>
+          </details>
+        </div>
+      </div>
+
+      <!-- 2 · ticker -->
+      <div class="a-row" data-w="rb">
+        <div class="a-head">
+          <div class="mini"><div class="toast"><span class="who">W**</span> bought Hummus <span class="ago">· 5 min</span></div></div>
+          <div>
+            <div class="a-name">Recent-buyers ticker <span class="a-where">· home</span></div>
+            <div class="a-sum" data-sum>Last 5 days &nbsp;·&nbsp; pops every ~13 s &nbsp;·&nbsp; 2 manual entries</div>
+          </div>
+          <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+          <span class="a-chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>
+        <div class="a-body">
+          <div class="a-fields">
+            <div class="a-field"><label class="f-lbl">Show orders from the last</label>
+              <div class="row-in"><input class="n-in" value="5"> <span class="unit">days</span></div></div>
+            <div class="a-field"><label class="f-lbl">Each toast stays</label>
+              <div class="row-in"><input class="n-in" value="3"> <span class="unit">sec</span></div></div>
+            <div class="a-field"><label class="f-lbl">Quiet gap between</label>
+              <div class="row-in"><input class="n-in" value="10"> <span class="unit">sec</span></div></div>
+          </div>
+          <p class="hint">Real paid orders, names masked. The gap stretches by itself overnight so it never spams at 3 am.</p>
+          <details class="a-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Manual entries <span class="t-dot"></span> — mixed into the real feed</summary>
+            <div class="a-manual">
+              <div class="m-row">
+                <input class="t-in" value="A****" aria-label="masked name">
+                <input class="t-in" value="Hummus Asli · 中东鹰嘴豆泥" aria-label="product">
+                <div class="row-in"><input class="n-in" value="25"> <span class="unit">min</span></div>
+                <button class="x" title="Remove">×</button>
+              </div>
+              <div class="m-row">
+                <input class="t-in" value="W**" aria-label="masked name">
+                <input class="t-in" value="81% Hazel Chocolate Spread · 可可榛子酱" aria-label="product">
+                <div class="row-in"><input class="n-in" value="8"> <span class="unit">min</span></div>
+                <button class="x" title="Remove">×</button>
+              </div>
+              <div><button class="btn-quiet">+ Add entry</button></div>
+              <p class="hint">Minutes are an average age — each entry drifts and resets on its own, so it reads like a live order.</p>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- 3 · viewing now -->
+      <div class="a-row" data-w="vn">
+        <div class="a-head">
+          <div class="mini"><span class="pill t-num">◉ 8 viewing now</span></div>
+          <div>
+            <div class="a-name">Viewing now <span class="a-where">· product page</span></div>
+            <div class="a-sum" data-sum>Counting on &nbsp;·&nbsp; badge shown to customers &nbsp;·&nbsp; <span class="t-dot"></span> 15–40 at peak</div>
+          </div>
+          <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+          <span class="a-chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>
+        <div class="a-body">
+          <div class="a-fields">
+            <div class="a-field">
+              <label class="f-lbl">Fill-in — viewers at peak</label>
+              <div class="row-in"><input class="n-in" value="15"> <span class="unit">to</span> <input class="n-in" value="40"></div>
+            </div>
+            <label class="switch" style="padding-bottom: 6px;"><input type="checkbox" checked><span class="track"></span><span class="lbl">Show the badge to customers</span></label>
+          </div>
+          <p class="hint">Drifts on a slow wave and quietens overnight — a 3 am page never claims a crowd. Turn the badge off to keep counting for your dashboard only.</p>
+          <details class="a-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Fine-tune</summary>
+            <div class="a-fields">
+              <div class="a-field"><label class="f-lbl">Viewer freshness</label>
+                <div class="row-in"><input class="n-in" value="45"> <span class="unit">sec</span></div></div>
+            </div>
+            <p class="hint">How long someone still counts after their last ping. The app pings every 25 s; 45 s is a tight default.</p>
+          </details>
+        </div>
+      </div>
+
+      <!-- 4 · last ordered -->
+      <div class="a-row" data-w="lo">
+        <div class="a-head">
+          <div class="mini"><span class="pill">Last ordered 14 min ago</span></div>
+          <div>
+            <div class="a-name">Last ordered <span class="a-where">· product page</span></div>
+            <div class="a-sum" data-sum>Hides after 24 h &nbsp;·&nbsp; <span class="t-dot"></span> fill-in reads 5–45 min on busy items</div>
+          </div>
+          <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+          <span class="a-chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>
+        <div class="a-body">
+          <div class="a-fields">
+            <div class="a-field">
+              <label class="f-lbl">Fill-in — busy products read</label>
+              <div class="row-in"><input class="n-in" value="5"> <span class="unit">to</span> <input class="n-in" value="45"> <span class="unit">min ago</span></div>
+            </div>
+          </div>
+          <p class="hint">Real orders always win when fresher. The fill-in only lands on some products at a time, ages on its own, and skips quiet items — never on everything at once.</p>
+          <details class="a-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Fine-tune</summary>
+            <div class="a-fields">
+              <div class="a-field"><label class="f-lbl">Hide if older than</label>
+                <div class="row-in"><input class="n-in" value="24"> <span class="unit">hours</span></div></div>
+            </div>
+            <p class="hint">Older "last orders" feel stale, not social. Also hides when the bought-count line already says "today", so the two never repeat each other.</p>
+          </details>
+        </div>
+      </div>
+
+      <!-- 5 · sold badge -->
+      <div class="a-row" data-w="sb">
+        <div class="a-head">
+          <div class="mini"><div class="cardlet"><span class="cap t-num">142 SOLD</span><div class="ph"></div><div class="nm">Hummus Asli</div></div></div>
+          <div>
+            <div class="a-name">SOLD badge <span class="a-where">· shop &amp; home cards</span></div>
+            <div class="a-sum" data-sum>From 3 units &nbsp;·&nbsp; <span class="t-dot"></span> starts life at 50–150</div>
+          </div>
+          <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+          <span class="a-chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </div>
+        <div class="a-body">
+          <div class="a-fields">
+            <div class="a-field">
+              <label class="f-lbl">Fill-in — starting total</label>
+              <div class="row-in"><input class="n-in" value="50"> <span class="unit">to</span> <input class="n-in" value="150"></div>
+            </div>
+          </div>
+          <p class="hint">Each product picks its own number in this range, then creeps up a little every day — capped so it can't balloon. Real units add on top.</p>
+          <details class="a-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Fine-tune</summary>
+            <div class="a-fields">
+              <div class="a-field"><label class="f-lbl">Minimum units to show</label><input class="n-in" value="3"></div>
+            </div>
+            <p class="hint">Below this the card stays neutral — we don't advertise a weak number.</p>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <div class="moved">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      <span><b>Checkout upsell</b> isn't social proof — it moved to <a href="#">Marketing → Pop-ups</a>, next to its siblings.</span>
+    </div>
+
+    <div class="save-bar">
+      <button class="btn-ink" onclick="fakeSave('a-status')">Save</button>
+      <span class="save-note" id="a-status">Saved — live in the mini app.</span>
+    </div>
+
+    <p class="note"><b>What changed.</b> Six cards of paragraphs became five rows you can read in one pass. Each row leads with a live sample of the actual widget — the sample explains more than the old 80-word helper ever did. The two or three numbers a merchant actually revisits sit one click away; the expert thresholds live under Fine-tune with the defaults already right. The dusk dot marks exactly one idea everywhere on the page: <b>a number Tacet is inventing for you</b>. One save button. The checkout upsell (a different feature that had drifted in) moves out.</p>
+  </div>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     OPTION B — THE STAGE
+     The customer's screen is the page. A live phone preview sits
+     on the left; the controls are grouped by where they appear.
+     Flip a switch, watch it appear or vanish on the phone.
+     ═══════════════════════════════════════════════════════════ -->
+<main id="opt-b">
+  <div class="page" style="max-width: 1080px;">
+    <div class="page-head">
+      <h1>Social proof</h1>
+      <span class="spacer"></span>
+      <label class="switch"><input type="checkbox" checked><span class="track"></span><span class="lbl">On across the mini app</span></label>
+    </div>
+    <p class="page-sub">What you switch on here shows up on the phone as you change it. Real activity first — the <span class="t-dot"></span> marks fill-in numbers.</p>
+
+    <div class="b-wrap">
+      <!-- stage -->
+      <div class="b-stage">
+        <div class="b-views">
+          <button class="b-view-tab active" data-view="home">Home</button>
+          <button class="b-view-tab" data-view="product">Product</button>
+          <button class="b-view-tab" data-view="shop">Shop</button>
+        </div>
+        <div class="phone"><div class="screen">
+
+          <div class="pv active" data-pv="home">
+            <div class="apphead"><span class="logo"></span><span class="nm">Roots Kitchen</span></div>
+            <div class="banner"><span>FRESH THIS WEEK</span></div>
+            <div class="sect">Popular</div>
+            <div class="grid">
+              <div class="pcard"><span class="sold-cap t-num" data-b="sold">142 SOLD</span><div class="img"></div><div class="b"><div class="t">Hummus Asli</div><div class="p t-num">¥38</div></div></div>
+              <div class="pcard"><span class="sold-cap t-num" data-b="sold">96 SOLD</span><div class="img"></div><div class="b"><div class="t">Hazel Choc Spread</div><div class="p t-num">¥52</div></div></div>
+            </div>
+            <div class="ticker" data-b="ticker"><span class="who">W**</span> bought Hummus Asli <span class="ago">5 min ago</span><span class="x">×</span></div>
+          </div>
+
+          <div class="pv" data-pv="product">
+            <div class="pimg"></div>
+            <div class="pbody">
+              <div class="ptitle">Hummus Asli · 中东鹰嘴豆泥</div>
+              <div class="pprice t-num">¥38</div>
+              <div class="proofline" data-b="bought"><span class="pp t-num">12 bought today</span></div>
+              <div class="proofline viewers" data-b="viewing"><span class="pp t-num">◉ 8 viewing now</span></div>
+              <div class="proofline last" data-b="last"><span class="pp">Last ordered 14 min ago</span></div>
+              <div class="buy">Add to cart</div>
+            </div>
+          </div>
+
+          <div class="pv" data-pv="shop">
+            <div class="apphead"><span class="nm">Shop</span></div>
+            <div class="grid">
+              <div class="pcard"><span class="sold-cap t-num" data-b="sold">142 SOLD</span><div class="img"></div><div class="b"><div class="t">Hummus Asli</div><div class="p t-num">¥38</div></div></div>
+              <div class="pcard"><span class="sold-cap t-num" data-b="sold">96 SOLD</span><div class="img"></div><div class="b"><div class="t">Hazel Choc Spread</div><div class="p t-num">¥52</div></div></div>
+              <div class="pcard"><div class="img"></div><div class="b"><div class="t">Za'atar Blend</div><div class="p t-num">¥24</div></div></div>
+              <div class="pcard"><span class="sold-cap t-num" data-b="sold">201 SOLD</span><div class="img"></div><div class="b"><div class="t">Tahini 500g</div><div class="p t-num">¥45</div></div></div>
+            </div>
+          </div>
+
+        </div></div>
+        <p class="hint" style="text-align:center; margin-top: 10px;">Live preview — flip anything on the right.</p>
+      </div>
+
+      <!-- controls -->
+      <div class="b-controls">
+        <div class="b-group-lbl">On the home screen</div>
+        <div class="b-card" data-w="ticker">
+          <div class="b-card-head">
+            <span class="nm">Recent-buyers ticker</span>
+            <label class="switch"><input type="checkbox" checked data-onoff data-target="ticker" data-view-hint="home"><span class="track"></span></label>
+          </div>
+          <div class="b-essent">
+            <div><label class="f-lbl">Orders from the last</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="5"><span class="unit">days</span></div></div>
+            <div><label class="f-lbl">Stays up</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="3"><span class="unit">sec</span></div></div>
+            <div><label class="f-lbl">Gap between</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="10"><span class="unit">sec</span></div></div>
+          </div>
+          <details class="b-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Manual entries <span class="t-dot"></span> — 2 mixed into the real feed</summary>
+            <div class="a-manual">
+              <div class="m-row">
+                <input class="t-in" value="A****"><input class="t-in" value="Hummus Asli · 中东鹰嘴豆泥"><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="25"><span class="unit">min</span></div><button class="x">×</button>
+              </div>
+              <div class="m-row">
+                <input class="t-in" value="W**"><input class="t-in" value="81% Hazel Chocolate Spread"><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="8"><span class="unit">min</span></div><button class="x">×</button>
+              </div>
+              <div><button class="btn-quiet">+ Add entry</button></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="b-group-lbl">On the product page</div>
+        <div class="b-card" data-w="bought">
+          <div class="b-card-head">
+            <span class="nm">People bought this</span>
+            <label class="switch"><input type="checkbox" checked data-onoff data-target="bought" data-view-hint="product"><span class="track"></span></label>
+          </div>
+          <div class="b-essent">
+            <div><label class="f-lbl"><span class="t-dot"></span> Fill-in — extra buyers a day</label>
+              <div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="6"><span class="unit">to</span><input class="n-in" value="15"></div></div>
+          </div>
+          <details class="b-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Fine-tune — when the line appears</summary>
+            <div class="b-essent" style="margin-top:0;">
+              <div><label class="f-lbl">Min today</label><input class="n-in" value="2"></div>
+              <div><label class="f-lbl">This week</label><input class="n-in" value="2"></div>
+              <div><label class="f-lbl">This month</label><input class="n-in" value="1"></div>
+              <div><label class="f-lbl">All-time</label><input class="n-in" value="2"></div>
+            </div>
+          </details>
+        </div>
+        <div class="b-card" data-w="viewing">
+          <div class="b-card-head">
+            <span class="nm">Viewing now</span>
+            <label class="switch"><input type="checkbox" checked data-onoff data-target="viewing" data-view-hint="product"><span class="track"></span></label>
+          </div>
+          <div class="b-essent">
+            <div><label class="f-lbl"><span class="t-dot"></span> Fill-in — viewers at peak</label>
+              <div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="15"><span class="unit">to</span><input class="n-in" value="40"></div></div>
+          </div>
+          <details class="b-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Fine-tune</summary>
+            <div class="b-essent" style="margin-top:0;">
+              <div><label class="f-lbl">Viewer freshness</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="45"><span class="unit">sec</span></div></div>
+              <label class="switch" style="align-self:center;"><input type="checkbox" checked><span class="track"></span><span class="lbl">Count for the dashboard even when hidden</span></label>
+            </div>
+          </details>
+        </div>
+        <div class="b-card" data-w="last">
+          <div class="b-card-head">
+            <span class="nm">Last ordered</span>
+            <label class="switch"><input type="checkbox" checked data-onoff data-target="last" data-view-hint="product"><span class="track"></span></label>
+          </div>
+          <div class="b-essent">
+            <div><label class="f-lbl"><span class="t-dot"></span> Fill-in — busy products read</label>
+              <div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="5"><span class="unit">to</span><input class="n-in" value="45"><span class="unit">min ago</span></div></div>
+          </div>
+          <details class="b-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Fine-tune</summary>
+            <div class="b-essent" style="margin-top:0;">
+              <div><label class="f-lbl">Hide if older than</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="24"><span class="unit">hours</span></div></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="b-group-lbl">On product cards</div>
+        <div class="b-card" data-w="sold">
+          <div class="b-card-head">
+            <span class="nm">SOLD badge</span>
+            <label class="switch"><input type="checkbox" checked data-onoff data-target="sold" data-view-hint="shop"><span class="track"></span></label>
+          </div>
+          <div class="b-essent">
+            <div><label class="f-lbl"><span class="t-dot"></span> Fill-in — starting total</label>
+              <div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="50"><span class="unit">to</span><input class="n-in" value="150"></div></div>
+          </div>
+          <details class="b-fine">
+            <summary><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 18 15 12 9 6"/></svg> Fine-tune</summary>
+            <div class="b-essent" style="margin-top:0;">
+              <div><label class="f-lbl">Minimum units to show</label><input class="n-in" value="3"></div>
+            </div>
+          </details>
+        </div>
+
+        <div class="moved" style="margin-top:0;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          <span><b>Checkout upsell</b> moved to <a href="#">Marketing → Pop-ups</a>.</span>
+        </div>
+
+        <div class="save-bar" style="margin-top:0;">
+          <button class="btn-ink" onclick="fakeSave('b-status')">Save</button>
+          <span class="save-note" id="b-status">Saved — live in the mini app.</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="note"><b>What changed.</b> The page stops describing the widgets and shows them instead: the phone is the documentation. Controls are grouped by <b>where they appear</b> (home / product page / cards) so the merchant thinks in customer screens, not in feature names. Flipping a switch removes the element from the preview instantly — the old paragraphs about "applies instantly, no republish" become something you watch happen. Fine-tune keeps every expert knob, folded away.</p>
+  </div>
+</main>
+
+<!-- ═══════════════════════════════════════════════════════════
+     OPTION C — THE DIAL
+     One decision up front: how lively should the shop feel?
+     A preset writes every fill-in number at once. Widgets reduce
+     to five switches. A three-step wizard runs the first time.
+     ═══════════════════════════════════════════════════════════ -->
+<main id="opt-c">
+  <div class="page">
+    <div class="page-head">
+      <h1>Social proof</h1>
+      <span class="spacer"></span>
+      <label class="switch"><input type="checkbox" checked><span class="track"></span><span class="lbl">On across the mini app</span></label>
+    </div>
+    <p class="page-sub">Little signs of life while people shop. Pick a feel; Tacet tunes every number to match.</p>
+
+    <div class="c-banner" id="c-banner">
+      <span class="t-dot"></span>
+      <span class="tx"><b>First time here?</b> Tacet can set this whole page up in three quick steps.</span>
+      <button onclick="wizOpen()">Set it up</button>
+    </div>
+
+    <div class="c-hero">
+      <h2>How lively should the shop feel?</h2>
+      <p class="hint">This one dial sets all the fill-in numbers below. Real activity always shows first; fill-in only tops up quiet moments.</p>
+      <div class="c-presets" id="c-presets">
+        <button class="c-preset" data-p="real">
+          <span class="nm">Real only</span>
+          <span class="de">Show only what actually happened. Honest and quiet — on slow days most signals simply hide.</span>
+          <span class="sample t-num">"3 bought this week"</span>
+        </button>
+        <button class="c-preset sel" data-p="gentle">
+          <span class="nm">Gentle lift</span>
+          <span class="de">Real numbers with a soft floor under them, so quiet days still read alive. Believable pace.</span>
+          <span class="sample t-num"><span class="t-dot"></span> "12 bought today · 8 viewing"</span>
+        </button>
+        <button class="c-preset" data-p="busy">
+          <span class="nm">Bustling</span>
+          <span class="de">A busy-market feel. Every signal leans lively — use when launching or running promotions.</span>
+          <span class="sample t-num"><span class="t-dot"></span> "34 bought today · 27 viewing"</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="c-widgets" id="c-widgets">
+      <div class="c-wrow" data-w="bc">
+        <div>
+          <div class="nm">People bought this <span class="a-where">· product page</span></div>
+          <div class="sum"><span data-csum="bc"><span class="t-dot"></span> fill-in 6–15 extra buyers a day</span></div>
+        </div>
+        <button class="c-adjust">Adjust</button>
+        <label class="switch"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+        <div class="c-wdetail">
+          <div class="a-fields">
+            <div><label class="f-lbl">Extra buyers a day</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" data-cin="bc1" value="6"><span class="unit">to</span><input class="n-in" data-cin="bc2" value="15"></div></div>
+            <div><label class="f-lbl">Min today</label><input class="n-in" value="2"></div>
+            <div><label class="f-lbl">This week</label><input class="n-in" value="2"></div>
+            <div><label class="f-lbl">This month</label><input class="n-in" value="1"></div>
+            <div><label class="f-lbl">All-time</label><input class="n-in" value="2"></div>
+          </div>
+          <p class="hint">Editing these switches the dial to "Custom" — your numbers stay put.</p>
+        </div>
+      </div>
+
+      <div class="c-wrow" data-w="rb">
+        <div>
+          <div class="nm">Recent-buyers ticker <span class="a-where">· home</span></div>
+          <div class="sum">Real orders from the last 5 days · <span class="t-dot"></span> 2 manual entries</div>
+        </div>
+        <button class="c-adjust">Adjust</button>
+        <label class="switch"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+        <div class="c-wdetail">
+          <div class="a-fields">
+            <div><label class="f-lbl">Orders from the last</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="5"><span class="unit">days</span></div></div>
+            <div><label class="f-lbl">Stays up</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="3"><span class="unit">sec</span></div></div>
+            <div><label class="f-lbl">Gap between</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="10"><span class="unit">sec</span></div></div>
+          </div>
+          <div class="a-manual">
+            <div class="m-row">
+              <input class="t-in" value="A****"><input class="t-in" value="Hummus Asli · 中东鹰嘴豆泥"><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="25"><span class="unit">min</span></div><button class="x">×</button>
+            </div>
+            <div class="m-row">
+              <input class="t-in" value="W**"><input class="t-in" value="81% Hazel Chocolate Spread"><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="8"><span class="unit">min</span></div><button class="x">×</button>
+            </div>
+            <div><button class="btn-quiet">+ Add entry</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-wrow" data-w="vn">
+        <div>
+          <div class="nm">Viewing now <span class="a-where">· product page</span></div>
+          <div class="sum"><span data-csum="vn"><span class="t-dot"></span> 15–40 viewers at peak</span></div>
+        </div>
+        <button class="c-adjust">Adjust</button>
+        <label class="switch"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+        <div class="c-wdetail">
+          <div class="a-fields">
+            <div><label class="f-lbl">Viewers at peak</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" data-cin="vn1" value="15"><span class="unit">to</span><input class="n-in" data-cin="vn2" value="40"></div></div>
+            <div><label class="f-lbl">Viewer freshness</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="45"><span class="unit">sec</span></div></div>
+            <label class="switch" style="align-self:flex-end;padding-bottom:6px;"><input type="checkbox" checked><span class="track"></span><span class="lbl">Show badge to customers</span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-wrow" data-w="lo">
+        <div>
+          <div class="nm">Last ordered <span class="a-where">· product page</span></div>
+          <div class="sum"><span data-csum="lo"><span class="t-dot"></span> busy products read 5–45 min ago</span></div>
+        </div>
+        <button class="c-adjust">Adjust</button>
+        <label class="switch"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+        <div class="c-wdetail">
+          <div class="a-fields">
+            <div><label class="f-lbl">Busy products read</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" data-cin="lo1" value="5"><span class="unit">to</span><input class="n-in" data-cin="lo2" value="45"><span class="unit">min ago</span></div></div>
+            <div><label class="f-lbl">Hide if older than</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" value="24"><span class="unit">hours</span></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="c-wrow" data-w="sb">
+        <div>
+          <div class="nm">SOLD badge <span class="a-where">· shop &amp; home cards</span></div>
+          <div class="sum"><span data-csum="sb"><span class="t-dot"></span> starts life at 50–150</span></div>
+        </div>
+        <button class="c-adjust">Adjust</button>
+        <label class="switch"><input type="checkbox" checked data-onoff><span class="track"></span></label>
+        <div class="c-wdetail">
+          <div class="a-fields">
+            <div><label class="f-lbl">Starting total</label><div style="display:flex;gap:7px;align-items:center;"><input class="n-in" data-cin="sb1" value="50"><span class="unit">to</span><input class="n-in" data-cin="sb2" value="150"></div></div>
+            <div><label class="f-lbl">Minimum units to show</label><input class="n-in" value="3"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="moved">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      <span><b>Checkout upsell</b> moved to <a href="#">Marketing → Pop-ups</a>.</span>
+    </div>
+
+    <div class="save-bar">
+      <button class="btn-ink" onclick="fakeSave('c-status')">Save</button>
+      <span class="save-note" id="c-status">Saved — live in the mini app.</span>
+    </div>
+
+    <p class="note"><b>What changed.</b> The page's real question was never "what should min-this-month be?" — it was <b>"how lively do I want my shop to look, and am I comfortable with how it gets there?"</b> So that becomes the only decision on the page: one dial, three honest presets, every fill-in number derived from it. The five widgets reduce to switches with a one-line summary. Adjust opens the raw numbers for anyone who wants them (editing flips the dial to "Custom"). A three-step wizard covers first-run — press <b>Set it up</b> above to walk it.</p>
+  </div>
+
+  <!-- wizard overlay -->
+  <div class="wiz-bg" id="wiz">
+    <div class="wiz">
+      <div class="steps" id="wiz-steps">
+        <span class="st on" data-st="1"><span class="n t-num">1</span> Feel</span>
+        <span class="bar"></span>
+        <span class="st" data-st="2"><span class="n t-num">2</span> Signals</span>
+        <span class="bar"></span>
+        <span class="st" data-st="3"><span class="n t-num">3</span> Done</span>
+      </div>
+
+      <div class="wiz-pane active" data-pane="1">
+        <h3>How lively should the shop feel?</h3>
+        <p class="hint">Real customer activity always shows first. This sets how much Tacet tops it up when things are quiet.</p>
+        <div class="c-presets">
+          <button class="c-preset" data-wp="real">
+            <span class="nm">Real only</span>
+            <span class="de">Only what actually happened. Quiet on slow days.</span>
+          </button>
+          <button class="c-preset sel" data-wp="gentle">
+            <span class="nm">Gentle lift</span>
+            <span class="de">A soft floor under the real numbers. Believable pace — most shops pick this.</span>
+          </button>
+          <button class="c-preset" data-wp="busy">
+            <span class="nm">Bustling</span>
+            <span class="de">A busy-market feel for launches and promotions.</span>
+          </button>
+        </div>
+        <div class="wiz-foot">
+          <button class="wiz-skip" onclick="wizClose()">Skip — I'll set it up myself</button>
+          <span class="spacer"></span>
+          <button class="btn-ink" onclick="wizGo(2)">Next</button>
+        </div>
+      </div>
+
+      <div class="wiz-pane" data-pane="2">
+        <h3>Which signals do you want?</h3>
+        <p class="hint">All five work well together. You can flip any of them later with one switch.</p>
+        <div class="wiz-widgets">
+          <div class="wiz-wrow"><span class="nm"><b>People bought this</b>on the product page</span><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+          <div class="wiz-wrow"><span class="nm"><b>Recent-buyers ticker</b>on the home screen</span><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+          <div class="wiz-wrow"><span class="nm"><b>Viewing now</b>on the product page</span><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+          <div class="wiz-wrow"><span class="nm"><b>Last ordered</b>on the product page</span><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+          <div class="wiz-wrow"><span class="nm"><b>SOLD badge</b>on shop &amp; home cards</span><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+        </div>
+        <div class="wiz-foot">
+          <button class="btn-quiet" onclick="wizGo(1)">Back</button>
+          <span class="spacer"></span>
+          <button class="btn-ink" onclick="wizGo(3)">Next</button>
+        </div>
+      </div>
+
+      <div class="wiz-pane" data-pane="3">
+        <h3>That's it.</h3>
+        <p class="hint">Tacet tuned all the numbers to <b id="wiz-chosen">Gentle lift</b> — thresholds, pacing, overnight quiet hours, all of it. Everything is adjustable on the page behind this, whenever you care to.</p>
+        <div class="mini" style="justify-content:flex-start; gap:10px; flex-wrap:wrap; padding:14px;">
+          <span class="pill warm t-num">12 bought today</span>
+          <span class="pill t-num">◉ 8 viewing now</span>
+          <div class="toast"><span class="who">W**</span> bought Hummus Asli <span class="ago">· 5 min</span></div>
+        </div>
+        <div class="wiz-foot">
+          <button class="btn-quiet" onclick="wizGo(2)">Back</button>
+          <span class="spacer"></span>
+          <button class="btn-ink" onclick="wizFinish()">Turn it on</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+/* ── option tabs ── */
+document.querySelectorAll('.opt-tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.opt-tab').forEach(x => x.classList.toggle('active', x === t));
+  document.querySelectorAll('main').forEach(m => m.classList.toggle('active', m.id === 'opt-' + t.dataset.opt));
+  window.scrollTo({ top: 0 });
+}));
+
+function fakeSave(id) {
+  const el = document.getElementById(id);
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+/* ── Option A: expand rows, dim when off ── */
+document.querySelectorAll('#opt-a .a-head').forEach(h => h.addEventListener('click', () => {
+  h.parentElement.classList.toggle('open');
+}));
+document.querySelectorAll('#opt-a [data-onoff]').forEach(sw => sw.addEventListener('change', () => {
+  sw.closest('.a-row').classList.toggle('off', !sw.checked);
+}));
+
+/* ── Option B: phone views + live bindings ── */
+document.querySelectorAll('.b-view-tab').forEach(t => t.addEventListener('click', () => {
+  document.querySelectorAll('.b-view-tab').forEach(x => x.classList.toggle('active', x === t));
+  document.querySelectorAll('.pv').forEach(p => p.classList.toggle('active', p.dataset.pv === t.dataset.view));
+}));
+document.querySelectorAll('#opt-b [data-onoff]').forEach(sw => sw.addEventListener('change', () => {
+  const target = sw.dataset.target;
+  document.querySelectorAll('[data-b="' + target + '"]').forEach(el => el.classList.toggle('hidden', !sw.checked));
+  sw.closest('.b-card').classList.toggle('off', !sw.checked);
+  // jump the preview to the screen where this widget lives, so the change is seen
+  if (sw.dataset.viewHint) {
+    const tab = document.querySelector('.b-view-tab[data-view="' + sw.dataset.viewHint + '"]');
+    if (tab && !tab.classList.contains('active')) tab.click();
+  }
+}));
+
+/* ── Option C: presets, adjust, wizard ── */
+const C_PRESETS = {
+  real:   { bc: [0, 0],   vn: [0, 0],   lo: [0, 0],   sb: [0, 0],
+            sum: { bc: 'real buyers only', vn: 'real viewers only', lo: 'real orders only', sb: 'real units only' } },
+  gentle: { bc: [6, 15],  vn: [15, 40], lo: [5, 45],  sb: [50, 150],
+            sum: { bc: 'fill-in 6–15 extra buyers a day', vn: '15–40 viewers at peak', lo: 'busy products read 5–45 min ago', sb: 'starts life at 50–150' } },
+  busy:   { bc: [20, 45], vn: [30, 80], lo: [3, 20],  sb: [150, 400],
+            sum: { bc: 'fill-in 20–45 extra buyers a day', vn: '30–80 viewers at peak', lo: 'busy products read 3–20 min ago', sb: 'starts life at 150–400' } }
+};
+function applyPreset(key) {
+  const p = C_PRESETS[key];
+  if (!p) return;
+  document.querySelectorAll('#c-presets .c-preset').forEach(b => b.classList.toggle('sel', b.dataset.p === key));
+  for (const w of ['bc', 'vn', 'lo', 'sb']) {
+    const [a, b] = p[w];
+    const i1 = document.querySelector('[data-cin="' + w + '1"]');
+    const i2 = document.querySelector('[data-cin="' + w + '2"]');
+    if (i1) i1.value = a;
+    if (i2) i2.value = b;
+    const sum = document.querySelector('[data-csum="' + w + '"]');
+    if (sum) sum.innerHTML = (key === 'real' ? '' : '<span class="t-dot"></span> ') + p.sum[w];
+  }
+}
+document.querySelectorAll('#c-presets .c-preset').forEach(b =>
+  b.addEventListener('click', () => applyPreset(b.dataset.p)));
+document.querySelectorAll('#opt-c .c-adjust').forEach(b => b.addEventListener('click', () => {
+  b.closest('.c-wrow').classList.toggle('open');
+}));
+document.querySelectorAll('#opt-c [data-onoff]').forEach(sw => sw.addEventListener('change', () => {
+  sw.closest('.c-wrow').classList.toggle('off', !sw.checked);
+}));
+/* editing a preset-managed number flips the dial to Custom */
+document.querySelectorAll('#opt-c [data-cin]').forEach(inp => inp.addEventListener('input', () => {
+  document.querySelectorAll('#c-presets .c-preset').forEach(b => b.classList.remove('sel'));
+}));
+
+/* wizard */
+let wizStep = 1, wizPick = 'gentle';
+function wizOpen() { document.getElementById('wiz').classList.add('open'); wizGo(1); }
+function wizClose() { document.getElementById('wiz').classList.remove('open'); }
+function wizGo(n) {
+  wizStep = n;
+  document.querySelectorAll('.wiz-pane').forEach(p => p.classList.toggle('active', +p.dataset.pane === n));
+  document.querySelectorAll('#wiz-steps .st').forEach(s => {
+    const i = +s.dataset.st;
+    s.classList.toggle('on', i === n);
+    s.classList.toggle('done', i < n);
+  });
+}
+document.querySelectorAll('[data-wp]').forEach(b => b.addEventListener('click', () => {
+  wizPick = b.dataset.wp;
+  document.querySelectorAll('[data-wp]').forEach(x => x.classList.toggle('sel', x === b));
+  document.getElementById('wiz-chosen').textContent =
+    { real: 'Real only', gentle: 'Gentle lift', busy: 'Bustling' }[wizPick];
+}));
+function wizFinish() {
+  applyPreset(wizPick);
+  wizClose();
+  document.getElementById('c-banner').style.display = 'none';
+  fakeSave('c-status');
+}
+document.getElementById('wiz').addEventListener('click', e => {
+  if (e.target === document.getElementById('wiz')) wizClose();
+});
+</script>
+</body>
+</html>
