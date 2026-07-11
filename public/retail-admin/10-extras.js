@@ -62,11 +62,11 @@ function afRenderSharePreview() {
   const box = $('#af-share-preview');
   if (!box) return;
   if (!url) {
-    box.innerHTML = '<div class="muted" style="font-size: 11px;">No custom picture — using the built-in Roots share card. · 暂无自定义图片 — 使用内置 Roots 分享卡片。</div>';
+    box.innerHTML = `<div class="afc-noimg" data-no-i18n>${afT('Using the built-in Roots picture.', '使用内置 Roots 图片。')}</div>`;
     return;
   }
-  box.innerHTML = `<img src="${escapeAttr(url)}" alt="" style="width: 250px; aspect-ratio: 5 / 4; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--bg2);">
-    <div style="margin-top: 6px;"><button class="btn btn-sm" onclick="afClearShareImage()">Remove picture · 移除图片</button></div>`;
+  box.innerHTML = `<img src="${escapeAttr(url)}" alt="">
+    <div class="afc-srow" data-no-i18n><button class="af2-btn ghost sm" onclick="afClearShareImage()">${afT('Remove picture', '移除图片')}</button></div>`;
 }
 
 function afClearShareImage() {
@@ -95,6 +95,23 @@ document.addEventListener('change', e => {
   }
 });
 
+// Click a status chip in the segmented filter → set the hidden field, move the
+// active state, reload. afLoadReferrals reads #af-status.value as before.
+function afSetStatus(v) {
+  const f = $('#af-status');
+  if (f) f.value = v;
+  document.querySelectorAll('#af-seg button').forEach(b => b.classList.toggle('on', (b.dataset.st || '') === v));
+  afLoadReferrals();
+}
+
+const afT = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
+function afInitials(name, id) {
+  const n = (name || '').trim();
+  if (!n) return '#' + (id || '');
+  const parts = n.split(/\s+/);
+  return ((parts[0][0] || '') + (parts.length > 1 ? (parts[parts.length - 1][0] || '') : '')).toUpperCase();
+}
+
 async function afLoadReferrals() {
   const status = $('#af-status').value;
   const q      = $('#af-q').value.trim();
@@ -103,59 +120,85 @@ async function afLoadReferrals() {
   if (q)      qs.set('q', q);
   qs.set('pageSize', '100');
 
-  const tbody = $('#af-table tbody');
-  tbody.innerHTML = '<tr><td colspan="9" class="muted">Loading…</td></tr>';
+  const ledger = $('#af-ledger');
+  ledger.innerHTML = `<div class="af2-empty"><div class="sub">${afT('Loading…', '加载中…')}</div></div>`;
   try {
     const r = await api('/api/retail-admin/affiliate/referrals?' + qs.toString());
     const rows = r.data || [];
     const s = r.summary || {};
-    $('#af-summary').innerHTML =
-      `<div class="card" style="padding: 12px 16px;"><div class="muted" style="font-size: 11px;">Total · 合计</div><div style="font-size: 20px; font-weight: 600;">${Number(s.total||0)}</div></div>` +
-      `<div class="card" style="padding: 12px 16px;"><div class="muted" style="font-size: 11px;">Joined (open) · 已加入(待转化)</div><div style="font-size: 20px; font-weight: 600;">${Number(s.joined||0)}</div></div>` +
-      `<div class="card" style="padding: 12px 16px;"><div class="muted" style="font-size: 11px;">Converted · 已转化</div><div style="font-size: 20px; font-weight: 600;">${Number(s.converted||0)}</div></div>` +
-      `<div class="card" style="padding: 12px 16px;"><div class="muted" style="font-size: 11px;">Voided · 已作废</div><div style="font-size: 20px; font-weight: 600;">${Number(s.voided||0)}</div></div>` +
-      `<div class="card" style="padding: 12px 16px;"><div class="muted" style="font-size: 11px;">Paid out · 已发奖励</div><div style="font-size: 20px; font-weight: 600;">¥${fmt(s.paid_out||0)}</div></div>`;
+
+    const stat = (k, v, d) =>
+      `<div class="af2-stat"><div class="af2-sk">${k}</div><div class="af2-sv">${v}</div>${d ? `<div class="af2-sd">${d}</div>` : ''}</div>`;
+    $('#af-stats').innerHTML =
+      stat(afT('Referrals', '推荐总数'),  Number(s.total || 0), '') +
+      stat(afT('Waiting', '待首单'),      Number(s.joined || 0), afT('no first order yet', '尚未首单')) +
+      stat(afT('Rewarded', '已奖励'),     Number(s.converted || 0), afT('first order placed', '已完成首单')) +
+      stat(afT('Paid out', '已发放'),     '¥' + fmt(s.paid_out || 0), afT('to referrer wallets', '入推荐人钱包'));
 
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="9" class="muted" style="text-align: center; padding: 24px;">No referrals match. · 暂无匹配的推荐记录</td></tr>';
+      ledger.innerHTML = `<div class="af2-empty"><div class="lead">${afT('No referrals match.', '没有匹配的推荐记录。')}</div><div class="sub">${afT('Try a different filter or search.', '换个筛选或搜索试试。')}</div></div>`;
       return;
     }
-    tbody.innerHTML = rows.map(r => {
-      const statusPill = afStatusPill(r.status);
-      const referrerLbl = `<a href="#" onclick="event.preventDefault(); cuOpenDetail(${r.referrer_id})">${escapeHtml(r.referrer_nickname || ('#' + r.referrer_id))}</a><div class="muted" style="font-size: 11px;">${escapeHtml(r.referrer_phone || '')}</div>`;
-      const inviteeLbl  = `<a href="#" onclick="event.preventDefault(); cuOpen(${r.invitee_id})">${escapeHtml(r.invitee_nickname  || ('#' + r.invitee_id))}</a><div class="muted" style="font-size: 11px;">${escapeHtml(r.invitee_phone  || '')}</div>`;
-      const orderCell = r.first_paid_order_id ? `<div class="muted" style="font-size: 11px;">Order # · 订单号 ${r.first_paid_order_id}</div>` : '';
-      const editable = r.status !== 'ordered';
-      const actions = editable
-        ? `<button class="btn btn-sm" onclick="afEditReward(${r.id}, ${Number(r.reward_amount) || 0})">Reward · 奖励</button>
-           ${r.status === 'joined' ? `<button class="btn btn-sm" onclick="afVoid(${r.id})">Void · 作废</button>` : ''}
-           ${r.status === 'void' ? `<button class="btn btn-sm" onclick="afRestore(${r.id})">Restore · 恢复</button>` : ''}`
-        : `<span class="muted" style="font-size: 11px;">paid — adjust via wallet · 已发放 — 请在钱包调整</span>`;
-      return `<tr>
-        <td class="muted">${r.id}</td>
-        <td>${referrerLbl}</td>
-        <td>${inviteeLbl}</td>
-        <td><code style="font-size: 11px;">${escapeHtml(r.code_used || '')}</code></td>
-        <td>${statusPill}${orderCell}</td>
-        <td class="numeric">¥${fmt(r.reward_amount || 0)}</td>
-        <td>${escapeHtml(cuFmtDate(r.joined_at) || '')}</td>
-        <td>${escapeHtml(cuFmtDate(r.rewarded_at) || cuFmtDate(r.voided_at) || '')}</td>
-        <td style="white-space: nowrap;">${actions}</td>
-      </tr>`;
+
+    ledger.innerHTML = rows.map(r => {
+      const referrer = escapeHtml(r.referrer_nickname || ('#' + r.referrer_id));
+      const invitee  = escapeHtml(r.invitee_nickname  || ('#' + r.invitee_id));
+      // sub line: code · what happened · when
+      const bits = [];
+      if (r.code_used) bits.push(escapeHtml(r.code_used));
+      if (r.status === 'ordered' && r.first_paid_order_id) bits.push(afT('order #', '订单 #') + r.first_paid_order_id);
+      else if (r.status === 'joined') bits.push(afT('new customer', '新顾客'));
+      else if (r.status === 'void')   bits.push(afT('voided', '已作废'));
+      const when = r.status === 'joined' ? cuFmtDate(r.joined_at)
+                 : cuFmtDate(r.rewarded_at) || cuFmtDate(r.voided_at) || cuFmtDate(r.joined_at);
+      if (when) bits.push(escapeHtml(when));
+
+      const paid = r.status === 'ordered';
+      const amtCls = Number(r.reward_amount) > 0 ? 'af2-amt' : 'af2-amt zero';
+      const acts = paid
+        ? `<button class="af2-btn ghost sm" onclick="afEditReward(${r.id}, ${Number(r.reward_amount) || 0})">${afT('Adjust', '调整')}</button>`
+        : `<button class="af2-btn sm" onclick="afEditReward(${r.id}, ${Number(r.reward_amount) || 0})">${afT('Reward', '奖励')}</button>` +
+          (r.status === 'joined' ? `<button class="af2-btn ghost sm" onclick="afVoid(${r.id})">${afT('Void', '作废')}</button>` : '') +
+          (r.status === 'void'   ? `<button class="af2-btn ghost sm" onclick="afRestore(${r.id})">${afT('Restore', '恢复')}</button>` : '');
+
+      return `<div class="af2-lrow">
+        <div class="af2-flow">
+          <span class="af2-av">${escapeHtml(afInitials(r.referrer_nickname, r.referrer_id))}</span>
+          <div class="af2-who">
+            <div class="af2-nm"><a href="#" onclick="event.preventDefault(); cuOpenDetail(${r.referrer_id})">${referrer}</a><span class="arw">→</span><a href="#" onclick="event.preventDefault(); cuOpen(${r.invitee_id})">${invitee}</a></div>
+            <div class="af2-sub">${bits.join(' · ')}</div>
+          </div>
+        </div>
+        <div class="af2-meta">
+          ${afStatusBadge(r.status)}
+          <span class="${amtCls}">${Number(r.reward_amount) > 0 ? '¥' + fmt(r.reward_amount) : '—'}</span>
+          <span class="af2-acts">${acts}</span>
+        </div>
+      </div>`;
     }).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="9" class="muted">Failed · 加载失败: ${escapeHtml(e.message)}</td></tr>`;
+    ledger.innerHTML = `<div class="af2-empty"><div class="lead">${afT('Couldn\'t load referrals.', '加载推荐记录失败。')}</div><div class="sub">${escapeHtml(e.message)}</div></div>`;
   }
 }
 
+function afStatusBadge(status) {
+  if (status === 'ordered') return `<span class="af2-badge done"><span class="bdot"></span>${afT('Rewarded', '已奖励')}</span>`;
+  if (status === 'void')    return `<span class="af2-badge void">${afT('Voided', '已作废')}</span>`;
+  return `<span class="af2-badge wait"><span class="bdot"></span>${afT('Waiting', '待首单')}</span>`;
+}
+
+// Self-contained Tacet status pill (inline styles, no scoped CSS needed) so it
+// also renders correctly inside the customer drawer's affiliate block, which
+// lives outside #tab-affiliate. Replaces the old neon lime/black pill.
 function afStatusPill(status) {
+  const base = 'display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;border-radius:999px;padding:2px 11px;white-space:nowrap;';
   const map = {
-    joined:  { bg: '#F2CA6C', label: 'JOINED' },
-    ordered: { bg: '#CCD900', label: 'ORDERED' },
-    void:    { bg: '#e6e3dc', label: 'VOIDED' },
+    ordered: { css: 'background:var(--tacet-sage-tint);color:var(--tacet-sage-ink);',  label: afT('Rewarded', '已奖励') },
+    joined:  { css: 'background:var(--tacet-amber-tint);color:var(--tacet-amber-ink);', label: afT('Waiting', '待首单') },
+    void:    { css: 'background:transparent;border:1px solid var(--line);color:var(--text-3);', label: afT('Voided', '已作废') },
   };
   const s = map[status] || map.void;
-  return `<span style="background: ${s.bg}; color: #1a1a17; padding: 2px 8px; font-size: 11px; letter-spacing: .08em; font-weight: 600; border: 1px solid #1a1a17;">${s.label}</span>`;
+  return `<span style="${base}${s.css}">${s.label}</span>`;
 }
 
 async function afEditReward(id, current) {
@@ -191,6 +234,16 @@ async function afRestore(id) {
 document.querySelector('[data-tab="affiliate"]').addEventListener('click', () => {
   if (!AFFILIATE_LOADED) { AFFILIATE_LOADED = true; afLoadAll(); }
 });
+
+// The stats + ledger are data-no-i18n (built with cuT), so re-render them when
+// the admin toggles language; the share preview carries its own EN/中 too.
+if (window.onLangChange) {
+  onLangChange(() => {
+    if (!AFFILIATE_LOADED) return;
+    afLoadReferrals();
+    afRenderSharePreview();
+  });
+}
 
 // ════════════════════════════════════════════════════════════════
 // SHARE CARDS — per-page WeChat forward thumbnails (Home / Product /

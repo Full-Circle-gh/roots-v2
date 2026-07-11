@@ -6023,108 +6023,201 @@
 
   <!-- ─── AFFILIATE ─── -->
   <section id="tab-affiliate" data-feat="affiliate">
-    <h2>Affiliate · Refer a friend · 分销与推荐好友</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      Customers can share their personal code; when a friend signs up and places their first paid order, both
-      sides get rewarded — friend through the public coupon they applied at checkout, referrer through a
-      wallet credit. <b>Edits live here only</b> — customers can view, share, and apply codes from the mini app
-      but cannot change rewards or override statuses.
-      · 顾客可以分享自己的专属推荐码;当好友注册并完成首笔付费订单后,双方都会获得奖励——好友通过结算时使用的公开优惠券,推荐人则获得钱包返现。<b>奖励只能在此处修改</b>——顾客可在小程序查看、分享和使用推荐码,但不能更改奖励或覆盖状态。
+    <style>
+      /* ═══ AFFILIATE — Tacet-native rebuild (2026-07-11) ═══════════════════
+         Mockup: reference/affiliate-redesign-mockup.html (option A).
+         The page answers one question: who do I owe, and is this working?
+         Data first (left column: stats + ledger); rewards + share card sit in
+         a calm right rail. All child classes are af2-/afc- prefixed and the
+         inputs are scoped under #tab-affiliate so base retail-admin.css can't
+         leak in (see reference-tacet-section-class-collisions). Dusk appears
+         once: the "Tacet pays these out" automation note. Same API payloads &
+         input IDs as before — this is a re-layout, not a data change. */
+
+      /* paper ground bled over <main>'s padding — same trick #tab-flash uses */
+      #tab-affiliate {
+        background: var(--bg-app);
+        margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
+        padding: calc(var(--s6) + 56px) var(--s6) var(--s7);
+        min-height: 100vh;
+      }
+
+      /* two-column shell */
+      #tab-affiliate .af2-wrap { display: grid; grid-template-columns: minmax(0,1fr) 360px; gap: 24px; align-items: start; margin-top: 20px; }
+      @media (max-width: 980px) { #tab-affiliate .af2-wrap { grid-template-columns: 1fr; } }
+      #tab-affiliate .af2-side { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 16px; }
+      @media (max-width: 980px) { #tab-affiliate .af2-side { position: static; } }
+
+      /* stat row — thin, not boxed */
+      .af2-stats { display: flex; gap: 36px; flex-wrap: wrap; padding: 4px 2px 22px; }
+      .af2-stat .af2-sk { font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
+      .af2-stat .af2-sv { font-size: 25px; font-weight: 500; line-height: 1; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+      .af2-stat .af2-sd { font-size: 11.5px; color: var(--text-3); margin-top: 6px; }
+
+      /* filters */
+      .af2-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }
+      .af2-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+      .af2-seg button { border: 0; background: transparent; font: 500 12.5px var(--f-sans); color: var(--text-2); padding: 6px 15px; cursor: pointer; transition: background .15s var(--ease-out), color .15s var(--ease-out); }
+      .af2-seg button:hover { color: var(--text-1); }
+      .af2-seg button.on { background: var(--tacet-ink); color: var(--tacet-paper); }
+      [data-theme="dark"] .af2-seg button.on { background: var(--tacet-paper); color: var(--tacet-ink); }
+      .af2-search { display: flex; align-items: center; gap: 8px; margin-left: auto; border: 1px solid var(--line); border-radius: var(--r-md); padding: 7px 12px; color: var(--text-3); background: var(--bg-input); }
+      #tab-affiliate .af2-search input { border: 0; outline: 0; background: transparent; font: 400 13px var(--f-sans); color: var(--text-1); width: 210px; }
+      .af2-refresh { display: inline-flex; align-items: center; gap: 7px; font: 500 13px var(--f-sans); color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: var(--r-md); padding: 7px 13px; cursor: pointer; transition: border-color .2s var(--ease-out), color .2s var(--ease-out); }
+      .af2-refresh:hover { color: var(--text-1); border-color: var(--text-3); }
+      .af2-refresh svg { width: 15px; height: 15px; }
+
+      /* ledger */
+      .af2-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; }
+      .af2-lrow { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; align-items: center; padding: 15px 18px; }
+      .af2-lrow + .af2-lrow { border-top: 1px solid var(--line-soft); }
+      .af2-lrow:hover { background: var(--bg-elev-1); }
+      .af2-flow { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      .af2-av { width: 32px; height: 32px; border-radius: 50%; flex: none; background: var(--bg-elev-1); color: var(--text-3); display: grid; place-items: center; font: 500 12px var(--f-sans); }
+      .af2-who { min-width: 0; }
+      .af2-nm { font-size: 14px; font-weight: 500; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .af2-nm a { color: var(--text-1); text-decoration: none; }
+      .af2-nm a:hover { text-decoration: underline; text-underline-offset: 2px; }
+      .af2-nm .arw { color: var(--text-3); margin: 0 5px; }
+      .af2-sub { font-size: 12px; color: var(--text-3); margin-top: 3px; font-family: var(--f-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .af2-meta { display: flex; align-items: center; gap: 18px; justify-content: flex-end; }
+      .af2-amt { font-family: var(--f-mono); font-size: 14px; font-weight: 600; color: var(--text-1); min-width: 52px; text-align: right; }
+      .af2-amt.zero { color: var(--text-3); font-weight: 400; }
+      .af2-acts { display: flex; align-items: center; gap: 6px; opacity: 0; transition: opacity .15s var(--ease-out); }
+      .af2-lrow:hover .af2-acts { opacity: 1; }
+      @media (hover: none) { .af2-acts { opacity: 1; } }
+      @media (max-width: 600px) { .af2-meta { gap: 12px; } .af2-amt { display: none; } }
+
+      /* Tacet status badges (replace the old lime/black pills) */
+      .af2-badge { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--f-sans); border-radius: 999px; padding: 3px 11px; white-space: nowrap; }
+      .af2-badge .bdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+      .af2-badge.wait { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
+      .af2-badge.done { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
+      .af2-badge.void { background: transparent; border: 1px solid var(--line); color: var(--text-3); }
+
+      .af2-empty { padding: 44px 20px; text-align: center; }
+      .af2-empty .lead { font-size: 14px; color: var(--text-1); margin-bottom: 4px; }
+      .af2-empty .sub { font-size: 12.5px; color: var(--text-3); }
+
+      /* ── right rail: the Dusk automation note (the ONE Dusk element) ── */
+      .af2-auto { display: flex; gap: 11px; align-items: flex-start; background: var(--tacet-dusk-tint); border-radius: var(--r-lg); padding: 14px 16px; }
+      .af2-auto .ld { width: 7px; height: 7px; border-radius: 50%; background: var(--tacet-dusk); margin-top: 5px; flex: none; animation: af2Breathe 2.4s var(--ease-out) infinite; }
+      .af2-auto .at { font-size: 13px; font-weight: 500; color: var(--tacet-dusk); }
+      .af2-auto .ad { font-size: 12px; color: var(--text-2); line-height: 1.5; margin-top: 3px; }
+      @keyframes af2Breathe { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+      @media (prefers-reduced-motion: reduce) { .af2-auto .ld { animation: none; } }
+
+      /* ── settings + share cards ── */
+      .afc { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 22px; }
+      .afc-h { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+      .afc-sub { font-size: 12px; color: var(--text-3); margin-bottom: 16px; line-height: 1.5; }
+      .afc-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line-soft); }
+      .afc-row:first-of-type { border-top: none; padding-top: 0; }
+      .afc-label { font-size: 13px; color: var(--text-1); }
+      .afc-q { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--line); color: var(--text-3); font-size: 10px; cursor: help; vertical-align: middle; margin-left: 4px; }
+      .afc-affix { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-family: var(--f-mono); font-size: 12.5px; }
+      #tab-affiliate .afc-inp { width: 76px; text-align: right; font: 400 13.5px var(--f-mono); color: var(--text-1); background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md); padding: 7px 10px; outline: none; transition: border-color .2s var(--ease-out); }
+      #tab-affiliate .afc-inp:focus { border-color: var(--tacet-dusk); }
+      #tab-affiliate .afc-inp.wide { width: 122px; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+
+      .afc-share .afc-sub { margin-bottom: 12px; }
+      #af-share-preview img { width: 100%; aspect-ratio: 5 / 4; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg-elev-1); display: block; }
+      .afc-noimg { aspect-ratio: 5 / 4; border: 1px dashed var(--line); border-radius: var(--r-md); display: grid; place-items: center; text-align: center; padding: 20px; color: var(--text-3); font-size: 12px; line-height: 1.5; }
+      .afc-srow { display: flex; gap: 8px; margin-top: 12px; }
+
+      /* rail buttons */
+      .af2-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 500 13px var(--f-sans); border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); padding: 8px 14px; cursor: pointer; transition: border-color .2s var(--ease-out), background .2s var(--ease-out); white-space: nowrap; }
+      .af2-btn:hover { border-color: var(--text-3); }
+      .af2-btn.ghost { border-color: transparent; color: var(--text-2); }
+      .af2-btn.ghost:hover { color: var(--text-1); background: var(--bg-elev-1); }
+      .af2-btn.sm { padding: 5px 12px; font-size: 12.5px; }
+      .af2-save { width: 100%; background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); padding: 10px 16px; }
+      .af2-save:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
+      [data-theme="dark"] #tab-affiliate .af2-save:hover { background: #EAE7DF; border-color: #EAE7DF; }
+    </style>
+
+    <div class="td-head">
+      <div class="td-greet-col">
+        <h2 style="margin: 0">Refer a friend · 推荐好友</h2>
+        <p class="td-greet-sub">Customers share a personal code. When a friend places their first paid order, both sides are rewarded — automatically. You only step in to void or adjust. · 顾客分享自己的专属推荐码。当好友完成首笔付费订单后,双方自动获得奖励。您只需在需要时作废或调整。</p>
+      </div>
     </div>
 
-    <!-- Settings card -->
-    <div class="card" style="margin-bottom: var(--s4);">
-      <h3 style="font-size: 13px; margin-bottom: 4px;">Program settings · 计划设置</h3>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Turn the program on/off in <b>Settings → Features</b>; the reward and code prefix below apply while it's on. · 计划开关位于“设置 → 功能”,以下奖励与前缀在启用时生效。</div>
-      <div class="row" style="gap: 16px; align-items: flex-end; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Reward for the referrer ("for you") (¥) · 推荐人奖励(“给你”)(¥)</label>
-          <input type="number" id="af-reward" placeholder="30" min="0" step="0.5" style="width: 160px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Credited to the referrer's wallet when their invitee's first order goes 'paid'. · 当受邀人首单付款后,奖励入推荐人钱包。</div>
+    <div class="af2-wrap">
+      <!-- LEFT: the data you came for -->
+      <div class="af2-main">
+        <div class="af2-stats" id="af-stats" data-no-i18n></div>
+
+        <div class="af2-filters">
+          <div class="af2-seg" id="af-seg">
+            <button data-st="" class="on" onclick="afSetStatus('')">All · 全部</button>
+            <button data-st="joined" onclick="afSetStatus('joined')">Waiting · 待首单</button>
+            <button data-st="ordered" onclick="afSetStatus('ordered')">Rewarded · 已奖励</button>
+            <button data-st="void" onclick="afSetStatus('void')">Voided · 已作废</button>
+          </div>
+          <input type="hidden" id="af-status" value="">
+          <label class="af2-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+            <input type="text" id="af-q" placeholder="Name, phone or code · 姓名、电话或邀请码" oninput="afDebouncedLoad()">
+          </label>
+          <button class="af2-refresh" onclick="afLoadReferrals()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+            Refresh · 刷新
+          </button>
         </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Reward for the friend ("for them") (¥) · 好友奖励(“给TA”)(¥)</label>
-          <input type="number" id="af-reward-referee" placeholder="0" min="0" step="0.5" style="width: 160px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Cashback to the invited friend's wallet on their first paid order. Set 0 to give the friend nothing. · 受邀好友首单付款后返现入其钱包;设为 0 则好友不获奖励。</div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Lifetime share — % of repeat orders (%) · 长期分成 — 复购订单百分比(%)</label>
-          <input type="number" id="af-lifetime-rate" placeholder="0" min="0" max="50" step="0.5" style="width: 160px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">From the friend's SECOND paid order onward, this % of each order is credited to the referrer's wallet — every time they reorder. The first order still pays the one-off reward above. Set 0 to turn lifetime share off. One level only. · 从受邀好友的第二笔付款订单起,每笔订单的该百分比将存入推荐人钱包(每次复购都计)。首单仍发放上方的一次性奖励。设为 0 关闭长期分成。仅一级。</div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Lifetime share lasts (months) · 长期分成持续(月)</label>
-          <input type="number" id="af-lifetime-months" placeholder="12" min="0" max="120" step="1" style="width: 160px;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">How long the referrer keeps earning on a friend, counted from when the friend joined. 12 = one year. Set 0 for no time limit (earn forever). · 推荐人对某位好友的分成可持续多久,从好友加入起算。12 = 一年。设为 0 则无时间限制(永久)。</div>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Code prefix · 邀请码前缀</label>
-          <input type="text" id="af-prefix" placeholder="ROOTS-" maxlength="12" style="width: 160px; text-transform: uppercase;">
-          <div class="muted" style="font-size: 11px; margin-top: 4px;">Prepended to new codes only — existing codes don't change. · 仅作用于新邀请码;已有邀请码不会改变。</div>
-        </div>
+
+        <div class="af2-card" id="af-ledger" data-no-i18n></div>
       </div>
 
-      <!-- Share-card picture: the thumbnail a customer sees when they forward
-           their invite into a WeChat chat. Empty = the built-in default. -->
-      <div class="field" style="margin: 16px 0 0;">
-        <label class="stacked">Share-card picture · 分享卡片图片</label>
-        <div class="muted" style="font-size: 11px; margin: 2px 0 8px; line-height: 1.5;">
-          The picture shown when a customer forwards their invite into a WeChat chat. Best shape is wide (5:4 — about 500×400). Leave empty to use the built-in Roots picture. The ¥-amount and code are added automatically as text — don't put them in the picture. · 顾客把邀请转发到微信聊天时显示的图片。建议比例 5:4(约 500×400)。留空则使用内置 Roots 图片。优惠金额与邀请码会自动作为文字显示,无需放进图片。
+      <!-- RIGHT: automation note + settings + share card -->
+      <aside class="af2-side">
+        <div class="af2-auto">
+          <span class="ld"></span>
+          <div>
+            <div class="at">Tacet pays these out · 由 Tacet 自动发放</div>
+            <div class="ad">Rewards land in the referrer's wallet the moment a friend's first order is marked paid. · 好友首单付款后,奖励即刻入推荐人钱包。</div>
+          </div>
         </div>
-        <input type="hidden" id="af-share-image">
-        <div id="af-share-preview"></div>
-        <div class="row" style="gap: 8px; margin-top: 8px;">
-          <button class="btn btn-sm" onclick="document.getElementById('af-share-file').click()">Upload picture · 上传图片</button>
-          <input type="file" id="af-share-file" accept="image/png,image/jpeg" style="display: none;">
+
+        <div class="afc">
+          <div class="afc-h">Rewards · 奖励</div>
+          <div class="afc-sub">Applies while the program is on. Turn it on or off in Settings → Features. · 计划启用时生效。开关位于“设置 → 功能”。</div>
+
+          <div class="afc-row">
+            <span class="afc-label">For the referrer · 给推荐人</span>
+            <span class="afc-affix">¥<input type="number" id="af-reward" class="afc-inp" placeholder="30" min="0" step="0.5"></span>
+          </div>
+          <div class="afc-row">
+            <span class="afc-label">For the friend · 给好友</span>
+            <span class="afc-affix">¥<input type="number" id="af-reward-referee" class="afc-inp" placeholder="0" min="0" step="0.5"></span>
+          </div>
+          <div class="afc-row">
+            <span class="afc-label">Lifetime share · 长期分成<span class="afc-q" title="A cut of every repeat order the friend places after their first — credited to the referrer. Set 0 to turn off. · 好友复购订单的分成比例,存入推荐人钱包。设 0 关闭。">i</span></span>
+            <span class="afc-affix"><input type="number" id="af-lifetime-rate" class="afc-inp" placeholder="0" min="0" max="50" step="0.5" style="width: 56px;">%</span>
+          </div>
+          <div class="afc-row">
+            <span class="afc-label">Share lasts · 分成持续</span>
+            <span class="afc-affix"><input type="number" id="af-lifetime-months" class="afc-inp" placeholder="12" min="0" max="120" step="1" style="width: 56px;">mo · 月</span>
+          </div>
+          <div class="afc-row">
+            <span class="afc-label">Code prefix · 邀请码前缀</span>
+            <input type="text" id="af-prefix" class="afc-inp wide" placeholder="ROOTS-" maxlength="12">
+          </div>
         </div>
-      </div>
 
-      <div style="margin-top: 16px;">
-        <button class="btn btn-primary" onclick="afSaveSettings()">Save settings · 保存设置</button>
-      </div>
-    </div>
+        <div class="afc afc-share">
+          <div class="afc-h">Share card · 分享卡片</div>
+          <div class="afc-sub">The picture a customer sees when forwarding their invite in WeChat. Wide shape (5:4). The ¥-amount and code are added as text — leave them out of the picture. · 顾客在微信转发邀请时看到的图片。建议 5:4。金额与邀请码会自动叠加为文字,请勿放进图片。</div>
+          <input type="hidden" id="af-share-image">
+          <div id="af-share-preview"></div>
+          <div class="afc-srow">
+            <button class="af2-btn sm" onclick="document.getElementById('af-share-file').click()">Replace picture · 更换图片</button>
+            <input type="file" id="af-share-file" accept="image/png,image/jpeg" style="display: none;">
+          </div>
+        </div>
 
-    <!-- Summary strip -->
-    <div class="row" id="af-summary" style="gap: 12px; flex-wrap: wrap; margin-bottom: var(--s4);">
-      <div class="muted">Loading… · 加载中…</div>
-    </div>
-
-    <!-- Filter row -->
-    <div class="row" style="gap: 12px; margin-bottom: var(--s4); flex-wrap: wrap; align-items: center;">
-      <div class="field" style="margin: 0;">
-        <label class="stacked">Status · 状态</label>
-        <select id="af-status" onchange="afLoadReferrals()">
-          <option value="">All · 全部</option>
-          <option value="joined">Joined (pending order) · 已加入(等待首单)</option>
-          <option value="ordered">Ordered (reward paid) · 已下单(已发放奖励)</option>
-          <option value="void">Voided · 已作废</option>
-        </select>
-      </div>
-      <div class="field" style="margin: 0; flex: 1; min-width: 220px;">
-        <label class="stacked">Search · 搜索</label>
-        <input type="text" id="af-q" placeholder="Code, referrer or invitee name / phone…" style="width: 100%;" oninput="afDebouncedLoad()">
-      </div>
-      <button class="btn" onclick="afLoadReferrals()" style="align-self: flex-end;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-        Refresh
-      </button>
-    </div>
-
-    <div class="table-wrap">
-      <table id="af-table">
-        <thead><tr>
-          <th style="width: 60px;">#</th>
-          <th>Referrer · 推荐人</th>
-          <th>Invitee · 受邀人</th>
-          <th>Code used · 使用的邀请码</th>
-          <th>Status · 状态</th>
-          <th class="numeric">Reward ¥ · 奖励</th>
-          <th>Joined · 加入时间</th>
-          <th>Rewarded · 奖励时间</th>
-          <th style="width: 240px;"></th>
-        </tr></thead>
-        <tbody><tr><td colspan="9" class="muted">Loading…</td></tr></tbody>
-      </table>
+        <button class="af2-btn af2-save" onclick="afSaveSettings()">Save changes · 保存更改</button>
+      </aside>
     </div>
   </section>
 
