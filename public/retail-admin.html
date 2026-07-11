@@ -3756,7 +3756,7 @@
       @media (prefers-reduced-motion: reduce) { .fsm-badge.live .fsm-dot, .fsm-auto .fsm-dot, .fsm-meter i { animation: none; transition: none; } }
 
       /* ── create / edit drawer (houses the composer) ── */
-      .fsd-scrim { position: fixed; inset: 0; background: rgba(17,26,43,.28); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease-out, ease); z-index: 1200; }
+      .fsd-scrim { position: fixed; inset: 0; background: var(--bg-overlay); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease-out, ease); z-index: 1200; }
       .fsd-scrim.on { opacity: 1; pointer-events: auto; }
       .fsd-drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 440px; max-width: 92vw; background: var(--bg-app); border-left: 1px solid var(--line); box-shadow: -8px 0 40px rgba(17,26,43,.16); transform: translateX(100%); transition: transform .35s var(--ease-out, ease); z-index: 1201; display: flex; flex-direction: column; }
       .fsd-drawer.on { transform: translateX(0); }
