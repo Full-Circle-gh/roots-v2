@@ -6266,7 +6266,24 @@
 
       /* paper ground bled over <main>'s padding — same trick #tab-flash uses */
       #tab-affiliate {
-        background: var(--bg-app);
+        /* Render in Inter like the mockup (base admin body is IBM Plex, which
+           never matched). Remap BOTH sans + mono so codes/amounts are Inter too
+           — the mockup uses no typewriter monospace. Same trick as #tab-dashboard. */
+        --f-sans: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+        --f-mono: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+        font-family: var(--f-sans);
+        /* This section was authored against a --tacet-* token set that does NOT
+           exist in this app; alias it to the real Tacet-native --td-* layer so
+           badge tints, the dusk note, sage/amber colours actually resolve
+           (otherwise they fall back to transparent / inherited = washed out). */
+        --tacet-dusk: var(--td-dusk); --tacet-dusk-tint: var(--td-dusk-tint);
+        --tacet-sage: var(--td-sage); --tacet-sage-tint: var(--td-sage-tint); --tacet-sage-ink: var(--td-sage-ink);
+        --tacet-amber-tint: var(--td-amber-tint); --tacet-amber-ink: var(--td-amber-ink);
+        --tacet-brick: var(--td-brick); --tacet-brick-tint: var(--td-brick-tint);
+        --tacet-ink: var(--td-text); --tacet-paper: var(--td-paper);
+        /* warm cream ground like the mockup (--td-paper = #FBF9F4), not the
+           greyer --bg-app (#E8E5DC). */
+        background: var(--td-paper);
         margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
         padding: calc(var(--s6) + 56px) var(--s6) var(--s7);
         min-height: 100vh;
@@ -6328,8 +6345,6 @@
       .af2-badge .bdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
       .af2-badge.wait { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
       .af2-badge.done { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
-      .af2-badge.earn { background: var(--tacet-dusk-tint); color: var(--tacet-dusk); }
-      .af2-badge.earn .bdot { animation: af2Breathe 2.4s var(--ease-out) infinite; }
       .af2-badge.void { background: transparent; border: 1px solid var(--line); color: var(--text-3); }
 
       .af2-empty { padding: 44px 20px; text-align: center; }

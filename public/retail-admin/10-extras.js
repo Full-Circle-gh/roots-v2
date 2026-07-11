@@ -66,7 +66,7 @@ function afRenderSharePreview() {
     // the tacet wordmark, the invite line, and a sample ¥-off · code chip.
     const off = Number(($('#af-reward-referee') || {}).value) || 0;
     const prefix = String((($('#af-prefix') || {}).value) || 'ROOTS-').toUpperCase();
-    const chip = (off > 0 ? '¥' + fmt(off) + afT(' off · ', ' 优惠 · ') : '') + escapeHtml(prefix) + 'XXXX';
+    const chip = (off > 0 ? '¥' + afMoney(off) + afT(' off · ', ' 优惠 · ') : '') + escapeHtml(prefix) + 'XXXX';
     box.innerHTML = `<div class="afc-card" data-no-i18n>
         <div>
           <div class="cw">tacet</div>
@@ -117,6 +117,9 @@ function afSetStatus(v) {
 }
 
 const afT = (en, cn) => (typeof cuT === 'function' ? cuT(en, cn) : en);
+// Money like the mockup: whole numbers show plain (¥630), only fractions show
+// decimals (¥12.50). The shared fmt() always forces .00, which read wrong here.
+function afMoney(n) { n = Number(n || 0); return Number.isInteger(n) ? String(n) : n.toFixed(2); }
 function afInitials(name, id) {
   const n = (name || '').trim();
   if (!n) return '#' + (id || '');
@@ -163,14 +166,14 @@ async function afLoadReferrals() {
                  : afT('level with last month', '与上月持平');
     const totalPaid = (Number(s.paid_out) || 0) + (Number(s.lifetime_paid) || 0);
     const paidSub = Number(s.lifetime_paid) > 0
-      ? afT('incl. ¥' + fmt(s.lifetime_paid) + ' lifetime', '含 ¥' + fmt(s.lifetime_paid) + ' 长期分成')
+      ? afT('incl. ¥' + afMoney(s.lifetime_paid) + ' lifetime', '含 ¥' + afMoney(s.lifetime_paid) + ' 长期分成')
       : afT('to referrer wallets', '入推荐人钱包');
     const stat = (k, v, d) =>
       `<div class="af2-stat"><div class="af2-sk">${k}</div><div class="af2-sv">${v}</div>${d ? `<div class="af2-sd">${d}</div>` : ''}</div>`;
     $('#af-stats').innerHTML =
       stat(afT('Friends joined', '好友加入'), Number(s.total || 0), vsLast) +
       stat(afT('First orders', '首单转化'),   Number(s.converted || 0), afT(pct + '% converted', pct + '% 转化')) +
-      stat(afT('Rewards paid', '已发奖励'),   '¥' + fmt(totalPaid), paidSub) +
+      stat(afT('Rewards paid', '已发奖励'),   '¥' + afMoney(totalPaid), paidSub) +
       stat(afT('Still earning', '持续分成'),  Number(s.still_earning || 0), afT('within lifetime window', '在分成周期内'));
 
     if (!rows.length) {
@@ -220,7 +223,7 @@ async function afLoadReferrals() {
         </td>
         <td class="af2-hide-sm"><span class="af2-code">${escapeHtml(r.code_used || '')}</span></td>
         <td>${afStatusBadge(r)}</td>
-        <td class="af2-r"><span class="${amtCls}">¥${fmt(r.reward_amount || 0)}</span></td>
+        <td class="af2-r"><span class="${amtCls}">¥${afMoney(r.reward_amount || 0)}</span></td>
         <td class="af2-hide-sm"><span class="af2-when">${escapeHtml(afRelTime(r.joined_at))}</span></td>
         <td class="af2-actcell"><span class="af2-acts">${acts}</span></td>
       </tr>`;
@@ -238,7 +241,7 @@ function afStatusBadge(r) {
     // "Still earning" uses inline Dusk styling (reusing the shipped .af2-badge
     // base + af2Breathe keyframe) so this doesn't need a retail-admin.html edit.
     return (r && r.lifetime_active)
-      ? `<span class="af2-badge" style="background:var(--tacet-dusk-tint);color:var(--tacet-dusk);"><span class="bdot" style="animation:af2Breathe 2.4s var(--ease-out) infinite;"></span>${afT('Still earning', '持续分成')}</span>`
+      ? `<span class="af2-badge" style="background:var(--td-dusk-tint);color:var(--td-dusk);"><span class="bdot" style="animation:af2Breathe 2.4s var(--ease-out) infinite;"></span>${afT('Still earning', '持续分成')}</span>`
       : `<span class="af2-badge done"><span class="bdot"></span>${afT('Rewarded', '已奖励')}</span>`;
   }
   if (status === 'void')    return `<span class="af2-badge void">${afT('Voided', '已作废')}</span>`;
@@ -251,8 +254,8 @@ function afStatusBadge(r) {
 function afStatusPill(status) {
   const base = 'display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:500;border-radius:999px;padding:2px 11px;white-space:nowrap;';
   const map = {
-    ordered: { css: 'background:var(--tacet-sage-tint);color:var(--tacet-sage-ink);',  label: afT('Rewarded', '已奖励') },
-    joined:  { css: 'background:var(--tacet-amber-tint);color:var(--tacet-amber-ink);', label: afT('Waiting', '待首单') },
+    ordered: { css: 'background:var(--td-sage-tint);color:var(--td-sage-ink);',  label: afT('Rewarded', '已奖励') },
+    joined:  { css: 'background:var(--td-amber-tint);color:var(--td-amber-ink);', label: afT('Waiting', '待首单') },
     void:    { css: 'background:transparent;border:1px solid var(--line);color:var(--text-3);', label: afT('Voided', '已作废') },
   };
   const s = map[status] || map.void;
