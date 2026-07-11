@@ -62,7 +62,19 @@ function afRenderSharePreview() {
   const box = $('#af-share-preview');
   if (!box) return;
   if (!url) {
-    box.innerHTML = `<div class="afc-noimg" data-no-i18n>${afT('Using the built-in Roots picture.', '使用内置 Roots 图片。')}</div>`;
+    // No custom picture — show the designed default card (matches the mockup):
+    // the tacet wordmark, the invite line, and a sample ¥-off · code chip.
+    const off = Number(($('#af-reward-referee') || {}).value) || 0;
+    const prefix = String((($('#af-prefix') || {}).value) || 'ROOTS-').toUpperCase();
+    const chip = (off > 0 ? '¥' + fmt(off) + afT(' off · ', ' 优惠 · ') : '') + escapeHtml(prefix) + 'XXXX';
+    box.innerHTML = `<div class="afc-card" data-no-i18n>
+        <div>
+          <div class="cw">tacet</div>
+          <div class="cl">${afT('A friend saved you a seat', '好友为你留了位')}</div>
+          <div class="cc">${chip}</div>
+        </div>
+      </div>
+      <div class="afc-note" data-no-i18n>${afT('The built-in card. Upload your own to replace it.', '内置卡片。可上传自定义图片替换。')}</div>`;
     return;
   }
   box.innerHTML = `<img src="${escapeAttr(url)}" alt="">
@@ -111,6 +123,22 @@ function afInitials(name, id) {
   const parts = n.split(/\s+/);
   return ((parts[0][0] || '') + (parts.length > 1 ? (parts[parts.length - 1][0] || '') : '')).toUpperCase();
 }
+// Relative "2 days ago" for the Joined column (matches the mockup); falls back
+// to the absolute date if the timestamp won't parse.
+function afRelTime(ts) {
+  if (!ts) return '';
+  const d = new Date(String(ts).replace(' ', 'T'));
+  const t = d.getTime();
+  if (!isFinite(t)) return cuFmtDate(ts) || '';
+  const secs = Math.max(0, (Date.now() - t) / 1000), day = 86400;
+  if (secs < 3600)  return afT('just now', '刚刚');
+  if (secs < day)   { const h = Math.floor(secs / 3600); return afT(h + 'h ago', h + ' 小时前'); }
+  const days = Math.floor(secs / day);
+  if (days < 7)     return afT(days + 'd ago', days + ' 天前');
+  if (days < 30)    { const w = Math.floor(days / 7);  return afT(w + 'w ago', w + ' 周前'); }
+  if (days < 365)   { const mo = Math.floor(days / 30); return afT(mo + 'mo ago', mo + ' 个月前'); }
+  return afT(Math.floor(days / 365) + 'y ago', Math.floor(days / 365) + ' 年前');
+}
 
 async function afLoadReferrals() {
   const status = $('#af-status').value;
@@ -127,55 +155,69 @@ async function afLoadReferrals() {
     const rows = r.data || [];
     const s = r.summary || {};
 
+    const pct = Number(s.total) > 0 ? Math.round((Number(s.converted) / Number(s.total)) * 100) : 0;
     const stat = (k, v, d) =>
       `<div class="af2-stat"><div class="af2-sk">${k}</div><div class="af2-sv">${v}</div>${d ? `<div class="af2-sd">${d}</div>` : ''}</div>`;
     $('#af-stats').innerHTML =
-      stat(afT('Referrals', '推荐总数'),  Number(s.total || 0), '') +
-      stat(afT('Waiting', '待首单'),      Number(s.joined || 0), afT('no first order yet', '尚未首单')) +
-      stat(afT('Rewarded', '已奖励'),     Number(s.converted || 0), afT('first order placed', '已完成首单')) +
-      stat(afT('Paid out', '已发放'),     '¥' + fmt(s.paid_out || 0), afT('to referrer wallets', '入推荐人钱包'));
+      stat(afT('Friends joined', '好友加入'), Number(s.total || 0), '') +
+      stat(afT('First orders', '首单转化'),   Number(s.converted || 0), afT(pct + '% converted', pct + '% 转化')) +
+      stat(afT('Rewards paid', '已发奖励'),   '¥' + fmt(s.paid_out || 0), afT('to referrer wallets', '入推荐人钱包')) +
+      stat(afT('Waiting', '待首单'),          Number(s.joined || 0), afT('no first order yet', '尚未首单'));
 
     if (!rows.length) {
-      ledger.innerHTML = `<div class="af2-empty"><div class="lead">${afT('No referrals match.', '没有匹配的推荐记录。')}</div><div class="sub">${afT('Try a different filter or search.', '换个筛选或搜索试试。')}</div></div>`;
+      const filtering = !!status || !!q;
+      ledger.innerHTML = filtering
+        ? `<div class="af2-empty"><div class="lead">${afT('None match.', '没有匹配项。')}</div><div class="sub">${afT('Try a different filter or search.', '换个筛选或搜索试试。')}</div></div>`
+        : `<div class="af2-empty"><div class="lead">${afT('No referrals yet.', '暂无推荐记录。')}</div><div class="sub">${afT('When a customer shares their code and a friend joins, they show up here.', '当顾客分享邀请码、好友加入后,会出现在这里。')}</div></div>`;
       return;
     }
 
-    ledger.innerHTML = rows.map(r => {
+    const th = `<thead><tr>
+      <th>${afT('Referrer → Friend', '推荐人 → 好友')}</th>
+      <th class="af2-hide-sm">${afT('Code', '邀请码')}</th>
+      <th>${afT('Status', '状态')}</th>
+      <th class="af2-r">${afT('Reward', '奖励')}</th>
+      <th class="af2-hide-sm">${afT('Joined', '加入')}</th>
+      <th></th>
+    </tr></thead>`;
+
+    const body = rows.map(r => {
       const referrer = escapeHtml(r.referrer_nickname || ('#' + r.referrer_id));
       const invitee  = escapeHtml(r.invitee_nickname  || ('#' + r.invitee_id));
-      // sub line: code · what happened · when
-      const bits = [];
-      if (r.code_used) bits.push(escapeHtml(r.code_used));
-      if (r.status === 'ordered' && r.first_paid_order_id) bits.push(afT('order #', '订单 #') + r.first_paid_order_id);
-      else if (r.status === 'joined') bits.push(afT('new customer', '新顾客'));
-      else if (r.status === 'void')   bits.push(afT('voided', '已作废'));
-      const when = r.status === 'joined' ? cuFmtDate(r.joined_at)
-                 : cuFmtDate(r.rewarded_at) || cuFmtDate(r.voided_at) || cuFmtDate(r.joined_at);
-      if (when) bits.push(escapeHtml(when));
+      // sub line under the names: friend's phone · what happened (code is its own column)
+      let note;
+      if (r.status === 'ordered')   note = afT('first order', '已首单') + (r.first_paid_order_id ? ' #' + r.first_paid_order_id : '');
+      else if (r.status === 'void') note = escapeHtml(r.voided_reason || afT('voided', '已作废'));
+      else                          note = afT('new customer', '新顾客');
+      const phone = escapeHtml(r.invitee_phone || r.referrer_phone || '');
+      const sub = [phone, note].filter(Boolean).join(' · ');
 
-      const paid = r.status === 'ordered';
       const amtCls = Number(r.reward_amount) > 0 ? 'af2-amt' : 'af2-amt zero';
-      const acts = paid
+      const acts = r.status === 'ordered'
         ? `<button class="af2-btn ghost sm" onclick="afEditReward(${r.id}, ${Number(r.reward_amount) || 0})">${afT('Adjust', '调整')}</button>`
         : `<button class="af2-btn sm" onclick="afEditReward(${r.id}, ${Number(r.reward_amount) || 0})">${afT('Reward', '奖励')}</button>` +
           (r.status === 'joined' ? `<button class="af2-btn ghost sm" onclick="afVoid(${r.id})">${afT('Void', '作废')}</button>` : '') +
           (r.status === 'void'   ? `<button class="af2-btn ghost sm" onclick="afRestore(${r.id})">${afT('Restore', '恢复')}</button>` : '');
 
-      return `<div class="af2-lrow">
-        <div class="af2-flow">
-          <span class="af2-av">${escapeHtml(afInitials(r.referrer_nickname, r.referrer_id))}</span>
-          <div class="af2-who">
-            <div class="af2-nm"><a href="#" onclick="event.preventDefault(); cuOpenDetail(${r.referrer_id})">${referrer}</a><span class="arw">→</span><a href="#" onclick="event.preventDefault(); cuOpen(${r.invitee_id})">${invitee}</a></div>
-            <div class="af2-sub">${bits.join(' · ')}</div>
+      return `<tr>
+        <td>
+          <div class="af2-flow">
+            <span class="af2-av">${escapeHtml(afInitials(r.referrer_nickname, r.referrer_id))}</span>
+            <div class="af2-who">
+              <div class="af2-nm"><a href="#" onclick="event.preventDefault(); cuOpenDetail(${r.referrer_id})">${referrer}</a><span class="arw">→</span><a href="#" onclick="event.preventDefault(); cuOpen(${r.invitee_id})">${invitee}</a></div>
+              <div class="af2-sub">${sub}</div>
+            </div>
           </div>
-        </div>
-        <div class="af2-meta">
-          ${afStatusBadge(r.status)}
-          <span class="${amtCls}">${Number(r.reward_amount) > 0 ? '¥' + fmt(r.reward_amount) : '—'}</span>
-          <span class="af2-acts">${acts}</span>
-        </div>
-      </div>`;
+        </td>
+        <td class="af2-hide-sm"><span class="af2-code">${escapeHtml(r.code_used || '')}</span></td>
+        <td>${afStatusBadge(r.status)}</td>
+        <td class="af2-r"><span class="${amtCls}">¥${fmt(r.reward_amount || 0)}</span></td>
+        <td class="af2-hide-sm"><span class="af2-when">${escapeHtml(afRelTime(r.joined_at))}</span></td>
+        <td class="af2-actcell"><span class="af2-acts">${acts}</span></td>
+      </tr>`;
     }).join('');
+
+    ledger.innerHTML = `<table class="af2-tbl">${th}<tbody>${body}</tbody></table>`;
   } catch (e) {
     ledger.innerHTML = `<div class="af2-empty"><div class="lead">${afT('Couldn\'t load referrals.', '加载推荐记录失败。')}</div><div class="sub">${escapeHtml(e.message)}</div></div>`;
   }
@@ -184,7 +226,7 @@ async function afLoadReferrals() {
 function afStatusBadge(status) {
   if (status === 'ordered') return `<span class="af2-badge done"><span class="bdot"></span>${afT('Rewarded', '已奖励')}</span>`;
   if (status === 'void')    return `<span class="af2-badge void">${afT('Voided', '已作废')}</span>`;
-  return `<span class="af2-badge wait"><span class="bdot"></span>${afT('Waiting', '待首单')}</span>`;
+  return `<span class="af2-badge wait"><span class="bdot"></span>${afT('Waiting for first order', '待首单')}</span>`;
 }
 
 // Self-contained Tacet status pill (inline styles, no scoped CSS needed) so it
