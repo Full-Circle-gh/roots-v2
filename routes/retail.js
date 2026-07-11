@@ -11794,7 +11794,13 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
 
     // Fulfillment — order left the store/warehouse, and reached the customer.
     // Both timestamps are set independently; a delivered order surfaces both
-    // its dispatch and delivery rows.
+    // its dispatch and delivery rows. EXCEPT when an order was flipped straight
+    // to delivered (Meituan same-label, auto-deliver-past-ETA, manual "Mark
+    // delivered") without ever passing a real dispatch step: those transitions
+    // backfill dispatched_at with the SAME CURRENT_TIMESTAMP as delivered_at, so
+    // the "dispatched" row would be a phantom at the identical time as delivery.
+    // Suppress it when the two timestamps are equal — the delivered row alone
+    // tells the true story.
     const dispatched = tdb().prepare(`
       SELECT o.id, o.order_no, o.dispatched_at, o.channel,
              COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer,
@@ -11803,6 +11809,7 @@ router.get('/api/retail-admin/dashboard/activity', requireRetailAdmin, (req, res
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.dispatched_at IS NOT NULL AND o.dispatched_at >= ?
+         AND (o.delivered_at IS NULL OR o.delivered_at <> o.dispatched_at)
        ORDER BY o.dispatched_at DESC LIMIT ?
     `).all(sinceIso, limit);
     for (const r of dispatched) events.push({
