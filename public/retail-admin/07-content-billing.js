@@ -1964,84 +1964,87 @@ async function fsInitNavState() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// THE TIMELINE (left column)
+// THE MARQUEE — live sales as hero tiles, scheduled + recent as a table
 // ════════════════════════════════════════════════════════════════
-function fsCountdown(row, now) {
-  const st = row.flash_state;
-  const ends = fsToMs(row.flash_ends_at);
-  const starts = fsToMs(row.flash_starts_at);
-  if (st === 'active' && ends != null) {
-    const r = fsRel(ends - now);
-    return r ? cuT('ends in ', '') + '<span class="fs2-cd" data-end="' + ends + '">' + r + cuT('', '后结束') + '</span>' : '';
-  }
-  if (st === 'upcoming' && starts != null) {
-    const r = fsRel(starts - now);
-    return r ? cuT('starts in ', '') + '<span class="fs2-cd" data-start="' + starts + '">' + r + cuT('', '后开始') + '</span>' : '';
-  }
-  return '';
+// hh:mm:ss for the live hero clock.
+function fsHms(ms) {
+  if (ms < 0) ms = 0;
+  const s = Math.floor(ms / 1000);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h + ':' + fsPad(m) + ':' + fsPad(sec);
 }
 
-function fsRowHtml(p, now) {
-  const st = p.flash_state;
-  const dim = st === 'ended' ? ' dim' : '';
+// ── A live sale = one hero tile: big running clock + sold meter. The clock
+// (and its breathing dot) is the ONE Dusk motif — "the price reverts on its
+// own when this hits zero." Every other control stays a plain ink button.
+function fsHeroTile(p, now) {
   const name = fsName(p);
-  const sku = p.sku ? `<span class="sk">[${escapeHtml(p.sku)}]</span>` : '';
-  const draft = !p.is_published ? ` <span class="fs2-badge ended">${cuT('DRAFT', '草稿')}</span>` : '';
-
-  // Sub line under the name — window + live countdown.
-  let sub = '';
-  const cd = fsCountdown(p, now);
-  const startW = fsWhen(fsToMs(p.flash_starts_at));
-  const endW = fsWhen(fsToMs(p.flash_ends_at));
-  if (st === 'active')        sub = (cd ? cd + ' · ' : '') + escapeHtml(startW ? startW : cuT('now', '现在')) + ' → ' + escapeHtml(endW || '');
-  else if (st === 'upcoming') sub = (cd ? cd + ' · ' : '') + escapeHtml(startW || '') + ' → ' + escapeHtml(endW || '');
-  else                        sub = escapeHtml(startW || cuT('now', '现在')) + ' → ' + escapeHtml(endW || '');
-
-  // Sold / cap + meter.
-  const sold = Number(p.flash_sold) || 0;
-  const cap = p.flash_stock_limit;
-  let soldHtml = '';
+  const sku = p.sku ? `<span class="fsm-sk">${escapeHtml(p.sku)}</span>` : '';
+  const draft = !p.is_published ? ` <span class="fsm-badge ended">${cuT('DRAFT', '草稿')}</span>` : '';
+  const reg = Number(p.sell_price) || 0, flash = Number(p.flash_price) || 0;
+  const off = (reg > 0 && flash > 0 && flash < reg) ? Math.round((1 - flash / reg) * 100) : 0;
+  const ends = fsToMs(p.flash_ends_at);
+  const sold = Number(p.flash_sold) || 0, cap = p.flash_stock_limit;
+  let soldLine, pct = 0, hot = '';
   if (cap != null) {
-    const pct = cap > 0 ? Math.min(100, Math.round((sold / cap) * 100)) : 0;
-    soldHtml = `<b>${sold}</b> / ${cap}<div class="fs2-meter"><i style="width:${pct}%"></i></div>`;
+    pct = cap > 0 ? Math.min(100, Math.round(sold / cap * 100)) : 0;
+    soldLine = `<span><b>${sold}</b> / ${cap} ${cuT('sold', '已售')}</span><span>${pct}%</span>`;
+    if (pct >= 40) hot = ' hot';
   } else {
-    soldHtml = st === 'ended' ? `<b>${sold}</b> ${cuT('sold', '已售')}` : cuT('no cap', '不限量');
+    soldLine = `<span><b>${sold}</b> ${cuT('sold · no cap', '已售 · 不限量')}</span><span></span>`;
   }
-
-  // Badge + a single row action per state (mockup C: one button each; deeper
-  // actions like Cancel live in the composer once a scheduled sale is opened).
-  let badge = '', acts = '';
-  if (st === 'active') {
-    badge = `<span class="fs2-badge live"><span class="dot"></span>${cuT('Live', '进行中')}</span>`;
-    acts = `<button class="btn btn-sm" onclick='fsEndNow(${p.id}, ${JSON.stringify(name)})'>${cuT('End early', '提前结束')}</button>`;
-  } else if (st === 'upcoming') {
-    badge = `<span class="fs2-badge sched">${cuT('Scheduled', '已排期')}</span>`;
-    acts = `<button class="btn btn-sm" onclick="fsEdit(${p.id})">${cuT('Edit', '编辑')}</button>`;
-  } else {
-    badge = `<span class="fs2-badge ended">${cuT('Ended', '已结束')}</span>`;
-    acts = `<button class="btn btn-sm" onclick="fsAgain(${p.id})">${cuT('Run again', '再来一次')}</button>`;
-  }
-
-  return `<div class="fs2-row${dim}" data-id="${p.id}">
-    <div class="fs2-thumb">${fsThumbHtml(p)}</div>
-    <div class="fs2-who">
-      <div class="n">${escapeHtml(name)} ${sku}${draft}</div>
-      <div class="s">${sub}</div>
+  const startW = fsWhen(fsToMs(p.flash_starts_at));
+  return `<div class="fsm-hero" data-id="${p.id}">
+    <div class="fsm-hero-top">
+      <div class="fsm-thumb">${fsThumbHtml(p)}</div>
+      <div class="fsm-who"><div class="fsm-name">${escapeHtml(name)} ${sku}${draft}</div>
+        <div class="fsm-prc"><span class="fsm-now">¥${fmt(flash)}</span>${reg > 0 ? `<span class="fsm-was">¥${fmt(reg)}</span>` : ''}${off ? `<span class="fsm-off">−${off}%</span>` : ''}</div></div>
     </div>
-    <div class="fs2-meta">
-      <div class="fs2-price"><span class="f">¥${fmt(p.flash_price)}</span><span class="r">¥${fmt(p.sell_price)}</span></div>
-      <div class="fs2-sold">${soldHtml}</div>
-      <div class="fs2-acts">${badge}${acts}</div>
+    <div class="fsm-cd-row">
+      <span class="fsm-cd" data-end="${ends}">${fsHms(ends - now)}</span>
+      <span class="fsm-cd-lab">${cuT('left', '剩余')}${startW ? ` · ${cuT('ends', '结束')} ${escapeHtml(fsWhen(ends) || '')}` : ''}</span>
+      <span class="fsm-auto"><span class="fsm-dot"></span>${cuT('auto-revert', '自动恢复')}</span>
+    </div>
+    <div class="fsm-sold">${soldLine}</div>
+    <div class="fsm-meter${hot}"><i style="width:${pct}%"></i></div>
+    <div class="fsm-hero-foot">
+      <button class="btn btn-sm btn-danger" onclick='fsEndNow(${p.id}, ${JSON.stringify(name)})'>${cuT('End early', '提前结束')}</button>
+      <button class="btn btn-sm" onclick="fsEdit(${p.id})">${cuT('Edit', '编辑')}</button>
+      ${startW ? `<span class="fsm-win">${cuT('started ', '开始 ')}${escapeHtml(startW)}</span>` : ''}
     </div>
   </div>`;
 }
 
-function fsGroupHtml(title, rows, now, live) {
-  if (!rows.length) return '';
-  return `<div class="fs2-group${live ? ' live' : ''}">
-    <span class="fs2-gdot"></span>
-    <div class="fs2-kicker">${title}</div>
-    <div class="fs2-card">${rows.map(p => fsRowHtml(p, now)).join('')}</div>
+// ── Scheduled + recent collapse into one quiet table row.
+function fsTableRow(p, now) {
+  const st = p.flash_state;
+  const dim = st === 'ended' ? ' dim' : '';
+  const name = fsName(p);
+  const sku = p.sku ? `<span class="fsm-sk">${escapeHtml(p.sku)}</span>` : '';
+  const reg = Number(p.sell_price) || 0, flash = Number(p.flash_price) || 0;
+  const startMs = fsToMs(p.flash_starts_at), endMs = fsToMs(p.flash_ends_at);
+  const sold = Number(p.flash_sold) || 0, cap = p.flash_stock_limit;
+  let when, soldTxt, act, badge;
+  if (st === 'upcoming') {
+    const r = fsRel((startMs || now) - now);
+    when = `<span class="fsm-cd2" data-start="${startMs}">${r ? cuT('starts in ', '') + r + cuT('', '后开始') : escapeHtml(fsWhen(startMs) || '')}</span>`;
+    soldTxt = cap != null ? cuT('cap ', '限 ') + cap : cuT('no cap', '不限量');
+    act = `<button class="btn btn-sm" onclick="fsEdit(${p.id})">${cuT('Edit', '编辑')}</button>`;
+    badge = `<span class="fsm-badge sched">${cuT('Scheduled', '已排期')}</span>`;
+  } else {
+    const soldOut = cap != null && sold >= cap;
+    when = escapeHtml(fsWhen(endMs) || '') + ` · ${cuT('ended', '已结束')}`;
+    soldTxt = cap != null ? `<b>${sold}</b>/${cap}${soldOut ? ` · ${cuT('sold out', '售罄')}` : ''}` : `<b>${sold}</b> ${cuT('sold', '已售')}`;
+    act = `<button class="btn btn-sm" onclick="fsAgain(${p.id})">${cuT('Run again', '再来一次')}</button>`;
+    badge = `<span class="fsm-badge ended">${cuT('Ended', '已结束')}</span>`;
+  }
+  return `<div class="fsm-trow${dim}" data-id="${p.id}">
+    <div class="fsm-tw"><div class="fsm-tthumb">${fsThumbHtml(p)}</div>
+      <div class="fsm-tmeta"><div class="fsm-tname">${escapeHtml(name)}</div><div class="fsm-tsub">${sku}</div></div></div>
+    <div class="fsm-tcell fsm-cw">${when}</div>
+    <div class="fsm-tcell"><span class="fsm-now">¥${fmt(flash)}</span> ${reg > 0 ? `<span class="fsm-was">¥${fmt(reg)}</span>` : ''}</div>
+    <div class="fsm-tcell fsm-cs">${soldTxt}</div>
+    <div class="fsm-tact">${st === 'upcoming' ? badge + ' ' : ''}${act}</div>
   </div>`;
 }
 
@@ -2054,28 +2057,56 @@ function fsRenderTimeline() {
   const ended = _fsRows.filter(p => p.flash_state === 'ended');
 
   if (!_fsRows.length) {
-    mount.innerHTML = `<div class="fs2-card"><div class="fs2-empty">
-      <div class="lead">${cuT('No flash sales yet', '暂无秒杀')}</div>
-      <div class="sub">${cuT('Press New flash sale to put a product on the clock.', '点击“新建秒杀”让某个产品限时降价。')}</div>
-    </div></div>`;
+    mount.innerHTML = `<div class="fsm-empty">
+      <svg class="fsm-emark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 1.5"/><path d="M9 2h6"/></svg>
+      <div class="lead">${cuT("Nothing's on the clock", '暂无秒杀')}</div>
+      <div class="sub">${cuT('Put a product on a timer and it sells at the sale price until the window closes.', '给产品加上倒计时,它会以秒杀价出售,直到时间结束。')}</div>
+      <button class="btn fsm-new" onclick="fsNewSale()">${cuT('New flash sale', '新建秒杀')}</button>
+    </div>`;
     return;
   }
-  mount.innerHTML =
-      fsGroupHtml(cuT('Live now', '进行中'), active, now, true)
-    + fsGroupHtml(cuT('Scheduled', '已排期'), upcoming, now, false)
-    + fsGroupHtml(cuT('Ended · last 30 days', '已结束 · 近30天'), ended, now, false);
+
+  let html = '';
+  // live hero band
+  if (active.length) {
+    html += `<div class="fsm-sec"><span class="fsm-badge live"><span class="fsm-dot"></span>${cuT('Live now', '进行中')}</span><span class="fsm-secn">· ${active.length} ${cuT('running', '进行中')}</span></div>`
+      + `<div class="fsm-grid">${active.map(p => fsHeroTile(p, now)).join('')}</div>`;
+  } else {
+    html += `<div class="fsm-sec"><span class="fsm-kick">${cuT('Live now', '进行中')}</span></div>`
+      + `<div class="fsm-none">${cuT('No sale is live this moment. Scheduled ones start on their own.', '当前没有进行中的秒杀,已排期的会自动开始。')}</div>`;
+  }
+  // scheduled + recent table
+  const rows = upcoming.concat(ended);
+  if (rows.length) {
+    html += `<div class="fsm-sec fsm-sec2"><span class="fsm-kick">${cuT('Scheduled &amp; recent', '已排期与最近')}</span><span class="fsm-secn">· ${upcoming.length} ${cuT('scheduled', '已排期')}</span></div>`
+      + `<div class="fsm-table"><div class="fsm-thead"><span>${cuT('Product', '产品')}</span><span class="fsm-cw">${cuT('Window', '时间')}</span><span>${cuT('Price', '价格')}</span><span class="fsm-cs">${cuT('Sold', '已售')}</span><span></span></div>`
+      + rows.map(p => fsTableRow(p, now)).join('') + `</div>`;
+  }
+  mount.innerHTML = html;
 }
 
-// Refresh only the countdown spans (cheap, every 30s) so the clock stays live
-// without re-rendering the whole list or losing anything.
+// Tick the hero clocks (hh:mm:ss) and scheduled "starts in" labels every second
+// without re-rendering the list. When a window actually closes — a live clock
+// hits zero, or a scheduled start passes — reload from the server so the state
+// (and the reverted price) is authoritative, not guessed on the client.
 function fsRefreshCountdowns() {
   const now = fsNow();
-  document.querySelectorAll('#fs2-timeline .fs2-cd').forEach(el => {
-    const end = el.getAttribute('data-end');
-    const start = el.getAttribute('data-start');
-    if (end != null) { const r = fsRel(Number(end) - now); if (r) el.innerHTML = r + cuT('', '后结束'); }
-    else if (start != null) { const r = fsRel(Number(start) - now); if (r) el.innerHTML = r + cuT('', '后开始'); }
+  let crossed = false;
+  document.querySelectorAll('#fs2-timeline .fsm-cd').forEach(el => {
+    const end = Number(el.getAttribute('data-end'));
+    if (Number.isFinite(end)) {
+      if (end - now <= 0) crossed = true;
+      el.textContent = fsHms(end - now);
+    }
   });
+  document.querySelectorAll('#fs2-timeline .fsm-cd2').forEach(el => {
+    const start = Number(el.getAttribute('data-start'));
+    if (!Number.isFinite(start)) return;
+    if (start - now <= 0) { crossed = true; return; }
+    const r = fsRel(start - now);
+    if (r) el.textContent = cuT('starts in ', '') + r + cuT('', '后开始');
+  });
+  if (crossed) fsLoadList();
 }
 
 async function fsLoadList() {
@@ -2088,7 +2119,7 @@ async function fsLoadList() {
     fsUpdateNavState(_fsRows);
     fsRenderTimeline();
     if (_fsTick) clearInterval(_fsTick);
-    _fsTick = setInterval(fsRefreshCountdowns, 30000);
+    _fsTick = setInterval(fsRefreshCountdowns, 1000);
   } catch (e) {
     if (mount) mount.innerHTML = `<div class="fs2-card"><div class="fs2-empty"><div class="sub err">${cuT('Failed to load', '加载失败')}: ${escapeHtml(e.message)}</div></div></div>`;
   }
@@ -2108,6 +2139,20 @@ async function fsEndNow(productId, name) {
 }
 function fsEdit(id) { const row = _fsRows.find(r => r.id === id); if (row) fscFillFromRow(row, 'edit'); }
 function fsAgain(id) { const row = _fsRows.find(r => r.id === id); if (row) fscFillFromRow(row, 'again'); }
+
+// ── The composer lives in a right-side drawer. New / Edit / Run-again all open
+// the same panel; it closes on save, cancel, the ✕, the scrim, or Escape.
+function fsOpenComposer() {
+  const sc = document.getElementById('fsd-scrim'), dw = document.getElementById('fsd-drawer');
+  if (sc) sc.classList.add('on');
+  if (dw) { dw.classList.add('on'); dw.setAttribute('aria-hidden', 'false'); }
+}
+function fsCloseComposer() {
+  const sc = document.getElementById('fsd-scrim'), dw = document.getElementById('fsd-drawer');
+  if (sc) sc.classList.remove('on');
+  if (dw) { dw.classList.remove('on'); dw.setAttribute('aria-hidden', 'true'); }
+}
+function fsNewSale() { fscReset(); fsOpenComposer(); }
 
 // ════════════════════════════════════════════════════════════════
 // THE COMPOSER  (right column) — always-open, stepped: Product → Price → Window.
@@ -2444,8 +2489,7 @@ function fscFillFromRow(row, mode) {
     _fsc.endChip = 'tonight';
   }
   fscRender();
-  const card = document.getElementById('fsc-form');
-  if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  fsOpenComposer();
 }
 
 // ─── save / cancel ────────────────────────────────────────────────────────
@@ -2474,6 +2518,7 @@ async function fscStart() {
   try {
     await api(`/api/retail-admin/products/${_fsc.product.id}/flash-sale`, { method: 'PUT', body });
     toast(starts ? cuT('Flash sale scheduled', '秒杀已排期') : cuT('Flash sale started', '秒杀已开启'));
+    fsCloseComposer();
     fscReset();
     await fsLoadList();
   } catch (e) {
@@ -2498,6 +2543,7 @@ async function fscCancelSale() {
   try {
     await api(`/api/retail-admin/products/${_fsc.editId}/flash-sale`, { method: 'DELETE' });
     toast(cuT('Flash sale cancelled', '秒杀已取消'));
+    fsCloseComposer();
     fscReset();
     await fsLoadList();
   } catch (e) { toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
@@ -2506,4 +2552,8 @@ async function fscCancelSale() {
 // ─── boot: lazy-load the timeline + composer on first tab open ────────────
 document.querySelector('[data-tab="flash"]').addEventListener('click', () => {
   if (!FLASH_LOADED) { FLASH_LOADED = true; fsLoadList(); fscInit(); }
+});
+document.addEventListener('keydown', (e) => {
+  const dw = document.getElementById('fsd-drawer');
+  if (e.key === 'Escape' && dw && dw.classList.contains('on')) fsCloseComposer();
 });

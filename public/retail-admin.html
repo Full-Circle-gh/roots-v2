@@ -6019,57 +6019,232 @@
     </div>
   </section>
 
-  <!-- ─── SHARE CARDS — per-page WeChat forward thumbnails ─── -->
+  <!-- ═══════════════════════════════════════════════════════════════════════
+       SHARE CARDS — Tacet gallery. Rebuilt 2026-07-11 from
+       reference/share-cards-redesign-mockup.html (option A). One card per
+       shareable page (Home / Product / Voting / Invite), each rendering the
+       REAL WeChat forward card (picture + title + app row) so the operator
+       sees exactly what a friend receives. Titles are editable per language
+       (Home / Voting / Invite); Product shares its own name so it stays
+       picture-only. The Invite card reads/writes affiliate.shareImage +
+       affiliate.shareTitle — the same keys as Marketing → Affiliate, so the
+       two stay in sync. All classes are sc-* prefixed and scoped under
+       #tab-sharing (see reference-tacet-section-class-collisions). Live-render
+       + save logic: 10-extras.js (sc* functions).
+       ═══════════════════════════════════════════════════════════════════════ -->
+  <style id="tacet-sharecards-skin">
+    /* paper ground bled over main's padding — same trick #tab-affiliate uses */
+    #tab-sharing { background: var(--bg-app);
+      margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
+      padding: calc(var(--s6) + 56px) var(--s6) var(--s7); min-height: 100vh; }
+
+    #tab-sharing .sc-head { max-width: 640px; margin-bottom: 24px; }
+    #tab-sharing .sc-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); margin: 0 0 6px; }
+    #tab-sharing .sc-h2 { font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--text-1); margin: 0; }
+    #tab-sharing .sc-sub { font-size: 13px; color: var(--text-2); line-height: 1.55; margin: 8px 0 0; }
+
+    #tab-sharing .sc-gal { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 20px; }
+    @media (max-width: 900px) { #tab-sharing .sc-gal { grid-template-columns: 1fr; } }
+
+    #tab-sharing .sc-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; display: flex; flex-direction: column; }
+    #tab-sharing .sc-chead { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 4px; }
+    #tab-sharing .sc-ctitle { font: 500 15px var(--f-sans); color: var(--text-1); }
+    #tab-sharing .sc-csub { font-size: 12px; color: var(--text-3); margin-top: 2px; line-height: 1.45; }
+    #tab-sharing .sc-chead .sc-cright { margin-left: auto; flex: none; }
+
+    /* status pill */
+    #tab-sharing .sc-pill { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--f-sans); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+    #tab-sharing .sc-pill .sc-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+    #tab-sharing .sc-pill.custom { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
+    #tab-sharing .sc-pill.deflt { background: var(--bg-elev-1); color: var(--text-3); }
+
+    /* the WeChat forward preview */
+    #tab-sharing .sc-pv { padding: 14px 20px 2px; }
+    #tab-sharing .sc-chat { background: var(--bg-elev-1); border-radius: var(--r-lg); padding: 18px 16px; }
+    #tab-sharing .sc-chatrow { display: flex; gap: 10px; align-items: flex-start; }
+    #tab-sharing .sc-avatar { width: 30px; height: 30px; border-radius: 7px; flex: none; background: var(--tacet-ink); color: var(--tacet-paper); display: flex; align-items: center; justify-content: center; }
+    #tab-sharing .sc-avatar svg { width: 15px; height: 15px; }
+    #tab-sharing .sc-wxcard { width: 216px; background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(17,26,43,.10); }
+    #tab-sharing .sc-wx-t { font: 400 13px var(--f-sans); color: var(--text-1); padding: 11px 12px 10px; line-height: 1.4; }
+    #tab-sharing .sc-wx-t.empty { color: var(--text-4); font-style: italic; }
+    #tab-sharing .sc-wx-img { aspect-ratio: 5 / 4; background-size: cover; background-position: center; background-color: var(--bg-elev-1); }
+    #tab-sharing .sc-wx-foot { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-top: 1px solid var(--line-soft); font-size: 10.5px; color: var(--text-3); }
+    #tab-sharing .sc-wx-lg { width: 13px; height: 13px; border-radius: 3px; background: var(--tacet-ink); color: var(--tacet-paper); flex: none; display: flex; align-items: center; justify-content: center; }
+    #tab-sharing .sc-wx-lg svg { width: 8px; height: 8px; }
+    #tab-sharing .sc-wx-mp { margin-left: auto; opacity: .8; }
+
+    /* fallback "page's own look" art (no custom picture) */
+    #tab-sharing .sc-fb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }
+    #tab-sharing .sc-fb-lines { width: 60%; }
+    #tab-sharing .sc-fb-lines i { display: block; height: 6px; border-radius: 3px; background: var(--line-strong); margin: 0 auto 7px; }
+    #tab-sharing .sc-fb-lines i:nth-child(1) { width: 68%; }
+    #tab-sharing .sc-fb-lines i:nth-child(2) { width: 100%; }
+    #tab-sharing .sc-fb-lines i:nth-child(3) { width: 44%; }
+    #tab-sharing .sc-fb-dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line-strong); }
+
+    /* editable fields */
+    #tab-sharing .sc-fields { padding: 14px 20px 0; display: flex; flex-direction: column; gap: 12px; }
+    #tab-sharing .sc-flabel { font: 500 12px var(--f-sans); color: var(--text-2); margin-bottom: 5px; display: block; }
+    #tab-sharing .sc-flabel .sc-lang { color: var(--text-4); font-weight: 400; }
+    #tab-sharing .sc-charc { float: right; font: 400 11px var(--f-mono); color: var(--text-4); }
+    #tab-sharing input.sc-input { width: 100%; font: 400 13.5px var(--f-sans); color: var(--text-1); background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px 11px; outline: none; transition: border-color .2s var(--ease-out); }
+    #tab-sharing input.sc-input:focus { border-color: var(--tacet-dusk); }
+    #tab-sharing input.sc-input::placeholder { color: var(--text-4); }
+    #tab-sharing .sc-note { font-size: 12px; color: var(--text-3); line-height: 1.5; background: var(--bg-elev-1); border-radius: var(--r-md); padding: 10px 12px; }
+
+    /* picture controls */
+    #tab-sharing .sc-picrow { display: flex; align-items: center; gap: 10px; }
+    #tab-sharing .sc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 500 12.5px var(--f-sans); border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); padding: 7px 13px; cursor: pointer; transition: border-color .2s var(--ease-out), background .2s var(--ease-out), color .2s var(--ease-out); white-space: nowrap; }
+    #tab-sharing .sc-btn:hover { border-color: var(--text-3); }
+    #tab-sharing .sc-btn svg { width: 14px; height: 14px; }
+    #tab-sharing .sc-btn.danger { border-color: transparent; color: var(--text-3); }
+    #tab-sharing .sc-btn.danger:hover { color: var(--tacet-brick); background: var(--tacet-brick-tint); border-color: transparent; }
+
+    /* footer / save */
+    #tab-sharing .sc-foot { margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 16px 20px 18px; }
+    #tab-sharing .sc-save { display: inline-flex; align-items: center; gap: 7px; font: 500 13px var(--f-sans); background: var(--tacet-ink); border: 1px solid var(--tacet-ink); color: var(--tacet-paper); border-radius: var(--r-md); padding: 9px 16px; cursor: pointer; transition: opacity .2s var(--ease-out); }
+    #tab-sharing .sc-save:hover { opacity: .88; }
+    #tab-sharing .sc-saved { font-size: 12px; color: var(--text-3); margin-left: auto; }
+
+    #tab-sharing .sc-tip { margin-top: 22px; font-size: 12px; color: var(--text-3); line-height: 1.55; }
+    #tab-sharing .sc-tip b { color: var(--text-2); font-weight: 500; }
+  </style>
+
   <section id="tab-sharing">
-    <h2>Share cards · 分享卡片</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4); line-height: 1.5;">
-      When a customer forwards a page into a WeChat chat, this is the picture on the card. Set one per page. Best shape is wide (5:4 — about 500×400). Leave a page empty to use the page's own look. · 顾客把页面转发到微信聊天时,卡片上显示的图片。每个页面单独设置。建议比例 5:4(约 500×400)。留空则使用该页面自带的样式。
+    <div class="sc-head">
+      <div class="sc-eyebrow" data-no-i18n>Mini app · Sharing</div>
+      <h2 class="sc-h2">Share cards · 分享卡片</h2>
+      <p class="sc-sub">When a customer forwards one of your pages into a WeChat chat, this is the card their friends see. Set the picture and the title for each page — and see exactly how it lands. · 顾客把页面转发到微信聊天时,好友看到的就是这张卡片。为每个页面设置图片和标题,并实时预览效果。</p>
     </div>
 
-    <div class="card" style="margin-bottom: var(--s4);">
-      <!-- Home / store -->
-      <div class="field" style="margin: 0 0 20px;">
-        <label class="stacked">Home page · 首页</label>
-        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Shown when someone forwards the store's home page (without a referral code). · 转发店铺首页(不含推荐码)时显示。</div>
-        <input type="hidden" id="sh-home">
-        <div id="sh-home-preview"></div>
-        <div class="row" style="gap: 8px; margin-top: 8px;">
-          <button class="btn btn-sm" onclick="document.getElementById('sh-home-file').click()">Upload picture · 上传图片</button>
-          <input type="file" id="sh-home-file" accept="image/png,image/jpeg" style="display: none;">
+    <div class="sc-gal">
+
+      <!-- HOME -->
+      <div class="sc-card" data-sc="home">
+        <div class="sc-chead">
+          <div>
+            <div class="sc-ctitle">Home page · 首页</div>
+            <div class="sc-csub">Forwarding the store's home, with no referral code. · 转发店铺首页(不含推荐码)。</div>
+          </div>
+          <div class="sc-cright" id="sc-home-pill"></div>
+        </div>
+        <div class="sc-pv" id="sc-home-pv" data-no-i18n></div>
+        <div class="sc-fields">
+          <div>
+            <label class="sc-flabel">Card title <span class="sc-lang">· English</span><span class="sc-charc" id="sc-home-ten-c">0 / 60</span></label>
+            <input type="text" class="sc-input" id="sc-home-ten" maxlength="60" placeholder="e.g. Fresh this week" oninput="scOnTitleInput('home')">
+          </div>
+          <div>
+            <label class="sc-flabel">卡片标题 <span class="sc-lang">· 中文</span><span class="sc-charc" id="sc-home-tcn-c">0 / 60</span></label>
+            <input type="text" class="sc-input" id="sc-home-tcn" maxlength="60" placeholder="例如:本周上新" oninput="scOnTitleInput('home')">
+          </div>
+          <input type="hidden" id="sc-home-img">
+          <div class="sc-picrow">
+            <button class="sc-btn" id="sc-home-upl" onclick="document.getElementById('sc-home-file').click()">Add picture · 添加图片</button>
+            <button class="sc-btn danger" id="sc-home-rm" onclick="scClear('home')" style="display:none">Remove · 移除</button>
+            <input type="file" id="sc-home-file" accept="image/png,image/jpeg" style="display:none">
+          </div>
+        </div>
+        <div class="sc-foot">
+          <button class="sc-save" onclick="scSave('home')">Save card · 保存卡片</button>
+          <span class="sc-saved" id="sc-home-saved"></span>
         </div>
       </div>
 
-      <!-- Product -->
-      <div class="field" style="margin: 0 0 20px;">
-        <label class="stacked">Product page · 商品页</label>
-        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Fallback for product shares. Each product still prefers its own photo when it has one — this fills in when it doesn't. · 商品分享的备用图。商品有自己的图片时优先用商品图,没有时才用这张。</div>
-        <input type="hidden" id="sh-product">
-        <div id="sh-product-preview"></div>
-        <div class="row" style="gap: 8px; margin-top: 8px;">
-          <button class="btn btn-sm" onclick="document.getElementById('sh-product-file').click()">Upload picture · 上传图片</button>
-          <input type="file" id="sh-product-file" accept="image/png,image/jpeg" style="display: none;">
+      <!-- PRODUCT (picture only) -->
+      <div class="sc-card" data-sc="product">
+        <div class="sc-chead">
+          <div>
+            <div class="sc-ctitle">Product page · 商品页</div>
+            <div class="sc-csub">Backup picture for product forwards. · 商品分享的备用图。</div>
+          </div>
+          <div class="sc-cright" id="sc-product-pill"></div>
+        </div>
+        <div class="sc-pv" id="sc-product-pv" data-no-i18n></div>
+        <div class="sc-fields">
+          <div class="sc-note">Products share their own name and photo. This picture only fills in when a product has none. · 商品使用自己的名称和图片,此图仅在商品没有图片时兜底。</div>
+          <input type="hidden" id="sc-product-img">
+          <div class="sc-picrow">
+            <button class="sc-btn" id="sc-product-upl" onclick="document.getElementById('sc-product-file').click()">Add picture · 添加图片</button>
+            <button class="sc-btn danger" id="sc-product-rm" onclick="scClear('product')" style="display:none">Remove · 移除</button>
+            <input type="file" id="sc-product-file" accept="image/png,image/jpeg" style="display:none">
+          </div>
+        </div>
+        <div class="sc-foot">
+          <button class="sc-save" onclick="scSave('product')">Save card · 保存卡片</button>
+          <span class="sc-saved" id="sc-product-saved"></span>
         </div>
       </div>
 
-      <!-- Voting -->
-      <div class="field" style="margin: 0;">
-        <label class="stacked">Voting page · 投票页</label>
-        <div class="muted" style="font-size: 11px; margin: 2px 0 8px;">Shown when someone forwards the community polls page. · 转发社区投票页时显示。</div>
-        <input type="hidden" id="sh-voting">
-        <div id="sh-voting-preview"></div>
-        <div class="row" style="gap: 8px; margin-top: 8px;">
-          <button class="btn btn-sm" onclick="document.getElementById('sh-voting-file').click()">Upload picture · 上传图片</button>
-          <input type="file" id="sh-voting-file" accept="image/png,image/jpeg" style="display: none;">
+      <!-- VOTING -->
+      <div class="sc-card" data-sc="voting">
+        <div class="sc-chead">
+          <div>
+            <div class="sc-ctitle">Voting page · 投票页</div>
+            <div class="sc-csub">Forwarding the community polls. A live poll titles itself. · 转发社区投票页。有进行中的投票时用其问题作标题。</div>
+          </div>
+          <div class="sc-cright" id="sc-voting-pill"></div>
+        </div>
+        <div class="sc-pv" id="sc-voting-pv" data-no-i18n></div>
+        <div class="sc-fields">
+          <div>
+            <label class="sc-flabel">Card title <span class="sc-lang">· English</span><span class="sc-charc" id="sc-voting-ten-c">0 / 60</span></label>
+            <input type="text" class="sc-input" id="sc-voting-ten" maxlength="60" placeholder="e.g. Vote on what we make next" oninput="scOnTitleInput('voting')">
+          </div>
+          <div>
+            <label class="sc-flabel">卡片标题 <span class="sc-lang">· 中文</span><span class="sc-charc" id="sc-voting-tcn-c">0 / 60</span></label>
+            <input type="text" class="sc-input" id="sc-voting-tcn" maxlength="60" placeholder="例如:投票决定下一款" oninput="scOnTitleInput('voting')">
+          </div>
+          <input type="hidden" id="sc-voting-img">
+          <div class="sc-picrow">
+            <button class="sc-btn" id="sc-voting-upl" onclick="document.getElementById('sc-voting-file').click()">Add picture · 添加图片</button>
+            <button class="sc-btn danger" id="sc-voting-rm" onclick="scClear('voting')" style="display:none">Remove · 移除</button>
+            <input type="file" id="sc-voting-file" accept="image/png,image/jpeg" style="display:none">
+          </div>
+        </div>
+        <div class="sc-foot">
+          <button class="sc-save" onclick="scSave('voting')">Save card · 保存卡片</button>
+          <span class="sc-saved" id="sc-voting-saved"></span>
         </div>
       </div>
 
-      <div style="margin-top: 16px;">
-        <button class="btn btn-primary" onclick="shSave()">Save share cards · 保存分享卡片</button>
+      <!-- INVITE (affiliate.shareImage + affiliate.shareTitle) -->
+      <div class="sc-card" data-sc="invite">
+        <div class="sc-chead">
+          <div>
+            <div class="sc-ctitle">Invite card · 邀请卡片</div>
+            <div class="sc-csub">A customer sharing their referral code. Synced with Marketing → Affiliate. · 顾客分享推荐码时显示。与“营销 → 分销”同步。</div>
+          </div>
+          <div class="sc-cright" id="sc-invite-pill"></div>
+        </div>
+        <div class="sc-pv" id="sc-invite-pv" data-no-i18n></div>
+        <div class="sc-fields">
+          <div>
+            <label class="sc-flabel">Card title <span class="sc-lang">· English</span><span class="sc-charc" id="sc-invite-ten-c">0 / 60</span></label>
+            <input type="text" class="sc-input" id="sc-invite-ten" maxlength="60" placeholder="e.g. Shop with my code — we both save" oninput="scOnTitleInput('invite')">
+          </div>
+          <div>
+            <label class="sc-flabel">卡片标题 <span class="sc-lang">· 中文</span><span class="sc-charc" id="sc-invite-tcn-c">0 / 60</span></label>
+            <input type="text" class="sc-input" id="sc-invite-tcn" maxlength="60" placeholder="例如:用我的邀请码,一起省" oninput="scOnTitleInput('invite')">
+          </div>
+          <div class="sc-note">Leave the titles empty to keep the automatic one (with the reward and code). · 标题留空则使用自动文案(含奖励金额与邀请码)。</div>
+          <input type="hidden" id="sc-invite-img">
+          <div class="sc-picrow">
+            <button class="sc-btn" id="sc-invite-upl" onclick="document.getElementById('sc-invite-file').click()">Add picture · 添加图片</button>
+            <button class="sc-btn danger" id="sc-invite-rm" onclick="scClear('invite')" style="display:none">Remove · 移除</button>
+            <input type="file" id="sc-invite-file" accept="image/png,image/jpeg" style="display:none">
+          </div>
+        </div>
+        <div class="sc-foot">
+          <button class="sc-save" onclick="scSave('invite')">Save card · 保存卡片</button>
+          <span class="sc-saved" id="sc-invite-saved"></span>
+        </div>
       </div>
+
     </div>
 
-    <div class="muted" style="font-size: 11px; line-height: 1.5;">
-      The <b>invite / referral</b> card has its own picture in <b>Marketing → Affiliate</b>. · <b>邀请 / 推荐</b>卡片的图片在<b>“营销 → 分销”</b>单独设置。
+    <div class="sc-tip">
+      <b>Best shape</b> — wide, about 500 × 400 (5:4). A page left empty uses its own look. · <b>建议尺寸</b> — 宽幅约 500 × 400(5:4)。留空的页面使用其自带样式。
     </div>
   </section>
 
