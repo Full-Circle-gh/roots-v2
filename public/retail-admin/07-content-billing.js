@@ -777,6 +777,79 @@ function mpOutcome() {
       hint.hidden = true;
     }
   }
+  try { mpPreview(); } catch {}   // rules feed the phone card beside them
+}
+
+// ── Live shopper preview (the phone card beside the rules) ────────────────────
+// Renders the same membership card a shopper sees, driven live by the four rule
+// inputs + the selected tier from RCTIER_STATE. Pure preview — never saves. The
+// numbers describe a representative member sitting ~60% of the way to the next
+// tier, so every figure (points earned, ¥ to spend, distance to climb) is
+// derived from the rules the operator is editing rather than invented.
+let MP_PV_TIER = null;   // index into threshold-sorted tiers; null = auto (top)
+function mpTiersByThreshold() {
+  return RCTIER_STATE.slice().sort((a, b) => (Number(a.threshold) || 0) - (Number(b.threshold) || 0));
+}
+function mpSelectPvTier(i) { MP_PV_TIER = i; mpPreview(); }
+function mpPreview() {
+  const host = $('#mp-preview');
+  if (!host) return;
+  const sorted = mpTiersByThreshold();
+  if (!sorted.length) { host.innerHTML = ''; return; }
+  const cn = (typeof cuLang === 'function') && cuLang() === 'cn';
+  let sel = MP_PV_TIER;
+  if (sel == null || sel < 0 || sel >= sorted.length) sel = sorted.length - 1;   // top tier by default
+  const cur  = sorted[sel];
+  const next = sorted[sel + 1] || null;
+  const earnPoints = Math.max(0, parseFloat($('#pts-earn-points')?.value) || 0);
+  const earnSpend  = Math.max(1, parseFloat($('#pts-earn-spend')?.value) || 100);
+  const pointValue = Math.max(0, parseFloat($('#pts-point-value')?.value) || 0);
+  const mult = Number(cur.points_mult) || 1;
+  // A representative member: ~60% of the way to the next tier, or a step past
+  // the summit if this is already the top tier.
+  const sampleSpend = next
+    ? (Number(cur.threshold) || 0) + 0.6 * ((Number(next.threshold) || 0) - (Number(cur.threshold) || 0))
+    : (Number(cur.threshold) || 0) + 2000;
+  const earnedPts = (sampleSpend / earnSpend) * earnPoints * mult;
+  const spendVal  = earnedPts * pointValue;
+  const nameMain = cn ? (cur.name_cn || cur.name_en) : (cur.name_en || cur.name_cn);
+  const nameSub  = cn
+    ? (cur.name_en && cur.name_en !== cur.name_cn ? cur.name_en : '')
+    : (cur.name_cn && cur.name_cn !== cur.name_en ? cur.name_cn : '');
+  const perks = cn ? (cur.perks_cn.length ? cur.perks_cn : cur.perks_en) : (cur.perks_en.length ? cur.perks_en : cur.perks_cn);
+  const perksHtml = (perks || []).slice(0, 4).map(p => `<li>${escapeHtml(p)}</li>`).join('');
+  let barPct = 100, nextLine;
+  if (next) {
+    barPct = 60;
+    const remain = Math.max(0, (Number(next.threshold) || 0) - sampleSpend);
+    const nextName = cn ? (next.name_cn || next.name_en) : (next.name_en || next.name_cn);
+    nextLine = cuT(
+      `¥${Math.round(remain).toLocaleString('en-US')} more to reach ${escapeHtml(nextName)}`,
+      `再消费 ¥${Math.round(remain).toLocaleString('en-US')} 即达 ${escapeHtml(nextName)}`);
+  } else {
+    nextLine = escapeHtml(cuT('Top tier — nothing higher to climb.', '最高等级 — 已达顶端。'));
+  }
+  const tabs = sorted.map((t, i) => {
+    const nm = cn ? (t.name_cn || t.name_en) : (t.name_en || t.name_cn);
+    return `<button type="button" class="mp-pv-tab${i === sel ? ' on' : ''}" onclick="mpSelectPvTier(${i})">${escapeHtml(nm || '—')}</button>`;
+  }).join('');
+  host.innerHTML = `
+    <div class="mp-pv-tabs">${tabs}</div>
+    <div class="mp-phone">
+      <div class="mp-pv-scr">
+        <div class="mp-pv-eyebrow">${escapeHtml(cuT('Roots Club', '会员俱乐部'))}</div>
+        <div class="mp-pv-tier">${escapeHtml(nameMain || '—')}${nameSub ? `<small>${escapeHtml(nameSub)}</small>` : ''}</div>
+        <span class="mp-pv-mult">${escapeHtml(cuT(mpFmt(mult) + '× points', mpFmt(mult) + '× 积分'))}</span>
+        <div class="mp-pv-bar"><i style="width:${barPct}%"></i></div>
+        <div class="mp-pv-next">${nextLine}</div>
+        <div class="mp-pv-pts">
+          <span class="n">${escapeHtml(Math.round(earnedPts).toLocaleString('en-US'))}</span>
+          <span class="l">${escapeHtml(cuT(`points · ¥${mpFmt(spendVal)} to spend`, `积分 · 可抵 ¥${mpFmt(spendVal)}`))}</span>
+        </div>
+        <ul class="mp-pv-perks">${perksHtml}</ul>
+      </div>
+    </div>
+    <div class="mp-pv-cap">${escapeHtml(cuT('Live preview — what a shopper sees', '实时预览 — 顾客所见'))}</div>`;
 }
 
 async function loadTopupPackages() {
@@ -871,6 +944,7 @@ const RCTIER_DEFAULTS = [
 let RCTIER_STATE = [];
 let RCTIER_EDITING = -1;   // index of the tier open in the inline editor, -1 = none
 let RCTIER_COUNTS = null;  // { seed: 186, ... } live member counts, or null if unavailable
+let _MP_LANG_HOOKED = false;   // registered once — repaints the section on language toggle
 async function loadRctiers() {
   try {
     const r = await api('/api/retail-admin/config');
@@ -893,6 +967,12 @@ async function loadRctiers() {
   renderRctiersTable();
   try { mpOutcome(); } catch {}   // top-tier multiplier feeds the worked example
   loadTierCounts();               // fire-and-forget; re-renders cards when it lands
+  // Repaint tier cards + outcome + shopper preview in the new language on toggle.
+  // The inline editor is left alone so a mid-edit toggle never steals the caret.
+  if (!_MP_LANG_HOOKED && window.onLangChange) {
+    _MP_LANG_HOOKED = true;
+    onLangChange(() => { try { renderRctierCards(); mpOutcome(); } catch {} });
+  }
 }
 
 // Live per-tier member counts — pure context for choosing thresholds. Degrades
@@ -955,6 +1035,7 @@ function renderRctierCards() {
         ${editBtn}
       </div>`;
   }).join('');
+  try { mpPreview(); } catch {}   // tier data feeds the shopper preview
 }
 
 function renderRctierEditor() {
