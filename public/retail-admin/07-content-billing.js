@@ -1938,7 +1938,10 @@ function fsThumbHtml(p) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`;
 }
 function fsName(p) {
-  return [p.name_en, p.name_cn].filter(Boolean).join(' · ') || ('#' + p.id);
+  // One language per the admin toggle — never glue EN · CN into one label.
+  const cn = (typeof cuLang === 'function') && cuLang() === 'cn';
+  const primary = cn ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
+  return primary || ('#' + p.id);
 }
 
 async function fsEnsureProducts() {
@@ -2268,7 +2271,7 @@ function fscRender() {
     + `</div></div>`
     // step 3 — window
     + `<div class="fsc-step${s3done ? ' done' : ''}" id="fsc-step3"><span class="fsc-num">3</span><div class="fsc-body">`
-    +   `<div class="fsc-title">${cuT('Window', '时间')} <span class="opt">· ${fscStartNoteHtml()}</span></div>`
+    +   `<div class="fsc-title">${cuT('Window', '时间')} <span class="fsc-opt">· ${fscStartNoteHtml()}</span></div>`
     +   `<input class="fsc-input mono" readonly onclick="fscOpenEndPicker()" value="${escapeAttr(fscEndLabel())}">`
     +   (_fsc.endEdit ? `<input type="datetime-local" class="fsc-date" value="${escapeAttr(_fsc.endsCustom)}" onchange="fscSetEnd(this.value)">` : '')
     +   `<div class="fsc-chips">${fscEndChipsHtml()}</div>`
