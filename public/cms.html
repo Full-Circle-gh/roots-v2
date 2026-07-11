@@ -4773,8 +4773,15 @@
     z-index: 44;
     border-right: 1px solid var(--line);
     box-shadow: var(--sh-3);
-    animation: cf-settle var(--t-med) var(--ease-out) both;
+    /* Slide-in via `top`, NOT transform. A persisted transform (cf-settle's
+       translateY held by fill-mode:both) would turn this fixed drawer into a
+       containing block + clip region for the fixed picker menus inside it,
+       shearing the 340px Design-check findings off at the 288px right edge.
+       Animating `top` keeps the menus escaping the pane's overflow like they
+       do in classic layout. */
+    animation: cf-drawer-in var(--t-med) var(--ease-out) both;
   }
+  @keyframes cf-drawer-in { from { opacity: 0; top: 64px; } to { opacity: 1; top: 56px; } }
   html[data-layout="canvas"] .pane.left.cf-open { display: block; }
   /* The drawer shows one section at a time depending on the rail button. */
   html[data-layout="canvas"] .pane.left.cf-show-design .pane-section:not(.cf-sec-design),
