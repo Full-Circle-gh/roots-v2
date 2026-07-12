@@ -2275,7 +2275,7 @@
 
       /* Stat strip — slim cards. Blocked hides itself at zero (an empty state
          shouldn't own a card) and only turns amber when it's real. */
-      #tab-customers .cul-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+      #tab-customers .cul-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
       #tab-customers .cul-stat {
         background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px;
         padding: 16px 20px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0;
@@ -2382,7 +2382,7 @@
 
       /* Narrow desktop / tablet: the strip stacks before the table scrolls. */
       @media (max-width: 900px) {
-        #tab-customers .cul-stats { grid-template-columns: 1fr 1fr; }
+        #tab-customers .cul-stats { grid-template-columns: repeat(3, 1fr); }
       }
 
       /* ── Drawer-only leftovers from the old page (diagnostics tile). ── */
@@ -2682,7 +2682,8 @@
         </button>
       </div>
 
-      <!-- Roster pulse — three figures, no more. "Active base" is gone: it was
+      <!-- Roster pulse — Total, New today, Returning rate always show; Blocked
+           joins as a 4th card only when real. "Active base" is gone: it was
            always total minus blocked. The Blocked card hides itself at zero and
            only turns amber when it's real. -->
       <div class="cul-stats" id="cu-stats">
@@ -2699,6 +2700,11 @@
             <span id="cu-kpi-new-word" data-no-i18n>&nbsp;</span>
           </div>
         </div>
+        <div class="cul-stat">
+          <div class="lbl">Returning rate · 复购率</div>
+          <div class="fig" id="cu-kpi-returning">—</div>
+          <div class="sub" id="cu-kpi-returning-sub">&nbsp;</div>
+        </div>
         <div class="cul-stat is-hidden" id="cu-kpi-blocked-tile">
           <div class="lbl">Blocked · 已封禁</div>
           <div class="fig" id="cu-kpi-blocked">—</div>
@@ -2706,7 +2712,7 @@
         </div>
       </div>
       <!-- Swipe-dot pager (phone only) — signals the stat strip scrolls sideways. -->
-      <div class="fc-kpi-dots" id="cu-stat-dots" aria-hidden="true"><i class="on"></i><i></i><i></i></div>
+      <div class="fc-kpi-dots" id="cu-stat-dots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i></div>
       <!-- Phone-only tier filter — sticky chip row mirroring the Orders status
            chips. Drives the existing #cu-tier <select> + cuLoad so there's one
            filter source of truth. Hidden on desktop (the <select> is shown). -->

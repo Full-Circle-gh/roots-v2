@@ -51,6 +51,7 @@ function cuSegment(btn, seg) {
 let _CU_KPI_AT = 0;
 let _CU_KPI_DASH = null;
 let _CU_KPI_TOTAL = null;
+let _CU_KPI_RETURNING = null; // { buyers, returners } | null
 let _CU_KPI_LANG_HOOKED = false;
 async function cuLoadKpis(force) {
   if (!document.getElementById('cu-stats')) return;
@@ -61,10 +62,11 @@ async function cuLoadKpis(force) {
   try {
     const [dash, tot] = await Promise.all([
       api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`),
-      api('/api/retail-admin/customers?includeBlocked=1&pageSize=1'),
+      api('/api/retail-admin/customers?includeBlocked=1&pageSize=1&withReturning=1'),
     ]);
     _CU_KPI_DASH = dash.data || {};
     _CU_KPI_TOTAL = (tot && typeof tot.total === 'number') ? tot.total : null;
+    _CU_KPI_RETURNING = (tot && tot.returning) ? tot.returning : null;
     cuRenderKpis();
   } catch (e) {}
 }
@@ -83,6 +85,14 @@ function cuRenderKpis() {
   _CU_BLOCKED = Math.max(0, total - activeBase);
   dashCountUp($('#cu-kpi-total'), total);
   dashCountUp($('#cu-kpi-new'), Number(d.kpis && d.kpis.new_customers || 0));
+  // Returning rate — share of buyers who came back for a 2nd order. No
+  // buyers yet = nothing to divide, so the tile shows a dash rather than 0%.
+  const ret = _CU_KPI_RETURNING;
+  const retFig = $('#cu-kpi-returning');
+  if (retFig) {
+    if (ret && ret.buyers > 0) retFig.textContent = Math.round(ret.returners / ret.buyers * 100) + '%';
+    else retFig.textContent = '—';
+  }
   // Nobody blocked = nothing to show. An empty state shouldn't own a card, so
   // the tile (and its swipe dot, and the filter chip) simply aren't there.
   const bTile = $('#cu-kpi-blocked-tile');
@@ -94,7 +104,7 @@ function cuRenderKpis() {
   const dots = document.getElementById('cu-stat-dots');
   if (dots) {
     const pips = dots.querySelectorAll('i');
-    if (pips[2]) pips[2].style.display = _CU_BLOCKED > 0 ? '' : 'none';
+    if (pips[3]) pips[3].style.display = _CU_BLOCKED > 0 ? '' : 'none';
   }
   const chip = $('#cu-seg-blocked');
   if (chip) {
@@ -133,6 +143,13 @@ function cuRepaintKpis() {
     }
     word.textContent = text;
     word.title = tip;
+  }
+  const retSub = $('#cu-kpi-returning-sub');
+  if (retSub) {
+    const ret = _CU_KPI_RETURNING;
+    retSub.textContent = (ret && ret.buyers > 0)
+      ? cuT(`${ret.returners} of ${ret.buyers} buyers`, `${ret.buyers} 位买家中 ${ret.returners} 位`)
+      : cuT('no orders yet', '暂无订单');
   }
   const bsub = $('#cu-kpi-blocked-sub');
   if (bsub) bsub.textContent = cuT('tap the chip to review', '点标签查看');

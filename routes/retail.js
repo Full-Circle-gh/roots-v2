@@ -12832,7 +12832,19 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
        LIMIT ? OFFSET ?`
   ).all(...params, pageSize, offset);
 
-  res.json({ success: true, data: rows, page, pageSize, total });
+  // Returning rate — share of customers who've bought at least once who came
+  // back for a second order. Only the stat-strip's grand-total call asks for
+  // this (withReturning=1); the paginated roster fetch skips it.
+  let returning = null;
+  if (req.query.withReturning === '1') {
+    const r = tdb().prepare(
+      `SELECT COUNT(*) AS buyers, SUM(CASE WHEN cnt >= 2 THEN 1 ELSE 0 END) AS returners
+         FROM (SELECT customer_id, COUNT(*) AS cnt FROM retail_orders GROUP BY customer_id)`
+    ).get();
+    returning = { buyers: r.buyers || 0, returners: r.returners || 0 };
+  }
+
+  res.json({ success: true, data: rows, page, pageSize, total, returning });
 });
 
 // List grants for a voucher (who has it, who used it).
