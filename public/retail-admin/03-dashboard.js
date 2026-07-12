@@ -913,7 +913,7 @@ function dashWeekRender() {
 // warehouse page never goes blank. Language-dependent (dates + "lines"), so it
 // repaints on a language toggle from its stashed rows.
 async function dashIncomingLoad() {
-  if (dashPos() !== 'warehouse') return;   // block is warehouse-only — skip the pull elsewhere
+  if (!['warehouse', 'default'].includes(dashPos())) return;   // warehouse + owner; skip the pull elsewhere
   try {
     const j = await api('/api/retail-admin/purchases?status=Ordered');
     DASH_HERO.incoming = Array.isArray(j.data) ? j.data : [];
@@ -958,7 +958,7 @@ function dashIncomingRender() {
 // sending). Warehouse-only. Its own pull; calm empty line when none, so the
 // warehouse page never blanks. Language-dependent (dates + "lines").
 async function dashDraftsLoad() {
-  if (dashPos() !== 'warehouse') return;   // block is warehouse-only — skip the pull elsewhere
+  if (!['warehouse', 'default'].includes(dashPos())) return;   // warehouse + owner; skip the pull elsewhere
   try {
     const j = await api('/api/retail-admin/purchases?status=Requested');
     DASH_HERO.drafts = Array.isArray(j.data) ? j.data : [];
@@ -1004,7 +1004,7 @@ const DASH_CHAN_SHORT = {
   meituan: ['Meituan', '美团'], gzgrocery: ['gzgrocery', 'gzgrocery'], manual: ['Manual', '手动'],
 };
 async function dashOnroadLoad() {
-  if (!['dispatch', 'customer_service'].includes(dashPos())) return;   // block is delivery-role only
+  if (!['dispatch', 'customer_service', 'default'].includes(dashPos())) return;   // delivery-role + owner
   try {
     const j = await api('/api/retail-admin/orders?status=dispatched&limit=8');
     DASH_HERO.onroad = Array.isArray(j.data) ? j.data : [];
@@ -1048,7 +1048,7 @@ function dashOnroadRender() {
 // pull of the orders list. If a rider is already inbound (courier awaiting a
 // pickup) the row says so; otherwise it reads "Packing".
 async function dashReadyLoad() {
-  if (!['dispatch', 'customer_service'].includes(dashPos())) return;
+  if (!['dispatch', 'customer_service', 'default'].includes(dashPos())) return;   // delivery-role + owner
   try {
     const j = await api('/api/retail-admin/orders?status=preparing&limit=8');
     DASH_HERO.ready = Array.isArray(j.data) ? j.data : [];
@@ -1086,7 +1086,7 @@ function dashReadyRender() {
 // side, so only the empty line is language-dependent.
 const DASH_AUTO_SRC = ['meituan', 'eleme', 'gzgrocery', 'guanyi', 'sync', 'system', 'auto'];
 async function dashMovesLoad() {
-  if (dashPos() !== 'warehouse') return;
+  if (!['warehouse', 'default'].includes(dashPos())) return;   // warehouse + owner
   try {
     const j = await api('/api/retail-admin/activity?limit=6');
     DASH_HERO.moves = Array.isArray(j.rows) ? j.rows : (Array.isArray(j.data) ? j.data : []);
