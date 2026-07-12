@@ -1626,6 +1626,11 @@ function dashArrangeToggle() {
   DASH_ARRANGING = !DASH_ARRANGING;
   document.body.classList.toggle('td-arranging', DASH_ARRANGING);
   dashArrangeChromePaint();
+  // Toggling arranging changes which quiet blocks the CSS reveals (they surface
+  // dimmed so they can be reordered) — re-solve so those newly-visible cards get
+  // real geometry instead of sitting at their stale/empty left:0;top:0 default,
+  // which would stack them on top of whatever card solved to that corner.
+  dashRender();
   if (!DASH_ARRANGING) dashArrangePersist();
 }
 
