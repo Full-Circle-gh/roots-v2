@@ -100,12 +100,15 @@ function _paStatusMatch(p) {
   if (PA_STATUS === 'all') return true;
   const pub = p.is_published === 1;
   const s = _paStockOf(p);
+  // Supplier-direct items hold no stock of ours — they're never out-of-stock,
+  // low, or something to restock, so keep them out of those buckets entirely.
+  const supplier = !!p.ship_from_supplier;
   switch (PA_STATUS) {
     case 'live':    return pub;
     case 'drafts':  return !pub;
-    case 'oos':     return pub && s <= 0;
-    case 'low':     return pub && s > 0 && s <= paLowThreshold(p);
-    case 'restock': return pub && s <= paLowThreshold(p);   // OOS + low = everything to buy back
+    case 'oos':     return pub && !supplier && s <= 0;
+    case 'low':     return pub && !supplier && s > 0 && s <= paLowThreshold(p);
+    case 'restock': return pub && !supplier && s <= paLowThreshold(p);   // OOS + low = everything to buy back
     default:        return true;
   }
 }
@@ -862,6 +865,18 @@ function _paPriceCell(u) {
 // count — an editable input for a lone product, a read-only total for a variant
 // family (each size has its own count, set by opening the product).
 function _paStockCell(u) {
+  // Supplier-direct items hold no stock of ours — they never go "Out". Show an
+  // availability badge instead of a count (in every store view), red only when
+  // the operator paused selling.
+  if (u.p.ship_from_supplier) {
+    const paused = !!u.p.supplier_paused;
+    const cls = paused ? 'is-out' : '';
+    const label = paused ? cuT('Paused', '暂停') : cuT('Available', '有货');
+    const title = paused
+      ? cuT('Supplier paused — not orderable', '供应商缺货，已暂停销售')
+      : cuT('Ships from supplier — always available', '供应商直发，始终有货');
+    return `<span class="pa-stock ${cls}" title="${title}"><span class="pa-stock-dot"></span>${label}</span>`;
+  }
   if (PA_STORE !== 'all' && PA_STOCK_LOADED) {
     if (u.group) {
       const q = u.members.reduce((s, m) => s + _paStoreQty(m.id, PA_STORE), 0);
@@ -1084,9 +1099,13 @@ function paRenderKpis(animate) {
     const pub = p.is_published === 1;
     if (pub) {
       live++;
-      const s = eff(p);
-      if (s <= 0) oos++;
-      else if (s <= paLowThreshold(p)) low++;
+      // Supplier-direct items hold no stock of ours — never count them as
+      // out-of-stock or low (mirrors _paStatusMatch).
+      if (!p.ship_from_supplier) {
+        const s = eff(p);
+        if (s <= 0) oos++;
+        else if (s <= paLowThreshold(p)) low++;
+      }
     } else {
       drafts++;
     }
