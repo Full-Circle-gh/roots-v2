@@ -2288,6 +2288,7 @@ function fscRender() {
     + fscFootHtml();
 
   fscRenderCouponNote();
+  fscRenderPvCard();
 }
 
 // ─── step 1: product picker ───────────────────────────────────────────────
@@ -2373,7 +2374,7 @@ function fscLivePrice(v) {
   const s2 = document.getElementById('fsc-step2'); if (s2) s2.classList.toggle('done', fscPriceValid());
   fscUpdatePreview();
 }
-function fscLiveCap(v) { _fsc.cap = v; }
+function fscLiveCap(v) { _fsc.cap = v; fscRenderPvCard(); }
 
 // ─── step 3: window ───────────────────────────────────────────────────────
 function fscEndChipsHtml() {
@@ -2453,7 +2454,34 @@ function fscPreviewHtml() {
     + (reg > 0 ? `, <span class="r">¥${fmt(reg)}</span>` : '')
     + (off ? ` · ${cuT('save', '省')} ${off}%` : '');
 }
-function fscUpdatePreview() { const el = document.getElementById('fsc-prev'); if (el) el.innerHTML = fscPreviewHtml(); }
+function fscUpdatePreview() { const el = document.getElementById('fsc-prev'); if (el) el.innerHTML = fscPreviewHtml(); fscRenderPvCard(); }
+
+// The pop-up's right-hand pane — a live mock of what a shopper sees, redrawn
+// on every product / price / cap / window change.
+function fscRenderPvCard() {
+  const el = document.getElementById('fsc-pv');
+  if (!el) return;
+  const p = _fsc && _fsc.product;
+  const f = fscPriceNum(), reg = fscRegular();
+  let html = `<div class="fspv-kick">${cuT('What customers see', '顾客看到')}</div>`;
+  if (!p || !(f > 0)) {
+    el.innerHTML = html + `<div class="fspv-empty">${cuT('Pick a product and set a price to preview the shopper’s view.', '选择产品并填写价格,预览顾客看到的样子。')}</div>`;
+    return;
+  }
+  const off = fscOffPct(), cap = fscCapNum(), ends = fscEndsDate();
+  const endTxt = (ends && !isNaN(ends.getTime())) ? fscDayWord(ends.getTime()) + ' ' + fsPad(ends.getHours()) + ':' + fsPad(ends.getMinutes()) : '';
+  html += `<div class="fspv-card">`
+    + `<div class="fspv-img"><span class="fspv-bolt">${cuT('Flash', '秒杀')}</span>${fsThumbHtml(p)}</div>`
+    + `<div class="fspv-b"><div class="fspv-n">${escapeHtml(fsName(p))}</div>`
+    +   `<div class="fspv-prc"><span class="fspv-now">¥${fmt(f)}</span>${reg > 0 ? `<span class="fspv-was">¥${fmt(reg)}</span>` : ''}${off ? `<span class="fspv-save">${cuT('save', '省')} ${off}%</span>` : ''}</div>`
+    +   (endTxt ? `<div class="fspv-meta">${cuT('Ends ', '结束 ')}${escapeHtml(endTxt)}</div>` : '')
+    +   (cap != null ? `<div class="fspv-meta">${cuT('Limited to ', '限 ')}${cap}${cuT('', ' 份')}</div>` : '')
+    + `</div></div>`
+    + `<div class="fspv-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>`
+    +   (reg > 0 ? cuT(`Reverts to ¥${fmt(reg)} on its own when the clock runs out.`, `倒计时结束后自动恢复 ¥${fmt(reg)}。`) : cuT('Reverts to the regular price when the clock runs out.', '倒计时结束后自动恢复原价。'))
+    + `</div>`;
+  el.innerHTML = html;
+}
 function fscFootHtml() {
   const future = !!fscStartsDate();
   const cta = future ? cuT('Schedule', '排期') : cuT('Start', '开启');
