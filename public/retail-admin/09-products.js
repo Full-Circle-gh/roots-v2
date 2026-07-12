@@ -2642,7 +2642,7 @@ function bpLoad(id) {
   const box = document.getElementById('pd-bundle-product'); if (!box) return;
   BP_ID = id; BP_PICKING = false; BP = []; BP_MODE = null;
   if (!id) {
-    box.innerHTML = `<div class="pd-var-head">${cuT('Bundle (sold as one)', '套装产品(作为一个产品出售)')}</div>` +
+    box.innerHTML = `<div class="pd-var-head">${cuT('Bundle — sold as one', '套装产品(作为一个产品出售)')}</div>` +
       `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then set this up as a bundle.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可将其设置为套装。')}</div>`;
     return;
   }
@@ -2674,7 +2674,7 @@ function bpRender() {
       : cuT('Not a bundle · tap to set up', '非套装 · 点击设置');
   const toggle = `<button type="button" class="pd-var-toggle" onclick="bpToggle()" aria-expanded="${BP_OPEN ? 'true' : 'false'}">` +
     `<span class="pd-var-caret">${BP_OPEN ? '▾' : '▸'}</span>` +
-    `<span class="pd-var-head" style="margin:0">${cuT('Bundle (sold as one)', '套装产品')}</span>` +
+    `<span class="pd-var-head" style="margin:0">${cuT('Bundle — sold as one', '套装产品')}</span>` +
     `<span class="pd-var-summary">${summary}</span></button>`;
   if (!BP_OPEN) { box.innerHTML = toggle; return; }
 

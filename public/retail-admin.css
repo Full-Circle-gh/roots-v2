@@ -9738,14 +9738,12 @@ body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, b
 }
 body.pos-store-manager .td-block[data-block="channels"] { display: none; }
 /* "On the way" + "Drafts to send" + "Recent stock moves" are warehouse-native —
-   shown only to warehouse, hidden for every other role (owner = pos-default). */
-body.pos-default .td-block[data-block="incoming"], body.pos-default .td-block[data-block="drafts"], body.pos-default .td-block[data-block="moves"],
+   shown to warehouse + owner (pos-default), hidden for every other role. */
 body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="drafts"], body.pos-dispatch .td-block[data-block="moves"],
 body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="drafts"], body.pos-customer-service .td-block[data-block="moves"],
 body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="drafts"], body.pos-store-manager .td-block[data-block="moves"] { display: none; }
 /* "On the road" + "Ready to hand off" (delivery board) are delivery-native —
-   shown to dispatch + customer-service, hidden for owner / warehouse / store-manager. */
-body.pos-default .td-block[data-block="onroad"], body.pos-default .td-block[data-block="ready"],
+   shown to dispatch + customer-service + owner (pos-default), hidden for warehouse / store-manager. */
 body.pos-warehouse .td-block[data-block="onroad"], body.pos-warehouse .td-block[data-block="ready"],
 body.pos-store-manager .td-block[data-block="onroad"], body.pos-store-manager .td-block[data-block="ready"] { display: none; }
 /* Each restricted position keeps only the section block it works in. */
@@ -10501,3 +10499,6 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     transition: border-color .15s var(--ease-out), color .15s var(--ease-out);
   }
   #pd-editor .pe-add-tile:hover { border-color: #58606E; color: #111A2B; }
+  /* Essentials stock area: loose section like the mockup, not a bordered card.
+     (The publish pill card keeps its border.) */
+  #pd-editor .pe-ess-side .pd-card:not(.pd-pub) { border: none; border-radius: 0; background: transparent; padding: 0; }
