@@ -4090,6 +4090,34 @@
          (rather than the old centered .pu-editor modal shell), it needs
          to flex-grow and scroll inside the drawer's flex column. */
       .side-drawer > .pu-editor-body { flex: 1; min-height: 0; }
+
+      /* Pop-up editor: centered pop-up dialog, not an edge-docked drawer.
+         Overrides the shared .side-drawer edge-slide with a Flash-sale-style
+         floating modal + dimmed backdrop. Id selector outweighs .dw-wide. */
+      #pu-editor-scrim {
+        position: fixed; inset: 0; background: var(--bg-overlay, rgba(17,26,43,.32));
+        opacity: 0; pointer-events: none; z-index: 199;
+        transition: opacity 300ms var(--ease-out, ease);
+      }
+      html:has(#pu-editor-bg.open) #pu-editor-scrim { opacity: 1; pointer-events: auto; }
+      #pu-editor-bg.side-drawer {
+        top: 50%; left: 50%; right: auto; bottom: auto;
+        width: min(1040px, 94vw); min-width: 0;
+        max-height: calc(90vh / var(--ui-scale, 1));
+        border-left: none; border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: 0 24px 64px rgba(17,26,43,.22);
+        transform: translate(-50%, -46%) scale(.98);
+        transition: opacity 300ms var(--ease-out, ease), transform 300ms var(--ease-out, ease),
+                    visibility 0s linear 300ms;
+        opacity: 0;
+      }
+      #pu-editor-bg.side-drawer.open {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+        transition: opacity 380ms var(--ease-out, ease), transform 380ms var(--ease-out, ease),
+                    visibility 0s linear 0s;
+      }
       .pu-preview {
         position: sticky; top: 0; align-self: start;
         background: var(--bg-elev-1); border-radius: 12px;
@@ -4211,7 +4239,9 @@
     </div>
   </section>
 
-  <!-- Pop-up editor (slide-in side drawer with phone preview) -->
+  <!-- Pop-up editor — centered modal (not an edge drawer) so the customer
+       preview has room to breathe, matching the Flash sale composer. -->
+  <div id="pu-editor-scrim" onclick="closeDrawer('#pu-editor-bg')"></div>
   <aside id="pu-editor-bg" class="side-drawer dw-wide" aria-hidden="true">
     <div class="drawer-head">
       <div style="font-size: 14px; font-weight: 600;" id="pu-editor-title">Pop-up · 弹窗</div>
