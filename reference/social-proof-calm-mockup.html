@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Social proof, calm</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400;9..144,500&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink:#111A2B; --paper:#FBF9F4; --graphite:#58606E; --dusk:#6E67AF;
+  --sage:#A3B49F; --amber:#C9954A; --brick:#B4533E;
+  --cream:#F6F3EC; --border:#E7E3D8; --hair:#EDEAE1;
+  --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC; --amber-tint:#F7EEDE;
+  --ok-ink:#4A6249; --warn-ink:#8A6425;
+  --text-3:#9A968B;
+  --display:"Fraunces","Iowan Old Style",Georgia,serif;
+  --text:"Inter",-apple-system,Arial,sans-serif;
+  --ease:cubic-bezier(.16,1,.3,1);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--text); color:var(--ink); background:var(--paper); font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+button,input { font-family:inherit; }
+.t-num { font-variant-numeric:tabular-nums; }
+@media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+
+.dot { width:6px; height:6px; border-radius:50%; background:var(--dusk); flex:none; display:inline-block; vertical-align:middle; animation:breathe 2.4s var(--ease) infinite; }
+@keyframes breathe { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.4;transform:scale(.8)} }
+
+/* mockup chrome only */
+.chrome { background:var(--ink); color:rgba(251,249,244,.6); padding:9px 24px; font-size:11px; letter-spacing:.14em; text-transform:uppercase; }
+.topbar { padding:20px 32px; border-bottom:1px solid var(--hair); }
+.wordmark { font-family:var(--display); font-weight:300; font-size:20px; letter-spacing:.22em; }
+
+/* generous single column */
+.wrap { max-width:660px; margin:0 auto; padding:72px 28px 140px; }
+@media (max-width:560px){ .wrap{ padding:48px 22px 120px; } }
+.fade { animation:fade .7s var(--ease) both; }
+@keyframes fade { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+/* hero */
+.eyebrow { font-size:12px; font-weight:500; letter-spacing:.16em; text-transform:uppercase; color:var(--text-3); }
+h1 { font-family:var(--display); font-weight:300; font-size:44px; line-height:1.08; letter-spacing:-.01em; margin:16px 0 0; }
+.lead { font-size:17px; line-height:1.7; color:var(--graphite); margin-top:18px; max-width:52ch; }
+.lead .dot { margin:0 2px; }
+
+/* the master line — a calm sentence with a switch, not a box */
+.master { display:flex; align-items:center; gap:14px; margin-top:36px; padding:18px 0; border-top:1px solid var(--hair); border-bottom:1px solid var(--hair); }
+.master .mtx { flex:1; }
+.master .mtx b { font-weight:500; }
+.master .mtx span { display:block; font-size:13px; color:var(--text-3); margin-top:2px; }
+
+.switch { display:inline-flex; align-items:center; cursor:pointer; user-select:none; flex:none; }
+.switch input { display:none; }
+.switch .tk { width:44px; height:26px; border-radius:99px; background:#D9D4C7; position:relative; transition:background .25s var(--ease); }
+.switch .tk::after { content:""; position:absolute; top:3px; left:3px; width:20px; height:20px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(17,26,43,.25); transition:left .25s var(--ease); }
+.switch input:checked + .tk { background:var(--ink); }
+.switch input:checked + .tk::after { left:21px; }
+.switch.sm .tk { width:38px; height:22px; }
+.switch.sm .tk::after { width:16px; height:16px; }
+.switch.sm input:checked + .tk::after { left:19px; }
+
+/* section rhythm — lots of air */
+section { margin-top:72px; }
+.q { font-family:var(--display); font-weight:300; font-size:27px; line-height:1.2; letter-spacing:-.01em; }
+.q-sub { font-size:14px; color:var(--text-3); margin-top:8px; max-width:46ch; }
+
+/* ── the feel: one segmented choice, calm ── */
+.seg { display:flex; margin-top:26px; background:var(--cream); border-radius:99px; padding:5px; gap:4px; }
+.seg button { flex:1; border:none; background:transparent; color:var(--graphite); font:500 15px var(--text); padding:12px 8px; border-radius:99px; cursor:pointer; transition:background .25s var(--ease), color .25s var(--ease); }
+.seg button.on { background:var(--ink); color:var(--paper); }
+.feel-say { margin-top:22px; min-height:52px; }
+.feel-say .d { font-size:16px; line-height:1.6; }
+.feel-say .d b { font-weight:500; }
+.feel-say .ex { margin-top:12px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:13px; color:var(--text-3); }
+.chip { display:inline-flex; align-items:center; gap:7px; padding:5px 13px; border-radius:99px; background:var(--amber-tint); color:var(--warn-ink); font-weight:500; font-size:13px; }
+.chip.sage { background:var(--sage-tint); color:var(--ok-ink); }
+
+/* ── what shows: a quiet list, no boxes ── */
+.grp { margin-top:40px; }
+.grp-lbl { font-size:11.5px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--text-3); padding-bottom:6px; border-bottom:1px solid var(--hair); }
+.sig { padding:24px 0; border-bottom:1px solid var(--hair); }
+.sig-top { display:flex; align-items:flex-start; gap:20px; }
+.sig-main { flex:1; }
+.sig-name { font-size:18px; font-weight:500; letter-spacing:-.005em; }
+.sig-say { font-size:14.5px; color:var(--graphite); margin-top:4px; line-height:1.55; }
+.sig.off .sig-name, .sig.off .sig-say { color:var(--text-3); }
+.sig-more { margin-top:14px; display:none; }
+.sig.open .sig-more { display:block; animation:fade .35s var(--ease) both; }
+.adjust { margin-top:12px; background:none; border:none; padding:0; font:400 13.5px var(--text); color:var(--text-3); cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+.adjust::after { content:"›"; font-size:15px; transition:transform .2s var(--ease); }
+.sig.open .adjust::after { transform:rotate(90deg); }
+.adjust:hover { color:var(--ink); }
+.sig.off .adjust { display:none; }
+
+/* the few numbers — airy, labelled clearly */
+.fields { display:flex; gap:28px; flex-wrap:wrap; align-items:flex-end; }
+.field .flab { display:block; font-size:12px; color:var(--graphite); margin-bottom:8px; }
+.in-row { display:flex; align-items:center; gap:9px; }
+.n-in { width:62px; padding:10px; border:1px solid var(--border); border-radius:10px; background:#fff; color:var(--ink); font:400 15px var(--text); text-align:center; font-variant-numeric:tabular-nums; }
+.n-in:focus { outline:2px solid var(--dusk); outline-offset:1px; border-color:transparent; }
+.unit { font-size:13.5px; color:var(--text-3); }
+.fnote { font-size:13px; color:var(--text-3); line-height:1.6; margin-top:14px; max-width:50ch; }
+.dot-lab { display:inline-flex; align-items:center; gap:7px; }
+
+/* fine print details */
+.fine { margin-top:18px; }
+.fine summary { list-style:none; cursor:pointer; font-size:13px; color:var(--text-3); }
+.fine summary::-webkit-details-marker { display:none; }
+.fine summary:hover { color:var(--ink); }
+.fine[open] summary { margin-bottom:14px; }
+
+/* ── preview: one calm phone, centered ── */
+.pv-tabs { display:flex; justify-content:center; gap:26px; margin-top:26px; }
+.pv-tab { background:none; border:none; font:500 14px var(--text); color:var(--text-3); cursor:pointer; padding:6px 2px; border-bottom:2px solid transparent; transition:color .2s var(--ease), border-color .2s var(--ease); }
+.pv-tab.on { color:var(--ink); border-color:var(--ink); }
+.phone-wrap { display:flex; justify-content:center; margin-top:30px; }
+.phone { width:288px; background:var(--ink); border-radius:40px; padding:9px; box-shadow:0 20px 50px rgba(17,26,43,.14); }
+.screen { background:var(--paper); border-radius:32px; height:520px; overflow:hidden; position:relative; }
+.pv { position:absolute; inset:0; display:none; flex-direction:column; }
+.pv.on { display:flex; animation:fade .35s var(--ease) both; }
+.apphead { padding:18px 16px 10px; display:flex; align-items:center; gap:8px; }
+.apphead .logo { width:22px; height:22px; border-radius:50%; background:var(--sage); }
+.apphead .nm { font-size:13px; font-weight:500; }
+.bnr { margin:4px 14px 12px; height:84px; border-radius:14px; background:linear-gradient(120deg,var(--amber-tint),var(--sage-tint)); display:flex; align-items:flex-end; padding:10px; }
+.bnr span { font-size:9.5px; color:var(--warn-ink); font-weight:600; letter-spacing:.08em; }
+.psec { font-size:11px; font-weight:600; margin:0 16px 8px; }
+.pgrid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 14px; }
+.pc { background:#fff; border:1px solid var(--hair); border-radius:14px; overflow:hidden; position:relative; }
+.pc .img { height:70px; }
+.pc:nth-child(odd) .img { background:linear-gradient(135deg,var(--sage-tint),var(--amber-tint)); }
+.pc:nth-child(even) .img { background:linear-gradient(135deg,var(--amber-tint),#F6E7E3); }
+.pc .b { padding:8px 9px 10px; }
+.pc .t { font-size:10.5px; font-weight:500; }
+.pc .pr { font-size:11px; font-weight:600; margin-top:3px; }
+.pc .cap { position:absolute; top:0; left:0; background:var(--ink); color:var(--paper); font-size:8px; font-weight:600; letter-spacing:.04em; padding:2px 7px; border-radius:0 0 10px 0; }
+.tick { position:absolute; left:12px; right:12px; bottom:14px; background:#fff; border-radius:14px; box-shadow:0 12px 30px rgba(17,26,43,.16); padding:11px 13px; font-size:11.5px; display:flex; align-items:center; gap:8px; }
+.tick .who { font-weight:600; } .tick .what{ min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap } .tick .ago { color:var(--text-3); font-size:10px; white-space:nowrap; } .tick .x{ margin-left:auto;color:var(--text-3) }
+.pimg { height:184px; background:linear-gradient(135deg,var(--sage-tint),var(--amber-tint)); }
+.pbody { padding:16px; }
+.ptitle { font-size:16px; font-weight:600; }
+.pprice { font-size:18px; font-weight:600; margin:5px 0 14px; }
+.proof { display:flex; align-items:center; padding:5px 0; }
+.proof .pp { font-size:11px; padding:3px 11px; border-radius:99px; background:var(--amber-tint); color:var(--warn-ink); font-weight:500; }
+.proof.v .pp { background:var(--sage-tint); color:var(--ok-ink); }
+.proof.l .pp { background:var(--cream); color:var(--graphite); }
+.buy { margin-top:16px; background:var(--ink); color:var(--paper); text-align:center; border-radius:12px; padding:12px; font-size:12px; font-weight:500; }
+.hide { display:none !important; }
+.pv-cap { text-align:center; font-size:12.5px; color:var(--text-3); margin-top:18px; }
+
+/* footer bits */
+.moved { margin-top:56px; font-size:13.5px; color:var(--text-3); line-height:1.6; }
+.moved b { color:var(--graphite); font-weight:500; } .moved a { color:var(--graphite); cursor:pointer; }
+.save-row { margin-top:40px; display:flex; align-items:center; gap:18px; }
+.btn-ink { background:var(--ink); color:var(--paper); border:none; border-radius:12px; padding:14px 30px; font:500 15px var(--text); cursor:pointer; transition:opacity .2s var(--ease); }
+.btn-ink:hover { opacity:.9; }
+.btn-quiet { background:transparent; border:1px solid var(--border); color:var(--ink); border-radius:12px; padding:13px 24px; font:500 14px var(--text); cursor:pointer; }
+.btn-quiet:hover { border-color:var(--graphite); }
+.saved { font-size:13.5px; color:var(--ok-ink); opacity:0; transition:opacity .3s var(--ease); }
+.saved.show { opacity:1; }
+.guide-link { background:none; border:none; color:var(--dusk); font:400 14px var(--text); cursor:pointer; text-decoration:underline; text-underline-offset:3px; }
+
+/* wizard */
+.wiz-bg { position:fixed; inset:0; background:rgba(17,26,43,.4); z-index:50; display:none; align-items:center; justify-content:center; padding:24px; }
+.wiz-bg.open { display:flex; }
+.wiz { background:var(--paper); border-radius:20px; box-shadow:0 30px 60px rgba(17,26,43,.24); width:100%; max-width:500px; padding:40px; }
+.wiz .step { font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-3); }
+.wiz h3 { font-family:var(--display); font-weight:300; font-size:26px; line-height:1.2; margin:12px 0 10px; }
+.wiz .ws { font-size:15px; color:var(--graphite); line-height:1.65; margin-bottom:26px; }
+.wiz-choices { display:flex; flex-direction:column; gap:10px; }
+.wiz-choice { text-align:left; background:#fff; border:1px solid var(--border); border-radius:14px; padding:16px 18px; cursor:pointer; font-family:var(--text); }
+.wiz-choice.on { border-color:var(--ink); box-shadow:0 0 0 1px var(--ink); }
+.wiz-choice b { font-weight:500; font-size:15px; } .wiz-choice span { display:block; font-size:13.5px; color:var(--graphite); margin-top:3px; line-height:1.5; }
+.wiz-foot { display:flex; align-items:center; margin-top:30px; }
+.wiz-foot .sp { flex:1; }
+.wiz-skip { background:none; border:none; color:var(--text-3); font:400 14px var(--text); cursor:pointer; }
+.wiz-skip:hover { color:var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="chrome">tacet · social proof — calm rethink</div>
+<div class="topbar"><span class="wordmark">tacet</span></div>
+
+<div class="wrap fade">
+
+  <div class="eyebrow">Mini app · Social proof</div>
+  <h1>Little signs of life.</h1>
+  <p class="lead">The small cues customers feel while they shop — who just bought, how many are looking. Real activity always comes first; the <span class="dot"></span> marks what Tacet gently fills in on quiet days.</p>
+
+  <div class="master">
+    <div class="mtx"><b>Show social proof</b><span>Turn everything off, or tune it below.</span></div>
+    <label class="switch"><input type="checkbox" checked><span class="tk"></span></label>
+  </div>
+
+  <!-- 1 · the feel -->
+  <section>
+    <div class="q">How lively should it feel?</div>
+    <div class="q-sub">One choice tunes every number below. <button class="guide-link" onclick="wizOpen()" style="font-size:13px">Walk me through it</button></div>
+    <div class="seg" id="seg">
+      <button data-p="real" onclick="setFeel('real')">Real only</button>
+      <button data-p="gentle" class="on" onclick="setFeel('gentle')">Gentle lift</button>
+      <button data-p="busy" onclick="setFeel('busy')">Bustling</button>
+    </div>
+    <div class="feel-say" id="feel-say"></div>
+  </section>
+
+  <!-- 2 · what shows -->
+  <section>
+    <div class="q">What shows, and where</div>
+    <div class="q-sub">Five signals across three screens. Flip any off; the preview updates.</div>
+
+    <div class="grp">
+      <div class="grp-lbl">On the home screen</div>
+      <div class="sig" data-w="rb">
+        <div class="sig-top">
+          <div class="sig-main">
+            <div class="sig-name">Recent-buyers ticker</div>
+            <div class="sig-say">A gentle stream of who just bought, in the corner.</div>
+            <button class="adjust" onclick="toggleSig(this)">Adjust</button>
+            <div class="sig-more">
+              <div class="fields">
+                <div class="field"><label class="flab">Show orders from the last</label><div class="in-row"><input class="n-in" value="5"><span class="unit">days</span></div></div>
+                <div class="field"><label class="flab">Each stays on screen</label><div class="in-row"><input class="n-in" value="3"><span class="unit">sec</span></div></div>
+                <div class="field"><label class="flab">Quiet gap between</label><div class="in-row"><input class="n-in" value="10"><span class="unit">sec</span></div></div>
+              </div>
+              <p class="fnote">Real paid orders, names masked. It quietens by itself overnight.</p>
+              <details class="fine"><summary>Add a manual entry</summary>
+                <div class="fields"><div class="field"><label class="flab">Name</label><input class="n-in" style="width:90px;text-align:left" value="W**"></div><div class="field"><label class="flab">Product</label><input class="n-in" style="width:150px;text-align:left" value="Hummus Asli"></div><div class="field"><label class="flab">About</label><div class="in-row"><input class="n-in" value="8"><span class="unit">min ago</span></div></div></div>
+              </details>
+            </div>
+          </div>
+          <label class="switch sm"><input type="checkbox" checked data-onoff="rb" data-screen="home"><span class="tk"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="grp-lbl">On the product page</div>
+      <div class="sig" data-w="bc">
+        <div class="sig-top">
+          <div class="sig-main">
+            <div class="sig-name">People bought this</div>
+            <div class="sig-say">A quiet buyer count on each product.</div>
+            <button class="adjust" onclick="toggleSig(this)">Adjust</button>
+            <div class="sig-more">
+              <div class="fields"><div class="field"><label class="flab dot-lab"><span class="dot"></span> Fill-in — extra buyers a day</label><div class="in-row"><input class="n-in" data-cin="bc0" value="6"><span class="unit">to</span><input class="n-in" data-cin="bc1" value="15"></div></div></div>
+              <p class="fnote">Climbs through the day like real orders, on top of the true count. Set 0–0 for real only.</p>
+            </div>
+          </div>
+          <label class="switch sm"><input type="checkbox" checked data-onoff="bc" data-screen="product"><span class="tk"></span></label>
+        </div>
+      </div>
+      <div class="sig" data-w="vn">
+        <div class="sig-top">
+          <div class="sig-main">
+            <div class="sig-name">Viewing now</div>
+            <div class="sig-say">How many are looking right now.</div>
+            <button class="adjust" onclick="toggleSig(this)">Adjust</button>
+            <div class="sig-more">
+              <div class="fields"><div class="field"><label class="flab dot-lab"><span class="dot"></span> Fill-in — viewers at peak</label><div class="in-row"><input class="n-in" data-cin="vn0" value="15"><span class="unit">to</span><input class="n-in" data-cin="vn1" value="40"></div></div></div>
+              <p class="fnote">Drifts on a slow wave, quiet overnight — a 3 am page never claims a crowd.</p>
+            </div>
+          </div>
+          <label class="switch sm"><input type="checkbox" checked data-onoff="vn" data-screen="product"><span class="tk"></span></label>
+        </div>
+      </div>
+      <div class="sig" data-w="lo">
+        <div class="sig-top">
+          <div class="sig-main">
+            <div class="sig-name">Last ordered</div>
+            <div class="sig-say">A freshness nudge from the latest order.</div>
+            <button class="adjust" onclick="toggleSig(this)">Adjust</button>
+            <div class="sig-more">
+              <div class="fields"><div class="field"><label class="flab dot-lab"><span class="dot"></span> Fill-in — busy items read</label><div class="in-row"><input class="n-in" data-cin="lo0" value="5"><span class="unit">to</span><input class="n-in" data-cin="lo1" value="45"><span class="unit">min ago</span></div></div></div>
+              <p class="fnote">Real orders win when fresher. Only lands on some products at a time.</p>
+            </div>
+          </div>
+          <label class="switch sm"><input type="checkbox" checked data-onoff="lo" data-screen="product"><span class="tk"></span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="grp">
+      <div class="grp-lbl">On product cards</div>
+      <div class="sig" data-w="sb">
+        <div class="sig-top">
+          <div class="sig-main">
+            <div class="sig-name">“Sold” badge</div>
+            <div class="sig-say">A small “X sold” cap on shop &amp; home cards.</div>
+            <button class="adjust" onclick="toggleSig(this)">Adjust</button>
+            <div class="sig-more">
+              <div class="fields"><div class="field"><label class="flab dot-lab"><span class="dot"></span> Fill-in — starting total</label><div class="in-row"><input class="n-in" data-cin="sb0" value="50"><span class="unit">to</span><input class="n-in" data-cin="sb1" value="150"></div></div></div>
+              <p class="fnote">Each product starts here, then creeps up a little daily. Real units add on top.</p>
+            </div>
+          </div>
+          <label class="switch sm"><input type="checkbox" checked data-onoff="sb" data-screen="shop"><span class="tk"></span></label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · preview -->
+  <section>
+    <div class="q">See it</div>
+    <div class="pv-tabs">
+      <button class="pv-tab" data-pt="home" onclick="setScreen('home')">Home</button>
+      <button class="pv-tab on" data-pt="product" onclick="setScreen('product')">Product</button>
+      <button class="pv-tab" data-pt="shop" onclick="setScreen('shop')">Shop</button>
+    </div>
+    <div class="phone-wrap">
+      <div class="phone"><div class="screen">
+        <div class="pv" data-pv="home">
+          <div class="apphead"><span class="logo"></span><span class="nm">Your shop</span></div>
+          <div class="bnr"><span>FRESH THIS WEEK</span></div>
+          <div class="psec">Popular</div>
+          <div class="pgrid">
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="1">142 SOLD</span><div class="img"></div><div class="b"><div class="t">Bestseller</div><div class="pr t-num">¥38</div></div></div>
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="2">96 SOLD</span><div class="img"></div><div class="b"><div class="t">New arrival</div><div class="pr t-num">¥52</div></div></div>
+          </div>
+          <div class="tick" data-b="rb"><span class="who">W**</span><span class="what">bought Hummus Asli</span><span class="ago">5 min ago</span><span class="x">×</span></div>
+        </div>
+        <div class="pv on" data-pv="product">
+          <div class="pimg"></div>
+          <div class="pbody">
+            <div class="ptitle">Hummus Asli</div>
+            <div class="pprice t-num">¥38</div>
+            <div class="proof" data-b="bc"><span class="pp t-num" data-n="bc">12 bought today</span></div>
+            <div class="proof v" data-b="vn"><span class="pp t-num" data-n="vn">◉ 8 viewing now</span></div>
+            <div class="proof l" data-b="lo"><span class="pp" data-n="lo">Last ordered 14 min ago</span></div>
+            <div class="buy">Add to cart</div>
+          </div>
+        </div>
+        <div class="pv" data-pv="shop">
+          <div class="apphead"><span class="nm">Shop</span></div>
+          <div class="pgrid">
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="1">142 SOLD</span><div class="img"></div><div class="b"><div class="t">Bestseller</div><div class="pr t-num">¥38</div></div></div>
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="2">96 SOLD</span><div class="img"></div><div class="b"><div class="t">New arrival</div><div class="pr t-num">¥52</div></div></div>
+            <div class="pc"><div class="img"></div><div class="b"><div class="t">Pantry staple</div><div class="pr t-num">¥24</div></div></div>
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="3">201 SOLD</span><div class="img"></div><div class="b"><div class="t">Weekly pick</div><div class="pr t-num">¥45</div></div></div>
+          </div>
+        </div>
+      </div></div>
+    </div>
+    <p class="pv-cap">Flip a switch above — this updates.</p>
+  </section>
+
+  <p class="moved"><b>Checkout upsell</b> isn't social proof — it now lives in <a>Marketing → Pop-ups</a>.</p>
+
+  <div class="save-row">
+    <button class="btn-ink" onclick="fakeSave()">Save</button>
+    <span class="saved" id="saved">Saved — live in the mini app.</span>
+  </div>
+</div>
+
+<!-- wizard -->
+<div class="wiz-bg" id="wiz" onclick="if(event.target===this)wizClose()">
+  <div class="wiz">
+    <div class="step">Guided setup</div>
+    <h3>How lively should it feel?</h3>
+    <p class="ws">Real customer activity always shows first. This just sets how much Tacet tops it up when things are quiet — you can change any of it later.</p>
+    <div class="wiz-choices" id="wiz-choices">
+      <button class="wiz-choice" data-wp="real" onclick="wizPick('real')"><b>Real only</b><span>Only what actually happened. Honest and quiet.</span></button>
+      <button class="wiz-choice on" data-wp="gentle" onclick="wizPick('gentle')"><b>Gentle lift</b><span>A soft floor under the real numbers. Most shops pick this.</span></button>
+      <button class="wiz-choice" data-wp="busy" onclick="wizPick('busy')"><b>Bustling</b><span>A busy-market feel for launches and promotions.</span></button>
+    </div>
+    <div class="wiz-foot">
+      <button class="wiz-skip" onclick="wizClose()">Skip</button>
+      <span class="sp"></span>
+      <button class="btn-ink" onclick="wizApply()">Use this</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRESETS = {
+  real:   { bc:[0,0], vn:[0,0], lo:[0,0], sb:[0,0] },
+  gentle: { bc:[6,15], vn:[15,40], lo:[5,45], sb:[50,150] },
+  busy:   { bc:[20,45], vn:[30,80], lo:[3,20], sb:[150,400] },
+};
+const SAY = {
+  real:   { d:'<b>Real only.</b> Show just what actually happened. On slow days most signals simply rest.', chips:'' },
+  gentle: { d:'<b>Gentle lift.</b> A soft floor under the real numbers, so quiet days still feel alive.', chips:'gentle' },
+  busy:   { d:'<b>Bustling.</b> Every signal leans lively — good for a launch or a promotion.', chips:'busy' },
+};
+const num = id => { const el=document.querySelector('[data-cin="'+id+'"]'); return el?(Number(el.value)||0):0; };
+const range = w => [num(w+'0'),num(w+'1')];
+const mid = w => { const [a,b]=range(w); return Math.round((a+b)/2); };
+let feel='gentle';
+
+function setFeel(k){
+  feel=k;
+  const p=PRESETS[k]; if(p) for(const w of ['bc','vn','lo','sb']){ const a=document.querySelector('[data-cin="'+w+'0"]'),b=document.querySelector('[data-cin="'+w+'1"]'); if(a)a.value=p[w][0]; if(b)b.value=p[w][1]; }
+  document.querySelectorAll('#seg button').forEach(x=>x.classList.toggle('on', x.dataset.p===k));
+  renderFeel(); preview();
+}
+function renderFeel(){
+  const s=SAY[feel];
+  let ex='';
+  if(s.chips==='gentle') ex='<span class="chip t-num">'+Math.max(3,mid('bc'))+' bought today</span> <span class="chip sage t-num">◉ '+Math.max(2,mid('vn'))+' viewing</span>';
+  else if(s.chips==='busy') ex='<span class="chip t-num">'+Math.max(3,mid('bc'))+' bought today</span> <span class="chip sage t-num">◉ '+Math.max(2,mid('vn'))+' viewing</span>';
+  else ex='<span style="color:var(--text-3)">e.g. “3 bought this week” — and nothing on the quiet days.</span>';
+  document.getElementById('feel-say').innerHTML='<div class="d">'+s.d+'</div><div class="ex">'+ex+'</div>';
+}
+function toggleSig(btn){ btn.closest('.sig').classList.toggle('open'); }
+function setScreen(s){
+  document.querySelectorAll('.pv-tab').forEach(t=>t.classList.toggle('on', t.dataset.pt===s));
+  document.querySelectorAll('[data-pv]').forEach(p=>p.classList.toggle('on', p.dataset.pv===s));
+}
+function applyOnOff(w, jump){
+  const sw=document.querySelector('[data-onoff="'+w+'"]'); if(!sw) return;
+  const on=sw.checked;
+  const sig=document.querySelector('.sig[data-w="'+w+'"]'); if(sig){ sig.classList.toggle('off',!on); if(!on) sig.classList.remove('open'); }
+  document.querySelectorAll('[data-b="'+w+'"]').forEach(el=>el.classList.toggle('hide',!on));
+  if(jump && sw.dataset.screen) setScreen(sw.dataset.screen);
+}
+function preview(){
+  const b=Math.max(3,mid('bc')||3), v=Math.max(2,mid('vn')||3), l=Math.max(4,mid('lo')||14), sb=Math.max(mid('sb')||12,3);
+  const set=(s,t)=>{ const e=document.querySelector(s); if(e)e.textContent=t; };
+  set('[data-n="bc"]', b+' bought today');
+  set('[data-n="vn"]', '◉ '+v+' viewing now');
+  set('[data-n="lo"]', 'Last ordered '+l+' min ago');
+  const m={1:.95,2:.64,3:1.34};
+  document.querySelectorAll('[data-cap]').forEach(e=>{ e.textContent=Math.max(1,Math.round(sb*(m[e.dataset.cap]||1)))+' SOLD'; });
+}
+document.querySelectorAll('[data-cin]').forEach(i=>i.addEventListener('input', ()=>{ document.querySelectorAll('#seg button').forEach(x=>x.classList.remove('on')); renderFeel(); preview(); }));
+document.querySelectorAll('[data-onoff]').forEach(sw=>sw.addEventListener('change', ()=>applyOnOff(sw.dataset.onoff, true)));
+function fakeSave(){ const s=document.getElementById('saved'); s.classList.add('show'); setTimeout(()=>s.classList.remove('show'),2200); }
+
+let wizChoice='gentle';
+function wizOpen(){ wizChoice=feel; wizPick(feel); document.getElementById('wiz').classList.add('open'); }
+function wizClose(){ document.getElementById('wiz').classList.remove('open'); }
+function wizPick(k){ wizChoice=k; document.querySelectorAll('[data-wp]').forEach(b=>b.classList.toggle('on', b.dataset.wp===k)); }
+function wizApply(){ setFeel(wizChoice); wizClose(); fakeSave(); }
+
+for(const w of ['rb','bc','vn','lo','sb']) applyOnOff(w,false);
+renderFeel(); preview();
+</script>
+</body>
+</html>
