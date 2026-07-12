@@ -1856,6 +1856,12 @@ function pdSyncSupplierUi() {
   const sb  = document.getElementById('pd-supplier-block');
   if (oos) oos.style.display = on ? 'none' : '';
   if (sb)  sb.style.display  = on ? '' : 'none';
+  // The per-location stock counts mean nothing for supplier-direct items (they
+  // hold no stock of ours), so hide them and show a note instead.
+  const sf = document.getElementById('pd-stock-fields');
+  const sn = document.getElementById('pd-stock-supplier-note');
+  if (sf) sf.style.display = on ? 'none' : '';
+  if (sn) sn.style.display = on ? '' : 'none';
 }
 function pdOpen(id) {
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
