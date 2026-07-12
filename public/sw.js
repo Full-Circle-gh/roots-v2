@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v462-popup-editor-centered';
+const CACHE = 'roots-v2-shell-v463-supplier-direct-always';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?

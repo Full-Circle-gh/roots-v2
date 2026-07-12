@@ -181,7 +181,8 @@ Page({
     if (!p) return;
     let q = (p.qty || 0) + dir;
     if (q < 0) q = 0;
-    if (p.stock != null && q > p.stock) {
+    // Supplier-direct items hold no stock of ours — never cap their quantity.
+    if (!p.ship_from_supplier && p.stock != null && q > p.stock) {
       wx.showToast({ title: this.data.copy.soldOut, icon: 'none' });
       q = p.stock;
     }

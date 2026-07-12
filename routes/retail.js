@@ -903,6 +903,7 @@ const RETAIL_PRODUCT_COLS = `
   p.low_stock_threshold,
   p.is_batch_made,
   p.oos_policy,
+  p.supplier_paused,
   p.bundle_items,
   p.updated_at
 `;
@@ -916,8 +917,14 @@ const RETAIL_PRODUCT_COLS = `
 // rule (batch meals = backorder, everything else = strict) so nothing that
 // relied on is_batch_made regresses before operators opt products in.
 function effectiveOosPolicy(p) {
+  // Supplier-direct items carry no inventory of ours — the supplier is the
+  // source of truth, so they're always orderable regardless of stock. This
+  // wins over any stored policy (and auto-applies to existing supplier products
+  // without a re-save). Pausing one is the supplier_paused switch, handled at
+  // the order gate, not here.
+  if (p && p.ship_from_supplier) return 'always';
   const pol = (p && p.oos_policy) || '';
-  if (pol === 'backorder_gz' || pol === 'strict') return pol;
+  if (pol === 'always' || pol === 'backorder_gz' || pol === 'strict') return pol;
   return (p && p.is_batch_made) ? 'backorder_gz' : 'strict';
 }
 
@@ -1291,6 +1298,9 @@ function expandStockLines(resolvedLines) {
   const agg = new Map();
   const add = (id, qty) => { const pid = parseInt(id, 10); if (pid) agg.set(pid, (agg.get(pid) || 0) + qty); };
   for (const r of resolvedLines) {
+    // Supplier-direct items hold no inventory of ours — never reserve, route on,
+    // or refuse them for stock. They contribute zero demand to every store.
+    if (r.product && r.product.ship_from_supplier) continue;
     const comps = parseBundleItems(r.product && r.product.bundle_items);
     if (comps.length) {
       for (const c of comps) add(c.id, c.qty * r.qty);
@@ -2277,7 +2287,7 @@ router.get('/api/retail/products/:id', (req, res) => {
     // via /api/retail/products/:id/image, same as the main hero above.
     product.variants = tdb().prepare(
       `SELECT p.id, p.variant_label, p.variant_label_cn, p.name_en, p.name_cn, p.sku, p.weight AS size,
-              p.sell_price AS price, p.compare_at_price, p.ship_from_supplier,
+              p.sell_price AS price, p.compare_at_price, p.ship_from_supplier, p.supplier_paused,
               p.flash_price, p.flash_starts_at, p.flash_ends_at,
               p.flash_stock_limit, p.flash_sold,
               p.image_url, p.updated_at,
@@ -8210,7 +8220,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
               flash_price, flash_starts_at, flash_ends_at,
               flash_stock_limit, flash_sold, no_coupon_on_flash,
               ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items,
-              is_batch_made, oos_policy,
+              is_batch_made, oos_policy, supplier_paused,
               COALESCE(
                 (SELECT SUM(rss.physical_qty)
                    FROM retail_store_stock rss
@@ -8299,6 +8309,19 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       success: false, error: 'insufficient_stock',
       product_id: hardOos.product.id,
       available: Math.max(0, Number(hardOos.product.real_stock) || 0),
+    });
+  }
+
+  // ── Supplier-paused gate ─────────────────────────────────────────────
+  // A supplier-direct item is always orderable UNLESS the operator flipped its
+  // "supplier is out" switch. Refuse those up front so a stale page can't slip
+  // a paused item through. supplier_paused only ever matters on supplier lines.
+  const paused = resolved.find(r =>
+    r.product && r.product.ship_from_supplier && r.product.supplier_paused);
+  if (paused) {
+    return res.status(409).json({
+      success: false, error: 'supplier_unavailable',
+      product_id: paused.product.id,
     });
   }
 
@@ -15998,11 +16021,17 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // Out-of-stock policy: only the two known modes persist; anything else (incl.
   // the default) stores NULL → effectiveOosPolicy() treats it as 'strict'.
   if ('oos_policy' in body) {
-    const pol = body.oos_policy === 'backorder_gz' ? 'backorder_gz'
+    const pol = body.oos_policy === 'always'       ? 'always'
+              : body.oos_policy === 'backorder_gz' ? 'backorder_gz'
               : body.oos_policy === 'strict'       ? 'strict' : null;
     sets.push('oos_policy = ?'); params.push(pol);
   }
   if ('ship_from_supplier' in body) { sets.push('ship_from_supplier = ?'); params.push(body.ship_from_supplier ? 1 : 0); }
+  // "Supplier is temporarily out" switch for supplier-direct items — pauses
+  // selling without hiding the product. Only meaningful alongside
+  // ship_from_supplier, but persisted independently so toggling it back on is
+  // one write.
+  if ('supplier_paused' in body) { sets.push('supplier_paused = ?'); params.push(body.supplier_paused ? 1 : 0); }
   // Kitchen-parity flags brought over so the store editor is a full superset.
   if ('is_market' in body) { sets.push('is_market = ?'); params.push(body.is_market ? 1 : 0); }
   if ('is_restock_only' in body) { sets.push('is_restock_only = ?'); params.push(body.is_restock_only ? 1 : 0); }
@@ -16070,7 +16099,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
-            is_batch_made, oos_policy, ship_from_supplier, page_template,
+            is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
   ).get(id);
@@ -16116,7 +16145,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
             variant_group_id, variant_label, variant_sort, variant_noun_en, variant_noun_cn,
-            is_batch_made, oos_policy, ship_from_supplier, page_template,
+            is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
@@ -16670,7 +16699,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
                     nutrition, bundle, bundle_items, tags,
                     variant_group_id, variant_label, variant_label_cn, variant_sort,
-                    is_batch_made, oos_policy, ship_from_supplier, use_block_design,
+                    is_batch_made, oos_policy, ship_from_supplier, supplier_paused, use_block_design,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,
                     ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks

@@ -3613,9 +3613,19 @@ try {
   // Store-only mirror of products.oos_policy (see the products addColumn above):
   // 'strict' (default/NULL) = sold-out blocks ordering in every region;
   // 'backorder_gz' = out-of-city shoppers may still pre-order, only same-day
-  // Guangzhou stays hard-blocked. NULL falls back to is_batch_made for
-  // back-compat. Operator-set per product in the store editor.
+  // Guangzhou stays hard-blocked;
+  // 'always' = stock is ignored entirely — always orderable in every region,
+  //   never SOLD OUT. Used for supplier-direct items (ship_from_supplier=1),
+  //   where we hold no inventory: the supplier is the source of truth. The only
+  //   way to stop selling one is the supplier_paused switch below.
+  // NULL falls back to is_batch_made for back-compat. Operator-set per product
+  // in the store editor.
   addColumn('store_products', 'oos_policy', 'TEXT');
+  // Operator's "the supplier is temporarily out" switch for supplier-direct
+  // products. 1 = still visible on the shop but shown "Temporarily unavailable"
+  // and not orderable; 0 (default) = available. Only meaningful when the item is
+  // always-available (ship_from_supplier=1); a stock count never applies to it.
+  addColumn('store_products', 'supplier_paused', 'INTEGER DEFAULT 0');
   // Mini-app PDP hero aspect ratio (width/height as a REAL). When present, the
   // product page sizes the hero box to the photo's true shape so nothing crops;
   // when NULL the mini-app self-corrects from the image's bindload event, then

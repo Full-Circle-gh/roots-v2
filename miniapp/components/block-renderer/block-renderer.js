@@ -1228,7 +1228,7 @@ Component({
               const regular = Number(p.price ?? p.sell_price) || 0;
               const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
               const isFlash = !!p.is_on_flash && eff < regular;
-              const soldOut = p.stock != null && Number(p.stock) <= 0;
+              const soldOut = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
               return {
                 id: p.id,
                 image: absUrl(p.image_url) || p.image_data || '',

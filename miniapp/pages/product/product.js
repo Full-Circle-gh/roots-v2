@@ -417,7 +417,15 @@ Page({
     const hasVariants = this._variants.length > 1;
     // Stock state — null means untracked (treat as in-stock).
     let soldOut = false, stockTag = '', stockTagKind = '';
-    if (hasVariants) {
+    if (p.ship_from_supplier) {
+      // Supplier-direct: no stock of ours. Always available unless the operator
+      // paused it (supplier is out), which shows a soft "Temporarily unavailable".
+      if (p.supplier_paused) {
+        soldOut = true;
+        stockTag = L === 'cn' ? '暂时缺货' : 'Unavailable';
+        stockTagKind = 'out';
+      }
+    } else if (hasVariants) {
       // Variant product: sold out only when EVERY size is out. Per-size
       // "Only N left" lives in the picker, so the hero badge stays quiet.
       soldOut = this._variants.every(v => v.stock != null && Number(v.stock) <= 0);
@@ -570,7 +578,7 @@ Page({
           name: lang.pick(it.name_en, it.name_cn, L) || ('#' + it.id),
           img: absUrl(it.image_data || it.image_url),
           price: Number(it.price) > 0 ? money(Number(it.price)) : '',
-          soldOut: st != null && st <= 0,
+          soldOut: it.ship_from_supplier ? !!it.supplier_paused : (st != null && st <= 0),
         };
       });
       const sum = this._bundle.items.reduce((a, it) => a + (Number(it.price) || 0), 0);
@@ -943,7 +951,7 @@ Page({
       const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
       const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
       const stock = m.stock == null ? null : Number(m.stock);
-      const soldOut = stock != null && stock <= 0;
+      const soldOut = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
       return {
         id: m.id,
         // Link to this size's own product page — unless it's the one we're
@@ -991,8 +999,9 @@ Page({
     const m = (this._variants || []).find(x => Number(x.id) === id);
     if (!m) return;
     const stock = m.stock == null ? null : Number(m.stock);
-    if (stock != null && stock <= 0) {
-      wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
+    const vSoldOut = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
+    if (vSoldOut) {
+      wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
     }
     cart.add({

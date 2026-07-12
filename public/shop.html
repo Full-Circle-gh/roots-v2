@@ -4846,7 +4846,7 @@ function slOpenVp(repId,members){
     const cmp=Number(m.compare_at_price)||0;
     const wasN=isFlash?regular:(cmp>eff&&eff>0?cmp:0);
     const stock=m.stock==null?null:Number(m.stock);
-    const soldOut=stock!=null&&stock<=0;
+    const soldOut=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
     const label=pick(m.variant_label,m.variant_label_cn)||pick(m.name_en,m.name_cn)||('#'+m.id);
     return {id:m.id,label,weight:(m.size||'').toString().trim(),
       price:eff>0?slMoney(eff):'',priceWas:wasN>0?slMoney(wasN):'',isFlash,soldOut,
@@ -4892,6 +4892,13 @@ function oosBackorder(p){
 // same-day gate at checkout) while a strict sold-out item is a hard SOLD OUT.
 // Untracked stock (null) counts as in stock.
 function stockState(p){
+  // Supplier-direct items carry no stock of ours — always available, never
+  // SOLD OUT — unless the operator paused them (supplier is out).
+  if(p&&p.ship_from_supplier){
+    return p.supplier_paused
+      ? {oos:true,soldOut:true,badge:state.lang==='cn'?'暂时缺货':'UNAVAILABLE'}
+      : {oos:false,soldOut:false,badge:''};
+  }
   const vs=Array.isArray(p.variants)?p.variants:null;
   const out = (vs&&vs.length>1)
     ? vs.every(v=>v.stock!=null&&Number(v.stock)<=0)
@@ -5129,7 +5136,7 @@ async function renderProduct(id){
         const cmp=Number(m.compare_at_price)||0;
         const wasN=isFl?regular:(cmp>eff&&eff>0?cmp:0);
         const stock=m.stock==null?null:Number(m.stock);
-        const soldOut=stock!=null&&stock<=0;
+        const soldOut=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
         const label=pick(m.variant_label,m.variant_label_cn)||pick(m.name_en,m.name_cn)||('#'+m.id);
         return {id:m.id,label,weight:(m.size||'').toString().trim(),
           price:eff>0?slMoney(eff):'',priceWas:wasN>0?slMoney(wasN):'',soldOut,

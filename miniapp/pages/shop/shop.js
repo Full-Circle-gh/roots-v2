@@ -494,12 +494,15 @@ Page({
         const allSame = prices.length > 0 && prices.every(v => v === minP);
         price = minP > 0 ? money(minP) : '—';
         pricePrefix = (minP > 0 && !allSame) ? (L === 'cn' ? '起' : 'from') : '';
-        outOfStock = members.every(m => m.stock != null && Number(m.stock) <= 0);
+        // Supplier-direct members carry no stock of ours — out only if paused.
+        outOfStock = members.every(m => m.ship_from_supplier
+          ? !!m.supplier_paused
+          : (m.stock != null && Number(m.stock) <= 0));
         soldUnits = members.reduce((s, m) => s + (Number(m.units_sold) || 0), 0);
         subline = '';
       } else {
         const stockNum = p.stock == null ? null : Number(p.stock);
-        outOfStock = stockNum != null && stockNum <= 0;
+        outOfStock = p.ship_from_supplier ? !!p.supplier_paused : (stockNum != null && stockNum <= 0);
         // All-time units sold (server min-gates this to 0 below the badge
         // threshold), shown as a small "X SOLD" popularity caption on the card.
         soldUnits = Number(p.units_sold) || 0;
@@ -997,7 +1000,7 @@ Page({
       const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
       const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
       const stock = m.stock == null ? null : Number(m.stock);
-      const soldOut = stock != null && stock <= 0;
+      const soldOut = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
       return {
         id: m.id,
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
@@ -1035,8 +1038,9 @@ Page({
     const m = members.find(x => Number(x.id) === id);
     if (!m) return;
     const stock = m.stock == null ? null : Number(m.stock);
-    if (stock != null && stock <= 0) {
-      wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
+    const vSoldOut = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
+    if (vSoldOut) {
+      wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
     }
     this.setData({ vpShow: false });

@@ -124,7 +124,7 @@ Page({
       const eff   = Number(p.effective_price) > 0 ? Number(p.effective_price) : Number(p.price) || 0;
       const reg   = Number(p.price) || 0;
       const flash = !!p.is_on_flash && eff < reg;
-      const soldOut = p.stock != null && Number(p.stock) <= 0;
+      const soldOut = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
       const priceDrop = flash && reg > eff ? Math.round(reg - eff) : 0;
       const name = L === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
       const cnSub = L === 'cn' ? (p.name_en || '') : (p.name_cn || '');
@@ -201,7 +201,8 @@ Page({
     if (!id) return;
     const p = (this.data.all || []).find(x => x.id === id);
     if (!p) return;
-    if (p.stock != null && Number(p.stock) <= 0) {
+    const soldOut = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
+    if (soldOut) {
       wx.showToast({ title: this.data.copy.soldOut, icon: 'none' });
       return;
     }

@@ -3103,16 +3103,25 @@
               <div style="display:flex;flex-direction:column;gap:7px;">
                 <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-market" style="width:15px;height:15px;"> Sold at markets · 市集销售</label>
                 <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-batch-made" style="width:15px;height:15px;"> Made fresh in batches · 分批现做</label>
-                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-from-supplier" style="width:15px;height:15px;"> Ships directly from supplier · 供应商直发</label>
+                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-from-supplier" style="width:15px;height:15px;" onchange="pdSyncSupplierUi()"> Ships directly from supplier · 供应商直发</label>
                 <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-restock-only" style="width:15px;height:15px;"> Restock-only, internal · 仅内部补货</label>
               </div>
-              <div style="margin-top:11px;border-top:1px solid #eee;padding-top:10px;">
+              <!-- Stock-tracked items: how out-of-stock behaves. Hidden for
+                   supplier-direct items (they hold no stock of ours). -->
+              <div id="pd-oos-block" style="margin-top:11px;border-top:1px solid #eee;padding-top:10px;">
                 <div style="font-weight:600;margin-bottom:5px;">When out of stock · 缺货时</div>
                 <select id="pd-oos-policy" style="width:100%;padding:7px 8px;border:1px solid #d6d1c7;border-radius:7px;font:inherit;">
                   <option value="strict">Sold out everywhere · 全国售罄停售</option>
                   <option value="backorder_gz">Pre-order outside Guangzhou · 广州外可预订（现订现发）</option>
                 </select>
                 <div style="font-size:12px;color:#8a8378;margin-top:5px;line-height:1.4;">“Pre-order outside Guangzhou” keeps the product orderable for out-of-city shoppers when stock hits 0 (ships on the next batch / restock); only same-day Guangzhou is blocked.<br>广州外顾客在缺货时仍可下单预订，仅广州当日配送会被拦截。</div>
+              </div>
+              <!-- Supplier-direct items: no stock control on our side. Shown only
+                   when "Ships directly from supplier" is ticked. -->
+              <div id="pd-supplier-block" style="margin-top:11px;border-top:1px solid #eee;padding-top:10px;display:none;">
+                <div style="font-weight:600;margin-bottom:5px;">Availability · 是否可售</div>
+                <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-supplier-paused" style="width:15px;height:15px;"> Supplier out — pause selling · 供应商缺货，暂停销售</label>
+                <div style="font-size:12px;color:#8a8378;margin-top:5px;line-height:1.4;">Ships from the supplier, so it’s always available on our side — no stock to track. Tick this only when the supplier is out; the product stays visible but shows “Temporarily unavailable” and can’t be ordered.<br>由供应商直发，我们这边始终有货，无需管理库存。仅在供应商缺货时勾选：商品仍显示，但标为“暂时缺货”且无法下单。</div>
               </div>
             </section>
             <section class="pd-card">
