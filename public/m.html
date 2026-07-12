@@ -422,11 +422,16 @@ function ordersFiltered(){
   });
 }
 function ordersHeader(){
-  const sc=[{key:'all',en:'All',zh:'全部',count:47},{key:'new',en:'New',zh:'新',count:2},{key:'paid',en:'Paid',zh:'已付',count:8},
-    {key:'preparing',en:'Preparing',zh:'备货',count:6},{key:'dispatched',en:'Dispatched',zh:'已发',count:11},{key:'delivered',en:'Delivered',zh:'送达',count:15},
-    {key:'restock',en:'Awaiting restock',zh:'待补货',count:2},{key:'refund',en:'Refund queue',zh:'退款',count:2}];
-  const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:47},{key:'miniapp',en:'Mini app',zh:'小程序',count:28},{key:'web',en:'Web',zh:'网页',count:9},
-    {key:'meituan',en:'Meituan',zh:'美团',count:6},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:2},{key:'manual',en:'Manual',zh:'手动',count:2}];
+  // Real counts when available (undefined → no badge shown, instead of a fake number).
+  const S=state.liveStatusCounts, C=state.liveChannelCounts;
+  const sCount=(k,f)=> S ? (k==null?undefined:S[k]) : f;
+  const cCount=(k,f)=> C ? (C[k]!=null?C[k]:0) : f;
+  const allOrders = C?C.all:(S?undefined:47);
+  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},{key:'new',en:'New',zh:'新',count:S?undefined:2},{key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
+    {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing',6)},{key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched',11)},{key:'delivered',en:'Delivered',zh:'送达',count:S?undefined:15},
+    {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock',2)},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open',2)}];
+  const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat',28)},{key:'web',en:'Web',zh:'网页',count:cCount('web',9)},
+    {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan',6)},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery',2)},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual',2)}];
   return `<div style="flex:none;background:var(--bg);border-bottom:1px solid var(--border-default);padding:10px 0">
     ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}</div>`;
 }
@@ -568,7 +573,9 @@ const SUBS={
       <button class="cta" onclick="APP.cmd('noop')">${T('Continue setup','继续设置')}</button></div>`;
   }},
   products:{title:['Products','产品'],render:()=>{
-    const cd=[{key:'all',en:'All',zh:'全部',count:118},{key:'live',en:'Live',zh:'在售',count:96},{key:'low',en:'Low',zh:'库存低',count:14},{key:'out',en:'Out',zh:'缺货',count:8}];
+    const L=state.liveProductsLoaded, P=DB.products;
+    const cd=[{key:'all',en:'All',zh:'全部',count:L?P.length:118},{key:'live',en:'Live',zh:'在售',count:L?P.filter(p=>p.kind==='on').length:96},
+      {key:'low',en:'Low',zh:'库存低',count:L?P.filter(p=>p.kind==='restock').length:14},{key:'out',en:'Out',zh:'缺货',count:L?P.filter(p=>p.kind==='off').length:8}];
     return `<div><div style="padding:12px 0 4px">${chipRow(cd,'all','noop')}</div>
       <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
         ${noteBar(T('Quick edits here · full authoring on desktop','这里可快速编辑 · 完整编辑请用电脑端'))}
@@ -734,8 +741,8 @@ function screenSettings(){
   const rt=r=> r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')"):r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')"):toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`);
   return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:18px">
     <button onclick="APP.cmd('noop')" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;background:var(--surface-raised);border:none;border-radius:14px;padding:16px;font-family:inherit">
-      <span style="width:46px;height:46px;border-radius:12px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px;font-weight:500;color:var(--text-primary)">${(state.storeName||'Maru Studio').trim().charAt(0)}</span>
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:16px;font-weight:500">${state.storeName||'Maru Studio'}</span><span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T('Owner · Growth plan','店主 · 成长版')}</span></span>
+      <span style="width:46px;height:46px;border-radius:12px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px;font-weight:500;color:var(--text-primary)">${(state.storeName||T('Your store','你的店铺')).trim().charAt(0)}</span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:16px;font-weight:500">${state.storeName||T('Your store','你的店铺')}</span><span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T('Owner · Growth plan','店主 · 成长版')}</span></span>
       <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>
     ${groups.map(g=>`<div><div class="eyebrow" style="padding:2px 4px 8px">${g.h}</div>
       <div class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}
@@ -1020,17 +1027,109 @@ function mapDetail(o){
   return base;
 }
 function mapProduct(r){
-  const stock=Number(r.stock!=null?r.stock:(r.total_stock!=null?r.total_stock:0));
+  // Backend returns effective_stock (summed across active stores) / stock_qty,
+  // and sell_price — NOT `stock`/`price`. Reading the wrong keys made every live
+  // product show ¥0 and "Out of stock". Keep the old keys as last-resort fallback.
+  const stock=Number(r.effective_stock!=null?r.effective_stock:(r.stock_qty!=null?r.stock_qty:(r.stock!=null?r.stock:0)));
+  const price=r.sell_price!=null?r.sell_price:(r.price!=null?r.price:0);
   const kind=stock<=0?'off':(stock<=10?'restock':'on');
   const st=stock<=0?['Out','缺货']:(stock<=10?['Low','库存低']:['Live','在售']);
   return {name:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],sku:r.sku?('SKU '+r.sku):('#'+r.id),
-    price:money(CUR,r.price), stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind};
+    price:money(CUR,price), stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind};
 }
 function mapReview(r){
   const replied=r.reply&&String(r.reply).trim();
   return {cust:[r.customer_name||'Customer',r.customer_name||'顾客'], rating:r.rating?Number(r.rating).toFixed(1):'',
     status:replied?['Replied','已回复']:['New','新'], kind:replied?'clear':'success',
     text:[r.comment||'',r.comment||''], time:[hhmm(r.created_at)||'',hhmm(r.created_at)||'']};
+}
+
+/* ---- mappers for the secondary screens (each falls back to sample data) ---- */
+const CAT_ICON={produce:'sprout',fresh:'sprout',bakery:'croissant',bread:'croissant','plant-based':'leaf',plant:'leaf',
+  beverage:'cup-soda',drink:'cup-soda',snack:'cookie',household:'house-plug',home:'house-plug',pantry:'package',frozen:'snowflake'};
+function catIcon(name){ const n=String(name||'').toLowerCase(); for(const k in CAT_ICON){ if(n.includes(k)) return CAT_ICON[k]; } return 'tag'; }
+function mapCategory(r){ const nm=r.name||r.name_en||'—'; return {name:[nm,r.name_cn||nm],icon:catIcon(nm),count:r.usage_count!=null?r.usage_count:(r.count!=null?r.count:0)}; }
+
+const PO_KIND={received:'delivered',partial:'preparing',in_transit:'dispatched',ordered:'dispatched',sent:'dispatched',draft:'draft',cancelled:'off'};
+function mapPurchase(r){
+  const st=String(r.status||'draft').toLowerCase();
+  return {id:r.po_number||('PO-'+r.id), _id:r.id, supplier:[r.supplier||r.store_name_en||'—',r.supplier||r.store_name_cn||'—'],
+    total:money(CUR,r.total_cost), items:[(r.line_count||0)+' items',(r.line_count||0)+' 项'],
+    status:[st.charAt(0).toUpperCase()+st.slice(1),st], kind:PO_KIND[st]||'pending'};
+}
+function mapActivity(r){
+  const src=r.source||r.reason||'';
+  return {name:[r.product||r.sku||'—',r.product||r.sku||'—'],
+    meta:[[r.sku,src].filter(Boolean).join(' · ')||'—',[r.sku,src].filter(Boolean).join(' · ')||'—'],
+    delta:(r.delta>0?'+':'')+ (r.delta!=null?r.delta:0)};
+}
+const INV_KIND={issued:'on',requested:'pending',pending:'pending'};
+function mapInvoice(r){
+  const st=String(r.invoice_status||'requested').toLowerCase();
+  const label=st==='issued'?['Issued','已开票']:['Pending','待开票'];
+  return {id:r.invoice_number||r.order_no||('#'+r.id), order:r.order_no||'—', amount:money(CUR,r.total),
+    status:label, kind:INV_KIND[st]||'pending', date:[hhmm(r.invoice_issued_at||r.placed_at)||'—',hhmm(r.invoice_issued_at||r.placed_at)||'—']};
+}
+function mapVoucher(r){
+  const val=r.type==='percent'?(r.value+'% off'):money(CUR,r.value)+' off';
+  const min=r.min_subtotal?(' · min '+money(CUR,r.min_subtotal)):'';
+  return {title:[r.description||val,r.description||val], code:r.code,
+    meta:['Used '+(r.grant_used_count||r.used_count||0)+min,'已用 '+(r.grant_used_count||r.used_count||0)+min],
+    on:!!r.is_active};
+}
+const FLASH_KIND={live:'live',running:'live',scheduled:'draft',upcoming:'draft',ended:'off',none:'off'};
+function mapFlash(r){
+  const win=[hhmm(r.flash_starts_at),hhmm(r.flash_ends_at)].filter(Boolean).join('–')||'—';
+  const state=String(r.flash_state||'none');
+  const label=state==='live'?['Live','进行中']:state==='ended'?['Ended','已结束']:['Scheduled','已排期'];
+  return {title:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'], win:[win,win], status:label, kind:FLASH_KIND[state]||'draft'};
+}
+const BC_KIND={sent:'delivered',scheduled:'draft',draft:'draft'};
+function mapBroadcast(r){
+  const st=String(r.status||'draft').toLowerCase();
+  const label=st==='sent'?['Sent','已发送']:st==='scheduled'?['Scheduled','已排期']:['Draft','草稿'];
+  const meta=st==='sent'?('Sent to '+(r.recipient_count||0)):(r.scheduled_for?('Scheduled '+r.scheduled_for):'Draft');
+  const metaCn=st==='sent'?('发送 '+(r.recipient_count||0)):(r.scheduled_for?('排期 '+r.scheduled_for):'草稿');
+  return {title:[r.title_en||r.title_cn||'—',r.title_cn||r.title_en||'—'], meta:[meta,metaCn], status:label, kind:BC_KIND[st]||'draft'};
+}
+function mapFeedback(r){
+  const open=r.needs_reply||!r.replied;
+  return {cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
+    status:open?['Open','待处理']:['Replied','已回复'], kind:open?'success':'clear',
+    text:[r.message||r.last_body||'',r.message||r.last_body||''], time:[hhmm(r.created_at)||'',hhmm(r.created_at)||'']};
+}
+function mapPoll(r){
+  const opts=r.options||[]; const total=r.total_votes||opts.reduce((a,o)=>a+(o.votes||0),0);
+  let top=opts[0]; opts.forEach(o=>{ if((o.votes||0)>((top&&top.votes)||0)) top=o; });
+  const pct=total?Math.round(((top&&top.votes||0)/total)*100)+'%':'0%';
+  const st=String(r.status||'draft').toLowerCase();
+  const label=st==='open'?['Live','进行中']:st==='closed'?['Closed','已结束']:['Draft','草稿'];
+  return {title:[r.question_en||r.question_cn||'—',r.question_cn||r.question_en||'—'],
+    status:label, kind:st==='open'?'live':'off', votes:[total+' votes',total+' 票'], pct,
+    top:top?['Leading: '+(top.label_en||top.label_cn||''),'领先：'+(top.label_cn||top.label_en||'')]:['—','—']};
+}
+const TIER_NAMES={seed:['Seed','种子'],sprout:['Sprout','幼苗'],root:['Root','根'],tree:['Tree','大树']};
+const TIER_PTS={seed:['≥ 0 pts','≥ 0 分'],sprout:['≥ 500 pts','≥ 500 分'],root:['≥ 2,000 pts','≥ 2,000 分'],tree:['≥ 5,000 pts','≥ 5,000 分']};
+function mapMember(r){
+  const tk=String(r.tier_key||'seed');
+  return {name:[r.nickname||'—',r.nickname||'—'], tier:TIER_NAMES[tk]||[tk,tk], pts:Number(r.points_balance||0).toLocaleString(),
+    gold:tk==='tree'||tk==='root'};
+}
+function mapWallet(r){
+  const amt=Number(r.amount||0);
+  return {label:['Top-up','充值'], who:[r.nickname||'—',r.nickname||'—'], time:hhmm(r.paid_at||r.created_at)||'',
+    amt:'+'+money(CUR,amt), color:'#5F7357'};
+}
+const CH_META={wechat:['Mini app','小程序','smartphone',false],web:['Web store','网店','globe',false],
+  meituan:['Meituan','美团','bike',true],gzgrocery:['gzgrocery ERP','gzgrocery','warehouse',true],eleme:['Eleme','饿了么','utensils-crossed',false]};
+function mapSalesChannel(key,c){
+  const m=CH_META[key]||[key,key,'store',false];
+  const connected=!!(c&&c.connected);
+  const metric=connected?((c.orders||0)+' orders · '+money(CUR,c.revenue||0)):'Tap to connect';
+  const metricCn=connected?((c.orders||0)+' 单 · '+money(CUR,c.revenue||0)):'点击连接';
+  return {name:[m[0],m[1]], icon:m[2], viewOnly:m[3],
+    status:connected?['Connected','已连接']:['Not connected','未连接'], kind:connected?'on':'off',
+    metric:[metric,metricCn], action:m[3]?['View','查看']:(connected?['Manage','管理']:['Connect','连接'])};
 }
 
 reg('openOrder', id=>{
@@ -1044,10 +1143,15 @@ reg('openOrder', id=>{
 
 async function loadLive(){
   // config → store name + currency (best-effort; keeps mock on any miss)
-  try{ const c=await api('/config');
-    const cfg=c&&(c.store||c)||{};
-    state.storeName=cfg.store_name||cfg.name||cfg.brand_name||cfg.name_en||state.storeName;
-    CUR=cfg.currency_symbol||cfg.currency||CUR;
+  try{ const cfg=await api('/config') || {};
+    // Store name lives at brand.me_footer.wordmark_text; currency at currency.symbol.
+    // (The old code read store_name/currency_symbol, which don't exist — so the app
+    //  kept showing the fake "Maru Studio" and could render currency as [object Object].)
+    const wm = cfg.brand && cfg.brand.me_footer && cfg.brand.me_footer.wordmark_text;
+    if(wm) state.storeName = wm;
+    const cur = cfg.currency;
+    if(cur && typeof cur==='object' && cur.symbol) CUR = cur.symbol;
+    else if(typeof cur==='string') CUR = cur;
   }catch(e){ if(String(e.message)==='auth') return; }
   // dashboard → KPIs + deltas
   try{ const d=await api('/dashboard'); const k=d.kpi||d.kpis||d||{}; const b=d.baseline||{};
@@ -1059,7 +1163,11 @@ async function loadLive(){
       [T('Avg. order','客单价'), money(CUR, k.orders? (Number(k.revenue||0)/k.orders):0), vy],
       [T('New customers','新客'), String(k.new_customers!=null?k.new_customers:(k.newCustomers||0)), dl(b.new_customers)],
     ];
-    const bs=d.byStatus||{};
+    // "Orders awaiting shipment" = paid-but-not-shipped. The dashboard exposes the
+    // per-status counts under `funnel` (the old code read `byStatus`, which doesn't
+    // exist, so this number was always the fake fallback). Prefer the dedicated
+    // order-status-counts endpoint below; fall back to the dashboard funnel.
+    const bs=d.funnel||d.byStatus||{};
     state.liveAttn={ ship:(bs.paid?bs.paid.n:null), reviews:null, low:null };
   }catch(e){ if(String(e.message)==='auth') return; }
   // orders list (the heart of the app)
@@ -1068,7 +1176,7 @@ async function loadLive(){
   }catch(e){}
   // products
   try{ const rows=await api('/products?limit=50');
-    if(Array.isArray(rows)&&rows.length) DB.products=rows.map(mapProduct);
+    if(Array.isArray(rows)&&rows.length){ DB.products=rows.map(mapProduct); state.liveProductsLoaded=true; }
   }catch(e){}
   // reviews (inbox)
   try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
@@ -1077,6 +1185,40 @@ async function loadLive(){
   // low-stock count for the Home attention row
   try{ state.liveAttn=Object.assign({},state.liveAttn||{},{low:DB.products.filter(p=>p.kind!=='on').length}); }catch(e){}
   render();
+
+  // ---- secondary screens: fetch in parallel, each falls back to its sample data ----
+  const set=(fn)=>{ try{ fn(); }catch(e){} render(); };
+
+  // order status + channel counts → real filter-chip numbers + Home "awaiting shipment"
+  api('/order-status-counts').then(d=>set(()=>{ if(d){ state.liveStatusCounts=d;
+    const ship=(d.paid||0)+(d.preparing||0);
+    state.liveAttn=Object.assign({},state.liveAttn||{},{ship});
+  }})).catch(()=>{});
+  api('/order-channel-counts').then(d=>set(()=>{ if(d) state.liveChannelCounts=d; })).catch(()=>{});
+
+  api('/categories').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.categories=r.map(mapCategory); })).catch(()=>{});
+  api('/purchases').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.purchasing=r.map(mapPurchase); })).catch(()=>{});
+  api('/activity').then(r=>set(()=>{ const rows=(r&&r.rows)||(Array.isArray(r)?r:null); if(rows&&rows.length) DB.activity=rows.slice(0,20).map(mapActivity); })).catch(()=>{});
+  api('/invoices').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows&&rows.length) DB.invoices=rows.map(mapInvoice); if(r&&r.counts) state.liveInvoiceCounts=r.counts; })).catch(()=>{});
+  api('/vouchers').then(r=>set(()=>{ if(Array.isArray(r)&&r.length){ DB.coupons=r.map(mapVoucher);
+    DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); } })).catch(()=>{});
+  api('/flash-sales').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.flash=r.map(mapFlash); })).catch(()=>{});
+  api('/broadcasts').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.broadcasts=r.map(mapBroadcast); })).catch(()=>{});
+  api('/feedback').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows) DB.feedback=rows.map(mapFeedback); })).catch(()=>{});
+  api('/polls').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.votes=r.map(mapPoll); })).catch(()=>{});
+
+  // membership: tier counts (+ static ladder names) and recent members
+  api('/tier-counts').then(d=>set(()=>{ if(d&&typeof d==='object'){
+    DB.tiers=['tree','root','sprout','seed'].filter(k=>d[k]!=null).map(k=>({tier:TIER_NAMES[k],pts:TIER_PTS[k],members:String(d[k]),kind:(k==='tree'||k==='root')?'gold':'off'}));
+  }})).catch(()=>{});
+  api('/customers?sort=recent_signup&pageSize=6').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows&&rows.length) DB.members=rows.map(mapMember); })).catch(()=>{});
+
+  // wallet activity + leaderboard + sales channels
+  api('/topup-transactions?limit=20').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.wallet=r.map(mapWallet); })).catch(()=>{});
+  api('/leaderboard/preview').then(d=>set(()=>{ const rows=d&&(d.revealed_entries||d.raw_entries); if(rows&&rows.length)
+    DB.leaderboard=rows.map(e=>({rank:String(e.rank),name:[e.name||e.nickname||'—',e.name||e.nickname||'—'],pts:Number(e.value||0).toLocaleString()})); })).catch(()=>{});
+  api('/sales/summary').then(d=>set(()=>{ const ch=d&&d.channels; if(ch){
+    DB.salesChannels=['wechat','web','meituan','gzgrocery','eleme'].filter(k=>ch[k]).map(k=>mapSalesChannel(k,ch[k])); } })).catch(()=>{});
 }
 
 document.documentElement.setAttribute('data-theme',state.theme);
