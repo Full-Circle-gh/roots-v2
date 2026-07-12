@@ -1372,6 +1372,10 @@ async function loadConfig() {
     $('#cfg-social-sb-min_units').value   = sp_sb.min_units ?? 3;
     $('#cfg-social-sb-boost_min').value   = sp_sb.boost_min ?? sbBoostLegacy;
     $('#cfg-social-sb-boost_max').value   = sp_sb.boost_max ?? sbBoostLegacy;
+    // Dial page: banner state + summaries + phone preview. wizard_done hides the
+    // first-run banner once the operator has finished (or dismissed) setup.
+    _spWizardDone = sp.wizard_done === true;
+    if (typeof sp2AfterLoad === 'function') sp2AfterLoad();
     applyVisualPreviews();
     syncAllPickers();
     applyShopFiltersPreview();
@@ -1664,6 +1668,9 @@ function buildSocialProof() {
       boost_min: sbR.min,
       boost_max: sbR.max,
     },
+    // Admin-only: once the guided setup has run (or been skipped), don't nag on
+    // the next visit. Ignored by the customer-facing getSocialConfig().
+    wizard_done: !!_spWizardDone,
   };
 }
 async function saveCheckoutUpsell() {
@@ -1714,35 +1721,28 @@ let _manualBuyers = [];
 function renderManualBuyers() {
   const mount = document.getElementById('cfg-social-rb-manual-list');
   if (!mount) return;
+  const T = (en, cn) => (window.cuT ? cuT(en, cn) : en);
   if (!_manualBuyers.length) {
-    mount.innerHTML = '<div class="muted" style="font-size: 12px; padding: 6px 0;">No fake entries yet. · 暂无虚拟条目。</div>';
-    return;
-  }
-  mount.innerHTML = _manualBuyers.map((m, i) => `
-    <div class="row" style="gap: 6px; flex-wrap: wrap; align-items: center;
-         padding: 8px; background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: 6px;">
-      <input type="text" data-mb-i="${i}" data-mb-f="name"
-             value="${escapeAttr(m.name || '')}"
-             data-ph-en="Masked name, e.g. W**" data-ph-cn="已脱敏姓名,如 李**"
-             style="flex: 1 1 110px; min-width: 90px; font-size: 12px;">
-      <input type="text" data-mb-i="${i}" data-mb-f="product_en"
-             value="${escapeAttr(m.product_en || '')}"
-             placeholder="Product EN" data-ph-en="Product (English)" data-ph-cn="产品名(英文)"
-             style="flex: 2 1 160px; min-width: 120px; font-size: 12px;">
-      <input type="text" data-mb-i="${i}" data-mb-f="product_cn"
-             value="${escapeAttr(m.product_cn || '')}"
-             placeholder="产品名(中文)" data-ph-en="Product (Chinese)" data-ph-cn="产品名(中文)"
-             style="flex: 2 1 160px; min-width: 120px; font-size: 12px;">
-      <div class="row" style="gap: 4px; align-items: center;">
-        <input type="number" data-mb-i="${i}" data-mb-f="minutes_ago" min="0" max="86400"
-               value="${Number(m.minutes_ago) || 0}"
-               style="width: 80px; font-size: 12px;">
-        <span class="muted" style="font-size: 11px;">min ago · 分钟前</span>
+    mount.innerHTML = '<div class="sp2-mempty" data-no-i18n>' + T('No manual entries yet.', '暂无手动条目。') + '</div>';
+  } else {
+    mount.innerHTML = _manualBuyers.map((m, i) => `
+      <div class="sp2-mrow" data-no-i18n>
+        <input type="text" data-mb-i="${i}" data-mb-f="name"
+               value="${escapeAttr(m.name || '')}" placeholder="${escapeAttr(T('Masked name, e.g. W**', '脱敏姓名,如 李**'))}">
+        <input type="text" data-mb-i="${i}" data-mb-f="product_en"
+               value="${escapeAttr(m.product_en || '')}" placeholder="${escapeAttr(T('Product (English)', '产品名(英文)'))}">
+        <input type="text" data-mb-i="${i}" data-mb-f="product_cn"
+               value="${escapeAttr(m.product_cn || '')}" placeholder="${escapeAttr(T('Product (Chinese)', '产品名(中文)'))}">
+        <span class="sp2-in-row">
+          <input type="number" class="sp2-in" data-mb-i="${i}" data-mb-f="minutes_ago" min="0" max="86400"
+                 value="${Number(m.minutes_ago) || 0}">
+          <span class="sp2-unit">${T('min', '分钟')}</span>
+        </span>
+        <button type="button" class="x" title="${escapeAttr(T('Remove', '删除'))}" onclick="removeManualBuyer(${i})">×</button>
       </div>
-      <button type="button" class="cat-del" title="Remove · 删除"
-              onclick="removeManualBuyer(${i})">×</button>
-    </div>
-  `).join('');
+    `).join('');
+  }
+  if (_sp2Wired) sp2Sync();   // manual-entry count rides in the ticker summary + preview
 }
 
 function addManualBuyer() {
@@ -1766,6 +1766,273 @@ document.addEventListener('input', e => {
   if (!Number.isFinite(i) || !_manualBuyers[i] || !f) return;
   _manualBuyers[i][f] = (f === 'minutes_ago') ? (Number(t.value) || 0) : t.value;
 });
+
+// ════════════════════════════════════════════════════════════════
+// SOCIAL PROOF — the dial page (sp2*)
+// ════════════════════════════════════════════════════════════════
+// One liveliness preset writes all four fill-in ranges at once; the five
+// widgets reduce to switches with a JS-built one-line summary, a live phone
+// preview mirrors the enabled state, and a three-step wizard covers first run.
+// Everything reads/writes the same cfg-social-* inputs buildSocialProof()
+// serialises, so the save path is unchanged.
+const SP2_PRESETS = {
+  real:   { bc: [0, 0],   vn: [0, 0],   lo: [0, 0],  sb: [0, 0] },
+  gentle: { bc: [6, 15],  vn: [15, 40], lo: [5, 45], sb: [50, 150] },
+  busy:   { bc: [20, 45], vn: [30, 80], lo: [3, 20], sb: [150, 400] },
+};
+const SP2_RANGE_IDS = {
+  bc: ['cfg-social-bc-boost_min', 'cfg-social-bc-boost_max'],
+  vn: ['cfg-social-vn-boost_min', 'cfg-social-vn-boost_max'],
+  lo: ['cfg-social-lo-fallback_min_minutes', 'cfg-social-lo-fallback_max_minutes'],
+  sb: ['cfg-social-sb-boost_min', 'cfg-social-sb-boost_max'],
+};
+// which preview element each widget switch shows/hides, and where it lives
+const SP2_PREVIEW_BIND = { bc: 'bought', rb: 'ticker', vn: 'viewing', lo: 'last', sb: 'sold' };
+let _spWizardDone = false;   // social_proof.wizard_done — hides the first-run banner
+let _sp2Wired = false;
+let _sp2WizChoice = 'gentle';
+
+function sp2Num(id) { const el = $('#' + id); return el ? (Number(el.value) || 0) : 0; }
+function sp2Range(w) { const [a, b] = SP2_RANGE_IDS[w]; return [sp2Num(a), sp2Num(b)]; }
+function sp2Mid(w) { const [a, b] = sp2Range(w); return Math.round((a + b) / 2); }
+
+function sp2DetectPreset() {
+  for (const [key, p] of Object.entries(SP2_PRESETS)) {
+    const hit = ['bc', 'vn', 'lo', 'sb'].every(w => {
+      const r = sp2Range(w);
+      return r[0] === p[w][0] && r[1] === p[w][1];
+    });
+    if (hit) return key;
+  }
+  return null;   // → the "Custom" chip
+}
+
+function sp2SetPreset(key) {
+  const p = SP2_PRESETS[key];
+  if (!p) return;
+  for (const w of ['bc', 'vn', 'lo', 'sb']) {
+    const [aId, bId] = SP2_RANGE_IDS[w];
+    const a = $('#' + aId), b = $('#' + bId);
+    if (a) a.value = p[w][0];
+    if (b) b.value = p[w][1];
+  }
+  sp2Sync();
+}
+
+function sp2ToggleRow(w) {
+  const row = document.querySelector('[data-sp2-row="' + w + '"]');
+  if (row) row.classList.toggle('open');
+}
+
+function sp2View(v) {
+  document.querySelectorAll('[data-sp2-viewtab]').forEach(b => b.classList.toggle('active', b.dataset.sp2Viewtab === v));
+  document.querySelectorAll('[data-sp2-pv]').forEach(p => p.classList.toggle('active', p.dataset.sp2Pv === v));
+}
+
+// One-line summaries under each widget name. Containers are data-no-i18n, so
+// the strings are built fully translated here and re-built on language toggle.
+function sp2Summaries() {
+  const T = (en, cn) => (window.cuT ? cuT(en, cn) : en);
+  const dot = '<span class="sp2-dot"></span> ';
+  const sep = ' &nbsp;·&nbsp; ';
+  const set = (id, html) => { const el = $('#' + id); if (el) el.innerHTML = html; };
+  {
+    const [a, b] = sp2Range('bc');
+    const fill = (a || b) ? dot + T('fill-in ' + a + '–' + b + ' extra a day', '填充 每日额外 ' + a + '–' + b + ' 人')
+                          : T('real buyers only', '只显示真实买家');
+    set('sp2-sum-bc', T('Shows from ' + sp2Num('cfg-social-bc-min_today') + ' buyers', '满 ' + sp2Num('cfg-social-bc-min_today') + ' 人显示') + sep + fill);
+  }
+  {
+    const days = sp2Num('cfg-social-rb-window_days');
+    const secs = Math.round(sp2Num('cfg-social-rb-visible_secs') + sp2Num('cfg-social-rb-gap_secs'));
+    const n = Array.isArray(_manualBuyers) ? _manualBuyers.length : 0;
+    let s = T('Last ' + days + ' days', '最近 ' + days + ' 天') + sep + T('pops every ~' + secs + ' s', '约每 ' + secs + ' 秒一条');
+    if (n) s += sep + dot + T(n + ' manual ' + (n === 1 ? 'entry' : 'entries'), n + ' 条手动条目');
+    set('sp2-sum-rb', s);
+  }
+  {
+    const [a, b] = sp2Range('vn');
+    const fill = (a || b) ? dot + T(a + '–' + b + ' at peak', '高峰 ' + a + '–' + b + ' 人')
+                          : T('real viewers only', '只显示真实在线');
+    const show = $('#cfg-social-vn-show_in_app');
+    const badge = (show && show.checked) ? T('badge shown to customers', '徽标对顾客可见')
+                                         : T('badge hidden — counting only', '徽标隐藏——仅后台统计');
+    set('sp2-sum-vn', badge + sep + fill);
+  }
+  {
+    const [a, b] = sp2Range('lo');
+    const fill = (a || b) ? dot + T('fill-in reads ' + a + '–' + b + ' min on busy items', '填充 热销品显示 ' + a + '–' + b + ' 分钟前')
+                          : T('real orders only', '只显示真实订单');
+    set('sp2-sum-lo', T('Hides after ' + sp2Num('cfg-social-lo-max_hours') + ' h', sp2Num('cfg-social-lo-max_hours') + ' 小时后隐藏') + sep + fill);
+  }
+  {
+    const [a, b] = sp2Range('sb');
+    const fill = (a || b) ? dot + T('starts life at ' + a + '–' + b, '起始 ' + a + '–' + b + ' 件')
+                          : T('real units only', '只显示真实销量');
+    set('sp2-sum-sb', T('From ' + sp2Num('cfg-social-sb-min_units') + ' units', '满 ' + sp2Num('cfg-social-sb-min_units') + ' 件显示') + sep + fill);
+  }
+}
+
+// The phone preview — sample numbers derived from the current inputs so the
+// operator sees roughly what their settings produce.
+function sp2Preview() {
+  const T = (en, cn) => (window.cuT ? cuT(en, cn) : en);
+  const texts = {
+    fresh:   T('FRESH THIS WEEK', '本周上新'),
+    popular: T('Popular', '热门'),
+    prod1:   T('Bestseller', '热销商品'),
+    prod2:   T('New arrival', '新品上架'),
+    prod3:   T('Pantry staple', '常备好物'),
+    prod4:   T('Weekly pick', '每周精选'),
+    addcart: T('Add to cart', '加入购物车'),
+    shop:    T('Shop', '商店'),
+    capnote: T('Live preview — flip anything on the left.', '实时预览——左侧改动即时呈现。'),
+  };
+  document.querySelectorAll('[data-sp2-t]').forEach(el => {
+    const t = texts[el.dataset.sp2T];
+    if (t != null) el.textContent = t;
+  });
+  const shopEl = document.querySelector('[data-sp2-shopname]');
+  if (shopEl) shopEl.textContent = T('Your shop', '你的店铺');
+  const viewTabs = { home: T('Home', '首页'), product: T('Product', '商品'), shop: T('Shop', '商店') };
+  document.querySelectorAll('[data-sp2-viewtab]').forEach(b => { b.textContent = viewTabs[b.dataset.sp2Viewtab] || ''; });
+
+  const bought = Math.max(3, sp2Mid('bc') || 3);
+  const view   = Math.max(2, sp2Mid('vn') || 3);
+  const last   = Math.max(4, sp2Mid('lo') || 14);
+  const soldBase = Math.max(sp2Mid('sb') || 12, sp2Num('cfg-social-sb-min_units') || 3);
+  const setTxt = (sel, txt) => { const el = document.querySelector(sel); if (el) el.textContent = txt; };
+  setTxt('[data-sp2-n="bought"]',  T(bought + ' bought today', '今日 ' + bought + ' 人购买'));
+  setTxt('[data-sp2-n="viewing"]', '◉ ' + T(view + ' viewing now', view + ' 人正在浏览'));
+  setTxt('[data-sp2-n="last"]',    T('Last ordered ' + last + ' min ago', '上次下单 ' + last + ' 分钟前'));
+  const capMul = { 1: 0.95, 2: 0.64, 3: 1.34 };
+  document.querySelectorAll('[data-sp2-cap]').forEach(el => {
+    const n = Math.max(1, Math.round(soldBase * (capMul[el.dataset.sp2Cap] || 1)));
+    el.textContent = T(n + ' SOLD', '已售 ' + n);
+  });
+
+  // Ticker sample: the first usable manual entry, else a generic masked buyer.
+  const m = Array.isArray(_manualBuyers)
+    ? _manualBuyers.find(x => x && x.name && (x.product_en || x.product_cn)) : null;
+  const what = m ? T(m.product_en || m.product_cn, m.product_cn || m.product_en) : texts.prod1;
+  setTxt('[data-sp2-tick="who"]',  m ? m.name : 'W**');
+  setTxt('[data-sp2-tick="what"]', T('bought ' + what, '购买了' + what));
+  setTxt('[data-sp2-tick="ago"]',  T((m && m.minutes_ago ? m.minutes_ago : 5) + ' min ago', (m && m.minutes_ago ? m.minutes_ago : 5) + ' 分钟前'));
+}
+
+// Reflect a widget's switch onto its row (dim + collapse) and its preview
+// element. jump=true also flips the phone to the screen where it lives, so
+// the operator watches the change land.
+function sp2ApplyOnOff(w, jump) {
+  const sw = document.querySelector('[data-sp2-onoff="' + w + '"]');
+  if (!sw) return;
+  const on = sw.checked;
+  const row = document.querySelector('[data-sp2-row="' + w + '"]');
+  if (row) {
+    row.classList.toggle('off', !on);
+    if (!on) row.classList.remove('open');
+  }
+  document.querySelectorAll('[data-sp2-b="' + SP2_PREVIEW_BIND[w] + '"]')
+    .forEach(el => el.classList.toggle('sp2-pv-hidden', !on));
+  if (jump && sw.dataset.sp2View) sp2View(sw.dataset.sp2View);
+}
+
+function sp2Sync() {
+  const cur = sp2DetectPreset();
+  document.querySelectorAll('[data-sp2-preset]').forEach(b => b.classList.toggle('sel', b.dataset.sp2Preset === cur));
+  const chip = $('#sp2-custom');
+  if (chip) chip.classList.toggle('show', !cur);
+  sp2Summaries();
+  sp2Preview();
+}
+
+// Called by loadConfig() once the cfg-social-* fields are populated.
+function sp2AfterLoad() {
+  const banner = $('#sp2-banner');
+  if (banner) banner.hidden = !!_spWizardDone;
+  if (!_sp2Wired) {
+    _sp2Wired = true;
+    const sec = document.getElementById('tab-social');
+    if (sec) {
+      sec.addEventListener('input', e => {
+        const t = e.target;
+        if (!t) return;
+        if (/^cfg-social-/.test(t.id || '') || (t.dataset && t.dataset.mbI != null)) sp2Sync();
+      });
+      sec.addEventListener('change', e => {
+        const t = e.target;
+        if (!t) return;
+        if (t.dataset && t.dataset.sp2Onoff) sp2ApplyOnOff(t.dataset.sp2Onoff, true);
+        if (/^cfg-social-/.test(t.id || '')) sp2Sync();
+      });
+    }
+    if (window.onLangChange) onLangChange(() => { sp2Sync(); renderManualBuyers(); });
+  }
+  for (const w of ['bc', 'rb', 'vn', 'lo', 'sb']) sp2ApplyOnOff(w, false);
+  sp2Sync();
+}
+
+// ── first-run wizard ──
+function sp2WizOpen() {
+  _sp2WizChoice = sp2DetectPreset() || 'gentle';
+  sp2WizPick(_sp2WizChoice);
+  // seed step-2 switches from the live enabled state
+  document.querySelectorAll('[data-sp2-wiz-w]').forEach(sw => {
+    const en = $('#cfg-social-' + sw.dataset.sp2WizW + '-enabled');
+    if (en) sw.checked = en.checked;
+  });
+  sp2WizGo(1);
+  const bg = $('#sp2-wiz');
+  if (bg) bg.classList.add('open');
+}
+function sp2WizClose() {
+  const bg = $('#sp2-wiz');
+  if (bg) bg.classList.remove('open');
+}
+// "Skip — I'll set it up myself": close the wizard AND stop the banner nagging
+// on future visits (persisted on the next Save), without touching any numbers.
+function sp2WizSkip() {
+  _spWizardDone = true;
+  const banner = $('#sp2-banner');
+  if (banner) banner.hidden = true;
+  sp2WizClose();
+}
+function sp2WizGo(n) {
+  document.querySelectorAll('[data-sp2-pane]').forEach(p => p.classList.toggle('active', Number(p.dataset.sp2Pane) === n));
+  document.querySelectorAll('[data-sp2-st]').forEach(s => {
+    const i = Number(s.dataset.sp2St);
+    s.classList.toggle('on', i === n);
+    s.classList.toggle('done', i < n);
+  });
+  if (n === 3) {
+    const label = {
+      real:   ['Real only', '只用真实数据'],
+      gentle: ['Gentle lift', '温和提升'],
+      busy:   ['Bustling', '热闹集市'],
+    }[_sp2WizChoice] || ['', ''];
+    const en = $('#sp2-wiz-chosen-en'), cn = $('#sp2-wiz-chosen-cn');
+    if (en) en.textContent = label[0];
+    if (cn) cn.textContent = label[1];
+  }
+}
+function sp2WizPick(key) {
+  _sp2WizChoice = key;
+  document.querySelectorAll('[data-sp2-wp]').forEach(b => b.classList.toggle('sel', b.dataset.sp2Wp === key));
+}
+async function sp2WizFinish() {
+  sp2SetPreset(_sp2WizChoice);
+  document.querySelectorAll('[data-sp2-wiz-w]').forEach(sw => {
+    const en = $('#cfg-social-' + sw.dataset.sp2WizW + '-enabled');
+    if (en) en.checked = sw.checked;
+    sp2ApplyOnOff(sw.dataset.sp2WizW, false);
+  });
+  _spWizardDone = true;
+  const banner = $('#sp2-banner');
+  if (banner) banner.hidden = true;
+  sp2WizClose();
+  sp2Sync();
+  await saveSocialProof();
+}
 
 
 // Mini-app footer wordmark upload/clear handlers moved to the Mini App Editor (/cms) 2026-06-09.

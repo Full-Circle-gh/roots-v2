@@ -53,7 +53,7 @@
      of the values; inlined here so no new asset needs SW-cache wiring.)
      ═══════════════════════════════════════════════════════════════════════ -->
 <style id="tacet-orders-skin">
-  :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  :is(#tab-flash, #tab-social, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
     --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
     --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
@@ -83,7 +83,7 @@
     font-family:var(--f-sans);
   }
   /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
-  [data-theme="dark"] :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+  [data-theme="dark"] :is(#tab-flash, #tab-social, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-vouchers, #tab-broadcasts, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
     --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
     --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
     --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
@@ -4077,6 +4077,46 @@
     <div id="popups-list" class="pu-list">
       <div class="muted">Loading… · 加载中…</div>
     </div>
+
+    <!-- Checkout upsell — moved here from the Social proof tab 2026-07-11
+         (it's an offer pop-up, not social proof). Same cfg-upsell-* ids +
+         saveCheckoutUpsell(); loadConfig() populates it wherever it lives. -->
+    <div style="margin-top: 24px;">
+    <!-- Checkout upsell pop-up — the "before you pay" offer popup. Gates the
+         server /checkout/offers tiers; saves to storefront_config 'checkout.upsell'.
+         Applies instantly to web + mini-app (no republish). -->
+    <div class="group-card">
+      <div class="group-card-head">
+        <h3>Checkout upsell pop-up · 结账推荐弹窗</h3>
+        <div class="muted">The "before you pay" pop-up that suggests add-ons. Turn it off entirely, or choose which content it may offer. Shows only when a chosen tier has something relevant; hides itself otherwise. Applies instantly to web + mini-app. · 结账付款前推荐加购商品的弹窗。可整体关闭,或选择允许展示的内容类型。仅在所选类型有相关内容时显示。即时生效,无需重新发布。</div>
+      </div>
+      <label class="ckbox" style="margin-bottom: 12px;">
+        <input type="checkbox" id="cfg-upsell-enabled">
+        <span>Show the checkout upsell pop-up · 显示结账推荐弹窗</span>
+      </label>
+      <div class="muted" style="margin-bottom: 8px;">Content it may offer · 可展示的内容</div>
+      <label class="ckbox" style="margin-bottom: 8px;">
+        <input type="checkbox" id="cfg-upsell-bundles">
+        <span>Bundles ("buy together") · 套餐(搭配购买)</span>
+      </label>
+      <label class="ckbox" style="margin-bottom: 8px;">
+        <input type="checkbox" id="cfg-upsell-extras">
+        <span>Linked extras · 关联加购</span>
+      </label>
+      <label class="ckbox" style="margin-bottom: 12px;">
+        <input type="checkbox" id="cfg-upsell-flash">
+        <span>Flash sales (active deals) · 限时秒杀(进行中)</span>
+      </label>
+      <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Max items shown · 最多展示数量</label>
+          <input type="number" min="1" max="6" id="cfg-upsell-max" style="width: 90px;">
+        </div>
+        <button class="btn btn-primary" onclick="saveCheckoutUpsell()" style="margin: 0;">Save · 保存</button>
+        <span id="upsell-status" style="font-size: 12px;"></span>
+      </div>
+    </div>
+    </div>
   </section>
 
   <!-- Pop-up editor (slide-in side drawer with phone preview) -->
@@ -8042,280 +8082,602 @@
        enable toggle + tuning fields writing to storefront_config.social_proof,
        read by routes/retail.js (getSocialConfig). -->
   <section id="tab-social" data-feat="socialProof">
-          <h2>Social proof · 社交证明</h2>
-          <div class="muted" style="margin-top: -8px; margin-bottom: var(--s4); line-height: 1.5;">
-            Five live engagement widgets that surface real customer activity in the mini app. Toggle any of them off to hide the widget instantly across all customers (no WeChat republish needed). Tuning numbers control how aggressive each one is. · 五个实时互动组件,在小程序中呈现真实的顾客活动。关闭任意组件可立即对所有顾客隐藏(无需重新发布微信小程序)。调节数值用于控制每个组件触发的积极程度。
+    <style>
+      /* Tacet cream bled over <main>'s padding — same trick #tab-flash /
+         #tab-products use, else the tan body shows through as a grey frame. */
+      #tab-social {
+        background: var(--bg-app);
+        margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
+        padding: calc(var(--s6) + 56px) var(--s6) var(--s7);
+        min-height: 100vh;
+      }
+      #tab-social > h2 { font-family: var(--f-sans); font-weight: 500; font-size: 24px;
+        letter-spacing: -.01em; color: var(--text-1); text-transform: none; }
+      .sp2-sub { font-size: 12.5px; color: var(--text-2); line-height: 1.55; max-width: 62ch;
+        margin: 2px 0 20px; }
+
+      /* the dusk dot — marks ONE idea on this page: a number Tacet invents for you */
+      .sp2-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tacet-dusk);
+        flex: none; display: inline-block; vertical-align: middle; margin: 0 1px 2px 0;
+        animation: sp2Breathe 2.4s cubic-bezier(.16,1,.3,1) infinite; }
+      @keyframes sp2Breathe { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
+      @media (prefers-reduced-motion: reduce) { .sp2-dot { animation: none; } }
+
+      /* ── two-column shell: controls left, phone right ── */
+      .sp2-wrap { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 28px; align-items: start; }
+      .sp2-side { position: sticky; top: 72px; }
+      @media (max-width: 1080px) { .sp2-wrap { grid-template-columns: 1fr; } .sp2-side { display: none; } }
+
+      /* ── first-run banner (dusk = Tacet acting for you) ── */
+      .sp2-banner { display: flex; align-items: center; gap: 12px;
+        background: var(--tacet-dusk-tint); border-radius: var(--r-xl);
+        padding: 13px 16px; margin-bottom: 20px; }
+      .sp2-banner .tx { flex: 1; font-size: 12.5px; color: var(--text-1); line-height: 1.5; }
+      .sp2-banner .tx b { font-weight: 500; }
+      .sp2-banner button { background: var(--text-1); color: var(--bg-app); border: none;
+        border-radius: var(--r-md); padding: 8px 16px; font: 500 12.5px var(--f-sans); cursor: pointer; }
+
+      /* ── the dial ── */
+      .sp2-dial { margin-bottom: 24px; }
+      .sp2-dial-h { display: flex; align-items: baseline; gap: 12px; }
+      .sp2-dial-h h3 { font: 400 17px/1.3 var(--f-sans); color: var(--text-1); margin: 0; }
+      .sp2-dial-h .rerun { margin-left: auto; background: none; border: none; cursor: pointer;
+        font: 400 12px var(--f-sans); color: var(--text-3); text-decoration: underline;
+        text-underline-offset: 3px; text-decoration-color: var(--line-strong); padding: 0; }
+      .sp2-dial-h .rerun:hover { color: var(--text-1); }
+      .sp2-dial-sub { font-size: 12.5px; color: var(--text-2); margin: 3px 0 14px; max-width: 60ch; }
+      .sp2-presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      @media (max-width: 720px) { .sp2-presets { grid-template-columns: 1fr; } }
+      .sp2-preset { text-align: left; background: var(--bg-pane); border: 1px solid var(--line);
+        border-radius: var(--r-xl); padding: 14px 16px; cursor: pointer; position: relative;
+        font-family: var(--f-sans); color: var(--text-1);
+        transition: border-color .2s ease, transform .2s ease; }
+      .sp2-preset:hover { transform: translateY(-1px); }
+      .sp2-preset.sel { border-color: var(--text-1); }
+      .sp2-preset.sel::after { content: "✓"; position: absolute; top: 11px; right: 13px;
+        width: 18px; height: 18px; border-radius: 50%; background: var(--text-1); color: var(--bg-app);
+        font-size: 10px; display: flex; align-items: center; justify-content: center; }
+      .sp2-preset .nm { font-weight: 500; font-size: 14px; }
+      .sp2-preset .de { font-size: 12px; color: var(--text-2); margin-top: 3px; line-height: 1.5; }
+      .sp2-preset .sample { margin-top: 9px; font-size: 11.5px; color: var(--text-3);
+        font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 6px; }
+      .sp2-custom { display: none; align-items: center; gap: 8px; margin-top: 10px;
+        font-size: 12px; color: var(--text-2); }
+      .sp2-custom.show { display: flex; }
+      .sp2-custom .chip { border: 1px dashed var(--line-strong); border-radius: 999px;
+        padding: 2px 11px; font-weight: 500; color: var(--text-1); }
+
+      /* ── widget rows ── */
+      .sp2-rows { display: flex; flex-direction: column; gap: 8px; }
+      .sp2-row { background: var(--bg-pane); border: 1px solid var(--line);
+        border-radius: var(--r-xl); }
+      .sp2-row.off { background: transparent; }
+      .sp2-row.off .sp2-name { color: var(--text-3); }
+      .sp2-row-head { display: grid; grid-template-columns: minmax(0,1fr) auto auto;
+        gap: 16px; align-items: center; padding: 13px 16px; }
+      .sp2-name { font-size: 14px; font-weight: 500; color: var(--text-1); }
+      .sp2-name .where { font-size: 10.5px; font-weight: 500; letter-spacing: .08em;
+        text-transform: uppercase; color: var(--text-3); margin-left: 6px; }
+      .sp2-sum { font-size: 12px; color: var(--text-2); margin-top: 3px; line-height: 1.5; }
+      .sp2-adjust { background: none; border: none; cursor: pointer;
+        font: 400 12px var(--f-sans); color: var(--text-3); text-decoration: underline;
+        text-underline-offset: 3px; text-decoration-color: var(--line-strong); padding: 4px 2px; }
+      .sp2-adjust:hover { color: var(--text-1); }
+      .sp2-row.off .sp2-adjust { visibility: hidden; }
+      .sp2-detail { display: none; border-top: 1px solid var(--line-soft); padding: 14px 16px 16px; }
+      .sp2-row.open .sp2-detail { display: block; }
+      .sp2-fields { display: flex; gap: 22px; flex-wrap: wrap; align-items: flex-end; }
+      .sp2-lbl { display: block; font-size: 10.5px; font-weight: 500; letter-spacing: .08em;
+        text-transform: uppercase; color: var(--text-2); margin-bottom: 6px; }
+      .sp2-in { width: 64px; padding: 7px 8px; border: 1px solid var(--line);
+        border-radius: var(--r-md); font: 400 13.5px var(--f-sans); background: var(--bg-input);
+        color: var(--text-1); text-align: center; font-variant-numeric: tabular-nums; }
+      .sp2-in-row { display: flex; align-items: center; gap: 7px; }
+      .sp2-unit { font-size: 12px; color: var(--text-2); }
+      .sp2-hint { font-size: 12px; color: var(--text-2); line-height: 1.55; margin-top: 10px; max-width: 58ch; }
+      .sp2-fine { margin-top: 13px; border-top: 1px dashed var(--line); padding-top: 11px; }
+      .sp2-fine > summary { list-style: none; cursor: pointer; font-size: 12px; color: var(--text-3);
+        display: inline-flex; align-items: center; gap: 6px; }
+      .sp2-fine > summary::-webkit-details-marker { display: none; }
+      .sp2-fine > summary::before { content: "›"; font-size: 13px; transition: transform .2s ease; }
+      .sp2-fine[open] > summary::before { transform: rotate(90deg); }
+      .sp2-fine > summary:hover { color: var(--text-1); }
+      .sp2-fine[open] > summary { margin-bottom: 11px; }
+
+      /* manual fake entries (ticker) */
+      .sp2-manual { display: flex; flex-direction: column; gap: 8px; }
+      .sp2-mrow { display: grid; grid-template-columns: 100px minmax(0,1.4fr) minmax(0,1.4fr) auto auto;
+        gap: 8px; align-items: center; }
+      @media (max-width: 720px) { .sp2-mrow { grid-template-columns: 1fr 1fr; } }
+      .sp2-mrow input[type="text"] { padding: 7px 10px; border: 1px solid var(--line);
+        border-radius: var(--r-md); font: 400 12.5px var(--f-sans); background: var(--bg-input);
+        color: var(--text-1); min-width: 0; }
+      .sp2-mrow .x { background: none; border: none; color: var(--text-3); cursor: pointer;
+        font-size: 15px; padding: 4px 6px; border-radius: var(--r-sm); }
+      .sp2-mrow .x:hover { color: var(--danger); }
+      .sp2-madd { background: transparent; color: var(--text-1); border: 1px solid var(--line);
+        border-radius: var(--r-md); padding: 7px 14px; font: 500 12px var(--f-sans); cursor: pointer;
+        align-self: flex-start; }
+      .sp2-madd:hover { border-color: var(--text-2); }
+      .sp2-mempty { font-size: 12px; color: var(--text-3); padding: 2px 0; }
+
+      /* inline switch label inside details */
+      .sp2-swlbl { display: inline-flex; align-items: center; gap: 10px; font-size: 12.5px;
+        color: var(--text-1); }
+
+      /* moved-away pointer */
+      .sp2-moved { margin-top: 20px; display: flex; align-items: center; gap: 10px;
+        font-size: 12px; color: var(--text-2); border: 1px dashed var(--line);
+        border-radius: var(--r-xl); padding: 10px 14px; background: var(--bg-elev-1); }
+      .sp2-moved b { font-weight: 500; color: var(--text-1); }
+      .sp2-moved a { color: var(--text-1); cursor: pointer; }
+
+      /* save bar */
+      .sp2-save { position: sticky; bottom: 0; margin-top: 20px; padding: 14px 0;
+        background: var(--bg-app); display: flex; align-items: center; gap: 14px; }
+      .sp2-save-btn { background: var(--text-1); color: var(--bg-app); border: none;
+        border-radius: var(--r-md); padding: 10px 24px; font: 500 13.5px var(--f-sans);
+        cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+        transition: opacity .2s ease; }
+      .sp2-save-btn:hover { opacity: .88; }
+
+      /* ── phone preview (right column) ── */
+      .sp2-views { display: flex; gap: 6px; margin-bottom: 12px; }
+      .sp2-view-tab { flex: 1; background: transparent; border: 1px solid var(--line);
+        color: var(--text-2); border-radius: 999px; padding: 6px 0; font: 400 12px var(--f-sans);
+        cursor: pointer; transition: all .2s ease; }
+      .sp2-view-tab.active { background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); }
+      .sp2-phone { width: 300px; margin: 0 auto; background: var(--tacet-ink); border-radius: 38px;
+        padding: 10px; box-shadow: 0 10px 30px rgba(17,26,43,.16); }
+      .sp2-screen { background: var(--tacet-paper); border-radius: 30px; height: 540px;
+        overflow: hidden; position: relative; color: var(--tacet-ink); }
+      [data-theme="dark"] .sp2-phone { background: #000; }
+      [data-theme="dark"] .sp2-screen { background: #FBF9F4; }
+      .sp2-pv { position: absolute; inset: 0; display: none; flex-direction: column; }
+      .sp2-pv.active { display: flex; }
+      .sp2-pv .apphead { padding: 18px 16px 10px; display: flex; align-items: center; gap: 8px; }
+      .sp2-pv .apphead .logo { width: 22px; height: 22px; border-radius: 50%; background: #A3B49F; }
+      .sp2-pv .apphead .nm { font-size: 13px; font-weight: 600; }
+      .sp2-pv .banner { margin: 4px 14px 12px; height: 88px; border-radius: 12px;
+        background: linear-gradient(120deg, #F7EEDE, #EDF1EC);
+        display: flex; align-items: flex-end; padding: 10px; }
+      .sp2-pv .banner span { font-size: 10px; color: #8A6425; font-weight: 600; letter-spacing: .06em; }
+      .sp2-pv .sect { font-size: 11px; font-weight: 600; margin: 0 16px 8px; }
+      .sp2-pv .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 0 14px; }
+      .sp2-pcard { background: #fff; border: 1px solid #E4E0D5; border-radius: 12px;
+        overflow: hidden; position: relative; }
+      .sp2-pcard .img { height: 74px; }
+      .sp2-pcard:nth-child(odd) .img { background: linear-gradient(135deg, #EDF1EC, #F7EEDE); }
+      .sp2-pcard:nth-child(even) .img { background: linear-gradient(135deg, #F7EEDE, #F6E7E3); }
+      .sp2-pcard .b { padding: 7px 9px 9px; }
+      .sp2-pcard .t { font-size: 10.5px; font-weight: 500; line-height: 1.3; }
+      .sp2-pcard .p { font-size: 11px; font-weight: 600; margin-top: 3px; font-variant-numeric: tabular-nums; }
+      .sp2-pcard .cap { position: absolute; top: 0; left: 0; background: #111A2B; color: #FBF9F4;
+        font-size: 8.5px; font-weight: 600; letter-spacing: .04em; padding: 2px 7px;
+        border-radius: 0 0 9px 0; font-variant-numeric: tabular-nums; }
+      .sp2-pv .ticker { position: absolute; left: 12px; right: 12px; bottom: 14px;
+        background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(17,26,43,.16);
+        padding: 9px 12px; font-size: 11px; display: flex; align-items: center; gap: 8px; }
+      .sp2-pv .ticker .who { font-weight: 600; white-space: nowrap; }
+      .sp2-pv .ticker .what { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .sp2-pv .ticker .ago { color: #58606E; font-size: 10px; white-space: nowrap; }
+      .sp2-pv .ticker .x { margin-left: auto; color: #58606E; }
+      .sp2-pv .pimg { height: 190px; background: linear-gradient(135deg, #EDF1EC, #F7EEDE); }
+      .sp2-pv .pbody { padding: 14px 16px; }
+      .sp2-pv .ptitle { font-size: 15px; font-weight: 600; }
+      .sp2-pv .pprice { font-size: 17px; font-weight: 600; margin: 4px 0 10px; font-variant-numeric: tabular-nums; }
+      .sp2-proof { display: flex; align-items: center; gap: 7px; font-size: 11px; padding: 4px 0; }
+      .sp2-proof .pp { padding: 2px 9px; border-radius: 999px; background: #F7EEDE; color: #8A6425;
+        font-weight: 500; font-size: 10.5px; font-variant-numeric: tabular-nums; }
+      .sp2-proof.viewers .pp { background: #EDF1EC; color: #4A6249; }
+      .sp2-proof.last .pp { background: #F6F3EC; color: #58606E; }
+      .sp2-pv .buy { margin-top: 14px; background: #111A2B; color: #FBF9F4; text-align: center;
+        border-radius: 10px; padding: 10px; font-size: 12px; font-weight: 500; }
+      .sp2-pv-hidden { display: none !important; }
+      .sp2-side .cap-note { text-align: center; font-size: 11.5px; color: var(--text-3); margin-top: 10px; }
+
+      /* ── wizard overlay ── */
+      .sp2-wiz-bg { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 100;
+        display: none; align-items: center; justify-content: center; padding: 24px; }
+      .sp2-wiz-bg.open { display: flex; }
+      .sp2-wiz { background: var(--bg-app); border-radius: var(--r-xl);
+        box-shadow: 0 10px 30px rgba(17,26,43,.24); width: 100%; max-width: 540px;
+        padding: 28px; max-height: 88vh; overflow: auto; }
+      .sp2-wiz-steps { display: flex; align-items: center; gap: 8px; margin-bottom: 20px;
+        font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); }
+      .sp2-wiz-steps .st { display: flex; align-items: center; gap: 6px; }
+      .sp2-wiz-steps .n { width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--line);
+        display: flex; align-items: center; justify-content: center; font-size: 10px;
+        font-variant-numeric: tabular-nums; }
+      .sp2-wiz-steps .st.on { color: var(--text-1); }
+      .sp2-wiz-steps .st.on .n { background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); }
+      .sp2-wiz-steps .st.done .n { background: var(--tacet-sage-tint); border-color: transparent; color: var(--tacet-sage-ink); }
+      .sp2-wiz-steps .bar { flex: 1; height: 1px; background: var(--line); }
+      .sp2-wiz h3 { font: 400 17px/1.3 var(--f-sans); color: var(--text-1); margin: 0 0 4px; }
+      .sp2-wiz .sub { font-size: 12.5px; color: var(--text-2); line-height: 1.55; margin-bottom: 16px; }
+      .sp2-wiz-pane { display: none; }
+      .sp2-wiz-pane.active { display: block; }
+      .sp2-wiz .sp2-presets { grid-template-columns: 1fr; }
+      .sp2-wiz-widgets { display: flex; flex-direction: column; gap: 8px; }
+      .sp2-wiz-wrow { display: flex; align-items: center; gap: 14px; background: var(--bg-pane);
+        border: 1px solid var(--line); border-radius: var(--r-md); padding: 10px 14px; }
+      .sp2-wiz-wrow .nm { flex: 1; font-size: 12px; color: var(--text-2); }
+      .sp2-wiz-wrow .nm b { font-weight: 500; font-size: 13.5px; color: var(--text-1); display: block; }
+      .sp2-wiz-done { background: var(--bg-elev-1); border: 1px solid var(--line);
+        border-radius: var(--r-md); padding: 14px; display: flex; align-items: center; gap: 10px;
+        flex-wrap: wrap; }
+      .sp2-wiz-done .pill { font-size: 11.5px; padding: 3px 10px; border-radius: 999px;
+        background: var(--bg-pane); border: 1px solid var(--line); white-space: nowrap;
+        font-variant-numeric: tabular-nums; }
+      .sp2-wiz-done .pill.warm { background: var(--tacet-amber-tint); border-color: transparent;
+        color: var(--tacet-amber-ink); font-weight: 500; }
+      .sp2-wiz-foot { display: flex; align-items: center; gap: 14px; margin-top: 20px; }
+      .sp2-wiz-foot .spacer { flex: 1; }
+      .sp2-wiz-skip { background: none; border: none; color: var(--text-3);
+        font: 400 12px var(--f-sans); cursor: pointer; padding: 0; }
+      .sp2-wiz-skip:hover { color: var(--text-1); }
+      .sp2-wiz-back { background: transparent; color: var(--text-1); border: 1px solid var(--line);
+        border-radius: var(--r-md); padding: 9px 18px; font: 500 12.5px var(--f-sans); cursor: pointer; }
+    </style>
+
+    <h2>Social proof · 社交证明</h2>
+    <div class="sp2-sub">Small signs of life customers see while they shop. Real activity always comes first — the <span class="sp2-dot"></span> marks numbers Tacet fills in for you on quiet days. · 顾客购物时看到的“店铺人气”信号。真实活动永远优先——紫点 <span class="sp2-dot"></span> 标记 Tacet 在安静时段为你填充的数字。</div>
+
+    <div class="sp2-wrap">
+      <div class="sp2-main">
+
+        <div class="sp2-banner" id="sp2-banner" hidden>
+          <span class="sp2-dot"></span>
+          <span class="tx">
+            <span data-lang-block="en"><b>First time here?</b> Tacet can set this whole page up in three quick steps.</span>
+            <span data-lang-block="cn"><b>第一次来?</b>Tacet 可通过三个快速步骤帮你完成全部设置。</span>
+          </span>
+          <button type="button" onclick="sp2WizOpen()">Set it up · 开始设置</button>
+        </div>
+
+        <div class="sp2-dial">
+          <div class="sp2-dial-h">
+            <h3>How lively should the shop feel? · 店铺要显得多热闹?</h3>
+            <button type="button" class="rerun" onclick="sp2WizOpen()">Guided setup · 引导设置</button>
+          </div>
+          <div class="sp2-dial-sub">One dial sets every fill-in number below. Real activity always shows first; fill-in only tops up quiet moments. · 一个旋钮决定下方所有填充数字。真实活动永远优先,填充只在安静时补足。</div>
+          <div class="sp2-presets">
+            <button type="button" class="sp2-preset" data-sp2-preset="real" onclick="sp2SetPreset('real')">
+              <span class="nm">Real only · 只用真实数据</span>
+              <span class="de">Show only what actually happened. Honest and quiet — on slow days most signals simply hide. · 只显示真实发生的活动;淡季大部分信号会自动隐藏。</span>
+              <span class="sample" data-no-i18n>"3 bought this week"</span>
+            </button>
+            <button type="button" class="sp2-preset" data-sp2-preset="gentle" onclick="sp2SetPreset('gentle')">
+              <span class="nm">Gentle lift · 温和提升</span>
+              <span class="de">A soft floor under the real numbers, so quiet days still read alive. Believable pace. · 在真实数字下垫一层柔和的底,安静的日子也有生气,节奏可信。</span>
+              <span class="sample" data-no-i18n><span class="sp2-dot"></span> "12 bought today · 8 viewing"</span>
+            </button>
+            <button type="button" class="sp2-preset" data-sp2-preset="busy" onclick="sp2SetPreset('busy')">
+              <span class="nm">Bustling · 热闹集市</span>
+              <span class="de">A busy-market feel. Every signal leans lively — for launches and promotions. · 集市般的热闹感,每个信号都更活跃——适合上新与大促。</span>
+              <span class="sample" data-no-i18n><span class="sp2-dot"></span> "34 bought today · 27 viewing"</span>
+            </button>
+          </div>
+          <div class="sp2-custom" id="sp2-custom">
+            <span class="chip">Custom · 自定义</span>
+            <span>Your own numbers — pick a style above to reset them. · 正在使用你自己的数字——点上方任一风格即可重置。</span>
+          </div>
+        </div>
+
+        <div class="sp2-rows">
+
+          <!-- 1 · bought count -->
+          <div class="sp2-row" data-sp2-row="bc">
+            <div class="sp2-row-head">
+              <div>
+                <div class="sp2-name">People bought this · “X 人购买”<span class="where">product page · 商品页</span></div>
+                <div class="sp2-sum" id="sp2-sum-bc" data-no-i18n></div>
+              </div>
+              <button type="button" class="sp2-adjust" onclick="sp2ToggleRow('bc')">Adjust · 调整</button>
+              <label class="fc-switch"><input type="checkbox" id="cfg-social-bc-enabled" data-sp2-onoff="bc" data-sp2-view="product"><span class="fc-switch-track"></span></label>
+            </div>
+            <div class="sp2-detail">
+              <div class="sp2-fields">
+                <div>
+                  <label class="sp2-lbl"><span class="sp2-dot"></span> Fill-in — extra buyers a day · 填充——每日额外买家</label>
+                  <div class="sp2-in-row">
+                    <input type="number" min="0" class="sp2-in" id="cfg-social-bc-boost_min">
+                    <span class="sp2-unit">to · 至</span>
+                    <input type="number" min="0" class="sp2-in" id="cfg-social-bc-boost_max">
+                  </div>
+                </div>
+              </div>
+              <div class="sp2-hint">Climbs through the day the way real orders do, on top of the true count. Busy products climb faster. Set 0–0 to show real buyers only. · 像真实订单一样随一天时段自然增长,叠加在真实人数之上;热销品增长更快。设为 0–0 则只显示真实买家。</div>
+              <details class="sp2-fine">
+                <summary>Fine-tune — when the line appears · 微调——显示门槛</summary>
+                <div class="sp2-fields">
+                  <div><label class="sp2-lbl">Min today · 今日最低</label><input type="number" min="1" class="sp2-in" id="cfg-social-bc-min_today"></div>
+                  <div><label class="sp2-lbl">This week · 本周</label><input type="number" min="1" class="sp2-in" id="cfg-social-bc-min_week"></div>
+                  <div><label class="sp2-lbl">This month · 本月</label><input type="number" min="1" class="sp2-in" id="cfg-social-bc-min_month"></div>
+                  <div><label class="sp2-lbl">All-time · 全部</label><input type="number" min="1" class="sp2-in" id="cfg-social-bc-min_all"></div>
+                </div>
+                <div class="sp2-hint">Shows the narrowest window that clears its minimum — and hides rather than show a weak number. · 显示满足最低值的最短时间窗;数据不足时宁可隐藏,也不显示疲软的数字。</div>
+              </details>
+            </div>
           </div>
 
-          <!-- Checkout upsell pop-up — the "before you pay" offer popup. Gates the
-               server /checkout/offers tiers; saves to storefront_config 'checkout.upsell'.
-               Applies instantly to web + mini-app (no republish). -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Checkout upsell pop-up · 结账推荐弹窗</h3>
-              <div class="muted">The "before you pay" pop-up that suggests add-ons. Turn it off entirely, or choose which content it may offer. Shows only when a chosen tier has something relevant; hides itself otherwise. Applies instantly to web + mini-app. · 结账付款前推荐加购商品的弹窗。可整体关闭,或选择允许展示的内容类型。仅在所选类型有相关内容时显示。即时生效,无需重新发布。</div>
-            </div>
-            <label class="ckbox" style="margin-bottom: 12px;">
-              <input type="checkbox" id="cfg-upsell-enabled">
-              <span>Show the checkout upsell pop-up · 显示结账推荐弹窗</span>
-            </label>
-            <div class="muted" style="margin-bottom: 8px;">Content it may offer · 可展示的内容</div>
-            <label class="ckbox" style="margin-bottom: 8px;">
-              <input type="checkbox" id="cfg-upsell-bundles">
-              <span>Bundles ("buy together") · 套餐(搭配购买)</span>
-            </label>
-            <label class="ckbox" style="margin-bottom: 8px;">
-              <input type="checkbox" id="cfg-upsell-extras">
-              <span>Linked extras · 关联加购</span>
-            </label>
-            <label class="ckbox" style="margin-bottom: 12px;">
-              <input type="checkbox" id="cfg-upsell-flash">
-              <span>Flash sales (active deals) · 限时秒杀(进行中)</span>
-            </label>
-            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Max items shown · 最多展示数量</label>
-                <input type="number" min="1" max="6" id="cfg-upsell-max" style="width: 90px;">
+          <!-- 2 · recent-buyers ticker -->
+          <div class="sp2-row" data-sp2-row="rb">
+            <div class="sp2-row-head">
+              <div>
+                <div class="sp2-name">Recent-buyers ticker · 最近购买动态<span class="where">home · 首页</span></div>
+                <div class="sp2-sum" id="sp2-sum-rb" data-no-i18n></div>
               </div>
-              <button class="btn btn-primary" onclick="saveCheckoutUpsell()" style="margin: 0;">Save · 保存</button>
-              <span id="upsell-status" style="font-size: 12px;"></span>
+              <button type="button" class="sp2-adjust" onclick="sp2ToggleRow('rb')">Adjust · 调整</button>
+              <label class="fc-switch"><input type="checkbox" id="cfg-social-rb-enabled" data-sp2-onoff="rb" data-sp2-view="home"><span class="fc-switch-track"></span></label>
+            </div>
+            <div class="sp2-detail">
+              <div class="sp2-fields">
+                <div>
+                  <label class="sp2-lbl">Orders from the last · 显示最近</label>
+                  <div class="sp2-in-row"><input type="number" min="1" max="60" class="sp2-in" id="cfg-social-rb-window_days"><span class="sp2-unit">days · 天</span></div>
+                </div>
+                <div>
+                  <label class="sp2-lbl">Each toast stays · 每条停留</label>
+                  <div class="sp2-in-row"><input type="number" min="0.5" max="60" step="0.5" class="sp2-in" id="cfg-social-rb-visible_secs"><span class="sp2-unit">sec · 秒</span></div>
+                </div>
+                <div>
+                  <label class="sp2-lbl">Quiet gap between · 间隔</label>
+                  <div class="sp2-in-row"><input type="number" min="0.5" max="60" step="0.5" class="sp2-in" id="cfg-social-rb-gap_secs"><span class="sp2-unit">sec · 秒</span></div>
+                </div>
+              </div>
+              <div class="sp2-hint">Real paid orders, names masked server-side. The gap stretches by itself overnight, so it never spams at 3 am. · 全部为真实已支付订单,姓名已在服务端脱敏;深夜间隔会自动拉长,凌晨不会频繁弹出。</div>
+              <details class="sp2-fine">
+                <summary><span data-no-i18n><span class="sp2-dot"></span></span> Manual entries — mixed into the real feed · 手动条目——与真实订单混排</summary>
+                <div class="sp2-manual" id="cfg-social-rb-manual-list"></div>
+                <button type="button" class="sp2-madd" style="margin-top: 10px;" onclick="addManualBuyer()">+ Add entry · 添加条目</button>
+                <div class="sp2-hint">Type names pre-masked ("W**"). Minutes are an average age — each entry drifts and resets on its own, so it reads like a live order. · 姓名请预先脱敏(如 “李**”)。分钟数是平均时间——每条会自行增减并适时重置,读起来像真实下单。</div>
+              </details>
             </div>
           </div>
 
-          <!-- 1. Bought-count -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>"N people bought this" — product page · "X 人买了这个" — 商品页</h3>
-              <div class="muted">Distinct buyers across widening windows (today → week → month → all-time). Shows the narrowest window that clears its minimum. Empty data → line hides (we never fake counts). · 显示满足阈值的最短时间窗口的真实买家人数;数据不足时自动隐藏。</div>
+          <!-- 3 · viewing now -->
+          <div class="sp2-row" data-sp2-row="vn">
+            <div class="sp2-row-head">
+              <div>
+                <div class="sp2-name">Viewing now · 正在浏览<span class="where">product page · 商品页</span></div>
+                <div class="sp2-sum" id="sp2-sum-vn" data-no-i18n></div>
+              </div>
+              <button type="button" class="sp2-adjust" onclick="sp2ToggleRow('vn')">Adjust · 调整</button>
+              <label class="fc-switch"><input type="checkbox" id="cfg-social-vn-enabled" data-sp2-onoff="vn" data-sp2-view="product"><span class="fc-switch-track"></span></label>
             </div>
-            <label class="ckbox" style="margin-bottom: 12px;">
-              <input type="checkbox" id="cfg-social-bc-enabled">
-              <span>Show this widget · 显示此组件</span>
-            </label>
-            <div class="row" style="gap: 16px; flex-wrap: wrap;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Min today · 今日最低</label>
-                <input type="number" min="1" id="cfg-social-bc-min_today" style="width: 90px;">
-              </div>
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Min this week · 本周最低</label>
-                <input type="number" min="1" id="cfg-social-bc-min_week" style="width: 90px;">
-              </div>
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Min this month · 本月最低</label>
-                <input type="number" min="1" id="cfg-social-bc-min_month" style="width: 90px;">
-              </div>
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Min all-time · 全部最低</label>
-                <input type="number" min="1" id="cfg-social-bc-min_all" style="width: 90px;">
-              </div>
-            </div>
-            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
-              Lower = shows on more products (even with few buyers). Higher = only popular products qualify. Defaults: 2 / 2 / 1 / 2. · 数值越低组件越常出现;越高越严格。
-            </div>
-            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
-            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Extra buyers per day · 每日额外买家</label>
-                <div class="row" style="gap: 6px; align-items: center;">
-                  <input type="number" min="0" id="cfg-social-bc-boost_min" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">to · 至</span>
-                  <input type="number" min="0" id="cfg-social-bc-boost_max" style="width: 90px;">
+            <div class="sp2-detail">
+              <div class="sp2-fields">
+                <div>
+                  <label class="sp2-lbl"><span class="sp2-dot"></span> Fill-in — viewers at peak · 填充——高峰在线人数</label>
+                  <div class="sp2-in-row">
+                    <input type="number" min="0" class="sp2-in" id="cfg-social-vn-boost_min">
+                    <span class="sp2-unit">to · 至</span>
+                    <input type="number" min="0" class="sp2-in" id="cfg-social-vn-boost_max">
+                  </div>
                 </div>
+                <label class="sp2-swlbl" style="padding-bottom: 5px;">
+                  <span class="fc-switch"><input type="checkbox" id="cfg-social-vn-show_in_app"><span class="fc-switch-track"></span></span>
+                  Show the badge to customers · 向顾客显示徽标
+                </label>
               </div>
-              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                Added on top of the real buyer count.<br>
-                The "today" number starts near 0 each morning and climbs through the day, the way real orders trickle in — it never sits frozen.<br>
-                Busy products (with real sales) climb faster; quiet ones slower.<br>
-                Each product picks its own steady value in this range, so no two read alike.<br>
-                Set both to 0 to show real buyers only. Try 8 to 30. · 叠加在真实购买人数之上。"今日"数字每天清晨从接近 0 开始,随当天时段自然增长,不再固定不动;热销品增长更快。设为 0 则只显示真实数据。
-              </div>
+              <div class="sp2-hint">Drifts on a slow, smooth wave and quietens overnight — a 3 am page never claims a crowd. Real viewers add on top. Badge off = keep counting for your dashboard only. · 数字以平缓的波形起伏,深夜自动回落——凌晨不会显示一堆人;真实在线人数另行叠加。关闭徽标则只为后台实时面板统计。</div>
+              <details class="sp2-fine">
+                <summary>Fine-tune · 微调</summary>
+                <div class="sp2-fields">
+                  <div>
+                    <label class="sp2-lbl">Viewer freshness · 在线判定时长</label>
+                    <div class="sp2-in-row"><input type="number" min="5" max="600" class="sp2-in" id="cfg-social-vn-ttl_sec"><span class="sp2-unit">sec · 秒</span></div>
+                  </div>
+                </div>
+                <div class="sp2-hint">How long someone still counts after their last ping. The app pings every 25 s — 45 s is a tight default. · 最后一次心跳后多久仍算“在线”;客户端每 25 秒心跳一次,默认 45 秒。</div>
+              </details>
             </div>
           </div>
 
-          <!-- 2. Recent-buyers ticker -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>Recent-buyers ticker — home · 最近购买滚动条 — 首页</h3>
-              <div class="muted">Cycles real recent purchases as a dismissible toast ("W** bought X, 5 min ago"). Names are masked server-side; only paid orders count. · 在首页循环显示真实的近期购买记录(姓名已脱敏)。</div>
+          <!-- 4 · last ordered -->
+          <div class="sp2-row" data-sp2-row="lo">
+            <div class="sp2-row-head">
+              <div>
+                <div class="sp2-name">Last ordered · 上次下单<span class="where">product page · 商品页</span></div>
+                <div class="sp2-sum" id="sp2-sum-lo" data-no-i18n></div>
+              </div>
+              <button type="button" class="sp2-adjust" onclick="sp2ToggleRow('lo')">Adjust · 调整</button>
+              <label class="fc-switch"><input type="checkbox" id="cfg-social-lo-enabled" data-sp2-onoff="lo" data-sp2-view="product"><span class="fc-switch-track"></span></label>
             </div>
-            <label class="ckbox" style="margin-bottom: 12px;">
-              <input type="checkbox" id="cfg-social-rb-enabled">
-              <span>Show the ticker · 显示滚动条</span>
-            </label>
-            <div class="row" style="gap: 16px; flex-wrap: wrap;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Look-back window · 回溯时间</label>
-                <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="1" max="60" id="cfg-social-rb-window_days" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">days · 天</span>
+            <div class="sp2-detail">
+              <div class="sp2-fields">
+                <div>
+                  <label class="sp2-lbl"><span class="sp2-dot"></span> Fill-in — busy products read · 填充——热销品显示</label>
+                  <div class="sp2-in-row">
+                    <input type="number" min="0" max="1440" class="sp2-in" id="cfg-social-lo-fallback_min_minutes">
+                    <span class="sp2-unit">to · 至</span>
+                    <input type="number" min="0" max="1440" class="sp2-in" id="cfg-social-lo-fallback_max_minutes">
+                    <span class="sp2-unit">min ago · 分钟前</span>
+                  </div>
                 </div>
               </div>
-              <div class="field" style="margin: 0;">
-                <label class="stacked">On screen · 显示时长</label>
-                <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="0.5" max="60" step="0.5" id="cfg-social-rb-visible_secs" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">sec · 秒</span>
+              <div class="sp2-hint">Real orders always win when they're fresher. The fill-in lands on some products at a time — popular ones often, quiet ones rarely — and ages on its own, so it's never on everything at once. · 有更新的真实订单时永远优先。填充每次只出现在部分商品上——热销品常见、冷门品偶尔——并会自动变旧,不会同时出现在所有商品上。</div>
+              <details class="sp2-fine">
+                <summary>Fine-tune · 微调</summary>
+                <div class="sp2-fields">
+                  <div>
+                    <label class="sp2-lbl">Hide if older than · 超时隐藏</label>
+                    <div class="sp2-in-row"><input type="number" min="1" max="720" class="sp2-in" id="cfg-social-lo-max_hours"><span class="sp2-unit">hours · 小时</span></div>
+                  </div>
                 </div>
-              </div>
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Gap between · 间隔</label>
-                <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="0.5" max="60" step="0.5" id="cfg-social-rb-gap_secs" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">sec · 秒</span>
-                </div>
-              </div>
-            </div>
-            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
-              Shorter window = feed reads "live" but may be empty on quiet days. Longer = always populated but older entries. Default: 7 days. · 时间越短越"实时",但安静期可能为空;越长越饱满但内容更旧。<br>
-              "On screen" = how long each toast stays up; "Gap between" = quiet pause before the next one pops. Bigger gap = less often. Defaults: 4.5s on screen, 5s gap. · "显示时长"=每条停留时间;"间隔"=下一条弹出前的安静时间,越大弹得越少。<br>
-              The gap automatically stretches overnight, so the feed pops less often in quiet hours and at its normal pace through the day. · 间隔会在深夜自动拉长,凌晨少弹、白天正常。
-            </div>
-            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
-            <div style="margin-bottom: 8px;">
-              <b style="font-size: 13px;">Manual fake entries · 手动虚拟条目</b>
-              <div class="muted" style="margin-top: 4px;">Mixed into the real feed and sorted by time. Names should be pre-masked (type "W**" or "M***"). The minutes you set is the average age — each entry's "X ago" drifts up and resets around it over time (and entries don't tick together), so it reads like a live order instead of a fixed label. · 与真实订单合并并按时间排序;姓名请预先脱敏。所填分钟数为平均时间,实际“X 前”会围绕它自然增减并适时重置(各条不同步),读起来像真实下单而非固定文字。</div>
-            </div>
-            <div id="cfg-social-rb-manual-list" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px;"></div>
-            <button type="button" class="btn btn-sm" onclick="addManualBuyer()">+ Add fake entry · 添加虚拟条目</button>
-          </div>
-
-          <!-- 3. Viewing-now -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>"N viewing now" — product page · "X 人正在查看" — 商品页</h3>
-              <div class="muted">Real concurrent-viewer count. In-memory; resets when the app restarts. Mini-app shows the badge only at 2+ viewers. · 实时查看人数(内存中保存,重启后重置);客户端在 2 人以上才显示。</div>
-            </div>
-            <label class="ckbox" style="margin-bottom: 8px;">
-              <input type="checkbox" id="cfg-social-vn-enabled">
-              <span>Track viewer counts (powers the dashboard LIVE pane) · 追踪在线人数(用于后台实时面板)</span>
-            </label>
-            <label class="ckbox" style="margin-bottom: 12px;">
-              <input type="checkbox" id="cfg-social-vn-show_in_app">
-              <span>Also show the "N viewing now" badge to customers · 同时向客户显示"N 人正在查看"标签</span>
-            </label>
-            <div class="helper" style="margin: -4px 0 12px; line-height: 1.5;">
-              Leave the second box off to count viewers for yourself only — the backend LIVE pane fills in, but customers never see the badge. · 仅勾选第一项即可只在后台统计,客户端不显示。
-            </div>
-            <div class="row" style="gap: 16px; flex-wrap: wrap;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Viewer freshness · 在线时长</label>
-                <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="5" max="600" id="cfg-social-vn-ttl_sec" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">seconds · 秒</span>
-                </div>
-              </div>
-            </div>
-            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
-              A viewer counts as "present" while their last heartbeat is within this window. The app pings every 25s, so 45s is a tight default that hides stragglers fast. Raise it for a calmer count. · 默认 45 秒;数值越大读数越"稳定",越小越实时。
-            </div>
-            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
-            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Fake viewers at peak · 高峰虚拟在线</label>
-                <div class="row" style="gap: 6px; align-items: center;">
-                  <input type="number" min="0" id="cfg-social-vn-boost_min" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">to · 至</span>
-                  <input type="number" min="0" id="cfg-social-vn-boost_max" style="width: 90px;">
-                </div>
-              </div>
-              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                This is the busy-hour level. Each product picks its own steady value in this range.<br>
-                The count drifts up and down on a slow, smooth wave — never jumping around — and quietens overnight, so a 3am page doesn't claim a crowd.<br>
-                Real live viewers are added on top.<br>
-                Set both to 0 for real data only. Try 15 to 40. · 这是高峰时段的人数。数字以平缓的波形自然起伏,深夜自动回落,不会在凌晨显示一堆人;真实在线人数另行叠加。设为 0 则只显示真实数据。
-              </div>
+                <div class="sp2-hint">Older "last orders" feel stale, not social. Also hides when the bought-count line already says "today", so the two never repeat each other. · 太久远的“上次下单”只会显得冷清;当“X 人购买”已显示“今日”时也会自动隐藏,避免重复。</div>
+              </details>
             </div>
           </div>
 
-          <!-- 4. Last-ordered -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>"Last ordered X ago" — product page · "上次订购于 X 前" — 商品页</h3>
-              <div class="muted">A freshness nudge from the most recent order. It shows the real time when there's been a recent sale; otherwise it fills in believable activity that <b>ages on its own</b> (the "X ago" climbs over time and resets, never stuck on one number) and only appears on <b>some</b> products at a time — popular ones often, quiet ones now and then — so it's never on every product at once. Hidden when the bought-count line is already showing "today/this week" (so the two don't repeat). · 基于最近一次订单的新鲜度提示。有真实近期订单时显示真实时间;否则填充会<b>自动变旧</b>的可信活动(“X 前”随时间增长并适时重置,不再固定),且只在<b>部分</b>商品上出现——热销品常见、冷门品偶尔——不会同时出现在每个商品上。</div>
+          <!-- 5 · sold badge -->
+          <div class="sp2-row" data-sp2-row="sb">
+            <div class="sp2-row-head">
+              <div>
+                <div class="sp2-name">SOLD badge · 已售标签<span class="where">shop &amp; home cards · 商品卡片</span></div>
+                <div class="sp2-sum" id="sp2-sum-sb" data-no-i18n></div>
+              </div>
+              <button type="button" class="sp2-adjust" onclick="sp2ToggleRow('sb')">Adjust · 调整</button>
+              <label class="fc-switch"><input type="checkbox" id="cfg-social-sb-enabled" data-sp2-onoff="sb" data-sp2-view="shop"><span class="fc-switch-track"></span></label>
             </div>
-            <label class="ckbox" style="margin-bottom: 12px;">
-              <input type="checkbox" id="cfg-social-lo-enabled">
-              <span>Show "last ordered" · 显示"上次订购"</span>
-            </label>
-            <div class="row" style="gap: 16px; flex-wrap: wrap;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Hide if older than · 超时则隐藏</label>
-                <div class="row" style="gap: 8px; align-items: center;">
-                  <input type="number" min="1" max="720" id="cfg-social-lo-max_hours" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">hours · 小时</span>
+            <div class="sp2-detail">
+              <div class="sp2-fields">
+                <div>
+                  <label class="sp2-lbl"><span class="sp2-dot"></span> Fill-in — starting total · 填充——起始销量</label>
+                  <div class="sp2-in-row">
+                    <input type="number" min="0" class="sp2-in" id="cfg-social-sb-boost_min">
+                    <span class="sp2-unit">to · 至</span>
+                    <input type="number" min="0" class="sp2-in" id="cfg-social-sb-boost_max">
+                  </div>
                 </div>
               </div>
-            </div>
-            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
-              Older "last orders" feel stale, not social. 24h is the default — anything older is dropped server-side. · 默认 24 小时;更久的记录不再显示。
-            </div>
-            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
-            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Freshness for active products · 活跃商品的新鲜度</label>
-                <div class="row" style="gap: 6px; align-items: center;">
-                  <input type="number" min="0" max="1440" id="cfg-social-lo-fallback_min_minutes" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">to · 至</span>
-                  <input type="number" min="0" max="1440" id="cfg-social-lo-fallback_max_minutes" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">min</span>
+              <div class="sp2-hint">Each product picks its own number in this range, then creeps up a little every day — capped so it can't balloon. Real units sold add on top. · 每件商品在范围内取一个稳定值,之后每天缓慢增长且有上限;真实销量另行叠加。</div>
+              <details class="sp2-fine">
+                <summary>Fine-tune · 微调</summary>
+                <div class="sp2-fields">
+                  <div>
+                    <label class="sp2-lbl">Minimum units to show · 最低显示销量</label>
+                    <input type="number" min="1" class="sp2-in" style="width: 80px;" id="cfg-social-sb-min_units">
+                  </div>
                 </div>
-              </div>
-              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                How recently a busy product should look like it was last ordered.<br>
-                A popular product reads near the low end (e.g. "8 min ago"); quieter ones stretch to hours and often show nothing at all.<br>
-                Whatever shows then ages on its own until the next order resets it.<br>
-                Real orders always win when they're fresher.<br>
-                Set both to 0 to turn the fill-in off. Try 5 to 45. · 一件热销品“上次订购”看起来有多近。热销品接近下限(如“8 分钟前”),冷门品拉长到数小时、常常不显示;显示后会自动变旧,直到下一单重置。有更近的真实订单时优先显示真实时间。设为 0 则关闭填充。
-              </div>
+                <div class="sp2-hint">Below this the card stays neutral — we don't advertise a weak number. · 低于此值不显示标签——不为疲软的数字做广告。</div>
+              </details>
+            </div>
+          </div>
+        </div>
+
+        <div class="sp2-moved">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none;"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+          <span>
+            <span data-lang-block="en"><b>Checkout upsell</b> isn't social proof — it now lives in <a onclick="goTab('popups')">Marketing → Pop-ups</a>.</span>
+            <span data-lang-block="cn"><b>结账推荐弹窗</b>不属于社交证明——已移至<a onclick="goTab('popups')">营销 → 弹窗</a>。</span>
+          </span>
+        </div>
+
+        <div class="sp2-save">
+          <button type="button" class="sp2-save-btn" onclick="saveSocialProof()">Save · 保存</button>
+          <span id="social-status" style="font-size: 12px;"></span>
+        </div>
+      </div>
+
+      <!-- ── live phone preview ── -->
+      <aside class="sp2-side" data-no-i18n>
+        <div class="sp2-views">
+          <button type="button" class="sp2-view-tab active" data-sp2-viewtab="home" onclick="sp2View('home')"></button>
+          <button type="button" class="sp2-view-tab" data-sp2-viewtab="product" onclick="sp2View('product')"></button>
+          <button type="button" class="sp2-view-tab" data-sp2-viewtab="shop" onclick="sp2View('shop')"></button>
+        </div>
+        <div class="sp2-phone"><div class="sp2-screen">
+
+          <div class="sp2-pv active" data-sp2-pv="home">
+            <div class="apphead"><span class="logo"></span><span class="nm" data-sp2-shopname></span></div>
+            <div class="banner"><span data-sp2-t="fresh"></span></div>
+            <div class="sect" data-sp2-t="popular"></div>
+            <div class="grid">
+              <div class="sp2-pcard"><span class="cap" data-sp2-b="sold" data-sp2-cap="1"></span><div class="img"></div><div class="b"><div class="t" data-sp2-t="prod1"></div><div class="p">¥38</div></div></div>
+              <div class="sp2-pcard"><span class="cap" data-sp2-b="sold" data-sp2-cap="2"></span><div class="img"></div><div class="b"><div class="t" data-sp2-t="prod2"></div><div class="p">¥52</div></div></div>
+            </div>
+            <div class="ticker" data-sp2-b="ticker"><span class="who" data-sp2-tick="who"></span><span class="what" data-sp2-tick="what"></span><span class="ago" data-sp2-tick="ago"></span><span class="x">×</span></div>
+          </div>
+
+          <div class="sp2-pv" data-sp2-pv="product">
+            <div class="pimg"></div>
+            <div class="pbody">
+              <div class="ptitle" data-sp2-t="prod1"></div>
+              <div class="pprice">¥38</div>
+              <div class="sp2-proof" data-sp2-b="bought"><span class="pp" data-sp2-n="bought"></span></div>
+              <div class="sp2-proof viewers" data-sp2-b="viewing"><span class="pp" data-sp2-n="viewing"></span></div>
+              <div class="sp2-proof last" data-sp2-b="last"><span class="pp" data-sp2-n="last"></span></div>
+              <div class="buy" data-sp2-t="addcart"></div>
             </div>
           </div>
 
-          <!-- 5. Sold badge -->
-          <div class="group-card">
-            <div class="group-card-head">
-              <h3>"X SOLD" badge — shop &amp; home cards · "已售 X 件"标签</h3>
-              <div class="muted">All-time paid units per product, shown as a corner cap on shop cards and home blocks. Low-sellers stay neutral (no badge) so we don't advertise a weak number. · 显示在商品卡片上的全期销量标签;低于阈值则不显示。</div>
-            </div>
-            <label class="ckbox" style="margin-bottom: 12px;">
-              <input type="checkbox" id="cfg-social-sb-enabled">
-              <span>Show "X SOLD" badges · 显示已售标签</span>
-            </label>
-            <div class="row" style="gap: 16px; flex-wrap: wrap;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Minimum units to show · 最低显示销量</label>
-                <input type="number" min="1" id="cfg-social-sb-min_units" style="width: 110px;">
-              </div>
-            </div>
-            <div class="helper" style="margin-top: 10px; line-height: 1.5;">
-              Raise to show the badge only on top sellers. Drop to 1 to show it wherever anything has sold. Default: 3. · 数值越高仅热销品显示;改为 1 可在所有有销量的商品上显示。
-            </div>
-            <hr style="border: none; border-top: 1px dashed var(--line); margin: 14px 0;">
-            <div class="row" style="gap: 16px; flex-wrap: wrap; align-items: flex-end;">
-              <div class="field" style="margin: 0;">
-                <label class="stacked">Starting "sold" baseline · 起始“已售”基数</label>
-                <div class="row" style="gap: 6px; align-items: center;">
-                  <input type="number" min="0" id="cfg-social-sb-boost_min" style="width: 90px;">
-                  <span class="muted" style="font-size: 12px;">to · 至</span>
-                  <input type="number" min="0" id="cfg-social-sb-boost_max" style="width: 90px;">
-                </div>
-              </div>
-              <div class="helper" style="line-height: 1.5; flex: 1; min-width: 220px;">
-                The number a product starts life with. Each one picks its own steady value in this range, so totals differ (e.g. "72 sold", "138 sold").<br>
-                From there the count <b>creeps up over time</b> — a little each day since the product launched — so it grows week to week instead of sitting frozen. Best-sellers climb faster, and the growth is capped so it can't balloon.<br>
-                Real units sold are added on top.<br>
-                Set both to 0 for real data only. Try 50 to 150. · 商品的起始数字,各取范围内一个稳定值。之后会<b>随时间缓慢增长</b>(按上架天数,每天少量累加),逐周变大而非固定;热销品增长更快,且有上限。真实销量另行叠加。设为 0 则只显示真实数据。
-              </div>
+          <div class="sp2-pv" data-sp2-pv="shop">
+            <div class="apphead"><span class="nm" data-sp2-t="shop"></span></div>
+            <div class="grid">
+              <div class="sp2-pcard"><span class="cap" data-sp2-b="sold" data-sp2-cap="1"></span><div class="img"></div><div class="b"><div class="t" data-sp2-t="prod1"></div><div class="p">¥38</div></div></div>
+              <div class="sp2-pcard"><span class="cap" data-sp2-b="sold" data-sp2-cap="2"></span><div class="img"></div><div class="b"><div class="t" data-sp2-t="prod2"></div><div class="p">¥52</div></div></div>
+              <div class="sp2-pcard"><div class="img"></div><div class="b"><div class="t" data-sp2-t="prod3"></div><div class="p">¥24</div></div></div>
+              <div class="sp2-pcard"><span class="cap" data-sp2-b="sold" data-sp2-cap="3"></span><div class="img"></div><div class="b"><div class="t" data-sp2-t="prod4"></div><div class="p">¥45</div></div></div>
             </div>
           </div>
 
-    <!-- ────── save bar ────── -->
-    <div class="save-bar">
-      <button class="btn btn-primary" onclick="saveSocialProof()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-        Save · 保存
-      </button>
-      <span id="social-status" style="font-size: 12px;"></span>
+        </div></div>
+        <div class="cap-note" data-sp2-t="capnote"></div>
+      </aside>
+    </div>
+
+    <!-- ── first-run wizard ── -->
+    <div class="sp2-wiz-bg" id="sp2-wiz" onclick="if (event.target === this) sp2WizClose()">
+      <div class="sp2-wiz">
+        <div class="sp2-wiz-steps">
+          <span class="st on" data-sp2-st="1"><span class="n">1</span> Feel · 风格</span>
+          <span class="bar"></span>
+          <span class="st" data-sp2-st="2"><span class="n">2</span> Signals · 信号</span>
+          <span class="bar"></span>
+          <span class="st" data-sp2-st="3"><span class="n">3</span> Done · 完成</span>
+        </div>
+
+        <div class="sp2-wiz-pane active" data-sp2-pane="1">
+          <h3>How lively should the shop feel? · 店铺要显得多热闹?</h3>
+          <div class="sub">Real customer activity always shows first. This sets how much Tacet tops it up when things are quiet. · 真实活动永远优先显示;这里决定安静时 Tacet 补足多少。</div>
+          <div class="sp2-presets">
+            <button type="button" class="sp2-preset" data-sp2-wp="real" onclick="sp2WizPick('real')">
+              <span class="nm">Real only · 只用真实数据</span>
+              <span class="de">Only what actually happened. Quiet on slow days. · 只显示真实发生的活动,淡季会比较安静。</span>
+            </button>
+            <button type="button" class="sp2-preset sel" data-sp2-wp="gentle" onclick="sp2WizPick('gentle')">
+              <span class="nm">Gentle lift · 温和提升</span>
+              <span class="de">A soft floor under the real numbers. Believable pace — most shops pick this. · 在真实数字下垫一层柔和的底,节奏可信——多数店铺选这个。</span>
+            </button>
+            <button type="button" class="sp2-preset" data-sp2-wp="busy" onclick="sp2WizPick('busy')">
+              <span class="nm">Bustling · 热闹集市</span>
+              <span class="de">A busy-market feel for launches and promotions. · 集市般的热闹感,适合上新与大促。</span>
+            </button>
+          </div>
+          <div class="sp2-wiz-foot">
+            <button type="button" class="sp2-wiz-skip" onclick="sp2WizSkip()">Skip — I'll set it up myself · 跳过,我自己设置</button>
+            <span class="spacer"></span>
+            <button type="button" class="sp2-save-btn" onclick="sp2WizGo(2)">Next · 下一步</button>
+          </div>
+        </div>
+
+        <div class="sp2-wiz-pane" data-sp2-pane="2">
+          <h3>Which signals do you want? · 想开启哪些信号?</h3>
+          <div class="sub">All five work well together. You can flip any of them later with one switch. · 五个信号可以同时开启;之后随时可用开关单独关闭。</div>
+          <div class="sp2-wiz-widgets">
+            <div class="sp2-wiz-wrow"><span class="nm"><b>People bought this · “X 人购买”</b>on the product page · 商品页</span><label class="fc-switch"><input type="checkbox" checked data-sp2-wiz-w="bc"><span class="fc-switch-track"></span></label></div>
+            <div class="sp2-wiz-wrow"><span class="nm"><b>Recent-buyers ticker · 最近购买动态</b>on the home screen · 首页</span><label class="fc-switch"><input type="checkbox" checked data-sp2-wiz-w="rb"><span class="fc-switch-track"></span></label></div>
+            <div class="sp2-wiz-wrow"><span class="nm"><b>Viewing now · 正在浏览</b>on the product page · 商品页</span><label class="fc-switch"><input type="checkbox" checked data-sp2-wiz-w="vn"><span class="fc-switch-track"></span></label></div>
+            <div class="sp2-wiz-wrow"><span class="nm"><b>Last ordered · 上次下单</b>on the product page · 商品页</span><label class="fc-switch"><input type="checkbox" checked data-sp2-wiz-w="lo"><span class="fc-switch-track"></span></label></div>
+            <div class="sp2-wiz-wrow"><span class="nm"><b>SOLD badge · 已售标签</b>on shop &amp; home cards · 商品卡片</span><label class="fc-switch"><input type="checkbox" checked data-sp2-wiz-w="sb"><span class="fc-switch-track"></span></label></div>
+          </div>
+          <div class="sp2-wiz-foot">
+            <button type="button" class="sp2-wiz-back" onclick="sp2WizGo(1)">Back · 上一步</button>
+            <span class="spacer"></span>
+            <button type="button" class="sp2-save-btn" onclick="sp2WizGo(3)">Next · 下一步</button>
+          </div>
+        </div>
+
+        <div class="sp2-wiz-pane" data-sp2-pane="3">
+          <h3>That's it. · 完成。</h3>
+          <div class="sub">
+            <span data-lang-block="en">Tacet tuned every number to <b id="sp2-wiz-chosen-en" data-no-i18n></b> — thresholds, pacing, overnight quiet hours, all of it. Everything stays adjustable on the page behind this.</span>
+            <span data-lang-block="cn">Tacet 已按<b id="sp2-wiz-chosen-cn" data-no-i18n></b>调好全部数字——门槛、节奏、深夜静默。之后都可在页面上随时调整。</span>
+          </div>
+          <div class="sp2-wiz-done" data-no-i18n>
+            <span class="pill warm">12 bought today</span>
+            <span class="pill">◉ 8 viewing now</span>
+            <span class="pill">W** · 5 min ago</span>
+          </div>
+          <div class="sp2-wiz-foot">
+            <button type="button" class="sp2-wiz-back" onclick="sp2WizGo(2)">Back · 上一步</button>
+            <span class="spacer"></span>
+            <button type="button" class="sp2-save-btn" onclick="sp2WizFinish()">Turn it on · 开启</button>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
