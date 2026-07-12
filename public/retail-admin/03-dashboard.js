@@ -398,6 +398,10 @@ function dashHeroInit() {
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.drafts) dashDraftsRender();
   });
+  // ...and the on-the-road list (channel + stage words are JS-built).
+  if (window.onLangChange) onLangChange(() => {
+    if (DASH_HERO.onroad) dashOnroadRender();
+  });
   // Hover-scrub the Today sparklines to read each hour of the day.
   ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
     const w = $(sel); if (!w) return;
@@ -441,6 +445,7 @@ function dashHeroRefreshAll() {
   dashWeekLoad();
   dashIncomingLoad();
   dashDraftsLoad();
+  dashOnroadLoad();
 }
 
 // ── Live push (SSE) ────────────────────────────────────────────────────────
@@ -467,6 +472,7 @@ function dashLiveRefresh() {
   dashChanLoad();       // Channels today
   dashHeroLoadToday();  // today KPIs + sparkline
   dashWeekLoad();       // the week-so-far bars
+  dashOnroadLoad();     // out-for-delivery list (dispatch/CS; role-guarded)
   if (typeof tdOpsLoad === 'function') tdOpsLoad();  // running-low / needs-you
   tdRecapWorkFetch();   // the open fold, if any (no-op when collapsed)
 }
@@ -899,6 +905,7 @@ function dashWeekRender() {
 // warehouse page never goes blank. Language-dependent (dates + "lines"), so it
 // repaints on a language toggle from its stashed rows.
 async function dashIncomingLoad() {
+  if (dashPos() !== 'warehouse') return;   // block is warehouse-only — skip the pull elsewhere
   try {
     const j = await api('/api/retail-admin/purchases?status=Ordered');
     DASH_HERO.incoming = Array.isArray(j.data) ? j.data : [];
@@ -943,6 +950,7 @@ function dashIncomingRender() {
 // sending). Warehouse-only. Its own pull; calm empty line when none, so the
 // warehouse page never blanks. Language-dependent (dates + "lines").
 async function dashDraftsLoad() {
+  if (dashPos() !== 'warehouse') return;   // block is warehouse-only — skip the pull elsewhere
   try {
     const j = await api('/api/retail-admin/purchases?status=Requested');
     DASH_HERO.drafts = Array.isArray(j.data) ? j.data : [];
@@ -975,6 +983,54 @@ function dashDraftsRender() {
     return `<div class="bx-in-row${cls}">
       <span class="bx-in-nm">${escapeHtml(po.po_number || '')}<span class="bx-in-sub">${escapeHtml(sub)}</span></span>
       <span class="bx-in-eta">${escapeHtml(dateLabel(po.date))}</span>
+    </div>`;
+  }).join('');
+}
+
+// On the road — orders out for delivery, with the live rider stage + ETA the
+// orders list already attaches (o.courier = {stage, eta_seconds}). Dispatch /
+// customer-service only; its own pull of the (heavy) orders list, role-guarded
+// so no other role fetches it. Language-dependent (channel + stage words).
+const DASH_CHAN_SHORT = {
+  wechat: ['Mini app', '小程序'], web: ['Web', '网店'],
+  meituan: ['Meituan', '美团'], gzgrocery: ['gzgrocery', 'gzgrocery'], manual: ['Manual', '手动'],
+};
+async function dashOnroadLoad() {
+  if (!['dispatch', 'customer_service'].includes(dashPos())) return;   // block is delivery-role only
+  try {
+    const j = await api('/api/retail-admin/orders?status=dispatched&limit=8');
+    DASH_HERO.onroad = Array.isArray(j.data) ? j.data : [];
+    dashOnroadRender();
+  } catch (e) {
+    if (!DASH_HERO.onroad) dashBootRetry('onroad', dashOnroadLoad);
+  }
+}
+function dashOnroadRender() {
+  const host = $('#td-onroad-list'); if (!host) return;
+  const rows = DASH_HERO.onroad; if (!rows) return;
+  if (!rows.length) {
+    host.innerHTML = `<div class="td-muted">${cuT('Nothing out for delivery', '暂无配送中订单')}</div>`;
+    return;
+  }
+  const stageOf = (o) => {
+    const c = o.courier;
+    if (c && c.stage === 'in_transit') {
+      const m = c.eta_seconds != null ? Math.max(1, Math.round(c.eta_seconds / 60)) : null;
+      return { txt: m != null ? cuT('En route · ' + m + ' min', '配送中 · ' + m + ' 分钟') : cuT('En route', '配送中'), soon: m != null && m <= 10 };
+    }
+    if (c && c.stage === 'awaiting_dispatch') return { txt: cuT('Finding rider', '正在找骑手'), soon: false };
+    return { txt: cuT('Out for delivery', '配送中'), soon: false };
+  };
+  host.innerHTML = rows.slice(0, 5).map((o, i) => {
+    const who = (o.recipient_name || o.nickname || '').trim();
+    const cn = DASH_CHAN_SHORT[String(o.channel || '').toLowerCase()];
+    const chan = cn ? cuT(cn[0], cn[1]) : '';
+    const sub = [who, chan].filter(Boolean).join(' · ');
+    const st = stageOf(o);
+    const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
+    return `<div class="bx-in-row${cls}">
+      <span class="bx-in-nm">${escapeHtml('#' + (o.order_no || o.id || ''))}<span class="bx-in-sub">${escapeHtml(sub)}</span></span>
+      <span class="bx-in-eta${st.soon ? ' is-soon' : ''}">${escapeHtml(st.txt)}</span>
     </div>`;
   }).join('');
 }
@@ -1250,8 +1306,8 @@ function tdInit() {
 // Key bumped to -v4: the 'movers' block joined the set, so a saved order that
 // predates it needs the fresh default once (missing blocks would otherwise only
 // surface at the tail — harmless, but the bump keeps the shipped order intact).
-const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v7';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'drafts', 'delivery', 'channels'];
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v8';
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'drafts', 'onroad', 'delivery', 'channels'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
   recap:     ['While you were away', '您不在的这段时间'],
@@ -1263,6 +1319,7 @@ const DASH_BLOCK_TITLES = {
   inventory: ['Inventory', '库存'],
   incoming:  ['On the way', '在途采购'],
   drafts:    ['Drafts to send', '待发送采购'],
+  onroad:    ['On the road', '配送在途'],
   delivery:  ['Delivery', '配送'],
   channels:  ['Channels today', '今日渠道'],
 };
@@ -1290,10 +1347,12 @@ const DASH_SHAPES = {
   incoming:  [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   // drafts = warehouse-only "Drafts to send". List block, same width menu.
   drafts:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  // onroad = dispatch/customer-service "On the road". List block.
+  onroad:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
   channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers: 1, inventory: 2, incoming: 2, drafts: 2, delivery: 1, channels: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers: 1, inventory: 2, incoming: 2, drafts: 2, onroad: 2, delivery: 1, channels: 2 };
 
 let DASH_ARRANGING = false;
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];
