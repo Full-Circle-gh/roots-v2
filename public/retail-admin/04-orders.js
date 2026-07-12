@@ -1869,7 +1869,7 @@ function rerouteShortNote(o) {
   const byId = new Map((o.items || []).map(it => [it.product_id, it]));
   const names = pids.map(pid => {
     const it = byId.get(pid);
-    return it ? orderItemNames(it) : `#${pid}`;
+    return it ? orderItemNames(it).primary : `#${pid}`;
   }).join('、');
   return `<div class="sub" style="color: var(--text-3);">`
     + `${cuT('nearer store was short on', '就近门店缺货')}: ${escapeHtml(names)}</div>`;
