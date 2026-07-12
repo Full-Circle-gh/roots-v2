@@ -9726,12 +9726,12 @@ body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, b
   display: none;
 }
 body.pos-store-manager .td-block[data-block="channels"] { display: none; }
-/* "On the way" (in-transit POs) is warehouse-native — shown only to warehouse,
-   hidden for every other role (owner = pos-default). */
-body.pos-default .td-block[data-block="incoming"],
-body.pos-dispatch .td-block[data-block="incoming"],
-body.pos-customer-service .td-block[data-block="incoming"],
-body.pos-store-manager .td-block[data-block="incoming"] { display: none; }
+/* "On the way" + "Drafts to send" (purchasing) are warehouse-native — shown
+   only to warehouse, hidden for every other role (owner = pos-default). */
+body.pos-default .td-block[data-block="incoming"], body.pos-default .td-block[data-block="drafts"],
+body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="drafts"],
+body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="drafts"],
+body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="drafts"] { display: none; }
 /* Each restricted position keeps only the section block it works in. */
 body.pos-dispatch .td-block[data-block="inventory"],
 body.pos-customer-service .td-block[data-block="inventory"],

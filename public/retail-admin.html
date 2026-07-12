@@ -1473,6 +1473,25 @@
         </div>
       </div>
 
+      <!-- Drafts to send — purchase orders drafted but not yet placed
+           (warehouse-only). Painted by dashDraftsRender from status=Requested. -->
+      <div class="td-block" data-block="drafts">
+        <button class="bn-hide" onclick="dashArrangeHide('drafts')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2"/><path d="M9 13h6M9 17h4"/></svg>
+              <h3>Drafts to send · 待发送采购</h3>
+              <button type="button" class="bn-go" onclick="dashJumpTab('products')">Review › · 前往采购 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bx-in-list" id="td-drafts-list"><div class="td-muted">Loading… · 加载中…</div></div>
+              <p class="td-chan-foot detail2">Requested · oldest first · 待下单 · 最早草拟优先</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Delivery -->
       <div class="td-block" data-block="delivery">
         <button class="bn-hide" onclick="dashArrangeHide('delivery')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>

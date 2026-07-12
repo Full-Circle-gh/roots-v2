@@ -394,6 +394,10 @@ function dashHeroInit() {
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.incoming) dashIncomingRender();
   });
+  // ...and the drafts-to-send list.
+  if (window.onLangChange) onLangChange(() => {
+    if (DASH_HERO.drafts) dashDraftsRender();
+  });
   // Hover-scrub the Today sparklines to read each hour of the day.
   ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
     const w = $(sel); if (!w) return;
@@ -436,6 +440,7 @@ function dashHeroRefreshAll() {
   dashHeroLoadToday();
   dashWeekLoad();
   dashIncomingLoad();
+  dashDraftsLoad();
 }
 
 // ── Live push (SSE) ────────────────────────────────────────────────────────
@@ -933,6 +938,47 @@ function dashIncomingRender() {
   }).join('');
 }
 
+// Drafts to send — purchase orders the buying department has drafted but not yet
+// placed (status 'Requested'), oldest first (a draft sitting longest most wants
+// sending). Warehouse-only. Its own pull; calm empty line when none, so the
+// warehouse page never blanks. Language-dependent (dates + "lines").
+async function dashDraftsLoad() {
+  try {
+    const j = await api('/api/retail-admin/purchases?status=Requested');
+    DASH_HERO.drafts = Array.isArray(j.data) ? j.data : [];
+    dashDraftsRender();
+  } catch (e) {
+    if (!DASH_HERO.drafts) dashBootRetry('drafts', dashDraftsLoad);
+  }
+}
+function dashDraftsRender() {
+  const host = $('#td-drafts-list'); if (!host) return;
+  const rows = DASH_HERO.drafts; if (!rows) return;
+  if (!rows.length) {
+    host.innerHTML = `<div class="td-muted">${cuT('Nothing to send', '暂无待发送')}</div>`;
+    return;
+  }
+  // Oldest draft first — the one sitting longest is the one to chase.
+  const byAge = [...rows].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const dateLabel = d => {
+    if (!d) return '';
+    const dt = new Date(String(d).slice(0, 10) + 'T00:00:00');
+    return cuT('drafted ' + dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+              (dt.getMonth() + 1) + '月' + dt.getDate() + '日草拟');
+  };
+  host.innerHTML = byAge.slice(0, 5).map((po, i) => {
+    const sup = (po.supplier || '').trim();
+    const lines = Number(po.line_count || 0);
+    const linesTxt = cuT(lines + (lines === 1 ? ' line' : ' lines'), lines + ' 项');
+    const sub = [sup, linesTxt].filter(Boolean).join(' · ');
+    const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
+    return `<div class="bx-in-row${cls}">
+      <span class="bx-in-nm">${escapeHtml(po.po_number || '')}<span class="bx-in-sub">${escapeHtml(sub)}</span></span>
+      <span class="bx-in-eta">${escapeHtml(dateLabel(po.date))}</span>
+    </div>`;
+  }).join('');
+}
+
 // Tacet activity row — clean prose per the dashboard mockup. Returns
 // { text, amount, badge }: `text` is the sentence, `amount` is the
 // right-aligned money (muted), `badge` a small first-order pill. No icon,
@@ -1204,8 +1250,8 @@ function tdInit() {
 // Key bumped to -v4: the 'movers' block joined the set, so a saved order that
 // predates it needs the fresh default once (missing blocks would otherwise only
 // surface at the tail — harmless, but the bump keeps the shipped order intact).
-const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v6';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'delivery', 'channels'];
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v7';
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'drafts', 'delivery', 'channels'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
   recap:     ['While you were away', '您不在的这段时间'],
@@ -1216,6 +1262,7 @@ const DASH_BLOCK_TITLES = {
   customers: ['Customers', '客户'],
   inventory: ['Inventory', '库存'],
   incoming:  ['On the way', '在途采购'],
+  drafts:    ['Drafts to send', '待发送采购'],
   delivery:  ['Delivery', '配送'],
   channels:  ['Channels today', '今日渠道'],
 };
@@ -1241,10 +1288,12 @@ const DASH_SHAPES = {
   // incoming = warehouse-only "On the way" (in-transit POs). List block, same
   // width menu as movers. Tiling proven in scripts/dash-solver-test.js.
   incoming:  [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  // drafts = warehouse-only "Drafts to send". List block, same width menu.
+  drafts:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
   channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers: 1, inventory: 2, incoming: 2, delivery: 1, channels: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers: 1, inventory: 2, incoming: 2, drafts: 2, delivery: 1, channels: 2 };
 
 let DASH_ARRANGING = false;
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];
