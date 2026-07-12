@@ -91,8 +91,36 @@ function paSetStatus(v) {
 // the same question — "out of stock *where I'm looking*" — so picking Tianhe +
 // Out of stock lists items zero in Tianhe even if they're stocked elsewhere.
 function _paStockOf(p) {
+  // An ASSEMBLED bundle holds no stock of its own — its availability is how many
+  // whole sets its components can currently make: min over components of
+  // floor(component stock ÷ per-bundle qty). Store-aware, so it follows the
+  // "Stock for" pick just like a normal product. (Pre-packed bundles carry their
+  // own count and fall through to the normal path below.)
+  if (p.is_bundle) return _paBundleStock(p);
   if (PA_STORE !== 'all' && PA_STOCK_LOADED) return _paStoreQty(p.id, PA_STORE);
   return Number(p.effective_stock ?? p.stock_qty ?? 0);
+}
+
+// How many whole bundles the components can make right now (0 when any part is
+// missing). Reads each component's store-aware stock the same way _paStockOf
+// does, so the figure matches what the shop would show. `p.bundle_items` is the
+// raw [{id, qty}] recipe the list endpoint ships.
+function _paBundleStock(p) {
+  const comps = Array.isArray(p.bundle_items) ? p.bundle_items : [];
+  if (!comps.length) return 0;
+  let min = Infinity;
+  for (const c of comps) {
+    const qty = Math.max(1, Number(c.qty) || 1);
+    let stock;
+    if (PA_STORE !== 'all' && PA_STOCK_LOADED) {
+      stock = _paStoreQty(c.id, PA_STORE);
+    } else {
+      const cp = (Array.isArray(PA_PRODUCTS) ? PA_PRODUCTS : []).find(x => x.id === c.id);
+      stock = cp ? Number(cp.effective_stock ?? cp.stock_qty ?? 0) : 0;
+    }
+    min = Math.min(min, Math.floor(stock / qty));
+  }
+  return Number.isFinite(min) ? Math.max(0, min) : 0;
 }
 
 // Does a product match the active status filter? Mirrors paRenderKpis' buckets.
@@ -877,6 +905,14 @@ function _paStockCell(u) {
       : cuT('Ships from supplier — always available', '供应商直发，始终有货');
     return `<span class="pa-stock ${cls}" title="${title}"><span class="pa-stock-dot"></span>${label}</span>`;
   }
+  // Assembled bundle — stock is computed from its components, never typed. Show
+  // the derived count read-only (in every store view) so the operator can't set a
+  // meaningless number on a row that has no stock of its own.
+  if (!u.group && u.p.is_bundle) {
+    const q = _paBundleStock(u.p);
+    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+    return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Made from other products — stock follows the parts', '由其他产品组成 — 库存取决于组成商品')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
+  }
   if (PA_STORE !== 'all' && PA_STOCK_LOADED) {
     if (u.group) {
       const q = u.members.reduce((s, m) => s + _paStoreQty(m.id, PA_STORE), 0);
@@ -1557,7 +1593,7 @@ function paRender() {
           <div class="pa-card-pills">
             ${oosPill}
             ${variantPill}
-            ${p.is_bundle ? `<span class="pa-pill pa-pill-bundle" title="Bundle — sold as one, made of other products · 套装产品">${cuT('Bundle', '套装')}</span>` : ''}
+            ${(p.is_bundle || p.bundle_mode === 'prepacked') ? `<span class="pa-pill pa-pill-bundle" title="Bundle — sold as one set · 套装产品">${cuT('Bundle', '套装')}</span>` : ''}
             ${designed
               ? `<span class="pa-pill pa-pill-designed" title="Designer sections authored · 已配置设计板块">${PA_ICON_SPARKLE}Designed</span>`
               : `<span class="pa-pill pa-pill-plain" title="No designer sections yet · 尚未配置设计板块">Plain</span>`}
@@ -2498,8 +2534,8 @@ function buLoad(id) {
   BU_ID = id; BU_PICKING = false;
   BU = { title_en: '', title_cn: '', ids: [], price: '', voucher: '' };
   if (!id) {
-    box.innerHTML = `<div class="pd-var-head">${cuT('Buy together', '一起买')}</div>` +
-      `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then build a buy-together set here.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可创建“一起买”套餐。')}</div>`;
+    box.innerHTML = `<div class="pd-var-head">${cuT('Suggested add-ons', '推荐搭配')}</div>` +
+      `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then suggest add-ons here.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可在此推荐搭配商品。')}</div>`;
     return;
   }
   const p = (PA_PRODUCTS || []).find(x => x.id === id);
@@ -2524,10 +2560,10 @@ function buRender() {
   // without expanding: "No bundle · tap to add" vs "N products".
   const summary = BU.ids.length
     ? cuT(BU.ids.length + ' products', BU.ids.length + ' 件商品')
-    : cuT('No bundle · tap to add', '无套装 · 点击添加');
+    : cuT('None · tap to add', '暂无 · 点击添加');
   const toggle = `<button type="button" class="pd-var-toggle" onclick="buToggle()" aria-expanded="${BU_OPEN ? 'true' : 'false'}">` +
     `<span class="pd-var-caret">${BU_OPEN ? '▾' : '▸'}</span>` +
-    `<span class="pd-var-head" style="margin:0">${cuT('Buy together', '一起买')}</span>` +
+    `<span class="pd-var-head" style="margin:0">${cuT('Suggested add-ons', '推荐搭配')}</span>` +
     `<span class="pd-var-summary">${summary}</span></button>`;
   if (!BU_OPEN) { box.innerHTML = toggle; return; }
   const nameOf = id => { const p = (PA_PRODUCTS || []).find(x => x.id === id); return p ? _vaName(p) : ('#' + id); };
@@ -2538,14 +2574,14 @@ function buRender() {
     <input id="bu-search" class="bu-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to add…', '搜索商品以添加…')}" oninput="buPickerList()">
     <div id="bu-picklist" class="bu-picklist"></div>` : '';
   box.innerHTML = toggle +
-    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT("Group this product with others as a “buy together” set on its page. Each item keeps its own price & stock — no separate inventory.", '在本产品页面将其与其他商品组成“一起买”套装。每件商品保留各自价格与库存,无需单独管理库存。')}</div>` +
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT("Suggest other products on this product’s page — a one-tap “add these too”. Each item keeps its own price & stock; nothing here is a separate product.", '在本产品页面推荐其他商品 — 一键“一起加购”。每件商品保留各自价格与库存,此处不产生新的商品。')}</div>` +
     `<div class="bu-row2">` +
-      `<div class="field"><label class="stacked">${cuT('Title EN', '标题(英文)')}</label><input type="text" value="${escapeAttr(BU.title_en)}" placeholder="Buy together" oninput="buField('title_en', this.value)"></div>` +
-      `<div class="field"><label class="stacked">${cuT('Title CN', '标题(中文)')}</label><input type="text" value="${escapeAttr(BU.title_cn)}" placeholder="一起买" oninput="buField('title_cn', this.value)"></div>` +
+      `<div class="field"><label class="stacked">${cuT('Title EN', '标题(英文)')}</label><input type="text" value="${escapeAttr(BU.title_en)}" placeholder="Goes well with" oninput="buField('title_en', this.value)"></div>` +
+      `<div class="field"><label class="stacked">${cuT('Title CN', '标题(中文)')}</label><input type="text" value="${escapeAttr(BU.title_cn)}" placeholder="推荐搭配" oninput="buField('title_cn', this.value)"></div>` +
     `</div>` +
     `<div class="bu-chips">${chips}</div>` +
     `<div class="bu-row2">` +
-      `<div class="field"><label class="stacked">${cuT('Bundle price ¥ (optional)', '套装价 ¥(可选)')}</label><input type="number" min="0" step="0.01" value="${BU.price === '' ? '' : BU.price}" placeholder="${cuT('blank = item total', '留空 = 各项合计')}" oninput="buField('price', this.value)"></div>` +
+      `<div class="field"><label class="stacked">${cuT('Set price ¥ (optional)', '搭配价 ¥(可选)')}</label><input type="number" min="0" step="0.01" value="${BU.price === '' ? '' : BU.price}" placeholder="${cuT('blank = item total', '留空 = 各项合计')}" oninput="buField('price', this.value)"></div>` +
       `<div class="field"><label class="stacked">${cuT('Auto voucher (optional)', '自动优惠券(可选)')}</label><input type="text" value="${escapeAttr(BU.voucher)}" placeholder="${cuT('code', '券码')}" oninput="buField('voucher', this.value)"></div>` +
     `</div>` +
     `<div class="va-actions">` +
@@ -2592,51 +2628,88 @@ function buBody() {
 // At checkout the COMPONENT stock is deducted, and availability = min(component
 // stock ÷ qty). Stored in the `bundle_items` column as [{id, qty}]; saved with
 // the main Save. Separate from the "buy together" upsell (bu*) below.
-let BP_ID = null, BP = [], BP_PICKING = false, BP_OPEN = false;   // BP = [{id, qty}]
+let BP_ID = null, BP = [], BP_PICKING = false, BP_OPEN = false, BP_MODE = null;   // BP = [{id, qty}]; BP_MODE = 'assembled' | 'prepacked' | null
 function bpLoad(id) {
   const box = document.getElementById('pd-bundle-product'); if (!box) return;
-  BP_ID = id; BP_PICKING = false; BP = [];
+  BP_ID = id; BP_PICKING = false; BP = []; BP_MODE = null;
   if (!id) {
     box.innerHTML = `<div class="pd-var-head">${cuT('Bundle (sold as one)', '套装产品(作为一个产品出售)')}</div>` +
-      `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then choose what goes inside.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可选择套装内含的商品。')}</div>`;
+      `<div class="helper" style="font-size:11px">${cuT('Add a name & SKU above — it saves automatically, then set this up as a bundle.', '请先在上方填写名称和货号 — 系统会自动保存,随后即可将其设置为套装。')}</div>`;
     return;
   }
   const p = (PA_PRODUCTS || []).find(x => x.id === id);
   const items = (p && Array.isArray(p.bundle_items)) ? p.bundle_items : [];
   BP = items.map(c => ({ id: Number(c.id), qty: Math.max(1, parseInt(c.qty, 10) || 1) }))
             .filter(c => Number.isFinite(c.id) && c.id > 0);
-  BP_OPEN = BP.length > 0;
+  // Back-compat: a saved recipe with no explicit mode is an assembled bundle.
+  BP_MODE = (p && (p.bundle_mode === 'assembled' || p.bundle_mode === 'prepacked')) ? p.bundle_mode
+          : (BP.length ? 'assembled' : null);
+  BP_OPEN = !!BP_MODE || BP.length > 0;
   bpRender();
 }
 function bpToggle() { BP_OPEN = !BP_OPEN; bpRender(); }
+// Pick how the bundle is stocked. Switching to pre-packed keeps any chosen
+// components in memory (so a mis-click doesn't lose them) but they won't save.
+function bpSetMode(mode) {
+  BP_MODE = (mode === 'assembled' || mode === 'prepacked') ? mode : null;
+  if (BP_MODE !== 'assembled') BP_PICKING = false;
+  bpRender();
+  pdScheduleAutosave();
+}
 function bpRender() {
   const box = document.getElementById('pd-bundle-product'); if (!box || BP_ID == null) return;
-  const summary = BP.length
+  const summary = BP_MODE === 'assembled'
     ? cuT(BP.length + ' products inside', '内含 ' + BP.length + ' 件商品')
-    : cuT('Not a bundle · tap to make one', '非套装 · 点击设为套装');
+    : BP_MODE === 'prepacked'
+      ? cuT('Pre-packed set', '预包装套装')
+      : cuT('Not a bundle · tap to set up', '非套装 · 点击设置');
   const toggle = `<button type="button" class="pd-var-toggle" onclick="bpToggle()" aria-expanded="${BP_OPEN ? 'true' : 'false'}">` +
     `<span class="pd-var-caret">${BP_OPEN ? '▾' : '▸'}</span>` +
     `<span class="pd-var-head" style="margin:0">${cuT('Bundle (sold as one)', '套装产品')}</span>` +
     `<span class="pd-var-summary">${summary}</span></button>`;
   if (!BP_OPEN) { box.innerHTML = toggle; return; }
-  const nameOf = id => { const p = (PA_PRODUCTS || []).find(x => x.id === id); return p ? _vaName(p) : ('#' + id); };
-  const chips = BP.length
-    ? BP.map(c =>
-        `<span class="bp-chip">` +
-          `<span class="bp-chip-name" title="${escapeAttr(nameOf(c.id))}">${escapeHtml(nameOf(c.id))}</span>` +
-          `<span class="bp-chip-qty" title="${cuT('Quantity in the bundle', '套装内数量')}">×<input type="number" min="1" step="1" value="${c.qty}" onchange="bpQty(${c.id}, this.value)" oninput="bpQty(${c.id}, this.value)"></span>` +
-          `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="bpRemove(${c.id})">✕</button>` +
-        `</span>`).join('')
-    : `<span class="helper" style="font-size:11px">${cuT('Add the products this bundle contains.', '添加本套装包含的商品。')}</span>`;
-  const picker = BP_PICKING ? `
-    <input id="bp-search" class="bu-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to add…', '搜索商品以添加…')}" oninput="bpPickerList()">
-    <div id="bp-picklist" class="bu-picklist"></div>` : '';
+
+  // Mode chooser — the whole point of the section. "Sold as one set" the same
+  // way, but stock works one of two ways.
+  const opt = (mode, on, title, desc) =>
+    `<label class="bp-mode${on ? ' is-on' : ''}">` +
+      `<input type="radio" name="bp-mode" ${on ? 'checked' : ''} onchange="bpSetMode('${mode}')">` +
+      `<span class="bp-mode-txt"><span class="bp-mode-title">${title}</span>` +
+      `<span class="bp-mode-desc">${desc}</span></span></label>`;
+  const modes =
+    `<div class="bp-modes">` +
+      opt('assembled', BP_MODE === 'assembled',
+          cuT('Assembled from other products', '由其他产品组成'),
+          cuT('Stock follows the parts — no count to keep. Sells while every item is in stock; each sale deducts the parts.', '库存取决于组成商品 — 无需单独盘点。所有商品有货时可售,每次售出扣减各组成商品。')) +
+      opt('prepacked', BP_MODE === 'prepacked',
+          cuT('Pre-packed on a shelf', '预先包装成套'),
+          cuT('You stock finished sets and count them yourself — set its stock like any product above.', '你自行备货并盘点成套商品 — 像普通产品一样在上方设置库存。')) +
+    `</div>`;
+
+  // Component picker — only for the assembled mode.
+  let modeBody = '';
+  if (BP_MODE === 'assembled') {
+    const nameOf = id => { const p = (PA_PRODUCTS || []).find(x => x.id === id); return p ? _vaName(p) : ('#' + id); };
+    const chips = BP.length
+      ? BP.map(c =>
+          `<span class="bp-chip">` +
+            `<span class="bp-chip-name" title="${escapeAttr(nameOf(c.id))}">${escapeHtml(nameOf(c.id))}</span>` +
+            `<span class="bp-chip-qty" title="${cuT('Quantity in the bundle', '套装内数量')}">×<input type="number" min="1" step="1" value="${c.qty}" onchange="bpQty(${c.id}, this.value)" oninput="bpQty(${c.id}, this.value)"></span>` +
+            `<button type="button" class="bp-chip-x" title="${cuT('Remove', '移除')}" onclick="bpRemove(${c.id})">✕</button>` +
+          `</span>`).join('')
+      : `<span class="helper" style="font-size:11px">${cuT('Add the products this bundle contains.', '添加本套装包含的商品。')}</span>`;
+    const picker = BP_PICKING ? `
+      <input id="bp-search" class="bu-search" type="text" autocomplete="off" placeholder="${cuT('Search a product to add…', '搜索商品以添加…')}" oninput="bpPickerList()">
+      <div id="bp-picklist" class="bu-picklist"></div>` : '';
+    modeBody =
+      `<div class="bu-chips">${chips}</div>` +
+      `<div class="va-actions">` +
+        `<button type="button" class="btn btn-sm" onclick="bpTogglePicker()">${BP_PICKING ? cuT('Close', '关闭') : cuT('+ Add product', '+ 添加商品')}</button>` +
+      `</div>` + picker;
+  }
   box.innerHTML = toggle +
-    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Customers see ONE product at the price you set above. Behind the scenes it’s these products combined — their stock is what gets deducted, and the bundle sells while every item is in stock.', '顾客看到的是上方价格的单个产品。其实它由下列商品组合而成 — 扣减的是这些商品的库存,且仅当每件商品都有货时套装才可售。')}</div>` +
-    `<div class="bu-chips">${chips}</div>` +
-    `<div class="va-actions">` +
-      `<button type="button" class="btn btn-sm" onclick="bpTogglePicker()">${BP_PICKING ? cuT('Close', '关闭') : cuT('+ Add product', '+ 添加商品')}</button>` +
-    `</div>` + picker;
+    `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Customers see ONE product at the price you set above. Choose how you stock it.', '顾客看到的是上方价格的单个产品。请选择其库存管理方式。')}</div>` +
+    modes + modeBody;
   if (BP_PICKING) { const s = document.getElementById('bp-search'); if (s) s.focus(); bpPickerList(); }
 }
 function bpQty(id, val) {
@@ -2664,10 +2737,15 @@ function bpPick(id) {
   bpRender();
   pdScheduleAutosave();
 }
-// Recipe to save (null clears → turns it back into a normal product).
+// Recipe to save — only an ASSEMBLED bundle carries components. Pre-packed and
+// non-bundle products save null (clears any stale recipe → own stock is used).
 function bpBody() {
-  if (!BP.length) return null;
+  if (BP_MODE !== 'assembled' || !BP.length) return null;
   return BP.map(c => ({ id: c.id, qty: Math.max(1, parseInt(c.qty, 10) || 1) }));
+}
+// The bundle mode to save ('assembled' | 'prepacked' | null = not a bundle).
+function bpModeBody() {
+  return (BP_MODE === 'assembled' || BP_MODE === 'prepacked') ? BP_MODE : null;
 }
 // ── Customer-choice options (dressing, spice level, cutlery…) ─────────────────
 // A choice records the customer's pick at checkout and NEVER touches stock — so
@@ -3881,7 +3959,7 @@ function pdCollectBody() {
   };
   if (_pdGalleryDirty) body.images = _pdGallery;  // gallery drives image_data (first = main)
   if (id && BU_ID === Number(id)) body.bundle = buBody();  // buy-together bundle (null clears)
-  if (id && BP_ID === Number(id)) body.bundle_items = bpBody();  // THIS-is-a-bundle recipe (null clears)
+  if (id && BP_ID === Number(id)) { body.bundle_items = bpBody(); body.bundle_mode = bpModeBody(); }  // THIS-is-a-bundle recipe + stock mode (null clears)
   if (id && OPT_ID === Number(id)) body.options = optBody();  // customer-choice options ([] clears)
   return { id, body };
 }

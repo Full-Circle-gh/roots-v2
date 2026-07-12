@@ -3604,6 +3604,17 @@ try {
   // reserved/deducted (never the bundle's). Distinct from the legacy `bundle`
   // column, which is the "buy together" upsell shown inside another product.
   addColumn('store_products', 'bundle_items', 'TEXT');
+  // Store-only: BUNDLE MODE — how a bundle product is stocked. Set only when the
+  // operator marks a product a bundle in the editor.
+  //   'assembled' = made from OTHER products (bundle_items lists them); its own
+  //     stock_qty is ignored, availability = min(component stock ÷ qty), and at
+  //     checkout the COMPONENT stock is deducted (see expandStockLines).
+  //   'prepacked' = the operator stocks finished sets on a shelf; it behaves like
+  //     an ordinary product with its own counted stock — the "bundle" flag is
+  //     just so it reads as a set (badge/label). Carries no bundle_items.
+  //   NULL = not a bundle. Back-compat: a row with bundle_items but no mode is
+  //     treated as 'assembled'.
+  addColumn('store_products', 'bundle_mode', 'TEXT');
   // Store-only: COUPON-ON-FLASH policy. 0/NULL (default) = vouchers stack on top
   // of the flash price as usual. 1 = while this product is on an ACTIVE flash
   // sale, its line is excluded from the voucher discount base (a sitewide coupon

@@ -15761,7 +15761,7 @@ const VERSION_COLUMNS = [
   'barcode', 'free_of', 'notes', 'product_facts', 'nutrition',
   'is_market', 'is_restock_only', 'is_batch_made', 'oos_policy', 'status', 'is_published',
   'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
-  'description_blocks', 'use_block_design', 'bundle', 'bundle_items', 'tags',
+  'description_blocks', 'use_block_design', 'bundle', 'bundle_items', 'bundle_mode', 'tags',
   'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn', 'page_template',
 ];
 const VERSION_COLLAPSE_SECONDS = 120;  // autosaves within this window merge into one checkpoint
@@ -16016,6 +16016,13 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   // Bundle PRODUCT recipe — [{id, qty}] of component products. A product can't
   // list itself; null clears (turns it back into a normal product).
   if ('bundle_items' in body) { sets.push('bundle_items = ?'); params.push(sanitizeBundleItems(body.bundle_items, id)); }
+  // How the bundle is stocked: 'assembled' (made of components) or 'prepacked'
+  // (own counted stock). Anything else — incl. clearing the bundle — stores NULL.
+  if ('bundle_mode' in body) {
+    const bm = body.bundle_mode === 'assembled' ? 'assembled'
+             : body.bundle_mode === 'prepacked' ? 'prepacked' : null;
+    sets.push('bundle_mode = ?'); params.push(bm);
+  }
   if ('tags' in body) { sets.push('tags = ?'); params.push(sanitizeProductBadge(body.tags)); }
   if ('is_batch_made' in body) { sets.push('is_batch_made = ?'); params.push(body.is_batch_made ? 1 : 0); }
   // Out-of-stock policy: only the two known modes persist; anything else (incl.
@@ -16098,7 +16105,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ?`
@@ -16143,7 +16150,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
     `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size, sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes,
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
-            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, tags,
+            keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
             variant_group_id, variant_label, variant_sort, variant_noun_en, variant_noun_cn,
             is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
@@ -16697,7 +16704,7 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                     status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
                     description_en, description_cn, description_format,
                     keywords_en, keywords_cn, tagline_en, tagline_cn,
-                    nutrition, bundle, bundle_items, tags,
+                    nutrition, bundle, bundle_items, bundle_mode, tags,
                     variant_group_id, variant_label, variant_label_cn, variant_sort,
                     is_batch_made, oos_policy, ship_from_supplier, supplier_paused, use_block_design,
                     colophon_character, colophon_tagline_en, colophon_tagline_cn,

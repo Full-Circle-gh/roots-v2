@@ -2465,6 +2465,33 @@
   @media (max-width: 880px) { #pd-editor .pu-editor-body { grid-template-columns: 1fr; } }
   #pd-editor .pd-main { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
   #pd-editor .pd-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  /* ── Essentials-first editor layout (pe-*) ─────────────────────────────────
+     The body is one column: an ESSENTIALS block (the daily handful) over a
+     stack of quiet disclosure ROWS (everything occasional). Replaces the old
+     two-column pd-main/pd-side grid. All classes are #pd-editor-scoped so they
+     never collide with the base sheet's generic names. */
+  #pd-editor .pu-editor-body.pe-body { display: block; }
+  #pd-editor .pe-ess { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 24px; align-items: start; margin-bottom: 20px; }
+  @media (max-width: 880px) { #pd-editor .pe-ess { grid-template-columns: 1fr; } }
+  #pd-editor .pe-ess-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+  #pd-editor .pe-ess-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  #pd-editor .pe-rows { display: flex; flex-direction: column; gap: 10px; }
+  /* A quiet row = native <details> styled to match the .pd-var-toggle cards the
+     variants/bundle/options sections render, so the whole stack reads as one. */
+  #pd-editor .pe-dis { border: 1px solid var(--line-soft); border-radius: 10px; background: var(--bg-app); overflow: hidden; transition: border-color .12s ease; }
+  #pd-editor .pe-dis[open] { background: var(--bg-elev-1); }
+  #pd-editor .pe-dis > summary { display: flex; align-items: center; gap: 8px; padding: 11px 12px; cursor: pointer; list-style: none; user-select: none; }
+  #pd-editor .pe-dis > summary::-webkit-details-marker { display: none; }
+  #pd-editor .pe-dis > summary::marker { content: ""; }
+  #pd-editor .pe-dis > summary:hover { color: var(--text-1); }
+  #pd-editor .pe-dis:hover { border-color: var(--brass); }
+  #pd-editor .pe-dis-t { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); }
+  #pd-editor .pe-dis-s { font-size: 12px; color: var(--text-2); font-family: var(--f-sans); letter-spacing: 0; text-transform: none; margin-left: auto; }
+  #pd-editor .pe-dis .pe-caret { color: var(--text-4); width: 12px; flex: none; transition: transform .12s ease; }
+  #pd-editor .pe-dis[open] > summary .pe-caret { transform: rotate(90deg); }
+  #pd-editor .pe-dis-body { padding: 12px 14px 16px; border-top: 1px solid var(--line-soft); }
+  #pd-editor .pe-dis-body > .pd-sec + .pd-sec { margin-top: 16px; }
+  #pd-editor .pe-dis-body .field + .field { margin-top: 12px; }
   #pd-editor .pd-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   #pd-editor .field { margin-bottom: 0; }
   #pd-editor .field input[type=text],
@@ -2759,6 +2786,16 @@
   #pd-bundle-product .bp-chip-qty input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
   .bp-chip-x { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 13px; line-height: 1; padding: 0 2px; flex: none; }
   .bp-chip-x:hover { color: var(--brass); }
+  /* Bundle stock-mode chooser (#pd-bundle-product) — two selectable cards:
+     "assembled from components" vs "pre-packed". */
+  #pd-bundle-product .bp-modes { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 2px; }
+  #pd-bundle-product .bp-mode { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: 10px 12px; background: var(--bg-app); cursor: pointer; transition: border-color .12s ease, background .12s ease; }
+  #pd-bundle-product .bp-mode:hover { border-color: var(--brass); }
+  #pd-bundle-product .bp-mode.is-on { border-color: var(--brass); background: var(--bg-elev-1); }
+  #pd-bundle-product .bp-mode input { margin: 2px 0 0; flex: none; accent-color: var(--brass); }
+  #pd-bundle-product .bp-mode-txt { display: flex; flex-direction: column; gap: 2px; }
+  #pd-bundle-product .bp-mode-title { font-size: 13px; color: var(--text-1); font-family: var(--f-sans); }
+  #pd-bundle-product .bp-mode-desc { font-size: 11px; color: var(--text-3); line-height: 1.4; }
   /* Customer-choice options editor (#pd-options) — one .opt-block per option
      (question + type + required), each holding a list of .opt-choice rows. */
   .opt-list { display: flex; flex-direction: column; gap: 10px; margin: 10px 0 2px; }
@@ -10321,3 +10358,69 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #tab-membership .mp-split { grid-template-columns: 1fr; }
   #tab-membership .mp-preview { position: static; max-width: 360px; }
 }
+
+/* ===========================================================================
+   PRODUCT EDITOR - Paper / Inter skin (the approved mockup).
+   The editor renders as a light "Paper" surface no matter the admin's theme.
+   Rather than override every rule, we re-declare the LIGHT Tacet token values
+   scoped to #pd-editor so all native styling resolves to light values; then a
+   few flourishes (Inter caps, white cards, Dusk accent, sliding publish switch)
+   take it the rest of the way. Mockup: reference/product-edit-essentials-mockup.html
+   =========================================================================== */
+  #pd-editor {
+    --bg-app:     #FBF9F4;
+    --bg-pane:    #FFFFFF;
+    --bg-elev-1:  #F6F3EC;
+    --bg-elev-2:  #EFEBE2;
+    --bg-input:   #FFFFFF;
+    --bg-overlay: rgba(18, 22, 26, .46);
+    --line-soft:  rgba(18, 22, 26, .09);
+    --line:       rgba(18, 22, 26, .14);
+    --line-strong: rgba(18, 22, 26, .22);
+    --text-1:     #111A2B;
+    --text-2:     #3f4653;
+    --text-3:     #58606E;
+    --text-4:     #8b9098;
+    --brass:      #B08D4A;
+    --accent:     #6B8E6F;
+    --danger:     #B4533E;
+    background: #FBF9F4;
+    color: #111A2B;
+    border: 1px solid #E4E0D5;
+    border-radius: 14px;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  }
+  #pd-editor .pu-editor-head, #pd-editor .pu-editor-foot { background: #FBF9F4; border-color: var(--line); }
+  #pd-editor .pu-editor-head #pd-title { font-size: 18px; font-weight: 600; letter-spacing: -.005em; color: #111A2B; }
+  #pd-editor .pd-card, #pd-editor .pe-dis, #pd-editor .pd-var-toggle, #pd-editor .bp-mode { background: #FFFFFF; }
+  #pd-editor .pd-card { border: 1px solid #E4E0D5; border-radius: 14px; padding: 18px; }
+  #pd-editor .pe-dis { border-color: #E4E0D5; border-radius: 12px; }
+  #pd-editor .pe-dis[open] { background: #FFFFFF; }
+  #pd-editor .pe-dis > summary:hover { background: #F6F3EC; }
+  #pd-editor .pd-var-toggle { border-color: #E4E0D5; border-radius: 12px; }
+  #pd-editor .pd-var-toggle:hover { background: #FFFFFF; border-color: #58606E; }
+  #pd-editor .pd-sec-h, #pd-editor .pd-card-h, #pd-editor .pe-dis-t, #pd-editor .pd-var-head {
+    font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600; letter-spacing: .05em;
+    text-transform: uppercase; color: #58606E;
+  }
+  #pd-editor .stacked, #pd-editor label.stacked { color: #111A2B; font-weight: 500; }
+  #pd-editor input:focus, #pd-editor select:focus, #pd-editor textarea:focus,
+  #pd-editor .pd-rte:focus, #pd-editor .field input:focus { outline: none; border-color: #6E67AF; }
+  #pd-editor .bp-mode input { accent-color: #6E67AF; }
+  #pd-editor .bp-mode.is-on { border-color: #111A2B; background: #F6F3EC; }
+  #pd-editor .pa-pill-bundle, #pd-editor .pa-pill.pa-pill-bundle { background: #F6F3EC; color: #58606E; }
+  #pd-editor .pd-pub { background: #FFFFFF; border-radius: 12px; }
+  #pd-editor .pd-pub > svg { display: none; }
+  #pd-editor .pd-pub > span { order: 1; font-weight: 500; color: #111A2B; }
+  #pd-editor .pd-pub input[type="checkbox"] {
+    order: 2; margin-left: auto; -webkit-appearance: none; appearance: none;
+    width: 38px; height: 22px; border-radius: 999px; background: #E4E0D5; position: relative;
+    cursor: pointer; transition: background .2s var(--ease-out); flex: none;
+  }
+  #pd-editor .pd-pub input[type="checkbox"]::after {
+    content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+    border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.18);
+    transition: transform .2s var(--ease-out);
+  }
+  #pd-editor .pd-pub input[type="checkbox"]:checked { background: #111A2B; }
+  #pd-editor .pd-pub input[type="checkbox"]:checked::after { transform: translateX(16px); }
