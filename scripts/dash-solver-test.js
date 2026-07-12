@@ -43,8 +43,12 @@ const DASH_SHAPES = {
   drafts:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   // onroad = dispatch/customer-service "On the road" (out-for-delivery orders).
   onroad:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  // ready = dispatch/customer-service "Ready to hand off" (status=preparing).
+  ready:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  // moves = warehouse "Recent stock moves" (retail_stock_ledger).
+  moves:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, delivery: 1, channels: 2, movers: 2, week: 2, incoming: 2, drafts: 2, onroad: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, delivery: 1, channels: 2, movers: 2, week: 2, incoming: 2, drafts: 2, onroad: 2, ready: 2, moves: 2 };
 
 function dashPrefScore(id, w, h) {
   const S = DASH_SHAPES[id]; if (!S) return null;
@@ -168,12 +172,12 @@ function run(label, blocks, opts) {
 // warehouse-only `incoming` block for the complete 10-block set — its all-subsets
 // check is enough since restricted roles can't reorder.
 const OWNER = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'delivery', 'channels'];
-const FULL = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'drafts', 'onroad', 'delivery', 'channels'];
+const FULL = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'drafts', 'moves', 'onroad', 'ready', 'delivery', 'channels'];
 
 console.log('Dashboard bento solver — tiling invariant\n');
 let ok = true;
 ok = run('owner 9 blocks — all subsets + all orderings', OWNER, { permuteFull: true }) && ok;
-ok = run('full 12 blocks (incl. warehouse + dispatch onroad) — all subsets', FULL) && ok;
+ok = run('full 14 blocks (all owner + warehouse + dispatch) — all subsets', FULL) && ok;
 
 console.log('');
 if (!ok) { console.log('RESULT: FAIL — a block set does not tile; do NOT ship the shapes as-is.'); process.exit(1); }

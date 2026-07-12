@@ -8388,6 +8388,17 @@
   .bx-in-sub { color: var(--td-text2); font-size: 12px; margin-left: 8px; }
   .bx-in-eta { margin-left: auto; flex: none; color: var(--td-text2); font-size: 12.5px; white-space: nowrap; }
   .bx-in-eta.is-soon { color: var(--td-amber-ink); font-weight: 500; }
+  /* Recent stock moves — ledger tail (bx-* scoped). Dusk dot = an automation
+     made the move; plain graphite dot = a person did. In green-ink, out ink. */
+  .bx-mo-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
+  .bx-mo-row { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; font-size: 13.5px; }
+  .bx-mo-row + .bx-mo-row { border-top: 1px solid var(--td-raised); }
+  .bx-mo-dot { flex: none; width: 6px; height: 6px; border-radius: 999px; background: var(--td-dusk, #7A7FB3); align-self: center; }
+  .bx-mo-dot.is-manual { background: var(--td-text2); }
+  .bx-mo-nm { min-width: 0; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bx-mo-d { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; font-weight: 500; }
+  .bx-mo-d.is-in { color: var(--td-sage-ink, #4A6249); }
+  .bx-mo-d.is-out { color: var(--td-text); }
   .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 14px; line-height: 1.4; cursor: pointer; }
   .td-feed-row:hover { background: var(--td-raised); }
   .td-feed-row .db-feed-ts { flex: none; width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
@@ -9726,17 +9737,17 @@ body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, b
   display: none;
 }
 body.pos-store-manager .td-block[data-block="channels"] { display: none; }
-/* "On the way" + "Drafts to send" (purchasing) are warehouse-native — shown
-   only to warehouse, hidden for every other role (owner = pos-default). */
-body.pos-default .td-block[data-block="incoming"], body.pos-default .td-block[data-block="drafts"],
-body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="drafts"],
-body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="drafts"],
-body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="drafts"] { display: none; }
-/* "On the road" (live delivery board) is delivery-native — shown to dispatch +
-   customer-service, hidden for owner / warehouse / store-manager. */
-body.pos-default .td-block[data-block="onroad"],
-body.pos-warehouse .td-block[data-block="onroad"],
-body.pos-store-manager .td-block[data-block="onroad"] { display: none; }
+/* "On the way" + "Drafts to send" + "Recent stock moves" are warehouse-native —
+   shown only to warehouse, hidden for every other role (owner = pos-default). */
+body.pos-default .td-block[data-block="incoming"], body.pos-default .td-block[data-block="drafts"], body.pos-default .td-block[data-block="moves"],
+body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="drafts"], body.pos-dispatch .td-block[data-block="moves"],
+body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="drafts"], body.pos-customer-service .td-block[data-block="moves"],
+body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="drafts"], body.pos-store-manager .td-block[data-block="moves"] { display: none; }
+/* "On the road" + "Ready to hand off" (delivery board) are delivery-native —
+   shown to dispatch + customer-service, hidden for owner / warehouse / store-manager. */
+body.pos-default .td-block[data-block="onroad"], body.pos-default .td-block[data-block="ready"],
+body.pos-warehouse .td-block[data-block="onroad"], body.pos-warehouse .td-block[data-block="ready"],
+body.pos-store-manager .td-block[data-block="onroad"], body.pos-store-manager .td-block[data-block="ready"] { display: none; }
 /* Each restricted position keeps only the section block it works in. */
 body.pos-dispatch .td-block[data-block="inventory"],
 body.pos-customer-service .td-block[data-block="inventory"],

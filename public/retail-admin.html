@@ -1492,6 +1492,25 @@
         </div>
       </div>
 
+      <!-- Recent stock moves — tail of the stock ledger (warehouse-only).
+           Painted by dashMovesRender from /activity. Dusk dot = automated move. -->
+      <div class="td-block" data-block="moves">
+        <button class="bn-hide" onclick="dashArrangeHide('moves')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+              <h3>Recent stock moves · 近期库存变动</h3>
+              <button type="button" class="bn-go" onclick="goTab('activity')">Stock activity › · 前往库存动态 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bx-mo-list" id="td-moves-list"><div class="td-muted">Loading… · 加载中…</div></div>
+              <p class="td-chan-foot detail2">In &amp; out · newest first · 出入库 · 最新优先</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- On the road — out-for-delivery orders with live rider stage + ETA
            (dispatch / customer-service). Painted by dashOnroadRender. -->
       <div class="td-block" data-block="onroad">
@@ -1506,6 +1525,25 @@
             <div class="bn-body">
               <div class="bx-in-list" id="td-onroad-list"><div class="td-muted">Loading… · 加载中…</div></div>
               <p class="td-chan-foot detail2">Out for delivery · live · 配送中 · 实时</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Ready to hand off — orders being packed, waiting for a rider
+           (dispatch / customer-service). Painted by dashReadyRender. -->
+      <div class="td-block" data-block="ready">
+        <button class="bn-hide" onclick="dashArrangeHide('ready')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16.5 9.4 7.5 4.2"/><path d="M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.7l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.3 7 12 12l8.7-5M12 22V12"/></svg>
+              <h3>Ready to hand off · 待交接</h3>
+              <button type="button" class="bn-go" onclick="dashJumpTab('orders')">Open orders › · 前往订单 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bx-in-list" id="td-ready-list"><div class="td-muted">Loading… · 加载中…</div></div>
+              <p class="td-chan-foot detail2">Packed · waiting for a rider · 已打包 · 等待骑手</p>
             </div>
           </div>
         </div>
