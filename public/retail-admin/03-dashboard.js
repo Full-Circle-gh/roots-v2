@@ -1412,8 +1412,14 @@ const DASH_COLS = 6, DASH_GAP = 16, DASH_ROW = 120;
 // tall shapes so the default gives them height; every block keeps {2,3,4}-wide
 // options so exact 6-unit partitions always exist. Tuned + headless-verified.
 const DASH_SHAPES = {
-  recap:     [[6,2],[4,2],[3,2],[6,1],[4,1],[3,1],[2,1]],
-  needs:     [[6,2],[4,2],[3,2],[6,1],[4,1],[3,1],[2,1]],
+  // recap + needs prefer a half-width (3-col) 2-row shape FIRST so, when both
+  // are on the page, the solver packs them side by side in one row (3+3=6)
+  // instead of stacking two full-width heroes. [6,2] stays in the menu right
+  // after, so whichever is alone (needs auto-hides on a calm day) still fills
+  // the row full-width — a lone 3-wide can't form a valid 2-row band (sum<4),
+  // so the solo case always lands on [6,2]. Tiling proven in dash-solver-test.
+  recap:     [[3,2],[6,2],[4,2],[6,1],[4,1],[3,1],[2,1]],
+  needs:     [[3,2],[6,2],[4,2],[6,1],[4,1],[3,1],[2,1]],
   orders:    [[4,2],[3,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
   // movers is a ranked list — it prefers height (2-row) so it can show 5 rows;
   // keeps {2,3,4}-wide options so every subset still partitions to 6. Tiling
