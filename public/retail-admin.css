@@ -9868,9 +9868,10 @@ body:has(#tab-vouchers.active) { background: var(--td-paper); }
 #tab-vouchers .td-head { align-items: flex-start; flex-wrap: wrap; margin-bottom: 20px; }
 .vch-spacer { flex: 1; }
 
-/* The screen's one Dusk element — creation CTA (mirrors #tab-orders .t-cta). */
-.vch-new { background: var(--tacet-dusk); border-color: var(--tacet-dusk); color: #fff; gap: 7px; white-space: nowrap; }
-.vch-new:hover { background: #605AA0; border-color: #605AA0; color: #fff; }
+/* Creation CTA — dark-ink primary, matches #tab-flash .fsm-new. */
+.vch-new { background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); gap: 7px; font-weight: 500; white-space: nowrap; }
+.vch-new:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
+[data-theme="dark"] .vch-new:hover { background: #EAE7DF; border-color: #EAE7DF; color: var(--bg-app); }
 .vch-new svg { flex: none; }
 
 /* ── toolbar: segment + search ── */
