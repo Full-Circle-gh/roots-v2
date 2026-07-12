@@ -2981,17 +2981,21 @@
   body.ent-quickStock:not(.feat-quickStock)   #qs-home .feat-off,
   body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home .feat-off,
   body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
-  /* feature on/off bar + enable card (mounted at the top of each feature page) */
+  /* feature on/off bar + enable card (mounted at the top of each feature page).
+     Tacet-native: quiet card, ink primary action — amber/brass stay reserved
+     for status, not a plain "turn this on" control. */
   .feat-bar { display: flex; align-items: center; justify-content: space-between;
-    gap: 16px; padding: 12px 16px; margin-bottom: var(--s4);
-    background: var(--bg-elev-1); border: 1px solid var(--line); border-radius: var(--r-lg, 10px); }
-  .feat-bar-t { font-weight: 600; font-size: 13px; }
-  .feat-bar-d { font-size: 11px; color: var(--text-3); margin-top: 2px; max-width: 60ch; }
-  .feat-bar-state { font-size: 12px; color: var(--text-2); min-width: 30px; }
-  .feat-off { padding: 30px 22px; text-align: center;
-    background: var(--bg-elev-1); border: 1px dashed var(--line); border-radius: var(--r-lg, 10px); }
-  .feat-off h3 { font-size: 15px; margin: 0 0 6px; }
-  .feat-off p { font-size: 12px; color: var(--text-3); margin: 0 auto 16px; max-width: 46ch; line-height: 1.5; }
+    gap: 16px; padding: 14px 18px; margin-bottom: var(--s4);
+    background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; }
+  .feat-bar-t { font-weight: 500; font-size: 13.5px; color: var(--td-text); }
+  .feat-bar-d { font-size: 11.5px; color: var(--td-text2); margin-top: 3px; max-width: 60ch; line-height: 1.5; }
+  .feat-bar-state { font-size: 12px; color: var(--td-text2); min-width: 30px; }
+  .feat-off { padding: 48px 24px; text-align: center;
+    background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 14px; }
+  .feat-off h3 { font-size: 15px; font-weight: 500; color: var(--td-text); margin: 0 0 6px; }
+  .feat-off p { font-size: 12.5px; color: var(--td-text2); margin: 0 auto 18px; max-width: 46ch; line-height: 1.6; }
+  .feat-off .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  .feat-off .btn-primary:hover { background: var(--td-dusk); border-color: var(--td-dusk); }
   .pa-dup-row {
     flex: none; width: 28px; height: 28px; padding: 0;
     border: 1px solid var(--td-border); border-radius: 6px;
