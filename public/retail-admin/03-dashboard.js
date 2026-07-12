@@ -390,6 +390,10 @@ function dashHeroInit() {
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.weekData) dashWeekRender();
   });
+  // ...and the incoming-PO list (dates + "lines" are JS-built).
+  if (window.onLangChange) onLangChange(() => {
+    if (DASH_HERO.incoming) dashIncomingRender();
+  });
   // Hover-scrub the Today sparklines to read each hour of the day.
   ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
     const w = $(sel); if (!w) return;
@@ -431,6 +435,7 @@ function dashHeroRefreshAll() {
   dashChanLoad();
   dashHeroLoadToday();
   dashWeekLoad();
+  dashIncomingLoad();
 }
 
 // ── Live push (SSE) ────────────────────────────────────────────────────────
@@ -883,6 +888,51 @@ function dashWeekRender() {
     </div>`;
 }
 
+// On the way — purchase orders the buying department has placed and are in
+// transit (status 'Ordered'), newest ETA first. Warehouse-only block. Its own
+// pull; stays present with a calm empty line when nothing's inbound so the
+// warehouse page never goes blank. Language-dependent (dates + "lines"), so it
+// repaints on a language toggle from its stashed rows.
+async function dashIncomingLoad() {
+  try {
+    const j = await api('/api/retail-admin/purchases?status=Ordered');
+    DASH_HERO.incoming = Array.isArray(j.data) ? j.data : [];
+    dashIncomingRender();
+  } catch (e) {
+    if (!DASH_HERO.incoming) dashBootRetry('incoming', dashIncomingLoad);
+  }
+}
+function dashIncomingRender() {
+  const host = $('#td-incoming-list'); if (!host) return;
+  const rows = DASH_HERO.incoming; if (!rows) return;
+  if (!rows.length) {
+    host.innerHTML = `<div class="td-muted">${cuT('Nothing on the way', '暂无在途采购')}</div>`;
+    return;
+  }
+  // Soonest expected first; POs with no date sink to the bottom.
+  const byEta = [...rows].sort((a, b) => (a.delivery_date || '9999').localeCompare(b.delivery_date || '9999'));
+  const todayGz = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const etaLabel = d => {
+    if (!d) return cuT('no date yet', '未定日期');
+    if (d <= todayGz) return cuT('arrives today', '今日到货');
+    const dt = new Date(d + 'T00:00:00');
+    return cuT('by ' + dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }),
+              '预计 ' + (dt.getMonth() + 1) + '月' + dt.getDate() + '日');
+  };
+  host.innerHTML = byEta.slice(0, 5).map((po, i) => {
+    const sup = (po.supplier || '').trim();
+    const lines = Number(po.line_count || 0);
+    const linesTxt = cuT(lines + (lines === 1 ? ' line' : ' lines'), lines + ' 项');
+    const sub = [sup, linesTxt].filter(Boolean).join(cuT(' · ', ' · '));
+    const soon = po.delivery_date && po.delivery_date <= todayGz;
+    const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
+    return `<div class="bx-in-row${cls}">
+      <span class="bx-in-nm">${escapeHtml(po.po_number || '')}<span class="bx-in-sub">${escapeHtml(sub)}</span></span>
+      <span class="bx-in-eta${soon ? ' is-soon' : ''}">${escapeHtml(etaLabel(po.delivery_date))}</span>
+    </div>`;
+  }).join('');
+}
+
 // Tacet activity row — clean prose per the dashboard mockup. Returns
 // { text, amount, badge }: `text` is the sentence, `amount` is the
 // right-aligned money (muted), `badge` a small first-order pill. No icon,
@@ -1154,8 +1204,8 @@ function tdInit() {
 // Key bumped to -v4: the 'movers' block joined the set, so a saved order that
 // predates it needs the fresh default once (missing blocks would otherwise only
 // surface at the tail — harmless, but the bump keeps the shipped order intact).
-const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v5';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'delivery', 'channels'];
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v6';
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'delivery', 'channels'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
   recap:     ['While you were away', '您不在的这段时间'],
@@ -1165,6 +1215,7 @@ const DASH_BLOCK_TITLES = {
   week:      ['The week so far', '本周概览'],
   customers: ['Customers', '客户'],
   inventory: ['Inventory', '库存'],
+  incoming:  ['On the way', '在途采购'],
   delivery:  ['Delivery', '配送'],
   channels:  ['Channels today', '今日渠道'],
 };
@@ -1187,10 +1238,13 @@ const DASH_SHAPES = {
   week:      [[4,2],[3,2],[4,1],[3,1],[2,2],[2,1],[6,1]],
   customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
   inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
+  // incoming = warehouse-only "On the way" (in-transit POs). List block, same
+  // width menu as movers. Tiling proven in scripts/dash-solver-test.js.
+  incoming:  [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
   channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers: 1, inventory: 2, delivery: 1, channels: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers: 1, inventory: 2, incoming: 2, delivery: 1, channels: 2 };
 
 let DASH_ARRANGING = false;
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];
@@ -1277,9 +1331,12 @@ function dashComputeRects() {
   if (!host) return { rects: {}, height: 0 };
   // A block with nothing to say marks itself .is-quiet (e.g. Needs-you on a
   // calm day) and drops out of the layout — unless arranging, where quiet
-  // blocks reappear dimmed so they can still be reordered.
+  // blocks reappear dimmed so they can still be reordered. A block the operator's
+  // ROLE hides (display:none via the DASHBOARDS BY POSITION rules) must also drop
+  // out, or it would reserve an empty grid slot and gap the restricted-role page.
   const present = new Set([...host.querySelectorAll('.td-block')]
-    .filter(b => DASH_ARRANGING || !b.classList.contains('is-quiet'))
+    .filter(b => (DASH_ARRANGING || !b.classList.contains('is-quiet'))
+              && getComputedStyle(b).display !== 'none')
     .map(b => b.dataset.block));
   const ids = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && present.has(id));
   if (!ids.length) return { rects: {}, height: 0 };

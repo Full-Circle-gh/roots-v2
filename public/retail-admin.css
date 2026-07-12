@@ -8379,6 +8379,15 @@
   .bx-wk-lbl.is-today { color: var(--td-text); font-weight: 500; }
   .bx-wk-foot { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--td-border); font-size: 12.5px; color: var(--td-text2); }
   .bx-wk-foot b { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  /* On the way — in-transit PO list (bx-* scoped). ETA in the "arrives today"
+     amber when due on/before today. Rows past the 2nd wear .detail/.detail2. */
+  .bx-in-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
+  .bx-in-row { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; font-size: 13.5px; }
+  .bx-in-row + .bx-in-row { border-top: 1px solid var(--td-raised); }
+  .bx-in-nm { min-width: 0; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .bx-in-sub { color: var(--td-text2); font-size: 12px; margin-left: 8px; }
+  .bx-in-eta { margin-left: auto; flex: none; color: var(--td-text2); font-size: 12.5px; white-space: nowrap; }
+  .bx-in-eta.is-soon { color: var(--td-amber-ink); font-weight: 500; }
   .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 14px; line-height: 1.4; cursor: pointer; }
   .td-feed-row:hover { background: var(--td-raised); }
   .td-feed-row .db-feed-ts { flex: none; width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
@@ -9717,6 +9726,12 @@ body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, b
   display: none;
 }
 body.pos-store-manager .td-block[data-block="channels"] { display: none; }
+/* "On the way" (in-transit POs) is warehouse-native — shown only to warehouse,
+   hidden for every other role (owner = pos-default). */
+body.pos-default .td-block[data-block="incoming"],
+body.pos-dispatch .td-block[data-block="incoming"],
+body.pos-customer-service .td-block[data-block="incoming"],
+body.pos-store-manager .td-block[data-block="incoming"] { display: none; }
 /* Each restricted position keeps only the section block it works in. */
 body.pos-dispatch .td-block[data-block="inventory"],
 body.pos-customer-service .td-block[data-block="inventory"],
