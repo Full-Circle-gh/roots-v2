@@ -665,6 +665,18 @@ app.get('/cms', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', file));
 });
 
+// Tacet Mobile — the monitoring-first phone companion for the store backend.
+// Same self-auth pattern as /product-editor and /retail-admin: the shell loads
+// immediately, then its own fetch('/api/retail-admin/*') enforces auth and the
+// page redirects to the store root on 401/403. Served no-store (like the admin
+// shell) so operators always get the freshest build on deploy. Reachable at /m
+// on any host, and it's the intended phone entry point on the store.* subdomain.
+app.get('/m', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'm.html'));
+});
+
 // Public storefront preview — renders the LIVE home.layout in a phone
 // frame for any visitor. No auth, no editor chrome. Used by the team to
 // share the current published layout via a link, and by stakeholders to
