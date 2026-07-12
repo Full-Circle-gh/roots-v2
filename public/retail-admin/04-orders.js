@@ -1867,12 +1867,27 @@ function rerouteShortNote(o) {
   try { pids = JSON.parse(o.reroute_short_pids || '[]') || []; } catch {}
   if (!pids.length) return '';
   const byId = new Map((o.items || []).map(it => [it.product_id, it]));
-  const names = pids.map(pid => {
+  const rows = pids.map(pid => {
     const it = byId.get(pid);
-    return it ? orderItemNames(it).primary : `#${pid}`;
-  }).join('、');
-  return `<div class="sub" style="color: var(--text-3);">`
-    + `${cuT('nearer store was short on', '就近门店缺货')}: ${escapeHtml(names)}</div>`;
+    if (!it) {
+      return `<div style="display:flex; align-items:center; gap:8px; min-width:0;">`
+        + `<span class="oi-thumb is-empty" aria-hidden="true"></span>`
+        + `<span style="font-weight:600; color: var(--text-1);">#${escapeHtml(String(pid))}</span></div>`;
+    }
+    const nm = orderItemNames(it);
+    return `<div style="display:flex; align-items:center; gap:8px; min-width:0;">`
+      + itemThumb(it)
+      + `<span style="min-width:0;">`
+      +   `<span style="display:block; font-weight:600; font-size:13px; color: var(--text-1); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(nm.primary)}</span>`
+      +   itemSkuHtml(it)
+      + `</span></div>`;
+  }).join('');
+  return `<div style="margin-top:10px; padding-top:10px; border-top:1px solid var(--line-soft);">`
+    + `<div style="display:flex; align-items:center; gap:6px; font-size:11.5px; font-weight:700; color: color-mix(in srgb, var(--brass) 72%, #000); margin-bottom:8px;">`
+    +   `<span style="width:6px; height:6px; border-radius:50%; background: var(--brass); flex:none;"></span>`
+    +   `${cuT('Nearer store was short on', '就近门店缺货')}</div>`
+    + `<div style="display:flex; flex-direction:column; gap:7px;">${rows}</div>`
+    + `</div>`;
 }
 // Warning line for orders whose shipping store can't currently cover every item
 // (set at checkout on out-of-city / scheduled-later orders that skipped the
