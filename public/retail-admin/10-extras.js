@@ -307,33 +307,110 @@ if (window.onLangChange) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// SHARE CARDS — per-page WeChat forward thumbnails (Home / Product /
-// Voting). Stored as config keys sharing.<key> (relative media paths);
-// the customer /api/retail/config endpoint absolutizes them for WeChat.
-// The affiliate invite card keeps its own picture (affiliate.shareImage).
-// Reuses the same media-upload endpoint as the affiliate share image.
+// SHARE CARDS — Tacet gallery (Home / Product / Voting / Invite). Each
+// card renders the REAL WeChat forward card (picture + title + app row)
+// so the operator sees exactly what a friend receives, and updates live
+// as they type. Storage:
+//   • Home / Product / Voting → config keys sharing.<key> (picture) and
+//     sharing.<key>Title = {en,cn} (Product has no title). The customer
+//     /api/retail/config endpoint absolutizes the pictures for WeChat.
+//   • Invite → affiliate.shareImage + affiliate.shareTitle, the SAME keys
+//     as Marketing → Affiliate, so the two surfaces stay in sync.
+// Media upload reuses /api/retail-admin/media/upload. Markup: the
+// #tab-sharing section + #tacet-sharecards-skin in retail-admin.html.
 // ════════════════════════════════════════════════════════════════
-const SH_KEYS = ['home', 'product', 'voting'];
+const SC_KEYS = ['home', 'product', 'voting', 'invite'];
+const SC_CFG = {
+  home:    { titled: true,  ep: 'config' },
+  product: { titled: false, ep: 'config' },
+  voting:  { titled: true,  ep: 'config' },
+  invite:  { titled: true,  ep: 'affiliate' },
+};
+// Muted placeholder shown in the preview when a card has no custom title —
+// stands in for the app's built-in default. Kept tenant-neutral (no brand
+// name) so the shared admin never hard-codes one store's wording.
+const SC_EMPTY_TITLE = {
+  home:    { en: 'Your store’s default title', cn: '店铺默认标题' },
+  product: { en: 'The product’s own name',     cn: '商品自身名称' },
+  voting:  { en: 'Vote with us',                    cn: '一起来投票' },
+  invite:  { en: 'Invite reward + code (automatic)', cn: '邀请奖励 + 邀请码(自动)' },
+};
+const SC_ICON_USER = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 20a8 8 0 0 1 16 0"/></svg>';
+const SC_ICON_MARK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M12 3v18"/></svg>';
 let SHARING_LOADED = false;
 
-function shRenderPreview(key) {
-  const url = $('#sh-' + key).value;
-  const box = $('#sh-' + key + '-preview');
-  if (!box) return;
-  if (!url) {
-    box.innerHTML = '<div class="muted" style="font-size: 11px;">No custom picture — using the page\'s own look. · 暂无自定义图片 — 使用该页面自带样式。</div>';
-    return;
+// Current admin language, read the same way the i18n engine stores it
+// (LANG_KEY = 'roots-admin-lang'). Used to decide which title the preview
+// shows; the preview re-renders on language toggle via onLangChange below.
+function scLang() { try { return localStorage.getItem('roots-admin-lang') === 'cn' ? 'cn' : 'en'; } catch (e) { return 'en'; } }
+function scT(en, cn) { return scLang() === 'cn' ? cn : en; }
+function scEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function scTitleObj(key) {
+  if (!SC_CFG[key].titled) return { en: '', cn: '' };
+  return {
+    en: String($('#sc-' + key + '-ten').value || '').trim(),
+    cn: String($('#sc-' + key + '-tcn').value || '').trim(),
+  };
+}
+
+function scCount(key, suffix) {
+  const el = $('#sc-' + key + '-' + suffix);
+  const c  = $('#sc-' + key + '-' + suffix + '-c');
+  if (el && c) c.textContent = el.value.length + ' / 60';
+}
+
+// Re-paint one card's preview + status pill + control labels from its inputs.
+function scRenderCard(key) {
+  const cfg  = SC_CFG[key];
+  const img  = String($('#sc-' + key + '-img').value || '').trim();
+  const lang = scLang();
+
+  let titleText, isDefault = false;
+  if (cfg.titled) {
+    const t = String((lang === 'cn' ? $('#sc-' + key + '-tcn') : $('#sc-' + key + '-ten')).value || '').trim();
+    if (t) { titleText = t; } else { titleText = SC_EMPTY_TITLE[key][lang]; isDefault = true; }
+  } else {
+    titleText = SC_EMPTY_TITLE[key][lang]; isDefault = true;
   }
-  box.innerHTML = `<img src="${escapeAttr(url)}" alt="" style="width: 250px; aspect-ratio: 5 / 4; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--bg2);">
-    <div style="margin-top: 6px;"><button class="btn btn-sm" onclick="shClear('${key}')">Remove picture · 移除图片</button></div>`;
+
+  const imgBlock = img
+    ? `<div class="sc-wx-img" data-scimg="${key}"></div>`
+    : '<div class="sc-wx-img sc-fb"><div class="sc-fb-lines"><i></i><i></i><i></i></div><div class="sc-fb-dot"></div></div>';
+
+  const pv = $('#sc-' + key + '-pv');
+  if (pv) {
+    pv.innerHTML =
+      '<div class="sc-chat"><div class="sc-chatrow">'
+      + '<div class="sc-avatar">' + SC_ICON_USER + '</div>'
+      + '<div class="sc-wxcard">'
+      +   '<div class="sc-wx-t' + (isDefault ? ' empty' : '') + '">' + scEsc(titleText) + '</div>'
+      +   imgBlock
+      +   '<div class="sc-wx-foot"><span class="sc-wx-lg">' + SC_ICON_MARK + '</span><span>' + scT('Mini Program', '小程序') + '</span></div>'
+      + '</div></div></div>';
+    // Set the picture via property (avoids escaping a URL into a style string).
+    if (img) { const el = pv.querySelector('[data-scimg="' + key + '"]'); if (el) el.style.backgroundImage = 'url("' + img.replace(/"/g, '%22') + '")'; }
+  }
+
+  const pill = $('#sc-' + key + '-pill');
+  if (pill) pill.innerHTML = img
+    ? '<span class="sc-pill custom"><span class="sc-dot"></span>' + scT('Custom picture', '自定义图片') + '</span>'
+    : '<span class="sc-pill deflt"><span class="sc-dot"></span>' + scT('Page’s own look', '页面自带样式') + '</span>';
+
+  const rm = $('#sc-' + key + '-rm'); if (rm) rm.style.display = img ? '' : 'none';
+  const upl = $('#sc-' + key + '-upl'); if (upl) upl.textContent = img ? scT('Replace picture', '更换图片') : scT('Add picture', '添加图片');
+  if (cfg.titled) { scCount(key, 'ten'); scCount(key, 'tcn'); }
 }
 
-function shClear(key) {
-  $('#sh-' + key).value = '';
-  shRenderPreview(key);
+function scOnTitleInput(key) { scRenderCard(key); }
+
+function scClear(key) {
+  $('#sc-' + key + '-img').value = '';
+  scRenderCard(key);
+  toast(scT('Picture removed — Save to apply', '已移除图片 — 保存后生效'));
 }
 
-async function shUpload(key, file) {
+async function scUpload(key, file) {
   if (!file) return;
   const fd = new FormData(); fd.append('file', file);
   toast('Uploading… · 上传中…');
@@ -341,46 +418,80 @@ async function shUpload(key, file) {
     const r = await fetch('/api/retail-admin/media/upload', { method: 'POST', credentials: 'same-origin', body: fd });
     const j = await r.json();
     if (!j.success) { toast('Upload failed · 上传失败: ' + (j.error || ''), 'err'); return; }
-    $('#sh-' + key).value = j.data.url;
-    shRenderPreview(key);
-    toast('Uploaded — remember to Save · 已上传 — 请记得保存');
+    $('#sc-' + key + '-img').value = j.data.url;
+    scRenderCard(key);
+    toast('Uploaded — Save to apply · 已上传 — 保存后生效');
   } catch (e) { toast('Upload failed · 上传失败: ' + e.message, 'err'); }
 }
 
-async function shLoad() {
+// Seed one card's inputs from stored values, then paint it.
+function scSet(key, img, title) {
+  $('#sc-' + key + '-img').value = String(img || '');
+  if (SC_CFG[key].titled) {
+    $('#sc-' + key + '-ten').value = (title && title.en) || '';
+    $('#sc-' + key + '-tcn').value = (title && title.cn) || '';
+  }
+  scRenderCard(key);
+}
+
+async function scLoad() {
+  // Paint every card up-front so the WeChat previews (with fallback art) show
+  // immediately — even before, or without, a successful fetch. Then hydrate the
+  // two data sources INDEPENDENTLY so one failing never blanks the whole page.
+  SC_KEYS.forEach(scRenderCard);
   try {
-    const r = await api('/api/retail-admin/config');
-    const sharing = (r.data && r.data.sharing) || {};
-    for (const key of SH_KEYS) {
-      $('#sh-' + key).value = String(sharing[key] || '');
-      shRenderPreview(key);
-    }
+    const cfgR = await api('/api/retail-admin/config');
+    const sharing = (cfgR.data && cfgR.data.sharing) || {};
+    scSet('home',    sharing.home,    sharing.homeTitle);
+    scSet('product', sharing.product, null);
+    scSet('voting',  sharing.voting,  sharing.votingTitle);
   } catch (e) {
-    toast('Settings load failed · 加载设置失败: ' + e.message, 'err');
+    toast('Couldn’t load page cards · 页面卡片加载失败: ' + e.message, 'err');
+  }
+  try {
+    const afR = await api('/api/retail-admin/affiliate/settings');
+    const af = afR.data || {};
+    scSet('invite',  af.shareImage,   af.shareTitle);
+  } catch (e) {
+    toast('Couldn’t load invite card · 邀请卡片加载失败: ' + e.message, 'err');
   }
 }
 
-async function shSave() {
-  const body = {};
-  for (const key of SH_KEYS) body['sharing.' + key] = String($('#sh-' + key).value || '').trim();
+async function scSave(key) {
+  const img   = String($('#sc-' + key + '-img').value || '').trim();
+  const saved = $('#sc-' + key + '-saved');
   try {
-    await api('/api/retail-admin/config', { method: 'PUT', body });
-    toast('Share cards saved · 分享卡片已保存');
+    if (SC_CFG[key].ep === 'affiliate') {
+      await api('/api/retail-admin/affiliate/settings', { method: 'PATCH', body: { shareImage: img, shareTitle: scTitleObj(key) } });
+    } else {
+      const body = {};
+      body['sharing.' + key] = img;
+      if (SC_CFG[key].titled) body['sharing.' + key + 'Title'] = scTitleObj(key);
+      await api('/api/retail-admin/config', { method: 'PUT', body });
+    }
+    toast('Card saved · 卡片已保存');
+    if (saved) saved.textContent = scT('Saved just now', '刚刚已保存');
   } catch (e) { toast('Save failed · 保存失败: ' + e.message, 'err'); }
 }
 
 document.addEventListener('change', e => {
-  for (const key of SH_KEYS) {
-    if (e.target.id === 'sh-' + key + '-file' && e.target.files?.[0]) {
-      shUpload(key, e.target.files[0]);
+  for (const key of SC_KEYS) {
+    if (e.target.id === 'sc-' + key + '-file' && e.target.files?.[0]) {
+      scUpload(key, e.target.files[0]);
       e.target.value = '';
     }
   }
 });
 
 document.querySelector('[data-tab="sharing"]').addEventListener('click', () => {
-  if (!SHARING_LOADED) { SHARING_LOADED = true; shLoad(); }
+  if (!SHARING_LOADED) { SHARING_LOADED = true; scLoad(); }
 });
+
+// Re-render every card when the admin flips language so the preview title,
+// status pill and button labels follow the chosen language.
+if (window.onLangChange) {
+  onLangChange(() => { if (SHARING_LOADED) SC_KEYS.forEach(scRenderCard); });
+}
 
 // ── Theme toggle (light / dark) ──
 // The pre-render script in <head> already set data-theme so paint is

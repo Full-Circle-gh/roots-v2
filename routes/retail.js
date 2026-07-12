@@ -13397,7 +13397,26 @@ function affiliateSettings() {
     // Stored as a relative media path (e.g. /api/retail/media/55); the
     // customer endpoint absolutizes it so the mini-app can hand WeChat a URL.
     shareImage:     String(cfgValue('affiliate.shareImage', '') || ''),
+    // Optional custom title for the invite share card, per language. Empty
+    // strings ⇒ the mini-app keeps its built-in reward-aware default. The
+    // referral code always travels in the share path (?ref=), never the title,
+    // so a custom title never breaks attribution.
+    shareTitle:     normShareTitle(cfgValue('affiliate.shareTitle', null)),
   };
+}
+
+// Coerce a stored share-title value into a clean { en, cn } pair. Accepts a
+// legacy plain string (treated as both languages) or a partial object; trims
+// and caps each side. Empty/missing ⇒ { en: '', cn: '' } so callers can always
+// read .en / .cn without guarding the shape.
+const SHARE_TITLE_MAX = 60;
+function normShareTitle(raw) {
+  const clean = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, SHARE_TITLE_MAX);
+  if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    return { en: clean(raw.en), cn: clean(raw.cn) };
+  }
+  const one = clean(raw);
+  return { en: one, cn: one };
 }
 
 // 6-char alnum (uppercase, no 0/O/1/I confusables). Re-rolled on collision.
@@ -13477,6 +13496,9 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
                               ? s.shareImage
                               : `${req.protocol}://${req.get('host')}${s.shareImage}`)
                           : '',
+      // Optional per-language custom title. Empty strings ⇒ the mini-app keeps
+      // its reward-aware default (see home.js onShareAppMessage).
+      share_title:      s.shareTitle,
       code,
       referred_by:      referredBy?.id ? { id: referredBy.id, nickname: referredBy.nickname, code: referredBy.referral_code } : null,
       stats:            affiliateStatsFor(req.customer.id),
@@ -13833,6 +13855,11 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
       return res.status(400).json({ success: false, error: 'bad_share_image' });
     }
     writes.push(['affiliate.shareImage', v.slice(0, 2000)]);
+  }
+  if (b.shareTitle !== undefined) {
+    // Free text, per language. normShareTitle trims + caps each side; a plain
+    // string is accepted for both languages. Stored as { en, cn }.
+    writes.push(['affiliate.shareTitle', normShareTitle(b.shareTitle)]);
   }
   if (!writes.length) return res.status(400).json({ success: false, error: 'no_fields' });
   const up = tdb().prepare(

@@ -268,10 +268,14 @@ Page({
 
   onShareAppMessage() {
     const p = this.data.featured;
-    // Office-set Voting share picture (admin → Share cards). Already absolute.
-    const img = getApp().globalData.config?.sharing?.voting;
+    // Office-set Voting share card (admin → Share cards). A live featured poll
+    // titles the card with its own question; otherwise use the office-set title
+    // (per language), falling back to the built-in default.
+    const sharing = getApp().globalData.config?.sharing || {};
+    const img = sharing.voting;
+    const fallback = (sharing.votingTitle && sharing.votingTitle[this.data.lang]) || 'Vote with Roots';
     return {
-      title: p ? (this.data.lang === 'cn' && p.question_cn ? p.question_cn : p.question_en) : 'Vote with Roots',
+      title: p ? (this.data.lang === 'cn' && p.question_cn ? p.question_cn : p.question_en) : fallback,
       path: '/pages/voting/voting',
       ...(img ? { imageUrl: img } : {}),
     };

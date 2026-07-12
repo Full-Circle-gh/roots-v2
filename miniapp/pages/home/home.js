@@ -681,10 +681,14 @@ Page({
     if (af?.enabled && af.code) {
       const reward = Number(af.reward_per_order) || 30;
       const en = this.data.lang === 'en';
+      // Office-set custom invite title (admin → Share cards), else the built-in
+      // reward-aware default. The code always rides in the path, never the
+      // title, so a custom title never breaks attribution.
+      const custom = af.share_title && af.share_title[this.data.lang];
       return {
-        title: en
+        title: custom || (en
           ? `Get ¥${reward} off your first Roots order — code ${af.code}`
-          : `Roots 邀请码 ${af.code} · 首单立减 ¥${reward}`,
+          : `Roots 邀请码 ${af.code} · 首单立减 ¥${reward}`),
         // Land the friend on the storefront Home; onLoad stashes the ref so
         // the affiliate apply box still pre-fills it later.
         path: '/pages/home/home?ref=' + encodeURIComponent(af.code),
@@ -693,10 +697,14 @@ Page({
         imageUrl: af.share_image || '/assets/brand/share-affiliate.png',
       };
     }
-    // Office-set Home share picture (admin → Share cards). Already absolute.
-    const img = getApp().globalData.config?.sharing?.home;
+    // Office-set Home share card (admin → Share cards). Picture + optional title
+    // are already absolute / plain text; fall back to the built-in defaults.
+    const sharing = getApp().globalData.config?.sharing || {};
+    const img = sharing.home;
+    const title = (sharing.homeTitle && sharing.homeTitle[this.data.lang])
+      || (this.data.lang === 'cn' ? 'Roots · 植物食物' : 'Roots · plant-forward food');
     return {
-      title: this.data.lang === 'cn' ? 'Roots · 植物食物' : 'Roots · plant-forward food',
+      title,
       path: '/pages/home/home',
       ...(img ? { imageUrl: img } : {}),
     };
@@ -707,16 +715,20 @@ Page({
     if (af?.enabled && af.code) {
       const reward = Number(af.reward_per_order) || 30;
       const en = this.data.lang === 'en';
+      const custom = af.share_title && af.share_title[this.data.lang];
       return {
-        title: en
+        title: custom || (en
           ? `¥${reward} off your first Roots order — ${af.code}`
-          : `Roots 首单立减 ¥${reward} · ${af.code}`,
+          : `Roots 首单立减 ¥${reward} · ${af.code}`),
         query: 'ref=' + encodeURIComponent(af.code),
       };
     }
-    const img = getApp().globalData.config?.sharing?.home;
+    const sharing = getApp().globalData.config?.sharing || {};
+    const img = sharing.home;
+    const title = (sharing.homeTitle && sharing.homeTitle[this.data.lang])
+      || (this.data.lang === 'cn' ? 'Roots · 植物食物' : 'Roots');
     return {
-      title: this.data.lang === 'cn' ? 'Roots · 植物食物' : 'Roots',
+      title,
       ...(img ? { imageUrl: img } : {}),
     };
   },
