@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Social proof, screen-focused</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* TACET DESIGN TOKENS — v1.0 (verbatim from tacet-tokens.css) */
+:root {
+  --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
+  --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
+  --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
+  --tacet-dusk-tint:#EEEDF6; --tacet-sage-tint:#EDF1EC; --tacet-amber-tint:#F7EEDE; --tacet-brick-tint:#F6E7E3;
+  --ok-ink:#4A6249; --warn-ink:#8A6425;
+  --bg:var(--tacet-paper); --surface:#FFFFFF; --surface-raised:var(--tacet-cream);
+  --text:var(--tacet-ink); --text-2:var(--tacet-graphite); --text-3:#8A8B8E; --border:var(--tacet-border);
+  --accent:var(--tacet-dusk);
+  --font-display:"Fraunces","Iowan Old Style",Georgia,serif;
+  --font-text:"Inter",-apple-system,Arial,sans-serif;
+  --fs-caption:0.8125rem;
+  --s-1:4px; --s-2:8px; --s-3:16px; --s-4:24px; --s-5:32px; --s-6:48px; --s-7:64px; --s-8:96px;
+  --r-ctl:8px; --r-card:14px; --pill:999px;
+  --shadow-soft:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
+  --shadow-lift:0 10px 30px rgba(17,26,43,.16);
+  --ease:cubic-bezier(.16,1,.3,1); --dur:200ms;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:var(--font-text); font-size:.9375rem; line-height:1.6; color:var(--text); background:var(--bg); }
+button { font-family:var(--font-text); }
+.t-num { font-variant-numeric:tabular-nums; }
+@media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
+
+.dot { width:6px; height:6px; border-radius:50%; background:var(--accent); flex:none; display:inline-block; vertical-align:middle; animation:breathe 2.4s var(--ease) infinite; }
+@keyframes breathe { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.45;transform:scale(.8)} }
+
+.chrome { background:var(--tacet-ink); color:rgba(251,249,244,.72); padding:var(--s-2) var(--s-4); font-size:var(--fs-caption); display:flex; align-items:center; gap:var(--s-3); position:sticky; top:0; z-index:90; }
+.chrome .tag { letter-spacing:.14em; text-transform:uppercase; font-weight:500; font-size:11px; color:rgba(251,249,244,.5); }
+.chrome .spacer { flex:1; }
+.chrome .note { font-size:11px; color:rgba(251,249,244,.6); }
+.topbar { display:flex; align-items:center; padding:var(--s-3) var(--s-5); border-bottom:1px solid var(--border); }
+.topbar .wordmark { font-family:var(--font-display); font-weight:300; font-size:20px; letter-spacing:.2em; }
+
+.page { max-width:1120px; margin:0 auto; padding:var(--s-5) var(--s-4) var(--s-8); }
+.settle { animation:settle .6s var(--ease) both; }
+@keyframes settle { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+.head { display:flex; align-items:center; gap:var(--s-3); }
+.head h1 { font:500 22px/1.2 var(--font-text); letter-spacing:-.01em; }
+.head .spacer { flex:1; }
+.sub { font-size:var(--fs-caption); color:var(--text-2); margin:4px 0 var(--s-4); max-width:66ch; }
+
+.switch { display:inline-flex; align-items:center; gap:var(--s-2); cursor:pointer; user-select:none; }
+.switch input { display:none; }
+.switch .tk { width:36px; height:20px; border-radius:var(--pill); background:var(--border); position:relative; flex:none; transition:background var(--dur) var(--ease); }
+.switch .tk::after { content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#fff; box-shadow:0 1px 2px rgba(17,26,43,.2); transition:left var(--dur) var(--ease); }
+.switch input:checked + .tk { background:var(--tacet-ink); }
+.switch input:checked + .tk::after { left:18px; }
+.switch .lbl { font-size:var(--fs-caption); color:var(--text-2); }
+
+.banner { display:flex; align-items:center; gap:var(--s-3); background:var(--tacet-dusk-tint); border-radius:var(--r-card); padding:13px 16px; margin-bottom:var(--s-4); }
+.banner .tx { flex:1; font-size:var(--fs-caption); }
+.banner .tx b { font-weight:500; }
+.banner button { background:var(--tacet-ink); color:var(--tacet-paper); border:none; border-radius:var(--r-ctl); padding:8px 16px; font:500 var(--fs-caption) var(--font-text); cursor:pointer; }
+
+/* dial */
+.dial { margin-bottom:var(--s-5); }
+.dial-h { display:flex; align-items:baseline; gap:var(--s-3); }
+.dial-h h2 { font:400 17px/1 var(--font-text); }
+.dial-h .setup { margin-left:auto; background:none; border:none; cursor:pointer; font:400 12px var(--font-text); color:var(--text-3); text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--border); }
+.dial-h .setup:hover { color:var(--text); }
+.dial-sub { font-size:var(--fs-caption); color:var(--text-2); margin:3px 0 14px; max-width:62ch; }
+.presets { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; }
+@media (max-width:720px){ .presets{grid-template-columns:1fr} }
+.preset { text-align:left; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); padding:15px 16px; cursor:pointer; position:relative; box-shadow:var(--shadow-soft); font-family:var(--font-text); color:var(--text); transition:border-color var(--dur) var(--ease), transform var(--dur) var(--ease); }
+.preset:hover { transform:translateY(-1px); }
+.preset.sel { border-color:var(--tacet-ink); }
+.preset.sel::after { content:"✓"; position:absolute; top:12px; right:14px; width:19px; height:19px; border-radius:50%; background:var(--tacet-ink); color:var(--tacet-paper); font-size:10px; display:flex; align-items:center; justify-content:center; }
+.preset .nm { font-weight:500; }
+.preset .de { font-size:var(--fs-caption); color:var(--text-2); margin-top:4px; line-height:1.5; }
+.preset .ex { margin-top:10px; font-size:11.5px; color:var(--text-3); display:flex; align-items:center; gap:6px; }
+.custom { display:none; align-items:center; gap:8px; margin-top:10px; font-size:12px; color:var(--text-2); }
+.custom.show { display:flex; }
+.custom .chip { border:1px dashed var(--border); border-radius:var(--pill); padding:2px 11px; font-weight:500; color:var(--text); }
+
+/* ── the screen switcher — drives BOTH the rows and the phone ── */
+.screen-bar { display:flex; align-items:center; gap:var(--s-3); margin-bottom:var(--s-4); flex-wrap:wrap; }
+.screen-tabs { display:inline-flex; gap:4px; background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--pill); padding:4px; }
+.screen-tab { border:none; background:transparent; color:var(--text-2); border-radius:var(--pill); padding:8px 16px; font:500 var(--fs-caption) var(--font-text); cursor:pointer; display:inline-flex; align-items:center; gap:8px; transition:background var(--dur) var(--ease), color var(--dur) var(--ease); }
+.screen-tab .ct { font-size:11px; color:var(--text-3); background:var(--surface); border:1px solid var(--border); border-radius:var(--pill); min-width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; padding:0 5px; }
+.screen-tab.active { background:var(--tacet-ink); color:var(--tacet-paper); }
+.screen-tab.active .ct { color:var(--tacet-paper); background:rgba(251,249,244,.18); border-color:transparent; }
+.screen-hint { font-size:var(--fs-caption); color:var(--text-3); }
+
+/* two columns */
+.cols { display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:var(--s-5); align-items:start; }
+@media (max-width:900px){ .cols{grid-template-columns:1fr} .right{display:none} }
+.rows { display:flex; flex-direction:column; gap:10px; min-height:120px; }
+
+.row { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-card); box-shadow:var(--shadow-soft); transition:border-color var(--dur) var(--ease); }
+.row.row-hidden { display:none; }
+.row.show { animation:settle .35s var(--ease) both; }
+.row.off { background:transparent; box-shadow:none; }
+.row.off .sample { opacity:.4; filter:grayscale(.5); }
+.row.off .r-name { color:var(--text-2); }
+.r-head { display:grid; grid-template-columns:150px 1fr auto auto; gap:var(--s-3); align-items:center; padding:12px 16px; }
+.sample { min-height:44px; display:flex; align-items:center; justify-content:center; background:var(--surface-raised); border:1px solid var(--border); border-radius:10px; padding:8px; overflow:hidden; }
+.r-name { font-weight:500; }
+.r-where { font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3); margin-left:6px; }
+.r-sum { font-size:var(--fs-caption); color:var(--text-2); margin-top:3px; display:flex; align-items:center; gap:7px; flex-wrap:wrap; }
+.r-adjust { background:none; border:none; cursor:pointer; font:400 12px var(--font-text); color:var(--text-3); text-decoration:underline; text-underline-offset:3px; text-decoration-color:var(--border); padding:4px 2px; }
+.r-adjust:hover { color:var(--text); }
+.row.off .r-adjust { visibility:hidden; }
+.r-body { display:none; border-top:1px solid var(--border); padding:14px 16px 16px; }
+.row.open .r-body { display:block; animation:settle .35s var(--ease) both; }
+.fields { display:flex; gap:22px; flex-wrap:wrap; align-items:flex-end; }
+.f-lbl { display:block; font-size:10.5px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--text-2); margin-bottom:6px; }
+.n-in { width:64px; padding:7px 8px; border:1px solid var(--border); border-radius:var(--r-ctl); font:400 14px var(--font-text); background:var(--surface); color:var(--text); text-align:center; font-variant-numeric:tabular-nums; }
+.n-in:focus { outline:2px solid var(--accent); outline-offset:1px; border-color:transparent; }
+.in-row { display:flex; align-items:center; gap:7px; }
+.unit { font-size:var(--fs-caption); color:var(--text-2); }
+.hint { font-size:var(--fs-caption); color:var(--text-2); line-height:1.55; margin-top:10px; max-width:58ch; }
+.fine { margin-top:13px; border-top:1px dashed var(--border); padding-top:11px; }
+.fine > summary { list-style:none; cursor:pointer; font-size:12px; color:var(--text-3); display:inline-flex; align-items:center; gap:6px; }
+.fine > summary::-webkit-details-marker { display:none; }
+.fine > summary::before { content:"›"; font-size:13px; transition:transform var(--dur) var(--ease); display:inline-block; }
+.fine[open] > summary::before { transform:rotate(90deg); }
+.fine > summary:hover { color:var(--text); }
+.fine[open] > summary { margin-bottom:11px; }
+.swlbl { display:inline-flex; align-items:center; gap:10px; font-size:12.5px; }
+@media (max-width:640px){ .r-head{grid-template-columns:1fr auto auto} .sample{display:none} }
+
+.manual { display:flex; flex-direction:column; gap:8px; }
+.mrow { display:grid; grid-template-columns:96px minmax(0,1.4fr) minmax(0,1.4fr) auto auto; gap:8px; align-items:center; }
+@media (max-width:640px){ .mrow{grid-template-columns:1fr 1fr} }
+.mrow input[type=text] { padding:7px 10px; border:1px solid var(--border); border-radius:var(--r-ctl); font:400 12.5px var(--font-text); background:var(--surface); color:var(--text); min-width:0; }
+.mrow .x { background:none; border:none; color:var(--text-3); cursor:pointer; font-size:15px; padding:4px 6px; }
+.mrow .x:hover { color:var(--tacet-brick); }
+.madd { background:transparent; color:var(--text); border:1px solid var(--border); border-radius:var(--r-ctl); padding:7px 14px; font:500 12px var(--font-text); cursor:pointer; align-self:flex-start; }
+.madd:hover { border-color:var(--text-2); }
+
+.pill { font-size:11.5px; padding:3px 10px; border-radius:var(--pill); background:var(--surface); border:1px solid var(--border); white-space:nowrap; }
+.pill.warm { background:var(--tacet-amber-tint); border-color:transparent; color:var(--warn-ink); font-weight:500; }
+.pill.sage { background:var(--tacet-sage-tint); border-color:transparent; color:var(--ok-ink); font-weight:500; }
+.toast { background:var(--surface); border-radius:10px; box-shadow:var(--shadow-soft); border:1px solid var(--border); padding:6px 10px; font-size:11px; display:flex; align-items:center; gap:7px; white-space:nowrap; }
+.toast .who { font-weight:600; } .toast .ago { color:var(--text-2); }
+.cardlet { width:72px; border-radius:8px; overflow:hidden; background:var(--surface); border:1px solid var(--border); position:relative; }
+.cardlet .ph { height:38px; background:linear-gradient(135deg,var(--tacet-sage-tint),var(--tacet-amber-tint)); }
+.cardlet .nm2 { font-size:9px; padding:3px 5px; color:var(--text-2); }
+.cardlet .cap { position:absolute; top:0; left:0; background:var(--tacet-ink); color:var(--tacet-paper); font-size:8px; font-weight:600; letter-spacing:.04em; padding:2px 6px; border-radius:0 0 8px 0; }
+
+.moved { margin-top:var(--s-4); display:flex; align-items:center; gap:10px; font-size:var(--fs-caption); color:var(--text-2); border:1px dashed var(--border); border-radius:var(--r-card); padding:10px 14px; background:var(--surface-raised); }
+.moved b { font-weight:500; color:var(--text); }
+.moved a { color:var(--text); cursor:pointer; }
+.save { margin-top:var(--s-5); padding:var(--s-3) 0; display:flex; align-items:center; gap:var(--s-3); }
+.btn-ink { background:var(--tacet-ink); color:var(--tacet-paper); border:none; border-radius:var(--r-ctl); padding:10px 24px; font:500 .9375rem var(--font-text); cursor:pointer; transition:opacity var(--dur) var(--ease); }
+.btn-ink:hover { opacity:.88; }
+.btn-quiet { background:transparent; color:var(--text); border:1px solid var(--border); border-radius:var(--r-ctl); padding:9px 18px; font:500 var(--fs-caption) var(--font-text); cursor:pointer; }
+.btn-quiet:hover { border-color:var(--text-2); }
+.saved { font-size:var(--fs-caption); color:var(--ok-ink); opacity:0; transition:opacity .35s var(--ease); }
+.saved.show { opacity:1; }
+
+/* phone */
+.right { position:sticky; top:52px; }
+.phone-cap { text-align:center; font-size:11px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3); margin-bottom:10px; }
+.phone { width:300px; margin:0 auto; background:var(--tacet-ink); border-radius:38px; padding:10px; box-shadow:var(--shadow-lift); }
+.screen { background:var(--bg); border-radius:30px; height:540px; overflow:hidden; position:relative; }
+.pv { position:absolute; inset:0; display:none; flex-direction:column; }
+.pv.active { display:flex; animation:settle .35s var(--ease) both; }
+.pv .apphead { padding:18px 16px 10px; display:flex; align-items:center; gap:8px; }
+.pv .apphead .logo { width:22px; height:22px; border-radius:50%; background:var(--tacet-sage); }
+.pv .apphead .nm { font-size:13px; font-weight:600; }
+.pv .bnr { margin:4px 14px 12px; height:88px; border-radius:12px; background:linear-gradient(120deg,var(--tacet-amber-tint),var(--tacet-sage-tint)); display:flex; align-items:flex-end; padding:10px; }
+.pv .bnr span { font-size:10px; color:var(--warn-ink); font-weight:600; letter-spacing:.06em; }
+.pv .sect { font-size:11px; font-weight:600; margin:0 16px 8px; }
+.pv .grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; padding:0 14px; }
+.pc { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; position:relative; }
+.pc .img { height:74px; }
+.pc:nth-child(odd) .img { background:linear-gradient(135deg,var(--tacet-sage-tint),var(--tacet-amber-tint)); }
+.pc:nth-child(even) .img { background:linear-gradient(135deg,var(--tacet-amber-tint),var(--tacet-brick-tint)); }
+.pc .b { padding:7px 9px 9px; }
+.pc .t { font-size:10.5px; font-weight:500; line-height:1.3; }
+.pc .p { font-size:11px; font-weight:600; margin-top:3px; }
+.pc .cap { position:absolute; top:0; left:0; background:var(--tacet-ink); color:var(--tacet-paper); font-size:8.5px; font-weight:600; letter-spacing:.04em; padding:2px 7px; border-radius:0 0 9px 0; }
+.pv .tick { position:absolute; left:12px; right:12px; bottom:14px; background:var(--surface); border-radius:12px; box-shadow:var(--shadow-lift); padding:9px 12px; font-size:11px; display:flex; align-items:center; gap:8px; }
+.pv .tick .who { font-weight:600; white-space:nowrap; }
+.pv .tick .what { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.pv .tick .ago { color:var(--text-2); font-size:10px; white-space:nowrap; }
+.pv .tick .x { margin-left:auto; color:var(--text-2); }
+.pv .pimg { height:190px; background:linear-gradient(135deg,var(--tacet-sage-tint),var(--tacet-amber-tint)); }
+.pv .pbody { padding:14px 16px; }
+.pv .ptitle { font-size:15px; font-weight:600; }
+.pv .pprice { font-size:17px; font-weight:600; margin:4px 0 10px; }
+.proof { display:flex; align-items:center; gap:7px; font-size:11px; padding:4px 0; }
+.proof .pp { padding:2px 9px; border-radius:var(--pill); background:var(--tacet-amber-tint); color:var(--warn-ink); font-weight:500; font-size:10.5px; }
+.proof.viewers .pp { background:var(--tacet-sage-tint); color:var(--ok-ink); }
+.proof.last .pp { background:var(--surface-raised); color:var(--text-2); }
+.pv .buy { margin-top:14px; background:var(--tacet-ink); color:var(--tacet-paper); text-align:center; border-radius:10px; padding:10px; font-size:12px; font-weight:500; }
+.pv-hidden { display:none !important; }
+.cap-note { text-align:center; font-size:11.5px; color:var(--text-3); margin-top:10px; }
+
+/* wizard */
+.wiz-bg { position:fixed; inset:0; background:rgba(17,26,43,.45); z-index:100; display:none; align-items:center; justify-content:center; padding:var(--s-4); }
+.wiz-bg.open { display:flex; }
+.wiz { background:var(--bg); border-radius:var(--r-card); box-shadow:var(--shadow-lift); width:100%; max-width:540px; padding:var(--s-5); max-height:88vh; overflow:auto; }
+.wiz-steps { display:flex; align-items:center; gap:8px; margin-bottom:var(--s-4); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); }
+.wiz-steps .st { display:flex; align-items:center; gap:6px; }
+.wiz-steps .n { width:20px; height:20px; border-radius:50%; border:1px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:10px; }
+.wiz-steps .st.on .n { background:var(--tacet-ink); border-color:var(--tacet-ink); color:var(--tacet-paper); }
+.wiz-steps .st.done .n { background:var(--tacet-sage-tint); border-color:transparent; color:var(--ok-ink); }
+.wiz-steps .bar { flex:1; height:1px; background:var(--border); }
+.wiz h3 { font:400 17px/1.3 var(--font-text); margin-bottom:4px; }
+.wiz .wsub { font-size:var(--fs-caption); color:var(--text-2); margin-bottom:var(--s-3); }
+.wiz-pane { display:none; }
+.wiz-pane.active { display:block; animation:settle .35s var(--ease) both; }
+.wiz .presets { grid-template-columns:1fr; }
+.wiz-ws { display:flex; flex-direction:column; gap:8px; }
+.wiz-wr { display:flex; align-items:center; gap:var(--s-3); background:var(--surface); border:1px solid var(--border); border-radius:var(--r-ctl); padding:10px 14px; }
+.wiz-wr .nm { flex:1; font-size:var(--fs-caption); color:var(--text-2); }
+.wiz-wr .nm b { font-weight:500; font-size:.9375rem; color:var(--text); display:block; }
+.wiz-done { background:var(--surface-raised); border:1px solid var(--border); border-radius:var(--r-ctl); padding:14px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.wiz-foot { display:flex; align-items:center; gap:var(--s-3); margin-top:var(--s-4); }
+.wiz-foot .spacer { flex:1; }
+.wiz-skip { background:none; border:none; color:var(--text-3); font:400 var(--fs-caption) var(--font-text); cursor:pointer; }
+.wiz-skip:hover { color:var(--text); }
+</style>
+</head>
+<body>
+
+<div class="chrome">
+  <span class="tag">tacet · social proof — screen-focused</span>
+  <span class="spacer"></span>
+  <span class="note">tabs show only that screen's widgets + its preview</span>
+</div>
+<div class="topbar"><span class="wordmark">tacet</span></div>
+
+<main class="page settle">
+  <div class="head">
+    <h1>Social proof</h1>
+    <span class="spacer"></span>
+    <label class="switch"><input type="checkbox" checked><span class="tk"></span><span class="lbl">On across the mini app</span></label>
+  </div>
+  <p class="sub">Small signs of life customers see while they shop. Real activity always comes first — the <span class="dot"></span> marks numbers Tacet fills in for you on quiet days.</p>
+
+  <div class="banner" id="banner">
+    <span class="dot"></span>
+    <span class="tx"><b>First time here?</b> Tacet can set this whole page up in three quick steps.</span>
+    <button onclick="wizOpen()">Set it up</button>
+  </div>
+
+  <div class="dial">
+    <div class="dial-h">
+      <h2>How lively should the shop feel?</h2>
+      <button class="setup" onclick="wizOpen()">Guided setup</button>
+    </div>
+    <p class="dial-sub">One dial sets every fill-in number, on every screen. Real activity always shows first; fill-in only tops up quiet moments.</p>
+    <div class="presets" id="presets">
+      <button class="preset" data-p="real" onclick="setPreset('real')">
+        <span class="nm">Real only</span>
+        <span class="de">Show only what actually happened. Honest and quiet — on slow days most signals hide.</span>
+        <span class="ex t-num">"3 bought this week"</span>
+      </button>
+      <button class="preset sel" data-p="gentle" onclick="setPreset('gentle')">
+        <span class="nm">Gentle lift</span>
+        <span class="de">A soft floor under the real numbers, so quiet days still read alive. Believable pace.</span>
+        <span class="ex t-num"><span class="dot"></span> "12 bought today · 8 viewing"</span>
+      </button>
+      <button class="preset" data-p="busy" onclick="setPreset('busy')">
+        <span class="nm">Bustling</span>
+        <span class="de">A busy-market feel. Every signal leans lively — for launches and promotions.</span>
+        <span class="ex t-num"><span class="dot"></span> "34 bought today · 27 viewing"</span>
+      </button>
+    </div>
+    <div class="custom" id="custom">
+      <span class="chip">Custom</span>
+      <span>Your own numbers — pick a style above to reset them.</span>
+    </div>
+  </div>
+
+  <!-- the one navigation: which screen are we tuning? -->
+  <div class="screen-bar">
+    <div class="screen-tabs">
+      <button class="screen-tab" data-screen="home" onclick="setScreen('home')">Home <span class="ct t-num">1</span></button>
+      <button class="screen-tab active" data-screen="product" onclick="setScreen('product')">Product page <span class="ct t-num">3</span></button>
+      <button class="screen-tab" data-screen="shop" onclick="setScreen('shop')">Shop &amp; cards <span class="ct t-num">1</span></button>
+    </div>
+    <span class="screen-hint" id="screen-hint">What customers see on the product page.</span>
+  </div>
+
+  <div class="cols">
+    <div class="left">
+      <div class="rows" id="rows">
+
+        <!-- HOME -->
+        <div class="row row-hidden" data-w="rb" data-screen="home">
+          <div class="r-head">
+            <div class="sample"><div class="toast"><span class="who">W**</span> bought Hummus <span class="ago">· 5 min</span></div></div>
+            <div>
+              <div class="r-name">Recent-buyers ticker <span class="r-where">home</span></div>
+              <div class="r-sum" data-sum="rb"></div>
+            </div>
+            <button class="r-adjust" onclick="toggleRow(this)">Adjust</button>
+            <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff="rb"><span class="tk"></span></label>
+          </div>
+          <div class="r-body">
+            <div class="fields">
+              <div><label class="f-lbl">Orders from the last</label><div class="in-row"><input class="n-in" value="5"><span class="unit">days</span></div></div>
+              <div><label class="f-lbl">Each toast stays</label><div class="in-row"><input class="n-in" value="3"><span class="unit">sec</span></div></div>
+              <div><label class="f-lbl">Quiet gap between</label><div class="in-row"><input class="n-in" value="10"><span class="unit">sec</span></div></div>
+            </div>
+            <p class="hint">Real paid orders, names masked. The gap stretches by itself overnight, so it never spams at 3 am.</p>
+            <details class="fine">
+              <summary><span class="dot"></span> Manual entries — mixed into the real feed</summary>
+              <div class="manual">
+                <div class="mrow"><input type="text" value="A****"><input type="text" value="Hummus Asli"><input type="text" value="中东鹰嘴豆泥"><span class="in-row"><input class="n-in" value="25"><span class="unit">min</span></span><button class="x">×</button></div>
+                <div class="mrow"><input type="text" value="W**"><input type="text" value="Hazel Chocolate Spread"><input type="text" value="可可榛子酱"><span class="in-row"><input class="n-in" value="8"><span class="unit">min</span></span><button class="x">×</button></div>
+              </div>
+              <button class="madd" style="margin-top:10px">+ Add entry</button>
+              <p class="hint">Names pre-masked ("W**"). Minutes are an average age — each entry drifts and resets on its own.</p>
+            </details>
+          </div>
+        </div>
+
+        <!-- PRODUCT PAGE -->
+        <div class="row" data-w="bc" data-screen="product">
+          <div class="r-head">
+            <div class="sample"><span class="pill warm t-num">12 bought today</span></div>
+            <div>
+              <div class="r-name">People bought this <span class="r-where">product page</span></div>
+              <div class="r-sum" data-sum="bc"></div>
+            </div>
+            <button class="r-adjust" onclick="toggleRow(this)">Adjust</button>
+            <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff="bc"><span class="tk"></span></label>
+          </div>
+          <div class="r-body">
+            <div class="fields">
+              <div><label class="f-lbl"><span class="dot"></span> Fill-in — extra buyers a day</label><div class="in-row"><input class="n-in" data-cin="bc0" value="6"><span class="unit">to</span><input class="n-in" data-cin="bc1" value="15"></div></div>
+            </div>
+            <p class="hint">Climbs through the day like real orders do, on top of the true count. Busy products climb faster. Set 0–0 for real buyers only.</p>
+            <details class="fine">
+              <summary>Fine-tune — when the line appears</summary>
+              <div class="fields">
+                <div><label class="f-lbl">Min today</label><input class="n-in" value="2"></div>
+                <div><label class="f-lbl">This week</label><input class="n-in" value="2"></div>
+                <div><label class="f-lbl">This month</label><input class="n-in" value="1"></div>
+                <div><label class="f-lbl">All-time</label><input class="n-in" value="2"></div>
+              </div>
+              <p class="hint">Shows the narrowest window that clears its minimum — and hides rather than show a weak number.</p>
+            </details>
+          </div>
+        </div>
+
+        <div class="row" data-w="vn" data-screen="product">
+          <div class="r-head">
+            <div class="sample"><span class="pill sage t-num">◉ 8 viewing now</span></div>
+            <div>
+              <div class="r-name">Viewing now <span class="r-where">product page</span></div>
+              <div class="r-sum" data-sum="vn"></div>
+            </div>
+            <button class="r-adjust" onclick="toggleRow(this)">Adjust</button>
+            <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff="vn"><span class="tk"></span></label>
+          </div>
+          <div class="r-body">
+            <div class="fields">
+              <div><label class="f-lbl"><span class="dot"></span> Fill-in — viewers at peak</label><div class="in-row"><input class="n-in" data-cin="vn0" value="15"><span class="unit">to</span><input class="n-in" data-cin="vn1" value="40"></div></div>
+              <label class="swlbl" style="padding-bottom:5px"><span class="switch"><input type="checkbox" checked id="vn-show"><span class="tk"></span></span> Show the badge to customers</label>
+            </div>
+            <p class="hint">Drifts on a slow wave and quietens overnight — a 3 am page never claims a crowd. Badge off = count for your dashboard only.</p>
+            <details class="fine">
+              <summary>Fine-tune</summary>
+              <div class="fields"><div><label class="f-lbl">Viewer freshness</label><div class="in-row"><input class="n-in" value="45"><span class="unit">sec</span></div></div></div>
+              <p class="hint">How long someone still counts after their last ping. The app pings every 25 s; 45 s is a tight default.</p>
+            </details>
+          </div>
+        </div>
+
+        <div class="row" data-w="lo" data-screen="product">
+          <div class="r-head">
+            <div class="sample"><span class="pill">Last ordered 14 min ago</span></div>
+            <div>
+              <div class="r-name">Last ordered <span class="r-where">product page</span></div>
+              <div class="r-sum" data-sum="lo"></div>
+            </div>
+            <button class="r-adjust" onclick="toggleRow(this)">Adjust</button>
+            <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff="lo"><span class="tk"></span></label>
+          </div>
+          <div class="r-body">
+            <div class="fields">
+              <div><label class="f-lbl"><span class="dot"></span> Fill-in — busy products read</label><div class="in-row"><input class="n-in" data-cin="lo0" value="5"><span class="unit">to</span><input class="n-in" data-cin="lo1" value="45"><span class="unit">min ago</span></div></div>
+            </div>
+            <p class="hint">Real orders always win when fresher. Lands on some products at a time, ages on its own, and skips quiet items — never on everything at once.</p>
+            <details class="fine">
+              <summary>Fine-tune</summary>
+              <div class="fields"><div><label class="f-lbl">Hide if older than</label><div class="in-row"><input class="n-in" value="24"><span class="unit">hours</span></div></div></div>
+              <p class="hint">Also hides when the bought-count line already says "today", so the two never repeat each other.</p>
+            </details>
+          </div>
+        </div>
+
+        <!-- SHOP & CARDS -->
+        <div class="row row-hidden" data-w="sb" data-screen="shop">
+          <div class="r-head">
+            <div class="sample"><div class="cardlet"><span class="cap t-num">142 SOLD</span><div class="ph"></div><div class="nm2">Hummus Asli</div></div></div>
+            <div>
+              <div class="r-name">SOLD badge <span class="r-where">shop &amp; home cards</span></div>
+              <div class="r-sum" data-sum="sb"></div>
+            </div>
+            <button class="r-adjust" onclick="toggleRow(this)">Adjust</button>
+            <label class="switch" onclick="event.stopPropagation()"><input type="checkbox" checked data-onoff="sb"><span class="tk"></span></label>
+          </div>
+          <div class="r-body">
+            <div class="fields">
+              <div><label class="f-lbl"><span class="dot"></span> Fill-in — starting total</label><div class="in-row"><input class="n-in" data-cin="sb0" value="50"><span class="unit">to</span><input class="n-in" data-cin="sb1" value="150"></div></div>
+            </div>
+            <p class="hint">Each product picks its own number in this range, then creeps up a little every day — capped so it can't balloon. Real units add on top.</p>
+            <details class="fine">
+              <summary>Fine-tune</summary>
+              <div class="fields"><div><label class="f-lbl">Minimum units to show</label><input class="n-in" style="width:80px" value="3"></div></div>
+              <p class="hint">Below this the card stays neutral — we don't advertise a weak number.</p>
+            </details>
+          </div>
+        </div>
+      </div>
+
+      <div class="moved">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;flex:none"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+        <span><b>Checkout upsell</b> isn't social proof — it moved to <a>Marketing → Pop-ups</a>, next to its siblings.</span>
+      </div>
+
+      <div class="save">
+        <button class="btn-ink" onclick="fakeSave()">Save</button>
+        <span class="saved" id="saved">Saved — live in the mini app.</span>
+      </div>
+    </div>
+
+    <aside class="right">
+      <div class="phone-cap" id="phone-cap">Product page preview</div>
+      <div class="phone"><div class="screen">
+        <div class="pv" data-pv="home">
+          <div class="apphead"><span class="logo"></span><span class="nm">Your shop</span></div>
+          <div class="bnr"><span>FRESH THIS WEEK</span></div>
+          <div class="sect">Popular</div>
+          <div class="grid">
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="1">142 SOLD</span><div class="img"></div><div class="b"><div class="t">Bestseller</div><div class="p t-num">¥38</div></div></div>
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="2">96 SOLD</span><div class="img"></div><div class="b"><div class="t">New arrival</div><div class="p t-num">¥52</div></div></div>
+          </div>
+          <div class="tick" data-b="rb"><span class="who" data-tick="who">W**</span><span class="what" data-tick="what">bought Hummus Asli</span><span class="ago" data-tick="ago">5 min ago</span><span class="x">×</span></div>
+        </div>
+        <div class="pv active" data-pv="product">
+          <div class="pimg"></div>
+          <div class="pbody">
+            <div class="ptitle">Hummus Asli</div>
+            <div class="pprice t-num">¥38</div>
+            <div class="proof" data-b="bc"><span class="pp t-num" data-n="bc">12 bought today</span></div>
+            <div class="proof viewers" data-b="vn"><span class="pp t-num" data-n="vn">◉ 8 viewing now</span></div>
+            <div class="proof last" data-b="lo"><span class="pp" data-n="lo">Last ordered 14 min ago</span></div>
+            <div class="buy">Add to cart</div>
+          </div>
+        </div>
+        <div class="pv" data-pv="shop">
+          <div class="apphead"><span class="nm">Shop</span></div>
+          <div class="grid">
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="1">142 SOLD</span><div class="img"></div><div class="b"><div class="t">Bestseller</div><div class="p t-num">¥38</div></div></div>
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="2">96 SOLD</span><div class="img"></div><div class="b"><div class="t">New arrival</div><div class="p t-num">¥52</div></div></div>
+            <div class="pc"><div class="img"></div><div class="b"><div class="t">Pantry staple</div><div class="p t-num">¥24</div></div></div>
+            <div class="pc"><span class="cap t-num" data-b="sb" data-cap="3">201 SOLD</span><div class="img"></div><div class="b"><div class="t">Weekly pick</div><div class="p t-num">¥45</div></div></div>
+          </div>
+        </div>
+      </div></div>
+      <div class="cap-note">Live preview — flip a switch on the left.</div>
+    </aside>
+  </div>
+
+  <p class="hint" style="margin-top:var(--s-6); border-top:1px solid var(--border); padding-top:var(--s-4); max-width:70ch"><b style="color:var(--text)">Screen-focused.</b> The dial and the master switch stay global at the top. Below, one Home / Product / Shop control drives both the list and the phone, so you only ever see the widgets for the screen you're looking at — no scrolling past controls that belong somewhere else. The count on each tab says how many signals live there.</p>
+</main>
+
+<div class="wiz-bg" id="wiz" onclick="if(event.target===this)wizClose()">
+  <div class="wiz">
+    <div class="wiz-steps">
+      <span class="st on" data-st="1"><span class="n">1</span> Feel</span><span class="bar"></span>
+      <span class="st" data-st="2"><span class="n">2</span> Signals</span><span class="bar"></span>
+      <span class="st" data-st="3"><span class="n">3</span> Done</span>
+    </div>
+    <div class="wiz-pane active" data-pane="1">
+      <h3>How lively should the shop feel?</h3>
+      <div class="wsub">Real customer activity always shows first. This sets how much Tacet tops it up when things are quiet.</div>
+      <div class="presets">
+        <button class="preset" data-wp="real" onclick="wizPick('real')"><span class="nm">Real only</span><span class="de">Only what actually happened. Quiet on slow days.</span></button>
+        <button class="preset sel" data-wp="gentle" onclick="wizPick('gentle')"><span class="nm">Gentle lift</span><span class="de">A soft floor under the real numbers. Believable pace — most shops pick this.</span></button>
+        <button class="preset" data-wp="busy" onclick="wizPick('busy')"><span class="nm">Bustling</span><span class="de">A busy-market feel for launches and promotions.</span></button>
+      </div>
+      <div class="wiz-foot"><button class="wiz-skip" onclick="wizClose()">Skip — I'll set it up myself</button><span class="spacer"></span><button class="btn-ink" onclick="wizGo(2)">Next</button></div>
+    </div>
+    <div class="wiz-pane" data-pane="2">
+      <h3>Which signals do you want?</h3>
+      <div class="wsub">All five work well together. You can flip any of them later with one switch.</div>
+      <div class="wiz-ws">
+        <div class="wiz-wr"><span class="nm"><b>People bought this</b>on the product page</span><label class="switch"><input type="checkbox" checked><span class="tk"></span></label></div>
+        <div class="wiz-wr"><span class="nm"><b>Recent-buyers ticker</b>on the home screen</span><label class="switch"><input type="checkbox" checked><span class="tk"></span></label></div>
+        <div class="wiz-wr"><span class="nm"><b>Viewing now</b>on the product page</span><label class="switch"><input type="checkbox" checked><span class="tk"></span></label></div>
+        <div class="wiz-wr"><span class="nm"><b>Last ordered</b>on the product page</span><label class="switch"><input type="checkbox" checked><span class="tk"></span></label></div>
+        <div class="wiz-wr"><span class="nm"><b>SOLD badge</b>on shop &amp; home cards</span><label class="switch"><input type="checkbox" checked><span class="tk"></span></label></div>
+      </div>
+      <div class="wiz-foot"><button class="btn-quiet" onclick="wizGo(1)">Back</button><span class="spacer"></span><button class="btn-ink" onclick="wizGo(3)">Next</button></div>
+    </div>
+    <div class="wiz-pane" data-pane="3">
+      <h3>That's it.</h3>
+      <div class="wsub">Tacet tuned every number to <b id="wiz-chosen">Gentle lift</b> — thresholds, pacing, overnight quiet hours, all of it. Everything stays adjustable on the page behind this.</div>
+      <div class="wiz-done">
+        <span class="pill warm t-num">12 bought today</span>
+        <span class="pill sage t-num">◉ 8 viewing now</span>
+        <div class="toast"><span class="who">W**</span> bought Hummus <span class="ago">· 5 min</span></div>
+      </div>
+      <div class="wiz-foot"><button class="btn-quiet" onclick="wizGo(2)">Back</button><span class="spacer"></span><button class="btn-ink" onclick="wizFinish()">Turn it on</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PRESETS = {
+  real:   { bc:[0,0], vn:[0,0], lo:[0,0], sb:[0,0] },
+  gentle: { bc:[6,15], vn:[15,40], lo:[5,45], sb:[50,150] },
+  busy:   { bc:[20,45], vn:[30,80], lo:[3,20], sb:[150,400] },
+};
+const SCREEN = { home:{label:'Home', hint:'What customers see on the home screen.'},
+  product:{label:'Product page', hint:'What customers see on the product page.'},
+  shop:{label:'Shop & cards', hint:'What customers see on shop & home cards.'} };
+const num = id => { const el = document.querySelector('[data-cin="'+id+'"]'); return el?(Number(el.value)||0):0; };
+const range = w => [num(w+'0'), num(w+'1')];
+const mid = w => { const [a,b]=range(w); return Math.round((a+b)/2); };
+
+function detectPreset(){
+  for (const [k,p] of Object.entries(PRESETS))
+    if (['bc','vn','lo','sb'].every(w => { const r=range(w); return r[0]===p[w][0]&&r[1]===p[w][1]; })) return k;
+  return null;
+}
+function setPreset(k){
+  const p = PRESETS[k]; if(!p) return;
+  for (const w of ['bc','vn','lo','sb']){
+    const a=document.querySelector('[data-cin="'+w+'0"]'), b=document.querySelector('[data-cin="'+w+'1"]');
+    if(a)a.value=p[w][0]; if(b)b.value=p[w][1];
+  }
+  sync();
+}
+function toggleRow(btn){ btn.closest('.row').classList.toggle('open'); }
+
+/* the one navigation — filters the rows AND switches the phone */
+function setScreen(s){
+  document.querySelectorAll('.screen-tab').forEach(t=>t.classList.toggle('active', t.dataset.screen===s));
+  document.querySelectorAll('.row').forEach(r=>{
+    const match = r.dataset.screen===s;
+    r.classList.toggle('row-hidden', !match);
+    if(match){ r.classList.remove('show'); void r.offsetWidth; r.classList.add('show'); }
+  });
+  document.querySelectorAll('[data-pv]').forEach(p=>p.classList.toggle('active', p.dataset.pv===s));
+  document.getElementById('phone-cap').textContent = SCREEN[s].label + ' preview';
+  document.getElementById('screen-hint').textContent = SCREEN[s].hint;
+}
+
+function applyOnOff(w){
+  const sw = document.querySelector('[data-onoff="'+w+'"]'); if(!sw) return;
+  const on = sw.checked;
+  const row = document.querySelector('.row[data-w="'+w+'"]');
+  if(row){ row.classList.toggle('off', !on); if(!on) row.classList.remove('open'); }
+  document.querySelectorAll('[data-b="'+w+'"]').forEach(el=>el.classList.toggle('pv-hidden', !on));
+}
+function sumHtml(w){
+  const [a,b]=range(w); const dot='<span class="dot"></span> ';
+  if(w==='bc') return 'Shows from 2 buyers &nbsp;·&nbsp; ' + ((a||b)?dot+'fill-in '+a+'–'+b+' extra a day':'real buyers only');
+  if(w==='rb') return 'Last 5 days &nbsp;·&nbsp; pops every ~13 s &nbsp;·&nbsp; '+dot+'2 manual entries';
+  if(w==='vn'){ const show=document.getElementById('vn-show'); const badge=(show&&show.checked)?'badge shown to customers':'badge hidden — counting only'; return badge+' &nbsp;·&nbsp; '+((a||b)?dot+a+'–'+b+' at peak':'real viewers only'); }
+  if(w==='lo') return 'Hides after 24 h &nbsp;·&nbsp; ' + ((a||b)?dot+'fill-in reads '+a+'–'+b+' min on busy items':'real orders only');
+  if(w==='sb') return 'From 3 units &nbsp;·&nbsp; ' + ((a||b)?dot+'starts life at '+a+'–'+b:'real units only');
+  return '';
+}
+function preview(){
+  const bought=Math.max(3,mid('bc')||3), view=Math.max(2,mid('vn')||3), last=Math.max(4,mid('lo')||14);
+  const soldBase=Math.max(mid('sb')||12,3);
+  const set=(sel,t)=>{ const el=document.querySelector(sel); if(el)el.textContent=t; };
+  set('[data-n="bc"]', bought+' bought today');
+  set('[data-n="vn"]', '◉ '+view+' viewing now');
+  set('[data-n="lo"]', 'Last ordered '+last+' min ago');
+  const capMul={1:0.95,2:0.64,3:1.34};
+  document.querySelectorAll('[data-cap]').forEach(el=>{ const n=Math.max(1,Math.round(soldBase*(capMul[el.dataset.cap]||1))); el.textContent=n+' SOLD'; });
+}
+function sync(){
+  const cur=detectPreset();
+  document.querySelectorAll('#presets .preset').forEach(b=>b.classList.toggle('sel', b.dataset.p===cur));
+  document.getElementById('custom').classList.toggle('show', !cur);
+  document.querySelectorAll('[data-sum]').forEach(el=>el.innerHTML=sumHtml(el.dataset.sum));
+  preview();
+}
+document.querySelectorAll('[data-cin]').forEach(i=>i.addEventListener('input', sync));
+document.getElementById('vn-show').addEventListener('change', sync);
+document.querySelectorAll('[data-onoff]').forEach(sw=>sw.addEventListener('change', ()=>applyOnOff(sw.dataset.onoff)));
+
+function fakeSave(){ const s=document.getElementById('saved'); s.classList.add('show'); setTimeout(()=>s.classList.remove('show'),2200); }
+
+let wizChoice='gentle';
+function wizOpen(){ wizChoice=detectPreset()||'gentle'; wizPick(wizChoice); wizGo(1); document.getElementById('wiz').classList.add('open'); }
+function wizClose(){ document.getElementById('wiz').classList.remove('open'); }
+function wizGo(n){
+  document.querySelectorAll('[data-pane]').forEach(p=>p.classList.toggle('active', +p.dataset.pane===n));
+  document.querySelectorAll('[data-st]').forEach(s=>{ const i=+s.dataset.st; s.classList.toggle('on', i===n); s.classList.toggle('done', i<n); });
+  if(n===3) document.getElementById('wiz-chosen').textContent={real:'Real only',gentle:'Gentle lift',busy:'Bustling'}[wizChoice]||'';
+}
+function wizPick(k){ wizChoice=k; document.querySelectorAll('[data-wp]').forEach(b=>b.classList.toggle('sel', b.dataset.wp===k)); }
+function wizFinish(){ setPreset(wizChoice); document.getElementById('banner').style.display='none'; wizClose(); fakeSave(); }
+
+for (const w of ['rb','bc','vn','lo','sb']) applyOnOff(w);
+setScreen('product');
+sync();
+</script>
+</body>
+</html>
