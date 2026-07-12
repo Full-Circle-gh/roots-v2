@@ -1167,8 +1167,11 @@ async function loadLive(){
     if(cur && typeof cur==='object' && cur.symbol) CUR = cur.symbol;
     else if(typeof cur==='string') CUR = cur;
   }catch(e){ if(String(e.message)==='auth') return; }
-  // dashboard → KPIs + deltas
-  try{ const d=await api('/dashboard'); const k=d.kpi||d.kpis||d||{}; const b=d.baseline||{};
+  // dashboard → KPIs + deltas. MUST scope to today (GZ date) — the endpoint
+  // defaults to a trailing 30 days, so an unscoped call made the "Today" tiles
+  // show 30-day totals (and killed the vs-typical-day baseline).
+  const gzToday=new Date(Date.now()+8*3600*1000).toISOString().slice(0,10);
+  try{ const d=await api('/dashboard?from='+gzToday+'&to='+gzToday); const k=d.kpi||d.kpis||d||{}; const b=d.baseline||{};
     const vy=T('vs a typical day','较日常');
     const dl=x=>x&&x.delta!=null?((x.delta>=0?'+':'−')+Math.abs(x.delta)+'% '+vy):vy;
     state.liveKpis=[
