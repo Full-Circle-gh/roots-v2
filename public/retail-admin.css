@@ -2330,7 +2330,10 @@
   }
   .pa-list-rich .pa-row, .pa-rowhead {
     display: grid;
-    grid-template-columns: 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px;
+    /* Track list is set inline per render (paRender) — img · name · category ·
+       SKU · one column per store · price. Fallback keeps the old single-stock
+       shape for safety. */
+    grid-template-columns: var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
     align-items: center; gap: var(--s3);
   }
   .pa-list-rich .pa-row {
@@ -2390,6 +2393,17 @@
      has its own count) — show it quiet. */
   .pa-stock-locked { color: var(--td-text2); cursor: default; }
 
+  /* ── Two-location stock: one column per store, both always visible ──────────
+     The Shop toggle column is gone; every store gets its own headed, editable
+     column (Tianhe · Yuexiu …). Centre the pair under their headers, and edge
+     the boxes amber when low / brick when sold out (the save-confirm sage flash
+     still wins while it shows). */
+  .pa-multistock .pa-col-stock,
+  .pa-multistock .pa-col-stock-h { justify-self: center; text-align: center; }
+  .pa-multistock .pa-stock-input { text-align: center; }
+  .pa-stock-input.is-low:not(.is-saved):not(.is-err) { border-color: var(--td-amber); color: var(--td-amber); }
+  .pa-stock-input.is-out:not(.is-saved):not(.is-err) { border-color: var(--td-brick); color: var(--td-brick); }
+
   /* Shop column: centre the toggle under its header. The duplicate button is
      pulled out of flow (hover-reveal) so it never shifts the toggle off-centre. */
   .pa-list-rich .pa-row-pills { justify-content: center; position: relative; }
@@ -2402,7 +2416,7 @@
      Only the grip starts a drag — the rest of the row still clicks to edit. */
   .pa-list-rich.pa-reorder .pa-row,
   .pa-list-rich.pa-reorder .pa-rowhead {
-    grid-template-columns: 22px 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px;
+    grid-template-columns: 22px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
   }
   .pa-grip {
     display: flex; align-items: center; justify-content: center;
@@ -2422,7 +2436,7 @@
      with reorder (we don't arm reorder while selecting). */
   .pa-list-rich.pa-selecting .pa-row,
   .pa-list-rich.pa-selecting .pa-rowhead {
-    grid-template-columns: 34px 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px;
+    grid-template-columns: 34px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
   }
   .pa-selbox { display: flex; align-items: center; justify-content: center; }
   /* Selection is an ordinary act, so it wears Ink — never Dusk. */
@@ -8382,6 +8396,15 @@
   .bx-wk-bar.is-best { background: var(--td-text2); }
   .bx-wk-lbl { font-size: 10.5px; color: var(--td-text2); white-space: nowrap; }
   .bx-wk-lbl.is-today { color: var(--td-text); font-weight: 500; }
+  /* value cap above each bar — makes the chart readable at a glance (no hover
+     needed, which matters in Arrange mode where the card can't be hovered). */
+  .bx-wk-cap { font-size: 10px; color: var(--td-text2); white-space: nowrap;
+    font-variant-numeric: tabular-nums; line-height: 1; }
+  .bx-wk-cap.is-today { color: var(--td-text); font-weight: 500; }
+  .bx-wk-day { cursor: default; }
+  /* On a squat/narrow week card the per-bar caps crowd — hide them there and let
+     the hover tooltip carry the figures instead. */
+  .td-block[data-tier="a"] .bx-wk-cap, .td-block[data-tier="c"] .bx-wk-cap { display: none; }
   .bx-wk-foot { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--td-border); font-size: 12.5px; color: var(--td-text2); }
   .bx-wk-foot b { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
   /* On the way — in-transit PO list (bx-* scoped). ETA in the "arrives today"

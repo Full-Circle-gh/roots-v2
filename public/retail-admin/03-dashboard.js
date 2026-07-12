@@ -897,7 +897,16 @@ function dashWeekRender() {
     const isToday = i === todayIdx;
     const lbl = isToday ? cuT('Today', '今天') : cuT(DASH_WD_EN[dow(d.bucket)], DASH_WD_CN[dow(d.bucket)]);
     const cls = isToday ? ' is-today' : (i === bestIdx ? ' is-best' : '');
-    return `<div class="bx-wk-day"><div class="bx-wk-bar${cls}" style="height:${h}%" title="${money(v)}"></div>`
+    // Full weekday name for the hover tooltip (the axis label is the short form).
+    const full = new Date(String(d.bucket) + 'T00:00:00')
+      .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+    // The whole column is the hover target (data-* fed to the tooltip) so a
+    // zero-revenue day (a 2px stub) still surfaces its figure. A value cap above
+    // each bar makes the chart readable without hovering at all.
+    return `<div class="bx-wk-day" data-day="${escapeAttr(isToday ? cuT('Today', '今天') : full)}" data-rev="${escapeAttr(money(v))}"`
+      + ` onmousemove="dashWeekTip(event)" onmouseleave="dashWeekTipHide()">`
+      + `<div class="bx-wk-cap${isToday ? ' is-today' : ''}">${escapeHtml(money(v))}</div>`
+      + `<div class="bx-wk-bar${cls}" style="height:${h}%"></div>`
       + `<div class="bx-wk-lbl${isToday ? ' is-today' : ''}">${escapeHtml(lbl)}</div></div>`;
   }).join('');
   host.innerHTML = `<div class="bx-wk-bars">${bars}</div>
@@ -905,6 +914,26 @@ function dashWeekRender() {
       <span>${cuT('Week to date', '本周至今')} <b>${money(total)}</b></span>
       <span>${cuT('Best day', '最佳单日')} <b>${money(vals[bestIdx])}</b></span>
     </div>`;
+}
+
+// Cursor-following tooltip for the week bars — the native <title> only shows if
+// the pointer holds dead-still, and never fires at all in Arrange mode. Reuses
+// the trend chart's body-level tip style + fcPlaceTip so no overflow clips it.
+function dashWeekTip(e) {
+  const col = e.currentTarget;
+  let tip = document.getElementById('bx-wk-tip');
+  if (!tip || tip.parentNode !== document.body) {
+    if (!tip) { tip = document.createElement('div'); tip.id = 'bx-wk-tip'; tip.className = 'db-trend-tip'; }
+    document.body.appendChild(tip);
+  }
+  tip.innerHTML = `<div class="b">${escapeHtml(col.dataset.day || '')}</div>`
+    + `<div class="r"><span>${cuT('Revenue', '营收')}</span><b>${escapeHtml(col.dataset.rev || '')}</b></div>`;
+  tip.style.display = 'block';
+  if (typeof fcPlaceTip === 'function') fcPlaceTip(tip, col.getBoundingClientRect());
+}
+function dashWeekTipHide() {
+  const tip = document.getElementById('bx-wk-tip');
+  if (tip) tip.style.display = 'none';
 }
 
 // On the way — purchase orders the buying department has placed and are in
@@ -1420,7 +1449,10 @@ const DASH_SHAPES = {
   // so the solo case always lands on [6,2]. Tiling proven in dash-solver-test.
   recap:     [[3,2],[6,2],[4,2],[6,1],[4,1],[3,1],[2,1]],
   needs:     [[3,2],[6,2],[4,2],[6,1],[4,1],[3,1],[2,1]],
-  orders:    [[4,2],[3,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
+  // orders (Today) joins the same half-width-first rule so it pairs side by side
+  // with whatever big card sits next to it (recap on a calm day, needs, movers);
+  // solo it still lands on [6,2] full-width (a lone 3-wide can't form a 2-row band).
+  orders:    [[3,2],[4,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
   // movers is a ranked list — it prefers height (2-row) so it can show 5 rows;
   // keeps {2,3,4}-wide options so every subset still partitions to 6. Tiling
   // across all subsets + orderings is proven in scripts/dash-solver-test.js.
