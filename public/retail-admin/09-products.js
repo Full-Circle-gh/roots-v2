@@ -1933,6 +1933,15 @@ async function pdOpen(id) {
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
   document.getElementById('pd-id').value = p ? p.id : '';
   document.getElementById('pd-title').textContent = p ? (p.name_en || p.name_cn || 'Product · 产品') : 'New product · 新增产品';
+  // Header identity strip: product thumbnail, SKU · shop-state subtitle, bundle pill.
+  { const th = document.getElementById('pd-head-thumb');
+    if (th) { const img = p && (p.image_data || p.image_url); th.style.backgroundImage = img ? 'url("' + img + '")' : ''; }
+    const sub = document.getElementById('pd-head-sub');
+    if (sub) sub.textContent = p
+      ? ((p.sku ? 'SKU ' + p.sku : cuT('No SKU', '无货号')) + ' · ' + (p.is_published === 1 ? cuT('In the shop', '已上架') : cuT('Draft', '草稿')))
+      : cuT('Not saved yet', '尚未保存');
+    const bp = document.getElementById('pd-head-bundlepill');
+    if (bp) bp.style.display = (p && (p.is_bundle || p.bundle_mode === 'prepacked')) ? '' : 'none'; }
   set('pd-name-en', p && p.name_en); set('pd-name-cn', p && p.name_cn);
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);

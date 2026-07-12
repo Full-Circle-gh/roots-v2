@@ -3047,8 +3047,18 @@
         </div>
         <div class="pu-editor" id="pd-editor" style="display:none;">
         <div class="pu-editor-head">
-          <h3 id="pd-title" style="margin:0;font-size:14px;">Product · 产品</h3>
-          <div style="display:flex;gap:8px;align-items:center;">
+          <div class="pd-head-id">
+            <div class="pd-head-thumb" id="pd-head-thumb"></div>
+            <div class="pd-head-txt">
+              <div class="pd-head-titlerow">
+                <h3 id="pd-title" style="margin:0;">Product · 产品</h3>
+                <span class="pa-pill pa-pill-bundle" id="pd-head-bundlepill" style="display:none;">Bundle · 套装</span>
+              </div>
+              <div class="pd-head-sub" id="pd-head-sub"></div>
+            </div>
+          </div>
+          <div class="pd-head-actions">
+            <span id="pd-save-status" class="pd-save-status" aria-live="polite"></span>
             <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Expand / shrink editor · 全屏 / 还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 全屏</button>
             <button class="btn btn-sm" type="button" onclick="pdClose()" title="Close · 关闭" aria-label="Close"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </div>
@@ -3286,7 +3296,6 @@
             <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
           </div>
           <div style="display:flex;gap:10px;align-items:center;">
-            <span id="pd-save-status" class="pd-save-status" aria-live="polite"></span>
             <button class="btn" onclick="pdOpenVersions()" title="See every saved version of this product and roll back to any of them · 查看此产品的所有历史版本并还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 4v4l2.5 1.5"/><path d="M2.6 6.5A5.5 5.5 0 1 1 2.5 9"/><path d="M2.5 4v2.5H5"/></svg>Version history · 历史版本</button>
           </div>
         </div>
