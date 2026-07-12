@@ -845,7 +845,6 @@ function ordRenderKpis() {
   dashCountUp($('#ord-kpi-orders'), orders);
   dashCountUp($('#ord-kpi-rev'), revenue, n => '¥' + Math.round(n).toLocaleString());
   $('#ord-kpi-aov').textContent = orders ? '¥' + Math.round(revenue / orders).toLocaleString() : '—';
-  $('#ord-kpi-new').textContent = fcNum(k.new_customers || 0);
   ordRepaintKpiLabels();   // deltas + sparklines (language-aware)
 }
 // Language-dependent half — delta badges (the "new" word) and sparkline tip
@@ -856,7 +855,6 @@ function ordRepaintKpiLabels() {
   const k = data.kpis || {}, b = data.baseline || null;
   fcSetDelta('#ord-kpi-orders-d', b && b.orders,        Number(k.orders || 0),        b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
   fcSetDelta('#ord-kpi-rev-d',    b && b.revenue,       Number(k.revenue || 0),       b && b.days, v => '¥' + Math.round(v).toLocaleString());
-  fcSetDelta('#ord-kpi-new-d',    b && b.new_customers, Number(k.new_customers || 0), b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
   const trend = data.trend || [];
   const labels = trend.map(p => String(p.bucket || ''));
   fcRenderSpark($('#ord-kpi-orders-spark'), trend.map(p => Number(p.orders || 0)),  labels, v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);

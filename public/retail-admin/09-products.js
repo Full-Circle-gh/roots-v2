@@ -636,6 +636,9 @@ async function paLoadStoreStock() {
     PA_STOCK_LOADED = true;
     // A remembered store that no longer exists falls back to "All".
     if (PA_STORE !== 'all' && !PA_STORES.some(s => s.id === PA_STORE)) PA_STORE = 'all';
+    // Two-location layout: every store shows its own always-visible column, so
+    // the single-store switcher is retired — keep filters on the combined total.
+    if (PA_STORES.length >= 2) PA_STORE = 'all';
     paRenderStoreSeg();
     paRender();   // stock cells now know per-store counts
   } catch (e) {
@@ -652,6 +655,9 @@ function paRenderStoreSeg() {
   // column — hide the switcher everywhere else so it can't imply it does nothing.
   const overview = PA_VIEW === 'list' && !_paEditorOpen;
   if (CATALOG_MODE === 'upstream' || PA_STORES.length < 2 || !overview) { bar.style.display = 'none'; return; }
+  // Two-location list shows every store's stock in its own column, so the
+  // single-store switcher is redundant — hide it once per-store columns are on.
+  if (_paListStores().length) { bar.style.display = 'none'; return; }
   const btn = (key, label) =>
     `<button type="button" class="pa-store-btn${PA_STORE === key ? ' active' : ''}" onclick="paSetStore(${key === 'all' ? "'all'" : key})">${label}</button>`;
   const btns = [btn('all', cuT('All', '全部'))]
@@ -722,6 +728,10 @@ async function paSaveStoreStock(productId, storeId, raw, el) {
     if (!PA_STOCK[productId]) PA_STOCK[productId] = {};
     PA_STOCK[productId][storeId] = qty;
     el.value = qty;
+    // Keep the amber/brick edge honest for the value just saved.
+    const _lp = (PA_PRODUCTS || []).find(x => x.id === productId);
+    el.classList.toggle('is-out', qty <= 0);
+    el.classList.toggle('is-low', qty > 0 && qty <= paLowThreshold(_lp || {}));
     el.classList.add('is-saved');
     setTimeout(() => el.classList.remove('is-saved'), 1200);
     // Refresh this product's combined stock so OOS/low badges + KPIs follow.
@@ -929,6 +939,44 @@ function _paStockCell(u) {
   const cls = qty <= 0 ? 'is-out' : (qty <= paLowThreshold(u.p) ? 'is-low' : '');
   const label = qty <= 0 ? cuT('Out', '缺货') : String(qty);
   return `<span class="pa-stock ${cls}"><span class="pa-stock-dot"></span>${label}</span>`;
+}
+// Stores that get their own always-visible editable stock column in the overview
+// list. Only when 2+ stores are live and the grid has loaded — a single-store
+// tenant keeps the plain combined Stock column (see _paStockCell).
+function _paListStores() {
+  return (PA_STOCK_LOADED && PA_STORES.length >= 2) ? PA_STORES : [];
+}
+
+// One store's stock cell for the two-location list: an editable box for a lone
+// product, a read-only rollup for a variant family / assembled bundle /
+// supplier-direct item (those carry no per-store editable count of their own,
+// so they show the same badge in every store column). Mirrors _paStockCell's
+// per-case logic, scoped to one storeId.
+function _paStoreStockCell(u, storeId) {
+  if (u.p.ship_from_supplier) {
+    const paused = !!u.p.supplier_paused;
+    const label = paused ? cuT('Paused', '暂停') : cuT('Available', '有货');
+    const title = paused
+      ? cuT('Supplier paused — not orderable', '供应商缺货，已暂停销售')
+      : cuT('Ships from supplier — always available', '供应商直发，始终有货');
+    return `<span class="pa-stock ${paused ? 'is-out' : ''}" title="${title}"><span class="pa-stock-dot"></span>${label}</span>`;
+  }
+  if (!u.group && u.p.is_bundle) {
+    const q = _paBundleStock(u.p);
+    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+    return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Made from other products — stock follows the parts', '由其他产品组成 — 库存取决于组成商品')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
+  }
+  if (u.group) {
+    const q = u.members.reduce((s, m) => s + _paStoreQty(m.id, storeId), 0);
+    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+    return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Open the product to set each size’s stock', '打开产品以分别设置各规格库存')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
+  }
+  const q = _paStoreQty(u.p.id, storeId);
+  const state = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+  return `<input class="pa-stock-input ${state}" type="number" min="0" inputmode="numeric" value="${q}"`
+    + ` aria-label="${escapeAttr(_paStoreName(storeId) + ' ' + cuT('stock', '库存'))}" onclick="event.stopPropagation()"`
+    + ` onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"`
+    + ` onchange="event.stopPropagation(); paSaveStoreStock(${u.p.id}, ${storeId}, this.value, this)">`;
 }
 function _paCatCell(u) {
   const c = (u.p.top_category || u.p.category || '').trim();
@@ -1479,7 +1527,24 @@ function paRender() {
     // scanning the catalogue; Docked = narrow list beside the editor, kept to a
     // compact name + pills row so it fits the 380px pane.
     const overview = !_paEditorOpen;
-    grid.className = (overview ? 'pa-list pa-list-rich' : 'pa-list') + (reorderActive ? ' pa-reorder' : '') + ((overview && PA_SELECT_MODE) ? ' pa-selecting' : '');
+    // Two-location list: one editable stock column per store, both always visible
+    // (the Shop toggle column is retired — publish still lives in the grid/card
+    // view, bulk actions, and the editor). Falls back to one combined Stock
+    // column for single-store tenants or before the grid loads.
+    const listStores = overview ? _paListStores() : [];
+    grid.className = (overview ? 'pa-list pa-list-rich' : 'pa-list')
+      + (listStores.length ? ' pa-multistock' : '')
+      + (reorderActive ? ' pa-reorder' : '')
+      + ((overview && PA_SELECT_MODE) ? ' pa-selecting' : '');
+    // Drive the grid track list so header + rows + reorder/select modes stay in
+    // lockstep: img · name · category · SKU · [one column per store] · price.
+    if (overview) {
+      const stockTracks = (listStores.length ? listStores.map(() => '104px').join(' ') : '104px');
+      grid.style.setProperty('--pa-grid',
+        `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px`);
+    } else {
+      grid.style.removeProperty('--pa-grid');
+    }
     // Snapshot the on-screen unit order as lists of product ids (a variant group
     // moves as one block). paRowDrop reads this to compute the new sequence.
     PA_REORDER_UNITS = reorderActive
@@ -1494,9 +1559,10 @@ function paRender() {
         <span>${cuT('Product', '产品')}</span>
         <span>${cuT('Category', '分类')}</span>
         <span>SKU</span>
-        <span>${(PA_STORE !== 'all' && PA_STOCK_LOADED) ? escapeHtml(cuT('Stock · ', '库存 · ') + _paStoreName(PA_STORE)) : cuT('Stock', '库存')}</span>
+        ${listStores.length
+          ? listStores.map(s => `<span class="pa-col-stock-h">${escapeHtml(_paStoreName(s.id))}</span>`).join('')
+          : `<span>${cuT('Stock', '库存')}</span>`}
         <span class="pa-col-price">${cuT('Price', '价格')}</span>
-        <span class="pa-col-shop">${cuT('Shop', '上架')}</span>
       </div>` : '';
     grid.innerHTML = head + pageUnits.map((u, ui) => {
       const p = u.p;
@@ -1530,9 +1596,10 @@ function paRender() {
           </div>
           <div class="pa-col-cat">${_paCatCell(u)}</div>
           <div class="pa-col-sku">${sku}</div>
-          <div class="pa-col-stock">${_paStockCell(u)}</div>
+          ${listStores.length
+            ? listStores.map(s => `<div class="pa-col-stock">${_paStoreStockCell(u, s.id)}</div>`).join('')
+            : `<div class="pa-col-stock">${_paStockCell(u)}</div>`}
           ${_paPriceCell(u)}
-          <div class="pa-row-pills">${_paShopToggle(u)}</div>
         </div>`;
       }
       const meta = u.group

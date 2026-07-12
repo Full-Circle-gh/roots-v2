@@ -1479,19 +1479,48 @@ const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers:
 let DASH_ARRANGING = false;
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];
 let DASH_HIDDEN = new Set();
+// Per-card width the operator forced by dropping one card beside another:
+// { block: 'half' } (pairs 3-wide with an adjacent half card) or 'full' (takes
+// the whole row). Absent = auto (the solver's own preference). Persisted with
+// order + hidden; honoured by dashComputeRects in every view, not just Arrange.
+let DASH_WIDTHS = {};
 let _dashRects = {};
 let _dashDrag = null;
 
 function dashLayoutLoad() {
   try {
     const v = JSON.parse(localStorage.getItem(DASH_LAYOUT_KEY) || '{}');
-    return { order: Array.isArray(v.order) ? v.order : [], hidden: Array.isArray(v.hidden) ? v.hidden : [] };
-  } catch (e) { return { order: [], hidden: [] }; }
+    return {
+      order: Array.isArray(v.order) ? v.order : [],
+      hidden: Array.isArray(v.hidden) ? v.hidden : [],
+      widths: (v.widths && typeof v.widths === 'object') ? v.widths : {},
+    };
+  } catch (e) { return { order: [], hidden: [], widths: {} }; }
 }
-function dashLayoutSave(order, hidden) {
-  try { localStorage.setItem(DASH_LAYOUT_KEY, JSON.stringify({ order, hidden })); } catch (e) {}
+function dashLayoutSave(order, hidden, widths) {
+  try { localStorage.setItem(DASH_LAYOUT_KEY, JSON.stringify({ order, hidden, widths: widths || {} })); } catch (e) {}
 }
-function dashArrangePersist() { dashLayoutSave(DASH_ORDER, [...DASH_HIDDEN]); }
+function dashArrangePersist() { dashLayoutSave(DASH_ORDER, [...DASH_HIDDEN], DASH_WIDTHS); }
+
+// Drop stale width pins: a 'half' card with no adjacent 'half' partner (its
+// pair was moved away / hidden) reverts to auto; a pin on a card no longer in
+// the order is forgotten. Keeps a lonely half from leaving a 3-wide gap.
+function dashPruneWidths() {
+  const vis = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id));
+  for (const id of Object.keys(DASH_WIDTHS)) {
+    const w = DASH_WIDTHS[id];
+    if (w === 'half') {
+      const k = vis.indexOf(id);
+      const paired = k >= 0 && ((k > 0 && DASH_WIDTHS[vis[k - 1]] === 'half')
+                             || (k < vis.length - 1 && DASH_WIDTHS[vis[k + 1]] === 'half'));
+      if (!paired) delete DASH_WIDTHS[id];
+    } else if (w === 'full') {
+      if (!vis.includes(id)) delete DASH_WIDTHS[id];
+    } else {
+      delete DASH_WIDTHS[id];
+    }
+  }
+}
 
 // ── the packing solver (identical algorithm to the mockup) ──────────────────
 function dashPrefScore(id, w, h) {
@@ -1578,14 +1607,34 @@ function dashComputeRects() {
   // with the block's real menu untouched, so the headless tiling proof
   // (scripts/dash-solver-test.js) still holds for every non-arrange layout.
   const savedShapes = {};
+  // Narrow a block's shape menu for THIS solve only (restored right after), and
+  // never strand it with an empty menu.
+  const restrict = (id, keep) => {
+    if (!DASH_SHAPES[id]) return;
+    const f = DASH_SHAPES[id].filter(keep);
+    if (!f.length) return;
+    if (!(id in savedShapes)) savedShapes[id] = DASH_SHAPES[id];
+    DASH_SHAPES[id] = f;
+  };
+  // Operator-forced widths (apply in every view so the arrangement persists):
+  // 'full' → 6-wide, 'half' → 3-wide but ONLY when an adjacent visible sibling
+  // is also 'half' (so a widowed half card falls back to auto, no 3-wide gap).
+  for (let k = 0; k < ids.length; k++) {
+    const id = ids[k], w = DASH_WIDTHS[id];
+    if (w === 'full') restrict(id, s => s[0] === 6);
+    else if (w === 'half'
+      && ((k > 0 && DASH_WIDTHS[ids[k - 1]] === 'half') || (k < ids.length - 1 && DASH_WIDTHS[ids[k + 1]] === 'half'))) {
+      // the 3-wide 2-ROW shape specifically — a 3-wide 1-row would let the solver
+      // stack the pair vertically in one column instead of side by side.
+      restrict(id, s => s[0] === 3 && s[1] === 2);
+    }
+  }
+  // In Arrange mode the quiet (empty-today) blocks reappear only so they can be
+  // reordered — restrict them to a single row so they read as a compact strip
+  // rather than a big empty box.
   if (DASH_ARRANGING) {
     const quiet = new Set([...host.querySelectorAll('.td-block.is-quiet')].map(b => b.dataset.block));
-    for (const id of ids) {
-      if (quiet.has(id) && DASH_SHAPES[id]) {
-        savedShapes[id] = DASH_SHAPES[id];
-        DASH_SHAPES[id] = DASH_SHAPES[id].filter(s => s[1] === 1);
-      }
-    }
+    for (const id of ids) if (quiet.has(id)) restrict(id, s => s[1] === 1);
   }
   let sol = dashSolve(ids);
   for (const id in savedShapes) DASH_SHAPES[id] = savedShapes[id];   // restore real menus
@@ -1667,12 +1716,17 @@ function dashRender(skipId) {
 // from the saved order surfaces at the tail (new blocks in a later release
 // appear rather than vanish); unknown ids are dropped.
 function dashArrangeApply() {
-  const { order, hidden } = dashLayoutLoad();
+  const { order, hidden, widths } = dashLayoutLoad();
   const known = DASH_BLOCK_DEFAULT;
   const seq = (order && order.length ? order : DASH_BLOCK_DEFAULT).filter(id => known.includes(id));
   known.forEach(id => { if (!seq.includes(id)) seq.push(id); });
   DASH_ORDER = seq;
   DASH_HIDDEN = new Set((hidden || []).filter(id => known.includes(id)));
+  DASH_WIDTHS = {};
+  for (const id in (widths || {})) {
+    if (known.includes(id) && (widths[id] === 'half' || widths[id] === 'full')) DASH_WIDTHS[id] = widths[id];
+  }
+  dashPruneWidths();
   dashRender();
 }
 
@@ -1696,8 +1750,8 @@ function dashArrangeChromePaint() {
   if (lbl) lbl.textContent = DASH_ARRANGING ? cuT('Done', '完成') : cuT('Arrange', '整理');
   const hint = document.getElementById('td-arrange-hint-txt');
   if (hint) hint.textContent = cuT(
-    "Drag cards to reorder. Hide the ones you don't need — they wait in the tray below.",
-    '拖动卡片重新排序，隐藏不需要的卡片 — 它们会保存在下方的托盘里。');
+    "Drag to reorder. Drop a card onto the side of another to sit them side by side. Hide the ones you don't need — they wait in the tray below.",
+    '拖动排序。把一张卡片拖到另一张的左右两侧，即可并排放置。隐藏不需要的卡片 — 它们会保存在下方的托盘里。');
   const reset = document.getElementById('td-arrange-reset');
   if (reset) reset.textContent = cuT('Reset to default', '恢复默认');
   dashArrangeTray();
@@ -1738,6 +1792,7 @@ function dashArrangeReset() {
   try { localStorage.removeItem(DASH_LAYOUT_KEY); } catch (e) {}
   DASH_ORDER = [...DASH_BLOCK_DEFAULT];
   DASH_HIDDEN = new Set();
+  DASH_WIDTHS = {};
   dashRender();
 }
 
@@ -1772,19 +1827,52 @@ function dashWireBlock(el, host) {
     el.style.left = (_dashDrag.ox + dx) + 'px';
     el.style.top = (_dashDrag.oy + dy) + 'px';
     const box = host.getBoundingClientRect(), px = e.clientX - box.left, py = e.clientY - box.top;
-    const others = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && id !== _dashDrag.id);
-    let ins = others.length;
-    for (let j = 0; j < others.length; j++) {
-      const q = _dashRects[others[j]]; if (!q) continue;
-      const cx = q.x + q.w / 2, cy = q.y + q.h / 2;
-      if (py < q.y - 4 || (py < q.y + q.h && px < cx && py < cy + q.h / 2)) { ins = j; break; }
-      if (py < cy && px < cx) { ins = j; break; }
+    const dragId = _dashDrag.id;
+    const others = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && id !== dragId);
+    // Only cards with a 3-wide 2-row shape can pair side by side (a few tiny
+    // list cards have no [3,2] and stay full-width droppers).
+    const canHalf = id => DASH_SHAPES[id] && DASH_SHAPES[id].some(s => s[0] === 3 && s[1] === 2);
+
+    // Drop-beside: is the pointer over a card's LEFT or RIGHT half? If so — and
+    // both cards can go 3-wide — pair them: drop the dragged card immediately
+    // before / after the target and pin both 'half'. This is how the operator
+    // forces two cards to sit side by side.
+    let B = null, side = null;
+    for (const oid of others) {
+      const q = _dashRects[oid]; if (!q) continue;
+      if (px >= q.x - DASH_GAP && px <= q.x + q.w + DASH_GAP && py >= q.y && py <= q.y + q.h) {
+        B = oid; side = (px - q.x) / q.w < 0.5 ? 'before' : 'after'; break;
+      }
     }
+
+    let target;
+    if (B && canHalf(dragId) && canHalf(B)) {
+      target = [...others];
+      const bi = target.indexOf(B);
+      target.splice(side === 'before' ? bi : bi + 1, 0, dragId);
+      DASH_WIDTHS[dragId] = 'half'; DASH_WIDTHS[B] = 'half';
+    } else {
+      // No card under the pointer → plain reorder into the nearest gap, and the
+      // dragged card drops any forced width (back to auto / full row).
+      let ins = others.length;
+      for (let j = 0; j < others.length; j++) {
+        const q = _dashRects[others[j]]; if (!q) continue;
+        const cx = q.x + q.w / 2, cy = q.y + q.h / 2;
+        if (py < q.y - 4 || (py < q.y + q.h && px < cx && py < cy + q.h / 2)) { ins = j; break; }
+        if (py < cy && px < cx) { ins = j; break; }
+      }
+      target = [...others]; target.splice(ins, 0, dragId);
+      delete DASH_WIDTHS[dragId];
+    }
+
+    // Re-render when the order OR the forced widths changed (a pairing can flip
+    // widths without moving anything in the list).
+    const wsig = target.map(id => DASH_WIDTHS[id] || 'a').join();
     const visOrder = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id));
-    const target = [...others]; target.splice(ins, 0, _dashDrag.id);
-    if (target.join() !== visOrder.join()) {
+    if (target.join() !== visOrder.join() || wsig !== _dashDrag._wsig) {
+      _dashDrag._wsig = wsig;
       DASH_ORDER = target.concat(DASH_ORDER.filter(id => DASH_HIDDEN.has(id)));
-      dashRender(_dashDrag.id);
+      dashRender(dragId);
     }
   });
   const finish = () => {
@@ -1792,7 +1880,7 @@ function dashWireBlock(el, host) {
     const live = _dashDrag.live;
     el.classList.remove('td-dragging');
     _dashDrag = null;
-    if (live) { dashRender(); dashArrangePersist(); }
+    if (live) { dashPruneWidths(); dashRender(); dashArrangePersist(); }
   };
   el.addEventListener('pointerup', finish);
   el.addEventListener('pointercancel', finish);
@@ -2986,10 +3074,11 @@ function cuBarTip(e) {
     if (!tip) { tip = document.createElement('div'); tip.id = 'cu-bar-tip'; tip.className = 'cu-bar-tip'; }
     document.body.appendChild(tip);
   }
-  const m = col.dataset.m || '', n = col.dataset.n || '0', rev = col.dataset.rev || '0.00';
+  const m = col.dataset.m || '', rev = col.dataset.rev || '0.00';
+  // Order count is redundant with the bar height (and a lone "Orders: 1" next
+  // to the amount reads as filler) — the tooltip carries only the figure.
   tip.innerHTML =
     `<div class="b">${escapeHtml(m)}</div>` +
-    `<div class="r"><span>${cuT('Orders', '订单')}</span><b>${escapeHtml(n)}</b></div>` +
     `<div class="r"><span>${cuT('Revenue', '营收')}</span><b>¥${escapeHtml(rev)}</b></div>`;
   tip.style.display = 'block';
   fcPlaceTip(tip, col.getBoundingClientRect());
