@@ -1532,7 +1532,25 @@ function dashComputeRects() {
     .map(b => b.dataset.block));
   const ids = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && present.has(id));
   if (!ids.length) return { rects: {}, height: 0 };
+  // In Arrange mode the quiet (empty-today) blocks reappear only so they can be
+  // reordered — a card with nothing to show has no reason to claim its full
+  // 2-row preferred shape and read as a big empty box. Temporarily restrict
+  // those blocks to a single-row menu for THIS solve only (restored right
+  // after), so they render as a compact strip. The shipped/default layout runs
+  // with the block's real menu untouched, so the headless tiling proof
+  // (scripts/dash-solver-test.js) still holds for every non-arrange layout.
+  const savedShapes = {};
+  if (DASH_ARRANGING) {
+    const quiet = new Set([...host.querySelectorAll('.td-block.is-quiet')].map(b => b.dataset.block));
+    for (const id of ids) {
+      if (quiet.has(id) && DASH_SHAPES[id]) {
+        savedShapes[id] = DASH_SHAPES[id];
+        DASH_SHAPES[id] = DASH_SHAPES[id].filter(s => s[1] === 1);
+      }
+    }
+  }
   let sol = dashSolve(ids);
+  for (const id in savedShapes) DASH_SHAPES[id] = savedShapes[id];   // restore real menus
   if (!sol) sol = { bands: ids.map((id, k) => ({ h: 1, cells: [{ idx: k, w: 6 }], sum: 6, next: k + 1 })) };
   const W = host.clientWidth || 1088;
   const unit = (W - (DASH_COLS - 1) * DASH_GAP) / DASH_COLS;

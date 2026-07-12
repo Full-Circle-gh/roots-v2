@@ -7979,7 +7979,11 @@
     overflow: hidden; display: flex; flex-direction: column;
   }
   .bn-inner { padding: 16px 20px; display: flex; flex-direction: column; flex: 1; min-height: 0; }
-  .bn-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex: none; }
+  /* padding-right reserves the top-right gutter the hover/arrange × hide button
+     lives in (position:absolute at right:10px), so the trailing action link
+     ("Show the work", "Open orders ›") never runs under the × and the two stop
+     colliding. */
+  .bn-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; flex: none; padding-right: 26px; }
   .bn-head .bn-ico { width: 16px; height: 16px; color: var(--td-text2); flex: none; }
   .bn-head h3 { margin: 0; font: 500 15px var(--f-sans); color: var(--td-text); white-space: nowrap; }
   .bn-meta { font-size: 12.5px; color: var(--td-text2); white-space: nowrap; }
@@ -8024,8 +8028,9 @@
     font-size: 11.5px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
   .bn-hours:empty { display: none; }
 
-  /* vitals — numbers split by hairlines; stack when the card is narrow-tall */
-  .bn-vitals { display: flex; align-items: stretch; gap: 0; flex: none; }
+  /* vitals — numbers split by hairlines; stack when the card is narrow-tall.
+     margin-top gives the number row air below the day-line graph (was flush). */
+  .bn-vitals { display: flex; align-items: stretch; gap: 0; flex: none; margin-top: 14px; }
   .bn-v { flex: 1; min-width: 0; }
   .bn-v + .bn-v { border-left: 1px solid var(--td-border); padding-left: 16px; margin-left: 16px; }
   .bn-vl { font-size: 12.5px; color: var(--td-text2); white-space: nowrap; }
