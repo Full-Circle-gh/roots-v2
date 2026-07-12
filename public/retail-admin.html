@@ -3938,8 +3938,9 @@
       /* buttons */
       .pg-btn { font: inherit; font-size: 13.5px; font-weight: 500; line-height: 1; border-radius: 8px; border: 1px solid transparent; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; padding: 9px 14px; transition: .2s var(--ease-pg); white-space: nowrap; }
       .pg-btn svg { width: 15px; height: 15px; }
-      .pg-btn.primary { background: var(--tacet-dusk); color: #fff; border-color: var(--tacet-dusk); }
-      .pg-btn.primary:hover { background: #5F58A0; }
+      .pg-btn.primary { background: var(--text-1); color: var(--bg-app); border-color: var(--text-1); font-weight: 500; }
+      .pg-btn.primary:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
+      [data-theme="dark"] .pg-btn.primary:hover { background: #EAE7DF; border-color: #EAE7DF; color: var(--bg-app); }
       .pg-btn.secondary { background: var(--bg-pane); color: var(--text-1); border-color: var(--line); }
       .pg-btn.secondary:hover { border-color: var(--text-3); }
       .pg-btn.ghost { background: transparent; color: var(--text-2); }
@@ -6061,10 +6062,12 @@
        + save logic: 10-extras.js (sc* functions).
        ═══════════════════════════════════════════════════════════════════════ -->
   <style id="tacet-sharecards-skin">
-    /* Uses the native Tacet --td-* token layer (global :root, theme-aware) —
-       same layer as #tab-products. Radius/font/ease come from the shared
-       --r-*/--f-*/--ease-out tokens; #tab-sharing is in the Tacet :is() scope
-       so those pick up the Tacet radius values. */
+    /* Option B — one workspace. Left page list + right stage (fields + one big
+       live WeChat preview). Native Tacet --td-* token layer (global :root,
+       theme-aware) — same layer as #tab-products. Radius/font/ease come from the
+       shared --r-*/--f-*/--ease-out tokens; #tab-sharing is in the Tacet :is()
+       scope so those pick up the Tacet radius values. No Dusk on ordinary
+       controls: the selected row uses an ink edge, not Dusk. */
     /* paper ground bled over main's padding — same trick #tab-affiliate uses */
     #tab-sharing { background: var(--td-paper);
       margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
@@ -6075,28 +6078,74 @@
     #tab-sharing .sc-h2 { font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0; }
     #tab-sharing .sc-sub { font-size: 13px; color: var(--td-text2); line-height: 1.55; margin: 8px 0 0; }
 
-    #tab-sharing .sc-gal { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 20px; }
-    @media (max-width: 900px) { #tab-sharing .sc-gal { grid-template-columns: 1fr; } }
+    /* workspace shell */
+    #tab-sharing .sc-work { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+    @media (max-width: 900px) { #tab-sharing .sc-work { grid-template-columns: 1fr; } }
 
-    #tab-sharing .sc-card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-xl); overflow: hidden; display: flex; flex-direction: column; }
-    #tab-sharing .sc-chead { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 4px; }
-    #tab-sharing .sc-ctitle { font: 500 15px var(--f-sans); color: var(--td-text); }
-    #tab-sharing .sc-csub { font-size: 12px; color: var(--td-text2); margin-top: 2px; line-height: 1.45; }
-    #tab-sharing .sc-chead .sc-cright { margin-left: auto; flex: none; }
+    /* left: page list */
+    #tab-sharing .sc-plist { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-xl); overflow: hidden; }
+    #tab-sharing .sc-plist-h { padding: 14px 18px; border-bottom: 1px solid var(--td-border); font: 600 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2); }
+    #tab-sharing .sc-prow { position: relative; display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 13px 16px; border: 0; border-top: 1px solid var(--td-border); background: transparent; cursor: pointer; transition: background .15s var(--ease-out); font-family: var(--f-sans); }
+    #tab-sharing .sc-prow:first-of-type { border-top: 0; }
+    #tab-sharing .sc-prow:hover { background: var(--td-raised); }
+    #tab-sharing .sc-prow.sel { background: var(--td-raised); box-shadow: inset 3px 0 0 var(--td-text); }
+    #tab-sharing .sc-pthumb { width: 40px; height: 32px; border-radius: 6px; flex: none; background: var(--td-raised); border: 1px solid var(--td-border); background-size: cover; background-position: center; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    #tab-sharing .sc-pmeta { display: flex; flex-direction: column; min-width: 0; }
+    #tab-sharing .sc-pn { font: 500 14px var(--f-sans); color: var(--td-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #tab-sharing .sc-ps { font-size: 12px; color: var(--td-text2); margin-top: 1px; }
+    #tab-sharing .sc-pright { margin-left: auto; flex: none; }
 
-    /* status pill */
-    #tab-sharing .sc-pill { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--f-sans); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+    /* right: stage */
+    #tab-sharing .sc-stage { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-xl); overflow: hidden; }
+    #tab-sharing .sc-sgrid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
+    @media (max-width: 720px) { #tab-sharing .sc-sgrid { grid-template-columns: 1fr; } }
+    #tab-sharing .sc-form { padding: 26px 28px; }
+    #tab-sharing .sc-stitle { font: 500 17px var(--f-sans); color: var(--td-text); letter-spacing: -.01em; }
+    #tab-sharing .sc-ssub { font-size: 13px; color: var(--td-text2); margin: 3px 0 20px; line-height: 1.5; }
+    #tab-sharing .sc-spreview { background: var(--td-paper); border-left: 1px solid var(--td-border); padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+    @media (max-width: 720px) { #tab-sharing .sc-spreview { border-left: 0; border-top: 1px solid var(--td-border); } }
+    #tab-sharing .sc-pv-capt { font: 600 11px var(--f-sans); letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2); }
+    #tab-sharing .sc-pv-note { font-size: 12px; color: var(--td-text2); line-height: 1.5; }
+
+    /* form bits */
+    #tab-sharing .sc-fgroup { margin-bottom: 16px; }
+    #tab-sharing .sc-flabel { font: 500 12px var(--f-sans); color: var(--td-text2); margin-bottom: 5px; display: block; }
+    #tab-sharing .sc-flabel .sc-lang { color: var(--td-text2); font-weight: 400; opacity: .7; }
+    #tab-sharing .sc-charc { float: right; font: 400 11px var(--f-mono); color: var(--td-text2); opacity: .7; }
+    #tab-sharing input.sc-input { width: 100%; font: 400 13.5px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-md); padding: 8px 11px; outline: none; transition: border-color .2s var(--ease-out); }
+    #tab-sharing input.sc-input:focus { border-color: var(--td-dusk); }
+    #tab-sharing input.sc-input::placeholder { color: var(--td-text2); opacity: .6; }
+    #tab-sharing .sc-note { font-size: 12px; color: var(--td-text2); line-height: 1.5; background: var(--td-raised); border-radius: var(--r-md); padding: 10px 12px; margin-bottom: 16px; }
+
+    /* dropzone */
+    #tab-sharing .sc-drop { display: flex; align-items: center; gap: 14px; border: 1px dashed var(--td-border); border-radius: var(--r-md); padding: 16px; background: var(--td-paper); cursor: pointer; transition: border-color .2s var(--ease-out), background .2s var(--ease-out); }
+    #tab-sharing .sc-drop:hover { border-color: var(--td-text2); background: var(--td-raised); }
+    #tab-sharing .sc-drop-thumb { width: 64px; height: 52px; border-radius: 8px; flex: none; background: var(--td-raised); border: 1px solid var(--td-border); background-size: cover; background-position: center; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    #tab-sharing .sc-drop-t { font: 500 13.5px var(--f-sans); color: var(--td-text); display: block; }
+    #tab-sharing .sc-drop-s { font-size: 12px; color: var(--td-text2); margin-top: 2px; }
+    #tab-sharing .sc-drophint { font-size: 12px; color: var(--td-text2); margin-top: 6px; }
+
+    /* save row */
+    #tab-sharing .sc-savebar { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+    #tab-sharing .sc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 500 12.5px var(--f-sans); border-radius: var(--r-md); border: 1px solid var(--td-border); background: var(--td-surface); color: var(--td-text); padding: 8px 14px; cursor: pointer; transition: border-color .2s var(--ease-out), background .2s var(--ease-out), color .2s var(--ease-out); white-space: nowrap; }
+    #tab-sharing .sc-btn.danger { border-color: transparent; color: var(--td-text2); }
+    #tab-sharing .sc-btn.danger:hover { color: var(--td-brick); background: var(--td-brick-tint); border-color: transparent; }
+    #tab-sharing .sc-save { display: inline-flex; align-items: center; gap: 7px; font: 500 13px var(--f-sans); background: var(--td-text); border: 1px solid var(--td-text); color: var(--td-paper); border-radius: var(--r-md); padding: 9px 18px; cursor: pointer; transition: opacity .2s var(--ease-out); }
+    #tab-sharing .sc-save:hover { opacity: .88; }
+    #tab-sharing .sc-saved { font-size: 12px; color: var(--td-text2); margin-left: auto; }
+
+    /* status pill (list) */
+    #tab-sharing .sc-pill { display: inline-flex; align-items: center; gap: 6px; font: 500 11px var(--f-sans); padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
     #tab-sharing .sc-pill .sc-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
     #tab-sharing .sc-pill.custom { background: var(--td-sage-tint); color: var(--td-sage-ink); }
     #tab-sharing .sc-pill.deflt { background: var(--td-raised); color: var(--td-text2); }
 
     /* the WeChat forward preview */
-    #tab-sharing .sc-pv { padding: 14px 20px 2px; }
     #tab-sharing .sc-chat { background: var(--td-raised); border-radius: var(--r-lg); padding: 18px 16px; }
     #tab-sharing .sc-chatrow { display: flex; gap: 10px; align-items: flex-start; }
     #tab-sharing .sc-avatar { width: 30px; height: 30px; border-radius: 7px; flex: none; background: var(--td-text2); color: var(--td-surface); display: flex; align-items: center; justify-content: center; }
     #tab-sharing .sc-avatar svg { width: 15px; height: 15px; }
-    #tab-sharing .sc-wxcard { width: 216px; background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(17,26,43,.10); }
+    #tab-sharing .sc-wxcard { width: 216px; max-width: 100%; background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(17,26,43,.10); }
     #tab-sharing .sc-wx-t { font: 400 13px var(--f-sans); color: var(--td-text); padding: 11px 12px 10px; line-height: 1.4; }
     #tab-sharing .sc-wx-t.empty { color: var(--td-text2); font-style: italic; }
     #tab-sharing .sc-wx-img { aspect-ratio: 5 / 4; background-size: cover; background-position: center; background-color: var(--td-raised); }
@@ -6106,37 +6155,13 @@
     #tab-sharing .sc-wx-mp { margin-left: auto; opacity: .8; }
 
     /* fallback "page's own look" art (no custom picture) */
-    #tab-sharing .sc-fb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }
+    #tab-sharing .sc-fb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
     #tab-sharing .sc-fb-lines { width: 60%; }
     #tab-sharing .sc-fb-lines i { display: block; height: 6px; border-radius: 3px; background: var(--td-border); margin: 0 auto 7px; }
     #tab-sharing .sc-fb-lines i:nth-child(1) { width: 68%; }
     #tab-sharing .sc-fb-lines i:nth-child(2) { width: 100%; }
     #tab-sharing .sc-fb-lines i:nth-child(3) { width: 44%; }
-    #tab-sharing .sc-fb-dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--td-border); }
-
-    /* editable fields */
-    #tab-sharing .sc-fields { padding: 14px 20px 0; display: flex; flex-direction: column; gap: 12px; }
-    #tab-sharing .sc-flabel { font: 500 12px var(--f-sans); color: var(--td-text2); margin-bottom: 5px; display: block; }
-    #tab-sharing .sc-flabel .sc-lang { color: var(--td-text2); font-weight: 400; opacity: .7; }
-    #tab-sharing .sc-charc { float: right; font: 400 11px var(--f-mono); color: var(--td-text2); opacity: .7; }
-    #tab-sharing input.sc-input { width: 100%; font: 400 13.5px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-md); padding: 8px 11px; outline: none; transition: border-color .2s var(--ease-out); }
-    #tab-sharing input.sc-input:focus { border-color: var(--td-dusk); }
-    #tab-sharing input.sc-input::placeholder { color: var(--td-text2); opacity: .6; }
-    #tab-sharing .sc-note { font-size: 12px; color: var(--td-text2); line-height: 1.5; background: var(--td-raised); border-radius: var(--r-md); padding: 10px 12px; }
-
-    /* picture controls */
-    #tab-sharing .sc-picrow { display: flex; align-items: center; gap: 10px; }
-    #tab-sharing .sc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 500 12.5px var(--f-sans); border-radius: var(--r-md); border: 1px solid var(--td-border); background: var(--td-surface); color: var(--td-text); padding: 7px 13px; cursor: pointer; transition: border-color .2s var(--ease-out), background .2s var(--ease-out), color .2s var(--ease-out); white-space: nowrap; }
-    #tab-sharing .sc-btn:hover { border-color: var(--td-text2); }
-    #tab-sharing .sc-btn svg { width: 14px; height: 14px; }
-    #tab-sharing .sc-btn.danger { border-color: transparent; color: var(--td-text2); }
-    #tab-sharing .sc-btn.danger:hover { color: var(--td-brick); background: var(--td-brick-tint); border-color: transparent; }
-
-    /* footer / save */
-    #tab-sharing .sc-foot { margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 16px 20px 18px; }
-    #tab-sharing .sc-save { display: inline-flex; align-items: center; gap: 7px; font: 500 13px var(--f-sans); background: var(--td-text); border: 1px solid var(--td-text); color: var(--td-paper); border-radius: var(--r-md); padding: 9px 16px; cursor: pointer; transition: opacity .2s var(--ease-out); }
-    #tab-sharing .sc-save:hover { opacity: .88; }
-    #tab-sharing .sc-saved { font-size: 12px; color: var(--td-text2); margin-left: auto; }
+    #tab-sharing .sc-fb-dot { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--td-border); flex: none; }
 
     #tab-sharing .sc-tip { margin-top: 22px; font-size: 12px; color: var(--td-text2); line-height: 1.55; }
     #tab-sharing .sc-tip b { color: var(--td-text); font-weight: 500; }
@@ -6146,133 +6171,15 @@
     <div class="sc-head">
       <div class="sc-eyebrow" data-no-i18n>Mini app · Sharing</div>
       <h2 class="sc-h2">Share cards · 分享卡片</h2>
-      <p class="sc-sub">When a customer forwards one of your pages into a WeChat chat, this is the card their friends see. Set the picture and the title for each page — and see exactly how it lands. · 顾客把页面转发到微信聊天时,好友看到的就是这张卡片。为每个页面设置图片和标题,并实时预览效果。</p>
+      <p class="sc-sub">When a customer forwards one of your pages into a WeChat chat, this is the card their friends see. Pick a page on the left; set its picture and title on the right and watch the preview. · 顾客把页面转发到微信聊天时,好友看到的就是这张卡片。左侧选择页面,右侧设置图片和标题,实时预览效果。</p>
     </div>
 
-    <div class="sc-gal">
-
-      <!-- HOME -->
-      <div class="sc-card" data-sc="home">
-        <div class="sc-chead">
-          <div>
-            <div class="sc-ctitle">Home page · 首页</div>
-            <div class="sc-csub">Forwarding the store's home, with no referral code. · 转发店铺首页(不含推荐码)。</div>
-          </div>
-          <div class="sc-cright" id="sc-home-pill"></div>
-        </div>
-        <div class="sc-pv" id="sc-home-pv" data-no-i18n></div>
-        <div class="sc-fields">
-          <div>
-            <label class="sc-flabel">Card title <span class="sc-lang">· English</span><span class="sc-charc" id="sc-home-ten-c">0 / 60</span></label>
-            <input type="text" class="sc-input" id="sc-home-ten" maxlength="60" placeholder="e.g. Fresh this week" oninput="scOnTitleInput('home')">
-          </div>
-          <div>
-            <label class="sc-flabel">卡片标题 <span class="sc-lang">· 中文</span><span class="sc-charc" id="sc-home-tcn-c">0 / 60</span></label>
-            <input type="text" class="sc-input" id="sc-home-tcn" maxlength="60" placeholder="例如:本周上新" oninput="scOnTitleInput('home')">
-          </div>
-          <input type="hidden" id="sc-home-img">
-          <div class="sc-picrow">
-            <button class="sc-btn" id="sc-home-upl" onclick="document.getElementById('sc-home-file').click()">Add picture · 添加图片</button>
-            <button class="sc-btn danger" id="sc-home-rm" onclick="scClear('home')" style="display:none">Remove · 移除</button>
-            <input type="file" id="sc-home-file" accept="image/png,image/jpeg" style="display:none">
-          </div>
-        </div>
-        <div class="sc-foot">
-          <button class="sc-save" onclick="scSave('home')">Save card · 保存卡片</button>
-          <span class="sc-saved" id="sc-home-saved"></span>
-        </div>
+    <div class="sc-work">
+      <div class="sc-plist">
+        <div class="sc-plist-h">Pages · 页面</div>
+        <div id="sc-list" data-no-i18n></div>
       </div>
-
-      <!-- PRODUCT (picture only) -->
-      <div class="sc-card" data-sc="product">
-        <div class="sc-chead">
-          <div>
-            <div class="sc-ctitle">Product page · 商品页</div>
-            <div class="sc-csub">Backup picture for product forwards. · 商品分享的备用图。</div>
-          </div>
-          <div class="sc-cright" id="sc-product-pill"></div>
-        </div>
-        <div class="sc-pv" id="sc-product-pv" data-no-i18n></div>
-        <div class="sc-fields">
-          <div class="sc-note">Products share their own name and photo. This picture only fills in when a product has none. · 商品使用自己的名称和图片,此图仅在商品没有图片时兜底。</div>
-          <input type="hidden" id="sc-product-img">
-          <div class="sc-picrow">
-            <button class="sc-btn" id="sc-product-upl" onclick="document.getElementById('sc-product-file').click()">Add picture · 添加图片</button>
-            <button class="sc-btn danger" id="sc-product-rm" onclick="scClear('product')" style="display:none">Remove · 移除</button>
-            <input type="file" id="sc-product-file" accept="image/png,image/jpeg" style="display:none">
-          </div>
-        </div>
-        <div class="sc-foot">
-          <button class="sc-save" onclick="scSave('product')">Save card · 保存卡片</button>
-          <span class="sc-saved" id="sc-product-saved"></span>
-        </div>
-      </div>
-
-      <!-- VOTING -->
-      <div class="sc-card" data-sc="voting">
-        <div class="sc-chead">
-          <div>
-            <div class="sc-ctitle">Voting page · 投票页</div>
-            <div class="sc-csub">Forwarding the community polls. A live poll titles itself. · 转发社区投票页。有进行中的投票时用其问题作标题。</div>
-          </div>
-          <div class="sc-cright" id="sc-voting-pill"></div>
-        </div>
-        <div class="sc-pv" id="sc-voting-pv" data-no-i18n></div>
-        <div class="sc-fields">
-          <div>
-            <label class="sc-flabel">Card title <span class="sc-lang">· English</span><span class="sc-charc" id="sc-voting-ten-c">0 / 60</span></label>
-            <input type="text" class="sc-input" id="sc-voting-ten" maxlength="60" placeholder="e.g. Vote on what we make next" oninput="scOnTitleInput('voting')">
-          </div>
-          <div>
-            <label class="sc-flabel">卡片标题 <span class="sc-lang">· 中文</span><span class="sc-charc" id="sc-voting-tcn-c">0 / 60</span></label>
-            <input type="text" class="sc-input" id="sc-voting-tcn" maxlength="60" placeholder="例如:投票决定下一款" oninput="scOnTitleInput('voting')">
-          </div>
-          <input type="hidden" id="sc-voting-img">
-          <div class="sc-picrow">
-            <button class="sc-btn" id="sc-voting-upl" onclick="document.getElementById('sc-voting-file').click()">Add picture · 添加图片</button>
-            <button class="sc-btn danger" id="sc-voting-rm" onclick="scClear('voting')" style="display:none">Remove · 移除</button>
-            <input type="file" id="sc-voting-file" accept="image/png,image/jpeg" style="display:none">
-          </div>
-        </div>
-        <div class="sc-foot">
-          <button class="sc-save" onclick="scSave('voting')">Save card · 保存卡片</button>
-          <span class="sc-saved" id="sc-voting-saved"></span>
-        </div>
-      </div>
-
-      <!-- INVITE (affiliate.shareImage + affiliate.shareTitle) -->
-      <div class="sc-card" data-sc="invite">
-        <div class="sc-chead">
-          <div>
-            <div class="sc-ctitle">Invite card · 邀请卡片</div>
-            <div class="sc-csub">A customer sharing their referral code. Synced with Marketing → Affiliate. · 顾客分享推荐码时显示。与“营销 → 分销”同步。</div>
-          </div>
-          <div class="sc-cright" id="sc-invite-pill"></div>
-        </div>
-        <div class="sc-pv" id="sc-invite-pv" data-no-i18n></div>
-        <div class="sc-fields">
-          <div>
-            <label class="sc-flabel">Card title <span class="sc-lang">· English</span><span class="sc-charc" id="sc-invite-ten-c">0 / 60</span></label>
-            <input type="text" class="sc-input" id="sc-invite-ten" maxlength="60" placeholder="e.g. Shop with my code — we both save" oninput="scOnTitleInput('invite')">
-          </div>
-          <div>
-            <label class="sc-flabel">卡片标题 <span class="sc-lang">· 中文</span><span class="sc-charc" id="sc-invite-tcn-c">0 / 60</span></label>
-            <input type="text" class="sc-input" id="sc-invite-tcn" maxlength="60" placeholder="例如:用我的邀请码,一起省" oninput="scOnTitleInput('invite')">
-          </div>
-          <div class="sc-note">Leave the titles empty to keep the automatic one (with the reward and code). · 标题留空则使用自动文案(含奖励金额与邀请码)。</div>
-          <input type="hidden" id="sc-invite-img">
-          <div class="sc-picrow">
-            <button class="sc-btn" id="sc-invite-upl" onclick="document.getElementById('sc-invite-file').click()">Add picture · 添加图片</button>
-            <button class="sc-btn danger" id="sc-invite-rm" onclick="scClear('invite')" style="display:none">Remove · 移除</button>
-            <input type="file" id="sc-invite-file" accept="image/png,image/jpeg" style="display:none">
-          </div>
-        </div>
-        <div class="sc-foot">
-          <button class="sc-save" onclick="scSave('invite')">Save card · 保存卡片</button>
-          <span class="sc-saved" id="sc-invite-saved"></span>
-        </div>
-      </div>
-
+      <div class="sc-stage" id="sc-stage" data-no-i18n></div>
     </div>
 
     <div class="sc-tip">
