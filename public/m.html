@@ -357,12 +357,20 @@ function flagGate(flag){
 /* ==========================================================================
    Home — archetype A (led by The Recap)
    ========================================================================== */
+function greetKey(){ const h=new Date().getHours(); return h<5?'night':h<12?'morning':h<18?'afternoon':'evening'; }
+const GREET={night:['Good evening','晚上好'],morning:['Good morning','早上好'],afternoon:['Good afternoon','下午好'],evening:['Good evening','晚上好']};
 function recapCard(){
-  const items=[[T('orders processed','处理订单'),'214'],[T('issues resolved','解决问题'),'3'],[T('stock-outs prevented','避免缺货'),'2']];
+  const g=greetKey();
+  // Title matches the time of day; "while you slept" only reads right in the morning.
+  const title=(g==='morning'||g==='night')?T('While you slept','在你休息时'):T('While you were away','在你离开时');
+  const r=state.liveRecap;
+  // Real overnight figures when live; otherwise the sample card (static preview only).
+  const items = r ? [[T('orders overnight','夜间订单'),String(r.orders)],[T('revenue overnight','夜间营收'),money(CUR,r.revenue)]]
+                  : [[T('orders processed','处理订单'),'214'],[T('issues resolved','解决问题'),'3'],[T('stock-outs prevented','避免缺货'),'2']];
   return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:24px;color:var(--text-primary)">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
       <span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none"></span>
-      <span style="font-size:18px;font-weight:500">${T('While you slept','在你休息时')}</span></div>
+      <span style="font-size:18px;font-weight:500">${title}</span></div>
     <div style="display:flex;flex-direction:column">${items.map(([l,v],i)=>
       `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:11px 0;${i?'border-top:1px solid var(--border-default)':''}">
          <span style="font-size:15px;color:var(--text-secondary)">${l}</span>
@@ -385,7 +393,7 @@ function screenHome(){
   ];
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px">
-      <span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T('Good morning','早上好')}</span>
+      <span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T(...GREET[greetKey()])}</span>
       <span style="font-size:12.5px;color:var(--text-secondary)">${T('Updated just now','刚刚更新')}</span></div>
     ${recapCard()}
     <div class="rise" style="animation-delay:.06s">
@@ -1172,7 +1180,18 @@ async function loadLive(){
   }catch(e){ if(String(e.message)==='auth') return; }
   // orders list (the heart of the app)
   try{ const rows=await api('/orders?limit=50');
-    if(Array.isArray(rows)&&rows.length){ state.liveOrders=rows.map(mapOrderRow); DB.orders=state.liveOrders; }
+    if(Array.isArray(rows)&&rows.length){
+      // Overnight recap from raw timestamps: last night 22:00 → 08:00 today (or now, if earlier).
+      try{ const now=new Date();
+        const end=new Date(now); end.setHours(8,0,0,0);
+        const start=new Date(end); start.setDate(start.getDate()-1); start.setHours(22,0,0,0);
+        const cutoff=now<end?now:end; let n=0, rev=0;
+        rows.forEach(r=>{ const t=new Date(String(r.placed_at||'').replace(' ','T'));
+          if(!isNaN(t)&&t>=start&&t<=cutoff){ n++; rev+=Number(r.total||0); } });
+        state.liveRecap={orders:n, revenue:rev};
+      }catch(e){}
+      state.liveOrders=rows.map(mapOrderRow); DB.orders=state.liveOrders;
+    }
   }catch(e){}
   // products
   try{ const rows=await api('/products?limit=50');
