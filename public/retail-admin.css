@@ -8319,6 +8319,16 @@
     margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--td-border);
     font-size: 12.5px; color: var(--td-text2);
   }
+  /* Today's movers — ranked product list (bx-* scoped per the section-class
+     rule). Rows past the 2nd carry .detail/.detail2 so the solver's squat
+     shapes shorten the list instead of clipping mid-row. */
+  .bx-mv-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
+  .bx-mv-row { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; font-size: 13.5px; }
+  .bx-mv-row + .bx-mv-row { border-top: 1px solid var(--td-raised); }
+  .bx-mv-rank { flex: none; width: 15px; color: var(--td-text2); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .bx-mv-nm { min-width: 0; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bx-mv-sub { color: var(--td-text2); font-size: 12px; margin-left: 8px; font-variant-numeric: tabular-nums; }
+  .bx-mv-amt { margin-left: auto; flex: none; color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
   .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 14px; line-height: 1.4; cursor: pointer; }
   .td-feed-row:hover { background: var(--td-raised); }
   .td-feed-row .db-feed-ts { flex: none; width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
@@ -9649,6 +9659,7 @@ body.pos-warehouse .td-block[data-block="recap"], body.pos-customer-service .td-
 body.pos-warehouse .td-block[data-block="orders"], body.pos-customer-service .td-block[data-block="orders"], body.pos-dispatch .td-block[data-block="orders"],
 body.pos-warehouse .td-block[data-block="customers"], body.pos-customer-service .td-block[data-block="customers"], body.pos-dispatch .td-block[data-block="customers"],
 body.pos-warehouse .td-block[data-block="channels"], body.pos-customer-service .td-block[data-block="channels"], body.pos-dispatch .td-block[data-block="channels"],
+body.pos-warehouse .td-block[data-block="movers"], body.pos-customer-service .td-block[data-block="movers"], body.pos-dispatch .td-block[data-block="movers"],
 body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot,
 /* role-restricted views are fixed — the Arrange control is hidden for them */
 body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, body.pos-dispatch .td-arrange-btn, body.pos-store-manager .td-arrange-btn {

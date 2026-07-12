@@ -508,6 +508,7 @@ async function dashHeroLoadToday(opts) {
     const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}${dashStoreQS()}`);
     const data = j.data || {};
     DASH_HERO.todayData = data;   // stashed so a language toggle can repaint without refetching
+    dashMoversRender();           // Today's movers reads the same payload's topProducts
     const k = data.kpis || {};
     dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => '¥' + Math.round(n).toLocaleString(), dur);
     dashCountUp($('#db-today-ord'), Number(k.orders || 0), undefined, dur);
@@ -563,6 +564,9 @@ function dashHeroTodayRepaint() {
   // The Orders / Customers section vitals this payload also feeds (avg order
   // value, visitors, visits, conversion) — language-aware, so they repaint here.
   if (typeof tdSecPaint === 'function') tdSecPaint();
+  // Today's movers reads the same payload and carries language-dependent copy
+  // (product names + "sold"), so repaint it on a language toggle too.
+  dashMoversRender();
 }
 // Integer when whole, else one decimal — keeps "/day" averages readable.
 function dashTrim(n) {
@@ -758,6 +762,35 @@ function dashChanRender() {
       <span class="td-chan-lbl">${escapeHtml(nm)} <span class="td-chan-cnt">${cnt}</span></span>
       <span class="td-chan-val">${money(r.revenue)}</span>
       <span class="td-chan-track"><span class="td-chan-fill" style="width:${pct}%"></span></span>
+    </div>`;
+  }).join('');
+}
+
+// Today's movers — the products actually selling today, by revenue. Reads the
+// topProducts array the single-day dashboard payload already carries (stashed in
+// DASH_HERO.todayData), so it needs no fetch of its own. Language-dependent
+// (product names + "sold" wording via cuT), so it's repainted on a language
+// toggle from dashHeroTodayRepaint. Rows past the second wear .detail/.detail2
+// so the list shortens gracefully when the solver hands the block a squat shape.
+function dashMoversRender() {
+  const host = $('#td-movers-list'); if (!host) return;
+  const data = DASH_HERO.todayData; if (!data) return;
+  const rows = (data.topProducts || [])
+    .filter(p => Number(p.revenue || 0) > 0)
+    .slice(0, 5);
+  if (!rows.length) {
+    host.innerHTML = `<div class="td-muted">${cuT('No sales yet today', '今日暂无销售')}</div>`;
+    return;
+  }
+  const money = n => '¥' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  host.innerHTML = rows.map((p, i) => {
+    const nm = cuT(p.name_en || p.name_cn || '', p.name_cn || p.name_en || '');
+    const units = cuT(`${p.units} sold`, `售出 ${p.units}`);
+    const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
+    return `<div class="bx-mv-row${cls}">
+      <span class="bx-mv-rank">${i + 1}</span>
+      <span class="bx-mv-nm">${escapeHtml(nm)}<span class="bx-mv-sub">${escapeHtml(units)}</span></span>
+      <span class="bx-mv-amt">${money(p.revenue)}</span>
     </div>`;
   }).join('');
 }
@@ -1030,15 +1063,17 @@ function tdInit() {
 // user; live data keeps landing in the blocks' inner ids untouched.
 // Proven to tile every subset with no gap/overlap (headless solver test).
 // ════════════════════════════════════════════════════════════════
-// Key bumped to -v3: the saved shape is now solver-chosen, so a stored
-// order/hidden set stays valid but everyone gets the fresh default once.
-const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v3';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'customers', 'inventory', 'delivery', 'channels'];
+// Key bumped to -v4: the 'movers' block joined the set, so a saved order that
+// predates it needs the fresh default once (missing blocks would otherwise only
+// surface at the tail — harmless, but the bump keeps the shipped order intact).
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v4';
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'customers', 'inventory', 'delivery', 'channels'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
   recap:     ['While you were away', '您不在的这段时间'],
   needs:     ['Needs you', '需要您处理'],
   orders:    ['Orders', '订单'],
+  movers:    ["Today's movers", '今日热销'],
   customers: ['Customers', '客户'],
   inventory: ['Inventory', '库存'],
   delivery:  ['Delivery', '配送'],
@@ -1054,12 +1089,16 @@ const DASH_SHAPES = {
   recap:     [[6,2],[4,2],[3,2],[6,1],[4,1],[3,1],[2,1]],
   needs:     [[6,2],[4,2],[3,2],[6,1],[4,1],[3,1],[2,1]],
   orders:    [[4,2],[3,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
+  // movers is a ranked list — it prefers height (2-row) so it can show 5 rows;
+  // keeps {2,3,4}-wide options so every subset still partitions to 6. Tiling
+  // across all subsets + orderings is proven in scripts/dash-solver-test.js.
+  movers:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
   inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
   channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, delivery: 1, channels: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, customers: 1, inventory: 2, delivery: 1, channels: 2 };
 
 let DASH_ARRANGING = false;
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];

@@ -1370,6 +1370,26 @@
         </div>
       </div>
 
+      <!-- Today's movers — the products actually selling today, by revenue.
+           Owner-only (money); reads topProducts off the Today payload, so no
+           extra fetch. Painted by dashMoversRender in 03-dashboard.js. -->
+      <div class="td-block" data-block="movers">
+        <button class="bn-hide" onclick="dashArrangeHide('movers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 17.8 6.4 20.4l1.4-6.3L3 9.8l6.4-.6z"/></svg>
+              <h3>Today's movers · 今日热销</h3>
+              <button type="button" class="bn-go" onclick="dashJumpTab('products')">Open products › · 前往商品 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bx-mv-list" id="td-movers-list"><div class="td-muted">Loading… · 加载中…</div></div>
+              <p class="td-chan-foot detail2">Today · by revenue · 今日 · 按销售额</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Customers -->
       <div class="td-block" data-block="customers">
         <button class="bn-hide" onclick="dashArrangeHide('customers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
