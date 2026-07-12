@@ -9732,6 +9732,11 @@ body.pos-default .td-block[data-block="incoming"], body.pos-default .td-block[da
 body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="drafts"],
 body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="drafts"],
 body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="drafts"] { display: none; }
+/* "On the road" (live delivery board) is delivery-native — shown to dispatch +
+   customer-service, hidden for owner / warehouse / store-manager. */
+body.pos-default .td-block[data-block="onroad"],
+body.pos-warehouse .td-block[data-block="onroad"],
+body.pos-store-manager .td-block[data-block="onroad"] { display: none; }
 /* Each restricted position keeps only the section block it works in. */
 body.pos-dispatch .td-block[data-block="inventory"],
 body.pos-customer-service .td-block[data-block="inventory"],
@@ -10474,3 +10479,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pd-head-sub { font-size: 12.5px; color: #58606E; margin-top: 2px; }
   #pd-editor .pd-head-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
   #pd-editor .pd-head-actions .pd-save-status { margin-right: 4px; }
+  /* Dashed "+ Add" photo tile (mockup): the label triggers the hidden file input. */
+  #pd-editor #pd-img-file { display: none; }
+  #pd-editor .pe-photos-strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
+  #pd-editor .pd-gallery { display: contents; }
+  #pd-editor .pe-add-tile {
+    width: 84px; height: 84px; border: 1px dashed #C9C3B4; border-radius: 10px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    color: #58606E; font: 500 11px 'Inter', sans-serif; cursor: pointer; flex: none;
+    transition: border-color .15s var(--ease-out), color .15s var(--ease-out);
+  }
+  #pd-editor .pe-add-tile:hover { border-color: #58606E; color: #111A2B; }
