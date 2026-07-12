@@ -11190,6 +11190,41 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     if (g) { t.revenue = +(Number(t.revenue || 0) + g.revenue).toFixed(2); }
   }
 
+  // ── "Typical {weekday}" ghost curve (single-day view only). The hourly-average
+  // blended revenue for the SAME weekday over the trailing 6 same-weekdays that
+  // have history — so the Today day-line can plot today against a normal
+  // same-weekday, by this hour. Candidate dates are `from` minus 7·1..6 days
+  // (each the same weekday by construction); only those on/after the first sale
+  // count, so a young shop divides by what it actually has (null when none yet).
+  // gzgrocery pickup is blended in per hour, matching the today curve above. ──
+  let typical = null;
+  if (hourly) {
+    const foDate = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}`).get().d;
+    const cand = [];
+    for (let w = 1; w <= 6; w++) {
+      const d = new Date(new Date(from).getTime() - w * 7 * 86400000).toISOString().slice(0, 10);
+      if (!foDate || d >= foDate) cand.push(d);
+    }
+    if (cand.length) {
+      const ph = cand.map(() => '?').join(',');
+      const rows = tdb().prepare(`
+        SELECT CAST(${PHOUR} AS INTEGER) AS b, COALESCE(SUM(total), 0) AS revenue
+          FROM retail_orders
+         WHERE ${PAID} AND ${PDATE} IN (${ph})
+         GROUP BY b`).all(...cand);
+      const sum = new Array(24).fill(0);
+      for (const r of rows) sum[r.b] = Number(r.revenue || 0);
+      for (const d of cand) {
+        const gy = guanyiPickupSales(tdb(), d, d, { hourly: true });
+        for (let h = 0; h < 24; h++) {
+          const g = gy.byBucket[String(h).padStart(2, '0')];
+          if (g) sum[h] += Number(g.revenue || 0);
+        }
+      }
+      typical = sum.map(v => +(v / cand.length).toFixed(2));
+    }
+  }
+
   // ── Payment-method split ──
   // Base buckets sum order.total by the order's primary tender. But a WeChat
   // add-on (paid through the gateway) was folded into order.total while the
@@ -11519,6 +11554,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       },
       baseline,
       trend,
+      typical,
       funnel: byStatus,
       new_vs_returning: {
         buyers: nvr.buyers || 0,
