@@ -1390,6 +1390,24 @@
         </div>
       </div>
 
+      <!-- The week so far — 7-day revenue bars (owner only). Painted by
+           dashWeekRender in 03-dashboard.js from its own week-window pull. -->
+      <div class="td-block" data-block="week">
+        <button class="bn-hide" onclick="dashArrangeHide('week')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+              <h3>The week so far · 本周概览</h3>
+              <button type="button" class="bn-go" onclick="goTab('reports')">Open reports › · 前往报表 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bx-wk" id="td-week-body"><div class="td-muted">Loading… · 加载中…</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Customers -->
       <div class="td-block" data-block="customers">
         <button class="bn-hide" onclick="dashArrangeHide('customers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>

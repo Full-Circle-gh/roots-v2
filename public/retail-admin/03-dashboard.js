@@ -359,6 +359,10 @@ function dashHeroInit() {
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.chan) dashChanRender();
   });
+  // ...and the week bars (day labels are JS-built), from stashed data.
+  if (window.onLangChange) onLangChange(() => {
+    if (DASH_HERO.weekData) dashWeekRender();
+  });
   // Hover-scrub the Today sparklines to read each hour of the day.
   ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
     const w = $(sel); if (!w) return;
@@ -399,6 +403,7 @@ function dashHeroRefreshAll() {
   dashHeroLoadPresence();
   dashChanLoad();
   dashHeroLoadToday();
+  dashWeekLoad();
 }
 
 // ── Live push (SSE) ────────────────────────────────────────────────────────
@@ -424,6 +429,7 @@ function dashLiveRefresh() {
   tdRecapLoad();        // recap summary rows (re-pulls the away window)
   dashChanLoad();       // Channels today
   dashHeroLoadToday();  // today KPIs + sparkline
+  dashWeekLoad();       // the week-so-far bars
   if (typeof tdOpsLoad === 'function') tdOpsLoad();  // running-low / needs-you
   tdRecapWorkFetch();   // the open fold, if any (no-op when collapsed)
 }
@@ -795,6 +801,53 @@ function dashMoversRender() {
   }).join('');
 }
 
+// The week so far — a seven-day revenue bar chart (owner). Its own pull, since
+// the Today block asks for a single day (hourly) and this wants the trailing
+// week (daily buckets). The dashboard endpoint returns `trend` as one bucket
+// per day for a multi-day window — same shape gzgrocery revenue is already
+// folded into. Stashed so a language toggle repaints the day labels without a
+// refetch. Refreshed from dashHeroRefreshAll / dashLiveRefresh, not polled.
+const DASH_WD_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DASH_WD_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+async function dashWeekLoad() {
+  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
+  const to = nowGz.toISOString().slice(0, 10);
+  const from = new Date(nowGz.getTime() - 6 * 86400000).toISOString().slice(0, 10);
+  try {
+    const j = await api(`/api/retail-admin/dashboard?from=${from}&to=${to}${dashStoreQS()}`);
+    DASH_HERO.weekData = (j.data && j.data.trend) || [];
+    dashWeekRender();
+  } catch (e) {
+    if (!DASH_HERO.weekData) dashBootRetry('week', dashWeekLoad);
+  }
+}
+function dashWeekRender() {
+  const host = $('#td-week-body'); if (!host) return;
+  const days = DASH_HERO.weekData; if (!days || !days.length) return;
+  const vals = days.map(d => Number(d.revenue || 0));
+  const max = Math.max(1, ...vals);
+  const total = vals.reduce((s, v) => s + v, 0);
+  let bestIdx = 0;
+  vals.forEach((v, i) => { if (v > vals[bestIdx]) bestIdx = i; });
+  const todayIdx = days.length - 1;
+  const money = n => '¥' + Math.round(Number(n || 0)).toLocaleString();
+  const dow = bucket => new Date(String(bucket) + 'T00:00:00').getDay();
+  const bars = days.map((d, i) => {
+    const v = Number(d.revenue || 0);
+    const h = v <= 0 ? 2 : Math.max(4, Math.round((v / max) * 100));
+    const isToday = i === todayIdx;
+    const lbl = isToday ? cuT('Today', '今天') : cuT(DASH_WD_EN[dow(d.bucket)], DASH_WD_CN[dow(d.bucket)]);
+    const cls = isToday ? ' is-today' : (i === bestIdx ? ' is-best' : '');
+    return `<div class="bx-wk-day"><div class="bx-wk-bar${cls}" style="height:${h}%" title="${money(v)}"></div>`
+      + `<div class="bx-wk-lbl${isToday ? ' is-today' : ''}">${escapeHtml(lbl)}</div></div>`;
+  }).join('');
+  host.innerHTML = `<div class="bx-wk-bars">${bars}</div>
+    <div class="bx-wk-foot detail">
+      <span>${cuT('Week to date', '本周至今')} <b>${money(total)}</b></span>
+      <span>${cuT('Best day', '最佳单日')} <b>${money(vals[bestIdx])}</b></span>
+    </div>`;
+}
+
 // Tacet activity row — clean prose per the dashboard mockup. Returns
 // { text, amount, badge }: `text` is the sentence, `amount` is the
 // right-aligned money (muted), `badge` a small first-order pill. No icon,
@@ -1066,14 +1119,15 @@ function tdInit() {
 // Key bumped to -v4: the 'movers' block joined the set, so a saved order that
 // predates it needs the fresh default once (missing blocks would otherwise only
 // surface at the tail — harmless, but the bump keeps the shipped order intact).
-const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v4';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'customers', 'inventory', 'delivery', 'channels'];
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v5';
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'delivery', 'channels'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
   recap:     ['While you were away', '您不在的这段时间'],
   needs:     ['Needs you', '需要您处理'],
   orders:    ['Orders', '订单'],
   movers:    ["Today's movers", '今日热销'],
+  week:      ['The week so far', '本周概览'],
   customers: ['Customers', '客户'],
   inventory: ['Inventory', '库存'],
   delivery:  ['Delivery', '配送'],
@@ -1093,12 +1147,15 @@ const DASH_SHAPES = {
   // keeps {2,3,4}-wide options so every subset still partitions to 6. Tiling
   // across all subsets + orderings is proven in scripts/dash-solver-test.js.
   movers:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  // week is a 7-bar chart — prefers width; keeps {2,3,4}-wide options so every
+  // subset still partitions to 6. Tiling proven in scripts/dash-solver-test.js.
+  week:      [[4,2],[3,2],[4,1],[3,1],[2,2],[2,1],[6,1]],
   customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
   inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
   channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, customers: 1, inventory: 2, delivery: 1, channels: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers: 1, inventory: 2, delivery: 1, channels: 2 };
 
 let DASH_ARRANGING = false;
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];

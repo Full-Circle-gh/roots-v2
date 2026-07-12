@@ -30,11 +30,13 @@ const DASH_SHAPES = {
   inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
   channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
-  // ── proposed new block (owner-only "Today's movers"). Same width menu shape
-  //    as the other list blocks so 6-unit partitions always exist. ──
+  // ── owner-only "Today's movers" (shipped) + "The week so far" (proposed).
+  //    Same width menu shape as the other list blocks so 6-unit partitions
+  //    always exist. week is a 7-bar chart → prefers width. ──
   movers:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  week:      [[4,2],[3,2],[4,1],[3,1],[2,2],[2,1],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, delivery: 1, channels: 2, movers: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, delivery: 1, channels: 2, movers: 2, week: 2 };
 
 function dashPrefScore(id, w, h) {
   const S = DASH_SHAPES[id]; if (!S) return null;
@@ -153,14 +155,16 @@ function run(label, blocks, opts) {
   return ok;
 }
 
-const CURRENT = ['recap', 'needs', 'orders', 'customers', 'inventory', 'delivery', 'channels'];
-const WITH_MOVERS = CURRENT.concat(['movers']);
+// SHIPPED = the live 8-block set (movers landed 2026-07-12). WITH_WEEK adds the
+// proposed "The week so far" block for a 9-block set.
+const SHIPPED = ['recap', 'needs', 'orders', 'movers', 'customers', 'inventory', 'delivery', 'channels'];
+const WITH_WEEK = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'delivery', 'channels'];
 
 console.log('Dashboard bento solver — tiling invariant\n');
 let ok = true;
-ok = run('current 7 blocks — all subsets + all orderings', CURRENT, { permuteFull: true }) && ok;
-ok = run('with movers (8) — all subsets', WITH_MOVERS) && ok;
-ok = run('with movers (8) — all orderings of the full set', WITH_MOVERS, { permuteFull: true }) && ok;
+ok = run('shipped 8 blocks — all subsets + all orderings', SHIPPED, { permuteFull: true }) && ok;
+ok = run('with week (9) — all subsets', WITH_WEEK) && ok;
+ok = run('with week (9) — all orderings of the full set', WITH_WEEK, { permuteFull: true }) && ok;
 
 console.log('');
 if (!ok) { console.log('RESULT: FAIL — a block set does not tile; do NOT ship the shapes as-is.'); process.exit(1); }

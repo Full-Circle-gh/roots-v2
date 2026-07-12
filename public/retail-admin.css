@@ -8329,6 +8329,19 @@
   .bx-mv-nm { min-width: 0; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .bx-mv-sub { color: var(--td-text2); font-size: 12px; margin-left: 8px; font-variant-numeric: tabular-nums; }
   .bx-mv-amt { margin-left: auto; flex: none; color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  /* The week so far — seven daily revenue bars (bx-* scoped). Today's bar is
+     inked, the best day graphite, the rest raised. Foot is .detail (hidden in
+     the squat 1-row tiers the solver may hand it). */
+  .bx-wk { margin-top: 6px; }
+  .bx-wk-bars { display: flex; align-items: flex-end; gap: 8px; height: 92px; }
+  .bx-wk-day { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; min-width: 0; }
+  .bx-wk-bar { width: 100%; max-width: 30px; border-radius: 5px 5px 0 0; background: var(--td-raised); transition: height .8s cubic-bezier(.16,1,.3,1); }
+  .bx-wk-bar.is-today { background: var(--td-text); opacity: .82; }
+  .bx-wk-bar.is-best { background: var(--td-text2); }
+  .bx-wk-lbl { font-size: 10.5px; color: var(--td-text2); white-space: nowrap; }
+  .bx-wk-lbl.is-today { color: var(--td-text); font-weight: 500; }
+  .bx-wk-foot { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--td-border); font-size: 12.5px; color: var(--td-text2); }
+  .bx-wk-foot b { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
   .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 14px; line-height: 1.4; cursor: pointer; }
   .td-feed-row:hover { background: var(--td-raised); }
   .td-feed-row .db-feed-ts { flex: none; width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
@@ -9660,6 +9673,7 @@ body.pos-warehouse .td-block[data-block="orders"], body.pos-customer-service .td
 body.pos-warehouse .td-block[data-block="customers"], body.pos-customer-service .td-block[data-block="customers"], body.pos-dispatch .td-block[data-block="customers"],
 body.pos-warehouse .td-block[data-block="channels"], body.pos-customer-service .td-block[data-block="channels"], body.pos-dispatch .td-block[data-block="channels"],
 body.pos-warehouse .td-block[data-block="movers"], body.pos-customer-service .td-block[data-block="movers"], body.pos-dispatch .td-block[data-block="movers"],
+body.pos-warehouse .td-block[data-block="week"], body.pos-customer-service .td-block[data-block="week"], body.pos-dispatch .td-block[data-block="week"],
 body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot,
 /* role-restricted views are fixed — the Arrange control is hidden for them */
 body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, body.pos-dispatch .td-arrange-btn, body.pos-store-manager .td-arrange-btn {
