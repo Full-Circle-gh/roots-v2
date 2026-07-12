@@ -969,7 +969,9 @@ function wireDrag(){
 const API='/api/retail-admin';
 async function api(path){
   const r=await fetch(API+path,{credentials:'same-origin',headers:{accept:'application/json'}});
-  if(r.status===401||r.status===403){ location.replace('/'); throw new Error('auth'); }
+  // Match the desktop backend's auth-fail target. Redirecting to '/' would loop
+  // once the store root serves this app to phones (root → 401 → root → …).
+  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
   if(!r.ok) throw new Error('HTTP '+r.status);
   const j=await r.json();
   return (j && j.data!==undefined) ? j.data : j;

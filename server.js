@@ -570,6 +570,16 @@ function serveRetailAdmin(req, res) {
   // always be fresh, so forbid storing it anywhere.
   res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   res.set('Pragma', 'no-cache');
+  // Phones get Tacet Mobile — the monitoring-first companion — as THE backend on
+  // mobile; desktop keeps the full admin. `?desktop=1` forces the desktop shell
+  // (same escape hatch as /cms). WeChat's in-app browser (MicroMessenger) counts
+  // as mobile. The companion self-auths against /api/retail-admin/* just like the
+  // desktop shell, so the session/suspended gate above still applies first.
+  const ua = req.get('user-agent') || '';
+  const isMobile = /Android|iPhone|iPod|Windows Phone|Mobile|MicroMessenger/i.test(ua);
+  if (isMobile && req.query.desktop !== '1') {
+    return res.sendFile(path.join(__dirname, 'public', 'm.html'));
+  }
   // Serve the shell with per-deploy versioned asset URLs so a deploy's new JS/CSS
   // is fetched immediately instead of being masked by the browser/SW cache.
   res.type('html').send(retailAdminShell());
