@@ -4083,30 +4083,30 @@
         opacity: .35;
       }
       .pu-modal {
-        position: absolute; left: 16px; right: 16px;
+        position: absolute; left: 20px; right: 20px;
         top: 50%; transform: translateY(-50%);
-        background: #fff; border-radius: 14px;
-        padding: 16px; text-align: center;
-        box-shadow: 0 10px 40px rgba(0,0,0,.25);
+        background: #fff; border-radius: 18px;
+        padding: 26px 22px 28px; text-align: center;
+        box-shadow: 0 12px 46px rgba(0,0,0,.28);
       }
       .pu-modal-img {
-        width: 100%; aspect-ratio: 1.4; border-radius: 8px;
+        width: 100%; aspect-ratio: 1.4; border-radius: 12px;
         background: #f7f3ee no-repeat center/cover;
-        margin-bottom: 10px;
+        margin-bottom: 18px;
       }
-      .pu-modal-title { font-weight: 700; font-size: 13px; color: #1a1a17; line-height: 1.3; }
-      .pu-modal-body  { font-size: 11px; color: #5a564f; margin-top: 6px; line-height: 1.5; }
+      .pu-modal-title { font-weight: 700; font-size: 17px; color: #1a1a17; line-height: 1.35; }
+      .pu-modal-body  { font-size: 13px; color: #5a564f; margin-top: 10px; line-height: 1.6; }
       .pu-modal-cta {
-        display: inline-block; margin-top: 12px;
-        padding: 7px 18px; border-radius: 999px;
+        display: inline-block; margin-top: 22px;
+        padding: 11px 30px; border-radius: 999px;
         background: #365329; color: #fff;
-        font-size: 11px; font-weight: 600;
+        font-size: 13px; font-weight: 600;
       }
       .pu-modal-close {
-        position: absolute; top: 8px; right: 8px;
-        width: 18px; height: 18px; border-radius: 50%;
+        position: absolute; top: 12px; right: 12px;
+        width: 24px; height: 24px; border-radius: 50%;
         background: rgba(0,0,0,.18); color: #fff;
-        font-size: 12px; line-height: 18px; text-align: center;
+        font-size: 15px; line-height: 24px; text-align: center;
       }
       /* ── editor: message-first fields + staged decision rows ── */
       .pg-ed-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--text-3); margin: 0 0 12px; }
@@ -6036,81 +6036,85 @@
        + save logic: 10-extras.js (sc* functions).
        ═══════════════════════════════════════════════════════════════════════ -->
   <style id="tacet-sharecards-skin">
+    /* Uses the native Tacet --td-* token layer (global :root, theme-aware) —
+       same layer as #tab-products. Radius/font/ease come from the shared
+       --r-*/--f-*/--ease-out tokens; #tab-sharing is in the Tacet :is() scope
+       so those pick up the Tacet radius values. */
     /* paper ground bled over main's padding — same trick #tab-affiliate uses */
-    #tab-sharing { background: var(--bg-app);
+    #tab-sharing { background: var(--td-paper);
       margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
       padding: calc(var(--s6) + 56px) var(--s6) var(--s7); min-height: 100vh; }
 
     #tab-sharing .sc-head { max-width: 640px; margin-bottom: 24px; }
-    #tab-sharing .sc-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); margin: 0 0 6px; }
-    #tab-sharing .sc-h2 { font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--text-1); margin: 0; }
-    #tab-sharing .sc-sub { font-size: 13px; color: var(--text-2); line-height: 1.55; margin: 8px 0 0; }
+    #tab-sharing .sc-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--td-text2); margin: 0 0 6px; }
+    #tab-sharing .sc-h2 { font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0; }
+    #tab-sharing .sc-sub { font-size: 13px; color: var(--td-text2); line-height: 1.55; margin: 8px 0 0; }
 
     #tab-sharing .sc-gal { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 20px; }
     @media (max-width: 900px) { #tab-sharing .sc-gal { grid-template-columns: 1fr; } }
 
-    #tab-sharing .sc-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; display: flex; flex-direction: column; }
+    #tab-sharing .sc-card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-xl); overflow: hidden; display: flex; flex-direction: column; }
     #tab-sharing .sc-chead { display: flex; align-items: flex-start; gap: 12px; padding: 18px 20px 4px; }
-    #tab-sharing .sc-ctitle { font: 500 15px var(--f-sans); color: var(--text-1); }
-    #tab-sharing .sc-csub { font-size: 12px; color: var(--text-3); margin-top: 2px; line-height: 1.45; }
+    #tab-sharing .sc-ctitle { font: 500 15px var(--f-sans); color: var(--td-text); }
+    #tab-sharing .sc-csub { font-size: 12px; color: var(--td-text2); margin-top: 2px; line-height: 1.45; }
     #tab-sharing .sc-chead .sc-cright { margin-left: auto; flex: none; }
 
     /* status pill */
     #tab-sharing .sc-pill { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--f-sans); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
     #tab-sharing .sc-pill .sc-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-    #tab-sharing .sc-pill.custom { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
-    #tab-sharing .sc-pill.deflt { background: var(--bg-elev-1); color: var(--text-3); }
+    #tab-sharing .sc-pill.custom { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+    #tab-sharing .sc-pill.deflt { background: var(--td-raised); color: var(--td-text2); }
 
     /* the WeChat forward preview */
     #tab-sharing .sc-pv { padding: 14px 20px 2px; }
-    #tab-sharing .sc-chat { background: var(--bg-elev-1); border-radius: var(--r-lg); padding: 18px 16px; }
+    #tab-sharing .sc-chat { background: var(--td-raised); border-radius: var(--r-lg); padding: 18px 16px; }
     #tab-sharing .sc-chatrow { display: flex; gap: 10px; align-items: flex-start; }
-    #tab-sharing .sc-avatar { width: 30px; height: 30px; border-radius: 7px; flex: none; background: var(--tacet-ink); color: var(--tacet-paper); display: flex; align-items: center; justify-content: center; }
+    #tab-sharing .sc-avatar { width: 30px; height: 30px; border-radius: 7px; flex: none; background: var(--td-text2); color: var(--td-surface); display: flex; align-items: center; justify-content: center; }
     #tab-sharing .sc-avatar svg { width: 15px; height: 15px; }
-    #tab-sharing .sc-wxcard { width: 216px; background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(17,26,43,.10); }
-    #tab-sharing .sc-wx-t { font: 400 13px var(--f-sans); color: var(--text-1); padding: 11px 12px 10px; line-height: 1.4; }
-    #tab-sharing .sc-wx-t.empty { color: var(--text-4); font-style: italic; }
-    #tab-sharing .sc-wx-img { aspect-ratio: 5 / 4; background-size: cover; background-position: center; background-color: var(--bg-elev-1); }
-    #tab-sharing .sc-wx-foot { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-top: 1px solid var(--line-soft); font-size: 10.5px; color: var(--text-3); }
-    #tab-sharing .sc-wx-lg { width: 13px; height: 13px; border-radius: 3px; background: var(--tacet-ink); color: var(--tacet-paper); flex: none; display: flex; align-items: center; justify-content: center; }
+    #tab-sharing .sc-wxcard { width: 216px; background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 10px; overflow: hidden; box-shadow: 0 4px 14px rgba(17,26,43,.10); }
+    #tab-sharing .sc-wx-t { font: 400 13px var(--f-sans); color: var(--td-text); padding: 11px 12px 10px; line-height: 1.4; }
+    #tab-sharing .sc-wx-t.empty { color: var(--td-text2); font-style: italic; }
+    #tab-sharing .sc-wx-img { aspect-ratio: 5 / 4; background-size: cover; background-position: center; background-color: var(--td-raised); }
+    #tab-sharing .sc-wx-foot { display: flex; align-items: center; gap: 6px; padding: 7px 12px; border-top: 1px solid var(--td-border); font-size: 10.5px; color: var(--td-text2); }
+    #tab-sharing .sc-wx-lg { width: 13px; height: 13px; border-radius: 3px; background: var(--td-text2); color: var(--td-surface); flex: none; display: flex; align-items: center; justify-content: center; }
     #tab-sharing .sc-wx-lg svg { width: 8px; height: 8px; }
     #tab-sharing .sc-wx-mp { margin-left: auto; opacity: .8; }
 
     /* fallback "page's own look" art (no custom picture) */
     #tab-sharing .sc-fb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px; }
     #tab-sharing .sc-fb-lines { width: 60%; }
-    #tab-sharing .sc-fb-lines i { display: block; height: 6px; border-radius: 3px; background: var(--line-strong); margin: 0 auto 7px; }
+    #tab-sharing .sc-fb-lines i { display: block; height: 6px; border-radius: 3px; background: var(--td-border); margin: 0 auto 7px; }
     #tab-sharing .sc-fb-lines i:nth-child(1) { width: 68%; }
     #tab-sharing .sc-fb-lines i:nth-child(2) { width: 100%; }
     #tab-sharing .sc-fb-lines i:nth-child(3) { width: 44%; }
-    #tab-sharing .sc-fb-dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--line-strong); }
+    #tab-sharing .sc-fb-dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid var(--td-border); }
 
     /* editable fields */
     #tab-sharing .sc-fields { padding: 14px 20px 0; display: flex; flex-direction: column; gap: 12px; }
-    #tab-sharing .sc-flabel { font: 500 12px var(--f-sans); color: var(--text-2); margin-bottom: 5px; display: block; }
-    #tab-sharing .sc-flabel .sc-lang { color: var(--text-4); font-weight: 400; }
-    #tab-sharing .sc-charc { float: right; font: 400 11px var(--f-mono); color: var(--text-4); }
-    #tab-sharing input.sc-input { width: 100%; font: 400 13.5px var(--f-sans); color: var(--text-1); background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md); padding: 8px 11px; outline: none; transition: border-color .2s var(--ease-out); }
-    #tab-sharing input.sc-input:focus { border-color: var(--tacet-dusk); }
-    #tab-sharing input.sc-input::placeholder { color: var(--text-4); }
-    #tab-sharing .sc-note { font-size: 12px; color: var(--text-3); line-height: 1.5; background: var(--bg-elev-1); border-radius: var(--r-md); padding: 10px 12px; }
+    #tab-sharing .sc-flabel { font: 500 12px var(--f-sans); color: var(--td-text2); margin-bottom: 5px; display: block; }
+    #tab-sharing .sc-flabel .sc-lang { color: var(--td-text2); font-weight: 400; opacity: .7; }
+    #tab-sharing .sc-charc { float: right; font: 400 11px var(--f-mono); color: var(--td-text2); opacity: .7; }
+    #tab-sharing input.sc-input { width: 100%; font: 400 13.5px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-md); padding: 8px 11px; outline: none; transition: border-color .2s var(--ease-out); }
+    #tab-sharing input.sc-input:focus { border-color: var(--td-dusk); }
+    #tab-sharing input.sc-input::placeholder { color: var(--td-text2); opacity: .6; }
+    #tab-sharing .sc-note { font-size: 12px; color: var(--td-text2); line-height: 1.5; background: var(--td-raised); border-radius: var(--r-md); padding: 10px 12px; }
 
     /* picture controls */
     #tab-sharing .sc-picrow { display: flex; align-items: center; gap: 10px; }
-    #tab-sharing .sc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 500 12.5px var(--f-sans); border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); padding: 7px 13px; cursor: pointer; transition: border-color .2s var(--ease-out), background .2s var(--ease-out), color .2s var(--ease-out); white-space: nowrap; }
-    #tab-sharing .sc-btn:hover { border-color: var(--text-3); }
+    #tab-sharing .sc-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 500 12.5px var(--f-sans); border-radius: var(--r-md); border: 1px solid var(--td-border); background: var(--td-surface); color: var(--td-text); padding: 7px 13px; cursor: pointer; transition: border-color .2s var(--ease-out), background .2s var(--ease-out), color .2s var(--ease-out); white-space: nowrap; }
+    #tab-sharing .sc-btn:hover { border-color: var(--td-text2); }
     #tab-sharing .sc-btn svg { width: 14px; height: 14px; }
-    #tab-sharing .sc-btn.danger { border-color: transparent; color: var(--text-3); }
-    #tab-sharing .sc-btn.danger:hover { color: var(--tacet-brick); background: var(--tacet-brick-tint); border-color: transparent; }
+    #tab-sharing .sc-btn.danger { border-color: transparent; color: var(--td-text2); }
+    #tab-sharing .sc-btn.danger:hover { color: var(--td-brick); background: var(--td-brick-tint); border-color: transparent; }
 
     /* footer / save */
     #tab-sharing .sc-foot { margin-top: auto; display: flex; align-items: center; gap: 12px; padding: 16px 20px 18px; }
-    #tab-sharing .sc-save { display: inline-flex; align-items: center; gap: 7px; font: 500 13px var(--f-sans); background: var(--tacet-ink); border: 1px solid var(--tacet-ink); color: var(--tacet-paper); border-radius: var(--r-md); padding: 9px 16px; cursor: pointer; transition: opacity .2s var(--ease-out); }
+    #tab-sharing .sc-save { display: inline-flex; align-items: center; gap: 7px; font: 500 13px var(--f-sans); background: var(--td-text); border: 1px solid var(--td-text); color: var(--td-paper); border-radius: var(--r-md); padding: 9px 16px; cursor: pointer; transition: opacity .2s var(--ease-out); }
     #tab-sharing .sc-save:hover { opacity: .88; }
-    #tab-sharing .sc-saved { font-size: 12px; color: var(--text-3); margin-left: auto; }
+    #tab-sharing .sc-saved { font-size: 12px; color: var(--td-text2); margin-left: auto; }
 
-    #tab-sharing .sc-tip { margin-top: 22px; font-size: 12px; color: var(--text-3); line-height: 1.55; }
-    #tab-sharing .sc-tip b { color: var(--text-2); font-weight: 500; }
+    #tab-sharing .sc-tip { margin-top: 22px; font-size: 12px; color: var(--td-text2); line-height: 1.55; }
+    #tab-sharing .sc-tip b { color: var(--td-text); font-weight: 500; }
   </style>
 
   <section id="tab-sharing">
