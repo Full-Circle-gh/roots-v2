@@ -741,7 +741,7 @@ function mirrorScreen(which,note){
 }
 function screenSettings(){
   const groups=[
-    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:'Maru Studio'},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
+    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:state.storeName||T('Your store','你的店铺')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
     {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
     {h:T('Automation','自动化'),rows:[{label:T('Auto-print','自动打印'),tgl:'autoprint',dusk:true},{label:T('Auto-route','自动派单'),tgl:'autoroute',dusk:true}]},
     {h:T('Preferences','偏好'),rows:[{label:T('Language','语言'),value:state.lang==='en'?'English':'中文',cmd:"APP.cmd('toggleLang')",chev:true},{label:T('Theme','主题'),value:state.theme==='light'?T('Light','浅色'):T('Dark','深色'),cmd:"APP.cmd('toggleTheme')",chev:true}]},
@@ -888,12 +888,14 @@ function sheetOverflow(){
      ${row('search',T('Search','搜索'),`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('openSearch')",true)}
      ${row('languages',T('Language','语言'),val(state.lang==='en'?'English':'中文'),"APP.cmd('toggleLang')",true)}
      ${row('sun-moon',T('Theme','主题'),val(state.theme==='light'?T('Light','浅色'):T('Dark','深色')),"APP.cmd('toggleTheme')",true)}
-     ${row('circle-user-round',T('Account','账户'),val('Maru Studio')+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('noop')",false)}
+     ${row('circle-user-round',T('Account','账户'),val(state.storeName||T('Your store','你的店铺'))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('noop')",false)}
      <div style="padding:16px 20px 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary)">${T('Updates','更新')}</div>
      <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
        <span style="width:20px;display:flex;justify-content:center;flex:none">${state.live?'<span class="breathe" style="width:9px;height:9px;border-radius:50%;background:var(--accent)"></span>':'<span style="width:9px;height:9px;border-radius:50%;background:var(--border-strong)"></span>'}</span>
        <span style="flex:1;font-size:15px">${T('Live updates','实时更新')}</span>${toggle(state.live,"APP.cmd('toggleLive')")}</div>
-     ${row('bell',T('Sound','提示音'),toggle(state.sound,"event.stopPropagation();APP.cmd('toggleSound')"),"event.stopPropagation();APP.cmd('toggleSound')",false)}</div>`;
+     <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
+       <span style="width:20px;display:flex;justify-content:center;flex:none;color:var(--text-secondary)">${ic('bell',18)}</span>
+       <span style="flex:1;font-size:15px">${T('Sound','提示音')}</span>${toggle(state.sound,"APP.cmd('toggleSound')")}</div></div>`;
 }
 function sheetSearch(){
   const results=[
