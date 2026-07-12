@@ -770,8 +770,11 @@ function sheetOrderDetail(){
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId); if(!o) return '';
   const isPO=!!o.supplier;
   const trans=state.dragging?'none':'transform .3s var(--ease-settle)';
-  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeOrder')"></div>
-   <div class="sheet" id="detailSheet" style="top:46px;overflow:hidden;z-index:46;transform:translateY(${state.drag}px);transition:${trans}">
+  // On the fetch re-render the sheet is already up — skip the slide-up/fade so it
+  // doesn't flick a second time when live detail arrives.
+  const noAnim=state.detailMounted?'animation:none;':'';
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closeOrder')"></div>
+   <div class="sheet" id="detailSheet" style="top:46px;overflow:hidden;z-index:46;${noAnim}transform:translateY(${state.drag}px);transition:${trans}">
      <div id="dragHandle" style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default);touch-action:none;cursor:grab">
        <div class="grabber"></div>
        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
@@ -1142,11 +1145,14 @@ function mapSalesChannel(key,c){
 
 reg('openOrder', id=>{
   const row=(state.liveOrders||[]).find(o=>o.id===id);
-  state.detailId=id; state.drag=0; state.liveDetail=null;
+  state.detailId=id; state.drag=0; state.liveDetail=null; state.detailMounted=false;
   if(row&&row._id!=null){
     render();
+    // Sheet has animated once now — suppress the slide-up on the fetch re-render
+    // so the detail doesn't flick up a second time when live items arrive.
+    state.detailMounted=true;
     api('/orders/'+row._id).then(o=>{ if(state.detailId===id){ state.liveDetail=mapDetail(o); render(); } }).catch(()=>{});
-  } else { render(); }
+  } else { render(); state.detailMounted=true; }
 });
 
 async function loadLive(){
