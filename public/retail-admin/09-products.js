@@ -1720,6 +1720,10 @@ function pdLoadStoreStocks(id) {
   box.dataset.productId = (id == null ? '' : String(id));
   PD_STOCK_DATA = null;
   if (id == null) { box.className = 'muted'; box.textContent = cuT('Set stock after saving', '保存后设置库存'); return; }
+  // Assembled bundle: stock is computed from its components, never typed. Show the
+  // "Makes N" panel instead of the per-store matrix (mirrors the products list).
+  const _bp = (PA_PRODUCTS || []).find(x => x.id === Number(id));
+  if (_bp && _bp.is_bundle && Array.isArray(_bp.bundle_items) && _bp.bundle_items.length) { pdRenderBundleStock(box, _bp); return; }
   box.className = '';
   box.textContent = '…';
   // NOTE: use cuT() for language, NOT the raw `_lang` global — `_lang` is scoped
@@ -1737,6 +1741,43 @@ function pdLoadStoreStocks(id) {
       pdSyncVariantTotals(d);
     })
     .catch(() => { box.className = 'muted'; box.textContent = cuT('Couldn’t load stock', '无法加载库存'); });
+}
+// Assembled bundle stock panel: availability is worked out from the components
+// (min over parts of floor(stock ÷ qty)), never typed. Reuses the per-store map
+// (PA_STOCK) + catalogue (PA_PRODUCTS) the list already loaded. Dusk = "Tacet
+// worked this out for you".
+function pdRenderBundleStock(box, p) {
+  const comps = Array.isArray(p.bundle_items) ? p.bundle_items : [];
+  const stores = PA_STORES || [];
+  const compName = cid => { const cp = (PA_PRODUCTS || []).find(x => x.id === cid); return cp ? (cuT(cp.name_en, cp.name_cn) || cp.name_en || ('#' + cid)) : ('#' + cid); };
+  const totalOf = cid => {
+    if (PA_STOCK_LOADED && stores.length) return stores.reduce((s, st) => s + _paStoreQty(cid, st.id), 0);
+    const cp = (PA_PRODUCTS || []).find(x => x.id === cid);
+    return cp ? Number(cp.effective_stock ?? cp.stock_qty ?? 0) : 0;
+  };
+  let makes = Infinity, limId = comps.length ? comps[0].id : null, limLeft = 0;
+  for (const c of comps) {
+    const qty = Math.max(1, Number(c.qty) || 1), t = totalOf(c.id), m = Math.floor(t / qty);
+    if (m < makes) { makes = m; limId = c.id; limLeft = t; }
+  }
+  makes = Number.isFinite(makes) ? Math.max(0, makes) : 0;
+  const perStore = (PA_STOCK_LOADED ? stores : []).map(s => {
+    let m = Infinity;
+    for (const c of comps) { const qty = Math.max(1, Number(c.qty) || 1); m = Math.min(m, Math.floor(_paStoreQty(c.id, s.id) / qty)); }
+    return { name: cuT(s.name_en || s.code, s.name_cn || s.name_en || s.code), makes: Number.isFinite(m) ? Math.max(0, m) : 0 };
+  });
+  const split = perStore.length
+    ? `<div class="pe-bstock-split">${perStore.map(s => `<span>${escapeHtml(s.name)} ${cuT('makes', '可做')} <b>${s.makes}</b></span>`).join('')}</div>`
+    : '';
+  box.className = '';
+  box.innerHTML =
+    `<div class="pe-bstock">` +
+      `<div class="pe-bstock-cap"><span class="pe-bstock-dot"></span>${cuT('Worked out from the parts', '由组成商品得出')}</div>` +
+      `<div class="pe-bstock-big">${cuT('Makes', '可做')} ${makes}</div>` +
+      (limId != null ? `<div class="pe-bstock-lim">${cuT('Limited by', '受限于')} <b>${escapeHtml(compName(limId))}</b> — ${limLeft} ${cuT('left', '剩余')}</div>` : '') +
+      split +
+    `</div>` +
+    `<p class="pe-bstock-note">${cuT('No count to keep — it moves as the parts sell.', '无需盘点 — 随组成商品售出而变化。')}</p>`;
 }
 // Build the grid: rows = variants, columns = stores, + a live row total. The
 // variant currently open above is flagged with ● so it's obvious which row the
