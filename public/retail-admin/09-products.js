@@ -1882,7 +1882,17 @@ function pdSyncSupplierUi() {
   if (sf) sf.style.display = on ? 'none' : '';
   if (sn) sn.style.display = on ? '' : 'none';
 }
-function pdOpen(id) {
+async function pdOpen(id) {
+  // Flush any not-yet-fired debounced autosave from whatever product is
+  // currently loaded BEFORE overwriting the form below. Switching products
+  // (or closing) used to just clearTimeout() the pending save here, silently
+  // dropping the operator's last edit whenever it landed within the 800ms
+  // debounce window (e.g. tick a checkbox, immediately click another row).
+  if (_pdAutoTimer) {
+    clearTimeout(_pdAutoTimer);
+    _pdAutoTimer = null;
+    try { await pdAutoSaveNow(); } catch (e) {}
+  }
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
   document.getElementById('pd-id').value = p ? p.id : '';
@@ -1953,7 +1963,7 @@ function pdOpen(id) {
   // "as-opened" baseline (updated again once async images arrive) so Revert can
   // roll the whole session back.
   pdWireAutosave();
-  clearTimeout(_pdAutoTimer); _pdSaving = false; _pdPendingResave = false;
+  _pdAutoTimer = null; _pdSaving = false; _pdPendingResave = false;
   _pdOpenBaseline = pdSnapshot();
   pdSetStatus(p ? 'saved' : 'hint', p ? cuT('All changes saved', '已自动保存') : cuT('Add a name & SKU to start autosaving', '填写名称和货号后自动保存'));
 }
@@ -2021,7 +2031,7 @@ function pdRevert() {
                    '还原到上次保存的版本?这将撤销自打开此产品以来的所有修改。'))) return;
   if (_pdOpenBaseline) {
     pdApplySnapshot(_pdOpenBaseline);
-    clearTimeout(_pdAutoTimer);
+    clearTimeout(_pdAutoTimer); _pdAutoTimer = null;
     pdAutoSaveNow();   // persist the rolled-back state immediately
   } else {
     pdOpen(_pdSelectedId);
@@ -3967,6 +3977,7 @@ function pdScheduleAutosave() {
 }
 
 async function pdAutoSaveNow() {
+  _pdAutoTimer = null;  // this fire consumes the pending debounce, scheduled or flushed
   if (_pdSaving) { _pdPendingResave = true; return; }  // coalesce — save again when current returns
   const g = el => (document.getElementById(el) && document.getElementById(el).value || '').trim();
   // Soft validation — never alert during autosave; just hold and hint until the
