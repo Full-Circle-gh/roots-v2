@@ -964,8 +964,13 @@
         </div>
       </div>
       <div class="acct-sep"></div>
-      <!-- Account + Manage team moved to the left rail, under Settings
-           (2026-07-14) — see .tabs a[href="/backend/account"] / [href="/backend/team"]. -->
+      <a class="acct-item" href="/backend/account" role="menuitem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
+        <span>Account · 账户</span>
+      </a>
+      <div class="acct-sep"></div>
+      <!-- Manage team moved to the left rail, under Settings (2026-07-14) —
+           see .tabs a[href="/backend/team"]. -->
       <!-- Display & language preferences — set-once toggles that used to sit
            loose in the topbar (Aa text size, light/dark, language). Folded in
            here Google/YouTube-style; each row flips in place and the menu
@@ -1224,15 +1229,11 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
     Settings · 设置
   </button>
-  <!-- Account + Manage team — moved here from the topbar account dropdown
-       (2026-07-14) so account/team management sits under Settings in the
-       rail instead of behind the avatar menu. Real page links (/backend/*),
-       not tabs, so <a> not <button> — .tabs a carries the same rail styling. -->
-  <a href="/backend/account" style="order:16">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
-    Account · 账户
-  </a>
-  <a href="/backend/team" style="order:17">
+  <!-- Manage team — moved here from the topbar account dropdown (2026-07-14)
+       so team management sits under Settings in the rail instead of behind
+       the avatar menu. Real page link (/backend/team), not a tab, so <a> not
+       <button> — .tabs a carries the same rail styling. -->
+  <a href="/backend/team" style="order:16">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.9-3 3.2-4.5 6-4.5S14.1 17 15 20"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6"/><path d="M18.5 20c-.5-2-1.6-3.3-3.2-4"/></svg>
     Manage team · 团队管理
   </a>
