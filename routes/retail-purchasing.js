@@ -43,8 +43,8 @@ function nextRetailPONumber() {
 
 function getRetailPO(id) {
   return db.prepare(
-    "SELECT * FROM purchase_orders WHERE id = ? AND COALESCE(scope,'kitchen') = 'retail'"
-  ).get(id);
+    "SELECT * FROM purchase_orders WHERE id = ? AND COALESCE(scope,'kitchen') = 'retail' AND COALESCE(tenant_id,1) = ?"
+  ).get(id, currentTenantId());
 }
 
 function actorLabel(req) {
@@ -123,7 +123,7 @@ function applyReceivedToStock(poId, req) {
 
 router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
   const includeInactive = req.query.all === '1';
-  const tid = currentTenantId();
+  const tid = Number(currentTenantId()) || 1;
   const rows = db.prepare(`
     SELECT s.id, s.name, s.name_cn, s.contact_name, s.contact_phone, s.contact_wechat,
            s.payment_terms, s.payment_method, s.rating, s.notes, s.is_active,
@@ -131,9 +131,9 @@ router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
            s.created_at, s.updated_at,
            (SELECT COUNT(*) FROM supplier_documents d WHERE d.supplier_id = s.id) AS doc_count,
            (SELECT COUNT(*) FROM purchase_orders po
-             WHERE po.supplier = s.name AND COALESCE(po.scope,'kitchen') = 'retail') AS po_count,
+             WHERE po.supplier = s.name AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}) AS po_count,
            (SELECT MAX(po.date) FROM purchase_orders po
-             WHERE po.supplier = s.name AND COALESCE(po.scope,'kitchen') = 'retail') AS last_po_date
+             WHERE po.supplier = s.name AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}) AS last_po_date
       FROM suppliers s
      WHERE s.tenant_id = ?${includeInactive ? '' : ' AND s.is_active = 1'}
      ORDER BY s.name COLLATE NOCASE
@@ -147,6 +147,7 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
   // Base64 payloads stay out of the detail read — documents fetch individually.
   delete s.channel_qr_data; delete s.business_license_data;
   delete s.permits_data; delete s.payment_qr_data;
+  const tid = Number(currentTenantId()) || 1;   // integer — safe to inline in SQL
   const documents = db.prepare(`
     SELECT id, kind, label, filename, mime_type, size_bytes, uploaded_at
       FROM supplier_documents WHERE supplier_id = ? ORDER BY uploaded_at DESC
@@ -155,7 +156,7 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
     SELECT id, po_number, date, status,
            (SELECT SUM(COALESCE(total_cost,0)) FROM po_line_items WHERE po_id = purchase_orders.id) AS total
       FROM purchase_orders
-     WHERE supplier = ? AND COALESCE(scope,'kitchen') = 'retail'
+     WHERE supplier = ? AND COALESCE(scope,'kitchen') = 'retail' AND COALESCE(tenant_id,1) = ${tid}
      ORDER BY date DESC, id DESC LIMIT 10
   `).all(s.name);
   // Scorecard — honest, computed-from-history metrics only (no faked on-time/
@@ -167,22 +168,22 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
            COALESCE(SUM(pli.total_cost),0) AS spend,
            MAX(po.date) AS last_date
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE COALESCE(po.scope,'kitchen')='retail' AND ${SUP_MATCH}`).get(s.name) || {};
+     WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH}`).get(s.name) || {};
   const owed = db.prepare(
-    "SELECT COALESCE(SUM(amount),0) AS owed, COUNT(*) AS n FROM invoices WHERE scope='retail' AND supplier=? AND paid_at IS NULL"
+    `SELECT COALESCE(SUM(amount),0) AS owed, COUNT(*) AS n FROM invoices WHERE scope='retail' AND COALESCE(tenant_id,1) = ${tid} AND supplier=? AND paid_at IS NULL`
   ).get(s.name) || {};
   const priceList = db.prepare(`
     SELECT pli.store_product_id,
            MAX(pli.name_en) AS name_en, MAX(pli.name_cn) AS name_cn, MAX(pli.sku) AS sku,
            COUNT(*) AS times, AVG(pli.cost_per_unit) AS avg_cost, SUM(pli.qty) AS total_qty
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE COALESCE(po.scope,'kitchen')='retail' AND ${SUP_MATCH} AND pli.store_product_id IS NOT NULL
+     WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH} AND pli.store_product_id IS NOT NULL
      GROUP BY pli.store_product_id
      ORDER BY times DESC, name_en LIMIT 50`).all(s.name);
   const lastStmt = db.prepare(`
     SELECT pli.cost_per_unit AS cost, po.date
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id=? AND COALESCE(po.scope,'kitchen')='retail' AND ${SUP_MATCH}
+     WHERE pli.store_product_id=? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH}
      ORDER BY po.date DESC, pli.id DESC LIMIT 1`);
   for (const pl of priceList) {
     const l = lastStmt.get(pl.store_product_id, s.name) || {};
@@ -304,8 +305,8 @@ router.get('/api/retail-admin/purchases', requireRetailAdmin, (req, res) => {
            (SELECT SUM(COALESCE(i.total_cost,0)) FROM po_line_items i WHERE i.po_id = po.id)   AS total_cost,
            (SELECT COUNT(*) FROM po_line_items i WHERE i.po_id = po.id AND i.qty_received IS NOT NULL) AS received_lines
       FROM purchase_orders po
-     WHERE COALESCE(po.scope,'kitchen') = 'retail'`;
-  const params = [];
+     WHERE COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ?`;
+  const params = [currentTenantId()];
   if (status)   { q += ' AND po.status = ?'; params.push(status); }
   if (store_id) { q += ' AND po.store_id = ?'; params.push(parseInt(store_id, 10)); }
   if (month)    { q += ' AND substr(po.date, 1, 7) = ?'; params.push(String(month).slice(0, 7)); }
@@ -357,12 +358,13 @@ router.get('/api/retail-admin/purchases/:id/history', requireRetailAdmin, (req, 
   const po = getRetailPO(req.params.id);
   if (!po) return res.status(404).json({ success: false, error: 'not_found' });
   const items = db.prepare('SELECT id, store_product_id FROM po_line_items WHERE po_id = ?').all(po.id);
+  const tid = Number(currentTenantId()) || 1;
   const prevStmt = db.prepare(`
     SELECT pli.qty, pli.unit, pli.cost_per_unit, pli.total_cost,
            po.id AS po_id, po.po_number, po.date, po.supplier
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND po.id != ? AND COALESCE(po.scope,'kitchen') = 'retail'
+     WHERE pli.store_product_id = ? AND po.id != ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}
      ORDER BY po.date DESC, pli.id DESC LIMIT 1`);
   const statsStmt = db.prepare(`
     SELECT COUNT(*) AS total_orders, AVG(pli.cost_per_unit) AS avg_price,
@@ -370,7 +372,7 @@ router.get('/api/retail-admin/purchases/:id/history', requireRetailAdmin, (req, 
            SUM(pli.qty) AS total_qty
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND po.id != ? AND COALESCE(po.scope,'kitchen') = 'retail'`);
+     WHERE pli.store_product_id = ? AND po.id != ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}`);
   const out = {};
   for (const it of items) {
     if (!it.store_product_id) continue;
@@ -391,6 +393,7 @@ router.get('/api/retail-admin/purchases/:id/history', requireRetailAdmin, (req, 
 router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (req, res) => {
   const spid = parseInt(req.params.spid, 10);
   if (!spid) return res.status(400).json({ success: false, error: 'bad_id' });
+  const tid = Number(currentTenantId()) || 1;   // integer — safe to inline
   // Group by the resolved supplier (line supplier wins, else the PO's supplier).
   // Positional GROUP BY 1 so the alias never shadows a real column.
   const rows = db.prepare(`
@@ -402,14 +405,14 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
            MAX(pli.cost_per_unit) AS max_cost
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}
      GROUP BY 1
      ORDER BY order_count DESC, MAX(po.date) DESC`).all(spid);
   const lastStmt = db.prepare(`
     SELECT pli.cost_per_unit AS cost, po.date, po.po_number
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}
        AND COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') = ?
      ORDER BY po.date DESC, pli.id DESC LIMIT 1`);
   const suppliers = rows.map(r => {
@@ -427,25 +430,25 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
            COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier) AS supplier
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}
      ORDER BY po.date DESC, pli.id DESC LIMIT 1`).get(spid) || null;
   // Cost-over-time series + overall stats + product identity, for the
   // standalone Price-history screen (sparkline + metric tiles).
   const series = db.prepare(`
     SELECT po.date AS date, pli.cost_per_unit AS cost
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(pli.cost_per_unit,0) > 0
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND COALESCE(pli.cost_per_unit,0) > 0
      ORDER BY po.date, pli.id`).all(spid);
   const stats = db.prepare(`
     SELECT COUNT(*) AS order_count, SUM(pli.qty) AS total_qty,
            AVG(pli.cost_per_unit) AS avg_cost, MIN(pli.cost_per_unit) AS min_cost, MAX(pli.cost_per_unit) AS max_cost,
            MIN(po.date) AS first_date, MAX(po.date) AS last_date
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(pli.cost_per_unit,0) > 0`).get(spid) || {};
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND COALESCE(pli.cost_per_unit,0) > 0`).get(spid) || {};
   const prod = db.prepare(`
     SELECT MAX(pli.name_en) AS name_en, MAX(pli.name_cn) AS name_cn, MAX(pli.sku) AS sku
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail'`).get(spid) || {};
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid}`).get(spid) || {};
   res.json({ success: true, data: {
     store_product_id: spid, product: prod, suppliers, series, stats,
     last: overall ? { cost: overall.cost, date: overall.date, supplier: overall.supplier, po_number: overall.po_number } : null,
@@ -467,7 +470,8 @@ router.get('/api/retail-admin/bills/outstanding', requireRetailAdmin, (req, res)
   const month = (req.query.month || '').trim();
   const supplier = (req.query.supplier || '').trim();
   const params = [];
-  let where = `COALESCE(po.scope,'kitchen')='retail' AND po.status IN ${BILL_PO_STATUSES}
+  const tid = Number(currentTenantId()) || 1;
+  let where = `COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND po.status IN ${BILL_PO_STATUSES}
     AND COALESCE(po.no_invoice_expected,0)=0 AND COALESCE(pli.no_invoice_expected,0)=0`;
   if (month)    { where += ' AND substr(po.date,1,7)=?'; params.push(month.slice(0, 7)); }
   if (supplier) { where += " AND COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''),po.supplier,'')=?"; params.push(supplier); }
@@ -495,18 +499,19 @@ router.get('/api/retail-admin/bills/outstanding', requireRetailAdmin, (req, res)
 // KPI + AP aging for the retail Bills header.
 router.get('/api/retail-admin/bills/summary', requireRetailAdmin, (req, res) => {
   const month = (req.query.month || gzToday().slice(0, 7)).slice(0, 7);
+  const tid = Number(currentTenantId()) || 1;
   const cov = db.prepare(`
     SELECT COALESCE(SUM(pli.qty*pli.cost_per_unit),0) AS purchased,
            COALESCE(SUM((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id=pli.id)),0) AS billed
       FROM po_line_items pli JOIN purchase_orders po ON po.id=pli.po_id
-     WHERE COALESCE(po.scope,'kitchen')='retail' AND po.status IN ${BILL_PO_STATUSES}
+     WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND po.status IN ${BILL_PO_STATUSES}
        AND COALESCE(po.no_invoice_expected,0)=0 AND COALESCE(pli.no_invoice_expected,0)=0
        AND substr(po.date,1,7)=?`).get(month);
   const purchased = cov.purchased || 0, billed = cov.billed || 0;
   const awaiting = Math.max(0, purchased - billed);
   const today = gzToday();
   const soon = new Date(Date.now() + 8 * 3600 * 1000 + 7 * 86400 * 1000).toISOString().slice(0, 10);
-  const bills = db.prepare("SELECT amount, due_date, paid_at FROM invoices WHERE scope='retail' AND paid_at IS NULL").all();
+  const bills = db.prepare(`SELECT amount, due_date, paid_at FROM invoices WHERE scope='retail' AND COALESCE(tenant_id,1) = ${tid} AND paid_at IS NULL`).all();
   let notDue = 0, dueSoon = 0, overdue = 0, overdueCount = 0;
   for (const b of bills) {
     const amt = b.amount || 0;
@@ -520,7 +525,8 @@ router.get('/api/retail-admin/bills/summary', requireRetailAdmin, (req, res) => 
 
 // Recorded retail bills ledger.
 router.get('/api/retail-admin/bills', requireRetailAdmin, (req, res) => {
-  const invs = db.prepare("SELECT * FROM invoices WHERE scope='retail' ORDER BY date DESC, id DESC").all();
+  const tid = Number(currentTenantId()) || 1;
+  const invs = db.prepare(`SELECT * FROM invoices WHERE scope='retail' AND COALESCE(tenant_id,1) = ${tid} ORDER BY date DESC, id DESC`).all();
   const linkStmt = db.prepare(`
     SELECT COUNT(DISTINCT po.id) AS po_count, GROUP_CONCAT(DISTINCT po.po_number) AS po_numbers,
            COALESCE(SUM(il.allocated_amount),0) AS allocated
@@ -544,8 +550,8 @@ router.post('/api/retail-admin/bills', requireRetailAdmin, express.json(), (req,
   if (!supplier || !String(supplier).trim()) return res.status(400).json({ success: false, error: 'supplier_required' });
   if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
   if (!date) return res.status(400).json({ success: false, error: 'date_required' });
-  const insertInv = db.prepare(`INSERT INTO invoices (supplier, invoice_number, amount, date, notes, created_by, scope, store_id, due_date)
-    VALUES (?,?,?,?,?,NULL,'retail',?,?)`);
+  const insertInv = db.prepare(`INSERT INTO invoices (supplier, invoice_number, amount, date, notes, created_by, scope, store_id, due_date, tenant_id)
+    VALUES (?,?,?,?,?,NULL,'retail',?,?,?)`);
   const insertLink = db.prepare('INSERT OR IGNORE INTO invoice_lines (invoice_id, line_id, allocated_amount) VALUES (?,?,?)');
   const lineInfo = db.prepare(`
     SELECT pli.id, pli.qty, pli.cost_per_unit,
@@ -555,7 +561,7 @@ router.post('/api/retail-admin/bills', requireRetailAdmin, express.json(), (req,
     let id;
     const tx = db.transaction(() => {
       const r = insertInv.run(String(supplier).trim(), invoice_number ? String(invoice_number).trim() : null,
-        parseFloat(amount), date, notes || null, store_id ? parseInt(store_id, 10) : null, due_date || null);
+        parseFloat(amount), date, notes || null, store_id ? parseInt(store_id, 10) : null, due_date || null, Number(currentTenantId()) || 1);
       id = r.lastInsertRowid;
       if (Array.isArray(links)) {
         for (const l of links) {
@@ -582,7 +588,7 @@ router.post('/api/retail-admin/bills', requireRetailAdmin, express.json(), (req,
 
 // Mark a bill paid / unpaid.
 router.put('/api/retail-admin/bills/:id/paid', requireRetailAdmin, express.json(), (req, res) => {
-  const inv = db.prepare("SELECT * FROM invoices WHERE id=? AND scope='retail'").get(req.params.id);
+  const inv = db.prepare("SELECT * FROM invoices WHERE id=? AND scope='retail' AND COALESCE(tenant_id,1)=?").get(req.params.id, Number(currentTenantId()) || 1);
   if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
   const paid = (req.body && req.body.paid === false) ? null : gzNow();
   db.prepare('UPDATE invoices SET paid_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(paid, inv.id);
@@ -591,7 +597,7 @@ router.put('/api/retail-admin/bills/:id/paid', requireRetailAdmin, express.json(
 
 // Delete a bill (invoice_lines cascade).
 router.delete('/api/retail-admin/bills/:id', requireRetailAdmin, (req, res) => {
-  const r = db.prepare("DELETE FROM invoices WHERE id=? AND scope='retail'").run(req.params.id);
+  const r = db.prepare("DELETE FROM invoices WHERE id=? AND scope='retail' AND COALESCE(tenant_id,1)=?").run(req.params.id, Number(currentTenantId()) || 1);
   if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
   logActivity(req.user.id, req.user.username, 'delete', 'retail_bill', req.params.id, null, req.ip);
   res.json({ success: true });
@@ -602,6 +608,7 @@ router.delete('/api/retail-admin/bills/:id', requireRetailAdmin, (req, res) => {
 // by the supplier we'd order each from (its most-used vendor in retail PO
 // history) + the store. Each group can become a one-tap draft order.
 router.get('/api/retail-admin/reorder', requireRetailAdmin, (req, res) => {
+  const tid = Number(currentTenantId()) || 1;
   let stores = [];
   try { stores = inventory.listStores({ activeOnly: true }); } catch (_) { stores = []; }
   const low = [];
@@ -632,7 +639,7 @@ router.get('/api/retail-admin/reorder', requireRetailAdmin, (req, res) => {
   const prefStmt = db.prepare(`
     SELECT COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') AS supplier, COUNT(*) AS c
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
-     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail' AND COALESCE(po.tenant_id,1) = ${tid}
      GROUP BY 1 ORDER BY c DESC LIMIT 1`);
   const groups = new Map();
   for (const it of low) {
@@ -661,10 +668,10 @@ router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (re
     const po_number = nextRetailPONumber();
     const tx = db.transaction(() => {
       const r = db.prepare(`INSERT INTO purchase_orders
-        (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, backorder_of)
-        VALUES (?,?,?,'Requested',?,?,'backorder','retail',?,NULL,?)`).run(
+        (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, backorder_of, tenant_id)
+        VALUES (?,?,?,'Requested',?,?,'backorder','retail',?,NULL,?,?)`).run(
         po_number, gzToday(), null, src.supplier || null,
-        `Back-order from ${src.po_number}`, src.store_id, src.id);
+        `Back-order from ${src.po_number}`, src.store_id, src.id, currentTenantId());
       const newId = r.lastInsertRowid;
       const ins = db.prepare(`INSERT INTO po_line_items
         (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
@@ -729,9 +736,9 @@ router.post('/api/retail-admin/purchases', requireRetailAdmin, express.json(), (
     const po_number = nextRetailPONumber();
     const tx = db.transaction(() => {
       const result = db.prepare(`
-        INSERT INTO purchase_orders (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by)
-        VALUES (?,?,?,'Requested',?,?,'manual','retail',?,NULL)
-      `).run(po_number, date, delivery_date || null, supplier || null, notes || null, storeId);
+        INSERT INTO purchase_orders (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, tenant_id)
+        VALUES (?,?,?,'Requested',?,?,'manual','retail',?,NULL,?)
+      `).run(po_number, date, delivery_date || null, supplier || null, notes || null, storeId, currentTenantId());
       const poId = result.lastInsertRowid;
       if (Array.isArray(items) && items.length) insertLineItems(poId, items, supplier);
       return poId;

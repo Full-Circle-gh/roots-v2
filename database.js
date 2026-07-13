@@ -299,6 +299,15 @@ addColumn('purchase_orders', 'extra_freight',  'REAL DEFAULT 0');
 addColumn('purchase_orders', 'extra_tax',      'REAL DEFAULT 0');
 addColumn('purchase_orders', 'extra_handling', 'REAL DEFAULT 0');
 
+// Tenant scoping for retail purchase orders + bills (mirrors suppliers.tenant_id).
+// DEFAULT 1 tags every existing row (kitchen + Roots' retail) to Roots, so Roots
+// is unchanged; new retail POs/bills stamp the creating tenant and retail reads
+// filter by it, so a second business never sees Roots' orders, bills or prices.
+addColumn('purchase_orders', 'tenant_id', 'INTEGER DEFAULT 1');
+addColumn('invoices',        'tenant_id', 'INTEGER DEFAULT 1');
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_po_tenant ON purchase_orders(tenant_id)'); } catch {}
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_invoices_tenant ON invoices(tenant_id)'); } catch {}
+
 // Supplier dossier columns. The first two are free-text notes the buyer
 // keeps about the vendor (catalogue + price list snapshot). The three
 // _data columns hold base64 image uploads — same pattern we use for
