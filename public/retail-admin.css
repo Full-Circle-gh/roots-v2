@@ -9830,6 +9830,17 @@
   #prod-view-purchasing .pu2-reocard .foot .amt { font-weight: 500; }
   #prod-view-purchasing .pu2-reocard .foot .pu2-btn { margin-left: auto; }
 
+  /* PO lifecycle stepper — Draft → Sent → Part received → Received */
+  #prod-view-purchasing .pu2-life { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    font-size: 12.5px; color: var(--td-text2); margin: 4px 0 18px; }
+  #prod-view-purchasing .pu2-life .s { display: inline-flex; align-items: center; gap: 6px; }
+  #prod-view-purchasing .pu2-life .s .d { width: 8px; height: 8px; border-radius: 50%; background: var(--td-border); }
+  #prod-view-purchasing .pu2-life .s.done { color: var(--td-text); }
+  #prod-view-purchasing .pu2-life .s.done .d { background: var(--td-text); }
+  #prod-view-purchasing .pu2-life .s.now { color: var(--td-text); font-weight: 500; }
+  #prod-view-purchasing .pu2-life .s.now .d { background: var(--td-amber); }
+  #prod-view-purchasing .pu2-life .conn { width: 20px; height: 1px; background: var(--td-border); }
+
   /* low-stock suggestions */
   #prod-view-purchasing .pu2-sugrow { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
     border: 1px dashed var(--td-border); border-radius: 10px; margin-bottom: 8px; font-size: 13.5px; }

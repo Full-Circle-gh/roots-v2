@@ -74,6 +74,7 @@
     box:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>',
     send:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
     star:   '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.9 6.3 6.8.6-5.1 4.5 1.5 6.7L12 17l-6 3.6 1.5-6.7-5.1-4.5 6.8-.6z"/></svg>',
+    print:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>',
   };
 
   // ── status → plain word + pill tone ───────────────────────────────────────
@@ -748,6 +749,24 @@
   // ═══════════════════════════════════════════════════════════════════════════
   //  RECEIVE — one PO
   // ═══════════════════════════════════════════════════════════════════════════
+  // The order's journey — Draft → Sent → Part received → Received. Derived from
+  // the wire status + how much has actually been ticked in.
+  function lifeStepper(p) {
+    const items = p.items || [];
+    const anyRcv = items.some(i => i.qty_received != null);
+    const allRcv = items.length > 0 && items.every(i => i.qty_received != null);
+    let step;
+    if (p.status === 'Delivered') step = 3;
+    else if (p.status === 'Ordered') step = (anyRcv && !allRcv) ? 2 : 1;
+    else if (p.status === 'Requested') step = 0;
+    else return `<div class="pu2-life"><span class="s now"><span class="d"></span>${esc(T('Cancelled', '已取消'))}</span></div>`;
+    const steps = [T('Draft', '草稿'), T('Sent', '已下单'), T('Part received', '部分收货'), T('Received', '已收货')];
+    return `<div class="pu2-life">${steps.map((s, i) => {
+      const cls = i < step ? 'done' : i === step ? 'now' : '';
+      return `<span class="s ${cls}"><span class="d"></span>${esc(s)}</span>${i < steps.length - 1 ? '<span class="conn"></span>' : ''}`;
+    }).join('')}</div>`;
+  }
+
   function paintReceive() {
     const p = _po;
     if (!p) { _screen = 'orders'; paint(); return; }
@@ -758,8 +777,11 @@
         ${backBtn(T('Orders', '采购单'), 'puBackOrders()')}
         <h1 class="pu2-mono" style="font-size:21px">${esc(p.po_number)}</h1>
         ${statusPill(p)}
+        <span class="spacer"></span>
+        <button class="pu2-btn" onclick="puPrintPO()"><span class="pu2-ic">${I.print}</span>${esc(T('Print / send', '打印 / 发送'))}</button>
       </div>
       <div class="pu2-rcvsub pu2-num">${esc(p.supplier || T('No supplier', '未指定供应商'))} → ${storeLabel(p)} · ${esc(T('placed', '下单'))} ${esc(p.date || '')}${p.delivery_date ? ` · ${esc(T('expected', '预计'))} ${esc(p.delivery_date)}` : ''} · ${money(p.total_cost || (p.items || []).reduce((s, i) => s + (i.qty || 0) * (i.cost_per_unit || 0), 0))}</div>
+      ${lifeStepper(p)}
       ${p.notes ? `<p class="pu2-notes">${esc(p.notes)}</p>` : ''}
 
       <div class="pu2-card">
@@ -819,6 +841,58 @@
       <td class="right pu2-num">${applied}${it.current_stock != null ? `<div class="sub">${esc(T('shelf', '现货'))} ${it.current_stock}</div>` : ''}</td>
     </tr>`;
   }
+
+  // Print / send — opens a clean, self-contained PO document in a new window
+  // (its own styles; no admin tokens) and triggers the browser print dialog,
+  // which doubles as "save to PDF" to email the supplier.
+  window.puPrintPO = function () {
+    const p = _po;
+    if (!p) return;
+    const items = p.items || [];
+    const total = p.total_cost || items.reduce((s, i) => s + (i.qty || 0) * (i.cost_per_unit || 0), 0);
+    const e2 = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const rows = items.map(i => {
+      const nm = [i.name_en, i.name_cn].filter(Boolean).join(' · ');
+      const line = (i.qty || 0) * (i.cost_per_unit || 0);
+      return `<tr><td>${e2(nm)}${i.sku ? ` <span class="sku">${e2(i.sku)}</span>` : ''}</td><td class="r">${i.qty} ${e2(i.unit || '')}</td><td class="r">${money(i.cost_per_unit || 0)}</td><td class="r">${money(line)}</td></tr>`;
+    }).join('');
+    const w = window.open('', '_blank', 'width=820,height=1040');
+    if (!w) { toast(T('Allow pop-ups, then Print again', '请允许弹窗后再打印'), 'err'); return; }
+    const doc = `<!doctype html><html><head><meta charset="utf-8"><title>${e2(p.po_number)}</title>
+      <style>
+        *{box-sizing:border-box} body{font-family:'Inter',-apple-system,Arial,sans-serif;color:#111A2B;margin:44px;font-size:13px;line-height:1.5}
+        .top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #111A2B;padding-bottom:14px;margin-bottom:20px}
+        .wm{font-family:Georgia,serif;font-size:22px;letter-spacing:.18em;font-weight:300}
+        h1{font-size:18px;font-weight:600;margin:0}
+        .meta{color:#58606E;font-size:12px;margin-top:4px}
+        table{width:100%;border-collapse:collapse;margin-top:8px}
+        th{text-align:left;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#58606E;border-bottom:1px solid #E4E0D5;padding:8px 6px}
+        td{padding:9px 6px;border-bottom:1px solid #EEEDE7}
+        .r{text-align:right}.sku{color:#9AA3B2;font-size:11px}
+        tfoot td{font-weight:600;border-top:2px solid #111A2B;border-bottom:none}
+        .note{margin-top:22px;color:#58606E;font-size:12px}
+        @media print{body{margin:0}}
+      </style></head><body>
+      <div class="top">
+        <div><div class="wm">tacet</div><div class="meta">${e2(T('Purchase order', '采购单'))}</div></div>
+        <div style="text-align:right"><h1>${e2(p.po_number)}</h1><div class="meta">${e2(T('Date', '日期'))}: ${e2(p.date || '')}${p.delivery_date ? ` · ${e2(T('Expected', '预计'))}: ${e2(p.delivery_date)}` : ''}</div></div>
+      </div>
+      <div style="display:flex;gap:60px;margin-bottom:18px">
+        <div><div class="meta">${e2(T('Supplier', '供应商'))}</div><div>${e2(p.supplier || '—')}</div></div>
+        <div><div class="meta">${e2(T('Deliver to', '收货'))}</div><div>${storeLabel(p)}</div></div>
+      </div>
+      <table>
+        <thead><tr><th>${e2(T('Product', '商品'))}</th><th class="r">${e2(T('Qty', '数量'))}</th><th class="r">${e2(T('Cost each', '单价'))}</th><th class="r">${e2(T('Line', '小计'))}</th></tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="3" class="r">${e2(T('Total', '合计'))}</td><td class="r">${money(total)}</td></tr></tfoot>
+      </table>
+      ${p.notes ? `<div class="note">${e2(p.notes)}</div>` : ''}
+      </body></html>`;
+    w.document.write(doc);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { try { w.print(); } catch (_) {} }, 350);
+  };
 
   window.puReceiveSave = async function () {
     if (!_po) return;
