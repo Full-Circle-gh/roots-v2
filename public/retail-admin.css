@@ -7860,7 +7860,10 @@
      the always-on Catalogue) for operators without activity/categories — parity
      with the in-content #stk-views it mirrors. */
   .tb-subviews { display: none; align-items: center; gap: 2px; min-width: 0; }
-  body:has(#tab-products.active) .tb-subviews { display: inline-flex; }
+  body:has(#tab-products.active) #tb-subviews { display: inline-flex; }
+  /* Purchasing sub-view switch — same mirror, own id so it never shows
+     alongside (or instead of) the Products one. */
+  body:has(#tab-purchasing.active) #tb-pu-subviews { display: inline-flex; }
   .tb-sep { color: var(--td-border); font-size: 16px; font-weight: 300; margin: 0 4px 0 1px; }
   .tb-subview {
     appearance: none; background: none; border: 0; cursor: pointer;
@@ -7888,6 +7891,10 @@
     #tab-products > .t-ord-eyebrow,
     #tab-products > .pa-head-row,
     #tab-products > .stk-views { display: none; }
+    /* Purchasing — puChrome's own page-head + sub-nav move into the bar too;
+       the ledger/wizard/etc. body underneath is untouched. */
+    #tab-purchasing .pu2-pagehead,
+    #tab-purchasing .pu2-subnav { display: none; }
     /* Bare page titles that now just repeat the crumb. Keep the range beside
        Reports and the New-customer action beside Customers. */
     #tab-orders > h2,

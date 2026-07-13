@@ -161,7 +161,22 @@
     else if (_screen === 'import')    paintImport();
     else if (_screen === 'bills')     paintBills();
     else if (_screen === 'reorder')   paintReorder();
+    tbSyncPuTabs();
     try { applyCapGates(); } catch (_) {}
+  }
+
+  // Mirror the active tab onto the desktop topbar switch (Option B), same as
+  // Products' prodShowView. Runs on every paint() so it also tracks drill-in
+  // screens (wizard/receive → Orders; supplier/import → Suppliers) that don't
+  // render puChrome themselves.
+  const PU_SCREEN_TAB = {
+    orders: 'orders', wizard: 'orders', receive: 'orders',
+    suppliers: 'suppliers', supplier: 'suppliers', import: 'suppliers',
+    bills: 'bills', reorder: 'reorder',
+  };
+  function tbSyncPuTabs() {
+    const active = PU_SCREEN_TAB[_screen] || 'orders';
+    PU_TABS.forEach(([key]) => document.getElementById('tb-pu-btn-' + key)?.classList.toggle('on', key === active));
   }
 
   function backBtn(label, fn) {
