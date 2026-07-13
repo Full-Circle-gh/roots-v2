@@ -11577,6 +11577,133 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   res.json(dashBody);
 });
 
+// ── Catalogue highlights — the "Your catalogue" summary's second band ──────
+// Five glanceable, product-only facts an owner reads every morning, computed
+// from data we already keep (retail order lines for sales, store_products
+// fields for completeness, flash_* columns for promotions):
+//   bestSeller     — most units sold in the trailing 7 days
+//   rising         — biggest % jump in units this week vs the week before
+//   goingNowhere   — live products with zero sales in the last 30 days
+//   needsAttention — live products missing a photo, price or category
+//   onPromotion    — live products with an active flash sale right now
+// Each is a headline, not a report: the client makes the whole band tappable so
+// a tile deep-links into Products filtered to that set. Cached briefly (60s) —
+// this rides beside the catalogue grid and re-renders on every tab entry.
+const _catHiCache = new Map();   // tenant → { at, body }
+const CAT_HI_TTL = 60 * 1000;
+router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, res) => {
+  const TZ = '+8 hours';
+  const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
+  const PAIDO  = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
+  const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
+
+  const memoKey = String(currentTenantId() || ROOTS_TENANT_ID);
+  const hit = _catHiCache.get(memoKey);
+  if (hit && Date.now() - hit.at < CAT_HI_TTL) return res.json(hit.body);
+
+  // Day windows in GZ-local time. This-week = trailing 7 days incl. today;
+  // prior-week = the 7 days before that; dead-window = trailing 30 days.
+  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
+  const today    = nowGz.toISOString().slice(0, 10);
+  const d = (n) => new Date(nowGz.getTime() - n * 86400000).toISOString().slice(0, 10);
+  const win7From = d(6);
+  const prev7From = d(13), prev7To = d(7);
+  const win30From = d(29);
+
+  const LIVE = "p.is_published = 1 AND COALESCE(p.is_active, 1) = 1";
+
+  // Units per published product over a date window (retail order lines only —
+  // this catalogue's own sales).
+  const unitsSql = `
+    SELECT i.product_id AS id, p.name_en, p.name_cn, COALESCE(SUM(i.qty), 0) AS units
+      FROM retail_order_items i
+      JOIN retail_orders o ON o.id = i.order_id
+      JOIN store_products p ON p.id = i.product_id
+     WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ? AND ${LIVE}
+     GROUP BY i.product_id`;
+  const rows7    = tdb().prepare(unitsSql).all(win7From, today);
+  const rowsPrev = tdb().prepare(unitsSql).all(prev7From, prev7To);
+
+  // bestSeller — most units this week.
+  let bestSeller = null;
+  for (const r of rows7) {
+    if (!bestSeller || r.units > bestSeller.units) {
+      bestSeller = { id: r.id, name_en: r.name_en, name_cn: r.name_cn, units: Math.round(r.units) };
+    }
+  }
+
+  // rising — biggest positive % jump in units, this week vs the week before.
+  // Guard against tiny-number noise: need a real base last week and a
+  // meaningful count this week before a % is worth showing.
+  const prevById = new Map(rowsPrev.map(r => [r.id, Number(r.units) || 0]));
+  let rising = null;
+  for (const r of rows7) {
+    const cur = Number(r.units) || 0;
+    const prev = prevById.get(r.id) || 0;
+    if (prev < 1 || cur < 3 || cur <= prev) continue;
+    const pct = Math.round(((cur - prev) / prev) * 100);
+    if (!rising || pct > rising.pct) {
+      rising = { id: r.id, name_en: r.name_en, name_cn: r.name_cn, pct, units: Math.round(cur) };
+    }
+  }
+
+  // The three count tiles also carry their member IDs (capped) so the client can
+  // make each tile tap-through — filter the catalogue to exactly that set — with
+  // the count and the filter reading from one source of truth.
+  const ID_CAP = 1000;
+
+  // goingNowhere — live products with zero sales in 30 days. New products (added
+  // within the window) get a pass so a fresh listing isn't branded dead on day one.
+  const goingNowhereIds = tdb().prepare(`
+    SELECT p.id FROM store_products p
+     WHERE ${LIVE}
+       AND (p.created_at IS NULL OR date(p.created_at, '${TZ}') <= ?)
+       AND p.id NOT IN (
+         SELECT i.product_id
+           FROM retail_order_items i
+           JOIN retail_orders o ON o.id = i.order_id
+          WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ? AND i.product_id IS NOT NULL)
+     LIMIT ${ID_CAP}
+  `).all(win30From, win30From, today).map(r => r.id);
+
+  // needsAttention — live listings that look unfinished to a shopper: no photo
+  // (self or variant sibling), no/zero price, or no category.
+  const needsAttentionIds = tdb().prepare(`
+    SELECT p.id FROM store_products p
+     WHERE ${LIVE}
+       AND (
+         NOT ${hasImageFallbackSql('p')}
+         OR p.sell_price IS NULL OR p.sell_price <= 0
+         OR p.top_category IS NULL OR p.top_category = ''
+       )
+     LIMIT ${ID_CAP}
+  `).all().map(r => r.id);
+
+  // onPromotion — live products whose flash sale is active right now. Timestamp
+  // formats vary, so decide with the shared flashsales helper rather than SQL.
+  const nowMs = Date.now();
+  const flashRows = tdb().prepare(`
+    SELECT id, flash_price, flash_starts_at, flash_ends_at, flash_stock_limit, flash_sold
+      FROM store_products p
+     WHERE ${LIVE} AND p.flash_price IS NOT NULL AND p.flash_price > 0`).all();
+  const onPromotionIds = [];
+  for (const r of flashRows) {
+    const f = flashsales.flashStatus(r, nowMs);
+    if (f && f.state === 'active') onPromotionIds.push(r.id);
+  }
+
+  const body = {
+    success: true,
+    window_days: 7,
+    bestSeller, rising,
+    goingNowhere:   { count: goingNowhereIds.length,   ids: goingNowhereIds },
+    needsAttention: { count: needsAttentionIds.length, ids: needsAttentionIds },
+    onPromotion:    { count: onPromotionIds.length,    ids: onPromotionIds },
+  };
+  _catHiCache.set(memoKey, { at: Date.now(), body });
+  res.json(body);
+});
+
 // ── Dashboard: live presence (global concurrent viewers) ──────────────────
 // Unions the per-product VIEWING Map by viewer key, so one customer hopping
 // between products counts once. Honest-labelled "viewing products now" —

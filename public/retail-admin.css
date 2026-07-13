@@ -2163,6 +2163,70 @@
     .pa-lowknob { margin-left: 0; width: 100%; }
   }
 
+  /* ── Catalogue card — wraps the recap row + the highlights band as ONE card,
+        divided by a hairline. The recap row keeps its own layout; the wrapper
+        owns the border/surface so the two bands read as a single unit. ── */
+  .pa-recap-card {
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 14px; margin-bottom: var(--s3); overflow: hidden;
+  }
+  .pa-recap-card > .pa-recap {
+    background: none; border: 0; border-radius: 0; margin-bottom: 0;
+  }
+
+  /* ── Highlights band — the few product facts worth a morning glance. Each
+        tile is a button that deep-links into Products filtered to that set. ── */
+  .pa-hi { padding: 16px 26px 20px; border-top: 1px solid var(--td-border); }
+  .pa-hi-head {
+    font-family: var(--f-sans); font-size: 11px; font-weight: 600;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2);
+    margin-bottom: 14px;
+  }
+  .pa-hi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; align-items: start; }
+  .pa-hi-tile {
+    display: flex; flex-direction: column; align-self: start; min-width: 0;
+    text-align: left; background: none; border: 0; padding: 0;
+    font-family: var(--f-sans); color: var(--td-text); cursor: pointer;
+    border-radius: 8px;
+  }
+  .pa-hi-tile:disabled { cursor: default; }
+  .pa-hi-tile:not(:disabled):hover .pa-hi-name { text-decoration: underline; text-decoration-color: var(--td-border); text-underline-offset: 3px; }
+  .pa-hi-tile:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+  .pa-hi-tile.is-on .pa-hi-badge { border-color: var(--td-text); box-shadow: 0 0 0 1px var(--td-text) inset; }
+  .pa-hi-tile.is-on .pa-hi-name { text-decoration: underline; text-decoration-color: var(--td-text); text-underline-offset: 3px; }
+  .pa-hi-cap {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
+    text-transform: uppercase; color: var(--td-text2);
+  }
+  .pa-hi-cap svg { flex: none; width: 14px; height: 14px; }
+  .pa-hi-cap.up   { color: var(--td-sage-ink); }
+  .pa-hi-cap.down { color: var(--td-brick-ink); }
+  .pa-hi-cap.warn { color: var(--td-amber-ink); }
+  .pa-hi-body { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .pa-hi-badge {
+    width: 34px; height: 34px; border-radius: 8px; flex: none;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--td-raised); border: 1px solid var(--td-border); color: var(--td-text2);
+  }
+  .pa-hi-badge.num { font-size: 15px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .pa-hi-badge svg { width: 18px; height: 18px; }
+  .pa-hi-badge img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
+  .pa-hi-text { min-width: 0; flex: 1; }
+  .pa-hi-name {
+    font-size: 13.5px; font-weight: 500; line-height: 1.3; color: var(--td-text);
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  }
+  .pa-hi-meta { font-size: 12px; color: var(--td-text2); margin-top: 1px; line-height: 1.3; }
+  .pa-hi-meta b { color: var(--td-text); font-weight: 600; }
+  .pa-hi-meta.up   { color: var(--td-sage-ink); }
+  .pa-hi-meta.up b { color: var(--td-sage-ink); }
+  .pa-hi-empty { font-size: 13px; color: var(--td-text3, var(--td-text2)); }
+  @media (max-width: 720px) {
+    .pa-hi { padding: 14px 16px 16px; }
+    .pa-hi-grid { grid-template-columns: repeat(2, 1fr); gap: 16px 12px; }
+  }
+
   /* ── Toolbar — search · category · add · guided add · layout ───────────── */
   .pa-toolbar {
     display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
@@ -8061,7 +8125,7 @@
 
   /* footers (painted by tdSecPaint) bleed to the card's rounded foot */
   .td-block .td-sec-foot { margin-top: auto; padding: 11px 20px; }
-  .td-block .td-chan-foot { margin-top: 10px; }
+  .td-block .td-chan-foot { margin-top: 8px; padding-bottom: 2px; }
   .td-block .td-inv-low { margin-top: 8px; }
 
   /* ── tier adaptation: one source of content, restyled by shape ──
@@ -8364,7 +8428,7 @@
 
   /* ── Channels today — the Activity square's replacement. Revenue split by
      channel as quiet magnitude bars (share of today's total). ── */
-  .td-chan-list { display: grid; gap: 14px; margin-top: 6px; align-content: start; }
+  .td-chan-list { display: grid; gap: 10px; margin-top: 6px; align-content: start; }
   .td-chan-row {
     display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
     align-items: baseline; font-size: 13.5px;
@@ -8422,7 +8486,7 @@
   /* Recent stock moves — ledger tail (bx-* scoped). Dusk dot = an automation
      made the move; plain graphite dot = a person did. In green-ink, out ink. */
   .bx-mo-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
-  .bx-mo-row { display: flex; align-items: baseline; gap: 10px; padding: 7px 0; font-size: 13.5px; }
+  .bx-mo-row { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; font-size: 13.5px; }
   .bx-mo-row + .bx-mo-row { border-top: 1px solid var(--td-raised); }
   .bx-mo-dot { flex: none; width: 6px; height: 6px; border-radius: 999px; background: var(--td-dusk, #7A7FB3); align-self: center; }
   .bx-mo-dot.is-manual { background: var(--td-text2); }

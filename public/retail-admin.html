@@ -2996,7 +2996,8 @@
          paRenderKpis(); the jump buttons reuse the paSetStatus() quick-filter and
          its .pa-kpi-on highlight. The low-stock threshold knob sits in the sub-bar
          below (out of the main scan path). -->
-    <div class="pa-recap" id="pa-kpis">
+    <div class="pa-recap-card" id="pa-kpis">
+      <div class="pa-recap">
       <div class="pa-recap-hero">
         <div class="pa-recap-cap">Live catalogue · 在售目录</div>
         <div class="pa-recap-n"><span id="pa-kpi-live">—</span> <span class="pa-recap-u">products · 件</span></div>
@@ -3013,6 +3014,14 @@
         <button type="button" class="pa-jump" id="pa-kpi-drafts-tile" onclick="paSetStatus('drafts')" title="Show drafts · 仅显示未上架产品">
           <span class="pa-jump-dot is-draft"></span><span class="pa-jump-n" id="pa-kpi-drafts">—</span><span class="pa-jump-l">Drafts · 未上架</span>
         </button>
+      </div>
+      </div>
+      <!-- Second band: catalogue highlights — a few product facts an owner reads
+           each morning. Filled by paRenderHighlights() from
+           /api/retail-admin/products/highlights; the whole band is tap-through. -->
+      <div class="pa-hi" id="pa-hi" hidden>
+        <div class="pa-hi-head" data-no-i18n>Highlights · this week · 本周亮点</div>
+        <div class="pa-hi-grid" id="pa-hi-grid"></div>
       </div>
     </div>
     <!-- Context line — appears under the band only when a jump filter is active:
