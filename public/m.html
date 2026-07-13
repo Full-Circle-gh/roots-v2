@@ -268,7 +268,7 @@ const state = {
   stack:[], statusF:'all', channelF:'all', inboxSeg:'reviews',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   reply:null, createKind:null, createValue:10, createActive:true,
-  toast:null, drag:0, dragging:false, faqOpen:null,
+  toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
   sw:{fapiao:true,membership:true,affiliate:false,social:false,faq:true,feedback:true,
       autoprint:true,autoroute:true,lowstock:true,popups:true,c_WELCOME10:true,c_WEEKEND20:true,c_OVER200:false},
@@ -308,7 +308,8 @@ reg('openProduct', sku=>{ state.productSku=sku; render(); });
 reg('closeProduct', ()=>{ state.productSku=null; render(); });
 reg('saveProduct', ()=>{ state.productSku=null; showToast(T('Saved','已保存')); });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
-reg('openReply', who=>{ state.reply=who; render(); });
+reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); render(); });
+reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(r.cust[0])); render(); });
 reg('closeReply', ()=>{ state.reply=null; render(); });
 reg('sendReply', ()=>{ state.reply=null; showToast(T('Reply sent','回复已发送')); });
 reg('create', k=>{ state.createKind=k; state.createValue=10; state.createActive=true; render(); });
@@ -478,26 +479,35 @@ function screenInbox(){
   const seg=state.inboxSeg;
   const segBtn=(k,label)=>`<button onclick="APP.cmd('inboxSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
     background:${seg===k?'var(--surface-card)':'transparent'};color:${seg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${seg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}</button>`;
-  const item=r=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
+  const item=(r,trackSeen)=>{
+    const unseen=trackSeen && !state.reviewsSeen.has(r.cust[0]);
+    return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-size:15px;font-weight:500">${T(...r.cust)}</span>
+        <span style="display:flex;align-items:center;gap:8px;min-width:0">
+        ${unseen?`<span style="width:7px;height:7px;border-radius:50%;background:var(--text-primary);flex:none" aria-hidden="true"></span>`:''}
+        <span style="font-size:15px;font-weight:500">${T(...r.cust)}</span>
         ${r.rating?`<span class="num" style="display:flex;align-items:center;gap:3px;color:var(--text-secondary);font-size:13px">${ic('star',14)} ${r.rating}</span>`:''}</span>
         ${pill(r.kind,T(...r.status))}</div>
       <div style="font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px">
         <span style="font-size:12px;color:var(--text-secondary)">${T(...r.time)}</span>
         <button onclick="APP.cmd('openReply','${r.cust[0]}')" style="font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit">${T('Reply','回复')}</button></div></div>`;
+  };
+  const unseenCount=DB.reviews.filter(r=>!state.reviewsSeen.has(r.cust[0])).length;
   let body;
-  if(seg==='reviews') body=DB.reviews.map(item).join('');
-  else if(state.sw.feedback) body=DB.feedback.length?DB.feedback.map(item).join(''):emptyState(T('Inbox zero','已清空'),T('No open feedback.','没有待处理反馈。'));
+  if(seg==='reviews') body=DB.reviews.map(r=>item(r,true)).join('');
+  else if(state.sw.feedback) body=DB.feedback.length?DB.feedback.map(r=>item(r,false)).join(''):emptyState(T('Inbox zero','已清空'),T('No open feedback.','没有待处理反馈。'));
   else body=`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
       <span style="width:52px;height:52px;border-radius:14px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('sparkles',22)}</span>
       <div style="font-size:16px;font-weight:500">${T('Feedback is off','反馈已关闭')}</div>
       <div style="font-size:13.5px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Turn on the feedback inbox to collect customer notes.','开启反馈以收集客户留言。')}</div>
       <button class="cta" style="width:auto;padding:12px 30px;font-size:15px" onclick="APP.cmd('sw','feedback')">${T('Enable','开启')}</button></div>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
-      ${segBtn('reviews',T('Reviews','评价'))}${segBtn('feedback',T('Feedback','反馈'))}</div>${body}</div>`;
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;flex:1">
+      ${segBtn('reviews',T('Reviews','评价'))}${segBtn('feedback',T('Feedback','反馈'))}</div>
+      ${seg==='reviews'&&unseenCount>0?`<button onclick="APP.cmd('markAllReviewsRead')" style="font-size:13px;font-weight:500;color:var(--text-primary);background:none;border:none;cursor:pointer;font-family:inherit;white-space:nowrap;padding:6px 2px">${T('Mark all read','全部已读')}</button>`:''}
+    </div>${body}</div>`;
 }
 
 /* ==========================================================================
