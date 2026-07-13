@@ -1704,7 +1704,13 @@ function dashRender(skipId) {
     const r = rects[el.dataset.block];
     if (!r) { el.style.left = el.style.top = el.style.width = el.style.height = ''; el.removeAttribute('data-tier'); return; }
     el.dataset.tier = r.tier;
-    if (el.dataset.block === skipId) return;
+    // Only honour the skip while a drag is genuinely live for THIS block. A
+    // dashRender(dragId) call queued via the requestAnimationFrame retry above
+    // (host.clientWidth was 0 at call time) carries its dragId across frames —
+    // if the drag finishes (finish() clears _dashDrag + repaints cleanly)
+    // before that deferred call fires, the stale dragId would otherwise still
+    // match here and skip painting this card forever after a clean drag.
+    if (el.dataset.block === skipId && _dashDrag && _dashDrag.live && _dashDrag.id === skipId) return;
     el.style.left = r.x + 'px'; el.style.top = r.y + 'px';
     el.style.width = r.w + 'px'; el.style.height = r.h + 'px';
   });
