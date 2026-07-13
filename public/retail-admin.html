@@ -2297,6 +2297,9 @@
       /* Attention, never alarm: amber tint, amber ink, no red. */
       #tab-customers .cul-stat.alert { background: var(--tacet-amber-tint); border-color: rgba(201,149,74,.45); }
       #tab-customers .cul-stat.alert :is(.lbl, .fig, .sub) { color: var(--tacet-amber-ink); }
+      /* Blocked is a 5th tile beyond the always-visible four — when it's real,
+         give it the full row rather than squeezing into one grid cell. */
+      #tab-customers .cul-stat#cu-kpi-blocked-tile:not(.is-hidden) { grid-column: 1 / -1; }
 
       /* Filter bar — search, the cuts you actually reach for, then the selects. */
       #tab-customers .cul-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
@@ -2685,15 +2688,17 @@
         </button>
       </div>
 
-      <!-- Roster pulse — Total, New today, Returning rate always show; Blocked
-           joins as a 4th card only when real. "Active base" is gone: it was
-           always total minus blocked. The Blocked card hides itself at zero and
-           only turns amber when it's real. -->
+      <!-- Roster pulse — Buyers, New today, Returning rate, Never ordered
+           always show; Blocked joins as a 5th card, full-width, only when
+           real. "Total customers" is gone: it only ever grew, so it couldn't
+           flag anything. Buyers is the same denominator Returning rate always
+           used, just surfaced on its own; Never ordered is the signup-to-
+           purchase gap that number used to hide. -->
       <div class="cul-stats" id="cu-stats">
         <div class="cul-stat">
-          <div class="lbl">Total customers · 顾客总数</div>
-          <div class="fig" id="cu-kpi-total">—</div>
-          <div class="sub">all accounts · 全部账户</div>
+          <div class="lbl">Buyers · 买家</div>
+          <div class="fig" id="cu-kpi-buyers">—</div>
+          <div class="sub" id="cu-kpi-buyers-sub">&nbsp;</div>
         </div>
         <div class="cul-stat">
           <div class="lbl">New today · 今日新增</div>
@@ -2708,6 +2713,11 @@
           <div class="fig" id="cu-kpi-returning">—</div>
           <div class="sub" id="cu-kpi-returning-sub">&nbsp;</div>
         </div>
+        <div class="cul-stat">
+          <div class="lbl">Never ordered · 从未下单</div>
+          <div class="fig" id="cu-kpi-neverordered">—</div>
+          <div class="sub" id="cu-kpi-neverordered-sub">&nbsp;</div>
+        </div>
         <div class="cul-stat is-hidden" id="cu-kpi-blocked-tile">
           <div class="lbl">Blocked · 已封禁</div>
           <div class="fig" id="cu-kpi-blocked">—</div>
@@ -2715,7 +2725,7 @@
         </div>
       </div>
       <!-- Swipe-dot pager (phone only) — signals the stat strip scrolls sideways. -->
-      <div class="fc-kpi-dots" id="cu-stat-dots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i></div>
+      <div class="fc-kpi-dots" id="cu-stat-dots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><i></i></div>
       <!-- Phone-only tier filter — sticky chip row mirroring the Orders status
            chips. Drives the existing #cu-tier <select> + cuLoad so there's one
            filter source of truth. Hidden on desktop (the <select> is shown). -->

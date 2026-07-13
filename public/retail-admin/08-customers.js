@@ -83,15 +83,25 @@ function cuRenderKpis() {
   const activeBase = (d.tiers || []).reduce((s, t) => s + Number(t.n || 0), 0);
   const total = _CU_KPI_TOTAL != null ? _CU_KPI_TOTAL : activeBase;
   _CU_BLOCKED = Math.max(0, total - activeBase);
-  dashCountUp($('#cu-kpi-total'), total);
+  // Buyers — accounts with at least one order. Same figure Returning rate
+  // has always divided by; now it leads the strip instead of raw signups.
+  const ret = _CU_KPI_RETURNING;
+  const buyers = (ret && typeof ret.buyers === 'number') ? ret.buyers : null;
+  dashCountUp($('#cu-kpi-buyers'), buyers != null ? buyers : 0);
   dashCountUp($('#cu-kpi-new'), Number(d.kpis && d.kpis.new_customers || 0));
   // Returning rate — share of buyers who came back for a 2nd order. No
   // buyers yet = nothing to divide, so the tile shows a dash rather than 0%.
-  const ret = _CU_KPI_RETURNING;
   const retFig = $('#cu-kpi-returning');
   if (retFig) {
     if (ret && ret.buyers > 0) retFig.textContent = Math.round(ret.returners / ret.buyers * 100) + '%';
     else retFig.textContent = '—';
+  }
+  // Never ordered — total minus buyers. The signup-to-purchase gap the old
+  // "Total customers" tile hid; same numbers, framed as the one worth acting on.
+  const neverFig = $('#cu-kpi-neverordered');
+  if (neverFig) {
+    if (buyers != null && total > 0) dashCountUp(neverFig, Math.max(0, total - buyers));
+    else neverFig.textContent = '—';
   }
   // Nobody blocked = nothing to show. An empty state shouldn't own a card, so
   // the tile (and its swipe dot, and the filter chip) simply aren't there.
@@ -104,7 +114,7 @@ function cuRenderKpis() {
   const dots = document.getElementById('cu-stat-dots');
   if (dots) {
     const pips = dots.querySelectorAll('i');
-    if (pips[3]) pips[3].style.display = _CU_BLOCKED > 0 ? '' : 'none';
+    if (pips[4]) pips[4].style.display = _CU_BLOCKED > 0 ? '' : 'none';
   }
   const chip = $('#cu-seg-blocked');
   if (chip) {
@@ -150,6 +160,23 @@ function cuRepaintKpis() {
     retSub.textContent = (ret && ret.buyers > 0)
       ? cuT(`${ret.returners} of ${ret.buyers} buyers`, `${ret.buyers} 位买家中 ${ret.returners} 位`)
       : cuT('no orders yet', '暂无订单');
+  }
+  const buySub = $('#cu-kpi-buyers-sub');
+  if (buySub) {
+    const ret = _CU_KPI_RETURNING;
+    buySub.textContent = (ret && ret.buyers > 0 && _CU_KPI_TOTAL != null)
+      ? cuT(`of ${_CU_KPI_TOTAL} accounts`, `共 ${_CU_KPI_TOTAL} 个账户`)
+      : cuT('no orders yet', '暂无订单');
+  }
+  const neverSub = $('#cu-kpi-neverordered-sub');
+  if (neverSub) {
+    const ret = _CU_KPI_RETURNING;
+    if (ret && typeof ret.buyers === 'number' && _CU_KPI_TOTAL) {
+      const pct = Math.round((_CU_KPI_TOTAL - ret.buyers) / _CU_KPI_TOTAL * 100);
+      neverSub.textContent = cuT(`${pct}% of accounts`, `占账户 ${pct}%`);
+    } else {
+      neverSub.textContent = '—';
+    }
   }
   const bsub = $('#cu-kpi-blocked-sub');
   if (bsub) bsub.textContent = cuT('tap the chip to review', '点标签查看');
