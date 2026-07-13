@@ -2666,11 +2666,12 @@ function tdAttnRender() {
   const wasQuiet = block && block.classList.contains('is-quiet');
   if (!cards.length) {
     // The note only ever shows in Arrange mode (the whole card is display:none
-    // otherwise), so it explains why a quiet card sits at the bottom and can't
-    // be dragged: it comes back up on its own when there's something to do.
+    // otherwise), so it spells out why this card sits parked at the bottom and
+    // can't be dragged: it's empty, so it's off the dashboard for now, and it
+    // reappears in its own spot the moment something needs attention.
     host.innerHTML = `<div class="td-quiet-note">`
-      + `<b>${escapeHtml(cuT('Quiet right now.', '目前无待办。'))}</b>`
-      + `<span>${escapeHtml(cuT('Moves back up on its own when something needs you.', '有待办时会自动回到上方。'))}</span>`
+      + `<b>${escapeHtml(cuT('Nothing needs you right now.', '目前没有待办。'))}</b>`
+      + `<span>${escapeHtml(cuT('This card is off your dashboard while it’s empty. It comes back in its usual spot on its own the moment something needs attention — no need to place it.', '空闲时这张卡片不会显示在仪表盘上。有待办时会自动回到原来的位置，无需手动摆放。'))}</span>`
       + `</div>`;
     if (block) block.classList.add('is-quiet');
     // Needs-you just emptied — re-solve so the bento closes its gap.

@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v491-dashboard-quiet-parked';
+const CACHE = 'roots-v2-shell-v492-quiet-note-copy';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
