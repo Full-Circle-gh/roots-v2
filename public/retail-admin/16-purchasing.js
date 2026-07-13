@@ -160,6 +160,35 @@
     return `<button class="pu2-btn ghost sm" onclick="${fn}"><span class="pu2-ic">${I.back}</span>${esc(label)}</button>`;
   }
 
+  // ── Tacet page-head + sub-nav (replaces the dead Full Circle .pa-pagetitle) ──
+  // Rendered at the top of every ledger screen so Purchasing carries its own
+  // Tacet identity. Tabs grow as screens ship (Bills / Reorder land next).
+  const PU_TABS = [
+    ['orders',    () => T('Orders', '采购单')],
+    ['suppliers', () => T('Suppliers', '供应商')],
+  ];
+  function puChrome(active) {
+    const meta = {
+      orders:    [T('Orders', '采购单'),   T('Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.', '向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。')],
+      suppliers: [T('Suppliers', '供应商'), T('Who you buy from — contacts, payment terms and their paperwork, all in one place.', '你的供货来源 —— 联系人、付款条件和资质文件,集中在一处。')],
+    };
+    const [title, sub] = meta[active] || meta.orders;
+    const tabs = PU_TABS.map(([key, label]) =>
+      `<button class="pu2-tab${active === key ? ' on' : ''}" onclick="puTab('${key}')">${esc(label())}</button>`).join('');
+    return `
+      <div class="pu2-pagehead">
+        <div class="pu2-eyebrow">${esc(T('Purchasing', '采购'))}</div>
+        <h1 class="pu2-title">${esc(title)}</h1>
+        <p class="pu2-sub">${esc(sub)}</p>
+      </div>
+      <nav class="pu2-subnav">${tabs}</nav>`;
+  }
+  window.puTab = function (tab) {
+    if (tab === 'suppliers') { _screen = 'suppliers'; _supSeg = 'active'; _showDisabled = false; }
+    else { _screen = 'orders'; }
+    paint();
+  };
+
   // ═══════════════════════════════════════════════════════════════════════════
   //  ORDERS — the quiet ledger
   // ═══════════════════════════════════════════════════════════════════════════
@@ -181,7 +210,7 @@
     const supN = _suppliers.filter(s => s.is_active).length;
 
     root().innerHTML = `
-      <!-- Lede moved to the ⓘ next to the page title (prodSetHelp, 09-products.js). -->
+      ${puChrome('orders')}
       <div class="pu2-statline">
         <button class="pu2-stat link${_seg === 'open' ? ' on' : ''}" onclick="puSeg('open')"><b class="pu2-num">${openN}</b>${esc(T('open', '进行中'))}</button>
         <button class="pu2-stat link warn" onclick="puSeg('open')" ${lateN ? '' : 'style="display:none"'}><b class="pu2-num">${lateN}</b>${esc(T('late', '逾期'))}</button>
@@ -835,11 +864,8 @@
     const activeN = _suppliers.filter(s => s.is_active).length;
     const disabledN = _suppliers.filter(s => !s.is_active).length;
     root().innerHTML = `
+      ${puChrome('suppliers')}
       <div class="pu2-head">
-        <div>
-          <p class="pu2-lede" data-lang-block="en" style="margin:0">Who you buy from — contacts, payment terms and their paperwork, all in one place.</p>
-          <p class="pu2-lede" data-lang-block="cn" style="margin:0">你的供货来源 —— 联系人、付款条件和资质文件,集中在一处。</p>
-        </div>
         <span class="spacer"></span>
         <button class="pu2-btn" data-cap="purchasing:edit" onclick="puImportOpen()"><span class="pu2-ic">${I.up}</span>${esc(T('Import CSV', '导入 CSV'))}</button>
         <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewSupplier()"><span class="pu2-ic">${I.plus}</span>${esc(T('New supplier', '新建供应商'))}</button>
@@ -883,6 +909,21 @@
     let rows = _suppliers.filter(s => _supSeg === 'disabled' ? !s.is_active : s.is_active);
     if (q) rows = rows.filter(s => `${s.name} ${s.name_cn || ''} ${s.contact_name || ''}`.toLowerCase().includes(q));
     if (!rows.length) {
+      // A brand-new workspace (no active suppliers at all, no search) gets the
+      // teaching empty state — start clean, build your own list.
+      const trulyEmpty = _supSeg === 'active' && !q && !_suppliers.some(s => s.is_active);
+      if (trulyEmpty) {
+        body.innerHTML = `<tr><td colspan="5"><div class="pu2-empty">
+          <div class="pu2-empty-ico">${I.box}</div>
+          <h3>${esc(T('No suppliers yet', '还没有供应商'))}</h3>
+          <p>${esc(T('Add the businesses you buy from. Once they’re here, every order and bill can lean on them — and each product remembers who sells it and for how much.', '添加你的供货商。加入后,采购单和账单都能用上它们 —— 每件商品也会记住由谁供货、价格多少。'))}</p>
+          <div class="pu2-actions" style="justify-content:center">
+            <button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewSupplier()"><span class="pu2-ic">${I.plus}</span>${esc(T('Add your first supplier', '添加第一个供应商'))}</button>
+            <button class="pu2-btn" data-cap="purchasing:edit" onclick="puImportOpen()"><span class="pu2-ic">${I.up}</span>${esc(T('Import from a spreadsheet', '从表格导入'))}</button>
+          </div>
+        </div></td></tr>`;
+        return;
+      }
       body.innerHTML = `<tr><td colspan="5"><div class="pu2-emptyline">${esc(_supSeg === 'disabled' && !_showDisabled ? T('Turn on the Disabled tab to load these.', '点击停用标签加载。') : T('No suppliers here.', '暂无供应商。'))}</div></td></tr>`;
       return;
     }
