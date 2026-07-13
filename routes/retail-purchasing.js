@@ -621,6 +621,47 @@ router.get('/api/retail-admin/reorder', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: out });
 });
 
+// Back-order the shortfall: make a fresh draft PO holding the outstanding
+// quantity of every line that arrived short (received < ordered), linked to the
+// original via backorder_of. Lines never received at all stay on the original
+// order — only genuine shortfalls carry over.
+router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (req, res) => {
+  const src = getRetailPO(req.params.id);
+  if (!src) return res.status(404).json({ success: false, error: 'not_found' });
+  const lines = db.prepare(`
+    SELECT * FROM po_line_items WHERE po_id = ? AND (COALESCE(qty_received, qty) < qty) ORDER BY sort_order, id
+  `).all(src.id);
+  if (!lines.length) return res.status(400).json({ success: false, error: 'nothing_outstanding' });
+  try {
+    const po_number = nextRetailPONumber();
+    const tx = db.transaction(() => {
+      const r = db.prepare(`INSERT INTO purchase_orders
+        (po_number, date, delivery_date, status, supplier, notes, source, scope, store_id, created_by, backorder_of)
+        VALUES (?,?,?,'Requested',?,?,'backorder','retail',?,NULL,?)`).run(
+        po_number, gzToday(), null, src.supplier || null,
+        `Back-order from ${src.po_number}`, src.store_id, src.id);
+      const newId = r.lastInsertRowid;
+      const ins = db.prepare(`INSERT INTO po_line_items
+        (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
+         expense_category, supplier_name, purchase_channel, sort_order)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+      lines.forEach((l, i) => {
+        const outstanding = (parseFloat(l.qty) || 0) - (l.qty_received == null ? 0 : parseFloat(l.qty_received) || 0);
+        ins.run(newId, l.store_product_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit || 'pcs',
+          l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), l.expense_category,
+          l.supplier_name || null, l.purchase_channel || null, i);
+      });
+      return newId;
+    });
+    const newId = tx();
+    logActivity(req.user.id, req.user.username, 'backorder', 'purchase_order', newId, { from: src.id, po_number, scope: 'retail' }, req.ip);
+    res.json({ success: true, id: newId, po_number });
+  } catch (e) {
+    console.error('[retail backorder]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 function insertLineItems(poId, items, headerSupplier) {
   const insertItem = db.prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,

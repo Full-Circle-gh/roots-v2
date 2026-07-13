@@ -771,6 +771,7 @@
     const p = _po;
     if (!p) { _screen = 'orders'; paint(); return; }
     const canReceive = p.status === 'Ordered' || p.status === 'Delivered';
+    const shortN = (p.items || []).filter(i => i.qty_received != null && Number(i.qty_received) < Number(i.qty)).length;
     const expTotal = (p.expenses || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
     root().innerHTML = `
       <div class="pu2-wizhead">
@@ -811,6 +812,7 @@
         ${p.status === 'Ordered' ? `<button class="pu2-btn" data-cap="purchasing:receive" onclick="puAllArrived()">${esc(T('All arrived as ordered', '全部按订单到货'))}</button>` : ''}
         ${p.status === 'Ordered' ? `<button class="pu2-btn ghost" data-cap="purchasing:edit" onclick="puSetStatus('Requested')">${esc(T('Back to draft', '退回草稿'))}</button>` : ''}
         ${p.status === 'Delivered' ? `<button class="pu2-btn" data-cap="purchasing:edit" onclick="puReorder(${p.id})">${esc(T('Order again', '再次采购'))}</button>` : ''}
+        ${shortN ? `<button class="pu2-btn" data-cap="purchasing:edit" onclick="puBackorder()">${esc(T(`Back-order ${shortN} short`, `${shortN} 项缺货补单`))}</button>` : ''}
         <span class="spacer"></span>
         ${p.status !== 'Cancelled' && p.status !== 'Delivered' ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puSetStatus('Cancelled')">${esc(T('Cancel order', '取消采购单'))}</button>` : ''}
       </div>
@@ -917,6 +919,17 @@
     } catch (e) { toast(e.message, 'err'); }
   };
   window.puAllArrived = function () { puSetStatus('Delivered'); };
+  window.puBackorder = async function () {
+    if (!_po) return;
+    try {
+      const r = await api('/api/retail-admin/purchases/' + _po.id + '/backorder', { method: 'POST' });
+      toast(T('Back-order created ✓', '已生成缺货补单 ✓'), 'ok');
+      await loadPOs();
+      puOpenPO(r.id);
+    } catch (e) {
+      toast(e.code === 'nothing_outstanding' ? T('No short items to back-order', '没有缺货项目') : e.message, 'err');
+    }
+  };
   window.puSetStatus = async function (status) {
     if (!_po) return;
     if (status === 'Cancelled' && !confirm(T('Cancel this order?', '确定取消该采购单？'))) return;
