@@ -1320,7 +1320,7 @@ function paRenderHighlights() {
     tiles.push(_paHiTile({
       cls: 'up', icon: PA_HI_ICONS.up, cap: cuT('Rising', '上升中'),
       badge: { html: PA_HI_ICONS.box }, name: pname(PA_HI.rising),
-      meta: { cls: 'up', html: `<b><svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%</b>` + cuT(' vs last week', ' 较上周') },
+      meta: { cls: 'up', html: `<b class="pa-hi-trend"><svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%</b>` + cuT(' vs last week', ' 较上周') },
       open: `paOpenEdit(${PA_HI.rising.id})`,
     }));
   } else {
