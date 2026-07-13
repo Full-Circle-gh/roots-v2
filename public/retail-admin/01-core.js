@@ -756,7 +756,7 @@ const CAT_ICON = {
   grip: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="5" r="1.7"/><circle cx="15" cy="5" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="19" r="1.7"/><circle cx="15" cy="19" r="1.7"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
   pen:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
-  x:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><path d="M6 7l1 13a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-13"/><path d="M10 11v6M14 11v6"/></svg>',
   box:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>',
   arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
 };
@@ -938,7 +938,7 @@ function catRenderPane() {
   host.innerHTML = `
     <div class="cat2-panehead cat2-row" id="cat2-tophead">
       <div style="min-width:0">
-        <h3 tabindex="0" title="${escapeAttr(cuT('Click to rename', '点击重命名'))}" onclick="catOpenRename('top',${catSel},-1)">${escapeHtml(t.name || cuT('Untitled', '未命名'))}</h3>
+        <h3 tabindex="0" title="${escapeAttr(cuT('Click to rename', '点击重命名'))}" onclick="catOpenRename('top',${catSel},-1)">${escapeHtml(t.name || cuT('Untitled', '未命名'))}<button class="cat2-icon cat2-pen-inline" type="button" title="${escapeAttr(cuT('Rename', '重命名'))}" onclick="event.stopPropagation();catOpenRename('top',${catSel},-1)">${CAT_ICON.pen}</button></h3>
         <div class="cat2-panemeta">
           <span>${escapeHtml(cuT(`${fcNum(subs.length)} subcategories`, `${fcNum(subs.length)} 个子分类`))}</span>
           <span>·</span>
@@ -947,8 +947,7 @@ function catRenderPane() {
         </div>
       </div>
       <div class="end">
-        <button class="cat2-btn cat2-btn-ghost" type="button" onclick="catOpenRename('top',${catSel},-1)">${CAT_ICON.pen}<span>${escapeHtml(cuT('Rename', '重命名'))}</span></button>
-        <button class="cat2-btn cat2-btn-danger" type="button" onclick="catRemoveTop(${catSel})">${escapeHtml(cuT('Remove', '删除'))}</button>
+        <button class="cat2-icon danger" type="button" title="${escapeAttr(cuT('Remove category', '删除主分类'))}" onclick="catRemoveTop(${catSel})">${CAT_ICON.trash}</button>
       </div>
     </div>
     <div id="cat2-tophead-rename"></div>
@@ -972,12 +971,11 @@ function catSubRowHtml(s, si) {
        ondragover="catDragOver(event,'sub',${si})" ondrop="catDrop(event,'sub',${si})" ondragleave="catDragLeave(event)">
     <span class="cat2-grip" draggable="true" title="${escapeAttr(cuT('Drag to reorder', '拖动排序'))}"
           ondragstart="catDragStart(event,'sub',${si})" ondragend="catDragEnd()">${CAT_ICON.grip}</span>
-    <span class="cat2-subname" tabindex="0" title="${escapeAttr(cuT('Click to rename', '点击重命名'))}" onclick="catOpenRename('sub',${catSel},${si})">${escapeHtml(s.name || cuT('Untitled', '未命名'))}</span>
+    <span class="cat2-subname" tabindex="0" title="${escapeAttr(cuT('Click to rename', '点击重命名'))}" onclick="catOpenRename('sub',${catSel},${si})">${escapeHtml(s.name || cuT('Untitled', '未命名'))}<button class="cat2-icon cat2-pen-inline" type="button" title="${escapeAttr(cuT('Rename', '重命名'))}" onclick="event.stopPropagation();catOpenRename('sub',${catSel},${si})">${CAT_ICON.pen}</button></span>
     ${hidden ? `<span class="cat2-pill cat2-pill-hidden">${escapeHtml(cuT('hidden', '已隐藏'))}</span>` : ''}
     <span class="n">${escapeHtml(c ? cuT(`${fcNum(c.n)} products`, `${fcNum(c.n)} 件产品`) : cuT('new', '新建'))}</span>
     <span class="cat2-acts">
-      <button class="cat2-icon" type="button" title="${escapeAttr(cuT('Rename', '重命名'))}" onclick="catOpenRename('sub',${catSel},${si})">${CAT_ICON.pen}</button>
-      <button class="cat2-icon danger" type="button" title="${escapeAttr(cuT('Remove subcategory', '删除子分类'))}" onclick="catRemoveSub(${catSel},${si})">${CAT_ICON.x}</button>
+      <button class="cat2-icon danger" type="button" title="${escapeAttr(cuT('Remove subcategory', '删除子分类'))}" onclick="catRemoveSub(${catSel},${si})">${CAT_ICON.trash}</button>
     </span>
   </div>`;
 }

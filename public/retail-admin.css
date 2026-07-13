@@ -9365,8 +9365,15 @@
   .cat2-icon.danger:hover { background: var(--td-brick-tint, #F6E7E3); color: var(--td-brick-ink, #B4533E); }
   .cat2-row:hover .cat2-grip,
   .cat2-row:hover .cat2-acts,
+  .cat2-row:hover .cat2-pen-inline,
   .cat2-row:focus-within .cat2-grip,
-  .cat2-row:focus-within .cat2-acts { opacity: 1; }
+  .cat2-row:focus-within .cat2-acts,
+  .cat2-row:focus-within .cat2-pen-inline { opacity: 1; }
+
+  /* rename pencil sitting right next to the name it edits, not bundled with
+     delete at the far end of the row; reveals with the rest of the row's
+     actions rather than only when the name itself is hovered */
+  .cat2-pen-inline { opacity: 0; padding: 3px; vertical-align: middle; }
 
   /* drag cues: one insertion line on the edge the row will land against */
   .cat2-dragging { opacity: .45; }
@@ -9465,7 +9472,7 @@
   @media (max-width: 880px) {
     .cat2-shelf { grid-template-columns: 1fr; }
     .cat2-rename-fields { grid-template-columns: 1fr; }
-    .cat2-grip, .cat2-acts { opacity: 1; }
+    .cat2-grip, .cat2-acts, .cat2-pen-inline { opacity: 1; }
   }
 
   /* ═══════════════════════════════════════════════════════════════════════
