@@ -7887,7 +7887,24 @@
        Reports and the New-customer action beside Customers. */
     #tab-orders > h2,
     #tab-reports .db-head > h2,
-    #tab-customers .cul-head > h2 { display: none; }
+    #tab-customers .cul-head > h2,
+    /* Secondary pages — same redundant title. Any descriptive subtitle under it
+       stays and reads as the page's lede; header-row actions (Sales) stay too. */
+    #tab-snippets > h2,
+    #tab-topup > h2,
+    #tab-reviews > h2,
+    #tab-feedback > h2,
+    #tab-media > h2,
+    #tab-about > h2,
+    #tab-legal > h2,
+    #tab-faq > h2,
+    /* meituan / guanyi / eleme deliberately excluded — no rail button, so their
+       crumb would be empty; they keep their in-content title. */
+    #tab-social h2,
+    #tab-vouchers .td-greet-col > h2,
+    #tab-delivery .dlv-view[data-dlv="hub"] > h2,
+    #tab-sales .td-head > h2,
+    #tab-sharing .sc-h2 { display: none; }
   }
   @media (max-width: 720px) {
     .tb-page { display: none; }
