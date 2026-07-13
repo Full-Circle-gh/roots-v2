@@ -3013,35 +3013,6 @@
          "Showing N of your … · Select all · See all products". Drawn by paRenderKpis(). -->
     <div class="pa-recap-banner" id="pa-recap-banner" hidden></div>
 
-    <!-- Stock pulse — what MOVED today, where the Recap band above says what
-         the catalogue IS right now. Four small cards fed by the same /activity
-         summary the ledger uses (prodLoadStock, 09-products.js); every card is
-         a door into the Stock activity sub-view. Amber lives ONLY on the
-         hit-zero card and only while its count is above zero. Values and hints
-         are JS-painted (the hints follow the live language via cuT). -->
-    <div class="stk-minis" id="stk-minis" data-cap="activity:view">
-      <button type="button" class="stk-mini" onclick="prodShowView('activity')">
-        <span class="lbl">Stock activity · 库存流水</span>
-        <span class="val" id="stk-mini-moves">—</span>
-        <span class="hint" id="stk-mini-moves-hint" data-no-i18n></span>
-      </button>
-      <button type="button" class="stk-mini" onclick="prodShowView('activity')">
-        <span class="lbl">Units out · 出库</span>
-        <span class="val" id="stk-mini-out">—</span>
-        <span class="hint" id="stk-mini-out-hint" data-no-i18n></span>
-      </button>
-      <button type="button" class="stk-mini" onclick="prodShowView('activity')">
-        <span class="lbl">Units in · 入库</span>
-        <span class="val is-in" id="stk-mini-in">—</span>
-        <span class="hint" id="stk-mini-in-hint" data-no-i18n></span>
-      </button>
-      <button type="button" class="stk-mini" id="stk-mini-zero-card" onclick="prodShowView('activity')">
-        <span class="lbl">Hit zero today · 今日售罄</span>
-        <span class="val" id="stk-mini-zero">—</span>
-        <span class="hint" id="stk-mini-zero-hint" data-no-i18n></span>
-      </button>
-    </div>
-
     <div class="pa-toolbar">
       <input id="pa-search" type="text" data-ph-en="Search by name, SKU…" data-ph-cn="按名称、SKU 搜索…" placeholder="Search by name, SKU…">
       <select id="pa-filter" title="Filter by category · 按分类筛选">
@@ -3483,6 +3454,34 @@
          new address (products tab active + this view shown). -->
     <div id="prod-view-activity" style="display:none">
     <!-- Helper copy moved to the ⓘ next to the page title (prodSetHelp). -->
+
+    <!-- Stock pulse — what MOVED today. Four small cards fed by the same
+         /activity summary the ledger below uses (prodLoadStock, 09-products.js).
+         Amber lives ONLY on the hit-zero card and only while its count is
+         above zero. Values and hints are JS-painted (the hints follow the
+         live language via cuT). -->
+    <div class="stk-minis" id="stk-minis" data-cap="activity:view">
+      <button type="button" class="stk-mini">
+        <span class="lbl">Stock activity · 库存流水</span>
+        <span class="val" id="stk-mini-moves">—</span>
+        <span class="hint" id="stk-mini-moves-hint" data-no-i18n></span>
+      </button>
+      <button type="button" class="stk-mini">
+        <span class="lbl">Units out · 出库</span>
+        <span class="val" id="stk-mini-out">—</span>
+        <span class="hint" id="stk-mini-out-hint" data-no-i18n></span>
+      </button>
+      <button type="button" class="stk-mini">
+        <span class="lbl">Units in · 入库</span>
+        <span class="val is-in" id="stk-mini-in">—</span>
+        <span class="hint" id="stk-mini-in-hint" data-no-i18n></span>
+      </button>
+      <button type="button" class="stk-mini" id="stk-mini-zero-card">
+        <span class="lbl">Hit zero today · 今日售罄</span>
+        <span class="val" id="stk-mini-zero">—</span>
+        <span class="hint" id="stk-mini-zero-hint" data-no-i18n></span>
+      </button>
+    </div>
 
     <!-- Channel switcher: quiet text tabs, one per sales channel. Picking a
          tab scopes the digest, ledger and export. Counts filled in by JS. -->

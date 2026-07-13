@@ -557,10 +557,10 @@ function prodRenderStock() {
   set('stk-mini-out',   d.out ? '−' + d.out.toLocaleString() : '0');
   set('stk-mini-in',    d.inn ? '+' + d.inn.toLocaleString() : '0');
   set('stk-mini-zero',  d.zero.toLocaleString());
-  set('stk-mini-moves-hint', cuT('open activity ›', '查看流水 ›'));
+  set('stk-mini-moves-hint', cuT('today so far', '今日累计'));
   set('stk-mini-out-hint',   cuT('sold or synced out', '售出或同步出库'));
   set('stk-mini-in-hint',    cuT('restocks', '补货入库'));
-  set('stk-mini-zero-hint',  d.zero ? cuT('see the names ›', '查看名称 ›') : cuT('nothing waiting', '无需处理'));
+  set('stk-mini-zero-hint',  d.zero ? cuT('see below ›', '见下方 ›') : cuT('nothing waiting', '无需处理'));
   document.getElementById('stk-mini-zero-card')?.classList.toggle('warn', d.zero > 0);
   const dot = document.getElementById('stk-view-dot');
   if (dot) dot.hidden = !(d.zero > 0);
