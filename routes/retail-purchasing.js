@@ -339,6 +339,59 @@ router.get('/api/retail-admin/purchases/:id/history', requireRetailAdmin, (req, 
   res.json({ success: true, data: out });
 });
 
+// Per-product supplier price list: every supplier we've bought THIS product
+// from on a retail PO, with last price + who + average. Powers the order
+// picker's "who sells this / what we paid last time". Derived from PO history
+// only — a brand-new tenant with no orders gets an empty list, never someone
+// else's suppliers. Preferred = who we buy it from most; cheapest = lowest last
+// price.
+router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (req, res) => {
+  const spid = parseInt(req.params.spid, 10);
+  if (!spid) return res.status(400).json({ success: false, error: 'bad_id' });
+  // Group by the resolved supplier (line supplier wins, else the PO's supplier).
+  // Positional GROUP BY 1 so the alias never shadows a real column.
+  const rows = db.prepare(`
+    SELECT COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') AS supplier,
+           COUNT(*)               AS order_count,
+           SUM(pli.qty)           AS total_qty,
+           AVG(pli.cost_per_unit) AS avg_cost,
+           MIN(pli.cost_per_unit) AS min_cost,
+           MAX(pli.cost_per_unit) AS max_cost
+      FROM po_line_items pli
+      JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
+     GROUP BY 1
+     ORDER BY order_count DESC, MAX(po.date) DESC`).all(spid);
+  const lastStmt = db.prepare(`
+    SELECT pli.cost_per_unit AS cost, po.date, po.po_number
+      FROM po_line_items pli
+      JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
+       AND COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') = ?
+     ORDER BY po.date DESC, pli.id DESC LIMIT 1`);
+  const suppliers = rows.map(r => {
+    const last = lastStmt.get(spid, r.supplier) || {};
+    return {
+      supplier: r.supplier || null,
+      order_count: r.order_count, total_qty: r.total_qty,
+      avg_cost: r.avg_cost, min_cost: r.min_cost, max_cost: r.max_cost,
+      last_cost: last.cost != null ? last.cost : r.avg_cost,
+      last_date: last.date || null, last_po_number: last.po_number || null,
+    };
+  });
+  const overall = db.prepare(`
+    SELECT pli.cost_per_unit AS cost, po.date, po.po_number,
+           COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier) AS supplier
+      FROM po_line_items pli
+      JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
+     ORDER BY po.date DESC, pli.id DESC LIMIT 1`).get(spid) || null;
+  res.json({ success: true, data: {
+    store_product_id: spid, suppliers,
+    last: overall ? { cost: overall.cost, date: overall.date, supplier: overall.supplier, po_number: overall.po_number } : null,
+  } });
+});
+
 function insertLineItems(poId, items, headerSupplier) {
   const insertItem = db.prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,

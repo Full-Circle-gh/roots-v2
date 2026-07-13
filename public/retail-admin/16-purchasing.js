@@ -44,6 +44,9 @@
   let _pos = [];             // PO header rows
   const _prodCache = {};     // storeId → stock rows (picker + suggestions)
   let _hist = {};            // store_product_id → last-paid, for the open PO
+  const _supCache = {};      // store_product_id → { suppliers[], last } price list
+  let _pickP = null;         // product the supplier popover is open for
+  let _pickInfo = null;      // its loaded price list
   let _screen = 'orders';    // orders | wizard | receive | suppliers | supplier | import
   let _seg = 'open';         // orders segment: open | received | all
   let _supSeg = 'active';    // suppliers segment: active | disabled
@@ -65,6 +68,7 @@
     down:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/></svg>',
     box:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>',
     send:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+    star:   '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.9 6.3 6.8.6-5.1 4.5 1.5 6.7L12 17l-6 3.6 1.5-6.7-5.1-4.5 6.8-.6z"/></svg>',
   };
 
   // ── status → plain word + pill tone ───────────────────────────────────────
@@ -128,6 +132,16 @@
       _prodCache[storeId] = r.data || [];
     }
     return _prodCache[storeId];
+  }
+  // The per-product supplier price list (who sells it, what we paid last time).
+  // Cached per product; a product never bought before returns { suppliers: [] }.
+  async function loadProductSuppliers(spid) {
+    if (_supCache[spid]) return _supCache[spid];
+    try {
+      const r = await api('/api/retail-admin/products/' + spid + '/suppliers');
+      _supCache[spid] = r.data || { suppliers: [] };
+    } catch (_) { _supCache[spid] = { suppliers: [] }; }
+    return _supCache[spid];
   }
 
   // ── paint dispatch ────────────────────────────────────────────────────────
@@ -287,7 +301,7 @@
             store_product_id: i.store_product_id, name_en: i.name_en, name_cn: i.name_cn,
             sku: i.sku, qty: i.qty, unit: i.unit, cost_per_unit: i.cost_per_unit,
             expense_category: i.expense_category || '', purchase_channel: i.purchase_channel || '',
-            current_stock: i.current_stock,
+            supplier_name: i.supplier_name || '', current_stock: i.current_stock,
           })),
         };
         _wstep = 2; _screen = 'wizard'; paint();
@@ -404,6 +418,8 @@
           <div id="pu2-picker-list" class="pu2-picker-list" style="display:none"></div>
         </div>
 
+        <div id="pu2-suppop" class="pu2-suppop" style="display:none"></div>
+
         <div id="pu2-suggest"></div>
 
         <table class="pu2-tbl pu2-lines" style="margin-top:18px">
@@ -461,8 +477,10 @@
     }
     body.innerHTML = _edit.items.map((it, i) => {
       const lineTotal = (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0);
+      const supLabel = it.supplier_name ? esc(it.supplier_name) : esc(T('Choose supplier', '选择供应商'));
       return `<tr>
-        <td>${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}</td>
+        <td>${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}
+          <div class="pu2-supline"><span class="pu2-supchip" onclick="puPick(${it.store_product_id})">${supLabel} <span class="swap">▾</span></span></div></td>
         <td class="right pu2-num" style="color:var(--td-text2)">${it.current_stock != null ? it.current_stock : '—'}</td>
         <td>
           <span class="pu2-qty">
@@ -490,7 +508,12 @@
   function lastPaid(it) {
     const h = _hist[it.store_product_id];
     if (!h || !h.previous) return '';
-    return `<div class="pu2-lasthint pu2-num">${esc(T('last paid', '上次'))} ${money(h.previous.cost_per_unit)}</div>`;
+    const last = parseFloat(h.previous.cost_per_unit);
+    const cur = parseFloat(it.cost_per_unit) || 0;
+    if (cur > last + 1e-9) {
+      return `<div class="pu2-lasthint pu2-num pricewarn">▲ ${esc(T('was', '上次'))} ${money(last)}</div>`;
+    }
+    return `<div class="pu2-lasthint pu2-num">${esc(T('last paid', '上次'))} ${money(last)}</div>`;
   }
 
   window.puLine = function (i, field, val) {
@@ -526,22 +549,86 @@
       list.style.display = '';
     }, 150);
   };
+  // Picking a product (from search or a suggestion, or tapping a line's supplier
+  // chip) opens the supplier popover: who sells it and what we paid last time.
+  // With no history it just drops a blank line — no invented vendors.
   window.puPick = async function (productId) {
     const prods = await products(_edit.store_id);
     const p = prods.find(x => x.product_id === productId);
     if (!p) return;
-    const existing = _edit.items.find(it => it.store_product_id === productId);
-    if (existing) existing.qty = (parseFloat(existing.qty) || 0) + 1;
-    else _edit.items.push({
-      store_product_id: p.product_id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
-      qty: 1, unit: 'pcs', cost_per_unit: 0, expense_category: '门店进货 Retail stock',
-      purchase_channel: '', current_stock: p.physical_qty,
-    });
     const pk = document.getElementById('pu2-picker');
     if (pk) pk.value = '';
     const pl = document.getElementById('pu2-picker-list');
     if (pl) pl.style.display = 'none';
+    const info = await loadProductSuppliers(productId);
+    if (info.last) _hist[productId] = { previous: { cost_per_unit: info.last.cost } };
+    _pickP = p; _pickInfo = info;
+    if (info.suppliers && info.suppliers.length) renderSupPop();
+    else addOrSetLine(p, _edit.supplier || '', null);   // nothing on file → blank line
+  };
+
+  // Add the line if new, or just retarget its supplier + price if it's already
+  // on the order. Never bumps quantity — that's the steppers' job.
+  function addOrSetLine(p, supplierName, cost) {
+    let it = _edit.items.find(x => x.store_product_id === p.product_id);
+    if (!it) {
+      it = {
+        store_product_id: p.product_id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku,
+        qty: 1, unit: 'pcs', cost_per_unit: 0, expense_category: '门店进货 Retail stock',
+        purchase_channel: '', current_stock: p.physical_qty, supplier_name: '',
+      };
+      _edit.items.push(it);
+    }
+    it.supplier_name = supplierName || '';
+    if (cost != null && cost !== '') it.cost_per_unit = cost;
+    puCloseSupPop();
     renderLines(); renderSuggestions();
+  }
+
+  function renderSupPop() {
+    const host = document.getElementById('pu2-suppop');
+    if (!host || !_pickP || !_pickInfo) return;
+    const s = _pickInfo.suppliers || [];
+    const minCost = s.length ? Math.min(...s.map(x => Number(x.last_cost) || Infinity)) : null;
+    host.innerHTML = `
+      <div class="pu2-pop">
+        <div class="pop-head">
+          <b>${nameLabel(_pickP)}</b>
+          <span class="sub pu2-mono">${esc(_pickP.sku || '')}${_pickP.sku ? ' · ' : ''}${esc(T('stock', '库存'))} ${_pickP.physical_qty}</span>
+          <button class="pu2-link" onclick="puCloseSupPop()">${esc(T('Close', '关闭'))}</button>
+        </div>
+        ${s.map((x, idx) => {
+          const preferred = idx === 0;
+          const cheapest = minCost != null && Number(x.last_cost) === minCost && s.length > 1;
+          return `<div class="pu2-suprow${preferred ? ' best' : ''}">
+            <div class="sname">${esc(x.supplier || T('Unrecorded', '未记录'))}${preferred ? ` <span class="pu2-tagstar">${I.star}${esc(T('Preferred', '常用'))}</span>` : ''}</div>
+            <div><div class="lab">${esc(T('Last paid', '上次'))}</div><div class="val pu2-num${cheapest ? ' cheap' : ''}">${money(x.last_cost)}${cheapest ? ' · ' + esc(T('cheapest', '最低')) : ''}</div></div>
+            <div><div class="lab">${esc(T('Average', '均价'))}</div><div class="val pu2-num">${x.avg_cost != null ? money(x.avg_cost) : '—'}</div></div>
+            <div><div class="lab">${esc(T('Bought', '采购'))}</div><div class="val pu2-num">${x.order_count}× · ${esc(x.last_date || '—')}</div></div>
+            <div><button class="pu2-btn sm${preferred ? ' primary' : ''}" onclick="puChooseSupplier(${idx})">${esc(T('Use', '选用'))} ${money(x.last_cost)}</button></div>
+          </div>`;
+        }).join('')}
+        <div class="pu2-suprow manual">
+          <div class="sname">${esc(T('Someone else / type it myself', '其他 / 手动填写'))}</div>
+          <div class="lab" style="grid-column:2 / 5">${esc(T('Adds the line — set the supplier and price by hand.', '先添加,再手动填写供应商与价格。'))}</div>
+          <div><button class="pu2-btn sm" onclick="puChooseSupplier(-1)">${esc(T('Add', '添加'))}</button></div>
+        </div>
+      </div>`;
+    host.style.display = '';
+  }
+
+  window.puChooseSupplier = function (idx) {
+    if (!_pickP || !_pickInfo) return;
+    if (idx < 0) { addOrSetLine(_pickP, _edit.supplier || '', null); return; }
+    const x = (_pickInfo.suppliers || [])[idx];
+    if (!x) return;
+    _hist[_pickP.product_id] = { previous: { cost_per_unit: x.last_cost } };
+    addOrSetLine(_pickP, x.supplier || '', x.last_cost);
+  };
+  window.puCloseSupPop = function () {
+    _pickP = null; _pickInfo = null;
+    const host = document.getElementById('pu2-suppop');
+    if (host) { host.style.display = 'none'; host.innerHTML = ''; }
   };
 
   function wizStep3() {
@@ -585,6 +672,7 @@
         qty: parseFloat(it.qty) || 0, unit: it.unit || 'pcs',
         cost_per_unit: parseFloat(it.cost_per_unit) || 0,
         expense_category: it.expense_category || null, purchase_channel: it.purchase_channel || null,
+        supplier_name: it.supplier_name || null,
       })),
     };
   }

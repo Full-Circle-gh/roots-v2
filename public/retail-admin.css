@@ -9628,6 +9628,37 @@
   #prod-view-purchasing .pu2-pick.muted { color: var(--td-text2); cursor: default; }
   #prod-view-purchasing .pu2-pick .sub { display: inline; margin-left: 6px; }
 
+  /* product → supplier price popover (who sells it, what we paid last time) */
+  #prod-view-purchasing .pu2-suppop { margin-top: 14px; }
+  #prod-view-purchasing .pu2-pop { border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface, #fff);
+    box-shadow: 0 8px 24px rgba(17,26,43,.14); overflow: hidden; max-width: 660px; }
+  #prod-view-purchasing .pu2-pop .pop-head { display: flex; align-items: baseline; gap: 10px; padding: 13px 18px;
+    border-bottom: 1px solid var(--td-border); }
+  #prod-view-purchasing .pu2-pop .pop-head b { font-size: 14px; font-weight: 500; }
+  #prod-view-purchasing .pu2-pop .pop-head .sub { margin-top: 0; }
+  #prod-view-purchasing .pu2-pop .pop-head .pu2-link { margin-left: auto; }
+  #prod-view-purchasing .pu2-suprow { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.1fr auto; align-items: center;
+    gap: 12px; padding: 11px 18px; border-bottom: 1px solid var(--td-border); font-size: 13.5px; }
+  #prod-view-purchasing .pu2-suprow:last-child { border-bottom: none; }
+  #prod-view-purchasing .pu2-suprow.best { background: var(--td-sage-tint); }
+  #prod-view-purchasing .pu2-suprow .sname { font-weight: 500; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+  #prod-view-purchasing .pu2-suprow .lab { font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em; color: var(--td-text2); }
+  #prod-view-purchasing .pu2-suprow .val { font-size: 13.5px; color: var(--td-text); margin-top: 2px; }
+  #prod-view-purchasing .pu2-suprow .val.cheap { color: var(--td-sage-ink); }
+  #prod-view-purchasing .pu2-suprow.manual { color: var(--td-text2); }
+  #prod-view-purchasing .pu2-tagstar { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 500;
+    color: var(--td-amber-ink); }
+  #prod-view-purchasing .pu2-tagstar svg { width: 11px; height: 11px; }
+
+  /* per-line supplier chip */
+  #prod-view-purchasing .pu2-supline { margin-top: 6px; }
+  #prod-view-purchasing .pu2-supchip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--td-text);
+    border: 1px solid var(--td-border); border-radius: 999px; padding: 3px 10px; background: var(--td-surface, #fff);
+    cursor: pointer; white-space: nowrap; transition: border-color .2s cubic-bezier(.16,1,.3,1); }
+  #prod-view-purchasing .pu2-supchip:hover { border-color: var(--td-text2); }
+  #prod-view-purchasing .pu2-supchip .swap { color: var(--td-text2); }
+  #prod-view-purchasing .pu2-lasthint.pricewarn { color: var(--td-amber-ink); }
+
   /* low-stock suggestions */
   #prod-view-purchasing .pu2-sugrow { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
     border: 1px dashed var(--td-border); border-radius: 10px; margin-bottom: 8px; font-size: 13.5px; }
