@@ -147,11 +147,11 @@
   /* Tier / status pills used a translucent overlay tuned for the dark bg.
      Bump opacity so they read on white. SEED = Tea per Full Circle. */
   :root[data-theme="light"] .cu-pill                { background: rgba(18, 22, 26, .06); color: var(--text-3); }
-  :root[data-theme="light"] .cu-pill.brass          { background: rgba(201, 149, 74, .12);  border-color: rgba(201, 149, 74, .30); color: #8a6a2e; }
-  :root[data-theme="light"] .cu-pill.tier-seed      { background: rgba(163, 180, 159, .16);  border-color: rgba(163, 180, 159, .30); color: #4e6b52; }
-  :root[data-theme="light"] .cu-pill.tier-sprout    { background: rgba(163, 180, 159, .14);  border-color: rgba(163, 180, 159, .28); color: #5e7e62; }
-  :root[data-theme="light"] .cu-pill.tier-root      { background: rgba(201, 149, 74, .16);   border-color: rgba(201, 149, 74, .28); color: #8a6a2e; }
-  :root[data-theme="light"] .cu-pill.tier-tree      { background: rgba(201, 149, 74, .20);   border-color: rgba(201, 149, 74, .34); color: #6f521f; }
+  :root[data-theme="light"] .cu-pill.brass          { background: rgba(201, 149, 74, .12);  border-color: rgba(201, 149, 74, .30); color: #8A6425; }
+  :root[data-theme="light"] .cu-pill.tier-seed      { background: rgba(163, 180, 159, .16);  border-color: rgba(163, 180, 159, .30); color: #4A6249; }
+  :root[data-theme="light"] .cu-pill.tier-sprout    { background: rgba(163, 180, 159, .14);  border-color: rgba(163, 180, 159, .28); color: #4A6249; }
+  :root[data-theme="light"] .cu-pill.tier-root      { background: rgba(201, 149, 74, .16);   border-color: rgba(201, 149, 74, .28); color: #8A6425; }
+  :root[data-theme="light"] .cu-pill.tier-tree      { background: rgba(201, 149, 74, .20);   border-color: rgba(201, 149, 74, .34); color: #8A6425; }
   :root[data-theme="light"] .cu-pill.blocked        { background: rgba(232, 85, 106, .16);  border-color: rgba(232, 85, 106, .32); color: #a01f33; }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -2576,7 +2576,7 @@
   #pd-editor .pe-dis > summary::marker { content: ""; }
   #pd-editor .pe-dis > summary:hover { color: var(--text-1); }
   #pd-editor .pe-dis:hover { border-color: var(--brass); }
-  #pd-editor .pe-dis-t { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); }
+  #pd-editor .pe-dis-t { font-family: var(--f-sans); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--td-text2); }
   #pd-editor .pe-dis-s { font-size: 12px; color: var(--text-2); font-family: var(--f-sans); letter-spacing: 0; text-transform: none; margin-left: auto; }
   #pd-editor .pe-dis .pe-caret { color: var(--text-4); width: 12px; flex: none; transition: transform .12s ease; }
   #pd-editor .pe-dis[open] > summary .pe-caret { transform: rotate(90deg); }
@@ -2596,7 +2596,7 @@
   #pd-facts.pd-facts-collapsed .pd-facts-body { display: none; }
   #pd-facts.pd-facts-collapsed .pd-sec-h { margin-bottom: 0; }
   #pd-facts:not(.pd-facts-collapsed) .pd-facts-caret { transform: rotate(90deg); }
-  #pd-editor .pd-sec-h, #pd-editor .pd-card-h { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin: 0; }
+  #pd-editor .pd-sec-h, #pd-editor .pd-card-h { font-family: var(--f-sans); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--td-text2); margin: 0; }
   #pd-editor .pd-pub { flex-direction: row; align-items: center; gap: 10px; cursor: pointer; font-weight: 600; }
   #pd-editor .pd-pub input { width: 16px; height: 16px; }
   /* Autosave status pill in the editor foot. Replaces the old manual Save
@@ -2701,7 +2701,7 @@
     position: absolute; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,.62);
     color: #fff; font-size: 9px; letter-spacing: .04em; text-align: center; padding: 2px 0;
   }
-  .pd-var-head { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--brass); margin-bottom: 6px; }
+  .pd-var-head { font-family: var(--f-sans); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; color: var(--td-text2); margin-bottom: 6px; }
   /* Variants is collapsed by default (a single-option product needs no table);
      this header is the open/close toggle. Caret + label + a summary chip so the
      operator sees the state ("Single option" / "N variants") without expanding. */
@@ -7120,7 +7120,7 @@
       background: linear-gradient(160deg, #15130E, #221C12);
       box-shadow: 0 18px 40px -24px rgba(40, 34, 20, .7);
     }
-    .rm-dh-live { display: flex; align-items: center; gap: 7px; font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: #C7B27E; }
+    .rm-dh-live { display: flex; align-items: center; gap: 7px; font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--td-sage-ink); }
     .rm-dh-live .d { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #6B8E6F); box-shadow: 0 0 0 0 rgba(163, 180, 159, .6); animation: rmDhPulse 2s infinite; }
     @keyframes rmDhPulse { 0% { box-shadow: 0 0 0 0 rgba(163, 180, 159, .5); } 70% { box-shadow: 0 0 0 7px rgba(163, 180, 159, 0); } 100% { box-shadow: 0 0 0 0 rgba(163, 180, 159, 0); } }
     .rm-dh-big { font: 600 42px var(--f-sans); letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
@@ -7131,7 +7131,7 @@
     .rm-dh-mini { display: flex; gap: 18px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .12); }
     .rm-dh-mini .m { min-width: 0; }
     .rm-dh-mini .v { font: 600 18px var(--f-sans); font-variant-numeric: tabular-nums; }
-    .rm-dh-mini .k { font: 500 9px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: #9C9684; margin-top: 2px; }
+    .rm-dh-mini .k { font: 500 9px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--td-text2); margin-top: 2px; }
 
     /* report tile grid */
     .rm-dh-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
