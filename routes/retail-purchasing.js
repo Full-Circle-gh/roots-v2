@@ -56,7 +56,7 @@ function actorLabel(req) {
 // wiped when the PO drops back to Requested (or is Cancelled). Amount uses
 // qty_received once receiving started, so shortages adjust the books.
 function postRetailPOExpenses(poId) {
-  const po = db.prepare('SELECT id, date, supplier, po_number, status FROM purchase_orders WHERE id = ?').get(poId);
+  const po = db.prepare('SELECT id, date, supplier, po_number, status, extra_freight, extra_tax, extra_handling FROM purchase_orders WHERE id = ?').get(poId);
   if (!po) return { skipped: 'po-missing' };
   db.prepare('DELETE FROM expense_entries WHERE po_id = ?').run(poId);
   if (!['Ordered', 'Delivered'].includes(po.status)) return { skipped: 'not-postable' };
@@ -75,6 +75,13 @@ function postRetailPOExpenses(poId) {
     const desc = `${po.po_number}${po.supplier ? ' · ' + po.supplier : ''} · ${g.line_count} line${g.line_count === 1 ? '' : 's'}`;
     insert.run(po.date, +g.amount, g.category, desc, poId);
     inserted++; total += +g.amount;
+  }
+  // Landed-cost extras (freight/tax/handling) post as one shipping & fees line.
+  const extras = (+po.extra_freight || 0) + (+po.extra_tax || 0) + (+po.extra_handling || 0);
+  if (extras > 0) {
+    insert.run(po.date, extras, '运费及杂费 Freight & fees',
+      `${po.po_number}${po.supplier ? ' · ' + po.supplier : ''} · shipping & fees`, poId);
+    inserted++; total += extras;
   }
   return { inserted, total };
 }
@@ -661,6 +668,20 @@ router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (re
     console.error('[retail backorder]', e);
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// Set landed-cost extras on a PO, then re-post expenses so Finance reflects
+// them (no-op posting until the order is placed — same rule as goods).
+router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express.json(), (req, res) => {
+  const po = getRetailPO(req.params.id);
+  if (!po) return res.status(404).json({ success: false, error: 'not_found' });
+  const num = v => Math.max(0, parseFloat(v) || 0);
+  const { freight, tax, handling } = req.body || {};
+  db.prepare('UPDATE purchase_orders SET extra_freight=?, extra_tax=?, extra_handling=?, updated_at=CURRENT_TIMESTAMP WHERE id=?')
+    .run(num(freight), num(tax), num(handling), po.id);
+  const posted = postRetailPOExpenses(po.id);
+  logActivity(req.user.id, req.user.username, 'landed_cost', 'purchase_order', po.id, { freight: num(freight), tax: num(tax), handling: num(handling) }, req.ip);
+  res.json({ success: true, posted });
 });
 
 function insertLineItems(poId, items, headerSupplier) {

@@ -782,6 +782,50 @@
     }).join('')}</div>`;
   }
 
+  // Landed cost — freight/tax/handling on top of goods, giving a true per-unit
+  // cost. Saving posts the extras to Finance as one "Freight & fees" line.
+  function landedPanel(p) {
+    const items = p.items || [];
+    const goods = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.cost_per_unit) || 0), 0);
+    const units = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+    const f = Number(p.extra_freight) || 0, t = Number(p.extra_tax) || 0, h = Number(p.extra_handling) || 0;
+    const landed = goods + f + t + h;
+    const perUnit = units > 0 ? landed / units : 0;
+    const inp = (id, val) => `<span class="pu2-costwrap">¥<input type="number" min="0" step="0.01" class="pu2-cost pu2-num" id="${id}" value="${val || ''}" placeholder="0" oninput="puLandedRecalc()"></span>`;
+    return `<div class="pu2-card pu2-block pu2-landed">
+      <b>${esc(T('True landed cost', '到手成本'))}</b>
+      <div class="pu2-lc-grid">
+        <div class="lc-row"><span class="g">${esc(T('Goods', '货款'))}</span><span class="pu2-num">${money(goods)}</span></div>
+        <div class="lc-row"><span class="g">${esc(T('Freight', '运费'))}</span>${inp('pu2-lc-freight', f)}</div>
+        <div class="lc-row"><span class="g">${esc(T('Tax', '税费'))}</span>${inp('pu2-lc-tax', t)}</div>
+        <div class="lc-row"><span class="g">${esc(T('Handling', '杂费'))}</span>${inp('pu2-lc-handling', h)}</div>
+        <div class="lc-row tot"><span>${esc(T('Landed total', '到手合计'))}</span><span class="pu2-num" id="pu2-lc-total">${money(landed)}</span></div>
+      </div>
+      <div class="sub" id="pu2-lc-per">${esc(T('≈', '约'))} ${money(perUnit)} ${esc(T('per unit across', '均摊到'))} ${units} ${esc(T('units', '件'))}</div>
+      <div style="margin-top:12px"><button class="pu2-btn sm" data-cap="purchasing:edit" onclick="puSaveLanded()">${esc(T('Save — posts freight & fees to Finance', '保存 —— 运杂费记入财务'))}</button></div>
+    </div>`;
+  }
+  window.puLandedRecalc = function () {
+    if (!_po) return;
+    const items = _po.items || [];
+    const goods = items.reduce((s, i) => s + (Number(i.qty) || 0) * (Number(i.cost_per_unit) || 0), 0);
+    const units = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+    const g = id => parseFloat(document.getElementById(id)?.value) || 0;
+    const landed = goods + g('pu2-lc-freight') + g('pu2-lc-tax') + g('pu2-lc-handling');
+    const tot = document.getElementById('pu2-lc-total'); if (tot) tot.textContent = money(landed);
+    const per = document.getElementById('pu2-lc-per');
+    if (per) per.textContent = `${T('≈', '约')} ${money(units > 0 ? landed / units : 0)} ${T('per unit across', '均摊到')} ${units} ${T('units', '件')}`;
+  };
+  window.puSaveLanded = async function () {
+    if (!_po) return;
+    const g = id => parseFloat(document.getElementById(id)?.value) || 0;
+    try {
+      await api('/api/retail-admin/purchases/' + _po.id + '/landed', { method: 'PUT', body: { freight: g('pu2-lc-freight'), tax: g('pu2-lc-tax'), handling: g('pu2-lc-handling') } });
+      toast(T('Landed cost saved ✓', '到手成本已保存 ✓'), 'ok');
+      puOpenPO(_po.id);
+    } catch (e) { toast(e.message, 'err'); }
+  };
+
   function paintReceive() {
     const p = _po;
     if (!p) { _screen = 'orders'; paint(); return; }
@@ -831,6 +875,8 @@
         <span class="spacer"></span>
         ${p.status !== 'Cancelled' && p.status !== 'Delivered' ? `<button class="pu2-btn danger" data-cap="purchasing:edit" onclick="puSetStatus('Cancelled')">${esc(T('Cancel order', '取消采购单'))}</button>` : ''}
       </div>
+
+      ${p.status !== 'Cancelled' ? landedPanel(p) : ''}
 
       <div class="pu2-fin">
         <b>${esc(T('Finance', '财务'))}</b>

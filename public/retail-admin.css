@@ -9881,6 +9881,15 @@
   #prod-view-purchasing .pu2-life .s.now .d { background: var(--td-amber); }
   #prod-view-purchasing .pu2-life .conn { width: 20px; height: 1px; background: var(--td-border); }
 
+  /* Landed cost breakdown */
+  #prod-view-purchasing .pu2-landed .pu2-lc-grid { max-width: 360px; margin-top: 10px; }
+  #prod-view-purchasing .pu2-landed .lc-row { display: flex; justify-content: space-between; align-items: center;
+    padding: 7px 0; border-bottom: 1px dashed var(--td-border); font-size: 13.5px; }
+  #prod-view-purchasing .pu2-landed .lc-row:last-of-type { border-bottom: none; }
+  #prod-view-purchasing .pu2-landed .lc-row .g { color: var(--td-text2); }
+  #prod-view-purchasing .pu2-landed .lc-row.tot { font-weight: 500; border-top: 1px solid var(--td-border);
+    border-bottom: none; margin-top: 4px; padding-top: 10px; }
+
   /* low-stock suggestions */
   #prod-view-purchasing .pu2-sugrow { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
     border: 1px dashed var(--td-border); border-radius: 10px; margin-bottom: 8px; font-size: 13.5px; }

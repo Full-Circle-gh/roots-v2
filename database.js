@@ -292,6 +292,13 @@ addColumn('invoices', 'due_date', 'DATE');
 addColumn('invoices', 'paid_at',  'DATETIME');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_invoices_scope ON invoices(scope)'); } catch {}
 
+// Landed cost — freight / tax / handling carried on the PO header, on top of
+// the line goods. Posts to Finance as one "Freight & fees" expense line and
+// feeds the true per-unit landed cost shown on the order. All additive, 0 default.
+addColumn('purchase_orders', 'extra_freight',  'REAL DEFAULT 0');
+addColumn('purchase_orders', 'extra_tax',      'REAL DEFAULT 0');
+addColumn('purchase_orders', 'extra_handling', 'REAL DEFAULT 0');
+
 // Supplier dossier columns. The first two are free-text notes the buyer
 // keeps about the vendor (catalogue + price list snapshot). The three
 // _data columns hold base64 image uploads — same pattern we use for
