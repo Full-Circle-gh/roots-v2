@@ -52,6 +52,8 @@
   let _billSum = null;       // bills KPI + AP aging
   let _billDraft = null;     // the record-a-bill modal's working state
   let _reorder = [];         // low-stock groups, by preferred supplier + store
+  let _ph = null;            // loaded price-history for one product
+  let _phBack = 'orders';    // screen to return to from price history
   let _screen = 'orders';    // orders | wizard | receive | suppliers | supplier | import
   let _seg = 'open';         // orders segment: open | received | all
   let _supSeg = 'active';    // suppliers segment: active | disabled
@@ -161,6 +163,7 @@
     else if (_screen === 'import')    paintImport();
     else if (_screen === 'bills')     paintBills();
     else if (_screen === 'reorder')   paintReorder();
+    else if (_screen === 'pricehist') paintPriceHistory();
     tbSyncPuTabs();
     try { applyCapGates(); } catch (_) {}
   }
@@ -653,7 +656,10 @@
         <div class="pop-head">
           <b>${nameLabel(_pickP)}</b>
           <span class="sub pu2-mono">${esc(_pickP.sku || '')}${_pickP.sku ? ' · ' : ''}${esc(T('stock', '库存'))} ${_pickP.physical_qty}</span>
-          <button class="pu2-link" onclick="puCloseSupPop()">${esc(T('Close', '关闭'))}</button>
+          <span style="margin-left:auto;display:inline-flex;gap:14px">
+            <button class="pu2-link" style="margin:0" onclick="puPriceHistory(${_pickP.product_id})">${esc(T('Price history', '价格历史'))}</button>
+            <button class="pu2-link" style="margin:0" onclick="puCloseSupPop()">${esc(T('Close', '关闭'))}</button>
+          </span>
         </div>
         ${s.map((x, idx) => {
           const preferred = idx === 0;
@@ -1347,6 +1353,74 @@
   };
 
   // ═══════════════════════════════════════════════════════════════════════════
+  //  PRICE HISTORY — one product, every supplier, cost over time
+  // ═══════════════════════════════════════════════════════════════════════════
+  window.puPriceHistory = async function (spid) {
+    try {
+      _phBack = (_screen === 'pricehist') ? _phBack : _screen;
+      const r = await api('/api/retail-admin/products/' + spid + '/suppliers');
+      _ph = r.data; _screen = 'pricehist'; paint();
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.puPriceBack = function () { _screen = _phBack || 'orders'; _ph = null; paint(); };
+
+  // Build a 220×46 sparkline path from a chronological [{cost}] series.
+  function sparkPath(series) {
+    const pts = (series || []).filter(s => s.cost != null).map(s => Number(s.cost));
+    if (pts.length < 2) return null;
+    const W = 220, H = 46, pad = 5;
+    const min = Math.min(...pts), max = Math.max(...pts), range = (max - min) || 1;
+    const n = pts.length;
+    const coords = pts.map((v, i) => [(i / (n - 1)) * W, H - pad - ((v - min) / range) * (H - 2 * pad)]);
+    const line = 'M' + coords.map(c => c[0].toFixed(1) + ',' + c[1].toFixed(1)).join(' L');
+    const last = coords[coords.length - 1];
+    return { line, area: line + ` L${W},${H} L0,${H} Z`, dotX: last[0].toFixed(1), dotY: last[1].toFixed(1) };
+  }
+
+  function paintPriceHistory() {
+    const d = _ph;
+    if (!d) { _screen = 'orders'; paint(); return; }
+    const pr = d.product || {}, st = d.stats || {}, last = d.last || {}, sups = d.suppliers || [];
+    const sp = sparkPath(d.series || []);
+    const cheapest = sups.length ? sups.reduce((a, b) => (Number(b.min_cost) < Number(a.min_cost) ? b : a)) : null;
+    const priciest = sups.length ? sups.reduce((a, b) => (Number(b.max_cost) > Number(a.max_cost) ? b : a)) : null;
+    const tile = (lab, val, foot) => `<div class="pu2-card pu2-metric"><div class="lab">${esc(lab)}</div><div class="big pu2-num">${val}</div><div class="foot">${esc(foot || '')}</div></div>`;
+    const hasHist = d.series && d.series.length;
+    root().innerHTML = `
+      <div class="pu2-wizhead">
+        <button class="pu2-btn ghost sm" onclick="puPriceBack()"><span class="pu2-ic">${I.back}</span>${esc(T('Back', '返回'))}</button>
+        <h1>${nameLabel(pr)}</h1>
+        ${pr.sku ? `<span class="pu2-pill grey pu2-mono">${esc(pr.sku)}</span>` : ''}
+      </div>
+      ${!hasHist ? `<div class="pu2-card"><div class="pu2-empty"><div class="pu2-empty-ico">${I.box}</div>
+        <h3>${esc(T('No purchase history yet', '暂无采购记录'))}</h3>
+        <p>${esc(T('Once you buy this product on an order, its price history shows here.', '在采购单中购买该商品后,这里会显示价格历史。'))}</p></div></div>` : `
+      <div class="pu2-metricrow" style="margin:0 0 16px">
+        ${tile(T('Last paid', '上次'), money(last.cost || st.avg_cost || 0), last.supplier ? esc(last.supplier) + (last.date ? ' · ' + esc(last.date) : '') : '')}
+        ${tile(T('Average', '均价'), money(st.avg_cost || 0), st.order_count ? st.order_count + ' ' + T('orders', '次') : '')}
+        ${tile(T('Range', '区间'), money(st.min_cost || 0) + '–' + fmt(st.max_cost || 0), [cheapest && cheapest.supplier ? T('low', '低') + ' ' + cheapest.supplier : '', priciest && priciest.supplier ? T('high', '高') + ' ' + priciest.supplier : ''].filter(Boolean).join(' · '))}
+        ${tile(T('Bought', '采购'), (st.total_qty || 0), st.first_date ? T('since', '自') + ' ' + esc(st.first_date) : '')}
+      </div>
+      <div class="pu2-card" style="padding:20px 22px; margin-bottom:16px">
+        <div class="pu2-kicker" style="margin:0 0 10px">${esc(T('What it has cost you', '历史成本'))}</div>
+        ${sp ? `<svg class="pu2-spark" viewBox="0 0 220 46" preserveAspectRatio="none" aria-hidden="true"><path class="area" d="${sp.area}"/><path class="line" d="${sp.line}"/><circle class="dot" cx="${sp.dotX}" cy="${sp.dotY}" r="2.6"/></svg>
+        <div class="pu2-num" style="font-size:12px;color:var(--td-text2);display:flex;justify-content:space-between;max-width:220px;margin-top:6px"><span>${esc(st.first_date || '')}</span><span>${esc(T('now', '现在'))} ${money(last.cost || 0)}</span></div>` : `<div class="sub">${esc(T('Need at least two purchases to chart a trend.', '至少两次采购才能绘制趋势。'))}</div>`}
+      </div>`}
+      <div class="pu2-kicker">${esc(T('Who sells it', '供应来源'))} — ${sups.length} ${esc(T('suppliers', '家'))}</div>
+      <div class="pu2-card">
+        <table class="pu2-tbl">
+          <thead><tr><th>${esc(T('Supplier', '供应商'))}</th><th class="right">${esc(T('Last paid', '上次'))}</th><th class="right">${esc(T('Average', '均价'))}</th><th class="right">${esc(T('Times', '次数'))}</th></tr></thead>
+          <tbody>${sups.length ? sups.map((s, i) => `<tr>
+            <td><b>${esc(s.supplier || T('Unrecorded', '未记录'))}</b>${i === 0 ? ` <span class="pu2-tagstar">${I.star}${esc(T('Preferred', '常用'))}</span>` : ''}</td>
+            <td class="right pu2-num">${money(s.last_cost || 0)}</td>
+            <td class="right pu2-num">${s.avg_cost != null ? money(s.avg_cost) : '—'}</td>
+            <td class="right pu2-num">${s.order_count}</td></tr>`).join('') : `<tr><td colspan="4"><div class="pu2-emptyline">${esc(T('No supplier history yet.', '暂无供应商记录。'))}</div></td></tr>`}</tbody>
+        </table>
+      </div>`;
+    try { applyCapGates(); } catch (_) {}
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
   //  SUPPLIERS — the ledger
   // ═══════════════════════════════════════════════════════════════════════════
   function paintSuppliers() {
@@ -1524,7 +1598,7 @@
       <b>${esc(T('Price list — what you’ve bought from them', '价格清单 —— 曾向其采购'))}</b>
       <table class="pu2-tbl" style="margin-top:8px">
         <thead><tr><th>${esc(T('Product', '商品'))}</th><th class="right">${esc(T('Last paid', '上次'))}</th><th class="right">${esc(T('Average', '均价'))}</th><th class="right">${esc(T('Times', '次数'))}</th></tr></thead>
-        <tbody>${pl.map(p => `<tr>
+        <tbody>${pl.map(p => `<tr onclick="puPriceHistory(${p.store_product_id})">
           <td>${nameLabel(p)}${p.sku ? `<div class="sub pu2-mono">${esc(p.sku)}</div>` : ''}</td>
           <td class="right pu2-num">${money(p.last_cost || 0)}</td>
           <td class="right pu2-num">${p.avg_cost != null ? money(p.avg_cost) : '—'}</td>

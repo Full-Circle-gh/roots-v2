@@ -9933,6 +9933,12 @@
   #prod-view-purchasing .pu2-landed .lc-row.tot { font-weight: 500; border-top: 1px solid var(--td-border);
     border-bottom: none; margin-top: 4px; padding-top: 10px; }
 
+  /* Price-history sparkline */
+  #prod-view-purchasing .pu2-spark { width: 220px; height: 46px; display: block; }
+  #prod-view-purchasing .pu2-spark .line { fill: none; stroke: var(--td-text); stroke-width: 1.6; }
+  #prod-view-purchasing .pu2-spark .area { fill: var(--td-raised); stroke: none; }
+  #prod-view-purchasing .pu2-spark .dot { fill: var(--td-text); }
+
   /* low-stock suggestions */
   #prod-view-purchasing .pu2-sugrow { display: flex; align-items: center; gap: 12px; padding: 10px 14px;
     border: 1px dashed var(--td-border); border-radius: 10px; margin-bottom: 8px; font-size: 13.5px; }

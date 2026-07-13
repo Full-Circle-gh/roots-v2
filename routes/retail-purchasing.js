@@ -429,8 +429,25 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
       JOIN purchase_orders po ON po.id = pli.po_id
      WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
      ORDER BY po.date DESC, pli.id DESC LIMIT 1`).get(spid) || null;
+  // Cost-over-time series + overall stats + product identity, for the
+  // standalone Price-history screen (sparkline + metric tiles).
+  const series = db.prepare(`
+    SELECT po.date AS date, pli.cost_per_unit AS cost
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(pli.cost_per_unit,0) > 0
+     ORDER BY po.date, pli.id`).all(spid);
+  const stats = db.prepare(`
+    SELECT COUNT(*) AS order_count, SUM(pli.qty) AS total_qty,
+           AVG(pli.cost_per_unit) AS avg_cost, MIN(pli.cost_per_unit) AS min_cost, MAX(pli.cost_per_unit) AS max_cost,
+           MIN(po.date) AS first_date, MAX(po.date) AS last_date
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail' AND COALESCE(pli.cost_per_unit,0) > 0`).get(spid) || {};
+  const prod = db.prepare(`
+    SELECT MAX(pli.name_en) AS name_en, MAX(pli.name_cn) AS name_cn, MAX(pli.sku) AS sku
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen')='retail'`).get(spid) || {};
   res.json({ success: true, data: {
-    store_product_id: spid, suppliers,
+    store_product_id: spid, product: prod, suppliers, series, stats,
     last: overall ? { cost: overall.cost, date: overall.date, supplier: overall.supplier, po_number: overall.po_number } : null,
   } });
 });
