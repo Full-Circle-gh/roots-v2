@@ -4271,7 +4271,7 @@
      detail (server seen_at). The wash is an inset box-shadow so it layers above
      whatever background the row-rhythm tweak (striped / cards) paints, without a
      specificity fight. Complements the one-shot 6s arrival flash above. */
-  .ord-no { font-family: var(--f-mono); font-weight: 600; font-size: 12px; }
+  .ord-no { font-family: var(--f-mono); font-weight: 400; font-size: 12px; }
   /* Orders table headers read small (11px, inherited from the shared th rule)
      next to 13px body cells — bump just this table's headers up so "Order #",
      "Channel", "Customer" etc. read as the section's main titles. */
