@@ -7892,9 +7892,12 @@
     #tab-products > .pa-head-row,
     #tab-products > .stk-views { display: none; }
     /* Purchasing — puChrome's own page-head + sub-nav move into the bar too;
-       the ledger/wizard/etc. body underneath is untouched. */
-    #tab-purchasing .pu2-pagehead,
-    #tab-purchasing .pu2-subnav { display: none; }
+       the ledger/wizard/etc. body underneath is untouched. Doubled selector
+       (not just #tab-purchasing .pu2-*) to out-specificity the base
+       #prod-view-purchasing .pu2-subnav{display:flex} rule below, which sits
+       later in the cascade and would otherwise win the tie. */
+    #tab-purchasing #prod-view-purchasing .pu2-pagehead,
+    #tab-purchasing #prod-view-purchasing .pu2-subnav { display: none; }
     /* Bare page titles that now just repeat the crumb. Keep the range beside
        Reports and the New-customer action beside Customers. */
     #tab-orders > h2,
