@@ -7872,14 +7872,22 @@
   #tb-info-wrap { display: none; }
   body:has(#tab-products.active) #tb-info-wrap { display: inline-flex; }
 
-  /* Desktop: the topbar carries the Products head, so the in-content eyebrow +
-     title row + sub-view switch drop out (they'd repeat what's now in the bar).
-     On phones (≤720) the topbar page region is hidden and these stay as the
-     header, so nothing is lost. */
+  /* Desktop: the topbar carries the page's name (the crumb), so each page's own
+     redundant title text drops out — the content starts higher. We hide only the
+     bare TITLE, never functional siblings (a date range, a "New …" action), so
+     those header rows keep their controls. On phones (≤720) the topbar page
+     region is hidden and every in-content title stays, so nothing is lost.
+     Dashboard keeps #td-greeting — that's a personalised greeting, not a title. */
   @media (min-width: 721px) {
+    /* Products — eyebrow + title row + sub-view switch all move into the bar. */
     #tab-products > .t-ord-eyebrow,
     #tab-products > .pa-head-row,
     #tab-products > .stk-views { display: none; }
+    /* Bare page titles that now just repeat the crumb. Keep the range beside
+       Reports and the New-customer action beside Customers. */
+    #tab-orders > h2,
+    #tab-reports .db-head > h2,
+    #tab-customers .cul-head > h2 { display: none; }
   }
   @media (max-width: 720px) {
     .tb-page { display: none; }
