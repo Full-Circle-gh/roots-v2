@@ -1537,14 +1537,15 @@ router.get('/api/retail/products/:id/image', async (req, res) => {
   let w = parseInt(req.query.w, 10);
   w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
   const ver  = String(req.query.v || '');
-  const ckey = w ? `${tenantCacheKey()}|${id}|w${w}|${ver}` : '';
-  if (ckey) {
-    const hit = THUMB_CACHE.get(ckey);
-    if (hit) {
-      res.set('Content-Type', hit.mime);
-      res.set('Cache-Control', 'public, max-age=31536000, immutable');
-      return res.send(hit.buf);
-    }
+  // Cache full-res reads too (not just thumbnails) — a client re-loading a
+  // product grid without ?w hammers the DB + base64-decode on every request
+  // otherwise, which was enough to stall the event loop under a burst (2026-07-13).
+  const ckey = `${tenantCacheKey()}|${id}|w${w || 0}|${ver}`;
+  const hit = THUMB_CACHE.get(ckey);
+  if (hit) {
+    res.set('Content-Type', hit.mime);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    return res.send(hit.buf);
   }
   const gate = tdb().prepare(
     `SELECT id FROM store_products
@@ -1572,12 +1573,10 @@ router.get('/api/retail/products/:id/image', async (req, res) => {
       const out = await pipe.toBuffer({ resolveWithObject: true });
       buf = out.data;
       outMime = 'image/' + out.info.format;
-      if (ckey) {
-        if (THUMB_CACHE.size >= THUMB_CACHE_MAX) THUMB_CACHE.delete(THUMB_CACHE.keys().next().value);
-        THUMB_CACHE.set(ckey, { buf, mime: outMime });
-      }
     } catch (e) { /* keep original bytes */ }
   }
+  if (THUMB_CACHE.size >= THUMB_CACHE_MAX) THUMB_CACHE.delete(THUMB_CACHE.keys().next().value);
+  THUMB_CACHE.set(ckey, { buf, mime: outMime });
   res.set('Content-Type', outMime);
   res.set('Cache-Control', 'public, max-age=31536000, immutable');
   res.send(buf);
