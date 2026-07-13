@@ -1597,72 +1597,86 @@ function dashComputeRects() {
     .filter(b => (DASH_ARRANGING || !b.classList.contains('is-quiet'))
               && getComputedStyle(b).display !== 'none')
     .map(b => b.dataset.block));
-  const ids = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && present.has(id));
-  if (!ids.length) return { rects: {}, height: 0 };
-  // In Arrange mode the quiet (empty-today) blocks reappear only so they can be
-  // reordered — a card with nothing to show has no reason to claim its full
-  // 2-row preferred shape and read as a big empty box. Temporarily restrict
-  // those blocks to a single-row menu for THIS solve only (restored right
-  // after), so they render as a compact strip. The shipped/default layout runs
-  // with the block's real menu untouched, so the headless tiling proof
-  // (scripts/dash-solver-test.js) still holds for every non-arrange layout.
-  const savedShapes = {};
-  // Narrow a block's shape menu for THIS solve only (restored right after), and
-  // never strand it with an empty menu.
-  const restrict = (id, keep) => {
-    if (!DASH_SHAPES[id]) return;
-    const f = DASH_SHAPES[id].filter(keep);
-    if (!f.length) return;
-    if (!(id in savedShapes)) savedShapes[id] = DASH_SHAPES[id];
-    DASH_SHAPES[id] = f;
-  };
-  // Operator-forced widths (apply in every view so the arrangement persists):
-  // 'full' → 6-wide, 'half' → 3-wide but ONLY when an adjacent visible sibling
-  // is also 'half' (so a widowed half card falls back to auto, no 3-wide gap).
-  for (let k = 0; k < ids.length; k++) {
-    const id = ids[k], w = DASH_WIDTHS[id];
-    if (w === 'full') restrict(id, s => s[0] === 6);
-    else if (w === 'half'
-      && ((k > 0 && DASH_WIDTHS[ids[k - 1]] === 'half') || (k < ids.length - 1 && DASH_WIDTHS[ids[k + 1]] === 'half'))) {
-      // the 3-wide 2-ROW shape specifically — a 3-wide 1-row would let the solver
-      // stack the pair vertically in one column instead of side by side.
-      restrict(id, s => s[0] === 3 && s[1] === 2);
-    }
-  }
-  // In Arrange mode the quiet (empty-today) blocks reappear only so they can be
-  // reordered — restrict them to a single row so they read as a compact strip
-  // rather than a big empty box.
-  if (DASH_ARRANGING) {
-    const quiet = new Set([...host.querySelectorAll('.td-block.is-quiet')].map(b => b.dataset.block));
-    for (const id of ids) if (quiet.has(id)) restrict(id, s => s[1] === 1);
-  }
-  let sol = dashSolve(ids);
-  for (const id in savedShapes) DASH_SHAPES[id] = savedShapes[id];   // restore real menus
-  if (!sol) sol = { bands: ids.map((id, k) => ({ h: 1, cells: [{ idx: k, w: 6 }], sum: 6, next: k + 1 })) };
+  const allIds = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && present.has(id));
+  if (!allIds.length) return { rects: {}, height: 0 };
+
   const W = host.clientWidth || 1088;
   const unit = (W - (DASH_COLS - 1) * DASH_GAP) / DASH_COLS;
-  const rects = {}; let y = 0;
-  for (const band of sol.bands) {
-    const slots = band.h === 1
-      ? band.cells.map(c => ({ units: c.w, parts: [{ idx: c.idx, row: 0, rows: 1 }] }))
-      : band.slots.map(s => s.type === 'one'
-          ? { units: s.w, parts: [{ idx: s.idx, row: 0, rows: 2 }] }
-          : { units: s.w, parts: [{ idx: s.a, row: 0, rows: 1 }, { idx: s.b, row: 1, rows: 1 }] });
-    const n = slots.length, avail = W - (n - 1) * DASH_GAP; let x = 0;
-    for (const slot of slots) {
-      const wpx = band.sum === DASH_COLS ? slot.units * unit + (slot.units - 1) * DASH_GAP : avail * slot.units / band.sum;
-      const effW = Math.max(2, Math.min(6, Math.round((wpx + DASH_GAP) / (unit + DASH_GAP))));
-      for (const part of slot.parts) {
-        rects[ids[part.idx]] = {
-          x, y: y + part.row * (DASH_ROW + DASH_GAP), w: wpx,
-          h: part.rows * DASH_ROW + (part.rows - 1) * DASH_GAP,
-          tier: dashTier(effW, part.rows),
-        };
+  const rects = {};
+
+  // Pack a contiguous run of blocks into bands and write their rects starting at
+  // startY; returns the y just past the last band. `quietStrip` restricts every
+  // block in the run to a single-row menu (the compact "nothing today" strip).
+  const layout = (ids, startY, quietStrip) => {
+    if (!ids.length) return startY;
+    // Narrow a block's shape menu for THIS solve only (restored right after),
+    // never stranding it with an empty menu.
+    const savedShapes = {};
+    const restrict = (id, keep) => {
+      if (!DASH_SHAPES[id]) return;
+      const f = DASH_SHAPES[id].filter(keep);
+      if (!f.length) return;
+      if (!(id in savedShapes)) savedShapes[id] = DASH_SHAPES[id];
+      DASH_SHAPES[id] = f;
+    };
+    // Operator-forced widths (apply in every view so the arrangement persists):
+    // 'full' → 6-wide, 'half' → 3-wide but ONLY when an adjacent visible sibling
+    // is also 'half' (so a widowed half card falls back to auto, no 3-wide gap).
+    for (let k = 0; k < ids.length; k++) {
+      const id = ids[k], w = DASH_WIDTHS[id];
+      if (w === 'full') restrict(id, s => s[0] === 6);
+      else if (w === 'half'
+        && ((k > 0 && DASH_WIDTHS[ids[k - 1]] === 'half') || (k < ids.length - 1 && DASH_WIDTHS[ids[k + 1]] === 'half'))) {
+        // the 3-wide 2-ROW shape specifically — a 3-wide 1-row would let the solver
+        // stack the pair vertically in one column instead of side by side.
+        restrict(id, s => s[0] === 3 && s[1] === 2);
       }
-      x += wpx + DASH_GAP;
     }
-    y += (band.h === 2 ? 2 * DASH_ROW + DASH_GAP : DASH_ROW) + DASH_GAP;
-  }
+    if (quietStrip) for (const id of ids) restrict(id, s => s[1] === 1);
+    let sol = dashSolve(ids);
+    for (const id in savedShapes) DASH_SHAPES[id] = savedShapes[id];   // restore real menus
+    if (!sol) sol = { bands: ids.map((id, k) => ({ h: 1, cells: [{ idx: k, w: 6 }], sum: 6, next: k + 1 })) };
+    let y = startY;
+    for (const band of sol.bands) {
+      const slots = band.h === 1
+        ? band.cells.map(c => ({ units: c.w, parts: [{ idx: c.idx, row: 0, rows: 1 }] }))
+        : band.slots.map(s => s.type === 'one'
+            ? { units: s.w, parts: [{ idx: s.idx, row: 0, rows: 2 }] }
+            : { units: s.w, parts: [{ idx: s.a, row: 0, rows: 1 }, { idx: s.b, row: 1, rows: 1 }] });
+      const n = slots.length, avail = W - (n - 1) * DASH_GAP; let x = 0;
+      for (const slot of slots) {
+        const wpx = band.sum === DASH_COLS ? slot.units * unit + (slot.units - 1) * DASH_GAP : avail * slot.units / band.sum;
+        const effW = Math.max(2, Math.min(6, Math.round((wpx + DASH_GAP) / (unit + DASH_GAP))));
+        for (const part of slot.parts) {
+          rects[ids[part.idx]] = {
+            x, y: y + part.row * (DASH_ROW + DASH_GAP), w: wpx,
+            h: part.rows * DASH_ROW + (part.rows - 1) * DASH_GAP,
+            tier: dashTier(effW, part.rows),
+          };
+        }
+        x += wpx + DASH_GAP;
+      }
+      y += (band.h === 2 ? 2 * DASH_ROW + DASH_GAP : DASH_ROW) + DASH_GAP;
+    }
+    return y;
+  };
+
+  // The data-bearing cards pack first, EXACTLY as they will when Arrange is left
+  // (outside arrange there are no quiet cards, so this is the whole set). The
+  // quiet (empty-today) cards only surface while arranging, and they must not
+  // sit INSIDE the real packing: an extra strip wedged between two cards changes
+  // the band math and makes the arrange preview pair cards differently from the
+  // committed layout — the "card jumps when I click Done" bug. So they're laid
+  // out as their own compact strip appended BELOW the real cards, where they
+  // stay draggable/hide-able without disturbing what Done will produce.
+  const quiet = DASH_ARRANGING
+    ? new Set([...host.querySelectorAll('.td-block.is-quiet')].map(b => b.dataset.block))
+    : new Set();
+  const realIds = allIds.filter(id => !quiet.has(id));
+  const quietIds = allIds.filter(id => quiet.has(id));
+
+  let y = layout(realIds, 0, false);
+  if (quietIds.length) y = layout(quietIds, y, true);
   return { rects, height: Math.max(0, y - DASH_GAP) };
 }
 
