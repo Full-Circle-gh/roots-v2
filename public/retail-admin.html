@@ -1067,7 +1067,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l8-4 8 4-8 4-8-4z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></svg>
     Products · 产品
   </button>
-  <button data-tab="purchasing" onclick="puInit()" style="order:9.5">
+  <button data-tab="purchasing" onclick="puInit()" style="order:9">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>
     Purchasing · 采购
   </button>
@@ -9348,11 +9348,18 @@
        because every string is already written in the live language by
        cuT() — the bilingual walker must keep its hands off. -->
   <section id="tab-purchasing">
-    <div class="t-ord-eyebrow">Purchasing · 采购</div>
-    <h2 class="pa-pagetitle" style="margin:0 0 4px" data-no-i18n>Purchasing</h2>
-    <p class="helper" data-lang-block="en" style="margin:0 0 var(--s4)">Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.</p>
-    <p class="helper" data-lang-block="cn" style="margin:0 0 var(--s4)">向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。</p>
-    <div id="pu2-root" data-no-i18n></div>
+    <!-- #prod-view-purchasing kept as the inner wrapper (not the section id)
+         so the ~240 lines of `#prod-view-purchasing .pu2-*` rules in
+         retail-admin.css keep scoping this page's look without a CSS rewrite;
+         the outer <section id="tab-purchasing"> is only what tab-switching
+         (01-core.js) looks for. -->
+    <div id="prod-view-purchasing">
+      <div class="t-ord-eyebrow">Purchasing · 采购</div>
+      <h2 class="pa-pagetitle" style="margin:0 0 4px" data-no-i18n>Purchasing</h2>
+      <p class="helper" data-lang-block="en" style="margin:0 0 var(--s4)">Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.</p>
+      <p class="helper" data-lang-block="cn" style="margin:0 0 var(--s4)">向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。</p>
+      <div id="pu2-root" data-no-i18n></div>
+    </div>
   </section>
 
   <section id="tab-guanyi">
