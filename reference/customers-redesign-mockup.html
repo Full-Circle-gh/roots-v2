@@ -176,14 +176,6 @@ body {
 .chip.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .chip.blocked { color: var(--amber-ink); border-color: #EAD9BC; background: var(--amber-tint); }
 
-.select {
-  font: 400 13.5px var(--font-text); color: var(--ink);
-  background: #fff; border: 1px solid var(--border); border-radius: var(--r-control);
-  padding: 8px 12px; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 8px;
-}
-.select .cv { color: var(--graphite); }
-
 /* ---- table ---- */
 .tablecard {
   background: #fff; border: 1px solid var(--border); border-radius: var(--r-card);
@@ -197,6 +189,17 @@ thead th {
   background: var(--cream);
 }
 thead th.r, td.r { text-align: right; }
+
+/* ---- sortable column headers (replaces the old "All tiers" / "Recent login" selects) ---- */
+th.th-sort { cursor: pointer; user-select: none; transition: color 150ms var(--ease-settle); }
+th.th-sort:hover { color: var(--ink); }
+th.th-sort .thlabel { display: inline-flex; align-items: center; gap: 5px; }
+th.th-sort.r .thlabel { flex-direction: row-reverse; }
+th.th-sort .arrow { flex: none; opacity: 0; transform: translateY(1px); transition: opacity 150ms var(--ease-settle), transform 150ms var(--ease-settle); }
+th.th-sort:hover .arrow { opacity: 0.35; }
+th.th-sort.active { color: var(--ink); }
+th.th-sort.active .arrow { opacity: 1; }
+th.th-sort.active.asc .arrow { transform: rotate(180deg); }
 tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr { cursor: pointer; transition: background 200ms var(--ease-settle); }
@@ -366,12 +369,6 @@ tr.dim td { opacity: 0.6; }
         <button class="chip blocked when-blocked">Blocked · 3</button>
       </span>
       <span class="spacer" style="margin-left: auto;"></span>
-      <button class="select">All tiers <span class="cv">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
-      </button>
-      <button class="select">Recent login <span class="cv">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>
-      </button>
     </div>
 
     <!-- ── The roster ───────────────────────────────────────────────── -->
@@ -379,16 +376,16 @@ tr.dim td { opacity: 0.6; }
       <table>
         <thead>
           <tr>
-            <th style="width: 34%;">Customer</th>
-            <th>Tier</th>
-            <th class="r">Orders</th>
-            <th class="r">Points</th>
-            <th class="r">Wallet ¥</th>
-            <th class="r">Last seen</th>
+            <th style="width: 34%;" class="th-sort" data-key="name" data-type="text"><span class="thlabel">Customer<svg class="arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></th>
+            <th class="th-sort" data-key="tier" data-type="num"><span class="thlabel">Tier<svg class="arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></th>
+            <th class="r th-sort" data-key="orders" data-type="num"><span class="thlabel">Orders<svg class="arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></th>
+            <th class="r th-sort" data-key="points" data-type="num"><span class="thlabel">Points<svg class="arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></th>
+            <th class="r th-sort" data-key="wallet" data-type="num"><span class="thlabel">Wallet ¥<svg class="arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></th>
+            <th class="r th-sort active" data-key="lastseen" data-type="num"><span class="thlabel">Last seen<svg class="arrow" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span></th>
           </tr>
         </thead>
         <tbody>
-          <tr class="dim when-blocked">
+          <tr class="dim when-blocked" data-name="marco" data-tier="0" data-orders="2" data-points="6" data-wallet="0" data-lastseen="10">
             <td><span class="who"><span class="ava">M</span><span><span class="nm">Marco <span class="pill block">Blocked</span></span><span class="ph">13802116644</span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num">2</td>
@@ -396,7 +393,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num"><span class="zero">0.00</span></td>
             <td class="r last">Today 15:02</td>
           </tr>
-          <tr>
+          <tr data-name="soraya maragnes" data-tier="0" data-orders="1" data-points="3" data-wallet="0" data-lastseen="9">
             <td><span class="who"><span class="ava">S</span><span><span class="nm">Soraya Maragnes <span class="pill new">New</span></span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num">1</td>
@@ -404,7 +401,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num"><span class="zero">0.00</span></td>
             <td class="r last">Today 14:35</td>
           </tr>
-          <tr>
+          <tr data-name="roxy" data-tier="0" data-orders="1" data-points="1" data-wallet="0" data-lastseen="8">
             <td><span class="who"><span class="ava">R</span><span><span class="nm">Roxy <span class="pill new">New</span></span><span class="ph">787481609</span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num">1</td>
@@ -412,7 +409,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num"><span class="zero">0.00</span></td>
             <td class="r last">Today 14:05</td>
           </tr>
-          <tr>
+          <tr data-name="no name yet 1" data-tier="0" data-orders="0" data-points="0" data-wallet="0" data-lastseen="7">
             <td><span class="who"><span class="ava">·</span><span><span class="nm none">No name yet</span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num"><span class="zero">0</span></td>
@@ -420,7 +417,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num"><span class="zero">0.00</span></td>
             <td class="r last">Today 13:55</td>
           </tr>
-          <tr>
+          <tr data-name="jessica" data-tier="1" data-orders="14" data-points="320" data-wallet="120" data-lastseen="6">
             <td><span class="who"><span class="ava">J</span><span><span class="nm">Jessica 王洁心</span><span class="ph">17792718097</span></span></span></td>
             <td><span class="pill tier up">Sprout</span></td>
             <td class="r num">14</td>
@@ -428,7 +425,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num">120.00</td>
             <td class="r last">Today 13:40</td>
           </tr>
-          <tr>
+          <tr data-name="caroline griffin" data-tier="0" data-orders="1" data-points="3" data-wallet="0" data-lastseen="5">
             <td><span class="who"><span class="ava">C</span><span><span class="nm">Caroline Griffin</span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num">1</td>
@@ -436,7 +433,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num"><span class="zero">0.00</span></td>
             <td class="r last">Today 12:06</td>
           </tr>
-          <tr>
+          <tr data-name="irma" data-tier="0" data-orders="0" data-points="0" data-wallet="0" data-lastseen="4">
             <td><span class="who"><span class="ava">I</span><span><span class="nm">Irma</span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num"><span class="zero">0</span></td>
@@ -444,7 +441,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num"><span class="zero">0.00</span></td>
             <td class="r last">Today 11:57</td>
           </tr>
-          <tr>
+          <tr data-name="no name yet 2" data-tier="0" data-orders="0" data-points="0" data-wallet="0" data-lastseen="3">
             <td><span class="who"><span class="ava">·</span><span><span class="nm none">No name yet</span><span class="ph">13638543304</span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num"><span class="zero">0</span></td>
@@ -452,7 +449,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num"><span class="zero">0.00</span></td>
             <td class="r last">Today 09:23</td>
           </tr>
-          <tr>
+          <tr data-name="tamir" data-tier="0" data-orders="1" data-points="0" data-wallet="0" data-lastseen="2">
             <td><span class="who"><span class="ava">T</span><span><span class="nm">Tamir</span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num">1</td>
@@ -460,7 +457,7 @@ tr.dim td { opacity: 0.6; }
             <td class="r num"><span class="zero">0.00</span></td>
             <td class="r last">Today 06:56</td>
           </tr>
-          <tr>
+          <tr data-name="chantelle" data-tier="0" data-orders="1" data-points="4" data-wallet="0" data-lastseen="1">
             <td><span class="who"><span class="ava">C</span><span><span class="nm">Chantelle</span></span></span></td>
             <td><span class="pill tier">Seed</span></td>
             <td class="r num">1</td>
@@ -490,11 +487,13 @@ tr.dim td { opacity: 0.6; }
           <li><b>“Blocked 0” card.</b> An empty state shouldn’t own a card. Blocked appears only when it exists (flip the toggle above). <span class="rec">recommend</span></li>
           <li><b>“Include blocked” checkbox.</b> Replaced by the amber Blocked chip that only shows when the count is above zero. <span class="rec">recommend</span></li>
           <li><b>Red ▼43% delta.</b> Fewer signups isn’t an alarm. It becomes the words “quieter than usual” in graphite. <span class="rec">recommend</span></li>
+          <li><b>“All tiers” / “Recent login” dropdown selects.</b> Two extra controls for two things already sitting in the table. <span class="rec">recommend</span></li>
         </ul>
       </div>
       <div class="dcard">
         <h3>Changed</h3>
         <ul>
+          <li><b>Tier and Last seen are now sort, not filter.</b> Click the column header to sort by it; click again to flip direction. All columns work this way — try it in the table above. Same information, one control instead of two. <span class="rec">recommend</span></li>
           <li><b>Phone lives under the name.</b> One column instead of two; em-dashes disappear.</li>
           <li><b>Base tier goes quiet.</b> Seed renders as a plain cream pill; only earned tiers (Sprout+) get the sage tint, so an upgraded customer stands out.</li>
           <li><b>Last login → “Last seen”.</b> Today 14:35 / Yesterday 23:24 / Jul 3 — no repeated dates.</li>
@@ -517,5 +516,51 @@ tr.dim td { opacity: 0.6; }
 
   </div>
 </div>
+
+<script>
+(function () {
+  var tbody = document.querySelector('.tablecard tbody');
+  var heads = Array.prototype.slice.call(document.querySelectorAll('th.th-sort'));
+  var state = { key: 'lastseen', dir: 'desc' };
+
+  function sortRows() {
+    var head = heads.filter(function (th) { return th.dataset.key === state.key; })[0];
+    var type = head.dataset.type;
+    var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr'));
+    rows.sort(function (a, b) {
+      var av = a.dataset[state.key], bv = b.dataset[state.key];
+      if (type === 'num') { av = parseFloat(av); bv = parseFloat(bv); }
+      if (av < bv) return state.dir === 'asc' ? -1 : 1;
+      if (av > bv) return state.dir === 'asc' ? 1 : -1;
+      return 0;
+    });
+    rows.forEach(function (r) { tbody.appendChild(r); });
+  }
+
+  function paintHeads() {
+    heads.forEach(function (th) {
+      var active = th.dataset.key === state.key;
+      th.classList.toggle('active', active);
+      th.classList.toggle('asc', active && state.dir === 'asc');
+    });
+  }
+
+  heads.forEach(function (th) {
+    th.addEventListener('click', function () {
+      var key = th.dataset.key;
+      if (state.key === key) {
+        state.dir = state.dir === 'asc' ? 'desc' : 'asc';
+      } else {
+        state.key = key;
+        state.dir = th.dataset.type === 'text' ? 'asc' : 'desc';
+      }
+      sortRows();
+      paintHeads();
+    });
+  });
+
+  paintHeads();
+})();
+</script>
 </body>
 </html>
