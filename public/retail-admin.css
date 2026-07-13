@@ -351,12 +351,17 @@
     padding: 7vh 16px 24px;
     animation: gsearchBackdrop 350ms cubic-bezier(.16, 1, .3, 1);
     /* Re-point this panel off the leftover Full Circle Tea green onto Tacet
-       Amber — the same "here" hue the rail's active row already uses. Scoped
-       here so every var(--accent)/var(--ring) inside the palette (focus ring,
-       active-row icon, jump flash) migrates in one place; the rest of the
-       legacy chrome keeps its own --accent untouched. */
-    --accent: var(--td-amber);
-    --ring: rgba(201, 149, 74, .26);
+       Dusk — not Amber. Every already-migrated Tacet input (.pa-toolbar,
+       #pa-filter, .pu2-search, .td-store-sel, .db-ask-box, …) focuses with
+       --td-dusk; Amber is reserved for status/attention (Tacet: "colour is
+       status, never decoration"). A command palette invokes the system, which
+       is exactly what Dusk means, so this also reads as the *more* correct
+       choice, not just the consistent one. Scoped here so every
+       var(--accent)/var(--ring) inside the palette (focus ring, active-row
+       icon, jump flash) migrates in one place; the rest of the legacy chrome
+       keeps its own --accent untouched. */
+    --accent: var(--td-dusk);
+    --ring: var(--td-dusk-tint);
   }
   @keyframes gsearchBackdrop { from { opacity: 0; } to { opacity: 1; } }
   .gsearch-overlay[hidden] { display: none; }
