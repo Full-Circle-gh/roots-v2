@@ -4269,7 +4269,7 @@
      detail (server seen_at). The wash is an inset box-shadow so it layers above
      whatever background the row-rhythm tweak (striped / cards) paints, without a
      specificity fight. Complements the one-shot 6s arrival flash above. */
-  .ord-no { font-family: var(--f-mono); font-weight: 600; }
+  .ord-no { font-family: var(--f-mono); font-weight: 700; font-size: 14.5px; color: var(--text-1); letter-spacing: .01em; }
   tr.order-row.is-unread td { box-shadow: inset 0 0 0 999px rgba(107, 142, 111, .12); }
   tr.order-row.is-unread .ord-no,
   tr.order-row.is-unread .ord-cust { font-weight: 700; color: var(--text-1); }
