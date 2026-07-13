@@ -8145,6 +8145,11 @@
   body.td-arranging .td-block .bn-card { pointer-events: none; }
   body.td-arranging .td-block .bn-hide { pointer-events: auto; }
   body.td-arranging .td-block .bn-card { border-style: dashed; border-color: var(--td-dusk); }
+  /* Quiet (empty-today) cards are parked in the trailing strip, not draggable —
+     so drop the grab cursor and the dashed "arrange me" border that would
+     otherwise promise a drag that just snaps back. */
+  body.td-arranging .td-block.is-quiet { cursor: default; }
+  body.td-arranging .td-block.is-quiet .bn-card { border-style: solid; border-color: var(--td-border); }
   .td-block.td-dragging { z-index: 40; }
   .td-block.td-dragging .bn-card { box-shadow: 0 10px 30px rgba(17,26,43,.16); border-style: solid; }
 
@@ -8359,9 +8364,17 @@
   }
 
   /* A block with nothing to say leaves the page — a shorter dashboard is the
-     good news. It stays in the DOM so Arrange mode can still reorder it. */
+     good news. It stays in the DOM so Arrange mode can still show it, parked in
+     the trailing strip with the note below. */
   .td-block.is-quiet { display: none; }
   body.td-arranging .td-block.is-quiet { display: block; opacity: .55; }
+  /* the "quiet right now" note inside a parked card (only visible in Arrange —
+     the whole card is display:none otherwise). Centred, muted, two short lines. */
+  .td-quiet-note {
+    display: flex; flex-direction: column; gap: 3px; justify-content: center;
+    height: 100%; padding: 4px 0; font-size: 13px; color: var(--td-text2);
+  }
+  .td-quiet-note b { font-weight: 500; color: var(--td-text); }
 
   /* ── Today — the hero block ──
      Revenue leads. The numeral is one step up from a section vital (44px vs

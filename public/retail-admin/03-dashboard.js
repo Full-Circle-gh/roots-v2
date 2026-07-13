@@ -819,11 +819,15 @@ function dashChanRender() {
   }
   const total = rows.reduce((s, r) => s + r.revenue, 0) || 1;
   const money = n => '¥' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
-  host.innerHTML = rows.map(r => {
+  host.innerHTML = rows.map((r, i) => {
     const nm = DASH_CHAN_NAMES[r.key] ? cuT(DASH_CHAN_NAMES[r.key][0], DASH_CHAN_NAMES[r.key][1]) : r.key;
     const cnt = cuT(`${r.orders} ${r.orders === 1 ? 'order' : 'orders'}`, `${r.orders} 单`);
     const pct = Math.max(2, Math.round((r.revenue / total) * 100));
-    return `<div class="td-chan-row">
+    // Rows past the 3rd carry .detail/.detail2, same convention as the other
+    // list blocks (movers/moves): a squat tile shortens the list instead of
+    // the uncapped row count overflowing the tile and clipping the foot line.
+    const cls = i >= 3 ? ' detail2' : (i >= 2 ? ' detail' : '');
+    return `<div class="td-chan-row${cls}">
       <span class="td-chan-lbl">${escapeHtml(nm)} <span class="td-chan-cnt">${cnt}</span></span>
       <span class="td-chan-val">${money(r.revenue)}</span>
       <span class="td-chan-track"><span class="td-chan-fill" style="width:${pct}%"></span></span>
@@ -1836,6 +1840,11 @@ function dashWireBlock(el, host) {
   el.addEventListener('pointerdown', e => {
     if (!DASH_ARRANGING || e.button !== 0) return;
     if (e.target.closest('.bn-hide')) return;   // the hide ✕ handles its own click
+    // A quiet (empty-today) card has no slot on the live board — it parks in the
+    // trailing strip and rejoins the layout on its own once it has something to
+    // show. Dragging it would just snap back, so it isn't a drag surface; the ✕
+    // still works to hide it for good.
+    if (el.classList.contains('is-quiet')) return;
     const r = _dashRects[el.dataset.block]; if (!r) return;
     _dashDrag = { id: el.dataset.block, el, sx: e.clientX, sy: e.clientY, ox: r.x, oy: r.y, live: false };
     try { el.setPointerCapture(e.pointerId); } catch (err) {}
@@ -2651,11 +2660,18 @@ function tdAttnRender() {
 
   // Nothing waiting → the whole block leaves the page: heading, card and all.
   // A shorter dashboard IS the good news. The block stays in the DOM (hidden
-  // by CSS) so Arrange mode can still show and reorder it.
+  // by CSS) so Arrange mode can still show it — parked in the trailing strip
+  // with a note (below) that only the operator sees while arranging.
   const block = host.closest('.td-block');
   const wasQuiet = block && block.classList.contains('is-quiet');
   if (!cards.length) {
-    host.innerHTML = '';
+    // The note only ever shows in Arrange mode (the whole card is display:none
+    // otherwise), so it explains why a quiet card sits at the bottom and can't
+    // be dragged: it comes back up on its own when there's something to do.
+    host.innerHTML = `<div class="td-quiet-note">`
+      + `<b>${escapeHtml(cuT('Quiet right now.', '目前无待办。'))}</b>`
+      + `<span>${escapeHtml(cuT('Moves back up on its own when something needs you.', '有待办时会自动回到上方。'))}</span>`
+      + `</div>`;
     if (block) block.classList.add('is-quiet');
     // Needs-you just emptied — re-solve so the bento closes its gap.
     if (!wasQuiet && typeof dashRender === 'function') dashRender();
