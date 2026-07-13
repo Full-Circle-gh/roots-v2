@@ -508,7 +508,7 @@
      `main` reserves the 56px below; collapse + mobile adjust `left` below. The
      topbar's own brand is hidden on desktop. */
   .topbar .brand { display: none; }
-  .tabs button {
+  .tabs button, .tabs a {
     position: relative;
     background: transparent;
     color: var(--text-2);
@@ -526,13 +526,15 @@
     width: 100%; text-align: left;
     /* Never wrap a label to a second line — keep every rail row single-line. */
     white-space: nowrap;
+    text-decoration: none;
+    box-sizing: border-box;
   }
-  .tabs button:hover { color: var(--text-1); background: var(--bg-elev-1); }
+  .tabs button:hover, .tabs a:hover { color: var(--text-1); background: var(--bg-elev-1); }
   /* Active row — cream fill + a short rounded Amber mark on the left edge and a
      heavier label (Tacet: Amber is the warm status/attention hue; the old --brass
      was leftover Full Circle). Popover children opt out of the mark below. */
-  .tabs button.active { color: var(--text-1); background: var(--bg-elev-1); font-weight: 600; box-shadow: none; }
-  .tabs button.active::before {
+  .tabs button.active, .tabs a.active { color: var(--text-1); background: var(--bg-elev-1); font-weight: 600; box-shadow: none; }
+  .tabs button.active::before, .tabs a.active::before {
     content: ""; position: absolute; left: 0; top: 9px; bottom: 9px;
     width: 3px; border-radius: 0 3px 3px 0; background: var(--td-amber);
   }
@@ -540,7 +542,7 @@
      alarm pulse. Scoped to .tabs so it doesn't touch the mobile bottom-nav. */
   .tabs .tab-badge { background: var(--td-amber); animation: none; }
   .tabs-popover button.active::before { content: none; }
-  .tabs button svg { width: 20px; height: 20px; flex: none; }
+  .tabs button svg, .tabs a svg { width: 20px; height: 20px; flex: none; }
   /* Group/parent chevron sits at the far right of its row. */
   .tabs .tabs-chev { margin-left: auto; }
 
@@ -592,7 +594,7 @@
   body.nav-collapsed.cobrand .nav-brand .brand-mark-img { display: block; width: 30px; height: 30px; border-radius: 7px; margin: 0 auto; }
   body.nav-collapsed .brand-credit { justify-content: center; padding: 12px 0 6px; }
   body.nav-collapsed .brand-credit span { display: none; }
-  body.nav-collapsed .tabs button {
+  body.nav-collapsed .tabs button, body.nav-collapsed .tabs a {
     font-size: 0; gap: 0; justify-content: center;
     padding-left: 0; padding-right: 0;
   }
