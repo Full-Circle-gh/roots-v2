@@ -426,16 +426,18 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 // Which view is up is read straight off the DOM (actTabVisible in 13-activity
 // .js checks #prod-view-activity's display), so no state variable is kept here.
 // The tab always opens on the catalogue.
-// Three places live under Products: the catalogue, the stock ledger, and the
+// Two places live under Products: the catalogue, the stock ledger, and the
 // shelf (Categories, folded in 2026-07-10). A view the operator can't reach
-// falls back to the catalogue rather than showing an empty pane.
+// falls back to the catalogue rather than showing an empty pane. Purchasing
+// was folded in here too (2026-07-11) but got its own rail tab back
+// (2026-07-13, #tab-purchasing / puInit in 16-purchasing.js) — a supplier
+// order is its own place, not a fact about the catalogue.
 function prodShowView(view) {
   const allowed = (v, cap) => v === view && (typeof can !== 'function' || can(cap));
-  if (!allowed('activity', 'activity:view') && !allowed('categories', 'categories:view')
-      && !allowed('purchasing', 'purchasing:view')) view = 'catalog';
+  if (!allowed('activity', 'activity:view') && !allowed('categories', 'categories:view')) view = 'catalog';
   const panes = {
     catalog: 'prod-view-catalog', activity: 'prod-view-activity',
-    categories: 'prod-view-categories', purchasing: 'prod-view-purchasing',
+    categories: 'prod-view-categories',
   };
   for (const [v, id] of Object.entries(panes)) {
     const el = document.getElementById(id);
@@ -447,17 +449,15 @@ function prodShowView(view) {
   if (view === 'activity' && typeof actAdminInit === 'function') actAdminInit();
   // The tree is fetched the first time the shelf is opened, never before.
   if (view === 'categories' && typeof catLoad === 'function' && !catLoaded) catLoad();
-  // Purchasing owns its own lazy-load + refresh (puInit is idempotent).
-  if (view === 'purchasing' && typeof puInit === 'function') puInit();
   // The ⓘ next to the title carries this view's "what is this" copy.
   prodSetHelp(view);
 }
 
 // ── Page header — both the title and the ⓘ tooltip follow whichever sub-view
 // is on screen. The title says WHERE you are (Catalogue / Stock activity /
-// Categories / Purchasing); the ⓘ carries that view's one-time "what is this"
-// copy, kept out of the way because a user needs it once. Both repaint with the
-// live language. ──
+// Categories); the ⓘ carries that view's one-time "what is this" copy, kept
+// out of the way because a user needs it once. Both repaint with the live
+// language. ──
 const PROD_VIEW_META = {
   catalog: {
     title: ['Your catalogue', '您的目录'],
@@ -473,11 +473,6 @@ const PROD_VIEW_META = {
     title: ['Categories', '分类'],
     help: ['How the shop shelves are arranged. Top categories are the left rail; subcategories are the section headings. Rename anything and every product on it follows. A category with nothing published stays out of the shop on its own.',
            '店面货架的排列方式。主分类即左栏，子分类即区块标题。重命名后，该分类下的所有产品会自动跟随。没有上架产品的分类不会出现在店面。'],
-  },
-  purchasing: {
-    title: ['Purchasing', '采购'],
-    help: ['Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.',
-           '向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。'],
   },
 };
 let _prodHelpView = 'catalog';

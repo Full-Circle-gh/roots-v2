@@ -942,6 +942,7 @@ async function loadIntegrationsStatus() {
     'orders':      'fulfil fulfill shipping refund cancel invoice receipt billing tax fapiao 订单 退款 发货 发票 收据',
     'customers':   'members users buyers tags 顾客 会员 用户',
     'products':    'items catalog inventory stock price sku 产品 商品 库存 价格',
+    'purchasing':  'purchase orders po buying restock receive goods suppliers vendor contacts import csv 采购单 进货 供应商 供货商',
     'coupons':     'voucher discount promo code 优惠券 折扣 促销',
     'flash sales': 'sale countdown deal 秒杀 限时',
     'pop-ups':     'popup banner modal announcement 弹窗',
@@ -1100,19 +1101,9 @@ async function loadIntegrationsStatus() {
                    view: 'categories',
                    kw: 'categories category shelves subcategory tree rail sections 分类 子分类 categories' });
     }
-    // 1d) Purchasing folded into Products 2026-07-11 (was a rail tab) — hand-index
-    // it, and "Suppliers", so both still surface in search after the move.
-    if (document.getElementById('prod-view-purchasing')
-        && (typeof can !== 'function' || (can('products:view') && can('purchasing:view')))) {
-      items.push({ type: 'page', title: cuT('Purchasing', '采购'),
-                   crumb: cuT('Products', '产品'), tab: 'products', sub: null, anchor: null,
-                   view: 'purchasing',
-                   kw: 'purchasing purchase orders po buying restock receive goods 采购 采购单 进货' });
-      items.push({ type: 'page', title: cuT('Suppliers', '供应商'),
-                   crumb: cuT('Products', '产品'), tab: 'products', sub: null, anchor: null,
-                   view: 'purchasing',
-                   kw: 'suppliers vendor supplier contacts import csv 供应商 供货商' });
-    }
+    // 1d) Purchasing had a hand-indexed entry while it was folded into Products
+    // (2026-07-11 – 2026-07-13); it's back on the rail now, so the generic
+    // top-level-tab walk above already indexes it (title + ALIASES.purchasing).
     // 2) External editor launchers in the Content group (open in a new tab)
     document.querySelectorAll('.tabs-popover button[onclick*="window.open"]').forEach(btn => {
       if (gatedOff(btn)) return;

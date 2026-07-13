@@ -1058,13 +1058,18 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5"/><path d="M16 6a3 3 0 0 1 0 5"/><path d="M18 20c0-2.4-1-4.2-2.5-5"/></svg>
     Customers · 顾客
   </button>
-  <!-- Products. Categories (2026-07-10) and Purchasing (2026-07-11) are both
-       sub-views of Products now — reached from the sub-view tabs on the page,
-       not the rail — because a shelf and a supplier order are facts about the
-       catalogue, not places of their own. So Products is a plain rail link. -->
+  <!-- Products. Categories (2026-07-10) is a sub-view of Products, reached
+       from the sub-view tabs on the page, not the rail — because a shelf is a
+       fact about the catalogue, not a place of its own. Purchasing was folded
+       in the same way (2026-07-11) but got its own rail tab back (2026-07-13)
+       — a supplier order is its own place. -->
   <button data-tab="products" style="order:9">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l8-4 8 4-8 4-8-4z"/><path d="M4 8v8l8 4 8-4V8"/><path d="M12 12v8"/></svg>
     Products · 产品
+  </button>
+  <button data-tab="purchasing" onclick="puInit()" style="order:9.5">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/></svg>
+    Purchasing · 采购
   </button>
 
   <!-- Editor → Content pages. The parent opens the Mini App Editor (embedded
@@ -1467,7 +1472,7 @@
             <div class="bn-head">
               <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
               <h3>On the way · 在途采购</h3>
-              <button type="button" class="bn-go" onclick="dashJumpTab('products')">Purchasing › · 前往采购 ›</button>
+              <button type="button" class="bn-go" onclick="dashJumpTab('purchasing')">Purchasing › · 前往采购 ›</button>
             </div>
             <div class="bn-body">
               <div class="bx-in-list" id="td-incoming-list"><div class="td-muted">Loading… · 加载中…</div></div>
@@ -1486,7 +1491,7 @@
             <div class="bn-head">
               <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2"/><path d="M9 13h6M9 17h4"/></svg>
               <h3>Drafts to send · 待发送采购</h3>
-              <button type="button" class="bn-go" onclick="dashJumpTab('products')">Review › · 前往采购 ›</button>
+              <button type="button" class="bn-go" onclick="dashJumpTab('purchasing')">Review › · 前往采购 ›</button>
             </div>
             <div class="bn-body">
               <div class="bx-in-list" id="td-drafts-list"><div class="td-muted">Loading… · 加载中…</div></div>
@@ -2954,8 +2959,8 @@
          is for. Bilingual halves ride as separate blocks (never glued). -->
     <div class="t-ord-eyebrow">Products · 产品</div>
     <!-- Title row + ⓘ. Both the title and the ⓘ tooltip follow whichever
-         sub-view is on screen — Catalogue / Stock activity / Categories /
-         Purchasing — painted by prodSetHelp() in 09-products.js (data-no-i18n:
+         sub-view is on screen — Catalogue / Stock activity / Categories —
+         painted by prodSetHelp() in 09-products.js (data-no-i18n:
          the live language is written straight into it by cuT). The "what is
          this" copy is one-time teaching text, so it rides behind the ⓘ (hover
          or tap) instead of standing on the page. -->
@@ -2974,12 +2979,13 @@
          with the products it counts). Quiet text tabs, ink underline on the
          active one; the amber dot appears when something hit zero today.
          Hidden entirely for operators without activity:view — their Products
-         page looks exactly as before. -->
-    <div class="stk-views" id="stk-views" data-cap="activity:view categories:view purchasing:view">
+         page looks exactly as before. Purchasing moved out to its own rail
+         tab (2026-07-13) — a supplier order is its own place, not a fact
+         about the catalogue. -->
+    <div class="stk-views" id="stk-views" data-cap="activity:view categories:view">
       <button type="button" class="stk-view on" id="stk-view-btn-catalog" onclick="prodShowView('catalog')">Catalogue · 目录</button>
       <button type="button" class="stk-view" id="stk-view-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')"><i class="stk-view-dot" id="stk-view-dot" hidden></i>Stock activity · 库存流水</button>
       <button type="button" class="stk-view" id="stk-view-btn-categories" data-cap="categories:view" onclick="prodShowView('categories')">Categories · 分类</button>
-      <button type="button" class="stk-view" id="stk-view-btn-purchasing" data-cap="purchasing:view" onclick="prodShowView('purchasing')">Purchasing · 采购</button>
     </div>
 
     <div id="prod-view-catalog">
@@ -3583,17 +3589,6 @@
       <div class="cat2-pane" id="cat2-pane" data-no-i18n></div>
     </div>
     </div><!-- /#prod-view-categories -->
-
-    <!-- Purchasing — the store's buying department, folded into Products
-         2026-07-11 (a supplier order is a fact about the catalogue). The whole
-         surface is painted by 16-purchasing.js into #pu2-root; screens (orders
-         ledger / new-order wizard / receiving / suppliers / supplier form /
-         CSV import) swap inside it. data-no-i18n because every string is
-         already written in the live language by cuT() — the bilingual walker
-         must keep its hands off. -->
-    <div id="prod-view-purchasing" style="display:none">
-      <div id="pu2-root" data-no-i18n></div>
-    </div><!-- /#prod-view-purchasing -->
 
     <!-- ─── Guided product wizard (additive; lives inside the Products tab so tab-switching never hides it) ─── -->
     <div id="pw-bg" class="pu-editor-bg">
@@ -9344,9 +9339,21 @@
        (#prod-view-activity, 2026-07-10) — same ids, same JS (13-activity.js),
        reached from the "Stock activity" tab / the four stock cards there. -->
 
-  <!-- Purchasing moved into Products as a sub-view (#prod-view-purchasing,
-       2026-07-11). Its whole UI is rendered by 16-purchasing.js into #pu2-root
-       up there; no standalone section lives here any more. -->
+  <!-- ─── PURCHASING ─── the store's buying department. Briefly folded into
+       Products as a sub-view (2026-07-11); promoted to its own rail tab
+       (2026-07-13) — a supplier order is its own place, not a fact about the
+       catalogue. The whole surface is painted by 16-purchasing.js into
+       #pu2-root; screens (orders ledger / new-order wizard / receiving /
+       suppliers / supplier form / CSV import) swap inside it. data-no-i18n
+       because every string is already written in the live language by
+       cuT() — the bilingual walker must keep its hands off. -->
+  <section id="tab-purchasing">
+    <div class="t-ord-eyebrow">Purchasing · 采购</div>
+    <h2 class="pa-pagetitle" style="margin:0 0 4px" data-no-i18n>Purchasing</h2>
+    <p class="helper" data-lang-block="en" style="margin:0 0 var(--s4)">Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.</p>
+    <p class="helper" data-lang-block="cn" style="margin:0 0 var(--s4)">向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。</p>
+    <div id="pu2-root" data-no-i18n></div>
+  </section>
 
   <section id="tab-guanyi">
     <h2>gzgrocery 同步 · Guanyi Sync</h2>
