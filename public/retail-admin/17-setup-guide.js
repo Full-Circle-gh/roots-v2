@@ -95,7 +95,7 @@ function suRing(percent, size) {
   return `<div class="su-ring" style="width:${s}px;height:${s}px">
     <svg viewBox="0 0 64 64" style="width:${s}px;height:${s}px">
       <circle cx="32" cy="32" r="27" fill="none" stroke="var(--line,#e8e4da)" stroke-width="6"/>
-      <circle cx="32" cy="32" r="27" fill="none" stroke="var(--brass,#a8853b)" stroke-width="6"
+      <circle cx="32" cy="32" r="27" fill="none" stroke="var(--brass)" stroke-width="6"
               stroke-dasharray="${C}" stroke-dashoffset="${off}" stroke-linecap="round"
               transform="rotate(-90 32 32)"/>
     </svg>

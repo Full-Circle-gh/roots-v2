@@ -2104,6 +2104,42 @@
     .pa-info-pop { transition: opacity .16s ease; transform: none; }
   }
 
+  /* ── Inline field help — a compact ⓘ that sits beside a field label and
+        reveals its "what is this" copy on hover / focus. Replaces the standing
+        grey guide lines under inputs, keeping teaching text out of the way
+        until it's wanted. Reuses the topbar ⓘ look at a smaller size. ── */
+  .fhelp { position: relative; display: inline-flex; vertical-align: middle; }
+  .fhelp-btn {
+    appearance: none; background: none; border: none; margin: 0 0 0 5px; padding: 2px;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 0; border-radius: 50%; cursor: help;
+    color: var(--td-text2, #8a8378); transition: color .15s ease, background .15s ease;
+  }
+  .fhelp-btn svg { width: 14px; height: 14px; display: block; }
+  .fhelp-btn:hover, .fhelp-btn:focus-visible {
+    color: var(--td-text, #1a1a17); background: var(--td-surface, #f0ede4); outline: none;
+  }
+  .fhelp-pop {
+    position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%) translateY(-4px);
+    z-index: 60; width: max-content; max-width: min(280px, calc(100vw - 48px));
+    background: var(--td-paper, #fbfaf6); color: var(--td-text2, #55554c);
+    border: 1px solid var(--td-border, #e4e0d5); border-radius: 10px;
+    box-shadow: 0 8px 28px rgba(20, 20, 15, .14);
+    padding: 9px 11px; font-size: 12px; font-weight: 400; line-height: 1.5; text-align: left;
+    white-space: normal;
+    opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s;
+  }
+  .fhelp:hover .fhelp-pop,
+  .fhelp:focus-within .fhelp-pop {
+    opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); pointer-events: auto;
+    transition: opacity .16s ease, transform .16s ease;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .fhelp-pop { transition: opacity .16s ease; transform: translateX(-50%); }
+    .fhelp:hover .fhelp-pop, .fhelp:focus-within .fhelp-pop { transform: translateX(-50%); }
+  }
+
   /* ── Recap band — one calm hero count, then one-click jumps to the three
         buckets that actually need someone. The numbers ARE the filters. ── */
   .pa-recap {
@@ -8158,6 +8194,16 @@
   /* generated-content wrappers fill + clip inside the tile */
   .bn-recap-rows, .bn-attn { flex: 1; min-height: 0; overflow: hidden; }
   .bn-chan-list { flex: 1; min-height: 0; }
+
+  /* "Show the work" unfolds the full feed in place. Inside the fixed-height
+     tile the one-line digest above it (flex:1) was being crushed to a clipped
+     sliver — so once the feed is open, fold the redundant digest away and let
+     the feed own the tile and scroll. */
+  .bn-body:has(> .td-recap-work:not([hidden])) .bn-recap-rows { display: none; }
+  .bn-body:has(> .td-recap-work:not([hidden])) .td-recap-work {
+    flex: 1 1 auto; min-height: 0; max-height: none;
+    margin-top: 0; padding-top: 0; border-top: 0;
+  }
 
   /* footers (painted by tdSecPaint) bleed to the card's rounded foot */
   .td-block .td-sec-foot { margin-top: auto; padding: 11px 20px; }

@@ -12,10 +12,10 @@
   // Status → { label EN·CN, dot colour, pill class }. Kept honest: a card is only
   // "connected" when its integration row says so.
   const STATUS = {
-    connected:      { en: 'Connected',   cn: '已连接',   dot: 'var(--accent,#6B8E6F)', cls: 'ok' },
-    configured:     { en: 'Ready to set up', cn: '待设置', dot: 'var(--brass,#B08D4A)', cls: 'warn' },
-    in_setup:       { en: 'In setup',    cn: '设置中',   dot: 'var(--brass,#B08D4A)', cls: 'warn' },
-    connecting:     { en: 'Connecting…', cn: '连接中…',  dot: 'var(--brass,#B08D4A)', cls: 'warn' },
+    connected:      { en: 'Connected',   cn: '已连接',   dot: 'var(--accent)', cls: 'ok' },
+    configured:     { en: 'Ready to set up', cn: '待设置', dot: 'var(--brass)', cls: 'warn' },
+    in_setup:       { en: 'In setup',    cn: '设置中',   dot: 'var(--brass)', cls: 'warn' },
+    connecting:     { en: 'Connecting…', cn: '连接中…',  dot: 'var(--brass)', cls: 'warn' },
     error:          { en: 'Needs attention', cn: '需处理', dot: 'var(--danger,#e8556a)', cls: 'err' },
     paused:         { en: 'Paused',      cn: '已暂停',   dot: 'var(--text-3,#7d7a72)', cls: 'muted' },
     not_configured: { en: 'Not set up',  cn: '未配置',   dot: 'var(--text-4,#56544f)', cls: 'muted' },
@@ -315,11 +315,11 @@
     const rows = [];
     rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('WeChat · 小程序', '小程序')}</b><br>
       <span class="muted" style="font-size:12px">${cuT('Appears in the store picker automatically · 自动加入门店选择', '自动加入门店选择')}</span></div>
-      <span style="color:var(--accent,#6B8E6F);font-size:12px;font-weight:600">✓ ${cuT('Ready · 自动就绪', '自动就绪')}</span></div>`);
+      <span style="color:var(--accent);font-size:12px;font-weight:600">✓ ${cuT('Ready · 自动就绪', '自动就绪')}</span></div>`);
     for (const t of channelTodos) {
       rows.push(`<div class="ig-linkrow"><div class="grow"><b>${esc(cuT(t.labelEn, t.labelCn))}</b><br>
         <span class="muted" style="font-size:12px">${cuT('A “link this store” to-do was added to its card below · 已在下方卡片添加“关联门店”待办', '已在下方卡片添加“关联门店”待办')}</span></div>
-        <span style="color:var(--brass,#B08D4A);font-size:12px;font-weight:600">⚑ ${cuT('To-do · 待办', '待办')}</span></div>`);
+        <span style="color:var(--brass);font-size:12px;font-weight:600">⚑ ${cuT('To-do · 待办', '待办')}</span></div>`);
     }
     rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Stock & quotas · 库存与配额', '库存与配额')}</b><br>
       <span class="muted" style="font-size:12px">${cuT('New stores start un-counted; set stock when ready · 新门店初始未盘点,可随时录入库存', '新门店初始未盘点,可随时录入库存')}</span></div>
@@ -388,7 +388,7 @@
         const tracking = boxSt.tracking
           ? `<div style="font-size:12.5px;margin-top:8px;color:var(--text-2)">${cuT('Tracking', '快递')}: <span style="font-family:var(--f-mono,monospace)">${esc(boxSt.tracking)}</span></div>`
           : '';
-        body = `<div style="font-size:14px;color:var(--accent,#6B8E6F);font-weight:600">✓ ${head}${when ? ` <span style="color:var(--text-3);font-weight:400">${esc(when)}</span>` : ''}</div>
+        body = `<div style="font-size:14px;color:var(--accent);font-weight:600">✓ ${head}${when ? ` <span style="color:var(--text-3);font-weight:400">${esc(when)}</span>` : ''}</div>
           <p class="muted" style="font-size:13px;max-width:56ch;margin-top:6px">${copy}</p>
           ${tracking}
           <div style="display:flex;gap:10px;margin-top:16px;align-items:center">
@@ -450,7 +450,7 @@
       const openBtn = _relay.kind === 'meituan'
         ? `<button class="btn btn-primary" onclick="igRelayClose();goTab('meituan')">${cuT('Open Meituan · 打开美团', '打开美团')}</button>`
         : '';
-      body = `<div style="font-size:14px;color:var(--accent,#6B8E6F);font-weight:600">✓ ${cuT('Connected · 已连接', '已连接')}</div>
+      body = `<div style="font-size:14px;color:var(--accent);font-weight:600">✓ ${cuT('Connected · 已连接', '已连接')}</div>
         <p class="muted" style="font-size:13px;margin-top:6px">${cuT(nextEn, nextCn)}</p>
         <div style="display:flex;gap:10px;margin-top:14px">
           ${openBtn}
@@ -560,7 +560,7 @@
     const liveN = Number(s.liveProducts || 0);
     const unmatched = Number(s.notMatched || 0);
     facts.push(`${liveN} ${cuT('products live', '个商品已上架')}`);
-    if (unmatched) facts.push(`<span style="color:var(--brass,#B08D4A)">${unmatched} ${cuT('not matched', '个未匹配')}</span>`);
+    if (unmatched) facts.push(`<span style="color:var(--brass)">${unmatched} ${cuT('not matched', '个未匹配')}</span>`);
     if (s.open === true) facts.push(cuT('Store open on Meituan', '门店美团营业中'));
     else if (s.open === false) facts.push(cuT('Store closed on Meituan', '门店美团已置休'));
     const live = [
@@ -670,7 +670,7 @@
         let right;
         if (!connected) right = `<button class="btn btn-sm btn-primary" onclick="igElemeConnect(${s.id}, '${escJs(s.code)}')">${cuT('Connect · 连接', '连接')}</button>`;
         else if (!shopSet) right = `<span style="display:flex;gap:6px;align-items:center"><input id="igel-shop-${s.id}" placeholder="${cuT('Eleme shop id', '店铺ID')}" style="width:130px"><button class="btn btn-sm btn-primary" onclick="igElemeShop(${s.id},'${escJs(s.code)}')">${cuT('Save', '保存')}</button></span>`;
-        else right = `<span style="color:var(--accent,#6B8E6F);font-size:12.5px">✓ ${esc(s.shop_name || s.shop_id)}</span>`;
+        else right = `<span style="color:var(--accent);font-size:12.5px">✓ ${esc(s.shop_name || s.shop_id)}</span>`;
         return `<div class="ig-linkrow"><div class="grow"><b>${esc(s.name || s.code)}</b></div>${right}</div>`;
       }).join('');
       body = `<p class="muted" style="font-size:13px">${cuT('Authorize each store to its Eleme shop. You’ll be sent to Eleme to approve, then back here.', '为每个门店授权对应的饿了么店铺。将跳转至饿了么授权后返回。')}</p>
@@ -889,10 +889,10 @@
       const r = await api('/api/retail-admin/channel-hub/miniapp/wechat-creds', { method: 'POST', body });
       if (r.verified) {
         if (btn) { btn.classList.add('mc-ok'); btn.innerHTML = `${MC_SVG.tick}<span>${cuT('Verified', '已验证')}</span>`; }
-        if (out) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = cuT('Saved — WeChat accepted the credentials.', '已保存 — 微信验证通过。'); }
+        if (out) { out.style.color = 'var(--accent)'; out.textContent = cuT('Saved — WeChat accepted the credentials.', '已保存 — 微信验证通过。'); }
       } else {
         if (btn) { btn.disabled = false; btn.innerHTML = mcSaveBtnHtml(); }
-        if (out) { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = cuT('Saved, but WeChat rejected the login pair: ', '已保存，但微信校验未通过：') + (r.error || ''); }
+        if (out) { out.style.color = 'var(--brass)'; out.textContent = cuT('Saved, but WeChat rejected the login pair: ', '已保存，但微信校验未通过：') + (r.error || ''); }
       }
       igLoad();
       setTimeout(igMiniappConfigFull, 1600);
@@ -924,7 +924,7 @@
   }
   function mwSay(t, bad) {
     const out = document.getElementById('mw_msg');
-    if (out) { out.style.color = bad ? 'var(--danger)' : 'var(--accent,#6B8E6F)'; out.textContent = t; }
+    if (out) { out.style.color = bad ? 'var(--danger)' : 'var(--accent)'; out.textContent = t; }
   }
   function mwBusy(on, step) {
     const btn = document.getElementById('mw_next'); if (!btn) return false;
@@ -1371,7 +1371,7 @@
     if (out) { out.style.color = 'var(--text-3)'; out.textContent = cuT('Saving…', '保存中…'); }
     try {
       await api('/api/retail-admin/channel-hub/web/signin', { method: 'POST', body });
-      if (out) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = '✓ ' + cuT('Saved', '已保存'); }
+      if (out) { out.style.color = 'var(--accent)'; out.textContent = '✓ ' + cuT('Saved', '已保存'); }
     } catch (e) {
       if (out) { out.style.color = 'var(--danger)'; out.textContent = cuT('Save failed', '保存失败'); }
     } finally { if (btn) btn.disabled = false; }
@@ -1401,8 +1401,8 @@
     try {
       const r = await api(`/api/retail-admin/channel-hub/web/domain/${domainId}/check`, { method: 'POST' });
       if (out) {
-        if (r.pointing) { out.style.color = 'var(--accent,#6B8E6F)'; out.textContent = '✓ ' + cuT('DNS is pointing here. We’ll issue HTTPS and turn it on — usually within a few minutes.', 'DNS 已指向本平台。我们会签发 HTTPS 并开启,通常几分钟内完成。'); }
-        else { out.style.color = 'var(--brass,#B08D4A)'; out.textContent = cuT('Not pointing here yet. DNS can take a while to update — try again shortly.', '尚未指向本平台。DNS 生效可能需要一些时间,请稍后重试。'); }
+        if (r.pointing) { out.style.color = 'var(--accent)'; out.textContent = '✓ ' + cuT('DNS is pointing here. We’ll issue HTTPS and turn it on — usually within a few minutes.', 'DNS 已指向本平台。我们会签发 HTTPS 并开启,通常几分钟内完成。'); }
+        else { out.style.color = 'var(--brass)'; out.textContent = cuT('Not pointing here yet. DNS can take a while to update — try again shortly.', '尚未指向本平台。DNS 生效可能需要一些时间,请稍后重试。'); }
       }
     } catch (e) {
       if (out) { out.style.color = 'var(--danger)'; out.textContent = cuT('Check failed', '检测失败'); }

@@ -257,6 +257,7 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   $$('.tabs-group').forEach(g => g.classList.toggle('has-active', g.contains(btn)));
   // Accordion rail: keep the active tab's group expanded; collapse the others.
   $$('.tabs-group').forEach(g => g.classList.toggle('open', g.contains(btn)));
+  tbSetPage();
 }));
 // Sales overview → jump into a single channel's full admin. The "Configure"
 // buttons on #tab-sales call this; it clicks the channel's rail button, which
@@ -286,7 +287,29 @@ function goTab(tab) {
     g.classList.toggle('has-active', has);
     g.classList.toggle('open', has);
   });
+  tbSetPage();
 }
+
+// Topbar page identity (Option B) — paint the active section's own name into the
+// left of the topbar, where the search field used to sit. The label is lifted
+// straight from the active rail button's DIRECT text (so it tracks the live
+// language and never picks up an SVG icon or a badge span). Products additionally
+// shows its sub-view switch there (wired in the markup); every other tab just
+// gets its name. Called on every tab switch and on language change.
+function _tbRailLabel(btn) {
+  let s = '';
+  btn.childNodes.forEach(n => { if (n.nodeType === 3) s += n.nodeValue; });
+  return s.replace(/\s+/g, ' ').trim();
+}
+function tbSetPage() {
+  const crumb = document.getElementById('tb-crumb');
+  if (!crumb) return;
+  const active = document.querySelector('.tabs [data-tab].active');
+  crumb.textContent = active ? _tbRailLabel(active) : '';
+}
+if (typeof window.onLangChange === 'function') window.onLangChange(() => tbSetPage());
+if (document.readyState !== 'loading') tbSetPage();
+else document.addEventListener('DOMContentLoaded', tbSetPage);
 // Topbar Inbox dropdown (Reviews / Feedback).
 function toggleInboxMenu(ev) {
   if (ev) ev.stopPropagation();

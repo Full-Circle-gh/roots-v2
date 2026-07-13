@@ -454,6 +454,8 @@ function prodShowView(view) {
     const el = document.getElementById(id);
     if (el) el.style.display = v === view ? '' : 'none';
     document.getElementById('stk-view-btn-' + v)?.classList.toggle('on', v === view);
+    // Mirror the active state onto the desktop topbar switch (Option B).
+    document.getElementById('tb-stk-btn-' + v)?.classList.toggle('on', v === view);
   }
   // actAdminInit loads the ledger and starts its own 15s poll; that poll asks
   // actTabVisible(), which checks this view is the one on screen.
@@ -495,23 +497,31 @@ function prodSetHelp(view) {
   if (title) title.textContent = say(m.title);
   const help = document.getElementById('pa-info-text');
   if (help) help.textContent = say(m.help);
+  // Desktop topbar ⓘ carries the same per-view copy (Option B mirror).
+  const tbHelp = document.getElementById('tb-info-text');
+  if (tbHelp) tbHelp.textContent = say(m.help);
 }
 // Click/tap toggles the tooltip open (hover + keyboard focus are handled in
 // CSS); an outside click closes it. Sticky-open is what makes it usable on
 // touch, where :hover never fires.
 function prodToggleHelp(e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
-  const wrap = document.getElementById('pa-info-wrap'); if (!wrap) return;
+  // Toggle whichever ⓘ was clicked — the in-content one (#pa-info-wrap) on phones
+  // or the topbar mirror (#tb-info-wrap) on desktop. Falls back to the content one.
+  const wrap = (e && e.currentTarget && e.currentTarget.closest('.pa-info-wrap'))
+             || document.getElementById('pa-info-wrap');
+  if (!wrap) return;
   const open = wrap.classList.toggle('open');
-  document.getElementById('pa-info-btn')?.setAttribute('aria-expanded', open ? 'true' : 'false');
+  wrap.querySelector('.pa-info')?.setAttribute('aria-expanded', open ? 'true' : 'false');
   if (open) setTimeout(() => document.addEventListener('click', prodCloseHelp), 0);
   else document.removeEventListener('click', prodCloseHelp);
 }
 function prodCloseHelp(e) {
-  const wrap = document.getElementById('pa-info-wrap'); if (!wrap) return;
-  if (e && wrap.contains(e.target)) return;
-  wrap.classList.remove('open');
-  document.getElementById('pa-info-btn')?.setAttribute('aria-expanded', 'false');
+  document.querySelectorAll('#pa-info-wrap, #tb-info-wrap').forEach((wrap) => {
+    if (e && wrap.contains(e.target)) return;
+    wrap.classList.remove('open');
+    wrap.querySelector('.pa-info')?.setAttribute('aria-expanded', 'false');
+  });
   document.removeEventListener('click', prodCloseHelp);
 }
 // Paint the default (catalogue) help on load and keep it in the live language.
@@ -568,8 +578,12 @@ function prodRenderStock() {
   set('stk-mini-in-hint',    cuT('restocks', '补货入库'));
   set('stk-mini-zero-hint',  d.zero ? cuT('see below ›', '见下方 ›') : cuT('nothing waiting', '无需处理'));
   document.getElementById('stk-mini-zero-card')?.classList.toggle('warn', d.zero > 0);
+  const zeroDot = !(d.zero > 0);
   const dot = document.getElementById('stk-view-dot');
-  if (dot) dot.hidden = !(d.zero > 0);
+  if (dot) dot.hidden = zeroDot;
+  // Mirror the hit-zero dot onto the desktop topbar switch (Option B).
+  const tbDot = document.getElementById('tb-stk-dot');
+  if (tbDot) tbDot.hidden = zeroDot;
 }
 
 // Live push: stock moves constantly (orders, daemons, quick-stock). The
@@ -3751,7 +3765,7 @@ function pdComposeProgress() {
         <div style="font-weight:700;font-size:15px;color:var(--text-1,#1a2314);line-height:1.3">${cuT('Building your product page', '正在生成商品页')}</div>
       </div>
       <div style="height:8px;border-radius:999px;background:var(--bg-elev-1,#e9e9e3);overflow:hidden">
-        <div data-bar style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,#A3B49F,var(--brass,#C9954A));transition:width .4s ease"></div>
+        <div data-bar style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,#A3B49F,var(--brass));transition:width .4s ease"></div>
       </div>
       <div data-msg style="margin-top:12px;font-size:12px;color:var(--text-3,#7d7a72);line-height:1.4;min-height:1.4em">${cuT('Reading your description…', '正在读取描述…')}</div>
     </div>`;
