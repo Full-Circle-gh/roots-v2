@@ -302,6 +302,13 @@ addColumn('suppliers', 'price_info',            'TEXT');  // pricing notes
 addColumn('suppliers', 'business_license_data', 'TEXT');  // 营业执照 image
 addColumn('suppliers', 'permits_data',          'TEXT');  // 许可证 image
 addColumn('suppliers', 'payment_qr_data',       'TEXT');  // 收款码 image
+// Tenant scoping. DEFAULT 1 tags every existing supplier (Roots' ~109 kitchen-
+// derived vendors + any kitchen-created ones) to Roots (tenant 1), so Roots'
+// purchasing keeps seeing them. Retail creates for another tenant stamp that
+// tenant's id, and the retail supplier list filters by the requesting tenant —
+// so a brand-new business opens with an empty supplier list, never Roots'.
+addColumn('suppliers', 'tenant_id', 'INTEGER DEFAULT 1');
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_suppliers_tenant ON suppliers(tenant_id)'); } catch {}
 
 // Backfill: every distinct supplier name found on ingredients OR PO line
 // items should exist in the suppliers master table. Pre-supplier-picker

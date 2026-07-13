@@ -22,7 +22,7 @@
 
 const express = require('express');
 const db = require('../database');
-const { tdb } = require('../lib/tenant-db');
+const { tdb, currentTenantId } = require('../lib/tenant-db');
 const inventory = require('../lib/inventory');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
@@ -116,6 +116,7 @@ function applyReceivedToStock(poId, req) {
 
 router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
   const includeInactive = req.query.all === '1';
+  const tid = currentTenantId();
   const rows = db.prepare(`
     SELECT s.id, s.name, s.name_cn, s.contact_name, s.contact_phone, s.contact_wechat,
            s.payment_terms, s.payment_method, s.rating, s.notes, s.is_active,
@@ -127,14 +128,14 @@ router.get('/api/retail-admin/suppliers', requireRetailAdmin, (req, res) => {
            (SELECT MAX(po.date) FROM purchase_orders po
              WHERE po.supplier = s.name AND COALESCE(po.scope,'kitchen') = 'retail') AS last_po_date
       FROM suppliers s
-     ${includeInactive ? '' : 'WHERE s.is_active = 1'}
+     WHERE s.tenant_id = ?${includeInactive ? '' : ' AND s.is_active = 1'}
      ORDER BY s.name COLLATE NOCASE
-  `).all();
+  `).all(tid);
   res.json({ success: true, data: rows });
 });
 
 router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => {
-  const s = db.prepare('SELECT * FROM suppliers WHERE id = ?').get(req.params.id);
+  const s = db.prepare('SELECT * FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
   // Base64 payloads stay out of the detail read — documents fetch individually.
   delete s.channel_qr_data; delete s.business_license_data;
@@ -202,21 +203,21 @@ router.post('/api/retail-admin/suppliers', requireRetailAdmin, express.json(), (
   const info = db.prepare(`
     INSERT INTO suppliers (name, name_cn, contact_name, contact_phone, contact_wechat,
                            payment_terms, payment_method, rating, notes, channel_type,
-                           channel_link, products_supplied, price_info, is_active)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)
+                           channel_link, products_supplied, price_info, is_active, tenant_id)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1,?)
   `).run(
     name, b.name_cn || null, b.contact_name || null, b.contact_phone || null, b.contact_wechat || null,
     b.payment_terms || null, b.payment_method || null,
     Math.min(5, Math.max(0, parseInt(b.rating, 10) || 0)),
     b.notes || null, b.channel_type || null, b.channel_link || null,
-    b.products_supplied || null, b.price_info || null,
+    b.products_supplied || null, b.price_info || null, currentTenantId(),
   );
   logActivity(req.user.id, req.user.username, 'create', 'supplier', info.lastInsertRowid, { name }, req.ip);
   res.json({ success: true, id: info.lastInsertRowid });
 });
 
 router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json(), (req, res) => {
-  const s = db.prepare('SELECT id, name FROM suppliers WHERE id = ?').get(req.params.id);
+  const s = db.prepare('SELECT id, name FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
   const b = req.body || {};
   if ('name' in b) {
@@ -245,7 +246,7 @@ router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json()
 
 // Soft-delete: keep the row (and its name) so historical POs stay attributable.
 router.delete('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => {
-  const s = db.prepare('SELECT id FROM suppliers WHERE id = ?').get(req.params.id);
+  const s = db.prepare('SELECT id FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
   db.prepare('UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(s.id);
   logActivity(req.user.id, req.user.username, 'delete', 'supplier', s.id, {}, req.ip);
