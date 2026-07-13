@@ -2221,6 +2221,7 @@
   .pa-hi-meta b { color: var(--td-text); font-weight: 600; }
   .pa-hi-meta.up   { color: var(--td-sage-ink); }
   .pa-hi-meta.up b { color: var(--td-sage-ink); }
+  .pa-hi-tri { width: 9px; height: 9px; flex: none; vertical-align: 1px; margin-right: 1px; }
   .pa-hi-empty { font-size: 13px; color: var(--td-text3, var(--td-text2)); }
   @media (max-width: 720px) {
     .pa-hi { padding: 14px 16px 16px; }
