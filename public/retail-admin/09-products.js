@@ -1300,13 +1300,18 @@ function paRenderHighlights() {
   if (!PA_HI) { band.hidden = true; return; }
   band.hidden = false;
   const pname = (o) => escapeHtml(cuT(o.name_en || o.name_cn || '—', o.name_cn || o.name_en || '—'));
+  // A tile names one real product → show its photo; no photo, or the tile is
+  // just a count (no single product), → fall back to the generic icon.
+  const thumb = (item) => (item && item.image)
+    ? { html: `<img src="${escapeHtml(item.image)}" alt="" loading="lazy">` }
+    : { html: PA_HI_ICONS.box };
   const tiles = [];
 
   // Best seller — top units this week.
   if (PA_HI.bestSeller) {
     tiles.push(_paHiTile({
       cls: 'up', icon: PA_HI_ICONS.star, cap: cuT('Best seller', '最畅销'),
-      badge: { html: PA_HI_ICONS.box }, name: pname(PA_HI.bestSeller),
+      badge: thumb(PA_HI.bestSeller), name: pname(PA_HI.bestSeller),
       meta: { html: `<b>${fcNum(PA_HI.bestSeller.units)}</b>` + cuT(' sold', ' 件已售') },
       open: `paOpenEdit(${PA_HI.bestSeller.id})`,
     }));
@@ -1319,7 +1324,7 @@ function paRenderHighlights() {
   if (PA_HI.rising) {
     tiles.push(_paHiTile({
       cls: 'up', icon: PA_HI_ICONS.up, cap: cuT('Rising', '上升中'),
-      badge: { html: PA_HI_ICONS.box }, name: pname(PA_HI.rising),
+      badge: thumb(PA_HI.rising), name: pname(PA_HI.rising),
       meta: { cls: 'up', html: `<b><svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%</b>` + cuT(' vs last week', ' 较上周') },
       open: `paOpenEdit(${PA_HI.rising.id})`,
     }));

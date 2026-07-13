@@ -11647,6 +11647,21 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
     }
   }
 
+  // bestSeller/rising each name one real product — give the client a thumbnail
+  // to show in the tile's badge instead of a generic icon. No photo → null, and
+  // the client falls back to the icon (this is a nice-to-have, not the PDP's
+  // canonical image, so skip the variant-group photo fallback here).
+  const baseUrl = `${req.protocol}://${req.get('host')}`;
+  const attachThumb = (item) => {
+    if (!item) return item;
+    const row = tdb().prepare('SELECT id, image_data, image_url, updated_at FROM store_products WHERE id = ?').get(item.id);
+    if (row) lazifyProductImage(row, baseUrl, 68);
+    item.image = (row && (row.image_data || row.image_url)) || null;
+    return item;
+  };
+  attachThumb(bestSeller);
+  attachThumb(rising);
+
   // The three count tiles also carry their member IDs (capped) so the client can
   // make each tile tap-through — filter the catalogue to exactly that set — with
   // the count and the filter reading from one source of truth.
