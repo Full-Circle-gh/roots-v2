@@ -7914,10 +7914,13 @@
     border-radius: 6px; font-size: 14px; color: var(--td-text); font-family: var(--f-sans);
   }
   .td-attn-row:hover { background: var(--td-raised); }
-  .td-attn-row .name { min-width: 0; display: grid; gap: 1px; }
-  .td-attn-row .name .nm,
-  .td-attn-row .name .sku { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .td-attn-row .name .sku { font-size: 11.5px; color: var(--td-text2); font-family: var(--f-mono, ui-monospace, monospace); }
+  /* One line, not a stacked grid: this row sits in a fixed-height bento tile
+     (.bn-card overflow:hidden) sized for single-line rows — a two-line stack
+     pushes the last row past the clip when an item happens to have a SKU. */
+  .td-attn-row .name { min-width: 0; display: flex; align-items: baseline; gap: 6px; }
+  .td-attn-row .name .nm { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .td-attn-row .name .sku { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 11.5px; color: var(--td-text2); font-family: var(--f-mono, ui-monospace, monospace); }
   .td-attn-row .val { margin-left: auto; flex: none; font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
   .td-attn-more { margin-top: 10px; font-size: 13px; color: var(--td-text2); }
   .td-attn-go {
