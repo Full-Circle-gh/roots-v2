@@ -1192,8 +1192,8 @@ async function loadLive(){
     const vy=T('vs a typical day','较日常');
     const dl=x=>x&&x.delta!=null?((x.delta>=0?'+':'−')+Math.abs(x.delta)+'% '+vy):vy;
     state.liveKpis=[
-      [T('Revenue','营收'), money(CUR,k.revenue), dl(b.revenue)],
-      [T('Orders','订单'), String(k.orders!=null?k.orders:0), dl(b.orders)],
+      [T('Revenue (all channels)','营收（全渠道）'), money(CUR,k.revenue), dl(b.revenue)],
+      [T('Orders (storefront)','订单（自营）'), String(k.orders!=null?k.orders:0), dl(b.orders)],
       [T('Avg. order','客单价'), money(CUR, k.orders? (Number(k.revenue||0)/k.orders):0), vy],
       [T('New customers','新客'), String(k.new_customers!=null?k.new_customers:(k.newCustomers||0)), dl(b.new_customers)],
     ];
@@ -1208,11 +1208,17 @@ async function loadLive(){
   try{ const rows=await api('/orders?limit=50');
     if(Array.isArray(rows)&&rows.length){
       // Overnight recap from raw timestamps: last night 22:00 → 08:00 today (or now, if earlier).
+      // gzgrocery rows are display-only wholesale-pickup mirrors (see routes/retail.js
+      // dashboard route) — they're excluded from every other order/revenue count in the
+      // app, so they must be excluded here too, or a quiet storefront night reads as sales.
+      // Cancelled/refunded orders don't belong in a "while you slept" recap either.
+      const RECAP_STATUSES=new Set(['paid','preparing','dispatched','delivered','awaiting_restock']);
       try{ const now=new Date();
         const end=new Date(now); end.setHours(8,0,0,0);
         const start=new Date(end); start.setDate(start.getDate()-1); start.setHours(22,0,0,0);
         const cutoff=now<end?now:end; let n=0, rev=0;
-        rows.forEach(r=>{ const t=new Date(String(r.placed_at||'').replace(' ','T'));
+        rows.forEach(r=>{ if(r.channel==='gzgrocery'||!RECAP_STATUSES.has(r.status)) return;
+          const t=new Date(String(r.placed_at||'').replace(' ','T'));
           if(!isNaN(t)&&t>=start&&t<=cutoff){ n++; rev+=Number(r.total||0); } });
         state.liveRecap={orders:n, revenue:rev};
       }catch(e){}
