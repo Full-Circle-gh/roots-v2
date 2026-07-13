@@ -313,7 +313,7 @@
     if (!box) return;
     const name = esc(store.name_en || store.name_cn || store.code);
     const rows = [];
-    rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('Mini App · 小程序', '小程序')}</b><br>
+    rows.push(`<div class="ig-linkrow"><div class="grow"><b>${cuT('WeChat · 小程序', '小程序')}</b><br>
       <span class="muted" style="font-size:12px">${cuT('Appears in the store picker automatically · 自动加入门店选择', '自动加入门店选择')}</span></div>
       <span style="color:var(--accent,#6B8E6F);font-size:12px;font-weight:600">✓ ${cuT('Ready · 自动就绪', '自动就绪')}</span></div>`);
     for (const t of channelTodos) {
@@ -756,7 +756,7 @@
   }
   window.igMiniappConfig = async function () {
     const box = igHostEl(); if (!box) return;
-    box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Mini App config…', '加载小程序配置…'));
+    box.style.display = ''; box.innerHTML = igMuted(cuT('Loading WeChat config…', '加载小程序配置…'));
     let cfg;
     try { cfg = await api('/api/retail-admin/channel-hub/miniapp/wechat-config'); }
     catch (e) { box.innerHTML = igMuted(cuT('Failed to load', '加载失败')); return; }
@@ -775,7 +775,7 @@
     const box = igHostEl(); if (!box) return;
     let cfg = preloaded;
     if (!cfg) {
-      box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Mini App config…', '加载小程序配置…'));
+      box.style.display = ''; box.innerHTML = igMuted(cuT('Loading WeChat config…', '加载小程序配置…'));
       try { cfg = await api('/api/retail-admin/channel-hub/miniapp/wechat-config'); }
       catch (e) { box.innerHTML = igMuted(cuT('Failed to load', '加载失败')); return; }
       _mwCfg = cfg;
@@ -808,7 +808,7 @@
 
     box.innerHTML = `<div class="ig-wiz mc-wiz">
       <div class="mc-head">
-        <strong class="mc-title">${cuT('Mini App configuration', '小程序配置')}</strong>
+        <strong class="mc-title">${cuT('WeChat configuration', '小程序配置')}</strong>
         <div style="display:flex;gap:8px;align-items:center">
           ${env ? '' : `<button class="btn btn-sm" onclick="igMiniappSetupStart()">${cuT('Setup guide', '设置向导')}</button>`}
           <button class="btn btn-sm btn-icon" onclick="igLocClose()" aria-label="${cuT('Close', '关闭')}">${MC_SVG.x}</button>
@@ -1028,7 +1028,7 @@
     box.innerHTML = `<div class="ig-wiz mc-wiz">
       <div class="mc-head">
         <div>
-          <strong class="mc-title">${cuT('Set up your Mini App', '设置你的小程序')}</strong>
+          <strong class="mc-title">${cuT('Set up your WeChat', '设置你的小程序')}</strong>
           <div class="mc-subtitle">${cuT('Three short steps. Skip any of them and come back later.', '三个小步骤。任何一步都可以先跳过，之后再回来。')}</div>
         </div>
         <button class="btn btn-sm btn-icon" onclick="igLocClose()" aria-label="${cuT('Close', '关闭')}">${MC_SVG.x}</button>
@@ -1309,9 +1309,9 @@
     const payHtml = `
       <div class="wc-pay">
         <span class="wc-mico">${WC_SVG.wechat}</span>
-        <div class="wc-mmain"><div class="mn">${cuT('WeChat Pay', '微信支付')}</div><div class="md">${cuT('Uses your Mini App merchant setup — nothing to enter again.', '沿用小程序的商户配置,无需重复填写。')}</div></div>
+        <div class="wc-mmain"><div class="mn">${cuT('WeChat Pay', '微信支付')}</div><div class="md">${cuT('Uses your WeChat merchant setup — nothing to enter again.', '沿用小程序的商户配置,无需重复填写。')}</div></div>
         <span class="wc-mstat ${wcReady ? 'ok' : 'byo'}" style="margin-right:6px">${wcReady ? '✓ ' + cuT('Ready', '就绪') : cuT('Not set up', '未配置')}</span>
-        <button class="btn btn-sm" onclick="igMiniappConfig()">${cuT('Open Mini App config', '打开小程序配置')}</button>
+        <button class="btn btn-sm" onclick="igMiniappConfig()">${cuT('Open WeChat config', '打开小程序配置')}</button>
       </div>
       <div class="wc-pay">
         <span class="wc-mico">${WC_SVG.alipay}</span>
@@ -1343,7 +1343,7 @@
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Payments', '收款')}</b>${mcInfo('How customers pay on the web. WeChat Pay uses the merchant setup from your Mini App.', '顾客在网页端的付款方式。微信支付沿用小程序的商户配置。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Payments', '收款')}</b>${mcInfo('How customers pay on the web. WeChat Pay uses the merchant setup from your WeChat.', '顾客在网页端的付款方式。微信支付沿用小程序的商户配置。')}</div>
         ${payHtml}
       </div>
 
