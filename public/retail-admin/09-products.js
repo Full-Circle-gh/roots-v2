@@ -3747,11 +3747,11 @@ function pdComposeProgress() {
   ov.innerHTML = `
     <div style="background:var(--bg-pane,#fff);border:1px solid var(--line,#e6e0d2);border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,.3);padding:22px 24px 20px;width:min(92vw,360px);font-family:var(--f-sans,inherit)">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-        <div style="width:22px;height:22px;flex:none;border:3px solid rgba(107,142,111,.22);border-top-color:#6B8E6F;border-radius:50%;animation:db-ring-spin .8s linear infinite"></div>
+        <div style="width:22px;height:22px;flex:none;border:3px solid rgba(163,180,159,.22);border-top-color:#A3B49F;border-radius:50%;animation:db-ring-spin .8s linear infinite"></div>
         <div style="font-weight:700;font-size:15px;color:var(--text-1,#1a2314);line-height:1.3">${cuT('Building your product page', '正在生成商品页')}</div>
       </div>
       <div style="height:8px;border-radius:999px;background:var(--bg-elev-1,#e9e9e3);overflow:hidden">
-        <div data-bar style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,#6B8E6F,var(--brass,#B08D4A));transition:width .4s ease"></div>
+        <div data-bar style="height:100%;width:6%;border-radius:999px;background:linear-gradient(90deg,#A3B49F,var(--brass,#C9954A));transition:width .4s ease"></div>
       </div>
       <div data-msg style="margin-top:12px;font-size:12px;color:var(--text-3,#7d7a72);line-height:1.4;min-height:1.4em">${cuT('Reading your description…', '正在读取描述…')}</div>
     </div>`;
@@ -3775,7 +3775,7 @@ function pdComposeProgress() {
     done(ok, text) {
       clearInterval(tick);
       bar.style.width = '100%';
-      bar.style.background = ok ? 'linear-gradient(90deg,#6B8E6F,#7BA07F)' : 'linear-gradient(90deg,#e8556a,#ef9a9a)';
+      bar.style.background = ok ? 'linear-gradient(90deg,#A3B49F,#4A6249)' : 'linear-gradient(90deg,#e8556a,#ef9a9a)';
       if (text) msg.textContent = text;
       setTimeout(() => ov.remove(), ok ? 900 : 1400);
     },

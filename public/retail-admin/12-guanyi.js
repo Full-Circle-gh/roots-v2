@@ -312,7 +312,7 @@
     const when = (t) => gyLocalTime(t, false);
 
     const modeBadge = mode === 'live'
-      ? '<span style="background:rgba(107,142,111,.14);color:var(--success);border:1px solid rgba(107,142,111,.35);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600">● LIVE</span>'
+      ? '<span style="background:rgba(163,180,159,.14);color:var(--success);border:1px solid rgba(163,180,159,.35);border-radius:10px;padding:1px 8px;font-size:11px;font-weight:600">● LIVE</span>'
       : mode === 'shadow'
         ? '<span style="background:var(--bg-elev-1);color:var(--text-3);border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:11px" title="Detecting + logging only — not changing stock">◌ shadow</span>'
         : '<span style="background:var(--bg-elev-1);color:var(--text-3);border:1px solid var(--line);border-radius:10px;padding:1px 8px;font-size:11px">off</span>';
