@@ -9485,6 +9485,21 @@
      ═══════════════════════════════════════════════════════════════════════ */
   #prod-view-purchasing { font-family: var(--f-sans); color: var(--td-text); }
 
+  /* ── FULL-CIRCLE RESET ──────────────────────────────────────────────────────
+     The base admin still styles bare h1–h4 as a Full Circle label: mono font,
+     UPPERCASE, letter-spaced, brass. Any heading in the pane that isn't fully
+     restyled (e.g. the record-a-bill modal's <h2>) inherits that. Neutralise
+     every heading to plain Tacet type so ONLY Tacet shows — then the specific
+     .pu2-* rules layer size/margins on top. Covers the modal host too, which
+     mounts inside the pane. */
+  #prod-view-purchasing h1, #prod-view-purchasing h2,
+  #prod-view-purchasing h3, #prod-view-purchasing h4 {
+    font-family: var(--f-sans); font-weight: 500; color: var(--td-text);
+    text-transform: none; letter-spacing: -.01em; margin: 0;
+  }
+  /* Tables ride the card's own surface — no leaked base header tint. */
+  #prod-view-purchasing .pu2-tbl th { background: transparent; }
+
   /* Tacet page-head + sub-nav — the pane's own header, replacing the old
      hardcoded Full Circle .pa-pagetitle brass title in the HTML wrapper. */
   #prod-view-purchasing .pu2-pagehead { margin: 2px 0 0; }
