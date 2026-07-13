@@ -51,6 +51,7 @@
   let _outstanding = [];     // PO lines awaiting an invoice, grouped by supplier
   let _billSum = null;       // bills KPI + AP aging
   let _billDraft = null;     // the record-a-bill modal's working state
+  let _reorder = [];         // low-stock groups, by preferred supplier + store
   let _screen = 'orders';    // orders | wizard | receive | suppliers | supplier | import
   let _seg = 'open';         // orders segment: open | received | all
   let _supSeg = 'active';    // suppliers segment: active | disabled
@@ -158,6 +159,7 @@
     else if (_screen === 'supplier')  paintSupplier();
     else if (_screen === 'import')    paintImport();
     else if (_screen === 'bills')     paintBills();
+    else if (_screen === 'reorder')   paintReorder();
     try { applyCapGates(); } catch (_) {}
   }
 
@@ -172,12 +174,14 @@
     ['orders',    () => T('Orders', '采购单')],
     ['suppliers', () => T('Suppliers', '供应商')],
     ['bills',     () => T('Bills', '账单')],
+    ['reorder',   () => T('Reorder', '补货')],
   ];
   function puChrome(active) {
     const meta = {
       orders:    [T('Orders', '采购单'),   T('Order goods from your suppliers. When a delivery arrives, tick it in — stock and expenses update by themselves.', '向供应商采购商品。到货时勾选收货 —— 库存和支出会自动更新。')],
       suppliers: [T('Suppliers', '供应商'), T('Who you buy from — contacts, payment terms and their paperwork, all in one place.', '你的供货来源 —— 联系人、付款条件和资质文件,集中在一处。')],
       bills:     [T('Bills', '账单'),       T('Match suppliers’ invoices to what you ordered, and keep an eye on what’s due.', '将供应商发票与采购内容对上,并留意到期应付。')],
+      reorder:   [T('Reorder', '补货'),      T('Products running low across your stores, grouped by who you’d order them from.', '各门店库存偏低的商品,按常用供应商归类。')],
     };
     const [title, sub] = meta[active] || meta.orders;
     const tabs = PU_TABS.map(([key, label]) =>
@@ -193,6 +197,7 @@
   window.puTab = function (tab) {
     if (tab === 'suppliers') { _screen = 'suppliers'; _supSeg = 'active'; _showDisabled = false; }
     else if (tab === 'bills') { _screen = 'bills'; }
+    else if (tab === 'reorder') { _screen = 'reorder'; }
     else { _screen = 'orders'; }
     paint();
   };
@@ -1135,6 +1140,62 @@
       await Promise.all([loadBillSummary(), loadOutstanding(), loadBills()]);
       if (_screen === 'bills') renderBillsBody();
     } catch (e) { toast(e.message, 'err'); }
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  //  REORDER — what's running low, grouped by who you'd buy it from
+  // ═══════════════════════════════════════════════════════════════════════════
+  async function loadReorder() { try { const r = await api('/api/retail-admin/reorder'); _reorder = r.data || []; } catch (_) { _reorder = []; } }
+
+  function paintReorder() {
+    root().innerHTML = `${puChrome('reorder')}<div id="pu2-reorder-body"><div class="pu2-loading">${esc(T('Loading…', '加载中…'))}</div></div>`;
+    try { applyCapGates(); } catch (_) {}
+    (async () => { await loadReorder(); if (_screen === 'reorder') renderReorderBody(); })();
+  }
+  function renderReorderBody() {
+    const host = document.getElementById('pu2-reorder-body');
+    if (!host) return;
+    if (!_reorder.length) {
+      host.innerHTML = `<div class="pu2-card"><div class="pu2-empty">
+        <div class="pu2-empty-ico">${I.check}</div>
+        <h3>${esc(T('Nothing’s running low', '库存都很充足'))}</h3>
+        <p>${esc(T('Every product is above its buffer across your stores. Nothing to reorder right now.', '各门店商品均高于安全库存,暂时无需补货。'))}</p>
+      </div></div>`;
+      return;
+    }
+    host.innerHTML = `<div class="pu2-reo">${_reorder.map((g, i) => {
+      const units = g.items.reduce((s, x) => s + (x.suggest || 0), 0);
+      return `<div class="pu2-card pu2-reocard">
+        <div class="top">
+          <span class="sup">${esc(g.supplier || T('No preferred supplier yet', '暂无常用供应商'))}</span>
+          <span class="pu2-pill amber" style="margin-left:auto"><span class="dot"></span>${g.items.length} ${esc(T('low', '偏低'))}</span>
+        </div>
+        <div class="sub">${esc(g.store_name)}</div>
+        <div class="lines2">
+          ${g.items.slice(0, 6).map(it => `<div class="l2"><span>${nameLabel(it)}</span><span class="cover pu2-num">${it.physical_qty} ${esc(T('left', '剩'))} · ${esc(T('buffer', '安全'))} ${it.buffer}</span></div>`).join('')}
+          ${g.items.length > 6 ? `<div class="l2 pu2-mut">+${g.items.length - 6} ${esc(T('more', '更多'))}</div>` : ''}
+        </div>
+        <div class="foot">
+          <span class="amt pu2-num">${units} ${esc(T('units suggested', '件建议'))}</span>
+          <button class="pu2-btn sm" data-cap="purchasing:edit" onclick="puReorderDraft(${i})">${esc(T('Open draft order', '生成草稿单'))}</button>
+        </div>
+      </div>`;
+    }).join('')}</div>`;
+    try { applyCapGates(); } catch (_) {}
+  }
+  window.puReorderDraft = function (idx) {
+    const g = _reorder[idx];
+    if (!g) return;
+    _edit = {
+      id: null, po_number: null, date: todayGz(), delivery_date: '',
+      supplier: g.supplier || '', store_id: g.store_id, notes: '',
+      items: g.items.map(it => ({
+        store_product_id: it.product_id, name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,
+        qty: it.suggest, unit: 'pcs', cost_per_unit: 0, expense_category: '门店进货 Retail stock',
+        purchase_channel: '', supplier_name: g.supplier || '', current_stock: it.physical_qty,
+      })),
+    };
+    _wstep = 2; _screen = 'wizard'; paint();
   };
 
   // ═══════════════════════════════════════════════════════════════════════════

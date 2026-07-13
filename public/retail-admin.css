@@ -1018,7 +1018,7 @@
   .sales-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; display: inline-block; }
   .sales-dot.ok { background: var(--ok, #3B6D11); }
   .sales-dot.off { background: var(--text-4, #b4b2a9); }
-  .sales-dot.warn { background: var(--brass, #B08D4A); }
+  .sales-dot.warn { background: var(--brass); }
   .sales-dot.err { background: var(--danger, #e8556a); }
 
   /* On/off switch — DISABLED for now (channel open/close API not yet wired).
@@ -2779,7 +2779,7 @@
   /* Description editor — Classic (rich) editor + "Product editor" launch, EN|CN side-by-side. */
   .pd-desc-modebar { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
   .pd-mode-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-2); border-radius: 6px; cursor: pointer; font-weight: 500; }
-  .pd-mode-btn.active { background: var(--brass, #B08D4A); color: #fff; border-color: var(--brass, #B08D4A); }
+  .pd-mode-btn.active { background: var(--brass); color: #fff; border-color: var(--brass); }
   /* The "🎨 Design" switch reads as a toggle — green when on, not brass, so it's
      not confused with the always-on Classic tab. */
   .pd-blockdesign-toggle.active { background: var(--brand, #A3B49F); border-color: var(--brand, #A3B49F); color: #fff; }
@@ -2801,7 +2801,7 @@
      only override colour/size, never the `background` shorthand (which would
      wipe the arrow) and leave room on the right for it. */
   .pd-rte-sel { height: 30px; border: 1px solid var(--line); background-color: var(--bg-app); color: var(--text-1); border-radius: 6px; font-size: 12px; padding: 0 26px 0 8px; cursor: pointer; }
-  .pd-rte-sel:hover { border-color: var(--brass, #B08D4A); }
+  .pd-rte-sel:hover { border-color: var(--brass); }
   /* Colour controls — native picker behind an "A"/highlight glyph; the bar
      under the glyph reflects the chosen colour. */
   .pd-rte-color { position: relative; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; width: 30px; height: 30px; border: 1px solid transparent; border-radius: 6px; cursor: pointer; }
@@ -2818,13 +2818,13 @@
      text-size zoom (raw vh ignores the html `zoom`). Fullscreen overrides this
      cap below. */
   .pd-rte { min-height: 140px; max-height: calc(42vh / var(--ui-scale, 1)); overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); overflow-wrap: break-word; }
-  .pd-rte:focus { outline: none; border-color: var(--brass, #B08D4A); }
+  .pd-rte:focus { outline: none; border-color: var(--brass); }
   .pd-rte h2 { font-size: 17px; margin: 8px 0 4px; font-weight: 700; }
   .pd-rte h3 { font-size: 15px; margin: 6px 0; }
   .pd-rte ul, .pd-rte ol { padding-left: 20px; margin: 6px 0; }
   .pd-rte blockquote { margin: 6px 0; padding: 2px 0 2px 12px; border-left: 3px solid var(--line); color: var(--text-2); }
   .pd-rte hr { border: none; border-top: 1px solid var(--line); margin: 10px 0; }
-  .pd-rte a { color: var(--brass, #B08D4A); }
+  .pd-rte a { color: var(--brass); }
   /* Inserted/pasted images stay inside the editor column (never bleed past it
      into the right rail) and preview exactly how the mini-app renders them —
      full column width, proportional height. Overrides any fixed pixel width an
@@ -2906,8 +2906,8 @@
   .opt-drag:active { cursor: grabbing; }
   .opt-drag-block { align-self: center; }
   .opt-dragging { opacity: 0.45; }
-  .opt-choice.opt-dragover { box-shadow: inset 0 2px 0 0 var(--brass, #B08D4A); }
-  .opt-block.opt-dragover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--brass, #B08D4A) 55%, transparent); }
+  .opt-choice.opt-dragover { box-shadow: inset 0 2px 0 0 var(--brass); }
+  .opt-block.opt-dragover { box-shadow: 0 0 0 2px color-mix(in srgb, var(--brass) 55%, transparent); }
   .opt-choice > input[type="radio"], .opt-choice > input[type="checkbox"] { margin: 0; flex: none; }
   .opt-clab { flex: 1 1 120px; min-width: 90px; }
   .opt-cdelta { display: inline-flex; align-items: center; gap: 2px; color: var(--text-3); font-size: 12px; flex: none; }
@@ -2920,8 +2920,8 @@
   /* Stock-product link on a paid add-on choice. */
   .opt-link-btn { flex: none; white-space: nowrap; }
   .opt-link { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 220px;
-    font-size: 12px; color: var(--text-1); background: color-mix(in srgb, var(--brass, #B08D4A) 12%, transparent);
-    border: 1px solid color-mix(in srgb, var(--brass, #B08D4A) 40%, transparent); border-radius: 14px; padding: 3px 6px 3px 10px;
+    font-size: 12px; color: var(--text-1); background: color-mix(in srgb, var(--brass) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--brass) 40%, transparent); border-radius: 14px; padding: 3px 6px 3px 10px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .opt-unlink { border: none; background: none; cursor: pointer; color: var(--text-3); font-size: 12px; line-height: 1; padding: 0 2px; flex: none; }
   .opt-unlink:hover { color: var(--brass); }
@@ -2935,15 +2935,15 @@
      packer's eye lands on it. */
   .oi-opts {
     margin-top: 8px; padding: 5px 0 4px 10px;
-    border-left: 2px solid color-mix(in srgb, var(--brass, #B08D4A) 35%, transparent);
-    font-size: 12px; font-weight: 500; color: var(--brass, #B08D4A);
+    border-left: 2px solid color-mix(in srgb, var(--brass) 35%, transparent);
+    font-size: 12px; font-weight: 500; color: var(--brass);
     line-height: 1.5; word-break: break-word;
   }
-  .oi-bndl { margin-top: 6px; padding: 6px 8px; border-left: 2px solid color-mix(in srgb, var(--brass, #B08D4A) 50%, transparent); background: var(--bg-app); border-radius: 0 6px 6px 0; }
+  .oi-bndl { margin-top: 6px; padding: 6px 8px; border-left: 2px solid color-mix(in srgb, var(--brass) 50%, transparent); background: var(--bg-app); border-radius: 0 6px 6px 0; }
   .oi-bndl-h { font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); margin-bottom: 3px; }
   .oi-bndl-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-1); line-height: 1.5; }
   .oi-bndl-sku { font-size: 10px; padding: 0 5px; flex: none; }
-  .oi-bndl-qty { color: var(--brass, #B08D4A); font-variant-numeric: tabular-nums; min-width: 24px; }
+  .oi-bndl-qty { color: var(--brass); font-variant-numeric: tabular-nums; min-width: 24px; }
   .oi-bndl-zh { color: var(--text-3); }
 
   .pa-card {
@@ -4636,7 +4636,7 @@
              border: 1px solid var(--line-soft); border-radius: 5px; padding: 2.5px 6px;
              margin-top: 4px; letter-spacing: .02em; }
   /* Live on neither store — brass edge stripe so problem rows pop while scrolling */
-  tr.mt-unmapped td:first-child { box-shadow: inset 3px 0 0 var(--brass, #B08D4A); }
+  tr.mt-unmapped td:first-child { box-shadow: inset 3px 0 0 var(--brass); }
 
   /* ── Meituan tab redesign (2026-07): status strip + sub-views ─────────────── */
   .mt-how { margin: 0 0 var(--s4); font-size: 12.5px; color: var(--text-3); }
@@ -6741,8 +6741,8 @@
       -webkit-tap-highlight-color: transparent;
     }
     .rm-ocard-actions svg { width: 20px; height: 20px; }
-    .rm-act-advance { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
-    .rm-act-call    { background: var(--accent, #6B8E6F); color: #fff; }
+    .rm-act-advance { background: linear-gradient(180deg, var(--brass-hi), var(--brass)); color: var(--brass-ink, #1A140A); }
+    .rm-act-call    { background: var(--accent); color: #fff; }
 
     .rm-ocard {
       position: relative; z-index: 1;
@@ -6760,7 +6760,7 @@
     .rm-oc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .rm-oc-no { font: 600 13px var(--f-mono); color: var(--text-1); font-variant-numeric: tabular-nums; letter-spacing: .01em; }
     .rm-oc-new { display: inline-block; margin-right: 6px; padding: 1px 6px; border-radius: 5px;
-      background: var(--brass, #B08D4A); color: #fff; font: 700 9px var(--f-mono); letter-spacing: .06em; vertical-align: 1px; }
+      background: var(--brass); color: #fff; font: 700 9px var(--f-mono); letter-spacing: .06em; vertical-align: 1px; }
 
     .rm-oc-mid { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-top: 9px; }
     .rm-oc-cust { min-width: 0; }
@@ -6776,7 +6776,7 @@
     .rm-oc-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
     .rm-oc-go { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
     .rm-oc-go .shipby { font: 600 13px var(--f-sans); color: var(--text-2); }
-    .rm-oc-go .shipby.act { color: var(--brass, #B08D4A); }
+    .rm-oc-go .shipby.act { color: var(--brass); }
     .rm-oc-go .shipby.late { color: var(--danger); }
     .rm-oc-go .rm-oc-chev { display: flex; color: var(--text-3); transition: transform .5s cubic-bezier(.22,.61,.36,1); }
     .rm-oc-go .rm-oc-chev svg { width: 16px; height: 16px; }
@@ -6786,7 +6786,7 @@
       display: flex; align-items: center; gap: 6px; width: 100%;
       margin-top: 11px; padding-top: 10px;
       border-top: 1px solid var(--line-soft);
-      font-size: 12.5px; font-weight: 600; color: var(--brass, #B08D4A);
+      font-size: 12.5px; font-weight: 600; color: var(--brass);
     }
     /* When it's the forward-action quick button: strip native chrome, keep look. */
     button.rm-oc-hint {
@@ -6813,7 +6813,7 @@
       height: 44px; border: 0; border-radius: 11px; cursor: pointer; font: 600 13.5px var(--f-sans);
       -webkit-tap-highlight-color: transparent; }
     .rm-oc-acts .rm-pbtn svg { width: 17px; height: 17px; }
-    .rm-oc-acts .rm-pbtn.adv { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
+    .rm-oc-acts .rm-pbtn.adv { background: linear-gradient(180deg, var(--brass-hi), var(--brass)); color: var(--brass-ink, #1A140A); }
     .rm-oc-acts .rm-pbtn.call { flex: 0 0 auto; width: 52px; background: var(--bg-elev-1); color: var(--text-1); }
     .rm-oc-full { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%;
       margin-top: 9px; padding: 11px; border: 1px solid var(--line); background: transparent; border-radius: 11px;
@@ -6936,9 +6936,9 @@
     background: var(--bg-elev-1); color: var(--text-2);
   }
   .rm-sheet-row .ri svg { width: 19px; height: 19px; }
-  .rm-sheet-row.primary .ri { background: var(--brass, #B08D4A); color: #fff; }
+  .rm-sheet-row.primary .ri { background: var(--brass); color: #fff; }
   .rm-sheet-row .sub { display: block; font: 400 12px var(--f-sans); color: var(--text-3); margin-top: 1px; }
-  .rm-sheet-row .rcheck { margin-left: auto; color: var(--brass, #B08D4A); display: inline-flex; }
+  .rm-sheet-row .rcheck { margin-left: auto; color: var(--brass); display: inline-flex; }
   .rm-sheet-row .rcheck svg { width: 18px; height: 18px; }
 
   /* ════════════════════════════════════════════════════════════════════
@@ -7014,9 +7014,9 @@
       -webkit-tap-highlight-color: transparent;
     }
     .rm-cucard-actions svg { width: 20px; height: 20px; }
-    .rm-cu-adjust { background: linear-gradient(180deg, var(--brass-hi, #C29B54), var(--brass, #B08D4A)); color: var(--brass-ink, #1A140A); }
+    .rm-cu-adjust { background: linear-gradient(180deg, var(--brass-hi), var(--brass)); color: var(--brass-ink, #1A140A); }
     .rm-cu-block  { background: var(--danger, #E8556A); color: #fff; }
-    .rm-cu-block.is-unblock { background: var(--accent, #6B8E6F); }
+    .rm-cu-block.is-unblock { background: var(--accent); }
 
     .rm-cucard {
       position: relative; z-index: 1;
@@ -7073,7 +7073,7 @@
       -webkit-tap-highlight-color: transparent;
     }
     .rm-cu-exp-actions button:active { background: var(--bg-elev-1); }
-    .rm-cu-exp-actions button.primary { background: var(--brass, #B08D4A); color: #fff; border-color: var(--brass, #B08D4A); }
+    .rm-cu-exp-actions button.primary { background: var(--brass); color: #fff; border-color: var(--brass); }
 
     .rm-cu-empty { text-align: center; color: var(--text-3); padding: 44px 20px; font-size: 13.5px; }
   }
@@ -7121,7 +7121,7 @@
       box-shadow: 0 18px 40px -24px rgba(40, 34, 20, .7);
     }
     .rm-dh-live { display: flex; align-items: center; gap: 7px; font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--td-sage-ink); }
-    .rm-dh-live .d { width: 7px; height: 7px; border-radius: 50%; background: var(--accent, #6B8E6F); box-shadow: 0 0 0 0 rgba(163, 180, 159, .6); animation: rmDhPulse 2s infinite; }
+    .rm-dh-live .d { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 rgba(163, 180, 159, .6); animation: rmDhPulse 2s infinite; }
     @keyframes rmDhPulse { 0% { box-shadow: 0 0 0 0 rgba(163, 180, 159, .5); } 70% { box-shadow: 0 0 0 7px rgba(163, 180, 159, 0); } 100% { box-shadow: 0 0 0 0 rgba(163, 180, 159, 0); } }
     .rm-dh-big { font: 600 42px var(--f-sans); letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
     .rm-cu { font-variant-numeric: tabular-nums; }
@@ -7361,7 +7361,7 @@
       content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px;
       border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 3px rgba(0,0,0,.3);
     }
-    #tab-config #me-rows-list .me-row-cb:checked { background: var(--accent, #6B8E6F); }
+    #tab-config #me-rows-list .me-row-cb:checked { background: var(--accent); }
     #tab-config #me-rows-list .me-row-cb:checked::after { transform: translateX(18px); }
     #tab-config #me-rows-list .me-row-up,
     #tab-config #me-rows-list .me-row-down { padding: 7px 14px !important; font-size: 15px; }
@@ -7379,7 +7379,7 @@
 #pw-bg .field input[type="text"], #pw-bg .field input[type="number"], #pw-bg select, #pw-bg textarea {
   font: inherit; padding: 9px 11px; border: 1px solid var(--line, #d9d3c6); border-radius: 9px; background: var(--bg-input, #fff); color: var(--ink, #1d1d1a);
 }
-#pw-bg .field input:focus, #pw-bg select:focus, #pw-bg textarea:focus { outline: none; border-color: var(--brass, #b08d4a); }
+#pw-bg .field input:focus, #pw-bg select:focus, #pw-bg textarea:focus { outline: none; border-color: var(--brass); }
 
 .pw-row { display: flex; flex-wrap: wrap; align-items: center; }
 .pw-row-end { display: flex; gap: 8px; justify-content: flex-end; }
@@ -7387,7 +7387,7 @@
 @media (max-width: 560px) { .pw-row2 { grid-template-columns: 1fr; } }
 
 .pw-photo { width: 64px; height: 64px; flex: none; border: 1.5px dashed var(--line, #d9d3c6); border-radius: 11px; display: flex; align-items: center; justify-content: center; font-size: 24px; color: var(--muted, #6b6b63); cursor: pointer; background: var(--bg-elev-1, #faf7f0); }
-.pw-photo:hover { border-color: var(--brass, #b08d4a); }
+.pw-photo:hover { border-color: var(--brass); }
 
 .pw-seg { display: inline-flex; gap: 0; border: 1px solid var(--line, #d9d3c6); border-radius: 10px; overflow: hidden; }
 .pw-seg-btn { font: inherit; padding: 10px 18px; background: var(--bg-input, #fff); border: none; cursor: pointer; color: var(--ink, #1d1d1a); }
@@ -7422,7 +7422,7 @@
 .pw-opts { display: flex; flex-direction: column; gap: 12px; }
 .pw-opt { border: 1px solid var(--line, #d9d3c6); border-radius: 12px; padding: 14px; background: var(--bg-elev-1, #faf7f0); }
 .pw-opt-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.pw-opt-tag { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--brass, #b08d4a); }
+.pw-opt-tag { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--brass); }
 .pw-opt-q { width: 100%; box-sizing: border-box; font: inherit; padding: 8px 10px; border: 1px solid var(--line, #d9d3c6); border-radius: 8px; background: var(--bg-input, #fff); margin-bottom: 8px; }
 .pw-choices { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
 .pw-choice { display: flex; align-items: center; gap: 8px; }
@@ -7449,7 +7449,7 @@
 .pw-rev-row { display: flex; gap: 12px; font-size: 14px; }
 .pw-rev-k { flex: 0 0 92px; color: var(--muted, #6b6b63); }
 .pw-rev-v { flex: 1 1 auto; color: var(--ink, #1d1d1a); }
-.pw-warn { margin-top: 14px; padding: 10px 13px; border: 1px solid var(--brass, #b08d4a); border-radius: 9px; background: rgba(201,149,74,.08); font-size: 13px; }
+.pw-warn { margin-top: 14px; padding: 10px 13px; border: 1px solid var(--brass); border-radius: 9px; background: rgba(201,149,74,.08); font-size: 13px; }
 
 /* The "new version available" dock lived here. It is gone: versionWatch
    (10-extras.js) now reloads silently once the tab is out of sight or idle
@@ -7802,28 +7802,51 @@
   .topbar .acct-danger svg { color: var(--td-brick-ink); }
   .topbar .acct-danger:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
 
-  /* Top-bar left edge — hamburger + wide search (2026-07-07). Wrapped so the
-     topbar's own 16px gap doesn't push them apart; .grow after pins the right
-     cluster (inbox + avatar). */
-  /* margin-left keeps the search clear of the seam fold dot, which straddles the
-     divider at the topbar's left edge — without it the collapsed arrow kisses
-     the search field. */
-  .tb-left { display: flex; align-items: center; gap: 8px; flex: 0 1 auto; min-width: 0; margin-left: 14px; }
-
-  /* Search — pill → wide field. Icon inside-left, full placeholder, no kbd chip;
-     colours already set in the slice-one block above, geometry here. */
-  .topbar .gsearch-trigger {
-    flex: 0 1 460px; min-width: 150px; height: 44px;
-    padding: 0 18px; gap: 11px; border-radius: var(--r-lg);
+  /* Top-bar left edge — page identity (2026-07-13). Search left this spot for an
+     icon in the right cluster; the bar now carries WHERE you are. margin-left
+     keeps the crumb clear of the seam-fold dot straddling the topbar's left edge. */
+  .tb-page {
+    display: flex; align-items: center; gap: 10px;
+    flex: 0 1 auto; min-width: 0; margin-left: 14px;
   }
-  .topbar .gsearch-trigger svg { width: 17px; height: 17px; color: var(--td-text2); }
-  .topbar .gsearch-ph {
-    flex: 1 1 auto; min-width: 0; text-align: left;
-    font-size: 15px; font-weight: 400; color: var(--td-text2);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  .tb-crumb {
+    font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--td-text2); white-space: nowrap; flex: none;
+  }
+  /* Products sub-view switch, moved up from the content (Option B). Hidden until
+     the Products tab is active; the slash rides with it so a lone crumb never
+     shows a dangling "/". data-cap on the container hides the whole switch (incl.
+     the always-on Catalogue) for operators without activity/categories — parity
+     with the in-content #stk-views it mirrors. */
+  .tb-subviews { display: none; align-items: center; gap: 2px; min-width: 0; }
+  body:has(#tab-products.active) .tb-subviews { display: inline-flex; }
+  .tb-sep { color: var(--td-border); font-size: 16px; font-weight: 300; margin: 0 4px 0 1px; }
+  .tb-subview {
+    appearance: none; background: none; border: 0; cursor: pointer;
+    font: 500 13.5px var(--f-sans); color: var(--td-text2);
+    padding: 7px 12px; border-radius: 8px; white-space: nowrap;
+    display: inline-flex; align-items: center; gap: 7px;
+    transition: color .18s cubic-bezier(.16,1,.3,1), background .18s cubic-bezier(.16,1,.3,1);
+  }
+  .tb-subview:hover { color: var(--td-text); background: var(--td-raised); }
+  .tb-subview.on { color: var(--td-text); background: var(--td-raised); font-weight: 600; }
+  .tb-stk-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--td-amber); }
+  /* ⓘ lives outside the switch so it stays for cap-limited operators too; shown
+     only on Products. Reuses the .pa-info / .pa-info-pop styling from the head. */
+  #tb-info-wrap { display: none; }
+  body:has(#tab-products.active) #tb-info-wrap { display: inline-flex; }
+
+  /* Desktop: the topbar carries the Products head, so the in-content eyebrow +
+     title row + sub-view switch drop out (they'd repeat what's now in the bar).
+     On phones (≤720) the topbar page region is hidden and these stay as the
+     header, so nothing is lost. */
+  @media (min-width: 721px) {
+    #tab-products > .t-ord-eyebrow,
+    #tab-products > .pa-head-row,
+    #tab-products > .stk-views { display: none; }
   }
   @media (max-width: 720px) {
-    .topbar .gsearch-trigger { flex: 1 1 auto; }
+    .tb-page { display: none; }
   }
 
   /* ── shared chrome ── */
@@ -9286,7 +9309,7 @@
   .stk-view.on { color: var(--td-text, #111A2B); font-weight: 600;
     border-bottom-color: var(--td-text, #111A2B); }
   .stk-view-dot { width: 7px; height: 7px; border-radius: 50%; flex: none;
-    background: var(--td-amber, #C9954A); }
+    background: var(--td-amber); }
 
   .stk-minis { display: grid; grid-template-columns: repeat(4, 1fr);
     gap: 10px; margin: 0 0 var(--s4, 16px); }
@@ -9331,8 +9354,8 @@
   .cat2-fact b { font-weight: 600; }
   .cat2-fact .k { color: var(--td-text2, #58606E); }
   .cat2-fact-dot { width: 8px; height: 8px; border-radius: 50%; flex: none;
-    background: var(--td-sage, #A3B49F); }
-  .cat2-fact.warn .cat2-fact-dot { background: var(--td-amber, #C9954A); }
+    background: var(--td-sage); }
+  .cat2-fact.warn .cat2-fact-dot { background: var(--td-amber); }
   .cat2-fact-sep { width: 1px; height: 15px; background: var(--td-border, #E4E0D5); flex: none; }
   .cat2-status-end { margin-left: auto; display: flex; align-items: center; gap: 8px; }
   .cat2-save { font-size: 12.5px; color: var(--td-text2, #58606E); white-space: nowrap; }
@@ -9412,7 +9435,7 @@
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cat2-railrow .n { font-size: 12.5px; color: var(--td-text2, #58606E);
     font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
-  .cat2-railrow .cat2-fact-dot { width: 6px; height: 6px; background: var(--td-amber, #C9954A); }
+  .cat2-railrow .cat2-fact-dot { width: 6px; height: 6px; background: var(--td-amber); }
   .cat2-railfoot { padding: 10px; border-top: 1px solid var(--td-border, #E4E0D5); }
   .cat2-railhint { font: 400 12px var(--f-sans); color: var(--td-text2, #58606E);
     line-height: 1.5; margin: 0; padding: 10px 18px 14px; }
@@ -9744,6 +9767,22 @@
     #prod-view-purchasing .pu2-billcols { grid-template-columns: 1fr; }
     #prod-view-purchasing .pu2-fgrid.three { grid-template-columns: 1fr; }
   }
+
+  /* Reorder — low-stock cards grouped by preferred supplier + store */
+  #prod-view-purchasing .pu2-reo { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; margin-top: 6px; }
+  #prod-view-purchasing .pu2-reocard { padding: 18px 20px 16px; }
+  #prod-view-purchasing .pu2-reocard .top { display: flex; align-items: center; gap: 10px; }
+  #prod-view-purchasing .pu2-reocard .sup { font-size: 15px; font-weight: 500; }
+  #prod-view-purchasing .pu2-reocard .sub { margin: 2px 0 0; }
+  #prod-view-purchasing .pu2-reocard .lines2 { margin: 12px 0 4px; }
+  #prod-view-purchasing .pu2-reocard .l2 { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 6px 0;
+    border-bottom: 1px solid var(--td-border); }
+  #prod-view-purchasing .pu2-reocard .l2:last-child { border-bottom: none; }
+  #prod-view-purchasing .pu2-reocard .l2 .cover { margin-left: auto; color: var(--td-text2); font-size: 12px; white-space: nowrap; }
+  #prod-view-purchasing .pu2-reocard .foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding-top: 12px;
+    border-top: 1px solid var(--td-border); }
+  #prod-view-purchasing .pu2-reocard .foot .amt { font-weight: 500; }
+  #prod-view-purchasing .pu2-reocard .foot .pu2-btn { margin-left: auto; }
 
   /* low-stock suggestions */
   #prod-view-purchasing .pu2-sugrow { display: flex; align-items: center; gap: 12px; padding: 10px 14px;

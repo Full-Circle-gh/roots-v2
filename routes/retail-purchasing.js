@@ -537,6 +537,55 @@ router.delete('/api/retail-admin/bills/:id', requireRetailAdmin, (req, res) => {
   res.json({ success: true });
 });
 
+// ═══ REORDER ════════════════════════════════════════════════════════════════
+// Products sitting below their safety buffer across every active store, grouped
+// by the supplier we'd order each from (its most-used vendor in retail PO
+// history) + the store. Each group can become a one-tap draft order.
+router.get('/api/retail-admin/reorder', requireRetailAdmin, (req, res) => {
+  let stores = [];
+  try { stores = inventory.listStores({ activeOnly: true }); } catch (_) { stores = []; }
+  const low = [];
+  for (const st of stores) {
+    let rows = [];
+    try {
+      rows = tdb().prepare(`
+        SELECT p.id AS product_id, p.name_en, p.name_cn, p.sku,
+               COALESCE(s.physical_qty,0)  AS physical_qty,
+               COALESCE(s.safety_buffer,0) AS safety_buffer
+          FROM store_products p
+          LEFT JOIN retail_store_stock s ON s.product_id = p.id AND s.store_id = ?
+         WHERE COALESCE(p.is_active,1) = 1
+      `).all(st.id);
+    } catch (_) { rows = []; }
+    for (const r of rows) {
+      const buffer = r.safety_buffer > 0 ? r.safety_buffer : 5;
+      if (r.physical_qty < buffer) {
+        low.push({
+          store_id: st.id, store_name: st.name_en || st.code || ('#' + st.id),
+          product_id: r.product_id, name_en: r.name_en, name_cn: r.name_cn, sku: r.sku,
+          physical_qty: r.physical_qty, buffer,
+          suggest: Math.max(1, Math.round(buffer * 2 - r.physical_qty)),
+        });
+      }
+    }
+  }
+  const prefStmt = db.prepare(`
+    SELECT COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') AS supplier, COUNT(*) AS c
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE pli.store_product_id = ? AND COALESCE(po.scope,'kitchen') = 'retail'
+     GROUP BY 1 ORDER BY c DESC LIMIT 1`);
+  const groups = new Map();
+  for (const it of low) {
+    const pref = prefStmt.get(it.product_id);
+    it.supplier = (pref && pref.supplier) ? pref.supplier : null;
+    const key = (it.supplier || '—') + '|' + it.store_id;
+    if (!groups.has(key)) groups.set(key, { supplier: it.supplier, store_id: it.store_id, store_name: it.store_name, items: [] });
+    groups.get(key).items.push(it);
+  }
+  const out = [...groups.values()].sort((a, b) => b.items.length - a.items.length);
+  res.json({ success: true, data: out });
+});
+
 function insertLineItems(poId, items, headerSupplier) {
   const insertItem = db.prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
