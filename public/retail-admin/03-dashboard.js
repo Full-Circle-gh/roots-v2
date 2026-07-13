@@ -364,15 +364,20 @@ function reportsInit() {
 const DASH_HERO = { presence:null, channels:null, today:null, lastSync:0 };
 const DASH_HERO_INTERVALS = { presence: 15000, channels: 60000, today: 60000 };
 
-// One quick (3s) retry per surface when its FIRST load fails — without this a
+// A few backoff retries per surface when its FIRST load fails — without this a
 // tripped boot request left the card on "Loading…"/"¥—" until the next 60s
-// poll, and a manual page refresh was genuinely the fastest fix. Later poll
-// failures stay silent as before (last good numbers are already on screen).
+// poll, and a manual page refresh was genuinely the fastest fix. One 3s retry
+// wasn't enough: the bad first-load window (cold server / SW still activating)
+// often outlasts a single attempt, so the card stayed stuck. We now retry on a
+// widening schedule until the surface fills or the schedule is exhausted. Later
+// poll failures stay silent as before (last good numbers are already on screen).
+const DASH_BOOT_BACKOFF = [3000, 5000, 9000, 15000];
 const DASH_BOOT_RETRIED = {};
 function dashBootRetry(key, fn) {
-  if (DASH_BOOT_RETRIED[key]) return false;
-  DASH_BOOT_RETRIED[key] = true;
-  setTimeout(fn, 3000);
+  const n = DASH_BOOT_RETRIED[key] || 0;
+  if (n >= DASH_BOOT_BACKOFF.length) return false;
+  DASH_BOOT_RETRIED[key] = n + 1;
+  setTimeout(fn, DASH_BOOT_BACKOFF[n]);
   return true;
 }
 
