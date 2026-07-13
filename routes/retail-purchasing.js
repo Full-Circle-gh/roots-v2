@@ -392,6 +392,151 @@ router.get('/api/retail-admin/products/:spid/suppliers', requireRetailAdmin, (re
   } });
 });
 
+// ═══ RETAIL BILLS (supplier invoices) ═══════════════════════════════════════
+// Retail port of the kitchen invoice tracker: record a supplier's invoice and
+// allocate it across the retail PO lines it covers, with due-date / paid / AP
+// aging on top. Everything is scoped to retail (invoices.scope='retail') and
+// linked to retail PO lines, so kitchen bills never appear here and vice versa.
+const BILL_PO_STATUSES = "('Ordered','Delivered','Confirmed')";
+const gzToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+const gzNow   = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
+
+// Outstanding retail PO lines grouped by supplier — "who are we still awaiting
+// an invoice from, and for how much?"
+router.get('/api/retail-admin/bills/outstanding', requireRetailAdmin, (req, res) => {
+  const month = (req.query.month || '').trim();
+  const supplier = (req.query.supplier || '').trim();
+  const params = [];
+  let where = `COALESCE(po.scope,'kitchen')='retail' AND po.status IN ${BILL_PO_STATUSES}
+    AND COALESCE(po.no_invoice_expected,0)=0 AND COALESCE(pli.no_invoice_expected,0)=0`;
+  if (month)    { where += ' AND substr(po.date,1,7)=?'; params.push(month.slice(0, 7)); }
+  if (supplier) { where += " AND COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''),po.supplier,'')=?"; params.push(supplier); }
+  const rows = db.prepare(`
+    SELECT pli.id AS line_id, pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.cost_per_unit,
+           (pli.qty*pli.cost_per_unit) AS line_total,
+           COALESCE((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id=pli.id),0) AS covered,
+           po.id AS po_id, po.po_number, po.date,
+           COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''),po.supplier,'') AS supplier
+      FROM po_line_items pli JOIN purchase_orders po ON po.id=pli.po_id
+     WHERE ${where}
+     ORDER BY supplier, po.date DESC, pli.id`).all(...params);
+  const bySup = new Map();
+  for (const r of rows) {
+    r.outstanding = Math.max(0, r.line_total - r.covered);
+    r.status = r.covered <= 0.01 ? 'awaiting' : (r.covered + 0.01 >= r.line_total ? 'fully' : 'partial');
+    if (!bySup.has(r.supplier)) bySup.set(r.supplier, { supplier: r.supplier || null, total: 0, covered: 0, outstanding: 0, lines: [] });
+    const g = bySup.get(r.supplier);
+    g.total += r.line_total; g.covered += r.covered; g.outstanding += r.outstanding; g.lines.push(r);
+  }
+  const groups = [...bySup.values()].filter(g => g.outstanding > 0.01).sort((a, b) => b.outstanding - a.outstanding);
+  res.json({ success: true, data: groups });
+});
+
+// KPI + AP aging for the retail Bills header.
+router.get('/api/retail-admin/bills/summary', requireRetailAdmin, (req, res) => {
+  const month = (req.query.month || gzToday().slice(0, 7)).slice(0, 7);
+  const cov = db.prepare(`
+    SELECT COALESCE(SUM(pli.qty*pli.cost_per_unit),0) AS purchased,
+           COALESCE(SUM((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id=pli.id)),0) AS billed
+      FROM po_line_items pli JOIN purchase_orders po ON po.id=pli.po_id
+     WHERE COALESCE(po.scope,'kitchen')='retail' AND po.status IN ${BILL_PO_STATUSES}
+       AND COALESCE(po.no_invoice_expected,0)=0 AND COALESCE(pli.no_invoice_expected,0)=0
+       AND substr(po.date,1,7)=?`).get(month);
+  const purchased = cov.purchased || 0, billed = cov.billed || 0;
+  const awaiting = Math.max(0, purchased - billed);
+  const today = gzToday();
+  const soon = new Date(Date.now() + 8 * 3600 * 1000 + 7 * 86400 * 1000).toISOString().slice(0, 10);
+  const bills = db.prepare("SELECT amount, due_date, paid_at FROM invoices WHERE scope='retail' AND paid_at IS NULL").all();
+  let notDue = 0, dueSoon = 0, overdue = 0, overdueCount = 0;
+  for (const b of bills) {
+    const amt = b.amount || 0;
+    if (!b.due_date) { notDue += amt; continue; }
+    if (b.due_date < today) { overdue += amt; overdueCount++; }
+    else if (b.due_date <= soon) dueSoon += amt;
+    else notDue += amt;
+  }
+  res.json({ success: true, data: { month, purchased, billed, awaiting, aging: { notDue, dueSoon, overdue, overdueCount } } });
+});
+
+// Recorded retail bills ledger.
+router.get('/api/retail-admin/bills', requireRetailAdmin, (req, res) => {
+  const invs = db.prepare("SELECT * FROM invoices WHERE scope='retail' ORDER BY date DESC, id DESC").all();
+  const linkStmt = db.prepare(`
+    SELECT COUNT(DISTINCT po.id) AS po_count, GROUP_CONCAT(DISTINCT po.po_number) AS po_numbers,
+           COALESCE(SUM(il.allocated_amount),0) AS allocated
+      FROM invoice_lines il JOIN po_line_items pli ON pli.id=il.line_id JOIN purchase_orders po ON po.id=pli.po_id
+     WHERE il.invoice_id=?`);
+  const today = gzToday();
+  for (const inv of invs) {
+    const l = linkStmt.get(inv.id) || {};
+    inv.po_count = l.po_count || 0;
+    inv.po_numbers = l.po_numbers || '';
+    inv.allocated = l.allocated || 0;
+    inv.paid = !!inv.paid_at;
+    inv.overdue = !inv.paid_at && !!inv.due_date && inv.due_date < today;
+  }
+  res.json({ success: true, data: invs });
+});
+
+// Create a retail bill + allocate across the lines it covers.
+router.post('/api/retail-admin/bills', requireRetailAdmin, express.json(), (req, res) => {
+  const { supplier, invoice_number, amount, date, due_date, store_id, notes, links } = req.body || {};
+  if (!supplier || !String(supplier).trim()) return res.status(400).json({ success: false, error: 'supplier_required' });
+  if (!(parseFloat(amount) > 0)) return res.status(400).json({ success: false, error: 'amount_required' });
+  if (!date) return res.status(400).json({ success: false, error: 'date_required' });
+  const insertInv = db.prepare(`INSERT INTO invoices (supplier, invoice_number, amount, date, notes, created_by, scope, store_id, due_date)
+    VALUES (?,?,?,?,?,NULL,'retail',?,?)`);
+  const insertLink = db.prepare('INSERT OR IGNORE INTO invoice_lines (invoice_id, line_id, allocated_amount) VALUES (?,?,?)');
+  const lineInfo = db.prepare(`
+    SELECT pli.id, pli.qty, pli.cost_per_unit,
+           COALESCE((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id=pli.id),0) AS already
+      FROM po_line_items pli WHERE pli.id=?`);
+  try {
+    let id;
+    const tx = db.transaction(() => {
+      const r = insertInv.run(String(supplier).trim(), invoice_number ? String(invoice_number).trim() : null,
+        parseFloat(amount), date, notes || null, store_id ? parseInt(store_id, 10) : null, due_date || null);
+      id = r.lastInsertRowid;
+      if (Array.isArray(links)) {
+        for (const l of links) {
+          const lineId = parseInt(l.line_id, 10);
+          const alloc = parseFloat(l.allocated_amount) || 0;
+          if (!(lineId > 0) || !(alloc > 0)) continue;
+          const info = lineInfo.get(lineId);
+          if (!info) throw new Error(`line ${lineId} not found`);
+          const lineTotal = (info.qty || 0) * (info.cost_per_unit || 0);
+          const remaining = Math.max(0, lineTotal - info.already);
+          if (alloc > remaining + 0.01) throw new Error(`line ${lineId} over-allocated`);
+          insertLink.run(id, lineId, alloc);
+        }
+      }
+    });
+    tx();
+    logActivity(req.user.id, req.user.username, 'create', 'retail_bill', id, { supplier, amount }, req.ip);
+    res.json({ success: true, id });
+  } catch (e) {
+    console.error('[retail bill create]', e);
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Mark a bill paid / unpaid.
+router.put('/api/retail-admin/bills/:id/paid', requireRetailAdmin, express.json(), (req, res) => {
+  const inv = db.prepare("SELECT * FROM invoices WHERE id=? AND scope='retail'").get(req.params.id);
+  if (!inv) return res.status(404).json({ success: false, error: 'not_found' });
+  const paid = (req.body && req.body.paid === false) ? null : gzNow();
+  db.prepare('UPDATE invoices SET paid_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(paid, inv.id);
+  res.json({ success: true, paid: !!paid });
+});
+
+// Delete a bill (invoice_lines cascade).
+router.delete('/api/retail-admin/bills/:id', requireRetailAdmin, (req, res) => {
+  const r = db.prepare("DELETE FROM invoices WHERE id=? AND scope='retail'").run(req.params.id);
+  if (!r.changes) return res.status(404).json({ success: false, error: 'not_found' });
+  logActivity(req.user.id, req.user.username, 'delete', 'retail_bill', req.params.id, null, req.ip);
+  res.json({ success: true });
+});
+
 function insertLineItems(poId, items, headerSupplier) {
   const insertItem = db.prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,

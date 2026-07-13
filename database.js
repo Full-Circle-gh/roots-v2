@@ -282,6 +282,16 @@ addColumn('purchase_orders', 'no_invoice_expected', 'INTEGER DEFAULT 0');
 // issue invoices (cash, market, …). Used by the line-level invoice report.
 addColumn('po_line_items', 'no_invoice_expected', 'INTEGER DEFAULT 0');
 
+// Retail Bills reuse the same invoices + invoice_lines tables as the kitchen,
+// separated by scope (mirrors purchase_orders.scope). store_id pins the bill
+// to a retail store; due_date + paid_at drive the AP-aging / mark-paid view
+// the retail Bills tab adds on top of the kitchen model. All additive.
+addColumn('invoices', 'scope',    "TEXT DEFAULT 'kitchen'");
+addColumn('invoices', 'store_id', 'INTEGER');
+addColumn('invoices', 'due_date', 'DATE');
+addColumn('invoices', 'paid_at',  'DATETIME');
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_invoices_scope ON invoices(scope)'); } catch {}
+
 // Supplier dossier columns. The first two are free-text notes the buyer
 // keeps about the vendor (catalogue + price list snapshot). The three
 // _data columns hold base64 image uploads — same pattern we use for
