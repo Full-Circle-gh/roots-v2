@@ -2227,58 +2227,101 @@
     background: none; border: 0; border-radius: 0; margin-bottom: 0;
   }
 
-  /* ── Highlights band — the few product facts worth a morning glance. Each
-        tile is a button that deep-links into Products filtered to that set. ── */
-  .pa-hi { padding: 16px 26px 20px; border-top: 1px solid var(--td-border); }
+  /* ── Highlights band — spotlight + rail. Best seller is the one number worth
+        a second look, so it gets its own quiet sage-washed panel with a photo;
+        the other four facts collapse into a compact reference rail beside it —
+        icon (or thumbnail, when the row names one real product), label, value.
+        Every row is a button that deep-links into Products filtered to that set. ── */
+  .pa-hi { border-top: 1px solid var(--td-border); }
   .pa-hi-head {
     font-family: var(--f-sans); font-size: 11px; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2);
-    margin-bottom: 14px;
+    padding: 16px 26px 0; margin-bottom: 12px;
   }
-  .pa-hi-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; align-items: start; }
-  .pa-hi-tile {
-    display: flex; flex-direction: column; align-self: start; min-width: 0;
-    text-align: left; background: none; border: 0; padding: 0;
+  .pa-hi-band { display: flex; }
+
+  .pa-hi-spot {
+    width: 34%; min-width: 200px; flex: none; text-align: left;
+    padding: 18px 26px 20px; border-right: 1px solid var(--td-border);
+    background: linear-gradient(180deg, var(--td-sage-tint), transparent 140%);
+    border-top: 0; border-bottom: 0; border-left: 0;
     font-family: var(--f-sans); color: var(--td-text); cursor: pointer;
-    border-radius: 8px;
+    transition: background .2s cubic-bezier(.16,1,.3,1);
   }
-  .pa-hi-tile:disabled { cursor: default; }
-  .pa-hi-tile:not(:disabled):hover .pa-hi-name { text-decoration: underline; text-decoration-color: var(--td-border); text-underline-offset: 3px; }
-  .pa-hi-tile:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
-  .pa-hi-tile.is-on .pa-hi-badge { border-color: var(--td-text); box-shadow: 0 0 0 1px var(--td-text) inset; }
-  .pa-hi-tile.is-on .pa-hi-name { text-decoration: underline; text-decoration-color: var(--td-text); text-underline-offset: 3px; }
-  .pa-hi-cap {
-    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
-    font-size: 11.5px; font-weight: 600; letter-spacing: .02em;
-    text-transform: uppercase; color: var(--td-text2);
+  .pa-hi-spot:not(:disabled):hover { background: var(--td-sage-tint); }
+  .pa-hi-spot:disabled { cursor: default; background: none; }
+  .pa-hi-spot:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
+  .pa-hi-spot-cap {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
+    font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--td-sage-ink);
   }
-  .pa-hi-cap svg { flex: none; width: 14px; height: 14px; }
-  .pa-hi-cap.up   { color: var(--td-sage-ink); }
-  .pa-hi-cap.down { color: var(--td-brick-ink); }
-  .pa-hi-cap.warn { color: var(--td-amber-ink); }
-  .pa-hi-body { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
-  .pa-hi-badge {
-    width: 34px; height: 34px; border-radius: 8px; flex: none;
+  .pa-hi-spot-cap svg { flex: none; width: 13px; height: 13px; }
+  .pa-hi-spot-photo {
+    width: 52px; height: 52px; border-radius: 12px; margin-bottom: 14px;
+    background: var(--td-surface); border: 1px solid var(--td-border);
     display: flex; align-items: center; justify-content: center;
-    background: var(--td-raised); border: 1px solid var(--td-border); color: var(--td-text2);
+    color: var(--td-text2); overflow: hidden;
   }
-  .pa-hi-badge.num { font-size: 15px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .pa-hi-badge svg { width: 18px; height: 18px; }
-  .pa-hi-badge img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; }
-  .pa-hi-text { min-width: 0; flex: 1; }
-  .pa-hi-name {
-    font-size: 13.5px; font-weight: 500; line-height: 1.3; color: var(--td-text);
+  .pa-hi-spot-photo svg { width: 20px; height: 20px; }
+  .pa-hi-spot-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .pa-hi-spot-name {
+    font-size: 14.5px; font-weight: 500; line-height: 1.3; color: var(--td-text); margin-bottom: 4px;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
   }
-  .pa-hi-meta { font-size: 12px; color: var(--td-text2); margin-top: 1px; line-height: 1.3; }
-  .pa-hi-meta b { color: var(--td-text); font-weight: 600; }
-  .pa-hi-meta.up   { color: var(--td-sage-ink); }
-  .pa-hi-meta.up b { color: var(--td-sage-ink); }
+  .pa-hi-spot-stat { font-size: 28px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .pa-hi-spot-stat .u { font-size: 12.5px; font-weight: 500; color: var(--td-text2); margin-left: 6px; }
+
+  .pa-hi-rail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .pa-hi-rail-row {
+    display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+    padding: 11px 26px; border-bottom: 1px solid var(--td-raised);
+    border-top: 0; border-left: 0; border-right: 0; background: none;
+    font-family: var(--f-sans); color: var(--td-text); cursor: pointer;
+    transition: background .15s cubic-bezier(.16,1,.3,1);
+  }
+  .pa-hi-rail-row:last-child { border-bottom: 0; }
+  .pa-hi-rail-row:not(:disabled):hover { background: var(--td-raised); }
+  .pa-hi-rail-row:disabled { cursor: default; }
+  .pa-hi-rail-row:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
+  .pa-hi-rail-row.is-on { background: var(--td-raised); }
+  .pa-hi-rail-row.is-on .pa-hi-rail-val { text-decoration: underline; text-decoration-color: var(--td-text); text-underline-offset: 3px; }
+  .pa-hi-rail-ico { width: 30px; height: 30px; border-radius: 8px; flex: none; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  .pa-hi-rail-ico svg { width: 16px; height: 16px; }
+  .pa-hi-rail-ico.thumb { background: var(--td-raised); border: 1px solid var(--td-border); color: var(--td-text2); }
+  .pa-hi-rail-ico.thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; }
+  .pa-hi-rail-ico.badge-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  .pa-hi-rail-ico.badge-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .pa-hi-rail-ico.badge-neu   { background: var(--td-raised); color: var(--td-text2); border: 1px solid var(--td-border); }
+  .pa-hi-rail-dot {
+    position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--td-surface); display: flex; align-items: center; justify-content: center;
+  }
+  .pa-hi-rail-dot.up { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+  .pa-hi-rail-dot svg { width: 7px; height: 7px; }
+  .pa-hi-rail-lab { flex: 1; min-width: 0; }
+  .pa-hi-rail-cap {
+    display: block; font-size: 11px; font-weight: 600; letter-spacing: .02em;
+    text-transform: uppercase; color: var(--td-text2); margin-bottom: 2px;
+  }
+  .pa-hi-rail-cap.up   { color: var(--td-sage-ink); }
+  .pa-hi-rail-cap.down { color: var(--td-brick-ink); }
+  .pa-hi-rail-cap.warn { color: var(--td-amber-ink); }
+  .pa-hi-rail-sub {
+    display: block; font-size: 13.5px; font-weight: 500; color: var(--td-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pa-hi-rail-val { flex: none; font-size: 15px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pa-hi-rail-val.up { color: var(--td-sage-ink); }
+  .pa-hi-rail-val.muted { color: var(--td-text2); font-weight: 500; }
+  .pa-hi-rail-chev { flex: none; color: var(--td-text2); opacity: .5; }
   .pa-hi-tri { width: 9px; height: 9px; margin-right: 2px; vertical-align: middle; }
   .pa-hi-empty { font-size: 13px; color: var(--td-text3, var(--td-text2)); }
   @media (max-width: 720px) {
-    .pa-hi { padding: 14px 16px 16px; }
-    .pa-hi-grid { grid-template-columns: repeat(2, 1fr); gap: 16px 12px; }
+    .pa-hi-head { padding: 14px 16px 0; }
+    .pa-hi-band { flex-direction: column; }
+    .pa-hi-spot { width: auto; border-right: 0; border-bottom: 1px solid var(--td-border); padding: 14px 16px 16px; }
+    .pa-hi-rail-row { padding: 11px 16px; }
   }
 
   /* ── Toolbar — search · category · add · guided add · layout ───────────── */

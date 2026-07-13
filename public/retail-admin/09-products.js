@@ -1294,87 +1294,100 @@ async function paLoadHighlights() {
   } catch { PA_HI = null; }
   paRenderHighlights();
 }
-// Build one tile. `open` is the click action (or null → non-interactive).
-function _paHiTile({ cls, icon, cap, badge, name, meta, open, active }) {
+// Spotlight panel — the one number worth a second look (best seller). `open`
+// is the click action, or falsy for the quiet empty state.
+function _paHiSpot({ img, name, stat, open }) {
+  const attrs = open ? `onclick="${open}"` : 'disabled';
+  const photo = img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy">` : PA_HI_ICONS.box;
+  return `<button type="button" class="pa-hi-spot" ${attrs}>
+      <span class="pa-hi-spot-cap">${PA_HI_ICONS.star}${cuT('Best seller · 7 days', '最畅销 · 近 7 天')}</span>
+      <span class="pa-hi-spot-photo">${photo}</span>
+      <span class="pa-hi-spot-name">${name}</span>
+      <span class="pa-hi-spot-stat">${stat}</span>
+    </button>`;
+}
+// One rail row. `iconType` is 'thumb' (a real product — shows its photo, or the
+// generic icon if it has none, with an optional small trend dot) or a badge
+// colour (aggregate count, no single product to depict). `open` falsy → disabled.
+function _paHiRailRow({ cls, iconType, icon, dotIcon, img, cap, sub, val, valCls, open, active }) {
   const attrs = open
     ? `onclick="${open}"${active ? ' aria-pressed="true"' : ''}`
     : 'disabled';
-  return `<button type="button" class="pa-hi-tile${active ? ' is-on' : ''}" ${attrs}>
-      <span class="pa-hi-cap ${cls}">${icon}${cap}</span>
-      <span class="pa-hi-body">
-        <span class="pa-hi-badge${badge.num ? ' num' : ''}">${badge.html}</span>
-        <span class="pa-hi-text"><span class="pa-hi-name">${name}</span>${meta ? `<span class="pa-hi-meta ${meta.cls || ''}">${meta.html}</span>` : ''}</span>
+  const iconHtml = iconType === 'thumb'
+    ? `<span class="pa-hi-rail-ico thumb">${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy">` : icon}${dotIcon ? `<span class="pa-hi-rail-dot ${cls}">${dotIcon}</span>` : ''}</span>`
+    : `<span class="pa-hi-rail-ico badge-${iconType}">${icon}</span>`;
+  return `<button type="button" class="pa-hi-rail-row${active ? ' is-on' : ''}" ${attrs}>
+      ${iconHtml}
+      <span class="pa-hi-rail-lab">
+        <span class="pa-hi-rail-cap ${cls}">${cap}</span>
+        <span class="pa-hi-rail-sub">${sub}</span>
       </span>
+      <span class="pa-hi-rail-val ${valCls || ''}">${val}</span>
+      <svg class="pa-hi-rail-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
     </button>`;
 }
 function paRenderHighlights() {
   const band = document.getElementById('pa-hi');
-  const grid = document.getElementById('pa-hi-grid');
-  if (!band || !grid) return;
+  const wrap = document.getElementById('pa-hi-band');
+  if (!band || !wrap) return;
   if (!PA_HI) { band.hidden = true; return; }
   band.hidden = false;
   const pname = (o) => escapeHtml(cuT(o.name_en || o.name_cn || '—', o.name_cn || o.name_en || '—'));
-  // A tile names one real product → show its photo; no photo, or the tile is
-  // just a count (no single product), → fall back to the generic icon.
-  const thumb = (item) => (item && item.image)
-    ? { html: `<img src="${escapeHtml(item.image)}" alt="" loading="lazy">` }
-    : { html: PA_HI_ICONS.box };
-  const tiles = [];
 
-  // Best seller — top units this week.
-  if (PA_HI.bestSeller) {
-    tiles.push(_paHiTile({
-      cls: 'up', icon: PA_HI_ICONS.star, cap: cuT('Best seller', '最畅销'),
-      badge: thumb(PA_HI.bestSeller), name: pname(PA_HI.bestSeller),
-      meta: { html: `<b>${fcNum(PA_HI.bestSeller.units)}</b>` + cuT(' sold', ' 件已售') },
-      open: `paOpenEdit(${PA_HI.bestSeller.id})`,
-    }));
-  } else {
-    tiles.push(_paHiTile({ cls: 'up', icon: PA_HI_ICONS.star, cap: cuT('Best seller', '最畅销'),
-      badge: { html: PA_HI_ICONS.box }, name: `<span class="pa-hi-empty">${cuT('No sales yet', '暂无销量')}</span>`, open: null }));
-  }
+  // Best seller — top units this week. The one headline; everything else is reference.
+  const spotHtml = PA_HI.bestSeller
+    ? _paHiSpot({
+        img: PA_HI.bestSeller.image, name: pname(PA_HI.bestSeller),
+        stat: `${fcNum(PA_HI.bestSeller.units)}<span class="u">${cuT('sold', '件已售')}</span>`,
+        open: `paOpenEdit(${PA_HI.bestSeller.id})`,
+      })
+    : _paHiSpot({ img: null, name: `<span class="pa-hi-empty">${cuT('No sales yet', '暂无销量')}</span>`, stat: '', open: null });
 
-  // Rising — biggest % jump this week vs last.
+  const rows = [];
+
+  // Rising — biggest % jump this week vs last. The only rail row backed by one
+  // real product, so it gets a thumbnail (or the fallback icon) + a trend dot.
   if (PA_HI.rising) {
-    tiles.push(_paHiTile({
-      cls: 'up', icon: PA_HI_ICONS.up, cap: cuT('Rising', '上升中'),
-      badge: thumb(PA_HI.rising), name: pname(PA_HI.rising),
-      meta: { cls: 'up', html: `<b><svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%</b>` + cuT(' vs last week', ' 较上周') },
-      open: `paOpenEdit(${PA_HI.rising.id})`,
+    rows.push(_paHiRailRow({
+      cls: 'up', iconType: 'thumb', icon: PA_HI_ICONS.box, img: PA_HI.rising.image, dotIcon: PA_HI_ICONS.up,
+      cap: cuT('Rising', '上升中'), sub: pname(PA_HI.rising),
+      val: `<svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%`,
+      valCls: 'up', open: `paOpenEdit(${PA_HI.rising.id})`,
     }));
   } else {
-    tiles.push(_paHiTile({ cls: 'up', icon: PA_HI_ICONS.up, cap: cuT('Rising', '上升中'),
-      badge: { html: PA_HI_ICONS.box }, name: `<span class="pa-hi-empty">${cuT('No clear climber', '暂无明显上升')}</span>`, open: null }));
+    rows.push(_paHiRailRow({
+      cls: 'up', iconType: 'thumb', icon: PA_HI_ICONS.box, img: null, dotIcon: null,
+      cap: cuT('Rising', '上升中'), sub: `<span class="pa-hi-empty">${cuT('No clear climber', '暂无明显上升')}</span>`,
+      val: '', open: null,
+    }));
   }
 
-  // Going nowhere — live, no sale in 30 days.
+  // Going nowhere — live, no sale in 30 days. Aggregate count → icon badge, no thumbnail.
   const dead = PA_HI.goingNowhere ? PA_HI.goingNowhere.count : 0;
-  tiles.push(_paHiTile({
-    cls: 'down', icon: PA_HI_ICONS.down, cap: cuT('Going nowhere', '无人问津'),
-    badge: { html: PA_HI_ICONS.box }, name: `${fcNum(dead)} ` + cuT('products', '件产品'),
-    meta: { html: cuT('No sale in 30 days', '30 天无销量') },
-    open: dead ? `paSetStatus('dead')` : null, active: PA_STATUS === 'dead',
+  rows.push(_paHiRailRow({
+    cls: 'down', iconType: 'brick', icon: PA_HI_ICONS.down,
+    cap: cuT('Going nowhere', '无人问津'), sub: cuT('No sale in 30 days', '30 天无销量'),
+    val: fcNum(dead), open: dead ? `paSetStatus('dead')` : null, active: PA_STATUS === 'dead',
   }));
 
   // Needs attention — live, missing photo/price/category.
   const inc = PA_HI.needsAttention ? PA_HI.needsAttention.count : 0;
-  tiles.push(_paHiTile({
-    cls: 'warn', icon: PA_HI_ICONS.warn, cap: cuT('Needs attention', '待完善'),
-    badge: { num: true, html: fcNum(inc) },
-    name: cuT('Missing a photo, price or category', '缺图片、价格或分类'),
-    open: inc ? `paSetStatus('incomplete')` : null, active: PA_STATUS === 'incomplete',
+  rows.push(_paHiRailRow({
+    cls: 'warn', iconType: 'amber', icon: PA_HI_ICONS.warn,
+    cap: cuT('Needs attention', '待完善'), sub: cuT('Missing a photo, price or category', '缺图片、价格或分类'),
+    val: fcNum(inc), open: inc ? `paSetStatus('incomplete')` : null, active: PA_STATUS === 'incomplete',
   }));
 
   // On promotion — live, active flash sale now.
   const promo = PA_HI.onPromotion ? PA_HI.onPromotion.count : 0;
-  tiles.push(_paHiTile({
-    cls: '', icon: PA_HI_ICONS.tag, cap: cuT('On promotion', '促销中'),
-    badge: { num: true, html: fcNum(promo) },
-    name: cuT('On a flash sale right now', '正在闪购'),
+  rows.push(_paHiRailRow({
+    cls: '', iconType: 'neu', icon: PA_HI_ICONS.tag,
+    cap: cuT('On promotion', '促销中'), sub: cuT('On a flash sale right now', '正在闪购'),
+    val: fcNum(promo), valCls: promo ? '' : 'muted',
     open: promo ? `paSetStatus('promo')` : null, active: PA_STATUS === 'promo',
   }));
 
-  grid.innerHTML = tiles.join('');
+  wrap.innerHTML = spotHtml + `<div class="pa-hi-rail">${rows.join('')}</div>`;
 }
 
 // Recap-banner shortcut: arm bulk-select and tick every product on the current

@@ -1908,7 +1908,7 @@
          list by origin. Meituan rows ride the list read-only (view only). -->
     <div class="status-chips ch-chips" id="orders-channel-chips" style="margin-bottom: var(--s3)">
       <div class="status-chip st-all active" data-channel=""        onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels</div>
-      <div class="status-chip"               data-channel="wechat"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg></span>Mini app</div>
+      <div class="status-chip"               data-channel="wechat"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5Z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg></span>Mini app</div>
       <div class="status-chip"               data-channel="web"     onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web</div>
       <div class="status-chip"               data-channel="meituan" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan</div>
       <div class="status-chip"               data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>gzgrocery</div>
@@ -3062,7 +3062,7 @@
            /api/retail-admin/products/highlights; the whole band is tap-through. -->
       <div class="pa-hi" id="pa-hi" hidden>
         <div class="pa-hi-head" data-no-i18n>Highlights · this week</div>
-        <div class="pa-hi-grid" id="pa-hi-grid"></div>
+        <div class="pa-hi-band" id="pa-hi-band"></div>
       </div>
     </div>
     <!-- Context line — appears under the band only when a jump filter is active:
@@ -9121,7 +9121,7 @@
         <div class="sales-ch-top">
           <div class="sales-ch-id">
             <span class="sales-ch-ico wc">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M10.5 18h3"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v5Z"/><path d="M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1"/></svg>
             </span>
             <div>
               <div class="sales-ch-name">Mini app · 小程序</div>
