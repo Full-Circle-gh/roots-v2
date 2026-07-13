@@ -150,7 +150,42 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
      WHERE supplier = ? AND COALESCE(scope,'kitchen') = 'retail'
      ORDER BY date DESC, id DESC LIMIT 10
   `).all(s.name);
-  res.json({ success: true, data: { ...s, documents, recent_pos: recentPOs } });
+  // Scorecard — honest, computed-from-history metrics only (no faked on-time/
+  // fill without the data to back them). Lines match this supplier whether the
+  // supplier sits on the line or only on the PO header.
+  const SUP_MATCH = "COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') = ?";
+  const stat = db.prepare(`
+    SELECT COUNT(DISTINCT po.id) AS order_count,
+           COALESCE(SUM(pli.total_cost),0) AS spend,
+           MAX(po.date) AS last_date
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE COALESCE(po.scope,'kitchen')='retail' AND ${SUP_MATCH}`).get(s.name) || {};
+  const owed = db.prepare(
+    "SELECT COALESCE(SUM(amount),0) AS owed, COUNT(*) AS n FROM invoices WHERE scope='retail' AND supplier=? AND paid_at IS NULL"
+  ).get(s.name) || {};
+  const priceList = db.prepare(`
+    SELECT pli.store_product_id,
+           MAX(pli.name_en) AS name_en, MAX(pli.name_cn) AS name_cn, MAX(pli.sku) AS sku,
+           COUNT(*) AS times, AVG(pli.cost_per_unit) AS avg_cost, SUM(pli.qty) AS total_qty
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE COALESCE(po.scope,'kitchen')='retail' AND ${SUP_MATCH} AND pli.store_product_id IS NOT NULL
+     GROUP BY pli.store_product_id
+     ORDER BY times DESC, name_en LIMIT 50`).all(s.name);
+  const lastStmt = db.prepare(`
+    SELECT pli.cost_per_unit AS cost, po.date
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE pli.store_product_id=? AND COALESCE(po.scope,'kitchen')='retail' AND ${SUP_MATCH}
+     ORDER BY po.date DESC, pli.id DESC LIMIT 1`);
+  for (const pl of priceList) {
+    const l = lastStmt.get(pl.store_product_id, s.name) || {};
+    pl.last_cost = l.cost != null ? l.cost : pl.avg_cost;
+    pl.last_date = l.date || null;
+  }
+  const scorecard = {
+    order_count: stat.order_count || 0, spend: stat.spend || 0, last_date: stat.last_date || null,
+    owed: owed.owed || 0, owed_count: owed.n || 0, product_count: priceList.length,
+  };
+  res.json({ success: true, data: { ...s, documents, recent_pos: recentPOs, scorecard, price_list: priceList } });
 });
 
 const SUPPLIER_FIELDS = ['name', 'name_cn', 'contact_name', 'contact_phone', 'contact_wechat',

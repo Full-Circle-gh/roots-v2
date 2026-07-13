@@ -1382,7 +1382,10 @@
         ${backBtn(T('Suppliers', '供应商'), 'puBackSuppliers()')}
         <h1>${s.id ? esc(s.name) : esc(T('New supplier', '新建供应商'))}</h1>
         ${s.id && !s.is_active ? `<span class="pu2-pill grey">${esc(T('Disabled', '已停用'))}</span>` : ''}
+        ${s.id ? `<span class="spacer"></span><button class="pu2-btn primary" data-cap="purchasing:edit" onclick="puNewOrderFor(${s.id})">${esc(T('New order', '新建采购单'))}</button>` : ''}
       </div>
+
+      ${s.id && s.scorecard ? supplierScorecard(s) : ''}
 
       <div class="pu2-card pu2-formcard">
         <div class="pu2-fgroup">
@@ -1430,8 +1433,40 @@
 
       ${s.id ? supplierExtras(s) : ''}`;
   }
+  function supplierScorecard(s) {
+    const sc = s.scorecard || {};
+    const tile = (lab, val, foot) => `<div class="pu2-card pu2-metric"><div class="lab">${esc(lab)}</div><div class="big pu2-num">${val}</div><div class="foot">${esc(foot || '')}</div></div>`;
+    return `<div class="pu2-metricrow" style="margin:0 0 16px">
+      ${tile(T('Orders', '采购单'), sc.order_count || 0, sc.last_date ? T('last', '最近') + ' ' + sc.last_date : T('none yet', '暂无'))}
+      ${tile(T('Spend, all time', '累计采购'), money(sc.spend || 0), '')}
+      ${tile(T('Owed now', '当前应付'), money(sc.owed || 0), (sc.owed_count || 0) + ' ' + T('bills', '张账单'))}
+      ${tile(T('Products', '商品'), sc.product_count || 0, T('bought before', '曾采购'))}
+    </div>`;
+  }
+  function supplierPriceList(s) {
+    const pl = s.price_list || [];
+    if (!pl.length) return '';
+    return `<div class="pu2-card pu2-block" style="max-width:none">
+      <b>${esc(T('Price list — what you’ve bought from them', '价格清单 —— 曾向其采购'))}</b>
+      <table class="pu2-tbl" style="margin-top:8px">
+        <thead><tr><th>${esc(T('Product', '商品'))}</th><th class="right">${esc(T('Last paid', '上次'))}</th><th class="right">${esc(T('Average', '均价'))}</th><th class="right">${esc(T('Times', '次数'))}</th></tr></thead>
+        <tbody>${pl.map(p => `<tr>
+          <td>${nameLabel(p)}${p.sku ? `<div class="sub pu2-mono">${esc(p.sku)}</div>` : ''}</td>
+          <td class="right pu2-num">${money(p.last_cost || 0)}</td>
+          <td class="right pu2-num">${p.avg_cost != null ? money(p.avg_cost) : '—'}</td>
+          <td class="right pu2-num">${p.times}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  }
+  window.puNewOrderFor = function (supId) {
+    const name = (_sup && _sup.id === supId) ? _sup.name : (_suppliers.find(x => x.id === supId)?.name || '');
+    puNewOrder();
+    if (name) { _edit.supplier = name; _wstep = 1; paint(); }
+  };
   function supplierExtras(s) {
     return `
+      ${supplierPriceList(s)}
       <div class="pu2-card pu2-block">
         <b>${esc(T('Paperwork', '资质文件'))}</b>
         <div class="pu2-docs">
