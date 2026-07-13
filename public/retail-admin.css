@@ -9466,11 +9466,9 @@
   .cat2-prod select { font: 400 13px var(--f-sans); color: var(--td-text, #111A2B);
     background-color: var(--td-surface, #fff); border: 1px solid var(--td-border, #E4E0D5);
     border-radius: 8px; padding: 6px 28px 6px 10px; cursor: pointer; max-width: 200px; }
-  .cat2-seeall { appearance: none; background: none; border: 0; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 6px 0;
-    font: 400 13.5px var(--f-sans); color: var(--td-text2, #58606E); }
-  .cat2-seeall:hover { color: var(--td-text, #111A2B); }
-  .cat2-seeall svg { width: 14px; height: 14px; }
+  /* invisible trigger row: the IntersectionObserver reveals the next page
+     when this scrolls into view, so the list just keeps growing */
+  .cat2-more { height: 1px; }
 
   @media (max-width: 880px) {
     .cat2-shelf { grid-template-columns: 1fr; }

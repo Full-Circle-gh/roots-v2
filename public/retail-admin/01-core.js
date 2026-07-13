@@ -1234,11 +1234,15 @@ function catDrop(ev, kind, i) {
 
 // ── The products standing on this shelf ────────────────────────────────────
 // Read against the LAST-SAVED name (products carry saved names, so an unsaved
-// rename wouldn't match until the tree lands). Twelve rows, then a door into
-// the catalogue — the pane answers "is this shelf right?", not "manage stock".
-const CAT_PROD_SHOWN = 12;
+// rename wouldn't match until the tree lands). Twelve rows at a time, more
+// revealed as the operator scrolls — the pane answers "is this shelf right?",
+// not "manage stock", so it never has to send them away to see the rest.
+const CAT_PROD_PAGE = 12;
 let _catMoveTargets = [];    // flattened [{ top, sub }]; the <select> value is the index
 let _catProdReq = 0;
+let _catProdRows = [];       // all rows for the current shelf, fetched once
+let _catProdShown = 0;       // how many of _catProdRows are currently rendered
+let _catProdObserver = null;
 
 function catCleanTree() { try { return JSON.parse(catClean); } catch (e) { return []; } }
 // The saved name of the selected top, matched by stable id. Null for a node
@@ -1266,9 +1270,50 @@ function catMoveOptions(curTop, curSub) {
   }).join('');
 }
 
+function catProdRowHtml(p) {
+  const name = escapeHtml(p.name_en || p.name_cn || ('#' + p.id));
+  const thumb = p.image_data
+    ? `<img class="cat2-thumb" src="${escapeAttr(p.image_data)}" alt="" loading="lazy">`
+    : `<span class="cat2-thumb">${CAT_ICON.box}</span>`;
+  const sub = (p.subcategory || '').trim();
+  return `<div class="cat2-prod">
+    ${thumb}
+    <span class="pn">${name}${p.is_published ? '' : ` <span class="psub">· ${escapeHtml(cuT('draft', '未上架'))}</span>`}</span>
+    <span class="psub">${escapeHtml(sub || cuT('no heading', '无区块'))}</span>
+    <select title="${escapeAttr(cuT('Move to another shelf', '移动到其他分类'))}" onchange="catMoveProduct(${p.id}, this)">
+      ${catMoveOptions(p.top_category, p.subcategory)}
+    </select>
+  </div>`;
+}
+function catProdStopWatching() {
+  if (_catProdObserver) { _catProdObserver.disconnect(); _catProdObserver = null; }
+}
+// Render however many rows are currently revealed, plus a sentinel that
+// reveals the next page once it scrolls into view. No click, no leaving
+// the shelf — the list just keeps growing as the operator scrolls down.
+function catRenderProdList() {
+  const host = document.getElementById('cat2-prods');
+  if (!host) return;
+  catProdStopWatching();
+  const shown = _catProdRows.slice(0, _catProdShown);
+  let html = shown.map(catProdRowHtml).join('');
+  if (_catProdShown < _catProdRows.length) html += `<div class="cat2-more" id="cat2-more"></div>`;
+  host.innerHTML = html;
+  const sentinel = document.getElementById('cat2-more');
+  if (sentinel) {
+    _catProdObserver = new IntersectionObserver((entries) => {
+      if (!entries.some(e => e.isIntersecting)) return;
+      _catProdShown = Math.min(_catProdShown + CAT_PROD_PAGE, _catProdRows.length);
+      catRenderProdList();
+    }, { rootMargin: '300px' });
+    _catProdObserver.observe(sentinel);
+  }
+}
+
 async function catLoadProducts() {
   const host = document.getElementById('cat2-prods');
   if (!host) return;
+  catProdStopWatching();
   const top = catSavedTopName();
   if (!top) {
     host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Save this category, then its products can stand here.', '保存该分类后，产品即可归入此处。'))}</div>`;
@@ -1284,25 +1329,9 @@ async function catLoadProducts() {
       host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Nothing stands on this shelf yet.', '该分类下暂无产品。'))}</div>`;
       return;
     }
-    const shown = rows.slice(0, CAT_PROD_SHOWN);
-    host.innerHTML = shown.map(p => {
-      const name = escapeHtml(p.name_en || p.name_cn || ('#' + p.id));
-      const thumb = p.image_data
-        ? `<img class="cat2-thumb" src="${escapeAttr(p.image_data)}" alt="" loading="lazy">`
-        : `<span class="cat2-thumb">${CAT_ICON.box}</span>`;
-      const sub = (p.subcategory || '').trim();
-      return `<div class="cat2-prod">
-        ${thumb}
-        <span class="pn">${name}${p.is_published ? '' : ` <span class="psub">· ${escapeHtml(cuT('draft', '未上架'))}</span>`}</span>
-        <span class="psub">${escapeHtml(sub || cuT('no heading', '无区块'))}</span>
-        <select title="${escapeAttr(cuT('Move to another shelf', '移动到其他分类'))}" onchange="catMoveProduct(${p.id}, this)">
-          ${catMoveOptions(p.top_category, p.subcategory)}
-        </select>
-      </div>`;
-    }).join('') +
-      `<button class="cat2-seeall" type="button" onclick="catSeeAll()">
-         <span>${escapeHtml(cuT(`See all ${fcNum(rows.length)} in the catalogue`, `在目录中查看全部 ${fcNum(rows.length)} 件`))}</span>${CAT_ICON.arrow}
-       </button>`;
+    _catProdRows = rows;
+    _catProdShown = Math.min(CAT_PROD_PAGE, rows.length);
+    catRenderProdList();
   } catch (e) {
     if (req !== _catProdReq) return;
     host.innerHTML = `<div class="cat2-empty">${escapeHtml(cuT('Could not load the products on this shelf.', '加载该分类的产品失败。'))}</div>`;
@@ -1323,19 +1352,6 @@ async function catMoveProduct(id, sel) {
     toast(cuT('Could not move it', '移动失败'), 'err');
     sel.disabled = false;
   }
-}
-
-// Hand the operator over to the catalogue, already filtered to this shelf.
-function catSeeAll() {
-  const top = catSavedTopName();
-  if (!top) return;
-  prodShowView('catalog');
-  const f = document.getElementById('pa-filter');
-  if (f && [...f.options].some(o => o.value === top)) {
-    f.value = top;
-    f.dispatchEvent(new Event('change'));
-  }
-  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 // Open the shelf from anywhere (search results, deep links).
