@@ -500,6 +500,19 @@ function prodSetHelp(view) {
   // Desktop topbar ⓘ carries the same per-view copy (Option B mirror).
   const tbHelp = document.getElementById('tb-info-text');
   if (tbHelp) tbHelp.textContent = say(m.help);
+  // Glue the desktop ⓘ to whichever tab is actually active instead of
+  // leaving it parked after the last tab — a fixed position reads as
+  // "about this page" rather than "about Catalogue specifically", which is
+  // what confused people into thinking it never changed. Skipped when the
+  // switch itself is capped away (operator has neither activity nor
+  // categories access), so the ⓘ stays put where cap-limited users can
+  // still reach it.
+  const subviews = document.getElementById('tb-subviews');
+  const tbWrap = document.getElementById('tb-info-wrap');
+  const activeBtn = document.getElementById('tb-stk-btn-' + _prodHelpView);
+  if (subviews && tbWrap && activeBtn && getComputedStyle(subviews).display !== 'none') {
+    activeBtn.insertAdjacentElement('afterend', tbWrap);
+  }
 }
 // Click/tap toggles the tooltip open (hover + keyboard focus are handled in
 // CSS); an outside click closes it. Sticky-open is what makes it usable on
