@@ -2243,8 +2243,9 @@
   .pa-hi-band { display: flex; }
 
   .pa-hi-spot {
-    width: 34%; min-width: 200px; flex: none; text-align: left;
-    padding: 18px 26px 20px; border-right: 1px solid var(--td-border);
+    width: 34%; min-width: 230px; flex: none; text-align: left;
+    display: flex; align-items: center; gap: 16px;
+    padding: 0 20px; border-right: 1px solid var(--td-border);
     background: linear-gradient(180deg, var(--td-sage-tint), transparent 140%);
     border-top: 0; border-bottom: 0; border-left: 0;
     font-family: var(--f-sans); color: var(--td-text); cursor: pointer;
@@ -2253,26 +2254,27 @@
   .pa-hi-spot:not(:disabled):hover { background: var(--td-sage-tint); }
   .pa-hi-spot:disabled { cursor: default; background: none; }
   .pa-hi-spot:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
-  .pa-hi-spot-cap {
-    display: flex; align-items: center; gap: 6px; margin-bottom: 14px;
-    font-size: 11px; font-weight: 600; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--td-sage-ink);
-  }
-  .pa-hi-spot-cap svg { flex: none; width: 13px; height: 13px; }
   .pa-hi-spot-photo {
-    width: 52px; height: 52px; border-radius: 12px; margin-bottom: 14px;
+    width: 88px; height: 88px; border-radius: 12px; flex: none;
     background: var(--td-surface); border: 1px solid var(--td-border);
     display: flex; align-items: center; justify-content: center;
     color: var(--td-text2); overflow: hidden;
   }
-  .pa-hi-spot-photo svg { width: 20px; height: 20px; }
+  .pa-hi-spot-photo svg { width: 32px; height: 32px; }
   .pa-hi-spot-photo img { width: 100%; height: 100%; object-fit: cover; }
-  .pa-hi-spot-name {
-    font-size: 14.5px; font-weight: 500; line-height: 1.3; color: var(--td-text); margin-bottom: 4px;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  .pa-hi-spot-body { min-width: 0; }
+  .pa-hi-spot-cap {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+    font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--td-sage-ink);
   }
-  .pa-hi-spot-stat { font-size: 28px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
-  .pa-hi-spot-stat .u { font-size: 12.5px; font-weight: 500; color: var(--td-text2); margin-left: 6px; }
+  .pa-hi-spot-cap svg { flex: none; width: 13px; height: 13px; }
+  .pa-hi-spot-name {
+    font-size: 14px; font-weight: 500; line-height: 1.3; color: var(--td-text); margin-bottom: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pa-hi-spot-stat { font-size: 24px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+  .pa-hi-spot-stat .u { font-size: 11.5px; font-weight: 500; color: var(--td-text2); margin-left: 4px; }
 
   .pa-hi-rail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .pa-hi-rail-row {

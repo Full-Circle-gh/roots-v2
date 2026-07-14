@@ -1300,10 +1300,12 @@ function _paHiSpot({ img, name, stat, open }) {
   const attrs = open ? `onclick="${open}"` : 'disabled';
   const photo = img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy">` : PA_HI_ICONS.box;
   return `<button type="button" class="pa-hi-spot" ${attrs}>
-      <span class="pa-hi-spot-cap">${PA_HI_ICONS.star}${cuT('Best seller · 7 days', '最畅销 · 近 7 天')}</span>
       <span class="pa-hi-spot-photo">${photo}</span>
-      <span class="pa-hi-spot-name">${name}</span>
-      <span class="pa-hi-spot-stat">${stat}</span>
+      <span class="pa-hi-spot-body">
+        <span class="pa-hi-spot-cap">${PA_HI_ICONS.star}${cuT('Best seller · 7 days', '最畅销 · 近 7 天')}</span>
+        <span class="pa-hi-spot-name">${name}</span>
+        <span class="pa-hi-spot-stat">${stat}</span>
+      </span>
     </button>`;
 }
 // One rail row. `iconType` is 'thumb' (a real product — shows its photo, or the
