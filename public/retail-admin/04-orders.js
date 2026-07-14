@@ -289,13 +289,16 @@ function refundBadge(o) {
 
 const ICON_INV_OWED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><line x1="8" y1="9" x2="16" y2="9"/></svg>';
 const ICON_INV_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><polyline points="8 12 11 15 16 9"/></svg>';
+const ICON_STOCK_PENDING = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
 
 // Fapiao sub-line under the status pill. Brass while the invoice is still
 // owed, muted once it has been issued — so the list tells "never asked" apart
 // from "asked and done" without opening a drawer. A row with no invoice
 // request renders nothing. This is the ONLY invoice mark the table carries:
 // no summary strip under the row, and the full detail (title, tax ID, email,
-// fapiao file, Copy for accounting) stays in the order drawer.
+// fapiao file, Copy for accounting) stays in the order drawer. Shares
+// .ord-note-line with stockPendingBadge() so both read as one quiet family
+// instead of competing pills.
 function invoiceLine(o) {
   if (!Number(o.needs_invoice)) return '';
   const issued = o.invoice_status === 'issued';
@@ -303,7 +306,7 @@ function invoiceLine(o) {
   const title = issued
     ? cuT('Invoice issued for this order', '此订单已开票')
     : cuT('Invoice requested — issue it from the order drawer', '顾客申请开票 — 请在订单详情中开票');
-  return `<div class="ord-inv-line${issued ? '' : ' is-owed'}" title="${escapeAttr(title)}">`
+  return `<div class="ord-note-line${issued ? '' : ' is-owed'}" title="${escapeAttr(title)}">`
     + `${issued ? ICON_INV_DONE : ICON_INV_OWED}${label}</div>`;
 }
 
@@ -1031,7 +1034,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}${stockPendingBadge(o)}</div>${invoiceLine(o)}</td>
+        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${stockPendingBadge(o)}${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
@@ -1915,11 +1918,14 @@ function addonBadge(o) {
 // List-row / drawer badge: order is 'paid' but its real stock hasn't been
 // decremented yet — an out-of-GZ order that skipped the checkout reserve gate
 // (see inventory.isStockPending). Without this the Products stock count looks
-// "wrong" to staff for a sold order that just hasn't hit Preparing yet.
+// "wrong" to staff for a sold order that just hasn't hit Preparing yet. Quiet
+// .ord-note-line (shared with invoiceLine) instead of a pill — this used to be
+// a second status pill fighting the order's own status for attention.
 function stockPendingBadge(o) {
   if (!o.stock_pending) return '';
-  return `<span class="pill st-awaiting_restock" title="${cuT('Real stock deducts once this order moves to Preparing','库存要等这单推进到备货中才会真正扣减')}">`
-    + `<span class="dot"></span>${cuT('Stock pending · 库存待扣','库存待扣 · Stock pending')}</span>`;
+  const title = cuT('Real stock deducts once this order moves to Preparing', '库存要等这单推进到备货中才会真正扣减');
+  return `<div class="ord-note-line is-owed" title="${escapeAttr(title)}">`
+    + `${ICON_STOCK_PENDING}${cuT('Stock pending', '库存待扣')}</div>`;
 }
 // Drawer audit block: each "Add to your order" event, time-stamped, so the
 // operator sees WHEN items were added (after the slip likely already printed)
