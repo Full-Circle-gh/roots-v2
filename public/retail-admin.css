@@ -6026,7 +6026,7 @@
     border-radius: var(--r-lg);
     padding: 6px;
   }
-  .settings-nav button {
+  .settings-nav button, .settings-nav a {
     display: flex; align-items: center; gap: 10px;
     width: 100%; text-align: left;
     background: transparent; color: var(--text-2);
@@ -6034,18 +6034,22 @@
     padding: 9px 12px;
     border-radius: var(--r-md);
     font-size: 13px; font-weight: 500;
+    text-decoration: none;
     cursor: pointer;
+    box-sizing: border-box;
     transition: background var(--t-fast) ease, color var(--t-fast) ease;
   }
-  .settings-nav button:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  .settings-nav button:hover, .settings-nav a:hover { background: var(--bg-elev-1); color: var(--text-1); }
   .settings-nav button.active {
     background: var(--bg-elev-2); color: var(--text-1);
     box-shadow: inset 2px 0 0 var(--accent);
   }
-  .settings-nav button svg {
+  .settings-nav button svg, .settings-nav a svg {
     width: 16px; height: 16px; flex-shrink: 0; color: var(--text-3);
   }
   .settings-nav button.active svg { color: var(--accent); }
+  .settings-nav a[href] { border-top: 1px solid var(--line-soft); margin-top: 4px; padding-top: 10px; }
+  .settings-nav a[href] + a[href] { border-top: 0; margin-top: 0; padding-top: 9px; }
 
   .sub-panel { display: none; }
   .sub-panel.active { display: block; }
@@ -7464,20 +7468,21 @@
       position: static; top: auto; padding: 0; gap: 0;
       background: transparent; border: 0; border-radius: var(--r-lg); overflow: hidden;
     }
-    #tab-config #settings-nav button {
+    #tab-config #settings-nav button, #tab-config #settings-nav a {
       background: var(--bg-pane); border: 1px solid var(--line); border-top: 0;
       border-radius: 0; padding: 14px; gap: 13px; font-size: 15px; color: var(--text-1);
+      margin: 0;
     }
-    #tab-config #settings-nav button:first-child { border-top: 1px solid var(--line); border-radius: var(--r-lg) var(--r-lg) 0 0; }
-    #tab-config #settings-nav button:last-child { border-radius: 0 0 var(--r-lg) var(--r-lg); }
+    #tab-config #settings-nav button:first-child, #tab-config #settings-nav a:first-child { border-top: 1px solid var(--line); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+    #tab-config #settings-nav button:last-child, #tab-config #settings-nav a:last-child { border-radius: 0 0 var(--r-lg) var(--r-lg); }
     #tab-config #settings-nav button.active { background: var(--bg-pane); box-shadow: none; }
-    #tab-config #settings-nav button svg {
+    #tab-config #settings-nav button svg, #tab-config #settings-nav a svg {
       width: 34px; height: 34px; padding: 8px; box-sizing: border-box; flex: none;
       background: var(--bg-elev-1); border-radius: 10px; color: var(--brass);
     }
     #tab-config #settings-nav button.active svg { color: var(--brass); }
     /* trailing chevron */
-    #tab-config #settings-nav button::after {
+    #tab-config #settings-nav button::after, #tab-config #settings-nav a::after {
       content: ""; width: 8px; height: 8px; margin-left: auto; flex: none;
       border-right: 2px solid var(--text-3); border-top: 2px solid var(--text-3);
       transform: rotate(45deg);
