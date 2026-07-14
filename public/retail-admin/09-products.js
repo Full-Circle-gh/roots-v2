@@ -28,35 +28,107 @@ let PA_STOCK_LOADED = false;
 // its own low_stock_threshold. Drives the amber dot, the Low-stock KPI tile +
 // quick-filter — kept in sync with the backend dashboard/alerts definition.
 let PA_LOW_STOCK = 5;
+// Which scope the toolbar knob is currently showing/editing: 'all' (the
+// tenant-wide default) or a store id (that store's own override). Only
+// reachable with 2+ stores — see paSyncLowStockUi().
+let PA_LOW_STORE = 'all';
 function paLowThreshold(p) {
   const t = p && p.low_stock_threshold;
   return (t == null || t === '' || !(Number(t) >= 0)) ? PA_LOW_STOCK : Number(t);
 }
-// Push the current global default into the products-page UI: the toolbar input,
-// the Low-stock KPI subtitle, and the editor field's placeholder.
+// The store object PA_LOW_STORE currently points at, or null when scoped to
+// 'all' / the store no longer exists (e.g. deactivated under us).
+function _paLowStoreRow() {
+  return PA_LOW_STORE === 'all' ? null : (PA_STORES.find(s => s.id === PA_LOW_STORE) || null);
+}
+// Push the current scope into the products-page UI: the toolbar's location
+// picker, badge, number input and reset link, plus the Low-stock KPI subtitle
+// and the editor field's placeholder (those two always reflect the tenant
+// default — a per-product override already wins over both tiers there).
 function paSyncLowStockUi() {
+  const sel = document.getElementById('pa-low-store-sel');
+  if (sel) {
+    if (PA_STORES.length < 2) {
+      sel.style.display = 'none';
+      PA_LOW_STORE = 'all';
+    } else {
+      if (PA_LOW_STORE !== 'all' && !PA_STORES.some(s => s.id === PA_LOW_STORE)) PA_LOW_STORE = 'all';
+      sel.innerHTML = `<option value="all">${cuT('All locations', '全部门店')}</option>` +
+        PA_STORES.map(s => `<option value="${s.id}">${escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en || s.code))}</option>`).join('');
+      sel.value = String(PA_LOW_STORE);
+      sel.style.display = '';
+    }
+  }
+  const store = _paLowStoreRow();
+  const hasOverride = !!store && store.low_stock_threshold != null && store.low_stock_threshold !== '';
+  const effective = hasOverride ? Number(store.low_stock_threshold) : PA_LOW_STOCK;
   const inp = document.getElementById('pa-low-threshold');
-  if (inp && document.activeElement !== inp) inp.value = PA_LOW_STOCK;
+  if (inp && document.activeElement !== inp) inp.value = effective;
+  const badge = document.getElementById('pa-low-badge');
+  if (badge) {
+    if (!store) {
+      badge.style.display = 'none';
+    } else {
+      badge.style.display = '';
+      badge.className = 'pa-low-badge ' + (hasOverride ? 'is-custom' : 'is-default');
+      badge.textContent = hasOverride
+        ? cuT('Custom for ' + _paStoreName(store.id), _paStoreName(store.id) + ' 专属')
+        : cuT('Shared default', '共享默认值');
+    }
+  }
+  const reset = document.getElementById('pa-low-reset');
+  if (reset) reset.style.display = (store && hasOverride) ? '' : 'none';
   const sub = document.getElementById('pa-kpi-low-sub');
   if (sub) sub.textContent = '≤ ' + PA_LOW_STOCK + ' left · 剩余 ≤ ' + PA_LOW_STOCK;
   const ls = document.getElementById('pd-low-stock');
   if (ls) ls.placeholder = cuT('Default', '默认') + ' ' + PA_LOW_STOCK;
 }
-// Persist the store-wide default low-stock threshold and re-flag the catalogue.
+// Switch which location the toolbar knob edits.
+function paLowStoreSelChange(val) {
+  PA_LOW_STORE = (val === 'all') ? 'all' : (parseInt(val, 10) || 'all');
+  paSyncLowStockUi();
+}
+// Persist the threshold for whichever scope the knob is currently on: the
+// tenant-wide default ('all'), or one store's own override.
 async function paSaveLowThreshold(val) {
   const n = Math.max(0, parseInt(val, 10) || 0);
-  PA_LOW_STOCK = n;
-  paSyncLowStockUi();
   const st = document.getElementById('pa-low-threshold-status');
   if (st) st.textContent = cuT('Saving…', '保存中…');
   try {
-    await api('/api/retail-admin/config', { method: 'PUT', body: { 'inventory.lowStockThreshold': n } });
-    if (_cfgCache) { _cfgCache.inventory = _cfgCache.inventory || {}; _cfgCache.inventory.lowStockThreshold = n; }
+    if (PA_LOW_STORE === 'all') {
+      PA_LOW_STOCK = n;
+      await api('/api/retail-admin/config', { method: 'PUT', body: { 'inventory.lowStockThreshold': n } });
+      if (_cfgCache) { _cfgCache.inventory = _cfgCache.inventory || {}; _cfgCache.inventory.lowStockThreshold = n; }
+    } else {
+      const j = await api(`/api/retail-admin/stores/${PA_LOW_STORE}`, { method: 'PATCH', body: { low_stock_threshold: n } });
+      const store = _paLowStoreRow();
+      if (store) store.low_stock_threshold = (j && j.data && j.data.low_stock_threshold != null) ? j.data.low_stock_threshold : n;
+    }
     if (st) st.textContent = cuT('Saved ✓', '已保存 ✓');
     setTimeout(() => { if (st) st.textContent = ''; }, 2000);
   } catch (e) {
     if (st) st.textContent = cuT('Save failed', '保存失败');
   }
+  paSyncLowStockUi();
+  paRenderKpis(false);
+  paRender();
+}
+// Clear the active location's override so it goes back to following the
+// shared default. No-op when the knob is scoped to 'all'.
+async function paResetLowThreshold() {
+  const store = _paLowStoreRow();
+  if (!store) return;
+  const st = document.getElementById('pa-low-threshold-status');
+  if (st) st.textContent = cuT('Saving…', '保存中…');
+  try {
+    await api(`/api/retail-admin/stores/${store.id}`, { method: 'PATCH', body: { low_stock_threshold: '' } });
+    store.low_stock_threshold = null;
+    if (st) st.textContent = cuT('Saved ✓', '已保存 ✓');
+    setTimeout(() => { if (st) st.textContent = ''; }, 2000);
+  } catch (e) {
+    if (st) st.textContent = cuT('Save failed', '保存失败');
+  }
+  paSyncLowStockUi();
   paRenderKpis(false);
   paRender();
 }
@@ -674,6 +746,7 @@ async function paLoadStoreStock() {
     // the single-store switcher is retired — keep filters on the combined total.
     if (PA_STORES.length >= 2) PA_STORE = 'all';
     paRenderStoreSeg();
+    paSyncLowStockUi();   // reveal/populate the low-stock knob's location picker
     paRender();   // stock cells now know per-store counts
   } catch (e) {
     PA_STOCK_LOADED = false;   // leave the column on the read-only combined total
@@ -1808,8 +1881,7 @@ function paRender() {
           ${selCell}${gripCell}
           <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
           <div class="pa-row-main" data-no-i18n>
-            <div class="pa-row-name">${escapeHtml(p.name_en || '—')}${sizesPill}</div>
-            ${p.name_cn ? `<div class="pa-row-sub">${escapeHtml(p.name_cn)}</div>` : ''}
+            <div class="pa-row-name">${escapeHtml(cuT(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—'))}${sizesPill}</div>
           </div>
           <div class="pa-col-cat">${_paCatCell(u)}</div>
           <div class="pa-col-sku">${sku}</div>
@@ -1819,20 +1891,18 @@ function paRender() {
           ${_paPriceCell(u)}
         </div>`;
       }
+      // Slim single-line row: one language (live cuT), photo, then the SKU (or
+      // "N sizes" for a family) as a muted inline tail — no stacked second
+      // language, no wasted second line.
+      const nameTxt = escapeHtml(cuT(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—'));
       const meta = u.group
         ? `${u.members.length} ${cuT('sizes', '规格')}`
         : (p.sku ? escapeHtml(p.sku) : '');
-      const sub  = [
-        p.name_cn ? escapeHtml(p.name_cn) : '',
-        meta ? `<span class="pa-row-meta">${meta}</span>` : '',
-      ].filter(Boolean).join(' · ');
       return `
-        <div class="pa-row" onclick="paOpenEdit(${p.id})">
+        <div class="pa-row pa-row-1l" onclick="paOpenEdit(${p.id})">
           <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
-          <div class="pa-row-main" data-no-i18n>
-            <div class="pa-row-name">${escapeHtml(p.name_en || '—')}</div>
-            ${sub ? `<div class="pa-row-sub">${sub}</div>` : ''}
-          </div>
+          <div class="pa-row-name" data-no-i18n>${nameTxt}</div>
+          ${meta ? `<div class="pa-row-meta" data-no-i18n>${meta}</div>` : ''}
           <div class="pa-row-pills">${_paPills(p)}</div>
           <button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button>
         </div>`;
