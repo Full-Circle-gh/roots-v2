@@ -7158,7 +7158,7 @@
     .rm-cucard.open .rm-cu-exp { grid-template-rows: 1fr; }
     .rm-cu-exp > .inner { overflow: hidden; }
     .rm-cu-exp-pad { padding: 13px 14px 14px; border-top: 1px dashed var(--line-soft); }
-    .rm-cu-tri { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 9px; margin-bottom: 12px; }
+    .rm-cu-tri { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 12px; }
     .rm-cu-tri > div { background: var(--bg-elev-1); border-radius: 12px; padding: 11px 8px; text-align: center; }
     .rm-cu-tri b { display: block; font: 600 18px var(--f-sans); color: var(--text-1); font-variant-numeric: tabular-nums; }
     .rm-cu-tri span { display: block; font: 500 9px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-top: 3px; }

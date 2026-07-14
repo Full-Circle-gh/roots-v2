@@ -26,7 +26,7 @@ let CU_SEGMENT = '';
 let CU_SORT = 'last_seen';
 let CU_SORT_DIR = 'desc';
 let CU_TIER_FILTERS = new Set();
-const CU_SORT_DEFAULT_DIR = { name: 'asc', tier: 'desc', orders: 'desc', points: 'desc', wallet: 'desc', last_seen: 'desc' };
+const CU_SORT_DEFAULT_DIR = { name: 'asc', tier: 'desc', orders: 'desc', spend: 'desc', points: 'desc', wallet: 'desc', last_seen: 'desc' };
 const CU_TIER_LABEL = { seed: 'Seed · 种子', sprout: 'Sprout · 嫩芽', root: 'Root · 根系', tree: 'Tree · 大树' };
 
 function cuSearchDebounced() {
@@ -281,25 +281,25 @@ async function cuLoad() {
     pageSize: CU_PAGE_SIZE
   });
   const tbody = $('#cu-table tbody');
-  tbody.innerHTML = '<tr><td colspan="6" class="muted">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
   let j;
   try {
     const res = await fetch('/api/retail-admin/customers?' + params);
     j = await res.json();
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="6" class="muted">Network error. · 网络错误。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="muted">Network error. · 网络错误。</td></tr>';
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
     return;
   }
   if (!j.success) {
-    tbody.innerHTML = '<tr><td colspan="6" class="muted">Failed to load. · 加载失败。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="muted">Failed to load. · 加载失败。</td></tr>';
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
     return;
   }
   CU_TOTAL = j.total || 0;
   const rows = j.data || [];
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="muted">No customers found. · 未找到客户。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="muted">No customers found. · 未找到客户。</td></tr>';
   } else {
     const today = cuGzDay(Date.now());
     tbody.innerHTML = rows.map(r => {
@@ -324,6 +324,7 @@ async function cuLoad() {
         </td>
         <td><span class="cul-pill tier-${tier}">${tier}</span></td>
         <td class="numeric cul-num ${(r.orders_count || 0) === 0 ? 'is-zero' : ''}">${r.orders_count || 0}</td>
+        <td class="numeric cul-num ${Number(r.lifetime_spend || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.lifetime_spend || 0).toFixed(2)}</td>
         <td class="numeric cul-num ${(r.points_balance || 0) === 0 ? 'is-zero' : ''}">${r.points_balance || 0}</td>
         <td class="numeric cul-num ${Number(r.balance || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.balance || 0).toFixed(2)}</td>
         <td class="cul-last" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>

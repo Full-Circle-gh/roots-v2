@@ -2908,11 +2908,12 @@
               </span>
             </th>
             <th class="numeric" data-sort="orders"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('orders')">Orders · 订单数<span class="cul-carets"></span></button></span></th>
+            <th class="numeric" data-sort="spend"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('spend')">Total spent ¥ · 累计消费<span class="cul-carets"></span></button></span></th>
             <th class="numeric" data-sort="points"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('points')">Points · 积分<span class="cul-carets"></span></button></span></th>
             <th class="numeric" data-sort="wallet"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('wallet')">Wallet ¥ · 钱包<span class="cul-carets"></span></button></span></th>
             <th class="numeric" data-sort="last_seen"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('last_seen')">Last seen · 最近活动<span class="cul-carets"></span></button></span></th>
           </tr></thead>
-          <tbody><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+          <tbody><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
 
@@ -11681,10 +11682,11 @@
   function fillPeek(card) {
     var id = +card.getAttribute('data-id'), c = findRow(id);
     var pad = card.querySelector('[data-exp]'); if (!c || !pad) return;
-    var wallet = Number(c.balance || 0), pts = Number(c.points_balance || 0), ord = Number(c.orders_count || 0);
+    var wallet = Number(c.balance || 0), pts = Number(c.points_balance || 0), ord = Number(c.orders_count || 0), spend = Number(c.lifetime_spend || 0);
     pad.innerHTML =
       '<div class="rm-cu-tri">' +
         '<div><b>' + ord + '</b><span>Orders · 订单</span></div>' +
+        '<div><b>¥' + esc(money(spend)) + '</b><span>Spent · 消费</span></div>' +
         '<div><b>' + pts + '</b><span>Points · 积分</span></div>' +
         '<div><b>¥' + esc(money(wallet)) + '</b><span>Wallet · 钱包</span></div>' +
       '</div>' +

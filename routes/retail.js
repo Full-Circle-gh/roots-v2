@@ -12995,11 +12995,11 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   // aliases so nothing else calling this endpoint breaks.
   const SORT_COLS = {
     name: 'nickname', tier: "CASE tier_key WHEN 'seed' THEN 0 WHEN 'sprout' THEN 1 WHEN 'root' THEN 2 WHEN 'tree' THEN 3 ELSE 0 END",
-    orders: 'orders_count', points: 'points_balance', wallet: 'balance', last_seen: 'last_login_at',
+    orders: 'orders_count', spend: 'lifetime_spend', points: 'points_balance', wallet: 'balance', last_seen: 'last_login_at',
     recent_login: 'last_login_at', recent_signup: 'created_at', lifetime_spend: 'lifetime_spend', points_balance: 'points_balance',
   };
   const SORT_DEFAULT_DIR = {
-    name: 'ASC', tier: 'DESC', orders: 'DESC', points: 'DESC', wallet: 'DESC', last_seen: 'DESC',
+    name: 'ASC', tier: 'DESC', orders: 'DESC', spend: 'DESC', points: 'DESC', wallet: 'DESC', last_seen: 'DESC',
     recent_login: 'DESC', recent_signup: 'DESC', lifetime_spend: 'DESC', points_balance: 'DESC',
   };
   const sortCol = SORT_COLS[sort] || SORT_COLS.last_seen;
