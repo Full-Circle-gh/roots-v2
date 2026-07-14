@@ -12947,12 +12947,15 @@ router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (
 // `page/pageSize/total` fields.
 router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const q              = String(req.query.q || '').trim();
-  const tier           = String(req.query.tier || '').trim();
+  // Comma-separated so the Tier column header can filter by several tiers at
+  // once (e.g. "root,tree"); a single value still works the same as before.
+  const tiers          = String(req.query.tier || '').trim().split(',').map(s => s.trim()).filter(Boolean);
   const segment        = String(req.query.segment || '').trim();
   // The roster asks for one segment at a time; the stat strip still calls this
   // with includeBlocked=1 (pageSize=1) purely to count every account.
   const includeBlocked = req.query.includeBlocked === '1' || segment === 'blocked';
   const sort           = String(req.query.sort || 'recent_login');
+  const dir            = req.query.dir === 'asc' ? 'ASC' : (req.query.dir === 'desc' ? 'DESC' : null);
   const page           = Math.max(1, parseInt(req.query.page, 10) || 1);
   const pageSize       = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
   const offset         = (page - 1) * pageSize;
@@ -12960,7 +12963,7 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const where  = [];
   const params = [];
   if (!includeBlocked) where.push('is_blocked = 0');
-  if (tier)            { where.push('tier_key = ?'); params.push(tier); }
+  if (tiers.length)    { where.push(`tier_key IN (${tiers.map(() => '?').join(',')})`); params.push(...tiers); }
 
   // Roster segments — the cuts an operator actually reaches for. Timestamps are
   // UTC text, so SQLite's datetime() comparisons work on them directly.
@@ -12984,11 +12987,27 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
-  let orderClause;
-  if      (sort === 'lifetime_spend') orderClause = 'lifetime_spend DESC, id DESC';
-  else if (sort === 'recent_signup')  orderClause = 'created_at DESC, id DESC';
-  else if (sort === 'points_balance') orderClause = 'points_balance DESC, id DESC';
-  else                                orderClause = 'last_login_at IS NULL, last_login_at DESC, id DESC';
+  // Column-header sort: one column at a time, either direction. `orders_count`
+  // and `balance` (Orders / Wallet columns) aren't sortable columns on the
+  // table itself — `orders_count` is a subquery alias in the SELECT list
+  // below, which SQLite lets ORDER BY reference directly; `balance` is the
+  // wallet column. Old sort-select values (recent_login etc.) are kept as
+  // aliases so nothing else calling this endpoint breaks.
+  const SORT_COLS = {
+    name: 'nickname', tier: "CASE tier_key WHEN 'seed' THEN 0 WHEN 'sprout' THEN 1 WHEN 'root' THEN 2 WHEN 'tree' THEN 3 ELSE 0 END",
+    orders: 'orders_count', points: 'points_balance', wallet: 'balance', last_seen: 'last_login_at',
+    recent_login: 'last_login_at', recent_signup: 'created_at', lifetime_spend: 'lifetime_spend', points_balance: 'points_balance',
+  };
+  const SORT_DEFAULT_DIR = {
+    name: 'ASC', tier: 'DESC', orders: 'DESC', points: 'DESC', wallet: 'DESC', last_seen: 'DESC',
+    recent_login: 'DESC', recent_signup: 'DESC', lifetime_spend: 'DESC', points_balance: 'DESC',
+  };
+  const sortCol = SORT_COLS[sort] || SORT_COLS.last_seen;
+  const sortDir = dir || SORT_DEFAULT_DIR[sort] || 'DESC';
+  // "Never logged in" rows sort to the tail regardless of direction.
+  const orderClause = (sort === 'last_seen' || sort === 'recent_login')
+    ? `last_login_at IS NULL, last_login_at ${sortDir}, id DESC`
+    : `${sortCol} ${sortDir}, id DESC`;
 
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM retail_customers ${whereSql}`).get(...params).n;
 

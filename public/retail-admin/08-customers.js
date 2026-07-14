@@ -21,6 +21,14 @@ let cuSearchTimer = null;
 // "Include blocked" checkbox: the chip only exists when someone IS blocked.
 let CU_SEGMENT = '';
 
+// Sort + tier filter now live on the table's own columns (the old "All tiers"
+// / "Recent login" toolbar selects are gone) — see cuSortBy / cuTierCheck.
+let CU_SORT = 'last_seen';
+let CU_SORT_DIR = 'desc';
+let CU_TIER_FILTERS = new Set();
+const CU_SORT_DEFAULT_DIR = { name: 'asc', tier: 'desc', orders: 'desc', points: 'desc', wallet: 'desc', last_seen: 'desc' };
+const CU_TIER_LABEL = { seed: 'Seed · 种子', sprout: 'Sprout · 嫩芽', root: 'Root · 根系', tree: 'Tree · 大树' };
+
 function cuSearchDebounced() {
   clearTimeout(cuSearchTimer);
   cuSearchTimer = setTimeout(() => { CU_PAGE = 1; cuLoad(); }, 220);
@@ -40,6 +48,87 @@ function cuSegment(btn, seg) {
   const bar = document.getElementById('cu-segs');
   if (bar) bar.querySelectorAll('.cul-seg').forEach(b => b.classList.toggle('on', b === btn));
   cuFilterChanged();
+}
+
+// ── Column-header sort ────────────────────────────────────────────────────
+// Click a sortable column: first click sorts by it (in that column's natural
+// default direction), a second click on the same column flips direction.
+function cuSortBy(key) {
+  if (CU_SORT === key) CU_SORT_DIR = (CU_SORT_DIR === 'asc') ? 'desc' : 'asc';
+  else { CU_SORT = key; CU_SORT_DIR = CU_SORT_DEFAULT_DIR[key] || 'desc'; }
+  cuPaintSortHeaders();
+  cuFilterChanged();
+}
+function cuPaintSortHeaders() {
+  document.querySelectorAll('#cu-table thead th[data-sort]').forEach(th => {
+    const active = th.dataset.sort === CU_SORT;
+    th.classList.toggle('cul-sort-active', active);
+    const car = th.querySelector('.cul-carets');
+    if (!car) return;
+    car.innerHTML = active
+      ? (CU_SORT_DIR === 'asc'
+          ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 6l6 8H6z"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 18l-6-8h12z"/></svg>')
+      : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 6l6 8H6z"/></svg>'
+      + '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 18l-6-8h12z"/></svg>';
+  });
+}
+
+// ── Tier column filter — funnel + checkbox popover ───────────────────────
+function cuTierPopToggle(e) {
+  if (e) e.stopPropagation();
+  const pop = document.getElementById('cu-tier-pop');
+  if (!pop) return;
+  const opening = !pop.classList.contains('open');
+  pop.classList.toggle('open', opening);
+  if (opening) setTimeout(() => document.addEventListener('mousedown', cuTierPopOutside), 0);
+  else document.removeEventListener('mousedown', cuTierPopOutside);
+}
+function cuTierPopClose() {
+  const pop = document.getElementById('cu-tier-pop');
+  if (pop) pop.classList.remove('open');
+  document.removeEventListener('mousedown', cuTierPopOutside);
+}
+function cuTierPopOutside(e) {
+  if (e.target.closest && e.target.closest('#cu-tier-pop, #cu-tier-filter-btn')) return;
+  cuTierPopClose();
+}
+function cuTierCheck(tier, checked) {
+  if (checked) CU_TIER_FILTERS.add(tier); else CU_TIER_FILTERS.delete(tier);
+  cuPaintTierFilterUI();
+  cuFilterChanged();
+}
+function cuTierFilterClear() {
+  CU_TIER_FILTERS.clear();
+  cuPaintTierFilterUI();
+  cuFilterChanged();
+}
+function cuTierFilterRemove(tier) {
+  CU_TIER_FILTERS.delete(tier);
+  cuPaintTierFilterUI();
+  cuFilterChanged();
+}
+function cuPaintTierFilterUI() {
+  const active = CU_TIER_FILTERS.size > 0;
+  const btn = document.getElementById('cu-tier-filter-btn');
+  if (btn) btn.classList.toggle('is-active', active);
+  document.querySelectorAll('#cu-tier-pop input[type=checkbox]').forEach(cb => {
+    cb.checked = CU_TIER_FILTERS.has(cb.value);
+  });
+  // Mirror into the phone quick-tier chips (single-select there).
+  const mob = document.getElementById('cu-mob-tiers');
+  if (mob) mob.querySelectorAll('.cu-tchip').forEach(b => {
+    const v = b.dataset.v || '';
+    b.classList.toggle('on', v ? (CU_TIER_FILTERS.size === 1 && CU_TIER_FILTERS.has(v)) : !active);
+  });
+  const row = document.getElementById('cu-afil-row');
+  const pills = document.getElementById('cu-afil-pills');
+  if (!row || !pills) return;
+  row.hidden = !active;
+  pills.innerHTML = active ? [...CU_TIER_FILTERS].map(t => `
+    <span class="cul-afil-pill">${CU_TIER_LABEL[t] || t}<button type="button" onclick="cuTierFilterRemove('${t}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></span>`).join('') : '';
 }
 
 // ── Customers stat strip — three figures, then the roster ────────────────
@@ -184,8 +273,9 @@ function cuRepaintKpis() {
 async function cuLoad() {
   const params = new URLSearchParams({
     q: $('#cu-q').value.trim(),
-    tier: $('#cu-tier').value,
-    sort: $('#cu-sort').value,
+    tier: [...CU_TIER_FILTERS].join(','),
+    sort: CU_SORT,
+    dir: CU_SORT_DIR,
     segment: CU_SEGMENT,
     page: CU_PAGE,
     pageSize: CU_PAGE_SIZE
@@ -264,12 +354,13 @@ async function cuLoad() {
   if (window.rmRenderCustomerCards) rmRenderCustomerCards(rows);  // phone card list (same data)
 }
 
-// Phone tier-chip filter — drives the existing #cu-tier <select> + cuLoad so
-// there's a single filter source of truth (the chip row is CSS-shown only on
-// phones; the <select> is shown on desktop).
+// Phone tier-chip filter — drives the same CU_TIER_FILTERS the desktop Tier
+// column popover uses, so there's a single filter source of truth (the chip
+// row is CSS-shown only on phones; the column popover is desktop-only).
 function cuMobTier(btn, v) {
-  const sel = document.getElementById('cu-tier');
-  if (sel) sel.value = v;
+  CU_TIER_FILTERS.clear();
+  if (v) CU_TIER_FILTERS.add(v);
+  cuPaintTierFilterUI();
   const bar = document.getElementById('cu-mob-tiers');
   if (bar) bar.querySelectorAll('.cu-tchip').forEach(b => b.classList.toggle('on', b === btn));
   CU_PAGE = 1;
@@ -1361,4 +1452,8 @@ document.querySelector('[data-tab="customers"]').addEventListener('click', () =>
   if (!CUSTOMERS_LOADED) { CUSTOMERS_LOADED = true; cuLoad(); }
   cuLoadKpis();   // throttled (45s) — keeps the New-today pulse fresh on open
 });
+
+// The table header exists in the DOM from page load (not just once the
+// customers tab is first opened), so paint its default sort state right away.
+cuPaintSortHeaders();
 

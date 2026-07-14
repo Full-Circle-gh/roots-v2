@@ -964,10 +964,10 @@
         </div>
       </div>
       <div class="acct-sep"></div>
-      <a class="acct-item" href="/backend/account" role="menuitem">
+      <button class="acct-item" id="acctProfileBtn" type="button" role="menuitem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
-        <span>Account · 账户</span>
-      </a>
+        <span>Profile · 个人资料</span>
+      </button>
       <div class="acct-sep"></div>
       <!-- Manage team moved to the left rail, under Settings (2026-07-14) —
            see .tabs a[href="/backend/team"]. -->
@@ -1005,6 +1005,16 @@
         <span>Sign out · 退出登录</span>
       </button>
     </div>
+  </div>
+
+  <!-- Profile pop-up — "Profile" opens /backend/account in this centred modal
+       instead of navigating away. Iframe src is set on first open (lazy). -->
+  <div class="prof-scrim" id="profScrim"></div>
+  <div class="prof-modal" id="profModal" role="dialog" aria-modal="true" aria-label="Profile" aria-hidden="true">
+    <button class="prof-x" id="profClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <iframe class="prof-frame" id="profFrame" title="Profile"></iframe>
   </div>
   <!-- Aa text-size, light/dark and language toggles used to live here as three
        loose topbar buttons. Moved into the account dropdown (the avatar circle)
@@ -2370,8 +2380,76 @@
       #cu-table thead th {
         background: var(--bg-elev-1); color: var(--text-2); font-family: var(--f-sans);
         font-weight: 500; font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
-        padding: 12px 16px; border-bottom: 1px solid var(--line); white-space: nowrap;
+        padding: 0; border-bottom: 1px solid var(--line); white-space: nowrap; position: relative;
       }
+
+      /* Sortable column header — a button so the whole label (+ the caret
+         hint) is one click target; the funnel (Tier only) is a second,
+         independent button beside it. */
+      #cu-table .cul-th-inner { display: flex; align-items: center; gap: 6px; padding: 12px 16px; width: 100%; }
+      #cu-table th.numeric .cul-th-inner { justify-content: flex-end; }
+      #cu-table .cul-sort-btn {
+        display: flex; align-items: center; gap: 5px; font: inherit; font-weight: inherit;
+        letter-spacing: inherit; text-transform: inherit; color: inherit;
+        background: none; border: 0; padding: 2px 3px; margin: -2px -3px; border-radius: 5px; cursor: pointer;
+      }
+      #cu-table .cul-sort-btn:hover { background: rgba(17,26,43,.06); color: var(--text-1); }
+      #cu-table .cul-carets { display: flex; flex-direction: column; gap: 1px; opacity: .35; }
+      #cu-table .cul-carets svg { width: 8px; height: 8px; display: block; }
+      #cu-table th.cul-sort-active .cul-sort-btn { color: var(--text-1); }
+      #cu-table th.cul-sort-active .cul-carets { opacity: 1; }
+
+      /* Tier filter — funnel button + checkbox popover, anchored to the th
+         (position:relative above). The popover escapes the table-wrap's
+         clipping the same way the Orders card's menus do: table-wrap only
+         clips horizontally (overflow-x:auto), not vertically. */
+      #cu-table .cul-filter-btn {
+        width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center;
+        justify-content: center; flex: none; position: relative; color: var(--text-3);
+        background: none; border: 0; padding: 0; cursor: pointer;
+      }
+      #cu-table .cul-filter-btn:hover { background: rgba(17,26,43,.08); color: var(--text-1); }
+      #cu-table .cul-filter-btn svg { width: 12px; height: 12px; display: block; }
+      #cu-table .cul-filter-btn.is-active { color: var(--text-1); }
+      #cu-table .cul-filter-btn .dot {
+        position: absolute; top: 1px; right: 1px; width: 6px; height: 6px; border-radius: 50%;
+        background: var(--tacet-amber-ink); display: none;
+      }
+      #cu-table .cul-filter-btn.is-active .dot { display: block; }
+      #cu-table .cul-pop {
+        position: absolute; top: calc(100% + 6px); left: 16px; z-index: 30; min-width: 180px;
+        background: var(--bg-pane); border: 1px solid var(--line); border-radius: 12px;
+        box-shadow: 0 14px 36px rgba(20,15,3,.16); padding: 8px;
+        display: none; text-transform: none; letter-spacing: 0; font-weight: 400;
+      }
+      #cu-table .cul-pop.open { display: block; }
+      #cu-table .cul-pop-title { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 6px 8px 8px; }
+      #cu-table .cul-pop-opt {
+        display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 7px 8px;
+        border-radius: 7px; font-size: 13.5px; font-weight: 500; color: var(--text-1); cursor: pointer;
+      }
+      #cu-table .cul-pop-opt:hover { background: var(--bg-elev-1); }
+      #cu-table .cul-pop-opt input { width: 14px; height: 14px; accent-color: var(--text-1); flex: none; }
+      #cu-table .cul-pop-foot { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 2px; margin-top: 2px; border-top: 1px solid var(--bg-elev-1); }
+      #cu-table .cul-pop-foot button { font-size: 12.5px; font-weight: 500; background: none; border: 0; padding: 0; cursor: pointer; }
+      #cu-table .cul-pop-foot .clear { color: var(--text-2); }
+      #cu-table .cul-pop-foot .clear:hover { color: var(--text-1); }
+      #cu-table .cul-pop-foot .done { color: var(--text-1); }
+
+      /* Active column-filter pills, above the table. */
+      #tab-customers .cul-afil { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12.5px; color: var(--text-2); flex-wrap: wrap; }
+      #tab-customers .cul-afil-pill {
+        display: inline-flex; align-items: center; gap: 7px; background: var(--bg-pane); border: 1px solid var(--line);
+        border-radius: 999px; padding: 5px 8px 5px 12px; font-weight: 500; color: var(--text-1);
+      }
+      #tab-customers .cul-afil-pill button {
+        width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+        color: var(--text-3); background: none; border: 0; padding: 0; cursor: pointer;
+      }
+      #tab-customers .cul-afil-pill button:hover { background: var(--bg-elev-1); color: var(--text-1); }
+      #tab-customers .cul-afil-pill button svg { width: 9px; height: 9px; display: block; }
+      #tab-customers .cul-afil-clear { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; font-weight: 500; background: none; border: 0; padding: 0; cursor: pointer; }
+      #tab-customers .cul-afil-clear:hover { color: var(--text-1); }
       #cu-table tbody td { background: var(--bg-pane); border-bottom: 1px solid var(--line); padding: 12px 16px; font-size: 14px; color: var(--text-1); vertical-align: middle; }
       #cu-table tbody tr:last-child td { border-bottom: none; }
       #cu-table tbody tr.cul-row { cursor: pointer; transition: background var(--t-med) var(--ease-out); }
@@ -2764,8 +2842,8 @@
       <!-- Swipe-dot pager (phone only) — signals the stat strip scrolls sideways. -->
       <div class="fc-kpi-dots" id="cu-stat-dots" aria-hidden="true"><i class="on"></i><i></i><i></i><i></i><i></i></div>
       <!-- Phone-only tier filter — sticky chip row mirroring the Orders status
-           chips. Drives the existing #cu-tier <select> + cuLoad so there's one
-           filter source of truth. Hidden on desktop (the <select> is shown). -->
+           chips. Drives the same CU_TIER_FILTERS the desktop Tier column
+           popover uses. Hidden on desktop (the column popover is used there). -->
       <div id="cu-mob-tiers" aria-label="Filter by tier">
         <button type="button" class="cu-tchip on" data-v=""       onclick="cuMobTier(this,'')">All</button>
         <button type="button" class="cu-tchip"    data-v="seed"   onclick="cuMobTier(this,'seed')">Seed</button>
@@ -2788,20 +2866,14 @@
           <button type="button" class="cul-seg"    data-seg="sleeping" onclick="cuSegment(this,'sleeping')">Sleeping 60d+ · 沉睡 60 天</button>
           <button type="button" class="cul-seg warn" data-seg="blocked" id="cu-seg-blocked" hidden onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct" id="cu-seg-blocked-ct" data-no-i18n></span></button>
         </span>
-        <span class="sp"></span>
-        <select id="cu-tier" onchange="cuFilterChanged()">
-          <option value="">All tiers · 全部等级</option>
-          <option value="seed">Seed · 种子</option>
-          <option value="sprout">Sprout · 嫩芽</option>
-          <option value="root">Root · 根系</option>
-          <option value="tree">Tree · 大树</option>
-        </select>
-        <select id="cu-sort" onchange="cuFilterChanged()">
-          <option value="recent_login">Recent login · 最近登录</option>
-          <option value="recent_signup">Recent signup · 最近注册</option>
-          <option value="lifetime_spend">Top spenders · 累计消费最多</option>
-          <option value="points_balance">Most points · 积分最多</option>
-        </select>
+      </div>
+      <!-- Active column-filter pills — only the Tier column filters today, but
+           this row is generic so a future column filter drops in the same way.
+           Hidden (via [hidden]) whenever nothing is filtered. -->
+      <div class="cul-afil" id="cu-afil-row" hidden>
+        <span>Filtered by · 已筛选</span>
+        <span id="cu-afil-pills"></span>
+        <button type="button" class="cul-afil-clear" onclick="cuTierFilterClear()">Clear · 清除</button>
       </div>
       <!-- One clipped list card: table + phone cards + pager footer. See the
            matching note on the Orders card — the pager is a CHILD so the
@@ -2810,12 +2882,35 @@
       <div class="table-wrap">
         <table id="cu-table">
           <thead><tr>
-            <th style="width: 34%;">Customer · 顾客</th>
-            <th>Tier · 等级</th>
-            <th class="numeric">Orders · 订单数</th>
-            <th class="numeric">Points · 积分</th>
-            <th class="numeric">Wallet ¥ · 钱包</th>
-            <th class="numeric">Last seen · 最近活动</th>
+            <th style="width: 34%;" data-sort="name">
+              <span class="cul-th-inner">
+                <button type="button" class="cul-sort-btn" onclick="cuSortBy('name')">Customer · 顾客<span class="cul-carets"></span></button>
+              </span>
+            </th>
+            <th data-sort="tier">
+              <span class="cul-th-inner">
+                <button type="button" class="cul-sort-btn" onclick="cuSortBy('tier')">Tier · 等级<span class="cul-carets"></span></button>
+                <button type="button" class="cul-filter-btn" id="cu-tier-filter-btn" onclick="cuTierPopToggle(event)" aria-haspopup="true" title="Filter by tier · 按等级筛选">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4 2v-8.5z"/></svg>
+                  <span class="dot"></span>
+                </button>
+                <div class="cul-pop" id="cu-tier-pop">
+                  <div class="cul-pop-title">Filter by tier · 按等级筛选</div>
+                  <label class="cul-pop-opt"><input type="checkbox" value="seed" onchange="cuTierCheck('seed', this.checked)"> Seed · 种子</label>
+                  <label class="cul-pop-opt"><input type="checkbox" value="sprout" onchange="cuTierCheck('sprout', this.checked)"> Sprout · 嫩芽</label>
+                  <label class="cul-pop-opt"><input type="checkbox" value="root" onchange="cuTierCheck('root', this.checked)"> Root · 根系</label>
+                  <label class="cul-pop-opt"><input type="checkbox" value="tree" onchange="cuTierCheck('tree', this.checked)"> Tree · 大树</label>
+                  <div class="cul-pop-foot">
+                    <button type="button" class="clear" onclick="cuTierFilterClear()">Clear · 清除</button>
+                    <button type="button" class="done" onclick="cuTierPopClose()">Done · 完成</button>
+                  </div>
+                </div>
+              </span>
+            </th>
+            <th class="numeric" data-sort="orders"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('orders')">Orders · 订单数<span class="cul-carets"></span></button></span></th>
+            <th class="numeric" data-sort="points"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('points')">Points · 积分<span class="cul-carets"></span></button></span></th>
+            <th class="numeric" data-sort="wallet"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('wallet')">Wallet ¥ · 钱包<span class="cul-carets"></span></button></span></th>
+            <th class="numeric" data-sort="last_seen"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('last_seen')">Last seen · 最近活动<span class="cul-carets"></span></button></span></th>
           </tr></thead>
           <tbody><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
         </table>
