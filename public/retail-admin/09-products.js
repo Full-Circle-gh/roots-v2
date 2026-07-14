@@ -5647,10 +5647,10 @@ function pwFrontHtml() {
     ['copy', 'copy', cuT('Copy one you already sell', '复制已有产品'), cuT('Start from a similar product and change what’s different.', '从相似产品开始,只改不同处。')],
   ];
   return '<div class="vw-lab" style="margin-bottom:2px;">' + cuT('How do you want to add it?', '你想怎样添加?') + '</div>'
-    + '<div class="vw-help" style="margin:-2px 0 6px;">' + cuT('Pick whatever’s easiest. You can change anything later.', '选最方便的方式,之后都能修改。') + '</div>'
-    + '<div class="vw-goals">'
-    + cards.map(c => '<button class="vw-goal" onclick="pwFront(\'' + c[0] + '\')"><span class="vico">' + pwIcon(c[1], 26) + '</span>'
-        + '<span><span class="gt">' + c[2] + '</span><br><span class="gs">' + c[3] + '</span></span></button>').join('')
+    + '<div class="vw-help" style="margin:-2px 0 12px;">' + cuT('Pick whatever’s easiest. You can change anything later.', '选最方便的方式,之后都能修改。') + '</div>'
+    + '<div class="vw-doors">'
+    + cards.map(c => '<button class="vw-door" onclick="pwFront(\'' + c[0] + '\')"><span class="vico">' + pwIcon(c[1], 22) + '</span>'
+        + '<span class="vw-door-txt"><span class="dt">' + c[2] + '</span><span class="ds">' + c[3] + '</span></span></button>').join('')
     + '</div>';
 }
 function pwFront(source) {

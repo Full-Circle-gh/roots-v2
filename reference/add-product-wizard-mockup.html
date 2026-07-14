@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Add product wizard mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET ADD-PRODUCT WIZARD — static mockup, no live data.
+   Same wizard language as the flash-sale / coupon wizards: modal
+   over the dimmed Products page, one question per screen, steps
+   list in the footer. The door screen forks three ways and all
+   three land back on "What it is" — so the numbering below reads
+   1 / 1a / 1b for the fork, then 2‑6 for the shared spine:
+     1  · Start        (blank / paste / copy — pick your on-ramp)
+     1a · Paste text    (branch — only reached from Start)
+     1b · Copy existing (branch — only reached from Start)
+     2  · What it is    (name, photo, category, code)
+     3  · Price         (single price, or per-option pricing)
+     4  · Details       (description → auto-filled facts, free-of)
+     5  · Customize     (free picks + paid extras, optional)
+     6  · Review         (one glance, then Save draft / Publish)
+   Tokens per tacet-tokens.css v1.0. Dusk budget: zero — this is a
+   plain data-entry flow, not an automation surface.
+   ============================================================ */
+:root {
+  --ink:      #111A2B;
+  --paper:    #FBF9F4;
+  --graphite: #58606E;
+  --dusk:     #6E67AF;
+  --sage:     #A3B49F;
+  --amber:    #C9954A;
+  --brick:    #B4533E;
+
+  --cream:       #F6F3EC;
+  --border:      #E4E0D5;
+  --dusk-tint:   #EEEDF6;
+  --sage-tint:   #EDF1EC;
+  --amber-tint:  #F7EEDE;
+  --brick-tint:  #F6E7E3;
+  --sage-ink:    #4A6249;
+  --amber-ink:   #8A6425;
+
+  --font-text: "Inter", -apple-system, Arial, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-pop: 0 4px 12px rgba(17,26,43,0.08), 0 24px 64px rgba(17,26,43,0.16);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-text);
+  font-size: 15px; line-height: 1.6;
+  color: var(--ink); background: var(--paper);
+}
+.num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+svg { display: block; }
+
+/* ---- state machinery (CSS only) ---- */
+.state { position: absolute; opacity: 0; pointer-events: none; }
+#s1:checked ~ .frame .scr:not(.scr-1) { display: none; }
+#s2:checked ~ .frame .scr:not(.scr-2) { display: none; }
+#s3:checked ~ .frame .scr:not(.scr-3) { display: none; }
+#s4:checked ~ .frame .scr:not(.scr-4) { display: none; }
+#s5:checked ~ .frame .scr:not(.scr-5) { display: none; }
+#s6:checked ~ .frame .scr:not(.scr-6) { display: none; }
+#s7:checked ~ .frame .scr:not(.scr-7) { display: none; }
+#s8:checked ~ .frame .scr:not(.scr-8) { display: none; }
+#s1:checked ~ .frame .chrome label[for="s1"],
+#s2:checked ~ .frame .chrome label[for="s2"],
+#s3:checked ~ .frame .chrome label[for="s3"],
+#s4:checked ~ .frame .chrome label[for="s4"],
+#s5:checked ~ .frame .chrome label[for="s5"],
+#s6:checked ~ .frame .chrome label[for="s6"],
+#s7:checked ~ .frame .chrome label[for="s7"],
+#s8:checked ~ .frame .chrome label[for="s8"] { background: var(--paper); color: var(--ink); }
+
+/* ---- mockup chrome bar (not part of the product) ---- */
+.chrome {
+  background: var(--ink); color: rgba(251,249,244,0.75);
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 28px; font-size: 12.5px; flex-wrap: wrap;
+  position: sticky; top: 0; z-index: 40;
+}
+.chrome .tag {
+  letter-spacing: 0.14em; text-transform: uppercase;
+  font-weight: 500; font-size: 10.5px; color: rgba(251,249,244,0.5);
+}
+.chrome .seg { display: inline-flex; flex-wrap: wrap; border: 1px solid rgba(251,249,244,0.25); border-radius: 999px; overflow: hidden; }
+.chrome .seg label { padding: 3px 12px; cursor: pointer; transition: background 200ms var(--ease-settle); white-space: nowrap; }
+.chrome .note { font-size: 12px; color: rgba(251,249,244,0.5); }
+
+/* ---- the page dimmed behind the modal ---- */
+.backpage { position: relative; min-height: calc(100vh - 41px); overflow: hidden; }
+.pagehint { opacity: 0.5; pointer-events: none; user-select: none; }
+.topbar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 18px 40px; border-bottom: 1px solid var(--border);
+}
+.topbar .wordmark { font-family: var(--font-display); font-weight: 300; font-size: 19px; letter-spacing: 0.2em; }
+.topbar .crumb { margin-left: auto; font-size: 13px; color: var(--graphite); }
+.pagehint .inner { max-width: 1120px; margin: 0 auto; padding: 36px 40px; }
+.pagehint h1 { font-size: 21px; font-weight: 500; }
+.pagehint .sub { font-size: 13.5px; color: var(--graphite); }
+.pagehint .toolbar { display: flex; gap: 10px; margin-top: 18px; }
+.pagehint .split { display: inline-flex; border-radius: var(--r-control); overflow: hidden; }
+.pagehint .split span { padding: 9px 14px; font-size: 13.5px; font-weight: 500; }
+.pagehint .split .main { background: var(--dusk); color: #fff; }
+.pagehint .split .care { background: var(--dusk); color: rgba(255,255,255,.7); border-left: 1px solid rgba(255,255,255,.25); padding: 9px 10px; }
+
+.scrim {
+  position: absolute; inset: 0; z-index: 10;
+  background: rgba(17,26,43,0.28);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 48px 24px 64px;
+}
+
+/* ---- annotation strip (mockup only) ---- */
+.optnote {
+  display: flex; gap: 10px; align-items: baseline;
+  font-size: 13px; color: var(--graphite);
+  border-left: 2px solid var(--border); padding: 2px 0 2px 14px;
+  margin: 0 auto 20px; max-width: 880px;
+}
+.optnote b { color: var(--ink); font-weight: 500; }
+
+/* ============================================================
+   THE MODAL
+   ============================================================ */
+.modal {
+  width: 100%; max-width: 880px;
+  background: #fff; border: 1px solid var(--border);
+  border-radius: var(--r-card); box-shadow: var(--shadow-pop);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.m-head {
+  display: flex; align-items: baseline; gap: 14px;
+  padding: 22px 28px 0;
+}
+.m-kicker {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--graphite);
+}
+.m-title { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; }
+.m-close {
+  margin-left: auto; align-self: center;
+  font: 500 13.5px var(--font-text); color: var(--graphite);
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-control);
+  padding: 6px 12px; cursor: pointer;
+}
+.m-close:hover { color: var(--ink); border-color: var(--border); }
+
+.m-body { padding: 20px 28px 26px; max-height: 62vh; overflow: auto; }
+
+.m-foot {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 28px; border-top: 1px solid var(--border);
+  background: var(--paper);
+}
+.steps { margin: 0 auto; display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--graphite); flex-wrap: wrap; justify-content: center; }
+.steps .st.on { color: var(--ink); font-weight: 500; }
+.steps .sep { width: 14px; height: 1px; background: var(--border); flex: none; }
+
+/* ---- buttons ---- */
+.btn {
+  display: inline-flex; align-items: center; gap: 7px;
+  font: 500 13.5px var(--font-text); color: var(--ink);
+  background: transparent; border: 1px solid var(--border);
+  border-radius: var(--r-control); padding: 8px 16px;
+  cursor: pointer; white-space: nowrap;
+  transition: border-color 200ms var(--ease-settle), background 200ms var(--ease-settle);
+}
+.btn:hover { border-color: var(--graphite); }
+.btn.primary { background: var(--dusk); border-color: var(--dusk); color: #fff; }
+.btn.primary:hover { background: #5F58A0; }
+.btn.ghost { border-color: transparent; color: var(--graphite); }
+.btn.ghost:hover { color: var(--ink); }
+.btn.sm { padding: 6px 12px; font-size: 12.5px; }
+
+/* ---- shared small bits ---- */
+.q { font-size: 15px; font-weight: 500; margin-bottom: 4px; }
+.q-sub { font-size: 13px; color: var(--graphite); margin-bottom: 16px; }
+.lab { font-size: 12.5px; font-weight: 500; color: var(--graphite); margin-bottom: 6px; display: block; }
+
+/* ---- form controls ---- */
+input[type="text"], input[type="number"], textarea, select {
+  width: 100%; font: 400 14.5px var(--font-text); color: var(--ink);
+  background: #fff; border: 1px solid var(--border); border-radius: var(--r-control);
+  padding: 10px 12px; outline: none;
+}
+textarea { resize: vertical; line-height: 1.55; }
+select { appearance: none; -webkit-appearance: none; background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="%2358606E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>'); background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px; }
+input:focus, textarea:focus, select:focus { border-color: var(--dusk); }
+.field { margin-bottom: 16px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 500; cursor: pointer; }
+.check input { width: 16px; height: 16px; margin: 0; }
+
+/* ============================================================
+   SCREEN 1 — START (the door)
+   ============================================================ */
+.goals { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+@media (max-width: 640px) { .goals { grid-template-columns: 1fr; } }
+.goal {
+  display: flex; gap: 14px; align-items: flex-start; text-align: left;
+  background: #fff; border: 1px solid var(--border); border-radius: 12px;
+  padding: 16px; cursor: pointer;
+  transition: border-color 200ms var(--ease-settle), background 200ms var(--ease-settle);
+}
+.goal:hover { border-color: var(--dusk); background: var(--dusk-tint); }
+.goal.wide { grid-column: 1 / -1; }
+.goal .gi { flex: none; width: 38px; height: 38px; border-radius: 10px; background: var(--cream); color: var(--graphite); display: grid; place-items: center; }
+.goal .gt { font-size: 14.5px; font-weight: 500; }
+.goal .gs { display: block; font-size: 12.5px; color: var(--graphite); margin-top: 2px; line-height: 1.45; }
+
+/* ============================================================
+   SCREEN 1a / 1b — PASTE, COPY
+   ============================================================ */
+.plist { max-width: 100%; margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; max-height: 300px; overflow-y: auto; }
+.prow {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  background: #fff; border: none; cursor: pointer;
+  padding: 12px 16px;
+  transition: background 200ms var(--ease-settle);
+}
+.prow + .prow { border-top: 1px solid var(--border); }
+.prow:hover { background: var(--paper); }
+.prow .pthumb {
+  width: 36px; height: 36px; border-radius: 9px; flex: none;
+  background: var(--cream); color: var(--graphite);
+  display: grid; place-items: center;
+}
+.prow .pn { font-size: 14px; font-weight: 500; line-height: 1.35; }
+.prow .ps { font-size: 12.5px; color: var(--graphite); }
+.search {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--border); border-radius: var(--r-control);
+  background: #fff; padding: 10px 14px;
+  color: var(--graphite); margin-top: 4px;
+}
+.search input { border: none; outline: none; flex: 1; padding: 0; }
+
+/* ============================================================
+   SCREEN 2 — WHAT IT IS
+   ============================================================ */
+.photorow { display: flex; align-items: center; gap: 12px; }
+.photobox {
+  width: 64px; height: 64px; flex: none; border: 1.5px dashed var(--border); border-radius: 11px;
+  display: grid; place-items: center; color: var(--graphite); cursor: pointer; background: var(--cream);
+}
+.photobox:hover { border-color: var(--dusk); }
+.hint { font-size: 12.5px; color: var(--graphite); }
+
+/* ============================================================
+   SCREEN 3 — PRICE
+   ============================================================ */
+.seg2 { display: inline-flex; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 2px 0 18px; }
+.seg2 button { font: 500 13.5px var(--font-text); padding: 9px 18px; background: #fff; border: none; cursor: pointer; color: var(--ink); }
+.seg2 button + button { border-left: 1px solid var(--border); }
+.seg2 button.on { background: var(--dusk); color: #fff; }
+
+.amt-box {
+  display: inline-flex; align-items: center;
+  border: 1px solid var(--border); border-radius: var(--r-control);
+  background: #fff; overflow: hidden;
+}
+.amt-box .unit {
+  padding: 10px 12px; font-size: 15px; color: var(--graphite);
+  background: var(--cream); border-right: 1px solid var(--border);
+}
+.amt-box input {
+  border: none; outline: none; width: 100px; padding: 10px 12px;
+  font: 500 15px var(--font-text); color: var(--ink);
+}
+
+.divider-lab { display: flex; align-items: center; gap: 12px; margin: 26px 0 16px; color: var(--graphite); font-size: 12.5px; }
+.divider-lab::before, .divider-lab::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+.varcard { border: 1px solid var(--border); border-radius: 11px; padding: 12px 14px; background: var(--cream); margin-bottom: 10px; }
+.varcard .vhead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.varcard .vn { font-size: 11px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--graphite); }
+.varcard .vx { background: none; border: none; color: var(--graphite); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+.varcard .vx:hover { color: var(--brick); }
+.varcard .vline { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.varcard .vline input { padding: 8px 10px; font-size: 13.5px; }
+.varcard .vw { flex: 1 1 auto; }
+.varcard .vp { display: inline-flex; align-items: center; gap: 2px; color: var(--graphite); }
+.varcard .vp input { width: 76px; }
+.varcard .vs { width: 76px; }
+
+/* ============================================================
+   SCREEN 4 — DETAILS
+   ============================================================ */
+.factgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 4px; }
+@media (max-width: 640px) { .factgrid { grid-template-columns: 1fr; } }
+.chiprow { display: flex; flex-wrap: wrap; gap: 8px 14px; padding-top: 4px; }
+.chipcheck { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; font-size: 13.5px; cursor: pointer; }
+.chipcheck input { width: 15px; height: 15px; margin: 0; }
+
+/* ============================================================
+   SCREEN 5 — CUSTOMIZE
+   ============================================================ */
+.optblock { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--cream); margin-bottom: 12px; }
+.optblock .ohead { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.optblock .otag { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; font-weight: 600; color: var(--amber-ink); }
+.optblock .ox { background: none; border: none; color: var(--graphite); cursor: pointer; font-size: 13px; }
+.optblock .ox:hover { color: var(--brick); }
+.optblock .oq { width: 100%; font: inherit; padding: 9px 11px; margin-bottom: 8px; }
+.choicerow { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.choicerow input[type="radio"] { flex: none; width: 16px; height: 16px; margin: 0; }
+.choicerow .radiospacer { width: 16px; flex: none; }
+.choicerow .clab { flex: 1 1 auto; padding: 7px 9px; font-size: 13.5px; }
+.choicerow .cur { display: inline-flex; align-items: center; gap: 2px; color: var(--graphite); white-space: nowrap; font-size: 13px; }
+.choicerow .cur input { width: 62px; padding: 7px 8px; font-size: 13px; }
+.linkpill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 4px 9px; border-radius: 999px; background: var(--sage-tint); color: var(--sage-ink); font-weight: 500; white-space: nowrap; }
+.linkbtn { font-size: 12px; padding: 6px 10px; white-space: nowrap; }
+
+/* ============================================================
+   SCREEN 6 — REVIEW
+   ============================================================ */
+.review { display: flex; gap: 18px; align-items: flex-start; }
+.rev-photo { width: 100px; height: 100px; flex: none; border-radius: 12px; background: var(--cream); display: grid; place-items: center; color: var(--graphite); }
+.rev-rows { flex: 1 1 auto; display: flex; flex-direction: column; gap: 8px; }
+.rev-row { display: flex; gap: 14px; font-size: 14px; }
+.rev-k { flex: 0 0 100px; color: var(--graphite); }
+.rev-v { flex: 1 1 auto; color: var(--ink); }
+.rev-v .was { color: var(--graphite); text-decoration: line-through; margin-left: 6px; }
+
+.warnbox { margin-top: 18px; padding: 11px 14px; background: var(--amber-tint); border-radius: 10px; font-size: 13px; color: var(--amber-ink); display: flex; gap: 9px; align-items: flex-start; }
+.warnbox .ni { flex: none; margin-top: 1px; }
+.warnbox .sub { color: var(--amber-ink); opacity: .8; font-size: 12.5px; margin-top: 2px; }
+
+.designcheck { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.finalnote { font-size: 12px; color: var(--graphite); margin-top: 12px; }
+
+@media (max-width: 760px) { .m-body { max-height: none; } }
+</style>
+</head>
+<body>
+
+<input class="state" type="radio" name="scr" id="s1" checked>
+<input class="state" type="radio" name="scr" id="s2">
+<input class="state" type="radio" name="scr" id="s3">
+<input class="state" type="radio" name="scr" id="s4">
+<input class="state" type="radio" name="scr" id="s5">
+<input class="state" type="radio" name="scr" id="s6">
+<input class="state" type="radio" name="scr" id="s7">
+<input class="state" type="radio" name="scr" id="s8">
+
+<div class="frame">
+
+  <div class="chrome">
+    <span class="tag">Add product wizard</span>
+    <span class="seg">
+      <label for="s1">1 · Start</label>
+      <label for="s2">1a · Paste</label>
+      <label for="s3">1b · Copy</label>
+      <label for="s4">2 · What it is</label>
+      <label for="s5">3 · Price</label>
+      <label for="s6">4 · Details</label>
+      <label for="s7">5 · Customize</label>
+      <label for="s8">6 · Review</label>
+    </span>
+    <span class="note">Click a step to jump. 1a/1b are the two branches off Start — both land back on "What it is".</span>
+  </div>
+
+  <div class="backpage">
+
+    <!-- dimmed products page behind the modal -->
+    <div class="pagehint">
+      <div class="topbar">
+        <span class="wordmark">tacet</span>
+        <span class="crumb">Sell / Products</span>
+      </div>
+      <div class="inner">
+        <h1>Products</h1>
+        <div class="sub">Everything you sell, in one place.</div>
+        <div class="toolbar">
+          <span class="split"><span class="main">✨ Step by step</span><span class="care">⌄</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="scrim">
+      <div style="width:100%; max-width: 880px;">
+
+        <!-- ================= SCREEN 1 — START ================= -->
+        <div class="scr scr-1">
+          <div class="optnote"><b>1 · Start.</b> Three plain on-ramps, not one blank form. "Pick whatever's easiest — you can change anything later" removes the pressure to choose the "right" one. No footer here — each card is its own next step.</div>
+
+          <div class="modal">
+            <div class="m-head">
+              <div>
+                <div class="m-kicker">New product</div>
+                <div class="m-title">Add a product</div>
+              </div>
+              <button class="m-close">Close</button>
+            </div>
+            <div class="m-body">
+              <div class="q">How do you want to add it?</div>
+              <div class="q-sub" style="margin-top:-2px;">Pick whatever's easiest. You can change anything later.</div>
+
+              <div class="goals">
+                <button class="goal">
+                  <span class="gi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg></span>
+                  <span><span class="gt">Start from scratch</span><span class="gs">A blank product. You fill it in.</span></span>
+                </button>
+                <button class="goal">
+                  <span class="gi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="3" width="8" height="4" rx="1"/><path d="M16 5h2a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h2"/></svg></span>
+                  <span><span class="gt">Paste what you've written</span><span class="gs">Drop in a description — we'll sort it into the right boxes.</span></span>
+                </button>
+                <button class="goal wide">
+                  <span class="gi"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></span>
+                  <span><span class="gt">Copy one you already sell</span><span class="gs">Start from a similar product and change what's different.</span></span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SCREEN 1a — PASTE ================= -->
+        <div class="scr scr-2">
+          <div class="optnote"><b>1a · Paste text.</b> One box, no fields to parse it into yet — that happens automatically once the wizard reaches Details. Nothing here is validated; an empty paste just continues to a blank "What it is".</div>
+
+          <div class="modal">
+            <div class="m-head">
+              <div>
+                <div class="m-kicker">New product</div>
+                <div class="m-title">Paste your text</div>
+              </div>
+              <button class="m-close">Close</button>
+            </div>
+            <div class="m-body">
+              <div class="q">Paste anything you have</div>
+              <div class="q-sub" style="margin-top:-2px;">A description, the back of the package, a spec sheet — we'll pull the details out next.</div>
+              <textarea rows="8" placeholder="e.g. Our Cacao Nibs are cold-pressed from single-origin Peruvian beans, roasted lightly to keep the natural bitterness…"></textarea>
+            </div>
+            <div class="m-foot">
+              <button class="btn">Back</button>
+              <span style="margin-left:auto;"></span>
+              <button class="btn primary">Continue</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SCREEN 1b — COPY ================= -->
+        <div class="scr scr-3">
+          <div class="optnote"><b>1b · Copy existing.</b> Search-then-pick, same list pattern as the flash sale and coupon pickers. Picking a row copies name, category and price into the wizard state and jumps straight to "What it is" for editing — nothing is created yet.</div>
+
+          <div class="modal">
+            <div class="m-head">
+              <div>
+                <div class="m-kicker">New product</div>
+                <div class="m-title">Which product is it like?</div>
+              </div>
+              <button class="m-close">Close</button>
+            </div>
+            <div class="m-body">
+              <div class="search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" placeholder="Search by name or SKU…">
+              </div>
+              <div class="plist">
+                <button class="prow">
+                  <span class="pthumb"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
+                  <span><span class="pn">Cacao Nibs 200g</span><br><span class="ps num">SKU 2-118</span></span>
+                </button>
+                <button class="prow">
+                  <span class="pthumb"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
+                  <span><span class="pn">Hazelnut-Chocolate Spread</span><br><span class="ps num">SKU 2-450</span></span>
+                </button>
+                <button class="prow">
+                  <span class="pthumb"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></span>
+                  <span><span class="pn">Maple Cinnamon Almond Butter</span><br><span class="ps num">SKU 2-451 · 2 sizes</span></span>
+                </button>
+              </div>
+            </div>
+            <div class="m-foot">
+              <button class="btn">Back</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SCREEN 2 — WHAT IT IS ================= -->
+        <div class="scr scr-4">
+          <div class="optnote"><b>2 · What it is.</b> The shared spine starts here regardless of which door you came through — "We've filled in what we could, just check it's right" appears only when arriving from Paste or Copy. Only a name is required to move on.</div>
+
+          <div class="modal">
+            <div class="m-head">
+              <div>
+                <div class="m-kicker">New product</div>
+                <div class="m-title">What is it?</div>
+              </div>
+              <button class="m-close">Close</button>
+            </div>
+            <div class="m-body">
+              <div class="field">
+                <label class="lab">Name</label>
+                <input type="text" placeholder="Cacao Nibs">
+              </div>
+              <div class="grid2">
+                <div class="field">
+                  <label class="lab">Photo</label>
+                  <div class="photorow">
+                    <div class="photobox"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+                    <span class="hint">A clear shot on a plain background looks best.</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label class="lab">What kind of product is it?</label>
+                  <select>
+                    <option>— pick a category —</option>
+                    <optgroup label="Dry &amp; Pantry">
+                      <option>(whole category)</option>
+                      <option selected>Nuts &amp; Seeds</option>
+                      <option>Spreads</option>
+                    </optgroup>
+                  </select>
+                </div>
+              </div>
+              <div class="field">
+                <label class="lab">Product code</label>
+                <input type="text" placeholder="we'll make one for you">
+                <div class="hint" style="margin-top:6px;">Leave it blank and we'll create one for you, or type your own.</div>
+              </div>
+            </div>
+            <div class="m-foot">
+              <button class="btn">Back</button>
+              <span class="steps">
+                <span class="st on">What it is</span><span class="sep"></span>
+                <span class="st">Price</span><span class="sep"></span>
+                <span class="st">Details</span><span class="sep"></span>
+                <span class="st">Customize</span><span class="sep"></span>
+                <span class="st">Review</span>
+              </span>
+              <button class="btn primary">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SCREEN 3 — PRICE ================= -->
+        <div class="scr scr-5">
+          <div class="optnote"><b>3 · Price.</b> One fork, answered with a segmented control instead of a size table you have to opt out of. "Just one" keeps price/stock/sale on a single line; "has options" swaps in a card per size or flavor — shown stacked below so both states are visible at once.</div>
+
+          <div class="modal">
+            <div class="m-head">
+              <div>
+                <div class="m-kicker">New product · Cacao Nibs</div>
+                <div class="m-title">Sizes &amp; price</div>
+              </div>
+              <button class="m-close">Close</button>
+            </div>
+            <div class="m-body">
+              <div class="q">Does it come in more than one option?</div>
+              <div class="q-sub" style="margin-top:-2px;">Different sizes (250g / 500g) or flavors (Original / Spicy).</div>
+              <div class="seg2">
+                <button class="on">No, just one</button>
+                <button>Yes, it has options</button>
+              </div>
+
+              <div class="grid2">
+                <div class="field">
+                  <label class="lab">Price ¥</label>
+                  <input type="number" placeholder="0.00">
+                </div>
+                <div class="field">
+                  <label class="lab">In stock</label>
+                  <input type="number" placeholder="0">
+                </div>
+              </div>
+              <label class="check"><input type="checkbox"> It's on sale</label>
+
+              <div class="divider-lab">or, if it has options</div>
+
+              <div class="q-sub" style="margin-top:-8px;">Give each option a name (a size or a flavor). Weight is optional.</div>
+              <div class="varcard">
+                <div class="vhead"><span class="vn">Option 1</span></div>
+                <div class="grid2">
+                  <input type="text" placeholder="Name — e.g. Spicy" value="Original">
+                  <input type="text" placeholder="Weight — e.g. 250g" value="250g">
+                </div>
+                <div class="vline">
+                  <span class="vp">¥<input type="number" placeholder="price" value="38.00"></span>
+                  <input type="number" class="vs" placeholder="stock" value="120">
+                </div>
+              </div>
+              <div class="varcard">
+                <div class="vhead"><span class="vn">Option 2</span><button class="vx">✕</button></div>
+                <div class="grid2">
+                  <input type="text" placeholder="Name — e.g. Spicy" value="Roasted">
+                  <input type="text" placeholder="Weight — e.g. 250g" value="250g">
+                </div>
+                <div class="vline">
+                  <span class="vp">¥<input type="number" placeholder="price" value="42.00"></span>
+                  <input type="number" class="vs" placeholder="stock" value="64">
+                </div>
+              </div>
+              <button class="btn sm">+ Add an option</button>
+
+              <div class="field" style="margin-top:22px;">
+                <label class="lab">Where can people get it?</label>
+                <label class="check"><input type="checkbox"> Guangzhou delivery only</label>
+                <div class="hint" style="margin-top:6px;">Leave unticked to ship anywhere.</div>
+              </div>
+            </div>
+            <div class="m-foot">
+              <button class="btn">Back</button>
+              <span class="steps">
+                <span class="st">What it is</span><span class="sep"></span>
+                <span class="st on">Price</span><span class="sep"></span>
+                <span class="st">Details</span><span class="sep"></span>
+                <span class="st">Customize</span><span class="sep"></span>
+                <span class="st">Review</span>
+              </span>
+              <button class="btn primary">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SCREEN 4 — DETAILS ================= -->
+        <div class="scr scr-6">
+          <div class="optnote"><b>4 · Details.</b> "Pull the details from this" reads the description and fills the facts below via AI — you're never blocked from typing them by hand instead. Every fact is phrased as a plain question ("Where it's from"), not a database column name.</div>
+
+          <div class="modal">
+            <div class="m-head">
+              <div>
+                <div class="m-kicker">New product · Cacao Nibs</div>
+                <div class="m-title">The details</div>
+              </div>
+              <button class="m-close">Close</button>
+            </div>
+            <div class="m-body">
+              <div class="q">Describe it (or paste anything)</div>
+              <div class="q-sub" style="margin-top:-2px;">A sentence or two is enough — "Pull the details" below fills in the rest.</div>
+              <textarea rows="4" placeholder="e.g. Cold-pressed from single-origin Peruvian beans, lightly roasted to keep their natural bite. Great in smoothies, oats or baking.">Cold-pressed from single-origin Peruvian beans, lightly roasted to keep their natural bite. Great in smoothies, oats or baking.</textarea>
+              <div style="margin:10px 0 20px;"><button class="btn sm">Pull the details from this</button></div>
+
+              <div class="factgrid">
+                <div class="field"><label class="lab">Where it's from</label><input type="text" placeholder="e.g. Peru" value="Peru"></div>
+                <div class="field"><label class="lab">What's in it</label><input type="text" placeholder="e.g. 100% cacao" value="100% cacao"></div>
+                <div class="field"><label class="lab">How to store it</label><input type="text" placeholder="e.g. Cool, dry place" value="Cool, dry place"></div>
+                <div class="field"><label class="lab">Keeps for</label><input type="text" placeholder="e.g. 12 months" value="12 months"></div>
+                <div class="field" style="grid-column:1/-1;"><label class="lab">How to enjoy it</label><input type="text" placeholder="e.g. Add to smoothies, oats or baking" value="Add to smoothies, oats or baking"></div>
+              </div>
+
+              <div class="field" style="margin-top:6px;">
+                <label class="lab">Free from anything? (optional)</label>
+                <div class="chiprow">
+                  <label class="chipcheck"><input type="checkbox"> Nuts</label>
+                  <label class="chipcheck"><input type="checkbox" checked> Soy</label>
+                  <label class="chipcheck"><input type="checkbox" checked> Gluten</label>
+                  <label class="chipcheck"><input type="checkbox"> 5 Spice</label>
+                </div>
+                <div class="hint" style="margin-top:8px;">This is your promise to shoppers, so make sure it's true.</div>
+              </div>
+            </div>
+            <div class="m-foot">
+              <button class="btn">Back</button>
+              <span class="steps">
+                <span class="st">What it is</span><span class="sep"></span>
+                <span class="st">Price</span><span class="sep"></span>
+                <span class="st on">Details</span><span class="sep"></span>
+                <span class="st">Customize</span><span class="sep"></span>
+                <span class="st">Review</span>
+              </span>
+              <button class="btn primary">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SCREEN 5 — CUSTOMIZE ================= -->
+        <div class="scr scr-7">
+          <div class="optnote"><b>5 · Customize.</b> Entirely optional — "Nothing to pick? Just tap Next" is shown whenever the list is empty. Free picks (no extra charge, one can be the default) and paid extras (each adds a price, can link to another product's stock) are visually distinct via the amber tag.</div>
+
+          <div class="modal">
+            <div class="m-head">
+              <div>
+                <div class="m-kicker">New product · Loaded Burrito Bowl</div>
+                <div class="m-title">Customize?</div>
+              </div>
+              <button class="m-close">Close</button>
+            </div>
+            <div class="m-body">
+              <div class="q">Do customers get to pick anything?</div>
+              <div class="q-sub" style="margin-top:-2px;">For example: choosing a dressing, or paying a bit more for extra toppings.</div>
+
+              <div class="optblock">
+                <div class="ohead"><span class="otag">Free pick</span><button class="ox">✕</button></div>
+                <input type="text" class="oq" value="Choose your dressing">
+                <div class="choicerow">
+                  <input type="radio" name="def1" checked title="Show one as the usual pick">
+                  <input type="text" class="clab" value="Ranch">
+                  <button class="ox">✕</button>
+                </div>
+                <div class="choicerow">
+                  <input type="radio" name="def1">
+                  <input type="text" class="clab" value="Caesar">
+                  <button class="ox">✕</button>
+                </div>
+                <div class="choicerow">
+                  <input type="radio" name="def1">
+                  <input type="text" class="clab" value="Vinaigrette">
+                  <button class="ox">✕</button>
+                </div>
+                <button class="btn sm" style="margin-bottom:10px;">+ Add another</button>
+                <label class="check"><input type="checkbox"> They have to pick one before they can buy</label>
+              </div>
+
+              <div class="optblock">
+                <div class="ohead"><span class="otag">Paid extra</span><button class="ox">✕</button></div>
+                <input type="text" class="oq" value="Add extras">
+                <div class="choicerow">
+                  <span class="radiospacer"></span>
+                  <input type="text" class="clab" value="Extra pickles">
+                  <span class="cur">+¥<input type="number" value="3.00"></span>
+                  <span class="linkpill">🔗 Pickles (jar)</span>
+                  <button class="ox">✕</button>
+                </div>
+                <div class="choicerow">
+                  <span class="radiospacer"></span>
+                  <input type="text" class="clab" value="Extra sauce">
+                  <span class="cur">+¥<input type="number" value="2.00"></span>
+                  <button class="btn linkbtn">+ Stock</button>
+                  <button class="ox">✕</button>
+                </div>
+                <button class="btn sm">+ Add an extra</button>
+              </div>
+
+              <div class="q-sub" style="margin-top:4px;">+ A free pick&nbsp;&nbsp;&nbsp;+ A paid extra</div>
+            </div>
+            <div class="m-foot">
+              <button class="btn">Back</button>
+              <span class="steps">
+                <span class="st">What it is</span><span class="sep"></span>
+                <span class="st">Price</span><span class="sep"></span>
+                <span class="st">Details</span><span class="sep"></span>
+                <span class="st on">Customize</span><span class="sep"></span>
+                <span class="st">Review</span>
+              </span>
+              <button class="btn primary">Next</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================= SCREEN 6 — REVIEW ================= -->
+        <div class="scr scr-8">
+          <div class="optnote"><b>6 · Review.</b> Every row is a plain recap, not a form to re-check. Missing photo/category/price surface as one soft warning ("no rush — finish later"), never a blocker. "Publish it" and "Save as draft" are both first-class — nothing goes live until Publish is tapped.</div>
+
+          <div class="modal">
+            <div class="m-head">
+              <div>
+                <div class="m-kicker">New product</div>
+                <div class="m-title">Take a look</div>
+              </div>
+              <button class="m-close">Close</button>
+            </div>
+            <div class="m-body">
+              <div class="review">
+                <div class="rev-photo"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg></div>
+                <div class="rev-rows">
+                  <div class="rev-row"><span class="rev-k">Name</span><span class="rev-v">Cacao Nibs</span></div>
+                  <div class="rev-row"><span class="rev-k">Category</span><span class="rev-v">Dry &amp; Pantry › Nuts &amp; Seeds</span></div>
+                  <div class="rev-row"><span class="rev-k">Price</span><span class="rev-v num">Original (250g) ¥38.00 · Roasted (250g) ¥42.00</span></div>
+                  <div class="rev-row"><span class="rev-k">Details</span><span class="rev-v">4 filled in</span></div>
+                  <div class="rev-row"><span class="rev-k">Free of</span><span class="rev-v">Soy, Gluten</span></div>
+                </div>
+              </div>
+
+              <div class="warnbox">
+                <span class="ni">⚠</span>
+                <span>No photo yet<div class="sub">No rush — you can finish this later.</div></span>
+              </div>
+
+              <div class="designcheck">
+                <label class="check"><input type="checkbox" checked> Build the nice designed page from my description</label>
+                <div class="hint" style="margin-top:6px;">Needs a description on the last step. You can always design it later in the editor.</div>
+              </div>
+              <div class="finalnote">Nothing goes live until you tap Publish.</div>
+            </div>
+            <div class="m-foot">
+              <button class="btn">Back</button>
+              <span class="steps">
+                <span class="st">What it is</span><span class="sep"></span>
+                <span class="st">Price</span><span class="sep"></span>
+                <span class="st">Details</span><span class="sep"></span>
+                <span class="st">Customize</span><span class="sep"></span>
+                <span class="st on">Review</span>
+              </span>
+              <span style="display:flex; gap:10px;">
+                <button class="btn">Save as draft</button>
+                <button class="btn primary">Publish it</button>
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
