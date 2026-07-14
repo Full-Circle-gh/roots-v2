@@ -1772,5 +1772,38 @@ function initAcctMenu(u) {
     fetch('/api/backend/logout', { method: 'POST', credentials: 'same-origin' })
       .finally(() => { location.href = '/backend/login'; });
   });
+
+  const profileBtn = $('#acctProfileBtn');
+  if (profileBtn) profileBtn.addEventListener('click', () => { close(); openProfileModal(); });
 }
+
+// ── Profile pop-up — hosts /backend/account in an iframe so it opens as a
+// centred modal (Google-style) instead of navigating the whole app away to
+// a separate page. Same scrim/panel pattern as the flash-sale composer.
+function openProfileModal() {
+  const scrim = $('#profScrim'), modal = $('#profModal'), frame = $('#profFrame');
+  if (!scrim || !modal || !frame) return;
+  if (!frame.src) frame.src = '/backend/account';
+  scrim.classList.add('on');
+  modal.classList.add('on');
+  modal.setAttribute('aria-hidden', 'false');
+  document.addEventListener('keydown', onProfileKey);
+}
+function closeProfileModal() {
+  const scrim = $('#profScrim'), modal = $('#profModal');
+  if (!scrim || !modal) return;
+  scrim.classList.remove('on');
+  modal.classList.remove('on');
+  modal.setAttribute('aria-hidden', 'true');
+  document.removeEventListener('keydown', onProfileKey);
+}
+function onProfileKey(e) { if (e.key === 'Escape') closeProfileModal(); }
+(function initProfileModal() {
+  const scrim = $('#profScrim'), closeBtn = $('#profClose');
+  if (scrim) scrim.addEventListener('click', closeProfileModal);
+  if (closeBtn) closeBtn.addEventListener('click', closeProfileModal);
+  window.addEventListener('message', (e) => {
+    if (e.origin === location.origin && e.data === 'profile-modal-close') closeProfileModal();
+  });
+})();
 
