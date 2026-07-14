@@ -3,11 +3,13 @@
 # deploy-apply.sh — safe install of staged files into the live roots-v2 app.
 #
 # Run this ON THE PRODUCTION SERVER (root@47.239.89.63, app `roots-v2`).
-# It expects changed files to be staged under /root/roots-v2/__stage__/ at the
-# SAME relative paths they have in the app, e.g.:
-#     __stage__/database.js
-#     __stage__/routes/retail.js
-#     __stage__/public/retail-admin.html
+# Takes the staging dir as $1 (a unique per-deploy path — see deploy-changed.sh
+# / deploy.yml), falling back to /root/roots-v2/__stage__ for manual runs. It
+# expects changed files staged at the SAME relative paths they have in the
+# app, e.g.:
+#     $STAGE/database.js
+#     $STAGE/routes/retail.js
+#     $STAGE/public/retail-admin.html
 #
 # Sequence: syntax-check staged .js  ->  back up live copies  ->  install
 #   ->  pm2 restart roots-v2  ->  health-check (auto-rollback on crash-loop).
@@ -16,7 +18,10 @@
 # ─────────────────────────────────────────────────────────────────────────
 set -u
 APP=/root/roots-v2
-STAGE=$APP/__stage__
+# STAGE is passed by the caller (deploy-changed.sh / deploy.yml) as a unique
+# per-deploy path so concurrent deploys never share — and race on — the same
+# directory. Falls back to the old shared path for manual/ad-hoc runs.
+STAGE="${1:-$APP/__stage__}"
 TS=$(date +%Y%m%d-%H%M%S)
 BK=/root/backups/deploy-$TS
 
@@ -24,6 +29,9 @@ rt(){ pm2 jlist | node -e 'let d=JSON.parse(require("fs").readFileSync(0));let p
 st(){ pm2 jlist | node -e 'let d=JSON.parse(require("fs").readFileSync(0));let p=d.find(x=>x.name=="roots-v2");process.stdout.write(p?p.pm2_env.status:"missing")'; }
 
 [ -d "$STAGE" ] || { echo "ABORT: no staging dir $STAGE"; exit 1; }
+# Always remove this deploy's own staging dir on the way out — success,
+# rollback, or any early ABORT — so unique per-deploy stage dirs never pile up.
+trap 'rm -rf "$STAGE"' EXIT
 mapfile -t FILES < <(cd "$STAGE" && find . -type f | sed 's|^\./||')
 [ ${#FILES[@]} -eq 0 ] && { echo "ABORT: $STAGE is empty"; exit 1; }
 echo "staged files:"; printf '  %s\n' "${FILES[@]}"
@@ -168,5 +176,4 @@ if [ "$DAEMON_TOUCHED" = "1" ]; then
   fi
 fi
 
-rm -rf "$STAGE"
 echo "RESULT=SUCCESS backup=$BK"

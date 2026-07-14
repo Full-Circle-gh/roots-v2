@@ -16,7 +16,11 @@ set -u
 
 SERVER=root@47.239.89.63
 APP=/root/roots-v2
-STAGE=$APP/__stage__
+# Unique per-deploy staging dir — never shared with a concurrent CI deploy
+# (or another local worktree), so one process's cleanup can't blow away
+# another's in-flight scp. See .github/workflows/deploy.yml for the CI side
+# of the same fix.
+STAGE=$APP/__stage__.$$.$(date +%s)
 
 # Only the `main` branch deploys. Feature/worktree branches commit freely as
 # safe checkpoints — merge into main to ship. A detached HEAD also skips.
@@ -86,8 +90,10 @@ fi
 echo "[deploy] shipping ${#FILES[@]} file(s) to $SERVER:"
 printf '  %s\n' "${FILES[@]}"
 
-# Fresh staging dir, then recreate the dir tree in one shot.
-ssh "$SERVER" "rm -rf '$STAGE' && mkdir -p '$STAGE'" \
+# Fresh (unique) staging dir — no rm needed, nothing else can be using this
+# path. Also prune any stage dirs orphaned by a killed/dropped session from a
+# past deploy (the installer's own cleanup trap didn't get to run).
+ssh "$SERVER" "find '$APP' -maxdepth 1 -name '__stage__.*' -mmin +60 -exec rm -rf {} + ; mkdir -p '$STAGE'" \
   || { echo "[deploy] FAILED: cannot reach server or create $STAGE"; exit 1; }
 
 DIRS=$(printf '%s\n' "${FILES[@]}" | xargs -n1 dirname | sort -u | sed "s|^|$STAGE/|" | tr '\n' ' ')
@@ -100,11 +106,14 @@ for f in "${FILES[@]}"; do
 done
 
 # Hand off to the safe installer (syntax-check, backup, install, restart,
-# auto-rollback). Its RESULT= line is the source of truth.
+# auto-rollback). Its RESULT= line is the source of truth. STAGE is passed
+# explicitly so it operates on THIS deploy's own staging dir.
 #
-# Run it from a throwaway /tmp copy: a deploy that ships a NEW deploy-apply.sh
-# would otherwise overwrite this script WHILE bash is still reading it (bash
-# re-reads scripts lazily by byte offset), corrupting the running process
-# mid-deploy. The snapshot is immune — installs land in $APP/scripts/, never on
-# the temp copy.
-ssh "$SERVER" "cp '$APP/scripts/deploy-apply.sh' /tmp/roots-v2-apply.sh && bash /tmp/roots-v2-apply.sh"
+# Run it from a throwaway, per-deploy /tmp copy: a deploy that ships a NEW
+# deploy-apply.sh would otherwise overwrite this script WHILE bash is still
+# reading it (bash re-reads scripts lazily by byte offset), corrupting the
+# running process mid-deploy — and a FIXED temp path would let a concurrent
+# CI deploy do the exact same thing to it. The unique, per-PID snapshot is
+# immune to both: installs land in $APP/scripts/, never on the temp copy.
+APPLY=/tmp/roots-v2-apply.$$.sh
+ssh "$SERVER" "cp '$APP/scripts/deploy-apply.sh' '$APPLY' && bash '$APPLY' '$STAGE'; rc=\$?; rm -f '$APPLY'; exit \$rc"

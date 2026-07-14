@@ -125,8 +125,17 @@ jobs:
         run: |
           set -euo pipefail
           APP=/root/roots-v2
-          STAGE="$APP/__stage__"
-          ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
+          # Unique per-run staging dir + apply-script path — never shared with
+          # a concurrent local-hook or another CI run, so one process's
+          # cleanup can't blow away another's in-flight scp (see
+          # scripts/deploy-changed.sh for the local-hook side of this fix).
+          RUNTAG="gha-${{ github.run_id }}-${{ github.run_attempt }}"
+          STAGE="$APP/__stage__.$RUNTAG"
+          APPLY="/tmp/roots-v2-apply-$RUNTAG.sh"
+          # Fresh (unique) staging dir — no rm needed. Also prune any stage
+          # dirs orphaned by a killed/dropped session from a past deploy (the
+          # installer's own cleanup trap didn't get to run).
+          ssh prod "find '$APP' -maxdepth 1 -name '__stage__.*' -mmin +60 -exec rm -rf {} + ; mkdir -p '$STAGE'"
           # Recreate the directory tree for any nested files. Grep the files
           # that HAVE a slash first, THEN strip to their dir — doing it the
           # other way (sed then grep '/') drops single-level dirs like
@@ -138,8 +147,11 @@ jobs:
             scp -q "$f" "prod:$STAGE/$f"
           done < /tmp/files.txt
           # Hand off to the server's installer: syntax-check, backup, install,
-          # pm2 restart, health probe, auto-rollback. RESULT= line is the verdict.
-          ssh prod "cp '$APP/scripts/deploy-apply.sh' /tmp/roots-v2-apply.sh && bash /tmp/roots-v2-apply.sh" | tee /tmp/apply.log || true
+          # pm2 restart, health probe, auto-rollback. RESULT= line is the
+          # verdict. STAGE is passed explicitly so it operates on THIS run's
+          # own staging dir; APPLY is a per-run temp copy so a concurrent
+          # local-hook or CI deploy can't overwrite it mid-execution.
+          ssh prod "cp '$APP/scripts/deploy-apply.sh' '$APPLY' && bash '$APPLY' '$STAGE'; rc=\$?; rm -f '$APPLY'; exit \$rc" | tee /tmp/apply.log || true
           if grep -q 'RESULT=ROLLED_BACK' /tmp/apply.log; then
             echo "::error::Deploy auto-rolled-back — the app did not come up healthy. Live site is unchanged. See installer output above."
             exit 1
