@@ -1352,7 +1352,7 @@ function paRenderHighlights() {
   if (PA_HI.rising) {
     rows.push(_paHiRailRow({
       cls: 'up', iconType: 'thumb', icon: PA_HI_ICONS.box, img: PA_HI.rising.image, dotIcon: PA_HI_ICONS.up,
-      cap: cuT('Rising', '上升中'), sub: pname(PA_HI.rising),
+      cap: cuT('Rising vs last week', '较上周上升'), sub: pname(PA_HI.rising),
       val: `<svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%`,
       valCls: 'up', open: `paOpenEdit(${PA_HI.rising.id})`,
     }));
