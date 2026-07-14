@@ -458,15 +458,29 @@ function dashHeroStop() {
   if (DASH_HERO._syncTimer) { clearInterval(DASH_HERO._syncTimer); DASH_HERO._syncTimer = null; }
 }
 function dashHeroRefreshAll() {
+  // Above-the-fold first: the hero pulse + today KPIs (which also feed Today's
+  // movers) + channels + presence. On a cold first boot ~12 GETs fire at once —
+  // more than the browser's 6-connection-per-host cap — and each GET's 20s abort
+  // timer starts when it's ENQUEUED, not when it's sent. A card whose fetch sat
+  // behind the cap could burn its whole budget waiting and abort before hitting
+  // the wire, leaving it stuck on "Loading…" until a retry ramp caught up. So we
+  // let the visible cards go first and defer the below-the-fold list blocks a
+  // beat, keeping the initial in-flight count at/under the cap. Only the FIRST
+  // (boot) call staggers; later refreshes (tab-return, live nudge) run flat.
   dashHeroLoadPresence();
   dashChanLoad();
   dashHeroLoadToday();
-  dashWeekLoad();
-  dashIncomingLoad();
-  dashDraftsLoad();
-  dashMovesLoad();
-  dashOnroadLoad();
-  dashReadyLoad();
+  const rest = () => {
+    dashWeekLoad();
+    dashIncomingLoad();
+    dashDraftsLoad();
+    dashMovesLoad();
+    dashOnroadLoad();
+    dashReadyLoad();
+  };
+  if (DASH_HERO._booted) { rest(); return; }
+  DASH_HERO._booted = true;
+  setTimeout(rest, 700);
 }
 
 // ── Live push (SSE) ────────────────────────────────────────────────────────
@@ -1403,7 +1417,7 @@ function tdInit() {
   tdDateRender();
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (greeting, date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashStockDrawerRender(); });
+  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashStockDrawerRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
@@ -2057,6 +2071,8 @@ async function tdRecapLoad() {
   if (!since || now - since > MAX_BACK) since = now - MAX_BACK;
   if (now - since < MIN_BACK) since = now - MIN_BACK;
   TD.recapSince = since;
+  tdRecapHeadPaint();   // paint the title/meta NOW, from the framing just decided —
+                        // so the glued static placeholder never survives a slow/failed load
   try {
     const j = await api(`/api/retail-admin/dashboard/activity?since=${since}&limit=500`);
     TD.recapEvents = (j.data && j.data.events) || [];
@@ -2090,17 +2106,28 @@ function tdRecentLabel(ms) {
   return cuT(`last ${mins} minutes`, `最近 ${mins} 分钟`);
 }
 
-// Aggregate the recap window's events into calm one-line rows, each with a
-// breathing Dusk dot — Dusk means "the system did this", and this card is the
-// only place on the dashboard that uses it.
-function tdRecapRender() {
-  const host = document.getElementById('td-recap-rows'); if (!host || !TD.recapEvents) return;
+// Paint just the Recap's title + meta from the framing decided in tdRecapLoad.
+// Split out of tdRecapRender so it runs the instant the framing is known —
+// before, and independent of, the activity fetch. That way the static bilingual
+// placeholder ("While you were away · 您不在的这段时间", which is data-no-i18n so
+// the toggle can't split it) is replaced with the single active-language title
+// even when the load is slow or fails, instead of leaking both languages.
+function tdRecapHeadPaint() {
+  if (!TD.recapSince) return;   // framing not computed yet (tdRecapLoad hasn't run)
   const title = document.getElementById('td-recap-title');
   if (title) title.textContent = TD.reallyAway
     ? cuT('While you were away', '您不在的这段时间')
     : cuT('Latest activity', '最新动态');
   const meta = document.getElementById('td-recap-meta');
   if (meta) meta.textContent = TD.reallyAway ? tdSinceLabel(TD.recapSince) : tdRecentLabel(TD.recapSince);
+}
+
+// Aggregate the recap window's events into calm one-line rows, each with a
+// breathing Dusk dot — Dusk means "the system did this", and this card is the
+// only place on the dashboard that uses it.
+function tdRecapRender() {
+  const host = document.getElementById('td-recap-rows'); if (!host || !TD.recapEvents) return;
+  tdRecapHeadPaint();
   const ev = TD.recapEvents;
   const of = type => ev.filter(e => e.type === type);
   const sumAmt = (rows, k) => rows.reduce((s, e) => s + (Number(e.payload && e.payload[k]) || 0), 0);

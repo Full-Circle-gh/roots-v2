@@ -1577,23 +1577,32 @@ let ENTITLEMENTS = {};
     document.body.classList.toggle('ent-' + f.key, ent);
     document.body.classList.toggle('feat-' + f.key, ent && f.def);
   }
-  mountFeatureControls();
-  dashInit();          // landing tab — set up date range + first load
-  loadOrders();
-  loadConfig();        // also hydrates the Mini-app footer fields
-  loadSnippets();
-  loadVouchers();
-  loadPopups();
-  loadDeliveryZones();
-  _loadGzExcludedDistricts();  // GZ same-day excluded-districts chips (now on the Delivery tab)
-  loadShippingIntegrations();  // Logistics integration card (kd100 / JD) — moved to the Delivery tab
-  loadTopup();
-  loadPointsSettings(); // Loyalty & Wallet → Membership & points (earn rate, point value, expiry)
-  loadRctiers();        // Loyalty & Wallet → Membership tier ladder (Roots Club)
-  loadFaq();
-  lbInitNavState();     // seed the Leaderboard nav OFF pill (lazy form loads later)
-  votInitNavState();    // seed the Voting nav OPEN pill (lazy list loads later)
-  fsInitNavState();     // seed the Flash sales nav LIVE pill (lazy list loads later)
+  // Boot each surface in ISOLATION. Previously these ran as a flat sequence, so
+  // a single throw — e.g. a script part that transiently didn't load/parse after
+  // a bad deploy or a stale SW-cached partial, leaving an early call like
+  // mountFeatureControls undefined — aborted every call BELOW it, including
+  // dashInit(). That stranded the whole dashboard on "Loading…" until a hard
+  // refresh. Thunks so an undefined identifier throws INSIDE the try (and is
+  // logged + skipped) rather than while the list is built; order is unchanged.
+  [
+    ['mountFeatureControls', () => mountFeatureControls()],
+    ['dashInit',      () => dashInit()],          // landing tab — date range + first load
+    ['loadOrders',    () => loadOrders()],
+    ['loadConfig',    () => loadConfig()],         // also hydrates the Mini-app footer fields
+    ['loadSnippets',  () => loadSnippets()],
+    ['loadVouchers',  () => loadVouchers()],
+    ['loadPopups',    () => loadPopups()],
+    ['loadDeliveryZones', () => loadDeliveryZones()],
+    ['_loadGzExcludedDistricts', () => _loadGzExcludedDistricts()], // GZ same-day excluded-districts chips (Delivery tab)
+    ['loadShippingIntegrations', () => loadShippingIntegrations()], // Logistics integration card (kd100 / JD) — Delivery tab
+    ['loadTopup',     () => loadTopup()],
+    ['loadPointsSettings', () => loadPointsSettings()], // Loyalty & Wallet → Membership & points (earn rate, point value, expiry)
+    ['loadRctiers',   () => loadRctiers()],        // Loyalty & Wallet → Membership tier ladder (Roots Club)
+    ['loadFaq',       () => loadFaq()],
+    ['lbInitNavState', () => lbInitNavState()],    // seed the Leaderboard nav OFF pill (lazy form loads later)
+    ['votInitNavState', () => votInitNavState()],  // seed the Voting nav OPEN pill (lazy list loads later)
+    ['fsInitNavState', () => fsInitNavState()],    // seed the Flash sales nav LIVE pill (lazy list loads later)
+  ].forEach(([label, fn]) => { try { fn(); } catch (e) { console.error('[retail-admin boot] ' + label + ' failed — continuing', e); } });
   // Deep-link: /?product=ID opens the Products tab focused on that product —
   // used by the order drawer's "open product in a new tab" item links so the
   // operator lands on the product page (this backend), not a blank dashboard.
