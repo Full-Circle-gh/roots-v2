@@ -331,7 +331,7 @@
      pattern as the flash-sale composer's .fsd-scrim/.fsd-drawer. ── */
   .prof-scrim { position: fixed; inset: 0; background: var(--bg-overlay); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease-out); z-index: 1200; }
   .prof-scrim.on { opacity: 1; pointer-events: auto; }
-  .prof-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -46%) scale(.98); opacity: 0; pointer-events: none; width: min(900px, 94vw); height: min(720px, 90vh); background: var(--bg-app); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 64px rgba(17, 26, 43, .22); overflow: hidden; z-index: 1201; display: flex; flex-direction: column; transition: opacity .3s var(--ease-out), transform .3s var(--ease-out); }
+  .prof-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -46%) scale(.98); opacity: 0; pointer-events: none; width: min(720px, 95vw); height: min(580px, 86vh); background: var(--bg-app); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 64px rgba(17, 26, 43, .22); overflow: hidden; z-index: 1201; display: flex; flex-direction: column; transition: opacity .3s var(--ease-out), transform .3s var(--ease-out); }
   .prof-modal.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
   .prof-x { position: absolute; top: 14px; right: 14px; z-index: 3; width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg-pane); display: grid; place-items: center; cursor: pointer; color: var(--text-3); }
   .prof-x:hover { border-color: var(--text-3); color: var(--text-1); }

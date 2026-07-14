@@ -1247,6 +1247,18 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.9-3 3.2-4.5 6-4.5S14.1 17 15 20"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6"/><path d="M18.5 20c-.5-2-1.6-3.3-3.2-4"/></svg>
     Manage team · 团队管理
   </a>
+  <!-- Brand + Billing — moved off the profile pop-up (2026-07-14): they're
+       business identity / account, not personal. Gated to owner/admin via
+       data-cap (applyCapGates hides them otherwise). Real page links like the
+       team link above. -->
+  <a href="/backend/brand" data-cap="settings:shop" style="order:17">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.5 5 5.5.8-4 3.9.9 5.5L12 15.5 7.1 18.2 8 12.7 4 8.8 9.5 8z"/></svg>
+    Brand · 品牌
+  </a>
+  <a href="/backend/billing" data-cap="billing:view" style="order:18">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><line x1="6" y1="15" x2="10" y2="15"/></svg>
+    Billing · 账单
+  </a>
 
   <!-- Rail-fold control lives on the seam now (#railSeamFold, in the topbar) —
        the old .nav-foot chevron button was removed 2026-07-07 so the dot is the

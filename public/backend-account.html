@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>tacet · Account · 账户</title>
+<title>tacet · Profile · 个人资料</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="theme-color" content="#FBF9F4" />
 <link rel="icon" href="/tacet-favicon.svg" />
@@ -14,6 +14,8 @@
     document.documentElement.setAttribute('data-theme', (t === 'dark' || t === 'light') ? t : 'light');
     var l = localStorage.getItem('roots-admin-lang');
     document.documentElement.setAttribute('data-lang', (l === 'cn') ? 'cn' : 'en');
+    // Embedded inside the retail-admin Profile pop-up? Fill the iframe edge-to-edge.
+    if (window.self !== window.top) document.documentElement.classList.add('embedded');
   } catch (e) { document.documentElement.setAttribute('data-theme','light'); } })();
 </script>
 
@@ -50,235 +52,255 @@
     margin:0; background:var(--paper); color:var(--text);
     font-family:var(--font); font-size:15px;
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
-    display:flex; flex-direction:column; align-items:center;
-    min-height:100%; padding:30px 20px 64px;
+    display:flex; align-items:center; justify-content:center; min-height:100%; padding:28px 18px;
     transition:background .25s var(--ease), color .25s var(--ease);
   }
+  html.embedded body{ padding:0; }
   html[data-lang=en] .cn, html[data-lang=en] .sep{display:none;}
   html[data-lang=cn] .en, html[data-lang=cn] .sep{display:none;}
 
-  .shell{width:100%; max-width:420px;}
-
-  .topbar{display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 2px 24px;}
-  .back{font-size:13px; color:var(--text-2); text-decoration:none; display:inline-flex; align-items:center; gap:7px; transition:color .15s;}
-  .back:hover{color:var(--text);} .back svg{stroke:currentColor; fill:none;}
-  .topbar-r{display:flex; align-items:center; gap:6px;}
-  .icobtn{cursor:pointer; border:none; background:transparent; color:var(--text-2); padding:6px; border-radius:8px; line-height:0; transition:color .15s, background .15s;}
-  .icobtn:hover{color:var(--text); background:var(--raised);}
-  .icobtn svg{stroke:currentColor; fill:none;}
-  .langtoggle{cursor:pointer; border:none; background:transparent; font-family:inherit; font-size:13px; font-weight:500;
-    color:var(--text-2); padding:6px 8px; border-radius:8px; transition:color .15s, background .15s;}
-  .langtoggle:hover{color:var(--text); background:var(--raised);}
-
-  /* co-brand header — tacet by default; applyBrand() swaps to the tenant logo+name */
-  .head{margin:0 2px 4px;}
-  .brandrow{display:flex; align-items:center; gap:12px;}
-  .brand-mark{width:38px; height:38px; flex:none; display:flex; align-items:center; justify-content:center; color:var(--text);}
-  .brand-mark svg path{stroke:currentColor;}
-  #brandLogoTop{height:38px; width:auto; max-width:180px; border-radius:8px; display:block;}
-  .brand-name{font-family:var(--display); font-weight:300; font-size:26px; letter-spacing:.16em; line-height:1; color:var(--text);}
-  body.cobrand .brand-name{letter-spacing:.01em;}
-  .eyebrow{margin-left:auto; font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--text-4); font-weight:500;}
-
-  /* cards */
-  .stack{display:flex; flex-direction:column; gap:16px;}
-  .card{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:24px 24px 26px;
-    box-shadow:var(--shadow); animation:settle .5s var(--ease) both;}
+  /* ── card: side-rail + content pane (Layout B) ── */
+  .acct{
+    display:flex; width:min(700px, 96vw); height:min(560px, 88vh);
+    background:var(--paper); border:1px solid var(--line); border-radius:16px; overflow:hidden;
+    box-shadow:var(--shadow); animation:settle .4s var(--ease) both;
+  }
+  html.embedded .acct{ width:100%; height:100%; border:none; border-radius:0; box-shadow:none; }
   @keyframes settle{from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:none;}}
-  .card h2{margin:0 0 4px; font-size:17px; font-weight:500; letter-spacing:-.01em; color:var(--text);}
-  .lead{margin:2px 0 18px; font-size:13.5px; line-height:1.55; color:var(--text-2);}
 
-  .flabel{display:block; font-size:13px; font-weight:500; color:var(--text); margin:0 0 8px;}
-  input[type=text], input[type=password]{
+  /* rail */
+  .rail{ width:198px; flex:none; border-right:1px solid var(--line); background:var(--cream);
+    padding:20px 14px 16px; display:flex; flex-direction:column; }
+  .rail-who{ display:flex; align-items:center; gap:11px; padding:0 6px 16px; margin-bottom:10px; border-bottom:1px solid var(--line); }
+  .who-av{ width:40px; height:40px; flex:none; border-radius:50%; overflow:hidden; display:grid; place-items:center;
+    background:var(--sage-tint); color:var(--sage-ink); font-size:15px; font-weight:500; text-transform:uppercase; }
+  .who-av img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .who-meta{ min-width:0; }
+  .who-name{ font-size:14px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .who-role{ font-size:11px; color:var(--text-2); margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+  .nav{ display:flex; flex-direction:column; gap:2px; }
+  .navbtn{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; font:500 13.5px var(--font);
+    color:var(--text-2); background:none; border:none; padding:9px 10px; border-radius:9px; cursor:pointer; }
+  .navbtn svg{ width:16px; height:16px; stroke:currentColor; fill:none; opacity:.85; flex:none; }
+  .navbtn:hover{ background:var(--raised); color:var(--text); }
+  .navbtn.on{ background:var(--surface); color:var(--text); box-shadow:0 1px 2px rgba(17,26,43,.05); }
+
+  .rail-foot{ margin-top:auto; padding-top:14px; display:flex; align-items:center; gap:6px; }
+  .icobtn{ cursor:pointer; border:none; background:transparent; color:var(--text-2); padding:6px; border-radius:8px; line-height:0; transition:color .15s, background .15s; }
+  .icobtn:hover{ color:var(--text); background:var(--raised); }
+  .icobtn svg{ stroke:currentColor; fill:none; }
+  .langtoggle{ cursor:pointer; border:none; background:transparent; font-family:inherit; font-size:12.5px; font-weight:500;
+    color:var(--text-2); padding:6px 8px; border-radius:8px; transition:color .15s, background .15s; }
+  .langtoggle:hover{ color:var(--text); background:var(--raised); }
+  .backbtn{ margin-left:auto; display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);
+    background:none; border:none; cursor:pointer; font-family:inherit; padding:6px; border-radius:8px; }
+  .backbtn:hover{ color:var(--text); }
+  .backbtn svg{ width:13px; height:13px; stroke:currentColor; fill:none; }
+
+  /* pane */
+  .pane{ flex:1; min-width:0; overflow-y:auto; padding:30px 30px 34px; }
+  .pane h1{ font-family:var(--font); font-size:18px; font-weight:500; letter-spacing:-.01em; margin:0 0 4px; }
+  .pane .lead{ font-size:13px; color:var(--text-2); margin:0 0 22px; line-height:1.55; }
+  .tabpane{ display:none; }
+  .tabpane.on{ display:block; animation:fade .2s var(--ease) both; }
+  @keyframes fade{from{opacity:0;} to{opacity:1;}}
+
+  /* profile tab */
+  .idrow{ display:flex; align-items:center; gap:16px; margin-bottom:6px; }
+  .av-wrap{ position:relative; flex:none; }
+  .av-lg{ width:60px; height:60px; border-radius:50%; overflow:hidden; display:grid; place-items:center;
+    background:var(--sage-tint); color:var(--sage-ink); font-size:22px; font-weight:500; text-transform:uppercase; user-select:none; }
+  .av-lg img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .av-cam{ position:absolute; bottom:-2px; right:-2px; width:24px; height:24px; border-radius:50%; background:var(--ink);
+    color:#fff; display:grid; place-items:center; cursor:pointer; border:2px solid var(--paper); }
+  .av-cam svg{ width:12px; height:12px; stroke:currentColor; fill:none; }
+  .id-main{ min-width:0; }
+  .id-nameline{ display:flex; align-items:center; gap:8px; }
+  .id-name{ font-size:19px; font-weight:500; letter-spacing:-.01em; }
+  .id-editbtn{ background:none; border:none; color:var(--text-4); cursor:pointer; padding:4px; border-radius:6px; display:inline-flex; }
+  .id-editbtn:hover{ color:var(--text-2); background:var(--raised); }
+  .id-editbtn svg{ width:13px; height:13px; stroke:currentColor; fill:none; }
+  .id-sub{ font-size:12.5px; color:var(--text-2); margin-top:3px; display:flex; align-items:center; gap:6px; }
+  .id-sub .lk{ width:11px; height:11px; stroke:var(--text-4); fill:none; flex:none; }
+  .id-nameform{ display:none; gap:8px; align-items:center; margin-top:2px; }
+  .idrow.editing .id-nameline{ display:none; }
+  .idrow.editing .id-nameform{ display:flex; }
+  .id-nameform input{ font:inherit; font-size:15px; padding:7px 10px; border:1px solid var(--dusk); border-radius:8px; outline:none; width:170px; background:var(--surface); color:var(--text); }
+  .id-photolink{ font-size:12px; color:var(--text-2); background:none; border:none; cursor:pointer; padding:0; text-decoration:underline; text-underline-offset:2px; margin-top:10px; }
+  .id-photolink:hover{ color:var(--brick); }
+
+  /* forms / inputs */
+  .flabel{ display:block; font-size:12px; font-weight:500; color:var(--text-2); margin:0 0 6px; }
+  input[type=text], input[type=password], input[type=email], input[type=tel]{
     width:100%; background:var(--surface); color:var(--text);
-    border:1px solid var(--line); border-radius:8px; padding:11px 13px; font-size:15px; font-family:inherit;
-    transition:border-color .16s;}
-  input::placeholder{color:var(--text-4);}
-  input:hover{border-color:var(--text-2);}
-  input:focus{outline:none; border-color:var(--dusk);}
-  .field{margin-bottom:16px;} .field:last-of-type{margin-bottom:0;}
+    border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-size:14px; font-family:inherit;
+    transition:border-color .16s; }
+  input::placeholder{ color:var(--text-4); }
+  input:hover{ border-color:var(--text-2); }
+  input:focus{ outline:none; border-color:var(--dusk); }
+  .field{ margin-bottom:15px; }
 
-  /* avatar / logo row */
-  .avatarrow{display:flex; align-items:center; gap:16px; margin:6px 0;}
-  .avatar-circle{width:60px; height:60px; flex:none; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center;
-    background:var(--sage-tint); color:var(--sage-ink); font-size:22px; font-weight:500; text-transform:uppercase; user-select:none;}
-  .avatar-circle img{width:100%; height:100%; object-fit:cover; display:block;}
-  .avatar-actions{display:flex; flex-wrap:wrap; gap:9px;}
+  .sect-h{ font-size:11px; font-weight:500; letter-spacing:.09em; text-transform:uppercase; color:var(--text-2); margin:0 0 14px; }
 
-  /* editable name */
-  .namebar{margin:18px 0 0;}
-  .nameedit{display:flex; gap:9px; align-items:stretch;}
-  .nameedit input{flex:1; min-width:0;}
+  /* buttons — ink primary (dusk is reserved for automation) */
+  .btn-ink{ cursor:pointer; border:none; background:var(--ink); color:#fff;
+    font-family:inherit; font-size:14px; font-weight:500; padding:11px 16px; border-radius:8px; position:relative;
+    --spin-track:rgba(255,255,255,.4); --spin-head:#fff; transition:background .18s; }
+  [data-theme="dark"] .btn-ink{ background:#EAE7DF; color:var(--ink); --spin-head:var(--ink); }
+  .btn-ink:hover{ background:#24304A; }
+  [data-theme="dark"] .btn-ink:hover{ background:#fff; }
+  .btn-ink:disabled{ cursor:default; opacity:.7; }
+  .btn-sec{ cursor:pointer; white-space:nowrap; position:relative;
+    background:transparent; color:var(--text); border:1px solid var(--line); border-radius:8px;
+    padding:0 15px; height:38px; display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    font-family:inherit; font-size:13px; font-weight:500;
+    --spin-track:var(--line); --spin-head:var(--text-2); transition:border-color .15s, color .15s, background .15s; }
+  .btn-sec:hover{ border-color:var(--text-2); }
+  .btn-sec:disabled{ cursor:default; opacity:.55; }
 
-  /* read-only identity */
-  .ident{margin:18px 0 0; border:1px solid var(--line); border-radius:12px; background:var(--raised); overflow:hidden;}
-  .ident .row{display:flex; align-items:baseline; justify-content:space-between; gap:16px; padding:12px 15px;}
-  .ident .row + .row{border-top:1px solid var(--line);}
-  .ident dt{font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-4); font-weight:500; white-space:nowrap;}
-  .ident dd{margin:0; font-size:14px; color:var(--text); text-align:right; word-break:break-word;}
-  .rohint{display:flex; align-items:center; gap:7px; margin:11px 2px 0; font-size:11.5px; color:var(--text-2); line-height:1.5;}
-  .rohint svg{flex:none; stroke:var(--text-4); fill:none; margin-top:1px;}
+  .loading{ color:transparent !important; pointer-events:none; }
+  .loading::after{ content:""; position:absolute; top:50%; left:50%; width:15px; height:15px; margin:-7.5px 0 0 -7.5px;
+    border:2px solid var(--spin-track); border-top-color:var(--spin-head); border-radius:50%; animation:spin .7s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
 
   /* messages */
-  .msg{display:none; align-items:center; gap:8px; font-size:12.5px; line-height:1.4; border-radius:8px; padding:10px 12px; margin-top:12px;}
-  .msg.show{display:flex;}
-  .msg.ok{color:var(--sage-ink); background:var(--sage-tint); border:1px solid var(--sage);}
-  .msg.err{color:var(--brick); background:var(--brick-tint); border:1px solid var(--brick);}
-  .msg::before{content:""; width:6px; height:6px; border-radius:50%; flex:none; background:currentColor; opacity:.7;}
+  .msg{ display:none; align-items:center; gap:8px; font-size:12.5px; line-height:1.4; border-radius:8px; padding:9px 12px; margin-top:12px; }
+  .msg.show{ display:flex; }
+  .msg.ok{ color:var(--sage-ink); background:var(--sage-tint); border:1px solid var(--sage); }
+  .msg.err{ color:var(--brick); background:var(--brick-tint); border:1px solid var(--brick); }
+  .msg::before{ content:""; width:6px; height:6px; border-radius:50%; flex:none; background:currentColor; opacity:.7; }
 
-  /* default-password warning (amber) */
-  .warn{display:none; align-items:flex-start; gap:9px; margin:0 0 18px; font-size:12.5px; line-height:1.5;
-    color:var(--amber-ink); background:var(--amber-tint); border:1px solid var(--amber); border-radius:8px; padding:11px 13px;}
-  .warn.show{display:flex;}
-  .warn svg{flex:none; margin-top:1px; stroke:var(--amber); fill:none;}
+  .warn{ display:none; align-items:flex-start; gap:9px; margin:0 0 16px; font-size:12.5px; line-height:1.5;
+    color:var(--amber-ink); background:var(--amber-tint); border:1px solid var(--amber); border-radius:8px; padding:10px 12px; }
+  .warn.show{ display:flex; }
+  .warn svg{ flex:none; margin-top:1px; stroke:var(--amber); fill:none; }
 
-  /* buttons */
-  .btn-primary{margin-top:18px; width:100%; border:none; cursor:pointer; background:var(--dusk); color:#fff;
-    font-family:inherit; font-size:15px; font-weight:500; padding:13px; border-radius:8px; position:relative;
-    --spin-track:rgba(255,255,255,.4); --spin-head:#fff; transition:background .18s;}
-  .btn-primary:hover{background:var(--dusk-hi);}
-  .btn-primary:focus-visible{outline:2px solid var(--dusk); outline-offset:2px;}
-  .btn-primary:disabled{cursor:default; opacity:.7;}
-  .btn-sec{flex:none; cursor:pointer; white-space:nowrap; position:relative;
-    background:transparent; color:var(--text); border:1px solid var(--line); border-radius:8px;
-    padding:0 16px; height:40px; display:inline-flex; align-items:center; justify-content:center; gap:7px;
-    font-family:inherit; font-size:13.5px; font-weight:500;
-    --spin-track:var(--line); --spin-head:var(--text-2); transition:border-color .15s, color .15s, background .15s;}
-  .btn-sec:hover{border-color:var(--text-2);}
-  .btn-sec:focus-visible{outline:2px solid var(--dusk); outline-offset:2px;}
-  .btn-sec:disabled{cursor:default; opacity:.55;}
-  .btn-sec.block{width:100%;}
-  .btn-danger{width:100%; cursor:pointer; background:transparent; color:var(--brick); border:1px solid var(--line);
-    border-radius:8px; padding:12px; font-family:inherit; font-size:13.5px; font-weight:500; transition:border-color .15s, background .15s;}
-  .btn-danger:hover{border-color:var(--brick); background:var(--brick-tint);}
+  /* devices */
+  .dev{ display:flex; align-items:center; gap:12px; padding:11px 2px; }
+  .dev + .dev{ border-top:1px solid var(--line); }
+  .dev-ico{ width:34px; height:34px; border-radius:9px; background:var(--raised); display:grid; place-items:center; flex:none; color:var(--text-2); }
+  .dev-ico svg{ width:16px; height:16px; stroke:currentColor; fill:none; }
+  .dev-m{ min-width:0; flex:1; }
+  .dev-n{ font-size:13.5px; font-weight:500; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .dev-badge{ font-size:10.5px; font-weight:500; color:var(--sage-ink); background:var(--sage-tint); border-radius:999px; padding:2px 8px; }
+  .dev-s{ font-size:12px; color:var(--text-2); margin-top:2px; }
+  .dev-out{ flex:none; font:500 12.5px inherit; color:var(--text-2); background:none; border:none; cursor:pointer; padding:6px 9px; border-radius:7px; }
+  .dev-out:hover{ color:var(--brick); background:var(--brick-tint); }
+  .dev-foot{ margin-top:14px; padding-top:14px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; }
+  .dev-clear{ font:500 12.5px inherit; color:var(--text-2); background:none; border:none; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
+  .dev-clear:hover{ color:var(--brick); }
+  .dev-empty{ font-size:13px; color:var(--text-2); padding:16px 2px; }
 
-  .loading{color:transparent !important; pointer-events:none;}
-  .loading::after{content:""; position:absolute; top:50%; left:50%; width:16px; height:16px; margin:-8px 0 0 -8px;
-    border:2px solid var(--spin-track); border-top-color:var(--spin-head); border-radius:50%; animation:spin .7s linear infinite;}
-  @keyframes spin{to{transform:rotate(360deg);}}
+  /* access */
+  .acc-note{ display:flex; align-items:flex-start; gap:11px; background:var(--sage-tint); border:1px solid var(--sage);
+    border-radius:12px; padding:14px 16px; font-size:13px; color:var(--sage-ink); line-height:1.55; }
+  .acc-note svg{ flex:none; width:18px; height:18px; stroke:currentColor; fill:none; margin-top:1px; }
+  .acc-grp{ margin-bottom:20px; }
+  .acc-grp:last-child{ margin-bottom:0; }
+  .acc-grp h2{ font-size:11px; font-weight:500; letter-spacing:.08em; text-transform:uppercase; color:var(--text-2); margin:0 0 10px; }
+  .acc-list{ display:flex; flex-direction:column; gap:8px; }
+  .acc-item{ display:flex; align-items:center; gap:9px; font-size:13px; color:var(--text); }
+  .acc-item svg{ width:14px; height:14px; stroke:var(--sage-ink); fill:none; flex:none; }
+  .acc-scope{ margin-top:6px; font-size:12.5px; color:var(--amber-ink); background:var(--amber-tint); border:1px solid var(--amber); border-radius:8px; padding:9px 12px; }
 
-  .foot{margin:24px 2px 0; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-4); text-align:center;}
-
-  /* two balanced columns on wide viewports */
-  @media (min-width:781px){
-    body.layout-grid .shell{max-width:864px;}
-    body.layout-grid .stack{display:block; column-count:2; column-gap:18px;}
-    body.layout-grid .stack .card{margin:0 0 18px; break-inside:avoid;}
-  }
-  @media (max-width:440px){
-    .nameedit{flex-direction:column;}
-    .btn-sec{width:100%; padding:12px;}
-  }
+  .skel{ color:var(--text-4); font-size:13px; padding:12px 2px; }
 </style>
 </head>
-<body class="layout-grid">
+<body>
 
-  <main class="shell">
+  <div class="acct">
 
-    <div class="topbar">
-      <a class="back" id="backLink" href="/retail-admin"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">Backend</span><span class="cn">后台</span></a>
-      <div class="topbar-r">
+    <!-- ── rail ── -->
+    <aside class="rail">
+      <div class="rail-who">
+        <span class="who-av" id="whoAv" aria-hidden="true"></span>
+        <div class="who-meta">
+          <div class="who-name" id="whoName">—</div>
+          <div class="who-role" id="whoRole"></div>
+        </div>
+      </div>
+      <nav class="nav">
+        <button class="navbtn on" data-tab="profile" type="button">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
+          <span class="en">Profile</span><span class="cn">个人资料</span>
+        </button>
+        <button class="navbtn" data-tab="security" type="button">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <span class="en">Security</span><span class="cn">安全</span>
+        </button>
+        <button class="navbtn" data-tab="devices" type="button">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>
+          <span class="en">Devices</span><span class="cn">设备</span>
+        </button>
+        <button class="navbtn" data-tab="access" type="button">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/></svg>
+          <span class="en">Access</span><span class="cn">权限</span>
+        </button>
+      </nav>
+      <div class="rail-foot">
         <button type="button" id="themeToggle" class="icobtn" aria-label="Theme">
           <svg width="17" height="17" viewBox="0 0 20 20" id="themeIcon"><circle cx="10" cy="10" r="4.2" stroke-width="1.4"/><path d="M10 1.5v2.2M10 16.3v2.2M18.5 10h-2.2M3.7 10H1.5M16 4l-1.6 1.6M5.6 14.4 4 16M16 16l-1.6-1.6M5.6 5.6 4 4" stroke-width="1.4" stroke-linecap="round"/></svg>
         </button>
         <button type="button" id="langToggle" class="langtoggle">中文</button>
+        <button type="button" id="backLink" class="backbtn">
+          <svg viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="en">Close</span><span class="cn">关闭</span>
+        </button>
       </div>
-    </div>
+    </aside>
 
-    <header class="head">
-      <div class="brandrow">
-        <span class="brand-mark" aria-hidden="true">
-          <svg width="30" height="20" viewBox="0 0 30 20" fill="none">
-            <path d="M1 10c3 0 3-6 6-6s3 12 6 12 3-9 5-9h6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="27" cy="7" r="1.7" fill="#6E67AF" stroke="none"/>
-          </svg>
-        </span>
-        <img id="brandLogoTop" alt="" hidden />
-        <span class="brand-name word" data-no-i18n>tacet</span>
-        <span class="eyebrow"><span class="en">Account</span><span class="cn">账户</span></span>
-      </div>
-    </header>
+    <!-- ── pane ── -->
+    <section class="pane">
 
-    <div class="stack">
+      <!-- Profile -->
+      <div class="tabpane on" data-pane="profile">
+        <h1><span class="en">Profile</span><span class="cn">个人资料</span></h1>
+        <p class="lead"><span class="en">Your name and photo, shown across the backend.</span><span class="cn">您的姓名与照片，展示在后台各处。</span></p>
 
-      <!-- Operator identity -->
-      <section class="card">
-        <h2><span class="en">Operator</span><span class="cn">操作员</span></h2>
-
-        <div class="avatarrow">
-          <span class="avatar-circle" id="avatarCircle" aria-hidden="true"></span>
-          <div class="avatar-actions">
-            <button type="button" id="avatarPick" class="btn-sec"><span class="en">Change photo</span><span class="cn">更换照片</span></button>
-            <button type="button" id="avatarClear" class="btn-sec" hidden><span class="en">Remove</span><span class="cn">移除</span></button>
+        <div class="idrow" id="idrow">
+          <div class="av-wrap">
+            <span class="av-lg" id="avatarCircle" aria-hidden="true"></span>
+            <span class="av-cam" id="avatarPick" title="Change photo · 更换照片">
+              <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4h4l1 3h2a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h2l1-3h4"/><circle cx="12" cy="12" r="3.4"/></svg>
+            </span>
             <input type="file" id="avatarFile" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
           </div>
+          <div class="id-main">
+            <div class="id-nameline">
+              <span class="id-name" id="idName">—</span>
+              <button class="id-editbtn" id="nameEditBtn" title="Edit name · 修改姓名" type="button">
+                <svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+              </button>
+            </div>
+            <form class="id-nameform" id="nameForm" novalidate>
+              <input id="nameInput" type="text" autocomplete="name" spellcheck="false" placeholder="Your display name" />
+              <button type="button" class="btn-sec" id="nameCancel"><span class="en">Cancel</span><span class="cn">取消</span></button>
+              <button type="submit" class="btn-ink" id="nameBtn" style="padding:7px 14px;font-size:13px;"><span class="en">Save</span><span class="cn">保存</span></button>
+            </form>
+            <div class="id-sub" title="Set by your administrator · 由管理员设置">
+              <svg class="lk" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+              <span id="idSub">—</span>
+            </div>
+          </div>
         </div>
+        <button type="button" id="avatarClear" class="id-photolink" hidden><span class="en">Remove photo</span><span class="cn">移除照片</span></button>
+        <div class="msg" id="nameMsg" role="status"><span></span></div>
         <div class="msg" id="avatarMsg" role="status"><span></span></div>
+      </div>
 
-        <form id="nameForm" class="namebar" novalidate>
-          <label class="flabel" for="nameInput"><span class="en">Name</span><span class="cn">姓名</span></label>
-          <div class="nameedit">
-            <input id="nameInput" type="text" autocomplete="name" spellcheck="false" placeholder="Your display name" />
-            <button type="submit" id="nameBtn" class="btn-sec"><span class="en">Save</span><span class="cn">保存</span></button>
-          </div>
-          <div class="msg" id="nameMsg" role="status"><span></span></div>
-        </form>
-
-        <dl id="ident" class="ident"></dl>
-        <p class="rohint">
-          <svg width="13" height="13" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-          <span class="en">Read-only — set by your administrator</span><span class="cn">只读 — 由管理员设置</span>
-        </p>
-      </section>
-
-      <!-- Brand (co-brand identity) — owner/admin only; revealed in hydrate(). -->
-      <section class="card" id="brandCard" hidden>
-        <h2><span class="en">Brand</span><span class="cn">品牌</span></h2>
-        <p class="lead"><span class="en">Your logo and name lead the admin, sign-in and customer emails. Everything else keeps the tacet look.</span><span class="cn">您的徽标与名称将展示在后台、登录页与顾客邮件上。其余部分保持 tacet 外观。</span></p>
-
-        <div class="avatarrow">
-          <img id="brandLogoPrev" alt="" style="height:38px;max-width:150px;object-fit:contain;display:none" />
-          <div class="avatar-actions">
-            <button type="button" id="brandPick" class="btn-sec"><span class="en">Upload logo</span><span class="cn">上传徽标</span></button>
-            <button type="button" id="brandClear" class="btn-sec" hidden><span class="en">Remove</span><span class="cn">移除</span></button>
-            <input type="file" id="brandFile" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden />
-          </div>
-        </div>
-        <div class="msg" id="brandMsg" role="status"><span></span></div>
-
-        <form id="brandNameForm" class="namebar" novalidate>
-          <label class="flabel" for="brandNameInput"><span class="en">Brand name</span><span class="cn">品牌名称</span></label>
-          <div class="nameedit">
-            <input id="brandNameInput" type="text" spellcheck="false" maxlength="60" placeholder="Your brand" />
-            <button type="submit" id="brandNameBtn" class="btn-sec"><span class="en">Save</span><span class="cn">保存</span></button>
-          </div>
-          <div class="msg" id="brandNameMsg" role="status"><span></span></div>
-        </form>
-
-        <p class="rohint">
-          <svg width="13" height="13" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
-          <span class="en">A small “runs on tacet” credit stays — removed on the Studio plan.</span><span class="cn">页面保留小字“runs on tacet”——升级 Studio 套餐后移除。</span>
-        </p>
-      </section>
-
-      <!-- Subscription -->
-      <section class="card">
-        <h2><span class="en">Subscription</span><span class="cn">订阅</span></h2>
-        <p class="lead"><span class="en">View your plan, renewal date, and invoices.</span><span class="cn">查看套餐、续订日期与发票。</span></p>
-        <a class="btn-sec block" href="/backend/billing"><span class="en">Billing &amp; plans →</span><span class="cn">账单与套餐 →</span></a>
-      </section>
-
-      <!-- Change password -->
-      <section class="card">
-        <h2><span class="en">Change password</span><span class="cn">修改密码</span></h2>
-        <p class="lead"><span class="en">Minimum 10 characters.</span><span class="cn">至少 10 位。</span></p>
+      <!-- Security -->
+      <div class="tabpane" data-pane="security">
+        <h1><span class="en">Security</span><span class="cn">安全</span></h1>
+        <p class="lead"><span class="en">Change the password you sign in with.</span><span class="cn">修改您的登录密码。</span></p>
 
         <div class="warn" id="defaultWarn" role="alert">
           <svg width="15" height="15" viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 2.5 20h19L12 3z"/><path d="M12 10v4"/><path d="M12 17v.2"/></svg>
           <span><span class="en">You're still using the default password — please set a new one.</span><span class="cn">您仍在使用默认密码，请设置新密码。</span></span>
         </div>
 
-        <form id="pwForm" novalidate>
+        <h2 class="sect-h"><span class="en">Change password</span><span class="cn">修改密码</span></h2>
+        <form id="pwForm" novalidate style="max-width:340px;">
           <div class="field">
             <label class="flabel" for="cur"><span class="en">Current password</span><span class="cn">当前密码</span></label>
             <input id="cur" type="password" autocomplete="current-password" placeholder="••••••••" />
@@ -291,371 +313,292 @@
             <label class="flabel" for="nw2"><span class="en">Confirm new password</span><span class="cn">确认新密码</span></label>
             <input id="nw2" type="password" autocomplete="new-password" placeholder="••••••••" />
           </div>
+          <p class="lead" style="margin:-4px 0 14px;font-size:12px;"><span class="en">Minimum 10 characters.</span><span class="cn">至少 10 位。</span></p>
           <div class="msg" id="msg" role="status"><span></span></div>
-          <button type="submit" id="pwBtn" class="btn-primary"><span class="en">Update password</span><span class="cn">更新密码</span></button>
+          <button type="submit" id="pwBtn" class="btn-ink"><span class="en">Update password</span><span class="cn">更新密码</span></button>
         </form>
-      </section>
+      </div>
 
-      <!-- Session -->
-      <section class="card">
-        <h2><span class="en">Session</span><span class="cn">会话</span></h2>
-        <p class="lead"><span class="en">Sign out of the backend on this device.</span><span class="cn">在此设备上登出后台。</span></p>
-        <button type="button" id="logoutBtn" class="btn-danger"><span class="en">Sign out</span><span class="cn">退出登录</span></button>
-      </section>
+      <!-- Devices -->
+      <div class="tabpane" data-pane="devices">
+        <h1><span class="en">Devices</span><span class="cn">设备</span></h1>
+        <p class="lead"><span class="en">Where you're signed in. Sign out anything you don't recognize.</span><span class="cn">您的登录设备。如有不认识的设备，请将其登出。</span></p>
+        <div id="devList"><div class="skel"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
+      </div>
 
-    </div>
+      <!-- Access -->
+      <div class="tabpane" data-pane="access">
+        <h1><span class="en">Access</span><span class="cn">权限</span></h1>
+        <p class="lead"><span class="en">What your role lets you do. Set by your administrator.</span><span class="cn">您的角色可执行的操作。由管理员设置。</span></p>
+        <div id="accBody"><div class="skel"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
+      </div>
 
-    <div class="foot"><span class="en">Roots · Account</span><span class="cn">Roots · 账户</span></div>
-
-  </main>
+    </section>
+  </div>
 
 <script>
-  /* Account controller — loads operator identity, co-brands the header per tenant,
-     edits display name + photo + brand, changes password, and signs out. */
+  /* Profile controller — tabbed. Loads identity, edits name + photo, changes
+     password, lists signed-in devices, and shows a read-only access summary.
+     Reused both standalone (/backend/account) and embedded in the retail-admin
+     Profile pop-up (iframe). */
   (function () {
     var LANG_KEY = 'roots-admin-lang';
     var THEME_KEY = 'retail-admin-theme';
     var lang = document.documentElement.getAttribute('data-lang') === 'cn' ? 'cn' : 'en';
     function L(en, cn){ return lang === 'cn' ? cn : en; }
     var lastUser = null;
-    var brandApplied = false;
+    var loaded = { devices:false, access:false };
 
-    var ident      = document.getElementById('ident');
-    var nameForm   = document.getElementById('nameForm');
-    var nameInput  = document.getElementById('nameInput');
-    var nameBtn    = document.getElementById('nameBtn');
-    var nameMsg    = document.getElementById('nameMsg');
-    var defaultWarn= document.getElementById('defaultWarn');
-    var pwForm     = document.getElementById('pwForm');
-    var pwBtn      = document.getElementById('pwBtn');
-    var msg        = document.getElementById('msg');
-    var avatarCircle = document.getElementById('avatarCircle');
-    var avatarPick   = document.getElementById('avatarPick');
-    var avatarClear  = document.getElementById('avatarClear');
-    var avatarFile   = document.getElementById('avatarFile');
-    var avatarMsg    = document.getElementById('avatarMsg');
-    var brandCard      = document.getElementById('brandCard');
-    var brandLogoPrev  = document.getElementById('brandLogoPrev');
-    var brandPick      = document.getElementById('brandPick');
-    var brandClear     = document.getElementById('brandClear');
-    var brandFile      = document.getElementById('brandFile');
-    var brandMsg       = document.getElementById('brandMsg');
-    var brandNameForm  = document.getElementById('brandNameForm');
-    var brandNameInput = document.getElementById('brandNameInput');
-    var brandNameBtn   = document.getElementById('brandNameBtn');
-    var brandInited    = false;
+    var $ = function(id){ return document.getElementById(id); };
+    function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function (c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+    function setMsg(el, kind, text){ el.classList.remove('ok','err','show'); el.querySelector('span').textContent = text || ''; if (kind) el.classList.add(kind,'show'); }
 
     function initials(u){
       var s = String((u && (u.displayName || u.username)) || '').trim();
       if (!s) return '?';
-      if (/^[\x00-\x7F]+$/.test(s)) {
-        var p = s.split(/\s+/).filter(Boolean);
-        return ((p[0] ? p[0][0] : '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '?';
-      }
+      if (/^[\x00-\x7F]+$/.test(s)) { var p = s.split(/\s+/).filter(Boolean); return ((p[0]?p[0][0]:'') + (p.length>1?p[p.length-1][0]:'')).toUpperCase() || '?'; }
       return Array.from(s)[0];
     }
     function renderAvatar(u){
-      if (u && u.avatarUrl) {
-        avatarCircle.innerHTML = '';
-        var img = document.createElement('img');
-        img.src = u.avatarUrl; img.alt = '';
-        avatarCircle.appendChild(img);
-        avatarClear.hidden = false;
-      } else {
-        avatarCircle.textContent = initials(u || {});
-        avatarClear.hidden = true;
-      }
-    }
-    function esc(s){
-      return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
-        return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c];
+      [$('avatarCircle'), $('whoAv')].forEach(function(el){
+        if (!el) return;
+        if (u && u.avatarUrl) { el.innerHTML=''; var img=document.createElement('img'); img.src=u.avatarUrl; img.alt=''; el.appendChild(img); }
+        else { el.textContent = initials(u || {}); }
       });
-    }
-    function setMsg(el, kind, text){
-      el.classList.remove('ok', 'err', 'show');
-      el.querySelector('span').textContent = text || '';
-      if (kind) { el.classList.add(kind, 'show'); }
+      $('avatarClear').hidden = !(u && u.avatarUrl);
     }
 
-    // Co-brand the header — tacet by default; a tenant takes over only once
-    // they've uploaded a LOGO (mirrors the admin's applyBrand rule).
-    function applyBrand(tenant){
-      if (!tenant || brandApplied) return;
-      var name = (tenant.brand || '').trim();
-      var logoUrl = tenant.brandLogoUrl || null;
-      var markUrl = tenant.brandMarkUrl || null;
-      if (!logoUrl) return;                          // stay tacet
-      brandApplied = true;
-      if (name) document.title = name + ' · Account';
-      if (markUrl) { var f = document.querySelector('link[rel=icon]'); if (f) f.href = markUrl; }
-      var img = document.getElementById('brandLogoTop');
-      var svg = document.querySelector('.brand-mark');
-      var nameEl = document.querySelector('.brand-name');
-      if (nameEl && name) nameEl.textContent = name;
-      if (img) {
-        img.onload = function (){ img.hidden = false; if (svg) svg.hidden = true; };
-        img.onerror = function (){ img.hidden = true; if (svg) svg.hidden = false; };
-        img.src = markUrl || logoUrl;
-      }
-      document.body.classList.add('cobrand');
-    }
-
-    function renderIdent(rows){
-      ident.innerHTML = rows.map(function (r) {
-        return '<div class="row"><dt>' + r[0] + '</dt><dd>' + esc(r[1] || '—') + '</dd></div>';
-      }).join('');
+    function roleLabel(role){
+      var m = { owner:['Owner','负责人'], admin:['Admin','管理员'], staff:['Staff','员工'], store_manager:['Store manager','店长'],
+        warehouse:['Warehouse','仓库'], customer_service:['Customer service','客服'], dispatch:['Dispatch','配送调度'],
+        manager:['Manager','经理'], marketing:['Marketing','市场'], fulfillment:['Fulfilment','履约'], channel:['Channel operator','渠道操作员'] };
+      var pair = m[role] || [role || 'Operator', role || '操作员'];
+      return L(pair[0], pair[1]);
     }
 
     function hydrate(u){
       lastUser = u;
       var tenant = u.tenant || {};
-      if (document.activeElement !== nameInput) {
-        nameInput.value = u.displayName || u.username || '';
-      }
-      renderIdent([
-        [L('Username', '用户名'), u.username],
-        [L('Role', '角色'),       u.role],
-        [L('Company', '公司'),    tenant.brand || tenant.name]
-      ]);
+      var company = tenant.brand || tenant.name || '';
+      var name = u.displayName || u.username || '—';
+      $('whoName').textContent = name;
+      $('idName').textContent = name;
+      if (document.activeElement !== $('nameInput')) $('nameInput').value = u.displayName || u.username || '';
+      var roleStr = roleLabel(u.role) + (company ? ' · ' + company : '');
+      $('whoRole').textContent = roleStr;
+      $('idSub').textContent = roleStr;
       renderAvatar(u);
-      applyBrand(tenant);
-      if (u.role === 'owner' || u.role === 'admin') { brandCard.hidden = false; initBrand(); }
-      if (u.mustChangePassword || u.defaultPassword) { defaultWarn.classList.add('show'); }
+      if (u.mustChangePassword || u.defaultPassword) $('defaultWarn').classList.add('show');
     }
 
-    fetch('/api/backend/me', { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (j) {
-        if (!j || !j.user) { location.replace('/backend/login'); return; }
-        hydrate(j.user);
-      })
-      .catch(function () { location.replace('/backend/login'); });
+    fetch('/api/backend/me', { credentials:'same-origin' })
+      .then(function(r){ return r.json(); })
+      .then(function(j){ if (!j || !j.user) { location.replace('/backend/login'); return; } hydrate(j.user); })
+      .catch(function(){ location.replace('/backend/login'); });
 
-    /* ── Edit display name → PUT /api/backend/profile ── */
-    nameForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      setMsg(nameMsg, null, '');
-      var name = nameInput.value.trim();
-      if (!name) { setMsg(nameMsg, 'err', L('Enter a display name', '请输入显示名称')); return; }
+    /* ── tab switching ── */
+    function showTab(tab){
+      document.querySelectorAll('.navbtn').forEach(function(b){ b.classList.toggle('on', b.dataset.tab === tab); });
+      document.querySelectorAll('.tabpane').forEach(function(p){ p.classList.toggle('on', p.dataset.pane === tab); });
+      if (tab === 'devices' && !loaded.devices) loadDevices();
+      if (tab === 'access'  && !loaded.access)  loadAccess();
+    }
+    document.querySelectorAll('.navbtn').forEach(function(b){ b.addEventListener('click', function(){ showTab(b.dataset.tab); }); });
 
-      nameBtn.disabled = true; nameBtn.classList.add('loading');
-      fetch('/api/backend/profile', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ display_name: name })
-      })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-          nameBtn.disabled = false; nameBtn.classList.remove('loading');
+    /* ── name edit (inline) ── */
+    $('nameEditBtn').addEventListener('click', function(){ $('idrow').classList.add('editing'); $('nameInput').focus(); $('nameInput').select(); });
+    $('nameCancel').addEventListener('click', function(){ $('idrow').classList.remove('editing'); setMsg($('nameMsg'), null, ''); if (lastUser) $('nameInput').value = lastUser.displayName || lastUser.username || ''; });
+    $('nameForm').addEventListener('submit', function(e){
+      e.preventDefault(); setMsg($('nameMsg'), null, '');
+      var name = $('nameInput').value.trim();
+      if (!name) { setMsg($('nameMsg'), 'err', L('Enter a display name','请输入显示名称')); return; }
+      $('nameBtn').disabled = true; $('nameBtn').classList.add('loading');
+      fetch('/api/backend/profile', { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ display_name:name }) })
+        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
+        .then(function(res){
+          $('nameBtn').disabled = false; $('nameBtn').classList.remove('loading');
           if (res.ok && res.data && res.data.success) {
-            nameInput.value = res.data.displayName || name;
-            setMsg(nameMsg, 'ok', L('Saved', '已保存'));
-          } else {
-            setMsg(nameMsg, 'err', (res.data && res.data.error) || L('Couldn’t save — please try again', '保存失败，请重试'));
-          }
+            if (lastUser) { lastUser.displayName = res.data.displayName || name; hydrate(lastUser); }
+            $('idrow').classList.remove('editing');
+            setMsg($('nameMsg'), 'ok', L('Saved','已保存'));
+          } else { setMsg($('nameMsg'), 'err', (res.data && res.data.error) || L('Couldn’t save — please try again','保存失败，请重试')); }
         })
-        .catch(function () {
-          nameBtn.disabled = false; nameBtn.classList.remove('loading');
-          setMsg(nameMsg, 'err', L('Network error — please try again', '网络错误，请重试'));
-        });
+        .catch(function(){ $('nameBtn').disabled = false; $('nameBtn').classList.remove('loading'); setMsg($('nameMsg'), 'err', L('Network error — please try again','网络错误，请重试')); });
     });
 
-    /* ── Avatar: pick → downscale to a 256px square → PUT /api/backend/avatar ── */
+    /* ── avatar: pick → 256px square → PUT /api/backend/avatar ── */
     function saveAvatar(dataUrl){
-      avatarPick.disabled = true; avatarPick.classList.add('loading');
-      setMsg(avatarMsg, null, '');
-      fetch('/api/backend/avatar', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ avatar: dataUrl })
-      })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-          avatarPick.disabled = false; avatarPick.classList.remove('loading');
+      setMsg($('avatarMsg'), null, '');
+      fetch('/api/backend/avatar', { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ avatar:dataUrl }) })
+        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
+        .then(function(res){
           if (res.ok && res.data && res.data.success) {
             if (lastUser) { lastUser.avatarUrl = res.data.avatarUrl || null; renderAvatar(lastUser); }
-            setMsg(avatarMsg, 'ok', dataUrl ? L('Photo updated', '照片已更新') : L('Photo removed', '照片已移除'));
-          } else {
-            setMsg(avatarMsg, 'err', (res.data && res.data.error) || L('Couldn’t save photo', '无法保存照片'));
-          }
+            setMsg($('avatarMsg'), 'ok', dataUrl ? L('Photo updated','照片已更新') : L('Photo removed','照片已移除'));
+          } else { setMsg($('avatarMsg'), 'err', (res.data && res.data.error) || L('Couldn’t save photo','无法保存照片')); }
         })
-        .catch(function () {
-          avatarPick.disabled = false; avatarPick.classList.remove('loading');
-          setMsg(avatarMsg, 'err', L('Network error — please try again', '网络错误，请重试'));
-        });
+        .catch(function(){ setMsg($('avatarMsg'), 'err', L('Network error — please try again','网络错误，请重试')); });
     }
-    avatarPick.addEventListener('click', function () { avatarFile.click(); });
-    avatarClear.addEventListener('click', function () { saveAvatar(null); });
-    avatarFile.addEventListener('change', function () {
-      var file = avatarFile.files && avatarFile.files[0];
-      avatarFile.value = '';
+    $('avatarPick').addEventListener('click', function(){ $('avatarFile').click(); });
+    $('avatarClear').addEventListener('click', function(){ saveAvatar(null); });
+    $('avatarFile').addEventListener('change', function(){
+      var file = $('avatarFile').files && $('avatarFile').files[0]; $('avatarFile').value = '';
       if (!file) return;
-      if (!/^image\//.test(file.type)) { setMsg(avatarMsg, 'err', L('Please choose an image file', '请选择图片文件')); return; }
+      if (!/^image\//.test(file.type)) { setMsg($('avatarMsg'), 'err', L('Please choose an image file','请选择图片文件')); return; }
       var reader = new FileReader();
-      reader.onload = function () {
+      reader.onload = function(){
         var img = new Image();
-        img.onload = function () {
-          var S = 256;
-          var canvas = document.createElement('canvas');
-          canvas.width = S; canvas.height = S;
-          var ctx = canvas.getContext('2d');
-          var scale = Math.max(S / img.width, S / img.height);
-          var w = img.width * scale, h = img.height * scale;
-          ctx.drawImage(img, (S - w) / 2, (S - h) / 2, w, h);
+        img.onload = function(){
+          var S = 256, canvas = document.createElement('canvas'); canvas.width = S; canvas.height = S;
+          var ctx = canvas.getContext('2d'), scale = Math.max(S/img.width, S/img.height), w = img.width*scale, h = img.height*scale;
+          ctx.drawImage(img, (S-w)/2, (S-h)/2, w, h);
           saveAvatar(canvas.toDataURL('image/jpeg', 0.85));
         };
-        img.onerror = function () { setMsg(avatarMsg, 'err', L('Couldn’t read that image', '无法读取该图片')); };
+        img.onerror = function(){ setMsg($('avatarMsg'), 'err', L('Couldn’t read that image','无法读取该图片')); };
         img.src = reader.result;
       };
-      reader.onerror = function () { setMsg(avatarMsg, 'err', L('Couldn’t read that file', '无法读取该文件')); };
+      reader.onerror = function(){ setMsg($('avatarMsg'), 'err', L('Couldn’t read that file','无法读取该文件')); };
       reader.readAsDataURL(file);
     });
 
-    /* ── Brand (co-brand identity) → GET/PUT /api/backend/brand ── */
-    function renderBrandPrev(url){
-      if (url) { brandLogoPrev.src = url; brandLogoPrev.style.display = 'block'; brandClear.hidden = false; }
-      else { brandLogoPrev.removeAttribute('src'); brandLogoPrev.style.display = 'none'; brandClear.hidden = true; }
-    }
-    function initBrand(){
-      if (brandInited) return; brandInited = true;
-      fetch('/api/backend/brand', { credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
-        .then(function (j) {
-          if (!j || !j.brand) return;
-          if (document.activeElement !== brandNameInput) brandNameInput.value = j.brand.name || '';
-          renderBrandPrev(j.brand.brandLogoUrl || null);
+    /* ── change password ── */
+    $('pwForm').addEventListener('submit', function(e){
+      e.preventDefault(); setMsg($('msg'), null, '');
+      var cur = $('cur').value, nw = $('nw').value, nw2 = $('nw2').value;
+      if (!cur || !nw || !nw2) { setMsg($('msg'), 'err', L('Fill in all password fields','请填写所有密码字段')); return; }
+      if (nw.length < 10)      { setMsg($('msg'), 'err', L('New password must be at least 10 characters','新密码至少 10 位')); return; }
+      if (nw !== nw2)          { setMsg($('msg'), 'err', L('New passwords don’t match','两次输入的新密码不一致')); return; }
+      $('pwBtn').disabled = true; $('pwBtn').classList.add('loading');
+      fetch('/api/backend/password', { method:'PUT', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ current_password:cur, new_password:nw }) })
+        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
+        .then(function(res){
+          $('pwBtn').disabled = false; $('pwBtn').classList.remove('loading');
+          if (res.ok && res.data && res.data.success) { $('pwForm').reset(); $('defaultWarn').classList.remove('show'); setMsg($('msg'), 'ok', L('Password updated','密码已更新')); }
+          else { setMsg($('msg'), 'err', (res.data && res.data.error) || L('Couldn’t update password','无法更新密码')); }
         })
-        .catch(function () {});
+        .catch(function(){ $('pwBtn').disabled = false; $('pwBtn').classList.remove('loading'); setMsg($('msg'), 'err', L('Network error — please try again','网络错误，请重试')); });
+    });
+
+    /* ── devices ── */
+    var ICO_PC = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>';
+    var ICO_PH = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>';
+    function relTime(s){
+      if (!s) return '';
+      var t = new Date(String(s).replace(' ', 'T') + (/[zZ]|[+\-]\d\d:?\d\d$/.test(s) ? '' : 'Z'));
+      var sec = Math.max(0, (Date.now() - t.getTime()) / 1000);
+      if (sec < 90) return L('Active now','当前活动');
+      var m = Math.round(sec/60); if (m < 60) return L(m+' min ago', m+' 分钟前');
+      var h = Math.round(m/60); if (h < 24) return L(h+(h>1?' hours ago':' hour ago'), h+' 小时前');
+      var d = Math.round(h/24); if (d < 30) return L(d+(d>1?' days ago':' day ago'), d+' 天前');
+      return L('over a month ago','一个月前');
     }
-    function saveBrand(payload, okMsg){
-      brandPick.disabled = true; brandPick.classList.add('loading'); setMsg(brandMsg, null, '');
-      return fetch('/api/backend/brand', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(payload)
-      })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-          brandPick.disabled = false; brandPick.classList.remove('loading');
-          if (res.ok && res.data && res.data.success) {
-            renderBrandPrev((res.data.brand && res.data.brand.brandLogoUrl) || null);
-            setMsg(brandMsg, 'ok', okMsg); return true;
+    function loadDevices(){
+      loaded.devices = true;
+      var box = $('devList'); box.innerHTML = '<div class="skel">'+L('Loading…','加载中…')+'</div>';
+      fetch('/api/backend/sessions', { credentials:'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          var list = (j && j.sessions) || [];
+          if (!list.length) { box.innerHTML = '<div class="dev-empty">'+L('No other devices signed in.','没有其他已登录的设备。')+'</div>'; return; }
+          var rows = list.map(function(d){
+            var meta = [ d.current ? L('Active now','当前活动') : relTime(d.lastSeen) ];
+            if (d.ip) meta.push(esc(d.ip));
+            return '<div class="dev" data-sid="'+esc(d.id)+'">'
+              + '<span class="dev-ico">'+(d.kind==='phone'||d.kind==='tablet'?ICO_PH:ICO_PC)+'</span>'
+              + '<div class="dev-m"><div class="dev-n">'+esc(d.label)+(d.current?' <span class="dev-badge">'+L('This device','当前设备')+'</span>':'')+'</div>'
+              + '<div class="dev-s">'+meta.join(' · ')+'</div></div>'
+              + '<button class="dev-out" data-sid="'+esc(d.id)+'" data-current="'+(d.current?'1':'0')+'">'+L('Sign out','登出')+'</button></div>';
+          }).join('');
+          var hasOthers = list.some(function(d){ return !d.current; });
+          box.innerHTML = rows + (hasOthers ? '<div class="dev-foot"><button class="dev-clear" id="devClear">'+L('Sign out of all other devices','登出所有其他设备')+'</button></div>' : '');
+          box.querySelectorAll('.dev-out').forEach(function(btn){ btn.addEventListener('click', function(){ revoke(btn.dataset.sid, btn.dataset.current === '1', btn); }); });
+          var clr = $('devClear'); if (clr) clr.addEventListener('click', revokeOthers);
+        })
+        .catch(function(){ box.innerHTML = '<div class="dev-empty">'+L('Couldn’t load devices.','无法加载设备。')+'</div>'; });
+    }
+    function revoke(sid, isCurrent, btn){
+      if (btn) { btn.disabled = true; btn.textContent = L('…','…'); }
+      fetch('/api/backend/sessions/revoke', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ sid:sid }) })
+        .then(function(r){ return r.json().catch(function(){ return {}; }); })
+        .then(function(res){
+          if (res && res.wasCurrent) { logoutRedirect(); return; }
+          var row = document.querySelector('.dev[data-sid="'+cssq(sid)+'"]');
+          if (row) { row.style.transition='opacity .25s'; row.style.opacity='0'; setTimeout(function(){ loadDevices(); }, 250); }
+          else loadDevices();
+        })
+        .catch(function(){ if (btn){ btn.disabled=false; btn.textContent=L('Sign out','登出'); } });
+    }
+    function revokeOthers(){
+      var clr = $('devClear'); if (clr){ clr.disabled = true; clr.textContent = L('Signing out…','正在登出…'); }
+      fetch('/api/backend/sessions/revoke-others', { method:'POST', credentials:'same-origin' })
+        .then(function(){ loadDevices(); })
+        .catch(function(){ loadDevices(); });
+    }
+    function cssq(s){ return String(s).replace(/["\\]/g, '\\$&'); }
+
+    /* ── access ── */
+    function loadAccess(){
+      loaded.access = true;
+      var box = $('accBody'); box.innerHTML = '<div class="skel">'+L('Loading…','加载中…')+'</div>';
+      fetch('/api/backend/access', { credentials:'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          if (!j) { box.innerHTML = '<div class="dev-empty">'+L('Couldn’t load access.','无法加载权限。')+'</div>'; return; }
+          if (j.owner) {
+            box.innerHTML = '<div class="acc-note"><svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/></svg><div><b>'+L('Full access','完全权限')+'</b><br>'+L('You’re the owner — you can use every part of the backend.','您是负责人——可以使用后台的每一项功能。')+'</div></div>';
+            return;
           }
-          setMsg(brandMsg, 'err', (res.data && res.data.error) || L('Couldn’t save — please try again', '保存失败，请重试')); return false;
-        })
-        .catch(function () {
-          brandPick.disabled = false; brandPick.classList.remove('loading');
-          setMsg(brandMsg, 'err', L('Network error — please try again', '网络错误，请重试')); return false;
-        });
-    }
-    brandPick.addEventListener('click', function () { brandFile.click(); });
-    brandClear.addEventListener('click', function () { saveBrand({ logo: null }, L('Logo removed', '徽标已移除')); });
-    brandFile.addEventListener('change', function () {
-      var file = brandFile.files && brandFile.files[0];
-      brandFile.value = '';
-      if (!file) return;
-      if (!/^image\//.test(file.type)) { setMsg(brandMsg, 'err', L('Please choose an image file', '请选择图片文件')); return; }
-      if (/svg/.test(file.type)) {
-        var rs = new FileReader();
-        rs.onload = function () { saveBrand({ logo: rs.result }, L('Logo updated', '徽标已更新')); };
-        rs.onerror = function () { setMsg(brandMsg, 'err', L('Couldn’t read that file', '无法读取该文件')); };
-        rs.readAsDataURL(file); return;
-      }
-      var reader = new FileReader();
-      reader.onload = function () {
-        var img = new Image();
-        img.onload = function () {
-          var MAX = 512, scale = Math.min(1, MAX / Math.max(img.width, img.height));
-          var w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-          var canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          saveBrand({ logo: canvas.toDataURL('image/png') }, L('Logo updated', '徽标已更新'));
-        };
-        img.onerror = function () { setMsg(brandMsg, 'err', L('Couldn’t read that image', '无法读取该图片')); };
-        img.src = reader.result;
-      };
-      reader.onerror = function () { setMsg(brandMsg, 'err', L('Couldn’t read that file', '无法读取该文件')); };
-      reader.readAsDataURL(file);
-    });
-    brandNameForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      brandNameBtn.disabled = true; brandNameBtn.classList.add('loading');
-      saveBrand({ name: brandNameInput.value.trim() }, L('Saved', '已保存'))
-        .then(function () { brandNameBtn.disabled = false; brandNameBtn.classList.remove('loading'); });
-    });
-
-    /* ── Change password → PUT /api/backend/password ── */
-    pwForm.addEventListener('submit', function (e) {
-      e.preventDefault();
-      setMsg(msg, null, '');
-      var cur = document.getElementById('cur').value;
-      var nw  = document.getElementById('nw').value;
-      var nw2 = document.getElementById('nw2').value;
-
-      if (!cur || !nw || !nw2) { setMsg(msg, 'err', L('Fill in all password fields', '请填写所有密码字段')); return; }
-      if (nw.length < 10)      { setMsg(msg, 'err', L('New password must be at least 10 characters', '新密码至少 10 位')); return; }
-      if (nw !== nw2)          { setMsg(msg, 'err', L('New passwords don’t match', '两次输入的新密码不一致')); return; }
-
-      pwBtn.disabled = true; pwBtn.classList.add('loading');
-      fetch('/api/backend/password', {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ current_password: cur, new_password: nw })
-      })
-        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
-        .then(function (res) {
-          pwBtn.disabled = false; pwBtn.classList.remove('loading');
-          if (res.ok && res.data && res.data.success) {
-            pwForm.reset();
-            defaultWarn.classList.remove('show');
-            setMsg(msg, 'ok', L('Password updated', '密码已更新'));
-          } else {
-            setMsg(msg, 'err', (res.data && res.data.error) || L('Couldn’t update password', '无法更新密码'));
+          var tick = '<svg viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+          var html = '';
+          (j.groups || []).forEach(function(g){
+            html += '<div class="acc-grp"><h2>'+esc(g.title)+'</h2><div class="acc-list">'
+              + g.items.map(function(it){ return '<div class="acc-item">'+tick+esc(it)+'</div>'; }).join('')
+              + '</div></div>';
+          });
+          if (!html) html = '<div class="dev-empty">'+L('No sections assigned yet.','尚未分配任何板块。')+'</div>';
+          if (j.scopeStores && j.scopeStores.length) {
+            html += '<div class="acc-scope">'+L('Limited to '+j.scopeStores.length+' store'+(j.scopeStores.length>1?'s':'')+'.', '仅限 '+j.scopeStores.length+' 家门店。')+'</div>';
           }
+          box.innerHTML = html;
         })
-        .catch(function () {
-          pwBtn.disabled = false; pwBtn.classList.remove('loading');
-          setMsg(msg, 'err', L('Network error — please try again', '网络错误，请重试'));
-        });
-    });
-
-    /* ── Sign out → POST /api/backend/logout ── */
-    document.getElementById('logoutBtn').addEventListener('click', function () {
-      fetch('/api/backend/logout', { method: 'POST', credentials: 'same-origin' })
-        .then(function () { window.top.location.href = '/backend/login'; })
-        .catch(function () { window.top.location.href = '/backend/login'; });
-    });
-
-    /* ── Embedded in the retail-admin Profile pop-up? The "Backend" link
-       should close the pop-up (postMessage the parent) instead of navigating
-       this iframe to the full admin app. ── */
-    if (window.self !== window.top) {
-      document.getElementById('backLink').addEventListener('click', function (e) {
-        e.preventDefault();
-        window.parent.postMessage('profile-modal-close', window.location.origin);
-      });
+        .catch(function(){ box.innerHTML = '<div class="dev-empty">'+L('Couldn’t load access.','无法加载权限。')+'</div>'; });
     }
 
-    /* ── Theme ── */
+    /* ── close / back ── */
+    function logoutRedirect(){ window.top.location.href = '/backend/login'; }
+    $('backLink').addEventListener('click', function(e){
+      e.preventDefault();
+      if (window.self !== window.top) { window.parent.postMessage('profile-modal-close', window.location.origin); }
+      else { window.location.href = '/retail-admin'; }
+    });
+
+    /* ── theme ── */
     function applyTheme(){
       var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
       document.querySelector('meta[name=theme-color]').setAttribute('content', t === 'dark' ? '#111A2B' : '#FBF9F4');
-      var ico = document.getElementById('themeIcon');
+      var ico = $('themeIcon');
       if (ico) ico.innerHTML = t === 'dark'
         ? '<path d="M16 11.5A6.5 6.5 0 1 1 8.5 4a5 5 0 0 0 7.5 7.5Z" stroke-width="1.4" stroke-linejoin="round"/>'
         : '<circle cx="10" cy="10" r="4.2" stroke-width="1.4"/><path d="M10 1.5v2.2M10 16.3v2.2M18.5 10h-2.2M3.7 10H1.5M16 4l-1.6 1.6M5.6 14.4 4 16M16 16l-1.6-1.6M5.6 5.6 4 4" stroke-width="1.4" stroke-linecap="round"/>';
     }
-    document.getElementById('themeToggle').addEventListener('click', function () {
+    $('themeToggle').addEventListener('click', function(){
       var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
       document.documentElement.setAttribute('data-theme', t);
       try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
       applyTheme();
     });
 
-    /* ── Language ── */
+    /* ── language ── */
     function applyLang(){
       document.documentElement.setAttribute('data-lang', lang);
-      var tg = document.getElementById('langToggle');
-      if (tg) tg.textContent = lang === 'cn' ? 'EN' : '中文';
-      nameInput.placeholder = L('Your display name', '您的显示名称');
+      var tg = $('langToggle'); if (tg) tg.textContent = lang === 'cn' ? 'EN' : '中文';
+      $('nameInput').placeholder = L('Your display name','您的显示名称');
       if (lastUser) hydrate(lastUser);
+      // re-render lazy tabs in the new language
+      if (loaded.devices) loadDevices();
+      if (loaded.access) loadAccess();
     }
-    document.getElementById('langToggle').addEventListener('click', function () {
+    $('langToggle').addEventListener('click', function(){
       lang = lang === 'cn' ? 'en' : 'cn';
       try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
       applyLang();

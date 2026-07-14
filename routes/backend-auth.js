@@ -99,6 +99,24 @@ db.exec(`
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_tenant_domains_host ON tenant_domains(host);
   CREATE INDEX IF NOT EXISTS idx_tenant_domains_tenant ON tenant_domains(tenant_id);
+
+  -- ── Signed-in devices (active sessions) ────────────────────────────────
+  -- One row per browser/app session an operator has open, so the Profile →
+  -- Devices tab can list them and sign any one out. Keyed by the express
+  -- session id (sid); the real session lives in sessions.db (connect-sqlite3)
+  -- and is destroyed via req.sessionStore.destroy(sid) on revoke — this table
+  -- is just the human-readable index (who / what device / where / when).
+  CREATE TABLE IF NOT EXISTS tenant_user_sessions (
+    sid            TEXT PRIMARY KEY,
+    tenant_user_id INTEGER NOT NULL,
+    tenant_id      INTEGER,
+    user_agent     TEXT,
+    ip             TEXT,
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (tenant_user_id) REFERENCES tenant_users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_tenant_user_sessions_user ON tenant_user_sessions(tenant_user_id);
 `);
 
 // Existing DBs predating product_catalog_mode get the column via ALTER. New
@@ -206,6 +224,53 @@ try {
   }
 } catch (e) {}
 
+// ── Device / session index (Profile → Devices) ───────────────────────────
+// Turn a raw User-Agent into a short, human label + a device class. Kept
+// deliberately small — enough to tell "Chrome on Windows" from "WeChat mini
+// app · iPhone" at a glance, not a full UA-parsing library.
+function describeUA(ua) {
+  ua = String(ua || '');
+  let os = 'Unknown device', kind = 'computer';
+  if (/iPhone/i.test(ua))                 { os = 'iPhone';  kind = 'phone'; }
+  else if (/iPad/i.test(ua))              { os = 'iPad';    kind = 'tablet'; }
+  else if (/Android/i.test(ua))           { os = 'Android'; kind = /Mobile/i.test(ua) ? 'phone' : 'tablet'; }
+  else if (/Windows/i.test(ua))           { os = 'Windows'; kind = 'computer'; }
+  else if (/Mac OS X|Macintosh/i.test(ua)){ os = 'Mac';     kind = 'computer'; }
+  else if (/Linux/i.test(ua))             { os = 'Linux';   kind = 'computer'; }
+
+  let browser = '';
+  if (/MicroMessenger/i.test(ua))         browser = 'WeChat';
+  else if (/Edg\//i.test(ua))             browser = 'Edge';
+  else if (/OPR\/|Opera/i.test(ua))       browser = 'Opera';
+  else if (/Firefox\//i.test(ua))         browser = 'Firefox';
+  else if (/Chrome\//i.test(ua))          browser = 'Chrome';
+  else if (/Safari\//i.test(ua))          browser = 'Safari';
+
+  const label = browser ? `${browser} on ${os}` : os;
+  return { label, kind };
+}
+
+// Record (or refresh) the current session in the device index. Called on login
+// and on each /me poll so pre-existing logins surface too. Best-effort: a hiccup
+// here must never block auth.
+function touchSession(req, user) {
+  try {
+    const sid = req.sessionID;
+    if (!sid || !user) return;
+    const ua = String(req.headers['user-agent'] || '').slice(0, 400);
+    const ip = String(req.ip || req.headers['x-forwarded-for'] || '').split(',')[0].trim().slice(0, 60);
+    db.prepare(`INSERT INTO tenant_user_sessions (sid, tenant_user_id, tenant_id, user_agent, ip)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(sid) DO UPDATE SET
+                  tenant_user_id = excluded.tenant_user_id,
+                  tenant_id      = excluded.tenant_id,
+                  user_agent     = COALESCE(NULLIF(excluded.user_agent, ''), tenant_user_sessions.user_agent),
+                  ip             = COALESCE(NULLIF(excluded.ip, ''), tenant_user_sessions.ip),
+                  last_seen      = CURRENT_TIMESTAMP`)
+      .run(sid, user.id, user.tenant_id || null, ua, ip);
+  } catch (e) { /* index-only; never blocks auth */ }
+}
+
 // ── Brute-force guard, same posture as the kitchen login ─────────────────
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -232,6 +297,7 @@ router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
   // "Keep me signed in" — extend this operator's cookie to 30 days; otherwise
   // it stays at the global 8-hour default (lost when the browser closes the gap).
   req.session.cookie.maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
+  touchSession(req, u);   // index this device for the Profile → Devices tab
   res.json({
     success: true,
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, avatarUrl: u.avatar_url || null,
@@ -242,6 +308,7 @@ router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
 });
 
 router.post('/api/backend/logout', (req, res) => {
+  try { if (req.sessionID) db.prepare('DELETE FROM tenant_user_sessions WHERE sid = ?').run(req.sessionID); } catch (e) {}
   if (req.session) { delete req.session.backendUserId; delete req.session.tenantId; }
   res.json({ success: true });
 });
@@ -250,6 +317,7 @@ router.get('/api/backend/me', (req, res) => {
   if (!req.session || !req.session.backendUserId) return res.json({ user: null });
   const u = db.prepare('SELECT id, tenant_id, username, display_name, role, last_login, avatar_url, retail_store_id, scope_all FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
   if (!u) return res.json({ user: null });
+  touchSession(req, u);   // keep the Devices index warm (surfaces pre-existing logins + heartbeat)
   const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
   // Effective capabilities + store scope for the signed-in operator. The client
   // renders the backend from this (hide sections/buttons the user can't use).
@@ -421,6 +489,111 @@ router.get('/api/backend/brand', (req, res) => {
   if (!u) return res.status(401).json({ error: 'Not authenticated · 未登录' });
   const t = db.prepare('SELECT id, brand_name, brand_logo_data, brand_mark_data, brand_credit, brand_updated_at FROM tenants WHERE id = ?').get(u.tenant_id);
   res.json({ success: true, brand: t ? brandPayload(t) : null });
+});
+
+// ── Profile → Devices ─────────────────────────────────────────────────────
+// List this operator's signed-in devices (their own sessions only), newest
+// activity first, with the current one flagged. Stale rows (past the 30-day
+// cookie ceiling) are pruned on read so a long-dead device doesn't linger.
+router.get('/api/backend/sessions', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  try {
+    db.prepare("DELETE FROM tenant_user_sessions WHERE last_seen < datetime('now', '-31 days')").run();
+  } catch (e) {}
+  let rows = [];
+  try {
+    rows = db.prepare(`SELECT sid, user_agent, ip, created_at, last_seen
+                         FROM tenant_user_sessions
+                        WHERE tenant_user_id = ?
+                        ORDER BY last_seen DESC`).all(req.session.backendUserId);
+  } catch (e) { rows = []; }
+  const sessions = rows.map(r => {
+    const d = describeUA(r.user_agent);
+    return {
+      id: r.sid,
+      current: r.sid === req.sessionID,
+      label: d.label,
+      kind: d.kind,
+      ip: r.ip || null,
+      lastSeen: r.last_seen,
+      createdAt: r.created_at,
+    };
+  });
+  res.json({ sessions });
+});
+
+// Sign a device out. A user may only revoke their OWN sessions. Revoking the
+// current one is allowed (it's just "sign out here"); the client then bounces
+// to the login page.
+router.post('/api/backend/sessions/revoke', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const sid = String((req.body && req.body.sid) || '').trim();
+  if (!sid) return res.status(400).json({ error: 'Missing session · 缺少会话' });
+  const row = db.prepare('SELECT sid FROM tenant_user_sessions WHERE sid = ? AND tenant_user_id = ?').get(sid, req.session.backendUserId);
+  if (!row) return res.status(404).json({ error: 'Session not found · 未找到会话' });
+  const finish = () => {
+    try { db.prepare('DELETE FROM tenant_user_sessions WHERE sid = ?').run(sid); } catch (e) {}
+    res.json({ success: true, wasCurrent: sid === req.sessionID });
+  };
+  if (req.sessionStore && typeof req.sessionStore.destroy === 'function') {
+    req.sessionStore.destroy(sid, () => finish());
+  } else { finish(); }
+});
+
+// Sign out every OTHER device — keep only the one making this request.
+router.post('/api/backend/sessions/revoke-others', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  let others = [];
+  try {
+    others = db.prepare('SELECT sid FROM tenant_user_sessions WHERE tenant_user_id = ? AND sid != ?')
+      .all(req.session.backendUserId, req.sessionID).map(r => r.sid);
+  } catch (e) { others = []; }
+  let done = 0;
+  const after = () => {
+    if (++done < others.length) return;
+    try { db.prepare('DELETE FROM tenant_user_sessions WHERE tenant_user_id = ? AND sid != ?').run(req.session.backendUserId, req.sessionID); } catch (e) {}
+    res.json({ success: true, revoked: others.length });
+  };
+  if (!others.length) return res.json({ success: true, revoked: 0 });
+  const canDestroy = req.sessionStore && typeof req.sessionStore.destroy === 'function';
+  others.forEach(sid => { if (canDestroy) req.sessionStore.destroy(sid, after); else after(); });
+});
+
+// ── Profile → Access ──────────────────────────────────────────────────────
+// A plain-language, read-only summary of what this operator can do — resolved
+// from the same capability engine the app gates on. Owners get a short
+// "full access" note; everyone else gets their granted capabilities grouped by
+// area (Running the shop / Selling / Content / Set up).
+const _caps = require('../lib/capabilities');
+const ACCESS_GROUPS = [
+  ['run',     'Running the shop'],
+  ['sell',    'Selling & marketing'],
+  ['content', 'Content & inbox'],
+  ['setup',   'Set up & admin'],
+];
+router.get('/api/backend/access', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const u = db.prepare('SELECT id, tenant_id, role, retail_store_id, scope_all FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  if (!u) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const tenant = db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
+  let caps = [], scopeStores = null;
+  try {
+    const r = require('../lib/operator-caps').resolveOperator(db, u, tenant);
+    caps = r.caps || []; scopeStores = r.scopeStores;
+  } catch (e) { caps = []; }
+  const roleLabel = ({ owner: 'Owner', admin: 'Admin', staff: 'Staff', store_manager: 'Store manager',
+    warehouse: 'Warehouse', customer_service: 'Customer service', dispatch: 'Dispatch', manager: 'Manager',
+    marketing: 'Marketing', fulfillment: 'Fulfilment', channel: 'Channel operator' })[u.role] || (u.role || 'Operator');
+
+  if (u.role === 'owner') {
+    return res.json({ owner: true, role: u.role, roleLabel, groups: [], scopeStores: null });
+  }
+  const have = new Set(caps);
+  const groups = ACCESS_GROUPS.map(([g, title]) => {
+    const items = _caps.CAPABILITIES.filter(c => c.group === g && have.has(c.key)).map(c => c.labelEn);
+    return items.length ? { title, items } : null;
+  }).filter(Boolean);
+  res.json({ owner: false, role: u.role, roleLabel, groups, scopeStores: scopeStores || null });
 });
 
 module.exports = router;

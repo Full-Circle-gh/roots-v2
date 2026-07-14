@@ -445,6 +445,16 @@ app.get('/backend/team', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'backend-team.html'));
 });
 
+// Co-brand identity editor (logo + brand name). Moved out of the profile page
+// (2026-07-14) — brand is business identity, not personal — and now reached
+// from the left rail under Set up. The PUT /api/backend/brand endpoint enforces
+// the owner/admin role; this page route only checks that someone's signed in.
+app.get('/backend/brand', (req, res) => {
+  if (!req.session?.backendUserId) return res.redirect('/backend/login');
+  res.set('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'backend-brand.html'));
+});
+
 // SaaS-admin console — platform owner only (a kitchen `admin` session).
 app.get('/saas-admin', (req, res) => {
   const dbx = require('./database');
