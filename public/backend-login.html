@@ -281,6 +281,23 @@
       </div>
     </div>
 
+    <!-- Two-step verification — shown after a correct password when the
+         operator has 2FA on. Code is emailed to their recovery address. -->
+    <div id="twofaPanel" hidden>
+      <button type="button" class="reset-back" id="twofaBack">
+        <svg width="13" height="13" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"/></svg>
+        <span class="en">Back to sign in</span><span class="cn">返回登录</span>
+      </button>
+      <h1><span class="en">Verify it’s you</span><span class="cn">验证身份</span></h1>
+      <p class="greet"><span class="en">Enter the 6-digit code we emailed to </span><span class="cn">请输入我们发送到 </span><b id="twofaHint"></b><span class="cn"> 的 6 位验证码</span><span class="en">.</span></p>
+      <div class="err" id="twofaErr" role="alert"><span></span></div>
+      <div class="field">
+        <label for="twofaCode"><span class="en">Verification code</span><span class="cn">验证码</span></label>
+        <input id="twofaCode" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" />
+      </div>
+      <button type="button" class="submit" id="twofaBtn"><span class="en">Verify &amp; sign in</span><span class="cn">验证并登录</span></button>
+    </div>
+
     <div class="quiet"><span class="sdot"></span><span class="en">All systems quiet</span><span class="cn">一切安静如常</span></div>
   </main>
 
@@ -373,6 +390,7 @@
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (j) {
           if (j && j.success) { window.location.href = '/retail-admin'; return; }
+          if (j && j.twofa) { showTwofa(j.hint); reset(); return; }
           showErr((j && j.error) || L('That username and password don’t match. Check them and try again.', '用户名与密码不匹配,请检查后重试。'));
           reset();
         })
@@ -398,6 +416,36 @@
         pw.focus();
       });
     }
+
+    // Two-step verification step — shown after a correct password.
+    var loginPanel = document.getElementById('loginPanel');
+    var twofaPanel = document.getElementById('twofaPanel');
+    var twofaBtn = document.getElementById('twofaBtn');
+    var twofaErr = document.getElementById('twofaErr');
+    function showTwofa(hint) {
+      document.getElementById('twofaHint').textContent = hint || '';
+      loginPanel.hidden = true; twofaPanel.hidden = false;
+      var c = document.getElementById('twofaCode'); if (c) c.focus();
+    }
+    document.getElementById('twofaBack').addEventListener('click', function () { window.location.reload(); });
+    function submit2fa() {
+      twofaErr.classList.remove('show'); twofaErr.querySelector('span').textContent = '';
+      var code = (document.getElementById('twofaCode').value || '').trim();
+      if (!/^\d{6}$/.test(code)) { twofaErr.querySelector('span').textContent = L('Enter the 6-digit code.', '请输入 6 位验证码。'); twofaErr.classList.add('show'); return; }
+      twofaBtn.disabled = true; twofaBtn.classList.add('loading');
+      fetch('/api/backend/login/2fa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ code: code }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (j) {
+          if (j && j.success) { window.location.href = '/retail-admin'; return; }
+          twofaBtn.disabled = false; twofaBtn.classList.remove('loading');
+          twofaErr.querySelector('span').textContent = (j && j.error) || L('Incorrect code.', '验证码不正确。');
+          twofaErr.classList.add('show');
+          if (j && j.restart) { setTimeout(function () { window.location.reload(); }, 1800); }
+        })
+        .catch(function () { twofaBtn.disabled = false; twofaBtn.classList.remove('loading'); twofaErr.querySelector('span').textContent = L('Network error — please try again.', '网络错误，请重试。'); twofaErr.classList.add('show'); });
+    }
+    twofaBtn.addEventListener('click', submit2fa);
+    document.getElementById('twofaCode').addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); submit2fa(); } });
 
     // Caps Lock hint — the quiet fix for most "wrong password" moments.
     var caps = document.getElementById('capsHint');

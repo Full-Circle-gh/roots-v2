@@ -160,14 +160,19 @@ try { db.exec('ALTER TABLE tenant_users ADD COLUMN avatar_url TEXT'); } catch (e
 try { db.exec('ALTER TABLE tenant_users ADD COLUMN recovery_email TEXT'); } catch (e) { /* already added */ }
 try { db.exec('ALTER TABLE tenant_users ADD COLUMN recovery_email_verified INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already added */ }
 
-// One-time codes — emailed 6-digit codes for verifying a recovery address and
-// for resetting a forgotten password. Codes are stored HASHED (never plain),
-// short-lived, and single-use; a small attempt counter blocks guessing.
+// Two-step verification — when on, a login also requires a one-time code
+// emailed to the operator's verified recovery address.
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN twofa_enabled INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already added */ }
+
+// One-time codes — emailed 6-digit codes for verifying a recovery address,
+// resetting a forgotten password, enabling 2FA, and the login second step.
+// Codes are stored HASHED (never plain), short-lived, and single-use; a small
+// attempt counter blocks guessing.
 db.exec(`
   CREATE TABLE IF NOT EXISTS tenant_user_codes (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
     tenant_user_id INTEGER NOT NULL,
-    purpose        TEXT NOT NULL,               -- 'recovery_verify' | 'password_reset'
+    purpose        TEXT NOT NULL,               -- 'recovery_verify' | 'password_reset' | 'twofa_enable' | 'login_2fa'
     email          TEXT,                        -- target address (pending recovery email / recovery email)
     code_hash      TEXT NOT NULL,
     attempts       INTEGER NOT NULL DEFAULT 0,
@@ -177,6 +182,23 @@ db.exec(`
     FOREIGN KEY (tenant_user_id) REFERENCES tenant_users(id)
   );
   CREATE INDEX IF NOT EXISTS idx_tenant_user_codes_user ON tenant_user_codes(tenant_user_id, purpose);
+
+  -- Web Push subscriptions for BACKEND operators (tenant_users). Kept separate
+  -- from push_subscriptions (which is keyed to kitchen users) so an operator's
+  -- "Push to this device" toggle reaches THEIR device. One row per endpoint.
+  CREATE TABLE IF NOT EXISTS tenant_operator_push_subs (
+    endpoint       TEXT PRIMARY KEY,
+    tenant_user_id INTEGER NOT NULL,
+    tenant_id      INTEGER,
+    p256dh         TEXT NOT NULL,
+    auth           TEXT NOT NULL,
+    user_agent     TEXT,
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (tenant_user_id) REFERENCES tenant_users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_operator_push_user   ON tenant_operator_push_subs(tenant_user_id);
+  CREATE INDEX IF NOT EXISTS idx_operator_push_tenant ON tenant_operator_push_subs(tenant_id);
 `);
 
 // Store assignment for restricted operators (the Quick Stock app): the one store
@@ -308,7 +330,7 @@ const loginLimiter = rateLimit({
   message: { success: false, error: 'Too many attempts, try again in 15 minutes · 尝试过于频繁,请 15 分钟后再试' },
 });
 
-router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
+router.post('/api/backend/login', loginLimiter, express.json(), async (req, res) => {
   const { username, password, remember } = req.body || {};
   if (!username || !password) return res.json({ success: false, error: 'Enter username and password · 请输入用户名和密码' });
   const u = db.prepare('SELECT * FROM tenant_users WHERE username = ? AND is_active = 1').get(String(username).trim().toLowerCase());
@@ -319,6 +341,19 @@ router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
   if (!tenant || tenant.status !== 'active') {
     return res.json({ success: false, error: 'This account is not active · 此账户未激活' });
   }
+
+  // Two-step verification — password checked out, but a code is required before
+  // the session is granted. Email it to the verified recovery address and hold
+  // the pending login on THIS browser session (bound by cookie). The full
+  // session (backendUserId) is deliberately NOT set yet.
+  if (u.twofa_enabled && u.recovery_email && u.recovery_email_verified && emailSender.isConfigured()) {
+    const code = genCode();
+    insertCode(u.id, 'login_2fa', u.recovery_email, code, 10);
+    req.session.pending2fa = { userId: u.id, remember: !!remember, at: Date.now() };
+    try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
+    return res.json({ success: false, twofa: true, hint: maskEmail(u.recovery_email) });
+  }
+
   db.prepare('UPDATE tenant_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(u.id);
   req.session.backendUserId = u.id;
   req.session.tenantId = u.tenant_id;
@@ -326,6 +361,43 @@ router.post('/api/backend/login', loginLimiter, express.json(), (req, res) => {
   // it stays at the global 8-hour default (lost when the browser closes the gap).
   req.session.cookie.maxAge = remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
   touchSession(req, u);   // index this device for the Profile → Devices tab
+  res.json({
+    success: true,
+    user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, avatarUrl: u.avatar_url || null,
+            tenant: { id: tenant.id, name: tenant.name, brand: tenant.brand_name,
+                      catalogMode: tenant.product_catalog_mode || 'self',
+                      entitlements: features.entitlements(tenant.features_json) } },
+  });
+});
+
+// Two-step verification — second step. Consumes the pending login held on this
+// browser session (set by /login after a correct password) + the emailed code.
+router.post('/api/backend/login/2fa', loginLimiter, express.json(), (req, res) => {
+  const pending = req.session && req.session.pending2fa;
+  if (!pending || !pending.userId || (Date.now() - (pending.at || 0)) > 10 * 60 * 1000) {
+    if (req.session) delete req.session.pending2fa;
+    return res.json({ success: false, error: 'Your sign-in expired — please start again · 登录已过期,请重新开始', restart: true });
+  }
+  const code = String((req.body && req.body.code) || '').trim();
+  if (!/^\d{6}$/.test(code)) return res.json({ success: false, error: 'Enter the 6-digit code · 请输入 6 位验证码' });
+  const row = liveCode(pending.userId, 'login_2fa');
+  if (!row) return res.json({ success: false, error: 'Code expired — please sign in again · 验证码已过期,请重新登录', restart: true });
+  if (row.attempts >= 5) return res.json({ success: false, error: 'Too many tries — please sign in again · 尝试次数过多,请重新登录', restart: true });
+  if (hashCode(code) !== row.code_hash) {
+    db.prepare('UPDATE tenant_user_codes SET attempts = attempts + 1 WHERE id = ?').run(row.id);
+    return res.json({ success: false, error: 'Incorrect code · 验证码不正确' });
+  }
+  const u = db.prepare('SELECT * FROM tenant_users WHERE id = ? AND is_active = 1').get(pending.userId);
+  const tenant = u && db.prepare('SELECT * FROM tenants WHERE id = ?').get(u.tenant_id);
+  if (!u || !tenant || tenant.status !== 'active') return res.json({ success: false, error: 'This account is not active · 此账户未激活', restart: true });
+
+  db.prepare('UPDATE tenant_user_codes SET used = 1 WHERE id = ?').run(row.id);
+  db.prepare('UPDATE tenant_users SET last_login = CURRENT_TIMESTAMP WHERE id = ?').run(u.id);
+  req.session.backendUserId = u.id;
+  req.session.tenantId = u.tenant_id;
+  req.session.cookie.maxAge = pending.remember ? 30 * 24 * 60 * 60 * 1000 : 8 * 60 * 60 * 1000;
+  delete req.session.pending2fa;
+  touchSession(req, u);
   res.json({
     success: true,
     user: { id: u.id, username: u.username, displayName: u.display_name, role: u.role, avatarUrl: u.avatar_url || null,
@@ -664,11 +736,79 @@ function liveCode(userId, purpose) {
 const codeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
   message: { success: false, error: 'Too many attempts, try again later · 尝试过于频繁,请稍后再试' } });
 
-// Current recovery-email state for the signed-in operator.
+// Current recovery-email + 2FA state for the signed-in operator.
 router.get('/api/backend/recovery', (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  const u = db.prepare('SELECT recovery_email, recovery_email_verified FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
-  res.json({ email: u && u.recovery_email ? maskEmail(u.recovery_email) : null, verified: !!(u && u.recovery_email_verified), emailConfigured: emailSender.isConfigured() });
+  const u = db.prepare('SELECT recovery_email, recovery_email_verified, twofa_enabled FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
+  res.json({
+    email: u && u.recovery_email ? maskEmail(u.recovery_email) : null,
+    verified: !!(u && u.recovery_email_verified),
+    twofaEnabled: !!(u && u.twofa_enabled),
+    emailConfigured: emailSender.isConfigured(),
+  });
+});
+
+// ── Two-step verification management ──────────────────────────────────────
+// Enabling requires a VERIFIED recovery email (that's where codes go). Confirm
+// with a code so we know delivery works before turning it on.
+router.post('/api/backend/twofa/enable/start', codeLimiter, express.json(), async (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const u = db.prepare('SELECT tenant_id, recovery_email, recovery_email_verified FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
+  if (!u || !u.recovery_email || !u.recovery_email_verified) return res.status(400).json({ error: 'Add a verified recovery email first · 请先设置并验证恢复邮箱' });
+  if (!emailSender.isConfigured()) return res.status(503).json({ error: 'Email isn’t set up yet · 邮件功能尚未配置' });
+  const code = genCode();
+  insertCode(req.session.backendUserId, 'twofa_enable', u.recovery_email, code, 15);
+  const r = await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id));
+  if (!r.ok) return res.status(502).json({ error: 'Couldn’t send the email — please try again · 邮件发送失败,请重试' });
+  res.json({ success: true, hint: maskEmail(u.recovery_email) });
+});
+router.post('/api/backend/twofa/enable/confirm', codeLimiter, express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const code = String((req.body && req.body.code) || '').trim();
+  if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Enter the 6-digit code · 请输入 6 位验证码' });
+  const row = liveCode(req.session.backendUserId, 'twofa_enable');
+  if (!row) return res.status(400).json({ error: 'Code expired — request a new one · 验证码已过期,请重新获取' });
+  if (row.attempts >= 5) return res.status(429).json({ error: 'Too many tries — request a new code · 尝试次数过多,请重新获取' });
+  if (hashCode(code) !== row.code_hash) {
+    db.prepare('UPDATE tenant_user_codes SET attempts = attempts + 1 WHERE id = ?').run(row.id);
+    return res.status(400).json({ error: 'Incorrect code · 验证码不正确' });
+  }
+  db.prepare('UPDATE tenant_user_codes SET used = 1 WHERE id = ?').run(row.id);
+  db.prepare('UPDATE tenant_users SET twofa_enabled = 1 WHERE id = ?').run(req.session.backendUserId);
+  res.json({ success: true });
+});
+router.post('/api/backend/twofa/disable', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  db.prepare('UPDATE tenant_users SET twofa_enabled = 0 WHERE id = ?').run(req.session.backendUserId);
+  res.json({ success: true });
+});
+
+// ── Operator Web Push (Profile → Notifications) ───────────────────────────
+const _push = require('./push');
+router.get('/api/backend/push/vapid', (req, res) => {
+  res.json({ enabled: !!_push.ENABLED, publicKey: _push.vapidPublicKey || '' });
+});
+router.post('/api/backend/push/subscribe', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const { endpoint, keys } = req.body || {};
+  const r = _push.operatorSubscribe({ tenantUserId: req.session.backendUserId, tenantId: req.session.tenantId, endpoint, keys, ua: req.headers['user-agent'] });
+  if (!r.ok) return res.status(r.error === 'push not configured' ? 503 : 400).json({ error: r.error || 'Couldn’t subscribe' });
+  res.json({ success: true });
+});
+router.post('/api/backend/push/unsubscribe', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  _push.operatorUnsubscribe((req.body && req.body.endpoint) || '', req.session.backendUserId);
+  res.json({ success: true });
+});
+router.post('/api/backend/push/test', async (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const r = await _push.sendPushToOperator(req.session.backendUserId, {
+    title: '🌿 Test notification · 测试通知',
+    body: 'Push is working on this device. · 此设备的推送已生效。',
+    url: '/retail-admin',
+    tag: 'operator-test',
+  });
+  res.json({ success: true, sent: (r && r.sent) || 0 });
 });
 
 // Start setting a recovery email — emails a 6-digit verification code.

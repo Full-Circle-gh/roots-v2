@@ -1718,10 +1718,7 @@ function acctSyncPrefs() {
   if (scaleVal && window.cuGetUiScale) scaleVal.textContent = Math.round(cuGetUiScale() * 100) + '%';
   const langVal = $('#acctLangVal');
   if (langVal) langVal.textContent = (window.cuLang && cuLang() === 'cn') ? '中文' : 'English';
-  const soundVal = $('#acctSoundVal');
-  if (soundVal && typeof _ordersSoundOn === 'function') {
-    soundVal.textContent = _ordersSoundOn() ? cuT('On', '开') : cuT('Off', '关');
-  }
+  // New-order sound moved to Profile → Notifications; no chip here anymore.
 }
 function initAcctMenu(u) {
   ACCT_USER = u;
@@ -1762,10 +1759,7 @@ function initAcctMenu(u) {
   if (scaleRow) scaleRow.addEventListener('click', () => { if (window.cuCycleUiScale) cuCycleUiScale(); acctSyncPrefs(); });
   const langRow = $('#acctLang');
   if (langRow) langRow.addEventListener('click', () => { if (window.cuToggleLang) cuToggleLang(); acctSyncPrefs(); });
-  // New-order sound — folded in from the topbar. Toggling previews the ding and
-  // keeps the menu open (the value chip flips in place via acctSyncPrefs).
-  const soundRow = $('#acctSound');
-  if (soundRow) soundRow.addEventListener('click', () => { if (window.toggleOrdersSound) toggleOrdersSound(); acctSyncPrefs(); });
+  // New-order sound now lives in Profile → Notifications (not the avatar menu).
 
   const signout = $('#acctSignout');
   if (signout) signout.addEventListener('click', () => {

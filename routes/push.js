@@ -157,7 +157,49 @@ async function _sendMany(subs, payload) {
   return { sent, pruned, total: subs.length };
 }
 
+// ─── Backend-operator push (tenant_users) ──────────────────────────────────
+// A separate subscription store from push_subscriptions (which is keyed to
+// kitchen `users`). Backing table `tenant_operator_push_subs` is created in
+// routes/backend-auth.js. Same VAPID setup + send/prune machinery.
+function operatorSubscribe({ tenantUserId, tenantId, endpoint, keys, ua }) {
+  if (!ENABLED) return { ok: false, error: 'push not configured' };
+  if (!endpoint || !keys || !keys.p256dh || !keys.auth) return { ok: false, error: 'invalid subscription' };
+  db.prepare(`INSERT INTO tenant_operator_push_subs (endpoint, tenant_user_id, tenant_id, p256dh, auth, user_agent)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(endpoint) DO UPDATE SET
+                tenant_user_id = excluded.tenant_user_id,
+                tenant_id      = excluded.tenant_id,
+                p256dh         = excluded.p256dh,
+                auth           = excluded.auth,
+                user_agent     = excluded.user_agent,
+                last_seen_at   = CURRENT_TIMESTAMP`)
+    .run(endpoint, tenantUserId, tenantId || null, keys.p256dh, keys.auth, String(ua || '').slice(0, 300));
+  return { ok: true };
+}
+function operatorUnsubscribe(endpoint, tenantUserId) {
+  if (!endpoint) return { ok: false };
+  db.prepare('DELETE FROM tenant_operator_push_subs WHERE endpoint = ? AND tenant_user_id = ?').run(endpoint, tenantUserId);
+  return { ok: true };
+}
+async function sendPushToOperator(tenantUserId, payload) {
+  if (!ENABLED) return { sent: 0, pruned: 0, skipped: 'disabled' };
+  const subs = db.prepare('SELECT endpoint, p256dh, auth FROM tenant_operator_push_subs WHERE tenant_user_id = ?').all(tenantUserId);
+  return _sendMany(subs, payload);
+}
+// Fan out to every operator of a tenant (used for new-order alerts). Failed
+// endpoints are pruned by _send. Best-effort; callers wrap in try/catch.
+async function sendPushToTenantOperators(tenantId, payload) {
+  if (!ENABLED || !tenantId) return { sent: 0, pruned: 0, skipped: 'disabled' };
+  const subs = db.prepare('SELECT endpoint, p256dh, auth FROM tenant_operator_push_subs WHERE tenant_id = ?').all(tenantId);
+  return _sendMany(subs, payload);
+}
+
 module.exports = router;
+module.exports.vapidPublicKey = VAPID_PUBLIC;
+module.exports.operatorSubscribe = operatorSubscribe;
+module.exports.operatorUnsubscribe = operatorUnsubscribe;
+module.exports.sendPushToOperator = sendPushToOperator;
+module.exports.sendPushToTenantOperators = sendPushToTenantOperators;
 module.exports.sendPushToUser     = sendPushToUser;
 module.exports.sendPushToUsers    = sendPushToUsers;
 module.exports.sendPushToAll      = sendPushToAll;

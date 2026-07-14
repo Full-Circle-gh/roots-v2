@@ -4209,6 +4209,21 @@ function markOrderPaid(orderId) {
       }
     } catch (e) { console.warn('[markOrderPaid push]', e.message); }
 
+    // Same alert to BACKEND operators (tenant_users) who enabled "Push to this
+    // device" in Profile → Notifications. Separate subscription store from the
+    // kitchen push above; best-effort.
+    try {
+      if (_push && _push.sendPushToTenantOperators) {
+        const op = tdb().prepare('SELECT order_no, total FROM retail_orders WHERE id = ?').get(orderId);
+        if (op) _push.sendPushToTenantOperators(currentTenantId(), {
+          title: isWait ? '🌿 New order · 新订单(待补货)' : '🌿 New paid order · 新订单已付款',
+          body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
+          url: '/retail-admin?tab=orders',
+          tag: 'retail-order-' + orderId,
+        });
+      }
+    } catch (e) { console.warn('[markOrderPaid operator push]', e.message); }
+
     // Mirror the push to a WeCom group bot, if configured (Settings → Push).
     // Best-effort; reaches the owner's phone even with the backend closed.
     try { sendWecomOrderAlert(orderId, { awaitingRestock: isWait }); }
@@ -20816,6 +20831,17 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // so re-saving a paid order doesn't re-alert.
     if (o.status !== 'paid') {
       try { sendWecomOrderAlert(id); } catch (e) { console.warn('[admin mark-paid wecom]', e.message); }
+      try {
+        if (_push && _push.sendPushToTenantOperators) {
+          const op = tdb().prepare('SELECT order_no, total FROM retail_orders WHERE id = ?').get(id);
+          if (op) _push.sendPushToTenantOperators(currentTenantId(), {
+            title: '🌿 New paid order · 新订单已付款',
+            body: `${op.order_no} · ¥${Number(op.total || 0).toFixed(2)}`,
+            url: '/retail-admin?tab=orders',
+            tag: 'retail-order-' + id,
+          });
+        }
+      } catch (e) { console.warn('[admin mark-paid operator push]', e.message); }
     }
   }
   // Stock side-effects of cancel / refund. cancelled before payment just
