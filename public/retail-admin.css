@@ -2254,7 +2254,6 @@
   .pa-hi-hero:last-child { border-right: 0; }
   .pa-hi-hero:disabled { cursor: default; }
   .pa-hi-hero:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
-  .pa-hi-hero:not(:disabled):hover { background: var(--td-sage-tint); }
   .pa-hi-hero-eb {
     display: flex; align-items: center; gap: 6px;
     font-size: 11px; font-weight: 600; letter-spacing: .08em;
