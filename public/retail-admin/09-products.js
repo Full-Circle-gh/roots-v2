@@ -2262,6 +2262,7 @@ async function pdOpen(id) {
   buLoad(p ? p.id : null);
   bpLoad(p ? p.id : null);
   optLoad(p ? p.id : null);
+  pdLoadSales(p ? p.id : null);
   // Show the docked editor, hide the empty-state placeholder, and mark which
   // row in the list is currently loaded so the operator never loses their place.
   _pdSelectedId = p ? p.id : null;
@@ -2275,6 +2276,60 @@ async function pdOpen(id) {
   _pdOpenBaseline = pdSnapshot();
   pdSetStatus(p ? 'saved' : 'hint', p ? cuT('All changes saved', '已自动保存') : cuT('Add a name & SKU to start autosaving', '填写名称和货号后自动保存'));
 }
+// Sales card — units/revenue/rank for the loaded product over a chosen
+// window (7d/30d/90d), fed by GET /api/retail-admin/products/:id/sales. The
+// command search palette's "N sold · 30d" badge on a product hit answers the
+// quick version of "how's this selling"; this card is the full one once
+// you're on the product itself, with a rank-among-all-products and a
+// zero-filled daily spark line for the window.
+let _pdSalesId = null;
+let _pdSalesDays = 30;
+let _pdSalesSeq = 0;
+
+function pdSetSalesRange(days, btn) {
+  _pdSalesDays = days;
+  document.querySelectorAll('#pd-sales-chips .pd-chip').forEach(b => b.classList.toggle('pd-chip-active', b === btn));
+  pdLoadSales(_pdSalesId);
+}
+
+async function pdLoadSales(id) {
+  _pdSalesId = id;
+  const card = document.getElementById('pd-sales-card');
+  if (!card) return;
+  if (id == null) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  const mySeq = ++_pdSalesSeq;
+  const setText = (elId, v) => { const n = document.getElementById(elId); if (n) n.textContent = v; };
+  setText('pd-sales-units', '…'); setText('pd-sales-revenue', '…'); setText('pd-sales-rank', '…');
+  const spark = document.getElementById('pd-sales-spark');
+  if (spark) spark.innerHTML = '';
+  let j;
+  try {
+    const r = await fetch('/api/retail-admin/products/' + id + '/sales?days=' + _pdSalesDays, { credentials: 'same-origin' });
+    j = await r.json();
+  } catch { j = null; }
+  if (mySeq !== _pdSalesSeq) return; // a newer range click superseded this fetch
+  if (!j || !j.success) {
+    setText('pd-sales-units', '—'); setText('pd-sales-revenue', '—'); setText('pd-sales-rank', '—');
+    return;
+  }
+  const d = j.data;
+  setText('pd-sales-units', Number(d.units || 0).toLocaleString());
+  setText('pd-sales-revenue', '¥' + Number(d.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }));
+  setText('pd-sales-rank', d.rank ? ('#' + d.rank + ' / ' + d.total_products) : cuT('No sales', '暂无销量'));
+  if (spark && Array.isArray(d.daily) && d.daily.length > 1) {
+    const w = 300, h = 36, pad = 2;
+    const max = Math.max(1, ...d.daily.map(x => x.units));
+    const step = (w - pad * 2) / (d.daily.length - 1);
+    const pts = d.daily.map((x, i) => {
+      const px = pad + i * step;
+      const py = h - pad - (x.units / max) * (h - pad * 2);
+      return px.toFixed(1) + ',' + py.toFixed(1);
+    }).join(' ');
+    spark.innerHTML = '<polyline points="' + pts + '" fill="none" stroke="#111A2B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
+  }
+}
+
 // Docked editor visibility — pdShowDocked reveals the editor in the right
 // column; pdClose hides it back to the empty-state placeholder.
 // Also ensures the right pane is visible — pdOpen can be called from "+ Add

@@ -3180,6 +3180,27 @@
         <div class="pu-editor-body pe-body">
           <input type="hidden" id="pd-id">
 
+          <!-- ═══ SALES — units/revenue/rank for a chosen window, requested by
+               front-of-house so a specific product's sales can be looked up
+               without hunting through the Reports top-N list. Hidden for a
+               not-yet-saved product (pdLoadSales(null)). ═══ -->
+          <section class="pd-card pd-sales-card" id="pd-sales-card" style="display:none;">
+            <div class="pd-card-h pd-sales-head">
+              <span>Sales · 销量</span>
+              <div class="pd-sales-chips" id="pd-sales-chips">
+                <button type="button" class="pd-chip" onclick="pdSetSalesRange(7, this)">7d</button>
+                <button type="button" class="pd-chip pd-chip-active" onclick="pdSetSalesRange(30, this)">30d</button>
+                <button type="button" class="pd-chip" onclick="pdSetSalesRange(90, this)">90d</button>
+              </div>
+            </div>
+            <div class="pd-sales-kpis">
+              <div class="pd-sales-kpi"><div class="v" id="pd-sales-units">—</div><div class="l">units sold · 售出件数</div></div>
+              <div class="pd-sales-kpi"><div class="v" id="pd-sales-revenue">—</div><div class="l">revenue · 营业额</div></div>
+              <div class="pd-sales-kpi"><div class="v" id="pd-sales-rank">—</div><div class="l">rank · 排名</div></div>
+            </div>
+            <svg id="pd-sales-spark" class="pd-sales-spark" viewBox="0 0 300 36" preserveAspectRatio="none"></svg>
+          </section>
+
           <!-- ═══ ESSENTIALS — the handful you touch daily ═══ -->
           <div class="pe-ess">
             <div class="pe-ess-main">

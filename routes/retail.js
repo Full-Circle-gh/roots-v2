@@ -16552,6 +16552,70 @@ router.get('/api/retail-admin/products/:id/variant-store-stocks', requireRetailA
   });
 });
 
+// GET /api/retail-admin/products/:id/sales — units/revenue/rank for this one
+// product over a date window, plus a zero-filled daily units series. Backs
+// the product editor's Sales card and mirrors the dashboard's topProducts
+// aggregation (same PAIDO/PDATEO filters, see /api/retail-admin/dashboard)
+// but scoped to a single product instead of a top-15 ranked list.
+router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  const TZ = '+8 hours';
+  const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
+  const PAIDO  = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
+  const PDATEO = `date(COALESCE(o.paid_at, o.placed_at), '${TZ}')`;
+
+  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
+  const toDefault = nowGz.toISOString().slice(0, 10);
+  const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 30));
+  const fromDefault = new Date(nowGz.getTime() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : fromDefault;
+  const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to   || '') ? req.query.to   : toDefault;
+
+  // Rank this product against every other product's revenue in the same
+  // window. RANK() (not ROW_NUMBER) so tied revenue shares a rank.
+  const ranked = tdb().prepare(`
+    SELECT product_id, units, revenue, orders, RANK() OVER (ORDER BY revenue DESC) AS rank
+      FROM (
+        SELECT i.product_id,
+               COALESCE(SUM(i.qty), 0) AS units,
+               COALESCE(SUM(i.line_total), 0) AS revenue,
+               COUNT(DISTINCT i.order_id) AS orders
+          FROM retail_order_items i
+          JOIN retail_orders o ON o.id = i.order_id
+         WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+         GROUP BY i.product_id
+      )
+  `).all(from, to);
+  const mine = ranked.find(r => r.product_id === id) || { units: 0, revenue: 0, orders: 0, rank: null };
+
+  // Daily units for the sparkline, zero-filled so a no-sale day is a real gap
+  // in the line rather than being skipped and skewing the shape.
+  const dailyRows = tdb().prepare(`
+    SELECT ${PDATEO} AS d, COALESCE(SUM(i.qty), 0) AS units
+      FROM retail_order_items i
+      JOIN retail_orders o ON o.id = i.order_id
+     WHERE i.product_id = ? AND ${PAIDO} AND ${PDATEO} BETWEEN ? AND ?
+     GROUP BY d
+  `).all(id, from, to);
+  const byDay = new Map(dailyRows.map(r => [r.d, r.units]));
+  const daily = [];
+  for (let d = new Date(from + 'T00:00:00Z'); d <= new Date(to + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
+    const key = d.toISOString().slice(0, 10);
+    daily.push({ date: key, units: byDay.get(key) || 0 });
+  }
+
+  res.json({
+    success: true,
+    data: {
+      from, to,
+      units: mine.units, revenue: mine.revenue, orders: mine.orders,
+      rank: mine.rank, total_products: ranked.length,
+      daily,
+    },
+  });
+});
+
 // Soft-delete a product from the Mini App Backend (hide from shop + lists).
 router.delete('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
   // upstream tenants can't remove master products from this backend.
@@ -16972,6 +17036,29 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     r.is_bundle = r.bundle_items.length > 0;
     return r;
   });
+  // Trailing-30-day units, batched in one extra query keyed off the rows just
+  // fetched — only when asked (the command search palette's typeahead), never
+  // on the full 500-row grid load. One query regardless of row count, not a
+  // correlated subquery per row.
+  if (req.query.sales30 === '1' && rows.length) {
+    const ids = rows.map(r => r.id);
+    const ph = ids.map(() => '?').join(',');
+    const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
+    const to = nowGz.toISOString().slice(0, 10);
+    const from = new Date(nowGz.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+    const salesRows = tdb().prepare(`
+      SELECT i.product_id, COALESCE(SUM(i.qty), 0) AS units
+        FROM retail_order_items i
+        JOIN retail_orders o ON o.id = i.order_id
+       WHERE i.product_id IN (${ph})
+         AND o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
+         AND COALESCE(o.channel,'') != 'gzgrocery'
+         AND date(COALESCE(o.paid_at, o.placed_at), '+8 hours') BETWEEN ? AND ?
+       GROUP BY i.product_id
+    `).all(...ids, from, to);
+    const bySales = new Map(salesRows.map(r => [r.product_id, r.units]));
+    rows.forEach(r => { r.units_30d = bySales.get(r.id) || 0; });
+  }
   res.json({ success: true, data: rows });
 });
 

@@ -1253,7 +1253,7 @@ async function loadIntegrationsStatus() {
     const grab = url => fetch(url, { credentials: 'same-origin' })
       .then(r => (r.ok ? r.json() : null)).catch(() => null);
     const [p, o, c] = await Promise.all([
-      grab('/api/retail-admin/products?q=' + enc + '&limit=8'),
+      grab('/api/retail-admin/products?q=' + enc + '&limit=8&sales30=1'),
       grab('/api/retail-admin/orders?q=' + enc + '&limit=8'),
       grab('/api/retail-admin/customers?q=' + enc + '&pageSize=8'),
     ]);
@@ -1262,6 +1262,9 @@ async function loadIntegrationsStatus() {
     ((p && p.data) || []).slice(0, 6).forEach(r => {
       const name = r.name_en || r.name_cn || ('#' + r.id);
       const bits = [r.sku, r.category].filter(Boolean);
+      // Rolling 30-day units, so a common query ("protein") often answers
+      // "how's it selling?" right in the result list, no click needed.
+      if (r.units_30d) bits.push(r.units_30d + ' sold · 30d');
       items.push({ type: 'product', group: 'product', title: name,
         crumb: bits.join(' · '), pid: r.id });
     });
@@ -1304,7 +1307,16 @@ async function loadIntegrationsStatus() {
     if (it.openUrl) { window.open(it.openUrl, '_blank', 'noopener'); return; }
     // Live records → open the matching editor / detail drawer.
     if (it.type === 'product') {
-      openProductEditor(it.pid);
+      // Go through the same tab-click + paOpenEdit(id) a normal product-row
+      // click uses (mirrors the order/customer branches below) — NOT
+      // openProductEditor() directly, which skips straight to the page-design
+      // iframe and would bypass the commercial editor's Sales card entirely
+      // for the common (non-upstream) catalog mode. paOpenEdit() still
+      // branches to openProductEditor() itself for upstream tenants.
+      const t = document.querySelector('.tabs [data-tab="products"]');
+      if (t) t.click();
+      if (typeof paOpenEdit === 'function') setTimeout(() => paOpenEdit(it.pid), 60);
+      else if (typeof openProductEditor === 'function') openProductEditor(it.pid);
       return;
     }
     if (it.type === 'order') {
