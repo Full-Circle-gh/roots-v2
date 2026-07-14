@@ -11579,11 +11579,15 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
 
 // ── Catalogue highlights — the "Your catalogue" summary's second band ──────
 // Five glanceable, product-only facts an owner reads every morning, computed
-// from data we already keep (retail order lines for sales, store_products
-// fields for completeness, flash_* columns for promotions):
-//   bestSeller     — most units sold in the trailing 7 days
+// from data we already keep (retail order lines + gzgrocery wholesale ledger
+// for sales, store_products fields for completeness, flash_* columns for
+// promotions):
+//   bestSeller     — most units sold in the trailing 7 days (storefront + gzgrocery)
 //   rising         — biggest % jump in units this week vs the week before
+//                    (storefront only — the gzgrocery ledger's occasional
+//                    same-week reverse would otherwise fake a spike)
 //   goingNowhere   — live products with zero sales in the last 30 days
+//                    (storefront + gzgrocery — a wholesale-only mover isn't dead)
 //   needsAttention — live products missing a photo, price or category
 //   onPromotion    — live products with an active flash sale right now
 // Each is a headline, not a report: the client makes the whole band tappable so
@@ -11624,9 +11628,29 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
   const rows7    = tdb().prepare(unitsSql).all(win7From, today);
   const rowsPrev = tdb().prepare(unitsSql).all(prev7From, prev7To);
 
-  // bestSeller — most units this week.
+  // gzgrocery wholesale pickups, this week — a unit picked up at the Tianhe
+  // warehouse is exactly as real as one sold through checkout, so it counts
+  // toward bestSeller/goingNowhere. Left OUT of rising: the ledger sometimes
+  // carries a same-week reverse (a corrected drift read), and folding that
+  // into a %-jump metric risks painting a false spike from a sync hiccup.
+  const gzUnitsSql = `
+    SELECT l.product_id AS id, p.name_en, p.name_cn, COALESCE(SUM(-l.delta), 0) AS units
+      FROM retail_stock_ledger l
+      JOIN store_products p ON p.id = l.product_id
+     WHERE l.reason IN ('gzgrocery_order','gzgrocery_order_reverse')
+       AND date(l.created_at, '${TZ}') BETWEEN ? AND ? AND ${LIVE}
+     GROUP BY l.product_id`;
+  const gzRows7 = tdb().prepare(gzUnitsSql).all(win7From, today);
+
+  // bestSeller — most units this week, storefront + gzgrocery combined.
+  const unitsById = new Map(rows7.map(r => [r.id, { id: r.id, name_en: r.name_en, name_cn: r.name_cn, units: Number(r.units) || 0 }]));
+  for (const r of gzRows7) {
+    const cur = unitsById.get(r.id);
+    if (cur) cur.units += Number(r.units) || 0;
+    else unitsById.set(r.id, { id: r.id, name_en: r.name_en, name_cn: r.name_cn, units: Number(r.units) || 0 });
+  }
   let bestSeller = null;
-  for (const r of rows7) {
+  for (const r of unitsById.values()) {
     if (!bestSeller || r.units > bestSeller.units) {
       bestSeller = { id: r.id, name_en: r.name_en, name_cn: r.name_cn, units: Math.round(r.units) };
     }
@@ -11667,8 +11691,9 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
   // the count and the filter reading from one source of truth.
   const ID_CAP = 1000;
 
-  // goingNowhere — live products with zero sales in 30 days. New products (added
-  // within the window) get a pass so a fresh listing isn't branded dead on day one.
+  // goingNowhere — live products with zero sales in 30 days, storefront OR
+  // gzgrocery wholesale. New products (added within the window) get a pass
+  // so a fresh listing isn't branded dead on day one.
   const goingNowhereIds = tdb().prepare(`
     SELECT p.id FROM store_products p
      WHERE ${LIVE}
@@ -11678,8 +11703,12 @@ router.get('/api/retail-admin/products/highlights', requireRetailAdmin, (req, re
            FROM retail_order_items i
            JOIN retail_orders o ON o.id = i.order_id
           WHERE ${PAIDO} AND ${PDATEO} BETWEEN ? AND ? AND i.product_id IS NOT NULL)
+       AND p.id NOT IN (
+         SELECT l.product_id FROM retail_stock_ledger l
+          WHERE l.reason = 'gzgrocery_order'
+            AND date(l.created_at, '${TZ}') BETWEEN ? AND ? AND l.product_id IS NOT NULL)
      LIMIT ${ID_CAP}
-  `).all(win30From, win30From, today).map(r => r.id);
+  `).all(win30From, win30From, today, win30From, today).map(r => r.id);
 
   // needsAttention — live listings that look unfinished to a shopper: no photo
   // (self or variant sibling), no/zero price, or no category.
