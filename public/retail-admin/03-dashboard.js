@@ -369,15 +369,24 @@ const DASH_HERO_INTERVALS = { presence: 15000, channels: 60000, today: 60000 };
 // poll, and a manual page refresh was genuinely the fastest fix. One 3s retry
 // wasn't enough: the bad first-load window (cold server / SW still activating)
 // often outlasts a single attempt, so the card stayed stuck. We now retry on a
-// widening schedule until the surface fills or the schedule is exhausted. Later
+// widening schedule, then — because the un-polled list blocks (week, incoming,
+// drafts, moves, onroad, ready, recap) have no 60s backstop of their own and
+// would otherwise sit on "Loading…" forever when the whole boot window is bad
+// (cold server + a thundering herd of ~20 parallel boot fetches all racing the
+// 6-connection cap) — keep retrying on a steady 30s cadence until the surface
+// fills. The steady phase is capped so a genuinely dead endpoint eventually
+// stops; the surface's own poll / live nudge still covers it after that. Later
 // poll failures stay silent as before (last good numbers are already on screen).
 const DASH_BOOT_BACKOFF = [3000, 5000, 9000, 15000];
+const DASH_BOOT_STEADY_MS = 30000;
+const DASH_BOOT_STEADY_MAX = 20;   // ~10 more min of steady retries after the ramp
 const DASH_BOOT_RETRIED = {};
 function dashBootRetry(key, fn) {
   const n = DASH_BOOT_RETRIED[key] || 0;
-  if (n >= DASH_BOOT_BACKOFF.length) return false;
+  const steady = n >= DASH_BOOT_BACKOFF.length;
+  if (steady && n >= DASH_BOOT_BACKOFF.length + DASH_BOOT_STEADY_MAX) return false;
   DASH_BOOT_RETRIED[key] = n + 1;
-  setTimeout(fn, DASH_BOOT_BACKOFF[n]);
+  setTimeout(fn, steady ? DASH_BOOT_STEADY_MS : DASH_BOOT_BACKOFF[n]);
   return true;
 }
 
