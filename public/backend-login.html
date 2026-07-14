@@ -159,6 +159,13 @@
   .quiet{display:flex; align-items:center; justify-content:center; gap:8px; font-size:12px; color:var(--text-4); margin-top:24px;}
   .quiet .sdot{width:7px; height:7px; border-radius:50%; background:var(--sage); flex:none;}
 
+  /* forgot-password link + reset panel */
+  .forgotlink{display:block; margin:16px auto 0; background:none; border:0; cursor:pointer; font:500 12.5px var(--font); color:var(--text-2); text-decoration:underline; text-underline-offset:2px;}
+  .forgotlink:hover{color:var(--text);}
+  .reset-back{display:inline-flex; align-items:center; gap:6px; background:none; border:0; cursor:pointer; font:500 12.5px var(--font); color:var(--text-2); padding:0; margin:0 0 16px;}
+  .reset-back:hover{color:var(--text);} .reset-back svg{stroke:currentColor; fill:none;}
+  #resetPanel h1{margin-bottom:8px;}
+
   @media (max-width:420px){ .card{padding:34px 24px 28px;} }
 </style>
 </head>
@@ -185,6 +192,7 @@
     <div class="logincredit" hidden>runs on <span class="w">tacet</span></div>
     <div class="brandgap"></div>
 
+    <div id="loginPanel">
     <h1><span class="en">Welcome back</span><span class="cn">欢迎回来</span></h1>
     <p class="greet"><span class="en">Your channels kept running. Sign in to catch up.</span><span class="cn">渠道一直在运行。登录即可查看。</span></p>
 
@@ -218,6 +226,8 @@
       <button type="submit" class="submit" id="submitBtn"><span class="en">Sign in</span><span class="cn">登录</span></button>
     </form>
 
+    <button type="button" class="forgotlink" id="forgotBtn"><span class="en">Forgot your password?</span><span class="cn">忘记密码?</span></button>
+
     <div class="divider"><span><span class="en">or</span><span class="cn">或</span></span></div>
     <button type="button" class="wechat" id="wechatBtn" disabled aria-disabled="true">
       <svg width="17" height="17" viewBox="0 0 24 24" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4C5.9 4 3 6.5 3 9.6c0 1.8 1 3.4 2.5 4.4L4.8 16l2.3-1.2c.5.2 1.1.3 1.7.3"/><path d="M21 14.5c0-2.6-2.4-4.7-5.3-4.7s-5.2 2.1-5.2 4.7 2.3 4.7 5.2 4.7c.7 0 1.4-.1 2-.3l2.1 1.1-.6-2c1.1-.9 1.8-2.1 1.8-3.5Z"/></svg>
@@ -229,6 +239,47 @@
       <span class="en">Want your own store? <a href="/backend/signup">Request access →</a></span>
       <span class="cn">想开通自己的门店?<a href="/backend/signup">申请开通 →</a></span>
     </p>
+    </div><!-- /#loginPanel -->
+
+    <!-- Forgotten-password reset — emails a code to the operator's verified
+         recovery address, then sets a new password. Toggled in place over the
+         sign-in panel. -->
+    <div id="resetPanel" hidden>
+      <button type="button" class="reset-back" id="resetBack">
+        <svg width="13" height="13" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"/></svg>
+        <span class="en">Back to sign in</span><span class="cn">返回登录</span>
+      </button>
+      <h1><span class="en">Reset password</span><span class="cn">重置密码</span></h1>
+
+      <div id="resetStep1">
+        <p class="greet"><span class="en">Enter your username and we’ll email a code to your recovery address.</span><span class="cn">输入用户名，我们会将验证码发送到您的恢复邮箱。</span></p>
+        <div class="err" id="resetErr" role="alert"><span></span></div>
+        <div class="field">
+          <label for="resetUser"><span class="en">Username</span><span class="cn">用户名</span></label>
+          <input id="resetUser" type="text" autocomplete="username" spellcheck="false" autocapitalize="none" />
+        </div>
+        <button type="button" class="submit" id="resetSendBtn"><span class="en">Send reset code</span><span class="cn">发送验证码</span></button>
+      </div>
+
+      <div id="resetStep2" hidden>
+        <p class="greet"><span class="en">If that account has a recovery email, a code is on its way. Enter it with a new password.</span><span class="cn">如果该账户设置了恢复邮箱，验证码已发送。请输入验证码并设置新密码。</span></p>
+        <div class="err" id="resetErr2" role="alert"><span></span></div>
+        <div class="field">
+          <label for="resetCode"><span class="en">Reset code</span><span class="cn">验证码</span></label>
+          <input id="resetCode" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" />
+        </div>
+        <div class="field">
+          <label for="resetPw"><span class="en">New password</span><span class="cn">新密码</span></label>
+          <input id="resetPw" type="password" autocomplete="new-password" placeholder="••••••••" />
+        </div>
+        <button type="button" class="submit" id="resetConfirmBtn"><span class="en">Set new password</span><span class="cn">设置新密码</span></button>
+      </div>
+
+      <div id="resetDone" hidden>
+        <p class="greet" style="margin-top:8px;"><span class="en">Password updated. You can sign in with it now.</span><span class="cn">密码已更新，现在即可使用新密码登录。</span></p>
+        <button type="button" class="submit" id="resetDoneBtn"><span class="en">Back to sign in</span><span class="cn">返回登录</span></button>
+      </div>
+    </div>
 
     <div class="quiet"><span class="sdot"></span><span class="en">All systems quiet</span><span class="cn">一切安静如常</span></div>
   </main>
@@ -356,6 +407,61 @@
       });
       pw.addEventListener('blur', function () { caps.classList.remove('show'); });
     }
+  })();
+
+  /* Forgotten-password reset — three steps in place over the sign-in panel. */
+  (function () {
+    function L(en, cn) { return window.__loginLang === 'cn' ? cn : en; }
+    var loginPanel = document.getElementById('loginPanel');
+    var resetPanel = document.getElementById('resetPanel');
+    var step1 = document.getElementById('resetStep1');
+    var step2 = document.getElementById('resetStep2');
+    var done  = document.getElementById('resetDone');
+    var err1  = document.getElementById('resetErr');
+    var err2  = document.getElementById('resetErr2');
+    var sendBtn = document.getElementById('resetSendBtn');
+    var confirmBtn = document.getElementById('resetConfirmBtn');
+    var userIn = document.getElementById('resetUser');
+    var username = '';
+
+    function show(el, on) { if (el) el.hidden = !on; }
+    function setErr(el, msg) { if (!el) return; if (msg) { el.querySelector('span').textContent = msg; el.classList.add('show'); } else { el.classList.remove('show'); el.querySelector('span').textContent = ''; } }
+    function loadBtn(btn, on) { if (!btn) return; btn.disabled = on; btn.classList.toggle('loading', on); }
+
+    function openReset() { setErr(err1, ''); setErr(err2, ''); show(step1, true); show(step2, false); show(done, false); show(loginPanel, false); resetPanel.hidden = false; if (userIn) userIn.focus(); }
+    function closeReset() { resetPanel.hidden = true; show(loginPanel, true); }
+
+    document.getElementById('forgotBtn').addEventListener('click', openReset);
+    document.getElementById('resetBack').addEventListener('click', closeReset);
+    document.getElementById('resetDoneBtn').addEventListener('click', closeReset);
+
+    sendBtn.addEventListener('click', function () {
+      setErr(err1, '');
+      username = (userIn.value || '').trim();
+      if (!username) { setErr(err1, L('Enter your username.', '请输入用户名。')); return; }
+      loadBtn(sendBtn, true);
+      fetch('/api/backend/password-reset/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: username }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function () { loadBtn(sendBtn, false); show(step1, false); show(step2, true); var c = document.getElementById('resetCode'); if (c) c.focus(); })
+        .catch(function () { loadBtn(sendBtn, false); setErr(err1, L('Network error — please try again.', '网络错误，请重试。')); });
+    });
+
+    confirmBtn.addEventListener('click', function () {
+      setErr(err2, '');
+      var code = (document.getElementById('resetCode').value || '').trim();
+      var pw = document.getElementById('resetPw').value || '';
+      if (!/^\d{6}$/.test(code)) { setErr(err2, L('Enter the 6-digit code from your email.', '请输入邮件中的 6 位验证码。')); return; }
+      if (pw.length < 10) { setErr(err2, L('New password must be at least 10 characters.', '新密码至少需要 10 位。')); return; }
+      loadBtn(confirmBtn, true);
+      fetch('/api/backend/password-reset/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ username: username, code: code, new_password: pw }) })
+        .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, data: d }; }); })
+        .then(function (res) {
+          loadBtn(confirmBtn, false);
+          if (res.ok && res.data && res.data.success) { show(step2, false); show(done, true); }
+          else { setErr(err2, (res.data && res.data.error) || L('Incorrect or expired code.', '验证码不正确或已过期。')); }
+        })
+        .catch(function () { loadBtn(confirmBtn, false); setErr(err2, L('Network error — please try again.', '网络错误，请重试。')); });
+    });
   })();
 </script>
 </body>

@@ -14,9 +14,11 @@
 
 const express = require('express');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const db = require('../database');
 const features = require('../lib/features');
+const emailSender = require('../lib/email-sender');
 const router = express.Router();
 
 // ── Schema (idempotent) ─────────────────────────────────────────────────
@@ -150,6 +152,32 @@ try { db.exec('ALTER TABLE tenants ADD COLUMN features_json TEXT'); } catch (e) 
 // Consistent with how customer avatars + other images live in SQLite today; the
 // planned OSS migration will sweep these up with the rest.
 try { db.exec('ALTER TABLE tenant_users ADD COLUMN avatar_url TEXT'); } catch (e) { /* already added */ }
+
+// Recovery email — a personal address the operator can use to reset a
+// forgotten password (login is username-only otherwise, so a lost password
+// was previously unrecoverable without an admin). Verified via an emailed code
+// before it's trusted for reset.
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN recovery_email TEXT'); } catch (e) { /* already added */ }
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN recovery_email_verified INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already added */ }
+
+// One-time codes — emailed 6-digit codes for verifying a recovery address and
+// for resetting a forgotten password. Codes are stored HASHED (never plain),
+// short-lived, and single-use; a small attempt counter blocks guessing.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS tenant_user_codes (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    tenant_user_id INTEGER NOT NULL,
+    purpose        TEXT NOT NULL,               -- 'recovery_verify' | 'password_reset'
+    email          TEXT,                        -- target address (pending recovery email / recovery email)
+    code_hash      TEXT NOT NULL,
+    attempts       INTEGER NOT NULL DEFAULT 0,
+    used           INTEGER NOT NULL DEFAULT 0,
+    expires_at     DATETIME NOT NULL,
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (tenant_user_id) REFERENCES tenant_users(id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_tenant_user_codes_user ON tenant_user_codes(tenant_user_id, purpose);
+`);
 
 // Store assignment for restricted operators (the Quick Stock app): the one store
 // they manage stock for. Set for the 'kitchen' role (add stock) and the
@@ -594,6 +622,130 @@ router.get('/api/backend/access', (req, res) => {
     return items.length ? { title, items } : null;
   }).filter(Boolean);
   res.json({ owner: false, role: u.role, roleLabel, groups, scopeStores: scopeStores || null });
+});
+
+// ── Recovery email + forgotten-password reset ─────────────────────────────
+const CODE_PEPPER = process.env.SESSION_SECRET || 'tacet-code-pepper';
+function genCode() { return String(crypto.randomInt(0, 1000000)).padStart(6, '0'); }
+function hashCode(code) { return crypto.createHmac('sha256', CODE_PEPPER).update(String(code)).digest('hex'); }
+function validEmail(e) { return typeof e === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 190; }
+function maskEmail(e) {
+  if (!e) return null;
+  var at = e.indexOf('@'); if (at < 1) return e;
+  var name = e.slice(0, at), dom = e.slice(at);
+  return name[0] + '****' + dom;
+}
+// Branding for the code email (co-brand when the tenant has a name/mark).
+function emailBrandOpts(req, tenantId) {
+  try {
+    const t = db.prepare('SELECT brand_name, brand_mark_data FROM tenants WHERE id = ?').get(tenantId);
+    if (!t) return {};
+    const host = req.headers['x-forwarded-host'] || req.get('host');
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0];
+    return {
+      brand: t.brand_name || '',
+      logoUrl: t.brand_mark_data && host ? `${proto}://${host}/api/backend/brand/${tenantId}/mark` : '',
+    };
+  } catch (e) { return {}; }
+}
+function insertCode(userId, purpose, email, code, minutes) {
+  db.prepare(`INSERT INTO tenant_user_codes (tenant_user_id, purpose, email, code_hash, expires_at)
+              VALUES (?, ?, ?, ?, datetime('now', ?))`)
+    .run(userId, purpose, email || null, hashCode(code), '+' + (minutes || 15) + ' minutes');
+}
+// Latest live (unused, unexpired) code for a user+purpose. Returns the row or null.
+function liveCode(userId, purpose) {
+  return db.prepare(`SELECT * FROM tenant_user_codes
+                       WHERE tenant_user_id = ? AND purpose = ? AND used = 0 AND expires_at > datetime('now')
+                       ORDER BY id DESC LIMIT 1`).get(userId, purpose);
+}
+
+// Throttle code sends + reset attempts (per IP). Same posture as login.
+const codeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, standardHeaders: true, legacyHeaders: false,
+  message: { success: false, error: 'Too many attempts, try again later · 尝试过于频繁,请稍后再试' } });
+
+// Current recovery-email state for the signed-in operator.
+router.get('/api/backend/recovery', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const u = db.prepare('SELECT recovery_email, recovery_email_verified FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
+  res.json({ email: u && u.recovery_email ? maskEmail(u.recovery_email) : null, verified: !!(u && u.recovery_email_verified), emailConfigured: emailSender.isConfigured() });
+});
+
+// Start setting a recovery email — emails a 6-digit verification code.
+router.post('/api/backend/recovery/start', codeLimiter, express.json(), async (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const email = String((req.body && req.body.email) || '').trim().toLowerCase();
+  if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid email · 请输入有效邮箱' });
+  if (!emailSender.isConfigured()) return res.status(503).json({ error: 'Email isn’t set up yet · 邮件功能尚未配置' });
+  const code = genCode();
+  insertCode(req.session.backendUserId, 'recovery_verify', email, code, 15);
+  const opts = emailBrandOpts(req, req.session.tenantId);
+  const r = await emailSender.sendOtpEmail(email, code, null, opts);
+  if (!r.ok) return res.status(502).json({ error: 'Couldn’t send the email — please try again · 邮件发送失败,请重试' });
+  res.json({ success: true, email: maskEmail(email) });
+});
+
+// Confirm the code → save + mark the recovery email verified.
+router.post('/api/backend/recovery/confirm', codeLimiter, express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const code = String((req.body && req.body.code) || '').trim();
+  if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Enter the 6-digit code · 请输入 6 位验证码' });
+  const row = liveCode(req.session.backendUserId, 'recovery_verify');
+  if (!row) return res.status(400).json({ error: 'Code expired — request a new one · 验证码已过期,请重新获取' });
+  if (row.attempts >= 5) return res.status(429).json({ error: 'Too many tries — request a new code · 尝试次数过多,请重新获取' });
+  if (hashCode(code) !== row.code_hash) {
+    db.prepare('UPDATE tenant_user_codes SET attempts = attempts + 1 WHERE id = ?').run(row.id);
+    return res.status(400).json({ error: 'Incorrect code · 验证码不正确' });
+  }
+  db.prepare('UPDATE tenant_user_codes SET used = 1 WHERE id = ?').run(row.id);
+  db.prepare('UPDATE tenant_users SET recovery_email = ?, recovery_email_verified = 1 WHERE id = ?').run(row.email, req.session.backendUserId);
+  res.json({ success: true, email: maskEmail(row.email) });
+});
+
+// Remove the recovery email.
+router.delete('/api/backend/recovery', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  db.prepare('UPDATE tenant_users SET recovery_email = NULL, recovery_email_verified = 0 WHERE id = ?').run(req.session.backendUserId);
+  db.prepare("DELETE FROM tenant_user_codes WHERE tenant_user_id = ? AND purpose = 'recovery_verify'").run(req.session.backendUserId);
+  res.json({ success: true });
+});
+
+// ── Forgotten-password reset (pre-auth) ───────────────────────────────────
+// Start: look up the username; if it has a VERIFIED recovery email, mail a
+// reset code there. The response is ALWAYS generic so this can't be used to
+// discover which usernames exist or who has recovery set up.
+router.post('/api/backend/password-reset/start', codeLimiter, express.json(), async (req, res) => {
+  const username = String((req.body && req.body.username) || '').trim().toLowerCase();
+  const generic = { success: true };
+  if (!username) return res.json(generic);
+  const u = db.prepare('SELECT id, tenant_id, recovery_email, recovery_email_verified FROM tenant_users WHERE username = ? AND is_active = 1').get(username);
+  if (!u || !u.recovery_email || !u.recovery_email_verified || !emailSender.isConfigured()) return res.json(generic);
+  const code = genCode();
+  insertCode(u.id, 'password_reset', u.recovery_email, code, 15);
+  try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
+  res.json(generic);
+});
+
+// Confirm: verify the reset code + set the new password.
+router.post('/api/backend/password-reset/confirm', codeLimiter, express.json(), (req, res) => {
+  const username = String((req.body && req.body.username) || '').trim().toLowerCase();
+  const code = String((req.body && req.body.code) || '').trim();
+  const newPassword = (req.body && req.body.new_password) || '';
+  if (!username || !/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Enter the code from your email · 请输入邮件中的验证码' });
+  if (!newPassword || newPassword.length < 10) return res.status(400).json({ error: 'New password must be at least 10 characters · 新密码至少需要 10 位' });
+  const u = db.prepare('SELECT id FROM tenant_users WHERE username = ? AND is_active = 1').get(username);
+  if (!u) return res.status(400).json({ error: 'Incorrect or expired code · 验证码不正确或已过期' });
+  const row = liveCode(u.id, 'password_reset');
+  if (!row) return res.status(400).json({ error: 'Code expired — request a new one · 验证码已过期,请重新获取' });
+  if (row.attempts >= 5) return res.status(429).json({ error: 'Too many tries — request a new code · 尝试次数过多,请重新获取' });
+  if (hashCode(code) !== row.code_hash) {
+    db.prepare('UPDATE tenant_user_codes SET attempts = attempts + 1 WHERE id = ?').run(row.id);
+    return res.status(400).json({ error: 'Incorrect code · 验证码不正确' });
+  }
+  db.prepare('UPDATE tenant_user_codes SET used = 1 WHERE id = ?').run(row.id);
+  db.prepare("UPDATE tenant_user_codes SET used = 1 WHERE tenant_user_id = ? AND purpose = 'password_reset'").run(u.id);
+  db.prepare('UPDATE tenant_users SET password = ? WHERE id = ?').run(bcrypt.hashSync(newPassword, 10), u.id);
+  res.json({ success: true });
 });
 
 module.exports = router;

@@ -205,6 +205,23 @@
   .acc-scope{ margin-top:6px; font-size:12.5px; color:var(--amber-ink); background:var(--amber-tint); border:1px solid var(--amber); border-radius:8px; padding:9px 12px; }
 
   .skel{ color:var(--text-4); font-size:13px; padding:12px 2px; }
+
+  /* recovery email */
+  .rec-sect{ margin-top:26px; padding-top:22px; border-top:1px solid var(--line); max-width:360px; }
+  .rec-set{ display:flex; align-items:center; gap:10px; background:var(--raised); border:1px solid var(--line); border-radius:10px; padding:11px 13px; }
+  .rec-set .rec-ico{ width:30px; height:30px; border-radius:8px; background:var(--surface); display:grid; place-items:center; flex:none; color:var(--text-2); }
+  .rec-set .rec-ico svg{ width:15px; height:15px; stroke:currentColor; fill:none; }
+  .rec-set .rec-addr{ min-width:0; flex:1; }
+  .rec-set .rec-em{ font-size:13.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rec-verified{ display:inline-flex; align-items:center; gap:5px; font-size:11.5px; color:var(--sage-ink); margin-top:2px; }
+  .rec-verified svg{ width:12px; height:12px; stroke:currentColor; fill:none; }
+  .rec-actions{ display:flex; gap:14px; margin-top:12px; }
+  .rec-link{ font:500 12.5px inherit; background:none; border:none; padding:0; cursor:pointer; color:var(--text-2); text-decoration:underline; text-underline-offset:2px; }
+  .rec-link:hover{ color:var(--text); }
+  .rec-link.danger:hover{ color:var(--brick); }
+  .rec-row{ display:flex; gap:9px; align-items:flex-start; }
+  .rec-row .field{ flex:1; margin-bottom:0; }
+  .rec-hint{ font-size:12px; color:var(--text-2); margin-top:9px; line-height:1.5; }
 </style>
 </head>
 <body>
@@ -317,6 +334,14 @@
           <div class="msg" id="msg" role="status"><span></span></div>
           <button type="submit" id="pwBtn" class="btn-ink"><span class="en">Update password</span><span class="cn">更新密码</span></button>
         </form>
+
+        <!-- Recovery email — lets you reset a forgotten password (login is
+             username-only otherwise). Verified with an emailed code. -->
+        <div class="rec-sect">
+          <h2 class="sect-h"><span class="en">Recovery email</span><span class="cn">恢复邮箱</span></h2>
+          <p class="lead" style="margin-bottom:14px;"><span class="en">If you forget your password, we’ll email a reset code here.</span><span class="cn">忘记密码时，我们会将重置验证码发送到此邮箱。</span></p>
+          <div id="recBody"><div class="skel"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
+        </div>
       </div>
 
       <!-- Devices -->
@@ -347,7 +372,10 @@
     var lang = document.documentElement.getAttribute('data-lang') === 'cn' ? 'cn' : 'en';
     function L(en, cn){ return lang === 'cn' ? cn : en; }
     var lastUser = null;
-    var loaded = { devices:false, access:false };
+    var loaded = { devices:false, access:false, recovery:false };
+    var recCurrent = { email:null, verified:false, emailConfigured:true };
+    var recPending = null;      // masked address, for display in the code step
+    var recPendingRaw = null;   // the real address typed, so "Resend" re-sends it
 
     var $ = function(id){ return document.getElementById(id); };
     function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function (c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
@@ -402,6 +430,7 @@
       document.querySelectorAll('.tabpane').forEach(function(p){ p.classList.toggle('on', p.dataset.pane === tab); });
       if (tab === 'devices' && !loaded.devices) loadDevices();
       if (tab === 'access'  && !loaded.access)  loadAccess();
+      if (tab === 'security' && !loaded.recovery) loadRecovery();
     }
     document.querySelectorAll('.navbtn').forEach(function(b){ b.addEventListener('click', function(){ showTab(b.dataset.tab); }); });
 
@@ -562,6 +591,88 @@
           box.innerHTML = html;
         })
         .catch(function(){ box.innerHTML = '<div class="dev-empty">'+L('Couldn’t load access.','无法加载权限。')+'</div>'; });
+    }
+
+    /* ── recovery email ── */
+    var ICO_MAIL = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
+    var ICO_TICK = '<svg viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    function loadRecovery(){
+      loaded.recovery = true;
+      var box = $('recBody'); box.innerHTML = '<div class="skel">'+L('Loading…','加载中…')+'</div>';
+      fetch('/api/backend/recovery', { credentials:'same-origin' })
+        .then(function(r){ return r.json(); })
+        .then(function(j){
+          recCurrent = { email:(j&&j.email)||null, verified:!!(j&&j.verified), emailConfigured:!(j&&j.emailConfigured===false) };
+          renderRecovery(recCurrent.email && recCurrent.verified ? 'set' : 'empty');
+        })
+        .catch(function(){ $('recBody').innerHTML = '<div class="dev-empty">'+L('Couldn’t load.','无法加载。')+'</div>'; });
+    }
+    function renderRecovery(mode){
+      var box = $('recBody'), h = '';
+      if (!recCurrent.emailConfigured && mode !== 'set') {
+        box.innerHTML = '<div class="rec-hint">'+L('Email isn’t set up on this workspace yet, so password reset by email isn’t available.','此工作区尚未配置邮件功能，暂不支持邮箱重置密码。')+'</div>';
+        return;
+      }
+      if (mode === 'set') {
+        h = '<div class="rec-set"><span class="rec-ico">'+ICO_MAIL+'</span><div class="rec-addr"><div class="rec-em">'+esc(recCurrent.email||'')+'</div>'
+          + '<div class="rec-verified">'+ICO_TICK+L('Verified','已验证')+'</div></div></div>'
+          + '<div class="rec-actions"><button class="rec-link" data-act="add">'+L('Change','更换')+'</button><button class="rec-link danger" data-act="remove">'+L('Remove','移除')+'</button></div>';
+      } else if (mode === 'email') {
+        h = '<div class="rec-row"><div class="field"><input type="email" id="recEmail" placeholder="you@example.com" autocomplete="email" spellcheck="false"></div>'
+          + '<button class="btn-ink" data-act="send" style="height:40px;">'+L('Send code','发送验证码')+'</button></div>'
+          + '<div class="msg" id="recMsg"><span></span></div>'
+          + '<div class="rec-actions"><button class="rec-link" data-act="cancel">'+L('Cancel','取消')+'</button></div>';
+      } else if (mode === 'code') {
+        h = '<p class="rec-hint">'+L('Enter the 6-digit code we emailed to ','我们已将 6 位验证码发送至 ')+'<b>'+esc(recPending||'')+'</b>.</p>'
+          + '<div class="rec-row"><div class="field"><input type="text" id="recCode" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code"></div>'
+          + '<button class="btn-ink" data-act="verify" style="height:40px;">'+L('Verify','验证')+'</button></div>'
+          + '<div class="msg" id="recMsg"><span></span></div>'
+          + '<div class="rec-actions"><button class="rec-link" data-act="send">'+L('Resend','重新发送')+'</button><button class="rec-link" data-act="cancel">'+L('Cancel','取消')+'</button></div>';
+      } else { // empty
+        h = '<button class="btn-sec" data-act="add">'+L('Add a recovery email','添加恢复邮箱')+'</button>';
+      }
+      box.innerHTML = h;
+      Array.prototype.forEach.call(box.querySelectorAll('[data-act]'), function(el){ el.addEventListener('click', function(){ recAct(el.dataset.act); }); });
+      var ce = $('recEmail'); if (ce) ce.addEventListener('keydown', function(e){ if (e.key==='Enter'){ e.preventDefault(); recAct('send'); } });
+      var cc = $('recCode'); if (cc) cc.addEventListener('keydown', function(e){ if (e.key==='Enter'){ e.preventDefault(); recAct('verify'); } });
+    }
+    function recAct(act){
+      if (act === 'add') { renderRecovery('email'); var f=$('recEmail'); if (f) f.focus(); return; }
+      if (act === 'cancel') { renderRecovery(recCurrent.email && recCurrent.verified ? 'set' : 'empty'); return; }
+      if (act === 'send') {
+        var input = $('recEmail');
+        var email = input ? input.value.trim() : (recPendingRaw || '');   // no input in 'code' mode → resend the raw address
+        if (input) recPendingRaw = email;                                 // remember the real address for a later resend
+        var btn = document.querySelector('#recBody [data-act="send"]');
+        if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+        fetch('/api/backend/recovery/start', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ email:email }) })
+          .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
+          .then(function(res){
+            if (res.ok && res.data && res.data.success) { recPending = res.data.email; renderRecovery('code'); var c=$('recCode'); if (c) c.focus(); }
+            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',(res.data&&res.data.error)||L('Couldn’t send — please try again','发送失败，请重试')); }
+          })
+          .catch(function(){ if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
+        return;
+      }
+      if (act === 'verify') {
+        var code = $('recCode') ? $('recCode').value.trim() : '';
+        var btn = document.querySelector('#recBody [data-act="verify"]');
+        if (btn) { btn.disabled = true; btn.classList.add('loading'); }
+        fetch('/api/backend/recovery/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ code:code }) })
+          .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
+          .then(function(res){
+            if (res.ok && res.data && res.data.success) { recCurrent.email = res.data.email; recCurrent.verified = true; renderRecovery('set'); }
+            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
+          })
+          .catch(function(){ if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
+        return;
+      }
+      if (act === 'remove') {
+        fetch('/api/backend/recovery', { method:'DELETE', credentials:'same-origin' })
+          .then(function(){ recCurrent.email = null; recCurrent.verified = false; recPending = null; renderRecovery('empty'); })
+          .catch(function(){});
+        return;
+      }
     }
 
     /* ── close / back ── */
