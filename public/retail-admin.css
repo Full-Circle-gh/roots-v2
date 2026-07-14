@@ -2229,103 +2229,94 @@
     background: none; border: 0; border-radius: 0; margin-bottom: 0;
   }
 
-  /* ── Highlights band — spotlight + rail. Best seller is the one number worth
-        a second look, so it gets its own quiet sage-washed panel with a photo;
-        the other four facts collapse into a compact reference rail beside it —
-        icon (or thumbnail, when the row names one real product), label, value.
-        Every row is a button that deep-links into Products filtered to that set. ── */
+  /* ── Highlights band — two hero tiles + a quiet ticker. Best seller and
+        Rising are the two facts worth a second look, so they get equal
+        weight: eyebrow, photo, big number. The other three (Going nowhere,
+        Needs attention, On promotion) drop into a dense reference strip
+        below — icon badge, label, value, no thumbnail. Every tile/tick is a
+        button that deep-links into Products filtered to that set. ── */
   .pa-hi { border-top: 1px solid var(--td-border); }
   .pa-hi-head {
     font-family: var(--f-sans); font-size: 11px; font-weight: 600;
     letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2);
     padding: 16px 26px 0; margin-bottom: 12px;
   }
-  .pa-hi-band { display: flex; }
+  .pa-hi-band { display: block; }
 
-  .pa-hi-spot {
-    width: 34%; min-width: 230px; flex: none; text-align: left;
-    display: flex; align-items: center; gap: 16px;
-    padding: 0 20px; border-right: 1px solid var(--td-border);
-    background: linear-gradient(180deg, var(--td-sage-tint), transparent 140%);
-    border-top: 0; border-bottom: 0; border-left: 0;
+  .pa-hi-heroes { display: flex; }
+  .pa-hi-hero {
+    flex: 1; min-width: 0; text-align: left; display: flex; flex-direction: column; gap: 14px;
+    padding: 18px 26px 20px; border-right: 1px solid var(--td-border);
+    border-top: 0; border-bottom: 0; border-left: 0; background: none;
     font-family: var(--f-sans); color: var(--td-text); cursor: pointer;
     transition: background .2s cubic-bezier(.16,1,.3,1);
   }
-  .pa-hi-spot:not(:disabled):hover { background: var(--td-sage-tint); }
-  .pa-hi-spot:disabled { cursor: default; background: none; }
-  .pa-hi-spot:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
-  .pa-hi-spot-photo {
-    width: 88px; height: 88px; border-radius: 12px; flex: none;
+  .pa-hi-hero:last-child { border-right: 0; }
+  .pa-hi-hero:disabled { cursor: default; }
+  .pa-hi-hero:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
+  .pa-hi-hero:not(:disabled):hover { background: var(--td-sage-tint); }
+  .pa-hi-hero-eb {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-weight: 600; letter-spacing: .08em;
+    text-transform: uppercase; color: var(--td-sage-ink);
+  }
+  .pa-hi-hero-eb svg { flex: none; width: 13px; height: 13px; }
+  .pa-hi-hero-body { display: flex; align-items: flex-start; gap: 16px; }
+  .pa-hi-hero-photo {
+    width: 64px; height: 64px; border-radius: 14px; flex: none; position: relative;
     background: var(--td-surface); border: 1px solid var(--td-border);
     display: flex; align-items: center; justify-content: center;
     color: var(--td-text2); overflow: hidden;
   }
-  .pa-hi-spot-photo svg { width: 32px; height: 32px; }
-  .pa-hi-spot-photo img { width: 100%; height: 100%; object-fit: cover; }
-  .pa-hi-spot-body { min-width: 0; }
-  .pa-hi-spot-cap {
-    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
-    font-size: 11px; font-weight: 600; letter-spacing: .08em;
-    text-transform: uppercase; color: var(--td-sage-ink);
+  .pa-hi-hero-photo svg { width: 26px; height: 26px; }
+  .pa-hi-hero-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .pa-hi-hero-dot {
+    position: absolute; bottom: -3px; right: -3px; width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid var(--td-surface); background: var(--td-sage-tint); color: var(--td-sage-ink);
+    display: flex; align-items: center; justify-content: center;
   }
-  .pa-hi-spot-cap svg { flex: none; width: 13px; height: 13px; }
-  .pa-hi-spot-name {
-    font-size: 14px; font-weight: 500; line-height: 1.3; color: var(--td-text); margin-bottom: 4px;
+  .pa-hi-hero-dot svg { width: 10px; height: 10px; }
+  /* text is always name-row then stat-row, regardless of how long the name is —
+     a short name (e.g. "Seitan") and a long one (e.g. "Masala Chai Latte") must
+     produce the same two-row height, or the photo box (vertically centered
+     against its own tile's text) drifts out of alignment with the other hero. */
+  .pa-hi-hero-text { min-width: 0; padding-top: 6px; }
+  .pa-hi-hero-name {
+    display: block; font-size: 14px; font-weight: 500; color: var(--td-text); margin-bottom: 6px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
-  .pa-hi-spot-stat { font-size: 24px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
-  .pa-hi-spot-stat .u { font-size: 11.5px; font-weight: 500; color: var(--td-text2); margin-left: 4px; }
+  .pa-hi-hero-stat { display: block; font-size: 28px; font-weight: 600; letter-spacing: -.01em; font-variant-numeric: tabular-nums; line-height: 1; }
+  .pa-hi-hero-stat .u { font-size: 12px; font-weight: 500; color: var(--td-text2); margin-left: 5px; }
 
-  .pa-hi-rail { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-  .pa-hi-rail-row {
-    display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
-    padding: 11px 26px; border-bottom: 1px solid var(--td-raised);
-    border-top: 0; border-left: 0; border-right: 0; background: none;
-    font-family: var(--f-sans); color: var(--td-text); cursor: pointer;
-    transition: background .15s cubic-bezier(.16,1,.3,1);
+  .pa-hi-ticks {
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+    padding: 13px 26px; border-top: 1px solid var(--td-raised); background: var(--td-raised);
   }
-  .pa-hi-rail-row:last-child { border-bottom: 0; }
-  .pa-hi-rail-row:not(:disabled):hover { background: var(--td-raised); }
-  .pa-hi-rail-row:disabled { cursor: default; }
-  .pa-hi-rail-row:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
-  .pa-hi-rail-row.is-on { background: var(--td-raised); }
-  .pa-hi-rail-row.is-on .pa-hi-rail-val { text-decoration: underline; text-decoration-color: var(--td-text); text-underline-offset: 3px; }
-  .pa-hi-rail-ico { width: 30px; height: 30px; border-radius: 8px; flex: none; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-  .pa-hi-rail-ico svg { width: 16px; height: 16px; }
-  .pa-hi-rail-ico.thumb { background: var(--td-raised); border: 1px solid var(--td-border); color: var(--td-text2); }
-  .pa-hi-rail-ico.thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 7px; }
-  .pa-hi-rail-ico.badge-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
-  .pa-hi-rail-ico.badge-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
-  .pa-hi-rail-ico.badge-neu   { background: var(--td-raised); color: var(--td-text2); border: 1px solid var(--td-border); }
-  .pa-hi-rail-dot {
-    position: absolute; bottom: -2px; right: -2px; width: 12px; height: 12px; border-radius: 50%;
-    border: 2px solid var(--td-surface); display: flex; align-items: center; justify-content: center;
+  .pa-hi-tick {
+    display: flex; align-items: center; gap: 8px; padding: 4px 20px 4px 0; margin-right: 20px;
+    border-right: 1px solid var(--td-border); border-top: 0; border-bottom: 0; border-left: 0;
+    background: none; font-family: var(--f-sans); cursor: pointer;
   }
-  .pa-hi-rail-dot.up { background: var(--td-sage-tint); color: var(--td-sage-ink); }
-  .pa-hi-rail-dot svg { width: 7px; height: 7px; }
-  .pa-hi-rail-lab { flex: 1; min-width: 0; }
-  .pa-hi-rail-cap {
-    display: block; font-size: 11px; font-weight: 600; letter-spacing: .02em;
-    text-transform: uppercase; color: var(--td-text2); margin-bottom: 2px;
-  }
-  .pa-hi-rail-cap.up   { color: var(--td-sage-ink); }
-  .pa-hi-rail-cap.down { color: var(--td-brick-ink); }
-  .pa-hi-rail-cap.warn { color: var(--td-amber-ink); }
-  .pa-hi-rail-sub {
-    display: block; font-size: 13.5px; font-weight: 500; color: var(--td-text);
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .pa-hi-rail-val { flex: none; font-size: 15px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .pa-hi-rail-val.up { color: var(--td-sage-ink); }
-  .pa-hi-rail-val.muted { color: var(--td-text2); font-weight: 500; }
-  .pa-hi-rail-chev { flex: none; color: var(--td-text2); opacity: .5; }
-  .pa-hi-tri { width: 9px; height: 9px; margin-right: 2px; vertical-align: middle; }
+  .pa-hi-tick:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
+  .pa-hi-tick:disabled { cursor: default; }
+  .pa-hi-tick:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
+  .pa-hi-tick.is-on .pa-hi-tick-v { text-decoration: underline; text-decoration-color: var(--td-text); text-underline-offset: 3px; }
+  .pa-hi-tick-ico { width: 20px; height: 20px; border-radius: 6px; flex: none; display: flex; align-items: center; justify-content: center; }
+  .pa-hi-tick-ico svg { width: 11px; height: 11px; }
+  .pa-hi-tick-ico.badge-brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  .pa-hi-tick-ico.badge-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .pa-hi-tick-ico.badge-neu   { background: var(--td-surface); color: var(--td-text2); border: 1px solid var(--td-border); }
+  .pa-hi-tick-k { font-size: 12.5px; color: var(--td-text2); }
+  .pa-hi-tick-v { font-size: 14px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .pa-hi-tick-v.muted { color: var(--td-text2); font-weight: 500; }
+  .pa-hi-tri { width: 18px; height: 18px; margin-right: 3px; vertical-align: -3px; }
   .pa-hi-empty { font-size: 13px; color: var(--td-text3, var(--td-text2)); }
   @media (max-width: 720px) {
     .pa-hi-head { padding: 14px 16px 0; }
-    .pa-hi-band { flex-direction: column; }
-    .pa-hi-spot { width: auto; border-right: 0; border-bottom: 1px solid var(--td-border); padding: 14px 16px 16px; }
-    .pa-hi-rail-row { padding: 11px 16px; }
+    .pa-hi-heroes { flex-direction: column; }
+    .pa-hi-hero { border-right: 0; border-bottom: 1px solid var(--td-border); padding: 16px; }
+    .pa-hi-hero:last-child { border-bottom: 0; }
+    .pa-hi-ticks { padding: 12px 16px; gap: 8px; }
   }
 
   /* ── Toolbar — search · category · add · guided add · layout ───────────── */

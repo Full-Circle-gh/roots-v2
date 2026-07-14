@@ -1294,38 +1294,36 @@ async function paLoadHighlights() {
   } catch { PA_HI = null; }
   paRenderHighlights();
 }
-// Spotlight panel — the one number worth a second look (best seller). `open`
-// is the click action, or falsy for the quiet empty state.
-function _paHiSpot({ img, name, stat, open }) {
+// Hero tile — Best seller or Rising, the two facts worth a second look. Both
+// get equal weight: eyebrow label, photo, big number. `open` falsy → disabled
+// quiet empty state. `dotIcon` is the small trend badge on the photo corner
+// (Rising only — Best seller has nothing to compare against).
+function _paHiHero({ ebIcon, ebLabel, img, dotIcon, name, statHtml, open }) {
   const attrs = open ? `onclick="${open}"` : 'disabled';
   const photo = img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy">` : PA_HI_ICONS.box;
-  return `<button type="button" class="pa-hi-spot" ${attrs}>
-      <span class="pa-hi-spot-photo">${photo}</span>
-      <span class="pa-hi-spot-body">
-        <span class="pa-hi-spot-cap">${PA_HI_ICONS.star}${cuT('Best seller · 7 days', '最畅销 · 近 7 天')}</span>
-        <span class="pa-hi-spot-name">${name}</span>
-        <span class="pa-hi-spot-stat">${stat}</span>
+  return `<button type="button" class="pa-hi-hero" ${attrs}>
+      <span class="pa-hi-hero-eb">${ebIcon}${ebLabel}</span>
+      <span class="pa-hi-hero-body">
+        <span class="pa-hi-hero-photo">${photo}${dotIcon ? `<span class="pa-hi-hero-dot">${dotIcon}</span>` : ''}</span>
+        <span class="pa-hi-hero-text">
+          <span class="pa-hi-hero-name">${name}</span>
+          <span class="pa-hi-hero-stat">${statHtml}</span>
+        </span>
       </span>
     </button>`;
 }
-// One rail row. `iconType` is 'thumb' (a real product — shows its photo, or the
-// generic icon if it has none, with an optional small trend dot) or a badge
-// colour (aggregate count, no single product to depict). `open` falsy → disabled.
-function _paHiRailRow({ cls, iconType, icon, dotIcon, img, cap, sub, val, valCls, open, active }) {
+// One quiet ticker entry for an aggregate fact (Going nowhere / Needs attention
+// / On promotion) — icon badge, label, value, no thumbnail. `title` carries the
+// longer explanation as a native tooltip since the strip has no room for a sub
+// line. `open` falsy → disabled.
+function _paHiTick({ cls, icon, cap, title, val, valCls, open, active }) {
   const attrs = open
     ? `onclick="${open}"${active ? ' aria-pressed="true"' : ''}`
     : 'disabled';
-  const iconHtml = iconType === 'thumb'
-    ? `<span class="pa-hi-rail-ico thumb">${img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy">` : icon}${dotIcon ? `<span class="pa-hi-rail-dot ${cls}">${dotIcon}</span>` : ''}</span>`
-    : `<span class="pa-hi-rail-ico badge-${iconType}">${icon}</span>`;
-  return `<button type="button" class="pa-hi-rail-row${active ? ' is-on' : ''}" ${attrs}>
-      ${iconHtml}
-      <span class="pa-hi-rail-lab">
-        <span class="pa-hi-rail-cap ${cls}">${cap}</span>
-        <span class="pa-hi-rail-sub">${sub}</span>
-      </span>
-      <span class="pa-hi-rail-val ${valCls || ''}">${val}</span>
-      <svg class="pa-hi-rail-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
+  return `<button type="button" class="pa-hi-tick${active ? ' is-on' : ''}" ${attrs} title="${escapeHtml(title)}">
+      <span class="pa-hi-tick-ico badge-${cls}">${icon}</span>
+      <span class="pa-hi-tick-k">${cap}</span>
+      <span class="pa-hi-tick-v ${valCls || ''}">${val}</span>
     </button>`;
 }
 function paRenderHighlights() {
@@ -1336,60 +1334,62 @@ function paRenderHighlights() {
   band.hidden = false;
   const pname = (o) => escapeHtml(cuT(o.name_en || o.name_cn || '—', o.name_cn || o.name_en || '—'));
 
-  // Best seller — top units this week. The one headline; everything else is reference.
-  const spotHtml = PA_HI.bestSeller
-    ? _paHiSpot({
-        img: PA_HI.bestSeller.image, name: pname(PA_HI.bestSeller),
-        stat: `${fcNum(PA_HI.bestSeller.units)}<span class="u">${cuT('sold', '件已售')}</span>`,
+  // Best seller — top units this week. Hero #1.
+  const bestHtml = PA_HI.bestSeller
+    ? _paHiHero({
+        ebIcon: PA_HI_ICONS.star, ebLabel: cuT('Best seller · 7 days', '最畅销 · 近 7 天'),
+        img: PA_HI.bestSeller.image, dotIcon: null, name: pname(PA_HI.bestSeller),
+        statHtml: `${fcNum(PA_HI.bestSeller.units)}<span class="u">${cuT('sold', '件已售')}</span>`,
         open: `paOpenEdit(${PA_HI.bestSeller.id})`,
       })
-    : _paHiSpot({ img: null, name: `<span class="pa-hi-empty">${cuT('No sales yet', '暂无销量')}</span>`, stat: '', open: null });
+    : _paHiHero({
+        ebIcon: PA_HI_ICONS.star, ebLabel: cuT('Best seller · 7 days', '最畅销 · 近 7 天'),
+        img: null, dotIcon: null, name: `<span class="pa-hi-empty">${cuT('No sales yet', '暂无销量')}</span>`,
+        statHtml: '', open: null,
+      });
 
-  const rows = [];
+  // Rising — biggest % jump this week vs last. Hero #2.
+  const risingHtml = PA_HI.rising
+    ? _paHiHero({
+        ebIcon: PA_HI_ICONS.up, ebLabel: cuT('Rising vs last week', '较上周上升'),
+        img: PA_HI.rising.image, dotIcon: PA_HI_ICONS.up, name: pname(PA_HI.rising),
+        statHtml: `<svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%`,
+        open: `paOpenEdit(${PA_HI.rising.id})`,
+      })
+    : _paHiHero({
+        ebIcon: PA_HI_ICONS.up, ebLabel: cuT('Rising vs last week', '较上周上升'),
+        img: null, dotIcon: null, name: `<span class="pa-hi-empty">${cuT('No clear climber', '暂无明显上升')}</span>`,
+        statHtml: '', open: null,
+      });
 
-  // Rising — biggest % jump this week vs last. The only rail row backed by one
-  // real product, so it gets a thumbnail (or the fallback icon) + a trend dot.
-  if (PA_HI.rising) {
-    rows.push(_paHiRailRow({
-      cls: 'up', iconType: 'thumb', icon: PA_HI_ICONS.box, img: PA_HI.rising.image, dotIcon: PA_HI_ICONS.up,
-      cap: cuT('Rising vs last week', '较上周上升'), sub: pname(PA_HI.rising),
-      val: `<svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%`,
-      valCls: 'up', open: `paOpenEdit(${PA_HI.rising.id})`,
-    }));
-  } else {
-    rows.push(_paHiRailRow({
-      cls: 'up', iconType: 'thumb', icon: PA_HI_ICONS.box, img: null, dotIcon: null,
-      cap: cuT('Rising', '上升中'), sub: `<span class="pa-hi-empty">${cuT('No clear climber', '暂无明显上升')}</span>`,
-      val: '', open: null,
-    }));
-  }
+  const ticks = [];
 
-  // Going nowhere — live, no sale in 30 days. Aggregate count → icon badge, no thumbnail.
+  // Going nowhere — live, no sale in 30 days. Aggregate count → icon badge.
   const dead = PA_HI.goingNowhere ? PA_HI.goingNowhere.count : 0;
-  rows.push(_paHiRailRow({
-    cls: 'down', iconType: 'brick', icon: PA_HI_ICONS.down,
-    cap: cuT('Going nowhere', '无人问津'), sub: cuT('No sale in 30 days', '30 天无销量'),
+  ticks.push(_paHiTick({
+    cls: 'brick', icon: PA_HI_ICONS.down, cap: cuT('Going nowhere', '无人问津'),
+    title: cuT('No sale in 30 days', '30 天无销量'),
     val: fcNum(dead), open: dead ? `paSetStatus('dead')` : null, active: PA_STATUS === 'dead',
   }));
 
   // Needs attention — live, missing photo/price/category.
   const inc = PA_HI.needsAttention ? PA_HI.needsAttention.count : 0;
-  rows.push(_paHiRailRow({
-    cls: 'warn', iconType: 'amber', icon: PA_HI_ICONS.warn,
-    cap: cuT('Needs attention', '待完善'), sub: cuT('Missing a photo, price or category', '缺图片、价格或分类'),
+  ticks.push(_paHiTick({
+    cls: 'amber', icon: PA_HI_ICONS.warn, cap: cuT('Needs attention', '待完善'),
+    title: cuT('Missing a photo, price or category', '缺图片、价格或分类'),
     val: fcNum(inc), open: inc ? `paSetStatus('incomplete')` : null, active: PA_STATUS === 'incomplete',
   }));
 
   // On promotion — live, active flash sale now.
   const promo = PA_HI.onPromotion ? PA_HI.onPromotion.count : 0;
-  rows.push(_paHiRailRow({
-    cls: '', iconType: 'neu', icon: PA_HI_ICONS.tag,
-    cap: cuT('On promotion', '促销中'), sub: cuT('On a flash sale right now', '正在闪购'),
+  ticks.push(_paHiTick({
+    cls: 'neu', icon: PA_HI_ICONS.tag, cap: cuT('On promotion', '促销中'),
+    title: cuT('On a flash sale right now', '正在闪购'),
     val: fcNum(promo), valCls: promo ? '' : 'muted',
     open: promo ? `paSetStatus('promo')` : null, active: PA_STATUS === 'promo',
   }));
 
-  wrap.innerHTML = spotHtml + `<div class="pa-hi-rail">${rows.join('')}</div>`;
+  wrap.innerHTML = `<div class="pa-hi-heroes">${bestHtml}${risingHtml}</div><div class="pa-hi-ticks">${ticks.join('')}</div>`;
 }
 
 // Recap-banner shortcut: arm bulk-select and tick every product on the current
