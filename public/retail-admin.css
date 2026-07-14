@@ -2213,6 +2213,26 @@
   }
   .pa-lowknob input:focus { outline: none; border-color: var(--td-dusk); }
   #pa-low-threshold-status { color: var(--td-sage-ink); font-size: 11px; }
+  .pa-low-store-sel {
+    font: 500 12px var(--f-sans); color: var(--td-text); background: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 6px; padding: 4px 22px 4px 8px; cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 7px center;
+  }
+  .pa-low-store-sel:focus { outline: none; border-color: var(--td-dusk); }
+  .pa-low-badge {
+    display: inline-flex; align-items: center; height: 18px; padding: 0 8px; border-radius: 999px;
+    font: 500 10.5px var(--f-sans); white-space: nowrap;
+  }
+  .pa-low-badge.is-default { background: transparent; color: var(--td-text2); border: 1px solid var(--td-border); }
+  .pa-low-badge.is-custom { background: var(--td-raised); color: var(--td-text); }
+  .pa-low-reset {
+    background: none; border: 0; cursor: pointer; padding: 0; font: 500 11.5px var(--f-sans);
+    color: var(--td-text2); text-decoration: underline; text-decoration-color: var(--td-border);
+    text-underline-offset: 2px;
+  }
+  .pa-low-reset:hover { color: var(--td-text); }
 
   /* Context line under the band — only while a jump filter is on. */
   .pa-recap-banner {
@@ -2715,7 +2735,7 @@
      split view. The sizing below is the fallback shape (kept so the editor
      still has reasonable bounds if anything ever renders it outside the split
      container); .pa-split-editor #pd-editor overrides it for the live page. */
-  #pd-editor { width: min(1180px, calc(94vw / var(--ui-scale, 1))); height: calc(90vh / var(--ui-scale, 1)); max-width: calc(94vw / var(--ui-scale, 1)); }
+  #pd-editor { width: min(1180px, 94vw); height: 90vh; max-width: 94vw; }
   /* Two-pane editor: a main column (photos → name → sizes → description) and a
      narrow commercial sidebar (visibility, pricing, inventory, organization).
      Inputs fill their cell so short fields no longer float in empty space.
@@ -2987,10 +3007,8 @@
      (overflow:auto) instead of growing to fit a long description and pushing
      the rest of the form down — so the office edits the text without scrolling
      the whole modal. resize:vertical still lets them drag it, capped by
-     max-height. vh ÷ --ui-scale so the cap tracks the real viewport at any
-     text-size zoom (raw vh ignores the html `zoom`). Fullscreen overrides this
-     cap below. */
-  .pd-rte { min-height: 140px; max-height: calc(42vh / var(--ui-scale, 1)); overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); overflow-wrap: break-word; }
+     max-height. Fullscreen overrides this cap below. */
+  .pd-rte { min-height: 140px; max-height: 42vh; overflow: auto; resize: vertical; border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; font-size: 13px; line-height: 1.5; color: var(--text-1); background: var(--bg-app); overflow-wrap: break-word; }
   .pd-rte:focus { outline: none; border-color: var(--brass); }
   .pd-rte h2 { font-size: 17px; margin: 8px 0 4px; font-weight: 700; }
   .pd-rte h3 { font-size: 15px; margin: 6px 0; }
@@ -5180,9 +5198,9 @@
      floating round × is used instead. */
   .side-drawer .drawer-back { display: none; }
   @media (max-width: 720px) {
-    .side-drawer { width: calc(100vw / var(--ui-scale, 1)); min-width: 0; border-left: 0; }
-    .side-drawer.dw-wide { width: calc(100vw / var(--ui-scale, 1)); }
-    .side-drawer.dw-compact { width: calc(100vw / var(--ui-scale, 1)); min-width: 0; }
+    .side-drawer { width: 100vw; min-width: 0; border-left: 0; }
+    .side-drawer.dw-wide { width: 100vw; }
+    .side-drawer.dw-compact { width: 100vw; min-width: 0; }
   }
   .prod-link {
     color: inherit;

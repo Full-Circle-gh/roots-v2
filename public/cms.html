@@ -27,8 +27,7 @@
       document.documentElement.setAttribute('data-theme', 'light');
     }
     // Embedded as an in-page tab of the backend (iframe)? Mark it so chrome
-    // (toggle, back link) hides and we skip self-zoom — the parent already
-    // applies zoom, so re-applying here would double it.
+    // (toggle, back link) hides.
     var fcEmbedded = false;
     try { fcEmbedded = window.self !== window.top; } catch (e) { fcEmbedded = true; }
     if (fcEmbedded) document.documentElement.classList.add('is-embedded');
@@ -43,17 +42,6 @@
         // the embed bridge can stream them to the shell (see __fcColorRegBuf).
         window.__fcPreviewEmbed = true;
       }
-    } catch (e) {}
-    // UI scale (text size) — shared suite-wide preference (roots-admin-ui-scale,
-    // set from the backend topbar). Apply pre-paint so the editor matches.
-    try {
-      var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
-      if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
-      if (fcEmbedded) s = 1; // parent iframe already zoomed; avoid compounding
-      document.documentElement.style.zoom = String(s);
-      // Also expose as a CSS var so layouts that lock to viewport units
-      // (.body uses 100vh - topbar) can compensate at first paint.
-      document.documentElement.style.setProperty('--ui-zoom', String(s));
     } catch (e) {}
   })();
 </script>
@@ -1008,11 +996,8 @@
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
      ═══════════════════════════════════════════════════════════════════ */
-  /* Height compensates for CSS `zoom` set by the Aa toggle: 100vh is the
-     unscaled viewport, but child layout gets rendered at zoom×, so we
-     divide back so the panes still fit visually at 110% / 125%. */
   .body { display: grid; grid-template-columns: 264px 1fr 340px;
-          height: calc((100vh - 56px * var(--ui-zoom, 1)) / var(--ui-zoom, 1)); }
+          height: calc(100vh - 56px); }
   .pane {
     background: var(--bg-pane);
     overflow-y: auto;
@@ -4716,7 +4701,6 @@
      actions (PAGE picker, save status, Revert, Publish). */
   .is-embedded .brand,
   .is-embedded #who,
-  .is-embedded #ui-scale-toggle,
   .is-embedded #theme-toggle,
   .is-embedded #lang-toggle { display: none; }
   /* Standalone and embedded look the same now — both sit on Paper. Blend
@@ -4986,9 +4970,6 @@
   </div>
   <div class="grow"></div>
   <span class="who" id="who"></span>
-  <!-- Text-size (Aa) control removed from the editor at the owner's request;
-       the shared suite-wide zoom is still applied on boot (cuApplyUiScale)
-       and remains adjustable from the Mini App Backend top bar. -->
   <button class="btn btn-icon" id="theme-toggle" type="button" onclick="cmsToggleTheme()" data-ti-en="Toggle light / dark mode" data-ti-cn="切换浅色 / 深色模式" title="Toggle light / dark mode" aria-label="Toggle theme">
     <svg id="theme-icon-dark"  viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     <svg id="theme-icon-light" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="display: none;"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2"  x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="2"  y1="12" x2="4"  y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93"  y1="4.93"  x2="6.34"  y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="4.93"  y1="19.07" x2="6.34"  y2="17.66"/><line x1="17.66" y1="6.34"  x2="19.07" y2="4.93"/></svg>
@@ -14826,33 +14807,6 @@ function cmsToggleTheme() {
   cmsSetTheme(current === 'dark' ? 'light' : 'dark');
 }
 cmsApplyThemeIcon();
-
-// ── UI scale (text size) — shared suite-wide setting (roots-admin-ui-scale) ──
-// Same control as the backend topbar: scales the whole document with `zoom`
-// so the editor honours the size the operator picked anywhere in the suite.
-const UI_SCALES = [1, 1.1, 1.25];
-function cuGetUiScale() {
-  let v = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
-  if (!UI_SCALES.includes(v)) v = 1.1;
-  return v;
-}
-function cuApplyUiScale(v) {
-  document.documentElement.style.zoom = String(v);
-  // CSS `zoom` scales rendering but not the viewport `vh` unit, so any
-  // child sized by `100vh` overflows by (zoom - 1). Mirror the active zoom
-  // into a CSS var so .body can shrink its layout height accordingly,
-  // keeping the panes' content inside the visible viewport at 110%/125%.
-  document.documentElement.style.setProperty('--ui-zoom', String(v));
-  const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
-  if (lbl) lbl.textContent = Math.round(v * 100) + '%';
-}
-function cuCycleUiScale() {
-  const next = UI_SCALES[(UI_SCALES.indexOf(cuGetUiScale()) + 1) % UI_SCALES.length];
-  try { localStorage.setItem('roots-admin-ui-scale', String(next)); } catch (e) {}
-  cuApplyUiScale(next);
-  if (typeof toast === 'function') toast('Text size · 字号 → ' + Math.round(next * 100) + '%');
-}
-cuApplyUiScale(cuGetUiScale());
 
 // ═══════════════════════════════════════════════════════════════════════
 // EDITOR TWEAKS — imported from the Claude Design "Tweaks" panel so staff

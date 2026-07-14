@@ -21,22 +21,10 @@
       document.documentElement.setAttribute('data-theme', 'light');
     }
     // Embedded as an in-page tab of the backend (iframe)? Mark it so chrome
-    // (toggle, close button) hides and we skip self-zoom — the parent already
-    // applies zoom, so re-applying here would double it.
+    // (toggle, close button) hides.
     var fcEmbedded = false;
     try { fcEmbedded = window.self !== window.top; } catch (e) { fcEmbedded = true; }
     if (fcEmbedded) document.documentElement.classList.add('is-embedded');
-    // UI scale (text size) — shared suite-wide preference (roots-admin-ui-scale,
-    // set from the backend topbar). Apply pre-paint so the editor matches.
-    try {
-      var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
-      if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
-      if (fcEmbedded) s = 1; // parent iframe already zoomed; avoid compounding
-      document.documentElement.style.zoom = String(s);
-      // Expose the zoom so viewport-locked heights (#pe-body's 100vh) can
-      // divide it back out — otherwise the body overflows and crops at 110/125%.
-      document.documentElement.style.setProperty('--ui-zoom', String(s));
-    } catch (e) {}
   })();
 </script>
 <style>
@@ -300,7 +288,6 @@
   .is-embedded .pe-brand,
   .is-embedded .pe-back,
   .is-embedded .pe-close-btn,
-  .is-embedded #ui-scale-toggle,
   .is-embedded #lang-toggle { display: none; }
   /* "Back to pages" — only useful when embedded in the backend's single Editor
      tab (returns to the Mini App Editor's page list). Hidden standalone. */
@@ -478,10 +465,7 @@
   .lang-toggle button.active { background: var(--brass); color: var(--accent-ink); }
 
   #pe-body {
-    /* Divide the Aa zoom back out of the viewport height: the whole document is
-       scaled by --ui-zoom, so 100vh/zoom is the unscaled space that maps to the
-       real viewport. Without this the body overflows and crops at 110%/125%. */
-    height: calc(100vh / var(--ui-zoom, 1) - 56px);
+    height: calc(100vh - 56px);
     display: grid;
     /* Rail and inspector are equal-width (288px) bookends; the canvas flexes
        between them so the phone gets breathing room and absorbs extra width on
@@ -1400,10 +1384,6 @@
       </div>
     </div>
     <div class="pe-topbar-actions">
-      <button class="btn btn-ghost" id="ui-scale-toggle" type="button" onclick="cuCycleUiScale()" title="Text size · 字号" style="gap:4px;padding:6px 9px;">
-        <span style="font-weight:700;line-height:1;"><span style="font-size:15px;">A</span><span style="font-size:10px;">A</span></span>
-        <span class="ui-scale-val" style="font-size:11px;font-weight:600;">110%</span>
-      </button>
       <div class="lang-toggle" id="lang-toggle">
         <button data-lang="en" onclick="cuSetLang('en')">EN</button>
         <button data-lang="cn" onclick="cuSetLang('cn')">中</button>
@@ -4262,30 +4242,6 @@ window.addEventListener('resize', () => {
   updateBtn();
   _mo.observe(document.body, { childList: true, subtree: true });
 })();
-
-// ── UI scale (text size) — shared suite-wide setting (roots-admin-ui-scale) ──
-// Same control as the backend topbar: scales the whole document with `zoom`
-// so the editor honours the size the operator picked anywhere in the suite.
-const UI_SCALES = [1, 1.1, 1.25];
-function cuGetUiScale() {
-  let v = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
-  if (!UI_SCALES.includes(v)) v = 1.1;
-  return v;
-}
-function cuApplyUiScale(v) {
-  document.documentElement.style.zoom = String(v);
-  // Keep --ui-zoom in sync so #pe-body's height divides the zoom back out.
-  document.documentElement.style.setProperty('--ui-zoom', String(v));
-  const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
-  if (lbl) lbl.textContent = Math.round(v * 100) + '%';
-}
-function cuCycleUiScale() {
-  const next = UI_SCALES[(UI_SCALES.indexOf(cuGetUiScale()) + 1) % UI_SCALES.length];
-  try { localStorage.setItem('roots-admin-ui-scale', String(next)); } catch (e) {}
-  cuApplyUiScale(next);
-  if (typeof toast === 'function') toast('Text size · 字号 → ' + Math.round(next * 100) + '%');
-}
-cuApplyUiScale(cuGetUiScale());
 
 // Go.
 peBoot();

@@ -594,34 +594,6 @@ function cuToggleTheme() {
 }
 cuApplyThemeIcon();
 
-// ── UI scale (text size) ──
-// The whole backend is px-based, so instead of rewriting hundreds of sizes
-// we scale the document with `zoom` — text, spacing, icons and modals all
-// grow together. Cycles 100 → 110 → 125%, persisted per operator, default
-// 110%. The initial value is also applied pre-paint in the <head> script.
-const UI_SCALES = [1, 1.1, 1.25];
-function cuGetUiScale() {
-  let v = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
-  if (!UI_SCALES.includes(v)) v = 1.1;
-  return v;
-}
-function cuApplyUiScale(v) {
-  document.documentElement.style.zoom = String(v);
-  // Mirror the zoom into a CSS var so modals can divide their vh/vw sizes by
-  // it — raw viewport units ignore `zoom` and otherwise overflow at >100%.
-  document.documentElement.style.setProperty('--ui-scale', String(v));
-  const lbl = document.querySelector('#ui-scale-toggle .ui-scale-val');
-  if (lbl) lbl.textContent = Math.round(v * 100) + '%';
-}
-function cuCycleUiScale() {
-  const next = UI_SCALES[(UI_SCALES.indexOf(cuGetUiScale()) + 1) % UI_SCALES.length];
-  try { localStorage.setItem('roots-admin-ui-scale', String(next)); } catch (e) {}
-  cuApplyUiScale(next);
-  if (typeof toast === 'function') toast('Text size · 字号 → ' + Math.round(next * 100) + '%');
-}
-cuApplyUiScale(cuGetUiScale());
-
-
 // ── i18n / Language toggle ──
 // NOTE: the AUTHORITATIVE copy of this engine now runs INLINE in retail-admin.html,
 // right before the module <script> tags, so the bilingual "EN · 中文" markup is

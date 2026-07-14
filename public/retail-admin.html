@@ -24,14 +24,6 @@
     } catch (e) {
       document.documentElement.setAttribute('data-theme', 'light');
     }
-    // UI scale (text size) — apply BEFORE first paint too, so the backend
-    // doesn't visibly resize after load. Default 110%. Toggle: cuCycleUiScale.
-    try {
-      var s = parseFloat(localStorage.getItem('roots-admin-ui-scale'));
-      if (!(s === 1 || s === 1.1 || s === 1.25)) s = 1.1;
-      document.documentElement.style.zoom = String(s);
-      document.documentElement.style.setProperty('--ui-scale', String(s));
-    } catch (e) {}
   })();
 </script>
 
@@ -534,13 +526,10 @@
      has usually landed). `visibility:visible` is what lets it show through
      the body guard, the same way #fc-pnotice does.
 
-     Sized by dividing the viewport by --ui-scale: the boot script puts a
-     `zoom` on <html>, and a fixed element at inset:0 would be scaled past the
-     viewport edge and grow the document. */
   #boot-splash {
     position: fixed; top: 0; left: 0;
-    width:  calc(100vw / var(--ui-scale, 1.1));
-    height: calc(100vh / var(--ui-scale, 1.1));
+    width:  100vw;
+    height: 100vh;
     z-index: 100000;
     visibility: visible;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
@@ -981,11 +970,6 @@
         <span>Appearance · 外观</span>
         <span class="acct-val" id="acctThemeVal"></span>
       </button>
-      <button class="acct-item" id="acctScale" type="button" role="menuitem" title="Text size · 字号">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 7 4 4 20 4 20 7"/><line x1="12" y1="4" x2="12" y2="20"/><line x1="9" y1="20" x2="15" y2="20"/></svg>
-        <span>Text size · 字号</span>
-        <span class="acct-val" id="acctScaleVal"></span>
-      </button>
       <button class="acct-item" id="acctLang" type="button" role="menuitem" title="Switch language · 切换语言">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg>
         <span>Language · 语言</span>
@@ -1009,12 +993,12 @@
     </button>
     <iframe class="prof-frame" id="profFrame" title="Profile"></iframe>
   </div>
-  <!-- Aa text-size, light/dark and language toggles used to live here as three
-       loose topbar buttons. Moved into the account dropdown (the avatar circle)
+  <!-- Light/dark and language toggles used to live here as loose topbar
+       buttons. Moved into the account dropdown (the avatar circle)
        2026-06-08 — set-once preferences belong with the profile, not in the
-       chrome. Their cu* handlers are unchanged; the old #ui-scale-toggle /
-       #theme-toggle / #lang-toggle elements simply no longer exist (every
-       updater guards for a missing node). -->
+       chrome. Their cu* handlers are unchanged; the old #theme-toggle /
+       #lang-toggle elements simply no longer exist (every updater guards for
+       a missing node). Aa text-size removed 2026-07-15. -->
   <!-- Live Preview removed 2026-05-20: the /cms page is the live preview
        surface; an extra "Live Preview" button in the backend topbar was
        redundant and added topbar weight. The openLivePreview() handler +
@@ -3228,10 +3212,14 @@
     <div class="pa-subbar">
       <div id="pa-store-seg" class="pa-store-seg" style="display:none"></div>
       <div id="pa-count" class="pa-count"></div>
-      <span class="pa-lowknob" title="Default low-stock threshold for every product — override per product in its editor. · 全店默认低库存阈值,可在单个产品编辑器中单独设置。">
-        <span class="pa-lowknob-lbl">Low-stock alert · 低库存提醒</span> ≤
+      <span class="pa-lowknob" title="Set a shared default, or pick a location to give it its own number — override per product in its editor. · 设置共享默认值,或为单个门店单独设置——也可在产品编辑器中按产品设置。">
+        <span class="pa-lowknob-lbl">Low-stock alert · 低库存提醒</span>
+        <select id="pa-low-store-sel" class="pa-low-store-sel" style="display:none" onchange="paLowStoreSelChange(this.value)"></select>
+        <span id="pa-low-badge" class="pa-low-badge" style="display:none"></span>
+        ≤
         <input type="number" id="pa-low-threshold" min="0" step="1" value="5" onchange="paSaveLowThreshold(this.value)">
         <span id="pa-low-threshold-status"></span>
+        <button type="button" id="pa-low-reset" class="pa-low-reset" style="display:none" onclick="paResetLowThreshold()">Use default · 使用默认值</button>
       </span>
       <button type="button" class="btn btn-sm" id="pa-bulk-btn" onclick="paSetSelectMode(true)">Bulk · 批量</button>
     </div>
@@ -4427,9 +4415,7 @@
       .pu-editor {
         background: var(--bg-pane); border: 1px solid var(--line);
         border-radius: 12px;
-        /* max-height divided by --ui-scale: raw vh ignores the html `zoom`
-           the text-size control applies, overflowing the viewport at >100%. */
-        width: 880px; max-width: 100%; max-height: calc(90vh / var(--ui-scale, 1));
+        width: 880px; max-width: 100%; max-height: 90vh;
         display: flex; flex-direction: column;
         box-shadow: var(--sh-3);
       }
@@ -4457,7 +4443,7 @@
       #pu-editor-bg.side-drawer {
         top: 50%; left: 50%; right: auto; bottom: auto;
         width: min(1040px, 94vw); min-width: 0;
-        max-height: calc(90vh / var(--ui-scale, 1));
+        max-height: 90vh;
         border-left: none; border: 1px solid var(--line);
         border-radius: 18px;
         box-shadow: 0 24px 64px rgba(17,26,43,.22);
@@ -10629,7 +10615,6 @@
     }
     var ctl = document.createElement('div');
     ctl.className = 'rm-sheet-ctl';
-    ctl.appendChild(ctlBtn('Text size · 字号', function () { if (window.cuCycleUiScale) cuCycleUiScale(); }));
     ctl.appendChild(ctlBtn('Theme · 主题', function () { if (window.cuToggleTheme) cuToggleTheme(); }));
     // Always bilingual (note: " / " not " · ", so the i18n runtime never strips
     // it to one language) — the control that switches language must stay legible

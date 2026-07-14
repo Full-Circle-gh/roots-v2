@@ -3096,11 +3096,10 @@ function dashTrendTip(e) {
 // amount that depends on the browser's zoom convention. Rather than guess that
 // factor, measure it: a hidden fixed probe tells us (a) the viewport bounds in
 // getBoundingClientRect space and (b) how a CSS left/top maps into that space.
-// Cached per zoom level. Everything below is computed in rect space, then
-// converted to CSS px exactly — so tooltips are positioned correctly at any zoom.
+// Everything below is computed in rect space, then converted to CSS px exactly.
 let _fcMap = null, _fcMapKey = null;
 function fcMeasureMap() {
-  const key = ((typeof cuGetUiScale === 'function' && cuGetUiScale()) || 1) + 'x' + window.innerWidth + 'x' + window.innerHeight;
+  const key = window.innerWidth + 'x' + window.innerHeight;
   if (_fcMap && _fcMapKey === key) return _fcMap;
   // Viewport bounds in rect space (a fixed inset:0 box == the viewport).
   const vp = document.createElement('div');

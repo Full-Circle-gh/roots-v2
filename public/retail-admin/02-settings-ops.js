@@ -1704,7 +1704,7 @@ function acctRenderMeta() {
   }
 }
 // Refresh the right-hand value chips on the in-menu preference rows (Appearance
-// / Text size / Language) so each reflects the live state. Reads the same
+// / Language) so each reflects the live state. Reads the same
 // sources the toggles write, so it's correct after a toggle, a language flip,
 // or on first open. Each lookup is guarded — the rows may not exist on every
 // surface that reuses this script.
@@ -1714,8 +1714,6 @@ function acctSyncPrefs() {
     const dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
     themeVal.textContent = dark ? cuT('Dark', '深色') : cuT('Light', '浅色');
   }
-  const scaleVal = $('#acctScaleVal');
-  if (scaleVal && window.cuGetUiScale) scaleVal.textContent = Math.round(cuGetUiScale() * 100) + '%';
   const langVal = $('#acctLangVal');
   if (langVal) langVal.textContent = (window.cuLang && cuLang() === 'cn') ? '中文' : 'English';
   // New-order sound moved to Profile → Notifications; no chip here anymore.
@@ -1755,8 +1753,6 @@ function initAcctMenu(u) {
   // value chip updates in place via acctSyncPrefs().
   const themeRow = $('#acctTheme');
   if (themeRow) themeRow.addEventListener('click', () => { if (window.cuToggleTheme) cuToggleTheme(); acctSyncPrefs(); });
-  const scaleRow = $('#acctScale');
-  if (scaleRow) scaleRow.addEventListener('click', () => { if (window.cuCycleUiScale) cuCycleUiScale(); acctSyncPrefs(); });
   const langRow = $('#acctLang');
   if (langRow) langRow.addEventListener('click', () => { if (window.cuToggleLang) cuToggleLang(); acctSyncPrefs(); });
   // New-order sound now lives in Profile → Notifications (not the avatar menu).
