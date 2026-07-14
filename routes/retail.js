@@ -17444,6 +17444,10 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     // own API — let the kd100 badge own it (the list cell still reads "live"
     // off tracking_kd100_subscribed).
     r.jd_live = r.tracking_carrier === 'jd' && !!r.tracking_number && jdLiveOn && !r.tracking_kd100_subscribed;
+    // Out-of-GZ orders skip stock reservation at checkout, so a 'paid' order
+    // can sit with its real stock not yet decremented until staff move it into
+    // Preparing — surface that so the number on Products doesn't look wrong.
+    r.stock_pending = inventory.isStockPending(r.id, r.status, r.channel);
     annotateShipBy(r);   // adds ship_by_mode + dispatch_deadline for out-of-GZ ASAP orders
     annotateShipTo(r);   // adds ship_city + ship_district (or ship_pickup) for the list "Ship to" column
   }
@@ -17714,6 +17718,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
        LEFT JOIN store_products p ON p.id = r.product_id
       WHERE r.order_id = ? ORDER BY r.id ASC`
   ).all(id);
+  o.stock_pending = inventory.isStockPending(o.id, o.status, o.channel);
 
   // "Forgot something?" add-ons the customer paid for after placing the order.
   // The added lines already live in o.items / their parcel; this just lets the

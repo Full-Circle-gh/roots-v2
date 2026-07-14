@@ -1031,7 +1031,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${invoiceLine(o)}</td>
+        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}${stockPendingBadge(o)}</div>${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
@@ -1911,6 +1911,15 @@ function addonBadge(o) {
   if (!Number(o.addon_count)) return '';
   return `<span class="pill st-paid" title="${cuT('Items were added after this order was placed','下单后又加购了商品')}">`
     + `<span class="dot"></span>${cuT('Updated · 加单','加单 · Updated')}</span>`;
+}
+// List-row / drawer badge: order is 'paid' but its real stock hasn't been
+// decremented yet — an out-of-GZ order that skipped the checkout reserve gate
+// (see inventory.isStockPending). Without this the Products stock count looks
+// "wrong" to staff for a sold order that just hasn't hit Preparing yet.
+function stockPendingBadge(o) {
+  if (!o.stock_pending) return '';
+  return `<span class="pill st-awaiting_restock" title="${cuT('Real stock deducts once this order moves to Preparing','库存要等这单推进到备货中才会真正扣减')}">`
+    + `<span class="dot"></span>${cuT('Stock pending · 库存待扣','库存待扣 · Stock pending')}</span>`;
 }
 // Drawer audit block: each "Add to your order" event, time-stamped, so the
 // operator sees WHEN items were added (after the slip likely already printed)
@@ -3979,6 +3988,7 @@ function renderOpenOrder(o) {
             ${o.fulfillment?.rollup === 'partial' ? `<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>` : ''}
             ${(o.addons && o.addons.length) ? `<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>` : ''}
             ${refundBadge(o)}
+            ${stockPendingBadge(o)}
           </div>
           <!-- Eyebrow → order no + status → actions on their OWN row below (calm,
                per Tacet). Forward actions are bordered; Refund/Cancel is a menu. -->

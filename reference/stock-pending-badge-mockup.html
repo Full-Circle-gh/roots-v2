@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock pending badge — mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#111A2B; --paper:#FBF9F4; --pane:#FFFFFF; --graphite:#58606E;
+    --cream:#F6F3EC; --elev2:#EFEBE1;
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --dusk:#6E67AF;
+    --sage:#A3B49F; --sage-tint:#EDF1EC; --sage-ink:#4A6249;
+    --amber:#C9954A; --amber-tint:#F7EEDE; --amber-ink:#8A6425;
+    --brick:#B4533E; --brick-tint:#F6E7E3;
+    --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
+    --f:'Inter','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--text-1);
+    font-family:var(--f); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:32px 28px 90px;
+  }
+  .wrap{max-width:1040px; margin:0 auto;}
+  .page-head{margin-bottom:28px;}
+  .page-head .eyebrow{font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--text-3); margin:0 0 8px;}
+  .page-head h1{font-size:24px; font-weight:500; letter-spacing:-.01em; margin:0 0 8px;}
+  .page-head p{margin:0; color:var(--text-2); font-size:14px; max-width:640px;}
+
+  .section-label{font-size:13px; font-weight:600; color:var(--text-2); margin:0 0 12px; display:flex; align-items:center; gap:8px;}
+
+  /* ── Orders list ── */
+  .card{background:var(--pane); border:1px solid var(--line); border-radius:var(--r-xl); overflow:hidden; margin-bottom:36px;}
+  table{width:100%; border-collapse:collapse; font-size:14px;}
+  thead th{text-align:left; font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--text-3); padding:12px 16px; border-bottom:1px solid var(--line); background:var(--cream);}
+  tbody td{padding:14px 16px; border-bottom:1px solid var(--line-soft); vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr.highlight{background:var(--amber-tint);}
+  .ord-no{font-weight:600; font-variant-numeric:tabular-nums;}
+  .muted{color:var(--text-3); font-size:12.5px;}
+  .numeric{font-variant-numeric:tabular-nums;}
+
+  .pill{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:500; border-radius:999px;
+    padding:3px 11px; white-space:nowrap;}
+  .pill .dot{width:6px; height:6px; border-radius:999px; flex:none;}
+  .pill.st-paid{background:var(--sage-tint); color:var(--sage-ink); border:1px solid rgba(163,180,159,.35);}
+  .pill.st-paid .dot{background:var(--sage-ink);}
+  .pill.st-preparing{background:var(--amber-tint); color:var(--amber-ink); border:1px solid rgba(201,149,74,.35);}
+  .pill.st-preparing .dot{background:var(--amber-ink);}
+  .pill.st-pending{background:var(--elev2); color:var(--text-2); border:1px solid var(--line);}
+  .pill.st-pending .dot{background:var(--text-3);}
+  .pill.stock-pending{background:var(--amber-tint); color:var(--amber-ink); border:1px solid rgba(201,149,74,.35); cursor:help;}
+  .pill.stock-pending .dot{background:var(--amber-ink); animation:breathe 2.4s ease-in-out infinite;}
+  @keyframes breathe{0%,100%{opacity:1;}50%{opacity:.45;}}
+  .stack{display:flex; flex-direction:column; gap:5px; align-items:flex-start;}
+
+  .cb-note{margin-top:8px; font-size:12.5px; color:var(--amber-ink); display:flex; align-items:flex-start; gap:6px; max-width:230px;}
+  .cb-note svg{width:14px; height:14px; flex:none; margin-top:1px;}
+
+  /* ── Callout annotation ── */
+  .callout{display:flex; gap:14px; align-items:flex-start; margin:-14px 0 28px; padding:14px 16px;
+    background:var(--cream); border:1px solid var(--line); border-radius:var(--r-lg); font-size:13px; color:var(--text-2); max-width:760px;}
+  .callout svg{width:18px; height:18px; flex:none; color:var(--amber-ink); margin-top:1px;}
+  .callout b{color:var(--text-1);}
+
+  /* ── Drawer mock ── */
+  .drawer{
+    max-width:600px; background:var(--pane); border:1px solid var(--line);
+    border-radius:var(--r-xl); padding:24px 24px 22px;
+    box-shadow:0 24px 60px rgba(40,30,5,.10); position:relative;
+  }
+  .od-eyebrow{font-size:13px; color:var(--text-2); margin:0 0 8px;}
+  .title-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+  .title-row b{font-size:22px; font-weight:600; letter-spacing:.01em; font-variant-numeric:tabular-nums;}
+  .od-tooltip{margin-top:14px; padding:12px 14px; background:var(--amber-tint); border:1px solid rgba(201,149,74,.35);
+    border-radius:var(--r-md); font-size:13px; color:var(--amber-ink); display:flex; gap:10px; align-items:flex-start;}
+  .od-tooltip svg{width:16px; height:16px; flex:none; margin-top:1px;}
+  .od-divider{height:1px; background:var(--line); margin:20px 0;}
+  .od-row{display:flex; justify-content:space-between; font-size:14px; padding:8px 0; border-bottom:1px solid var(--line-soft);}
+  .od-row:last-child{border-bottom:none;}
+  .od-row .k{color:var(--text-2);}
+  .od-row .v{font-weight:500; font-variant-numeric:tabular-nums;}
+
+  .tag-arrow{position:absolute; font-size:12.5px; color:var(--amber-ink); font-weight:600;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="page-head">
+    <div class="eyebrow">Orders · Backend</div>
+    <h1>Stock pending badge</h1>
+    <p>A small amber indicator on paid orders whose real stock hasn't been deducted yet — out-of-Guangzhou orders hold off on deducting stock until staff move them into Preparing, so the number on Products can look "unchanged" for a sale that already went through. This badge tells staff why, right where they're looking.</p>
+  </div>
+
+  <div class="callout">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <div><b>Only appears when it matters:</b> paid + out-of-Guangzhou + not yet moved to Preparing. Guangzhou orders already deducted stock at payment, so they never show it. Meituan / Eleme / GZGrocery orders decrement instantly on their own — never shown there either.</div>
+  </div>
+
+  <div class="section-label">Orders list</div>
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Order</th><th>Customer</th><th>Store</th><th>Ship to</th>
+          <th>Total</th><th>Status</th><th>Placed</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="ord-no">#48213</span><div class="muted">WeChat</div></td>
+          <td>Wen Jiaqi</td>
+          <td>Tianhe</td>
+          <td>Tianhe District<div class="muted">Guangzhou</div></td>
+          <td class="numeric">¥128.00</td>
+          <td><span class="pill st-paid"><span class="dot"></span>Paid</span></td>
+          <td class="muted">Today, 10:42</td>
+        </tr>
+        <tr class="highlight">
+          <td><span class="ord-no">#48219</span><div class="muted">WeChat</div></td>
+          <td>Chen Hao</td>
+          <td>Tianhe</td>
+          <td>Hangzhou<div class="muted">Zhejiang</div></td>
+          <td class="numeric">¥210.00</td>
+          <td>
+            <div class="stack">
+              <span class="pill st-paid"><span class="dot"></span>Paid</span>
+              <span class="pill stock-pending" title="Real stock deducts once this order moves to Preparing"><span class="dot"></span>Stock pending</span>
+            </div>
+          </td>
+          <td class="muted">Today, 09:15</td>
+        </tr>
+        <tr>
+          <td><span class="ord-no">#48204</span><div class="muted">WeChat</div></td>
+          <td>Li Wei</td>
+          <td>Yuexiu</td>
+          <td>Chengdu<div class="muted">Sichuan</div></td>
+          <td class="numeric">¥86.50</td>
+          <td><span class="pill st-preparing"><span class="dot"></span>Preparing</span></td>
+          <td class="muted">Yesterday</td>
+        </tr>
+        <tr>
+          <td><span class="ord-no">#48198</span><div class="muted">Meituan</div></td>
+          <td>— (platform order)</td>
+          <td>Tianhe</td>
+          <td>Local delivery</td>
+          <td class="numeric">¥45.00</td>
+          <td><span class="pill st-paid"><span class="dot"></span>Paid</span></td>
+          <td class="muted">Yesterday</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-label">Order drawer — #48219</div>
+  <div class="drawer">
+    <div class="od-eyebrow">Order placed today, 09:15</div>
+    <div class="title-row">
+      <b>#48219</b>
+      <span class="pill st-paid"><span class="dot"></span>Paid</span>
+      <span class="pill stock-pending"><span class="dot"></span>Stock pending</span>
+    </div>
+    <div class="od-tooltip">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+      <div>Real stock deducts once this order moves to <b>Preparing</b>. This is a shipped-from-out-of-Guangzhou order, so it deliberately skipped reserving stock at checkout — giving the warehouse a window to restock before this ships.</div>
+    </div>
+    <div class="od-divider"></div>
+    <div class="od-row"><span class="k">Customer</span><span class="v">Chen Hao</span></div>
+    <div class="od-row"><span class="k">Ship to</span><span class="v">Hangzhou, Zhejiang</span></div>
+    <div class="od-row"><span class="k">Items</span><span class="v">3</span></div>
+    <div class="od-row"><span class="k">Total</span><span class="v">¥210.00</span></div>
+  </div>
+
+</div>
+</body>
+</html>
