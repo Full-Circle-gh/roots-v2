@@ -3184,8 +3184,17 @@
       <select id="pa-subfilter" title="Filter by subcategory · 按子分类筛选" style="display:none">
         <option value="all">All subcategories · 全部子分类</option>
       </select>
-      <button class="btn" id="pa-add-btn" type="button" onclick="pdOpen(null)" style="white-space:nowrap;">＋ Add manually · 手动新增</button>
-      <button class="btn btn-primary" id="pa-wizard-btn" type="button" onclick="pwOpen()" style="white-space:nowrap;"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2.5l1.2 2.8L12 6.5 9.2 7.7 8 10.5 6.8 7.7 4 6.5l2.8-1.2z"/><path d="M12.5 10.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/></svg>Guided add · 向导添加</button>
+      <!-- Add product — one split button. The main click starts the step-by-step
+           wizard (the recommended path); the caret drops to the two ways to add
+           so the blank-form option no longer competes for its own slot. -->
+      <div class="pa-addsplit" id="pa-addsplit">
+        <button class="btn btn-primary pa-addsplit-main" id="pa-wizard-btn" type="button" onclick="pwOpen()" style="white-space:nowrap;"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2.5l1.2 2.8L12 6.5 9.2 7.7 8 10.5 6.8 7.7 4 6.5l2.8-1.2z"/><path d="M12.5 10.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/></svg>Step by step · 分步添加</button>
+        <button class="btn btn-primary pa-addsplit-caret" id="pa-add-caret" type="button" aria-haspopup="true" aria-label="More ways to add · 更多添加方式" title="More ways to add · 更多添加方式" onclick="paAddMenu(this)"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg></button>
+        <div class="pa-addsplit-menu" id="pa-add-menu" hidden>
+          <button type="button" onclick="paAddMenuClose();pwOpen()"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5l1.2 2.8L12 6.5 9.2 7.7 8 10.5 6.8 7.7 4 6.5l2.8-1.2z"/><path d="M12.5 10.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/></svg><span><b>Step by step · 分步添加</b><small>Walks you through each field · 逐项引导填写</small></span></button>
+          <button type="button" onclick="paAddMenuClose();pdOpen(null)"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v10M3 8h10"/></svg><span><b>Add manually · 手动新增</b><small>Blank form · 空白表单</small></span></button>
+        </div>
+      </div>
       <div id="pa-view-seg" class="pa-view-seg" role="group" aria-label="Product layout · 产品布局">
         <button type="button" class="pa-view-btn" data-view="list" title="List view · 列表视图" aria-label="List view"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg></button>
         <button type="button" class="pa-view-btn" data-view="grid" title="Grid view · 网格视图" aria-label="Grid view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
@@ -3258,7 +3267,7 @@
       <div id="pd-bg" class="pa-split-editor">
         <div id="pd-empty" class="pd-empty">
           <p class="pd-empty-h">Pick a product on the left · 在左侧选择产品</p>
-          <p class="pd-empty-sub">…or click <b>＋ Add product</b> above to create a new one. · 或点击上方「＋ 新增产品」创建新产品。</p>
+          <p class="pd-empty-sub">…or click <b>Step by step</b> above to create a new one. · 或点击上方「分步添加」创建新产品。</p>
         </div>
         <div class="pu-editor" id="pd-editor" style="display:none;">
         <div class="pu-editor-head">

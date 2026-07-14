@@ -1435,38 +1435,53 @@ function paRenderBulkBar() {
   const overview = PA_VIEW === 'list' && !_paEditorOpen;
   const idset = new Set(PA_FILTERED_IDS || []);
   const shown = overview ? (PA_PRODUCTS || []).filter(p => idset.has(p.id)) : [];
-  if (!shown.length) { bar.style.display = 'none'; bar.innerHTML = ''; PA_SELECT_MODE = false; PA_SELECTED = new Set(); return; }
-  bar.style.cssText = 'display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 var(--s3);padding:8px 12px;border:1px solid var(--line-soft);border-radius:10px;background:var(--bg-app);font-family:var(--f-sans);font-size:12px;';
+  if (!shown.length) { bar.style.display = 'none'; bar.className = ''; bar.innerHTML = ''; PA_SELECT_MODE = false; PA_SELECTED = new Set(); return; }
 
   if (PA_SELECT_MODE) {
     const n = PA_SELECTED.size;
     const visN = PA_VISIBLE_MEMBER_IDS.length;
     const allVis = visN && PA_VISIBLE_MEMBER_IDS.every(id => PA_SELECTED.has(id));
-    const grp = (lbl, btns) => `<span class="pa-bulk-grp"><span class="pa-bulk-lbl">${lbl}</span>${btns}</span>`;
-    const b = (txt, fn) => `<button type="button" class="btn btn-sm" ${n ? '' : 'disabled'} onclick="${fn}">${txt}</button>`;
+    // One dropdown per field: a trigger + a menu of choices. `dis` greys the
+    // triggers out until something is ticked. Items close the menu, then apply.
+    const dis = n ? '' : 'disabled';
+    const mi = (txt, fn) => `<button type="button" onclick="paBulkMenuClose();${fn}">${txt}</button>`;
+    const mh = (t) => `<div class="pa-bm-h">${t}</div>`;
+    const sep = `<div class="pa-bm-sep"></div>`;
+    const menu = (lbl, items, right) =>
+      `<div class="pa-bm"><button type="button" class="pa-bm-trig" ${dis} onclick="paBulkMenu(this)">${lbl}` +
+      `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg></button>` +
+      `<div class="pa-bm-menu${right ? ' right' : ''}">${items}</div></div>`;
+    bar.style.cssText = '';
+    bar.className = 'pa-bulkbar-sel';
     bar.innerHTML =
-      `<span class="muted">${cuT(n + ' selected', '已选 ' + n + ' 件')}</span>` +
+      `<span class="pa-bulk-count"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4L6 11 3 8"/></svg>${cuT(n + ' selected', '已选 ' + n + ' 件')}</span>` +
       `<button type="button" class="btn btn-sm" onclick="paSelectAllVisible(${allVis ? 'false' : 'true'})">${allVis ? cuT('Clear page', '清空本页') : cuT('Select all ' + visN, '全选 ' + visN)}</button>` +
       (n ? `<button type="button" class="btn btn-sm" onclick="paClearSelection()">${cuT('Clear', '清除')}</button>` : '') +
-      `<span style="margin-left:auto;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">` +
-        grp(cuT('Shop', '上架'), b(cuT('On', '上架'), "paBulkApply({is_published:1}, 'shop-on')") + b(cuT('Off', '下架'), "paBulkApply({is_published:0}, 'shop-off')")) +
-        `<span class="pa-bulk-sep"></span>` +
-        grp(cuT('Markets', '市集'), b(cuT('Yes', '是'), "paBulkApply({is_market:1}, 'mkt-on')") + b(cuT('No', '否'), "paBulkApply({is_market:0}, 'mkt-off')")) +
-        `<span class="pa-bulk-sep"></span>` +
-        grp(cuT('Fresh batch', '现做'), b(cuT('Yes', '是'), "paBulkApply({is_batch_made:1}, 'batch-on')") + b(cuT('No', '否'), "paBulkApply({is_batch_made:0}, 'batch-off')")) +
-        `<span class="pa-bulk-sep"></span>` +
-        grp(cuT('Shipping', '配送'), b(cuT('Air + Land', '空运+陆运'), "paBulkApply({ship_modes:'air,land'}, 'ship')") + b(cuT('Air only', '仅空运'), "paBulkApply({ship_modes:'air'}, 'ship')") + b(cuT('Land only', '仅陆运'), "paBulkApply({ship_modes:'land'}, 'ship')")) +
-        `<span class="pa-bulk-sep"></span>` +
-        grp(cuT('Badge', '标签'),
-          b(cuT('None', '无'),  "paBulkApply({tags:''}, 'badge-none')") +
-          b(cuT('Auto', '自动'), "paBulkApply({tags:'auto'}, 'badge-auto')") +
-          b('NEW',  "paBulkApply({tags:'new'}, 'badge-new')") +
-          b('POP',  "paBulkApply({tags:'pop'}, 'badge-pop')") +
-          b('SALE', "paBulkApply({tags:'sale'}, 'badge-sale')") +
-          b('HOT',  "paBulkApply({tags:'hot'}, 'badge-hot')")) +
-        `<span class="pa-bulk-sep"></span>` +
-        `<button type="button" class="btn btn-sm" ${n ? '' : 'disabled'} onclick="paBulkDelete()" style="color:var(--danger,#c0392b);">${cuT('Delete', '删除')}</button>` +
-        `<span class="pa-bulk-sep"></span>` +
+      `<span class="pa-bulk-actions">` +
+        menu(cuT('Shop', '上架'),
+          mi(cuT('Turn on', '上架'), "paBulkApply({is_published:1}, 'shop-on')") +
+          mi(cuT('Turn off', '下架'), "paBulkApply({is_published:0}, 'shop-off')")) +
+        menu(cuT('Badge', '标签'),
+          mi(cuT('None', '无'),  "paBulkApply({tags:''}, 'badge-none')") +
+          mi(cuT('Auto', '自动'), "paBulkApply({tags:'auto'}, 'badge-auto')") + sep +
+          mi('NEW',  "paBulkApply({tags:'new'}, 'badge-new')") +
+          mi('POP',  "paBulkApply({tags:'pop'}, 'badge-pop')") +
+          mi('SALE', "paBulkApply({tags:'sale'}, 'badge-sale')") +
+          mi('HOT',  "paBulkApply({tags:'hot'}, 'badge-hot')")) +
+        menu(cuT('Shipping', '配送'),
+          mi(cuT('Air + Land', '空运+陆运'), "paBulkApply({ship_modes:'air,land'}, 'ship')") +
+          mi(cuT('Air only', '仅空运'), "paBulkApply({ship_modes:'air'}, 'ship')") +
+          mi(cuT('Land only', '仅陆运'), "paBulkApply({ship_modes:'land'}, 'ship')")) +
+        menu(cuT('More', '更多'),
+          mh(cuT('Markets', '市集')) +
+          mi(cuT('Show in markets', '在市集显示'), "paBulkApply({is_market:1}, 'mkt-on')") +
+          mi(cuT('Hide from markets', '从市集隐藏'), "paBulkApply({is_market:0}, 'mkt-off')") + sep +
+          mh(cuT('Fresh batch', '现做')) +
+          mi(cuT('Mark fresh batch', '标记现做'), "paBulkApply({is_batch_made:1}, 'batch-on')") +
+          mi(cuT('Not fresh batch', '取消现做'), "paBulkApply({is_batch_made:0}, 'batch-off')"), true) +
+        `<span class="pa-bulk-vr"></span>` +
+        `<button type="button" class="pa-bm-trig pa-bulk-del" ${dis} onclick="paBulkDelete()">${cuT('Delete', '删除')}</button>` +
+        `<span class="pa-bulk-vr"></span>` +
         `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(false)">${cuT('Done', '完成')}</button>` +
       `</span>`;
     return;
@@ -1476,7 +1491,41 @@ function paRenderBulkBar() {
   // bulk bar stays hidden until the operator enters select mode (when it becomes
   // the action bar above).
   bar.style.display = 'none';
+  bar.className = '';
   bar.innerHTML = '';
+}
+// One-open-at-a-time dropdowns inside the selection bar. Toggling closes any
+// sibling menu first; a document click (bound once) closes them all.
+function paBulkMenu(btn) {
+  const grp = btn.closest('.pa-bm');
+  const wasOpen = grp.classList.contains('open');
+  paBulkMenuClose();
+  if (!wasOpen) grp.classList.add('open');
+}
+function paBulkMenuClose() {
+  document.querySelectorAll('#pa-bulkbar .pa-bm.open').forEach(g => g.classList.remove('open'));
+}
+if (!window._paBulkMenuBound) {
+  window._paBulkMenuBound = true;
+  document.addEventListener('click', (e) => { if (!e.target.closest('#pa-bulkbar .pa-bm')) paBulkMenuClose(); });
+}
+// Toolbar "Add product" split button — caret drops the two ways to add.
+function paAddMenu(btn) {
+  const wrap = btn.closest('.pa-addsplit');
+  const menu = document.getElementById('pa-add-menu');
+  const open = !menu.hidden;
+  paAddMenuClose();
+  if (!open) { menu.hidden = false; wrap.classList.add('is-open'); }
+}
+function paAddMenuClose() {
+  const menu = document.getElementById('pa-add-menu');
+  if (menu) menu.hidden = true;
+  const wrap = document.getElementById('pa-addsplit');
+  if (wrap) wrap.classList.remove('is-open');
+}
+if (!window._paAddMenuBound) {
+  window._paAddMenuBound = true;
+  document.addEventListener('click', (e) => { if (!e.target.closest('#pa-addsplit')) paAddMenuClose(); });
 }
 // Enter/leave select mode. Leaving drops the tick set. Re-renders the list so
 // the checkbox column slides in/out and the bar swaps.

@@ -2614,6 +2614,88 @@
   .pa-list-rich.pa-selecting .pa-row { cursor: pointer; }
   .pa-list-rich .pa-row.is-sel { background: var(--td-raised); }
   .pa-list-rich .pa-row.is-sel:hover { background: var(--td-raised); box-shadow: inset 2px 0 0 0 var(--td-text); }
+  /* ── Add-product split button (toolbar) ─────────────────────────────────
+     One control: the main face starts the step-by-step wizard; the caret
+     drops a small menu with both ways to add. */
+  .pa-addsplit { position: relative; display: inline-flex; }
+  .pa-addsplit-main { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+  .pa-addsplit-caret {
+    border-top-left-radius: 0; border-bottom-left-radius: 0;
+    padding-left: 8px; padding-right: 8px; margin-left: 1px;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .pa-addsplit-caret svg { transition: transform .18s var(--ease-out, ease); }
+  .pa-addsplit.is-open .pa-addsplit-caret svg { transform: rotate(180deg); }
+  .pa-addsplit-menu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+    min-width: 248px; padding: 6px; background: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .28), 0 1px 2px rgba(0, 0, 0, .18);
+  }
+  .pa-addsplit-menu[hidden] { display: none; }
+  .pa-addsplit-menu button {
+    display: flex; align-items: flex-start; gap: 11px; width: 100%;
+    padding: 10px 12px; border: 0; background: none; border-radius: 8px;
+    font-family: var(--f-sans); font-size: 13px; color: var(--td-text);
+    text-align: left; cursor: pointer; transition: background .14s ease;
+  }
+  .pa-addsplit-menu button:hover { background: var(--td-raised); }
+  .pa-addsplit-menu button svg { flex: none; margin-top: 2px; color: var(--td-text2); }
+  .pa-addsplit-menu button:hover svg { color: var(--td-text); }
+  .pa-addsplit-menu span { display: flex; flex-direction: column; gap: 1px; line-height: 1.35; }
+  .pa-addsplit-menu small { color: var(--td-text2); font-size: 11.5px; }
+
+  /* ── Bulk selection bar (#pa-bulkbar in select mode) ────────────────────
+     A distinct raised bar that reads as a "mode": one short menu per field
+     instead of a wall of chips, with Delete set apart from the safe edits. */
+  .pa-bulkbar-sel {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    margin: 0 0 var(--s3); padding: 9px 12px;
+    background: var(--td-raised); border: 1px solid var(--td-border);
+    border-radius: 12px; box-shadow: 0 6px 22px rgba(0, 0, 0, .22);
+    font-family: var(--f-sans); font-size: 12px;
+    animation: paBulkRise .28s var(--ease-out, ease) both;
+  }
+  @keyframes paBulkRise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .pa-bulk-count { font-weight: 600; color: var(--td-text); display: inline-flex; align-items: center; gap: 7px; }
+  .pa-bulk-count svg { width: 15px; height: 15px; color: var(--td-sage); }
+  .pa-bulk-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .pa-bulk-vr { width: 1px; align-self: stretch; background: var(--td-border); margin: 2px 2px; }
+
+  /* Field menu — trigger button + dropdown. */
+  .pa-bm { position: relative; display: inline-block; }
+  .pa-bm-trig {
+    height: 32px; display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 10px; border: 1px solid var(--td-border); border-radius: 8px;
+    background: var(--td-surface); color: var(--td-text);
+    font-family: var(--f-sans); font-size: 12px; cursor: pointer; transition: border-color .14s ease, background .14s ease;
+  }
+  .pa-bm-trig:hover:not(:disabled) { border-color: var(--td-text2); }
+  .pa-bm-trig:disabled { opacity: .5; cursor: default; }
+  .pa-bm-trig svg { width: 12px; height: 12px; color: var(--td-text2); transition: transform .16s ease; }
+  .pa-bm.open .pa-bm-trig svg { transform: rotate(180deg); }
+  .pa-bm.open .pa-bm-trig { border-color: var(--td-text2); }
+  .pa-bm-menu {
+    position: absolute; top: calc(100% + 6px); left: 0; z-index: 60;
+    min-width: 190px; padding: 6px; background: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 11px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, .28);
+    display: none;
+  }
+  .pa-bm.open .pa-bm-menu { display: block; animation: paBulkRise .16s var(--ease-out, ease) both; }
+  .pa-bm-menu.right { left: auto; right: 0; }
+  .pa-bm-menu button {
+    display: block; width: 100%; text-align: left; padding: 8px 11px;
+    border: 0; background: none; border-radius: 7px;
+    font-family: var(--f-sans); font-size: 12.5px; color: var(--td-text);
+    cursor: pointer; transition: background .12s ease;
+  }
+  .pa-bm-menu button:hover { background: var(--td-raised); }
+  .pa-bm-h { font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--td-text2); font-weight: 600; padding: 8px 11px 3px; }
+  .pa-bm-sep { height: 1px; background: var(--td-border); margin: 5px 4px; }
+  .pa-bulk-del { color: var(--danger); }
+  .pa-bulk-del:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); }
+
   /* Bulk action groups inside #pa-bulkbar when selecting. */
   .pa-bulk-grp { display: inline-flex; align-items: center; gap: 6px; }
   .pa-bulk-grp .pa-bulk-lbl { font-size: 10px; letter-spacing: .05em; text-transform: uppercase; color: var(--td-text2); font-weight: 600; }
