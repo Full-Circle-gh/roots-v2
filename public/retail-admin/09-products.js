@@ -2983,6 +2983,11 @@ function bpSetMode(mode) {
   bpRender();
   pdScheduleAutosave();
 }
+// Radios can't be unchecked by clicking them again — clicking an already-selected
+// mode clears it back to "no mode chosen" instead of leaving it stuck.
+function bpRadioClick(input, mode) {
+  bpSetMode(input.dataset.wasOn === '1' ? null : mode);
+}
 function bpRender() {
   const box = document.getElementById('pd-bundle-product'); if (!box || BP_ID == null) return;
   const summary = BP_MODE === 'assembled'
@@ -3000,7 +3005,7 @@ function bpRender() {
   // way, but stock works one of two ways.
   const opt = (mode, on, title, desc) =>
     `<label class="bp-mode${on ? ' is-on' : ''}">` +
-      `<input type="radio" name="bp-mode" ${on ? 'checked' : ''} onchange="bpSetMode('${mode}')">` +
+      `<input type="radio" name="bp-mode" ${on ? 'checked' : ''} data-was-on="${on ? '1' : '0'}" onclick="bpRadioClick(this,'${mode}')">` +
       `<span class="bp-mode-txt"><span class="bp-mode-title">${title}</span>` +
       `<span class="bp-mode-desc">${desc}</span></span></label>`;
   const modes =
