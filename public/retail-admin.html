@@ -9991,24 +9991,37 @@
     <iframe id="frame-product-editor" class="ed-frame" title="Product Page Editor · 产品页编辑器" data-src="/product-editor"></iframe>
   </section>
 
-</main>
+  <!-- Order detail. Lives INSIDE <main> so that on desktop it renders as an
+       in-flow page in the content area (body.ord-viewing hides the tab sections
+       and drops this to position:static) — no fixed overlay, no slide. On phones
+       (<721px) it keeps the full-screen drawer behaviour. -->
+  <aside id="order-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
+    <button type="button" class="drawer-close" onclick="closeDrawer('#order-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <!-- Phone-only back affordance — replaces the floating × with a left-side
+         chevron in the sticky order-head bar (matches the mobile mockup). Hidden
+         on desktop via CSS; same close action as the ×. -->
+    <button type="button" class="drawer-back" onclick="orderDrawerBack()" title="Back · 返回" aria-label="Back">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <!-- Desktop in-page back + breadcrumb bar (shown only in body.ord-viewing). -->
+    <div id="ord-page-bar" class="ord-page-bar" aria-hidden="true">
+      <button type="button" class="opb-back" onclick="closeDrawer('#order-drawer')" aria-label="Back to orders">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        <span>Orders · 订单</span>
+      </button>
+      <span class="opb-sep">/</span>
+      <span class="opb-cur" id="ord-page-crumb" data-no-i18n></span>
+    </div>
+    <div class="drawer-body" id="order-detail-mount"></div>
+    <!-- Print controls. In the drawer they pin to the bottom; as an in-flow page
+         they sit at the end of the content. Populated by orderDrawerFoot();
+         collapses when empty via `#order-drawer .drawer-foot:empty`. -->
+    <div class="drawer-foot" id="order-drawer-foot"></div>
+  </aside>
 
-<aside id="order-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
-  <button type="button" class="drawer-close" onclick="closeDrawer('#order-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-  </button>
-  <!-- Phone-only back affordance — replaces the floating × with a left-side
-       chevron in the sticky order-head bar (matches the mobile mockup). Hidden
-       on desktop via CSS; same close action as the ×. -->
-  <button type="button" class="drawer-back" onclick="orderDrawerBack()" title="Back · 返回" aria-label="Back">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-  </button>
-  <div class="drawer-body" id="order-detail-mount"></div>
-  <!-- Print controls pinned to the bottom of the drawer (outside the scroll
-       area) so a reprint is one click. Populated by orderDrawerFoot(); collapses
-       when empty via `#order-drawer .drawer-foot:empty`. -->
-  <div class="drawer-foot" id="order-drawer-foot"></div>
-</aside>
+</main>
 
 <!-- Customer detail drawer — same slide-in pattern as Orders. -->
 <aside id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">

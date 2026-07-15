@@ -5094,6 +5094,46 @@
   #order-drawer .drawer-foot:empty { display: none; }
   #order-drawer .drawer-foot .od-foot-spacer { flex: 1 1 auto; }
   #order-drawer .drawer-foot .od-foot-hint { font-size: 12.5px; color: var(--text-3); }
+
+  /* ── Orders · in-flow PAGE (desktop ≥721px, body.ord-viewing) ───────────
+     Rebuilt from the floating drawer into a real page. #order-drawer now lives
+     inside <main>; when an order is open we hide the tab sections and drop the
+     drawer to position:static, so the order renders in the content-area FLOW —
+     no fixed overlay, no slide-in, no shadow. The nav rail + topbar (both fixed)
+     stay put. Phones (<721px) are untouched and keep the full-screen drawer. */
+  .ord-page-bar { display: none; }
+  @media (min-width: 721px) {
+    body.ord-viewing main > section { display: none; }
+    body.ord-viewing #order-drawer {
+      position: static;
+      width: auto; min-width: 0; max-width: none; height: auto;
+      transform: none; visibility: visible;
+      box-shadow: none; border: 0; background: transparent;
+      overflow: visible;
+    }
+    /* Scroll the page with the window, not an inner panel. */
+    body.ord-viewing #order-drawer .drawer-body { overflow: visible; padding: 0; }
+    body.ord-viewing #order-drawer .drawer-close { display: none; }
+    /* Back + breadcrumb bar, aligned to the content column. */
+    body.ord-viewing #order-drawer .ord-page-bar {
+      display: flex; align-items: center; gap: 9px;
+      max-width: 900px; margin: 0 auto var(--s4);
+    }
+    .ord-page-bar .opb-back {
+      display: inline-flex; align-items: center; gap: 8px;
+      font: 500 14px var(--f-sans); color: var(--text-2);
+      background: transparent; border: 0; cursor: pointer;
+      padding: 6px 10px 6px 6px; border-radius: var(--r-md);
+    }
+    .ord-page-bar .opb-back:hover { color: var(--text-1); background: var(--bg-elev-1); }
+    .ord-page-bar .opb-back svg { width: 16px; height: 16px; }
+    .ord-page-bar .opb-sep { color: var(--text-3); }
+    .ord-page-bar .opb-cur { font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
+    /* Readable single column, centered in the content area. */
+    body.ord-viewing #order-drawer .order-card { max-width: 900px; margin: 0 auto; }
+    body.ord-viewing #order-drawer .drawer-foot { max-width: 900px; margin: var(--s4) auto 0; padding-left: 0; padding-right: 0; }
+  }
+
   /* The Orders drawer hosts the existing .order-card chrome unchanged
      — but reset the card's outer chrome since the drawer already
      frames it. */

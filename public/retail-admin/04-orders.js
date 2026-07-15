@@ -3525,6 +3525,11 @@ async function openOrder(id, opts = {}) {
       const foot = $('#order-drawer-foot');
       if (foot) foot.innerHTML = '';  // drop the previous order's print footer while loading
       openDrawer('#order-drawer');
+      // Desktop: render the order as an in-flow page (hides the tab sections,
+      // drops the drawer to static). The CSS gates this to ≥721px; phones keep
+      // the full-screen drawer. Start at the top of the new page.
+      document.body.classList.add('ord-viewing');
+      window.scrollTo(0, 0);
     }
   }
   // When switching, we deliberately do NOT fade out up-front. The old code
@@ -3556,6 +3561,9 @@ async function openOrder(id, opts = {}) {
       const _chip = _row.querySelector('.new-chip');
       if (_chip) _chip.remove();
     }
+    // In-page breadcrumb (desktop page mode).
+    const _crumb = document.getElementById('ord-page-crumb');
+    if (_crumb) _crumb.textContent = o.order_no || '';
   } catch (e) {
     mount.innerHTML = `<div class="order-card err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
     mount.classList.remove('od-swapping');
@@ -3581,6 +3589,8 @@ function closeDrawer(sel) {
   const d = typeof sel === 'string' ? document.querySelector(sel) : sel;
   if (!d) return;
   d.classList.remove('open');
+  // Order page: drop in-flow page mode synchronously so the list returns at once.
+  if (d.id === 'order-drawer') document.body.classList.remove('ord-viewing');
   d.setAttribute('aria-hidden', 'true');
   const key = typeof sel === 'string' ? sel : '#' + d.id;
   const hook = _drawerCloseHooks.get(key);
