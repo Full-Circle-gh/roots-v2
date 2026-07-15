@@ -26,8 +26,13 @@ let CU_SEGMENT = '';
 let CU_SORT = 'last_seen';
 let CU_SORT_DIR = 'desc';
 let CU_TIER_FILTERS = new Set();
+// Channel column filter — same shape as CU_TIER_FILTERS, filters on each
+// customer's MOST RECENT order's channel (backend default 'wechat' for
+// customers with zero orders yet, since mini app is the only signup path).
+let CU_CHAN_FILTERS = new Set();
 const CU_SORT_DEFAULT_DIR = { name: 'asc', tier: 'desc', orders: 'desc', spend: 'desc', points: 'desc', wallet: 'desc', last_seen: 'desc' };
 const CU_TIER_LABEL = { seed: 'Seed · 种子', sprout: 'Sprout · 嫩芽', root: 'Root · 根系', tree: 'Tree · 大树' };
+const CU_CHAN_LABEL = { wechat: 'Mini app · 小程序', web: 'Web · 网页', meituan: 'Meituan · 美团', gzgrocery: 'Gzgrocery · 果满多' };
 
 function cuSearchDebounced() {
   clearTimeout(cuSearchTimer);
@@ -121,14 +126,79 @@ function cuPaintTierFilterUI() {
     const v = b.dataset.v || '';
     b.classList.toggle('on', v ? (CU_TIER_FILTERS.size === 1 && CU_TIER_FILTERS.has(v)) : !active);
   });
+  cuPaintFilterPills();
+}
+
+// ── Channel column filter — funnel + checkbox popover, same shape as Tier ──
+function cuChanPopToggle(e) {
+  if (e) e.stopPropagation();
+  const pop = document.getElementById('cu-chan-pop');
+  if (!pop) return;
+  const opening = !pop.classList.contains('open');
+  pop.classList.toggle('open', opening);
+  if (opening) setTimeout(() => document.addEventListener('mousedown', cuChanPopOutside), 0);
+  else document.removeEventListener('mousedown', cuChanPopOutside);
+}
+function cuChanPopClose() {
+  const pop = document.getElementById('cu-chan-pop');
+  if (pop) pop.classList.remove('open');
+  document.removeEventListener('mousedown', cuChanPopOutside);
+}
+function cuChanPopOutside(e) {
+  if (e.target.closest && e.target.closest('#cu-chan-pop, #cu-chan-filter-btn')) return;
+  cuChanPopClose();
+}
+function cuChanCheck(chan, checked) {
+  if (checked) CU_CHAN_FILTERS.add(chan); else CU_CHAN_FILTERS.delete(chan);
+  cuPaintChanFilterUI();
+  cuFilterChanged();
+}
+function cuChanFilterClear() {
+  CU_CHAN_FILTERS.clear();
+  cuPaintChanFilterUI();
+  cuFilterChanged();
+}
+function cuChanFilterRemove(chan) {
+  CU_CHAN_FILTERS.delete(chan);
+  cuPaintChanFilterUI();
+  cuFilterChanged();
+}
+function cuPaintChanFilterUI() {
+  const active = CU_CHAN_FILTERS.size > 0;
+  const btn = document.getElementById('cu-chan-filter-btn');
+  if (btn) btn.classList.toggle('is-active', active);
+  document.querySelectorAll('#cu-chan-pop input[type=checkbox]').forEach(cb => {
+    cb.checked = CU_CHAN_FILTERS.has(cb.value);
+  });
+  cuPaintFilterPills();
+}
+
+// Clears BOTH column filters — the "Clear all" action above the table.
+function cuFilterClearAll() {
+  CU_TIER_FILTERS.clear();
+  CU_CHAN_FILTERS.clear();
+  cuPaintTierFilterUI();
+  cuPaintChanFilterUI();
+  cuFilterChanged();
+}
+
+// Shared pill strip — Tier and Channel filters render into the same row
+// ("Filtered by …") so a future column filter can join the same way.
+function cuPaintFilterPills() {
   const row = document.getElementById('cu-afil-row');
   const pills = document.getElementById('cu-afil-pills');
   if (!row || !pills) return;
+  const active = CU_TIER_FILTERS.size > 0 || CU_CHAN_FILTERS.size > 0;
   row.hidden = !active;
-  pills.innerHTML = active ? [...CU_TIER_FILTERS].map(t => `
+  const tierPills = [...CU_TIER_FILTERS].map(t => `
     <span class="cul-afil-pill">${CU_TIER_LABEL[t] || t}<button type="button" onclick="cuTierFilterRemove('${t}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button></span>`).join('') : '';
+    </button></span>`);
+  const chanPills = [...CU_CHAN_FILTERS].map(c => `
+    <span class="cul-afil-pill">${CU_CHAN_LABEL[c] || c}<button type="button" onclick="cuChanFilterRemove('${c}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></span>`);
+  pills.innerHTML = [...tierPills, ...chanPills].join('');
 }
 
 // ── Customers stat strip — three figures, then the roster ────────────────
@@ -274,6 +344,7 @@ async function cuLoad() {
   const params = new URLSearchParams({
     q: $('#cu-q').value.trim(),
     tier: [...CU_TIER_FILTERS].join(','),
+    channel: [...CU_CHAN_FILTERS].join(','),
     sort: CU_SORT,
     dir: CU_SORT_DIR,
     segment: CU_SEGMENT,
@@ -281,25 +352,25 @@ async function cuLoad() {
     pageSize: CU_PAGE_SIZE
   });
   const tbody = $('#cu-table tbody');
-  tbody.innerHTML = '<tr><td colspan="7" class="muted">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="8" class="muted">Loading…</td></tr>';
   let j;
   try {
     const res = await fetch('/api/retail-admin/customers?' + params);
     j = await res.json();
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="7" class="muted">Network error. · 网络错误。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">Network error. · 网络错误。</td></tr>';
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
     return;
   }
   if (!j.success) {
-    tbody.innerHTML = '<tr><td colspan="7" class="muted">Failed to load. · 加载失败。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">Failed to load. · 加载失败。</td></tr>';
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
     return;
   }
   CU_TOTAL = j.total || 0;
   const rows = j.data || [];
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="muted">No customers found. · 未找到客户。</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="muted">No customers found. · 未找到客户。</td></tr>';
   } else {
     const today = cuGzDay(Date.now());
     tbody.innerHTML = rows.map(r => {
@@ -328,6 +399,7 @@ async function cuLoad() {
         <td class="numeric cul-num ${(r.points_balance || 0) === 0 ? 'is-zero' : ''}">${r.points_balance || 0}</td>
         <td class="numeric cul-num ${Number(r.balance || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.balance || 0).toFixed(2)}</td>
         <td class="cul-last" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
+        <td class="cul-chan" data-no-i18n><span class="cul-chan-in">${chanIcon(r.channel)}<span>${ordChannelLabel(r)}</span></span></td>
       </tr>`;
     }).join('');
   }

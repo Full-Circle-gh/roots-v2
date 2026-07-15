@@ -2466,6 +2466,9 @@
       #cu-table td.cul-num { font-variant-numeric: tabular-nums; }
       #cu-table td.cul-num.is-zero { color: var(--text-3); opacity: .7; }
       #cu-table td.cul-last { color: var(--text-2); font-size: 13px; white-space: nowrap; text-align: right; }
+      #cu-table td.cul-chan { white-space: nowrap; }
+      #cu-table .cul-chan-in { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text-1); }
+      #cu-table .cul-chan-in svg { width: 14px; height: 14px; flex: none; color: var(--text-2); }
       #cu-table td.muted[colspan] { padding: 30px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
 
       /* A customer who signed in but never set a name. */
@@ -2837,13 +2840,13 @@
           <button type="button" class="cul-seg warn" data-seg="blocked" id="cu-seg-blocked" hidden onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct" id="cu-seg-blocked-ct" data-no-i18n></span></button>
         </span>
       </div>
-      <!-- Active column-filter pills — only the Tier column filters today, but
-           this row is generic so a future column filter drops in the same way.
-           Hidden (via [hidden]) whenever nothing is filtered. -->
+      <!-- Active column-filter pills — Tier and Channel today, generic enough
+           for a future column filter to drop in the same way. Hidden (via
+           [hidden]) whenever nothing is filtered. -->
       <div class="cul-afil" id="cu-afil-row" hidden>
         <span>Filtered by · 已筛选</span>
         <span id="cu-afil-pills"></span>
-        <button type="button" class="cul-afil-clear" onclick="cuTierFilterClear()">Clear · 清除</button>
+        <button type="button" class="cul-afil-clear" onclick="cuFilterClearAll()">Clear · 清除</button>
       </div>
       <!-- One clipped list card: table + phone cards + pager footer. See the
            matching note on the Orders card — the pager is a CHILD so the
@@ -2882,8 +2885,28 @@
             <th class="numeric" data-sort="points"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('points')">Points · 积分<span class="cul-carets"></span></button></span></th>
             <th class="numeric" data-sort="wallet"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('wallet')">Wallet ¥ · 钱包<span class="cul-carets"></span></button></span></th>
             <th class="numeric" data-sort="last_seen"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('last_seen')">Last seen · 最近活动<span class="cul-carets"></span></button></span></th>
+            <th>
+              <span class="cul-th-inner">
+                <span class="cul-sort-btn" style="cursor:default;">Channel · 渠道</span>
+                <button type="button" class="cul-filter-btn" id="cu-chan-filter-btn" onclick="cuChanPopToggle(event)" aria-haspopup="true" title="Filter by channel · 按渠道筛选">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4 2v-8.5z"/></svg>
+                  <span class="dot"></span>
+                </button>
+                <div class="cul-pop" id="cu-chan-pop">
+                  <div class="cul-pop-title">Filter by channel · 按渠道筛选</div>
+                  <label class="cul-pop-opt"><input type="checkbox" value="wechat" onchange="cuChanCheck('wechat', this.checked)"> Mini app · 小程序</label>
+                  <label class="cul-pop-opt"><input type="checkbox" value="web" onchange="cuChanCheck('web', this.checked)"> Web · 网页</label>
+                  <label class="cul-pop-opt"><input type="checkbox" value="meituan" onchange="cuChanCheck('meituan', this.checked)"> Meituan · 美团</label>
+                  <label class="cul-pop-opt"><input type="checkbox" value="gzgrocery" onchange="cuChanCheck('gzgrocery', this.checked)"> Gzgrocery · 果满多</label>
+                  <div class="cul-pop-foot">
+                    <button type="button" class="clear" onclick="cuChanFilterClear()">Clear · 清除</button>
+                    <button type="button" class="done" onclick="cuChanPopClose()">Done · 完成</button>
+                  </div>
+                </div>
+              </span>
+            </th>
           </tr></thead>
-          <tbody><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
+          <tbody><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
 

@@ -576,30 +576,15 @@ function prodSetHelp(view) {
   if (title) title.textContent = say(m.title);
   const help = document.getElementById('pa-info-text');
   if (help) help.textContent = say(m.help);
-  // Desktop topbar ⓘ carries the same per-view copy (Option B mirror).
-  const tbHelp = document.getElementById('tb-info-text');
-  if (tbHelp) tbHelp.textContent = say(m.help);
-  // Glue the desktop ⓘ to whichever tab is actually active instead of
-  // leaving it parked after the last tab — a fixed position reads as
-  // "about this page" rather than "about Catalogue specifically", which is
-  // what confused people into thinking it never changed. Skipped when the
-  // switch itself is capped away (operator has neither activity nor
-  // categories access), so the ⓘ stays put where cap-limited users can
-  // still reach it.
-  const subviews = document.getElementById('tb-subviews');
-  const tbWrap = document.getElementById('tb-info-wrap');
-  const activeBtn = document.getElementById('tb-stk-btn-' + _prodHelpView);
-  if (subviews && tbWrap && activeBtn && getComputedStyle(subviews).display !== 'none') {
-    activeBtn.insertAdjacentElement('afterend', tbWrap);
-  }
+  // The ⓘ lives in the page body now (#pa-info-wrap, beside the per-view title),
+  // on both desktop and phone — no topbar mirror to keep in sync any more.
 }
 // Click/tap toggles the tooltip open (hover + keyboard focus are handled in
 // CSS); an outside click closes it. Sticky-open is what makes it usable on
 // touch, where :hover never fires.
 function prodToggleHelp(e) {
   if (e) { e.stopPropagation(); e.preventDefault(); }
-  // Toggle whichever ⓘ was clicked — the in-content one (#pa-info-wrap) on phones
-  // or the topbar mirror (#tb-info-wrap) on desktop. Falls back to the content one.
+  // Toggle the in-content ⓘ (#pa-info-wrap) — the only one now, on every width.
   const wrap = (e && e.currentTarget && e.currentTarget.closest('.pa-info-wrap'))
              || document.getElementById('pa-info-wrap');
   if (!wrap) return;
@@ -609,11 +594,11 @@ function prodToggleHelp(e) {
   else document.removeEventListener('click', prodCloseHelp);
 }
 function prodCloseHelp(e) {
-  document.querySelectorAll('#pa-info-wrap, #tb-info-wrap').forEach((wrap) => {
-    if (e && wrap.contains(e.target)) return;
+  const wrap = document.getElementById('pa-info-wrap');
+  if (wrap && !(e && wrap.contains(e.target))) {
     wrap.classList.remove('open');
     wrap.querySelector('.pa-info')?.setAttribute('aria-expanded', 'false');
-  });
+  }
   document.removeEventListener('click', prodCloseHelp);
 }
 // Paint the default (catalogue) help on load and keep it in the live language.
@@ -669,13 +654,9 @@ function prodRenderStock() {
   set('stk-mini-out-hint',   cuT('sold or synced out', '售出或同步出库'));
   set('stk-mini-in-hint',    cuT('restocks', '补货入库'));
   set('stk-mini-zero-hint',  d.zero ? cuT('see below ›', '见下方 ›') : cuT('nothing waiting', '无需处理'));
+  // The hit-zero card still turns amber while something's at zero; the old
+  // tab-dot signal was removed (2026-07-15) — the amber card carries it.
   document.getElementById('stk-mini-zero-card')?.classList.toggle('warn', d.zero > 0);
-  const zeroDot = !(d.zero > 0);
-  const dot = document.getElementById('stk-view-dot');
-  if (dot) dot.hidden = zeroDot;
-  // Mirror the hit-zero dot onto the desktop topbar switch (Option B).
-  const tbDot = document.getElementById('tb-stk-dot');
-  if (tbDot) tbDot.hidden = zeroDot;
 }
 
 // Live push: stock moves constantly (orders, daemons, quick-stock). The

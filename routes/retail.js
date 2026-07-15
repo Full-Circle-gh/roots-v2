@@ -12529,7 +12529,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         amount:       r.amount,
         status:       r.status,
         requested_at: r.refund_requested_at,
-        buyer:        maskBuyerName(r.buyer),
+        buyer:        r.buyer,
       })),
     };
 
@@ -12686,25 +12686,25 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         tracking_status:  r.tracking_status,
         tracking_scenario: r.tracking_scenario,
         synced_at:        r.tracking_synced_at,
-        buyer:            maskBuyerName(r.buyer),
+        buyer:            r.buyer,
       })).concat(airItems.map(r => ({
         id:         r.id,
         order_no:   r.order_no,
         air_delayed: 1,
         synced_at:  r.tracking_synced_at,
-        buyer:      maskBuyerName(r.buyer),
+        buyer:      r.buyer,
       }))).concat(mtItems.map(r => ({
         id:         r.id,
         order_no:   r.order_no,
         channel:    'meituan',
         overdue:    1,
         synced_at:  r.channel_status_at,
-        buyer:      maskBuyerName(r.buyer),
+        buyer:      r.buyer,
       }))).concat(localStuck.map(r => ({
         id:          r.id,
         order_no:    r.order_no,
         local_stuck: 1,
-        buyer:       maskBuyerName(r.buyer),
+        buyer:       r.buyer,
       }))),
     };
 
@@ -12734,8 +12734,8 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         amount:    r.total,
         type:      r.invoice_type || 'personal',
         // Company requests show the 抬头 (that's what the accountant types);
-        // personal ones fall back to the buyer, masked like the refund card.
-        title:     r.invoice_title || maskBuyerName(r.buyer),
+        // personal ones fall back to the buyer's name.
+        title:     r.invoice_title || r.buyer,
         placed_at: r.placed_at,
       })),
     };
@@ -12965,6 +12965,11 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   // Comma-separated so the Tier column header can filter by several tiers at
   // once (e.g. "root,tree"); a single value still works the same as before.
   const tiers          = String(req.query.tier || '').trim().split(',').map(s => s.trim()).filter(Boolean);
+  // Same pattern for the Channel column filter — the channel shown per
+  // customer is their MOST RECENT order's channel (matches the label already
+  // used per-order in the Orders table). No orders yet → 'wechat' (mini app),
+  // the only channel an account can be created through today.
+  const channels       = String(req.query.channel || '').trim().split(',').map(s => s.trim()).filter(Boolean);
   const segment        = String(req.query.segment || '').trim();
   // The roster asks for one segment at a time; the stat strip still calls this
   // with includeBlocked=1 (pageSize=1) purely to count every account.
@@ -12975,10 +12980,15 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const pageSize       = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
   const offset         = (page - 1) * pageSize;
 
+  // Correlated subquery reused in both SELECT and WHERE so "the channel
+  // shown" and "the channel filtered on" can never drift apart.
+  const CHANNEL_SQL = `COALESCE((SELECT channel FROM retail_orders WHERE customer_id = retail_customers.id ORDER BY placed_at DESC LIMIT 1), 'wechat')`;
+
   const where  = [];
   const params = [];
   if (!includeBlocked) where.push('is_blocked = 0');
   if (tiers.length)    { where.push(`tier_key IN (${tiers.map(() => '?').join(',')})`); params.push(...tiers); }
+  if (channels.length) { where.push(`${CHANNEL_SQL} IN (${channels.map(() => '?').join(',')})`); params.push(...channels); }
 
   // Roster segments — the cuts an operator actually reaches for. Timestamps are
   // UTC text, so SQLite's datetime() comparisons work on them directly.
@@ -13031,7 +13041,8 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT id, nickname, phone, openid, email, tier_key, lifetime_spend,
             points_balance, balance, is_blocked, created_at, last_login_at,
-            (SELECT COUNT(*) FROM retail_orders WHERE customer_id = retail_customers.id) AS orders_count
+            (SELECT COUNT(*) FROM retail_orders WHERE customer_id = retail_customers.id) AS orders_count,
+            ${CHANNEL_SQL} AS channel
        FROM retail_customers
        ${whereSql}
        ORDER BY ${orderClause}
