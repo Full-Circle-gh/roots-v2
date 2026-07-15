@@ -61,7 +61,7 @@
 
   /* ── card: side-rail + content pane (Layout B) ── */
   .acct{
-    display:flex; width:min(700px, 96vw); height:min(560px, 88vh);
+    display:flex; width:min(840px, 96vw); height:min(700px, 92vh);
     background:var(--paper); border:1px solid var(--line); border-radius:16px; overflow:hidden;
     box-shadow:var(--shadow); animation:settle .4s var(--ease) both;
   }
@@ -276,10 +276,6 @@
           <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
           <span class="en">Notifications</span><span class="cn">通知</span>
         </button>
-        <button class="navbtn" data-tab="access" type="button">
-          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/></svg>
-          <span class="en">Access</span><span class="cn">权限</span>
-        </button>
       </nav>
       <div class="rail-foot">
         <button type="button" id="themeToggle" class="icobtn" aria-label="Theme">
@@ -409,13 +405,6 @@
         </div>
       </div>
 
-      <!-- Access -->
-      <div class="tabpane" data-pane="access">
-        <h1><span class="en">Access</span><span class="cn">权限</span></h1>
-        <p class="lead"><span class="en">What your role lets you do. Set by your administrator.</span><span class="cn">您的角色可执行的操作。由管理员设置。</span></p>
-        <div id="accBody"><div class="skel"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
-      </div>
-
     </section>
   </div>
 
@@ -430,7 +419,7 @@
     var lang = document.documentElement.getAttribute('data-lang') === 'cn' ? 'cn' : 'en';
     function L(en, cn){ return lang === 'cn' ? cn : en; }
     var lastUser = null;
-    var loaded = { devices:false, access:false, recovery:false, notifications:false };
+    var loaded = { devices:false, recovery:false, notifications:false };
     var recCurrent = { email:null, verified:false, twofaEnabled:false, emailConfigured:true };
     var recPending = null;      // masked address, for display in the code step
     var recPendingRaw = null;   // the real address typed, so "Resend" re-sends it
@@ -486,8 +475,7 @@
     function showTab(tab){
       document.querySelectorAll('.navbtn').forEach(function(b){ b.classList.toggle('on', b.dataset.tab === tab); });
       document.querySelectorAll('.tabpane').forEach(function(p){ p.classList.toggle('on', p.dataset.pane === tab); });
-      if (tab === 'devices' && !loaded.devices) loadDevices();
-      if (tab === 'access'  && !loaded.access)  loadAccess();
+      if (tab === 'devices') loadDevices();   // always refetch — a device signed in elsewhere must surface without a full reload
       if (tab === 'security' && !loaded.recovery) loadRecovery();
       if (tab === 'notifications' && !loaded.notifications) loadNotifications();
     }
@@ -506,7 +494,7 @@
         .then(function(res){
           $('nameBtn').disabled = false; $('nameBtn').classList.remove('loading');
           if (res.ok && res.data && res.data.success) {
-            if (lastUser) { lastUser.displayName = res.data.displayName || name; hydrate(lastUser); }
+            if (lastUser) { lastUser.displayName = res.data.displayName || name; hydrate(lastUser); notifyParent(); }
             $('idrow').classList.remove('editing');
             setMsg($('nameMsg'), 'ok', L('Saved','已保存'));
           } else { setMsg($('nameMsg'), 'err', (res.data && res.data.error) || L('Couldn’t save — please try again','保存失败，请重试')); }
@@ -521,7 +509,7 @@
         .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
         .then(function(res){
           if (res.ok && res.data && res.data.success) {
-            if (lastUser) { lastUser.avatarUrl = res.data.avatarUrl || null; renderAvatar(lastUser); }
+            if (lastUser) { lastUser.avatarUrl = res.data.avatarUrl || null; renderAvatar(lastUser); notifyParent(); }
             setMsg($('avatarMsg'), 'ok', dataUrl ? L('Photo updated','照片已更新') : L('Photo removed','照片已移除'));
           } else { setMsg($('avatarMsg'), 'err', (res.data && res.data.error) || L('Couldn’t save photo','无法保存照片')); }
         })
@@ -623,34 +611,6 @@
         .catch(function(){ loadDevices(); });
     }
     function cssq(s){ return String(s).replace(/["\\]/g, '\\$&'); }
-
-    /* ── access ── */
-    function loadAccess(){
-      loaded.access = true;
-      var box = $('accBody'); box.innerHTML = '<div class="skel">'+L('Loading…','加载中…')+'</div>';
-      fetch('/api/backend/access', { credentials:'same-origin' })
-        .then(function(r){ return r.json(); })
-        .then(function(j){
-          if (!j) { box.innerHTML = '<div class="dev-empty">'+L('Couldn’t load access.','无法加载权限。')+'</div>'; return; }
-          if (j.owner) {
-            box.innerHTML = '<div class="acc-note"><svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 4v5c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V7z"/></svg><div><b>'+L('Full access','完全权限')+'</b><br>'+L('You’re the owner — you can use every part of the backend.','您是负责人——可以使用后台的每一项功能。')+'</div></div>';
-            return;
-          }
-          var tick = '<svg viewBox="0 0 24 24" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-          var html = '';
-          (j.groups || []).forEach(function(g){
-            html += '<div class="acc-grp"><h2>'+esc(g.title)+'</h2><div class="acc-list">'
-              + g.items.map(function(it){ return '<div class="acc-item">'+tick+esc(it)+'</div>'; }).join('')
-              + '</div></div>';
-          });
-          if (!html) html = '<div class="dev-empty">'+L('No sections assigned yet.','尚未分配任何板块。')+'</div>';
-          if (j.scopeStores && j.scopeStores.length) {
-            html += '<div class="acc-scope">'+L('Limited to '+j.scopeStores.length+' store'+(j.scopeStores.length>1?'s':'')+'.', '仅限 '+j.scopeStores.length+' 家门店。')+'</div>';
-          }
-          box.innerHTML = html;
-        })
-        .catch(function(){ box.innerHTML = '<div class="dev-empty">'+L('Couldn’t load access.','无法加载权限。')+'</div>'; });
-    }
 
     /* ── recovery email ── */
     var ICO_MAIL = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>';
@@ -880,6 +840,14 @@
       }
     }
 
+    /* ── notify the parent frame so the topbar/dashboard pick up a profile
+         change (name, avatar) immediately — no reload needed. Same
+         postMessage channel as 'profile-modal-close' below. ── */
+    function notifyParent(){
+      if (window.self === window.top || !lastUser) return;
+      window.parent.postMessage({ type:'fc-profile-updated', user:{ displayName: lastUser.displayName, avatarUrl: lastUser.avatarUrl } }, window.location.origin);
+    }
+
     /* ── close / back ── */
     function logoutRedirect(){ window.top.location.href = '/backend/login'; }
     $('backLink').addEventListener('click', function(e){
@@ -912,7 +880,6 @@
       if (lastUser) hydrate(lastUser);
       // re-render lazy tabs in the new language
       if (loaded.devices) loadDevices();
-      if (loaded.access) loadAccess();
     }
     $('langToggle').addEventListener('click', function(){
       lang = lang === 'cn' ? 'en' : 'cn';
