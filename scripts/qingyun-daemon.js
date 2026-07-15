@@ -326,7 +326,13 @@ async function buildCreatePayload(order, shop, br) {
   let addr = {}; try { addr = JSON.parse(order.address_json || '{}') || {}; } catch { addr = {}; }
   const name  = norm(order.recipient_name || addr.name || addr.contact);
   const phone = norm(order.recipient_phone || addr.phone || addr.mobile);
-  const text  = norm(addr.address || addr.detail || [addr.city, addr.district, addr.address, addr.detail].filter(Boolean).join(''));
+  // Recipient address: the street/building line plus the floor/unit/room detail
+  // ('901房') folded in. Qingyun keeps only recipientAddress reliably — the separate
+  // recipientDoorInfo field is not surfaced to the courier — so a room number that
+  // lives only in addr.detail would otherwise silently drop and need manual re-entry.
+  const streetText = norm(addr.address) || norm([addr.city, addr.district, addr.address].filter(Boolean).join(''));
+  const detailText = norm(addr.detail);
+  const text = norm([streetText || detailText, (detailText && detailText !== streetText) ? detailText : ''].filter(Boolean).join(' '));
   if (!name || !phone || !text) throw new Error('missing recipient name/phone/address');
 
   // Resolve the drop-off pin (Qingyun wants GCJ-02 ×1e6; the app's geocoders + the
