@@ -1817,9 +1817,9 @@ function paRender() {
           ${_paPriceCell(u)}
         </div>`;
       }
-      // Slim single-line row: one language (live cuT), photo, then the SKU (or
-      // "N sizes" for a family) as a muted inline tail — no stacked second
-      // language, no wasted second line.
+      // Slim two-line row: one language (live cuT), 30px photo, name on top with
+      // the SKU (or "N sizes" for a family) as a muted grey line underneath.
+      // Keeps the list narrow while the SKU stays visible without a hover.
       const nameTxt = escapeHtml(cuT(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—'));
       const meta = u.group
         ? `${u.members.length} ${cuT('sizes', '规格')}`
@@ -1827,8 +1827,10 @@ function paRender() {
       return `
         <div class="pa-row pa-row-1l" onclick="paOpenEdit(${p.id})">
           <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
-          <div class="pa-row-name" data-no-i18n>${nameTxt}</div>
-          ${meta ? `<div class="pa-row-meta" data-no-i18n>${meta}</div>` : ''}
+          <div class="pa-row-main" data-no-i18n>
+            <div class="pa-row-name">${nameTxt}</div>
+            ${meta ? `<div class="pa-row-sub"><span class="pa-row-meta">${meta}</span></div>` : ''}
+          </div>
           <div class="pa-row-pills">${_paPills(p)}</div>
           <button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button>
         </div>`;
