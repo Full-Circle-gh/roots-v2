@@ -1321,8 +1321,6 @@ function paRenderKpis(animate) {
   // is_published split as the Drafts jump tile below.
   set('pa-kpi-active', live);
   set('pa-kpi-total', rows.length);
-  set('pa-kpi-active-leg', live);
-  set('pa-kpi-disabled', drafts);
   const barFill = document.getElementById('pa-kpi-bar-fill');
   if (barFill) barFill.style.width = (rows.length ? Math.round((live / rows.length) * 100) : 0) + '%';
   set('pa-kpi-restock', oos + low);   // everything that needs buying back
