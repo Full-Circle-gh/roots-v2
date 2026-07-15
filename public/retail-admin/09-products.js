@@ -103,7 +103,6 @@ function paLowStoreSelChange(val) {
 async function paSaveLowThreshold(val) {
   const n = Math.max(0, parseInt(val, 10) || 0);
   const st = document.getElementById('pa-low-threshold-status');
-  if (st) st.textContent = cuT('Saving…', '保存中…');
   try {
     if (PA_LOW_STORE === 'all') {
       PA_LOW_STOCK = n;
@@ -129,7 +128,6 @@ async function paResetLowThreshold() {
   const store = _paLowStoreRow();
   if (!store) return;
   const st = document.getElementById('pa-low-threshold-status');
-  if (st) st.textContent = cuT('Saving…', '保存中…');
   try {
     await api(`/api/retail-admin/stores/${store.id}`, { method: 'PATCH', body: { low_stock_threshold: '' } });
     store.low_stock_threshold = null;
@@ -2088,7 +2086,7 @@ function pdLoadStoreStocks(id) {
   if (!box) return;
   box.dataset.productId = (id == null ? '' : String(id));
   PD_STOCK_DATA = null;
-  if (id == null) { box.className = 'muted'; box.textContent = cuT('Set stock after saving', '保存后设置库存'); return; }
+  if (id == null) { box.className = 'muted'; box.textContent = cuT('Set stock after saving', '保存后设置库存'); pdSetStockTabCount(null); return; }
   // Assembled bundle: stock is computed from its components, never typed. Show the
   // "Makes N" panel instead of the per-store matrix (mirrors the products list).
   const _bp = (PA_PRODUCTS || []).find(x => x.id === Number(id));
@@ -2102,14 +2100,17 @@ function pdLoadStoreStocks(id) {
     .then(j => {
       const d = j && j.success && j.data;
       if (!d || !Array.isArray(d.stores) || !d.stores.length || !Array.isArray(d.variants) || !d.variants.length) {
-        box.className = 'muted'; box.textContent = cuT('No stock info yet', '暂无库存信息'); return;
+        box.className = 'muted'; box.textContent = cuT('No stock info yet', '暂无库存信息'); pdSetStockTabCount(null); return;
       }
       box.className = '';
       PD_STOCK_DATA = d;
       pdRenderStockMatrix(box, d);
       pdSyncVariantTotals(d);
+      const qty = d.qty || {}, grandTotal = Object.keys(qty).reduce((sum, vid) =>
+        sum + Object.values(qty[vid] || {}).reduce((a, n) => a + (Number(n) || 0), 0), 0);
+      pdSetStockTabCount(grandTotal);
     })
-    .catch(() => { box.className = 'muted'; box.textContent = cuT('Couldn’t load stock', '无法加载库存'); });
+    .catch(() => { box.className = 'muted'; box.textContent = cuT('Couldn’t load stock', '无法加载库存'); pdSetStockTabCount(null); });
 }
 // Assembled bundle stock panel: availability is worked out from the components
 // (min over parts of floor(stock ÷ qty)), never typed. Reuses the per-store map
@@ -2147,6 +2148,7 @@ function pdRenderBundleStock(box, p) {
       split +
     `</div>` +
     `<p class="pe-bstock-note">${cuT('No count to keep — it moves as the parts sell.', '无需盘点 — 随组成商品售出而变化。')}</p>`;
+  pdSetStockTabCount(makes);
 }
 // Build the grid: rows = variants, columns = stores, + a live row total. The
 // variant currently open above is flagged with ● so it's obvious which row the
@@ -2257,6 +2259,23 @@ function pdMatrixSyncTotals() {
   VA_STORE_TOTALS = totals;
   (VA_MEMBERS || []).forEach(m => { if (totals[m.id] != null) m.stock = totals[m.id]; });
   if (document.getElementById('pd-variants') && VA_ID != null) vaRender();
+  pdSetStockTabCount(Object.values(totals).reduce((a, n) => a + n, 0));
+}
+// Tab glance chips — a live hint of what's inside Stock/Page without opening
+// them. Purely cosmetic (the tab label), never read by save/load code.
+function pdSetStockTabCount(n) {
+  const el = document.getElementById('pd-tab-cnt-stock');
+  if (!el) return;
+  if (n == null || !Number.isFinite(n)) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.textContent = String(n);
+  el.style.display = '';
+}
+function pdSetPageTabChip(on) {
+  const el = document.getElementById('pd-tab-chip-page');
+  if (!el) return;
+  if (!on) { el.style.display = 'none'; el.textContent = ''; return; }
+  el.textContent = cuT('Designed', '已设计');
+  el.style.display = '';
 }
 async function pdSaveStoreStocks() {
   const box = document.getElementById('pd-store-stocks');
@@ -2327,6 +2346,19 @@ function pdSyncSupplierUi() {
   const sn = document.getElementById('pd-stock-supplier-note');
   if (sf) sf.style.display = on ? 'none' : '';
   if (sn) sn.style.display = on ? '' : 'none';
+  // Mirror the state onto the two Sourcing radio cards (the real control the
+  // operator clicks) — pd-ship-from-supplier stays the single source of truth.
+  const choice = document.getElementById('pd-source-choice');
+  if (choice) choice.querySelectorAll('.pd-radio-card').forEach(function (c) {
+    c.classList.toggle('is-on', (c.getAttribute('data-src') === 'sup') === on);
+  });
+}
+// Sourcing radio cards (Stock pane) — set the underlying checkbox and repaint.
+function pdSetSourceMode(shipsFromSupplier) {
+  const sup = document.getElementById('pd-ship-from-supplier');
+  if (!sup) return;
+  sup.checked = !!shipsFromSupplier;
+  pdSyncSupplierUi();
 }
 async function pdOpen(id) {
   // Flush any not-yet-fired debounced autosave from whatever product is
@@ -3943,6 +3975,7 @@ function pdOpenPageDesign() {
 let _pdUseBlockDesign = false;
 function pdRenderBlockDesignToggle() {
   const btn = document.getElementById('pd-blockdesign-toggle');
+  pdSetPageTabChip(_pdUseBlockDesign);
   if (!btn) return;
   btn.classList.toggle('active', _pdUseBlockDesign);
   btn.innerHTML = '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 6.5h11M6.5 6.5v7"/></svg>' + (_pdUseBlockDesign ? 'Design: On · 开' : 'Design: Off · 关');
