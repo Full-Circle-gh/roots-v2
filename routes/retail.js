@@ -12991,9 +12991,11 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   if (q) {
     const like = '%' + q + '%';
     if (/^\d+$/.test(q)) {
-      // numeric → also match as order id or order number
-      where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ? OR id IN (SELECT customer_id FROM retail_orders WHERE id = ? OR order_no LIKE ?))');
-      params.push(like, like, like, parseInt(q, 10), like);
+      // numeric → also match as order id or order number, or a saved
+      // delivery-address phone (recipient number can differ from the
+      // customer's own profile phone, e.g. gifting/family orders)
+      where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ? OR id IN (SELECT customer_id FROM retail_orders WHERE id = ? OR order_no LIKE ?) OR id IN (SELECT customer_id FROM retail_customer_addresses WHERE phone LIKE ?))');
+      params.push(like, like, like, parseInt(q, 10), like, like);
     } else {
       // non-numeric → match profile fields, plus order number (e.g. "R26...")
       where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ? OR id IN (SELECT customer_id FROM retail_orders WHERE order_no LIKE ?))');
