@@ -2480,6 +2480,20 @@
   .pa-row-sub .pa-row-meta { font-family: var(--f-sans); font-size: 12.5px; color: var(--td-text2); letter-spacing: 0; }
   .pa-row-pills { display: flex; gap: 4px; flex-shrink: 0; align-items: center; }
 
+  /* Slim single-line row (docked list): photo · name · inline SKU · status.
+     One language only, half the height of the old two-line row. */
+  .pa-row-1l { padding: 5px 12px; gap: var(--s2); }
+  .pa-row-1l .pa-row-img { width: 30px; height: 30px; border-radius: 7px; }
+  .pa-row-1l .pa-row-img svg { width: 15px; height: 15px; }
+  .pa-row-1l .pa-row-name {
+    flex: 1; min-width: 0; font-size: 14px; font-weight: 500; color: var(--td-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pa-row-1l .pa-row-meta {
+    flex-shrink: 0; font-family: var(--f-sans); font-size: 12px; color: var(--td-text2);
+    letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+
   /* "Available on the shop" switch — sage when live, quiet when not. */
   .pa-shop-toggle {
     position: relative; display: inline-flex; align-items: center;
@@ -11070,3 +11084,72 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pd-sales-kpi .v { font-size: 20px; font-weight: 600; color: #111A2B; font-variant-numeric: tabular-nums; }
   #pd-editor .pd-sales-kpi .l { font-size: 11.5px; color: #58606E; margin-top: 2px; }
   #pd-editor .pd-sales-spark { width: 100%; height: 32px; margin-top: 10px; }
+
+  /* ── Focused panes (Basics / Stock / Page / Details) ───────────────────────
+     One job per screen behind a quiet tab bar. Panes are plain show/hide; every
+     field inside is the same node (same id, same wiring) as the old one-scroll
+     form. pdTab() swaps the active pane. ──────────────────────────────────── */
+  #pd-editor .pd-tabs {
+    display: flex; gap: 0; margin: 4px 0 20px; border-bottom: 1px solid var(--line-soft);
+    overflow-x: auto; scrollbar-width: none;
+  }
+  #pd-editor .pd-tabs::-webkit-scrollbar { display: none; }
+  #pd-editor .pd-tab {
+    border: 0; background: none; cursor: pointer; white-space: nowrap;
+    font: 600 13.5px 'Inter', sans-serif; letter-spacing: 0; text-transform: none;
+    color: #58606E; padding: 11px 2px; margin-right: 24px; position: relative;
+    transition: color .15s var(--ease-out);
+  }
+  #pd-editor .pd-tab:last-child { margin-right: 0; }
+  #pd-editor .pd-tab:hover { color: #111A2B; }
+  #pd-editor .pd-tab.is-active { color: #111A2B; }
+  #pd-editor .pd-tab.is-active::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
+    background: #111A2B; border-radius: 2px;
+  }
+  #pd-editor .pd-pane { display: none; }
+  #pd-editor .pd-pane.is-active { display: block; animation: pdPaneIn .28s var(--ease-out) both; }
+  @keyframes pdPaneIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  /* Even breathing room between a pane's top-level blocks; tighter between the
+     paired Name and Price rows. */
+  #pd-editor .pd-pane > * + * { margin-top: 20px; }
+  #pd-editor .pd-pane > .pd-row2 + .pd-row2 { margin-top: 14px; }
+  #pd-editor .pd-fieldstack > .field + .field { margin-top: 12px; }
+  /* Availability: the publish switch and Status sit side by side up top. */
+  #pd-editor .pd-avail { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
+  #pd-editor .pd-avail-status { justify-content: center; }
+  @media (max-width: 880px) { #pd-editor .pd-avail { grid-template-columns: 1fr; } }
+
+  /* Sourcing choice (Stock pane): two clickable cards standing in for the
+     single pd-ship-from-supplier checkbox, so the choice and its effect
+     (stock matrix vs supplier note below) sit on the same screen. */
+  #pd-editor .pd-source-choice { display: flex; flex-direction: column; gap: 9px; }
+  #pd-editor .pd-radio-card {
+    display: flex; gap: 11px; align-items: flex-start; text-align: left;
+    padding: 12px 14px; border: 1px solid #E4E0D5; border-radius: 10px;
+    background: #FFFFFF; cursor: pointer; font: inherit; width: 100%;
+    transition: border-color .15s var(--ease-out), background .15s var(--ease-out);
+  }
+  #pd-editor .pd-radio-card:hover { border-color: #58606E; }
+  #pd-editor .pd-radio-card.is-on { border-color: #111A2B; background: #F6F3EC; }
+  #pd-editor .pd-radio-dot {
+    width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid #E4E0D5;
+    flex: none; margin-top: 1px; position: relative; transition: border-color .15s var(--ease-out);
+  }
+  #pd-editor .pd-radio-card.is-on .pd-radio-dot { border-color: #111A2B; }
+  #pd-editor .pd-radio-card.is-on .pd-radio-dot::after {
+    content: ""; position: absolute; inset: 3px; border-radius: 50%; background: #111A2B;
+  }
+  #pd-editor .pd-radio-txt b { display: block; font-weight: 500; font-size: 13.5px; color: #111A2B; }
+  #pd-editor .pd-radio-txt span { display: block; font-size: 12px; color: #58606E; margin-top: 2px; line-height: 1.45; }
+
+  /* Tab glance chips — a live hint of what's inside a pane without opening it. */
+  #pd-editor .pd-tab-cnt {
+    font-size: 11px; font-weight: 600; color: #58606E; margin-left: 5px;
+    font-variant-numeric: tabular-nums;
+  }
+  #pd-editor .pd-tab-chip {
+    font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: #4C468A; background: #EEEDF6; border-radius: 999px; padding: 2px 7px; margin-left: 6px;
+    vertical-align: 1px;
+  }

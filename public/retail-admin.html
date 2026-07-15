@@ -3289,9 +3289,37 @@
             <svg id="pd-sales-spark" class="pd-sales-spark" viewBox="0 0 300 36" preserveAspectRatio="none"></svg>
           </section>
 
-          <!-- ═══ ESSENTIALS — the handful you touch daily ═══ -->
-          <div class="pe-ess">
-            <div class="pe-ess-main">
+          <!-- ═══ Focused panes — Basics · Stock · Page · Details. Every field
+               below is the SAME node as before (same ids, same wiring); only the
+               grouping changed. pdTab() in 09-products.js swaps the active pane. ═══ -->
+          <div class="pd-tabs" id="pd-tabs" role="tablist" aria-label="Product sections · 产品分区">
+            <button type="button" class="pd-tab is-active" data-pane="basics"  role="tab" aria-selected="true"  onclick="pdTab('basics')">Basics · 基础</button>
+            <button type="button" class="pd-tab"           data-pane="stock"   role="tab" aria-selected="false" onclick="pdTab('stock')">Stock · 库存<span class="pd-tab-cnt" id="pd-tab-cnt-stock" style="display:none;"></span></button>
+            <button type="button" class="pd-tab"           data-pane="page"    role="tab" aria-selected="false" onclick="pdTab('page')">Page · 页面<span class="pd-tab-chip" id="pd-tab-chip-page" style="display:none;"></span></button>
+            <button type="button" class="pd-tab"           data-pane="details" role="tab" aria-selected="false" onclick="pdTab('details')">Details · 详情</button>
+          </div>
+
+          <!-- ══════════ BASICS ══════════ -->
+          <div class="pd-pane is-active" data-pane="basics" role="tabpanel">
+            <section class="pd-sec">
+              <div class="pd-sec-h">Availability · 是否上架</div>
+              <div class="pd-avail">
+              <label class="pd-card pd-pub">
+                <input type="checkbox" id="pd-published">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Show in shop · 在店面显示</span>
+              </label>
+                <div class="pd-card pd-avail-status">
+                  <div class="field"><label class="stacked">Status · 状态</label>
+                    <select id="pd-status">
+                      <option value="Active">Active · 在售</option>
+                      <option value="Inactive">Inactive · 停售</option>
+                      <option value="Seasonal">Seasonal · 季节性</option>
+                      <option value="Coming Soon">Coming Soon · 即将上架</option>
+                    </select></div>
+                </div>
+              </div>
+            </section>
               <section class="pd-sec">
                 <div class="pd-sec-h" style="margin-bottom:8px;">Photos · 图片</div>
                 <div class="pe-photos-strip">
@@ -3312,27 +3340,54 @@
                 <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
                 <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
               </div>
-            </div>
-
-            <div class="pe-ess-side">
-              <label class="pd-card pd-pub">
-                <input type="checkbox" id="pd-published">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                <span>Show in shop · 在店面显示</span>
-              </label>
-              <section class="pd-card">
-                <div class="pd-card-h">Stock &amp; status · 库存与状态</div>
-                <div class="pd-row2">
-                  <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="required · 必填"></div>
-                  <div class="field"><label class="stacked">Status · 状态</label>
-                    <select id="pd-status">
-                      <option value="Active">Active · 在售</option>
-                      <option value="Inactive">Inactive · 停售</option>
-                      <option value="Seasonal">Seasonal · 季节性</option>
-                      <option value="Coming Soon">Coming Soon · 即将上架</option>
-                    </select></div>
+            <section class="pd-sec">
+              <div class="pd-sec-h">Where it shows · 分类与陈列</div>
+              <div class="pd-fieldstack">
+                <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
+                  <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
+                <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
+                  <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
+                <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Auto picks the chip from live sales &amp; recency — top 15 sellers (30 days) → POP, added in the last 30 days → NEW, has a strike-through price → SALE. · 自动按销量与上架时间选择:30 天内最畅销前 15 名 → POP,30 天内新上架 → NEW,有划线价 → SALE。</span></span></label>
+                  <select id="pd-badge">
+                    <option value="">None · 无</option>
+                    <option value="auto">Auto · 自动 (by sales · 按销量)</option>
+                    <option value="new">NEW · 新品</option>
+                    <option value="pop">POP · 热门</option>
+                    <option value="sale">SALE · 特价</option>
+                    <option value="hot">HOT · 推荐</option>
+                  </select>
                 </div>
-                <!-- Stock inputs: hidden for supplier-direct items (no stock of ours). -->
+                <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
+              </div>
+            </section>
+          </div>
+
+          <!-- ══════════ STOCK ══════════ -->
+          <div class="pd-pane" data-pane="stock" role="tabpanel">
+            <!-- Sourcing: who holds the stock. Drives which of pd-stock-fields /
+                 pd-supplier-block shows below (pdSyncSupplierUi). The underlying
+                 data is still the single pd-ship-from-supplier checkbox (kept
+                 hidden) so save/load code is untouched — these two cards are
+                 just a clearer face on the same value. -->
+            <section class="pd-sec">
+              <div class="pd-sec-h">Sourcing · 货源</div>
+              <div class="pd-source-choice" id="pd-source-choice">
+                <button type="button" class="pd-radio-card is-on" data-src="own" onclick="pdSetSourceMode(false)">
+                  <span class="pd-radio-dot"></span>
+                  <span class="pd-radio-txt"><b>We hold the stock · 我们持有库存</b><span>Counted per store below. When it hits zero, your out-of-stock rule decides what shoppers see. · 按门店计数,缺货时按下方规则处理。</span></span>
+                </button>
+                <button type="button" class="pd-radio-card" data-src="sup" onclick="pdSetSourceMode(true)">
+                  <span class="pd-radio-dot"></span>
+                  <span class="pd-radio-txt"><b>Ships directly from supplier · 供应商直发</b><span>The supplier holds and ships it — we don't count stock here. Sell it until the supplier runs out. · 由供应商直发,我们不计库存,直到供应商缺货为止。</span></span>
+                </button>
+                <input type="checkbox" id="pd-ship-from-supplier" style="display:none;" onchange="pdSyncSupplierUi()">
+              </div>
+            </section>
+            <section class="pd-card">
+              <div class="pd-card-h">Stock &amp; status · 库存与状态</div>
+              <div class="pd-fieldstack">
+                  <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="required · 必填"></div>
+              </div>
                 <div id="pd-stock-fields">
                   <div class="field"><label class="stacked">Stock by location · 各门店库存</label>
                     <div id="pd-store-stocks" style="font-size:13px;line-height:1.7;">—</div>
@@ -3341,10 +3396,7 @@
                     <input type="number" id="pd-low-stock" min="0" step="1" placeholder="">
                   </div>
                 </div>
-                <!-- Shown instead for supplier-direct items. -->
                 <div id="pd-stock-supplier-note" class="muted" style="display:none;font-weight:400;font-size:12px;line-height:1.5;">No stock tracked — this ships from the supplier and is always available. Manage availability with “Supplier out — pause selling” below. · 不跟踪库存——由供应商直发,始终有货。可用下方的“供应商缺货,暂停销售”控制是否可售。</div>
-                <!-- Stock-tracked items: how out-of-stock behaves. Hidden for
-                     supplier-direct items (they hold no stock of ours). -->
                 <div id="pd-oos-block" style="border-top:1px solid var(--line-soft);padding-top:10px;">
                   <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">When out of stock · 缺货时<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">“Pre-order outside Guangzhou” keeps the product orderable for out-of-city shoppers when stock hits 0 (ships on the next batch / restock); only same-day Guangzhou is blocked. · 广州外顾客在缺货时仍可下单预订,仅广州当日配送会被拦截。</span></span></div>
                   <select id="pd-oos-policy" style="width:100%;padding:7px 8px;border:1px solid #d6d1c7;border-radius:7px;font:inherit;">
@@ -3352,27 +3404,21 @@
                     <option value="backorder_gz">Pre-order outside Guangzhou · 广州外可预订（现订现发）</option>
                   </select>
                 </div>
-                <!-- Supplier-direct items: no stock control on our side. Shown only
-                     when "Ships directly from supplier" is ticked. -->
                 <div id="pd-supplier-block" style="border-top:1px solid var(--line-soft);padding-top:10px;display:none;">
                   <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">Availability · 是否可售<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Ships from the supplier, so it’s always available on our side — no stock to track. Tick this only when the supplier is out; the product stays visible but shows “Temporarily unavailable” and can’t be ordered. · 由供应商直发,我们这边始终有货,无需管理库存。仅在供应商缺货时勾选:商品仍显示,但标为“暂时缺货”且无法下单。</span></span></div>
                   <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-supplier-paused" style="width:15px;height:15px;"> Supplier out — pause selling · 供应商缺货,暂停销售</label>
                 </div>
-              </section>
-            </div>
-          </div>
-
-          <!-- ═══ QUIET ROWS — everything occasional, opens in place ═══ -->
-          <div class="pe-rows">
+            </section>
+            <div class="pe-rows">
             <div id="pd-variants" class="pd-variants"></div>
             <div id="pd-bundle-product" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
             <div id="pd-options" class="pd-variants"></div>
+            </div>
+          </div>
 
-            <!-- Description & page -->
-            <details class="pe-dis" open>
-              <summary><svg class="pe-caret" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg><span class="pe-dis-t">Description &amp; page · 描述与页面</span><span class="pe-dis-s">Classic + designer · 经典 + 设计</span></summary>
-              <div class="pe-dis-body">
+          <!-- ══════════ PAGE ══════════ -->
+          <div class="pd-pane" data-pane="page" role="tabpanel">
             <section class="pd-sec">
               <div class="pd-sec-h" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="display:inline-flex;align-items:center;gap:7px;">Product details · 产品详情</span>
@@ -3446,35 +3492,13 @@
               </div>
             </div>
             </section>
-              </div>
-            </details>
+          </div>
 
-            <!-- Shop placement -->
-            <details class="pe-dis">
-              <summary><svg class="pe-caret" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg><span class="pe-dis-t">Shop placement · 分类与陈列</span><span class="pe-dis-s">Section · badge</span></summary>
-              <div class="pe-dis-body pe-fields">
-                <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
-                  <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
-                <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
-                  <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
-                <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Auto picks the chip from live sales &amp; recency — top 15 sellers (30 days) → POP, added in the last 30 days → NEW, has a strike-through price → SALE. · 自动按销量与上架时间选择:30 天内最畅销前 15 名 → POP,30 天内新上架 → NEW,有划线价 → SALE。</span></span></label>
-                  <select id="pd-badge">
-                    <option value="">None · 无</option>
-                    <option value="auto">Auto · 自动 (by sales · 按销量)</option>
-                    <option value="new">NEW · 新品</option>
-                    <option value="pop">POP · 热门</option>
-                    <option value="sale">SALE · 特价</option>
-                    <option value="hot">HOT · 推荐</option>
-                  </select>
-                </div>
-                <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
-              </div>
-            </details>
-
-            <!-- Delivery, flags & label facts -->
-            <details class="pe-dis">
-              <summary><svg class="pe-caret" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg><span class="pe-dis-t">Delivery, flags &amp; label facts · 配送、标记与标签</span></summary>
-              <div class="pe-dis-body pe-fields">
+          <!-- ══════════ DETAILS ══════════ -->
+          <div class="pd-pane" data-pane="details" role="tabpanel">
+            <section class="pd-sec">
+              <div class="pd-sec-h">Delivery, flags &amp; label facts · 配送、标记与标签</div>
+              <div class="pd-fieldstack">
                 <div class="field">
                   <label class="stacked">Shipping · 配送方式</label>
                   <div style="display:flex;gap:16px;align-items:center;padding-top:4px;flex-wrap:wrap;">
@@ -3488,7 +3512,9 @@
                   <div style="display:flex;flex-direction:column;gap:7px;padding-top:4px;">
                     <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-market" style="width:15px;height:15px;"> Sold at markets · 市集销售</label>
                     <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-batch-made" style="width:15px;height:15px;"> Made fresh in batches · 分批现做</label>
-                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-from-supplier" style="width:15px;height:15px;" onchange="pdSyncSupplierUi()"> Ships directly from supplier · 供应商直发</label>
+                    <!-- "Ships directly from supplier" moved to the Stock tab's
+                         Sourcing choice — same checkbox, clearer spot (cause and
+                         effect on the same screen). -->
                     <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-restock-only" style="width:15px;height:15px;"> Restock-only, internal · 仅内部补货</label>
                   </div>
                 </div>
@@ -3501,16 +3527,12 @@
                   </div>
                 </div>
               </div>
-            </details>
-
-            <!-- Internal notes -->
-            <details class="pe-dis">
-              <summary><svg class="pe-caret" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"/></svg><span class="pe-dis-t">Internal notes · 内部备注</span></summary>
-              <div class="pe-dis-body">
+            </section>
+            <section class="pd-sec">
+              <div class="pd-sec-h">Internal notes · 内部备注</div>
                 <textarea id="pd-notes" rows="2" style="width:100%;resize:vertical;font:inherit;padding:6px 8px;box-sizing:border-box;"></textarea>
-              </div>
-            </details>
-          </div><!-- /.pe-rows -->
+            </section>
+          </div>
         </div>
         <div class="pu-editor-foot" style="justify-content:space-between;">
           <div style="display:flex;gap:8px;">
