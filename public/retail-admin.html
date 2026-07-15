@@ -10003,17 +10003,6 @@
   <button type="button" class="drawer-back" onclick="orderDrawerBack()" title="Back · 返回" aria-label="Back">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
   </button>
-  <!-- In-app page mode (desktop, body.ord-page): a back + breadcrumb bar at the
-       top of the order view. Hidden otherwise; the × / mobile chevron cover the
-       drawer/full-screen cases. -->
-  <div id="ord-page-bar" class="ord-page-bar" aria-hidden="true">
-    <button type="button" class="opb-back" onclick="closeDrawer('#order-drawer')" aria-label="Back to orders">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      <span>Orders · 订单</span>
-    </button>
-    <span class="opb-sep">/</span>
-    <span class="opb-cur" id="ord-page-crumb" data-no-i18n></span>
-  </div>
   <div class="drawer-body" id="order-detail-mount"></div>
   <!-- Print controls pinned to the bottom of the drawer (outside the scroll
        area) so a reprint is one click. Populated by orderDrawerFoot(); collapses
