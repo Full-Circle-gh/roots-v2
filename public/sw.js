@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v551-acct-menu-trim';
+const CACHE = 'roots-v2-shell-v552-profile-modal-sync';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
@@ -54,6 +54,11 @@ self.addEventListener('push', (e) => {
   const tag   = data.tag   || 'roots-' + Date.now();
   e.waitUntil(self.registration.showNotification(title, {
     body, tag, icon: '/pos-icon-192.png', badge: '/pos-icon-192.png',
+    // When a new push reuses an existing tag the browser replaces the tray
+    // entry *silently* unless renotify is set — that's why only the first
+    // push banners/chimes and later ones just update quietly. renotify makes
+    // every push re-alert. It requires a tag, so only set it when we have one.
+    renotify: !!tag,
     data: { url },
     requireInteraction: !!data.requireInteraction,
   }));
