@@ -1670,15 +1670,18 @@
   .db-spark-dot.is-breathing { box-shadow: 0 0 0 0 rgba(163,180,159,.45); animation: dbSparkBreathe 2.6s ease-out infinite; }
   @keyframes dbSparkBreathe { 0% { box-shadow: 0 0 0 0 rgba(163,180,159,.45); } 70% { box-shadow: 0 0 0 6px rgba(163,180,159,0); } 100% { box-shadow: 0 0 0 0 rgba(163,180,159,0); } }
   @media (prefers-reduced-motion: reduce) { .db-spark-dot.is-breathing { animation: none; } }
-  /* The big hero chart's end-dot reads as a real marker, not a stray pixel —
-     bigger, with a surface-color ring so it stays legible crossing the line. */
-  .db-spark-dot.is-big { width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; box-shadow: 0 0 0 2px var(--td-surface); }
-  /* Names the ghost curve before any real data exists — otherwise the "day
-     hasn't started" state is a bare unlabeled squiggle. A fixed top-left
-     corner caption, not tracking the curve: the ghost's own peak always
-     sits at the chart's top edge (it alone sets the y-scale ceiling while
-     today is flat), so there is no headroom to float a label above it —
-     the top-left corner sits over the day's low early hours instead. */
+  /* The Today hero chart: hourly columns instead of a line — see
+     dashDayBars in 03-dashboard.js for why. Live bars carry the day's
+     actual sage ink; the typical-day ghost is a light backing column
+     behind each one, both sharing one implicit floor (their own bottom
+     edge), so neither needs a separate baseline stroke to contrast-match. */
+  .db-bar-ghost { fill: var(--td-border); }
+  .db-bar-live { fill: var(--td-sage); }
+  /* Names the ghost columns before today has any bars of its own —
+     otherwise the "day hasn't started" state is an unlabeled block of
+     light columns. A fixed top-left corner caption, clear of the bars
+     (their early hours run low), and dropped once live bars exist since
+     they then sit right beside their ghost twin. */
   .db-spark-ghost-label {
     position: absolute; top: 0; left: 0;
     font: 500 11px var(--f-sans); color: var(--td-text2);
@@ -1688,7 +1691,6 @@
      cursor and a small chip names the hour + value. */
   .db-spark-wrap { cursor: crosshair; }
   .db-spark-dot.is-active { animation: none; transform: scale(1.5); transition: left .06s linear, top .06s linear; box-shadow: 0 0 0 3px rgba(163,180,159,.18); }
-  .db-spark-dot.is-big.is-active { box-shadow: 0 0 0 2px var(--td-surface), 0 0 0 5px rgba(163,180,159,.18); }
   .db-spark-tip { position: absolute; z-index: 60; transform: translate(-50%, -100%); margin-top: -4px; padding: 8px 11px; background: var(--td-text, #111A2B); color: var(--td-paper, #FBF9F4); border: 0; border-radius: 8px; font: 400 12px var(--f-sans); line-height: 1.4; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s ease; box-shadow: 0 4px 12px rgba(17,26,43,.08), 0 12px 32px rgba(17,26,43,.18); }
   .db-spark-tip.show { opacity: 1; }
   .db-today-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
@@ -8310,12 +8312,10 @@
   .bn-cmp { font-size: 13px; color: var(--td-text2); white-space: nowrap; }
   .bn-rev-note { color: var(--td-text2); }
 
-  /* the day line — the shared spark wrap lends the hover-scrub; we lend height
-     + sage ink. The tip is a still ink dot (a breathing dot is Dusk). */
+  /* the day line — now hourly columns (dashDayBars); the shared spark wrap
+     still lends the hover-scrub tooltip + height. */
   .bn-dayline { flex: 1; min-height: 30px; margin-top: 6px; display: flex; flex-direction: column; overflow: hidden; }
-  .bn-dayline .db-spark-wrap.td-dayline { flex: 1; height: auto; min-height: 36px; margin-top: 0; color: var(--td-sage); }
-  .bn-dayline .db-spark-line { stroke-width: 2; }
-  .bn-dayline .db-spark-dot { background: var(--td-text); }
+  .bn-dayline .db-spark-wrap.td-dayline { flex: 1; height: auto; min-height: 36px; margin-top: 0; }
   .bn-hours { display: flex; justify-content: space-between; margin-top: 4px;
     font-size: 11.5px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
   .bn-hours:empty { display: none; }
