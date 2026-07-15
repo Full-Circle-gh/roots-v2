@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Block editor — simplify (working mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* ---- Core palette ---- */
+  --tacet-ink:      #111A2B;
+  --tacet-paper:    #FBF9F4;
+  --tacet-graphite: #58606E;
+  --tacet-dusk:     #6E67AF;  /* the AI's color — scarce by design */
+  --tacet-sage:     #A3B49F;  /* success / all-clear only */
+  --tacet-amber:    #C9954A;  /* attention — never alarmist */
+  --tacet-brick:    #B4533E;  /* errors — never pure red */
+
+  /* ---- Derived tints ---- */
+  --tacet-cream:       #F6F3EC;  /* raised surface on paper */
+  --tacet-border:      #E4E0D5;
+  --tacet-dusk-tint:   #EEEDF6;
+  --tacet-sage-tint:   #EDF1EC;
+  --tacet-amber-tint:  #F7EEDE;
+  --tacet-brick-tint:  #F6E7E3;
+
+  /* ---- Semantic ---- */
+  --bg:             var(--tacet-paper);
+  --surface:        #FFFFFF;
+  --surface-raised: var(--tacet-cream);
+  --text:           var(--tacet-ink);
+  --text-secondary: var(--tacet-graphite);
+  --border:         var(--tacet-border);
+  --accent:         var(--tacet-dusk);
+  --accent-tint:    var(--tacet-dusk-tint);
+  --ok:             var(--tacet-sage);
+  --ok-tint:        var(--tacet-sage-tint);
+  --warn:           var(--tacet-amber);
+  --warn-tint:      var(--tacet-amber-tint);
+  --danger:         var(--tacet-brick);
+  --danger-tint:    var(--tacet-brick-tint);
+
+  /* ---- Typography ---- */
+  --font-display: "Fraunces", Georgia, serif;
+  --font-text:    "Inter", -apple-system, Arial, sans-serif;
+  --fs-title: 1.125rem;
+  --fs-body: 0.9375rem;
+  --fs-caption: 0.8125rem;
+  --lh-body: 1.6;
+  --lh-tight: 1.15;
+
+  /* ---- Spacing ---- */
+  --s-1: 4px;  --s-2: 8px;  --s-3: 16px;  --s-4: 24px;
+  --s-5: 32px; --s-6: 48px; --s-7: 64px;  --s-8: 96px;
+
+  /* ---- Shape ---- */
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --border-w: 1px;
+  --shadow-soft: 0 1px 2px rgba(17, 26, 43, 0.05), 0 4px 16px rgba(17, 26, 43, 0.04);
+
+  /* ---- Motion ---- */
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-quick: 200ms;
+  --dur-settle: 350ms;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: var(--font-text); font-size: var(--fs-body); line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1000px; margin: 0 auto; padding: var(--s-6) var(--s-4) var(--s-8); }
+
+h1 { font-family: var(--font-display); font-weight: 300; font-size: 2.25rem;
+  line-height: var(--lh-tight); margin: 0 0 var(--s-2); letter-spacing: -0.01em; }
+.lede { color: var(--text-secondary); max-width: 66ch; margin: 0 0 var(--s-5); }
+.lede b { color: var(--text); font-weight: 600; }
+
+/* ---- Block tabs ---- */
+.block-tabs { display: flex; gap: 6px; padding: 4px; background: var(--surface-raised);
+  border: 1px solid var(--border); border-radius: 11px; width: max-content; margin-bottom: var(--s-6); }
+.block-tabs button { font: 500 var(--fs-body) var(--font-text); padding: 9px 18px; border: 1px solid transparent;
+  background: transparent; color: var(--text-secondary); border-radius: 8px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px; transition: all var(--dur-quick) var(--ease-settle); }
+.block-tabs button svg { width: 16px; height: 16px; }
+.block-tabs button.on { background: var(--surface); color: var(--text); border-color: var(--border); box-shadow: var(--shadow-soft); }
+.block-tabs button:not(.on):hover { color: var(--text); }
+
+.block-demo { display: none; }
+.block-demo.on { display: block; animation: settle var(--dur-settle) var(--ease-settle) both; }
+
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-4); align-items: start; }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+
+.col-head { display: flex; align-items: center; gap: var(--s-2); margin: 0 0 var(--s-3); }
+.col-head .tag { font-size: var(--fs-caption); font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; padding: 3px 10px; border-radius: var(--radius-pill); flex-shrink: 0; }
+.tag.now { background: var(--surface-raised); color: var(--text-secondary); border: 1px solid var(--border); }
+.tag.new { background: var(--accent-tint); color: var(--accent); }
+.col-head p { margin: 0; font-size: var(--fs-caption); color: var(--text-secondary); }
+
+/* ---- The inspector panel shell ---- */
+.panel {
+  width: 100%; background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-card); box-shadow: var(--shadow-soft); overflow: hidden;
+}
+.panel-head { display: flex; align-items: center; gap: 12px; padding: 18px 20px;
+  border-bottom: 1px solid var(--border); }
+.panel-head .ico { width: 34px; height: 34px; border-radius: 9px; background: var(--surface-raised);
+  border: 1px solid var(--border); display: grid; place-items: center; color: var(--text-secondary); flex-shrink: 0; }
+.panel-head .ico svg { width: 18px; height: 18px; }
+.panel-head .name { font-family: var(--font-text); font-weight: 600; font-size: var(--fs-title); }
+.panel-body { padding: 6px 20px 20px; }
+
+/* ---- Section (accordion) styling — "Now" columns ---- */
+.sec { border-top: 1px solid var(--border); }
+.sec:first-child { border-top: 0; }
+.sec-head { display: flex; align-items: center; justify-content: space-between; width: 100%;
+  gap: 8px; text-align: left; background: transparent; border: 0; cursor: pointer;
+  padding: 15px 0 13px; margin: 0; font-family: var(--font-text); }
+.sec-title { font-weight: 600; font-size: 11px; letter-spacing: .07em; text-transform: uppercase;
+  color: var(--text-secondary); }
+.sec-chev { width: 15px; height: 15px; color: #9AA0AC; transition: transform var(--dur-quick) var(--ease-settle); flex-shrink: 0; }
+.sec.open .sec-chev { transform: rotate(180deg); }
+.sec-body { display: none; padding-bottom: 12px; }
+.sec.open .sec-body { display: block; animation: settle var(--dur-settle) var(--ease-settle) both; }
+@keyframes settle { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ---- Fields ---- */
+.field { margin: 12px 0; }
+.field > label { display: flex; align-items: center; gap: 6px; font-weight: 500;
+  font-size: var(--fs-caption); color: var(--text); margin-bottom: 6px; }
+.field .info { width: 15px; height: 15px; border-radius: 50%; color: #B4B8C0; cursor: help; flex-shrink: 0; }
+.select {
+  width: 100%; font: 400 var(--fs-body) var(--font-text); color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control);
+  padding: 9px 34px 9px 13px; appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+}
+.select:focus { outline: none; border-color: var(--accent); }
+.txt {
+  width: 100%; font: 400 var(--fs-body) var(--font-text); color: var(--text);
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-control);
+  padding: 9px 13px;
+}
+.txt:focus { outline: none; border-color: var(--accent); }
+.hint { font-size: var(--fs-caption); color: var(--text-secondary); margin: 5px 0 0; }
+
+/* Segmented control */
+.seg { display: grid; gap: 4px; padding: 4px;
+  background: var(--surface-raised); border: 1px solid var(--border); border-radius: 10px; }
+.seg.cols2 { grid-template-columns: 1fr 1fr; }
+.seg button { font: 500 var(--fs-caption) var(--font-text); padding: 9px 8px; border: 1px solid transparent;
+  background: transparent; color: var(--text-secondary); border-radius: 7px; cursor: pointer; text-align: center; }
+.seg button.on { background: var(--surface); color: var(--text); border-color: var(--border); box-shadow: 0 1px 2px rgba(17,26,43,.05); }
+.seg .sub { display: block; font-weight: 400; font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.seg button.on .sub { color: var(--text-secondary); }
+
+/* Image dropzone */
+.dropzone { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px dashed var(--border);
+  border-radius: var(--radius-control); background: var(--surface-raised); }
+.dropzone .thumb { width: 52px; height: 40px; border-radius: 6px; background:
+  linear-gradient(135deg, #E9E4D8, #DBD3C4); display: grid; place-items: center; color: #A79E8C; flex-shrink: 0; }
+.dropzone .thumb svg { width: 20px; height: 20px; }
+.dropzone .meta { flex: 1; min-width: 0; }
+.dropzone .meta strong { display: block; font-weight: 500; font-size: var(--fs-body); }
+.dropzone .meta span { font-size: var(--fs-caption); color: var(--text-secondary); }
+.mini-btn { font: 500 var(--fs-caption) var(--font-text); padding: 6px 12px; border-radius: 7px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; white-space: nowrap; }
+
+/* Buttons list (CTA rows) */
+.cta { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border);
+  border-radius: var(--radius-control); background: var(--surface); margin-bottom: 6px; }
+.cta .grip { color: #C4C0B4; width: 16px; height: 16px; flex-shrink: 0; }
+.cta .lab { flex: 1; font-weight: 500; }
+.cta .pill { font-size: 11px; font-weight: 500; padding: 2px 9px; border-radius: var(--radius-pill);
+  background: var(--accent-tint); color: var(--accent); }
+.cta .pill.sec { background: var(--surface-raised); color: var(--text-secondary); }
+.add-btn { width: 100%; margin-top: 6px; display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; font: 500 var(--fs-caption) var(--font-text); padding: 10px; border-radius: var(--radius-control);
+  border: 1px dashed var(--border); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.add-btn:hover { color: var(--text); border-color: var(--text-secondary); }
+.add-btn svg { width: 15px; height: 15px; }
+
+/* Info / status banner (live data, not a control) */
+.status-banner { display: flex; gap: 10px; padding: 12px 14px; border-radius: var(--radius-control);
+  background: var(--accent-tint); border: 1px solid transparent; margin-bottom: 14px; }
+.status-banner svg { width: 16px; height: 16px; color: var(--accent); flex-shrink: 0; margin-top: 1px; }
+.status-banner p { margin: 0; font-size: var(--fs-caption); color: var(--text); line-height: 1.5; }
+.status-banner b { font-weight: 600; }
+
+/* "More options" disclosure — one drawer */
+.more { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 6px; }
+.more-head { display: flex; align-items: center; justify-content: space-between; width: 100%;
+  background: transparent; border: 0; cursor: pointer; padding: 12px 0; font-family: var(--font-text); }
+.more-head .lhs { display: flex; align-items: center; gap: 8px; }
+.more-head .lhs svg { width: 16px; height: 16px; color: var(--text-secondary); }
+.more-head .lhs strong { font-weight: 500; font-size: var(--fs-body); color: var(--text); }
+.more-head .count { font-size: var(--fs-caption); color: var(--text-secondary); }
+.more-chev { width: 16px; height: 16px; color: #9AA0AC; transition: transform var(--dur-quick) var(--ease-settle); flex-shrink: 0; }
+.more.open .more-chev { transform: rotate(180deg); }
+.more-body { display: none; }
+.more.open .more-body { display: block; animation: settle var(--dur-settle) var(--ease-settle) both; }
+.sub-grp { font-weight: 600; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--text-secondary); margin: 18px 0 2px; opacity: .8; }
+.sub-grp:first-child { margin-top: 4px; }
+
+/* Nested disclosure — for the 7 colour overrides buried inside More options */
+.nested { margin-top: 10px; border: 1px solid var(--border); border-radius: var(--radius-control);
+  background: var(--surface-raised); overflow: hidden; }
+.nested-head { display: flex; align-items: center; justify-content: space-between; width: 100%;
+  background: transparent; border: 0; cursor: pointer; padding: 11px 13px; font-family: var(--font-text); }
+.nested-head .lhs { display: flex; align-items: center; gap: 8px; font: 500 var(--fs-caption) var(--font-text); color: var(--text); }
+.nested-head .lhs svg { width: 14px; height: 14px; color: var(--text-secondary); }
+.nested-chev { width: 14px; height: 14px; color: #9AA0AC; transition: transform var(--dur-quick) var(--ease-settle); }
+.nested.open .nested-chev { transform: rotate(180deg); }
+.nested-body { display: none; padding: 2px 13px 13px; }
+.nested.open .nested-body { display: block; animation: settle var(--dur-settle) var(--ease-settle) both; }
+.nested .field { margin: 10px 0; }
+.nested .field:first-child { margin-top: 0; }
+
+/* Delete */
+.danger { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+.del-btn { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font: 500 var(--fs-body) var(--font-text); padding: 11px; border-radius: var(--radius-control);
+  border: 1px solid var(--danger); background: transparent; color: var(--danger); cursor: pointer; }
+.del-btn:hover { background: var(--danger-tint); }
+.del-btn svg { width: 16px; height: 16px; }
+
+/* Notes block under the panels */
+.notes { margin-top: var(--s-6); background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-card); padding: var(--s-4) var(--s-5); box-shadow: var(--shadow-soft); }
+.notes h2 { font-family: var(--font-display); font-weight: 400; font-size: 1.4rem; margin: 0 0 var(--s-3); }
+.notes h3 { font-size: var(--fs-caption); font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-secondary); margin: var(--s-4) 0 var(--s-2); }
+.notes ul { margin: 0; padding-left: 20px; }
+.notes li { margin: 7px 0; }
+.notes li b { font-weight: 600; }
+.chip { display: inline-block; font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: var(--radius-pill);
+  vertical-align: middle; }
+.chip.cut { background: var(--danger-tint); color: var(--danger); }
+.chip.auto { background: var(--accent-tint); color: var(--accent); }
+.chip.moved { background: var(--warn-tint); color: #8A6425; }
+.count-line { display: flex; gap: var(--s-5); flex-wrap: wrap; margin-top: var(--s-3);
+  padding-top: var(--s-3); border-top: 1px solid var(--border); }
+.count-line .num { font-family: var(--font-text); font-weight: 600; font-size: 1.9rem;
+  font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.count-line .cap { font-size: var(--fs-caption); color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Simplifying the block editor</h1>
+  <p class="lede">Two blocks, each shown two ways. Click a tab to switch blocks; every drawer and toggle below is live — open the "Now" accordions, expand "More options" on the right, click the layout tiles. <b>Flash Sale</b> is the busiest block in the CMS (18 fields, 7 of them just colour), so it's the harder test of whether "a few essentials + one drawer" still holds up.</p>
+
+  <div class="block-tabs">
+    <button class="on" data-target="hero">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+      Hero Banner
+    </button>
+    <button data-target="flash">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Flash Sale
+    </button>
+  </div>
+
+  <!-- ================================================================ -->
+  <!-- HERO BANNER                                                       -->
+  <!-- ================================================================ -->
+  <section class="block-demo on" data-block="hero">
+    <div class="cols">
+      <!-- NOW -->
+      <div>
+        <div class="col-head"><span class="tag now">Now</span><p>5 closed drawers · 5 taps to survey</p></div>
+        <div class="panel">
+          <div class="panel-head">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
+            <div class="name">Hero Banner</div>
+          </div>
+          <div class="panel-body now-accordion">
+            <div class="sec"><button class="sec-head"><span class="sec-title">Style &amp; layout</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Layout · Image fit · Banner height · Placeholder height</p></div></div>
+            <div class="sec"><button class="sec-head"><span class="sec-title">Content</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Image · Desktop image · Video · Buttons</p></div></div>
+            <div class="sec"><button class="sec-head"><span class="sec-title">Colours</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Primary button colour</p></div></div>
+            <div class="sec"><button class="sec-head"><span class="sec-title">Behaviour</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Darken photo bottom · Entrance animation</p></div></div>
+            <div class="sec"><button class="sec-head"><span class="sec-title">Frame, radius &amp; width</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Frame · Corner radius · Full width</p></div></div>
+            <div class="danger"><button class="del-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete this block</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROPOSED -->
+      <div>
+        <div class="col-head"><span class="tag new">Proposed</span><p>3 essentials shown · rest one tap away</p></div>
+        <div class="panel">
+          <div class="panel-head">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
+            <div class="name">Hero Banner</div>
+          </div>
+          <div class="panel-body">
+            <div class="field">
+              <label>Layout</label>
+              <div class="seg cols2 segtoggle">
+                <button class="on">Full<span class="sub">Photo fills, buttons on top</span></button>
+                <button>Split<span class="sub">Photo left, text box right</span></button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Picture</label>
+              <div class="dropzone">
+                <div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
+                <div class="meta"><strong>autumn-harvest.jpg</strong><span>Tap to replace</span></div>
+                <button class="mini-btn">Replace</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Buttons</label>
+              <div class="cta"><svg class="grip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg><span class="lab">Shop now</span><span class="pill">Main</span></div>
+              <div class="cta"><svg class="grip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="18" r="1"/></svg><span class="lab">See what's new</span><span class="pill sec">Plain</span></div>
+              <button class="add-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add button</button>
+            </div>
+
+            <div class="more" data-more>
+              <button class="more-head" data-more-toggle>
+                <span class="lhs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg><strong>More options</strong><span class="count">7 settings</span></span>
+                <svg class="more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="more-body">
+                <div class="sub-grp">Picture</div>
+                <div class="field"><label>How the picture fits <svg class="info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg></label><select class="select"><option>Fill the banner — edges may crop</option><option>Whole picture — nothing cut</option></select></div>
+                <div class="field"><label>Banner height</label><select class="select"><option>Medium (360px)</option><option>Short (260px)</option><option>Tall (520px)</option></select></div>
+                <div class="field"><label>Wide picture for computers <svg class="info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg></label><div class="dropzone"><div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div><div class="meta"><strong>None</strong><span>Phones use the picture above</span></div><button class="mini-btn">Add</button></div></div>
+                <div class="field"><label>Background video <svg class="info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg></label><div class="dropzone"><div class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg></div><div class="meta"><strong>None</strong><span>Plays silently on a loop</span></div><button class="mini-btn">Add</button></div></div>
+                <div class="sub-grp">Look</div>
+                <div class="field"><label>Main button colour</label><select class="select"><option>Brand green</option><option>Carrot</option><option>Ink</option></select></div>
+                <div class="field"><label>Darken photo bottom <svg class="info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg></label><select class="select"><option>Auto (recommended)</option><option>Off</option><option>Strong</option></select></div>
+                <div class="field"><label>Appears with</label><select class="select"><option>No motion</option><option>Fade in</option><option>Rise up</option></select></div>
+              </div>
+            </div>
+            <div class="danger"><button class="del-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete this block</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h2>What changed, and why</h2>
+      <h3>Shown straight away — the three real jobs</h3>
+      <ul>
+        <li><b>Layout</b> — the one choice that defines the whole look. A visible toggle, not a hidden dropdown.</li>
+        <li><b>Picture</b> — the thing people open the panel to change most.</li>
+        <li><b>Buttons</b> — add, rename, reorder in place.</li>
+      </ul>
+      <h3>Moved into "More options"</h3>
+      <ul>
+        <li><span class="chip moved">moved</span> How the picture fits · Banner height · Wide picture for computers · Background video</li>
+        <li><span class="chip moved">moved</span> Main button colour · Darken photo bottom · Appears with</li>
+      </ul>
+      <h3>Cut or made automatic</h3>
+      <ul>
+        <li><span class="chip cut">cut</span> <b>Stretch</b> image fit — only ever makes photos look squashed; nobody chooses it on purpose.</li>
+        <li><span class="chip auto">auto</span> <b>Placeholder height</b> folded into Banner height — no more two height fields.</li>
+        <li><span class="chip auto">auto</span> <b>Darken photo bottom</b> now defaults to <b>Auto</b> — darkens only when buttons sit on a bright photo.</li>
+      </ul>
+      <div class="count-line">
+        <div><div class="num">13 &rarr; 3</div><div class="cap">Controls greeting the user</div></div>
+        <div><div class="num">5 &rarr; 0</div><div class="cap">Taps before you see anything</div></div>
+        <div><div class="num">1</div><div class="cap">Drawer for everything else</div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================ -->
+  <!-- FLASH SALE                                                        -->
+  <!-- ================================================================ -->
+  <section class="block-demo" data-block="flash">
+    <div class="cols">
+      <!-- NOW -->
+      <div>
+        <div class="col-head"><span class="tag now">Now</span><p>18 fields · 7 of them just colour</p></div>
+        <div class="panel">
+          <div class="panel-head">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+            <div class="name">Flash Sale</div>
+          </div>
+          <div class="panel-body now-accordion">
+            <div class="sec"><button class="sec-head"><span class="sec-title">Style &amp; layout</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Layout · Energy · Max products shown · Card layout · Card corners</p></div></div>
+            <div class="sec"><button class="sec-head"><span class="sec-title">Content</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Small heading · Title · Button text · Button link · Empty-state text</p></div></div>
+            <div class="sec"><button class="sec-head"><span class="sec-title">Colours</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Band · Ink/detail · Accent · Cream panel · Classic tile · Progress · Sale price (7 pickers)</p></div></div>
+            <div class="sec"><button class="sec-head"><span class="sec-title">Behaviour</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Urgency · Entrance animation · Hide when no sales are active</p></div></div>
+            <div class="sec"><button class="sec-head"><span class="sec-title">Frame, radius &amp; width</span><svg class="sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button><div class="sec-body"><p class="hint">Frame · Corner radius · Full width</p></div></div>
+            <div class="danger"><button class="del-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete this block</button></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PROPOSED -->
+      <div>
+        <div class="col-head"><span class="tag new">Proposed</span><p>3 essentials shown · rest grouped, one tap away</p></div>
+        <div class="panel">
+          <div class="panel-head">
+            <div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></div>
+            <div class="name">Flash Sale</div>
+          </div>
+          <div class="panel-body">
+
+            <div class="status-banner">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+              <p><b>2</b> active · <b>1</b> upcoming flash sale. The countdown binds to the soonest-ending active sale.</p>
+            </div>
+
+            <div class="field">
+              <label>Layout</label>
+              <select class="select">
+                <option>Strip — compact row</option>
+                <option>Hero — big countdown + products</option>
+                <option>Banner — countdown only, no products</option>
+                <option selected>Classic — centred tiles + cream button</option>
+                <option>Editorial — left headline + timer bar</option>
+                <option>Urgency — LIVE tag + popping tiles</option>
+              </select>
+              <p class="hint">Strip/Hero/Banner are compact, everyday styles. Classic/Editorial/Urgency are bigger sections with a coloured band.</p>
+            </div>
+
+            <div class="field">
+              <label>Title</label>
+              <input class="txt" value="What are you waiting for?">
+            </div>
+
+            <div class="field">
+              <label>Max products shown</label>
+              <select class="select"><option>4</option><option selected>6</option><option>8</option></select>
+            </div>
+
+            <div class="more" data-more>
+              <button class="more-head" data-more-toggle>
+                <span class="lhs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg><strong>More options</strong><span class="count">14 settings</span></span>
+                <svg class="more-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+              <div class="more-body">
+
+                <div class="sub-grp">Content</div>
+                <div class="field"><label>Small heading</label><input class="txt" value="LIMITED TIME"></div>
+                <div class="field"><label>Button text</label><input class="txt" value="Shop now"></div>
+                <div class="field"><label>Button link</label><select class="select"><option>Flash sale collection</option></select></div>
+                <div class="field"><label>Empty-state text <svg class="info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg></label><input class="txt" value="Check back soon for our next drop"></div>
+                <div class="field" style="display:flex;align-items:center;gap:8px;">
+                  <input type="checkbox" id="hideEmptyCk" style="margin:0;">
+                  <label for="hideEmptyCk" style="margin:0;cursor:pointer;">Hide block when no flash sales are active</label>
+                </div>
+
+                <div class="sub-grp">Layout details</div>
+                <div class="field"><label>Card layout</label><select class="select"><option>Carousel — swipe sideways</option><option>Grid — 2 per row, no swiping</option></select></div>
+                <div class="field"><label>Energy <svg class="info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg></label><select class="select"><option>Refined — smaller, tighter</option><option selected>Balanced — the design default</option><option>Bold — bigger, chunkier</option></select></div>
+
+                <div class="sub-grp">Motion</div>
+                <div class="field"><label>Urgency <svg class="info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg></label><select class="select"><option>Mellow — still</option><option selected>Building — still</option><option>Frantic — pulsing clock</option></select></div>
+                <div class="field"><label>Appears with</label><select class="select"><option>No motion</option><option>Fade in</option><option>Rise up</option></select></div>
+
+                <div class="sub-grp">Colours</div>
+                <div class="nested" data-nested>
+                  <button class="nested-head" data-nested-toggle>
+                    <span class="lhs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2a10 10 0 1 0 10 10c0-1-.5-2-2-2h-3a2 2 0 0 1-2-2c0-1 1-1.5 1-3a3 3 0 0 0-3-3z"/></svg>Customize colours</span>
+                    <span class="count">7, all optional</span>
+                    <svg class="nested-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <div class="nested-body">
+                    <p class="hint" style="margin:0 0 10px;">The design already has a colour story (coral band, lime accent, cream panels). Only touch these to override it.</p>
+                    <div class="field"><label>Band colour</label><select class="select"><option>— default (coral) —</option></select></div>
+                    <div class="field"><label>Ink / detail colour</label><select class="select"><option>— default (ink) —</option></select></div>
+                    <div class="field"><label>Accent colour</label><select class="select"><option>— default (lime) —</option></select></div>
+                    <div class="field"><label>Cream panel colour</label><select class="select"><option>— default (cream) —</option></select></div>
+                    <div class="field"><label>Classic tile colour</label><select class="select"><option>— default (maroon) —</option></select></div>
+                    <div class="field"><label>Progress / label colour</label><select class="select"><option>— default (forest) —</option></select></div>
+                    <div class="field"><label>Sale price colour</label><select class="select"><option>— default (berry) —</option></select></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="danger"><button class="del-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Delete this block</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h2>What changed, and why</h2>
+      <h3>Shown straight away — the three real jobs</h3>
+      <ul>
+        <li><b>Live status</b> — read-only context ("2 active, 1 upcoming"), not a setting, but the thing people check first. No control, just an answer.</li>
+        <li><b>Layout</b> — the 6-way style choice. Still one dropdown; this one genuinely needs to be a dropdown, not tiles, since there are 6 options with real visual differences.</li>
+        <li><b>Title</b> and <b>Max products shown</b> — the two things that change per campaign.</li>
+      </ul>
+      <h3>Moved into "More options", grouped by heading</h3>
+      <ul>
+        <li><span class="chip moved">moved</span> <b>Content</b> — Small heading · Button text · Button link · Empty-state text · Hide-when-empty</li>
+        <li><span class="chip moved">moved</span> <b>Layout details</b> — Card layout · Energy</li>
+        <li><span class="chip moved">moved</span> <b>Motion</b> — Urgency · Entrance animation</li>
+      </ul>
+      <h3>The 7 colour pickers get a drawer of their own</h3>
+      <p style="margin:0 0 4px;color:var(--text-secondary);font-size:var(--fs-caption)">Seven side-by-side colour dropdowns was the single worst offender — nobody needs all seven to change the sale title. They're now a second-level, closed-by-default disclosure inside More options, titled plainly and marked "all optional."</p>
+      <h3>Cut</h3>
+      <ul>
+        <li><span class="chip cut">cut</span> <b>Card corners</b> — this set the same <code>corner_radius</code> value as the universal Frame/radius/width section at the bottom of every block. Same setting, shown twice; removed the duplicate here.</li>
+      </ul>
+      <div class="count-line">
+        <div><div class="num">18 &rarr; 3</div><div class="cap">Controls greeting the user</div></div>
+        <div><div class="num">7 &rarr; 1</div><div class="cap">Colour pickers visible at once</div></div>
+        <div><div class="num">2</div><div class="cap">Levels of disclosure (More, then Colours)</div></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  // Block tab switcher
+  document.querySelectorAll('.block-tabs button').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('.block-tabs button').forEach(function (b) { b.classList.remove('on'); });
+      btn.classList.add('on');
+      var target = btn.getAttribute('data-target');
+      document.querySelectorAll('.block-demo').forEach(function (sec) {
+        sec.classList.toggle('on', sec.getAttribute('data-block') === target);
+      });
+    });
+  });
+
+  // "Now" accordions
+  document.querySelectorAll('.now-accordion .sec-head').forEach(function (h) {
+    h.addEventListener('click', function () { h.parentElement.classList.toggle('open'); });
+  });
+
+  // "More options" drawers
+  document.querySelectorAll('[data-more-toggle]').forEach(function (h) {
+    h.addEventListener('click', function () { h.closest('[data-more]').classList.toggle('open'); });
+  });
+
+  // Nested "Customize colours" drawer
+  document.querySelectorAll('[data-nested-toggle]').forEach(function (h) {
+    h.addEventListener('click', function () { h.closest('[data-nested]').classList.toggle('open'); });
+  });
+
+  // Layout segmented control (Hero)
+  document.querySelectorAll('.segtoggle button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      b.parentElement.querySelectorAll('button').forEach(function (x) { x.classList.remove('on'); });
+      b.classList.add('on');
+    });
+  });
+</script>
+</body>
+</html>

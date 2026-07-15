@@ -2164,6 +2164,80 @@
   .insp-sec-body { display: none; padding-bottom: var(--s2); }
   .insp-sec.open .insp-sec-body { display: block; }
 
+  /* "More options" drawer — a heavier disclosure than the plain uppercase
+     Style/Content/Colours/Behaviour headers above. Used by the simplified
+     Hero Banner + Flash Sale panels to bundle every field their essentials
+     don't need to show by default. Icon + live count communicates "there's
+     more here", not just another identical accordion row. Built on the same
+     inspectorSection()/inspectorOpen plumbing (variant: 'more') so open state
+     still survives the per-edit rebuild. */
+  .insp-sec--more { margin-top: 2px; }
+  .insp-sec-lhs { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .insp-sec-ico { display: flex; flex-shrink: 0; color: var(--text-3); }
+  .insp-sec-ico svg { width: 15px; height: 15px; }
+  .insp-sec--more .insp-sec-title {
+    font: 500 13px var(--f-sans); letter-spacing: normal; text-transform: none; color: var(--text-1);
+  }
+  .insp-sec-badge { font-size: 11px; color: var(--text-3); flex-shrink: 0; }
+  .insp-sub-grp {
+    font: 700 11px var(--f-sans); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--text-3); margin: var(--s4) 0 var(--s2);
+  }
+  .insp-sub-grp:first-child { margin-top: 0; }
+
+  /* Nested disclosure — for a cluster of controls most operators never touch
+     (Flash Sale's 7 per-element colour overrides). A bordered box, not just
+     another accordion row, so it reads as "optional, tucked away" even while
+     the surrounding More-options drawer is itself open. Same plumbing again
+     (variant: 'nested'), nested one level deeper in the inspectorOpen map. */
+  .insp-sec--nested {
+    border: 1px solid var(--line-soft); border-radius: var(--r-md);
+    background: var(--bg-elev-2); margin: var(--s2) 0 var(--s4); overflow: hidden;
+  }
+  .insp-sec--nested > .insp-sec-head { padding: 10px 12px; }
+  .insp-sec--nested .insp-sec-title {
+    font: 500 12px var(--f-sans); letter-spacing: normal; text-transform: none; color: var(--text-1);
+  }
+  .insp-sec--nested .insp-sec-body { padding: 0 12px 12px; }
+  .insp-sec--nested .insp-sec-body .field:first-child { margin-top: 2px; }
+
+  /* Live status banner — read-only context ("2 active, 1 upcoming"), not a
+     setting. Same quiet surface as .insp-note. */
+  .insp-status {
+    display: flex; gap: 10px; margin: 0 0 var(--s4); padding: var(--s3);
+    background: var(--bg-elev-2); border-radius: var(--r-md);
+  }
+  .insp-status svg { width: 15px; height: 15px; color: var(--text-3); flex-shrink: 0; margin-top: 1px; }
+  .insp-status p { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--text-2); }
+  .insp-status b { color: var(--text-1); font-weight: 600; }
+
+  /* Two-option segmented toggle — for a field with exactly two clearly-named
+     choices (Hero's Full/Split layout), so the choice is visible without
+     opening a dropdown for something this simple. */
+  .insp-seg {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px;
+    background: var(--bg-elev-2); border: 1px solid var(--line-soft); border-radius: var(--r-md);
+  }
+  .insp-seg button {
+    font: 500 12px var(--f-sans); padding: 9px 8px; border: 1px solid transparent;
+    background: transparent; color: var(--text-3); border-radius: 6px; cursor: pointer; text-align: center;
+  }
+  .insp-seg button.on {
+    background: var(--bg-pane); color: var(--text-1); border-color: var(--line); box-shadow: var(--sh-2);
+  }
+  .insp-seg-sub { display: block; font-weight: 400; font-size: 10.5px; color: var(--text-3); margin-top: 2px; }
+
+  /* Visually-hidden shadow <select> mirroring the segmented toggle above —
+     not a user-facing control. It exists purely so the mobile preview
+     embed's design-variant scraper (which looks for a real <select> under
+     [data-sec-key="layout"], see renderInspector()) keeps working for Hero's
+     Full/Split choice exactly as it does for every other block's Layout
+     field, which is still a native <select>. */
+  .insp-shadow-select {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+  }
+
   /* ═══════════════════════════════════════════════════════════════════
      BLOCK PREVIEW STYLES (on the phone)
      ═══════════════════════════════════════════════════════════════════ */
@@ -5546,6 +5620,7 @@
   </div>
 </div>
 
+<script src="/assets/tacet-dialogs.js"></script>
 <script>
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -6955,9 +7030,18 @@ async function renderLinkStatus() {
 async function addLinkFromHomeToCurrentPage() {
   const target = state.page;
   const pageDef = PAGES.find(p => p.id === target) || { name: target, cn: target };
-  const labelEn = prompt(`Bar text (EN) — shown to English-speaking customers.\n\nTapping it on Home will open the ${pageDef.name} page.`, `See ${pageDef.name} →`);
+  const labelEn = await askPrompt({
+    title: 'Bar text (EN)',
+    sub: `Shown to English-speaking customers. Tapping it on Home will open the ${pageDef.name} page.`,
+    value: `See ${pageDef.name} →`,
+    submitLabel: 'Next',
+  });
   if (labelEn == null) return;
-  const labelCn = prompt(`Bar text (中文)`, `查看${pageDef.cn} →`);
+  const labelCn = await askPrompt({
+    title: 'Bar text (中文)',
+    value: `查看${pageDef.cn} →`,
+    submitLabel: 'Add link',
+  });
   if (labelCn == null) return;
 
   const home = await getHomeLayout(true);
@@ -7043,10 +7127,10 @@ async function renderOnboardingSettings(el) {
     }
   });
   $('#onb-bump-btn').addEventListener('click', async () => {
-    if (!confirm(T(
-      'Re-show onboarding to ALL returning users on their next launch?\n\n(New users see it anyway. Has no effect when mode is "Off".)',
-      '在所有已访问过的用户下次启动时再次显示引导页?\n\n(新用户本来就会看到。模式为「关闭」时不生效。)'
-    ))) return;
+    if (!(await askConfirm({
+      title: T('Re-show onboarding to ALL returning users on their next launch?', '在所有已访问过的用户下次启动时再次显示引导页?'),
+      body: T('New users see it anyway. Has no effect when mode is "Off".', '新用户本来就会看到。模式为「关闭」时不生效。'),
+    }))) return;
     try {
       const r = await api('/api/retail-admin/cms/onboarding-settings/bump', { method: 'POST' });
       toast(T('Will re-show — now at v' + r.data.version, '将重新显示 — 当前 v' + r.data.version));
@@ -7852,8 +7936,8 @@ function _orderedPaletteEntries() {
   for (const [t, m] of all) if (!seen.has(t)) out.push([t, m]);
   return out;
 }
-function resetPaletteOrder() {
-  if (!confirm(T('Reset palette order to default?', '重置左侧块栏顺序?'))) return;
+async function resetPaletteOrder() {
+  if (!(await askConfirm({ title: T('Reset palette order to default?', '重置左侧块栏顺序?') }))) return;
   try { localStorage.removeItem(PALETTE_ORDER_KEY); } catch {}
   buildPalette();
 }
@@ -7951,7 +8035,11 @@ async function fcGotoProductEditor() {
 async function publish() {
   if (state.saving) await new Promise(r => setTimeout(r, 900));
   const pageName = (PAGES.find(p => p.id === state.page) || {}).name || state.page;
-  if (!confirm(`Publish the "${pageName}" page draft to the live mini app?\n\nCustomers will see the updated layout on their next refresh.`)) return;
+  if (!(await askConfirm({
+    title: `Publish the "${pageName}" page draft to the live mini app?`,
+    body: 'Customers will see the updated layout on their next refresh.',
+    confirmLabel: 'Publish',
+  }))) return;
   try {
     await api('/api/retail-admin/cms/publish', { method: 'POST', body: { page: state.page } });
     state.live = JSON.parse(JSON.stringify(state.draft));
@@ -7963,7 +8051,11 @@ async function publish() {
   }
 }
 async function revertDraft() {
-  if (!confirm('Discard the draft and reload the currently published version?\n\nUnsaved edits will be lost.')) return;
+  if (!(await askConfirm({
+    title: 'Discard the draft and reload the currently published version?',
+    body: 'Unsaved edits will be lost.',
+    confirmLabel: 'Discard draft',
+  }))) return;
   try {
     const { data } = await api('/api/retail-admin/cms/revert-draft', { method: 'POST', body: { page: state.page } });
     state.draft = data.draft || [];
@@ -11194,13 +11286,16 @@ function renderInspector() {
       };
     });
     __fcColorRegBuf = null;
-    // Design / layout variants — the "which look" selectors. They all live in
-    // the 'layout' section (key is language-independent), so capture every
-    // native <select> there. Skip the universal corner-radius control. Driving
-    // them = set .value + dispatch 'change' (reuses sel()'s own listener), so no
-    // per-call-site wiring and no duplicated option lists.
+    // Design / layout variants — the "which look" selectors. They all live
+    // under a 'layout' marker (key is language-independent) — either the
+    // accordion section most block types use, or (Hero / Flash Sale's
+    // simplified panels) a plain [data-sec-key="layout"] wrapper around the
+    // essentials-area Layout field, see buildHeroForm/buildFlashStripForm.
+    // Capture every native <select> there; skip the universal corner-radius
+    // control. Driving them = set .value + dispatch 'change' (reuses sel()'s
+    // own listener), so no per-call-site wiring and no duplicated option lists.
     state.designVariants = [];
-    body.querySelectorAll('.insp-sec[data-sec-key="layout"] select').forEach(selEl => {
+    body.querySelectorAll('[data-sec-key="layout"] select').forEach(selEl => {
       const opts = Array.from(selEl.options);
       if (opts.length < 2) return;
       const vals = opts.map(o => o.value);
@@ -11271,6 +11366,11 @@ function buildChromeSection(body, b) {
 }
 
 const FIELD_INFO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg>';
+// Icons for the two heavier disclosures used by the simplified block panels
+// (More options / Customize colours) — see inspectorSection()'s variant opt.
+const MORE_OPTIONS_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg>';
+const COLOR_SWATCH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10c0-1-.5-2-2-2h-3a2 2 0 0 1-2-2c0-1 1-1.5 1-3a3 3 0 0 0-3-3z"/><circle cx="6.5" cy="11.5" r=".6" fill="currentColor" stroke="none"/><circle cx="9.5" cy="7.5" r=".6" fill="currentColor" stroke="none"/><circle cx="14.5" cy="7" r=".6" fill="currentColor" stroke="none"/></svg>';
+const STATUS_INFO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>';
 
 function field(label, helper, inner) {
   const wrap = document.createElement('div');
@@ -11357,7 +11457,7 @@ let lastInspectedId = null;
 // open/closed comes from `open`; once the operator toggles it, their choice is
 // remembered for that block type across rebuilds. Empty sections are pruned by
 // renderInspector, so a build fn can safely create a section it might not fill.
-function inspectorSection(body, blockType, key, title, { open = false } = {}) {
+function inspectorSection(body, blockType, key, title, { open = false, icon = '', badge = '', variant = '' } = {}) {
   const mapKey = blockType + ':' + key;
   // Every section starts folded; the `open` hint is ignored on first build so
   // the inspector opens compact. Once the operator expands a section it's
@@ -11365,15 +11465,28 @@ function inspectorSection(body, blockType, key, title, { open = false } = {}) {
   // which clears that memory on every block change so the next block opens folded.
   const isOpen = (mapKey in inspectorOpen) ? inspectorOpen[mapKey] : false;
   const sec = document.createElement('div');
-  sec.className = 'insp-sec' + (isOpen ? ' open' : '');
+  sec.className = 'insp-sec' + (variant ? ' insp-sec--' + variant : '') + (isOpen ? ' open' : '');
   sec.dataset.secKey = key;   // stable, language-independent (mobile reads 'layout')
   const head = document.createElement('button');
   head.type = 'button';
   head.className = 'insp-sec-head';
+  // `icon`/`badge` dress up the heavier "More options" / "Customize colours"
+  // disclosures (see MORE_OPTIONS_SVG, COLOR_SWATCH_SVG) — plain sections
+  // (Style & layout, Content, ...) omit both and render exactly as before.
+  const lhs = document.createElement('span');
+  lhs.className = 'insp-sec-lhs';
+  if (icon) lhs.insertAdjacentHTML('beforeend', `<span class="insp-sec-ico">${icon}</span>`);
   const ttl = document.createElement('span');
   ttl.className = 'insp-sec-title';
   ttl.textContent = title;
-  head.appendChild(ttl);
+  lhs.appendChild(ttl);
+  if (badge) {
+    const badgeEl = document.createElement('span');
+    badgeEl.className = 'insp-sec-badge';
+    badgeEl.textContent = badge;
+    lhs.appendChild(badgeEl);
+  }
+  head.appendChild(lhs);
   head.insertAdjacentHTML('beforeend',
     '<svg class="insp-sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>');
   const inner = document.createElement('div');
@@ -11641,79 +11754,55 @@ function buildHeroForm(m, b) {
   const view = b.view || 'full';
   const heroFit = b.image_fit || (b.image_aspect ? 'contain' : 'cover');
 
-  // Grouped sections — Style & layout + Content open by default; Colours and
-  // Behaviour collapsed (set once, rarely reopened). See inspectorSection().
-  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
-  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
-  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
-  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
+  // ── Essentials — shown flat, no accordion. These are the three things an
+  // operator opens this panel to change: the layout, the picture, the
+  // buttons (plus the headline/subtitle text when Split needs it). Every
+  // other field lives in "More options" below. See the Hero Banner mockup
+  // (reference/cms-inspector-simplify-mockup.html) this implements. ───────
+  const layoutWrap = document.createElement('div');
+  // Plain marker (not the accordion class) — the mobile preview embed's
+  // design-variant scraper looks for a <select> under [data-sec-key="layout"]
+  // (see renderInspector()). The segmented toggle below isn't a <select>, so
+  // a hidden shadow one mirrors it purely for that sync path.
+  layoutWrap.dataset.secKey = 'layout';
+  const seg = document.createElement('div');
+  seg.className = 'insp-seg';
+  const fullBtn = document.createElement('button');
+  fullBtn.type = 'button';
+  fullBtn.className = view === 'full' ? 'on' : '';
+  fullBtn.innerHTML = escapeHtml(T('Full', '全幅')) + '<span class="insp-seg-sub">' + escapeHtml(T('Picture fills, buttons on top', '图片铺满,按钮在上面')) + '</span>';
+  fullBtn.addEventListener('click', () => updateBlock(b.id, { view: 'full' }));
+  const splitBtn = document.createElement('button');
+  splitBtn.type = 'button';
+  splitBtn.className = view === 'split' ? 'on' : '';
+  splitBtn.innerHTML = escapeHtml(T('Split', '分栏')) + '<span class="insp-seg-sub">' + escapeHtml(T('Picture left, text box right', '图片在左,文字框在右')) + '</span>';
+  splitBtn.addEventListener('click', () => updateBlock(b.id, { view: 'split' }));
+  seg.appendChild(fullBtn); seg.appendChild(splitBtn);
+  layoutWrap.appendChild(field(T('Layout', '版式'), '', seg));
+  const layoutShadowSel = sel(view, [
+    { value: 'full',  label: T('Full — picture fills, buttons on top', '全幅 — 图片铺满,按钮在上面') },
+    { value: 'split', label: T('Split — picture left, text box right', '分栏 — 图片在左,文字框在右') },
+  ], v => updateBlock(b.id, { view: v }));
+  layoutShadowSel.className = 'insp-shadow-select';
+  layoutShadowSel.tabIndex = -1;
+  layoutShadowSel.setAttribute('aria-hidden', 'true');
+  layoutWrap.appendChild(layoutShadowSel);
+  m.appendChild(layoutWrap);
 
-  // ── Style & layout ──────────────────────────────────────────────────
-  secLayout.appendChild(field(T('Layout', '版式'),
-    T('Full = the picture fills the whole banner, with the buttons on top of it. Split = the picture on the left, and your title and button in a coloured box on the right.', '全幅 = 图片铺满整个横幅,按钮显示在图片上面。分栏 = 图片在左边,标题和按钮放在右边的彩色方块里。'),
-    sel(view, [
-      { value: 'full',  label: T('Full — picture fills, buttons on top', '全幅 — 图片铺满,按钮在上面') },
-      { value: 'split', label: T('Split — picture left, text box right', '分栏 — 图片在左,文字框在右') },
-    ], v => updateBlock(b.id, { view: v }))));
-
-  // Image fit — only meaningful for the full view (split crops to a square).
-  if (view === 'full') {
-    secLayout.appendChild(field(
-      T('Image fit', '图片填充方式'),
-      T('How the picture sits in the banner. Fill = cover the whole banner (some edges may be cut off). Whole image = show all of the picture. Stretch = force it to fit (it may look squashed).',
-        '图片在横幅里的显示方式。填满 = 铺满横幅(边缘可能被裁掉)。完整显示 = 显示整张图片。拉伸 = 强行填满(可能变形)。'),
-      sel(heroFit, [
-        { value: 'cover',   label: T('Fill banner — cut the edges', '填满横幅 — 裁掉边缘') },
-        { value: 'contain', label: T('Whole picture — nothing cut', '完整显示 — 不裁剪') },
-        { value: 'stretch', label: T('Stretch — may look squashed', '拉伸填满 — 可能变形') },
-      ], v => updateBlock(b.id, { image_fit: v }))));
-
-    // When filling/stretching the banner uses a fixed height (the picture is
-    // cropped into it), so expose the height here too — not just as a
-    // placeholder. Contain keeps auto-height from the image shape.
-    if (heroFit !== 'contain') {
-      secLayout.appendChild(field(T('Banner height (px)', '横幅高度(像素)'),
-        T('How tall the banner is. The picture is cut to fit.', '横幅的高度。图片会被裁剪以铺满。'),
-        num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
-    }
-  }
-
-  // Hide the placeholder-height field when the "Banner height" field above is
-  // already shown (full view + fill/stretch), to avoid two inputs for height_px.
-  if (!(view === 'full' && heroFit !== 'contain')) {
-    secLayout.appendChild(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used before you add a picture.', '仅在你还没有添加图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
-  }
-
-  // ── Content ─────────────────────────────────────────────────────────
-  secContent.appendChild(field(
-    T('Image', '图片'),
+  m.appendChild(field(
+    T('Picture', '图片'),
     view === 'split'
       ? T('Shown as a square on the left side.', '会裁成正方形,放在左边。')
       : T('The banner becomes as tall as your picture. Nothing is cut or stretched.', '横幅会自动变成图片的高度,不裁剪、不拉伸。'),
     imgPicker(b.image_url, ({ url, aspect }) => updateBlock(b.id, { image_url: url, image_aspect: aspect }))
   ));
 
-  // Wide-screen variant for the web storefront. The phone image is authored
-  // for a narrow canvas; a full-bleed desktop banner wants wide art. Optional —
-  // when empty, desktop browsers use the picture above.
-  secContent.appendChild(field(
-    T('Desktop image (optional)', '电脑端图片(可选)'),
-    T('Used on the web store on wide screens. Upload a wide picture (about 3:1). Phones keep the picture above.', '仅网页版宽屏使用。请上传较宽的图片(约 3:1)。手机仍显示上面的图片。'),
-    imgPicker(b.image_desktop_url, ({ url }) => updateBlock(b.id, { image_desktop_url: url }))
-  ));
-
-  secContent.appendChild(field(
-    T('Video (optional)', '视频(可选)'),
-    T('Plays on a loop with no sound and fills the banner. If you add a video, it shows instead of the picture (the picture is shown while the video is loading). Keep videos small — under 20MB, MP4.', '视频会无声循环播放,铺满横幅。添加后会代替图片显示(视频加载时会先显示图片)。请使用较小的视频 — 小于 20MB 的 MP4。'),
-    videoPicker(b.video_url, url => updateBlock(b.id, { video_url: url }))
-  ));
-
   if (view === 'split') {
     const hl = getBi(b, 'headline');
     const sub = getBi(b, 'subtitle');
-    secContent.appendChild(field(T('Headline', '标题'), '',
+    m.appendChild(field(T('Headline', '标题'), '',
       txtPair(hl.en, hl.cn, ({ en, cn }) => updateBlockSilent(b.id, { headline_en: en, headline_cn: cn }))));
-    secContent.appendChild(field(T('Subtitle', '副标题'), T('One short line under the title.', '标题下面的一行短句。'),
+    m.appendChild(field(T('Subtitle', '副标题'), T('One short line under the title.', '标题下面的一行短句。'),
       txtPair(sub.en, sub.cn, ({ en, cn }) => updateBlockSilent(b.id, { subtitle_en: en, subtitle_cn: cn }))));
   }
 
@@ -11746,27 +11835,93 @@ function buildHeroForm(m, b) {
     updateBlock(b.id, { ctas: next, cta_label: undefined, cta_target: undefined });
   });
   btnWrap.appendChild(addBtn);
-  secContent.appendChild(btnWrap);
+  m.appendChild(btnWrap);
 
-  // ── Colours ─────────────────────────────────────────────────────────
+  // ── More options — everything else, grouped under two quiet sub-headings
+  // (Picture / Look) so the drawer itself doesn't read as another wall of
+  // fields. Built into arrays first so the header badge's count always
+  // matches exactly what's about to render, even as view/fit conditions
+  // change which fields apply. ─────────────────────────────────────────
+  const picFields = [];
+  // Image fit — only meaningful in Full view (Split always crops to a
+  // square). "Stretch" is cut: it only ever makes photos look squashed, so
+  // it's no longer offered as a new choice. A block already set to it keeps
+  // rendering as before on the live mini app until the operator changes it.
+  if (view === 'full') {
+    picFields.push(field(
+      T('How the picture fits', '图片填充方式'),
+      T('Fill = cover the whole banner (edges may crop). Whole picture = show all of it, nothing cut.', '填满 = 铺满横幅(边缘可能被裁掉)。完整显示 = 显示整张图片,不裁剪。'),
+      sel(heroFit === 'stretch' ? 'cover' : heroFit, [
+        { value: 'cover',   label: T('Fill banner — cut the edges', '填满横幅 — 裁掉边缘') },
+        { value: 'contain', label: T('Whole picture — nothing cut', '完整显示 — 不裁剪') },
+      ], v => updateBlock(b.id, { image_fit: v }))));
+
+    // When filling the banner uses a fixed height (the picture is cropped
+    // into it). Contain keeps auto-height from the image shape instead.
+    if (heroFit !== 'contain') {
+      picFields.push(field(T('Banner height (px)', '横幅高度(像素)'),
+        T('How tall the banner is. The picture is cut to fit.', '横幅的高度。图片会被裁剪以铺满。'),
+        num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+    }
+  }
+  // Same height_px field, relabelled — shown instead of "Banner height"
+  // whenever that one isn't (Split view, or Full+Whole picture), so there's
+  // never two height inputs on screen at once.
+  if (!(view === 'full' && heroFit !== 'contain')) {
+    picFields.push(field(T('Placeholder height (px)', '占位高度(像素)'), T('Only used before you add a picture.', '仅在你还没有添加图片时使用。'), num(b.height_px, v => updateBlock(b.id, { height_px: v }), { min: 200, max: 800, step: 10 })));
+  }
+  picFields.push(field(
+    T('Desktop picture (optional)', '电脑端图片(可选)'),
+    T('Used on the web store on wide screens. Upload a wide picture (about 3:1). Phones keep the picture above.', '仅网页版宽屏使用。请上传较宽的图片(约 3:1)。手机仍显示上面的图片。'),
+    imgPicker(b.image_desktop_url, ({ url }) => updateBlock(b.id, { image_desktop_url: url }))
+  ));
+  picFields.push(field(
+    T('Video (optional)', '视频(可选)'),
+    T('Plays on a loop with no sound and fills the banner. If you add a video, it shows instead of the picture (the picture is shown while the video is loading). Keep videos small — under 20MB, MP4.', '视频会无声循环播放,铺满横幅。添加后会代替图片显示(视频加载时会先显示图片)。请使用较小的视频 — 小于 20MB 的 MP4。'),
+    videoPicker(b.video_url, url => updateBlock(b.id, { video_url: url }))
+  ));
+
+  const lookFields = [];
   if (view === 'split') {
-    secColours.appendChild(field(T('Panel background', '面板背景颜色'), '',
+    lookFields.push(field(T('Panel background', '面板背景颜色'), '',
       sel(b.panel_bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_bg_color: v }))));
-    secColours.appendChild(field(T('Panel text colour', '面板文字颜色'), '',
+    lookFields.push(field(T('Panel text colour', '面板文字颜色'), '',
       sel(b.panel_fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { panel_fg_color: v }))));
   }
-  secColours.appendChild(field(T('Primary button colour', '主按钮颜色'), T('The colour of your main button. The text colour is chosen for you so it stays easy to read. Other button styles do not change.', '主按钮的颜色。文字颜色会自动选择,保证清晰易读。其他样式的按钮不受影响。'),
+  lookFields.push(field(T('Primary button colour', '主按钮颜色'), T('The colour of your main button. The text colour is chosen for you so it stays easy to read. Other button styles do not change.', '主按钮的颜色。文字颜色会自动选择,保证清晰易读。其他样式的按钮不受影响。'),
     sel(b.btn_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { btn_color: v }))));
-
-  // ── Behaviour ───────────────────────────────────────────────────────
   if (view === 'full') {
-    secBehaviour.appendChild(field(T('Darken photo bottom', '压暗图片底部'), T('Makes the bottom of the photo darker, so the buttons are easy to read on bright pictures.', '把图片底部调暗,让按钮在明亮的照片上也能看清。'),
-      sel(b.scrim || 'medium', SCRIM_OPTIONS,
+    // Default relabelled "Auto (recommended)" — same medium-scrim value as
+    // before, just presented as the smart default rather than one of three
+    // equal choices. Still fully overridable.
+    lookFields.push(field(T('Darken photo bottom', '压暗图片底部'), T('Makes the bottom of the photo darker, so the buttons are easy to read on bright pictures. Auto is right for almost every photo.', '把图片底部调暗,让按钮在明亮的照片上也能看清。「自动」适合绝大多数照片。'),
+      sel(b.scrim || 'medium', SCRIM_OPTIONS.map(o => o.value === 'medium' ? { ...o, label: T('Auto (recommended)', '自动(推荐)') } : o),
           v => updateBlock(b.id, { scrim: v }))));
   }
-  secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the banner appears when the page opens.', '页面打开时,横幅出现的方式。'),
+  lookFields.push(field(T('Appears with', '入场动画'), T('How the banner appears when the page opens.', '页面打开时,横幅出现的方式。'),
     sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS,
         v => updateBlock(b.id, { entrance_anim: v }))));
+
+  const moreCount = picFields.length + lookFields.length;
+  const more = inspectorSection(m, b.type, 'more', T('More options', '更多选项'), {
+    icon: MORE_OPTIONS_SVG,
+    badge: T(`${moreCount} settings`, `${moreCount} 项设置`),
+    variant: 'more',
+  });
+  if (picFields.length) {
+    const sub = document.createElement('div');
+    sub.className = 'insp-sub-grp';
+    sub.textContent = T('Picture', '图片');
+    more.appendChild(sub);
+    picFields.forEach(f => more.appendChild(f));
+  }
+  if (lookFields.length) {
+    const sub = document.createElement('div');
+    sub.className = 'insp-sub-grp';
+    sub.textContent = T('Look', '外观');
+    more.appendChild(sub);
+    lookFields.forEach(f => more.appendChild(f));
+  }
 }
 
 function buildVideoForm(m, b) {
@@ -12471,28 +12626,36 @@ const TOD_EMOJI_OPTIONS = [
 ];
 
 function buildFlashStripForm(m, b) {
-  const liveCount = (state.flashSales || []).filter(p => p.flash?.state === 'active').length;
-  const upcoming = (state.flashSales || []).filter(p => p.flash?.state === 'upcoming').length;
-  const banner = document.createElement('div');
-  banner.className = 'helper';
-  banner.style.cssText = 'margin: -8px 0 12px; padding: 10px 12px; background: var(--bg-2); border: 1px solid var(--border-2); border-radius: 6px; line-height: 1.5;';
-  if (liveCount === 0 && upcoming === 0) {
-    banner.innerHTML = B(`<b>No flash sales scheduled.</b><br>Configure a flash sale in <a href="/retail-admin#flash" target="_blank" style="color: var(--text-1)">Mini App Backend → Flash sales</a>. Until at least one is active, this block will ${b.hide_when_empty ? 'be hidden' : 'show your empty-state message'} on the live mini app.`,
-                         `<b>暂无限时秒杀。</b><br>请在 <a href="/retail-admin#flash" target="_blank" style="color: var(--text-1)">小程序后台 → 限时秒杀</a> 中配置。在至少有一个生效之前,本模块在线上小程序中将${b.hide_when_empty ? '被隐藏' : '显示你的空状态文案'}。`);
-  } else {
-    banner.innerHTML = B(`<b>${liveCount}</b> active · <b>${upcoming}</b> upcoming flash sale${(liveCount + upcoming) === 1 ? '' : 's'}. The countdown binds to the soonest-ending active sale.`,
-                         `<b>${liveCount}</b> 个进行中 · <b>${upcoming}</b> 个即将开始的限时秒杀。倒计时绑定到最快结束的进行中秒杀。`);
-  }
-  const secLayout    = inspectorSection(m, b.type, 'layout',    T('Style & layout', '样式与版式'), { open: true });
-  const secContent   = inspectorSection(m, b.type, 'content',   T('Content', '内容'), { open: true });
-  const secColours   = inspectorSection(m, b.type, 'colours',   T('Colours', '颜色'));
-  const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
-
-  secContent.appendChild(banner);
-
   const view = b.view || 'strip';
   const isDesign = view === 'classic' || view === 'editorial' || view === 'urgency';
-  secLayout.appendChild(field(T('Layout', '版式'), T('Strip, Hero and Banner are compact, everyday styles. Classic, Editorial and Urgency are bigger sections with a coloured band, a big countdown and a row of products.', '条带 / 主视觉 / 横幅为紧凑的日常样式。经典 / 编辑 / 紧迫为更大的版块 — 彩色条幅、大号倒计时与一排商品。'),
+
+  // ── Live status — read-only context, not a setting. Shown first because
+  // it's the thing an operator checks before touching anything else. ──────
+  const liveCount = (state.flashSales || []).filter(p => p.flash?.state === 'active').length;
+  const upcoming = (state.flashSales || []).filter(p => p.flash?.state === 'upcoming').length;
+  const status = document.createElement('div');
+  status.className = 'insp-status';
+  status.innerHTML = STATUS_INFO_SVG + '<p></p>';
+  const statusText = status.querySelector('p');
+  if (liveCount === 0 && upcoming === 0) {
+    statusText.innerHTML = B(`<b>No flash sales scheduled.</b><br>Configure a flash sale in <a href="/retail-admin#flash" target="_blank" style="color: var(--text-1)">Mini App Backend → Flash sales</a>. Until at least one is active, this block will ${b.hide_when_empty ? 'be hidden' : 'show your empty-state message'} on the live mini app.`,
+                              `<b>暂无限时秒杀。</b><br>请在 <a href="/retail-admin#flash" target="_blank" style="color: var(--text-1)">小程序后台 → 限时秒杀</a> 中配置。在至少有一个生效之前,本模块在线上小程序中将${b.hide_when_empty ? '被隐藏' : '显示你的空状态文案'}。`);
+  } else {
+    statusText.innerHTML = B(`<b>${liveCount}</b> active · <b>${upcoming}</b> upcoming flash sale${(liveCount + upcoming) === 1 ? '' : 's'}. The countdown binds to the soonest-ending active sale.`,
+                              `<b>${liveCount}</b> 个进行中 · <b>${upcoming}</b> 个即将开始的限时秒杀。倒计时绑定到最快结束的进行中秒杀。`);
+  }
+  m.appendChild(status);
+
+  // ── Essentials — Layout, Title, and (when relevant) Max products shown.
+  // Everything else lives in "More options" below. See the Flash Sale
+  // mockup (reference/cms-inspector-simplify-mockup.html) this implements. ─
+  const layoutWrap = document.createElement('div');
+  // Plain marker (not the accordion class) — the mobile preview embed's
+  // design-variant scraper looks for a <select> under [data-sec-key="layout"]
+  // (see renderInspector()); this keeps that sync working even though the
+  // Layout field now sits in the essentials area, not an accordion section.
+  layoutWrap.dataset.secKey = 'layout';
+  layoutWrap.appendChild(field(T('Layout', '版式'), T('Strip, Hero and Banner are compact, everyday styles. Classic, Editorial and Urgency are bigger sections with a coloured band, a big countdown and a row of products.', '条带 / 主视觉 / 横幅为紧凑的日常样式。经典 / 编辑 / 紧迫为更大的版块 — 彩色条幅、大号倒计时与一排商品。'),
     sel(view, [
       { value: 'strip',     label: T('Strip — compact row', '条带 — 紧凑单行') },
       { value: 'hero',      label: T('Hero — big countdown + products', '主视觉 — 大号倒计时 + 商品') },
@@ -12501,85 +12664,37 @@ function buildFlashStripForm(m, b) {
       { value: 'editorial', label: T('Editorial — left headline + timer bar', '编辑 — 左对齐标题 + 计时条') },
       { value: 'urgency',   label: T('Urgency — LIVE tag + popping tiles', '紧迫 — LIVE 标签 + 立体色块') },
     ], v => updateBlock(b.id, { view: v }))));
+  m.appendChild(layoutWrap);
 
-  if (isDesign) {
-    secLayout.appendChild(field(T('Energy', '风格强度'), T('How big and bold it looks. Refined = smaller and neater. Bold = bigger headlines, thicker borders.', '整体的大小与醒目程度。精致 = 更小更紧凑。醒目 = 更大标题、更粗描边。'),
-      sel(b.energy || 'balanced', [
-        { value: 'refined',  label: T('Refined — smaller, tighter', '精致 — 更小更紧凑') },
-        { value: 'balanced', label: T('Balanced — the design default', '平衡 — 设计默认') },
-        { value: 'bold',     label: T('Bold — bigger, chunkier', '醒目 — 更大更粗') },
-      ], v => updateBlock(b.id, { energy: v }))));
-  }
-
-  secContent.appendChild(field(T('Small heading', '小标题'), '',
-    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
-  secContent.appendChild(field(T('Title', '标题'), isDesign ? T('The big headline on the band (e.g. "What are you waiting for?").', '条幅上的大号标题(例如「What are you waiting for?」)。') : '',
+  m.appendChild(field(T('Title', '标题'), isDesign ? T('The big headline on the band (e.g. "What are you waiting for?").', '条幅上的大号标题(例如「What are you waiting for?」)。') : '',
     txtPair(b.title_en, b.title_cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn }))));
 
   if (view !== 'banner') {
-    secLayout.appendChild(field(T('Max products shown', '最多显示商品数'), view === 'hero'
+    m.appendChild(field(T('Max products shown', '最多显示商品数'), view === 'hero'
         ? T('Hero view focuses on the countdown — keep this small (1–3) so it stays bold.', '主视觉模式聚焦倒计时 — 数量保持较小(1–3),让视觉更醒目。')
         : T('How many flash-sale items to show. Extra ones scroll sideways.', '显示多少件秒杀商品。多出的可左右滑动。'),
       num(b.product_limit, v => updateBlock(b.id, { product_limit: Math.max(1, Math.min(8, v)) }), { min: 1, max: 8 })));
-    secLayout.appendChild(field(T('Card layout', '卡片排列'), T('Carousel = one row you swipe sideways. Grid = cards wrap two per row, so a few show at once without swiping.', '轮播 = 单行,左右滑动查看。网格 = 每行两个自动换行,无需滑动即可同时看到多件。'),
-      sel(b.card_layout || 'carousel', [
-        { value: 'carousel', label: T('Carousel — swipe sideways', '轮播 — 左右滑动') },
-        { value: 'grid',     label: T('Grid — 2 per row, no swiping', '网格 — 每行 2 个,无需滑动') },
-      ], v => updateBlock(b.id, { card_layout: v }))));
   }
 
-  if (isDesign) {
-    // Per-element colours — every coloured piece is overridable; blank keeps
-    // the design's coral-story default.
-    secColours.appendChild(field(T('Band colour', '条幅底色'), T('The full-width band background. Default = brand red (coral).', '通栏条幅背景。默认 = 品牌红(珊瑚色)。'),
-      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-    secColours.appendChild(field(T('Ink / detail colour', '墨色 / 细节色'), T('The headline and small details, like borders, badges and the LIVE tag. Blank = black.', '标题与描边、角标、LIVE 标签等细节的颜色。留空 = 墨黑。'),
-      sel(b.ink_color || '', [{ value: '', label: T('— default (ink) —', '— 默认(墨黑)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { ink_color: v }))));
-    secColours.appendChild(field(T('Accent colour', '强调色'), T('Discount badges, buttons, tiles and the LIVE dot. Blank = brand lime.', '折扣角标、按钮、色块与 LIVE 圆点。留空 = 品牌青柠。'),
-      sel(b.accent_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(青柠)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { accent_color: v }))));
-    secColours.appendChild(field(T('Cream panel colour', '奶白面板色'), T('The light cream surfaces — the top edge, timer bar and SHOP NOW button. Blank = soft cream.', '奶白面 — 顶边、计时条与立即抢购按钮。留空 = 柔奶白。'),
-      sel(b.panel_color || '', [{ value: '', label: T('— default (cream) —', '— 默认(奶白)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { panel_color: v }))));
-    secColours.appendChild(field(T('Classic tile colour', '经典色块色'), T('The countdown tile colour (Classic style only). Blank = deep maroon.', '倒计时色块颜色(仅经典样式)。留空 = 深酒红。'),
-      sel(b.tile_color || '', [{ value: '', label: T('— default (maroon) —', '— 默认(酒红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { tile_color: v }))));
-    secColours.appendChild(field(T('Progress / label colour', '进度 / 标签色'), T('The "sold" progress bar on each card. Blank = forest green.', '每张卡片的「已售」进度条。留空 = 森绿。'),
-      sel(b.fill_color || '', [{ value: '', label: T('— default (forest) —', '— 默认(森绿)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { fill_color: v }))));
-    secColours.appendChild(field(T('Sale price colour', '促销价颜色'), T('The big sale price on each product card. Blank = brand red.', '每张商品卡上的大号促销价。留空 = 品牌红。'),
-      sel(b.price_color || '', [{ value: '', label: T('— default (berry) —', '— 默认(莓红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { price_color: v }))));
-  } else {
-    secColours.appendChild(field(T('Background colour', '背景颜色'), '',
-      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-    secColours.appendChild(field(T('Text colour', '文字颜色'), '',
-      sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
-    secColours.appendChild(field(T('Sale accent colour', '促销强调色'), T('Colours the sale price and the sold-progress bar on each card. Default = brand red.', '为每张卡片的促销价和已售进度条着色。默认 = 品牌红。'),
-      sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
-  }
-
+  // ── More options — everything else, grouped under three quiet
+  // sub-headings (Content / Layout details / Motion), plus a nested
+  // "Customize colours" drawer for isDesign's 7 per-element colour
+  // overrides so seven side-by-side pickers never greet anyone by default.
+  // Built into arrays first so the badge count matches exactly what's about
+  // to render. ─────────────────────────────────────────────────────────
+  const contentFields = [];
+  contentFields.push(field(T('Small heading', '小标题'), '',
+    txtPair(b.kicker_en, b.kicker_cn, ({ en, cn }) => updateBlockSilent(b.id, { kicker_en: en, kicker_cn: cn }))));
   if (view === 'hero' || view === 'banner' || isDesign) {
-    secContent.appendChild(field(T('Button text', '按钮文字'), isDesign
+    contentFields.push(field(T('Button text', '按钮文字'), isDesign
         ? T('The SHOP NOW button (an arrow is added). Leave both blank to hide it.', '立即抢购按钮(会自动加箭头)。两者留空则隐藏。')
         : T('Shown under the big clock. Leave both blank to hide the button.', '显示在大号时钟下方。两者留空则隐藏按钮。'),
       txtPair(b.cta_label_en, b.cta_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { cta_label_en: en, cta_label_cn: cn }))));
-    secContent.appendChild(field(T('Button link', '按钮链接'), T('Pick where this button takes the customer.', '选择按钮将顾客带到哪里。'),
+    contentFields.push(field(T('Button link', '按钮链接'), T('Pick where this button takes the customer.', '选择按钮将顾客带到哪里。'),
       targetPicker({ value: b.cta_target, onChange: v => updateBlockSilent(b.id, { cta_target: v }), suggest: 'shop' })));
   }
-
-  if (isDesign) {
-    secLayout.appendChild(field(T('Card corners', '卡片圆角'), T('Rounds the band edges. Sharp = edge-to-edge (the design default).', '为条幅边角加圆角。直角 = 通栏到边(设计默认)。'),
-      sel(b.corner_radius || 'sharp', CORNER_RADIUS_OPTIONS, v => updateBlock(b.id, { corner_radius: v }))));
-  }
-
-  // ── Behaviour ───────────────────────────────────────────────────────
-  if (isDesign) {
-    secBehaviour.appendChild(field(T('Urgency', '紧迫感'), T('How much it pulses. Mellow and Building stay still; Frantic gently pulses the countdown (and the LIVE dot). The real countdown always follows the soonest-ending sale.', '脉动强度。舒缓 / 渐强为静态;紧迫会让倒计时(及 LIVE 圆点)轻微脉动。倒计时始终跟随最快结束的秒杀。'),
-      sel(b.urgency || 'building', [
-        { value: 'mellow',   label: T('Mellow — still', '舒缓 — 静态') },
-        { value: 'building', label: T('Building — still', '渐强 — 静态') },
-        { value: 'frantic',  label: T('Frantic — pulsing clock', '紧迫 — 脉动时钟') },
-      ], v => updateBlock(b.id, { urgency: v }))));
-    secBehaviour.appendChild(field(T('Entrance animation', '入场动画'), T('How the block appears when it scrolls into view.', '模块滚动进入视图时的出现方式。'),
-      sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
-  }
-
+  contentFields.push(field(T('Empty-state text', '空状态文案'), T("Shown when no flash sales are active and 'Hide block' is unchecked.", '当无进行中秒杀且未勾选「隐藏本模块」时显示。'),
+    txtPair(b.empty_text_en, b.empty_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { empty_text_en: en, empty_text_cn: cn }))));
   const hideWrap = document.createElement('div');
   hideWrap.className = 'field';
   hideWrap.innerHTML = `
@@ -12591,10 +12706,123 @@ function buildFlashStripForm(m, b) {
   hideWrap.querySelector('input').addEventListener('change', e => {
     updateBlock(b.id, { hide_when_empty: e.target.checked });
   });
-  secBehaviour.appendChild(hideWrap);
+  contentFields.push(hideWrap);
 
-  secContent.appendChild(field(T('Empty-state text', '空状态文案'), T("Shown when no flash sales are active and 'Hide block' is unchecked.", '当无进行中秒杀且未勾选「隐藏本模块」时显示。'),
-    txtPair(b.empty_text_en, b.empty_text_cn, ({ en, cn }) => updateBlockSilent(b.id, { empty_text_en: en, empty_text_cn: cn }))));
+  const layoutFields = [];
+  if (view !== 'banner') {
+    layoutFields.push(field(T('Card layout', '卡片排列'), T('Carousel = one row you swipe sideways. Grid = cards wrap two per row, so a few show at once without swiping.', '轮播 = 单行,左右滑动查看。网格 = 每行两个自动换行,无需滑动即可同时看到多件。'),
+      sel(b.card_layout || 'carousel', [
+        { value: 'carousel', label: T('Carousel — swipe sideways', '轮播 — 左右滑动') },
+        { value: 'grid',     label: T('Grid — 2 per row, no swiping', '网格 — 每行 2 个,无需滑动') },
+      ], v => updateBlock(b.id, { card_layout: v }))));
+  }
+  if (isDesign) {
+    layoutFields.push(field(T('Energy', '风格强度'), T('How big and bold it looks. Refined = smaller and neater. Bold = bigger headlines, thicker borders.', '整体的大小与醒目程度。精致 = 更小更紧凑。醒目 = 更大标题、更粗描边。'),
+      sel(b.energy || 'balanced', [
+        { value: 'refined',  label: T('Refined — smaller, tighter', '精致 — 更小更紧凑') },
+        { value: 'balanced', label: T('Balanced — the design default', '平衡 — 设计默认') },
+        { value: 'bold',     label: T('Bold — bigger, chunkier', '醒目 — 更大更粗') },
+      ], v => updateBlock(b.id, { energy: v }))));
+  }
+  // Card corners is cut here: it wrote the same block.corner_radius value as
+  // the universal "Frame, radius & width" section every block already has
+  // at the bottom of its panel (see buildChromeSection) — an exact
+  // duplicate control, not just a rarely-used one.
+
+  const motionFields = [];
+  if (isDesign) {
+    motionFields.push(field(T('Urgency', '紧迫感'), T('How much it pulses. Mellow and Building stay still; Frantic gently pulses the countdown (and the LIVE dot). The real countdown always follows the soonest-ending sale.', '脉动强度。舒缓 / 渐强为静态;紧迫会让倒计时(及 LIVE 圆点)轻微脉动。倒计时始终跟随最快结束的秒杀。'),
+      sel(b.urgency || 'building', [
+        { value: 'mellow',   label: T('Mellow — still', '舒缓 — 静态') },
+        { value: 'building', label: T('Building — still', '渐强 — 静态') },
+        { value: 'frantic',  label: T('Frantic — pulsing clock', '紧迫 — 脉动时钟') },
+      ], v => updateBlock(b.id, { urgency: v }))));
+    motionFields.push(field(T('Appears with', '入场动画'), T('How the block appears when it scrolls into view.', '模块滚动进入视图时的出现方式。'),
+      sel(b.entrance_anim || 'none', ENTRANCE_ANIM_OPTIONS, v => updateBlock(b.id, { entrance_anim: v }))));
+  }
+
+  // Colours — isDesign's 7 per-element overrides tuck into a nested,
+  // closed-by-default drawer (nobody needs all seven to change the sale
+  // title); the simpler 3-field set for Strip/Hero/Banner shows directly.
+  const designColourFields = [];
+  const simpleColourFields = [];
+  if (isDesign) {
+    designColourFields.push(field(T('Band colour', '条幅底色'), T('The full-width band background. Default = brand red (coral).', '通栏条幅背景。默认 = 品牌红(珊瑚色)。'),
+      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+    designColourFields.push(field(T('Ink / detail colour', '墨色 / 细节色'), T('The headline and small details, like borders, badges and the LIVE tag. Blank = black.', '标题与描边、角标、LIVE 标签等细节的颜色。留空 = 墨黑。'),
+      sel(b.ink_color || '', [{ value: '', label: T('— default (ink) —', '— 默认(墨黑)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { ink_color: v }))));
+    designColourFields.push(field(T('Accent colour', '强调色'), T('Discount badges, buttons, tiles and the LIVE dot. Blank = brand lime.', '折扣角标、按钮、色块与 LIVE 圆点。留空 = 品牌青柠。'),
+      sel(b.accent_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(青柠)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { accent_color: v }))));
+    designColourFields.push(field(T('Cream panel colour', '奶白面板色'), T('The light cream surfaces — the top edge, timer bar and SHOP NOW button. Blank = soft cream.', '奶白面 — 顶边、计时条与立即抢购按钮。留空 = 柔奶白。'),
+      sel(b.panel_color || '', [{ value: '', label: T('— default (cream) —', '— 默认(奶白)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { panel_color: v }))));
+    designColourFields.push(field(T('Classic tile colour', '经典色块色'), T('The countdown tile colour (Classic style only). Blank = deep maroon.', '倒计时色块颜色(仅经典样式)。留空 = 深酒红。'),
+      sel(b.tile_color || '', [{ value: '', label: T('— default (maroon) —', '— 默认(酒红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { tile_color: v }))));
+    designColourFields.push(field(T('Progress / label colour', '进度 / 标签色'), T('The "sold" progress bar on each card. Blank = forest green.', '每张卡片的「已售」进度条。留空 = 森绿。'),
+      sel(b.fill_color || '', [{ value: '', label: T('— default (forest) —', '— 默认(森绿)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { fill_color: v }))));
+    designColourFields.push(field(T('Sale price colour', '促销价颜色'), T('The big sale price on each product card. Blank = brand red.', '每张商品卡上的大号促销价。留空 = 品牌红。'),
+      sel(b.price_color || '', [{ value: '', label: T('— default (berry) —', '— 默认(莓红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { price_color: v }))));
+  } else {
+    simpleColourFields.push(field(T('Background colour', '背景颜色'), '',
+      sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
+    simpleColourFields.push(field(T('Text colour', '文字颜色'), '',
+      sel(b.fg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { fg_color: v }))));
+    simpleColourFields.push(field(T('Sale accent colour', '促销强调色'), T('Colours the sale price and the sold-progress bar on each card. Default = brand red.', '为每张卡片的促销价和已售进度条着色。默认 = 品牌红。'),
+      sel(b.accent_color || '', BTN_COLOR_OPTIONS, v => updateBlock(b.id, { accent_color: v }))));
+  }
+
+  const moreCount = contentFields.length + layoutFields.length + motionFields.length
+    + designColourFields.length + simpleColourFields.length;
+  const more = inspectorSection(m, b.type, 'more', T('More options', '更多选项'), {
+    icon: MORE_OPTIONS_SVG,
+    badge: T(`${moreCount} settings`, `${moreCount} 项设置`),
+    variant: 'more',
+  });
+
+  if (contentFields.length) {
+    const sub = document.createElement('div');
+    sub.className = 'insp-sub-grp';
+    sub.textContent = T('Content', '内容');
+    more.appendChild(sub);
+    contentFields.forEach(f => more.appendChild(f));
+  }
+  if (layoutFields.length) {
+    const sub = document.createElement('div');
+    sub.className = 'insp-sub-grp';
+    sub.textContent = T('Layout details', '版式细节');
+    more.appendChild(sub);
+    layoutFields.forEach(f => more.appendChild(f));
+  }
+  if (motionFields.length) {
+    const sub = document.createElement('div');
+    sub.className = 'insp-sub-grp';
+    sub.textContent = T('Motion', '动效');
+    more.appendChild(sub);
+    motionFields.forEach(f => more.appendChild(f));
+  }
+  if (simpleColourFields.length) {
+    const sub = document.createElement('div');
+    sub.className = 'insp-sub-grp';
+    sub.textContent = T('Colours', '颜色');
+    more.appendChild(sub);
+    simpleColourFields.forEach(f => more.appendChild(f));
+  }
+  if (designColourFields.length) {
+    const sub = document.createElement('div');
+    sub.className = 'insp-sub-grp';
+    sub.textContent = T('Colours', '颜色');
+    more.appendChild(sub);
+    const nested = inspectorSection(more, b.type, 'colours-custom', T('Customize colours', '自定义颜色'), {
+      icon: COLOR_SWATCH_SVG,
+      badge: T(`${designColourFields.length}, all optional`, `共 ${designColourFields.length} 项,均可选`),
+      variant: 'nested',
+    });
+    const hint = document.createElement('p');
+    hint.className = 'helper';
+    hint.style.margin = '0 0 10px';
+    hint.textContent = T('The design already has a colour story (coral band, lime accent, cream panels). Only touch these to override it.', '此样式已自带一套配色(珊瑚条幅、青柠强调色、奶白面板)。仅在需要覆盖默认配色时才使用以下选项。');
+    nested.appendChild(hint);
+    designColourFields.forEach(f => nested.appendChild(f));
+  }
 }
 
 // Turn a real voucher (from Marketing) into the block's display fields.
@@ -14731,8 +14959,12 @@ async function openMediaLibrary(onPick) {
 // ═══════════════════════════════════════════════════════════════════════
 // BLOCK OPS
 // ═══════════════════════════════════════════════════════════════════════
-function deleteBlock(id) {
-  if (!confirm(T('Delete this block?', '确定删除此模块?'))) return;
+async function deleteBlock(id) {
+  if (!(await askConfirm({
+    title: T('Delete this block?', '确定删除此模块?'),
+    confirmLabel: T('Delete block', '删除模块'),
+    danger: true,
+  }))) return;
   state.draft = state.draft.filter(b => b.id !== id);
   if (state.selectedId === id) state.selectedId = null;
   render(); scheduleSave();
