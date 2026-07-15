@@ -841,7 +841,7 @@
           + '<div class="msg" id="recMsg"><span></span></div>'
           + '<div class="rec-actions"><button class="rec-link" data-act="send">'+L('Resend','重新发送')+'</button><button class="rec-link" data-act="cancel">'+L('Cancel','取消')+'</button></div>';
       } else { // empty
-        h = '<button class="btn-sec" data-act="add">'+L('Add a recovery email','添加恢复邮箱')+'</button>';
+        h = '<button class="btn-sec" data-act="add">'+L('Add email','添加邮箱')+'</button>';
       }
       box.innerHTML = h;
       Array.prototype.forEach.call(box.querySelectorAll('[data-act]'), function(el){ el.addEventListener('click', function(){ recAct(el.dataset.act); }); });
