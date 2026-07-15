@@ -934,13 +934,15 @@ function _paHasBlocks(p) {
   return !!p.has_blocks;
 }
 
-// Status pills (Designed/Plain + Draft) — used by the List view rows.
+// Status marks (Designed/Plain + Draft) — used by the List view rows. The
+// Designed/Plain state is a single sparkle glyph rather than a text pill: lit
+// sage when the product has designer sections, faint when it doesn't. Saves
+// the ~70px a "DESIGNED" pill cost on every row; the title carries the words.
 function _paPills(p) {
   const designed = _paHasBlocks(p);
   const pub = p.is_published === 1;
-  return `${designed
-      ? `<span class="pa-pill pa-pill-designed" title="Designer sections authored · 已配置设计板块">${PA_ICON_SPARKLE}Designed</span>`
-      : `<span class="pa-pill pa-pill-plain" title="No designer sections yet · 尚未配置设计板块">Plain</span>`}
+  return `<span class="pa-status-icon${designed ? ' is-designed' : ' is-plain'}"
+      title="${designed ? 'Designer sections authored · 已配置设计板块' : 'No designer sections yet · 尚未配置设计板块'}">${PA_ICON_SPARKLE}</span>
     ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}`;
 }
 

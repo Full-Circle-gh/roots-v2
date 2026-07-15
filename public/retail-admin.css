@@ -3397,6 +3397,15 @@
   .pa-pill-variants { background: rgba(17,26,43,.72); color: #FBF9F4; }
   .pa-pill-oos      { background: var(--td-brick); color: #fff; }
 
+  /* List-row "designed?" mark — a bare sparkle glyph, no pill ground: lit sage
+     when the product has designer sections, faint when it doesn't. Replaces
+     the wider DESIGNED/PLAIN text pill on the compact single-line row only
+     (the grid card keeps the opaque pill — it sits on top of photography). */
+  .pa-status-icon { display: inline-flex; flex-shrink: 0; }
+  .pa-status-icon svg { display: block; width: 15px; height: 15px; }
+  .pa-status-icon.is-designed { color: var(--td-sage-ink); }
+  .pa-status-icon.is-plain    { color: var(--td-border); }
+
   /* Empty state */
   .pa-empty {
     text-align: center; padding: var(--s7) var(--s4);
