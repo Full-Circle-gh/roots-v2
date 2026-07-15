@@ -5114,7 +5114,10 @@
       width: auto; min-width: 0; max-width: none;
       height: calc(100vh - 56px);
       transform: none; visibility: visible;
-      box-shadow: none; border: 0; background: transparent;
+      box-shadow: none; border: 0;
+      /* White content panel — matches the mockup's .c-main (var(--surface)),
+         distinct from the cream page/rail behind it. */
+      background: var(--bg-pane);
       display: flex; flex-direction: column; overflow: hidden;
     }
     body.ord-viewing #order-drawer .drawer-close { display: none; }
