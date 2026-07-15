@@ -1657,7 +1657,6 @@
     font-size: 13px; font-weight: 600; color: var(--text-1);
     text-transform: capitalize;
   }
-  .inspector-head .id { font-family: var(--f-mono); font-size: 11px; color: var(--text-4); }
 
   /* Per-block behaviour note — explains conditional/dynamic blocks (e.g.
      "hides when the customer has no active order") that used to print inline
@@ -1675,18 +1674,41 @@
   .inspector-body { padding: var(--s4) var(--s5) var(--s7); }
   .field { margin-bottom: var(--s4); }
   .field label {
-    display: block;
+    display: flex; align-items: center;
     font-size: 11px; font-weight: 600;
     letter-spacing: .04em; text-transform: uppercase;
     color: var(--text-3);
     margin-bottom: 6px;
   }
-  .field .helper {
-    /* --text-3, not --text-4: helper text is meant to be read. On the light
-       theme --text-4 (#9a978c on #fff ≈ 2.6:1) fails WCAG AA; --text-3
-       (#6a675c ≈ 4.8:1) passes while staying quieter than the field value. */
-    font-size: 11px; color: var(--text-3); margin-top: 6px; line-height: 1.5;
+  /* Field explanation text used to sit as always-on copy below the input.
+     That read as clutter on dense panels, so it now lives behind an info
+     dot next to the label — same on-demand pattern as retail-admin's
+     .mc-info. Keyboard-reachable via tabindex; shows on :focus-visible too. */
+  .mc-info {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 14px; height: 14px; margin-left: 6px; flex: none;
+    color: var(--text-4); cursor: help; position: relative;
   }
+  .mc-info svg { width: 13px; height: 13px; }
+  .mc-info:hover, .mc-info:focus-visible { color: var(--text-1); outline: none; }
+  .mc-info::after {
+    content: attr(data-tip); position: absolute; bottom: calc(100% + 9px); left: 0;
+    transform: translateY(4px);
+    background: var(--text-1); color: var(--bg-pane);
+    font: 400 12px var(--f-sans); line-height: 1.5; text-align: left; text-transform: none; letter-spacing: 0;
+    padding: 8px 11px; border-radius: 8px; width: max-content; max-width: 240px; white-space: normal;
+    box-shadow: 0 4px 12px rgba(0,0,0,.12), 0 12px 32px rgba(0,0,0,.22);
+    opacity: 0; pointer-events: none; z-index: 60;
+    transition: opacity .18s cubic-bezier(.16,1,.3,1), transform .18s cubic-bezier(.16,1,.3,1);
+  }
+  .mc-info::before {
+    content: ""; position: absolute; bottom: calc(100% + 4px); left: 5px;
+    border: 5px solid transparent; border-top-color: var(--text-1);
+    opacity: 0; pointer-events: none; z-index: 60; transition: opacity .18s;
+  }
+  .mc-info:hover::after, .mc-info:focus-visible::after { opacity: 1; transform: translateY(0); }
+  .mc-info:hover::before, .mc-info:focus-visible::before { opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .mc-info::after { transition: opacity .18s; } }
 
   input[type=text], input[type=number], input[type=url], select, textarea {
     width: 100%;
@@ -4851,18 +4873,23 @@
     border: 0; background: none;
   }
 
-  /* ── floating inspector ── */
+  /* ── inspector, pinned to the right edge ──
+     Fixed at the same spot regardless of which block is selected — only
+     its content swaps (renderInspector). It used to float beside the
+     selected block's rect (see cfPositionInspector, now just a show/hide
+     toggle); operators found the panel jumping around distracting. */
   html[data-layout="canvas"] .pane.right.cf-float {
     display: block;
     position: fixed; z-index: 40;
-    width: 320px; max-height: calc(100vh - 150px);
+    top: 72px; right: 24px; bottom: 24px;
+    width: 320px;
     background: var(--bg-pane); border: 1px solid var(--line);
     border-radius: var(--r-lg); box-shadow: var(--sh-3);
     overflow: hidden auto;
     animation: cf-settle var(--t-med) var(--ease-out) both;
   }
   html[data-layout="canvas"] .pane.right.cf-float[hidden] { display: none; }
-  @keyframes cf-settle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes cf-settle { from { opacity: 0; } to { opacity: 1; } }
   /* When floating and nothing is selected, the empty-state is pointless —
      the panel just hides (see cf JS), so no rule needed for .empty here. */
 
@@ -5804,25 +5831,16 @@ function initCanvasLayout() {
     cfCloseDrawer();
   });
 
-  // ── inspector positioner (called from positionFloatingToolbar) ──
+  // ── inspector show/hide (called from positionFloatingToolbar) ──
+  // Position is fixed in CSS (.pane.right.cf-float) so the panel stays put
+  // on the right edge no matter which block is selected — this just decides
+  // whether it's showing; renderInspector() swaps its content.
   window.cfPositionInspector = function () {
     const panel = document.querySelector('.pane.right.cf-float');
     if (!panel) return;
     const id = state.selectedId;
     const wrap = id && document.querySelector(`#phone-content .block-wrap[data-id="${id}"]`);
-    if (!id || !wrap) { panel.hidden = true; return; }
-    panel.hidden = false;
-    const cv = canvas.getBoundingClientRect();
-    const r  = wrap.getBoundingClientRect();
-    const w  = panel.offsetWidth  || 320;
-    const h  = panel.offsetHeight || 420;
-    let left = r.right + 20;
-    if (left + w > cv.right - 12) left = cv.right - w - 12;   // tuck beside the phone
-    if (left < cv.left + 12) left = cv.left + 12;
-    let top = Math.max(cv.top + 12, r.top);
-    if (top + h > cv.bottom - 12) top = Math.max(cv.top + 12, cv.bottom - h - 12);
-    panel.style.left = left + 'px';
-    panel.style.top  = top + 'px';
+    panel.hidden = !(id && wrap);
   };
 
   // ── dismiss the drawer on outside click / Esc ──
@@ -11000,7 +11018,6 @@ function renderInspector() {
         <div class="icon">${ICONS[b.type] || ''}</div>
         <div class="type">${(T(BLOCK_META[b.type]?.name, BLOCK_META[b.type]?.name_cn) || b.type).replace('_', ' ')}</div>
       </div>
-      <div class="id">id: ${b.id}</div>
     </div>
     ${BLOCK_META[b.type]?.editorNote ? `<div class="insp-note">${T(BLOCK_META[b.type].editorNote, BLOCK_META[b.type].editorNote_cn)}</div>` : ''}
     <div class="inspector-body" id="inspector-body"></div>`;
@@ -11151,12 +11168,25 @@ function buildChromeSection(body, b) {
   sec.appendChild(row);
 }
 
+const FIELD_INFO_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg>';
+
 function field(label, helper, inner) {
   const wrap = document.createElement('div');
   wrap.className = 'field';
-  const lbl = document.createElement('label'); lbl.textContent = label; wrap.appendChild(lbl);
+  const lbl = document.createElement('label');
+  lbl.appendChild(document.createTextNode(label));
+  if (helper) {
+    const info = document.createElement('span');
+    info.className = 'mc-info';
+    info.tabIndex = 0;
+    info.setAttribute('role', 'note');
+    info.setAttribute('aria-label', helper);
+    info.setAttribute('data-tip', helper);
+    info.innerHTML = FIELD_INFO_SVG;
+    lbl.appendChild(info);
+  }
+  wrap.appendChild(lbl);
   wrap.appendChild(inner);
-  if (helper) { const h = document.createElement('div'); h.className = 'helper'; h.textContent = helper; wrap.appendChild(h); }
   return wrap;
 }
 
@@ -11875,7 +11905,7 @@ function buildCatTabsForm(m, b) {
     txtPair(t.en, t.cn, ({ en, cn }) => updateBlockSilent(b.id, { title_en: en, title_cn: cn, title: undefined }))));
 
   const wrap = field(T('Categories to show', '要显示的分类'), T('Click to turn on/off. These are your shop categories — edit the list in the Mini App Backend → Categories.', '点击开启/关闭。这些是你的商店分类 — 在「小程序后台 → 分类」中编辑列表。'), document.createElement('div'));
-  const chips = wrap.querySelector('.helper').previousElementSibling;
+  const chips = wrap.lastElementChild;
   chips.className = 'chips';
   const cats = state.categories || [];
   cats.forEach(c => {
