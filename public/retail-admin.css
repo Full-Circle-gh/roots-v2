@@ -5103,21 +5103,26 @@
      stay put. Phones (<721px) are untouched and keep the full-screen drawer. */
   .ord-page-bar { display: none; }
   @media (min-width: 721px) {
+    /* Hide the list; give the content area over to the order. main is pinned to
+       the viewport (below the 56px topbar) and clips, so the order owns a fixed
+       content height and scrolls INSIDE its body — reliable, unlike relying on
+       window scroll of a static block. Rail + topbar (both fixed) stay put. */
     body.ord-viewing main > section { display: none; }
+    body.ord-viewing main { padding: 56px 0 0; overflow: hidden; }
     body.ord-viewing #order-drawer {
       position: static;
-      width: auto; min-width: 0; max-width: none; height: auto;
+      width: auto; min-width: 0; max-width: none;
+      height: calc(100vh - 56px);
       transform: none; visibility: visible;
       box-shadow: none; border: 0; background: transparent;
-      overflow: visible;
+      display: flex; flex-direction: column; overflow: hidden;
     }
-    /* Scroll the page with the window, not an inner panel. */
-    body.ord-viewing #order-drawer .drawer-body { overflow: visible; padding: 0; }
     body.ord-viewing #order-drawer .drawer-close { display: none; }
-    /* Back + breadcrumb bar, aligned to the content column. */
+    /* Back + breadcrumb bar — pinned at the top, aligned to the 900px column. */
     body.ord-viewing #order-drawer .ord-page-bar {
-      display: flex; align-items: center; gap: 9px;
-      max-width: 900px; margin: 0 auto var(--s4);
+      display: flex; align-items: center; gap: 9px; flex-shrink: 0;
+      width: 100%; max-width: 948px; margin: 0 auto;
+      padding: var(--s4) var(--s6) var(--s3);
     }
     .ord-page-bar .opb-back {
       display: inline-flex; align-items: center; gap: 8px;
@@ -5129,9 +5134,18 @@
     .ord-page-bar .opb-back svg { width: 16px; height: 16px; }
     .ord-page-bar .opb-sep { color: var(--text-3); }
     .ord-page-bar .opb-cur { font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
-    /* Readable single column, centered in the content area. */
+    /* The order body scrolls; content sits in a readable 900px column. */
+    body.ord-viewing #order-drawer .drawer-body {
+      flex: 1; min-height: 0; overflow-y: auto;
+      padding: 0 var(--s6) var(--s6);
+    }
     body.ord-viewing #order-drawer .order-card { max-width: 900px; margin: 0 auto; }
-    body.ord-viewing #order-drawer .drawer-foot { max-width: 900px; margin: var(--s4) auto 0; padding-left: 0; padding-right: 0; }
+    /* Print footer pinned at the bottom of the page. */
+    body.ord-viewing #order-drawer .drawer-foot {
+      flex-shrink: 0; width: 100%; max-width: 948px; margin: 0 auto;
+      padding: var(--s3) var(--s6);
+      border-top: 1px solid var(--line-soft);
+    }
   }
 
   /* The Orders drawer hosts the existing .order-card chrome unchanged
