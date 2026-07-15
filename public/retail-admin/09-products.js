@@ -1346,7 +1346,7 @@ function paRenderKpis(animate) {
     const meta = {
       oos:     { c: 'var(--danger)', en: 'sold-out products',   cn: '缺货产品',     n: oos },
       low:     { c: 'var(--warn)',   en: 'low-stock products',  cn: '库存偏低产品', n: low },
-      drafts:  { c: 'var(--text-3)', en: 'drafts',              cn: '草稿',        n: drafts },
+      drafts:  { c: 'var(--text-3)', en: 'disabled products',   cn: '已下架产品',   n: drafts },
       restock: { c: 'var(--warn)',   en: 'products to restock', cn: '需补货产品',   n: oos + low },
       live:    { c: 'var(--accent)', en: 'live products',       cn: '已上架产品',   n: live },
       // Highlights-band filters (counts come from the fetched payload).
@@ -2294,7 +2294,7 @@ async function pdOpen(id) {
     if (th) { const img = p && (p.image_data || p.image_url); th.style.backgroundImage = img ? 'url("' + img + '")' : ''; }
     const sub = document.getElementById('pd-head-sub');
     if (sub) sub.textContent = p
-      ? ((p.sku ? 'SKU ' + p.sku : cuT('No SKU', '无货号')) + ' · ' + (p.is_published === 1 ? cuT('In the shop', '已上架') : cuT('Draft', '草稿')))
+      ? ((p.sku ? 'SKU ' + p.sku : cuT('No SKU', '无货号')) + ' · ' + (p.is_published === 1 ? cuT('In the shop', '已上架') : cuT('Disabled', '已下架')))
       : cuT('Not saved yet', '尚未保存');
     const bp = document.getElementById('pd-head-bundlepill');
     if (bp) bp.style.display = (p && (p.is_bundle || p.bundle_mode === 'prepacked')) ? '' : 'none'; }

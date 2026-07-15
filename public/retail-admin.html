@@ -953,7 +953,7 @@
       </div>
       <button class="acct-item" id="acctProfileBtn" type="button" role="menuitem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
-        <span>Profile · 个人资料</span>
+        <span>My Info · 我的信息</span>
       </button>
       <!-- Manage team moved to the left rail, under Settings (2026-07-14) —
            see .tabs a[href="/backend/team"]. -->
@@ -975,14 +975,14 @@
     </div>
   </div>
 
-  <!-- Profile pop-up — "Profile" opens /backend/account in this centred modal
+  <!-- Account pop-up — "My Info" opens /backend/account in this centred modal
        instead of navigating away. Iframe src is set on first open (lazy). -->
   <div class="prof-scrim" id="profScrim"></div>
-  <div class="prof-modal" id="profModal" role="dialog" aria-modal="true" aria-label="Profile" aria-hidden="true">
+  <div class="prof-modal" id="profModal" role="dialog" aria-modal="true" aria-label="Account" aria-hidden="true">
     <button class="prof-x" id="profClose" aria-label="Close">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
     </button>
-    <iframe class="prof-frame" id="profFrame" title="Profile"></iframe>
+    <iframe class="prof-frame" id="profFrame" title="Account"></iframe>
   </div>
   <!-- Light/dark and language toggles used to live here as loose topbar
        buttons. Moved into the account dropdown (the avatar circle)
@@ -3131,8 +3131,8 @@
         <button type="button" class="pa-jump" id="pa-kpi-low-tile" onclick="paSetStatus('low')" title="Show low-stock products · 仅显示库存偏低产品">
           <span class="pa-jump-dot is-low"></span><span class="pa-jump-n" id="pa-kpi-low">—</span><span class="pa-jump-l">Low stock · 库存偏低</span>
         </button>
-        <button type="button" class="pa-jump" id="pa-kpi-drafts-tile" onclick="paSetStatus('drafts')" title="Show drafts · 仅显示未上架产品">
-          <span class="pa-jump-dot is-draft"></span><span class="pa-jump-n" id="pa-kpi-drafts">—</span><span class="pa-jump-l">Drafts · 未上架</span>
+        <button type="button" class="pa-jump" id="pa-kpi-drafts-tile" onclick="paSetStatus('drafts')" title="Show disabled products · 仅显示已下架产品">
+          <span class="pa-jump-dot is-draft"></span><span class="pa-jump-n" id="pa-kpi-drafts">—</span><span class="pa-jump-l">Disabled · 已下架</span>
         </button>
         <button type="button" class="pa-jump" id="pa-kpi-dead-tile" onclick="paSetStatus('dead')" title="No sale in 30 days · 30 天无销量" hidden>
           <span class="pa-jump-dot is-dead"></span><span class="pa-jump-n" id="pa-kpi-dead">—</span><span class="pa-jump-l">Going nowhere · 无人问津</span>
