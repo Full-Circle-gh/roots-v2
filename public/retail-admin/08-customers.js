@@ -529,9 +529,10 @@ function cuMoreOutside(e) {
 // Small copy-to-clipboard for the header phone + openid rows.
 function cuCopyText(text) {
   const done = () => (typeof toast === 'function' ? toast(cuT('Copied', '已复制')) : null);
+  const fail = () => (typeof toast === 'function' ? toast(cuT('Copy failed', '复制失败'), 'err') : null);
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(done, () => prompt('Copy:', text));
-  } else { prompt('Copy:', text); }
+    navigator.clipboard.writeText(text).then(done, fail);
+  } else { fail(); }
 }
 
 // Diagnostics block — "what's happening on this customer's phone". Built from
@@ -634,9 +635,10 @@ function cuCopyDiagnostics() {
   ];
   const text = lines.join('\n');
   const done = () => (typeof toast === 'function' ? toast(cuT('Diagnostics copied', '诊断已复制')) : null);
+  const fail = () => (typeof toast === 'function' ? toast(cuT('Copy failed', '复制失败'), 'err') : null);
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(done, () => prompt('Copy:', text));
-  } else { prompt('Copy:', text); }
+    navigator.clipboard.writeText(text).then(done, fail);
+  } else { fail(); }
 }
 
 function cuRenderDetail() {
@@ -1040,7 +1042,10 @@ function renderAffiliateBlock(aff) {
 }
 
 async function afReissueCode(customerId) {
-  if (!confirm('Reissue this customer\'s referral code? Existing referrals keep their history; future shares will use the new code. · 重新生成此顾客的邀请码?已有推荐记录保留;以后分享使用新邀请码。')) return;
+  if (!(await askConfirm({
+    title: 'Reissue this customer\'s referral code? Existing referrals keep their history; future shares will use the new code. · 重新生成此顾客的邀请码?已有推荐记录保留;以后分享使用新邀请码。',
+    confirmLabel: cuT('Reissue code', '重发邀请码'),
+  }))) return;
   try {
     const r = await api('/api/retail-admin/customers/' + customerId + '/referral-code', { method: 'POST' });
     toast('New code · 新邀请码: ' + (r.data?.code || '?'));
@@ -1223,7 +1228,11 @@ async function cuToggleBlock() {
   const c = CU_CURRENT.customer;
   const blocking = !c.is_blocked;
   if (blocking) {
-    const reason = prompt('Block this customer? Optional reason for the audit log. · 封禁此顾客?可填写原因(写入审计日志)');
+    const reason = await askReason({
+      title: 'Block this customer? Optional reason for the audit log. · 封禁此顾客?可填写原因(写入审计日志)',
+      submitLabel: cuT('Block customer', '封禁顾客'),
+      danger: true,
+    });
     if (reason === null) return;
     try {
       await cuWriteRequest({
@@ -1233,7 +1242,10 @@ async function cuToggleBlock() {
       toast('Blocked · 已封禁');
     } catch { return; }
   } else {
-    if (!confirm('Unblock this customer? · 解除此顾客的封禁?')) return;
+    if (!(await askConfirm({
+      title: 'Unblock this customer? · 解除此顾客的封禁?',
+      confirmLabel: cuT('Unblock', '解封'),
+    }))) return;
     try {
       await cuWriteRequest({
         url: '/api/retail-admin/customers/' + c.id + '/unblock', method: 'POST',
@@ -1249,7 +1261,10 @@ async function cuToggleBlock() {
 
 async function cuForceLogout() {
   if (!CU_CURRENT?.customer) return;
-  if (!confirm('Sign this customer out on all devices? Active sessions are revoked immediately — useful if a token may be compromised. She can sign back in normally; to lock her out, use Block instead. · 退出该顾客的所有设备?将立即撤销所有活跃会话——令牌可能泄露时适用。她可正常重新登录;如需锁定,请改用封禁。')) return;
+  if (!(await askConfirm({
+    title: 'Sign this customer out on all devices? Active sessions are revoked immediately — useful if a token may be compromised. She can sign back in normally; to lock her out, use Block instead. · 退出该顾客的所有设备?将立即撤销所有活跃会话——令牌可能泄露时适用。她可正常重新登录;如需锁定,请改用封禁。',
+    confirmLabel: cuT('Sign out all devices', '退出所有设备'),
+  }))) return;
   try {
     const j = await cuWriteRequest({
       url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id + '/force-logout', method: 'POST',
@@ -1433,7 +1448,11 @@ async function cuSaveAddr() {
 
 async function cuDeleteAddr(addrId) {
   if (!CU_CURRENT?.customer) return;
-  if (!confirm('Delete this address? · 删除此地址?')) return;
+  if (!(await askConfirm({
+    title: 'Delete this address? · 删除此地址?',
+    confirmLabel: cuT('Delete address', '删除地址'),
+    danger: true,
+  }))) return;
   const cid = CU_CURRENT.customer.id;
   try {
     await cuWriteRequest({

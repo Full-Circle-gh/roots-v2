@@ -686,11 +686,12 @@
       }
     }
     if (!targets.length) { toast('Nothing to clear — no 天河 外卖 names are set.'); return; }
-    if (!confirm(
-      `Clear ALL ${targets.length} 天河 外卖 Meituan name mapping(s)?\n\n`
-      + `越秀 闪购 (auto by 货号) is left untouched. `
-      + `This deletes the 天河 mappings (you can re-fill afterwards). Continue?`
-    )) return;
+    if (!(await askConfirm({
+      title: `Clear ALL ${targets.length} 天河 外卖 Meituan name mapping(s)?`,
+      body: '越秀 闪购 (auto by 货号) is left untouched. This deletes the 天河 mappings (you can re-fill afterwards).',
+      confirmLabel: 'Clear mappings',
+      danger: true,
+    }))) return;
 
     let done = 0, failed = 0;
     for (const t of targets) {
@@ -1059,7 +1060,7 @@
   };
 
   window.mtDeleteBundle = async function (id) {
-    if (!confirm('Delete this bundle? This only stops auto-stock — it does not touch the Meituan listing.')) return;
+    if (!(await askConfirm({ title: 'Delete this bundle?', body: 'This only stops auto-stock — it does not touch the Meituan listing.', confirmLabel: 'Delete bundle', danger: true }))) return;
     try {
       await api(`/api/retail-admin/meituan/bundles/${id}`, { method: 'DELETE' });
       toast('Deleted.');

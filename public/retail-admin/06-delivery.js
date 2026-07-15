@@ -858,7 +858,7 @@ async function deleteZoneFromDrawer() {
   if (!_zoneEditId) return;
   const z = _zones.find(x => x.id === _zoneEditId);
   if (!z) return;
-  if (!confirm(`Delete delivery zone "${zoneLabel(z)}"? · 删除配送区 "${zoneLabel(z)}"？`)) return;
+  if (!(await askConfirm({ title: `Delete delivery zone "${zoneLabel(z)}"? · 删除配送区 "${zoneLabel(z)}"？`, confirmLabel: 'Delete zone · 删除', danger: true }))) return;
   try {
     await api(`/api/retail-admin/delivery-zones/${_zoneEditId}`, { method: 'DELETE' });
     toast('Zone deleted · 配送区已删除');
@@ -1042,7 +1042,11 @@ async function applyToSelected() {
   if (_applyTargets.size === 0)  return toast('Pick at least one zone · 请选择配送区', 'err');
   if (_applyBundles.size === 0)  return toast('Pick at least one field bundle · 请选择字段', 'err');
   const targets = _zones.filter(z => _applyTargets.has(z.id));
-  if (!confirm(`Apply current settings to ${targets.length} zone(s)?\n${targets.map(z => '  • '+zoneLabel(z)).join('\n')}`)) return;
+  if (!(await askConfirm({
+    title: `Apply current settings to ${targets.length} zone(s)?`,
+    body: targets.map(z => '• '+zoneLabel(z)).join('<br>'),
+    confirmLabel: 'Apply settings · 应用',
+  }))) return;
 
   const go = $('#dz-apply-go');
   if (go) go.disabled = true;
@@ -1078,7 +1082,7 @@ async function updateZone(id, field, val) {
 }
 
 async function deleteZone(id, label) {
-  if (!confirm(`Delete delivery zone "${label}"? · 删除配送区 "${label}"？`)) return;
+  if (!(await askConfirm({ title: `Delete delivery zone "${label}"? · 删除配送区 "${label}"？`, confirmLabel: 'Delete zone · 删除', danger: true }))) return;
   try {
     await api(`/api/retail-admin/delivery-zones/${id}`, { method: 'DELETE' });
     toast('Zone deleted · 配送区已删除');

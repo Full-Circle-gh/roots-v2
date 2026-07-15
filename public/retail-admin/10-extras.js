@@ -263,7 +263,7 @@ function afStatusPill(status) {
 }
 
 async function afEditReward(id, current) {
-  const raw = prompt('New reward amount (¥):', String(current));
+  const raw = await askPrompt({ title: 'New reward amount (¥):', value: String(current), submitLabel: 'Update reward' });
   if (raw == null) return;
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) { toast('Invalid amount · 金额无效', 'err'); return; }
@@ -275,7 +275,7 @@ async function afEditReward(id, current) {
 }
 
 async function afVoid(id) {
-  const reason = prompt('Reason for voiding this referral?', 'admin override');
+  const reason = await askPrompt({ title: 'Reason for voiding this referral?', value: 'admin override', submitLabel: 'Void referral', danger: true });
   if (reason == null) return;
   try {
     await api('/api/retail-admin/affiliate/referrals/' + id, { method: 'PATCH', body: { status: 'void', voided_reason: reason } });
@@ -1676,8 +1676,8 @@ function cancelPollEdit() {
 }
 
 async function quickPollStatus(id, status) {
-  if (status === 'open' && !confirm('Publish this poll? Customers will see it immediately and start earning points for voting. · 发布此投票?顾客会立即看到并通过投票获得积分。')) return;
-  if (status === 'closed' && !confirm('Close this poll? Voting will be locked. · 关闭此投票?投票将被锁定。')) return;
+  if (status === 'open' && !(await askConfirm({ title: 'Publish this poll? Customers will see it immediately and start earning points for voting. · 发布此投票?顾客会立即看到并通过投票获得积分。', confirmLabel: 'Publish poll' }))) return;
+  if (status === 'closed' && !(await askConfirm({ title: 'Close this poll? Voting will be locked. · 关闭此投票?投票将被锁定。', confirmLabel: 'Close poll' }))) return;
   try {
     await api('/api/retail-admin/polls/' + id, { method: 'PUT', body: { status } });
     toast('Poll → · 投票状态 → ' + status);
@@ -1686,7 +1686,7 @@ async function quickPollStatus(id, status) {
 }
 
 async function deletePoll(id) {
-  if (!confirm('Delete this poll? All vote records are removed too. · 删除此投票?所有投票记录也将一并删除。')) return;
+  if (!(await askConfirm({ title: 'Delete this poll? All vote records are removed too. · 删除此投票?所有投票记录也将一并删除。', confirmLabel: 'Delete poll', danger: true }))) return;
   try {
     await api('/api/retail-admin/polls/' + id, { method: 'DELETE' });
     if (_pollDraft && _pollDraft.id === id) {
@@ -2132,10 +2132,11 @@ function qsStockLink() { return location.origin + '/stock'; }
 function qsCopyStockLink() {
   const link = qsStockLink();
   const done = () => toast(cuT('Link copied · 链接已复制', '链接已复制'));
+  const fail = () => toast('Copy failed · 复制失败', 'err');
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(link).then(done, () => prompt('Copy this link · 复制此链接', link));
+    navigator.clipboard.writeText(link).then(done, fail);
   } else {
-    prompt('Copy this link · 复制此链接', link);
+    fail();
   }
 }
 // Populate the shown link once the DOM is ready (the code elements are static).

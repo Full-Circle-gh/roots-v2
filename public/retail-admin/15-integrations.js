@@ -197,9 +197,11 @@
   window.igHelp = async function (kind) {
     const c = kind ? _cards.find(x => x.kind === kind) : null;
     const label = c ? cuT(c.labelEn, c.labelCn) : cuT('setup', '设置');
-    const note = window.prompt(cuT(
-      `Tell us what you're stuck on with ${label} (optional):`,
-      `请告诉我们您在${label}遇到的问题(可选):`), '');
+    const note = await askReason({
+      title: cuT(`Tell us what you're stuck on with ${label} (optional):`, `请告诉我们您在${label}遇到的问题(可选):`),
+      value: '',
+      submitLabel: cuT('Send request', '发送求助'),
+    });
     if (note === null) return; // cancelled
     try {
       await api('/api/retail-admin/channel-hub/help', {
@@ -1410,7 +1412,12 @@
   };
 
   window.igWebRemoveDomain = async function (domainId, host) {
-    if (!window.confirm(cuT('Remove ' + host + '? Customers using it will no longer reach your store.', '移除 ' + host + '?使用该域名的顾客将无法访问您的商店。'))) return;
+    if (!(await askConfirm({
+      title: cuT('Remove ' + host + '?', '移除 ' + host + '?'),
+      body: cuT('Customers using it will no longer reach your store.', '使用该域名的顾客将无法访问您的商店。'),
+      confirmLabel: cuT('Remove domain', '移除域名'),
+      danger: true,
+    }))) return;
     try { await api(`/api/retail-admin/channel-hub/web/domain/${domainId}`, { method: 'DELETE' }); igWebConfig(); }
     catch (e) { if (window.toast) toast(cuT('Could not remove', '无法移除')); }
   };

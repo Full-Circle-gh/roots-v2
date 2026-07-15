@@ -999,7 +999,11 @@
   };
   window.puSetStatus = async function (status) {
     if (!_po) return;
-    if (status === 'Cancelled' && !confirm(T('Cancel this order?', '确定取消该采购单？'))) return;
+    if (status === 'Cancelled' && !(await askConfirm({
+      title: T('Cancel this order?', '确定取消该采购单？'),
+      confirmLabel: T('Cancel order', '取消采购单'),
+      danger: true,
+    }))) return;
     try {
       await api('/api/retail-admin/purchases/' + _po.id + '/status', { method: 'PUT', body: { status } });
       toast(T('Saved ✓', '已保存 ✓'), 'ok');
@@ -1287,7 +1291,11 @@
     } catch (e) { toast(e.message, 'err'); }
   };
   window.puBillDelete = async function (id) {
-    if (!confirm(T('Delete this bill?', '确定删除该账单?'))) return;
+    if (!(await askConfirm({
+      title: T('Delete this bill?', '确定删除该账单?'),
+      confirmLabel: T('Delete bill', '删除账单'),
+      danger: true,
+    }))) return;
     try {
       await api('/api/retail-admin/bills/' + id, { method: 'DELETE' });
       toast(T('Deleted', '已删除'), 'ok');
@@ -1728,7 +1736,11 @@
     } catch (e) { toast(e.message, 'err'); }
   };
   window.puDeleteDoc = async function (docId) {
-    if (!confirm(T('Delete this document?', '确定删除该文件？'))) return;
+    if (!(await askConfirm({
+      title: T('Delete this document?', '确定删除该文件？'),
+      confirmLabel: T('Delete document', '删除文件'),
+      danger: true,
+    }))) return;
     try {
       await api('/api/retail-admin/suppliers/' + _sup.id + '/documents/' + docId, { method: 'DELETE' });
       toast(T('Deleted ✓', '已删除 ✓'), 'ok');

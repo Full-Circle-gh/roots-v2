@@ -377,7 +377,7 @@ async function _opsStoreStaffAdd(storeId) {
 }
 
 async function _opsStoreStaffRemove(storeId, userId) {
-  if (!confirm('Remove this stock staff member? They will lose access immediately. · 移除该库存员?其访问权限将立即失效。')) return;
+  if (!(await askConfirm({ title: 'Remove this stock staff member? They will lose access immediately. · 移除该库存员?其访问权限将立即失效。', confirmLabel: 'Remove', danger: true }))) return;
   try {
     await api(`/api/backend/stores/${storeId}/staff/${userId}`, { method: 'DELETE' });
     toast('Removed · 已移除', 'success');
@@ -388,7 +388,7 @@ async function _opsStoreStaffRemove(storeId, userId) {
 }
 
 async function _opsStoreStaffResetPw(storeId, userId) {
-  const np = (prompt('New password (at least 10 characters) · 新密码(至少 10 位)') || '').trim();
+  const np = ((await askPrompt({ title: 'New password (at least 10 characters) · 新密码(至少 10 位)', submitLabel: 'Reset password · 重置密码' })) || '').trim();
   if (!np) return;
   if (np.length < 10) return toast('Password must be at least 10 characters · 密码至少需要 10 位', 'error');
   try {
@@ -780,7 +780,7 @@ async function _testJd() {
 }
 
 async function _geocodeBackfill() {
-  if (!confirm('Geocode all stores + customer addresses now? Uses your maps quota. · 现在为所有门店与客户地址重新定位?将消耗地图配额。')) return;
+  if (!(await askConfirm({ title: 'Geocode all stores + customer addresses now? Uses your maps quota. · 现在为所有门店与客户地址重新定位?将消耗地图配额。', confirmLabel: 'Geocode now' }))) return;
   try {
     toast('Geocoding… · 定位中…', 'info');
     const r = await fetch('/api/retail-admin/inventory/geocode-backfill', { method: 'POST' });

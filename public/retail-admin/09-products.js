@@ -967,7 +967,7 @@ async function paToggleShop(ids, on) {
     }
   } catch (e) {
     set(on ? 0 : 1); paRender(); paRenderKpis(false);
-    alert(cuT('Could not update availability — ', '无法更新上架状态 — ') + (e.message || e));
+    toast(cuT('Could not update availability — ', '无法更新上架状态 — ') + (e.message || e), 'err');
   }
 }
 
@@ -1543,7 +1543,10 @@ async function paBulkApply(patch, kind) {
     'badge-hot':  cuT('Set badge to HOT', '设置标签为 HOT · 推荐'),
   };
   const what = labels[kind] || cuT('Update', '更新');
-  if (!confirm(cuT(what + ' — ' + ids.length + ' product(s)?', what + ' — ' + ids.length + ' 件商品?'))) return;
+  if (!(await askConfirm({
+    title: cuT(what + ' — ' + ids.length + ' product(s)?', what + ' — ' + ids.length + ' 件商品?'),
+    confirmLabel: cuT('Apply', '应用'),
+  }))) return;
   toast(cuT('Working…', '处理中…'));
   let done = 0, fail = 0;
   for (const id of ids) {
@@ -1567,8 +1570,13 @@ async function paBulkApply(patch, kind) {
 async function paBulkDelete() {
   const ids = [...PA_SELECTED];
   if (!ids.length) return;
-  if (!confirm(cuT('Delete ' + ids.length + ' product(s)? This removes them from the catalogue and frees their SKUs. This cannot be undone.',
-                   '删除 ' + ids.length + ' 件商品?将从商品库移除并释放其 SKU。此操作无法撤销。'))) return;
+  if (!(await askConfirm({
+    title: cuT('Delete ' + ids.length + ' product(s)?', '删除 ' + ids.length + ' 件商品?'),
+    body: cuT('This removes them from the catalogue and frees their SKUs. This cannot be undone.',
+              '将从商品库移除并释放其 SKU。此操作无法撤销。'),
+    confirmLabel: cuT('Delete', '删除'),
+    danger: true,
+  }))) return;
   toast(cuT('Working…', '处理中…'));
   let done = 0, fail = 0;
   for (const id of ids) {
@@ -1591,7 +1599,10 @@ async function paBulkSetPublished(want) {
   const ask = want
     ? cuT('Publish ' + targets.length + ' product(s)? They will go live in the shop.', '确定上架 ' + targets.length + ' 件商品?它们将在店面显示。')
     : cuT('Hide ' + targets.length + ' product(s)? They will be removed from the shop.', '确定下架 ' + targets.length + ' 件商品?它们将从店面移除。');
-  if (!confirm(ask)) return;
+  if (!(await askConfirm({
+    title: ask,
+    confirmLabel: want ? cuT('Publish', '上架') : cuT('Hide', '下架'),
+  }))) return;
   toast(cuT('Working…', '处理中…'));
   let done = 0, fail = 0;
   for (const id of targets) {
@@ -2478,10 +2489,14 @@ function pdClose() {
 // Revert to last save: roll the form back to the snapshot captured when this
 // product was opened, then autosave that restored state so it's the live version
 // again. Undoes a whole editing session's worth of autosaves in one step.
-function pdRevert() {
+async function pdRevert() {
   if (_pdSelectedId == null) { pdClose(); return; }
-  if (!confirm(cuT('Revert to the last-saved version? This undoes every change since you opened this product.',
-                   '还原到上次保存的版本?这将撤销自打开此产品以来的所有修改。'))) return;
+  if (!(await askConfirm({
+    title: cuT('Revert to the last-saved version?', '还原到上次保存的版本?'),
+    body: cuT('This undoes every change since you opened this product.', '这将撤销自打开此产品以来的所有修改。'),
+    confirmLabel: cuT('Revert', '还原'),
+    danger: true,
+  }))) return;
   if (_pdOpenBaseline) {
     pdApplySnapshot(_pdOpenBaseline);
     clearTimeout(_pdAutoTimer); _pdAutoTimer = null;
@@ -2546,10 +2561,14 @@ async function pdOpenVersions() {
 }
 async function pdRestoreVersion(versionId) {
   const id = document.getElementById('pd-id').value; if (!id) return;
-  if (!confirm(cuT(
-    'Restore this version?\n\nThe product’s current content (name, price, description, photos, category…) is replaced with this version. A new version is kept first, so you can undo. Stock is not changed.',
-    '还原此版本?\n\n产品当前内容(名称、价格、描述、图片、分类…)将被此版本替换。会先保留一个新版本以便撤销。库存不会更改。'
-  ))) return;
+  if (!(await askConfirm({
+    title: cuT('Restore this version?', '还原此版本?'),
+    body: cuT(
+      'The product’s current content (name, price, description, photos, category…) is replaced with this version. A new version is kept first, so you can undo. Stock is not changed.',
+      '产品当前内容(名称、价格、描述、图片、分类…)将被此版本替换。会先保留一个新版本以便撤销。库存不会更改。'),
+    confirmLabel: cuT('Restore', '还原'),
+    danger: true,
+  }))) return;
   try {
     await api('/api/retail-admin/products/' + id + '/restore-version', { method: 'POST', body: { version_id: versionId } });
     document.querySelectorAll('body > .pu-editor-bg').forEach(x => x.remove());
@@ -2854,7 +2873,12 @@ function vaDragEnd() { VA_DRAG = null; document.querySelectorAll('#pd-variants .
 async function vaRemove(id) {
   const v = VA_MEMBERS.find(x => x.id === id); if (!v || v.self) return;
   const nm = (v.label && v.label.trim()) || v.name || ('#' + id);
-  if (!confirm(cuT('Delete the variant “', '删除规格“') + nm + cuT('”? This removes that product for good.', '”?将永久删除该产品。'))) return;
+  if (!(await askConfirm({
+    title: cuT('Delete the variant “', '删除规格“') + nm + cuT('”?', '”?'),
+    body: cuT('This removes that product for good.', '将永久删除该产品。'),
+    confirmLabel: cuT('Delete', '删除'),
+    danger: true,
+  }))) return;
   try {
     await api('/api/retail-admin/products/' + id, { method: 'DELETE' });
     VA_MEMBERS = VA_MEMBERS.filter(m => m.id !== id);
@@ -4009,9 +4033,14 @@ async function pdAutoComposeBlocks(id, btn, skipConfirm) {
   // Already designed: don't silently keep the old sections — offer a rebuild.
   if (hasBlocks && !skipConfirm) {
     const n = Array.isArray(blocks) ? blocks.length : 0;
-    const ok = confirm(cuT(
-      'This product already has ' + (n ? n + ' designed section(s)' : 'a designed page') + '.\n\nRebuild it from the current description? This replaces the existing sections.',
-      '该商品已有' + (n ? n + ' 个板块' : '已设计的页面') + '。\n\n要根据当前描述重新生成吗?这将替换现有板块。'));
+    const ok = await askConfirm({
+      title: cuT('This product already has ' + (n ? n + ' designed section(s)' : 'a designed page') + '.',
+                 '该商品已有' + (n ? n + ' 个板块' : '已设计的页面') + '。'),
+      body: cuT('Rebuild it from the current description? This replaces the existing sections.',
+                '要根据当前描述重新生成吗?这将替换现有板块。'),
+      confirmLabel: cuT('Rebuild', '重新生成'),
+      danger: true,
+    });
     if (!ok) { toast(cuT('Kept the existing design — open the Product editor to edit it', '已保留现有设计,可在产品页编辑器中编辑'), 'ok'); return; }
   }
   // Read the description straight from the editor (cleaned HTML → plain text).
@@ -4146,7 +4175,7 @@ function pdRteBlock(tag) { if (tag) pdRte('formatBlock', tag); }
 function pdRteColor(c) { pdRte('foreColor', c); }
 function pdRteHilite(c) { try { pdRte('hiliteColor', c); } catch (e) { pdRte('backColor', c); } }
 function pdRteClear() { pdRte('removeFormat'); pdRte('formatBlock', 'p'); }
-function pdRteLink() { const url = prompt('Link URL · 链接地址:'); if (url) pdRte('createLink', url); }
+async function pdRteLink() { const url = await askPrompt({ title: 'Link URL · 链接地址', submitLabel: cuT('Insert', '插入') }); if (url) pdRte('createLink', url); }
 // Image: upload through the media library (same store the gallery uses), then
 // drop an absolute https URL into the HTML. Relative /api/... srcs wouldn't
 // resolve inside the mini-app's <rich-text>, so we anchor to the live origin
@@ -4191,9 +4220,13 @@ async function pdRteImagePick(e) {
 }
 // Table: ask for rows × cols and drop an inline-styled (class-free, so the
 // mini-app <rich-text> keeps the borders) editable grid; first row is <th>.
-function pdRteTable() {
+async function pdRteTable() {
   pdRteSaveSel();
-  const spec = prompt(cuT('Table size — rows × columns (e.g. 3x3)', '表格大小 — 行 × 列(例如 3x3)'), '3x3');
+  const spec = await askPrompt({
+    title: cuT('Table size — rows × columns (e.g. 3x3)', '表格大小 — 行 × 列(例如 3x3)'),
+    value: '3x3',
+    submitLabel: cuT('Insert', '插入'),
+  });
   if (!spec) return;
   const nums = String(spec).toLowerCase().split(/[^0-9]+/).filter(Boolean).map(n => parseInt(n, 10));
   let rows = Math.min(Math.max(nums[0] || 2, 1), 20);
@@ -4292,7 +4325,10 @@ async function pdFactsAutofill() {
   let textEn = pdStripToText(pdRteClean(document.getElementById('pd-rte-en').innerHTML));
   let textCn = pdStripToText(pdRteClean(document.getElementById('pd-rte-cn').innerHTML));
   if (!textEn && !textCn) {
-    const pasted = prompt(cuT('Paste the product text to pull details from:', '粘贴产品文字以提取详情:'));
+    const pasted = await askReason({
+      title: cuT('Paste the product text to pull details from', '粘贴产品文字以提取详情'),
+      submitLabel: cuT('Read text', '识别'),
+    });
     if (pasted == null || !pasted.trim()) return;
     textEn = pasted.trim();
   }
@@ -4582,7 +4618,11 @@ async function pdDoDuplicate(id, asVariant) {
   if (id == null || id === '') return;
   let label = null;
   if (asVariant) {
-    label = prompt(cuT('Variant label for the copy (e.g. 500g):', '副本的规格标签(如 500克):'), '');
+    label = await askPrompt({
+      title: cuT('Variant label for the copy (e.g. 500g)', '副本的规格标签(如 500克)'),
+      value: '',
+      submitLabel: cuT('Duplicate', '复制'),
+    });
     if (label === null) return;   // cancelled
     label = (label || '').trim();
   }
@@ -4599,7 +4639,12 @@ function pdDuplicate(asVariant) { pdDoDuplicate(document.getElementById('pd-id')
 function paDuplicate(id) { pdDoDuplicate(id, false); }
 async function pdDelete() {
   const id = document.getElementById('pd-id').value; if (!id) return;
-  if (!confirm('Delete this product? · 删除此产品?\nIt will be hidden from the shop. · 将从店面隐藏。')) return;
+  if (!(await askConfirm({
+    title: 'Delete this product? · 删除此产品?',
+    body: 'It will be hidden from the shop. · 将从店面隐藏。',
+    confirmLabel: 'Delete · 删除',
+    danger: true,
+  }))) return;
   try {
     const r = await fetch('/api/retail-admin/products/' + id, { method: 'DELETE' });
     const j = await r.json();
@@ -4607,7 +4652,7 @@ async function pdDelete() {
     PA_PRODUCTS = PA_PRODUCTS.filter(x => x.id !== Number(id));
     pdClose();
     paRender();
-  } catch (e) { alert('Delete failed · 删除失败: ' + e.message); }
+  } catch (e) { toast('Delete failed · 删除失败: ' + e.message, 'err'); }
 }
 
 // Paint the IP character tiles. The hidden input #pa-edit-colophon-character
@@ -4654,15 +4699,16 @@ function paRenderPresets() {
 // blocks, confirm before overwriting so the office doesn't lose work.
 // New ids are generated so the existing tab/selection state cleanly
 // rebuilds against the fresh stack.
-function paApplyPreset(id) {
+async function paApplyPreset(id) {
   const preset = PA_PAGE_PRESETS.find(p => p.id === id); if (!preset) return;
   const existing = (window._paBlocks || []).length;
   if (existing > 0) {
-    const ok = confirm(
-      'Apply this preset? · 套用此版型?\n\n' +
-      'It will REPLACE the ' + existing + ' block(s) currently on this product. ' +
-      '\n将替换当前产品上的 ' + existing + ' 个板块,无法撤销。'
-    );
+    const ok = await askConfirm({
+      title: 'Apply this preset? · 套用此版型?',
+      body: 'It will REPLACE the ' + existing + ' block(s) currently on this product. · 将替换当前产品上的 ' + existing + ' 个板块,无法撤销。',
+      confirmLabel: 'Apply · 套用',
+      danger: true,
+    });
     if (!ok) return;
   }
   // Deep-clone the preset blocks (so editing one product doesn't mutate
@@ -4726,7 +4772,7 @@ async function paSaveEdit() {
     paCloseEdit();
     paRender();
   } catch (e) {
-    alert('Save failed · 保存失败: ' + e.message);
+    toast('Save failed · 保存失败: ' + e.message, 'err');
   }
 }
 
@@ -4760,8 +4806,8 @@ function paBlocksAdd(type) {
     if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, 30);
 }
-function paBlocksRemove(id) {
-  if (!confirm('Delete this section? · 删除此板块?')) return;
+async function paBlocksRemove(id) {
+  if (!(await askConfirm({ title: 'Delete this section? · 删除此板块?', confirmLabel: 'Delete · 删除', danger: true }))) return;
   paBlocksSyncFromDOM();
   const arr = window._paBlocks || [];
   const i = arr.findIndex(b => b.id === id);

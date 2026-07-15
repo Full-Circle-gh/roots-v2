@@ -555,7 +555,7 @@ function shipmentMergeControls(o) {
   return '';
 }
 async function combineParcels(orderId) {
-  if (!confirm(cuT('Combine all parcels into one shipment? The customer will track a single parcel.', '将所有包裹合并为一个发货?顾客将只追踪一个包裹。'))) return;
+  if (!(await askConfirm({ title: cuT('Combine all parcels into one shipment? The customer will track a single parcel.', '将所有包裹合并为一个发货?顾客将只追踪一个包裹。'), confirmLabel: cuT('Combine', '合并') }))) return;
   try {
     await adminWrite({ url: `/api/retail-admin/orders/${orderId}/shipments/combine`, method: 'POST', errLabelEn: 'Combine failed', errLabelCn: '合并失败' });
     toast(cuT('Combined into one parcel', '已合并为一个包裹'));
@@ -563,7 +563,7 @@ async function combineParcels(orderId) {
   } catch {}
 }
 async function splitParcels(orderId) {
-  if (!confirm(cuT('Split back into separate Air / Land parcels?', '拆分回独立的空运 / 陆运包裹?'))) return;
+  if (!(await askConfirm({ title: cuT('Split back into separate Air / Land parcels?', '拆分回独立的空运 / 陆运包裹?'), confirmLabel: cuT('Split', '拆分') }))) return;
   try {
     await adminWrite({ url: `/api/retail-admin/orders/${orderId}/shipments/split`, method: 'POST', errLabelEn: 'Split failed', errLabelCn: '拆分失败' });
     toast(cuT('Split into separate parcels', '已拆分为多个包裹'));
@@ -3394,7 +3394,7 @@ async function qyDispatch(orderId, btn) {
           `同时呼叫 ${carriers.length} 家运力?谁先接单谁配送,仅对接单的那家从青云余额扣费。`)
     : cuT(`Dispatch ${labels[0]}? A rider is called and your Qingyun balance is charged.`,
           `确认发起配送 ${labels[0]}?将呼叫骑手并从青云余额扣费。`);
-  if (!confirm(confirmMsg)) return;
+  if (!(await askConfirm({ title: confirmMsg, confirmLabel: cuT('Dispatch', '发起配送') }))) return;
   if (btn) { btn.disabled = true; btn.textContent = cuT('Dispatching…', '发单中…'); }
   try {
     const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/dispatch`, {
@@ -4228,99 +4228,10 @@ function askPayMethod() {
   });
 }
 
-// Branded replacement for window.prompt() when collecting one optional reason
-// (cancellation / refund). Resolves to the typed string, or null if the staff
-// member dismisses (ESC / backdrop / Cancel) so callers can abort. Submitting
-// an empty textarea resolves to '' (reason is optional).
-function askReason(opts) {
-  return new Promise((resolve) => {
-    const bg = document.createElement('div');
-    bg.className = 'pu-editor-bg tacet';
-    bg.style.display = 'flex';
-    bg.innerHTML = `
-      <div class="pu-editor" style="width: 460px; max-width: 92vw;" role="dialog" aria-modal="true">
-        <div class="pu-editor-head">
-          <div>
-            <h3 style="margin: 0; font-size: 14px;">${opts.titleEn} · ${opts.titleCn}</h3>
-            <div class="muted" style="font-size: 11px; margin-top: 2px;">${opts.subEn} · ${opts.subCn}</div>
-          </div>
-          <button class="btn" data-cancel>Close · 关闭</button>
-        </div>
-        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display: block;">
-          <div class="field" style="margin-bottom: 14px;">
-            <label class="stacked">${opts.labelEn} · ${opts.labelCn}</label>
-            <textarea id="ar-reason" rows="3" style="width: 100%;" placeholder="${opts.phEn} · ${opts.phCn}"></textarea>
-          </div>
-          <div style="display: flex; gap: 8px; justify-content: flex-end;">
-            <button class="btn" data-cancel>Cancel · 取消</button>
-            <button class="btn btn-primary" data-submit>${opts.submitEn} · ${opts.submitCn}</button>
-          </div>
-        </div>
-      </div>`;
-    mountFloatingPuModal(bg);
-
-    let done = false;
-    const finish = (val) => {
-      if (done) return; done = true;
-      document.removeEventListener('keydown', onKey);
-      bg.remove();
-      resolve(val);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') finish(null); };
-    bg.addEventListener('mousedown', (e) => { if (e.target === bg) finish(null); });
-    bg.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => finish(null)));
-    bg.querySelector('[data-submit]').addEventListener('click', () => finish(bg.querySelector('#ar-reason').value || ''));
-    document.addEventListener('keydown', onKey);
-    const ta = bg.querySelector('#ar-reason');
-    if (ta) setTimeout(() => ta.focus(), 30);
-  });
-}
-
-// Generic yes/no confirmation modal — resolves true on confirm, false on
-// cancel/dismiss. Mirrors askReason's floating-modal plumbing so it inherits
-// the same backdrop, Escape-to-close, and calm motion.
-function askConfirm(opts) {
-  return new Promise((resolve) => {
-    const bg = document.createElement('div');
-    bg.className = 'pu-editor-bg tacet';
-    bg.style.display = 'flex';
-    bg.innerHTML = `
-      <div class="pu-editor" style="width: 460px; max-width: 92vw;" role="dialog" aria-modal="true">
-        <div class="pu-editor-head">
-          <div>
-            <h3 style="margin: 0; font-size: 14px;">${opts.titleEn} · ${opts.titleCn}</h3>
-          </div>
-          <button class="btn" data-cancel>Close · 关闭</button>
-        </div>
-        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display: block;">
-          <div style="font-size: 13px; line-height: 1.5; margin-bottom: 16px;">
-            <div>${opts.bodyEn}</div>
-            <div class="muted" style="margin-top: 6px;">${opts.bodyCn}</div>
-          </div>
-          <div style="display: flex; gap: 8px; justify-content: flex-end;">
-            <button class="btn" data-cancel>${opts.cancelEn || 'Cancel'} · ${opts.cancelCn || '取消'}</button>
-            <button class="btn btn-primary" data-submit>${opts.confirmEn} · ${opts.confirmCn}</button>
-          </div>
-        </div>
-      </div>`;
-    mountFloatingPuModal(bg);
-
-    let done = false;
-    const finish = (val) => {
-      if (done) return; done = true;
-      document.removeEventListener('keydown', onKey);
-      bg.remove();
-      resolve(val);
-    };
-    const onKey = (e) => { if (e.key === 'Escape') finish(false); };
-    bg.addEventListener('mousedown', (e) => { if (e.target === bg) finish(false); });
-    bg.querySelectorAll('[data-cancel]').forEach((b) => b.addEventListener('click', () => finish(false)));
-    bg.querySelector('[data-submit]').addEventListener('click', () => finish(true));
-    document.addEventListener('keydown', onKey);
-    const submit = bg.querySelector('[data-submit]');
-    if (submit) setTimeout(() => submit.focus(), 30);
-  });
-}
+// askReason()/askConfirm() now live in /tacet-dialogs.js (shared across every
+// admin page, loaded before this file in retail-admin.html) — same field
+// contract (titleEn/titleCn, bodyEn/bodyCn, confirmEn/confirmCn, etc.) so
+// every call site below is unchanged.
 
 // Print controls for the order drawer, rendered into the footer pinned at the
 // bottom of the drawer (#order-drawer-foot) rather than mid-scroll — so a
@@ -5332,7 +5243,7 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
 // off the courier. On success the waybill is removed + the order may roll back
 // to preparing.
 async function cancelJdPickup(orderId, shipmentId, ev) {
-  if (!confirm('Cancel the JD pickup / recall this parcel with JD?\n向京东取消揽收 / 拦截此包裹？')) return;
+  if (!(await askConfirm({ title: 'Cancel the JD pickup / recall this parcel with JD? · 向京东取消揽收 / 拦截此包裹?', danger: true, confirmLabel: 'Cancel pickup' }))) return;
   const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
   try {
     const r = await adminWrite({
@@ -5478,7 +5389,7 @@ async function saveTracking(orderId, shipmentId, ev) {
 }
 
 async function clearTracking(orderId, shipmentId, ev) {
-  if (!confirm('Remove the tracking number from this shipment? · 移除此运单号?')) return;
+  if (!(await askConfirm({ title: 'Remove the tracking number from this shipment? · 移除此运单号?', danger: true, confirmLabel: 'Remove' }))) return;
   const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
   try {
     await adminWrite({
@@ -5540,7 +5451,7 @@ async function saveLocalEta(orderId, shipmentId, ev) {
 }
 
 async function clearLocalEta(orderId, shipmentId, ev) {
-  if (!confirm('Remove the arrival time? · 移除送达时间?')) return;
+  if (!(await askConfirm({ title: 'Remove the arrival time? · 移除送达时间?', danger: true, confirmLabel: 'Remove' }))) return;
   try {
     await adminWrite({
       btn: ev?.currentTarget, url: `/api/retail-admin/orders/${orderId}/eta?shipment_id=${shipmentId}`,

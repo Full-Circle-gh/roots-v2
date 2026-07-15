@@ -319,7 +319,7 @@ async function grantToCustomer(customerId) {
 
 async function grantToAll() {
   if (!_grantVoucherId) return;
-  if (!confirm('Grant this coupon to every customer? Existing grants are kept. · 向所有顾客发放此优惠券?已有发放记录会保留。')) return;
+  if (!(await askConfirm({ title: 'Grant this coupon to every customer? · 向所有顾客发放此优惠券?', body: 'Existing grants are kept. · 已有发放记录会保留。', confirmLabel: 'Grant to all · 全部发放' }))) return;
   const note = $('#grant-note').value.trim() || null;
   try {
     const r = await api('/api/retail-admin/vouchers/' + _grantVoucherId + '/grant', {
@@ -364,7 +364,7 @@ async function loadGrantedList() {
 }
 
 async function revokeGrant(grantId) {
-  if (!confirm('Revoke this grant? · 撤销此优惠券?')) return;
+  if (!(await askConfirm({ title: 'Revoke this grant? · 撤销此优惠券?', confirmLabel: 'Revoke · 撤销', danger: true }))) return;
   try {
     await api('/api/retail-admin/voucher-grants/' + grantId, { method: 'DELETE' });
     await loadGrantedList();
@@ -1907,10 +1907,10 @@ async function addCategory() {
 
 async function deleteCategory(id, name, usage) {
   if (usage > 0) {
-    alert(`"${name}" is used by ${usage} product${usage === 1 ? '' : 's'}. Recategorize or unpublish those products first. · "${name}" 已被 ${usage} 个商品使用。请先将这些商品重新分类或下架。`);
+    toast(`"${name}" is used by ${usage} product${usage === 1 ? '' : 's'}. Recategorize or unpublish those products first. · "${name}" 已被 ${usage} 个商品使用。请先将这些商品重新分类或下架。`, 'err');
     return;
   }
-  if (!confirm(`Delete category "${name}"? · 删除分类 "${name}"？`)) return;
+  if (!(await askConfirm({ title: `Delete category "${name}"? · 删除分类 "${name}"？`, confirmLabel: 'Delete · 删除', danger: true }))) return;
   const status = $('#cats-status');
   status.innerHTML = 'Deleting…';
   try {
@@ -2398,7 +2398,7 @@ async function sendBroadcast() {
   }
   const audCount = bxAudCount();
   const verb = mode === 'later' ? 'Schedule' : 'Send';
-  if (!confirm(`${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}? · 向 ${audCount || '所有活跃'} 位客户${verb === 'Schedule' ? '排期' : '发送'}此群发消息？`)) return;
+  if (!(await askConfirm({ title: `${verb} this broadcast to ${audCount || 'all active'} customer${audCount === '1' ? '' : 's'}? · 向 ${audCount || '所有活跃'} 位客户${verb === 'Schedule' ? '排期' : '发送'}此群发消息？`, confirmLabel: `${verb} · ${verb === 'Schedule' ? '排期' : '发送'}` }))) return;
 
   const payload = { title_en, title_cn, body_en, body_cn, deeplink, audience: bcAudienceObj() };
   if (scheduledRaw) {
@@ -2427,12 +2427,12 @@ async function recallBroadcast(id, currentStatus) {
   const verb = currentStatus === 'scheduled'
     ? 'Cancel this scheduled broadcast · 取消此已排期的群发消息'
     : 'Recall this broadcast (remove from every customer\'s inbox) · 撤回此群发消息（从每位客户的收件箱中移除）';
-  if (!confirm(verb + '?')) return;
+  if (!(await askConfirm({ title: verb + '?', confirmLabel: currentStatus === 'scheduled' ? 'Cancel · 取消' : 'Recall · 撤回', danger: true }))) return;
   try {
     await api('/api/retail-admin/broadcasts/' + id + '/recall', { method: 'POST' });
     loadBroadcasts();
   } catch (e) {
-    alert('Failed · 失败: ' + e.message);
+    toast('Failed · 失败: ' + e.message, 'err');
   }
 }
 // Lazy-load when the operator first opens the tab.
@@ -2975,7 +2975,7 @@ async function savePopup() {
 
 async function deletePopup() {
   const id = $('#pu-id').value;
-  if (!confirm('Delete this pop-up? · 删除此弹窗?')) return;
+  if (!(await askConfirm({ title: 'Delete this pop-up? · 删除此弹窗?', confirmLabel: 'Delete · 删除', danger: true }))) return;
   _popups = _popups.filter(p => p.id !== id);
   try {
     await savePopupsArray();

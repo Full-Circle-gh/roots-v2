@@ -630,7 +630,7 @@ function csRenderLocations() {
 // One tap on a channel's master toggle opens/closes it at every store.
 window.csChannelToggle = async function (ch, isOpenNow) {
   const open = !isOpenNow;
-  if (!open && !window.confirm(cuT('Close this channel at every store?', '关闭所有门店的该渠道？'))) return;
+  if (!open && !(await askConfirm({ title: cuT('Close this channel at every store?', '关闭所有门店的该渠道？'), confirmLabel: cuT('Close channel', '关闭渠道'), danger: true }))) return;
   try {
     await api('/api/retail-admin/channel-status/channel', { method: 'POST', body: { channel: ch, open } });
     if (window.toast) toast(cuT('Saved', '已保存'));
@@ -644,8 +644,12 @@ window.csCell = async function (ch, storeCode, open) {
 };
 // Location master: open/close EVERY channel for one store.
 window.csLocation = async function (storeCode, open) {
-  if (!window.confirm(open ? cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道？')
-                           : cuT('Close ALL sales channels for this location?', '关闭该门店的所有销售渠道？'))) return;
+  if (!(await askConfirm({
+    title: open ? cuT('Open ALL sales channels for this location?', '开启该门店的所有销售渠道？')
+                : cuT('Close ALL sales channels for this location?', '关闭该门店的所有销售渠道？'),
+    confirmLabel: open ? cuT('Open all', '全部开启') : cuT('Close all', '全部关闭'),
+    danger: !open,
+  }))) return;
   try { await api('/api/retail-admin/channel-status/location', { method: 'POST', body: { storeCode, open } }); if (window.toast) toast(cuT('Done', '完成')); await csLoad(); }
   catch (e) { if (window.toast) toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 };
@@ -1125,7 +1129,7 @@ function catAddTop() {
   catRenderStatus(); catRenderRail(); catRenderPane();
   catOpenRename('top', catSel, -1);
 }
-function catRemoveTop(ti) {
+async function catRemoveTop(ti) {
   const t = catModel[ti]; if (!t) return;
   // The shop needs at least one shelf; the server rejects an empty tree, so
   // say so here instead of letting an autosave fail behind the operator's back.
@@ -1136,7 +1140,8 @@ function catRemoveTop(ti) {
     ? cuT(`Remove “${name}” and its ${n} subcategor${n === 1 ? 'y' : 'ies'}?\n\nProducts keep their tag until you re-assign them.`,
           `删除“${name}”及其 ${n} 个子分类？\n\n产品标签保留，直到重新分配。`)
     : cuT(`Remove “${name}”?`, `删除“${name}”？`);
-  if (!confirm(msg)) return;
+  const [msgTitle, msgBody] = msg.split('\n\n');
+  if (!(await askConfirm({ title: msgTitle, body: msgBody, confirmLabel: cuT('Remove category', '删除主分类'), danger: true }))) return;
   catEdit = null;
   catModel.splice(ti, 1);
   if (catSel >= catModel.length) catSel = Math.max(0, catModel.length - 1);
@@ -1148,12 +1153,16 @@ function catAddSub(ti) {
   catRenderStatus(); catRenderPane();
   catOpenRename('sub', ti, catModel[ti].subs.length - 1);
 }
-function catRemoveSub(ti, si) {
+async function catRemoveSub(ti, si) {
   const s = catModel[ti].subs[si]; if (!s) return;
   const c = catCount(s);
-  if (c && c.n && !confirm(cuT(
-    `Remove “${s.name}”? Its ${c.n} product${c.n === 1 ? '' : 's'} stay in ${catModel[ti].name}, without a heading.`,
-    `删除“${s.name}”？其 ${c.n} 件产品仍留在“${catModel[ti].name}”，但不再归入任何区块。`))) return;
+  if (c && c.n && !(await askConfirm({
+    title: cuT(
+      `Remove “${s.name}”? Its ${c.n} product${c.n === 1 ? '' : 's'} stay in ${catModel[ti].name}, without a heading.`,
+      `删除“${s.name}”？其 ${c.n} 件产品仍留在“${catModel[ti].name}”，但不再归入任何区块。`),
+    confirmLabel: cuT('Remove subcategory', '删除子分类'),
+    danger: true,
+  }))) return;
   catEdit = null;
   catModel[ti].subs.splice(si, 1);
   catRenderStatus(); catRenderRail(); catRenderPane(); catUpdateDirty();

@@ -119,7 +119,7 @@ function onNewFolderKey(ev) {
 async function renameFolder(id) {
   const f = _mlFolders.find(x => x.id === id);
   if (!f) return;
-  const name = prompt('Rename folder · 重命名文件夹', f.name);
+  const name = await askPrompt({ title: 'Rename folder · 重命名文件夹', value: f.name, submitLabel: 'Rename' });
   if (name == null) return;
   const trimmed = name.trim();
   if (!trimmed || trimmed === f.name) return;
@@ -135,7 +135,7 @@ async function deleteFolder(id) {
   const msg = f.count
     ? `Delete folder "${f.name}"? Its ${f.count} item${f.count===1?'':'s'} will move to Unsorted (images are kept). · 删除文件夹 "${f.name}"？其中 ${f.count} 个项目将移至未分类（图片保留）。`
     : `Delete empty folder "${f.name}"? · 删除空文件夹 "${f.name}"？`;
-  if (!confirm(msg)) return;
+  if (!(await askConfirm({ title: msg, confirmLabel: 'Delete folder', danger: true }))) return;
   try {
     await api(`/api/retail-admin/media/folders/${id}`, { method: 'DELETE' });
     if (_mlActiveFolder === String(id)) _mlActiveFolder = '';
@@ -395,7 +395,7 @@ async function deleteMediaFromDrawer() {
   const m = _mlRows.find(r => r.id === _mlEditId);
   const used = _mlUsage[_mlEditId] || 0;
   const warn = used ? `This media is referenced in ${used} place${used===1?'':'s'}. Delete anyway? · 此媒体被 ${used} 处引用。仍要删除吗？` : `Delete "${m?.filename || '#'+_mlEditId}"? · 删除 "${m?.filename || '#'+_mlEditId}"？`;
-  if (!confirm(warn)) return;
+  if (!(await askConfirm({ title: warn, confirmLabel: 'Delete', danger: true }))) return;
   try {
     await api(`/api/retail-admin/media/bulk-delete`, { method: 'POST', body: { ids: [_mlEditId] } });
     toast('Deleted · 已删除');
@@ -598,7 +598,7 @@ async function bulkDeleteSelected() {
   const msg = usedCount
     ? `Delete ${ids.length} item${ids.length===1?'':'s'} — ${usedCount} reference${usedCount===1?'':'s'} will be broken. Continue? · 删除 ${ids.length} 项，将破坏 ${usedCount} 处引用，是否继续？`
     : `Delete ${ids.length} item${ids.length===1?'':'s'}? · 删除 ${ids.length} 项？`;
-  if (!confirm(msg)) return;
+  if (!(await askConfirm({ title: msg, confirmLabel: 'Delete', danger: true }))) return;
   try {
     await api('/api/retail-admin/media/bulk-delete', { method: 'POST', body: { ids } });
     _mlSel.clear();
@@ -902,7 +902,7 @@ async function updateTopup(id, field, val) {
 }
 
 async function deleteTopupPackage(id, amt) {
-  if (!confirm(`Delete ¥${amt} top-up package? · 删除 ¥${amt} 充值套餐？`)) return;
+  if (!(await askConfirm({ title: `Delete ¥${amt} top-up package? · 删除 ¥${amt} 充值套餐？`, confirmLabel: 'Delete package', danger: true }))) return;
   try {
     await api(`/api/retail-admin/topup-packages/${id}`, { method: 'DELETE' });
     toast('Package deleted · 套餐已删除');
@@ -1132,10 +1132,10 @@ function addRctierRow() {
   renderRctiersTable();
   document.querySelector('#rctier-editor .mp-editor')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
-function removeRctier(i) {
+async function removeRctier(i) {
   const t = RCTIER_STATE[i];
   if (!t) return;
-  if (!confirm(cuT(`Remove tier "${t.name_en || t.name_cn || '(unnamed)'}"?`, `删除等级"${t.name_cn || t.name_en || '(未命名)'}"?`))) return;
+  if (!(await askConfirm({ title: cuT(`Remove tier "${t.name_en || t.name_cn || '(unnamed)'}"?`, `删除等级"${t.name_cn || t.name_en || '(未命名)'}"?`), confirmLabel: cuT('Remove tier', '删除等级'), danger: true }))) return;
   RCTIER_STATE.splice(i, 1);
   if (RCTIER_EDITING === i) RCTIER_EDITING = -1;
   else if (RCTIER_EDITING > i) RCTIER_EDITING -= 1;
@@ -1190,7 +1190,7 @@ async function loadTopupTransactions() {
 }
 
 async function finalizeTopupTx(id) {
-  if (!confirm('Mark this top-up as successful and credit the wallet? · 标记此充值为成功并入账钱包?')) return;
+  if (!(await askConfirm({ title: 'Mark this top-up as successful and credit the wallet? · 标记此充值为成功并入账钱包?', confirmLabel: 'Mark successful' }))) return;
   try {
     await api(`/api/retail-admin/topup-transactions/${id}/finalize`, { method: 'POST' });
     toast('Top-up finalized · 充值已确认');
@@ -1274,10 +1274,10 @@ function addReviewTag() {
   renderReviewTagsTable();
 }
 
-function removeReviewTag(i) {
+async function removeReviewTag(i) {
   const t = REVIEW_TAGS_STATE[i];
   if (!t) return;
-  if (t.id && !confirm(`Remove "${t.id}"? Reviews already tagged with this id will lose that chip. · 移除 "${t.id}"？已使用此标签的评价将失去该标记。`)) return;
+  if (t.id && !(await askConfirm({ title: `Remove "${t.id}"? Reviews already tagged with this id will lose that chip. · 移除 "${t.id}"？已使用此标签的评价将失去该标记。`, confirmLabel: 'Remove tag', danger: true }))) return;
   REVIEW_TAGS_STATE.splice(i, 1);
   renderReviewTagsTable();
 }
@@ -1396,11 +1396,11 @@ function addFaqCategory() {
   renderFaqQs();
 }
 
-function removeFaqCat(i) {
+async function removeFaqCat(i) {
   const c = FAQ_CATS[i];
   if (!c) return;
   const used = FAQ_QS.filter(q => q.cat === c.id).length;
-  if (used && !confirm(`Remove "${c.id || '(empty)'}"? ${used} question(s) still reference it and will be left uncategorised. · 移除 "${c.id || '(empty)'}"？仍有 ${used} 个问题引用它，将变为未分类。`)) return;
+  if (used && !(await askConfirm({ title: `Remove "${c.id || '(empty)'}"? ${used} question(s) still reference it and will be left uncategorised. · 移除 "${c.id || '(empty)'}"？仍有 ${used} 个问题引用它，将变为未分类。`, confirmLabel: 'Remove category', danger: true }))) return;
   FAQ_CATS.splice(i, 1);
   renderFaqCatsTable();
   renderFaqQs();
@@ -1473,10 +1473,10 @@ function addFaqQuestion() {
   renderFaqQs();
 }
 
-function removeFaqQ(i) {
+async function removeFaqQ(i) {
   const q = FAQ_QS[i];
   if (!q) return;
-  if ((q.q_en || q.q_cn) && !confirm(`Remove "${q.q_en || q.q_cn}"? · 移除 "${q.q_en || q.q_cn}"？`)) return;
+  if ((q.q_en || q.q_cn) && !(await askConfirm({ title: `Remove "${q.q_en || q.q_cn}"? · 移除 "${q.q_en || q.q_cn}"？`, confirmLabel: 'Remove question', danger: true }))) return;
   FAQ_QS.splice(i, 1);
   renderFaqQs();
 }
@@ -1683,7 +1683,7 @@ async function toggleReview(id, visible, source) {
 // deletable from here — they can only be hidden — so this is only wired to
 // synthetic rows.
 async function deleteReview(id) {
-  if (!confirm(cuT('Remove this seeded review for good?', '永久删除这条种子评价?'))) return;
+  if (!(await askConfirm({ title: cuT('Remove this seeded review for good?', '永久删除这条种子评价?'), confirmLabel: cuT('Remove review', '删除评价'), danger: true }))) return;
   try {
     await api('/api/retail-admin/reviews/' + id + '?source=synthetic', { method: 'DELETE' });
     toast(cuT('Removed', '已删除'));
@@ -1698,10 +1698,12 @@ async function deleteReview(id) {
 async function replyReview(id, source) {
   const cur = REVIEWS_BY_KEY[`${source || 'real'}:${id}`];
   const existing = (cur && cur.reply) || '';
-  const next = prompt(
-    cuT('Your public reply to this review (customers see it under their review). Leave blank to remove.',
-        '对这条评价的公开回复(顾客会在自己的评价下看到)。留空则删除回复。'),
-    existing);
+  const next = await askReason({
+    title: cuT('Public reply', '公开回复'),
+    sub: cuT('Customers see it under their review. Leave blank to remove.', '顾客会在自己的评价下看到。留空则删除回复。'),
+    value: existing,
+    submitLabel: cuT('Save reply', '保存回复'),
+  });
   if (next === null) return;            // cancelled
   const reply = next.trim();
   if (reply === existing.trim()) return; // no change
@@ -2136,10 +2138,9 @@ async function fsLoadList() {
 
 // ─── row actions ─────────────────────────────────────────────────────────
 async function fsEndNow(productId, name) {
-  const msg = cuT(
-    `End the flash sale on "${name}" now?\n\nThe regular price comes back immediately.`,
-    `立即结束 "${name}" 的秒杀？\n\n将马上恢复原价。`);
-  if (!confirm(msg)) return;
+  const title = cuT(`End the flash sale on "${name}" now?`, `立即结束 "${name}" 的秒杀？`);
+  const body = cuT('The regular price comes back immediately.', '将马上恢复原价。');
+  if (!(await askConfirm({ title, body, confirmLabel: cuT('End sale', '结束秒杀'), danger: true }))) return;
   try {
     await api(`/api/retail-admin/products/${productId}/flash-sale`, { method: 'DELETE' });
     toast(cuT('Flash sale ended', '秒杀已结束'));
@@ -2573,10 +2574,9 @@ async function fscStart() {
 async function fscCancelSale() {
   if (!_fsc.editId) return;
   const name = fsName(_fsc.product);
-  const msg = cuT(
-    `Cancel the flash sale on "${name}"?\n\nThe product returns to its regular price and the sale leaves the list. This can't be undone.`,
-    `取消 "${name}" 的秒杀？\n\n商品将恢复原价,此活动会从列表中移除,且无法撤销。`);
-  if (!confirm(msg)) return;
+  const title = cuT(`Cancel the flash sale on "${name}"?`, `取消 "${name}" 的秒杀？`);
+  const body = cuT("The product returns to its regular price and the sale leaves the list. This can't be undone.", '商品将恢复原价,此活动会从列表中移除,且无法撤销。');
+  if (!(await askConfirm({ title, body, confirmLabel: cuT('Cancel sale', '取消秒杀'), danger: true }))) return;
   try {
     await api(`/api/retail-admin/products/${_fsc.editId}/flash-sale`, { method: 'DELETE' });
     toast(cuT('Flash sale cancelled', '秒杀已取消'));
