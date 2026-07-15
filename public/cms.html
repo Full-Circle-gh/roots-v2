@@ -12033,7 +12033,7 @@ function buildCatTabsForm(m, b) {
   const isCircles = catStyle === 'classic' && view === 'icons';
   const styleValue = isCircles ? 'circles' : catStyle;
   secLayout.appendChild(field(T('Style', '样式'),
-    T('Classic = use the Layout below (tiles / scroll). Circles = round icons with labels (choose the columns below). Index = a numbered list with count tags and arrows. Bento = an image grid (uses each category\'s product photo, or pick your own below). Sticker = coloured pills with an outline and a hard shadow.', '经典 = 使用下方版式(色块 / 横滑)。圆形 = 带标签的圆形图标(在下方选列数)。目录 = 编号列表 + 数量标签 + 箭头。便当 = 图片网格(用分类的商品图,或在下方自选)。贴纸 = 带轮廓和硬阴影的彩色药丸。'),
+    T('Classic = tiles or a scrolling row. Circles = round icons. Index = a numbered list. Bento = a photo grid. Sticker = colourful pill shapes.', '经典 = 色块或横滑一行。圆形 = 圆形图标。目录 = 编号列表。便当 = 图片网格。贴纸 = 彩色药丸形状。'),
     sel(styleValue, CAT_STYLE_OPTIONS, v => {
       if (v === 'circles')      updateBlock(b.id, { cat_style: 'classic', view: 'icons' });
       else if (v === 'classic') updateBlock(b.id, { cat_style: 'classic', view: view === 'icons' ? 'tiles' : view });
@@ -12492,7 +12492,7 @@ function buildFlashStripForm(m, b) {
 
   const view = b.view || 'strip';
   const isDesign = view === 'classic' || view === 'editorial' || view === 'urgency';
-  secLayout.appendChild(field(T('Layout', '版式'), T('Strip / Hero / Banner are the compact live views. Classic / Editorial / Urgency are the full "Flash sale" sections — a coral band, a cream zigzag edge, a big countdown and a row of products.', '条带 / 主视觉 / 横幅为紧凑实时视图。经典 / 编辑 / 紧迫为完整「限时秒杀」版块 — 珊瑚色条幅、奶白锯齿边、大号倒计时与一排商品。'),
+  secLayout.appendChild(field(T('Layout', '版式'), T('Strip, Hero and Banner are compact, everyday styles. Classic, Editorial and Urgency are bigger sections with a coloured band, a big countdown and a row of products.', '条带 / 主视觉 / 横幅为紧凑的日常样式。经典 / 编辑 / 紧迫为更大的版块 — 彩色条幅、大号倒计时与一排商品。'),
     sel(view, [
       { value: 'strip',     label: T('Strip — compact row', '条带 — 紧凑单行') },
       { value: 'hero',      label: T('Hero — big countdown + products', '主视觉 — 大号倒计时 + 商品') },
@@ -12503,7 +12503,7 @@ function buildFlashStripForm(m, b) {
     ], v => updateBlock(b.id, { view: v }))));
 
   if (isDesign) {
-    secLayout.appendChild(field(T('Energy', '风格强度'), T('Text size and corner/border weight. Refined = smaller, tighter. Bold = larger headlines, thicker borders.', '字号大小 + 圆角/描边粗细。精致 = 更小更紧凑。醒目 = 更大标题、更粗描边。'),
+    secLayout.appendChild(field(T('Energy', '风格强度'), T('How big and bold it looks. Refined = smaller and neater. Bold = bigger headlines, thicker borders.', '整体的大小与醒目程度。精致 = 更小更紧凑。醒目 = 更大标题、更粗描边。'),
       sel(b.energy || 'balanced', [
         { value: 'refined',  label: T('Refined — smaller, tighter', '精致 — 更小更紧凑') },
         { value: 'balanced', label: T('Balanced — the design default', '平衡 — 设计默认') },
@@ -12533,15 +12533,15 @@ function buildFlashStripForm(m, b) {
     // the design's coral-story default.
     secColours.appendChild(field(T('Band colour', '条幅底色'), T('The full-width band background. Default = brand red (coral).', '通栏条幅背景。默认 = 品牌红(珊瑚色)。'),
       sel(b.bg_color, BRAND_COLOR_OPTIONS, v => updateBlock(b.id, { bg_color: v }))));
-    secColours.appendChild(field(T('Ink / detail colour', '墨色 / 细节色'), T('Headline and ink details: borders, the Classic discount badge, and the Urgency tiles, LIVE tag and SHOP NOW. Blank = ink black.', '标题与墨色细节:描边、经典折扣角标,以及紧迫版的色块、LIVE 标签和立即抢购按钮。留空 = 墨黑。'),
+    secColours.appendChild(field(T('Ink / detail colour', '墨色 / 细节色'), T('The headline and small details, like borders, badges and the LIVE tag. Blank = black.', '标题与描边、角标、LIVE 标签等细节的颜色。留空 = 墨黑。'),
       sel(b.ink_color || '', [{ value: '', label: T('— default (ink) —', '— 默认(墨黑)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { ink_color: v }))));
-    secColours.appendChild(field(T('Accent colour', '强调色'), T('Discount badges, the Editorial/Urgency buttons and tiles, the LIVE dot. Blank = brand lime.', '折扣角标、编辑/紧迫版的按钮与色块、LIVE 圆点。留空 = 品牌青柠。'),
+    secColours.appendChild(field(T('Accent colour', '强调色'), T('Discount badges, buttons, tiles and the LIVE dot. Blank = brand lime.', '折扣角标、按钮、色块与 LIVE 圆点。留空 = 品牌青柠。'),
       sel(b.accent_color || '', [{ value: '', label: T('— default (lime) —', '— 默认(青柠)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { accent_color: v }))));
-    secColours.appendChild(field(T('Cream panel colour', '奶白面板色'), T('The zigzag top edge and cream surfaces: the Editorial timer bar and the Classic SHOP NOW button. Blank = soft cream.', '锯齿顶边与奶白面:编辑版计时条与经典版立即抢购按钮。留空 = 柔奶白。'),
+    secColours.appendChild(field(T('Cream panel colour', '奶白面板色'), T('The light cream surfaces — the top edge, timer bar and SHOP NOW button. Blank = soft cream.', '奶白面 — 顶边、计时条与立即抢购按钮。留空 = 柔奶白。'),
       sel(b.panel_color || '', [{ value: '', label: T('— default (cream) —', '— 默认(奶白)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { panel_color: v }))));
-    secColours.appendChild(field(T('Classic tile colour', '经典色块色'), T('The fill of the Classic countdown tiles. Blank = deep maroon. (Editorial uses the cream panel; Urgency uses the accent.)', '经典版倒计时色块的填充色。留空 = 深酒红。(编辑版用奶白面板;紧迫版用强调色。)'),
+    secColours.appendChild(field(T('Classic tile colour', '经典色块色'), T('The countdown tile colour (Classic style only). Blank = deep maroon.', '倒计时色块颜色(仅经典样式)。留空 = 深酒红。'),
       sel(b.tile_color || '', [{ value: '', label: T('— default (maroon) —', '— 默认(酒红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { tile_color: v }))));
-    secColours.appendChild(field(T('Progress / label colour', '进度 / 标签色'), T('The "sold" progress fill on each card and the Urgency tile labels. Blank = forest green.', '每张卡片的「已售」进度填充 + 紧迫版色块标签。留空 = 森绿。'),
+    secColours.appendChild(field(T('Progress / label colour', '进度 / 标签色'), T('The "sold" progress bar on each card. Blank = forest green.', '每张卡片的「已售」进度条。留空 = 森绿。'),
       sel(b.fill_color || '', [{ value: '', label: T('— default (forest) —', '— 默认(森绿)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { fill_color: v }))));
     secColours.appendChild(field(T('Sale price colour', '促销价颜色'), T('The big sale price on each product card. Blank = brand red.', '每张商品卡上的大号促销价。留空 = 品牌红。'),
       sel(b.price_color || '', [{ value: '', label: T('— default (berry) —', '— 默认(莓红)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { price_color: v }))));
@@ -12739,7 +12739,7 @@ function buildTopUpForm(m, b) {
   const secColours = inspectorSection(m, b.type, 'colours', T('Colours', '颜色'));
 
   secLayout.appendChild(field(T('Layout', '版式'),
-    T('Card row — swipeable tier cards (browsy). Receipt — stacked bands, all visible at a glance. Hero — one big best-value pack with a strip of the rest.', '卡片行 — 可滑动的梯度卡片(易浏览)。小票 — 堆叠条带,一眼看全。主推 — 一个超值大套餐 + 其余小条带。'),
+    T('Card row = cards you swipe through. Receipt = all tiers stacked, visible at once. Hero = one big best-value pack, with the rest shown smaller below.', '卡片行 = 可左右滑动的卡片。小票 = 所有档位堆叠显示,一眼看全。主推 = 突出一个超值大套餐,其余以小条带显示。'),
     sel(b.layout || 'a', [
       { value: 'a', label: T('Card row — swipeable cards', '卡片行 — 可滑动卡片') },
       { value: 'b', label: T('Receipt — stacked bands', '小票 — 堆叠条带') },
@@ -12789,7 +12789,7 @@ function buildVotingForm(m, b) {
   // Inline view renders the full poll with options in one of three styles.
   if (view === 'inline') {
     secLayout.appendChild(field(T('Poll style', '投票样式'),
-      T('Classic — bordered rows with full fill bars and letter circles. Compact — slim rows with a thin underline bar. Leaderboard — ranked by votes with a LEADING badge; rows re-sort live.', '经典 — 带边框、整行填充进度条 + 字母圆标。紧凑 — 纤细行 + 细下划线进度条。排行榜 — 按票数排名,带「领先」徽章;实时重排。'),
+      T('Classic = bordered rows with full fill bars. Compact = slim rows, a thinner style. Leaderboard = ranked by votes, re-sorts as votes come in.', '经典 = 带边框、整行填充进度条。紧凑 = 纤细行,更简洁的样式。排行榜 = 按票数排名,随投票实时重排。'),
       sel(b.poll_style || 'classic', [
         { value: 'classic',     label: T('Classic — fill bars + letter circles', '经典 — 填充条 + 字母圆标') },
         { value: 'compact',     label: T('Compact — slim pills + underline bar', '紧凑 — 纤细行 + 下划线条') },
@@ -12998,8 +12998,8 @@ function buildGreetingForm(m, b) {
   const secBehaviour = inspectorSection(m, b.type, 'behaviour', T('Behaviour', '行为与动效'));
 
   secLayout.appendChild(field(T('Layout', '版式'),
-    T('Card = bordered editorial card. Banner = full-bleed colour band, big greeting. Inline = compact one-line with pts pill on the right. Split = greeting left, big pts wallet right. Classic / Wallet / Coin are the full "Welcome back" directions — coloured band, Bear Serif greeting, and a points/wallet display.',
-      '卡片 = 带边框的编辑卡片。横幅 = 全幅色带、大号问候语。行内 = 紧凑单行,积分胶囊在右侧。分栏 = 问候语在左,大号积分钱包在右。经典 / 钱包 / 金币为完整「欢迎回来」方向 — 彩色条幅、Bear Serif 问候语,以及积分/钱包展示。'),
+    T('Card, Banner, Inline and Split are simple, compact layouts. Classic, Wallet and Coin are bigger styles with a coloured band and a points display.',
+      '卡片 / 横幅 / 行内 / 分栏为简洁紧凑的版式。经典 / 钱包 / 金币为更大的样式 — 带彩色条幅与积分展示。'),
     sel(view, [
       { value: 'card',    label: T('Card — bordered (default)', '卡片 — 带边框(默认)') },
       { value: 'banner',  label: T('Banner — full-bleed, oversized greeting', '横幅 — 全幅、超大问候语') },
@@ -13011,13 +13011,13 @@ function buildGreetingForm(m, b) {
     ], v => updateBlock(b.id, { view: v }))));
 
   if (isDesign) {
-    secLayout.appendChild(field(T('Energy', '风格强度'), T('Type scale + corner/border weight + coin depth. Refined = smaller, tighter. Playful = larger headline, chunkier borders, bigger coin shadow.', '字号大小 + 圆角/描边粗细 + 金币立体感。精致 = 更小更紧凑。活泼 = 更大标题、更粗描边、更厚金币阴影。'),
+    secLayout.appendChild(field(T('Energy', '风格强度'), T('How big and bold it looks — text size, borders, and the coin\'s shadow. Refined = smaller and neater. Playful = bigger, bolder, more shadow.', '整体的大小与醒目程度 — 字号、边框与金币阴影。精致 = 更小更紧凑。活泼 = 更大更粗、阴影更厚。'),
       sel(b.energy || 'balanced', [
         { value: 'refined',  label: T('Refined — smaller, tighter', '精致 — 更小更紧凑') },
         { value: 'balanced', label: T('Balanced — the design default', '平衡 — 设计默认') },
         { value: 'playful',  label: T('Playful — bigger, chunkier', '活泼 — 更大更粗') },
       ], v => updateBlock(b.id, { energy: v }))));
-    secLayout.appendChild(field(T('Mood', '色彩故事'), T('Accent colour story for the points / links / coin. Forest = lime, Dusk = amber, Berry = pink. The band stays oat cream unless you set a Band colour below.', '积分 / 链接 / 金币的强调色彩故事。森林 = 青柠,黄昏 = 琥珀,莓果 = 粉。条幅保持燕麦白,除非你在下方设置条幅底色。'),
+    secLayout.appendChild(field(T('Mood', '色彩故事'), T('The accent colour for points, links and the coin. Forest = lime, Dusk = amber, Berry = pink. The background stays cream unless you set a Band colour below.', '积分 / 链接 / 金币的强调色。森林 = 青柠,黄昏 = 琥珀,莓果 = 粉。条幅保持燕麦白,除非你在下方设置条幅底色。'),
       sel(b.mood || 'forest', [
         { value: 'forest', label: T('Forest — lime accent', '森林 — 青柠强调') },
         { value: 'dusk',   label: T('Dusk — amber accent', '黄昏 — 琥珀强调') },
@@ -13067,7 +13067,7 @@ function buildGreetingForm(m, b) {
       sel(b.kicker_color || '', [{ value: '', label: T('— default (mood) —', '— 默认(色彩故事)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { kicker_color: v }))));
     secColours.appendChild(field(T('Badge colour', '徽章颜色'), T('The Coin star + small badge accents. Blank = mood badge (amber / amber / coral).', '金币上的星标 + 小徽章细节。留空 = 色彩故事徽章色(琥珀 / 琥珀 / 珊瑚)。'),
       sel(b.badge_color || '', [{ value: '', label: T('— default (mood) —', '— 默认(色彩故事)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { badge_color: v }))));
-    secColours.appendChild(field(T('Ink / text colour', '墨色 / 文字色'), T('Greeting headline, CN line + ink details: borders, the Coin face number. Blank = ink black.', '问候标题、中文行与墨色细节:描边、金币面数字。留空 = 墨黑。'),
+    secColours.appendChild(field(T('Ink / text colour', '墨色 / 文字色'), T('The greeting headline, Chinese line, and small details like borders. Blank = black.', '问候标题、中文行与描边等细节。留空 = 墨黑。'),
       sel(b.ink_color || '', [{ value: '', label: T('— default (ink) —', '— 默认(墨黑)—') }, ...BRAND_COLOR_OPTIONS], v => updateBlock(b.id, { ink_color: v }))));
   } else {
     secColours.appendChild(field(T('Background colour', '背景颜色'), '',
@@ -13856,7 +13856,7 @@ function buildWecomContactForm(m, b) {
 
   // ── Chat & QR setup ─────────────────────────────────────────────────
   secConnect.appendChild(field(T('Chat button', '客服按钮'),
-    T('Controls the chat button. It adapts to your settings below: if you add a QR code, the button shows it full-screen for the customer to long-press and add. If you instead paste a WeCom 微信客服 link, the button opens your WeCom chat. If neither is set, it falls back to the mini-app\'s built-in customer-service contact.', '控制客服按钮。它会根据下方的设置自动适配:若添加二维码,按钮会全屏显示二维码,顾客长按即可添加。若改为粘贴企业微信「微信客服」链接,按钮会打开企微客服会话。若两者都没有,则回退到小程序自带的客服联系。'),
+    T('Turns the chat button on or off. It uses whichever you\'ve set up below — QR code or WeCom link — or falls back to the mini app\'s built-in contact.', '控制客服按钮的显示。会使用下方已配置的方式 — 二维码或企业微信链接 — 若都未配置,则回退到小程序自带的客服联系。'),
     sel(b.show_chat_button === false ? '0' : '1', [
       { value: '1', label: T('Show — adapts to your settings below', '显示 — 按下方配置自动适配') },
       { value: '0', label: T('Hide', '隐藏') },
@@ -13866,7 +13866,7 @@ function buildWecomContactForm(m, b) {
     txtPair(b.button_label_en, b.button_label_cn, ({ en, cn }) => updateBlockSilent(b.id, { button_label_en: en, button_label_cn: cn }), { en: 'Chat with us', cn: '联系客服' })));
 
   secConnect.appendChild(field(T('WeCom 微信客服 link', '企业微信「微信客服」链接'),
-    T('Paste a 微信客服 link from 企业微信管理后台 → 微信客服 → (your account) → 接入网页/小程序 → copy link. It looks like "https://work.weixin.qq.com/kfid/kfc12345abc". When set (and no QR), the chat button opens WeCom instead of the official-account service.', '从企业微信管理后台 → 微信客服 → 创建/选择客服账号 → 接入网页/小程序 → 复制接入链接,粘贴该「微信客服」链接。形如「https://work.weixin.qq.com/kfid/kfc12345abc」。设置后(且无二维码时),客服按钮将打开企业微信,而非公众号客服。'),
+    T('Paste your 微信客服 link from 企业微信管理后台 → 微信客服 → 接入网页/小程序. It looks like "https://work.weixin.qq.com/kfid/kfc12345abc".', '从企业微信管理后台 → 微信客服 → 接入网页/小程序中复制链接并粘贴于此。形如「https://work.weixin.qq.com/kfid/kfc12345abc」。'),
     txt(b.wecom_kf_url, v => updateBlockSilent(b.id, { wecom_kf_url: (v || '').trim() }), 'https://work.weixin.qq.com/kfid/kfc…')));
 
   secConnect.appendChild(field(T('WeCom Corp ID (optional)', '企业微信 Corp ID(可选)'),
