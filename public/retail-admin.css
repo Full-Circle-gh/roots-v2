@@ -301,11 +301,6 @@
     font-size: 13px; font-weight: 600; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;
   }
-  .acct-role {
-    font-size: 11px; color: var(--text-3); font-family: var(--f-mono);
-    letter-spacing: .02em; margin-top: 2px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;
-  }
   .acct-sep { height: 1px; background: var(--line); margin: 4px 0; }
   .acct-item {
     display: flex; align-items: center; gap: 10px; width: 100%;
@@ -8013,10 +8008,6 @@
     box-shadow: 0 1px 2px rgba(17, 26, 43, .05), 0 4px 16px rgba(17, 26, 43, .06);
   }
   .topbar .acct-name { color: var(--td-text); font-weight: 500; font-size: 15px; }
-  .topbar .acct-role {
-    color: var(--td-text2); font-family: inherit;
-    text-transform: uppercase; letter-spacing: .08em; font-weight: 500;
-  }
   .topbar .acct-sep { background: var(--td-border); }
   .topbar .acct-item { color: var(--td-text); }
   .topbar .acct-item svg { color: var(--td-text2); opacity: 1; }
@@ -8034,7 +8025,7 @@
     flex: 0 1 auto; min-width: 0; margin-left: 14px;
   }
   .tb-crumb {
-    font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    font-size: 12.5px; font-weight: 600; letter-spacing: .02em; text-transform: none;
     color: var(--td-text2); white-space: nowrap; flex: none;
   }
   /* Products sub-view switch, moved up from the content (Option B). Hidden until

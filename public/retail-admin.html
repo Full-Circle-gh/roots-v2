@@ -949,10 +949,8 @@
         <span class="acct-circle acct-circle-lg" id="acctCircleLg" aria-hidden="true"></span>
         <div class="acct-meta">
           <div class="acct-name" id="acctName">—</div>
-          <div class="acct-role" id="acctRoleLine"></div>
         </div>
       </div>
-      <div class="acct-sep"></div>
       <button class="acct-item" id="acctProfileBtn" type="button" role="menuitem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
         <span>Profile · 个人资料</span>
@@ -960,20 +958,14 @@
       <div class="acct-sep"></div>
       <!-- Manage team moved to the left rail, under Settings (2026-07-14) —
            see .tabs a[href="/backend/team"]. -->
-      <!-- Display & language preferences — set-once toggles that used to sit
-           loose in the topbar (Aa text size, light/dark, language). Folded in
-           here Google/YouTube-style; each row flips in place and the menu
-           deliberately stays open so you can nudge size or theme repeatedly.
-           Current value shows in the right-hand chip (synced by acctSyncPrefs). -->
+      <!-- Appearance preference — set-once toggle that used to sit loose in the
+           topbar. Deliberately stays open on click so you can nudge theme
+           repeatedly; the value shows in the right-hand chip (acctSyncPrefs).
+           Language now lives only inside Profile (langToggle), not duplicated here. -->
       <button class="acct-item" id="acctTheme" type="button" role="menuitem" title="Toggle light / dark mode · 切换浅色 / 深色模式">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none"/></svg>
         <span>Appearance · 外观</span>
         <span class="acct-val" id="acctThemeVal"></span>
-      </button>
-      <button class="acct-item" id="acctLang" type="button" role="menuitem" title="Switch language · 切换语言">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg>
-        <span>Language · 语言</span>
-        <span class="acct-val" id="acctLangVal"></span>
       </button>
       <!-- New-order sound moved to Profile → Notifications (2026-07-14). -->
       <div class="acct-sep"></div>

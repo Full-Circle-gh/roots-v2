@@ -1673,12 +1673,6 @@ function acctInitials(u) {
   }
   return Array.from(src)[0];                    // CJK / other → first glyph
 }
-function acctRoleLabel(role) {
-  return cuT(
-    ({ owner: 'Owner', admin: 'Admin', staff: 'Staff', store_manager: 'Store manager', warehouse: 'Warehouse', customer_service: 'Customer service', dispatch: 'Dispatch' })[role] || (role || 'Operator'),
-    ({ owner: '负责人', admin: '管理员', staff: '员工', store_manager: '店长', warehouse: '仓库', customer_service: '客服', dispatch: '配送调度' })[role] || (role || '操作员')
-  );
-}
 function acctRenderCircle(el, u) {
   if (!el) return;
   if (u.avatarUrl) {
@@ -1697,25 +1691,16 @@ function acctRenderMeta() {
   acctRenderCircle($('#acctCircleLg'), u);
   const nameEl = $('#acctName');
   if (nameEl) nameEl.textContent = u.displayName || u.username || '—';
-  const roleEl = $('#acctRoleLine');
-  if (roleEl) {
-    const company = (u.tenant && (u.tenant.brand || u.tenant.name)) || '';
-    roleEl.textContent = acctRoleLabel(u.role) + (company ? ' · ' + company : '');
-  }
 }
-// Refresh the right-hand value chips on the in-menu preference rows (Appearance
-// / Language) so each reflects the live state. Reads the same
-// sources the toggles write, so it's correct after a toggle, a language flip,
-// or on first open. Each lookup is guarded — the rows may not exist on every
-// surface that reuses this script.
+// Refresh the right-hand value chip on the in-menu Appearance row so it
+// reflects the live theme. Guarded — the row may not exist on every surface
+// that reuses this script.
 function acctSyncPrefs() {
   const themeVal = $('#acctThemeVal');
   if (themeVal) {
     const dark = (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark';
     themeVal.textContent = dark ? cuT('Dark', '深色') : cuT('Light', '浅色');
   }
-  const langVal = $('#acctLangVal');
-  if (langVal) langVal.textContent = (window.cuLang && cuLang() === 'cn') ? '中文' : 'English';
   // New-order sound moved to Profile → Notifications; no chip here anymore.
 }
 function initAcctMenu(u) {
@@ -1753,8 +1738,6 @@ function initAcctMenu(u) {
   // value chip updates in place via acctSyncPrefs().
   const themeRow = $('#acctTheme');
   if (themeRow) themeRow.addEventListener('click', () => { if (window.cuToggleTheme) cuToggleTheme(); acctSyncPrefs(); });
-  const langRow = $('#acctLang');
-  if (langRow) langRow.addEventListener('click', () => { if (window.cuToggleLang) cuToggleLang(); acctSyncPrefs(); });
   // New-order sound now lives in Profile → Notifications (not the avatar menu).
 
   const signout = $('#acctSignout');
