@@ -1426,6 +1426,32 @@
     color: var(--text-1); border-color: var(--line-strong);
   }
   .canvas-meta select:focus { box-shadow: none; }
+  /* Focus-mode toggle — pill button matching .btn-phone-preview, with a
+     small switch instead of a chevron so its on/off state reads at a glance. */
+  .focus-toggle {
+    display: inline-flex; align-items: center; gap: 7px;
+    background: var(--bg-elev-1);
+    border: 1px solid var(--line);
+    border-radius: var(--r-md);
+    padding: 6px 8px 6px 11px;
+    font: 500 12px var(--f-sans);
+    color: var(--text-2);
+    cursor: pointer;
+    transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  }
+  .focus-toggle:hover { border-color: var(--text-2); }
+  .focus-toggle svg { width: 13px; height: 13px; flex: none; }
+  .focus-toggle .sw {
+    width: 24px; height: 14px; border-radius: 999px; background: var(--line-strong);
+    position: relative; flex: none; transition: background var(--t-fast) var(--ease-out);
+  }
+  .focus-toggle .sw::after {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 10px; height: 10px; border-radius: 50%;
+    background: #fff; transition: transform var(--t-fast) var(--ease-out); box-shadow: 0 1px 2px rgba(17, 26, 43, .25);
+  }
+  .focus-toggle.on { color: var(--text-1); }
+  .focus-toggle.on .sw { background: var(--accent); }
+  .focus-toggle.on .sw::after { transform: translateX(10px); }
   /* Notch only makes sense on iOS — hide it on Android presets */
   .phone[data-platform="android"]::before { display: none; }
 
@@ -1486,7 +1512,8 @@
   .block-wrap {
     position: relative;
     cursor: grab;
-    transition: outline-color var(--t-fast) ease, box-shadow var(--t-fast) ease;
+    transition: outline-color var(--t-fast) ease, box-shadow var(--t-fast) ease,
+      opacity var(--t-fast) var(--ease-out), filter var(--t-fast) var(--ease-out);
     outline: 2px solid transparent;
     outline-offset: -2px;
   }
@@ -1544,6 +1571,20 @@
     0%   { box-shadow: 0 0 0 0 rgba(110, 103, 175, .50), 0 0 0 0 rgba(110, 103, 175, .22); outline-color: var(--tacet-dusk); }
     35%  { box-shadow: 0 0 0 8px rgba(110, 103, 175, .30), 0 0 0 14px rgba(110, 103, 175, .10); outline-color: var(--tacet-dusk); }
     100% { box-shadow: 0 0 0 3px var(--tacet-dusk-tint), 0 0 0 0 rgba(110, 103, 175, 0); outline-color: var(--tacet-dusk); }
+  }
+  /* Focus mode — while a block is selected AND the Focus toggle is on,
+     every other block fades back so the one you're editing is unmistakable.
+     Scoped to .canvas (set by applyFocusClass()) rather than a body-level
+     class so it never leaks into the live-preview iframe embed. Hover lifts
+     a faded block partway so you can find your next target without
+     clicking blind. */
+  .canvas.focus-active .block-wrap:not(.selected) {
+    opacity: .3;
+    filter: saturate(.5);
+  }
+  .canvas.focus-active .block-wrap:not(.selected):hover {
+    opacity: .62;
+    filter: saturate(.75);
   }
   body.dragging .block-wrap.dragging-self {
     opacity: .35;
@@ -1697,28 +1738,31 @@
   .mc-info {
     display: inline-flex; align-items: center; justify-content: center;
     width: 14px; height: 14px; margin-left: 6px; flex: none;
-    color: var(--text-4); cursor: help; position: relative;
+    color: var(--text-4); cursor: help;
   }
   .mc-info svg { width: 13px; height: 13px; }
   .mc-info:hover, .mc-info:focus-visible { color: var(--text-1); outline: none; }
-  .mc-info::after {
-    content: attr(data-tip); position: absolute; bottom: calc(100% + 9px); left: 0;
-    transform: translateY(4px);
+  /* The popup itself is a single shared element appended to <body> and
+     positioned by JS (see the field-tip controller near `field()`), not a
+     CSS ::after on the icon. The inspector column is only 340px wide with
+     overflow-x:hidden for its own scrollbar, so a ::after bubble anchored to
+     the icon would get hard-clipped the moment a label pushed the icon past
+     the column's mid-point — position:fixed + viewport clamping sidesteps
+     that entirely. */
+  .field-tip-pop {
+    position: fixed;
+    display: none;
+    max-width: 240px;
+    padding: 8px 11px;
     background: var(--text-1); color: var(--bg-pane);
-    font: 400 12px var(--f-sans); line-height: 1.5; text-align: left; text-transform: none; letter-spacing: 0;
-    padding: 8px 11px; border-radius: 8px; width: max-content; max-width: 240px; white-space: normal;
+    font: 400 12px var(--f-sans);
+    line-height: 1.5; text-align: left;
+    border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,.12), 0 12px 32px rgba(0,0,0,.22);
-    opacity: 0; pointer-events: none; z-index: 60;
-    transition: opacity .18s cubic-bezier(.16,1,.3,1), transform .18s cubic-bezier(.16,1,.3,1);
+    white-space: normal;
+    z-index: 10000;
+    pointer-events: none;
   }
-  .mc-info::before {
-    content: ""; position: absolute; bottom: calc(100% + 4px); left: 5px;
-    border: 5px solid transparent; border-top-color: var(--text-1);
-    opacity: 0; pointer-events: none; z-index: 60; transition: opacity .18s;
-  }
-  .mc-info:hover::after, .mc-info:focus-visible::after { opacity: 1; transform: translateY(0); }
-  .mc-info:hover::before, .mc-info:focus-visible::before { opacity: 1; }
-  @media (prefers-reduced-motion: reduce) { .mc-info::after { transition: opacity .18s; } }
 
   input[type=text], input[type=number], input[type=url], select, textarea {
     width: 100%;
@@ -5117,6 +5161,17 @@
   <div class="canvas">
     <div class="canvas-meta">
       <select id="resolution-picker" title="Preview device"></select>
+      <!-- Focus mode — while a block is selected, fades every other block
+           back so it's unmistakable which one you're editing. Piggybacks on
+           the existing selection state; this button just gates whether the
+           dim CSS is allowed to apply (see applyFocusClass()). -->
+      <button type="button" class="focus-toggle" id="focus-toggle" onclick="toggleFocusMode()"
+              data-ti-en="Dim other blocks while one is selected" data-ti-cn="选中模块时,淡化其余模块"
+              title="Dim other blocks while one is selected">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V5a1 1 0 0 1 1-1h4"/><path d="M15 4h4a1 1 0 0 1 1 1v4"/><path d="M20 15v4a1 1 0 0 1-1 1h-4"/><path d="M9 20H5a1 1 0 0 1-1-1v-4"/></svg>
+        <span class="i18n-en">Focus</span><span class="i18n-cn">聚焦</span>
+        <span class="sw"></span>
+      </button>
       <!-- Single Preview entry point — opens a small menu with the two
            distinct ways to see what the customer will see. The inline
            phone-frame on this same canvas is the *editor stage*, not a
@@ -5601,6 +5656,10 @@ const state = {
   // never type a fake one. Loaded once from /api/retail-admin/vouchers.
   vouchers: [],
   selectedId: null, dirty: false, saving: false,
+  // Focus mode — when on, selecting a block fades every other block back
+  // (see .canvas.focus-active in CSS). On by default; persisted per-browser
+  // like the other view prefs so it doesn't reset every session.
+  focusMode: true,
   // Preview language. Customers in WeChat see either EN or 中 (their app
   // language), never both fused. The CMS lets the author flip between
   // them to verify each version. Persisted in localStorage.
@@ -5678,6 +5737,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
   initThemeBrand();
   buildLangToggle();
   buildResolutionPicker();
+  loadFocusMode();
   initCanvasLayout();   // opt-in canvas-first re-housing (no-op unless enabled)
   try {
     const me = await fetch('/api/auth/me', { credentials: 'same-origin' }).then(r => r.json());
@@ -7740,6 +7800,34 @@ function applyResolution(idx) {
   phone.dataset.platform = r.platform;
 }
 
+// Focus mode — see .canvas.focus-active in CSS + the .focus-toggle button
+// in the canvas toolbar. Loaded once at bootstrap; applyFocusClass() then
+// runs after every renderPreview() so it always reflects the live
+// selection without needing its own call site at every place selectedId
+// changes.
+function loadFocusMode() {
+  try {
+    const v = localStorage.getItem('cms_focus_mode');
+    if (v === '0' || v === '1') state.focusMode = v === '1';
+  } catch {}
+  syncFocusToggleUI();
+  applyFocusClass();
+}
+function toggleFocusMode() {
+  state.focusMode = !state.focusMode;
+  try { localStorage.setItem('cms_focus_mode', state.focusMode ? '1' : '0'); } catch {}
+  syncFocusToggleUI();
+  applyFocusClass();
+}
+function syncFocusToggleUI() {
+  const btn = $('#focus-toggle');
+  if (btn) btn.classList.toggle('on', !!state.focusMode);
+}
+function applyFocusClass() {
+  const canvas = document.querySelector('.canvas');
+  if (canvas) canvas.classList.toggle('focus-active', !!state.focusMode && state.selectedId != null);
+}
+
 // User-defined palette order — persisted per-browser so each editor can
 // keep their most-used blocks at the top. Stored as an array of block
 // type ids. Missing/new types append at the end so a future block
@@ -8578,6 +8666,10 @@ function renderPreview() {
   // the wrap) — reposition on the next frame so getBoundingClientRect sees
   // the post-paint coordinates.
   requestAnimationFrame(positionFloatingToolbar);
+  // Block wraps were just rebuilt from scratch above — re-sync the dim
+  // state against the (stable) .canvas element so focus mode survives
+  // every rerender, not just explicit selection changes.
+  applyFocusClass();
 }
 
 // Tick every second so countdown_timer + flash_sale_strip blocks stay live
@@ -11199,6 +11291,58 @@ function field(label, helper, inner) {
   wrap.appendChild(inner);
   return wrap;
 }
+
+// Floating, viewport-clamped tooltip for .mc-info[data-tip] — one shared
+// popup positioned on hover/focus so it never clips inside the scrollable
+// inspector column (same pattern as retail-admin's help-tip controller).
+(function () {
+  let pop = null;
+  function ensure() {
+    if (pop) return pop;
+    pop = document.createElement('div');
+    pop.className = 'field-tip-pop';
+    document.body.appendChild(pop);
+    return pop;
+  }
+  function place(target) {
+    const tip = target.getAttribute('data-tip');
+    if (!tip) return;
+    const el = ensure();
+    el.textContent = tip;
+    el.style.left = '0px';
+    el.style.top = '0px';
+    el.style.display = 'block';
+    const m = 8;
+    const r = target.getBoundingClientRect();
+    const tr = el.getBoundingClientRect();
+    let left = r.left + r.width / 2 - tr.width / 2;
+    left = Math.max(m, Math.min(left, window.innerWidth - tr.width - m));
+    let top = r.bottom + 8;
+    if (top + tr.height > window.innerHeight - m) {
+      const above = r.top - tr.height - 8;
+      if (above >= m) top = above;
+    }
+    el.style.left = Math.round(left) + 'px';
+    el.style.top = Math.round(top) + 'px';
+  }
+  function hide() { if (pop) pop.style.display = 'none'; }
+  document.addEventListener('mouseover', (e) => {
+    const t = e.target.closest && e.target.closest('.mc-info[data-tip]');
+    if (t) place(t);
+  });
+  document.addEventListener('mouseout', (e) => {
+    const t = e.target.closest && e.target.closest('.mc-info[data-tip]');
+    if (t) hide();
+  });
+  document.addEventListener('focusin', (e) => {
+    const t = e.target.closest && e.target.closest('.mc-info[data-tip]');
+    if (t) place(t);
+  });
+  document.addEventListener('focusout', (e) => {
+    const t = e.target.closest && e.target.closest('.mc-info[data-tip]');
+    if (t) hide();
+  });
+})();
 
 // Remembers which inspector sections are expanded, keyed by
 // "<blockType>:<sectionKey>". The inspector rebuilds on every edit, so without
