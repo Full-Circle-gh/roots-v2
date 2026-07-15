@@ -32,9 +32,19 @@ let PA_LOW_STOCK = 5;
 // tenant-wide default) or a store id (that store's own override). Only
 // reachable with 2+ stores — see paSyncLowStockUi().
 let PA_LOW_STORE = 'all';
-function paLowThreshold(p) {
+// Effective low-stock threshold: a product's own override wins; failing that,
+// the given store's own override (when known); failing that, the tenant-wide
+// default. storeId is optional — omit it (or pass 'all') for a combined-stock
+// row that isn't scoped to one location.
+function paLowThreshold(p, storeId) {
   const t = p && p.low_stock_threshold;
-  return (t == null || t === '' || !(Number(t) >= 0)) ? PA_LOW_STOCK : Number(t);
+  if (t != null && t !== '' && Number(t) >= 0) return Number(t);
+  if (storeId != null && storeId !== 'all') {
+    const s = PA_STORES.find(x => x.id === storeId);
+    const st = s && s.low_stock_threshold;
+    if (st != null && st !== '' && Number(st) >= 0) return Number(st);
+  }
+  return PA_LOW_STOCK;
 }
 // The store object PA_LOW_STORE currently points at, or null when scoped to
 // 'all' / the store no longer exists (e.g. deactivated under us).
@@ -838,7 +848,7 @@ async function paSaveStoreStock(productId, storeId, raw, el) {
     // Keep the amber/brick edge honest for the value just saved.
     const _lp = (PA_PRODUCTS || []).find(x => x.id === productId);
     el.classList.toggle('is-out', qty <= 0);
-    el.classList.toggle('is-low', qty > 0 && qty <= paLowThreshold(_lp || {}));
+    el.classList.toggle('is-low', qty > 0 && qty <= paLowThreshold(_lp || {}, storeId));
     el.classList.add('is-saved');
     setTimeout(() => el.classList.remove('is-saved'), 1200);
     // Refresh this product's combined stock so OOS/low badges + KPIs follow.
@@ -1027,13 +1037,13 @@ function _paStockCell(u) {
   // meaningless number on a row that has no stock of its own.
   if (!u.group && u.p.is_bundle) {
     const q = _paBundleStock(u.p);
-    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p, PA_STORE) ? 'is-low' : '');
     return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Made from other products — stock follows the parts', '由其他产品组成 — 库存取决于组成商品')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
   }
   if (PA_STORE !== 'all' && PA_STOCK_LOADED) {
     if (u.group) {
       const q = u.members.reduce((s, m) => s + _paStoreQty(m.id, PA_STORE), 0);
-      const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+      const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p, PA_STORE) ? 'is-low' : '');
       return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Open the product to set each size’s stock', '打开产品以分别设置各规格库存')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
     }
     const q = _paStoreQty(u.p.id, PA_STORE);
@@ -1070,16 +1080,16 @@ function _paStoreStockCell(u, storeId) {
   }
   if (!u.group && u.p.is_bundle) {
     const q = _paBundleStock(u.p);
-    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p, storeId) ? 'is-low' : '');
     return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Made from other products — stock follows the parts', '由其他产品组成 — 库存取决于组成商品')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
   }
   if (u.group) {
     const q = u.members.reduce((s, m) => s + _paStoreQty(m.id, storeId), 0);
-    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+    const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p, storeId) ? 'is-low' : '');
     return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Open the product to set each size’s stock', '打开产品以分别设置各规格库存')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
   }
   const q = _paStoreQty(u.p.id, storeId);
-  const state = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p) ? 'is-low' : '');
+  const state = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p, storeId) ? 'is-low' : '');
   return `<input class="pa-stock-input ${state}" type="number" min="0" inputmode="numeric" value="${q}"`
     + ` aria-label="${escapeAttr(_paStoreName(storeId) + ' ' + cuT('stock', '库存'))}" onclick="event.stopPropagation()"`
     + ` onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"`
@@ -1709,7 +1719,13 @@ async function paBulkSetPublished(want) {
   await paLoad();
 }
 let PA_ORDERED_UNIT_IDS = [];
+let _PA_RENDER_LANG_HOOKED = false;
 function paRender() {
+  // Rows/cards resolve product names through cuT() at render time and carry
+  // data-no-i18n, so the DOM walker won't repaint them on a language toggle —
+  // re-render the whole grid instead. Registered lazily (onLangChange lives in
+  // a later part file).
+  if (!_PA_RENDER_LANG_HOOKED && window.onLangChange) { _PA_RENDER_LANG_HOOKED = true; onLangChange(paRender); }
   const grid   = document.getElementById('pa-grid');
   const empty  = document.getElementById('pa-empty');
   const count  = document.getElementById('pa-count');
@@ -1955,8 +1971,7 @@ function paRender() {
           </div>
         </div>
         <div class="pa-card-body" data-no-i18n>
-          <div class="pa-card-name">${escapeHtml(p.name_en || '—')}</div>
-          ${p.name_cn ? `<div class="pa-card-sub">${escapeHtml(p.name_cn)}</div>` : ''}
+          <div class="pa-card-name">${escapeHtml(cuT(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—'))}</div>
           ${meta ? `<div class="pa-card-meta">${meta}</div>` : ''}
           <div class="pa-card-shop">${_paShopToggle(u)}<span class="pa-card-shop-lbl">${pub ? cuT('On shop', '已上架') : cuT('Off shop', '未上架')}</span></div>
         </div>
@@ -2476,6 +2491,9 @@ function pdShowDocked() {
   if (split) split.classList.remove('pa-split-listonly');
   if (empty) empty.style.display = 'none';
   if (ed)    ed.style.display = '';
+  // Every open lands on the Basics pane — no matter which pane was showing when
+  // the previous product was closed.
+  pdTab('basics');
   // The docked list pages by 18 while the overview pages by 50/100/200/All, so
   // the product just clicked from a long overview page may fall on a different
   // 18-row page. Jump to the page that holds it (using the full ordered unit
@@ -2495,6 +2513,25 @@ function pdShowDocked() {
     const targetY = Math.max(0, window.scrollY + ed.getBoundingClientRect().top - 110);
     if (Math.abs(targetY - window.scrollY) > 40) window.scrollTo({ top: targetY, behavior: 'smooth' });
   }
+}
+// Focused-panes tab switch — show one pane (Basics/Stock/Page/Details) at a
+// time. Pure show/hide; every field stays in the DOM so saves/loads are
+// unaffected by which pane is visible. Called by the tab buttons and on open.
+function pdTab(name) {
+  const ed = document.getElementById('pd-editor');
+  if (!ed) return;
+  ed.querySelectorAll('.pd-tab').forEach(function (b) {
+    const on = b.getAttribute('data-pane') === name;
+    b.classList.toggle('is-active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  ed.querySelectorAll('.pd-pane').forEach(function (p) {
+    p.classList.toggle('is-active', p.getAttribute('data-pane') === name);
+  });
+  // Switching panes scrolls the body back to the top so the new pane starts at
+  // its heading, not wherever the last pane was scrolled to.
+  const body = ed.querySelector('.pu-editor-body');
+  if (body) body.scrollTop = 0;
 }
 function pdClose() {
   // Deselect — the editor returns to the empty-state placeholder. (Closing the
