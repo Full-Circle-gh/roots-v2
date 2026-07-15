@@ -1776,7 +1776,13 @@ function onProfileKey(e) { if (e.key === 'Escape') closeProfileModal(); }
   if (scrim) scrim.addEventListener('click', closeProfileModal);
   if (closeBtn) closeBtn.addEventListener('click', closeProfileModal);
   window.addEventListener('message', (e) => {
-    if (e.origin === location.origin && e.data === 'profile-modal-close') closeProfileModal();
+    if (e.origin !== location.origin) return;
+    if (e.data === 'profile-modal-close') closeProfileModal();
+    if (e.data && e.data.type === 'fc-profile-updated') {
+      Object.assign(ACCT_USER || (ACCT_USER = {}), e.data.user);
+      acctRenderMeta();
+      if (typeof tdGreetRender === 'function') tdGreetRender();
+    }
   });
 })();
 

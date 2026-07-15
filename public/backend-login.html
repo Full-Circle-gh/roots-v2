@@ -252,14 +252,15 @@
     </div>
 
     <!-- Two-step verification — shown after a correct password when the
-         operator has 2FA on. Code is emailed to their recovery address. -->
+         operator has 2FA on. Code is sent to their recovery email or verified
+         phone (SMS), depending on their chosen channel. -->
     <div id="twofaPanel" hidden>
       <button type="button" class="reset-back" id="twofaBack">
         <svg width="13" height="13" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"/></svg>
         <span class="en">Back to sign in</span><span class="cn">返回登录</span>
       </button>
       <h1><span class="en">Verify it’s you</span><span class="cn">验证身份</span></h1>
-      <p class="greet"><span class="en">Enter the 6-digit code we emailed to </span><span class="cn">请输入我们发送到 </span><b id="twofaHint"></b><span class="cn"> 的 6 位验证码</span><span class="en">.</span></p>
+      <p class="greet"><span class="en">Enter the 6-digit code we sent to </span><span class="cn">请输入我们发送到 </span><b id="twofaHint"></b><span class="cn"> 的 6 位验证码</span><span class="en">.</span></p>
       <div class="err" id="twofaErr" role="alert"><span></span></div>
       <div class="field">
         <label for="twofaCode"><span class="en">Verification code</span><span class="cn">验证码</span></label>
