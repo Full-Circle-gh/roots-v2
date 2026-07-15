@@ -5094,6 +5094,56 @@
   #order-drawer .drawer-foot:empty { display: none; }
   #order-drawer .drawer-foot .od-foot-spacer { flex: 1 1 auto; }
   #order-drawer .drawer-foot .od-foot-hint { font-size: 12.5px; color: var(--text-3); }
+
+  /* ── Orders · full-screen detail (desktop) ──────────────────────────────
+     Opening an order takes over the full window instead of a right-side
+     panel — a dedicated page: back + "Orders / <order#>" breadcrumb + prev
+     /next through the visible list, then the EXISTING order detail in one
+     centered column. Gated to the exact complement of the phone breakpoint
+     (max-width:720px above) so the two never overlap. Purely additive — the
+     detail renderer (renderOpenOrder / renderReadonlyOrder) is reused
+     unchanged; only the container + a new topbar are added. */
+  @media (min-width: 721px) {
+    #order-drawer.open {
+      width: 100vw; left: 0; right: 0; min-width: 0;
+      border-left: 0; box-shadow: none;
+    }
+    #order-drawer .drawer-close { display: none; }
+    #order-drawer .od-topbar { display: flex; }
+    #order-drawer .drawer-body { max-width: 780px; margin: 0 auto; }
+  }
+  #order-drawer .od-topbar {
+    display: none; /* shown only ≥721px above; phones keep .drawer-back */
+    align-items: center; gap: 14px;
+    padding: 13px 24px;
+    border-bottom: 1px solid var(--line);
+    flex-shrink: 0;
+    background: var(--bg-app);
+    position: sticky; top: 0; z-index: 6;
+  }
+  #order-drawer .od-topbar .od-tb-crumb { display: flex; align-items: center; gap: 9px; font-size: 14px; color: var(--text-2); }
+  #order-drawer .od-topbar .od-tb-back {
+    width: 32px; height: 32px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--bg-pane);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-2); cursor: pointer;
+  }
+  #order-drawer .od-topbar .od-tb-back:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  #order-drawer .od-topbar .od-tb-back svg { width: 16px; height: 16px; }
+  #order-drawer .od-topbar .od-tb-sep { color: var(--text-4); }
+  #order-drawer .od-topbar .od-tb-here { color: var(--text-1); font-weight: 600; font-variant-numeric: tabular-nums; }
+  #order-drawer .od-topbar .od-tb-grow { flex: 1; }
+  #order-drawer .od-topbar .od-tb-count { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  #order-drawer .od-topbar .od-tb-nav {
+    width: 32px; height: 32px; border-radius: var(--r-md);
+    border: 1px solid var(--line); background: var(--bg-pane);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-2); cursor: pointer;
+  }
+  #order-drawer .od-topbar .od-tb-nav:hover { background: var(--bg-elev-1); color: var(--text-1); }
+  #order-drawer .od-topbar .od-tb-nav:disabled { opacity: .35; cursor: default; pointer-events: none; }
+  #order-drawer .od-topbar .od-tb-nav svg { width: 16px; height: 16px; }
+
   /* The Orders drawer hosts the existing .order-card chrome unchanged
      — but reset the card's outer chrome since the drawer already
      frames it. */

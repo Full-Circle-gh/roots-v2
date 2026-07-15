@@ -3556,10 +3556,50 @@ async function openOrder(id, opts = {}) {
       const _chip = _row.querySelector('.new-chip');
       if (_chip) _chip.remove();
     }
+    // Desktop full-screen topbar: back + breadcrumb + prev/next. No-op on
+    // phones (CSS keeps it hidden there) and harmless if the container isn't
+    // mounted for any reason.
+    renderOrderTopbar(o);
   } catch (e) {
     mount.innerHTML = `<div class="order-card err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
     mount.classList.remove('od-swapping');
   }
+}
+
+// ── Orders · full-screen topbar (desktop) ─────────────────────────────────
+// Renders into #order-drawer-topbar: a back chevron (reuses orderDrawerBack()
+// so the existing "return to customer" flow keeps working), a plain "Orders /
+// <order#>" breadcrumb, and prev/next through the CURRENTLY VISIBLE desktop
+// order rows (#orders-table). Hidden on phones via CSS (they keep the
+// existing .drawer-back chevron). Prev/next simply disable themselves when
+// the order wasn't opened from that list (e.g. from a dashboard card) —
+// nothing to page through, not an error.
+function renderOrderTopbar(o) {
+  const host = document.getElementById('order-drawer-topbar');
+  if (!host) return;
+  const ids = Array.from(document.querySelectorAll('#orders-table tbody tr.order-row[data-order-id]'))
+    .map(r => Number(r.dataset.orderId));
+  const idx = ids.indexOf(Number(o.id));
+  const prevId = idx > 0 ? ids[idx - 1] : null;
+  const nextId = (idx >= 0 && idx < ids.length - 1) ? ids[idx + 1] : null;
+  const countHtml = ids.length
+    ? `<span class="od-tb-count">${idx >= 0 ? idx + 1 : '—'} of ${ids.length}</span>`
+    : '';
+  host.innerHTML = `
+    <div class="od-tb-crumb">
+      <button type="button" class="od-tb-back" onclick="orderDrawerBack()" title="Back · 返回" aria-label="Back">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      </button>
+      <span>Orders</span><span class="od-tb-sep">/</span><span class="od-tb-here">${escapeHtml(o.order_no)}</span>
+    </div>
+    <span class="od-tb-grow"></span>
+    ${countHtml}
+    <button type="button" class="od-tb-nav" ${prevId != null ? `onclick="openOrder(${prevId})"` : 'disabled'} title="Previous order · 上一单" aria-label="Previous order">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+    </button>
+    <button type="button" class="od-tb-nav" ${nextId != null ? `onclick="openOrder(${nextId})"` : 'disabled'} title="Next order · 下一单" aria-label="Next order">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+    </button>`;
 }
 
 // Generic side-drawer open/close. Shared across Orders, Customers,
@@ -3633,6 +3673,8 @@ onDrawerClose('#order-drawer', () => {
   teardownCourierMap();            // stop polling + destroy the AMap instance
   const m = document.getElementById('order-detail-mount');
   if (m) m.innerHTML = '';
+  const tb = document.getElementById('order-drawer-topbar');
+  if (tb) tb.innerHTML = '';
   _OPEN_ORDER = null;
 });
 
