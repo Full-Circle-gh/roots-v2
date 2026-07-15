@@ -159,12 +159,12 @@ function paSetView(v) {
 // stack on top. 'restock' = OOS + low together (what the dashboard's
 // "Open restock" button deep-links into).
 let PA_STATUS = 'all';
-// Highlights band payload (best seller / rising / three id-backed count buckets),
-// fetched from /api/retail-admin/products/highlights. The three count tiles are
-// tap-through: their member IDs back the 'dead' | 'incomplete' | 'promo' quick
-// filters below, so the tile's number and the filtered grid share one source.
+// Highlights payload (two id-backed count buckets), fetched from
+// /api/retail-admin/products/highlights. Their member IDs back the
+// 'dead' | 'promo' quick filters below, so the jump tile's number and the
+// filtered grid share one source.
 let PA_HI = null;
-const PA_HI_SETS = { dead: new Set(), incomplete: new Set(), promo: new Set() };
+const PA_HI_SETS = { dead: new Set(), promo: new Set() };
 function paSetStatus(v) {
   PA_STATUS = (PA_STATUS === v) ? 'all' : v;   // click the active tile to clear
   PA_PAGE = 1;
@@ -226,7 +226,6 @@ function _paStatusMatch(p) {
     // Highlights-band buckets — membership comes from the server (id sets), not a
     // per-product rule, so the grid matches the tile count exactly.
     case 'dead':       return PA_HI_SETS.dead.has(p.id);
-    case 'incomplete': return PA_HI_SETS.incomplete.has(p.id);
     case 'promo':      return PA_HI_SETS.promo.has(p.id);
     default:        return true;
   }
@@ -722,7 +721,7 @@ async function paLoad() {
     pdLoadCatTree().then(paFillCatFilter);   // re-label bilingually once the tree lands
     paRender();
     paRenderKpis(true);   // animated count-up once on load
-    paLoadHighlights();   // second band: best seller, rising, needs-attention…
+    paLoadHighlights();   // fills the Going nowhere / On promotion jump tiles
     paLoadStoreStock();   // per-store stock + store list (drives the switcher)
   } catch (e) {
     grid.innerHTML = `<div class="err" style="grid-column:1/-1;text-align:center;padding:40px">Failed to load products: ${escapeHtml(e.message)}</div>`;
@@ -1316,6 +1315,16 @@ function paRenderKpis(animate) {
     if (animate) dashCountUp(el, n); else el.textContent = fcNum(n);
   };
   set('pa-kpi-live', live);
+  // Hero stat: Active is the number the operator scans first, so it's the big
+  // figure ("N of TOTAL products"); the proportion bar + legend under it show
+  // the live-vs-disabled split. Active + Disabled always equal Total — same
+  // is_published split as the Drafts jump tile below.
+  set('pa-kpi-active', live);
+  set('pa-kpi-total', rows.length);
+  set('pa-kpi-active-leg', live);
+  set('pa-kpi-disabled', drafts);
+  const barFill = document.getElementById('pa-kpi-bar-fill');
+  if (barFill) barFill.style.width = (rows.length ? Math.round((live / rows.length) * 100) : 0) + '%';
   set('pa-kpi-restock', oos + low);   // everything that needs buying back
   set('pa-kpi-oos', oos);
   set('pa-kpi-low', low);
@@ -1324,7 +1333,7 @@ function paRenderKpis(animate) {
   const lowTile = document.getElementById('pa-kpi-low-tile'); if (lowTile) lowTile.classList.toggle('alert', low > 0);
   const restockTile = document.getElementById('pa-kpi-restock-tile'); if (restockTile) restockTile.classList.toggle('alert', (oos + low) > 0);
   // Light up whichever jump drives the active quick-filter (none when 'all').
-  const tiles = { live: 'pa-kpi-live-tile', restock: 'pa-kpi-restock-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile' };
+  const tiles = { live: 'pa-kpi-live-tile', restock: 'pa-kpi-restock-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile', dead: 'pa-kpi-dead-tile', promo: 'pa-kpi-promo-tile' };
   for (const [status, id] of Object.entries(tiles)) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('pa-kpi-on', PA_STATUS === status);
@@ -1342,7 +1351,6 @@ function paRenderKpis(animate) {
       live:    { c: 'var(--accent)', en: 'live products',       cn: '已上架产品',   n: live },
       // Highlights-band filters (counts come from the fetched payload).
       dead:       { c: 'var(--td-brick)', en: 'products with no sale in 30 days', cn: '30 天无销量产品', n: PA_HI_SETS.dead.size },
-      incomplete: { c: 'var(--td-amber)', en: 'products missing a photo, price or category', cn: '缺图片、价格或分类的产品', n: PA_HI_SETS.incomplete.size },
       promo:      { c: 'var(--td-sage)',  en: 'products on a flash sale', cn: '正在闪购的产品', n: PA_HI_SETS.promo.size },
     };
     const m = meta[PA_STATUS];
@@ -1359,133 +1367,37 @@ function paRenderKpis(animate) {
     }
   }
 }
-// ── Catalogue highlights band ───────────────────────────────────────────────
-// The "Your catalogue" card's second row: five product facts an owner glances at
-// each morning. Product tiles (best seller / rising) open that product; the three
-// count tiles filter the grid to their set. Data + id-sets are fetched once by
-// paLoadHighlights(); paRenderHighlights() paints from the cached payload so it
-// re-runs cheaply on every grid render (to track the active filter) and on a
-// language toggle.
-const PA_HI_ICONS = {
-  star:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 2.9 6.3 6.9.6-5.2 4.6 1.6 6.8L12 17.3 5.8 20.9l1.6-6.8L2.2 8.9l6.9-.6z"/></svg>',
-  up:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 7-7"/><path d="M17 8h4v4"/></svg>',
-  down:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l6 6 4-4 7 7"/><path d="M17 16h4v-4"/></svg>',
-  warn:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>',
-  tag:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5H7a2 2 0 0 0-2 2v12l7-3 7 3V7a2 2 0 0 0-2-2h-2"/><path d="M9 5a3 3 0 0 1 6 0"/></svg>',
-  box:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9h18M3 9l1.5-4.5A1 1 0 0 1 5.4 4h13.2a1 1 0 0 1 .95.68L21 9M5 9v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/></svg>',
-};
-let _PA_HI_LANG_HOOKED = false;
+// ── Catalogue highlights — folded into the Jump-to row ─────────────────────
+// Two more quick filters that used to live in a separate "Highlights" band:
+// Going nowhere (no sale in 30 days) and On promotion (active flash sale).
+// Their counts + id-sets come once from /api/retail-admin/products/highlights;
+// paRenderHighlights() just fills the two pa-jump tiles already in the DOM
+// (pa-kpi-dead-tile / pa-kpi-promo-tile) so they read identically to
+// Sold out / Low stock / Drafts. Best seller / Rising and Needs attention were
+// dropped — Needs attention duplicated the existing Drafts filter.
 async function paLoadHighlights() {
-  if (!document.getElementById('pa-hi')) return;
-  // Bilingual copy is chosen at render time, so repaint on a language toggle.
-  if (!_PA_HI_LANG_HOOKED && window.onLangChange) { _PA_HI_LANG_HOOKED = true; onLangChange(paRenderHighlights); }
+  if (!document.getElementById('pa-kpi-dead-tile')) return;
   try {
     const res = await fetch('/api/retail-admin/products/highlights');
     const j = await res.json();
     if (!j || !j.success) throw new Error('load_failed');
     PA_HI = j;
-    PA_HI_SETS.dead       = new Set(j.goingNowhere   && j.goingNowhere.ids   || []);
-    PA_HI_SETS.incomplete = new Set(j.needsAttention && j.needsAttention.ids || []);
-    PA_HI_SETS.promo      = new Set(j.onPromotion    && j.onPromotion.ids    || []);
+    PA_HI_SETS.dead  = new Set(j.goingNowhere && j.goingNowhere.ids || []);
+    PA_HI_SETS.promo = new Set(j.onPromotion  && j.onPromotion.ids  || []);
   } catch { PA_HI = null; }
   paRenderHighlights();
 }
-// Hero tile — Best seller or Rising, the two facts worth a second look. Both
-// get equal weight: eyebrow label, photo, big number. `open` falsy → disabled
-// quiet empty state. `dotIcon` is the small trend badge on the photo corner
-// (Rising only — Best seller has nothing to compare against).
-function _paHiHero({ ebIcon, ebLabel, img, dotIcon, name, statHtml, open }) {
-  const attrs = open ? `onclick="${open}"` : 'disabled';
-  const photo = img ? `<img src="${escapeHtml(img)}" alt="" loading="lazy">` : PA_HI_ICONS.box;
-  return `<button type="button" class="pa-hi-hero" ${attrs}>
-      <span class="pa-hi-hero-eb">${ebIcon}${ebLabel}</span>
-      <span class="pa-hi-hero-body">
-        <span class="pa-hi-hero-photo">${photo}${dotIcon ? `<span class="pa-hi-hero-dot">${dotIcon}</span>` : ''}</span>
-        <span class="pa-hi-hero-text">
-          <span class="pa-hi-hero-name">${name}</span>
-          <span class="pa-hi-hero-stat">${statHtml}</span>
-        </span>
-      </span>
-    </button>`;
-}
-// One quiet ticker entry for an aggregate fact (Going nowhere / Needs attention
-// / On promotion) — icon badge, label, value, no thumbnail. `title` carries the
-// longer explanation as a native tooltip since the strip has no room for a sub
-// line. `open` falsy → disabled.
-function _paHiTick({ cls, icon, cap, title, val, valCls, open, active }) {
-  const attrs = open
-    ? `onclick="${open}"${active ? ' aria-pressed="true"' : ''}`
-    : 'disabled';
-  return `<button type="button" class="pa-hi-tick${active ? ' is-on' : ''}" ${attrs} title="${escapeHtml(title)}">
-      <span class="pa-hi-tick-ico badge-${cls}">${icon}</span>
-      <span class="pa-hi-tick-k">${cap}</span>
-      <span class="pa-hi-tick-v ${valCls || ''}">${val}</span>
-    </button>`;
-}
 function paRenderHighlights() {
-  const band = document.getElementById('pa-hi');
-  const wrap = document.getElementById('pa-hi-band');
-  if (!band || !wrap) return;
-  if (!PA_HI) { band.hidden = true; return; }
-  band.hidden = false;
-  const pname = (o) => escapeHtml(cuT(o.name_en || o.name_cn || '—', o.name_cn || o.name_en || '—'));
-
-  // Best seller — top units this week. Hero #1.
-  const bestHtml = PA_HI.bestSeller
-    ? _paHiHero({
-        ebIcon: PA_HI_ICONS.star, ebLabel: cuT('Best seller · 7 days', '最畅销 · 近 7 天'),
-        img: PA_HI.bestSeller.image, dotIcon: null, name: pname(PA_HI.bestSeller),
-        statHtml: `${fcNum(PA_HI.bestSeller.units)}<span class="u">${cuT('sold', '件已售')}</span>`,
-        open: `paOpenEdit(${PA_HI.bestSeller.id})`,
-      })
-    : _paHiHero({
-        ebIcon: PA_HI_ICONS.star, ebLabel: cuT('Best seller · 7 days', '最畅销 · 近 7 天'),
-        img: null, dotIcon: null, name: `<span class="pa-hi-empty">${cuT('No sales yet', '暂无销量')}</span>`,
-        statHtml: '', open: null,
-      });
-
-  // Rising — biggest % jump this week vs last. Hero #2.
-  const risingHtml = PA_HI.rising
-    ? _paHiHero({
-        ebIcon: PA_HI_ICONS.up, ebLabel: cuT('Rising vs last week', '较上周上升'),
-        img: PA_HI.rising.image, dotIcon: PA_HI_ICONS.up, name: pname(PA_HI.rising),
-        statHtml: `<svg class="pa-hi-tri" viewBox="0 0 24 24" fill="currentColor"><path d="M12 5.5 20.5 19h-17z"/></svg>${PA_HI.rising.pct}%`,
-        open: `paOpenEdit(${PA_HI.rising.id})`,
-      })
-    : _paHiHero({
-        ebIcon: PA_HI_ICONS.up, ebLabel: cuT('Rising vs last week', '较上周上升'),
-        img: null, dotIcon: null, name: `<span class="pa-hi-empty">${cuT('No clear climber', '暂无明显上升')}</span>`,
-        statHtml: '', open: null,
-      });
-
-  const ticks = [];
-
-  // Going nowhere — live, no sale in 30 days. Aggregate count → icon badge.
+  const deadTile = document.getElementById('pa-kpi-dead-tile');
+  const promoTile = document.getElementById('pa-kpi-promo-tile');
+  if (!deadTile || !promoTile) return;
+  if (!PA_HI) { deadTile.hidden = true; promoTile.hidden = true; return; }
   const dead = PA_HI.goingNowhere ? PA_HI.goingNowhere.count : 0;
-  ticks.push(_paHiTick({
-    cls: 'brick', icon: PA_HI_ICONS.down, cap: cuT('Going nowhere', '无人问津'),
-    title: cuT('No sale in 30 days', '30 天无销量'),
-    val: fcNum(dead), open: dead ? `paSetStatus('dead')` : null, active: PA_STATUS === 'dead',
-  }));
-
-  // Needs attention — live, missing photo/price/category.
-  const inc = PA_HI.needsAttention ? PA_HI.needsAttention.count : 0;
-  ticks.push(_paHiTick({
-    cls: 'amber', icon: PA_HI_ICONS.warn, cap: cuT('Needs attention', '待完善'),
-    title: cuT('Missing a photo, price or category', '缺图片、价格或分类'),
-    val: fcNum(inc), open: inc ? `paSetStatus('incomplete')` : null, active: PA_STATUS === 'incomplete',
-  }));
-
-  // On promotion — live, active flash sale now.
   const promo = PA_HI.onPromotion ? PA_HI.onPromotion.count : 0;
-  ticks.push(_paHiTick({
-    cls: 'neu', icon: PA_HI_ICONS.tag, cap: cuT('On promotion', '促销中'),
-    title: cuT('On a flash sale right now', '正在闪购'),
-    val: fcNum(promo), valCls: promo ? '' : 'muted',
-    open: promo ? `paSetStatus('promo')` : null, active: PA_STATUS === 'promo',
-  }));
-
-  wrap.innerHTML = `<div class="pa-hi-heroes">${bestHtml}${risingHtml}</div><div class="pa-hi-ticks">${ticks.join('')}</div>`;
+  deadTile.hidden = !dead;
+  promoTile.hidden = !promo;
+  const deadN = document.getElementById('pa-kpi-dead'); if (deadN) deadN.textContent = fcNum(dead);
+  const promoN = document.getElementById('pa-kpi-promo'); if (promoN) promoN.textContent = fcNum(promo);
 }
 
 // Recap-banner shortcut: arm bulk-select and tick every product on the current
@@ -1733,7 +1645,7 @@ function paRender() {
   const filter = document.getElementById('pa-filter').value;
 
   paRenderKpis(false);   // keep the health strip in sync (no re-animation)
-  paRenderHighlights();  // repaint the highlights band's active-filter state
+  paRenderHighlights();  // keep the Going nowhere / On promotion tile counts in sync
   paRenderStoreSeg();    // show/hide the per-store switcher for the current view
 
   let rows = PA_PRODUCTS;
