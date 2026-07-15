@@ -3556,6 +3556,9 @@ async function openOrder(id, opts = {}) {
       const _chip = _row.querySelector('.new-chip');
       if (_chip) _chip.remove();
     }
+    // Desktop: open the order as an in-app page (fills the content area beside
+    // the nav rail; the CSS gates it to ≥721px). No-op on phones (full-screen).
+    ordPageOn(o);
   } catch (e) {
     mount.innerHTML = `<div class="order-card err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
     mount.classList.remove('od-swapping');
@@ -3634,7 +3637,23 @@ onDrawerClose('#order-drawer', () => {
   const m = document.getElementById('order-detail-mount');
   if (m) m.innerHTML = '';
   _OPEN_ORDER = null;
+  ordPageOff();
 });
+
+// ── Orders · in-app page mode (desktop) ──────────────────────────────────
+// An open order fills the main content area beside the fixed nav rail
+// (body.ord-page; the CSS gates the layout to ≥721px). The list is covered,
+// the rail + a back/breadcrumb bar stay, so it reads as a page rather than a
+// floating panel. Purely additive: phones keep the full-screen takeover and
+// the closed state is unchanged.
+function ordPageOn(o) {
+  document.body.classList.add('ord-page');
+  const crumb = document.getElementById('ord-page-crumb');
+  if (crumb) crumb.textContent = (o && o.order_no) || '';
+}
+function ordPageOff() {
+  document.body.classList.remove('ord-page');
+}
 
 // Row-click → open. Delegated so it survives table re-renders. Bails when
 // the click landed on an interactive child (button, link, input) so those

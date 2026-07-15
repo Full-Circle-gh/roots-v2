@@ -5094,6 +5094,44 @@
   #order-drawer .drawer-foot:empty { display: none; }
   #order-drawer .drawer-foot .od-foot-spacer { flex: 1 1 auto; }
   #order-drawer .drawer-foot .od-foot-hint { font-size: 12.5px; color: var(--text-3); }
+
+  /* ── Orders · in-app PAGE mode (desktop ≥721px, body.ord-page) ─────────
+     Opening an order fills the main content area — right of the fixed rail
+     (236px, or 62px when collapsed), below/over the topbar — so the app nav
+     stays put and the order reads as a page, not a floating panel. The detail
+     renderer is reused unchanged; only the container is re-anchored and given a
+     back/breadcrumb bar. Mobile keeps its full-screen takeover; the closed
+     state and every other .side-drawer are untouched. */
+  .ord-page-bar { display: none; }
+  @media (min-width: 721px) {
+    body.ord-page #order-drawer {
+      left: 236px; top: 0; right: 0; bottom: 0;
+      width: auto; min-width: 0;
+      box-shadow: none; border-left: 0;
+    }
+    body.nav-collapsed.ord-page #order-drawer { left: 62px; }
+    body.ord-page #order-drawer .drawer-close { display: none; }
+    body.ord-page #order-drawer .ord-page-bar {
+      display: flex; align-items: center; gap: 9px; flex-shrink: 0;
+      padding: 13px 26px; border-bottom: 1px solid var(--line-soft);
+      background: var(--bg-app);
+    }
+    .ord-page-bar .opb-back {
+      display: inline-flex; align-items: center; gap: 8px;
+      font: 500 14px var(--f-sans); color: var(--text-2);
+      background: transparent; border: 0; cursor: pointer;
+      padding: 5px 8px; border-radius: var(--r-md);
+    }
+    .ord-page-bar .opb-back:hover { color: var(--text-1); background: var(--bg-elev-1); }
+    .ord-page-bar .opb-back svg { width: 16px; height: 16px; }
+    .ord-page-bar .opb-sep { color: var(--text-3); }
+    .ord-page-bar .opb-cur { font-weight: 600; color: var(--text-1); font-variant-numeric: tabular-nums; }
+    /* Constrain the reused single-column detail to a comfortable page width. */
+    body.ord-page #order-drawer .drawer-body { padding: 26px 28px 32px; }
+    body.ord-page #order-drawer .order-card { max-width: 900px; margin: 0 auto; }
+    body.ord-page #order-drawer .drawer-foot { padding-left: 28px; padding-right: 28px; }
+  }
+
   /* The Orders drawer hosts the existing .order-card chrome unchanged
      — but reset the card's outer chrome since the drawer already
      frames it. */
