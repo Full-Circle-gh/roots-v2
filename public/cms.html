@@ -1680,6 +1680,16 @@
     color: var(--text-3);
     margin-bottom: 6px;
   }
+  /* .helper: standalone always-on note text — empty states, warnings, section
+     notes. NOT used for field() label explanations anymore (see .mc-info
+     below) — those moved behind an on-demand info dot so dense panels don't
+     read as cluttered. --text-3, not --text-4: this text is meant to be
+     read. On the light theme --text-4 (#9a978c on #fff ≈ 2.6:1) fails WCAG
+     AA; --text-3 (#6a675c ≈ 4.8:1) passes while staying quieter than the
+     field value. */
+  .field .helper {
+    font-size: 11px; color: var(--text-3); margin-top: 6px; line-height: 1.5;
+  }
   /* Field explanation text used to sit as always-on copy below the input.
      That read as clutter on dense panels, so it now lives behind an info
      dot next to the label — same on-demand pattern as retail-admin's
