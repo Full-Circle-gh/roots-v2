@@ -955,21 +955,20 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
         <span>Profile · 个人资料</span>
       </button>
-      <div class="acct-sep"></div>
       <!-- Manage team moved to the left rail, under Settings (2026-07-14) —
            see .tabs a[href="/backend/team"]. -->
       <!-- Appearance preference — set-once toggle that used to sit loose in the
            topbar. Deliberately stays open on click so you can nudge theme
            repeatedly; the value shows in the right-hand chip (acctSyncPrefs).
-           Language now lives only inside Profile (langToggle), not duplicated here. -->
-      <button class="acct-item" id="acctTheme" type="button" role="menuitem" title="Toggle light / dark mode · 切换浅色 / 深色模式">
+           Language now lives only inside Profile (langToggle), not duplicated here.
+           Groups separate by space alone (acct-gap) — no rule lines. -->
+      <button class="acct-item acct-gap" id="acctTheme" type="button" role="menuitem" title="Toggle light / dark mode · 切换浅色 / 深色模式">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 3v18a9 9 0 0 0 0-18z" fill="currentColor" stroke="none"/></svg>
         <span>Appearance · 外观</span>
         <span class="acct-val" id="acctThemeVal"></span>
       </button>
       <!-- New-order sound moved to Profile → Notifications (2026-07-14). -->
-      <div class="acct-sep"></div>
-      <button class="acct-item acct-danger" id="acctSignout" type="button" role="menuitem">
+      <button class="acct-item acct-danger acct-gap" id="acctSignout" type="button" role="menuitem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
         <span>Sign out · 退出登录</span>
       </button>
@@ -3113,8 +3112,12 @@
     <div class="pa-recap-card" id="pa-kpis">
       <div class="pa-recap">
       <div class="pa-recap-hero">
-        <div class="pa-recap-cap">Live catalogue · 在售目录</div>
-        <div class="pa-recap-n"><span id="pa-kpi-live">—</span> <span class="pa-recap-u">products · 件</span></div>
+        <div class="pa-recap-cap">Active · 已上架</div>
+        <div class="pa-recap-n"><span id="pa-kpi-active">—</span> <span class="pa-recap-u">products · 件</span></div>
+        <div class="pa-recap-sub">
+          <span class="pa-recap-subitem">Total · 总数 <b id="pa-kpi-total">—</b></span>
+          <span class="pa-recap-subitem">Disabled · 已下架 <b id="pa-kpi-disabled">—</b></span>
+        </div>
       </div>
       <div class="pa-recap-rule"></div>
       <div class="pa-recap-jump">
@@ -3128,14 +3131,13 @@
         <button type="button" class="pa-jump" id="pa-kpi-drafts-tile" onclick="paSetStatus('drafts')" title="Show drafts · 仅显示未上架产品">
           <span class="pa-jump-dot is-draft"></span><span class="pa-jump-n" id="pa-kpi-drafts">—</span><span class="pa-jump-l">Drafts · 未上架</span>
         </button>
+        <button type="button" class="pa-jump" id="pa-kpi-dead-tile" onclick="paSetStatus('dead')" title="No sale in 30 days · 30 天无销量" hidden>
+          <span class="pa-jump-dot is-dead"></span><span class="pa-jump-n" id="pa-kpi-dead">—</span><span class="pa-jump-l">Going nowhere · 无人问津</span>
+        </button>
+        <button type="button" class="pa-jump" id="pa-kpi-promo-tile" onclick="paSetStatus('promo')" title="On a flash sale right now · 正在闪购" hidden>
+          <span class="pa-jump-dot is-promo"></span><span class="pa-jump-n" id="pa-kpi-promo">—</span><span class="pa-jump-l">On promotion · 促销中</span>
+        </button>
       </div>
-      </div>
-      <!-- Second band: catalogue highlights — a few product facts an owner reads
-           each morning. Filled by paRenderHighlights() from
-           /api/retail-admin/products/highlights; the whole band is tap-through. -->
-      <div class="pa-hi" id="pa-hi" hidden>
-        <div class="pa-hi-head" data-no-i18n>Highlights · this week</div>
-        <div class="pa-hi-band" id="pa-hi-band"></div>
       </div>
     </div>
     <!-- Context line — appears under the band only when a jump filter is active:

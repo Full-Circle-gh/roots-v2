@@ -301,7 +301,8 @@
     font-size: 13px; font-weight: 600; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;
   }
-  .acct-sep { height: 1px; background: var(--line); margin: 4px 0; }
+  /* Groups separate by space alone (no rule lines) — see .acct-gap below. */
+  .acct-gap { margin-top: 14px; }
   .acct-item {
     display: flex; align-items: center; gap: 10px; width: 100%;
     padding: 9px 10px; border: none; background: transparent; cursor: pointer;
@@ -326,7 +327,7 @@
      pattern as the flash-sale composer's .fsd-scrim/.fsd-drawer. ── */
   .prof-scrim { position: fixed; inset: 0; background: var(--bg-overlay); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease-out); z-index: 1200; }
   .prof-scrim.on { opacity: 1; pointer-events: auto; }
-  .prof-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -46%) scale(.98); opacity: 0; pointer-events: none; width: min(720px, 95vw); height: min(580px, 86vh); background: var(--bg-app); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 64px rgba(17, 26, 43, .22); overflow: hidden; z-index: 1201; display: flex; flex-direction: column; transition: opacity .3s var(--ease-out), transform .3s var(--ease-out); }
+  .prof-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -46%) scale(.98); opacity: 0; pointer-events: none; width: min(860px, 96vw); height: min(720px, 92vh); background: var(--bg-app); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 24px 64px rgba(17, 26, 43, .22); overflow: hidden; z-index: 1201; display: flex; flex-direction: column; transition: opacity .3s var(--ease-out), transform .3s var(--ease-out); }
   .prof-modal.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
   .prof-x { position: absolute; top: 14px; right: 14px; z-index: 3; width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--line); background: var(--bg-pane); display: grid; place-items: center; cursor: pointer; color: var(--text-3); }
   .prof-x:hover { border-color: var(--text-3); color: var(--text-1); }
@@ -8008,7 +8009,6 @@
     box-shadow: 0 1px 2px rgba(17, 26, 43, .05), 0 4px 16px rgba(17, 26, 43, .06);
   }
   .topbar .acct-name { color: var(--td-text); font-weight: 500; font-size: 15px; }
-  .topbar .acct-sep { background: var(--td-border); }
   .topbar .acct-item { color: var(--td-text); }
   .topbar .acct-item svg { color: var(--td-text2); opacity: 1; }
   .topbar .acct-item:hover { background: var(--td-raised); color: var(--td-text); }
