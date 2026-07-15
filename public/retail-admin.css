@@ -5121,7 +5121,7 @@
     /* Back + breadcrumb bar — pinned at the top, aligned to the 900px column. */
     body.ord-viewing #order-drawer .ord-page-bar {
       display: flex; align-items: center; gap: 9px; flex-shrink: 0;
-      width: 100%; max-width: 948px; margin: 0 auto;
+      width: 100%;
       padding: var(--s4) var(--s6) var(--s3);
     }
     .ord-page-bar .opb-back {
@@ -5139,10 +5139,10 @@
       flex: 1; min-height: 0; overflow-y: auto;
       padding: 0 var(--s6) var(--s6);
     }
-    body.ord-viewing #order-drawer .order-card { max-width: 900px; margin: 0 auto; }
+    body.ord-viewing #order-drawer .order-card { max-width: none; margin: 0; }
     /* Print footer pinned at the bottom of the page. */
     body.ord-viewing #order-drawer .drawer-foot {
-      flex-shrink: 0; width: 100%; max-width: 948px; margin: 0 auto;
+      flex-shrink: 0; width: 100%;
       padding: var(--s3) var(--s6);
       border-top: 1px solid var(--line-soft);
     }
