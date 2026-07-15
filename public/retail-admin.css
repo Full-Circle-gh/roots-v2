@@ -7948,34 +7948,31 @@
     font-size: 12.5px; font-weight: 600; letter-spacing: .02em; text-transform: none;
     color: var(--td-text2); white-space: nowrap; flex: none;
   }
-  /* Sub-view switch, moved up from the content (Option B). Hidden until its
-     section is active. The tabs sit inside one raised, bordered track — the same
-     segmented-switch shape Tacet uses elsewhere — so the crumb ("Products") reads
-     as the section LABEL and the track reads as one control; the track's own edge
-     is the divider, no glyph between them (2026-07-15, replaces the old "/" sep).
-     data-cap on the container hides the whole switch (incl. the always-on
-     Catalogue) for operators without activity/categories — parity with the
-     in-content #stk-views it mirrors. */
-  .tb-subviews {
-    display: none; align-items: center; gap: 2px; min-width: 0;
-    background: var(--td-raised); border: 1px solid var(--td-border);
-    border-radius: 10px; padding: 3px;
-  }
+  /* Products sub-view switch, moved up from the content (Option B). Hidden until
+     the Products tab is active; the slash rides with it so a lone crumb never
+     shows a dangling "/". data-cap on the container hides the whole switch (incl.
+     the always-on Catalogue) for operators without activity/categories — parity
+     with the in-content #stk-views it mirrors. */
+  .tb-subviews { display: none; align-items: center; gap: 2px; min-width: 0; }
   body:has(#tab-products.active) #tb-subviews { display: inline-flex; }
   /* Purchasing sub-view switch — same mirror, own id so it never shows
      alongside (or instead of) the Products one. */
   body:has(#tab-purchasing.active) #tb-pu-subviews { display: inline-flex; }
+  .tb-sep { color: var(--td-border); font-size: 16px; font-weight: 300; margin: 0 4px 0 1px; }
   .tb-subview {
     appearance: none; background: none; border: 0; cursor: pointer;
     font: 500 13.5px var(--f-sans); color: var(--td-text2);
-    padding: 6px 12px; border-radius: 8px; white-space: nowrap;
+    padding: 7px 12px; border-radius: 8px; white-space: nowrap;
     display: inline-flex; align-items: center; gap: 7px;
-    transition: color .18s cubic-bezier(.16,1,.3,1), background .18s cubic-bezier(.16,1,.3,1),
-      box-shadow .18s cubic-bezier(.16,1,.3,1);
+    transition: color .18s cubic-bezier(.16,1,.3,1), background .18s cubic-bezier(.16,1,.3,1);
   }
-  .tb-subview:hover:not(.on) { color: var(--td-text); background: rgba(17,26,43,.05); }
-  .tb-subview.on { color: var(--td-text); background: var(--td-surface); font-weight: 600;
-    box-shadow: 0 1px 2px rgba(17,26,43,.08); }
+  .tb-subview:hover { color: var(--td-text); background: var(--td-raised); }
+  .tb-subview.on { color: var(--td-text); background: var(--td-raised); font-weight: 600; }
+  .tb-stk-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--td-amber); }
+  /* ⓘ lives outside the switch so it stays for cap-limited operators too; shown
+     only on Products. Reuses the .pa-info / .pa-info-pop styling from the head. */
+  #tb-info-wrap { display: none; }
+  body:has(#tab-products.active) #tb-info-wrap { display: inline-flex; }
 
   /* Desktop: the topbar carries the page's name (the crumb), so each page's own
      redundant title text drops out — the content starts higher. We hide only the
@@ -7984,21 +7981,10 @@
      region is hidden and every in-content title stays, so nothing is lost.
      Dashboard keeps #td-greeting — that's a personalised greeting, not a title. */
   @media (min-width: 721px) {
-    /* Products — eyebrow + sub-view switch move into the bar; the crumb + track
-       carry them. The title ROW stays (2026-07-15): it hosts the ⓘ, which moved
-       out of the bar into the page body, and its per-view label reads as a quiet
-       section eyebrow above the content (painted by prodSetHelp). */
+    /* Products — eyebrow + title row + sub-view switch all move into the bar. */
     #tab-products > .t-ord-eyebrow,
+    #tab-products > .pa-head-row,
     #tab-products > .stk-views { display: none; }
-    /* On desktop the crumb already names the section in the bar, so the in-body
-       title drops the loud micro-caps `h2` look and reads as a calm sentence-case
-       section heading — a quiet, balanced home for the ⓘ beside it. On phones the
-       original micro-caps `h2` styling stays (the bar is hidden there). */
-    #tab-products > .pa-head-row > .pa-pagetitle {
-      font-size: 16px; font-weight: 600; letter-spacing: -.01em;
-      text-transform: none; color: var(--td-text);
-    }
-    #tab-products > .pa-head-row { margin: 2px 0 20px; }
     /* Purchasing — puChrome's own page-head + sub-nav move into the bar too;
        the ledger/wizard/etc. body underneath is untouched. Doubled selector
        (not just #tab-purchasing .pu2-*) to out-specificity the base
@@ -9502,6 +9488,8 @@
   .stk-view:hover { color: var(--td-text, #111A2B); }
   .stk-view.on { color: var(--td-text, #111A2B); font-weight: 600;
     border-bottom-color: var(--td-text, #111A2B); }
+  .stk-view-dot { width: 7px; height: 7px; border-radius: 50%; flex: none;
+    background: var(--td-amber); }
 
   .stk-minis { display: grid; grid-template-columns: repeat(4, 1fr);
     gap: 10px; margin: 0 0 var(--s4, 16px); }
@@ -11085,40 +11073,3 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     color: #4C468A; background: #EEEDF6; border-radius: 999px; padding: 2px 7px; margin-left: 6px;
     vertical-align: 1px;
   }
-
-  /* ── Basics pane: bento of cards that breathe with the editor's width ───────
-     Direction A (reference/product-editor-dynamic-layouts-mockup.html). The pane
-     is a size container, so the cards react to their OWN rendered width — which
-     changes with Expand and with the app sidebar folding — no JS, no viewport
-     media queries. Cards flow 1 col → 2 cols → a tailored 12-col grid; fields
-     inside each card subdivide via auto-fit so a name/price input never grows
-     into a full-bleed long line. All classes are pdb-* to avoid the base
-     retail-admin class collisions. */
-  #pd-editor .pd-pane[data-pane="basics"] { container-type: inline-size; }
-  #pd-editor .pdb-grid { display: grid; gap: 14px; align-items: start; grid-template-columns: 1fr; }
-  @container (min-width: 600px) { #pd-editor .pdb-grid { grid-template-columns: 1fr 1fr; } }
-  @container (min-width: 980px) {
-    #pd-editor .pdb-grid { grid-template-columns: repeat(12, 1fr); }
-    /* Row 1: Basics (7) + Availability (5) = 12. Row 2: Photos (5) + Where (7) = 12.
-       Packs cleanly in DOM order — no gaps, no dense hacks. */
-    #pd-editor .pdb-basics { grid-column: span 7; }
-    #pd-editor .pdb-avail  { grid-column: span 5; }
-    #pd-editor .pdb-photos { grid-column: span 5; }
-    #pd-editor .pdb-where  { grid-column: span 7; }
-  }
-  #pd-editor .pdb-card {
-    background: #FFFFFF; border: 1px solid #E4E0D5; border-radius: 14px;
-    padding: 16px 17px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
-  }
-  #pd-editor .pdb-card > .pd-sec-h { margin: 0; }
-  /* Fields subdivide with the card. min 250px keeps the semantic pairs
-     (Name ↔ translation, Price ↔ Was) two-up across the common width range and
-     collapses them to one column only when a card is genuinely narrow. */
-  #pd-editor .pdb-fields {
-    display: grid; gap: 13px; align-items: start;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  }
-  #pd-editor .pdb-fields .field { margin: 0; min-width: 0; }
-  /* Publish switch sits as a plain row inside the card, not a nested white tile. */
-  #pd-editor .pdb-avail .pd-pub { background: transparent; border-radius: 0; padding: 0; font-weight: 500; }
-  #pd-editor .pdb-photos .pdb-photo-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }

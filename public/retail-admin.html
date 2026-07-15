@@ -879,8 +879,9 @@
   <div class="tb-page" id="tb-page">
     <span class="tb-crumb" id="tb-crumb" data-no-i18n></span>
     <div class="tb-subviews" id="tb-subviews" data-cap="activity:view categories:view">
+      <span class="tb-sep" aria-hidden="true">/</span>
       <button type="button" class="tb-subview on" id="tb-stk-btn-catalog" onclick="prodShowView('catalog')">Catalogue · 目录</button>
-      <button type="button" class="tb-subview" id="tb-stk-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')">Stock activity · 库存流水</button>
+      <button type="button" class="tb-subview" id="tb-stk-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')"><i class="tb-stk-dot" id="tb-stk-dot" hidden></i>Stock activity · 库存流水</button>
       <button type="button" class="tb-subview" id="tb-stk-btn-categories" data-cap="categories:view" onclick="prodShowView('categories')">Categories · 分类</button>
     </div>
     <!-- Purchasing sub-view switch, same Option-B mirror as Products above —
@@ -889,14 +890,18 @@
          via tbSyncPuTabs() so it also reflects the tab when you're deep in a
          drill-in screen (wizard/receive/supplier/import). -->
     <div class="tb-subviews" id="tb-pu-subviews">
+      <span class="tb-sep" aria-hidden="true">/</span>
       <button type="button" class="tb-subview on" id="tb-pu-btn-orders" onclick="puTab('orders')">Orders · 采购单</button>
       <button type="button" class="tb-subview" id="tb-pu-btn-suppliers" onclick="puTab('suppliers')">Suppliers · 供应商</button>
       <button type="button" class="tb-subview" id="tb-pu-btn-bills" onclick="puTab('bills')">Bills · 账单</button>
       <button type="button" class="tb-subview" id="tb-pu-btn-reorder" onclick="puTab('reorder')">Reorder · 补货</button>
     </div>
-    <!-- ⓘ moved out of the bar into the page body (2026-07-15) — it now rides
-         beside the per-view title in #pa-head-row, where it explains the block
-         it sits above. See prodSetHelp() / .pa-head-row desktop rule. -->
+    <span class="pa-info-wrap" id="tb-info-wrap">
+      <button type="button" class="pa-info" id="tb-info-btn" aria-label="What is this page?" aria-expanded="false" onclick="prodToggleHelp(event)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg>
+      </button>
+      <span class="pa-info-pop" role="tooltip"><span id="tb-info-text" data-no-i18n></span></span>
+    </span>
   </div>
   <div class="grow"></div>
   <!-- Search — collapsed from the old wide field to a single trigger icon; the
@@ -3092,7 +3097,7 @@
          about the catalogue. -->
     <div class="stk-views" id="stk-views" data-cap="activity:view categories:view">
       <button type="button" class="stk-view on" id="stk-view-btn-catalog" onclick="prodShowView('catalog')">Catalogue · 目录</button>
-      <button type="button" class="stk-view" id="stk-view-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')">Stock activity · 库存流水</button>
+      <button type="button" class="stk-view" id="stk-view-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')"><i class="stk-view-dot" id="stk-view-dot" hidden></i>Stock activity · 库存流水</button>
       <button type="button" class="stk-view" id="stk-view-btn-categories" data-cap="categories:view" onclick="prodShowView('categories')">Categories · 分类</button>
     </div>
 
@@ -3294,80 +3299,66 @@
           </div>
 
           <!-- ══════════ BASICS ══════════ -->
-          <!-- Bento layout (Direction A): the pane is a size container; the four
-               cards flow 1 → 2 → tailored 12-col grid as the editor widens
-               (docked-narrow → expanded / sidebar folded). Fields inside each
-               card subdivide via auto-fit so nothing stretches to a long line.
-               Every field below is the SAME node/id as before — only grouping
-               and wrappers changed, so save/load wiring is untouched. -->
           <div class="pd-pane is-active" data-pane="basics" role="tabpanel">
-            <div class="pdb-grid">
-
-              <!-- Basics: name + price -->
-              <section class="pdb-card pdb-basics">
-                <div class="pd-sec-h">Basics · 基础</div>
-                <div class="pdb-fields">
-                  <div class="field"><label class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
-                  <div class="field"><label class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
-                  <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
-                  <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
+            <section class="pd-sec">
+              <div class="pd-sec-h">Availability · 是否上架</div>
+              <div class="pd-avail">
+              <label class="pd-card pd-pub">
+                <input type="checkbox" id="pd-published">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                <span>Show in shop · 在店面显示</span>
+              </label>
+                <div class="pd-card pd-avail-status">
+                  <div class="field"><label class="stacked">Status · 状态</label>
+                    <select id="pd-status">
+                      <option value="Active">Active · 在售</option>
+                      <option value="Inactive">Inactive · 停售</option>
+                      <option value="Seasonal">Seasonal · 季节性</option>
+                      <option value="Coming Soon">Coming Soon · 即将上架</option>
+                    </select></div>
                 </div>
-              </section>
-
-              <!-- Availability: publish switch + status -->
-              <section class="pdb-card pdb-avail">
-                <div class="pd-sec-h">Availability · 是否上架</div>
-                <label class="pd-pub">
-                  <input type="checkbox" id="pd-published">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                  <span>Show in shop · 在店面显示</span>
-                </label>
-                <div class="field"><label class="stacked">Status · 状态</label>
-                  <select id="pd-status">
-                    <option value="Active">Active · 在售</option>
-                    <option value="Inactive">Inactive · 停售</option>
-                    <option value="Seasonal">Seasonal · 季节性</option>
-                    <option value="Coming Soon">Coming Soon · 即将上架</option>
-                  </select></div>
-              </section>
-
-              <!-- Photos -->
-              <section class="pdb-card pdb-photos">
-                <div class="pd-sec-h">Photos · 图片</div>
+              </div>
+            </section>
+              <section class="pd-sec">
+                <div class="pd-sec-h" style="margin-bottom:8px;">Photos · 图片</div>
                 <div class="pe-photos-strip">
                   <div id="pd-gallery" class="pd-gallery"></div>
                   <label for="pd-img-file" class="pe-add-tile" title="Add photos · 添加图片"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add · 添加</label>
                 </div>
                 <input type="file" id="pd-img-file" accept="image/*" multiple onchange="pdAddPhotos(event)">
-                <div class="pdb-photo-actions">
+                <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                   <button type="button" class="btn btn-sm" onclick="pdOpenLibraryPicker()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-4-9 8"/></svg>From library · 从图库选择</button>
                   <span class="muted" style="font-size:11px;">Up to 8 · 最多 8 张</span>
                 </div>
               </section>
-
-              <!-- Where it shows -->
-              <section class="pdb-card pdb-where">
-                <div class="pd-sec-h">Where it shows · 分类与陈列</div>
-                <div class="pdb-fields">
-                  <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
-                    <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
-                  <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
-                    <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
-                  <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Auto picks the chip from live sales &amp; recency — top 15 sellers (30 days) → POP, added in the last 30 days → NEW, has a strike-through price → SALE. · 自动按销量与上架时间选择:30 天内最畅销前 15 名 → POP,30 天内新上架 → NEW,有划线价 → SALE。</span></span></label>
-                    <select id="pd-badge">
-                      <option value="">None · 无</option>
-                      <option value="auto">Auto · 自动 (by sales · 按销量)</option>
-                      <option value="new">NEW · 新品</option>
-                      <option value="pop">POP · 热门</option>
-                      <option value="sale">SALE · 特价</option>
-                      <option value="hot">HOT · 推荐</option>
-                    </select>
-                  </div>
-                  <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
+              <div class="pd-row2">
+                <div class="field"><label class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
+                <div class="field"><label class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
+              </div>
+              <div class="pd-row2">
+                <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
+                <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
+              </div>
+            <section class="pd-sec">
+              <div class="pd-sec-h">Where it shows · 分类与陈列</div>
+              <div class="pd-fieldstack">
+                <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
+                  <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
+                <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
+                  <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
+                <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Auto picks the chip from live sales &amp; recency — top 15 sellers (30 days) → POP, added in the last 30 days → NEW, has a strike-through price → SALE. · 自动按销量与上架时间选择:30 天内最畅销前 15 名 → POP,30 天内新上架 → NEW,有划线价 → SALE。</span></span></label>
+                  <select id="pd-badge">
+                    <option value="">None · 无</option>
+                    <option value="auto">Auto · 自动 (by sales · 按销量)</option>
+                    <option value="new">NEW · 新品</option>
+                    <option value="pop">POP · 热门</option>
+                    <option value="sale">SALE · 特价</option>
+                    <option value="hot">HOT · 推荐</option>
+                  </select>
                 </div>
-              </section>
-
-            </div>
+                <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
+              </div>
+            </section>
           </div>
 
           <!-- ══════════ STOCK ══════════ -->
