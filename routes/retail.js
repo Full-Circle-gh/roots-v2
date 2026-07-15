@@ -12515,7 +12515,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const refItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.refund_amount_requested AS amount,
              o.refund_status AS status, o.refund_requested_at,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), o.recipient_phone) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.refund_status IN ('pending','reviewing')
@@ -12551,7 +12551,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const daItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_status, o.tracking_scenario,
              o.tracking_carrier, o.tracking_number, o.tracking_synced_at,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), o.recipient_phone) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE ${ALERT_WHERE}
@@ -12583,7 +12583,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     `).get().n;
     const airItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_synced_at,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), o.recipient_phone) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE ${AIR_DELAY_EXISTS}
@@ -12617,7 +12617,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     `).get().n;
     const mtItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.channel_status, o.channel_status_at,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), o.recipient_phone) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE ${MT_ALERT_WHERE}
@@ -12650,7 +12650,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
                  WHERE j.retail_order_id = o.id AND j.order_status IS NOT NULL
                    AND j.updated_at > datetime('now','-30 minutes')
                  ORDER BY j.updated_at DESC LIMIT 1) AS job_os,
-               COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+               COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), o.recipient_phone) AS buyer
           FROM retail_orders o
           LEFT JOIN retail_customers c ON c.id = o.customer_id
          WHERE o.fulfillment_type = 'delivery' AND o.status = 'dispatched'
@@ -12720,7 +12720,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const invItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.total, o.placed_at,
              o.invoice_type, o.invoice_title,
-             COALESCE(NULLIF(TRIM(c.nickname), ''), o.recipient_name) AS buyer
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), o.recipient_phone) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE ${INV_WHERE}
