@@ -86,17 +86,20 @@
   .navbtn:hover{ background:var(--raised); color:var(--text); }
   .navbtn.on{ background:var(--surface); color:var(--text); box-shadow:0 1px 2px rgba(17,26,43,.05); }
 
-  .rail-foot{ margin-top:auto; padding-top:14px; display:flex; align-items:center; gap:6px; }
-  .icobtn{ cursor:pointer; border:none; background:transparent; color:var(--text-2); padding:6px; border-radius:8px; line-height:0; transition:color .15s, background .15s; }
-  .icobtn:hover{ color:var(--text); background:var(--raised); }
-  .icobtn svg{ stroke:currentColor; fill:none; }
-  .langtoggle{ cursor:pointer; border:none; background:transparent; font-family:inherit; font-size:12.5px; font-weight:500;
-    color:var(--text-2); padding:6px 8px; border-radius:8px; transition:color .15s, background .15s; }
-  .langtoggle:hover{ color:var(--text); background:var(--raised); }
-  .backbtn{ margin-left:auto; display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);
-    background:none; border:none; cursor:pointer; font-family:inherit; padding:6px; border-radius:8px; }
+  .rail-foot{ margin-top:auto; padding-top:14px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:2px; }
+  .langrow{ display:flex; align-items:center; gap:9px; width:100%; text-align:left; cursor:pointer; border:none;
+    background:transparent; font-family:inherit; font-size:12.5px; font-weight:500; color:var(--text-2);
+    padding:8px; border-radius:9px; transition:color .15s, background .15s; }
+  .langrow:hover{ color:var(--text); background:var(--raised); }
+  .langrow svg{ width:15px; height:15px; stroke:currentColor; fill:none; flex:none; }
+  .langrow .cur{ margin-left:auto; color:var(--text-4); font-size:11.5px; }
+  .backbtn{ display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--text-2);
+    background:none; border:none; cursor:pointer; font-family:inherit; padding:8px; border-radius:8px; }
   .backbtn:hover{ color:var(--text); }
   .backbtn svg{ width:13px; height:13px; stroke:currentColor; fill:none; }
+  /* Embedded in the retail-admin pop-up → the parent's corner × already
+     closes it, so this in-panel "Close" is standalone-only. */
+  html.embedded .backbtn{ display:none; }
 
   /* pane */
   .pane{ flex:1; min-width:0; overflow-y:auto; padding:30px 30px 34px; }
@@ -286,10 +289,17 @@
         </button>
       </nav>
       <div class="rail-foot">
-        <button type="button" id="themeToggle" class="icobtn" aria-label="Theme">
-          <svg width="17" height="17" viewBox="0 0 20 20" id="themeIcon"><circle cx="10" cy="10" r="4.2" stroke-width="1.4"/><path d="M10 1.5v2.2M10 16.3v2.2M18.5 10h-2.2M3.7 10H1.5M16 4l-1.6 1.6M5.6 14.4 4 16M16 16l-1.6-1.6M5.6 5.6 4 4" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <!-- Theme toggle removed (reachable from the retail-admin topbar); the
+             × in the parent modal already closes this pop-up, so "Close" only
+             shows on the standalone /backend/account route (hidden via
+             html.embedded .backbtn below). Language stays as a labelled row —
+             icon + name + the CURRENTLY ACTIVE language shown as a quiet value,
+             not what clicking switches to. -->
+        <button type="button" id="langToggle" class="langrow">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>
+          <span class="en">Language</span><span class="cn">语言</span>
+          <span class="cur" id="langCur">EN</span>
         </button>
-        <button type="button" id="langToggle" class="langtoggle">中文</button>
         <button type="button" id="backLink" class="backbtn">
           <svg viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <span class="en">Close</span><span class="cn">关闭</span>
@@ -429,7 +439,6 @@
      account pop-up (iframe). */
   (function () {
     var LANG_KEY = 'roots-admin-lang';
-    var THEME_KEY = 'retail-admin-theme';
     var lang = document.documentElement.getAttribute('data-lang') === 'cn' ? 'cn' : 'en';
     function L(en, cn){ return lang === 'cn' ? cn : en; }
     var lastUser = null;
@@ -980,25 +989,17 @@
     });
 
     /* ── theme ── */
+    // No in-panel toggle (removed — flip theme from the retail-admin topbar
+    // instead); this just keeps the mobile browser-chrome color in step with
+    // whichever theme the shared 'retail-admin-theme' localStorage key set at boot.
     function applyTheme(){
       var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
       document.querySelector('meta[name=theme-color]').setAttribute('content', t === 'dark' ? '#111A2B' : '#FBF9F4');
-      var ico = $('themeIcon');
-      if (ico) ico.innerHTML = t === 'dark'
-        ? '<path d="M16 11.5A6.5 6.5 0 1 1 8.5 4a5 5 0 0 0 7.5 7.5Z" stroke-width="1.4" stroke-linejoin="round"/>'
-        : '<circle cx="10" cy="10" r="4.2" stroke-width="1.4"/><path d="M10 1.5v2.2M10 16.3v2.2M18.5 10h-2.2M3.7 10H1.5M16 4l-1.6 1.6M5.6 14.4 4 16M16 16l-1.6-1.6M5.6 5.6 4 4" stroke-width="1.4" stroke-linecap="round"/>';
     }
-    $('themeToggle').addEventListener('click', function(){
-      var t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', t);
-      try { localStorage.setItem(THEME_KEY, t); } catch (e) {}
-      applyTheme();
-    });
-
     /* ── language ── */
     function applyLang(){
       document.documentElement.setAttribute('data-lang', lang);
-      var tg = $('langToggle'); if (tg) tg.textContent = lang === 'cn' ? 'EN' : '中文';
+      var cur = $('langCur'); if (cur) cur.textContent = lang === 'cn' ? '中文' : 'EN';   // shows the ACTIVE language, not the target
       $('nameInput').placeholder = L('Your display name','您的显示名称');
       if (lastUser) hydrate(lastUser);
       // re-render lazy tabs in the new language
