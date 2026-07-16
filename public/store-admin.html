@@ -242,6 +242,7 @@
 </div></div>
 <div class="toast" id="toast"></div>
 
+<script src="/assets/tacet-dialogs.js"></script>
 <script>
 (function () {
   const $ = s => document.querySelector(s);
@@ -473,8 +474,8 @@
           .then(r=>{ toast(r.success?'Updated':r.error||'Failed'); loadBroadcasts(); }).catch(()=>{});
       }));
       document.querySelectorAll('[data-bc-edit]').forEach(btn => btn.addEventListener('click', () => bcModal(rows.find(x=>String(x.id)===btn.getAttribute('data-bc-edit')))));
-      document.querySelectorAll('[data-bc-del]').forEach(btn => btn.addEventListener('click', () => {
-        if (!confirm('Delete this broadcast? · 删除该广播?')) return;
+      document.querySelectorAll('[data-bc-del]').forEach(btn => btn.addEventListener('click', async () => {
+        if (!(await askConfirm({ title: 'Delete this broadcast? · 删除该广播?', confirmLabel: 'Delete', danger: true }))) return;
         api('/api/store-admin/broadcasts/'+btn.getAttribute('data-bc-del'),{method:'DELETE'}).then(r=>{ toast(r.success?'Deleted':r.error||'Failed'); loadBroadcasts(); }).catch(()=>{});
       }));
     }).catch(()=>{});
@@ -630,8 +631,8 @@
       $('#sp-back').addEventListener('click', () => go('stores'));
       document.querySelectorAll('#spTabs [data-sec]').forEach(b => b.addEventListener('click', () => selectProfSection(b.getAttribute('data-sec'))));
       const impBtn = $('#sp-imp'); if (impBtn) impBtn.addEventListener('click', () => doImpersonate(profTenantObj()));
-      const susBtn = $('#sp-suspend'); if (susBtn) susBtn.addEventListener('click', () => {
-        if (!confirm('Suspend '+(t.brand||t.name)+'? They lose backend access until reactivated. · 暂停后该店铺将无法访问后台。')) return;
+      const susBtn = $('#sp-suspend'); if (susBtn) susBtn.addEventListener('click', async () => {
+        if (!(await askConfirm({ title: 'Suspend '+(t.brand||t.name)+'? They lose backend access until reactivated. · 暂停后该店铺将无法访问后台。', confirmLabel: 'Suspend', danger: true }))) return;
         api('/api/saas-admin/tenants/'+id+'/suspend',{method:'POST'}).then(r=>{ toast(r.success?'Suspended · 已暂停':r.error||'Failed'); renderStoreProfile(id, profSection()); }).catch(()=>{});
       });
       const reactBtn = $('#sp-react'); if (reactBtn) reactBtn.addEventListener('click', () => {
@@ -722,11 +723,13 @@
   // and returns the hand-off URL on the merchant-backend host (so the session
   // cookie lands there); we open it in a new tab. The merchant shell shows an
   // "impersonating" bar with an exit button.
-  function doImpersonate(t){
-    if (!confirm('Open '+(t.brand||t.name)+' as its operator? Your actions there are REAL. · 以该店铺操作员身份打开?所有操作真实生效。')) return;
-    // Open the tab synchronously within the click gesture so popup blockers
-    // allow it, then point it at the one-time hand-off URL once it returns.
+  async function doImpersonate(t){
+    // Open the tab synchronously within the click gesture — BEFORE the async
+    // confirm dialog — so popup blockers allow it. An await'd dialog runs
+    // after the click's gesture window closes, so window.open() can't wait
+    // for it; open the blank tab first and close it again if declined.
     const w = window.open('about:blank', '_blank');
+    if (!(await askConfirm({ title: 'Open '+(t.brand||t.name)+' as its operator? Your actions there are REAL. · 以该店铺操作员身份打开?所有操作真实生效。', confirmLabel: 'Open as operator', danger: true }))) { if (w) w.close(); return; }
     api('/api/store-admin/tenants/'+t.id+'/impersonate',{method:'POST'}).then(j=>{
       if (j && j.success && j.url){ toast('Opening '+(j.store||'store')+'… · 正在打开'); if (w) w.location.href = j.url; else window.location.href = j.url; }
       else { if (w) w.close(); toast((j&&j.error)||'Failed · 失败'); }
@@ -812,9 +815,9 @@
       v.querySelectorAll('[data-take]').forEach(b => b.addEventListener('click', () =>
         doImpersonate({ id: b.getAttribute('data-take'), brand: b.getAttribute('data-name'), name: b.getAttribute('data-name') })));
       v.querySelectorAll('[data-resolve]').forEach(b => b.addEventListener('click', () => resolveHelp(b.getAttribute('data-resolve'))));
-      v.querySelectorAll('[data-boxship]').forEach(b => b.addEventListener('click', () => {
+      v.querySelectorAll('[data-boxship]').forEach(b => b.addEventListener('click', async () => {
         const [tid, kind] = b.getAttribute('data-boxship').split('|');
-        const tracking = window.prompt('Tracking info (courier + number) · 快递信息(公司+单号)', '');
+        const tracking = await askPrompt({ title: 'Tracking info (courier + number) · 快递信息(公司+单号)', value: '', submitLabel: 'Mark shipped' });
         if (tracking === null) return;   // cancelled
         boxUpdate(tid, kind, 'shipped', tracking.trim());
       }));
@@ -867,8 +870,8 @@
       '</div>';
     panel.querySelectorAll('[data-dom-primary]').forEach(b => b.addEventListener('click', () => domPatch(t, b.getAttribute('data-dom-primary'), { is_primary:true })));
     panel.querySelectorAll('[data-dom-status]').forEach(b => b.addEventListener('click', () => domPatch(t, b.getAttribute('data-dom-status'), { status:b.getAttribute('data-to') })));
-    panel.querySelectorAll('[data-dom-del]').forEach(b => b.addEventListener('click', () => {
-      if (!confirm('Remove this domain? · 删除该域名?')) return;
+    panel.querySelectorAll('[data-dom-del]').forEach(b => b.addEventListener('click', async () => {
+      if (!(await askConfirm({ title: 'Remove this domain? · 删除该域名?', confirmLabel: 'Remove', danger: true }))) return;
       api('/api/store-admin/domains/'+b.getAttribute('data-dom-del'),{method:'DELETE'}).then(r=>{ toast(r.success?'Removed':r.error||'Failed'); secDomains(t); }).catch(()=>{});
     }));
     $('#dom-add').addEventListener('click', () => {
