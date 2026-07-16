@@ -117,7 +117,7 @@ router.get('/api/backend/team', requireBackend, (req, res) => {
   const custom = customPermSet(rows.map(r => r.id));
   let rbacEnforce = false;
   try { rbacEnforce = !!db.prepare('SELECT rbac_enforce FROM tenants WHERE id = ?').get(req.session.tenantId)?.rbac_enforce; } catch (e) {}
-  res.json({ team: rows.map(u => publicUser(u, req.session.backendUserId, custom)), rbacEnforce });
+  res.json({ success: true, team: rows.map(u => publicUser(u, req.session.backendUserId, custom)), rbacEnforce });
 });
 
 // Master switch — turn capability enforcement on/off for this tenant. Owner only.
