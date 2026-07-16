@@ -136,6 +136,13 @@ router.put('/api/auth/profile', (req, res) => {
   if (!display_name || display_name.trim().length < 1) return res.status(400).json({ error: 'display_name required · 名称必填' });
   db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(display_name.trim(), req.session.userId);
   logActivity(req.session.userId, null, 'update_profile', 'user', req.session.userId, null, req.ip);
+  // Live: nudge this user's OTHER open kitchen sessions to refetch their name
+  // (reference/live-updates-spec.md). Scoped to the user's own id; best-effort.
+  try {
+    require('./events').broadcast('live',
+      { entity: 'identity', action: 'update', scope: { userId: req.session.userId }, ids: [req.session.userId], ts: Date.now() },
+      { userId: req.session.userId });
+  } catch (e) { /* live push is best-effort */ }
   res.json({ success: true });
 });
 

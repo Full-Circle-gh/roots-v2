@@ -1663,6 +1663,7 @@ function applyBrand(tenant) {
 // Avatar (uploaded photo, or initials monogram fallback) in the topbar; click
 // opens a menu with the operator's identity, Account, Manage team, Sign out.
 let ACCT_USER = null;
+let ACCT_LIVE_BOUND = false;   // guard: bind the identity live-subscription once
 function acctInitials(u) {
   const src = String(u.displayName || u.username || '').trim();
   if (!src) return '?';
@@ -1711,6 +1712,29 @@ function initAcctMenu(u) {
   acctRenderMeta();
   acctSyncPrefs();
   if (window.onLangChange) window.onLangChange(() => { acctRenderMeta(); acctSyncPrefs(); });
+
+  // Live: another device changed this operator's name/avatar → refetch and
+  // repaint the topbar + dashboard greeting without a refresh
+  // (reference/live-updates-spec.md). Best-effort; the in-browser postMessage
+  // path (initProfileModal below) still updates the editing tab instantly.
+  if (!ACCT_LIVE_BOUND && typeof retailLiveOn === 'function') {
+    ACCT_LIVE_BOUND = true;
+    retailLiveOn('identity', () => {
+      fetch('/api/backend/me', { credentials: 'same-origin' })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          const nu = d && d.user; if (!nu) return;
+          Object.assign(ACCT_USER || (ACCT_USER = {}), {
+            displayName: nu.displayName,
+            avatarUrl: nu.avatarUrl,
+            username: nu.username,
+          });
+          acctRenderMeta();
+          if (typeof tdGreetRender === 'function') tdGreetRender();
+        })
+        .catch(() => {});
+    });
+  }
 
   const close = () => {
     if (menu.hidden) return;

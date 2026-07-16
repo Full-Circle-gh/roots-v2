@@ -12357,7 +12357,7 @@ function _dashLiveTick() {
 
 router.get('/api/retail-admin/stream', requireRetailAdmin, (req, res) => {
   const tenantId = (req.tenant && req.tenant.id) || ROOTS_TENANT_ID;
-  const sub = { id: ++_dashLiveSid, res, tenantId };
+  const sub = { id: ++_dashLiveSid, res, tenantId, userId: (req.backendUser && req.backendUser.id) || (req.session && req.session.backendUserId) || null };
   res.set({
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',
@@ -12385,6 +12385,34 @@ router.get('/api/retail-admin/stream', requireRetailAdmin, (req, res) => {
     if (![..._dashLiveSubs].some(s => s.tenantId === tenantId)) _dashLiveMark.delete(tenantId);
   });
 });
+
+// Push a typed entity nudge to a tenant's open dashboards. See
+// reference/live-updates-spec.md. No payload rides in the frame — clients
+// refetch under their own auth, so a nudge can never leak over-scoped data.
+// This is the emit-at-write companion to the watermark tick above (which stays
+// as the cross-process safety net for daemon writes the app can't observe).
+//   entity : 'identity' | 'orders' | …   (see the spec's entity registry)
+//   meta   : { action, scope:{ userId }, ids }
+// When meta.scope.userId is set the nudge reaches ONLY that operator's own open
+// sockets — e.g. a display-name change only affects how that operator sees their
+// own name, so other operators in the tenant are never bothered.
+function retailLiveBump(tenantId, entity, meta) {
+  if (!tenantId || !entity) return;
+  meta = meta || {};
+  const scope = meta.scope || {};
+  const frame = `event: live\ndata: ${JSON.stringify({
+    entity,
+    action: meta.action || 'update',
+    scope,
+    ids: meta.ids || null,
+    ts: Date.now(),
+  })}\n\n`;
+  for (const s of _dashLiveSubs) {
+    if (s.tenantId !== tenantId) continue;
+    if (scope.userId && s.userId && s.userId !== scope.userId) continue;
+    try { s.res.write(frame); } catch { /* dead socket — close handler cleans up */ }
+  }
+}
 
 // ── Dashboard: operational snapshot (low stock + refunds queue) ────────────
 // Feeds the bento "Low stock" and "Refunds queue" tiles. Counts + small
@@ -25887,3 +25915,7 @@ module.exports = router;
 // inventory endpoints while every other /api/retail-admin/* route lets them in,
 // which used to send retail-admin.html into a login→dashboard redirect loop.
 module.exports.requireRetailAdmin = requireRetailAdmin;
+// Live-updates emit seam (reference/live-updates-spec.md). Writers in other
+// route modules (e.g. backend-auth.js profile/avatar) call this to nudge a
+// tenant operator's open sessions after a committed mutation.
+module.exports.retailLiveBump = retailLiveBump;

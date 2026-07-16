@@ -3529,6 +3529,21 @@ function _connectEventStream() {
         if (data.kind === 'created' && _user?.role === 'admin' && typeof _chime === 'function') _chime();
       } catch {}
     });
+    // Identity live-sync — another device changed this user's display name.
+    // Refetch and repaint the topbar name without a refresh
+    // (reference/live-updates-spec.md). Scoped server-side to our own user id.
+    _eventStream.addEventListener('live', (e) => {
+      try {
+        const d = JSON.parse(e.data || '{}');
+        if (d.entity !== 'identity') return;
+        fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d2 => {
+          const nu = d2 && d2.user; if (!nu || !_user) return;
+          if (nu.display_name != null) { _user.display_name = nu.display_name; _user.displayName = nu.display_name; }
+          const el = document.getElementById('userName');
+          if (el) el.textContent = _user.display_name || _user.username;
+        }).catch(() => {});
+      } catch {}
+    });
     _eventStream.onerror = () => {
       // EventSource reconnects on its own. We don't manually close
       // unless the user navigates away.

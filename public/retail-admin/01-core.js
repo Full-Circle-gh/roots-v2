@@ -1430,12 +1430,24 @@ $$('#settings-nav button').forEach(btn => btn.addEventListener('click', () => {
 // after a reconnect (events may have been missed while the socket was
 // down). They should treat the call as "something changed, go refetch",
 // never as the change itself — no payload is delivered.
-const _LIVE = { es: null, opened: false, subs: new Set() };
+const _LIVE = { es: null, opened: false, subs: new Set(), ent: new Map() };
 
 function retailLiveSubscribe(fn) {
   _LIVE.subs.add(fn);
   retailLiveConnect();
   return () => _LIVE.subs.delete(fn);   // unsubscribe
+}
+
+// Typed entity nudges (reference/live-updates-spec.md). The server emits
+// `event: live` with { entity, action, scope, ids, ts } — no payload. Callers
+// register per entity ('identity', …) and refetch just that entity on the
+// nudge. Kept separate from retailLiveSubscribe so an identity change doesn't
+// make every page's `activity` subscriber refetch its whole dataset.
+function retailLiveOn(entity, fn) {
+  if (!_LIVE.ent.has(entity)) _LIVE.ent.set(entity, new Set());
+  _LIVE.ent.get(entity).add(fn);
+  retailLiveConnect();
+  return () => { const s = _LIVE.ent.get(entity); if (s) s.delete(fn); };
 }
 
 function retailLiveConnect() {
@@ -1448,6 +1460,14 @@ function retailLiveConnect() {
     for (const fn of _LIVE.subs) { try { fn(reason); } catch (e) { /* one bad subscriber must not starve the rest */ } }
   };
   es.addEventListener('activity', () => fan('activity'));
+  // Typed entity nudges — route to the per-entity subscribers registered via
+  // retailLiveOn. Bad JSON or an unknown entity is ignored, never thrown.
+  es.addEventListener('live', (e) => {
+    let d; try { d = JSON.parse(e.data); } catch (_) { return; }
+    const set = d && d.entity && _LIVE.ent.get(d.entity);
+    if (!set) return;
+    for (const fn of set) { try { fn(d); } catch (_) { /* isolate subscribers */ } }
+  });
   // Skip the very first open — the page that just subscribed has loaded its
   // own data already. Later opens are reconnects, so catch up.
   es.addEventListener('open', () => {

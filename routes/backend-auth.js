@@ -514,6 +514,22 @@ router.put('/api/backend/password', express.json(), (req, res) => {
   res.json({ success: true });
 });
 
+// Fan a live "identity changed" nudge to this operator's OTHER open sessions so
+// the topbar name / avatar update without a refresh (reference/live-updates-spec.md).
+// Scoped to the operator's own userId. Best-effort — the DB write has already
+// committed, so a failure here must never surface to the caller. Lazily requires
+// routes/retail so there's no load-order / circular dependency at startup.
+function bumpBackendIdentity(req) {
+  try {
+    const uid = req.session && req.session.backendUserId;
+    if (!uid) return;
+    const tenantId = (req.session && req.session.tenantId)
+      || (db.prepare('SELECT tenant_id FROM tenant_users WHERE id = ?').get(uid) || {}).tenant_id;
+    if (!tenantId) return;
+    require('./retail').retailLiveBump(tenantId, 'identity', { scope: { userId: uid }, ids: [uid] });
+  } catch (e) { /* live push is best-effort */ }
+}
+
 // Edit own profile. Only the display name is self-editable; username, role and
 // tenant are login identity / admin-assigned and stay read-only.
 router.put('/api/backend/profile', express.json(), (req, res) => {
@@ -522,6 +538,7 @@ router.put('/api/backend/profile', express.json(), (req, res) => {
   if (!name) return res.status(400).json({ error: 'Name is required · 名称必填' });
   if (name.length > 60) return res.status(400).json({ error: 'Name is too long · 名称过长' });
   db.prepare('UPDATE tenant_users SET display_name = ? WHERE id = ?').run(name, req.session.backendUserId);
+  bumpBackendIdentity(req);
   res.json({ success: true, displayName: name });
 });
 
@@ -534,6 +551,7 @@ router.put('/api/backend/avatar', express.json({ limit: '1mb' }), (req, res) => 
   let avatar = req.body && req.body.avatar;
   if (avatar === null || avatar === undefined || avatar === '') {
     db.prepare('UPDATE tenant_users SET avatar_url = NULL WHERE id = ?').run(req.session.backendUserId);
+    bumpBackendIdentity(req);
     return res.json({ success: true, avatarUrl: null });
   }
   avatar = String(avatar);
@@ -545,6 +563,7 @@ router.put('/api/backend/avatar', express.json({ limit: '1mb' }), (req, res) => 
     return res.status(413).json({ error: 'Image is too large — please use a smaller photo · 图片过大，请使用更小的照片' });
   }
   db.prepare('UPDATE tenant_users SET avatar_url = ? WHERE id = ?').run(avatar, req.session.backendUserId);
+  bumpBackendIdentity(req);
   res.json({ success: true, avatarUrl: avatar });
 });
 
