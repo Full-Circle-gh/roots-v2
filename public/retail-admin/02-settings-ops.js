@@ -1646,6 +1646,7 @@ function applyBrand(tenant) {
   set('brandLogoTop', logoUrl);
   set('brandLogoRail', logoUrl);
   set('brandMarkRail', markUrl);
+  set('brandLogoAcct', logoUrl);
 
   // Only commit the swap once the logo actually loads — a 404 leaves the clean
   // tacet waveform in place rather than an empty brand corner.

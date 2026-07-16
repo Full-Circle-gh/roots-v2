@@ -301,6 +301,11 @@
     font-size: 13px; font-weight: 600; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;
   }
+  /* Tenant brand row — collapsed entirely until body.cobrand reveals the logo
+     (.brand-logo's own display:none/block toggle, shared with the rail). */
+  .acct-brand { display: none; align-items: center; justify-content: center; padding: 2px 10px 12px; }
+  body.cobrand .acct-brand { display: flex; }
+  .acct-brand .brand-logo { height: 22px; max-width: 190px; }
   /* Groups separate by space alone (no rule lines) — see .acct-gap below. */
   .acct-gap { margin-top: 6px; }
   .acct-item {

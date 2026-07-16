@@ -951,6 +951,13 @@
           <div class="acct-name" id="acctName">—</div>
         </div>
       </div>
+      <!-- Tenant brand row — mirrors the rail's co-brand logo (applyBrand()).
+           .brand-logo is hidden by default and only shown by body.cobrand, so
+           this row stays empty/collapsed for tenants with no logo uploaded
+           (incl. Tacet/Roots itself) — same tenant-neutral rule as the rail. -->
+      <div class="acct-brand">
+        <img class="brand-logo" id="brandLogoAcct" alt="" data-no-i18n>
+      </div>
       <button class="acct-item" id="acctProfileBtn" type="button" role="menuitem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
         <span>Profile · 个人资料</span>
