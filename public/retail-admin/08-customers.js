@@ -26,13 +26,14 @@ let CU_SEGMENT = '';
 let CU_SORT = 'last_seen';
 let CU_SORT_DIR = 'desc';
 let CU_TIER_FILTERS = new Set();
-// Channel column filter — same shape as CU_TIER_FILTERS, filters on each
-// customer's MOST RECENT order's channel (backend default 'wechat' for
-// customers with zero orders yet, since mini app is the only signup path).
-let CU_CHAN_FILTERS = new Set();
+// Channel filter — single value, '' = all. Lives in the chip strip above the
+// table (mirrors Orders' #orders-channel-chips), not a column popover: it's
+// the filter reached for on every visit, so it's one click, always visible.
+// Filters on each customer's MOST RECENT order's channel (backend default
+// 'wechat' for customers with zero orders yet, the only signup path today).
+let CU_CHAN_FILTER = '';
 const CU_SORT_DEFAULT_DIR = { name: 'asc', tier: 'desc', orders: 'desc', spend: 'desc', points: 'desc', wallet: 'desc', last_seen: 'desc' };
 const CU_TIER_LABEL = { seed: 'Seed · 种子', sprout: 'Sprout · 嫩芽', root: 'Root · 根系', tree: 'Tree · 大树' };
-const CU_CHAN_LABEL = { wechat: 'Mini app · 小程序', web: 'Web · 网页', meituan: 'Meituan · 美团', gzgrocery: 'Gzgrocery · 果满多' };
 
 function cuSearchDebounced() {
   clearTimeout(cuSearchTimer);
@@ -129,76 +130,41 @@ function cuPaintTierFilterUI() {
   cuPaintFilterPills();
 }
 
-// ── Channel column filter — funnel + checkbox popover, same shape as Tier ──
-function cuChanPopToggle(e) {
-  if (e) e.stopPropagation();
-  const pop = document.getElementById('cu-chan-pop');
-  if (!pop) return;
-  const opening = !pop.classList.contains('open');
-  pop.classList.toggle('open', opening);
-  if (opening) setTimeout(() => document.addEventListener('mousedown', cuChanPopOutside), 0);
-  else document.removeEventListener('mousedown', cuChanPopOutside);
-}
-function cuChanPopClose() {
-  const pop = document.getElementById('cu-chan-pop');
-  if (pop) pop.classList.remove('open');
-  document.removeEventListener('mousedown', cuChanPopOutside);
-}
-function cuChanPopOutside(e) {
-  if (e.target.closest && e.target.closest('#cu-chan-pop, #cu-chan-filter-btn')) return;
-  cuChanPopClose();
-}
-function cuChanCheck(chan, checked) {
-  if (checked) CU_CHAN_FILTERS.add(chan); else CU_CHAN_FILTERS.delete(chan);
-  cuPaintChanFilterUI();
+// ── Channel filter — chip strip, single value, mirrors setOrderChannel ────
+function cuSetChan(chan) {
+  CU_CHAN_FILTER = chan || '';
+  cuPaintChanChips();
   cuFilterChanged();
 }
-function cuChanFilterClear() {
-  CU_CHAN_FILTERS.clear();
-  cuPaintChanFilterUI();
-  cuFilterChanged();
-}
-function cuChanFilterRemove(chan) {
-  CU_CHAN_FILTERS.delete(chan);
-  cuPaintChanFilterUI();
-  cuFilterChanged();
-}
-function cuPaintChanFilterUI() {
-  const active = CU_CHAN_FILTERS.size > 0;
-  const btn = document.getElementById('cu-chan-filter-btn');
-  if (btn) btn.classList.toggle('is-active', active);
-  document.querySelectorAll('#cu-chan-pop input[type=checkbox]').forEach(cb => {
-    cb.checked = CU_CHAN_FILTERS.has(cb.value);
+function cuPaintChanChips() {
+  const bar = document.getElementById('cu-chan-chips');
+  if (!bar) return;
+  bar.querySelectorAll('.cul-chan-chip').forEach(b => {
+    b.classList.toggle('on', (b.dataset.chan || '') === CU_CHAN_FILTER);
   });
-  cuPaintFilterPills();
 }
 
-// Clears BOTH column filters — the "Clear all" action above the table.
+// Clears both filters — the "Clear all" action above the table.
 function cuFilterClearAll() {
   CU_TIER_FILTERS.clear();
-  CU_CHAN_FILTERS.clear();
+  CU_CHAN_FILTER = '';
   cuPaintTierFilterUI();
-  cuPaintChanFilterUI();
+  cuPaintChanChips();
   cuFilterChanged();
 }
 
-// Shared pill strip — Tier and Channel filters render into the same row
-// ("Filtered by …") so a future column filter can join the same way.
+// Pill strip — Tier only today (Channel's own chip strip already shows its
+// selection state, so it doesn't need a second, redundant pill).
 function cuPaintFilterPills() {
   const row = document.getElementById('cu-afil-row');
   const pills = document.getElementById('cu-afil-pills');
   if (!row || !pills) return;
-  const active = CU_TIER_FILTERS.size > 0 || CU_CHAN_FILTERS.size > 0;
+  const active = CU_TIER_FILTERS.size > 0;
   row.hidden = !active;
-  const tierPills = [...CU_TIER_FILTERS].map(t => `
+  pills.innerHTML = [...CU_TIER_FILTERS].map(t => `
     <span class="cul-afil-pill">${CU_TIER_LABEL[t] || t}<button type="button" onclick="cuTierFilterRemove('${t}')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button></span>`);
-  const chanPills = [...CU_CHAN_FILTERS].map(c => `
-    <span class="cul-afil-pill">${CU_CHAN_LABEL[c] || c}<button type="button" onclick="cuChanFilterRemove('${c}')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button></span>`);
-  pills.innerHTML = [...tierPills, ...chanPills].join('');
+    </button></span>`).join('');
 }
 
 // ── Customers stat strip — three figures, then the roster ────────────────
@@ -344,7 +310,7 @@ async function cuLoad() {
   const params = new URLSearchParams({
     q: $('#cu-q').value.trim(),
     tier: [...CU_TIER_FILTERS].join(','),
-    channel: [...CU_CHAN_FILTERS].join(','),
+    channel: CU_CHAN_FILTER,
     sort: CU_SORT,
     dir: CU_SORT_DIR,
     segment: CU_SEGMENT,
