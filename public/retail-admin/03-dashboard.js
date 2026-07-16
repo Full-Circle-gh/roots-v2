@@ -130,9 +130,18 @@ function dashSparkline(values, opts) {
         + `stroke-width="1.2" vector-effect="non-scaling-stroke" stroke-dasharray="1.5 2.5" stroke-linecap="round" opacity="0.4"/>`;
   }
   // Today may not have started yet (all zero) while the ghost carries shape —
-  // show the ghost (+ floor, on the big chart) alone, no line/area/dot.
+  // show the ghost (+ floor, on the big chart) alone, no line/area/dot. A bare
+  // curve with nothing to say it's "typical Thursday" and not live data reads
+  // as a nameless squiggle, so the big chart names it with a direct label —
+  // an HTML overlay (not SVG <text>) so it isn't squashed by the non-uniform
+  // preserveAspectRatio="none" scale, same trick as the end-dot below.
   if (todayFlat) {
-    return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${baseline}${ghostSvg}</svg>`;
+    let ghostLabel = '';
+    if (big && hasGhost && opts.ghostLabel) {
+      const gx = x(n - 1), gy = y(ghost[n - 1]);
+      ghostLabel = `<span class="db-spark-ghost-label" style="left:${gx.toFixed(1)}%;top:${((gy / H) * 100).toFixed(1)}%">${escapeHtml(opts.ghostLabel)}</span>`;
+    }
+    return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${baseline}${ghostSvg}</svg>${ghostLabel}`;
   }
   const p = vals.map((v, i) => ({ x: x(i), y: y(v) }));
   const d = dashSmoothPath(p, H, pad);
@@ -624,8 +633,10 @@ async function dashHeroLoadToday(opts) {
     // The typical-day ghost (same-weekday hourly average) rides behind the day
     // line so today reads against a normal day, by this hour.
     const typical = Array.isArray(data.typical) ? data.typical.map(v => Number(v) || 0) : null;
+    const wd = new Date().getDay();
+    const ghostLabel = cuT(`typical ${DASH_DOW_EN[wd]}`, `平常${DASH_DOW_CN[wd]}`);
     dashRenderSpark($('#db-today-spark'), trend.map(p => Number(p.revenue || 0)), labels,
-                    v => '¥' + Math.round(v).toLocaleString(), false, typical, true);
+                    v => '¥' + Math.round(v).toLocaleString(), false, typical, true, ghostLabel);
     tdTodayHours(labels);   // hour marks under the day line
     dashRenderSpark($('#db-today-ord-spark'), trend.map(p => Number(p.orders || 0)), labels,
                     v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);
@@ -713,9 +724,9 @@ function dashDeltaLeave(e) { dashSparkTipEl(e.currentTarget).classList.remove('s
 
 // ── Interactive sparkline scrub ──────────────────────────────────────────
 // Render a sparkline into a wrap and stash its series so a hover can scrub it.
-function dashRenderSpark(wrap, vals, labels, fmt, pulse, ghost, big) {
+function dashRenderSpark(wrap, vals, labels, fmt, pulse, ghost, big, ghostLabel) {
   if (!wrap) return;
-  wrap.innerHTML = dashSparkline(vals, { dot: true, pulse: !!pulse, ghost: ghost, big: !!big });
+  wrap.innerHTML = dashSparkline(vals, { dot: true, pulse: !!pulse, ghost: ghost, big: !!big, ghostLabel: ghostLabel });
   // Stash the shared scale so the hover-scrub places the dot on the same line
   // the ghost may have re-scaled.
   wrap._spark = { vals, labels, fmt, scale: dashSparkScale(vals, ghost) };

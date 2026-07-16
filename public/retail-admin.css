@@ -1673,6 +1673,14 @@
   /* The big hero chart's end-dot reads as a real marker, not a stray pixel —
      bigger, with a surface-color ring so it stays legible crossing the line. */
   .db-spark-dot.is-big { width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; box-shadow: 0 0 0 2px var(--td-surface); }
+  /* Names the ghost curve before any real data exists — otherwise the "day
+     hasn't started" state is a bare unlabeled squiggle. Anchored to the
+     curve's right end, lifted clear of the line itself. */
+  .db-spark-ghost-label {
+    position: absolute; transform: translate(-100%, -160%);
+    font: 500 11px var(--f-sans); color: var(--td-text2);
+    white-space: nowrap; pointer-events: none;
+  }
   /* Hover-scrub: the chart is draggable to read each hour. The dot tracks the
      cursor and a small chip names the hour + value. */
   .db-spark-wrap { cursor: crosshair; }
