@@ -5089,59 +5089,6 @@
   #order-drawer .drawer-foot:empty { display: none; }
   #order-drawer .drawer-foot .od-foot-spacer { flex: 1 1 auto; }
   #order-drawer .drawer-foot .od-foot-hint { font-size: 12.5px; color: var(--text-3); }
-
-  /* ── Orders · split master / detail (desktop ≥1080px) ─────────────────
-     When an order is open (body.ord-split, toggled in 04-orders.js), the
-     Orders tab reflows into a docked master/detail: the list collapses to a
-     compact left rail and the EXISTING order detail docks beside it instead
-     of floating over the page. Purely additive — the closed state, narrow
-     screens, and every other .side-drawer are untouched. The detail renderer
-     is reused unchanged; only the container is re-laid-out. --ord-dock-left is
-     measured live (the rail's right edge) so the dock survives a collapsed
-     nav / any content width without hard-coding it. */
-  @media (min-width: 1080px) {
-    body.ord-split #tab-orders { max-width: 420px; margin-right: auto; }
-    body.ord-split #ord-kpis,
-    body.ord-split #ord-kpi-dots,
-    body.ord-split #orders-channel-chips { display: none; }
-
-    /* list-card → a vertical rail of compact rows (table cells stacked) */
-    body.ord-split #orders-table thead { display: none; }
-    body.ord-split #orders-table,
-    body.ord-split #orders-table tbody,
-    body.ord-split #orders-table tr,
-    body.ord-split #orders-table td { display: block; width: auto; }
-    body.ord-split #orders-table tr.order-row {
-      padding: 12px 14px; border-top: 0; border-bottom: 1px solid var(--line-soft);
-      cursor: pointer;
-    }
-    body.ord-split #orders-table tr.order-row:hover { background: var(--bg-elev-1); }
-    body.ord-split #orders-table td { padding: 2px 0; border: 0; white-space: normal; }
-    /* keep Order#(1) · Customer(3) · Total(7) · Status(8); hide the rest */
-    body.ord-split #orders-table td:nth-child(2),
-    body.ord-split #orders-table td:nth-child(4),
-    body.ord-split #orders-table td:nth-child(5),
-    body.ord-split #orders-table td:nth-child(6),
-    body.ord-split #orders-table td:nth-child(9),
-    body.ord-split #orders-table td:nth-child(10) { display: none; }
-    body.ord-split #orders-table td:nth-child(1) { font-weight: 600; font-size: 14px; }
-    body.ord-split #orders-table td:nth-child(7) { font-weight: 600; font-variant-numeric: tabular-nums; }
-    body.ord-split #orders-table tr.order-row.is-open {
-      background: var(--bg-elev-1); box-shadow: inset 3px 0 0 var(--ink);
-    }
-
-    /* dock the detail beside the rail — transform (slide) stays inherited
-       from .side-drawer(.open) so open/close still glide; we only re-anchor
-       the box and drop the floating shadow. */
-    body.ord-split #order-drawer {
-      left: var(--ord-dock-left, 460px);
-      right: 0; width: auto; min-width: 0;
-      box-shadow: none;
-      border-left: 1px solid var(--line);
-    }
-    body.ord-split #order-drawer .order-card { max-width: 780px; }
-  }
-
   /* The Orders drawer hosts the existing .order-card chrome unchanged
      — but reset the card's outer chrome since the drawer already
      frames it. */
