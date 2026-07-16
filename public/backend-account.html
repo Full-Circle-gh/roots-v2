@@ -265,6 +265,15 @@
   .sw.on::after{ left:19px; }
   [data-theme="dark"] .sw.on::after{ background:var(--ink); }
   .sw.busy{ opacity:.6; pointer-events:none; }
+  .ntf-test{ display:flex; align-items:center; gap:8px; margin-top:10px; }
+  .play-btn{ width:28px; height:28px; border-radius:50%; flex:none; border:1px solid var(--line); background:var(--raised); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s var(--ease), transform .15s var(--ease), border-color .15s var(--ease); }
+  .play-btn:hover{ border-color:var(--text-4); }
+  .play-btn:active{ transform:scale(.92); }
+  .play-btn svg{ width:12px; height:12px; margin-left:1px; }
+  .play-btn.playing{ background:var(--sage-tint); border-color:var(--sage); color:var(--sage-ink); }
+  .play-btn.playing svg{ margin-left:0; }
+  .play-btn:focus-visible{ outline:2px solid var(--dusk); outline-offset:2px; }
+  .test-label{ font-size:12.5px; color:var(--text-2); }
 </style>
 </head>
 <body>
@@ -301,12 +310,11 @@
         <!-- Theme toggle removed (reachable from the retail-admin topbar); the
              × in the parent modal already closes this pop-up, so "Close" only
              shows on the standalone /backend/account route (hidden via
-             html.embedded .backbtn below). Language stays as a labelled row —
-             icon + name + the CURRENTLY ACTIVE language shown as a quiet value,
-             not what clicking switches to. -->
-        <button type="button" id="langToggle" class="langrow">
+             html.embedded .backbtn below). Language row dropped its text label
+             2026-07-16 — the globe icon + CURRENTLY ACTIVE language value read
+             clearly on their own. -->
+        <button type="button" id="langToggle" class="langrow" aria-label="Language">
           <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3a14 14 0 0 1 0 18a14 14 0 0 1 0-18z"/></svg>
-          <span class="en">Language</span><span class="cn">语言</span>
           <span class="cur" id="langCur">EN</span>
         </button>
         <button type="button" id="backLink" class="backbtn">
@@ -423,6 +431,12 @@
           <div class="ntf-txt">
             <div class="ntf-t"><span class="en">New-order sound</span><span class="cn">新订单提示音</span></div>
             <div class="ntf-d"><span class="en">Play a soft chime in this browser when an order arrives.</span><span class="cn">订单到达时在此浏览器播放轻提示音。</span></div>
+            <div class="ntf-test">
+              <button class="play-btn" id="ntfSoundTest" type="button" aria-label="Play test sound">
+                <svg id="ntfSoundTestIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M6 4.5v15l13-7.5z"/></svg>
+              </button>
+              <span class="en test-label" id="ntfSoundTestLabel">Play test sound</span><span class="cn test-label" id="ntfSoundTestLabelCn">播放测试提示音</span>
+            </div>
           </div>
           <button class="sw" id="ntfSound" type="button" role="switch" aria-label="New-order sound"></button>
         </div>
@@ -761,6 +775,47 @@
     /* ── notifications: sound + push-to-device ── */
     var SOUND_KEY = 'tacet-orders-sound-on';
     function soundOn(){ try { return localStorage.getItem(SOUND_KEY) !== '0'; } catch(e){ return true; } }
+    /* Test-play the new-order chime. Embedded (iframe inside the retail-admin
+       profile pop-up) hands off to the parent's real _synthOrderChime so it's
+       the exact same sound as a live order; standalone (/backend/account has
+       no orders page loaded) synthesises the same two-note ding locally. */
+    var _testChimeCtx = null;
+    function synthChimeLocal(){
+      try {
+        if (!_testChimeCtx) _testChimeCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (_testChimeCtx.state === 'suspended') _testChimeCtx.resume();
+        var ctx = _testChimeCtx, now = ctx.currentTime;
+        [[784, 0], [1047, 0.16]].forEach(function(pair){
+          var osc = ctx.createOscillator(), gain = ctx.createGain(), t = now + pair[1];
+          osc.type = 'sine'; osc.frequency.value = pair[0];
+          gain.gain.setValueAtTime(0.0001, t);
+          gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(t); osc.stop(t + 0.45);
+        });
+      } catch(e){}
+    }
+    var _testChimeResetTimer = null;
+    function playTestChime(){
+      if (window.self !== window.top) { window.parent.postMessage({ type:'fc-play-order-chime' }, window.location.origin); }
+      else { synthChimeLocal(); }
+      var btn = $('ntfSoundTest'), icon = $('ntfSoundTestIcon');
+      btn.classList.add('playing');
+      icon.innerHTML = '<path d="M9 6h2v12H9zM13 6h2v12h-2z"/>';
+      setTestLabel('Playing…','正在播放…');
+      clearTimeout(_testChimeResetTimer);
+      _testChimeResetTimer = setTimeout(function(){
+        btn.classList.remove('playing');
+        icon.innerHTML = '<path d="M6 4.5v15l13-7.5z"/>';
+        setTestLabel('Play test sound','播放测试提示音');
+      }, 500);
+    }
+    function setTestLabel(en, cn){
+      var enEl = $('ntfSoundTestLabel'), cnEl = $('ntfSoundTestLabelCn');
+      if (enEl) enEl.textContent = en;
+      if (cnEl) cnEl.textContent = cn;
+    }
     function setSw(id, on){ var el=$(id); if (el){ el.classList.toggle('on', !!on); el.setAttribute('aria-checked', on?'true':'false'); } }
     function b64ToU8(base64){
       var pad = '='.repeat((4 - base64.length % 4) % 4);
@@ -794,6 +849,7 @@
       });
     }
     function bindNotifToggles(){
+      $('ntfSoundTest').addEventListener('click', playTestChime);
       $('ntfSound').addEventListener('click', function(){
         var next = !soundOn();
         try { localStorage.setItem(SOUND_KEY, next ? '1' : '0'); } catch(e){}

@@ -1317,9 +1317,9 @@ function paRenderKpis(animate) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('pa-kpi-on', PA_STATUS === status);
   }
-  // Context line under the band: only while a jump filter is active. Tells the
-  // operator what they're looking at + gives a one-move "Select all" and a way
-  // back to the full catalogue.
+  // Filter chip under the band: only while a jump filter is active. A bordered
+  // rectangle (not a text line) — tells the operator what they're looking at,
+  // gives a one-move "Select all", and an X to clear back to the full catalogue.
   const banner = document.getElementById('pa-recap-banner');
   if (banner) {
     const meta = {
@@ -1335,11 +1335,14 @@ function paRenderKpis(animate) {
     const m = meta[PA_STATUS];
     if (m) {
       banner.hidden = false;
+      const clearLbl = cuT('Clear filter', '清除筛选');
       banner.innerHTML =
         `<span class="rb-dot" style="background:${m.c}"></span>` +
-        cuT('Showing ', '正在显示 ') + `<b>${fcNum(m.n)}</b>` + cuT(' of your ' + m.en, ' 件' + m.cn) +
-        ` · <a onclick="paSelectAllFiltered()">${cuT('Select all', '全选')}</a>` +
-        ` · <a onclick="paSetStatus('all')">${cuT('See all products', '查看全部产品')}</a>`;
+        `<span class="rb-text">` + cuT('Showing ', '正在显示 ') + `<b>${fcNum(m.n)}</b>` + cuT(' of your ' + m.en, ' 件' + m.cn) + `</span>` +
+        `<button type="button" class="rb-select" onclick="paSelectAllFiltered()">${cuT('Select all', '全选')}</button>` +
+        `<button type="button" class="rb-close" onclick="paSetStatus('all')" title="${clearLbl}" aria-label="${clearLbl}">` +
+          `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>` +
+        `</button>`;
     } else {
       banner.hidden = true;
       banner.innerHTML = '';

@@ -1192,6 +1192,12 @@ function _unlockOrdersAudio() {
 }
 function _playOrderChime() {
   if (!_ordersSoundOn()) return;
+  _synthOrderChime();
+}
+// Unguarded synth — used by _playOrderChime above, and by the Notifications
+// "play test sound" button (Profile pop-up / backend-account.html), which
+// should preview the ding even while the toggle is off.
+function _synthOrderChime() {
   _unlockOrdersAudio();
   const ctx = _ordersAudioCtx;
   if (!ctx) return;

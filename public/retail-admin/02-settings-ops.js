@@ -1808,6 +1808,9 @@ function onProfileKey(e) { if (e.key === 'Escape') closeProfileModal(); }
       acctRenderMeta();
       if (typeof tdGreetRender === 'function') tdGreetRender();
     }
+    if (e.data && e.data.type === 'fc-play-order-chime' && typeof _synthOrderChime === 'function') {
+      _synthOrderChime();
+    }
   });
 })();
 
