@@ -64,13 +64,39 @@ function setOrderStatus(chip) {
   ordFilterChanged();
 }
 // Channel facet — orthogonal to status. Filters the combined list by origin
-// (mini app / web / Meituan); '' = all channels.
-function setOrderChannel(chip) {
-  const value = chip.dataset.channel || '';
+// (mini app / web / Meituan); '' = all channels. UI is a dropdown (.chd-*),
+// not a chip row — see setOrderChannel/chdToggle below.
+function setOrderChannel(item) {
+  const value = item.dataset.channel || '';
   const hid = document.getElementById('orders-channel');
   if (hid) hid.value = value;
-  $$('#orders-channel-chips .status-chip').forEach(el => el.classList.toggle('active', el === chip));
+  $$('#chd-pop .chd-item').forEach(el => el.classList.toggle('active', el === item));
+  const btn = document.getElementById('chd-btn');
+  const ico = document.getElementById('chd-btn-ico');
+  const txt = document.getElementById('chd-btn-txt');
+  if (ico) ico.innerHTML = item.querySelector('.chan-ico').innerHTML;
+  if (txt) txt.textContent = item.textContent.trim();
+  if (btn) btn.classList.toggle('is-set', !!value);
+  chdClose();
   ordFilterChanged();
+}
+let _CHD_OPEN = false;
+function chdToggle() {
+  _CHD_OPEN = !_CHD_OPEN;
+  const pop = document.getElementById('chd-pop'); if (pop) pop.hidden = !_CHD_OPEN;
+  const wrap = document.getElementById('chd-wrap'); if (wrap) wrap.classList.toggle('open', _CHD_OPEN);
+  if (_CHD_OPEN) setTimeout(() => document.addEventListener('mousedown', chdOutside), 0);
+  else document.removeEventListener('mousedown', chdOutside);
+}
+function chdOutside(e) {
+  if (e.target.closest && e.target.closest('.chd-wrap')) return;
+  chdClose();
+}
+function chdClose() {
+  _CHD_OPEN = false;
+  const pop = document.getElementById('chd-pop'); if (pop) pop.hidden = true;
+  const wrap = document.getElementById('chd-wrap'); if (wrap) wrap.classList.remove('open');
+  document.removeEventListener('mousedown', chdOutside);
 }
 // Which non-storefront channels are shown read-only in the combined list — the
 // storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For

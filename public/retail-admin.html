@@ -130,7 +130,7 @@
   [data-theme="dark"] #tab-orders .status-chip.active .chip-ct { color:rgba(17,26,43,.6); }
   #tab-orders .status-chip .chip-ct.alert { color:var(--tacet-amber-ink); }
   #tab-orders .status-chip.active .chip-ct.alert { color:rgba(251,249,244,.85); }
-  #orders-channel-chips .chan-ico svg { width:15px; height:15px; }
+  #chd-btn .chan-ico svg { width:15px; height:15px; }
 
   /* Data table — paper card, hairline rows, calm hover. */
   #tab-orders .table-wrap { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px;
@@ -1897,15 +1897,25 @@
       <div class="status-chip st-awaiting_restock"       data-status="needs_invoice"    onclick="setOrderStatus(this)" title="Orders with an invoice request — the count is the ones still to issue · 开票申请订单,计数为待开票"><span class="dot"></span>Invoice<span class="chip-ct alert" id="oc-needs_invoice"></span></div>
     </div>
 
-    <!-- Channel chip strip — orthogonal to status. Filters the combined order
-         list by origin. Meituan rows ride the list read-only (view only). -->
-    <div class="status-chips ch-chips" id="orders-channel-chips" style="margin-bottom: var(--s3)">
-      <div class="status-chip st-all active" data-channel=""        onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels</div>
-      <div class="status-chip"               data-channel="wechat"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10.2c0-3.6-3.2-6.2-7.1-6.2S2.3 6.6 2.3 10.2c0 1.8.8 3.4 2.1 4.6-.1.9-.4 1.8-.9 2.6a8 8 0 0 0 3.3-1.2c.9.2 1.8.3 2.7.2"/><path d="M21.7 15.4c0-2.9-2.6-5.1-5.7-5.1-.4 0-.8 0-1.2.1.4.9.6 1.8.6 2.8 0 1.6-.6 3-1.7 4.1a6.9 6.9 0 0 0 2.3.4c.6 0 1.2-.1 1.8-.2a6.4 6.4 0 0 0 2.6 1c-.3-.6-.5-1.3-.6-2 .6-.9.9-1.9.9-3.1Z"/><circle cx="6.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/><circle cx="10.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/></svg></span>Mini app</div>
-      <div class="status-chip"               data-channel="web"     onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web</div>
-      <div class="status-chip"               data-channel="meituan" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan</div>
-      <div class="status-chip"               data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>gzgrocery</div>
-      <div class="status-chip"               data-channel="manual"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>Manual · 手动</div>
+    <!-- Channel filter — orthogonal to status. Filters the combined order
+         list by origin. Meituan rows ride the list read-only (view only).
+         A dropdown, not a chip row: channel is a secondary facet reached for
+         far less often than status, so it collapses into one control instead
+         of costing its own line (was 6 chips wide). -->
+    <div class="ovp-wrap chd-wrap" id="chd-wrap" style="margin-bottom: var(--s3)">
+      <button type="button" class="chd-btn" id="chd-btn" onclick="chdToggle()" aria-haspopup="true">
+        <span class="chan-ico" id="chd-btn-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
+        <span><span class="chd-lbl-dim">Channel:</span> <span id="chd-btn-txt">All channels</span></span>
+        <svg class="chd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <div class="chd-pop" id="chd-pop" hidden>
+        <button type="button" class="chd-item active" data-channel=""        onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button type="button" class="chd-item"        data-channel="wechat"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10.2c0-3.6-3.2-6.2-7.1-6.2S2.3 6.6 2.3 10.2c0 1.8.8 3.4 2.1 4.6-.1.9-.4 1.8-.9 2.6a8 8 0 0 0 3.3-1.2c.9.2 1.8.3 2.7.2"/><path d="M21.7 15.4c0-2.9-2.6-5.1-5.7-5.1-.4 0-.8 0-1.2.1.4.9.6 1.8.6 2.8 0 1.6-.6 3-1.7 4.1a6.9 6.9 0 0 0 2.3.4c.6 0 1.2-.1 1.8-.2a6.4 6.4 0 0 0 2.6 1c-.3-.6-.5-1.3-.6-2 .6-.9.9-1.9.9-3.1Z"/><circle cx="6.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/><circle cx="10.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/></svg></span>Mini app<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button type="button" class="chd-item"        data-channel="web"     onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button type="button" class="chd-item"        data-channel="meituan" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button type="button" class="chd-item"        data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>gzgrocery<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+        <button type="button" class="chd-item"        data-channel="manual"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>Manual · 手动<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+      </div>
     </div>
     <input type="hidden" id="orders-channel" value="">
     <!-- Hidden source-of-truth for existing loadOrders() reads -->
@@ -2128,11 +2138,45 @@
          but carry no fulfilment actions. The channel cell renders identically to
          our own Mini app / Web / Manual orders (same font + colour, no dimming). */
 
-      /* Channel chips carry a leading glyph (mockup parity), not the status dot. */
-      #orders-channel-chips .chan-ico {
-        display: inline-flex; align-items: center; margin-right: 6px;
+      /* Channel filter dropdown — default state is a neutral pill; picking a
+         channel ink-fills the trigger, the same "filter applied" language the
+         status chips already use, so a filtered view is never silent. */
+      .chd-wrap { position: relative; }
+      .chd-btn {
+        display: inline-flex; align-items: center; gap: 8px;
+        background: var(--bg-pane); border: 1px solid var(--line); color: var(--text-2);
+        border-radius: 999px; padding: 6px 14px 6px 12px; font-size: 13px; font-weight: 500;
+        cursor: pointer; transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
       }
-      #orders-channel-chips .chan-ico svg { width: 15px; height: 15px; display: block; }
+      .chd-btn:hover { border-color: var(--text-3); color: var(--text-1); }
+      .chd-btn .chan-ico { display: inline-flex; align-items: center; }
+      .chd-btn .chan-ico svg { width: 15px; height: 15px; display: block; }
+      .chd-btn .chd-lbl-dim { font-weight: 400; }
+      .chd-btn .chd-chev { width: 12px; height: 12px; color: var(--text-3); flex: none; margin-left: 2px; transition: transform var(--t-fast) ease; }
+      .chd-wrap.open .chd-btn .chd-chev { transform: rotate(180deg); }
+      .chd-btn.is-set { background: var(--tacet-ink); border-color: var(--tacet-ink); color: var(--tacet-paper); }
+      .chd-btn.is-set .chd-lbl-dim { color: rgba(251,249,244,.7); }
+      .chd-btn.is-set .chd-chev { color: rgba(251,249,244,.7); }
+      [data-theme="dark"] .chd-btn.is-set { background: var(--tacet-paper); border-color: var(--tacet-paper); color: var(--tacet-ink); }
+      [data-theme="dark"] .chd-btn.is-set .chd-lbl-dim,
+      [data-theme="dark"] .chd-btn.is-set .chd-chev { color: rgba(17,26,43,.6); }
+
+      .chd-pop {
+        position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 200px;
+        background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-lg);
+        box-shadow: 0 14px 36px rgba(20,15,3,.16); padding: 6px;
+      }
+      .chd-pop[hidden] { display: none; }
+      .chd-item {
+        display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
+        padding: 8px 10px; border-radius: 7px; font-size: 13.5px; font-weight: 500;
+        color: var(--text-1); cursor: pointer; background: none; border: 0;
+      }
+      .chd-item:hover { background: var(--bg-elev-1); }
+      .chd-item .chan-ico { display: inline-flex; align-items: center; color: var(--text-2); }
+      .chd-item .chan-ico svg { width: 14px; height: 14px; display: block; }
+      .chd-item .chd-check { margin-left: auto; width: 14px; height: 14px; color: var(--text-1); opacity: 0; flex: none; }
+      .chd-item.active .chd-check { opacity: 1; }
       /* Per-row / per-card channel label: icon + text on one baseline. */
       .ord-chan { display: inline-flex; align-items: center; gap: 4px; }
       .ord-chan svg { width: 13px; height: 13px; flex: none; }
@@ -2417,8 +2461,8 @@
       #cu-table .cul-pop-foot .clear:hover { color: var(--text-1); }
       #cu-table .cul-pop-foot .done { color: var(--text-1); }
 
-      /* Channel filter — chip strip (mirrors Orders' #orders-channel-chips
-         .status-chip exactly: pill, icon, label, ink fill when active). */
+      /* Channel filter — chip strip (same pill/icon/label/ink-fill language
+         Orders' channel filter uses, now a dropdown there — see .chd-btn). */
       #tab-customers .cul-chan-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
       #tab-customers .cul-chan-chip {
         display: inline-flex; align-items: center; background: var(--bg-pane); border: 1px solid var(--line);
@@ -2865,12 +2909,12 @@
           <button type="button" class="cul-seg warn" data-seg="blocked" id="cu-seg-blocked" hidden onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct" id="cu-seg-blocked-ct" data-no-i18n></span></button>
         </span>
       </div>
-      <!-- Channel filter — chip strip, not a column-header popover. Same
-           component Orders' #orders-channel-chips uses (icon + label, one
-           active at a time) — it's the filter an operator reaches for on
-           every visit, so it stays one click, always visible, never a
-           popover that can open past the table's right edge. Tier keeps its
-           column funnel below: an occasional cut, comfortable near the left. -->
+      <!-- Channel filter — chip strip, not a column-header popover. It's the
+           filter an operator reaches for on every visit here, so it stays one
+           click, always visible, never a popover that can open past the
+           table's right edge. (Orders' channel filter is lower-traffic and
+           now a dropdown — see .chd-btn.) Tier keeps its column funnel below:
+           an occasional cut, comfortable near the left. -->
       <div class="cul-chan-chips" id="cu-chan-chips">
         <button type="button" class="cul-chan-chip on" data-chan="" onclick="cuSetChan('')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels · 全部渠道</button>
         <button type="button" class="cul-chan-chip" data-chan="wechat" onclick="cuSetChan('wechat')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10.2c0-3.6-3.2-6.2-7.1-6.2S2.3 6.6 2.3 10.2c0 1.8.8 3.4 2.1 4.6-.1.9-.4 1.8-.9 2.6a8 8 0 0 0 3.3-1.2c.9.2 1.8.3 2.7.2"/><path d="M21.7 15.4c0-2.9-2.6-5.1-5.7-5.1-.4 0-.8 0-1.2.1.4.9.6 1.8.6 2.8 0 1.6-.6 3-1.7 4.1a6.9 6.9 0 0 0 2.3.4c.6 0 1.2-.1 1.8-.2a6.4 6.4 0 0 0 2.6 1c-.3-.6-.5-1.3-.6-2 .6-.9.9-1.9.9-3.1Z"/><circle cx="6.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/><circle cx="10.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/></svg></span>Mini app · 小程序</button>
@@ -3196,10 +3240,6 @@
       </div>
       </div>
     </div>
-    <!-- Context line — appears under the band only when a jump filter is active:
-         "Showing N of your … · Select all · See all products". Drawn by paRenderKpis(). -->
-    <div class="pa-recap-banner" id="pa-recap-banner" hidden></div>
-
     <div class="pa-toolbar">
       <input id="pa-search" type="text" data-ph-en="Search by name, SKU…" data-ph-cn="按名称、SKU 搜索…" placeholder="Search by name, SKU…">
       <select id="pa-filter" title="Filter by category · 按分类筛选">

@@ -27,8 +27,9 @@ let CU_SORT = 'last_seen';
 let CU_SORT_DIR = 'desc';
 let CU_TIER_FILTERS = new Set();
 // Channel filter — single value, '' = all. Lives in the chip strip above the
-// table (mirrors Orders' #orders-channel-chips), not a column popover: it's
-// the filter reached for on every visit, so it's one click, always visible.
+// table (same pill/icon/label look Orders used before it moved to a
+// dropdown — see .chd-btn there), not a column popover: it's the filter
+// reached for on every visit, so it's one click, always visible.
 // Filters on each customer's MOST RECENT order's channel (backend default
 // 'wechat' for customers with zero orders yet, the only signup path today).
 let CU_CHAN_FILTER = '';
