@@ -34,12 +34,15 @@ esac
 
 # Only paths the production Node app actually serves/uses are deployable.
 # Intentionally excluded: miniapp/ (WeChat build, uploaded separately via
-# DevTools), node_modules/, docs, git metadata, local config, and package*.json
-# (a dependency change needs a manual `npm install` + restart on the server).
+# DevTools), node_modules/, docs, git metadata, local config. package*.json IS
+# deployable — deploy-apply.sh runs `npm install` on the server when either
+# ships, so a new dependency no longer needs a manual install to avoid a
+# MODULE_NOT_FOUND crash loop.
 is_deployable() {
   case "$1" in
     public/*|routes/*|lib/*|middleware/*|scripts/*) return 0 ;;
     server.js|database.js|schema.sql) return 0 ;;
+    package.json|package-lock.json) return 0 ;;
     *) return 1 ;;
   esac
 }

@@ -38,11 +38,12 @@ Scale markers: `routes/retail.js` ≈ 23k lines (the customer API), `routes/ai.j
 
 A **post-commit git hook** (`scripts/deploy-changed.sh` → `deploy-apply.sh`) **and** a GitHub Action
 (`.github/workflows/deploy.yml`) ship changed files to production on every push to **`main`**:
-syntax-gate → backup → `pm2 restart` → health-probe → **auto-rollback** on crash-loop.
+syntax-gate → backup → install → `npm install` (if `package*.json` shipped) → `pm2 restart` →
+health-probe → **auto-rollback** on crash-loop.
 
 - **Deployable paths:** `public/ routes/ lib/ middleware/ scripts/` + `server.js`, `database.js`,
-  `schema.sql`. **Non-deployable:** `*.md`, `*.csv`, `miniapp/` (WeChat build, shipped via DevTools
-  per tenant), `package*.json` (needs manual `npm install` on the box).
+  `schema.sql`, `package.json`, `package-lock.json`. **Non-deployable:** `*.md`, `*.csv`, `miniapp/`
+  (WeChat build, shipped via DevTools per tenant).
 - Bypass with `[skip deploy]` / `[no deploy]` in the commit **subject**.
 - **Only `main` deploys.** Feature branches (and this repo's `claude/*` branches) are safe checkpoints.
 - After editing retail-admin JS, **bump `public/sw.js`** cache version or clients keep stale JS.

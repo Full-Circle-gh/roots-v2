@@ -10,6 +10,7 @@
 #     __stage__/public/retail-admin.html
 #
 # Sequence: syntax-check staged .js  ->  back up live copies  ->  install
+#   ->  npm install (only if package.json/package-lock.json shipped)
 #   ->  pm2 restart roots-v2  ->  health-check (auto-rollback on crash-loop).
 # A pm2 restart reloads the WHOLE backend, so the syntax gate + rollback are
 # what keep a bad file from taking the entire live site down.
@@ -28,7 +29,7 @@ mapfile -t FILES < <(cd "$STAGE" && find . -type f | sed 's|^\./||')
 [ ${#FILES[@]} -eq 0 ] && { echo "ABORT: $STAGE is empty"; exit 1; }
 echo "staged files:"; printf '  %s\n' "${FILES[@]}"
 
-echo "=== 1/4 syntax-check staged .js + .html inline scripts (live files untouched) ==="
+echo "=== 1/5 syntax-check staged .js + .html inline scripts (live files untouched) ==="
 HTML_CHECK="$APP/scripts/check-html-js.js"
 for f in "${FILES[@]}"; do
   case "$f" in
@@ -59,15 +60,40 @@ if [ -f "$STAGE/public/sw.js" ]; then
   echo "stamped sw.js CACHE -> roots-v2-shell-$TS"
 fi
 
-echo "=== 2/4 back up live copies -> $BK ==="
+echo "=== 2/5 back up live copies -> $BK ==="
 for f in "${FILES[@]}"; do if [ -f "$APP/$f" ]; then mkdir -p "$BK/$(dirname "$f")"; cp "$APP/$f" "$BK/$f"; fi; done
 echo "OK"
 
 BEFORE=$(rt)
-echo "=== 3/4 install (restart_time before = $BEFORE) ==="
+echo "=== 3/5 install (restart_time before = $BEFORE) ==="
 for f in "${FILES[@]}"; do mkdir -p "$APP/$(dirname "$f")"; cp "$STAGE/$f" "$APP/$f"; echo "  -> $f"; done
 
-echo "=== 4/4 restart roots-v2 + verify health ==="
+# If this ship touched package.json/package-lock.json, the live node_modules is
+# now out of sync with the manifest (a missing dep here means every future
+# restart crash-loops on MODULE_NOT_FOUND — the exact failure that motivated
+# this step). Install BEFORE the pm2 restart below so the process only ever
+# starts against a manifest its node_modules actually satisfies. --omit=dev
+# skips eslint/globals (server never lints; that only runs in the local
+# pre-push gate and CI checkout).
+NPM_TOUCHED=0
+for f in "${FILES[@]}"; do
+  case "$f" in package.json|package-lock.json) NPM_TOUCHED=1; break ;; esac
+done
+if [ "$NPM_TOUCHED" = "1" ]; then
+  echo "=== 4/5 package.json/package-lock.json changed -> npm install ==="
+  if (cd "$APP" && npm install --omit=dev --no-audit --no-fund); then
+    echo "npm install OK"
+  else
+    echo "ABORT: npm install failed -- restoring previous files, NOT restarting pm2"
+    for f in "${FILES[@]}"; do [ -f "$BK/$f" ] && cp "$BK/$f" "$APP/$f"; done
+    echo "RESULT=ABORTED_NPM_INSTALL backup=$BK"
+    exit 1
+  fi
+else
+  echo "=== 4/5 package.json unchanged -> skip npm install ==="
+fi
+
+echo "=== 5/5 restart roots-v2 + verify health ==="
 pm2 restart roots-v2 --update-env >/dev/null
 
 # Health verdict. This REPLACES the old brittle "restart_time must be exactly

@@ -81,6 +81,7 @@ jobs:
             case "$1" in
               public/*|routes/*|lib/*|middleware/*|scripts/*) return 0 ;;
               server.js|database.js|schema.sql) return 0 ;;
+              package.json|package-lock.json) return 0 ;;
               *) return 1 ;;
             esac
           }
