@@ -2448,7 +2448,11 @@
   .pa-list-rich {
     gap: 0;
     background: var(--td-surface);
-    border: 1px solid var(--td-border); border-radius: 14px;
+    border: 1px solid var(--td-border);
+    /* Top corners square, matching .pa-rowhead's now-square top (see below) —
+       with no overflow:hidden a rounded top here would poke out past the
+       header's straight edge. Bottom stays rounded via .pa-row:last-child. */
+    border-radius: 0 0 14px 14px;
     /* No overflow:hidden — .pa-rowhead is position:sticky and needs the
        viewport (not this box) as its containing block, else it would be
        trapped inside the list instead of locking under the topbar. Corners
