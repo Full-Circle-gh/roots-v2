@@ -10177,11 +10177,15 @@ function findDeliveryJobForOrder(orderId, recipientPhone) {
     if (!job) {
       const phone = String(recipientPhone || '').replace(/\D/g, '');
       if (phone.length >= 7) {
+        // Exclude rows already claimed by a DIFFERENT order — a repeat customer's
+        // phone otherwise matches their OLD (already-delivered) job and this
+        // order's card silently shows a stranger's rider as its own.
         job = tdb().prepare(
           `SELECT * FROM delivery_jobs
             WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
+              AND (retail_order_id IS NULL OR retail_order_id = ?)
             ORDER BY updated_at DESC LIMIT 1`
-        ).get('%' + phone.slice(-8) + '%');
+        ).get('%' + phone.slice(-8) + '%', orderId);
       }
     }
     return job || null;
@@ -17991,11 +17995,14 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
     if (!job) {
       const phone = String(o.recipient_phone || '').replace(/\D/g, '');
       if (phone.length >= 7) {
+        // Exclude rows already claimed by a DIFFERENT order — see
+        // findDeliveryJobForOrder for why (repeat customer, stale rider leak).
         job = tdb().prepare(
           `SELECT * FROM delivery_jobs
             WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
+              AND (retail_order_id IS NULL OR retail_order_id = ?)
             ORDER BY updated_at DESC LIMIT 1`
-        ).get('%' + phone.slice(-8) + '%');
+        ).get('%' + phone.slice(-8) + '%', id);
       }
     }
     if (job) {
