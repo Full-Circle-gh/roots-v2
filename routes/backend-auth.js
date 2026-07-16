@@ -21,6 +21,7 @@ const features = require('../lib/features');
 const emailSender = require('../lib/email-sender');
 const aliyunSms = require('../lib/aliyun-sms');
 const { getTenantCreds } = require('../lib/tenant-creds');
+const geoip = require('geoip-lite');
 const router = express.Router();
 
 // ── Schema (idempotent) ─────────────────────────────────────────────────
@@ -329,6 +330,20 @@ function describeUA(ua) {
 
   const label = browser ? `${browser} on ${os}` : os;
   return { label, kind };
+}
+
+// Best-effort "city, region" from an IP using the bundled offline GeoIP
+// database (no third-party lookup, no network call — the IP never leaves
+// the box). Private/loopback addresses and misses resolve to null so the
+// UI can fall back to showing the raw IP instead.
+function describeIP(ip) {
+  try {
+    const clean = String(ip || '').replace(/^::ffff:/, '');
+    if (!clean || /^(127\.|10\.|192\.168\.|::1)/.test(clean)) return null;
+    const g = geoip.lookup(clean);
+    if (!g) return null;
+    return [g.city, g.region, g.country].filter(Boolean).join(', ') || null;
+  } catch (e) { return null; }
 }
 
 // Record (or refresh) the current session in the device index. Called on login
@@ -753,6 +768,7 @@ router.get('/api/backend/sessions', (req, res) => {
       label: d.label,
       kind: d.kind,
       ip: r.ip || null,
+      location: describeIP(r.ip),
       lastSeen: r.last_seen,
       createdAt: r.created_at,
     };
@@ -790,6 +806,7 @@ router.get('/api/backend/sessions/team', (req, res) => {
       label: d.label,
       kind: d.kind,
       ip: r.ip || null,
+      location: describeIP(r.ip),
       lastSeen: r.last_seen,
       createdAt: r.created_at,
       ownerId: r.tenant_user_id,

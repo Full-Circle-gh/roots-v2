@@ -643,6 +643,16 @@
       var d = Math.round(h/24); if (d < 30) return L(d+(d>1?' days ago':' day ago'), d+' 天前');
       return L('over a month ago','一个月前');
     }
+    function toDate(s){
+      return new Date(String(s).replace(' ', 'T') + (/[zZ]|[+\-]\d\d:?\d\d$/.test(s) ? '' : 'Z'));
+    }
+    function dateFmt(s){
+      if (!s) return '';
+      var t = toDate(s);
+      var opts = { month:'short', day:'numeric' };
+      if (t.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+      return t.toLocaleDateString(lang === 'cn' ? 'zh-CN' : 'en-US', opts);
+    }
 
     var devView = 'me';   // 'me' | 'team' (team = owner/admin only)
     var devKind = 'all';  // 'all' | 'desktop' | 'mobile'
@@ -699,7 +709,10 @@
       }
       box.innerHTML = list.map(function(d){
         var meta = [ d.current ? L('Active now','当前活动') : relTime(d.lastSeen) ];
-        if (d.ip) meta.push(esc(d.ip));
+        if (d.location || d.ip) meta.push(esc(d.location || d.ip));
+        if (d.createdAt && d.lastSeen && toDate(d.createdAt) < new Date(toDate(d.lastSeen).getTime() - 86400000)) {
+          meta.push(L('since '+dateFmt(d.createdAt), dateFmt(d.createdAt)+'以来'));
+        }
         var owner = (devView === 'team' && d.ownerName)
           ? '<span class="own-chip">'+esc(initialsOf(d.ownerName))+'</span> ' + esc(d.isYou ? d.ownerName + ' ' + L('(You)','(您)') : d.ownerName) + ' · '
           : '';
