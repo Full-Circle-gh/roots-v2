@@ -1670,10 +1670,14 @@
   .db-spark-dot.is-breathing { box-shadow: 0 0 0 0 rgba(163,180,159,.45); animation: dbSparkBreathe 2.6s ease-out infinite; }
   @keyframes dbSparkBreathe { 0% { box-shadow: 0 0 0 0 rgba(163,180,159,.45); } 70% { box-shadow: 0 0 0 6px rgba(163,180,159,0); } 100% { box-shadow: 0 0 0 0 rgba(163,180,159,0); } }
   @media (prefers-reduced-motion: reduce) { .db-spark-dot.is-breathing { animation: none; } }
+  /* The big hero chart's end-dot reads as a real marker, not a stray pixel —
+     bigger, with a surface-color ring so it stays legible crossing the line. */
+  .db-spark-dot.is-big { width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; box-shadow: 0 0 0 2px var(--td-surface); }
   /* Hover-scrub: the chart is draggable to read each hour. The dot tracks the
      cursor and a small chip names the hour + value. */
   .db-spark-wrap { cursor: crosshair; }
   .db-spark-dot.is-active { animation: none; transform: scale(1.5); transition: left .06s linear, top .06s linear; box-shadow: 0 0 0 3px rgba(163,180,159,.18); }
+  .db-spark-dot.is-big.is-active { box-shadow: 0 0 0 2px var(--td-surface), 0 0 0 5px rgba(163,180,159,.18); }
   .db-spark-tip { position: absolute; z-index: 60; transform: translate(-50%, -100%); margin-top: -4px; padding: 8px 11px; background: var(--td-text, #111A2B); color: var(--td-paper, #FBF9F4); border: 0; border-radius: 8px; font: 400 12px var(--f-sans); line-height: 1.4; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .12s ease; box-shadow: 0 4px 12px rgba(17,26,43,.08), 0 12px 32px rgba(17,26,43,.18); }
   .db-spark-tip.show { opacity: 1; }
   .db-today-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }

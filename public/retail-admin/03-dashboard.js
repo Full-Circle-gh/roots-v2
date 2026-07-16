@@ -93,9 +93,18 @@ function dashSparkline(values, opts) {
   const W = 100, H = 24, pad = 2;
   const hasGhost = ghost.length >= 2 && ghost.length === vals.length && ghost.some(v => v > 0);
   const todayFlat = vals.length < 2 || vals.every(v => v <= 0);
+  // opts.big: the one large hero chart (the Today day line) gets a floor to
+  // sit on and a solid (not dashed) ghost reference — dashes read as "broken"
+  // at that size. Small tile sparklines keep the original quiet treatment.
+  const big = !!opts.big;
+  const baseline = big
+    ? `<line x1="${pad}" y1="${(H - pad).toFixed(1)}" x2="${W - pad}" y2="${(H - pad).toFixed(1)}" `
+      + `stroke="var(--td-border)" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+    : '';
   // Nothing today AND no ghost: draw a faint dashed baseline instead of
   // vanishing — the sparkline is always visibly present, saying "no activity".
   if (todayFlat && !hasGhost) {
+    if (big) return `<svg class="db-spark is-flat" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${baseline}</svg>`;
     const midY = (H / 2).toFixed(1);
     return `<svg class="db-spark is-flat" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">`
       + `<line x1="${pad}" y1="${midY}" x2="${W - pad}" y2="${midY}" stroke="currentColor" stroke-width="1" `
@@ -106,18 +115,24 @@ function dashSparkline(values, opts) {
   const max = sc.max, min = sc.min, span = (max - min) || 1;
   const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
   const y = v => (H - pad) - ((v - min) / span) * (H - 2 * pad);
-  // The typical-day ghost — a dotted curve behind today's line, same y-scale so
-  // heights compare directly. No fill, no dot: a reference, not data.
+  // The typical-day ghost — a reference curve behind today's line, same
+  // y-scale so heights compare directly. No fill, no dot: a reference, not
+  // data. The big hero chart draws it solid in a neutral ink (dashes are for
+  // gridlines, not a data series); small tiles keep the original dotted line.
   let ghostSvg = '';
   if (hasGhost) {
     const gp = ghost.map((v, i) => ({ x: x(i), y: y(v) }));
-    ghostSvg = `<path class="db-spark-ghost" d="${dashSmoothPath(gp, H, pad)}" fill="none" stroke="currentColor" `
-      + `stroke-width="1.2" vector-effect="non-scaling-stroke" stroke-dasharray="1.5 2.5" stroke-linecap="round" opacity="0.4"/>`;
+    const gd = dashSmoothPath(gp, H, pad);
+    ghostSvg = big
+      ? `<path class="db-spark-ghost" d="${gd}" fill="none" stroke="var(--td-text2)" `
+        + `stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>`
+      : `<path class="db-spark-ghost" d="${gd}" fill="none" stroke="currentColor" `
+        + `stroke-width="1.2" vector-effect="non-scaling-stroke" stroke-dasharray="1.5 2.5" stroke-linecap="round" opacity="0.4"/>`;
   }
   // Today may not have started yet (all zero) while the ghost carries shape —
-  // show the ghost alone, no line/area/dot.
+  // show the ghost (+ floor, on the big chart) alone, no line/area/dot.
   if (todayFlat) {
-    return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${ghostSvg}</svg>`;
+    return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${baseline}${ghostSvg}</svg>`;
   }
   const p = vals.map((v, i) => ({ x: x(i), y: y(v) }));
   const d = dashSmoothPath(p, H, pad);
@@ -137,9 +152,9 @@ function dashSparkline(values, opts) {
   let dot = '';
   if (opts.dot) {
     const idx = n - 1;
-    dot = `<i class="db-spark-dot${opts.pulse ? ' is-breathing' : ''}" style="left:${x(idx).toFixed(1)}%;top:${((y(vals[idx]) / H) * 100).toFixed(1)}%"></i>`;
+    dot = `<i class="db-spark-dot${opts.pulse ? ' is-breathing' : ''}${big ? ' is-big' : ''}" style="left:${x(idx).toFixed(1)}%;top:${((y(vals[idx]) / H) * 100).toFixed(1)}%"></i>`;
   }
-  return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${defs}${ghostSvg}${area}${line}</svg>${dot}`;
+  return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${defs}${baseline}${ghostSvg}${area}${line}</svg>${dot}`;
 }
 
 // Period caption ("Last 30 days · 近30天") from the active date-range window —
@@ -610,7 +625,7 @@ async function dashHeroLoadToday(opts) {
     // line so today reads against a normal day, by this hour.
     const typical = Array.isArray(data.typical) ? data.typical.map(v => Number(v) || 0) : null;
     dashRenderSpark($('#db-today-spark'), trend.map(p => Number(p.revenue || 0)), labels,
-                    v => '¥' + Math.round(v).toLocaleString(), false, typical);
+                    v => '¥' + Math.round(v).toLocaleString(), false, typical, true);
     tdTodayHours(labels);   // hour marks under the day line
     dashRenderSpark($('#db-today-ord-spark'), trend.map(p => Number(p.orders || 0)), labels,
                     v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);
@@ -698,9 +713,9 @@ function dashDeltaLeave(e) { dashSparkTipEl(e.currentTarget).classList.remove('s
 
 // ── Interactive sparkline scrub ──────────────────────────────────────────
 // Render a sparkline into a wrap and stash its series so a hover can scrub it.
-function dashRenderSpark(wrap, vals, labels, fmt, pulse, ghost) {
+function dashRenderSpark(wrap, vals, labels, fmt, pulse, ghost, big) {
   if (!wrap) return;
-  wrap.innerHTML = dashSparkline(vals, { dot: true, pulse: !!pulse, ghost: ghost });
+  wrap.innerHTML = dashSparkline(vals, { dot: true, pulse: !!pulse, ghost: ghost, big: !!big });
   // Stash the shared scale so the hover-scrub places the dot on the same line
   // the ghost may have re-scaled.
   wrap._spark = { vals, labels, fmt, scale: dashSparkScale(vals, ghost) };
