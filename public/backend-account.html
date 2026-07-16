@@ -633,6 +633,7 @@
     var ICO_TAB = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="2.2"/><path d="M10.6 19h2.8"/></svg>';
     function iconFor(kind){ return kind === 'phone' ? ICO_PH : (kind === 'tablet' ? ICO_TAB : ICO_PC); }
     function groupKind(kind){ return (kind === 'phone' || kind === 'tablet') ? 'mobile' : 'desktop'; }
+    function kindLabel(kind){ return kind === 'phone' ? L('Phone','手机') : (kind === 'tablet' ? L('Tablet','平板') : L('Desktop','桌面')); }
     function relTime(s){
       if (!s) return '';
       var t = new Date(String(s).replace(' ', 'T') + (/[zZ]|[+\-]\d\d:?\d\d$/.test(s) ? '' : 'Z'));
@@ -709,6 +710,7 @@
       }
       box.innerHTML = list.map(function(d){
         var meta = [ d.current ? L('Active now','当前活动') : relTime(d.lastSeen) ];
+        meta.push(kindLabel(d.kind));
         if (d.location || d.ip) meta.push(esc(d.location || d.ip));
         if (d.createdAt && d.lastSeen && toDate(d.createdAt) < new Date(toDate(d.lastSeen).getTime() - 86400000)) {
           meta.push(L('since '+dateFmt(d.createdAt), dateFmt(d.createdAt)+'以来'));
