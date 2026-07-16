@@ -136,6 +136,12 @@ function noteVerifyResult(storeCode, challenged) {
   }
 }
 const downFlagged = {};
+// A single isLoggedIn() false is usually a transient blip (residential-proxy hiccup
+// or an H5guard signing retry) that clears on the very next poll — 2026-07-16 a lone
+// skipped poll paged ops at 03:21 and self-healed 5min later. Only alert once the
+// session stays down for this many consecutive polls (~90s), mirroring PROXY_DOWN_GRACE.
+const loginFailStreak = {};
+const LOGIN_DOWN_GRACE = Number(process.env.QINGYUN_LOGIN_DOWN_GRACE || 3);
 // Bootstrap = logged in but no captured order/list to replay (page reloaded).
 // 2026-07-02: yuexiu sat in this state 10h unnoticed — alert once it persists.
 const bootstrapSince = {};
@@ -470,10 +476,13 @@ async function pollStore(storeCode) {
     br = await getQingyunBrowser(storeCode);
     if (!(await br.isLoggedIn())) {
       if (br.verificationRequired) { noteVerifyResult(storeCode, true); return; }
-      if (!downFlagged[storeCode]) {
+      loginFailStreak[storeCode] = (loginFailStreak[storeCode] || 0) + 1;
+      log(storeCode, `not logged in — skipping poll (${loginFailStreak[storeCode]}/${LOGIN_DOWN_GRACE})`);
+      // Debounce: only page ops once the session has stayed down for GRACE consecutive
+      // polls — a lone transient blip clears before we ever alert (no more 3am false alarms).
+      if (!downFlagged[storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE) {
         downFlagged[storeCode] = true;
         logSync(storeCode, 'needs_login', 'error', null, '青云 Chrome not logged in — scan the QR on the box');
-        log(storeCode, 'not logged in — skipping poll');
         sendOpsAlert(`🔴 青云聚信 ${storeCode} 未登录，配送跟踪已停止，需要扫码重新登录\nQingyun ${storeCode} not logged in — tracking stopped, scan QR to re-login`);
       }
       heartbeat(storeCode, false);
@@ -481,6 +490,7 @@ async function pollStore(storeCode) {
     }
     const wasDown = downFlagged[storeCode];
     downFlagged[storeCode] = false;
+    loginFailStreak[storeCode] = 0;
     heartbeat(storeCode, true);
 
     // Phase 2: create any queued paid delivery orders in Qingyun (no-op unless the
