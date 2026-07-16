@@ -11181,3 +11181,26 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pdb-photos .pdb-photo-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   /* Variant / bundle / option rows sit below the Stock grid, full width. */
   #pd-editor .pdb-belowgrid { margin-top: 14px; }
+
+  /* Stock tab — Variants / Bundle / Add-ons / Options as a 2-up card grid rather
+     than full-bleed rows. As full-page rows their summary flew to the far edge
+     (the original wasted-space complaint). Two columns when the editor is wide;
+     an OPEN section spans the full width so its matrix / radios get the room they
+     need (open state is the toggle's aria-expanded — same for all four). Each
+     .pd-variants box is JS-rendered; :empty hides any that render nothing. */
+  #pd-editor .pdb-vgrid { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: start; }
+  @container (min-width: 760px) { #pd-editor .pdb-vgrid { grid-template-columns: 1fr 1fr; } }
+  #pd-editor .pdb-vgrid > .pd-variants {
+    border: 1px solid #E4E0D5; border-radius: 14px; background: #FFFFFF;
+    padding: 0 14px; align-self: start; min-width: 0; transition: border-color .12s ease;
+  }
+  #pd-editor .pdb-vgrid > .pd-variants:empty { display: none; }
+  #pd-editor .pdb-vgrid > .pd-variants:hover { border-color: #C9C3B4; }
+  @container (min-width: 760px) {
+    #pd-editor .pdb-vgrid > .pd-variants:has(.pd-var-toggle[aria-expanded="true"]) {
+      grid-column: 1 / -1; padding-bottom: 14px;
+    }
+  }
+  /* Toggle becomes the card header — drop the full-bleed hairline-row look. */
+  #pd-editor .pdb-vgrid .pd-var-toggle { border-top: none; padding: 15px 3px; }
+  #pd-editor .pdb-vgrid .pd-var-toggle:hover { background: transparent; border-top-color: transparent; }
