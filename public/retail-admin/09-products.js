@@ -1737,7 +1737,7 @@ function paRender() {
         ${listStores.length
           ? listStores.map(s => `<span class="pa-col-stock-h">${escapeHtml(_paStoreName(s.id))}</span>`).join('')
           : `<span>${cuT('Stock', '库存')}</span>`}
-        <span class="pa-col-price">${cuT('Price', '价格')}</span>
+        <span class="pa-col-price-h">${cuT('Price', '价格')}</span>
       </div>` : '';
     grid.innerHTML = head + pageUnits.map((u, ui) => {
       const p = u.p;

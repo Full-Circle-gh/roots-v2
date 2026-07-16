@@ -2448,7 +2448,11 @@
   .pa-list-rich {
     gap: 0;
     background: var(--td-surface);
-    border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--td-border); border-radius: 14px;
+    /* No overflow:hidden — .pa-rowhead is position:sticky and needs the
+       viewport (not this box) as its containing block, else it would be
+       trapped inside the list instead of locking under the topbar. Corners
+       are rounded on the header/last row instead. */
     margin-top: 16px;
   }
   .pa-list-rich .pa-row, .pa-rowhead {
@@ -2466,13 +2470,15 @@
     padding: 12px 18px; transform: none;
   }
   .pa-list-rich .pa-row:hover { transform: none; background: var(--td-raised); border-color: var(--td-border); }
-  .pa-list-rich .pa-row:last-child { border-bottom: none; }
+  .pa-list-rich .pa-row:last-child { border-bottom: none; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
   .pa-list-rich .pa-row.is-selected { background: var(--td-raised); }
   .pa-rowhead {
-    padding: 14px 18px; background: transparent;
+    padding: 14px 18px; background: var(--td-raised);
     border-bottom: 1px solid var(--td-border);
+    border-top-left-radius: 14px; border-top-right-radius: 14px;
     font-size: 13.5px; letter-spacing: .02em; text-transform: none;
     color: var(--td-text); font-weight: 700;
+    position: sticky; top: 72px; z-index: 5;
   }
   .pa-list-rich .pa-row-img { width: 44px; height: 44px; border-radius: 10px; }
   .pa-list-rich .pa-row-name { font-size: 15px; font-weight: 500; }
@@ -2490,6 +2496,10 @@
     font-variant-numeric: tabular-nums; font-size: 14px; font-weight: 500; color: var(--td-text);
     justify-self: end; white-space: nowrap;
   }
+  /* Header-only: alignment matches the body's price column, but weight/size
+     inherit from .pa-rowhead (700/13.5px) instead of the body's 500/14px —
+     "Price" was previously reusing .pa-col-price and picking up its font. */
+  .pa-col-price-h { justify-self: end; }
   .pa-col-stock { font-size: 14px; }
 
   /* Stock — sage healthy · amber low · brick sold out. */
