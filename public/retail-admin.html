@@ -3288,22 +3288,12 @@
       </div>
     </div>
 
-    <!-- Sub-bar (one row): store switcher + shown-count on the left, low-stock
-         threshold knob + Bulk on the right. Store switcher shows only for 2+
-         stores; the count, knob and Bulk are always present. -->
+    <!-- Sub-bar (one row): store switcher + shown-count. The low-stock threshold
+         moved to Settings → Operations → Stores; bulk actions are now a permanent
+         bar above the list (no separate Bulk button). -->
     <div class="pa-subbar">
       <div id="pa-store-seg" class="pa-store-seg" style="display:none"></div>
       <div id="pa-count" class="pa-count"></div>
-      <span class="pa-lowknob" title="Set a shared default, or pick a location to give it its own number — override per product in its editor. · 设置共享默认值,或为单个门店单独设置——也可在产品编辑器中按产品设置。">
-        <span class="pa-lowknob-lbl">Low-stock alert · 低库存提醒</span>
-        <select id="pa-low-store-sel" class="pa-low-store-sel" style="display:none" onchange="paLowStoreSelChange(this.value)"></select>
-        <span id="pa-low-badge" class="pa-low-badge" style="display:none"></span>
-        ≤
-        <input type="number" id="pa-low-threshold" min="0" step="1" value="5" onchange="paSaveLowThreshold(this.value)">
-        <span id="pa-low-threshold-status"></span>
-        <button type="button" id="pa-low-reset" class="pa-low-reset" style="display:none" onclick="paResetLowThreshold()">Use default · 使用默认值</button>
-      </span>
-      <button type="button" class="btn btn-sm" id="pa-bulk-btn" onclick="paSetSelectMode(true)">Bulk · 批量</button>
     </div>
 
     <!-- ── Products page: list on the left, docked editor on the right. The
@@ -8761,6 +8751,15 @@
               <h3>Stores · 门店</h3>
               <div class="muted">The stores / warehouses this online store ships and routes orders from. Each store's <strong>street address</strong> sets the GPS location used to route orders to the nearest store — keep it accurate. · 本店派单/发货的门店与仓库。每个门店的<strong>详细地址</strong>决定其 GPS 定位(用于就近派单),请保持准确。</div>
             </div>
+            <div style="margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--line)">
+              <label class="field-label">Low-stock alert at · 低库存提醒 <span style="color:var(--text-3);font-weight:400">— flag any product low when it drops to this many units. Each store can set its own number below. · 商品降到此数量时提醒;每个门店可在下方单独设置。</span></label>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                <span style="color:var(--text-2);font-size:15px">≤</span>
+                <input type="number" id="cfg-low-stock" min="0" step="1" value="5" style="width:90px" onchange="paSaveLowStockDefault(this.value)">
+                <span style="color:var(--text-3);font-size:13px">units · 件</span>
+                <span id="cfg-low-stock-status" style="color:var(--accent);font-size:12px"></span>
+              </div>
+            </div>
             <div id="ops-stores-list" class="muted" style="font-size:13px">Loading…</div>
             <div style="margin-top:12px"><button class="btn btn-primary" onclick="_opsStoreForm(null)">+ Add store · 添加门店</button></div>
             <div id="ops-store-form"></div>
@@ -10084,6 +10083,28 @@
       #tab-team .tm-edit:hover { border-color: var(--td-text2); color: var(--td-text); }
       #tab-team .tm-empty { padding: 22px 8px; font-size: 13px; color: var(--text-3); text-align: center; }
 
+      /* Team devices — every operator's signed-in sessions (owner/admin only),
+         moved here from the account pop-up's Devices tab. Per-row sign-out hits
+         the tenant-wide /sessions/revoke; owner/admin may sign out anyone. */
+      #tab-team .tm-dev-chips { display: flex; gap: 8px; margin: 20px 0 6px; }
+      #tab-team .tm-dev-chip { font: 500 12px var(--f-sans); color: var(--td-text2); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 999px; padding: 6px 13px; cursor: pointer; }
+      #tab-team .tm-dev-chip.on { color: var(--td-text); border-color: var(--td-text2); }
+      #tab-team .tm-dev-list { margin-top: 14px; }
+      #tab-team .tm-dev { display: flex; align-items: center; gap: 12px; padding: 12px 2px; }
+      #tab-team .tm-dev + .tm-dev { border-top: 1px solid var(--td-border); }
+      #tab-team .tm-dev-ico { width: 34px; height: 34px; border-radius: 9px; background: var(--td-raised); display: grid; place-items: center; flex: none; color: var(--td-text2); }
+      #tab-team .tm-dev-ico svg { width: 16px; height: 16px; stroke: currentColor; fill: none; }
+      #tab-team .tm-dev-m { min-width: 0; flex: 1; }
+      #tab-team .tm-dev-n { font-size: 13.5px; font-weight: 500; color: var(--td-text); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+      #tab-team .tm-dev-who { width: 18px; height: 18px; border-radius: 50%; background: var(--td-sage-tint); color: var(--td-sage-ink); font-size: 9.5px; font-weight: 600; display: inline-grid; place-items: center; flex: none; }
+      #tab-team .tm-dev-badge { font-size: 10.5px; font-weight: 500; color: var(--td-sage-ink); background: var(--td-sage-tint); border-radius: 999px; padding: 2px 8px; }
+      #tab-team .tm-dev-s { font-size: 12px; color: var(--td-text2); margin-top: 2px; }
+      #tab-team .tm-dev-out { flex: none; font: 500 12.5px var(--f-sans); color: var(--td-text2); background: none; border: none; cursor: pointer; padding: 6px 9px; border-radius: 7px; }
+      #tab-team .tm-dev-out:hover { color: var(--td-brick); background: var(--td-brick-tint); }
+      #tab-team .tm-dev-out[disabled] { cursor: default; opacity: .7; }
+      #tab-team .tm-dev-foot { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--td-border); font-size: 12px; color: var(--td-text2); }
+      #tab-team .tm-dev-empty { padding: 16px 2px; font-size: 13px; color: var(--td-text2); }
+
       #tab-team .tm-addbtn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; background: transparent; color: var(--td-text); border: 1px solid var(--td-border); border-radius: 8px; padding: 11px 16px; font-family: inherit; font-size: 13.5px; font-weight: 500; margin-top: 18px; }
       #tab-team .tm-addbtn:hover { border-color: var(--td-text2); }
       #tab-team .tm-addbtn svg { stroke: currentColor; fill: none; }
@@ -10255,6 +10276,18 @@
           <button type="button" class="tm-copy" id="tmCredCopy">Copy username &amp; password · 复制用户名和密码</button>
         </div>
       </form>
+    </div>
+
+    <!-- Team devices — where the whole team is signed in. Owner/admin only;
+         hidden for everyone else (tmDevCard stays display:none). Moved here
+         from the account pop-up, which now shows only the operator's own
+         devices. -->
+    <div class="tm-card" id="tmDevCard" style="display:none">
+      <h3>Team devices · 团队设备</h3>
+      <p class="tm-lead">Every device your team is signed in on. Sign out anything that looks wrong. · 团队所有已登录的设备。如发现异常，请将其登出。</p>
+      <div class="tm-dev-chips" id="tmDevChips"></div>
+      <div class="tm-dev-list" id="tmDevList"><div class="tm-dev-empty">Loading… · 加载中…</div></div>
+      <div class="tm-dev-foot" id="tmDevFoot" hidden></div>
     </div>
     </div>
 

@@ -28,10 +28,6 @@ let PA_STOCK_LOADED = false;
 // its own low_stock_threshold. Drives the amber dot, the Low-stock KPI tile +
 // quick-filter — kept in sync with the backend dashboard/alerts definition.
 let PA_LOW_STOCK = 5;
-// Which scope the toolbar knob is currently showing/editing: 'all' (the
-// tenant-wide default) or a store id (that store's own override). Only
-// reachable with 2+ stores — see paSyncLowStockUi().
-let PA_LOW_STORE = 'all';
 // Effective low-stock threshold: a product's own override wins; failing that,
 // the given store's own override (when known); failing that, the tenant-wide
 // default. storeId is optional — omit it (or pass 'all') for a combined-stock
@@ -46,99 +42,34 @@ function paLowThreshold(p, storeId) {
   }
   return PA_LOW_STOCK;
 }
-// The store object PA_LOW_STORE currently points at, or null when scoped to
-// 'all' / the store no longer exists (e.g. deactivated under us).
-function _paLowStoreRow() {
-  return PA_LOW_STORE === 'all' ? null : (PA_STORES.find(s => s.id === PA_LOW_STORE) || null);
-}
-// Push the current scope into the products-page UI: the toolbar's location
-// picker, badge, number input and reset link, plus the Low-stock KPI subtitle
-// and the editor field's placeholder (those two always reflect the tenant
-// default — a per-product override already wins over both tiers there).
+// Mirror the tenant-wide default in the three places it still shows: the
+// Settings input, the Low-stock KPI tile subtitle, and the editor field's
+// placeholder (a per-product override already wins over all of these). The
+// threshold itself is now set in Settings → Operations → Stores
+// (paSaveLowStockDefault); per-store overrides live in each store's own form.
 function paSyncLowStockUi() {
-  const sel = document.getElementById('pa-low-store-sel');
-  if (sel) {
-    if (PA_STORES.length < 2) {
-      sel.style.display = 'none';
-      PA_LOW_STORE = 'all';
-    } else {
-      if (PA_LOW_STORE !== 'all' && !PA_STORES.some(s => s.id === PA_LOW_STORE)) PA_LOW_STORE = 'all';
-      sel.innerHTML = `<option value="all">${cuT('All locations', '全部门店')}</option>` +
-        PA_STORES.map(s => `<option value="${s.id}">${escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en || s.code))}</option>`).join('');
-      sel.value = String(PA_LOW_STORE);
-      sel.style.display = '';
-    }
-  }
-  const store = _paLowStoreRow();
-  const hasOverride = !!store && store.low_stock_threshold != null && store.low_stock_threshold !== '';
-  const effective = hasOverride ? Number(store.low_stock_threshold) : PA_LOW_STOCK;
-  const inp = document.getElementById('pa-low-threshold');
-  if (inp && document.activeElement !== inp) inp.value = effective;
-  const badge = document.getElementById('pa-low-badge');
-  if (badge) {
-    if (!store) {
-      badge.style.display = 'none';
-    } else {
-      badge.style.display = '';
-      badge.className = 'pa-low-badge ' + (hasOverride ? 'is-custom' : 'is-default');
-      badge.textContent = hasOverride
-        ? cuT('Custom for ' + _paStoreName(store.id), _paStoreName(store.id) + ' 专属')
-        : cuT('Shared default', '共享默认值');
-    }
-  }
-  const reset = document.getElementById('pa-low-reset');
-  if (reset) reset.style.display = (store && hasOverride) ? '' : 'none';
+  const cfg = document.getElementById('cfg-low-stock');
+  if (cfg && document.activeElement !== cfg) cfg.value = PA_LOW_STOCK;
   const sub = document.getElementById('pa-kpi-low-sub');
   if (sub) sub.textContent = '≤ ' + PA_LOW_STOCK + ' left · 剩余 ≤ ' + PA_LOW_STOCK;
   const ls = document.getElementById('pd-low-stock');
   if (ls) ls.placeholder = cuT('Default', '默认') + ' ' + PA_LOW_STOCK;
 }
-// Switch which location the toolbar knob edits.
-function paLowStoreSelChange(val) {
-  PA_LOW_STORE = (val === 'all') ? 'all' : (parseInt(val, 10) || 'all');
-  paSyncLowStockUi();
-}
-// Persist the threshold for whichever scope the knob is currently on: the
-// tenant-wide default ('all'), or one store's own override.
-async function paSaveLowThreshold(val) {
+// Persist the tenant-wide default from Settings → Operations → Stores. Per-store
+// overrides are saved separately in each store's settings form (osf_low_stock).
+async function paSaveLowStockDefault(val) {
   const n = Math.max(0, parseInt(val, 10) || 0);
-  const st = document.getElementById('pa-low-threshold-status');
+  const st = document.getElementById('cfg-low-stock-status');
   try {
-    if (PA_LOW_STORE === 'all') {
-      PA_LOW_STOCK = n;
-      await api('/api/retail-admin/config', { method: 'PUT', body: { 'inventory.lowStockThreshold': n } });
-      if (_cfgCache) { _cfgCache.inventory = _cfgCache.inventory || {}; _cfgCache.inventory.lowStockThreshold = n; }
-    } else {
-      const j = await api(`/api/retail-admin/stores/${PA_LOW_STORE}`, { method: 'PATCH', body: { low_stock_threshold: n } });
-      const store = _paLowStoreRow();
-      if (store) store.low_stock_threshold = (j && j.data && j.data.low_stock_threshold != null) ? j.data.low_stock_threshold : n;
-    }
-    if (st) st.textContent = cuT('Saved ✓', '已保存 ✓');
-    setTimeout(() => { if (st) st.textContent = ''; }, 2000);
+    PA_LOW_STOCK = n;
+    await api('/api/retail-admin/config', { method: 'PUT', body: { 'inventory.lowStockThreshold': n } });
+    if (typeof _cfgCache !== 'undefined' && _cfgCache) { _cfgCache.inventory = _cfgCache.inventory || {}; _cfgCache.inventory.lowStockThreshold = n; }
+    if (st) { st.textContent = cuT('Saved ✓', '已保存 ✓'); setTimeout(() => { if (st) st.textContent = ''; }, 2000); }
+    paSyncLowStockUi();
+    try { paRenderKpis(false); paRender(); } catch (_) {}
   } catch (e) {
     if (st) st.textContent = cuT('Save failed', '保存失败');
   }
-  paSyncLowStockUi();
-  paRenderKpis(false);
-  paRender();
-}
-// Clear the active location's override so it goes back to following the
-// shared default. No-op when the knob is scoped to 'all'.
-async function paResetLowThreshold() {
-  const store = _paLowStoreRow();
-  if (!store) return;
-  const st = document.getElementById('pa-low-threshold-status');
-  try {
-    await api(`/api/retail-admin/stores/${store.id}`, { method: 'PATCH', body: { low_stock_threshold: '' } });
-    store.low_stock_threshold = null;
-    if (st) st.textContent = cuT('Saved ✓', '已保存 ✓');
-    setTimeout(() => { if (st) st.textContent = ''; }, 2000);
-  } catch (e) {
-    if (st) st.textContent = cuT('Save failed', '保存失败');
-  }
-  paSyncLowStockUi();
-  paRenderKpis(false);
-  paRender();
 }
 // Product layout: 'grid' (rich cards) | 'compact' (denser) | 'list' (one row
 // each). Separate from the "View" display-tweaks popover; persisted per-browser.
@@ -734,7 +665,7 @@ async function paLoadStoreStock() {
     // the single-store switcher is retired — keep filters on the combined total.
     if (PA_STORES.length >= 2) PA_STORE = 'all';
     paRenderStoreSeg();
-    paSyncLowStockUi();   // reveal/populate the low-stock knob's location picker
+    paSyncLowStockUi();   // refresh the KPI subtitle + editor placeholder
     paRender();   // stock cells now know per-store counts
   } catch (e) {
     PA_STOCK_LOADED = false;   // leave the column on the read-only combined total
@@ -1361,11 +1292,12 @@ let PA_SELECT_MODE = false;
 let PA_SELECTED = new Set();
 let PA_VISIBLE_MEMBER_IDS = [];
 
-// Bulk bar — two modes, both shown only in the full-width overview (editor
-// closed). Default: bulk publish/hide of everything matching the current filter
-// (search + category + status) plus a "Select" button. Select mode: tick
-// specific products, then apply one change (shop on/off, markets, fresh batches,
-// shipping) to just the ticked set. All reuse the per-product PATCH.
+// Bulk bar — a permanent action bar in the full-width overview (editor closed).
+// The per-field triggers (shop on/off, badges, shipping, markets, fresh batches,
+// delete) stay greyed until at least one product is ticked, then apply one
+// change to the ticked set via the per-product PATCH. Ticking a row's checkbox
+// arms PA_SELECT_MODE so row clicks toggle the tick instead of opening the
+// editor; "Clear" drops out of that mode again.
 function paRenderBulkBar() {
   const bar = document.getElementById('pa-bulkbar');
   if (!bar) return;
@@ -1374,7 +1306,7 @@ function paRenderBulkBar() {
   const shown = overview ? (PA_PRODUCTS || []).filter(p => idset.has(p.id)) : [];
   if (!shown.length) { bar.style.display = 'none'; bar.className = ''; bar.innerHTML = ''; PA_SELECT_MODE = false; PA_SELECTED = new Set(); return; }
 
-  if (PA_SELECT_MODE) {
+  {
     const n = PA_SELECTED.size;
     const visN = PA_VISIBLE_MEMBER_IDS.length;
     const allVis = visN && PA_VISIBLE_MEMBER_IDS.every(id => PA_SELECTED.has(id));
@@ -1393,7 +1325,7 @@ function paRenderBulkBar() {
     bar.innerHTML =
       `<span class="pa-bulk-count"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4L6 11 3 8"/></svg>${cuT(n + ' selected', '已选 ' + n + ' 件')}</span>` +
       `<button type="button" class="btn btn-sm" onclick="paSelectAllVisible(${allVis ? 'false' : 'true'})">${allVis ? cuT('Clear page', '清空本页') : cuT('Select all ' + visN, '全选 ' + visN)}</button>` +
-      (n ? `<button type="button" class="btn btn-sm" onclick="paClearSelection()">${cuT('Clear', '清除')}</button>` : '') +
+      (n ? `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(false)">${cuT('Clear', '清除')}</button>` : '') +
       `<span class="pa-bulk-actions">` +
         menu(cuT('Shop', '上架'),
           mi(cuT('Turn on', '上架'), "paBulkApply({is_published:1}, 'shop-on')") +
@@ -1418,18 +1350,8 @@ function paRenderBulkBar() {
           mi(cuT('Not fresh batch', '取消现做'), "paBulkApply({is_batch_made:0}, 'batch-off')"), true) +
         `<span class="pa-bulk-vr"></span>` +
         `<button type="button" class="pa-bm-trig pa-bulk-del" ${dis} onclick="paBulkDelete()">${cuT('Delete', '删除')}</button>` +
-        `<span class="pa-bulk-vr"></span>` +
-        `<button type="button" class="btn btn-sm" onclick="paSetSelectMode(false)">${cuT('Done', '完成')}</button>` +
       `</span>`;
-    return;
   }
-
-  // Default (not select mode): the "Bulk" entry lives in the sub-bar now, so the
-  // bulk bar stays hidden until the operator enters select mode (when it becomes
-  // the action bar above).
-  bar.style.display = 'none';
-  bar.className = '';
-  bar.innerHTML = '';
 }
 // One-open-at-a-time dropdowns inside the selection bar. Toggling closes any
 // sibling menu first; a document click (bound once) closes them all.
@@ -1471,11 +1393,10 @@ function paSetSelectMode(on) {
   if (!PA_SELECT_MODE) PA_SELECTED = new Set();
   paRender();
 }
-function paClearSelection() { PA_SELECTED = new Set(); paRender(); }
 // Toggle one unit (csv of member ids). All-in → remove all; otherwise add all,
 // so a half-selected group flips fully on. The row checkbox is always on
-// screen (not gated behind the "Bulk" button), so ticking one is itself what
-// arms select mode — the bulk bar then slides in already showing that tick.
+// screen, so ticking one is itself what arms select mode — the bulk bar (always
+// present) then enables its actions and lights up that tick.
 function paToggleSelect(ids) {
   PA_SELECT_MODE = true;
   const list = String(ids).split(',').map(Number).filter(Boolean);
