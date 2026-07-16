@@ -2654,7 +2654,7 @@ function tdAttnRender() {
         const rsn = daShared ? '' : `<span class="rsn">${escapeHtml(cap(r.reason))}</span>`;
         return `
       <button type="button" class="td-attn-row td-da-row" onclick="openOrder(${r.id})">
-        <span class="td-da-main"><span class="nm">${nm}</span>${rsn}</span>
+        <span class="td-da-main"><span class="nm" data-no-i18n>${nm}</span>${rsn}</span>
         ${ref}<span class="td-da-chev" aria-hidden="true">${daChev}</span>
       </button>`;
       }).join('');
@@ -2671,7 +2671,7 @@ function tdAttnRender() {
   if (rf.count && dashPosWants('refunds')) {
     const rows = (rf.items || []).slice(0, 4).map(it => `
       <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
-        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
+        <span class="name" data-no-i18n>${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
         <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
       </button>`).join('');
     cards.push(tdAttnCard('amber', 'refund', cuT('Refunds waiting', '退款待处理'), rf.count, rows,
@@ -2686,7 +2686,7 @@ function tdAttnRender() {
   if (inv.count && dashPosWants('invoices')) {
     const rows = (inv.items || []).slice(0, 4).map(it => `
       <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
-        <span class="name">${escapeHtml(it.order_no || '')} · ${escapeHtml(it.title || '')}</span>
+        <span class="name" data-no-i18n>${escapeHtml(it.order_no || '')} · ${escapeHtml(it.title || '')}</span>
         <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
       </button>`).join('');
     cards.push(tdAttnCard('amber', 'invoice', cuT('Invoices to issue', '待开发票'), inv.count, rows,
