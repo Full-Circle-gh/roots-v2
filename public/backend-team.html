@@ -15,8 +15,6 @@
     document.documentElement.setAttribute('data-theme', (t === 'dark' || t === 'light') ? t : 'light');
     var l = localStorage.getItem('roots-admin-lang');
     document.documentElement.setAttribute('data-lang', (l === 'cn') ? 'cn' : 'en');
-    // Embedded inside the retail-admin Team pop-up? Fill the iframe edge-to-edge.
-    if (window.self !== window.top) document.documentElement.classList.add('embedded');
   } catch (e) { document.documentElement.setAttribute('data-theme','light'); } })();
 </script>
 
@@ -55,10 +53,6 @@
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
     padding:0 0 72px; transition:background .25s var(--ease), color .25s var(--ease);
   }
-  html.embedded body{ padding:0 0 40px; }
-  /* Embedded in the retail-admin pop-up → the parent's corner × already
-     closes it, so this in-panel "Backend" link is standalone-only. */
-  html.embedded .back{ display:none; }
   .tnum{font-variant-numeric:tabular-nums; font-feature-settings:"tnum";}
   html[data-lang=en] .cn, html[data-lang=en] .sep{display:none;}
   html[data-lang=cn] .en, html[data-lang=cn] .sep{display:none;}
@@ -242,7 +236,7 @@
 
   <main class="shell">
     <div class="topbar">
-      <a class="back" id="backLink" href="/retail-admin"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">Backend</span><span class="cn">后台</span></a>
+      <a class="back" href="/retail-admin"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="en">Backend</span><span class="cn">后台</span></a>
       <div class="topbar-r">
         <button type="button" id="themeToggle" class="icobtn" aria-label="Theme">
           <svg width="17" height="17" viewBox="0 0 20 20" id="themeIcon"><circle cx="10" cy="10" r="4.2" stroke-width="1.4"/><path d="M10 1.5v2.2M10 16.3v2.2M18.5 10h-2.2M3.7 10H1.5M16 4l-1.6 1.6M5.6 14.4 4 16M16 16l-1.6-1.6M5.6 5.6 4 4" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -920,16 +914,6 @@
   });
 
   document.getElementById('editPerms').addEventListener('click', function (){ if (editing) openPerms(editing.id); });
-
-  /* ── Close / back — embedded in the retail-admin Team pop-up? Tell the
-       parent to close instead of navigating this iframe away. ── */
-  var backLink = document.getElementById('backLink');
-  if (backLink) backLink.addEventListener('click', function (e){
-    if (window.self !== window.top) {
-      e.preventDefault();
-      window.parent.postMessage('team-modal-close', window.location.origin);
-    }
-  });
 
   /* ── Theme ── */
   function applyTheme(){

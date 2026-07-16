@@ -1789,42 +1789,13 @@ function closeProfileModal() {
   document.removeEventListener('keydown', onProfileKey);
 }
 function onProfileKey(e) { if (e.key === 'Escape') closeProfileModal(); }
-
-// ── Team pop-up — same pattern as the Account pop-up above: hosts
-// /backend/team in a centred modal iframe instead of navigating away.
-function openTeamModal() {
-  const scrim = $('#teamScrim'), modal = $('#teamModal'), frame = $('#teamFrame');
-  if (!scrim || !modal || !frame) return;
-  if (!frame.src) frame.src = '/backend/team';
-  scrim.classList.add('on');
-  modal.classList.add('on');
-  modal.setAttribute('aria-hidden', 'false');
-  document.addEventListener('keydown', onTeamKey);
-}
-function closeTeamModal() {
-  const scrim = $('#teamScrim'), modal = $('#teamModal');
-  if (!scrim || !modal) return;
-  scrim.classList.remove('on');
-  modal.classList.remove('on');
-  modal.setAttribute('aria-hidden', 'true');
-  document.removeEventListener('keydown', onTeamKey);
-}
-function onTeamKey(e) { if (e.key === 'Escape') closeTeamModal(); }
-
 (function initProfileModal() {
   const scrim = $('#profScrim'), closeBtn = $('#profClose');
   if (scrim) scrim.addEventListener('click', closeProfileModal);
   if (closeBtn) closeBtn.addEventListener('click', closeProfileModal);
-
-  const teamScrim = $('#teamScrim'), teamCloseBtn = $('#teamClose'), teamNavBtn = $('#teamNavBtn');
-  if (teamScrim) teamScrim.addEventListener('click', closeTeamModal);
-  if (teamCloseBtn) teamCloseBtn.addEventListener('click', closeTeamModal);
-  if (teamNavBtn) teamNavBtn.addEventListener('click', openTeamModal);
-
   window.addEventListener('message', (e) => {
     if (e.origin !== location.origin) return;
     if (e.data === 'profile-modal-close') closeProfileModal();
-    if (e.data === 'team-modal-close') closeTeamModal();
     if (e.data && e.data.type === 'fc-profile-updated') {
       Object.assign(ACCT_USER || (ACCT_USER = {}), e.data.user);
       acctRenderMeta();
@@ -1835,4 +1806,442 @@ function onTeamKey(e) { if (e.key === 'Escape') closeTeamModal(); }
     }
   });
 })();
+
+// ══════════════════════════════════════════════════════════════════
+// Team — native tab (2026-07-16), ported from the old standalone
+// backend-team.html (route still exists as a fallback, no longer linked to
+// from the rail). Lists/invites/edits operators via /api/backend/team* using
+// the app's own api()/toast()/can()/cuT() helpers instead of the standalone
+// page's raw fetch + local L()/setMsg(). Namespaced tm* to match the scoped
+// CSS in #tab-team's <style> block (retail-admin.html).
+// ══════════════════════════════════════════════════════════════════
+let TM_TEAM = [];
+let TM_SELF_OWNER = false;
+let TM_RBAC_ENFORCE = false;
+let TM_STORES = [];
+let TM_EDITING = null;
+let TM_E_ACTIVE = true;
+let TM_CATALOG = null;
+let TM_PERM_EDITING = null;
+let TM_PERM_PRESET = null;
+let TM_PERM_STATE = {};
+let TM_PERM_SCOPE_ALL = true;
+let TM_PERM_STORE_SEL = {};
+let TM_PERM_LOCKED = false;
+let TM_INIT_DONE = false;
+
+function tmNeedsStore(role) { return role === 'kitchen' || role === 'store_manager'; }
+function tmRoleLabel(role) {
+  return cuT(
+    { owner: 'Owner', admin: 'Admin', staff: 'Staff', store_manager: 'Store manager', warehouse: 'Warehouse', customer_service: 'Customer service', dispatch: 'Dispatch', kitchen: 'Kitchen', store_stock: 'Store stock' }[role] || role,
+    { owner: '负责人', admin: '管理员', staff: '员工', store_manager: '店长', warehouse: '仓库', customer_service: '客服', dispatch: '配送调度', kitchen: '后厨', store_stock: '门店库存' }[role] || role
+  );
+}
+// owner/admin read as elevated (amber), operator presets as sage, staff neutral.
+function tmRoleClass(role) { return (role === 'owner' || role === 'admin') ? 'owner' : (role === 'staff') ? 'staff' : 'op'; }
+function tmRoleDesc(role) {
+  const en = {
+    staff: 'Day-to-day shop floor — orders, stock, customers. No money reports or setup.',
+    store_manager: 'Runs one store — its orders, stock and customers. Their home opens on that store.',
+    warehouse: 'Stock and shipments only. No revenue shown, anywhere.',
+    customer_service: 'Refunds, invoices, order fixes and customer feedback.',
+    dispatch: 'Keeps deliveries moving — orders waiting to go out and orders on the road.',
+    kitchen: 'Only the Add Stock app, for one store.',
+    admin: 'Runs everything and manages the team. Can’t change billing, edit others’ permissions, or delete a store.',
+    owner: 'Full access, always. Cannot be narrowed.',
+  }[role] || '';
+  const cn = {
+    staff: '门店日常——订单、库存、顾客。不含营收报表与设置。',
+    store_manager: '负责一家门店——该店的订单、库存与顾客，首页只看本店。',
+    warehouse: '只看库存与发货，任何地方都不显示营收。',
+    customer_service: '处理退款、发票、订单问题与顾客反馈。',
+    dispatch: '盯配送——待派单与在途订单。',
+    kitchen: '仅限一家门店的“加库存”应用。',
+    admin: '负责全部运营并管理团队。不能更改账单、编辑他人权限或删除门店。',
+    owner: '始终拥有完整权限，不可缩减。',
+  }[role] || '';
+  return cuT(en, cn);
+}
+function tmInitials(u) {
+  const src = String((u.displayName || u.username) || '').trim();
+  if (!src) return '?';
+  if (/^[\x00-\x7F]+$/.test(src)) {
+    const p = src.split(/\s+/).filter(Boolean);
+    return ((p[0] ? p[0][0] : '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '?';
+  }
+  return Array.from(src)[0];
+}
+function tmCircleHtml(u, cls) {
+  if (u.avatarUrl) return `<span class="tm-av ${cls || ''}"><img src="${escapeAttr(u.avatarUrl)}" alt=""></span>`;
+  return `<span class="tm-av ${cls || ''}">${escapeHtml(tmInitials(u))}</span>`;
+}
+function tmStoreLabel(s) { return (cuLang() === 'cn' ? (s.name_cn || s.name_en) : (s.name_en || s.name_cn)) || s.code || ('#' + s.id); }
+function tmStoreName(id) { const s = TM_STORES.find(x => x.id === id); return s ? tmStoreLabel(s) : ('#' + id); }
+function tmFillStoreSelect(sel) {
+  if (!sel) return;
+  sel.innerHTML = TM_STORES.map(s => `<option value="${s.id}">${escapeHtml(tmStoreLabel(s))}</option>`).join('');
+}
+async function tmLoadStores() {
+  try {
+    const j = await api('/api/retail-admin/stores');
+    TM_STORES = (j.data || []).filter(s => s.is_active !== 0);
+  } catch (e) { TM_STORES = []; }
+  tmFillStoreSelect($('#tmIStore'));
+  tmFillStoreSelect($('#tmEStore'));
+  tmRender();
+}
+function tmSyncStoreField(roleSel, fieldId, descId, helpId) {
+  const role = roleSel ? roleSel.value : '';
+  const f = $('#' + fieldId);
+  if (f) f.style.display = tmNeedsStore(role) ? '' : 'none';
+  const d = descId ? $('#' + descId) : null;
+  if (d) d.textContent = tmRoleDesc(role);
+  const h = helpId ? $('#' + helpId) : null;
+  if (h) h.textContent = role === 'kitchen'
+    ? cuT('Kitchen members only get the Add Stock app, for this store.', '后厨成员仅可使用此门店的“加库存”应用。')
+    : cuT('This is the store they run — their home and data stay on it.', '这是其负责的门店——首页与数据仅限本店。');
+}
+function tmPaintStats() {
+  const people = TM_TEAM.length;
+  const owners = TM_TEAM.filter(u => u.role === 'owner').length;
+  const never = TM_TEAM.filter(u => !u.lastLogin).length;
+  const limited = TM_TEAM.filter(u => tmNeedsStore(u.role) || u.scopeAll === false).length;
+  $('#tmStatPeople').textContent = people;
+  $('#tmStatOwners').textContent = owners;
+  $('#tmStatNever').textContent = never;
+  $('#tmStatLimited').textContent = limited;
+}
+function tmRender() {
+  tmPaintStats();
+  const membersEl = $('#tmMembers');
+  if (!membersEl) return;
+  if (!TM_TEAM.length) { membersEl.innerHTML = `<div class="tm-empty">${cuT('No team members yet.', '暂无团队成员。')}</div>`; return; }
+  membersEl.innerHTML = TM_TEAM.map(u => {
+    const bits = [];
+    bits.push(`<span class="tm-u">@${escapeHtml(u.username)}</span>`);
+    if (tmNeedsStore(u.role) && u.retailStoreId) bits.push(`<span class="tm-dot"></span>${escapeHtml(tmStoreName(u.retailStoreId))}`);
+    else if (u.scopeAll === false) bits.push(`<span class="tm-dot"></span>${cuT('limited stores', '门店受限')}`);
+    if (!u.lastLogin) bits.push(`<span class="tm-dot"></span>${cuT('never signed in', '从未登录')}`);
+    return `<div class="tm-member${u.isActive ? '' : ' inactive'}">` +
+      tmCircleHtml(u) +
+      `<div class="tm-main">` +
+        `<div class="tm-name">${escapeHtml(u.displayName || u.username)}` +
+          (u.isSelf ? `<span class="tm-tag you">${cuT('You', '你')}</span>` : '') +
+          (u.isActive ? '' : `<span class="tm-tag off">${cuT('Inactive', '已停用')}</span>`) +
+        `</div>` +
+        `<div class="tm-sub">${bits.join('')}</div>` +
+      `</div>` +
+      (u.hasCustomPerms ? `<span class="tm-custom">${cuT('Custom', '自定义')}</span>` : '') +
+      `<span class="tm-role ${tmRoleClass(u.role)}">${escapeHtml(tmRoleLabel(u.role))}</span>` +
+      `<button class="tm-edit" data-id="${u.id}">${cuT('Edit', '编辑')}</button>` +
+    `</div>`;
+  }).join('');
+  membersEl.querySelectorAll('.tm-edit').forEach(b => {
+    b.addEventListener('click', () => tmOpenEdit(Number(b.getAttribute('data-id'))));
+  });
+}
+async function tmLoad() {
+  try {
+    const j = await api('/api/backend/team');
+    TM_TEAM = j.team || [];
+    const me = TM_TEAM.find(u => u.isSelf);
+    if (me) TM_SELF_OWNER = me.role === 'owner';
+    TM_RBAC_ENFORCE = !!j.rbacEnforce;
+    tmPaintEnforce();
+    tmRender();
+  } catch (e) { /* api() already redirects to login on 401 */ }
+}
+function tmPaintEnforce() {
+  const row = $('#tmEnforceRow'), btn = $('#tmEnforceBtn');
+  if (!row || !btn) return;
+  row.style.display = TM_SELF_OWNER ? 'flex' : 'none';
+  row.classList.toggle('on', TM_RBAC_ENFORCE);
+  btn.textContent = TM_RBAC_ENFORCE ? cuT('On', '开') : cuT('Off', '关');
+  btn.classList.toggle('on', TM_RBAC_ENFORCE);
+}
+async function tmToggleEnforce() {
+  const btn = $('#tmEnforceBtn');
+  const turningOn = !TM_RBAC_ENFORCE;
+  if (turningOn && !window.confirm(cuT(
+    'Turn on enforcement? Members will be blocked from actions outside their permissions. You (owner) always keep full access.',
+    '开启强制权限？成员将无法执行其权限之外的操作。您（负责人）始终保留完整权限。'))) return;
+  btn.disabled = true;
+  try {
+    const res = await api('/api/backend/rbac-enforce', { method: 'PUT', body: { enforce: turningOn ? 1 : 0 } });
+    TM_RBAC_ENFORCE = !!res.rbacEnforce;
+    tmPaintEnforce();
+  } catch (e) { toast(e.message || cuT('Couldn’t save', '保存失败'), 'err'); }
+  finally { btn.disabled = false; }
+}
+function tmShowCred(username, password) {
+  $('#tmCredUser').textContent = username;
+  $('#tmCredPass').textContent = password;
+  const box = $('#tmCredBox');
+  box.classList.add('show');
+  box.dataset.user = username; box.dataset.pass = password;
+}
+async function tmSubmitInvite(e) {
+  e.preventDefault();
+  $('#tmCredBox').classList.remove('show');
+  const username = $('#tmIUser').value.trim().toLowerCase();
+  const display_name = $('#tmIName').value.trim();
+  const role = $('#tmIRole').value;
+  const password = $('#tmIPass').value;
+  const storeId = $('#tmIStore').value;
+  if (!username) { toast(cuT('Enter a username', '请输入用户名'), 'err'); return; }
+  if (tmNeedsStore(role) && !storeId) { toast(cuT('Pick a store', '请选择门店'), 'err'); return; }
+  if (password.length < 10) { toast(cuT('Password must be at least 10 characters', '密码至少 10 位'), 'err'); return; }
+  const btn = $('#tmInviteBtn');
+  btn.disabled = true; btn.classList.add('loading');
+  try {
+    await api('/api/backend/team', { method: 'POST', body: { username, display_name, role, password, retail_store_id: tmNeedsStore(role) ? parseInt(storeId, 10) : null } });
+    toast(cuT('Teammate added', '已添加成员'), 'ok');
+    tmShowCred(username, password);
+    $('#tmInviteForm').reset();
+    tmSyncStoreField($('#tmIRole'), 'tmIStoreField', 'tmIRoleDesc', 'tmIStoreHelp');
+    tmLoad();
+  } catch (e) {
+    toast(e.message || cuT('Couldn’t add teammate', '无法添加成员'), 'err');
+  } finally {
+    btn.disabled = false; btn.classList.remove('loading');
+  }
+}
+function tmPaintActiveBtn() {
+  const btn = $('#tmEActive');
+  btn.textContent = TM_E_ACTIVE ? cuT('On', '开') : cuT('Off', '关');
+  btn.classList.toggle('on', TM_E_ACTIVE);
+  btn.classList.toggle('danger', !TM_E_ACTIVE);
+}
+function tmOpenEdit(id) {
+  TM_EDITING = TM_TEAM.find(u => u.id === id);
+  if (!TM_EDITING) return;
+  $('#tmEditTitle').innerHTML = tmCircleHtml(TM_EDITING, '') + `<span id="tmEditName">${escapeHtml(TM_EDITING.displayName || TM_EDITING.username)}</span>`;
+  $('#tmEName').value = TM_EDITING.displayName || '';
+  $('#tmERole').value = TM_EDITING.role;
+  const eStore = $('#tmEStore');
+  if (eStore && TM_EDITING.retailStoreId) eStore.value = TM_EDITING.retailStoreId;
+  tmSyncStoreField($('#tmERole'), 'tmEStoreField', 'tmERoleDesc');
+  $('#tmEPass').value = '';
+  TM_E_ACTIVE = !!TM_EDITING.isActive;
+  $('#tmEActive').disabled = TM_EDITING.isSelf;
+  const ep = $('#tmEditPerms');
+  if (ep) ep.style.display = can('team:permissions') ? '' : 'none';
+  tmPaintActiveBtn();
+  $('#tmEditScrim').classList.add('on');
+  $('#tmEditModal').classList.add('on');
+  $('#tmEditModal').setAttribute('aria-hidden', 'false');
+}
+function tmCloseEdit() {
+  $('#tmEditScrim').classList.remove('on');
+  $('#tmEditModal').classList.remove('on');
+  $('#tmEditModal').setAttribute('aria-hidden', 'true');
+  TM_EDITING = null;
+}
+async function tmSaveEdit() {
+  if (!TM_EDITING) return;
+  const saveBtn = $('#tmEditSave');
+  const body = { display_name: $('#tmEName').value.trim(), role: $('#tmERole').value, is_active: TM_E_ACTIVE };
+  if (tmNeedsStore($('#tmERole').value)) {
+    const eStore = $('#tmEStore');
+    if (!eStore.value) { toast(cuT('Pick a store', '请选择门店'), 'err'); return; }
+    body.retail_store_id = parseInt(eStore.value, 10);
+  }
+  const pw = $('#tmEPass').value;
+  saveBtn.disabled = true; saveBtn.classList.add('loading');
+  try {
+    await api('/api/backend/team/' + TM_EDITING.id, { method: 'PUT', body });
+    if (pw && pw.length) {
+      if (pw.length < 10) throw new Error(cuT('Password must be at least 10 characters', '密码至少 10 位'));
+      await api('/api/backend/team/' + TM_EDITING.id + '/password', { method: 'POST', body: { new_password: pw } });
+    }
+    tmCloseEdit();
+    toast(cuT('Saved', '已保存'), 'ok');
+    tmLoad();
+  } catch (e) {
+    toast(e.message || cuT('Couldn’t save', '保存失败'), 'err');
+  } finally {
+    saveBtn.disabled = false; saveBtn.classList.remove('loading');
+  }
+}
+function tmGroupLabel(g) {
+  return cuT({ run: 'Run', sell: 'Sell', content: 'Content', setup: 'Set up' }[g] || g,
+             { run: '运营', sell: '销售', content: '内容', setup: '设置' }[g] || g);
+}
+async function tmLoadCatalog() {
+  if (TM_CATALOG) return TM_CATALOG;
+  TM_CATALOG = await api('/api/backend/capabilities');
+  return TM_CATALOG;
+}
+function tmPaintScopeBtn() {
+  const btn = $('#tmPermScopeAll');
+  btn.textContent = TM_PERM_SCOPE_ALL ? cuT('On', '开') : cuT('Off', '关');
+  btn.classList.toggle('on', TM_PERM_SCOPE_ALL);
+  btn.classList.toggle('danger', !TM_PERM_SCOPE_ALL);
+  $('#tmPermStores').style.display = TM_PERM_SCOPE_ALL ? 'none' : 'flex';
+}
+function tmRenderScopeStores() {
+  const el = $('#tmPermStores');
+  el.innerHTML = TM_STORES.map(s =>
+    `<label><input type="checkbox" data-store="${s.id}"${TM_PERM_STORE_SEL[s.id] ? ' checked' : ''}${TM_PERM_LOCKED ? ' disabled' : ''}>${escapeHtml(tmStoreLabel(s))}</label>`
+  ).join('');
+  el.querySelectorAll('input[data-store]').forEach(cb => {
+    cb.addEventListener('change', () => { TM_PERM_STORE_SEL[Number(cb.getAttribute('data-store'))] = cb.checked; });
+  });
+}
+function tmRenderMatrix() {
+  const el = $('#tmPermMatrix');
+  if (!TM_CATALOG) { el.innerHTML = ''; return; }
+  const byGroup = {};
+  TM_CATALOG.capabilities.forEach(c => { (byGroup[c.group] = byGroup[c.group] || []).push(c); });
+  let html = '';
+  TM_CATALOG.groups.forEach(g => {
+    const caps = byGroup[g]; if (!caps || !caps.length) return;
+    html += `<div class="tm-perm-group"><div class="tm-pg-h">${escapeHtml(tmGroupLabel(g))}</div>`;
+    caps.forEach(c => {
+      const on = !!TM_PERM_STATE[c.key];
+      const dev = on !== TM_PERM_PRESET.has(c.key);
+      html += `<div class="tm-perm-row${dev ? ' dev' : ''}${TM_PERM_LOCKED ? ' locked' : ''}" data-key="${escapeAttr(c.key)}">`
+        + `<input type="checkbox"${on ? ' checked' : ''}${TM_PERM_LOCKED ? ' disabled' : ''}>`
+        + `<label>${escapeHtml(cuT(c.labelEn, c.labelCn))}</label>`
+        + `</div>`;
+    });
+    html += '</div>';
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.tm-perm-row').forEach(row => {
+    const key = row.getAttribute('data-key');
+    row.querySelector('input').addEventListener('change', function () {
+      TM_PERM_STATE[key] = this.checked;
+      row.classList.toggle('dev', this.checked !== TM_PERM_PRESET.has(key));
+    });
+  });
+}
+async function tmOpenPerms(id) {
+  const m = TM_TEAM.find(u => u.id === id);
+  if (!m) return;
+  $('#tmPermsName').textContent = m.displayName || m.username;
+  try {
+    await tmLoadCatalog();
+    const j = await api('/api/backend/team/' + id + '/permissions');
+    TM_PERM_EDITING = m;
+    TM_PERM_PRESET = new Set(j.presetCaps || []);
+    const eff = j.effective || [];
+    TM_PERM_STATE = {};
+    (TM_CATALOG ? TM_CATALOG.capabilities : []).forEach(c => { TM_PERM_STATE[c.key] = eff.indexOf(c.key) !== -1; });
+    TM_PERM_SCOPE_ALL = j.scopeAll !== false;
+    TM_PERM_STORE_SEL = {}; (j.storeIds || []).forEach(sid => { TM_PERM_STORE_SEL[sid] = true; });
+    TM_PERM_LOCKED = !!j.isOwner;
+    let ctx;
+    if (j.isOwner) ctx = cuT('Owner always has full access — nothing to change here.', '负责人始终拥有完整权限 — 此处无需更改。');
+    else {
+      ctx = cuT('Position', '职位') + ': ' + tmRoleLabel(m.role) + '. ';
+      ctx += j.isSelf ? cuT('You can’t edit your own permissions.', '不能编辑自己的权限。')
+                      : cuT('Tinted rows differ from the position default.', '带底色的行表示与职位默认不同。');
+    }
+    $('#tmPermsCtx').textContent = ctx;
+    $('#tmPermsSave').style.display = (j.isOwner || j.isSelf) ? 'none' : '';
+    tmPaintScopeBtn(); tmRenderScopeStores(); tmRenderMatrix();
+    $('#tmPermsScrim').classList.add('on');
+    $('#tmPermsModal').classList.add('on');
+    $('#tmPermsModal').setAttribute('aria-hidden', 'false');
+  } catch (e) {
+    toast(e.message || cuT('Couldn’t load permissions', '无法加载权限'), 'err');
+  }
+}
+function tmClosePerms() {
+  $('#tmPermsScrim').classList.remove('on');
+  $('#tmPermsModal').classList.remove('on');
+  $('#tmPermsModal').setAttribute('aria-hidden', 'true');
+  TM_PERM_EDITING = null;
+}
+async function tmSavePerms() {
+  if (!TM_PERM_EDITING) return;
+  const caps = Object.keys(TM_PERM_STATE).filter(k => TM_PERM_STATE[k]);
+  const store_ids = Object.keys(TM_PERM_STORE_SEL).filter(k => TM_PERM_STORE_SEL[k]).map(Number);
+  if (!TM_PERM_SCOPE_ALL && !store_ids.length) { toast(cuT('Pick at least one store, or turn All stores on', '请至少选择一个门店，或开启“所有门店”'), 'err'); return; }
+  const btn = $('#tmPermsSave');
+  btn.disabled = true; btn.classList.add('loading');
+  try {
+    const res = await api('/api/backend/team/' + TM_PERM_EDITING.id + '/permissions', { method: 'PUT', body: { caps, scope_all: TM_PERM_SCOPE_ALL ? 1 : 0, store_ids } });
+    TM_PERM_EDITING.hasCustomPerms = !!res.hasCustomPerms;
+    TM_PERM_EDITING.scopeAll = res.scopeAll;
+    toast(cuT('Permissions saved', '权限已保存'), 'ok');
+    tmRender();
+    tmClosePerms();
+  } catch (e) {
+    toast(e.message || cuT('Couldn’t save', '保存失败'), 'err');
+  } finally {
+    btn.disabled = false; btn.classList.remove('loading');
+  }
+}
+
+// Called via the rail button's onclick (data-tab="team"): wires listeners once,
+// then (re)loads fresh data on every visit — same "always refetch" rule the
+// Account pop-up's Devices tab uses, so a teammate added elsewhere shows up.
+function tmInit() {
+  if (TM_INIT_DONE) { tmLoad(); return; }
+  TM_INIT_DONE = true;
+
+  $('#tmRevealInvite').addEventListener('click', () => {
+    const card = $('#tmInviteCard');
+    card.style.display = 'block';
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    $('#tmIName').focus();
+  });
+  const iRoleSel = $('#tmIRole');
+  iRoleSel.addEventListener('change', () => tmSyncStoreField(iRoleSel, 'tmIStoreField', 'tmIRoleDesc', 'tmIStoreHelp'));
+  tmSyncStoreField(iRoleSel, 'tmIStoreField', 'tmIRoleDesc', 'tmIStoreHelp');
+  $('#tmInviteForm').addEventListener('submit', tmSubmitInvite);
+  $('#tmCredCopy').addEventListener('click', function () {
+    const box = $('#tmCredBox');
+    const txt = cuT('Username', '用户名') + ': ' + (box.dataset.user || '') + '\n' + cuT('Password', '密码') + ': ' + (box.dataset.pass || '');
+    const btn = this;
+    const done = () => { btn.textContent = cuT('Copied', '已复制'); setTimeout(() => { btn.textContent = cuT('Copy username & password', '复制用户名和密码'); }, 1400); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(done, done);
+    else { try { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); done(); } catch (e) {} }
+  });
+
+  const eRole = $('#tmERole'), eActive = $('#tmEActive');
+  eRole.addEventListener('change', () => tmSyncStoreField(eRole, 'tmEStoreField', 'tmERoleDesc'));
+  eActive.addEventListener('click', () => { if (eActive.disabled) return; TM_E_ACTIVE = !TM_E_ACTIVE; tmPaintActiveBtn(); });
+  $('#tmEditCancel').addEventListener('click', tmCloseEdit);
+  $('#tmEditScrim').addEventListener('mousedown', (e) => { if (e.target === e.currentTarget) tmCloseEdit(); });
+  $('#tmEditSave').addEventListener('click', tmSaveEdit);
+  $('#tmEditPerms').addEventListener('click', () => { if (TM_EDITING) tmOpenPerms(TM_EDITING.id); });
+
+  $('#tmEnforceBtn').addEventListener('click', tmToggleEnforce);
+
+  $('#tmPermScopeAll').addEventListener('click', () => { if (TM_PERM_LOCKED) return; TM_PERM_SCOPE_ALL = !TM_PERM_SCOPE_ALL; tmPaintScopeBtn(); });
+  $('#tmPermResetPreset').addEventListener('click', () => {
+    if (TM_PERM_LOCKED) return;
+    (TM_CATALOG ? TM_CATALOG.capabilities : []).forEach(c => { TM_PERM_STATE[c.key] = TM_PERM_PRESET.has(c.key); });
+    tmRenderMatrix();
+  });
+  $('#tmPermsCancel').addEventListener('click', tmClosePerms);
+  $('#tmPermsScrim').addEventListener('mousedown', (e) => { if (e.target === e.currentTarget) tmClosePerms(); });
+  $('#tmPermsSave').addEventListener('click', tmSavePerms);
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if ($('#tmPermsModal').classList.contains('on')) tmClosePerms();
+    else if ($('#tmEditModal').classList.contains('on')) tmCloseEdit();
+  });
+
+  // Re-render dynamic (cuT-driven) content on language toggle — static markup
+  // is handled automatically by the app's i18n walker. Registered here, not at
+  // file scope, because onLangChange/cuT are defined by an inline <script>
+  // near the end of the document — later than this file loads.
+  if (window.onLangChange) onLangChange(() => {
+    tmFillStoreSelect($('#tmIStore'));
+    tmFillStoreSelect($('#tmEStore'));
+    tmSyncStoreField($('#tmIRole'), 'tmIStoreField', 'tmIRoleDesc', 'tmIStoreHelp');
+    tmRender();
+    tmPaintEnforce();
+    if (TM_EDITING) { tmPaintActiveBtn(); tmSyncStoreField($('#tmERole'), 'tmEStoreField', 'tmERoleDesc'); }
+    if ($('#tmPermsModal') && $('#tmPermsModal').classList.contains('on')) { tmPaintScopeBtn(); tmRenderScopeStores(); tmRenderMatrix(); }
+  });
+
+  tmLoadStores();
+  tmLoad();
+}
 

@@ -984,18 +984,6 @@
     </button>
     <iframe class="prof-frame" id="profFrame" title="Account"></iframe>
   </div>
-
-  <!-- Team pop-up — "Manage team" opens /backend/team in this centred modal
-       instead of navigating away, mirroring the Account pop-up above (same
-       .prof-scrim/.prof-modal/.prof-frame CSS, separate ids/iframe so the two
-       stay independent). Iframe src is set on first open (lazy). -->
-  <div class="prof-scrim" id="teamScrim"></div>
-  <div class="prof-modal" id="teamModal" role="dialog" aria-modal="true" aria-label="Team" aria-hidden="true">
-    <button class="prof-x" id="teamClose" aria-label="Close">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
-    <iframe class="prof-frame" id="teamFrame" title="Team"></iframe>
-  </div>
   <!-- Light/dark and language toggles used to live here as loose topbar
        buttons. Moved into the account dropdown (the avatar circle)
        2026-06-08 — set-once preferences belong with the profile, not in the
@@ -1220,10 +1208,9 @@
   </button>
   <!-- Manage team — moved here from the topbar account dropdown (2026-07-14)
        so team management sits under Settings in the rail instead of behind
-       the avatar menu. 2026-07-16: opens /backend/team in the same centred
-       prof-modal iframe pattern as the Account pop-up (openTeamModal, in
-       02-settings-ops.js), instead of navigating the whole app away. -->
-  <button type="button" id="teamNavBtn" style="order:16">
+       the avatar menu. 2026-07-16: a real tab (data-tab="team", section
+       #tab-team below) — same pattern as Orders/Products — not a pop-up. -->
+  <button data-tab="team" onclick="tmInit()" style="order:16">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.9-3 3.2-4.5 6-4.5S14.1 17 15 20"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6"/><path d="M18.5 20c-.5-2-1.6-3.3-3.2-4"/></svg>
     Manage team · 团队管理
   </button>
@@ -10041,6 +10028,308 @@
   </section>
   <section id="tab-product-editor" class="tab-embed-editor">
     <iframe id="frame-product-editor" class="ed-frame" title="Product Page Editor · 产品页编辑器" data-src="/product-editor"></iframe>
+  </section>
+
+  <!-- Team — native tab (2026-07-16), same pattern as Orders/Products: a real
+       #tab-team section switched by the rail's data-tab click handler, not a
+       pop-up/iframe. Ported from the old standalone backend-team.html, whose
+       route still exists as a fallback but is no longer linked to from here.
+       Everything below is namespaced tm- (classes + JS in 02-settings-ops.js)
+       per reference_tacet_section_class_collisions — base retail-admin.css
+       owns generic names like .lab/.sub/.k/.v/.n/.dot, so nothing here uses
+       them unprefixed. Colors reuse the app's own --td-* Tacet tokens (same
+       palette backend-team.html carried as its own :root block) so this
+       renders identically in light/dark without redeclaring anything. -->
+  <section id="tab-team">
+    <style>
+      #tab-team .tm-head { display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+      #tab-team .tm-head h2 { margin: 0; font-family: var(--f-sans); font-weight: 500; font-size: 24px; letter-spacing: -.01em; color: var(--text-1); }
+
+      #tab-team .tm-card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 22px 22px 24px; margin-bottom: 16px; }
+      #tab-team .tm-card h3 { margin: 0; font-size: 17px; font-weight: 500; letter-spacing: -.01em; color: var(--td-text); }
+      #tab-team .tm-lead { margin: 6px 0 0; font-size: 13.5px; line-height: 1.6; color: var(--td-text2); max-width: 70ch; }
+      #tab-team .tm-lead b { font-weight: 500; color: var(--td-text); }
+
+      #tab-team .tm-stats { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
+      #tab-team .tm-stat { flex: 1; min-width: 100px; border: 1px solid var(--td-border); border-radius: 12px; padding: 12px 14px; background: var(--td-raised); }
+      #tab-team .tm-stat .tm-n { font-size: 22px; font-weight: 500; letter-spacing: -.02em; color: var(--td-text); font-variant-numeric: tabular-nums; }
+      #tab-team .tm-stat .tm-k { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); margin-top: 3px; }
+
+      #tab-team .tm-enforce { display: flex; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid var(--td-border); border-radius: 12px; padding: 14px 16px; margin-top: 16px; }
+      #tab-team .tm-enforce.on { border-color: var(--td-sage); background: var(--td-sage-tint); }
+      #tab-team .tm-enforce .tm-lab { font-size: 13.5px; font-weight: 500; color: var(--td-text); }
+      #tab-team .tm-enforce .tm-subtext { font-size: 12px; color: var(--td-text2); margin-top: 3px; max-width: 50ch; line-height: 1.5; }
+
+      #tab-team .tm-members { margin-top: 20px; display: flex; flex-direction: column; }
+      #tab-team .tm-member { display: flex; align-items: center; gap: 13px; padding: 13px 8px; border-top: 1px solid var(--td-border); border-radius: 8px; }
+      #tab-team .tm-member:first-child { border-top: 0; }
+      #tab-team .tm-member:hover { background: var(--td-raised); }
+      #tab-team .tm-member.inactive { opacity: .5; }
+      #tab-team .tm-av { width: 38px; height: 38px; flex: none; border-radius: 50%; overflow: hidden; display: flex; align-items: center; justify-content: center; background: var(--td-sage-tint); color: var(--td-sage-ink); font-size: 14px; font-weight: 500; user-select: none; }
+      #tab-team .tm-av img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      #tab-team .tm-main { flex: 1; min-width: 0; }
+      #tab-team .tm-name { font-size: 14.5px; font-weight: 500; color: var(--td-text); display: flex; align-items: center; gap: 8px; }
+      #tab-team .tm-tag { font-size: 9.5px; letter-spacing: .08em; text-transform: uppercase; font-weight: 500; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
+      #tab-team .tm-tag.you { color: var(--td-dusk); background: var(--td-dusk-tint); }
+      #tab-team .tm-tag.off { color: var(--td-brick); background: var(--td-brick-tint); }
+      #tab-team .tm-sub { margin-top: 3px; font-size: 12.5px; color: var(--td-text2); display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+      #tab-team .tm-sub .tm-u { color: var(--text-3); }
+      #tab-team .tm-sub .tm-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-3); flex: none; }
+      #tab-team .tm-role { font-size: 11px; letter-spacing: .04em; font-weight: 500; border-radius: 999px; padding: 4px 11px; white-space: nowrap; flex: none; }
+      #tab-team .tm-role.owner { color: var(--td-amber-ink); background: var(--td-amber-tint); }
+      #tab-team .tm-role.staff { color: var(--td-text2); background: var(--td-raised); border: 1px solid var(--td-border); }
+      #tab-team .tm-role.op { color: var(--td-sage-ink); background: var(--td-sage-tint); }
+      #tab-team .tm-custom { font-size: 10px; letter-spacing: .04em; color: var(--td-dusk); background: var(--td-dusk-tint); border-radius: 999px; padding: 3px 9px; white-space: nowrap; flex: none; }
+      #tab-team .tm-edit { flex: none; cursor: pointer; background: transparent; border: 1px solid var(--td-border); border-radius: 8px; padding: 7px 14px; font-family: inherit; font-size: 12.5px; font-weight: 500; color: var(--td-text2); }
+      #tab-team .tm-edit:hover { border-color: var(--td-text2); color: var(--td-text); }
+      #tab-team .tm-empty { padding: 22px 8px; font-size: 13px; color: var(--text-3); text-align: center; }
+
+      #tab-team .tm-addbtn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; cursor: pointer; background: transparent; color: var(--td-text); border: 1px solid var(--td-border); border-radius: 8px; padding: 11px 16px; font-family: inherit; font-size: 13.5px; font-weight: 500; margin-top: 18px; }
+      #tab-team .tm-addbtn:hover { border-color: var(--td-text2); }
+      #tab-team .tm-addbtn svg { stroke: currentColor; fill: none; }
+
+      #tab-team .tm-flabel { display: block; font-size: 13px; font-weight: 500; color: var(--td-text); margin: 0 0 8px; }
+      #tab-team .tm-field { margin-bottom: 18px; }
+      #tab-team .tm-field:last-child { margin-bottom: 0; }
+      #tab-team .tm-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+      #tab-team .tm-fhint { font-size: 12px; color: var(--td-text2); margin-top: 7px; line-height: 1.5; }
+      #tab-team input.tm-input, #tab-team select.tm-input {
+        width: 100%; background: var(--td-surface); color: var(--td-text);
+        border: 1px solid var(--td-border); border-radius: 8px; padding: 11px 13px; font-size: 14px; font-family: inherit;
+      }
+      #tab-team select.tm-input {
+        appearance: none; cursor: pointer;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5 6 7.5 9 4.5' stroke='%239AA3B2' fill='none' stroke-width='1.3'/></svg>");
+        background-repeat: no-repeat; background-position: right 13px center; padding-right: 34px;
+      }
+      #tab-team input.tm-input:focus, #tab-team select.tm-input:focus { outline: none; border-color: var(--td-dusk); }
+
+      #tab-team .tm-btn-primary { border: none; cursor: pointer; background: var(--td-dusk); color: #fff; font-family: inherit; font-size: 14px; font-weight: 500; padding: 12px; border-radius: 8px; position: relative; }
+      #tab-team .tm-btn-primary:hover { background: var(--td-dusk-hi); }
+      #tab-team .tm-btn-primary:disabled { opacity: .65; cursor: default; }
+      #tab-team .tm-btn-line { display: inline-flex; align-items: center; justify-content: center; gap: 7px; flex: 1; cursor: pointer; background: transparent; color: var(--td-text); border: 1px solid var(--td-border); border-radius: 8px; padding: 11px; font-family: inherit; font-size: 13.5px; font-weight: 500; position: relative; }
+      #tab-team .tm-btn-line:hover { border-color: var(--td-text2); }
+      #tab-team .tm-btn-line.full { width: 100%; margin-top: 16px; }
+      #tab-team .tm-btn-primary.loading, #tab-team .tm-btn-line.loading { color: transparent !important; pointer-events: none; }
+      #tab-team .tm-btn-primary.loading::after, #tab-team .tm-btn-line.loading::after {
+        content: ""; position: absolute; top: 50%; left: 50%; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+        border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: tmSpin .7s linear infinite;
+      }
+      @keyframes tmSpin { to { transform: rotate(360deg); } }
+
+      #tab-team .tm-cred { margin-top: 18px; border: 1px solid var(--td-sage); background: var(--td-sage-tint); border-radius: 12px; padding: 16px; display: none; }
+      #tab-team .tm-cred.show { display: block; }
+      #tab-team .tm-cred .tm-ct { font-size: 13.5px; font-weight: 500; color: var(--td-text); }
+      #tab-team .tm-cred .tm-cst { font-size: 12px; color: var(--td-text2); margin: 4px 0 12px; }
+      #tab-team .tm-cred .tm-kv { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 14px; padding: 8px 0; border-top: 1px solid var(--td-border); }
+      #tab-team .tm-cred .tm-k { color: var(--td-text2); font-size: 12.5px; }
+      #tab-team .tm-cred .tm-v { font-weight: 500; color: var(--td-text); word-break: break-all; text-align: right; }
+      #tab-team .tm-cred .tm-copy { margin-top: 12px; width: 100%; font: 500 12.5px var(--f-sans); border: 1px solid var(--td-sage); background: var(--td-surface); color: var(--td-sage-ink); border-radius: 8px; padding: 9px 14px; cursor: pointer; }
+
+      #tab-team .tm-pill { font: 500 12.5px var(--f-sans); border: 1px solid var(--td-border); background: var(--td-surface); color: var(--td-text2); border-radius: 999px; padding: 7px 16px; cursor: pointer; min-width: 54px; }
+      #tab-team .tm-pill.on { border-color: var(--td-sage); color: var(--td-sage-ink); }
+      #tab-team .tm-pill:disabled { opacity: .5; cursor: default; }
+
+      /* Edit + Permissions modals — centred pop-up for a single-record action
+         (matches Orders' own detail drawer being a pop-over on top of the
+         list). Scoped locally so this section never depends on another
+         section's style block having loaded first. */
+      #tab-team .tm-scrim { position: fixed; inset: 0; background: var(--bg-overlay); opacity: 0; pointer-events: none; transition: opacity .25s var(--ease-out, ease); z-index: 1200; }
+      #tab-team .tm-scrim.on { opacity: 1; pointer-events: auto; }
+      #tab-team .tm-modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -46%) scale(.98); opacity: 0; pointer-events: none; width: min(440px, 94vw); max-height: 88vh; overflow: auto; background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; box-shadow: 0 24px 64px rgba(17,26,43,.22); z-index: 1201; transition: opacity .3s var(--ease-out, ease), transform .3s var(--ease-out, ease); }
+      #tab-team .tm-modal.on { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%) scale(1); }
+      #tab-team .tm-modal.wide { width: min(560px, 94vw); display: flex; flex-direction: column; }
+      #tab-team .tm-modal h3 { margin: 0 0 6px; font-size: 17px; font-weight: 500; color: var(--td-text); display: flex; align-items: center; gap: 11px; }
+      #tab-team .tm-modal h3 .tm-av { width: 34px; height: 34px; font-size: 13px; }
+      #tab-team .tm-msub { font-size: 12.5px; color: var(--td-text2); line-height: 1.5; margin-bottom: 18px; }
+      #tab-team .tm-trow { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 14px 0; border-top: 1px solid var(--td-border); margin-top: 6px; }
+      #tab-team .tm-trow .tm-lab { font-size: 13.5px; font-weight: 500; color: var(--td-text); }
+      #tab-team .tm-trow .tm-subtext { font-size: 12px; color: var(--td-text2); margin-top: 3px; max-width: 44ch; line-height: 1.5; }
+      #tab-team .tm-modal-actions { display: flex; gap: 10px; margin-top: 20px; }
+
+      #tab-team .tm-perm-ctx { font-size: 12.5px; color: var(--td-text2); line-height: 1.5; margin: -4px 0 14px; }
+      #tab-team .tm-perm-scroll { overflow: auto; margin: 0 -6px; padding: 0 6px; flex: 1; }
+      #tab-team .tm-scope-box { border: 1px solid var(--td-border); border-radius: 12px; padding: 14px; }
+      #tab-team .tm-scope-stores { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+      #tab-team .tm-scope-stores:empty { display: none; }
+      #tab-team .tm-scope-stores label { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--td-text); border: 1px solid var(--td-border); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+      #tab-team .tm-scope-stores input { accent-color: var(--td-dusk); cursor: pointer; }
+      #tab-team .tm-perm-tools { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin: 14px 2px 2px; }
+      #tab-team .tm-linkbtn { font: 500 12px var(--f-sans); color: var(--td-dusk); background: none; border: 0; cursor: pointer; padding: 4px 0; }
+      #tab-team .tm-perm-group { margin-top: 16px; }
+      #tab-team .tm-pg-h { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-3); font-weight: 500; margin: 0 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--td-border); }
+      #tab-team .tm-perm-row { display: flex; align-items: center; gap: 11px; padding: 9px 8px; border-radius: 8px; }
+      #tab-team .tm-perm-row:hover { background: var(--td-raised); }
+      #tab-team .tm-perm-row.dev { background: var(--td-dusk-tint); }
+      #tab-team .tm-perm-row label { flex: 1; font-size: 13.5px; color: var(--td-text); cursor: pointer; }
+      #tab-team .tm-perm-row input[type=checkbox] { width: 17px; height: 17px; flex: none; accent-color: var(--td-dusk); cursor: pointer; }
+      #tab-team .tm-perm-row.locked { opacity: .55; }
+      #tab-team .tm-perm-row.locked label, #tab-team .tm-perm-row.locked input { cursor: not-allowed; }
+
+      @media (max-width: 720px) { #tab-team .tm-grid2 { grid-template-columns: 1fr; } }
+    </style>
+
+    <div class="tm-head"><h2>Team · 团队</h2></div>
+
+    <div class="tm-card">
+      <h3>Team · 团队</h3>
+      <p class="tm-lead">A <b>position</b> sets what each person sees and can do — and shapes their home screen. Open <b>Permissions</b> to fine-tune, or limit someone to certain stores. The owner always keeps full access. · <b>职位</b>决定每个人可见、可做的内容，也决定其首页。打开<b>权限</b>可精细调整，或将成员限定到指定门店。负责人始终拥有完整权限。</p>
+
+      <div class="tm-stats">
+        <div class="tm-stat"><div class="tm-n" id="tmStatPeople">—</div><div class="tm-k">People · 成员</div></div>
+        <div class="tm-stat"><div class="tm-n" id="tmStatOwners">—</div><div class="tm-k">Owners · 负责人</div></div>
+        <div class="tm-stat"><div class="tm-n" id="tmStatNever">—</div><div class="tm-k">Never in · 从未登录</div></div>
+        <div class="tm-stat"><div class="tm-n" id="tmStatLimited">—</div><div class="tm-k">Limited · 受限</div></div>
+      </div>
+
+      <div class="tm-enforce" id="tmEnforceRow" style="display:none">
+        <div>
+          <div class="tm-lab">Enforce permissions · 强制权限</div>
+          <div class="tm-subtext">Off — permissions shape what each person sees. On — they're also blocked from anything outside it. · 关 — 权限仅影响可见内容。开 — 同时阻止越权操作。</div>
+        </div>
+        <button type="button" id="tmEnforceBtn" class="tm-pill">—</button>
+      </div>
+
+      <div class="tm-members" id="tmMembers"><div class="tm-empty">Loading… · 加载中…</div></div>
+
+      <button type="button" class="tm-addbtn" id="tmRevealInvite">
+        <svg width="15" height="15" viewBox="0 0 15 15"><path d="M7.5 3v9M3 7.5h9" stroke-width="1.3" stroke-linecap="round"/></svg>
+        Add teammate · 添加成员
+      </button>
+    </div>
+
+    <div class="tm-card" id="tmInviteCard" style="display:none">
+      <h3>Add a teammate · 添加成员</h3>
+      <p class="tm-lead">Creates a sign-in you hand to a colleague. You'll get the username and password to share once it's made. · 创建一个交给同事的登录账户。创建后会显示用户名和密码，供你转交。</p>
+      <form id="tmInviteForm" novalidate style="margin-top:20px">
+        <div class="tm-grid2">
+          <div class="tm-field">
+            <label class="tm-flabel" for="tmIName">Display name · 显示名称</label>
+            <input class="tm-input" id="tmIName" type="text" autocomplete="off" spellcheck="false" placeholder="Jane Lee" />
+          </div>
+          <div class="tm-field">
+            <label class="tm-flabel" for="tmIRole">Position · 职位</label>
+            <select class="tm-input" id="tmIRole">
+              <option value="staff">Staff · 员工</option>
+              <option value="store_manager">Store manager · 店长</option>
+              <option value="warehouse">Warehouse · 仓库</option>
+              <option value="customer_service">Customer service · 客服</option>
+              <option value="dispatch">Dispatch · 配送调度</option>
+              <option value="kitchen">Kitchen · 后厨</option>
+              <option value="admin">Admin · 管理员</option>
+              <option value="owner">Owner · 负责人</option>
+            </select>
+            <div class="tm-fhint" id="tmIRoleDesc"></div>
+          </div>
+        </div>
+        <div class="tm-field" id="tmIStoreField" style="display:none">
+          <label class="tm-flabel" for="tmIStore">Store · 门店</label>
+          <select class="tm-input" id="tmIStore"></select>
+          <div class="tm-fhint" id="tmIStoreHelp"></div>
+        </div>
+        <div class="tm-grid2">
+          <div class="tm-field">
+            <label class="tm-flabel" for="tmIUser">Username · 用户名</label>
+            <input class="tm-input" id="tmIUser" type="text" autocomplete="off" spellcheck="false" placeholder="jane" />
+          </div>
+          <div class="tm-field">
+            <label class="tm-flabel" for="tmIPass">Temporary password · 初始密码</label>
+            <input class="tm-input" id="tmIPass" type="text" autocomplete="off" spellcheck="false" placeholder="min 10 characters · 至少 10 位" />
+          </div>
+        </div>
+        <button type="submit" id="tmInviteBtn" class="tm-btn-primary" style="width:100%">Create sign-in · 创建账户</button>
+
+        <div class="tm-cred" id="tmCredBox">
+          <div class="tm-ct">Sign-in ready · 账户已创建</div>
+          <div class="tm-cst">Share these with your teammate. The password won't be shown again. · 请把以下信息转交给对方。密码不会再次显示。</div>
+          <div class="tm-kv"><span class="tm-k">Username · 用户名</span><span class="tm-v" id="tmCredUser">—</span></div>
+          <div class="tm-kv"><span class="tm-k">Password · 密码</span><span class="tm-v" id="tmCredPass">—</span></div>
+          <button type="button" class="tm-copy" id="tmCredCopy">Copy username &amp; password · 复制用户名和密码</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Edit member modal -->
+    <div class="tm-scrim" id="tmEditScrim"></div>
+    <div class="tm-modal" id="tmEditModal" role="dialog" aria-modal="true" aria-hidden="true">
+      <h3 id="tmEditTitle"><span class="tm-av" id="tmEditCircle" aria-hidden="true"></span><span id="tmEditName">—</span></h3>
+      <div class="tm-msub">Change what this person is, reset their sign-in, or open Permissions to fine-tune. · 调整该成员的身份、重置登录，或打开权限精细调整。</div>
+
+      <div class="tm-field">
+        <label class="tm-flabel" for="tmEName">Display name · 显示名称</label>
+        <input class="tm-input" id="tmEName" type="text" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="tm-field">
+        <label class="tm-flabel" for="tmERole">Position · 职位</label>
+        <select class="tm-input" id="tmERole">
+          <option value="staff">Staff · 员工</option>
+          <option value="store_manager">Store manager · 店长</option>
+          <option value="warehouse">Warehouse · 仓库</option>
+          <option value="customer_service">Customer service · 客服</option>
+          <option value="dispatch">Dispatch · 配送调度</option>
+          <option value="kitchen">Kitchen · 后厨</option>
+          <option value="admin">Admin · 管理员</option>
+          <option value="owner">Owner · 负责人</option>
+        </select>
+        <div class="tm-fhint" id="tmERoleDesc"></div>
+      </div>
+      <div class="tm-field" id="tmEStoreField" style="display:none">
+        <label class="tm-flabel" for="tmEStore">Store · 门店</label>
+        <select class="tm-input" id="tmEStore"></select>
+      </div>
+      <div class="tm-field">
+        <label class="tm-flabel" for="tmEPass">Reset password · 重置密码</label>
+        <input class="tm-input" id="tmEPass" type="text" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep · 留空则不变" />
+      </div>
+
+      <div class="tm-trow">
+        <div>
+          <div class="tm-lab">Active · 启用</div>
+          <div class="tm-subtext">Turned off, they can't sign in — the account and its history stay. · 关闭后无法登录 — 账户与历史仍保留。</div>
+        </div>
+        <button type="button" id="tmEActive" class="tm-pill">—</button>
+      </div>
+
+      <button type="button" id="tmEditPerms" class="tm-btn-line full" style="display:none;">
+        <svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 1.5 2.5 3.8v3.6c0 3.3 2.3 5.4 5.5 7 3.2-1.6 5.5-3.7 5.5-7V3.8L8 1.5Z" stroke-width="1.2" stroke-linejoin="round"/></svg>
+        Permissions… · 权限…
+      </button>
+
+      <div class="tm-modal-actions">
+        <button type="button" id="tmEditCancel" class="tm-btn-line">Cancel · 取消</button>
+        <button type="button" id="tmEditSave" class="tm-btn-primary" style="flex:1">Save · 保存</button>
+      </div>
+    </div>
+
+    <!-- Permissions matrix modal -->
+    <div class="tm-scrim" id="tmPermsScrim" style="z-index:1210"></div>
+    <div class="tm-modal wide" id="tmPermsModal" role="dialog" aria-modal="true" aria-hidden="true" style="z-index:1211">
+      <h3>Permissions · 权限 — <span id="tmPermsName">—</span></h3>
+      <div class="tm-perm-ctx" id="tmPermsCtx"></div>
+
+      <div class="tm-perm-scroll" id="tmPermsScroll">
+        <div class="tm-scope-box">
+          <div class="tm-trow" style="border-top:0; padding:0; margin:0;">
+            <div>
+              <div class="tm-lab">All stores · 所有门店</div>
+              <div class="tm-subtext">Off — limit this person to specific stores. · 关 — 仅限指定门店。</div>
+            </div>
+            <button type="button" id="tmPermScopeAll" class="tm-pill">—</button>
+          </div>
+          <div class="tm-scope-stores" id="tmPermStores"></div>
+        </div>
+
+        <div class="tm-perm-tools">
+          <button type="button" class="tm-linkbtn" id="tmPermResetPreset">Reset to position default · 重置为职位默认</button>
+        </div>
+        <div id="tmPermMatrix"></div>
+      </div>
+
+      <div class="tm-modal-actions">
+        <button type="button" id="tmPermsCancel" class="tm-btn-line">Cancel · 取消</button>
+        <button type="button" id="tmPermsSave" class="tm-btn-primary" style="flex:1">Save permissions · 保存权限</button>
+      </div>
+    </div>
   </section>
 
   <!-- Order detail. Lives INSIDE <main> so that on desktop it renders as an
