@@ -331,6 +331,28 @@ function touchSession(req, user) {
                   ip             = COALESCE(NULLIF(excluded.ip, ''), tenant_user_sessions.ip),
                   last_seen      = CURRENT_TIMESTAMP`)
       .run(sid, user.id, user.tenant_id || null, ua, ip);
+    dedupeSessions(user.id, sid);
+  } catch (e) { /* index-only; never blocks auth */ }
+}
+
+// Collapse duplicate rows for the same operator + browser + IP down to the
+// newest one. A "new device" in this table is really just a new session
+// cookie — clearing cookies, an incognito window, or a stale un-revoked
+// login all mint a fresh sid for what is physically the same machine. Keeps
+// `currentSid` unconditionally so the active session never disappears mid-poll.
+function dedupeSessions(tenantUserId, currentSid) {
+  try {
+    db.prepare(`
+      DELETE FROM tenant_user_sessions
+       WHERE tenant_user_id = ?
+         AND sid != ?
+         AND user_agent != '' AND ip != ''
+         AND last_seen < (
+           SELECT MAX(t2.last_seen) FROM tenant_user_sessions t2
+            WHERE t2.tenant_user_id = tenant_user_sessions.tenant_user_id
+              AND t2.user_agent     = tenant_user_sessions.user_agent
+              AND t2.ip             = tenant_user_sessions.ip
+         )`).run(tenantUserId, currentSid);
   } catch (e) { /* index-only; never blocks auth */ }
 }
 
@@ -632,6 +654,7 @@ router.get('/api/backend/sessions', (req, res) => {
   try {
     db.prepare("DELETE FROM tenant_user_sessions WHERE last_seen < datetime('now', '-31 days')").run();
   } catch (e) {}
+  dedupeSessions(req.session.backendUserId, req.sessionID);
   let rows = [];
   try {
     rows = db.prepare(`SELECT sid, user_agent, ip, created_at, last_seen
