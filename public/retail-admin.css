@@ -2475,10 +2475,12 @@
   .pa-rowhead {
     padding: 14px 18px; background: var(--td-raised);
     border-bottom: 1px solid var(--td-border);
-    border-top-left-radius: 14px; border-top-right-radius: 14px;
+    /* Square top, not rounded: once stuck it's pinned flush under the topbar
+       (top:56px = exact topbar height, no gap) — a rounded top edge there
+       reads as a floating pill instead of an attached bar. */
     font-size: 13.5px; letter-spacing: .02em; text-transform: none;
     color: var(--td-text); font-weight: 700;
-    position: sticky; top: 72px; z-index: 5;
+    position: sticky; top: 56px; z-index: 5;
   }
   .pa-list-rich .pa-row-img { width: 44px; height: 44px; border-radius: 10px; }
   .pa-list-rich .pa-row-name { font-size: 15px; font-weight: 500; }
