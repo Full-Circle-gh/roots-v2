@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tacet — OTP code field, digit boxes (options)</title>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET DESIGN TOKENS — v1.0
+   "Runs in silence." — When in doubt, remove something.
+   ============================================================ */
+:root {
+  --tacet-ink:      #111A2B;
+  --tacet-paper:    #FBF9F4;
+  --tacet-graphite: #58606E;
+  --tacet-dusk:     #6E67AF;
+  --tacet-sage:     #A3B49F;
+  --tacet-amber:    #C9954A;
+  --tacet-brick:    #B4533E;
+
+  --tacet-cream:       #F6F3EC;
+  --tacet-border:      #E4E0D5;
+  --tacet-dusk-tint:   #EEEDF6;
+  --tacet-sage-tint:   #EDF1EC;
+  --tacet-amber-tint:  #F7EEDE;
+  --tacet-brick-tint:  #F6E7E3;
+
+  --bg:             var(--tacet-paper);
+  --surface:        #FFFFFF;
+  --surface-raised: var(--tacet-cream);
+  --text:           var(--tacet-ink);
+  --text-secondary: var(--tacet-graphite);
+  --border:         var(--tacet-border);
+  --accent:         var(--tacet-dusk);
+  --accent-tint:    var(--tacet-dusk-tint);
+  --ok:             var(--tacet-sage);
+  --ok-tint:        var(--tacet-sage-tint);
+  --warn:           var(--tacet-amber);
+  --warn-tint:      var(--tacet-amber-tint);
+  --danger:         var(--tacet-brick);
+  --danger-tint:    var(--tacet-brick-tint);
+
+  --font-display: "Fraunces", Georgia, serif;
+  --font-text:    "Inter", -apple-system, Arial, sans-serif;
+  --fs-display: 3.5rem;
+  --fs-headline: 2rem;
+  --fs-title: 1.125rem;
+  --fs-body: 0.9375rem;
+  --fs-caption: 0.8125rem;
+  --lh-body: 1.6;
+  --lh-tight: 1.15;
+
+  --s-1: 4px;  --s-2: 8px;  --s-3: 16px;  --s-4: 24px;
+  --s-5: 32px; --s-6: 48px; --s-7: 64px;  --s-8: 96px;
+
+  --radius-control: 8px;
+  --radius-card: 14px;
+  --radius-pill: 999px;
+  --border-w: 1px;
+  --shadow-soft: 0 1px 2px rgba(17, 26, 43, 0.05), 0 4px 16px rgba(17, 26, 43, 0.04);
+
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-quick: 200ms;
+  --dur-settle: 350ms;
+  --dur-slow: 600ms;
+}
+[data-theme="dark"] {
+  --bg:             var(--tacet-ink);
+  --surface:        #18233A;
+  --surface-raised: #1E2A44;
+  --text:           var(--tacet-paper);
+  --text-secondary: #9AA3B2;
+  --border:         #2A3550;
+  --accent-tint:    #262A4A;
+  --ok-tint:        #1E2C26;
+  --warn-tint:      #33290F;
+  --danger-tint:    #351B14;
+}
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+}
+
+/* ---- base ---- */
+* { margin: 0; box-sizing: border-box; }
+body { font-family: var(--font-text); font-size: var(--fs-body); line-height: var(--lh-body);
+  color: var(--text); background: var(--surface-raised); -webkit-font-smoothing: antialiased; }
+
+.t-btn { font: 500 var(--fs-body) var(--font-text); padding: 10px 20px;
+  border-radius: var(--radius-control); border: var(--border-w) solid transparent;
+  cursor: pointer; transition: all var(--dur-quick) var(--ease-settle);
+  display: inline-flex; align-items: center; gap: var(--s-2); }
+.t-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.t-btn--primary { background: var(--accent); color: #FFFFFF; }
+.t-btn--primary:hover { background: #5F58A0; }
+
+.t-input { font: 400 var(--fs-body) var(--font-text); color: var(--text);
+  background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-control); padding: 10px 14px; width: 100%;
+  transition: border-color var(--dur-quick) var(--ease-settle); }
+.t-input:focus { outline: none; border-color: var(--accent); }
+
+/* ---- page chrome ---- */
+.topbar { position: sticky; top: 0; z-index: 10; background: var(--tacet-ink); color: var(--tacet-paper);
+  display: flex; align-items: center; gap: 14px; padding: 12px 22px; }
+.topbar .tag { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; color: rgba(251,249,244,.55); font-weight: 500; }
+.topbar .spacer { margin-left: auto; }
+.topbar .theme-btn { font: 500 12.5px var(--font-text); color: rgba(251,249,244,.75); background: none;
+  border: 1px solid rgba(251,249,244,.25); padding: 6px 13px; border-radius: var(--radius-control); cursor: pointer; }
+
+.wrap { max-width: 860px; margin: 0 auto; padding: 44px 20px 90px; }
+.intro { max-width: 620px; margin: 0 0 40px; }
+.intro h1 { font: 400 26px var(--font-display); letter-spacing: -.01em; color: var(--text); margin-bottom: 8px; }
+.intro p { font-size: 13.5px; color: var(--text-secondary); line-height: 1.6; }
+
+.opt { position: relative; background: var(--surface); border: var(--border-w) solid var(--border);
+  border-radius: var(--radius-card); padding: var(--s-4); margin-bottom: var(--s-4); }
+.opt-head { display: flex; align-items: center; gap: 10px; margin-bottom: var(--s-4); }
+.opt-num { width: 22px; height: 22px; border-radius: 50%; background: var(--tacet-ink); color: var(--tacet-paper);
+  font-size: 11px; font-weight: 600; display: grid; place-items: center; flex: none; }
+.opt-name { font-size: 14px; font-weight: 500; color: var(--text); }
+.opt-why { font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; margin-top: var(--s-4);
+  padding-top: var(--s-3); border-top: var(--border-w) solid var(--border); }
+.rec-tag { position: absolute; top: -11px; right: 18px; font-size: 9.5px; letter-spacing: .09em;
+  text-transform: uppercase; font-weight: 600; color: #4A6249; background: var(--ok-tint);
+  border-radius: var(--radius-pill); padding: 3px 10px; }
+
+/* ---- ported "recovery" section chrome, matches backend-account.html ---- */
+.sect-h { font: 400 15px var(--font-display); color: var(--text); margin-bottom: 10px; }
+.lead { font-size: 12.5px; color: var(--text-secondary); }
+.rec-hint { font-size: 13px; color: var(--text); margin: 14px 0 16px; }
+.rec-hint b { font-weight: 600; }
+.rec-actions { display: flex; gap: var(--s-4); margin-top: 12px; }
+.rec-link { font: 500 12.5px var(--font-text); color: var(--text-secondary); background: none; border: none;
+  cursor: pointer; padding: 0; }
+.rec-link:hover { color: var(--text); text-decoration: underline; }
+.verify-row { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+
+/* ---- digit boxes: shared skeleton, each option overrides look ---- */
+.otp { display: flex; gap: 8px; }
+.otp input { width: 44px; height: 52px; text-align: center; font: 500 20px var(--font-text);
+  font-variant-numeric: tabular-nums; color: var(--text); background: var(--surface);
+  border: var(--border-w) solid var(--border); border-radius: var(--radius-control);
+  transition: border-color var(--dur-quick) var(--ease-settle), background var(--dur-quick) var(--ease-settle);
+  caret-color: var(--accent); }
+.otp input:focus { outline: none; border-color: var(--accent); }
+.otp input::-webkit-outer-spin-button, .otp input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* A — gapped outline, matches t-input border weight (recommended) */
+.otp--a input.filled { border-color: var(--text-secondary); }
+
+/* B — tinted, borderless until active */
+.otp--b input { background: var(--surface-raised); border-color: transparent; }
+.otp--b input:focus { background: var(--surface); border-color: var(--accent); }
+.otp--b input.filled { background: var(--surface); border-color: var(--border); }
+
+/* C — grouped 3+3 with a wider middle gap */
+.otp--c { gap: 8px; }
+.otp--c .gap-after { margin-right: 12px; }
+
+/* D — connected single field, shared borders instead of 6 separate cards */
+.otp--d { gap: 0; }
+.otp--d input { border-radius: 0; border-right-width: 0; width: 46px; }
+.otp--d input:first-child { border-top-left-radius: var(--radius-control); border-bottom-left-radius: var(--radius-control); }
+.otp--d input:last-child { border-top-right-radius: var(--radius-control); border-bottom-right-radius: var(--radius-control); border-right-width: var(--border-w); }
+.otp--d input:focus { border-right-width: var(--border-w); z-index: 1; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <span class="tag">Tacet — mockup</span>
+  <span class="tag" style="color:rgba(251,249,244,.85);">OTP code field · digit boxes</span>
+  <div class="spacer"></div>
+  <button class="theme-btn" onclick="document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark')">Toggle dark mode</button>
+</div>
+
+<div class="wrap">
+  <div class="intro">
+    <h1>Code field: one box per digit</h1>
+    <p>Same email-verification step as My Info → Security, just with the single 6-character text field replaced
+    by six separate digit boxes. Each option below is live — type into it, use backspace, or paste a code to compare
+    the feel. Pick the one you want and it becomes the real markup.</p>
+  </div>
+
+  <!-- Option A -->
+  <div class="opt">
+    <span class="rec-tag">Recommended</span>
+    <div class="opt-head"><span class="opt-num">A</span><span class="opt-name">Outlined, gapped</span></div>
+
+    <h2 class="sect-h">Email</h2>
+    <p class="rec-hint">Enter the 6-digit code we emailed to <b>a****@gmail.com</b>.</p>
+    <div class="verify-row">
+      <div class="otp otp--a" data-otp></div>
+      <button class="t-btn t-btn--primary">Verify</button>
+    </div>
+    <div class="rec-actions"><button class="rec-link">Resend</button><button class="rec-link">Cancel</button></div>
+
+    <p class="opt-why">Same border weight and focus ring as every other input in the backend — closest to the current
+    field, just split into six. Quiet, no extra color.</p>
+  </div>
+
+  <!-- Option B -->
+  <div class="opt">
+    <div class="opt-head"><span class="opt-num">B</span><span class="opt-name">Tinted, borderless until active</span></div>
+
+    <h2 class="sect-h">Email</h2>
+    <p class="rec-hint">Enter the 6-digit code we emailed to <b>a****@gmail.com</b>.</p>
+    <div class="verify-row">
+      <div class="otp otp--b" data-otp></div>
+      <button class="t-btn t-btn--primary">Verify</button>
+    </div>
+    <div class="rec-actions"><button class="rec-link">Resend</button><button class="rec-link">Cancel</button></div>
+
+    <p class="opt-why">Boxes sit flush against the page (surface-raised fill, no border) until you type — only the
+    box you're on picks up an accent border. Softer at rest, still clear while filling in.</p>
+  </div>
+
+  <!-- Option C -->
+  <div class="opt">
+    <div class="opt-head"><span class="opt-num">C</span><span class="opt-name">Grouped 3 + 3</span></div>
+
+    <h2 class="sect-h">Email</h2>
+    <p class="rec-hint">Enter the 6-digit code we emailed to <b>a****@gmail.com</b>.</p>
+    <div class="verify-row">
+      <div class="otp otp--a otp--c" data-otp data-group="3"></div>
+      <button class="t-btn t-btn--primary">Verify</button>
+    </div>
+    <div class="rec-actions"><button class="rec-link">Resend</button><button class="rec-link">Cancel</button></div>
+
+    <p class="opt-why">Same box style as A, split into two groups of three like a card number. Easier to read back
+    at a glance, costs a bit more width.</p>
+  </div>
+
+  <!-- Option D -->
+  <div class="opt">
+    <div class="opt-head"><span class="opt-num">D</span><span class="opt-name">Connected strip</span></div>
+
+    <h2 class="sect-h">Email</h2>
+    <p class="rec-hint">Enter the 6-digit code we emailed to <b>a****@gmail.com</b>.</p>
+    <div class="verify-row">
+      <div class="otp otp--d" data-otp></div>
+      <button class="t-btn t-btn--primary">Verify</button>
+    </div>
+    <div class="rec-actions"><button class="rec-link">Resend</button><button class="rec-link">Cancel</button></div>
+
+    <p class="opt-why">One shared-border strip instead of six separate cards — reads as a single field, compact.
+    Least visual separation between digits, which can make a wrong digit harder to spot.</p>
+  </div>
+</div>
+
+<script>
+(function(){
+  var groups = document.querySelectorAll('[data-otp]');
+  groups.forEach(function(g){
+    var groupAt = parseInt(g.getAttribute('data-group') || '0', 10);
+    for (var i = 0; i < 6; i++) {
+      var inp = document.createElement('input');
+      inp.type = 'text'; inp.inputMode = 'numeric'; inp.maxLength = 1;
+      inp.autocomplete = i === 0 ? 'one-time-code' : 'off';
+      if (groupAt && i === groupAt - 1) inp.classList.add('gap-after');
+      g.appendChild(inp);
+    }
+    var boxes = g.querySelectorAll('input');
+    boxes.forEach(function(box, idx){
+      box.addEventListener('input', function(){
+        box.value = box.value.replace(/[^0-9]/g, '').slice(0, 1);
+        box.classList.toggle('filled', box.value.length === 1);
+        if (box.value && idx < boxes.length - 1) boxes[idx + 1].focus();
+      });
+      box.addEventListener('keydown', function(e){
+        if (e.key === 'Backspace' && !box.value && idx > 0) boxes[idx - 1].focus();
+      });
+      box.addEventListener('paste', function(e){
+        var text = (e.clipboardData || window.clipboardData).getData('text').replace(/[^0-9]/g, '');
+        if (!text) return;
+        e.preventDefault();
+        for (var j = 0; j < boxes.length; j++) {
+          boxes[j].value = text[j] || '';
+          boxes[j].classList.toggle('filled', !!text[j]);
+        }
+        boxes[Math.min(text.length, boxes.length) - 1].focus();
+      });
+    });
+  });
+})();
+</script>
+</body>
+</html>
