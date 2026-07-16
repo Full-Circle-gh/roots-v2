@@ -301,11 +301,6 @@
     font-size: 13px; font-weight: 600; color: var(--text-1);
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;
   }
-  /* Tenant brand row — collapsed entirely until body.cobrand reveals the logo
-     (.brand-logo's own display:none/block toggle, shared with the rail). */
-  .acct-brand { display: none; align-items: center; justify-content: center; padding: 2px 10px 12px; }
-  body.cobrand .acct-brand { display: flex; }
-  .acct-brand .brand-logo { height: 22px; max-width: 190px; }
   /* Groups separate by space alone (no rule lines) — see .acct-gap below. */
   .acct-gap { margin-top: 6px; }
   .acct-item {
@@ -494,19 +489,17 @@
     font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 18px;
     letter-spacing: .20em; color: var(--text-1);
   }
-  /* ── Co-brand identity — option A: the tenant's uploaded logo REPLACES our
-     waveform + wordmark entirely (no name text, no waveform). Logo images are
-     hidden by default; body.cobrand (set once the logo loads) reveals them and
-     hides ours. Kept short so the 56px header holds (the y:56 divider must). */
+  /* ── Co-brand identity — the tenant's uploaded logo replaces our waveform +
+     wordmark on the topbar (mobile brand) only. The open rail always keeps the
+     tacet mark + wordmark as-is; a tenant's own identity shows up ONLY as the
+     small square mark on the FOLDED rail (body.nav-collapsed.cobrand below) —
+     it never takes over the full expanded rail. Logo images are hidden by
+     default; body.cobrand (set once the logo loads) reveals the topbar one. */
   .brand-logo, .brand-mark-img { display: none; object-fit: contain; }
-  body.cobrand .brand .brand-mark,  body.cobrand .nav-brand .brand-mark  { display: none; }  /* our waveform */
-  body.cobrand .brand .brand-name,  body.cobrand .nav-brand .brand-name  { display: none; }  /* our/their name text */
-  body.cobrand .brand-logo { display: block; }
-  .nav-brand .brand-logo { height: 40px; max-width: 172px; }   /* full logo, open rail — sized to fill the 56px head */
+  body.cobrand .brand .brand-mark { display: none; }  /* topbar waveform */
+  body.cobrand .brand .brand-name { display: none; }  /* topbar name text */
+  body.cobrand .brand .brand-logo { display: block; }
   .brand .brand-logo { height: 26px; max-width: 150px; }       /* full logo, topbar/phones */
-  /* Left-align the logo to the nav's icon column (rail 10px .tabs pad + 12px
-     button pad = 22px) so it anchors the column instead of floating centred. */
-  body.cobrand .nav-brand { justify-content: flex-start; padding-left: 22px; }
   /* "runs on tacet" credit — pinned to the rail foot via margin-top:auto. */
   .brand-credit {
     margin-top: auto; display: flex; align-items: center; gap: 9px;
@@ -601,10 +594,10 @@
      the wordmark. Hide the mark while folded; the 56px head + its bottom border
      stay, so the y:56 divider is unbroken and only the arrow occupies the corner. */
   body.nav-collapsed .nav-brand .brand-mark { display: none; }
-  /* Co-brand folded: the FULL logo is too wide for the 62px rail, so swap it for
-     the square mark (auto-cropped from the logo), centered so it clears the fold
-     arrow on the seam. The credit shrinks to its bare waveform. */
-  body.nav-collapsed .nav-brand .brand-logo { display: none; }
+  /* Co-brand folded: the square mark (auto-cropped from the tenant's logo) takes
+     over the folded rail — the ONE place a tenant's own identity shows, centered
+     so it clears the fold arrow on the seam. The credit shrinks to its bare
+     waveform. The open rail never shows this tenant mark (see body.cobrand above). */
   body.nav-collapsed.cobrand .nav-brand .brand-mark-img { display: block; width: 30px; height: 30px; border-radius: 7px; margin: 0 auto; }
   body.nav-collapsed .brand-credit { justify-content: center; padding: 12px 0 6px; }
   body.nav-collapsed .brand-credit span { display: none; }

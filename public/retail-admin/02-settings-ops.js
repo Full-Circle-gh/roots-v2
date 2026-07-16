@@ -1618,8 +1618,8 @@ let ENTITLEMENTS = {};
 })();
 
 // ── Co-brand identity — make the chrome read as the tenant's own ─────────
-// Given the tenant object from /api/backend/me, swap the rail + topbar wordmark
-// to the tenant's logo + name, retitle the tab, and repoint the favicon at the
+// Given the tenant object from /api/backend/me, swap the topbar wordmark to
+// the tenant's logo + name, retitle the tab, and repoint the favicon at the
 // tenant's square mark. A tenant with no logo set (including Tacet/Roots itself)
 // keeps the built-in waveform + "tacet" — never a broken image. Identity only:
 // we touch the logo/name/title/favicon and nothing else about the Tacet look.
@@ -1633,9 +1633,9 @@ function applyBrand(tenant) {
   // payment/print, e.g. Roots) must NOT rename the admin.
   if (!logoUrl) return;   // leave the built-in tacet waveform + wordmark
 
-  // Option A — LOGO ONLY. The uploaded logo replaces our waveform + wordmark
-  // entirely (no name text, no waveform); body.cobrand drives the swap in CSS.
-  // Open rail + topbar show the full logo; the folded rail shows the square mark.
+  // LOGO ONLY, topbar (mobile) only. The open rail always keeps the tacet
+  // wordmark; the tenant's identity shows up ONLY as the square mark on the
+  // FOLDED rail, wired below. body.cobrand drives the CSS swap.
   if (name) document.title = name;
   const fav = document.getElementById('favlink');
   const favA = document.getElementById('favlink-apple');
@@ -1644,9 +1644,7 @@ function applyBrand(tenant) {
 
   const set = (id, url) => { const el = document.getElementById(id); if (el && url) el.src = url; };
   set('brandLogoTop', logoUrl);
-  set('brandLogoRail', logoUrl);
   set('brandMarkRail', markUrl);
-  set('brandLogoAcct', logoUrl);
 
   // Only commit the swap once the logo actually loads — a 404 leaves the clean
   // tacet waveform in place rather than an empty brand corner.

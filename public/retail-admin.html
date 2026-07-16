@@ -951,13 +951,6 @@
           <div class="acct-name" id="acctName">—</div>
         </div>
       </div>
-      <!-- Tenant brand row — mirrors the rail's co-brand logo (applyBrand()).
-           .brand-logo is hidden by default and only shown by body.cobrand, so
-           this row stays empty/collapsed for tenants with no logo uploaded
-           (incl. Tacet/Roots itself) — same tenant-neutral rule as the rail. -->
-      <div class="acct-brand">
-        <img class="brand-logo" id="brandLogoAcct" alt="" data-no-i18n>
-      </div>
       <button class="acct-item" id="acctProfileBtn" type="button" role="menuitem">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg>
         <span>Profile · 个人资料</span>
@@ -1010,10 +1003,9 @@
        the rail top. On phones the whole rail is hidden, so the topbar's own
        .brand (kept in the markup above) shows the wordmark there instead. -->
   <div class="nav-brand">
-    <!-- Tenant logo (co-brand, option A = logo only). Open rail shows the FULL
-         logo (replacing our waveform + wordmark); the folded rail swaps in the
-         square mark. Both revealed by body.cobrand once applyBrand() fills them. -->
-    <img class="brand-logo" id="brandLogoRail" alt="" data-no-i18n>
+    <!-- Tenant mark (co-brand). The open rail always keeps the tacet wordmark
+         below; the folded rail swaps in the tenant's square mark instead —
+         revealed by body.cobrand once applyBrand() fills it in. -->
     <img class="brand-mark-img" id="brandMarkRail" alt="" data-no-i18n>
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 340 110" fill="none">
