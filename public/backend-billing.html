@@ -129,6 +129,7 @@
 
   <div class="toast" id="toast"></div>
 
+<script src="/assets/tacet-dialogs.js"></script>
 <script>
 (function () {
   const $ = s => document.querySelector(s);
@@ -215,7 +216,7 @@
   }
 
   async function onChoosePlan(code, name) {
-    if (!confirm('Select the ' + name + ' plan? An invoice will be created for you to pay. · 选择「' + name + '」套餐?系统将生成一张待支付发票。')) return;
+    if (!(await askConfirm({ title: 'Select the ' + name + ' plan? An invoice will be created for you to pay. · 选择「' + name + '」套餐?系统将生成一张待支付发票。', confirmLabel: 'Select plan' }))) return;
     try {
       const j = await fetch('/api/backend/billing/select-plan', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',

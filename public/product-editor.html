@@ -1575,6 +1575,7 @@
   <div id="pe-loading">Loading product… · 加载产品中…</div>
   <div id="pe-toast"></div>
 
+  <script src="/assets/tacet-dialogs.js"></script>
   <script>
 // ── Utilities ───────────────────────────────────────────────────────────
 function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -1593,11 +1594,12 @@ function toast(msg, kind) {
 // both editors under one "Editor" tab, so we ask the parent to swap the Mini
 // App Editor section back in (the product editor section just hides). Confirms
 // first if there are unsaved changes.
-function peExitToPages() {
+async function peExitToPages() {
   if (window.self === window.top) return;
-  if (peIsDirty() && !confirm(cuT(
-    'You have unsaved changes that will be lost. Leave anyway? · 有未保存的更改将会丢失,仍要离开吗?',
-    'You have unsaved changes that will be lost. Leave anyway? · 有未保存的更改将会丢失,仍要离开吗?'))) {
+  if (peIsDirty() && !(await askConfirm({
+    title: cuT('You have unsaved changes that will be lost. Leave anyway?', '有未保存的更改将会丢失,仍要离开吗?'),
+    confirmLabel: cuT('Leave', '离开'),
+  }))) {
     return;
   }
   window.parent.postMessage({ type: 'fc-open-editor', editor: 'mini-app', openPages: true }, location.origin);
@@ -2336,9 +2338,10 @@ async function peSwitchProduct(id) {
   if (PA_CURRENT && id === PA_CURRENT.id) { peCloseSwitcher(); return; }
   const p = PA_ALL_PRODUCTS.find(x => x.id === id);
   if (!p) return;
-  if (peIsDirty() && !confirm(cuT(
-    'You have unsaved changes that will be lost. Switch product anyway? · 有未保存的更改将会丢失,仍要切换产品吗?',
-    'You have unsaved changes that will be lost. Switch product anyway? · 有未保存的更改将会丢失,仍要切换产品吗?'))) {
+  if (peIsDirty() && !(await askConfirm({
+    title: cuT('You have unsaved changes that will be lost. Switch product anyway?', '有未保存的更改将会丢失,仍要切换产品吗?'),
+    confirmLabel: cuT('Switch product', '切换产品'),
+  }))) {
     return;
   }
   peCloseSwitcher();
@@ -2917,7 +2920,7 @@ async function paHandleImportFile(input) {
 }
 async function paDeleteCustomTemplate(ev, id) {
   ev.stopPropagation();
-  if (!confirm('Remove this template? Products already built from it keep their blocks. · 删除此模板?已套用的产品保留其板块。')) return;
+  if (!(await askConfirm({ title: 'Remove this template? Products already built from it keep their blocks. · 删除此模板?已套用的产品保留其板块。', confirmLabel: 'Remove template', danger: true }))) return;
   try {
     const r = await fetch('/api/retail-admin/page-templates/' + encodeURIComponent(id), {
       method: 'DELETE', credentials: 'same-origin',
@@ -2959,7 +2962,7 @@ function paRenderPresets() {
   }).join('');
   paFitThumbs(row);
 }
-function paApplyTemplate(id) {
+async function paApplyTemplate(id) {
   const tpl = PA_TEMPLATES.find(p => p.id === id); if (!tpl) return;
   // Re-picking the template the page is already built from would needlessly
   // wipe the operator's edits — no-op instead.
@@ -2969,11 +2972,12 @@ function paApplyTemplate(id) {
   }
   const existing = (window._paBlocks || []).length;
   if (existing > 0) {
-    const ok = confirm(
-      'Switch template? · 切换模板?\n\n' +
-      'It will REPLACE the ' + existing + ' block(s) currently on this product. ' +
-      '\n将替换当前产品上的 ' + existing + ' 个板块,无法撤销。'
-    );
+    const ok = await askConfirm({
+      title: 'Switch template? · 切换模板?',
+      body: 'It will REPLACE the ' + existing + ' block(s) currently on this product. · 将替换当前产品上的 ' + existing + ' 个板块,无法撤销。',
+      confirmLabel: 'Switch template',
+      danger: true,
+    });
     if (!ok) return;
   }
   window._paTemplate = id;
@@ -3151,8 +3155,8 @@ function paBlocksAdd(type) {
     if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, 30);
 }
-function paBlocksRemove(id) {
-  if (!confirm('Delete this section? · 删除此板块?')) return;
+async function paBlocksRemove(id) {
+  if (!(await askConfirm({ title: 'Delete this section? · 删除此板块?', confirmLabel: 'Delete section', danger: true }))) return;
   paBlocksSyncFromDOM();
   const arr = window._paBlocks || [];
   const i = arr.findIndex(b => b.id === id);
