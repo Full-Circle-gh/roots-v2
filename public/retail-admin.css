@@ -1674,10 +1674,11 @@
      bigger, with a surface-color ring so it stays legible crossing the line. */
   .db-spark-dot.is-big { width: 9px; height: 9px; margin: -4.5px 0 0 -4.5px; box-shadow: 0 0 0 2px var(--td-surface); }
   /* Names the ghost curve before any real data exists — otherwise the "day
-     hasn't started" state is a bare unlabeled squiggle. Anchored to the
-     curve's right end, lifted clear of the line itself. */
+     hasn't started" state is a bare unlabeled squiggle. Anchored above the
+     curve's own peak (set in JS, in px so it clears the line regardless of
+     how tall the crest is) and centered over that point. */
   .db-spark-ghost-label {
-    position: absolute; transform: translate(-100%, -160%);
+    position: absolute; transform: translate(-50%, -100%);
     font: 500 11px var(--f-sans); color: var(--td-text2);
     white-space: nowrap; pointer-events: none;
   }

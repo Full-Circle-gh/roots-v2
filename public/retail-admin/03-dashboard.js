@@ -138,8 +138,15 @@ function dashSparkline(values, opts) {
   if (todayFlat) {
     let ghostLabel = '';
     if (big && hasGhost && opts.ghostLabel) {
-      const gx = x(n - 1), gy = y(ghost[n - 1]);
-      ghostLabel = `<span class="db-spark-ghost-label" style="left:${gx.toFixed(1)}%;top:${((gy / H) * 100).toFixed(1)}%">${escapeHtml(opts.ghostLabel)}</span>`;
+      // Anchor above the curve's highest point (not just its last point,
+      // which can itself sit on a peak) so the label clears the line
+      // wherever it happens to crest, plus a fixed pixel margin (not a %
+      // transform, which scales with the label's own — near-fixed — height
+      // and wasn't enough clearance in practice).
+      const peakIdx = ghost.indexOf(Math.max(...ghost));
+      const gx = Math.min(88, Math.max(12, x(peakIdx)));
+      const gy = (y(ghost[peakIdx]) / H) * 100;
+      ghostLabel = `<span class="db-spark-ghost-label" style="left:${gx.toFixed(1)}%;top:calc(${gy.toFixed(1)}% - 10px)">${escapeHtml(opts.ghostLabel)}</span>`;
     }
     return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${baseline}${ghostSvg}</svg>${ghostLabel}`;
   }
