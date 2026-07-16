@@ -7152,6 +7152,17 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
 // Background geocode helper — never throws, writes lat/lng + geocoded_at
 // when the Tencent Maps call resolves. Skipped silently if the key isn't
 // configured (TENCENT_MAPS_KEY in .env).
+//
+// English/pinyin street text (customers who type their address in English)
+// routinely gets rejected outright by Amap's mainland geocoder — the address
+// then never gets coordinates, routeOrder() can't rank stores by real
+// distance, and every future order from it silently falls back to whichever
+// store sorts first, flagged "verify store" for an ops person to notice and
+// fix by hand via the admin "Make address Chinese" tool. Self-heal instead:
+// on a failed geocode, if the street carries Latin letters, auto-translate it
+// to Chinese (same model + tool the admin flow uses) and retry once. Saving
+// the corrected text is what makes the FOLLOW-UP retry worthwhile — without
+// it we'd re-fail identically on every future save of the same bad text.
 function geocodeAddressAsync(addressId, a) {
   if (!geocode.configured()) return;
   setImmediate(async () => {
@@ -7160,12 +7171,65 @@ function geocodeAddressAsync(addressId, a) {
         province: a.province, city: a.city, district: a.district,
         address: [a.address, a.detail].filter(Boolean).join(' '),
       });
-      if (!coords) return;
+      if (coords) {
+        tdb().prepare(
+          'UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?'
+        ).run(coords.lat, coords.lng, addressId);
+        return;
+      }
+      if (!addressHasLatin(a.address) || !modelGateway.isConfigured()) return;
+      const merged = await autoTranslateAddressCn(a);
+      if (!merged) return;
+      const retryCoords = await geocode.geocodeAddress({
+        province: merged.province, city: merged.city, district: merged.district, address: merged.address,
+      });
+      if (!retryCoords) return;
       tdb().prepare(
-        'UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?'
-      ).run(coords.lat, coords.lng, addressId);
+        `UPDATE retail_customer_addresses
+            SET province = ?, city = ?, district = ?, address = ?,
+                province_en = ?, city_en = ?, district_en = ?,
+                lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP
+          WHERE id = ?`
+      ).run(
+        merged.province || null, merged.city || null, merged.district || null, merged.address || '',
+        merged.province_en || null, merged.city_en || null, merged.district_en || null,
+        retryCoords.lat, retryCoords.lng, addressId
+      );
+      console.log('[geocodeAddressAsync] auto-translated + resolved address', addressId);
     } catch (e) { console.warn('[geocodeAddressAsync]', e.message); }
   });
+}
+
+// Shared by geocodeAddressAsync's auto-heal path and (identically, hand-
+// triggered) the admin "Make address Chinese" order tool below. ai_not_configured
+// / translate failures return null — callers just skip the retry, same as any
+// other soft geocode miss.
+async function autoTranslateAddressCn(a) {
+  const system = 'You convert a Chinese-mainland shipping address that contains English or pinyin into a clean, fully simplified-Chinese mailing address, split into province / city / district / street. Use official administrative names. Never invent numbers that are not present. Always answer by calling the chinese_address tool.';
+  const userMsg =
+    `Current components:\n` +
+    `province: ${a.province || '(none)'}\n` +
+    `city: ${a.city || '(none)'}\n` +
+    `district: ${a.district || '(none)'}\n` +
+    `street: ${a.address || '(none)'}\n` +
+    `detail: ${a.detail || '(none)'}`;
+  try {
+    const out = await modelGateway.callModel({ system, tools: [ADDRESS_CN_TOOL], messages: [{ role: 'user', content: userMsg }], max_tokens: 500 });
+    const ai = modelGateway.extractToolUse(out.content_blocks, 'chinese_address') || {};
+    const pick = (s) => (s == null ? '' : String(s).trim().slice(0, 200));
+    let merged = normalizeChinaAddress({
+      province: pick(ai.province) || a.province || '',
+      city:     pick(ai.city)     || a.city     || '',
+      district: pick(ai.district) || a.district || '',
+      address:  pick(ai.street)   || a.address  || '',
+      detail:   a.detail || '',
+    });
+    merged = { ...merged, ...regionI18n.resolveRegion(merged) };
+    return merged;
+  } catch (e) {
+    console.warn('[autoTranslateAddressCn]', e && (e.message || e));
+    return null;
+  }
 }
 
 // Reverse-geocode a map pin into a Chinese address. The mini-app "Choose on
