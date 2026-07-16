@@ -2346,7 +2346,11 @@
         overflow: hidden; overflow-x: auto;
         box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
       }
-      #cu-table { border-collapse: collapse; width: 100%; background: var(--bg-pane); }
+      /* table-layout:fixed + the colgroup above give every column a
+         deterministic share instead of the browser's auto-guess, which used
+         to hand almost all the slack to Customer and leave the numeric
+         columns cramped against each other (same fix as #orders-table). */
+      #cu-table { border-collapse: collapse; width: 100%; background: var(--bg-pane); table-layout: fixed; }
       #cu-table thead th {
         background: var(--bg-pane); color: var(--text-1); font-family: var(--f-sans);
         font-weight: 700; font-size: 13.5px; letter-spacing: .02em; text-transform: none;
@@ -2356,7 +2360,7 @@
       /* Sortable column header — a button so the whole label (+ the caret
          hint) is one click target; the funnel (Tier only) is a second,
          independent button beside it. */
-      #cu-table .cul-th-inner { display: flex; align-items: center; gap: 6px; padding: 12px 16px; width: 100%; }
+      #cu-table .cul-th-inner { display: flex; align-items: center; gap: 6px; padding: 13px 18px; width: 100%; }
       #cu-table th.numeric .cul-th-inner { justify-content: flex-end; }
       #cu-table .cul-sort-btn {
         display: flex; align-items: center; gap: 5px; font: inherit; font-weight: inherit;
@@ -2406,6 +2410,20 @@
       #cu-table .cul-pop-foot .clear:hover { color: var(--text-1); }
       #cu-table .cul-pop-foot .done { color: var(--text-1); }
 
+      /* Channel filter — chip strip (mirrors Orders' #orders-channel-chips
+         .status-chip exactly: pill, icon, label, ink fill when active). */
+      #tab-customers .cul-chan-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
+      #tab-customers .cul-chan-chip {
+        display: inline-flex; align-items: center; background: var(--bg-pane); border: 1px solid var(--line);
+        color: var(--text-2); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+        transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
+      }
+      #tab-customers .cul-chan-chip:hover { border-color: var(--text-3); color: var(--text-1); }
+      #tab-customers .cul-chan-chip.on { background: var(--tacet-ink); border-color: var(--tacet-ink); color: var(--tacet-paper); }
+      [data-theme="dark"] #tab-customers .cul-chan-chip.on { background: var(--tacet-paper); border-color: var(--tacet-paper); color: var(--tacet-ink); }
+      #tab-customers .cul-chan-ico { display: inline-flex; align-items: center; margin-right: 8px; }
+      #tab-customers .cul-chan-ico svg { width: 15px; height: 15px; display: block; }
+
       /* Active column-filter pills, above the table. */
       #tab-customers .cul-afil { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12.5px; color: var(--text-2); flex-wrap: wrap; }
       #tab-customers .cul-afil-pill {
@@ -2420,7 +2438,7 @@
       #tab-customers .cul-afil-pill button svg { width: 9px; height: 9px; display: block; }
       #tab-customers .cul-afil-clear { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; font-weight: 500; background: none; border: 0; padding: 0; cursor: pointer; }
       #tab-customers .cul-afil-clear:hover { color: var(--text-1); }
-      #cu-table tbody td { background: var(--bg-pane); border-bottom: 1px solid var(--line); padding: 12px 16px; font-size: 14px; color: var(--text-1); vertical-align: middle; }
+      #cu-table tbody td { background: var(--bg-pane); border-bottom: 1px solid var(--line); padding: 13px 18px; font-size: 14px; color: var(--text-1); vertical-align: middle; }
       #cu-table tbody tr:last-child td { border-bottom: none; }
       #cu-table tbody tr.cul-row { cursor: pointer; transition: background var(--t-med) var(--ease-out); }
       #cu-table tbody tr.cul-row:hover td { background: var(--bg-app); }
@@ -2840,8 +2858,21 @@
           <button type="button" class="cul-seg warn" data-seg="blocked" id="cu-seg-blocked" hidden onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct" id="cu-seg-blocked-ct" data-no-i18n></span></button>
         </span>
       </div>
-      <!-- Active column-filter pills — Tier and Channel today, generic enough
-           for a future column filter to drop in the same way. Hidden (via
+      <!-- Channel filter — chip strip, not a column-header popover. Same
+           component Orders' #orders-channel-chips uses (icon + label, one
+           active at a time) — it's the filter an operator reaches for on
+           every visit, so it stays one click, always visible, never a
+           popover that can open past the table's right edge. Tier keeps its
+           column funnel below: an occasional cut, comfortable near the left. -->
+      <div class="cul-chan-chips" id="cu-chan-chips">
+        <button type="button" class="cul-chan-chip on" data-chan="" onclick="cuSetChan('')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels · 全部渠道</button>
+        <button type="button" class="cul-chan-chip" data-chan="wechat" onclick="cuSetChan('wechat')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10.2c0-3.6-3.2-6.2-7.1-6.2S2.3 6.6 2.3 10.2c0 1.8.8 3.4 2.1 4.6-.1.9-.4 1.8-.9 2.6a8 8 0 0 0 3.3-1.2c.9.2 1.8.3 2.7.2"/><path d="M21.7 15.4c0-2.9-2.6-5.1-5.7-5.1-.4 0-.8 0-1.2.1.4.9.6 1.8.6 2.8 0 1.6-.6 3-1.7 4.1a6.9 6.9 0 0 0 2.3.4c.6 0 1.2-.1 1.8-.2a6.4 6.4 0 0 0 2.6 1c-.3-.6-.5-1.3-.6-2 .6-.9.9-1.9.9-3.1Z"/><circle cx="6.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/><circle cx="10.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/></svg></span>Mini app · 小程序</button>
+        <button type="button" class="cul-chan-chip" data-chan="web" onclick="cuSetChan('web')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web · 网页</button>
+        <button type="button" class="cul-chan-chip" data-chan="meituan" onclick="cuSetChan('meituan')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan · 美团</button>
+        <button type="button" class="cul-chan-chip" data-chan="gzgrocery" onclick="cuSetChan('gzgrocery')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>Gzgrocery · 果满多</button>
+      </div>
+      <!-- Active column-filter pills — Tier today, generic enough for a
+           future column filter to drop in the same way. Hidden (via
            [hidden]) whenever nothing is filtered. -->
       <div class="cul-afil" id="cu-afil-row" hidden>
         <span>Filtered by · 已筛选</span>
@@ -2854,8 +2885,13 @@
       <div class="list-card">
       <div class="table-wrap">
         <table id="cu-table">
+          <colgroup>
+            <col style="width:25%"><col style="width:10%"><col style="width:9%">
+            <col style="width:13%"><col style="width:9%"><col style="width:11%">
+            <col style="width:12%"><col style="width:11%">
+          </colgroup>
           <thead><tr>
-            <th style="width: 34%;" data-sort="name">
+            <th data-sort="name">
               <span class="cul-th-inner">
                 <button type="button" class="cul-sort-btn" onclick="cuSortBy('name')">Customer · 顾客<span class="cul-carets"></span></button>
               </span>
@@ -2888,21 +2924,6 @@
             <th>
               <span class="cul-th-inner">
                 <span class="cul-sort-btn" style="cursor:default;">Channel · 渠道</span>
-                <button type="button" class="cul-filter-btn" id="cu-chan-filter-btn" onclick="cuChanPopToggle(event)" aria-haspopup="true" title="Filter by channel · 按渠道筛选">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4 2v-8.5z"/></svg>
-                  <span class="dot"></span>
-                </button>
-                <div class="cul-pop" id="cu-chan-pop">
-                  <div class="cul-pop-title">Filter by channel · 按渠道筛选</div>
-                  <label class="cul-pop-opt"><input type="checkbox" value="wechat" onchange="cuChanCheck('wechat', this.checked)"> Mini app · 小程序</label>
-                  <label class="cul-pop-opt"><input type="checkbox" value="web" onchange="cuChanCheck('web', this.checked)"> Web · 网页</label>
-                  <label class="cul-pop-opt"><input type="checkbox" value="meituan" onchange="cuChanCheck('meituan', this.checked)"> Meituan · 美团</label>
-                  <label class="cul-pop-opt"><input type="checkbox" value="gzgrocery" onchange="cuChanCheck('gzgrocery', this.checked)"> Gzgrocery · 果满多</label>
-                  <div class="cul-pop-foot">
-                    <button type="button" class="clear" onclick="cuChanFilterClear()">Clear · 清除</button>
-                    <button type="button" class="done" onclick="cuChanPopClose()">Done · 完成</button>
-                  </div>
-                </div>
               </span>
             </th>
           </tr></thead>
@@ -3322,76 +3343,89 @@
           </div>
 
           <!-- ══════════ BASICS ══════════ -->
+          <!-- Bento (Direction A): the pane is a size container; the four cards
+               flow 1 → 2 → tailored 12-col as the editor widens. Every field is
+               the SAME node/id as before — only grouping/wrappers changed, so
+               save/load wiring is untouched. -->
           <div class="pd-pane is-active" data-pane="basics" role="tabpanel">
-            <section class="pd-sec">
-              <div class="pd-sec-h">Availability · 是否上架</div>
-              <div class="pd-avail">
-              <label class="pd-card pd-pub">
-                <input type="checkbox" id="pd-published">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                <span>Show in shop · 在店面显示</span>
-              </label>
-                <div class="pd-card pd-avail-status">
-                  <div class="field"><label class="stacked">Status · 状态</label>
-                    <select id="pd-status">
-                      <option value="Active">Active · 在售</option>
-                      <option value="Inactive">Inactive · 停售</option>
-                      <option value="Seasonal">Seasonal · 季节性</option>
-                      <option value="Coming Soon">Coming Soon · 即将上架</option>
-                    </select></div>
+            <div class="pdb-grid">
+
+              <!-- Basics: name + price -->
+              <section class="pdb-card pdb-c7">
+                <div class="pd-sec-h">Basics · 基础</div>
+                <div class="pdb-fields">
+                  <div class="field"><label class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
+                  <div class="field"><label class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
+                  <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
+                  <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
                 </div>
-              </div>
-            </section>
-              <section class="pd-sec">
-                <div class="pd-sec-h" style="margin-bottom:8px;">Photos · 图片</div>
+              </section>
+
+              <!-- Availability: publish switch + status -->
+              <section class="pdb-card pdb-c5 pdb-avail">
+                <div class="pd-sec-h">Availability · 是否上架</div>
+                <label class="pd-pub">
+                  <input type="checkbox" id="pd-published">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                  <span>Show in shop · 在店面显示</span>
+                </label>
+                <div class="field"><label class="stacked">Status · 状态</label>
+                  <select id="pd-status">
+                    <option value="Active">Active · 在售</option>
+                    <option value="Inactive">Inactive · 停售</option>
+                    <option value="Seasonal">Seasonal · 季节性</option>
+                    <option value="Coming Soon">Coming Soon · 即将上架</option>
+                  </select></div>
+              </section>
+
+              <!-- Photos -->
+              <section class="pdb-card pdb-c5 pdb-photos">
+                <div class="pd-sec-h">Photos · 图片</div>
                 <div class="pe-photos-strip">
                   <div id="pd-gallery" class="pd-gallery"></div>
                   <label for="pd-img-file" class="pe-add-tile" title="Add photos · 添加图片"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add · 添加</label>
                 </div>
                 <input type="file" id="pd-img-file" accept="image/*" multiple onchange="pdAddPhotos(event)">
-                <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                <div class="pdb-photo-actions">
                   <button type="button" class="btn btn-sm" onclick="pdOpenLibraryPicker()"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-4-9 8"/></svg>From library · 从图库选择</button>
                   <span class="muted" style="font-size:11px;">Up to 8 · 最多 8 张</span>
                 </div>
               </section>
-              <div class="pd-row2">
-                <div class="field"><label class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
-                <div class="field"><label class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
-              </div>
-              <div class="pd-row2">
-                <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
-                <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
-              </div>
-            <section class="pd-sec">
-              <div class="pd-sec-h">Where it shows · 分类与陈列</div>
-              <div class="pd-fieldstack">
-                <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
-                  <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
-                <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
-                  <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
-                <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Auto picks the chip from live sales &amp; recency — top 15 sellers (30 days) → POP, added in the last 30 days → NEW, has a strike-through price → SALE. · 自动按销量与上架时间选择:30 天内最畅销前 15 名 → POP,30 天内新上架 → NEW,有划线价 → SALE。</span></span></label>
-                  <select id="pd-badge">
-                    <option value="">None · 无</option>
-                    <option value="auto">Auto · 自动 (by sales · 按销量)</option>
-                    <option value="new">NEW · 新品</option>
-                    <option value="pop">POP · 热门</option>
-                    <option value="sale">SALE · 特价</option>
-                    <option value="hot">HOT · 推荐</option>
-                  </select>
+
+              <!-- Where it shows -->
+              <section class="pdb-card pdb-c7">
+                <div class="pd-sec-h">Where it shows · 分类与陈列</div>
+                <div class="pdb-fields">
+                  <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
+                    <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
+                  <div class="field"><label class="stacked">Subcategory · 子分类 <span class="muted" style="font-weight:400;">(section heading)</span></label>
+                    <select id="pd-subcategory"><option value="">— none · 无 —</option></select></div>
+                  <div class="field"><label class="stacked">Badge · 标签 <span class="muted" style="font-weight:400;">(shop card chip)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Auto picks the chip from live sales &amp; recency — top 15 sellers (30 days) → POP, added in the last 30 days → NEW, has a strike-through price → SALE. · 自动按销量与上架时间选择:30 天内最畅销前 15 名 → POP,30 天内新上架 → NEW,有划线价 → SALE。</span></span></label>
+                    <select id="pd-badge">
+                      <option value="">None · 无</option>
+                      <option value="auto">Auto · 自动 (by sales · 按销量)</option>
+                      <option value="new">NEW · 新品</option>
+                      <option value="pop">POP · 热门</option>
+                      <option value="sale">SALE · 特价</option>
+                      <option value="hot">HOT · 推荐</option>
+                    </select>
+                  </div>
+                  <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
                 </div>
-                <div class="field"><label class="stacked">Size / weight · 规格</label><input type="text" id="pd-weight" placeholder="e.g. 200 g"></div>
-              </div>
-            </section>
+              </section>
+
+            </div>
           </div>
 
           <!-- ══════════ STOCK ══════════ -->
           <div class="pd-pane" data-pane="stock" role="tabpanel">
+            <div class="pdb-grid">
             <!-- Sourcing: who holds the stock. Drives which of pd-stock-fields /
                  pd-supplier-block shows below (pdSyncSupplierUi). The underlying
                  data is still the single pd-ship-from-supplier checkbox (kept
                  hidden) so save/load code is untouched — these two cards are
                  just a clearer face on the same value. -->
-            <section class="pd-sec">
+            <section class="pdb-card pdb-c5">
               <div class="pd-sec-h">Sourcing · 货源</div>
               <div class="pd-source-choice" id="pd-source-choice">
                 <button type="button" class="pd-radio-card is-on" data-src="own" onclick="pdSetSourceMode(false)">
@@ -3405,7 +3439,7 @@
                 <input type="checkbox" id="pd-ship-from-supplier" style="display:none;" onchange="pdSyncSupplierUi()">
               </div>
             </section>
-            <section class="pd-card">
+            <section class="pdb-card pdb-c7">
               <div class="pd-card-h">Stock &amp; status · 库存与状态</div>
               <div class="pd-fieldstack">
                   <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="required · 必填"></div>
@@ -3431,7 +3465,8 @@
                   <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-supplier-paused" style="width:15px;height:15px;"> Supplier out — pause selling · 供应商缺货,暂停销售</label>
                 </div>
             </section>
-            <div class="pe-rows">
+            </div>
+            <div class="pe-rows pdb-belowgrid">
             <div id="pd-variants" class="pd-variants"></div>
             <div id="pd-bundle-product" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
@@ -3440,8 +3475,12 @@
           </div>
 
           <!-- ══════════ PAGE ══════════ -->
+          <!-- Page uses an intrinsic auto-fit grid (NOT a size container): the
+               rich-text editor goes position:fixed for fullscreen, and a
+               container ancestor would trap that fixed element inside the card. -->
           <div class="pd-pane" data-pane="page" role="tabpanel">
-            <section class="pd-sec">
+            <div class="pdb-grid-auto">
+            <section class="pdb-card">
               <div class="pd-sec-h" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="display:inline-flex;align-items:center;gap:7px;">Product details · 产品详情</span>
                 <button type="button" id="pd-facts-autofill" class="btn btn-sm pd-facts-body" onclick="pdFactsAutofill()" style="margin-left:auto;text-transform:none;letter-spacing:0;font-weight:500;font-family:var(--f-sans);" title="Read your description (or pasted text) and fill these boxes automatically · 读取描述并自动填充"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:5px"><path d="M7 2.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z"/><path d="M12.5 10.5v3M11 12h3"/></svg>Auto-fill from text · 智能填充</button>
@@ -3457,7 +3496,7 @@
               <div class="field pd-facts-body"><label class="stacked">Serving suggestion · 食用建议</label>
                 <div class="pd-row2"><textarea id="pd-fact-serving-en" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="How to enjoy it"></textarea><textarea id="pd-fact-serving-cn" rows="2" style="width:100%;box-sizing:border-box;resize:vertical;font:inherit;padding:6px 8px;" placeholder="如何享用"></textarea></div></div>
             </section>
-            <section class="pd-sec">
+            <section class="pdb-card">
             <label class="stacked">Description · 描述
               <span class="pd-desc-modebar">
                 <button type="button" class="pd-mode-btn active" data-mode="classic" onclick="pdDescMode()" title="Edit the description here with the rich-text toolbar · 在此用富文本工具栏编辑描述">Classic · 经典</button>
@@ -3514,46 +3553,57 @@
               </div>
             </div>
             </section>
+            </div>
           </div>
 
           <!-- ══════════ DETAILS ══════════ -->
+          <!-- Bento: Shipping · Flags · Free-of sit side by side; notes span full.
+               Same checkbox nodes/ids/handlers — only the grouping wrappers changed. -->
           <div class="pd-pane" data-pane="details" role="tabpanel">
-            <section class="pd-sec">
-              <div class="pd-sec-h">Delivery, flags &amp; label facts · 配送、标记与标签</div>
-              <div class="pd-fieldstack">
-                <div class="field">
-                  <label class="stacked">Shipping · 配送方式</label>
-                  <div style="display:flex;gap:16px;align-items:center;padding-top:4px;flex-wrap:wrap;">
-                    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" onchange="pdShipModeChanged('air')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15.5 13 13V6a1 1 0 0 0-2 0v7l-8 2.5V17l8-1.5V20l-2.5 1.5V23L12 22l3.5 1.5V21.5L13 20v-4.5l8 1.5z"/></svg> Air · 空运</label>
-                    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" onchange="pdShipModeChanged('land')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M2.5 6.5h11v8h-11z"/><path d="M13.5 9h4l4 3.5v2h-8z"/><circle cx="6.5" cy="16.5" r="1.6"/><circle cx="17.5" cy="16.5" r="1.6"/></svg> Land · 陆运</label>
-                    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-local" onchange="pdShipModeChanged('local')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg> Local only · 仅广州</label>
-                  </div>
-                  <div id="pd-ship-local-hint" style="display:none;font-size:11px;color:var(--text-3);margin-top:5px;">Delivers within Guangzhou only — customers outside Guangzhou can't order it. · 仅限广州同城配送 — 广州以外的顾客无法下单。</div>
+            <div class="pdb-grid">
+
+              <!-- Shipping -->
+              <section class="pdb-card pdb-c4">
+                <div class="pd-sec-h">Shipping · 配送方式</div>
+                <div style="display:flex;gap:14px 16px;align-items:center;flex-wrap:wrap;">
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" onchange="pdShipModeChanged('air')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15.5 13 13V6a1 1 0 0 0-2 0v7l-8 2.5V17l8-1.5V20l-2.5 1.5V23L12 22l3.5 1.5V21.5L13 20v-4.5l8 1.5z"/></svg> Air · 空运</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" onchange="pdShipModeChanged('land')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M2.5 6.5h11v8h-11z"/><path d="M13.5 9h4l4 3.5v2h-8z"/><circle cx="6.5" cy="16.5" r="1.6"/><circle cx="17.5" cy="16.5" r="1.6"/></svg> Land · 陆运</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-local" onchange="pdShipModeChanged('local')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg> Local only · 仅广州</label>
                 </div>
-                <div class="field"><label class="stacked">Flags · 标记</label>
-                  <div style="display:flex;flex-direction:column;gap:7px;padding-top:4px;">
-                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-market" style="width:15px;height:15px;"> Sold at markets · 市集销售</label>
-                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-batch-made" style="width:15px;height:15px;"> Made fresh in batches · 分批现做</label>
-                    <!-- "Ships directly from supplier" moved to the Stock tab's
-                         Sourcing choice — same checkbox, clearer spot (cause and
-                         effect on the same screen). -->
-                    <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-restock-only" style="width:15px;height:15px;"> Restock-only, internal · 仅内部补货</label>
-                  </div>
+                <div id="pd-ship-local-hint" style="display:none;font-size:11px;color:var(--text-3);margin-top:-4px;">Delivers within Guangzhou only — customers outside Guangzhou can't order it. · 仅限广州同城配送 — 广州以外的顾客无法下单。</div>
+              </section>
+
+              <!-- Flags -->
+              <section class="pdb-card pdb-c4">
+                <div class="pd-sec-h">Flags · 标记</div>
+                <div style="display:flex;flex-direction:column;gap:9px;">
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-market" style="width:15px;height:15px;"> Sold at markets · 市集销售</label>
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-batch-made" style="width:15px;height:15px;"> Made fresh in batches · 分批现做</label>
+                  <!-- "Ships directly from supplier" moved to the Stock tab's
+                       Sourcing choice — same checkbox, clearer spot (cause and
+                       effect on the same screen). -->
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-restock-only" style="width:15px;height:15px;"> Restock-only, internal · 仅内部补货</label>
                 </div>
-                <div class="field"><label class="stacked">Free of (allergens) · 不含 <span class="muted" style="font-weight:400;">(tick what applies)</span></label>
-                  <div id="pd-free-of" data-freeof-group="1" style="display:flex;flex-wrap:wrap;gap:10px 16px;padding-top:4px;">
-                    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="nuts" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3a3.3 3.3 0 0 0-3 4.9c.3.5.5 1 .5 1.7s-.2 1.2-.5 1.8a3.3 3.3 0 1 0 6 0c-.3-.6-.5-1.1-.5-1.8s.2-1.2.5-1.7A3.3 3.3 0 0 0 12 3z"/><path d="M10 7.5h.01M14 7.5h.01M10.5 11h.01M13.5 11h.01"/></svg> Nuts · 无坚果</label>
-                    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="soy" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21v-8"/><path d="M12 13c0-3-2-5.5-5.5-5.5 0 3 2 5.5 5.5 5.5z"/><path d="M12 11.5c0-2.6 2-4.8 5.2-4.8 0 2.6-2 4.8-5.2 4.8z"/></svg> Soy · 无大豆</label>
-                    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="gluten" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21V8"/><path d="M12 8c-1.6 0-3-1.2-3-3.2 1.6 0 3 1.2 3 3.2zM12 8c1.6 0 3-1.2 3-3.2-1.6 0-3 1.2-3 3.2zM12 13c-1.6 0-3-1.2-3-3.2 1.6 0 3 1.2 3 3.2zM12 13c1.6 0 3-1.2 3-3.2-1.6 0-3 1.2-3 3.2z"/></svg> Gluten · 无麸质</label>
-                    <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="5 spice" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M8 10h8v9a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z"/><path d="M9 10V7.5a3 3 0 0 1 6 0V10"/><path d="M11 14h.01M13 14h.01M12 16.5h.01"/></svg> 5 Spice · 无五香</label>
-                  </div>
+              </section>
+
+              <!-- Free of -->
+              <section class="pdb-card pdb-c4">
+                <div class="pd-sec-h">Free of · 不含 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;">(tick what applies)</span></div>
+                <div id="pd-free-of" data-freeof-group="1" style="display:flex;flex-wrap:wrap;gap:10px 16px;">
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="nuts" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3a3.3 3.3 0 0 0-3 4.9c.3.5.5 1 .5 1.7s-.2 1.2-.5 1.8a3.3 3.3 0 1 0 6 0c-.3-.6-.5-1.1-.5-1.8s.2-1.2.5-1.7A3.3 3.3 0 0 0 12 3z"/><path d="M10 7.5h.01M14 7.5h.01M10.5 11h.01M13.5 11h.01"/></svg> Nuts · 无坚果</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="soy" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21v-8"/><path d="M12 13c0-3-2-5.5-5.5-5.5 0 3 2 5.5 5.5 5.5z"/><path d="M12 11.5c0-2.6 2-4.8 5.2-4.8 0 2.6-2 4.8-5.2 4.8z"/></svg> Soy · 无大豆</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="gluten" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21V8"/><path d="M12 8c-1.6 0-3-1.2-3-3.2 1.6 0 3 1.2 3 3.2zM12 8c1.6 0 3-1.2 3-3.2-1.6 0-3 1.2-3 3.2zM12 13c-1.6 0-3-1.2-3-3.2 1.6 0 3 1.2 3 3.2zM12 13c1.6 0 3-1.2 3-3.2-1.6 0-3 1.2-3 3.2z"/></svg> Gluten · 无麸质</label>
+                  <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="5 spice" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M8 10h8v9a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z"/><path d="M9 10V7.5a3 3 0 0 1 6 0V10"/><path d="M11 14h.01M13 14h.01M12 16.5h.01"/></svg> 5 Spice · 无五香</label>
                 </div>
-              </div>
-            </section>
-            <section class="pd-sec">
-              <div class="pd-sec-h">Internal notes · 内部备注</div>
+              </section>
+
+              <!-- Internal notes -->
+              <section class="pdb-card pdb-c12">
+                <div class="pd-sec-h">Internal notes · 内部备注 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;">(staff only — never shown to shoppers)</span></div>
                 <textarea id="pd-notes" rows="2" style="width:100%;resize:vertical;font:inherit;padding:6px 8px;box-sizing:border-box;"></textarea>
-            </section>
+              </section>
+
+            </div>
           </div>
         </div>
         <div class="pu-editor-foot" style="justify-content:space-between;">

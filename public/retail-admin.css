@@ -11073,3 +11073,58 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     color: #4C468A; background: #EEEDF6; border-radius: 999px; padding: 2px 7px; margin-left: 6px;
     vertical-align: 1px;
   }
+
+  /* ── Editor bento: every tab's cards reflow with the editor's width ─────────
+     Direction A (reference/product-editor-all-tabs-bento-mockup.html). A pane is
+     a size container, so its cards react to their OWN rendered width — which
+     changes with Expand and with the app sidebar folding — no JS. Cards flow
+     1 col → 2 cols → a tailored 12-col grid; fields inside subdivide via auto-fit
+     so nothing stretches into a long line. All classes are pdb-* to dodge the
+     base retail-admin class collisions.
+
+     PAGE is the exception: its rich-text editor goes position:fixed for
+     fullscreen, and container-type would make the pane the containing block for
+     that fixed element (trapping fullscreen inside the card). So Page skips the
+     container and uses an intrinsic auto-fit grid instead. */
+  #pd-editor .pd-pane[data-pane="basics"],
+  #pd-editor .pd-pane[data-pane="stock"],
+  #pd-editor .pd-pane[data-pane="details"] { container-type: inline-size; }
+
+  #pd-editor .pdb-grid { display: grid; gap: 14px; align-items: start; grid-template-columns: 1fr; }
+  @container (min-width: 600px) {
+    #pd-editor .pdb-grid { grid-template-columns: 1fr 1fr; }
+    #pd-editor .pdb-c12 { grid-column: 1 / -1; }
+  }
+  @container (min-width: 980px) {
+    #pd-editor .pdb-grid { grid-template-columns: repeat(12, 1fr); }
+    #pd-editor .pdb-c4 { grid-column: span 4; }
+    #pd-editor .pdb-c5 { grid-column: span 5; }
+    #pd-editor .pdb-c6 { grid-column: span 6; }
+    #pd-editor .pdb-c7 { grid-column: span 7; }
+    #pd-editor .pdb-c8 { grid-column: span 8; }
+    #pd-editor .pdb-c12 { grid-column: 1 / -1; }
+  }
+  /* Page — intrinsic reflow, no container (keeps RTE fullscreen viewport-fixed). */
+  #pd-editor .pdb-grid-auto {
+    display: grid; gap: 14px; align-items: start;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+
+  #pd-editor .pdb-card {
+    background: #FFFFFF; border: 1px solid #E4E0D5; border-radius: 14px;
+    padding: 16px 17px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
+  }
+  #pd-editor .pdb-card > .pd-sec-h, #pd-editor .pdb-card > .pd-card-h { margin: 0; }
+  /* Fields subdivide with the card via auto-fit (intrinsic — no container needed).
+     min 250px keeps the semantic pairs (Name ↔ translation, Price ↔ Was) two-up
+     across the common width range and collapses to one column when narrow. */
+  #pd-editor .pdb-fields {
+    display: grid; gap: 13px; align-items: start;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  }
+  #pd-editor .pdb-fields .field { margin: 0; min-width: 0; }
+  /* Publish switch sits as a plain row inside the card, not a nested white tile. */
+  #pd-editor .pdb-avail .pd-pub { background: transparent; border-radius: 0; padding: 0; font-weight: 500; }
+  #pd-editor .pdb-photos .pdb-photo-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  /* Variant / bundle / option rows sit below the Stock grid, full width. */
+  #pd-editor .pdb-belowgrid { margin-top: 14px; }
