@@ -143,6 +143,19 @@
   .reset-back:hover{color:var(--text);} .reset-back svg{stroke:currentColor; fill:none;}
   #resetPanel h1{margin-bottom:8px;}
 
+  /* two-step channel picker — only shown when BOTH email and SMS are on */
+  .chan-opts{display:flex; flex-direction:column; gap:10px; margin:4px 0 6px;}
+  .chan-opt{display:flex; align-items:center; gap:12px; width:100%; text-align:left; border:1px solid var(--line);
+    border-radius:10px; background:var(--surface); padding:13px 14px; cursor:pointer; font:inherit; color:var(--text);
+    transition:border-color .15s var(--ease);}
+  .chan-opt:hover{border-color:var(--dusk);}
+  .chan-opt:focus-visible{outline:2px solid var(--dusk); outline-offset:2px;}
+  .chan-opt:disabled{opacity:.6; cursor:default;}
+  .chan-opt svg{width:17px; height:17px; stroke:var(--text-2); fill:none; flex:none;}
+  .chan-meta{display:flex; flex-direction:column; gap:2px;}
+  .chan-t{font-size:14px; font-weight:500;}
+  .chan-s{font-size:12px; color:var(--text-2);}
+
   @media (max-width:420px){ .card{padding:34px 24px 28px;} }
 </style>
 </head>
@@ -251,6 +264,28 @@
       </div>
     </div>
 
+    <!-- Two-step channel picker — only reached when the operator has BOTH
+         email and SMS on; no code is sent until they pick one here. -->
+    <div id="twofaChoosePanel" hidden>
+      <button type="button" class="reset-back" id="chooseBack">
+        <svg width="13" height="13" viewBox="0 0 14 14"><path d="M8.5 3 4.5 7l4 4" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none" stroke="currentColor"/></svg>
+        <span class="en">Back to sign in</span><span class="cn">返回登录</span>
+      </button>
+      <h1><span class="en">Verify it’s you</span><span class="cn">验证身份</span></h1>
+      <p class="greet"><span class="en">Both channels are on for this account — choose where to send your code.</span><span class="cn">此账户已开启邮箱和短信验证，请选择接收验证码的方式。</span></p>
+      <div class="err" id="chooseErr" role="alert"><span></span></div>
+      <div class="chan-opts">
+        <button type="button" class="chan-opt" id="chanEmail" data-ch="email">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>
+          <span class="chan-meta"><span class="chan-t"><span class="en">Email</span><span class="cn">邮箱</span></span><span class="chan-s" id="chooseEmailHint"></span></span>
+        </button>
+        <button type="button" class="chan-opt" id="chanSms" data-ch="sms">
+          <svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>
+          <span class="chan-meta"><span class="chan-t"><span class="en">SMS</span><span class="cn">短信</span></span><span class="chan-s" id="chooseSmsHint"></span></span>
+        </button>
+      </div>
+    </div>
+
     <!-- Two-step verification — shown after a correct password when the
          operator has 2FA on. Code is sent to their recovery email or verified
          phone (SMS), depending on their chosen channel. -->
@@ -350,6 +385,7 @@
         .then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (j) {
           if (j && j.success) { window.location.href = '/retail-admin'; return; }
+          if (j && j.twofa && j.choose) { showChoose(j.hints); reset(); return; }
           if (j && j.twofa) { showTwofa(j.hint); reset(); return; }
           showErr(pickErr(j && j.error) || L('That username and password don’t match. Check them and try again.', '用户名与密码不匹配,请检查后重试。'));
           reset();
@@ -379,15 +415,47 @@
 
     // Two-step verification step — shown after a correct password.
     var loginPanel = document.getElementById('loginPanel');
+    var twofaChoosePanel = document.getElementById('twofaChoosePanel');
     var twofaPanel = document.getElementById('twofaPanel');
     var twofaBtn = document.getElementById('twofaBtn');
     var twofaErr = document.getElementById('twofaErr');
     function showTwofa(hint) {
       document.getElementById('twofaHint').textContent = hint || '';
-      loginPanel.hidden = true; twofaPanel.hidden = false;
+      loginPanel.hidden = true; twofaChoosePanel.hidden = true; twofaPanel.hidden = false;
       var c = document.getElementById('twofaCode'); if (c) c.focus();
     }
     document.getElementById('twofaBack').addEventListener('click', function () { window.location.reload(); });
+
+    // Channel picker — only reached when both email and SMS are on. No code is
+    // sent until the operator picks one; that pick triggers the actual send.
+    var chooseErr = document.getElementById('chooseErr');
+    document.getElementById('chooseBack').addEventListener('click', function () { window.location.reload(); });
+    function showChoose(hints) {
+      hints = hints || {};
+      document.getElementById('chooseEmailHint').textContent = hints.email || '';
+      document.getElementById('chooseSmsHint').textContent = hints.sms || '';
+      loginPanel.hidden = true; twofaChoosePanel.hidden = false;
+    }
+    Array.prototype.forEach.call(twofaChoosePanel.querySelectorAll('.chan-opt'), function (opt) {
+      opt.addEventListener('click', function () {
+        chooseErr.classList.remove('show'); chooseErr.querySelector('span').textContent = '';
+        Array.prototype.forEach.call(twofaChoosePanel.querySelectorAll('.chan-opt'), function (o) { o.disabled = true; });
+        fetch('/api/backend/login/2fa/channel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ channel: opt.dataset.ch }) })
+          .then(function (r) { return r.json().catch(function () { return {}; }); })
+          .then(function (j) {
+            if (j && j.success) { showTwofa(j.hint); return; }
+            Array.prototype.forEach.call(twofaChoosePanel.querySelectorAll('.chan-opt'), function (o) { o.disabled = false; });
+            chooseErr.querySelector('span').textContent = pickErr(j && j.error) || L('Couldn’t send — please try again.', '发送失败，请重试。');
+            chooseErr.classList.add('show');
+            if (j && j.restart) { setTimeout(function () { window.location.reload(); }, 1800); }
+          })
+          .catch(function () {
+            Array.prototype.forEach.call(twofaChoosePanel.querySelectorAll('.chan-opt'), function (o) { o.disabled = false; });
+            chooseErr.querySelector('span').textContent = L('Network error — please try again.', '网络错误，请重试。');
+            chooseErr.classList.add('show');
+          });
+      });
+    });
     function submit2fa() {
       twofaErr.classList.remove('show'); twofaErr.querySelector('span').textContent = '';
       var code = (document.getElementById('twofaCode').value || '').trim();

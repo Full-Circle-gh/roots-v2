@@ -175,7 +175,25 @@ try { db.exec('ALTER TABLE tenant_users ADD COLUMN phone_verified INTEGER NOT NU
 // Two-step delivery channel — where the one-time sign-in code is sent when
 // twofa_enabled is on: 'email' (to the recovery email, the default) or 'sms'
 // (to the verified phone). Ignored when 2FA is off.
+// SUPERSEDED by twofa_email_enabled / twofa_sms_enabled below (kept only so the
+// one-time backfill has a source; new code should not read these two columns).
 try { db.exec("ALTER TABLE tenant_users ADD COLUMN twofa_method TEXT NOT NULL DEFAULT 'email'"); } catch (e) { /* already added */ }
+
+// Two-step verification, per channel — email and SMS are independent switches
+// (both can be on at once), not a single preferred method. Turning one on takes
+// effect immediately: the channel's own address was already verified when it
+// was added under My Info, so there's nothing left to re-confirm here. At
+// sign-in, if only one channel is on it's used automatically; if both are on
+// the operator is asked which to use for that sign-in (see /api/backend/login).
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN twofa_email_enabled INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already added */ }
+try { db.exec('ALTER TABLE tenant_users ADD COLUMN twofa_sms_enabled INTEGER NOT NULL DEFAULT 0'); } catch (e) { /* already added */ }
+// One-time backfill from the old single-channel fields, for rows that predate
+// the split and haven't been touched by the new toggles yet (guarded by the
+// email/sms columns still being at their 0 default).
+try {
+  db.exec("UPDATE tenant_users SET twofa_email_enabled = 1 WHERE twofa_enabled = 1 AND twofa_method = 'email' AND twofa_email_enabled = 0 AND twofa_sms_enabled = 0");
+  db.exec("UPDATE tenant_users SET twofa_sms_enabled = 1 WHERE twofa_enabled = 1 AND twofa_method = 'sms' AND twofa_email_enabled = 0 AND twofa_sms_enabled = 0");
+} catch (e) { /* best-effort backfill */ }
 
 // One-time codes — emailed 6-digit codes for verifying a recovery address,
 // resetting a forgotten password, enabling 2FA, and the login second step.
@@ -378,24 +396,25 @@ router.post('/api/backend/login', loginLimiter, express.json(), async (req, res)
   }
 
   // Two-step verification — password checked out, but a code is required before
-  // the session is granted. Send it over the operator's chosen channel (email
-  // to the recovery address, or SMS to the verified phone) and hold the pending
-  // login on THIS browser session (bound by cookie). The full session
-  // (backendUserId) is deliberately NOT set yet. If the preferred channel isn't
-  // deliverable we fall back to the other verified one; if NEITHER can deliver,
-  // we sign in password-only rather than lock the operator out (fail-open).
-  if (u.twofa_enabled) {
-    const emailOk = !!(u.recovery_email && u.recovery_email_verified && emailSender.isConfigured());
+  // the session is granted. Email and SMS are independent switches (see the
+  // Security tab): if only one is on it's used automatically; if BOTH are on
+  // we hold the pending login and ask which channel to use for this sign-in
+  // (see /api/backend/login/2fa/channel) rather than picking one silently. The
+  // full session (backendUserId) is deliberately NOT set yet. If neither
+  // channel can currently deliver, we sign in password-only rather than lock
+  // the operator out (fail-open).
+  {
+    const emailOk = !!(u.twofa_email_enabled && u.recovery_email && u.recovery_email_verified && emailSender.isConfigured());
     const smsCreds = smsOtpCreds(u.tenant_id);
-    const smsOk = !!(u.phone && u.phone_verified && aliyunSms.aliyunOtpEnabled(smsCreds));
-    let channel = null;
-    if (u.twofa_method === 'sms' && smsOk) channel = 'sms';
-    else if (u.twofa_method === 'email' && emailOk) channel = 'email';
-    else if (smsOk) channel = 'sms';
-    else if (emailOk) channel = 'email';
-    if (channel) {
+    const smsOk = !!(u.twofa_sms_enabled && u.phone && u.phone_verified && aliyunSms.aliyunOtpEnabled(smsCreds));
+    if (emailOk && smsOk) {
+      req.session.pending2fa = { userId: u.id, remember: !!remember, at: Date.now(), channel: null };
+      return res.json({ success: false, twofa: true, choose: true, hints: { email: maskEmail(u.recovery_email), sms: maskPhone(u.phone) } });
+    }
+    if (emailOk || smsOk) {
+      const channel = smsOk ? 'sms' : 'email';
       const code = genCode();
-      req.session.pending2fa = { userId: u.id, remember: !!remember, at: Date.now() };
+      req.session.pending2fa = { userId: u.id, remember: !!remember, at: Date.now(), channel };
       if (channel === 'sms') {
         insertCode(u.id, 'login_2fa', u.phone, code, 10);
         try { await aliyunSms.sendOtpSms(u.phone, code, smsCreds); } catch (e) {}
@@ -424,11 +443,44 @@ router.post('/api/backend/login', loginLimiter, express.json(), async (req, res)
   });
 });
 
+// Two-step verification — channel choice. Only reached when BOTH email and SMS
+// are on (the /login response came back with choose:true and no code was sent
+// yet); the operator picks one here and the code goes out on that channel.
+router.post('/api/backend/login/2fa/channel', loginLimiter, express.json(), async (req, res) => {
+  const pending = req.session && req.session.pending2fa;
+  if (!pending || !pending.userId || pending.channel || (Date.now() - (pending.at || 0)) > 10 * 60 * 1000) {
+    if (req.session) delete req.session.pending2fa;
+    return res.json({ success: false, error: 'Your sign-in expired — please start again · 登录已过期,请重新开始', restart: true });
+  }
+  const channel = (req.body && req.body.channel) === 'sms' ? 'sms' : 'email';
+  const u = db.prepare('SELECT * FROM tenant_users WHERE id = ? AND is_active = 1').get(pending.userId);
+  if (!u) { delete req.session.pending2fa; return res.json({ success: false, error: 'Your sign-in expired — please start again · 登录已过期,请重新开始', restart: true }); }
+  const smsCreds = smsOtpCreds(u.tenant_id);
+  const emailOk = !!(u.twofa_email_enabled && u.recovery_email_verified && emailSender.isConfigured());
+  const smsOk = !!(u.twofa_sms_enabled && u.phone_verified && aliyunSms.aliyunOtpEnabled(smsCreds));
+  if ((channel === 'sms' && !smsOk) || (channel === 'email' && !emailOk)) {
+    return res.json({ success: false, error: 'That channel isn’t available · 该渠道不可用' });
+  }
+  const code = genCode();
+  pending.channel = channel;
+  pending.at = Date.now();
+  req.session.pending2fa = pending;
+  if (channel === 'sms') {
+    insertCode(u.id, 'login_2fa', u.phone, code, 10);
+    try { await aliyunSms.sendOtpSms(u.phone, code, smsCreds); } catch (e) {}
+    return res.json({ success: true, channel: 'sms', hint: maskPhone(u.phone) });
+  }
+  insertCode(u.id, 'login_2fa', u.recovery_email, code, 10);
+  try { await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id)); } catch (e) {}
+  res.json({ success: true, channel: 'email', hint: maskEmail(u.recovery_email) });
+});
+
 // Two-step verification — second step. Consumes the pending login held on this
-// browser session (set by /login after a correct password) + the emailed code.
+// browser session (set by /login, or /login/2fa/channel, after a correct
+// password) + the emailed/texted code.
 router.post('/api/backend/login/2fa', loginLimiter, express.json(), (req, res) => {
   const pending = req.session && req.session.pending2fa;
-  if (!pending || !pending.userId || (Date.now() - (pending.at || 0)) > 10 * 60 * 1000) {
+  if (!pending || !pending.userId || !pending.channel || (Date.now() - (pending.at || 0)) > 10 * 60 * 1000) {
     if (req.session) delete req.session.pending2fa;
     return res.json({ success: false, error: 'Your sign-in expired — please start again · 登录已过期,请重新开始', restart: true });
   }
@@ -887,69 +939,42 @@ const codeLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8, standardHeader
 // Backs both My Info (email/phone) and Security (two-step) in the account pop-up.
 router.get('/api/backend/recovery', (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  const u = db.prepare('SELECT tenant_id, recovery_email, recovery_email_verified, phone, phone_verified, twofa_enabled, twofa_method FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
+  const u = db.prepare('SELECT tenant_id, recovery_email, recovery_email_verified, phone, phone_verified, twofa_email_enabled, twofa_sms_enabled FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
   res.json({
     email: u && u.recovery_email ? maskEmail(u.recovery_email) : null,
     verified: !!(u && u.recovery_email_verified),
     phone: u && u.phone ? maskPhone(u.phone) : null,
     phoneVerified: !!(u && u.phone_verified),
-    twofaEnabled: !!(u && u.twofa_enabled),
-    twofaMethod: (u && u.twofa_method) || 'email',
+    twofaEmail: !!(u && u.twofa_email_enabled),
+    twofaSms: !!(u && u.twofa_sms_enabled),
     emailConfigured: emailSender.isConfigured(),
     smsConfigured: smsOtpConfigured(u && u.tenant_id),
   });
 });
 
 // ── Two-step verification management ──────────────────────────────────────
-// Enabling requires a VERIFIED channel — the recovery email (default) or the
-// verified phone (method:'sms'). We send a code over that channel and confirm
-// it so we know delivery works before turning 2FA on.
-router.post('/api/backend/twofa/enable/start', codeLimiter, express.json(), async (req, res) => {
+// Email and SMS are independent switches. Turning a channel ON requires that
+// channel to already be a VERIFIED contact (the recovery email or the phone,
+// both set under My Info) — since that verification already happened once,
+// flipping the switch takes effect immediately with no extra code step here.
+router.post('/api/backend/twofa/toggle', express.json(), async (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  const method = (req.body && req.body.method) === 'sms' ? 'sms' : 'email';
-  const u = db.prepare('SELECT tenant_id, recovery_email, recovery_email_verified, phone, phone_verified FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
+  const channel = (req.body && req.body.channel) === 'sms' ? 'sms' : 'email';
+  const enabled = !!(req.body && req.body.enabled);
+  const u = db.prepare('SELECT tenant_id, recovery_email_verified, phone, phone_verified FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
   if (!u) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  const code = genCode();
-  if (method === 'sms') {
-    if (!u.phone || !u.phone_verified) return res.status(400).json({ error: 'Add a verified phone first · 请先设置并验证手机号' });
-    const creds = smsOtpCreds(u.tenant_id);
-    if (!aliyunSms.aliyunOtpEnabled(creds)) return res.status(503).json({ error: 'SMS isn’t set up on this workspace · 此工作区未启用短信' });
-    insertCode(req.session.backendUserId, 'twofa_enable', u.phone, code, 15);
-    const r = await aliyunSms.sendOtpSms(u.phone, code, creds);
-    if (!r.ok) return res.status(502).json({ error: 'Couldn’t send the code — please try again · 验证码发送失败,请重试' });
-    return res.json({ success: true, method: 'sms', hint: maskPhone(u.phone) });
+  if (enabled) {
+    if (channel === 'sms') {
+      if (!u.phone || !u.phone_verified) return res.status(400).json({ error: 'Verify a phone under My Info first · 请先在“我的信息”中验证手机号' });
+      if (!aliyunSms.aliyunOtpEnabled(smsOtpCreds(u.tenant_id))) return res.status(503).json({ error: 'SMS isn’t set up on this workspace · 此工作区未启用短信' });
+    } else {
+      if (!u.recovery_email_verified) return res.status(400).json({ error: 'Verify a recovery email under My Info first · 请先在“我的信息”中验证恢复邮箱' });
+      if (!emailSender.isConfigured()) return res.status(503).json({ error: 'Email isn’t set up yet · 邮件功能尚未配置' });
+    }
   }
-  if (!u.recovery_email || !u.recovery_email_verified) return res.status(400).json({ error: 'Add a verified recovery email first · 请先设置并验证恢复邮箱' });
-  if (!emailSender.isConfigured()) return res.status(503).json({ error: 'Email isn’t set up yet · 邮件功能尚未配置' });
-  insertCode(req.session.backendUserId, 'twofa_enable', u.recovery_email, code, 15);
-  const r = await emailSender.sendOtpEmail(u.recovery_email, code, null, emailBrandOpts(req, u.tenant_id));
-  if (!r.ok) return res.status(502).json({ error: 'Couldn’t send the email — please try again · 邮件发送失败,请重试' });
-  res.json({ success: true, method: 'email', hint: maskEmail(u.recovery_email) });
-});
-router.post('/api/backend/twofa/enable/confirm', codeLimiter, express.json(), (req, res) => {
-  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  const method = (req.body && req.body.method) === 'sms' ? 'sms' : 'email';
-  const code = String((req.body && req.body.code) || '').trim();
-  if (!/^\d{6}$/.test(code)) return res.status(400).json({ error: 'Enter the 6-digit code · 请输入 6 位验证码' });
-  const row = liveCode(req.session.backendUserId, 'twofa_enable');
-  if (!row) return res.status(400).json({ error: 'Code expired — request a new one · 验证码已过期,请重新获取' });
-  if (row.attempts >= 5) return res.status(429).json({ error: 'Too many tries — request a new code · 尝试次数过多,请重新获取' });
-  if (hashCode(code) !== row.code_hash) {
-    db.prepare('UPDATE tenant_user_codes SET attempts = attempts + 1 WHERE id = ?').run(row.id);
-    return res.status(400).json({ error: 'Incorrect code · 验证码不正确' });
-  }
-  // Re-check the channel is still verified before trusting it as the 2FA route.
-  const u = db.prepare('SELECT recovery_email_verified, phone_verified FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
-  if (method === 'sms' && !(u && u.phone_verified)) return res.status(400).json({ error: 'Verify a phone first · 请先验证手机号' });
-  if (method === 'email' && !(u && u.recovery_email_verified)) return res.status(400).json({ error: 'Verify a recovery email first · 请先验证恢复邮箱' });
-  db.prepare('UPDATE tenant_user_codes SET used = 1 WHERE id = ?').run(row.id);
-  db.prepare('UPDATE tenant_users SET twofa_enabled = 1, twofa_method = ? WHERE id = ?').run(method, req.session.backendUserId);
-  res.json({ success: true, method });
-});
-router.post('/api/backend/twofa/disable', (req, res) => {
-  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  db.prepare('UPDATE tenant_users SET twofa_enabled = 0 WHERE id = ?').run(req.session.backendUserId);
-  res.json({ success: true });
+  const col = channel === 'sms' ? 'twofa_sms_enabled' : 'twofa_email_enabled';
+  db.prepare(`UPDATE tenant_users SET ${col} = ? WHERE id = ?`).run(enabled ? 1 : 0, req.session.backendUserId);
+  res.json({ success: true, channel, enabled });
 });
 
 // ── Operator Web Push (Profile → Notifications) ───────────────────────────
@@ -1011,13 +1036,13 @@ router.post('/api/backend/recovery/confirm', codeLimiter, express.json(), (req, 
   res.json({ success: true, email: maskEmail(row.email) });
 });
 
-// Remove the recovery email. If email is the channel 2FA relies on, turn 2FA
-// off too — otherwise the operator would have no way to receive a sign-in code.
+// Remove the recovery email. If email two-step is on, turn that switch off too
+// — otherwise the operator would keep an "on" toggle pointed at a dead address.
 router.delete('/api/backend/recovery', (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  const u = db.prepare('SELECT twofa_enabled, twofa_method FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
-  const killTwofa = !!(u && u.twofa_enabled && u.twofa_method === 'email');
-  db.prepare('UPDATE tenant_users SET recovery_email = NULL, recovery_email_verified = 0' + (killTwofa ? ', twofa_enabled = 0' : '') + ' WHERE id = ?').run(req.session.backendUserId);
+  const u = db.prepare('SELECT twofa_email_enabled FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
+  const killTwofa = !!(u && u.twofa_email_enabled);
+  db.prepare('UPDATE tenant_users SET recovery_email = NULL, recovery_email_verified = 0' + (killTwofa ? ', twofa_email_enabled = 0' : '') + ' WHERE id = ?').run(req.session.backendUserId);
   db.prepare("DELETE FROM tenant_user_codes WHERE tenant_user_id = ? AND purpose = 'recovery_verify'").run(req.session.backendUserId);
   res.json({ success: true, twofaDisabled: killTwofa });
 });
@@ -1052,12 +1077,13 @@ router.post('/api/backend/phone/confirm', codeLimiter, express.json(), (req, res
   db.prepare('UPDATE tenant_users SET phone = ?, phone_verified = 1 WHERE id = ?').run(row.email, req.session.backendUserId);
   res.json({ success: true, phone: maskPhone(row.email) });
 });
-// Remove the phone. If SMS is the channel 2FA relies on, turn 2FA off too.
+// Remove the phone. If SMS two-step is on, turn that switch off too — otherwise
+// the operator would keep an "on" toggle pointed at a number that's gone.
 router.delete('/api/backend/phone', (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  const u = db.prepare('SELECT twofa_enabled, twofa_method FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
-  const killTwofa = !!(u && u.twofa_enabled && u.twofa_method === 'sms');
-  db.prepare('UPDATE tenant_users SET phone = NULL, phone_verified = 0' + (killTwofa ? ', twofa_enabled = 0' : '') + ' WHERE id = ?').run(req.session.backendUserId);
+  const u = db.prepare('SELECT twofa_sms_enabled FROM tenant_users WHERE id = ?').get(req.session.backendUserId);
+  const killTwofa = !!(u && u.twofa_sms_enabled);
+  db.prepare('UPDATE tenant_users SET phone = NULL, phone_verified = 0' + (killTwofa ? ', twofa_sms_enabled = 0' : '') + ' WHERE id = ?').run(req.session.backendUserId);
   db.prepare("DELETE FROM tenant_user_codes WHERE tenant_user_id = ? AND purpose = 'phone_verify'").run(req.session.backendUserId);
   res.json({ success: true, twofaDisabled: killTwofa });
 });

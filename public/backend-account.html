@@ -249,24 +249,12 @@
   .ph-cc-wrap input[type=tel]{ border:none; border-radius:0 8px 8px 0; flex:1; min-width:0; }
   .ph-cc-wrap input[type=tel]:hover, .ph-cc-wrap input[type=tel]:focus{ border:none; }
 
-  /* two-step verification status row */
-  .twofa-state{ display:flex; align-items:center; gap:12px; }
+  /* two-step verification status pill */
   .twofa-pill{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; border-radius:999px; padding:4px 11px; }
   .twofa-pill.on{ color:var(--sage-ink); background:var(--sage-tint); }
   .twofa-pill.off{ color:var(--text-2); background:var(--raised); }
   .twofa-pill .d{ width:6px; height:6px; border-radius:50%; background:currentColor; }
-  .twofa-state .btn-sec{ margin-left:auto; }
-
-  /* two-step channel chooser (Email / SMS segmented control) */
-  .tfa-seg{ display:flex; gap:8px; margin-bottom:10px; max-width:320px; }
-  .tfa-segbtn{ flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px; font:500 13px var(--font);
-    color:var(--text-2); background:var(--surface); border:1px solid var(--line); border-radius:9px; padding:9px 10px; cursor:pointer;
-    transition:border-color .15s, color .15s, background .15s; }
-  .tfa-segbtn svg{ width:15px; height:15px; stroke:currentColor; fill:none; }
-  .tfa-segbtn:hover{ border-color:var(--text-2); color:var(--text); }
-  .tfa-segbtn.on{ border-color:var(--text); color:var(--text); background:var(--raised); }
-  .tfa-segbtn.off{ opacity:.5; cursor:not-allowed; }
-  .tfa-segbtn.off:hover{ border-color:var(--line); color:var(--text-2); background:var(--surface); }
+  .tfa-status{ margin-top:4px; }
 
   /* notifications */
   .ntf-row{ display:flex; align-items:flex-start; gap:14px; padding:16px 2px; border-bottom:1px solid var(--line); max-width:440px; }
@@ -281,6 +269,7 @@
   .sw.on::after{ left:19px; }
   [data-theme="dark"] .sw.on::after{ background:var(--ink); }
   .sw.busy{ opacity:.6; pointer-events:none; }
+  .sw:disabled{ opacity:.4; cursor:not-allowed; }
   .ntf-test{ display:flex; align-items:center; gap:8px; margin-top:10px; }
   .play-btn{ width:28px; height:28px; border-radius:50%; flex:none; border:1px solid var(--line); background:var(--raised); color:var(--text); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .15s var(--ease), transform .15s var(--ease), border-color .15s var(--ease); }
   .play-btn:hover{ border-color:var(--text-4); }
@@ -421,12 +410,14 @@
           <button type="submit" id="pwBtn" class="btn-ink"><span class="en">Update password</span><span class="cn">更新密码</span></button>
         </form>
 
-        <!-- Two-step verification — a one-time code at sign-in, on top of the
-             password. Sent by email (recovery address) or SMS (verified phone),
-             both set under My Info. -->
+        <!-- Two-step verification — email and SMS are independent switches
+             (both can be on at once), not a single preferred method. Turning
+             one on takes effect immediately: the address was already verified
+             under My Info, so there's no extra code step here. If both are on,
+             sign-in adds a "which channel?" step (see backend-login.html). -->
         <div class="rec-sect">
           <h2 class="sect-h"><span class="en">Two-step verification</span><span class="cn">两步验证</span></h2>
-          <p class="lead" style="margin-bottom:14px;"><span class="en">Ask for a one-time code at sign-in — sent by email or text message.</span><span class="cn">登录时额外要求一次性验证码，可通过邮箱或短信发送。</span></p>
+          <p class="lead" style="margin-bottom:14px;"><span class="en">Ask for a one-time code at sign-in. Turn on either channel below — since email and phone are already verified under My Info, there's nothing more to confirm here.</span><span class="cn">登录时额外要求一次性验证码。开启下方任一渠道即可——邮箱和手机号已在“我的信息”中验证过，此处无需再次确认。</span></p>
           <div id="twofaBody"><div class="skel"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
         </div>
       </div>
@@ -491,12 +482,11 @@
     var lastUser = null;
     var loaded = { devices:false, recovery:false, notifications:false };
     var recCurrent = { email:null, verified:false, phone:null, phoneVerified:false,
-                       twofaEnabled:false, twofaMethod:'email', emailConfigured:true, smsConfigured:false };
+                       twofaEmail:false, twofaSms:false, emailConfigured:true, smsConfigured:false };
     var recPending = null;      // masked address, for display in the code step
     var recPendingRaw = null;   // the real address typed, so "Resend" re-sends it
     var phPending = null;       // masked phone, for the code step
     var phPendingRaw = null;    // the real number typed, so "Resend" re-sends it
-    var twofaMethodSel = 'email'; // channel chosen while enabling two-step (email | sms)
     var contactReady = false;     // set once /recovery has resolved (email/phone/2fa state known)
 
     var $ = function(id){ return document.getElementById(id); };
@@ -781,13 +771,13 @@
           recCurrent = {
             email:(j&&j.email)||null, verified:!!(j&&j.verified),
             phone:(j&&j.phone)||null, phoneVerified:!!(j&&j.phoneVerified),
-            twofaEnabled:!!(j&&j.twofaEnabled), twofaMethod:(j&&j.twofaMethod)||'email',
+            twofaEmail:!!(j&&j.twofaEmail), twofaSms:!!(j&&j.twofaSms),
             emailConfigured:!(j&&j.emailConfigured===false), smsConfigured:!!(j&&j.smsConfigured),
           };
           contactReady = true;
           renderRecovery(recCurrent.email && recCurrent.verified ? 'set' : 'empty');
           renderPhone(recCurrent.phone && recCurrent.phoneVerified ? 'set' : 'empty');
-          renderTwofa(recCurrent.twofaEnabled ? 'on' : 'off');
+          renderTwofa();
         })
         .catch(function(){
           $('recBody').innerHTML = '<div class="dev-empty">'+L('Couldn’t load.','无法加载。')+'</div>';
@@ -804,80 +794,62 @@
         sms:   !!(recCurrent.phoneVerified && recCurrent.smsConfigured),
       };
     }
-    function renderTwofa(mode){
+    // Two independent toggles — email and SMS can both be on. Turning one on
+    // needs no code step (the address is already verified under My Info); the
+    // toggle call itself is the enable action.
+    function twofaRow(channel, icoSvg, label, sub, on, avail){
+      return '<div class="ntf-row">'
+        + '<div class="ntf-txt"><div class="ntf-t" style="display:flex;align-items:center;gap:8px;">'+icoSvg+label+'</div>'
+        + '<div class="ntf-d">'+sub+'</div></div>'
+        + '<button class="sw'+(on?' on':'')+'" type="button" role="switch" aria-checked="'+(on?'true':'false')+'" data-ch="'+channel+'"'+(avail?'':' disabled')+'></button>'
+        + '</div>';
+    }
+    function twofaStatusHtml(){
+      var e = recCurrent.twofaEmail, s = recCurrent.twofaSms;
+      if (!e && !s) return '<span class="twofa-pill off"><span class="d"></span>'+L('Off — no code required at sign-in.','未开启 — 登录无需验证码。')+'</span>';
+      if (e && s) return '<span class="twofa-pill on"><span class="d"></span>'+L('On — email and SMS, choose one at sign-in.','已开启 — 邮箱和短信均可，登录时选择其一。')+'</span>';
+      return '<span class="twofa-pill on"><span class="d"></span>'+(e
+        ? L('On — email code required at sign-in.','已开启 — 登录需邮箱验证码。')
+        : L('On — SMS code required at sign-in.','已开启 — 登录需短信验证码。'))+'</span>';
+    }
+    function renderTwofa(){
       var box = $('twofaBody');
       var ch = twofaChannels();
       if (!ch.email && !ch.sms) {
         box.innerHTML = '<div class="rec-hint">'+L('Add and verify an email or phone under My Info to turn this on.','请先在“我的信息”中设置并验证邮箱或手机号，才能开启此功能。')+'</div>';
         return;
       }
-      var h = '';
-      if (mode === 'confirm') {
-        var via = twofaMethodSel === 'sms'
-          ? L('texted to ','短信发送至 ') + '<b>'+esc(recCurrent.phone||'')+'</b>'
-          : L('emailed to ','邮件发送至 ') + '<b>'+esc(recCurrent.email||'')+'</b>';
-        h = '<p class="rec-hint">'+L('Enter the 6-digit code we ','请输入我们')+via+'.</p>'
-          + '<div class="rec-row"><div class="field"><input type="text" id="twofaCode" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code"></div>'
-          + '<button class="btn-ink" data-t="confirm" style="height:40px;">'+L('Turn on','开启')+'</button></div>'
-          + '<div class="msg" id="twofaMsg"><span></span></div>'
-          + '<div class="rec-actions"><button class="rec-link" data-t="cancel">'+L('Cancel','取消')+'</button></div>';
-      } else if (mode === 'on') {
-        var cur = recCurrent.twofaMethod === 'sms'
-          ? L('Texted to ','短信发送至 ') + esc(recCurrent.phone||'')
-          : L('Emailed to ','邮件发送至 ') + esc(recCurrent.email||'');
-        h = '<div class="twofa-state"><span class="twofa-pill on"><span class="d"></span>'+L('On','已开启')+'</span>'
-          + '<button class="btn-sec" data-t="disable">'+L('Turn off','关闭')+'</button></div>'
-          + '<div class="rec-hint">'+cur+'</div>';
-      } else {   // off — pick a channel, then turn on
-        if (!ch[twofaMethodSel]) twofaMethodSel = ch.email ? 'email' : 'sms';
-        h = '<div class="tfa-seg">'
-          + '<button type="button" class="tfa-segbtn'+(twofaMethodSel==='email'?' on':'')+(ch.email?'':' off')+'" data-m="email"'+(ch.email?'':' disabled')+'>'+ICO_MAIL+L('Email','邮箱')+'</button>'
-          + '<button type="button" class="tfa-segbtn'+(twofaMethodSel==='sms'?' on':'')+(ch.sms?'':' off')+'" data-m="sms"'+(ch.sms?'':' disabled')+'>'+ICO_PHONE+L('SMS','短信')+'</button>'
-          + '</div>'
-          + '<div class="rec-hint">'+(twofaMethodSel==='sms'
-              ? L('Code texted to ','短信发送至 ')+esc(recCurrent.phone||'')
-              : L('Code emailed to ','邮件发送至 ')+esc(recCurrent.email||''))+'</div>'
-          + (!ch.sms ? '<div class="rec-hint">'+L('Verify a phone under My Info to use SMS.','在“我的信息”中验证手机号即可使用短信。')+'</div>' : '')
-          + '<div style="margin-top:12px;"><button class="btn-ink" data-t="enable">'+L('Turn on','开启')+'</button></div>'
-          + '<div class="msg" id="twofaMsg" style="margin-top:12px;"><span></span></div>';
-      }
+      var h = twofaRow('email', ICO_MAIL, L('Email','邮箱'),
+                ch.email ? L('Code sent to ','验证码发送至 ')+esc(recCurrent.email||'') : L('Verify a recovery email under My Info to use this.','请先在“我的信息”中验证恢复邮箱。'),
+                recCurrent.twofaEmail, ch.email)
+        + twofaRow('sms', ICO_PHONE, L('SMS','短信'),
+                ch.sms ? L('Code texted to ','验证码发送至 ')+esc(recCurrent.phone||'') : L('Verify a phone under My Info to use this.','请先在“我的信息”中验证手机号。'),
+                recCurrent.twofaSms, ch.sms)
+        + '<div class="tfa-status" id="twofaStatus">'+twofaStatusHtml()+'</div>'
+        + '<div class="msg" id="twofaMsg" style="margin-top:10px;"><span></span></div>';
       box.innerHTML = h;
-      Array.prototype.forEach.call(box.querySelectorAll('[data-t]'), function(el){ el.addEventListener('click', function(){ twofaAct(el.dataset.t); }); });
-      Array.prototype.forEach.call(box.querySelectorAll('[data-m]'), function(el){ el.addEventListener('click', function(){ if (el.disabled) return; twofaMethodSel = el.dataset.m; renderTwofa('off'); }); });
-      var cc = $('twofaCode'); if (cc) cc.addEventListener('keydown', function(e){ if (e.key==='Enter'){ e.preventDefault(); twofaAct('confirm'); } });
+      Array.prototype.forEach.call(box.querySelectorAll('[data-ch]'), function(el){
+        el.addEventListener('click', function(){ if (el.disabled) return; twofaToggle(el.dataset.ch, !el.classList.contains('on')); });
+      });
     }
-    function twofaAct(t){
-      if (t === 'cancel') { renderTwofa(recCurrent.twofaEnabled ? 'on' : 'off'); return; }
-      if (t === 'enable') {
-        var btn = document.querySelector('#twofaBody [data-t="enable"]'); if (btn){ btn.disabled=true; btn.classList.add('loading'); }
-        fetch('/api/backend/twofa/enable/start', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ method:twofaMethodSel }) })
-          .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
-          .then(function(res){
-            if (res.ok && res.data && res.data.success) { renderTwofa('confirm'); var c=$('twofaCode'); if (c) c.focus(); }
-            else { renderTwofa('off'); var m=$('twofaMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Couldn’t send — please try again','发送失败，请重试')); }
-          })
-          .catch(function(){ renderTwofa('off'); var m=$('twofaMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
-        return;
-      }
-      if (t === 'confirm') {
-        var code = $('twofaCode') ? $('twofaCode').value.trim() : '';
-        var btn2 = document.querySelector('#twofaBody [data-t="confirm"]'); if (btn2){ btn2.disabled=true; btn2.classList.add('loading'); }
-        fetch('/api/backend/twofa/enable/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ code:code, method:twofaMethodSel }) })
-          .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
-          .then(function(res){
-            if (res.ok && res.data && res.data.success) { recCurrent.twofaEnabled = true; recCurrent.twofaMethod = res.data.method || twofaMethodSel; renderTwofa('on'); }
-            else { if (btn2){ btn2.disabled=false; btn2.classList.remove('loading'); } var m=$('twofaMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
-          })
-          .catch(function(){ if (btn2){ btn2.disabled=false; btn2.classList.remove('loading'); } var m=$('twofaMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
-        return;
-      }
-      if (t === 'disable') {
-        var btn3 = document.querySelector('#twofaBody [data-t="disable"]'); if (btn3){ btn3.disabled=true; btn3.classList.add('loading'); }
-        fetch('/api/backend/twofa/disable', { method:'POST', credentials:'same-origin' })
-          .then(function(){ recCurrent.twofaEnabled = false; renderTwofa('off'); })
-          .catch(function(){ if (btn3){ btn3.disabled=false; btn3.classList.remove('loading'); } });
-        return;
-      }
+    function twofaToggle(channel, enabled){
+      var btn = document.querySelector('#twofaBody [data-ch="'+channel+'"]');
+      if (btn){ btn.disabled = true; btn.classList.add('busy'); }
+      fetch('/api/backend/twofa/toggle', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ channel:channel, enabled:enabled }) })
+        .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
+        .then(function(res){
+          if (res.ok && res.data && res.data.success) {
+            if (channel === 'sms') recCurrent.twofaSms = enabled; else recCurrent.twofaEmail = enabled;
+            renderTwofa();
+          } else {
+            if (btn){ btn.disabled = false; btn.classList.remove('busy'); }
+            var m=$('twofaMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Couldn’t update — please try again','更新失败，请重试'));
+          }
+        })
+        .catch(function(){
+          if (btn){ btn.disabled = false; btn.classList.remove('busy'); }
+          var m=$('twofaMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试'));
+        });
     }
 
     /* ── notifications: sound + push-to-device ── */
@@ -1061,7 +1033,7 @@
         fetch('/api/backend/recovery/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ code:code }) })
           .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
           .then(function(res){
-            if (res.ok && res.data && res.data.success) { recCurrent.email = res.data.email; recCurrent.verified = true; renderRecovery('set'); renderTwofa(recCurrent.twofaEnabled?'on':'off'); }
+            if (res.ok && res.data && res.data.success) { recCurrent.email = res.data.email; recCurrent.verified = true; renderRecovery('set'); renderTwofa(); }
             else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
           })
           .catch(function(){ if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
@@ -1071,8 +1043,8 @@
         fetch('/api/backend/recovery', { method:'DELETE', credentials:'same-origin' })
           .then(function(r){ return r.json().catch(function(){ return {}; }); })
           .then(function(j){ recCurrent.email = null; recCurrent.verified = false; recPending = null;
-            if (j && j.twofaDisabled) recCurrent.twofaEnabled = false;
-            renderRecovery('empty'); renderTwofa(recCurrent.twofaEnabled?'on':'off'); })
+            if (j && j.twofaDisabled) recCurrent.twofaEmail = false;
+            renderRecovery('empty'); renderTwofa(); })
           .catch(function(){});
         return;
       }
@@ -1151,7 +1123,7 @@
         fetch('/api/backend/phone/confirm', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ code:code }) })
           .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
           .then(function(res){
-            if (res.ok && res.data && res.data.success) { recCurrent.phone = res.data.phone; recCurrent.phoneVerified = true; renderPhone('set'); renderTwofa(recCurrent.twofaEnabled?'on':'off'); }
+            if (res.ok && res.data && res.data.success) { recCurrent.phone = res.data.phone; recCurrent.phoneVerified = true; renderPhone('set'); renderTwofa(); }
             else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('phMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
           })
           .catch(function(){ if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('phMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
@@ -1161,8 +1133,8 @@
         fetch('/api/backend/phone', { method:'DELETE', credentials:'same-origin' })
           .then(function(r){ return r.json().catch(function(){ return {}; }); })
           .then(function(j){ recCurrent.phone = null; recCurrent.phoneVerified = false; phPending = null;
-            if (j && j.twofaDisabled) recCurrent.twofaEnabled = false;
-            renderPhone('empty'); renderTwofa(recCurrent.twofaEnabled?'on':'off'); })
+            if (j && j.twofaDisabled) recCurrent.twofaSms = false;
+            renderPhone('empty'); renderTwofa(); })
           .catch(function(){});
         return;
       }
@@ -1200,7 +1172,7 @@
       if (lastUser) hydrate(lastUser);
       // re-render lazy tabs in the new language
       if (loaded.devices) loadDevices();
-      if (contactReady) { renderRecovery(recCurrent.email && recCurrent.verified ? 'set' : 'empty'); renderPhone(recCurrent.phone && recCurrent.phoneVerified ? 'set' : 'empty'); renderTwofa(recCurrent.twofaEnabled ? 'on' : 'off'); }
+      if (contactReady) { renderRecovery(recCurrent.email && recCurrent.verified ? 'set' : 'empty'); renderPhone(recCurrent.phone && recCurrent.phoneVerified ? 'set' : 'empty'); renderTwofa(); }
     }
     $('langToggle').addEventListener('click', function(){
       lang = lang === 'cn' ? 'en' : 'cn';
