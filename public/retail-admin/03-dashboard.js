@@ -97,9 +97,13 @@ function dashSparkline(values, opts) {
   // sit on and a solid (not dashed) ghost reference — dashes read as "broken"
   // at that size. Small tile sparklines keep the original quiet treatment.
   const big = !!opts.big;
+  // --td-border is nearly white-on-white inside a card (it's tuned to sit
+  // against the page background, not the card surface) — measured against a
+  // real render, it was effectively invisible. --td-text2 at low opacity
+  // actually shows as a hairline while staying recessive.
   const baseline = big
     ? `<line x1="${pad}" y1="${(H - pad).toFixed(1)}" x2="${W - pad}" y2="${(H - pad).toFixed(1)}" `
-      + `stroke="var(--td-border)" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+      + `stroke="var(--td-text2)" stroke-width="1" opacity="0.3" vector-effect="non-scaling-stroke"/>`
     : '';
   // Nothing today AND no ghost: draw a faint dashed baseline instead of
   // vanishing — the sparkline is always visibly present, saying "no activity".
@@ -112,7 +116,15 @@ function dashSparkline(values, opts) {
   }
   const n = vals.length;
   const sc = dashSparkScale(vals, hasGhost ? ghost : null);
-  const max = sc.max, min = sc.min, span = (max - min) || 1;
+  let max = sc.max;
+  const min = sc.min;
+  // The big hero chart pads its ceiling so the tallest peak (today's, or the
+  // ghost's while today is flat) never touches the top edge — measured
+  // against a real render, at 100% fill every crest sat flush against
+  // y=pad, which reads as cramped and left the corner label with zero
+  // headroom regardless of how it was anchored.
+  if (big) max = min + (max - min) * 1.22;
+  const span = (max - min) || 1;
   const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
   const y = v => (H - pad) - ((v - min) / span) * (H - 2 * pad);
   // The typical-day ghost — a reference curve behind today's line, same
