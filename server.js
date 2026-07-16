@@ -408,7 +408,7 @@ function brandedLoginHtml(req) {
     if (t.brand_name) {
       const nm = _escHtmlAttr(t.brand_name);
       html = html.replace('<span class="wordmark" data-no-i18n>tacet</span>', `<span class="wordmark tenant" data-no-i18n>${nm}</span>`)
-                 .replace('<title>tacet · Sign in · 登录</title>', `<title>${nm} · Sign in</title>`);
+                 .replace('<title>tacet · Sign in</title>', `<title>${nm} · Sign in</title>`);
     }
     if (t.brand_mark_data) {
       html = html.replace('</head>', `<link rel="icon" href="/api/backend/brand/${t.id}/mark?v=${stamp}"></head>`);
