@@ -635,18 +635,30 @@ router.put('/api/backend/brand', express.json({ limit: '4mb' }), async (req, res
       if (logo.length > 3 * 1024 * 1024) {
         return res.status(413).json({ error: 'Logo is too large — please use a smaller file · 徽标过大,请使用更小的文件' });
       }
-      // Derive the square mark (favicon + folded rail) from the logo.
+      // Derive the square mark (favicon + folded rail) from the logo, and trim
+      // any baked-in canvas padding from the logo itself first — exported logo
+      // files commonly sit on an oversized white/transparent canvas, and every
+      // consumer (rail, favicon, account menu) sizes the image by height, so
+      // untrimmed padding shrinks the visible artwork down to near-nothing.
       let mark = logo;
+      let storedLogo = logo;
       const mm = /^data:([^;,]*?);base64,([\s\S]*)$/.exec(logo);
       if (_brandSharp && mm && !/svg/i.test(mm[1])) {
         try {
-          const png = await _brandSharp(Buffer.from(mm[2], 'base64'))
+          const rawBuf = Buffer.from(mm[2], 'base64');
+          const { data: corner } = await _brandSharp(rawBuf)
+            .extract({ left: 0, top: 0, width: 1, height: 1 }).raw().ensureAlpha()
+            .toBuffer({ resolveWithObject: true });
+          const bg = { r: corner[0], g: corner[1], b: corner[2], alpha: corner[3] / 255 };
+          const trimmedBuf = await _brandSharp(rawBuf).trim({ background: bg, threshold: 15 }).png().toBuffer();
+          storedLogo = 'data:image/png;base64,' + trimmedBuf.toString('base64');
+          const png = await _brandSharp(trimmedBuf)
             .resize(256, 256, { fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
             .png().toBuffer();
           mark = 'data:image/png;base64,' + png.toString('base64');
-        } catch (e) { mark = logo; }   // fall back to the logo as-is
+        } catch (e) { mark = logo; storedLogo = logo; }   // fall back to the logo as-is
       }
-      db.prepare('UPDATE tenants SET brand_logo_data = ?, brand_mark_data = ? WHERE id = ?').run(logo, mark, u.tenant_id);
+      db.prepare('UPDATE tenants SET brand_logo_data = ?, brand_mark_data = ? WHERE id = ?').run(storedLogo, mark, u.tenant_id);
     }
   }
 
