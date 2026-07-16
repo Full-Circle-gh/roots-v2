@@ -224,6 +224,15 @@
   .rec-row .field{ flex:1; margin-bottom:0; }
   .rec-hint{ font-size:12px; color:var(--text-2); margin-top:9px; line-height:1.5; }
 
+  /* phone field — country code + number as one bordered unit */
+  .ph-cc-wrap{ display:flex; border:1px solid var(--line); border-radius:8px; background:var(--surface); transition:border-color .16s; }
+  .ph-cc-wrap:hover{ border-color:var(--text-2); }
+  .ph-cc-wrap:focus-within{ border-color:var(--dusk); }
+  .ph-cc{ flex:none; width:80px; border:none; border-right:1px solid var(--line); background:transparent; color:var(--text);
+    font:inherit; font-size:14px; padding:10px 4px 10px 10px; outline:none; cursor:pointer; border-radius:8px 0 0 8px; }
+  .ph-cc-wrap input[type=tel]{ border:none; border-radius:0 8px 8px 0; flex:1; min-width:0; }
+  .ph-cc-wrap input[type=tel]:hover, .ph-cc-wrap input[type=tel]:focus{ border:none; }
+
   /* two-step verification status row */
   .twofa-state{ display:flex; align-items:center; gap:12px; }
   .twofa-pill{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; border-radius:999px; padding:4px 11px; }
@@ -900,7 +909,18 @@
     }
 
     /* ── phone (SMS) — verify a mobile for SMS two-step. Mirrors the recovery
-         email flow above, but codes arrive by text message. ── */
+         email flow above, but codes arrive by text message. Only +86 actually
+         sends today (SMS runs on Aliyun, mainland-only) — the other codes are
+         listed for the dropdown but blocked client-side with a clear message
+         instead of silently failing against the CN-only backend. ── */
+    var PHONE_CC = [
+      { c:'86',  label:'+86'  }, { c:'1',   label:'+1'   }, { c:'852', label:'+852' },
+      { c:'853', label:'+853' }, { c:'886', label:'+886' }, { c:'65',  label:'+65'  },
+      { c:'44',  label:'+44'  }, { c:'61',  label:'+61'  },
+    ];
+    function phCcOptions(){
+      return PHONE_CC.map(function(x){ return '<option value="'+x.c+'">'+x.label+'</option>'; }).join('');
+    }
     function renderPhone(mode){
       var box = $('phoneBody'), h = '';
       if (!recCurrent.smsConfigured && mode !== 'set') {
@@ -912,7 +932,8 @@
           + '<div class="rec-verified">'+ICO_TICK+L('Verified','已验证')+'</div></div></div>'
           + '<div class="rec-actions"><button class="rec-link" data-p="add">'+L('Change','更换')+'</button><button class="rec-link danger" data-p="remove">'+L('Remove','移除')+'</button></div>';
       } else if (mode === 'phone') {
-        h = '<div class="rec-row"><div class="field"><input type="tel" id="phInput" inputmode="tel" placeholder="'+L('Mobile number','手机号')+'" autocomplete="tel"></div>'
+        h = '<div class="rec-row"><div class="field"><div class="ph-cc-wrap"><select id="phCc" class="ph-cc">'+phCcOptions()+'</select>'
+          + '<input type="tel" id="phInput" inputmode="tel" placeholder="'+L('Mobile number','手机号')+'" autocomplete="tel"></div></div>'
           + '<button class="btn-ink" data-p="send" style="height:40px;">'+L('Send code','发送验证码')+'</button></div>'
           + '<div class="msg" id="phMsg"><span></span></div>'
           + '<div class="rec-actions"><button class="rec-link" data-p="cancel">'+L('Cancel','取消')+'</button></div>';
@@ -935,6 +956,11 @@
       if (act === 'cancel') { renderPhone(recCurrent.phone && recCurrent.phoneVerified ? 'set' : 'empty'); return; }
       if (act === 'send') {
         var input = $('phInput');
+        var cc = $('phCc');
+        if (input && cc && cc.value !== '86') {
+          var m0 = $('phMsg'); if (m0) setMsg(m0, 'err', L('That region isn’t supported yet — only +86 numbers can receive codes','该地区暂不支持，目前仅 +86 号码可接收验证码'));
+          return;
+        }
         var phone = input ? input.value.trim() : (phPendingRaw || '');   // no input in 'code' mode → resend the raw number
         if (input) phPendingRaw = phone;
         var btn = document.querySelector('#phoneBody [data-p="send"]');
