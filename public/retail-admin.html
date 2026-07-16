@@ -984,6 +984,18 @@
     </button>
     <iframe class="prof-frame" id="profFrame" title="Account"></iframe>
   </div>
+
+  <!-- Team pop-up — "Manage team" opens /backend/team in this centred modal
+       instead of navigating away, mirroring the Account pop-up above (same
+       .prof-scrim/.prof-modal/.prof-frame CSS, separate ids/iframe so the two
+       stay independent). Iframe src is set on first open (lazy). -->
+  <div class="prof-scrim" id="teamScrim"></div>
+  <div class="prof-modal" id="teamModal" role="dialog" aria-modal="true" aria-label="Team" aria-hidden="true">
+    <button class="prof-x" id="teamClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <iframe class="prof-frame" id="teamFrame" title="Team"></iframe>
+  </div>
   <!-- Light/dark and language toggles used to live here as loose topbar
        buttons. Moved into the account dropdown (the avatar circle)
        2026-06-08 — set-once preferences belong with the profile, not in the
@@ -1208,12 +1220,13 @@
   </button>
   <!-- Manage team — moved here from the topbar account dropdown (2026-07-14)
        so team management sits under Settings in the rail instead of behind
-       the avatar menu. Real page link (/backend/team), not a tab, so <a> not
-       <button> — .tabs a carries the same rail styling. -->
-  <a href="/backend/team" style="order:16">
+       the avatar menu. 2026-07-16: opens /backend/team in the same centred
+       prof-modal iframe pattern as the Account pop-up (openTeamModal, in
+       02-settings-ops.js), instead of navigating the whole app away. -->
+  <button type="button" id="teamNavBtn" style="order:16">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c.9-3 3.2-4.5 6-4.5S14.1 17 15 20"/><path d="M16 5.2a3.2 3.2 0 0 1 0 6"/><path d="M18.5 20c-.5-2-1.6-3.3-3.2-4"/></svg>
     Manage team · 团队管理
-  </a>
+  </button>
   <!-- Brand + Billing moved into Settings (#settings-nav) 2026-07-14 —
        see public/retail-admin.html #settings-nav for the links. -->
 

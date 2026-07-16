@@ -1789,13 +1789,42 @@ function closeProfileModal() {
   document.removeEventListener('keydown', onProfileKey);
 }
 function onProfileKey(e) { if (e.key === 'Escape') closeProfileModal(); }
+
+// ── Team pop-up — same pattern as the Account pop-up above: hosts
+// /backend/team in a centred modal iframe instead of navigating away.
+function openTeamModal() {
+  const scrim = $('#teamScrim'), modal = $('#teamModal'), frame = $('#teamFrame');
+  if (!scrim || !modal || !frame) return;
+  if (!frame.src) frame.src = '/backend/team';
+  scrim.classList.add('on');
+  modal.classList.add('on');
+  modal.setAttribute('aria-hidden', 'false');
+  document.addEventListener('keydown', onTeamKey);
+}
+function closeTeamModal() {
+  const scrim = $('#teamScrim'), modal = $('#teamModal');
+  if (!scrim || !modal) return;
+  scrim.classList.remove('on');
+  modal.classList.remove('on');
+  modal.setAttribute('aria-hidden', 'true');
+  document.removeEventListener('keydown', onTeamKey);
+}
+function onTeamKey(e) { if (e.key === 'Escape') closeTeamModal(); }
+
 (function initProfileModal() {
   const scrim = $('#profScrim'), closeBtn = $('#profClose');
   if (scrim) scrim.addEventListener('click', closeProfileModal);
   if (closeBtn) closeBtn.addEventListener('click', closeProfileModal);
+
+  const teamScrim = $('#teamScrim'), teamCloseBtn = $('#teamClose'), teamNavBtn = $('#teamNavBtn');
+  if (teamScrim) teamScrim.addEventListener('click', closeTeamModal);
+  if (teamCloseBtn) teamCloseBtn.addEventListener('click', closeTeamModal);
+  if (teamNavBtn) teamNavBtn.addEventListener('click', openTeamModal);
+
   window.addEventListener('message', (e) => {
     if (e.origin !== location.origin) return;
     if (e.data === 'profile-modal-close') closeProfileModal();
+    if (e.data === 'team-modal-close') closeTeamModal();
     if (e.data && e.data.type === 'fc-profile-updated') {
       Object.assign(ACCT_USER || (ACCT_USER = {}), e.data.user);
       acctRenderMeta();
