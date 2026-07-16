@@ -1618,14 +1618,12 @@ let ENTITLEMENTS = {};
 })();
 
 // ── Co-brand identity — make the chrome read as the tenant's own ─────────
-// Given the tenant object from /api/backend/me, swap the topbar wordmark to
-// the tenant's logo + name, retitle the tab, and repoint the favicon at the
-// tenant's square mark. A tenant with no logo set (including Tacet/Roots itself)
-// keeps the built-in waveform + "tacet" — never a broken image. Identity only:
-// we touch the logo/name/title/favicon and nothing else about the Tacet look.
+// Given the tenant object from /api/backend/me, swap the folded-rail mark to
+// the tenant's logo. A tenant with no logo set (including Tacet/Roots itself)
+// keeps the built-in waveform + "tacet" — never a broken image. The browser
+// tab (favicon + title) always stays Tacet, regardless of tenant branding.
 function applyBrand(tenant) {
   if (!tenant) return;
-  const name = (tenant.brand || '').trim();
   const logoUrl = tenant.brandLogoUrl || null;
   const markUrl = tenant.brandMarkUrl || logoUrl;
   // The admin's default identity is ALWAYS "tacet". A tenant only takes over the
@@ -1636,11 +1634,8 @@ function applyBrand(tenant) {
   // LOGO ONLY, topbar (mobile) only. The open rail always keeps the tacet
   // wordmark; the tenant's identity shows up ONLY as the square mark on the
   // FOLDED rail, wired below. body.cobrand drives the CSS swap.
-  if (name) document.title = name;
-  const fav = document.getElementById('favlink');
-  const favA = document.getElementById('favlink-apple');
-  if (markUrl && fav) fav.href = markUrl;
-  if (markUrl && favA) favA.href = markUrl;
+  // Browser tab (favicon + title) is intentionally left untouched — it stays
+  // Tacet always, regardless of tenant branding (cancelled 2026-07-16).
 
   const set = (id, url) => { const el = document.getElementById(id); if (el && url) el.src = url; };
   set('brandLogoTop', logoUrl);
