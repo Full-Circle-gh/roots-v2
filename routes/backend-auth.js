@@ -708,14 +708,60 @@ router.get('/api/backend/sessions', (req, res) => {
   res.json({ sessions });
 });
 
-// Sign a device out. A user may only revoke their OWN sessions. Revoking the
-// current one is allowed (it's just "sign out here"); the client then bounces
-// to the login page.
+// Owner/admin only: every operator's sessions across the whole tenant, so an
+// owner can see (and sign out) a teammate's device. Same shape + pruning as
+// the personal list above, plus who each session belongs to.
+router.get('/api/backend/sessions/team', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const me = db.prepare('SELECT tenant_id, role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  if (!me) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  if (me.role !== 'owner' && me.role !== 'admin') {
+    return res.status(403).json({ error: 'Only an owner or admin can view team devices · 仅负责人或管理员可查看团队设备' });
+  }
+  try {
+    db.prepare("DELETE FROM tenant_user_sessions WHERE last_seen < datetime('now', '-31 days')").run();
+  } catch (e) {}
+  let rows = [];
+  try {
+    rows = db.prepare(`SELECT s.sid, s.tenant_user_id, s.user_agent, s.ip, s.created_at, s.last_seen,
+                              u.display_name, u.username
+                         FROM tenant_user_sessions s
+                         JOIN tenant_users u ON u.id = s.tenant_user_id
+                        WHERE s.tenant_id = ? AND u.is_active = 1
+                        ORDER BY s.last_seen DESC`).all(me.tenant_id);
+  } catch (e) { rows = []; }
+  const sessions = rows.map(r => {
+    const d = describeUA(r.user_agent);
+    return {
+      id: r.sid,
+      current: r.sid === req.sessionID,
+      label: d.label,
+      kind: d.kind,
+      ip: r.ip || null,
+      lastSeen: r.last_seen,
+      createdAt: r.created_at,
+      ownerId: r.tenant_user_id,
+      ownerName: r.display_name || r.username,
+      isYou: r.tenant_user_id === req.session.backendUserId,
+    };
+  });
+  res.json({ sessions });
+});
+
+// Sign a device out. A user may always revoke their OWN sessions; an owner
+// or admin may also revoke any device belonging to their tenant (e.g. from
+// the Team devices view). Revoking your own current one is allowed (it's
+// just "sign out here"); the client then bounces to the login page.
 router.post('/api/backend/sessions/revoke', express.json(), (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const me = db.prepare('SELECT tenant_id, role FROM tenant_users WHERE id = ? AND is_active = 1').get(req.session.backendUserId);
+  if (!me) return res.status(401).json({ error: 'Not authenticated · 未登录' });
   const sid = String((req.body && req.body.sid) || '').trim();
   if (!sid) return res.status(400).json({ error: 'Missing session · 缺少会话' });
-  const row = db.prepare('SELECT sid FROM tenant_user_sessions WHERE sid = ? AND tenant_user_id = ?').get(sid, req.session.backendUserId);
+  let row = db.prepare('SELECT sid, tenant_user_id FROM tenant_user_sessions WHERE sid = ? AND tenant_user_id = ?').get(sid, req.session.backendUserId);
+  if (!row && (me.role === 'owner' || me.role === 'admin')) {
+    row = db.prepare('SELECT sid, tenant_user_id FROM tenant_user_sessions WHERE sid = ? AND tenant_id = ?').get(sid, me.tenant_id);
+  }
   if (!row) return res.status(404).json({ error: 'Session not found · 未找到会话' });
   const finish = () => {
     try { db.prepare('DELETE FROM tenant_user_sessions WHERE sid = ?').run(sid); } catch (e) {}

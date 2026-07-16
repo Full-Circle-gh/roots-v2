@@ -178,19 +178,35 @@
   .warn svg{ flex:none; margin-top:1px; stroke:var(--amber); fill:none; }
 
   /* devices */
+  .dev-seg{ display:inline-flex; padding:3px; background:var(--raised); border-radius:10px; margin-bottom:12px; }
+  .dev-seg button{ font:500 12.5px inherit; color:var(--text-2); background:none; border:none; padding:7px 14px; border-radius:7px; cursor:pointer; }
+  .dev-seg button.on{ background:var(--surface); color:var(--text); box-shadow:var(--shadow); }
+  .dev-owner-note{ display:flex; align-items:flex-start; gap:9px; background:var(--dusk-tint); border-radius:10px; padding:10px 12px; font-size:12.5px; color:var(--text); line-height:1.5; margin-bottom:14px; }
+  .dev-owner-note svg{ flex:none; width:14px; height:14px; stroke:var(--dusk); fill:none; margin-top:2px; }
+  .dev-chips{ display:flex; gap:8px; margin-bottom:14px; }
+  .dev-chip{ font:500 12px inherit; color:var(--text-2); background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:6px 13px; cursor:pointer; }
+  .dev-chip.on{ color:var(--text); border-color:var(--text-2); }
   .dev{ display:flex; align-items:center; gap:12px; padding:11px 2px; }
   .dev + .dev{ border-top:1px solid var(--line); }
   .dev-ico{ width:34px; height:34px; border-radius:9px; background:var(--raised); display:grid; place-items:center; flex:none; color:var(--text-2); }
   .dev-ico svg{ width:16px; height:16px; stroke:currentColor; fill:none; }
   .dev-m{ min-width:0; flex:1; }
   .dev-n{ font-size:13.5px; font-weight:500; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .own-chip{ width:18px; height:18px; border-radius:50%; background:var(--sage-tint); color:var(--sage-ink); font-size:9.5px; font-weight:600; display:inline-grid; place-items:center; flex:none; }
   .dev-badge{ font-size:10.5px; font-weight:500; color:var(--sage-ink); background:var(--sage-tint); border-radius:999px; padding:2px 8px; }
   .dev-s{ font-size:12px; color:var(--text-2); margin-top:2px; }
   .dev-out{ flex:none; font:500 12.5px inherit; color:var(--text-2); background:none; border:none; cursor:pointer; padding:6px 9px; border-radius:7px; }
   .dev-out:hover{ color:var(--brick); background:var(--brick-tint); }
-  .dev-foot{ margin-top:14px; padding-top:14px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; }
-  .dev-clear{ font:500 12.5px inherit; color:var(--text-2); background:none; border:none; cursor:pointer; text-decoration:underline; text-underline-offset:2px; }
-  .dev-clear:hover{ color:var(--brick); }
+  .dev-out[disabled]{ cursor:default; opacity:.7; }
+  .dev-foot{ margin-top:14px; padding-top:14px; border-top:1px solid var(--line); display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .dev-count{ font-size:12px; color:var(--text-2); }
+  .dev-bulk-wrap{ display:flex; align-items:center; gap:8px; }
+  .dev-bulk-btn{ font:500 12.5px inherit; color:var(--text); background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:8px 14px; cursor:pointer; }
+  .dev-bulk-btn:hover{ border-color:var(--text-2); }
+  .dev-bulk-ghost{ font:500 12.5px inherit; color:var(--text-2); background:none; border:none; cursor:pointer; padding:8px 6px; }
+  .dev-bulk-ghost:hover{ color:var(--text); }
+  .dev-bulk-danger{ font:500 12.5px inherit; color:var(--brick); background:none; border:1px solid var(--brick); border-radius:8px; padding:8px 14px; cursor:pointer; }
+  .dev-bulk-danger:hover{ background:var(--brick-tint); }
   .dev-empty{ font-size:13px; color:var(--text-2); padding:16px 2px; }
 
   /* access */
@@ -419,7 +435,9 @@
       <div class="tabpane" data-pane="devices">
         <h1><span class="en">Devices</span><span class="cn">设备</span></h1>
         <p class="lead"><span class="en">Where you're signed in. Sign out anything you don't recognize.</span><span class="cn">您的登录设备。如有不认识的设备，请将其登出。</span></p>
+        <div id="devControls"></div>
         <div id="devList"><div class="skel"><span class="en">Loading…</span><span class="cn">加载中…</span></div></div>
+        <div id="devFoot" class="dev-foot" hidden></div>
       </div>
 
       <!-- Notifications -->
@@ -508,6 +526,10 @@
       if (document.activeElement !== $('nameInput')) $('nameInput').value = u.displayName || u.username || '';
       renderAvatar(u);
       if (u.mustChangePassword || u.defaultPassword) $('defaultWarn').classList.add('show');
+      // /me can resolve after the Devices tab is already open (race with the
+      // tab click) — re-render so the owner/admin-only Team toggle appears.
+      var devicesPane = document.querySelector('.tabpane[data-pane="devices"]');
+      if (devicesPane && devicesPane.classList.contains('on')) renderDevControls();
     }
 
     fetch('/api/backend/me', { credentials:'same-origin' })
@@ -519,7 +541,7 @@
     function showTab(tab){
       document.querySelectorAll('.navbtn').forEach(function(b){ b.classList.toggle('on', b.dataset.tab === tab); });
       document.querySelectorAll('.tabpane').forEach(function(p){ p.classList.toggle('on', p.dataset.pane === tab); });
-      if (tab === 'devices') loadDevices();   // always refetch — a device signed in elsewhere must surface without a full reload
+      if (tab === 'devices') { devView = 'me'; devKind = 'all'; loadDevices(); }   // always refetch — a device signed in elsewhere must surface without a full reload
       // Email + phone live on My Info; two-step lives on Security. Both read the
       // same contact state, so a single lazy load covers either tab.
       if ((tab === 'profile' || tab === 'security') && !loaded.recovery) loadRecovery();
@@ -604,8 +626,11 @@
     });
 
     /* ── devices ── */
-    var ICO_PC = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>';
-    var ICO_PH = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg>';
+    var ICO_PC  = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>';
+    var ICO_PH  = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg>';
+    var ICO_TAB = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="2.2"/><path d="M10.6 19h2.8"/></svg>';
+    function iconFor(kind){ return kind === 'phone' ? ICO_PH : (kind === 'tablet' ? ICO_TAB : ICO_PC); }
+    function groupKind(kind){ return (kind === 'phone' || kind === 'tablet') ? 'mobile' : 'desktop'; }
     function relTime(s){
       if (!s) return '';
       var t = new Date(String(s).replace(' ', 'T') + (/[zZ]|[+\-]\d\d:?\d\d$/.test(s) ? '' : 'Z'));
@@ -616,44 +641,127 @@
       var d = Math.round(h/24); if (d < 30) return L(d+(d>1?' days ago':' day ago'), d+' 天前');
       return L('over a month ago','一个月前');
     }
+
+    var devView = 'me';   // 'me' | 'team' (team = owner/admin only)
+    var devKind = 'all';  // 'all' | 'desktop' | 'mobile'
+    var devRaw = [];
+
+    function isTeamCapable(){ return !!(lastUser && (lastUser.role === 'owner' || lastUser.role === 'admin')); }
+
+    function renderDevControls(){
+      var box = $('devControls'); if (!box) return;
+      var html = '';
+      if (isTeamCapable()) {
+        html += '<div class="dev-seg" id="devSeg">'
+          + '<button type="button" class="'+(devView==='me'?'on':'')+'" data-view="me">'+L('My devices','我的设备')+'</button>'
+          + '<button type="button" class="'+(devView==='team'?'on':'')+'" data-view="team">'+L('Team devices','团队设备')+'</button>'
+          + '</div>';
+        if (devView === 'team') {
+          html += '<div class="dev-owner-note"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c1.4-3.6 4.2-5.4 7-5.4S18.6 16.4 20 20"/></svg>'
+            + '<span>'+L('As owner/admin, you can see and sign out devices for your whole team.','作为负责人/管理员，您可以查看并登出团队所有设备。')+'</span></div>';
+        }
+      }
+      html += '<div class="dev-chips" id="devChips">' + ['all','desktop','mobile'].map(function(k){
+        var lbl = k === 'all' ? L('All','全部') : (k === 'desktop' ? L('Desktop','桌面') : L('Mobile','移动'));
+        return '<button type="button" class="dev-chip '+(devKind===k?'on':'')+'" data-kind="'+k+'">'+lbl+'</button>';
+      }).join('') + '</div>';
+      box.innerHTML = html;
+      var seg = $('devSeg');
+      if (seg) seg.querySelectorAll('button').forEach(function(b){
+        b.addEventListener('click', function(){ if (devView === b.dataset.view) return; devView = b.dataset.view; loadDevices(); });
+      });
+      $('devChips').querySelectorAll('.dev-chip').forEach(function(b){
+        b.addEventListener('click', function(){ if (devKind === b.dataset.kind) return; devKind = b.dataset.kind; renderDevControls(); renderDeviceRows(); });
+      });
+    }
+
     function loadDevices(){
       loaded.devices = true;
       var box = $('devList'); box.innerHTML = '<div class="skel">'+L('Loading…','加载中…')+'</div>';
-      fetch('/api/backend/sessions', { credentials:'same-origin' })
+      $('devFoot').hidden = true;
+      renderDevControls();
+      var url = (devView === 'team' && isTeamCapable()) ? '/api/backend/sessions/team' : '/api/backend/sessions';
+      fetch(url, { credentials:'same-origin' })
         .then(function(r){ return r.json(); })
-        .then(function(j){
-          var list = (j && j.sessions) || [];
-          if (!list.length) { box.innerHTML = '<div class="dev-empty">'+L('No other devices signed in.','没有其他已登录的设备。')+'</div>'; return; }
-          var rows = list.map(function(d){
-            var meta = [ d.current ? L('Active now','当前活动') : relTime(d.lastSeen) ];
-            if (d.ip) meta.push(esc(d.ip));
-            return '<div class="dev" data-sid="'+esc(d.id)+'">'
-              + '<span class="dev-ico">'+(d.kind==='phone'||d.kind==='tablet'?ICO_PH:ICO_PC)+'</span>'
-              + '<div class="dev-m"><div class="dev-n">'+esc(d.label)+(d.current?' <span class="dev-badge">'+L('This device','当前设备')+'</span>':'')+'</div>'
-              + '<div class="dev-s">'+meta.join(' · ')+'</div></div>'
-              + '<button class="dev-out" data-sid="'+esc(d.id)+'" data-current="'+(d.current?'1':'0')+'">'+L('Sign out','登出')+'</button></div>';
-          }).join('');
-          var hasOthers = list.some(function(d){ return !d.current; });
-          box.innerHTML = rows + (hasOthers ? '<div class="dev-foot"><button class="dev-clear" id="devClear">'+L('Sign out of all other devices','登出所有其他设备')+'</button></div>' : '');
-          box.querySelectorAll('.dev-out').forEach(function(btn){ btn.addEventListener('click', function(){ revoke(btn.dataset.sid, btn.dataset.current === '1', btn); }); });
-          var clr = $('devClear'); if (clr) clr.addEventListener('click', revokeOthers);
-        })
+        .then(function(j){ devRaw = (j && j.sessions) || []; renderDeviceRows(); })
         .catch(function(){ box.innerHTML = '<div class="dev-empty">'+L('Couldn’t load devices.','无法加载设备。')+'</div>'; });
     }
+
+    function renderDeviceRows(){
+      var box = $('devList');
+      var list = devKind === 'all' ? devRaw : devRaw.filter(function(d){ return groupKind(d.kind) === devKind; });
+      if (!list.length) {
+        box.innerHTML = '<div class="dev-empty">'+(devRaw.length ? L('No devices match this filter.','没有符合筛选条件的设备。') : L('No other devices signed in.','没有其他已登录的设备。'))+'</div>';
+        $('devFoot').hidden = true;
+        return;
+      }
+      box.innerHTML = list.map(function(d){
+        var meta = [ d.current ? L('Active now','当前活动') : relTime(d.lastSeen) ];
+        if (d.ip) meta.push(esc(d.ip));
+        var owner = (devView === 'team' && d.ownerName)
+          ? '<span class="own-chip">'+esc(initialsOf(d.ownerName))+'</span> ' + esc(d.isYou ? d.ownerName + ' ' + L('(You)','(您)') : d.ownerName) + ' · '
+          : '';
+        var actLabel = d.current ? L('Sign out of this device','登出此设备') : L('Sign out','登出');
+        return '<div class="dev" data-sid="'+esc(d.id)+'">'
+          + '<span class="dev-ico">'+iconFor(d.kind)+'</span>'
+          + '<div class="dev-m"><div class="dev-n">'+owner+esc(d.label)+(d.current?' <span class="dev-badge">'+L('This device','当前设备')+'</span>':'')+'</div>'
+          + '<div class="dev-s">'+meta.join(' · ')+'</div></div>'
+          + '<button class="dev-out" data-sid="'+esc(d.id)+'" data-current="'+(d.current?'1':'0')+'">'+actLabel+'</button></div>';
+      }).join('');
+      box.querySelectorAll('.dev-out').forEach(function(btn){
+        btn.addEventListener('click', function(){ revoke(btn.dataset.sid, btn.dataset.current === '1', btn); });
+      });
+      renderDevFoot(list);
+    }
+
+    function initialsOf(name){
+      var s = String(name||'').trim(); if (!s) return '?';
+      var p = s.split(/\s+/).filter(Boolean);
+      return ((p[0]?p[0][0]:'') + (p.length>1?p[p.length-1][0]:'')).toUpperCase() || '?';
+    }
+
+    function renderDevFoot(list){
+      var foot = $('devFoot');
+      var others = list.filter(function(d){ return !d.current; });
+      if (!others.length) { foot.hidden = true; return; }
+      foot.hidden = false;
+      var countTxt = list.length + ' ' + (list.length === 1 ? L('device signed in','台设备已登录') : L('devices signed in','台设备已登录'));
+      if (devView === 'team') {
+        // The bulk action below only ever signs out YOUR OWN other sessions —
+        // showing it here, while looking at everyone else's devices, would be
+        // misleading. Per-row "Sign out" is the correct granular action for team.
+        foot.innerHTML = '<span class="dev-count">'+countTxt+'</span>';
+        return;
+      }
+      foot.innerHTML = '<span class="dev-count">'+countTxt+'</span>'
+        + '<div class="dev-bulk-wrap" id="devBulkWrap"><button type="button" class="dev-bulk-btn" id="devBulkBtn">'+L('Sign out of all other devices','登出所有其他设备')+'</button></div>';
+      $('devBulkBtn').addEventListener('click', function(){ confirmBulk(others.length); });
+    }
+
+    function confirmBulk(n){
+      var wrap = $('devBulkWrap'); if (!wrap) return;
+      wrap.innerHTML = '<span class="dev-count">'+L('Sign out '+n+' other device'+(n===1?'':'s')+'?', '登出其他 '+n+' 台设备？')+'</span>'
+        + '<button type="button" class="dev-bulk-ghost" id="devBulkCancel">'+L('Cancel','取消')+'</button>'
+        + '<button type="button" class="dev-bulk-danger" id="devBulkConfirm">'+L('Confirm','确认')+'</button>';
+      $('devBulkCancel').addEventListener('click', function(){ renderDeviceRows(); });
+      $('devBulkConfirm').addEventListener('click', revokeOthers);
+    }
+
     function revoke(sid, isCurrent, btn){
-      if (btn) { btn.disabled = true; btn.textContent = L('…','…'); }
+      if (btn) { btn.disabled = true; btn.textContent = L('Signing out…','正在登出…'); }
       fetch('/api/backend/sessions/revoke', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ sid:sid }) })
         .then(function(r){ return r.json().catch(function(){ return {}; }); })
         .then(function(res){
           if (res && res.wasCurrent) { logoutRedirect(); return; }
+          devRaw = devRaw.filter(function(d){ return d.id !== sid; });
           var row = document.querySelector('.dev[data-sid="'+cssq(sid)+'"]');
-          if (row) { row.style.transition='opacity .25s'; row.style.opacity='0'; setTimeout(function(){ loadDevices(); }, 250); }
-          else loadDevices();
+          if (row) { row.style.transition='opacity .25s'; row.style.opacity='0'; setTimeout(function(){ renderDeviceRows(); }, 250); }
+          else renderDeviceRows();
         })
         .catch(function(){ if (btn){ btn.disabled=false; btn.textContent=L('Sign out','登出'); } });
     }
     function revokeOthers(){
-      var clr = $('devClear'); if (clr){ clr.disabled = true; clr.textContent = L('Signing out…','正在登出…'); }
+      var wrap = $('devBulkWrap'); if (wrap) wrap.innerHTML = '<span class="dev-count">'+L('Signing out…','正在登出…')+'</span>';
       fetch('/api/backend/sessions/revoke-others', { method:'POST', credentials:'same-origin' })
         .then(function(){ loadDevices(); })
         .catch(function(){ loadDevices(); });
