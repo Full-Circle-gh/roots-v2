@@ -3525,10 +3525,10 @@ async function openOrder(id, opts = {}) {
       const foot = $('#order-drawer-foot');
       if (foot) foot.innerHTML = '';  // drop the previous order's print footer while loading
       openDrawer('#order-drawer');
-      // Desktop: render the order as an in-flow page (hides the tab sections,
-      // drops the drawer to static). The CSS gates this to ≥721px; phones keep
-      // the full-screen drawer. Start at the top of the new page.
-      document.body.classList.add('ord-viewing');
+      // Back to the floating slide-in drawer (was briefly an in-flow desktop
+      // page via body.ord-viewing — reverted per operator feedback). The
+      // ord-viewing CSS/markup stays in place, just unreached, in case this
+      // gets revisited.
       window.scrollTo(0, 0);
     }
   }
