@@ -69,7 +69,7 @@
   .brand{display:flex; flex-direction:column; align-items:center; gap:14px; margin-bottom:8px; text-align:center;}
   .wave{display:inline-flex; align-items:center; color:var(--text);}
   .wave svg path{stroke:currentColor;}
-  .settleline{stroke-dasharray:120; stroke-dashoffset:120; animation:draw 1.1s var(--ease) .15s forwards;}
+  .settleline{stroke-dasharray:100; stroke-dashoffset:100; animation:draw 1.1s var(--ease) .15s forwards;}
   @keyframes draw{to{stroke-dashoffset:0;}}
   .dot-breathe{animation:breathe 2.4s var(--ease) infinite;}
   @keyframes breathe{0%,100%{opacity:1;} 50%{opacity:.45;}}
@@ -159,8 +159,8 @@
     <div class="brand">
       <span class="wave" aria-hidden="true">
         <svg width="64" height="36" viewBox="0 0 64 36" fill="none">
-          <path class="settleline" d="M2 18c5 0 5-12 10-12s5 22 10 22 5-16 9-16 4 6 8 6h21" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle class="dot-breathe" cx="58" cy="10" r="2.6" fill="#6E67AF"/>
+          <path class="settleline" pathLength="100" d="M10 18 C14 9, 18 27, 22 18 C26 10.7, 30 25.3, 34 18 C37 13.5, 40 22.5, 43 18 L56 18" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle class="dot-breathe" cx="58" cy="18" r="2.6" fill="#6E67AF"/>
         </svg>
       </span>
       <span class="wordmark" data-no-i18n>tacet</span>
