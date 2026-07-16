@@ -132,22 +132,17 @@ function dashSparkline(values, opts) {
   // Today may not have started yet (all zero) while the ghost carries shape —
   // show the ghost (+ floor, on the big chart) alone, no line/area/dot. A bare
   // curve with nothing to say it's "typical Thursday" and not live data reads
-  // as a nameless squiggle, so the big chart names it with a direct label —
-  // an HTML overlay (not SVG <text>) so it isn't squashed by the non-uniform
-  // preserveAspectRatio="none" scale, same trick as the end-dot below.
+  // as a nameless squiggle, so the big chart names it with a direct label — a
+  // fixed corner caption, NOT tracking the curve: the ghost's own peak always
+  // sits at the scale's ceiling (y = pad, the very top of the drawable area,
+  // since todayFlat means the ghost alone sets the max), so there is never
+  // headroom to float a label above it without clipping against the wrap's
+  // overflow:hidden. A static top-left caption sits over the day's early,
+  // low hours instead and never competes with the line.
   if (todayFlat) {
-    let ghostLabel = '';
-    if (big && hasGhost && opts.ghostLabel) {
-      // Anchor above the curve's highest point (not just its last point,
-      // which can itself sit on a peak) so the label clears the line
-      // wherever it happens to crest, plus a fixed pixel margin (not a %
-      // transform, which scales with the label's own — near-fixed — height
-      // and wasn't enough clearance in practice).
-      const peakIdx = ghost.indexOf(Math.max(...ghost));
-      const gx = Math.min(88, Math.max(12, x(peakIdx)));
-      const gy = (y(ghost[peakIdx]) / H) * 100;
-      ghostLabel = `<span class="db-spark-ghost-label" style="left:${gx.toFixed(1)}%;top:calc(${gy.toFixed(1)}% - 10px)">${escapeHtml(opts.ghostLabel)}</span>`;
-    }
+    const ghostLabel = (big && hasGhost && opts.ghostLabel)
+      ? `<span class="db-spark-ghost-label">${escapeHtml(opts.ghostLabel)}</span>`
+      : '';
     return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${baseline}${ghostSvg}</svg>${ghostLabel}`;
   }
   const p = vals.map((v, i) => ({ x: x(i), y: y(v) }));
