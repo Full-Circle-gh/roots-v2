@@ -1317,37 +1317,6 @@ function paRenderKpis(animate) {
     const el = document.getElementById(id);
     if (el) el.classList.toggle('pa-kpi-on', PA_STATUS === status);
   }
-  // Filter chip under the band: only while a jump filter is active. A bordered
-  // rectangle (not a text line) — tells the operator what they're looking at,
-  // gives a one-move "Select all", and an X to clear back to the full catalogue.
-  const banner = document.getElementById('pa-recap-banner');
-  if (banner) {
-    const meta = {
-      oos:     { c: 'var(--danger)', en: 'sold-out products',   cn: '缺货产品',     n: oos },
-      low:     { c: 'var(--warn)',   en: 'low-stock products',  cn: '库存偏低产品', n: low },
-      drafts:  { c: 'var(--text-3)', en: 'disabled products',   cn: '已下架产品',   n: drafts },
-      restock: { c: 'var(--warn)',   en: 'products to restock', cn: '需补货产品',   n: oos + low },
-      live:    { c: 'var(--accent)', en: 'live products',       cn: '已上架产品',   n: live },
-      // Highlights-band filters (counts come from the fetched payload).
-      dead:       { c: 'var(--td-brick)', en: 'products with no sale in 30 days', cn: '30 天无销量产品', n: PA_HI_SETS.dead.size },
-      promo:      { c: 'var(--td-sage)',  en: 'products on a flash sale', cn: '正在闪购的产品', n: PA_HI_SETS.promo.size },
-    };
-    const m = meta[PA_STATUS];
-    if (m) {
-      banner.hidden = false;
-      const clearLbl = cuT('Clear filter', '清除筛选');
-      banner.innerHTML =
-        `<span class="rb-dot" style="background:${m.c}"></span>` +
-        `<span class="rb-text">` + cuT('Showing ', '正在显示 ') + `<b>${fcNum(m.n)}</b>` + cuT(' of your ' + m.en, ' 件' + m.cn) + `</span>` +
-        `<button type="button" class="rb-select" onclick="paSelectAllFiltered()">${cuT('Select all', '全选')}</button>` +
-        `<button type="button" class="rb-close" onclick="paSetStatus('all')" title="${clearLbl}" aria-label="${clearLbl}">` +
-          `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>` +
-        `</button>`;
-    } else {
-      banner.hidden = true;
-      banner.innerHTML = '';
-    }
-  }
 }
 // ── Catalogue highlights — folded into the Jump-to row ─────────────────────
 // Two more quick filters that used to live in a separate "Highlights" band:
@@ -1380,15 +1349,6 @@ function paRenderHighlights() {
   promoTile.hidden = !promo;
   const deadN = document.getElementById('pa-kpi-dead'); if (deadN) deadN.textContent = fcNum(dead);
   const promoN = document.getElementById('pa-kpi-promo'); if (promoN) promoN.textContent = fcNum(promo);
-}
-
-// Recap-banner shortcut: arm bulk-select and tick every product on the current
-// (filtered) page in one move — the "Select all N" affordance. paRender()
-// repopulates PA_VISIBLE_MEMBER_IDS for the filtered page before we tick them.
-function paSelectAllFiltered() {
-  PA_SELECT_MODE = true;
-  paRender();
-  paSelectAllVisible(true);
 }
 
 let PA_FILTERED_IDS = [];
@@ -1513,14 +1473,18 @@ function paSetSelectMode(on) {
 }
 function paClearSelection() { PA_SELECTED = new Set(); paRender(); }
 // Toggle one unit (csv of member ids). All-in → remove all; otherwise add all,
-// so a half-selected group flips fully on.
+// so a half-selected group flips fully on. The row checkbox is always on
+// screen (not gated behind the "Bulk" button), so ticking one is itself what
+// arms select mode — the bulk bar then slides in already showing that tick.
 function paToggleSelect(ids) {
+  PA_SELECT_MODE = true;
   const list = String(ids).split(',').map(Number).filter(Boolean);
   const allIn = list.length && list.every(id => PA_SELECTED.has(id));
   list.forEach(id => allIn ? PA_SELECTED.delete(id) : PA_SELECTED.add(id));
   paRender();
 }
 function paSelectAllVisible(on) {
+  PA_SELECT_MODE = true;
   PA_VISIBLE_MEMBER_IDS.forEach(id => on ? PA_SELECTED.add(id) : PA_SELECTED.delete(id));
   paRender();
 }
@@ -1763,9 +1727,9 @@ function paRender() {
       : null;
     const grip = reorderActive ? '<span></span>' : '';
     const allVisSel = PA_VISIBLE_MEMBER_IDS.length && PA_VISIBLE_MEMBER_IDS.every(id => PA_SELECTED.has(id));
-    const selHead = PA_SELECT_MODE ? `<span class="pa-selbox"><input type="checkbox" ${allVisSel ? 'checked' : ''} onclick="paSelectAllVisible(this.checked)" title="${cuT('Select all on this page', '全选本页')}"></span>` : '';
+    const selHead = `<span class="pa-selbox"><input type="checkbox" ${allVisSel ? 'checked' : ''} onclick="paSelectAllVisible(this.checked)" title="${cuT('Select all on this page', '全选本页')}"></span>`;
     const head = (overview && pageUnits.length) ? `
-      <div class="pa-rowhead"${PA_SELECT_MODE ? '' : ' aria-hidden="true"'}>
+      <div class="pa-rowhead">
         ${selHead}${grip}<span></span>
         <span>${cuT('Product', '产品')}</span>
         <span>${cuT('Category', '分类')}</span>
@@ -1792,10 +1756,14 @@ function paRender() {
           ? ` ondragover="paRowDragOver(event, ${ui})" ondragleave="paRowDragLeave(event)" ondrop="paRowDrop(event, ${ui})"`
           : '';
         const memberIds = (u.group ? u.members.map(m => m.id) : [p.id]).join(',');
-        const selRow = PA_SELECT_MODE && memberIds.split(',').every(id => PA_SELECTED.has(Number(id)));
+        const selRow = memberIds.split(',').every(id => PA_SELECTED.has(Number(id)));
+        // In select mode the whole row toggles the tick (box is display-only,
+        // pointer-events:none in CSS). Outside select mode the row still opens
+        // the editor, so the box needs its own click handler + stopPropagation
+        // to tick without navigating away.
         const selCell = PA_SELECT_MODE
           ? `<span class="pa-selbox"><input type="checkbox" tabindex="-1" aria-hidden="true" ${selRow ? 'checked' : ''}></span>`
-          : '';
+          : `<span class="pa-selbox"><input type="checkbox" ${selRow ? 'checked' : ''} onclick="event.stopPropagation();paToggleSelect('${memberIds}')"></span>`;
         const rowClick = PA_SELECT_MODE ? `paToggleSelect('${memberIds}')` : `paOpenEdit(${p.id})`;
         return `
         <div class="pa-row${selRow ? ' is-sel' : ''}" onclick="${rowClick}"${rowDrag}>

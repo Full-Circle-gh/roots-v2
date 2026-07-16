@@ -2265,31 +2265,6 @@
   }
   .pa-low-reset:hover { color: var(--td-text); }
 
-  /* Filter chip under the band — a bordered rectangle, only while a jump
-     filter is on. Replaces the old plain text line: label + Select all +
-     an explicit X to clear, instead of an underlined "see all" link. */
-  .pa-recap-banner {
-    display: flex; align-items: center; gap: 10px; margin: 0 0 var(--s3); padding: 9px 10px 9px 12px;
-    font-size: 13.5px; color: var(--td-text2); font-family: var(--f-sans);
-    background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 8px;
-  }
-  .pa-recap-banner .rb-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .pa-recap-banner .rb-text { flex: 1; min-width: 0; }
-  .pa-recap-banner b { color: var(--td-text); font-weight: 600; }
-  .pa-recap-banner .rb-select {
-    flex: none; background: none; border: 0; cursor: pointer; padding: 4px 2px;
-    font: 500 12.5px var(--f-sans); color: var(--td-text); text-decoration: underline;
-    text-decoration-color: var(--td-border); text-underline-offset: 3px;
-  }
-  .pa-recap-banner .rb-select:hover { text-decoration-color: var(--td-text); }
-  .pa-recap-banner .rb-close {
-    flex: none; display: inline-flex; align-items: center; justify-content: center;
-    width: 24px; height: 24px; border-radius: 6px; border: 1px solid transparent;
-    background: none; cursor: pointer; color: var(--td-text2); padding: 0;
-    transition: background .15s cubic-bezier(.16,1,.3,1), border-color .15s cubic-bezier(.16,1,.3,1), color .15s cubic-bezier(.16,1,.3,1);
-  }
-  .pa-recap-banner .rb-close:hover { background: var(--td-surface); border-color: var(--td-border); color: var(--td-text); }
-  .pa-recap-banner .rb-close:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 1px; }
   @media (max-width: 720px) {
     .pa-recap { gap: 14px; padding: 14px 16px; }
     .pa-recap-n { font-size: 30px; }
@@ -2485,10 +2460,11 @@
   }
   .pa-list-rich .pa-row, .pa-rowhead {
     display: grid;
-    /* Track list is set inline per render (paRender) — img · name · category ·
+    /* Leading 34px is the always-on select checkbox column. Rest of the track
+       list is set inline per render (paRender) — img · name · category ·
        SKU · one column per store · price. Fallback keeps the old single-stock
        shape for safety. */
-    grid-template-columns: var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
+    grid-template-columns: 34px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
     align-items: center; gap: var(--s3);
   }
   .pa-list-rich .pa-row {
@@ -2569,7 +2545,7 @@
      Only the grip starts a drag — the rest of the row still clicks to edit. */
   .pa-list-rich.pa-reorder .pa-row,
   .pa-list-rich.pa-reorder .pa-rowhead {
-    grid-template-columns: 22px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
+    grid-template-columns: 34px 22px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
   }
   .pa-grip {
     display: flex; align-items: center; justify-content: center;
@@ -2583,19 +2559,18 @@
   .pa-row.pa-row-drop { box-shadow: inset 0 2px 0 0 var(--td-text); }
 
   /* ── Multi-select (bulk edit) ──────────────────────────────────────────────
-     A leading checkbox column slides in when select-mode is armed (the "Select"
-     button in the bulk bar). Clicking anywhere on a row toggles its tick; the
-     bulk bar then applies one change to every ticked product. Mutually exclusive
-     with reorder (we don't arm reorder while selecting). */
-  .pa-list-rich.pa-selecting .pa-row,
-  .pa-list-rich.pa-selecting .pa-rowhead {
-    grid-template-columns: 34px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
-  }
+     The leading checkbox column is always on screen (ticking one is itself
+     what arms select mode). Once armed, clicking anywhere on a row toggles
+     its tick and the bulk bar applies one change to every ticked product.
+     Reorder wins over select mode's row-click takeover (mutually exclusive —
+     we don't arm reorder while selecting). */
   .pa-selbox { display: flex; align-items: center; justify-content: center; }
   /* Selection is an ordinary act, so it wears Ink — never Dusk. */
   .pa-selbox input { width: 16px; height: 16px; accent-color: var(--td-text); cursor: pointer; margin: 0; }
-  /* On a row the whole row handles the toggle, so the box is display-only. */
-  .pa-list-rich .pa-row .pa-selbox input { pointer-events: none; }
+  /* Once select mode is armed the whole row handles the toggle, so the box
+     becomes display-only (its own click would double-fire the row's). Before
+     that the box is the only thing that ticks, so it stays clickable. */
+  .pa-list-rich.pa-selecting .pa-row .pa-selbox input { pointer-events: none; }
   .pa-list-rich.pa-selecting .pa-row { cursor: pointer; }
   .pa-list-rich .pa-row.is-sel { background: var(--td-raised); }
   .pa-list-rich .pa-row.is-sel:hover { background: var(--td-raised); box-shadow: inset 2px 0 0 0 var(--td-text); }
