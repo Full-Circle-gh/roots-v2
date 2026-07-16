@@ -1041,6 +1041,12 @@ async function loadOrders(opts = {}) {
     }).join('');
     ordTweaksApply();
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
+    // Docked master/detail: keep the open order's rail row highlighted across
+    // the live re-render (the fresh rows lose the class otherwise).
+    if (document.body.classList.contains('ord-split') && _OPEN_ORDER) {
+      const _openRow = document.querySelector('tr.order-row[data-order-id="' + _OPEN_ORDER.id + '"]');
+      if (_openRow) _openRow.classList.add('is-open');
+    }
 
     _ORDERS_SEEN_IDS = newIds;
     _ORDERS_NOTIFIED_IDS = actionableIds;
@@ -3556,6 +3562,8 @@ async function openOrder(id, opts = {}) {
       const _chip = _row.querySelector('.new-chip');
       if (_chip) _chip.remove();
     }
+    // Desktop: reflow the tab into the docked master/detail (rail + detail).
+    ordEnterSplit(id);
   } catch (e) {
     mount.innerHTML = `<div class="order-card err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
     mount.classList.remove('od-swapping');
@@ -3634,7 +3642,42 @@ onDrawerClose('#order-drawer', () => {
   const m = document.getElementById('order-detail-mount');
   if (m) m.innerHTML = '';
   _OPEN_ORDER = null;
+  // Drop split-master/detail only AFTER the slide-out — by now the panel is
+  // translated off-screen, so reverting its dock geometry is invisible (no snap).
+  ordExitSplit();
 });
+
+// ── Orders · split master / detail (desktop) ─────────────────────────────
+// On a wide screen an open order reflows the Orders tab into a docked
+// master/detail (body.ord-split; the CSS gates it to ≥1080px). The list
+// collapses to a left rail and the existing detail docks beside it. Purely
+// additive: narrow screens and the closed state keep the floating drawer.
+// --ord-dock-left is the rail's live right edge, so the dock survives a
+// collapsed nav / any content width without a hard-coded offset.
+function ordSyncDock() {
+  if (!document.body.classList.contains('ord-split')) return;
+  const sec = document.getElementById('tab-orders');
+  if (!sec) return;
+  const right = Math.round(sec.getBoundingClientRect().right);
+  document.documentElement.style.setProperty('--ord-dock-left', Math.max(0, right) + 'px');
+}
+let _ordDockResizeBound = false;
+function ordEnterSplit(id) {
+  document.body.classList.add('ord-split');
+  document.querySelectorAll('tr.order-row.is-open').forEach(r => r.classList.remove('is-open'));
+  const row = document.querySelector('tr.order-row[data-order-id="' + id + '"]');
+  if (row) row.classList.add('is-open');
+  requestAnimationFrame(ordSyncDock);
+  if (!_ordDockResizeBound) {
+    _ordDockResizeBound = true;
+    window.addEventListener('resize', ordSyncDock);
+  }
+}
+function ordExitSplit() {
+  document.body.classList.remove('ord-split');
+  document.querySelectorAll('tr.order-row.is-open').forEach(r => r.classList.remove('is-open'));
+  document.documentElement.style.removeProperty('--ord-dock-left');
+}
 
 // Row-click → open. Delegated so it survives table re-renders. Bails when
 // the click landed on an interactive child (button, link, input) so those
