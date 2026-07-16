@@ -100,7 +100,7 @@ function ordChannelLabel(o) {
   if (c === 'gzgrocery') return 'Gzgrocery';
   if (c === 'web')       return 'Web';
   if (c === 'manual')    return cuT('Manual', '手动');
-  return 'Mini app';
+  return 'WeChat';
 }
 // Read-only channels (Meituan) carry their OWN order lifecycle we don't fulfil.
 // The daemon mirrors the platform's current status label into channel_status

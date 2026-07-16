@@ -875,7 +875,7 @@ function fcBarRows(items, opt) {
 // overview page; all stores, GZ-local day, no .data wrapper). The activity
 // feed itself now lives inside The Recap's "Show the work" fold.
 const DASH_CHAN_NAMES = {
-  wechat:    ['Mini app', '小程序'],
+  wechat:    ['WeChat', '微信'],
   web:       ['Web shop', '网上商店'],
   meituan:   ['Meituan', '美团'],
   eleme:     ['Eleme', '饿了么'],
@@ -1125,7 +1125,7 @@ function dashDraftsRender() {
 // customer-service only; its own pull of the (heavy) orders list, role-guarded
 // so no other role fetches it. Language-dependent (channel + stage words).
 const DASH_CHAN_SHORT = {
-  wechat: ['Mini app', '小程序'], web: ['Web', '网店'],
+  wechat: ['WeChat', '微信'], web: ['Web', '网店'],
   meituan: ['Meituan', '美团'], gzgrocery: ['gzgrocery', 'gzgrocery'], manual: ['Manual', '手动'],
 };
 async function dashOnroadLoad() {
