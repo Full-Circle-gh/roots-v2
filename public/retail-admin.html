@@ -10023,6 +10023,11 @@
 
 </main>
 
+<!-- Focus scrim behind the order drawer: blurs + dims the list (and the rest
+     of the chrome) so the operator focuses on the one order. Toggled with the
+     drawer in openDrawer/closeDrawer; a click on it closes the order. -->
+<div id="order-scrim" class="ord-scrim" aria-hidden="true" onclick="closeDrawer('#order-drawer')"></div>
+
 <!-- Customer detail drawer — same slide-in pattern as Orders. -->
 <aside id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
   <button type="button" class="drawer-close" onclick="closeDrawer('#cu-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">

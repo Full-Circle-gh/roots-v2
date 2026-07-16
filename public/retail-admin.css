@@ -5029,6 +5029,22 @@
     transition: transform 1100ms cubic-bezier(.16, 1, .3, 1),
                 visibility 0s linear 0s;
   }
+  /* ─── Order-drawer focus scrim ───────────────────────────────────────
+     Blur + dim behind the order detail so the operator focuses on the one
+     order rather than the list behind it. z-index 199 — under the drawer
+     (200), over the topbar (12) + rail (11) — so everything but the drawer
+     de-focuses. Fades with the drawer; a click closes the order (same as the
+     dw-dismiss outside-click). Scoped to Orders. On phones the full-screen
+     drawer covers it, so it's a no-op there. */
+  .ord-scrim {
+    position: fixed; inset: 0; z-index: 199;
+    background: rgba(17, 26, 43, .30);
+    backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none;
+    transition: opacity .3s var(--ease-out);
+  }
+  .ord-scrim.show { opacity: 1; pointer-events: auto; }
+  @media (prefers-reduced-motion: reduce) { .ord-scrim { transition: none; } }
   .side-drawer.dw-wide { --drawer-vw: 80vw; --drawer-px: 980px; }
   /* Compact peek — the activity drawer holds only a few lines, so it doesn't
      need the full editor width. Narrower panel sized to its content. */

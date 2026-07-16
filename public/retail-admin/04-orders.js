@@ -3584,13 +3584,23 @@ function openDrawer(sel) {
   if (!d) return;
   d.classList.add('open');
   d.setAttribute('aria-hidden', 'false');
+  // Order drawer opens in focus mode: raise the blur+dim scrim behind it.
+  if (d.id === 'order-drawer') {
+    const sc = document.getElementById('order-scrim');
+    if (sc) sc.classList.add('show');
+  }
 }
 function closeDrawer(sel) {
   const d = typeof sel === 'string' ? document.querySelector(sel) : sel;
   if (!d) return;
   d.classList.remove('open');
-  // Order page: drop in-flow page mode synchronously so the list returns at once.
-  if (d.id === 'order-drawer') document.body.classList.remove('ord-viewing');
+  // Order drawer: drop the focus scrim (and the legacy in-flow page mode)
+  // synchronously so the list returns at once.
+  if (d.id === 'order-drawer') {
+    document.body.classList.remove('ord-viewing');
+    const sc = document.getElementById('order-scrim');
+    if (sc) sc.classList.remove('show');
+  }
   d.setAttribute('aria-hidden', 'true');
   const key = typeof sel === 'string' ? sel : '#' + d.id;
   const hook = _drawerCloseHooks.get(key);
