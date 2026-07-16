@@ -8147,19 +8147,24 @@ function backfillShipmentTrackingFromOrder(orderId) {
 }
 
 function nextOrderNo() {
-  // MA{7-digit-random}. Short and easy to read/say — two letters + 7 digits.
-  // A random suffix (not a daily counter) so the digits are always different,
-  // never the repeating 0001/0002/0003 a per-day reset produces. Retry until
-  // the full number is unused.
+  // TC{6-digit sequential}, e.g. TC000001, TC000002, ... — every order this
+  // system creates itself (mini-app, web storefront, manual admin order) goes
+  // through this one function. External-channel mirrors (Meituan MT, Eleme
+  // EL, Gzgrocery GZ) mint their own order_no separately and never call this.
+  // Callers always run this inside an (immediate) tdb().transaction() so the
+  // read-max + INSERT serialize — see call sites for why that matters.
+  const row = tdb().prepare(
+    `SELECT MAX(CAST(SUBSTR(order_no, 3) AS INTEGER)) AS n FROM retail_orders WHERE order_no LIKE 'TC______'`
+  ).get();
+  let next = (row && row.n ? row.n : 0) + 1;
   const exists = tdb().prepare(`SELECT 1 FROM retail_orders WHERE order_no = ? LIMIT 1`);
   for (let attempt = 0; attempt < 50; attempt++) {
-    // 1000000–9999999: always 7 digits, never leading-zero padded.
-    const suffix = String(1000000 + Math.floor(Math.random() * 9000000));
-    const candidate = 'MA' + suffix;
+    const candidate = 'TC' + String(next).padStart(6, '0');
     if (!exists.get(candidate)) return candidate;
+    next++;
   }
   // Extremely unlikely fallback: append more entropy to guarantee uniqueness.
-  return 'MA' + String(1000000 + Math.floor(Math.random() * 9000000)) + String(Math.floor(Math.random() * 10));
+  return 'TC' + String(next) + String(Math.floor(Math.random() * 10));
 }
 
 router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req, res, next) => {

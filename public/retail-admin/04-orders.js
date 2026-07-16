@@ -108,17 +108,17 @@ function ordIsReadonlyChannel(o) {
 // Short display for the list glance. Channel/legacy numbers look like
 // PREFIX + [sep] + yyyymmdd + sequence (e.g. MT20260706256422, GZ-138616).
 // The date is dead weight — the row already carries a time column — so
-// collapse anything over 6 digits to prefix + last 6 (MT·256422). A hyphen
-// separator (GZ-138616) is normalised to a middot so the column doesn't
-// line-break at the dash. Full number still shows in the drawer and on hover.
+// collapse anything over 6 digits to prefix + last 6 (MT256422). A hyphen
+// separator (GZ-138616) is dropped so the column doesn't line-break at the
+// dash. Full number still shows in the drawer and on hover.
 function ordShortNo(no) {
   const s = String(no || '');
   const m = s.match(/^([A-Za-z]+)[-·\s]?(\d+)$/);
   if (!m) return s;
   const prefix = m[1], digits = m[2];
-  if (digits.length > 6) return prefix + '·' + digits.slice(-6);
-  // Short enough already — but swap a wrapping hyphen for the middot.
-  return s.includes('-') ? prefix + '·' + digits : s;
+  if (digits.length > 6) return prefix + digits.slice(-6);
+  // Short enough already — but drop a wrapping hyphen.
+  return s.includes('-') ? prefix + digits : s;
 }
 function ordChannelLabel(o) {
   const c = String(o.channel || 'wechat').toLowerCase();
