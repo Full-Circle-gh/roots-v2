@@ -10167,8 +10167,16 @@
       #tab-team .tm-perm-row.locked label, #tab-team .tm-perm-row.locked input { cursor: not-allowed; }
 
       @media (max-width: 720px) { #tab-team .tm-grid2 { grid-template-columns: 1fr; } }
+
+      /* Content column — capped and centered so the card doesn't stretch
+         edge-to-edge on wide screens (mockup: reference/team-tab-centered-
+         mockup.html). Modals sit outside .tm-frame — position:fixed centers
+         on the viewport regardless of DOM nesting, so it doesn't matter either
+         way, but they read as overlays, not part of the content column. */
+      #tab-team .tm-frame { max-width: 780px; margin: 0 auto; }
     </style>
 
+    <div class="tm-frame">
     <div class="tm-head"><h2>Team · 团队</h2></div>
 
     <div class="tm-card">
@@ -10247,6 +10255,7 @@
           <button type="button" class="tm-copy" id="tmCredCopy">Copy username &amp; password · 复制用户名和密码</button>
         </div>
       </form>
+    </div>
     </div>
 
     <!-- Edit member modal -->
