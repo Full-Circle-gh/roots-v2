@@ -450,6 +450,12 @@
     var LANG_KEY = 'roots-admin-lang';
     var lang = document.documentElement.getAttribute('data-lang') === 'cn' ? 'cn' : 'en';
     function L(en, cn){ return lang === 'cn' ? cn : en; }
+    function pickErr(s){
+      if (!s) return s;
+      var i = s.indexOf(' · ');
+      if (i < 0) return s;
+      return lang === 'cn' ? s.slice(i + 3) : s.slice(0, i);
+    }
     var lastUser = null;
     var loaded = { devices:false, recovery:false, notifications:false };
     var recCurrent = { email:null, verified:false, phone:null, phoneVerified:false,
@@ -525,7 +531,7 @@
             if (lastUser) { lastUser.displayName = res.data.displayName || name; hydrate(lastUser); notifyParent(); }
             $('idrow').classList.remove('editing');
             setMsg($('nameMsg'), 'ok', L('Saved','已保存'));
-          } else { setMsg($('nameMsg'), 'err', (res.data && res.data.error) || L('Couldn’t save — please try again','保存失败，请重试')); }
+          } else { setMsg($('nameMsg'), 'err', pickErr(res.data && res.data.error) || L('Couldn’t save — please try again','保存失败，请重试')); }
         })
         .catch(function(){ $('nameBtn').disabled = false; $('nameBtn').classList.remove('loading'); setMsg($('nameMsg'), 'err', L('Network error — please try again','网络错误，请重试')); });
     });
@@ -539,7 +545,7 @@
           if (res.ok && res.data && res.data.success) {
             if (lastUser) { lastUser.avatarUrl = res.data.avatarUrl || null; renderAvatar(lastUser); notifyParent(); }
             setMsg($('avatarMsg'), 'ok', dataUrl ? L('Photo updated','照片已更新') : L('Photo removed','照片已移除'));
-          } else { setMsg($('avatarMsg'), 'err', (res.data && res.data.error) || L('Couldn’t save photo','无法保存照片')); }
+          } else { setMsg($('avatarMsg'), 'err', pickErr(res.data && res.data.error) || L('Couldn’t save photo','无法保存照片')); }
         })
         .catch(function(){ setMsg($('avatarMsg'), 'err', L('Network error — please try again','网络错误，请重试')); });
     }
@@ -578,7 +584,7 @@
         .then(function(res){
           $('pwBtn').disabled = false; $('pwBtn').classList.remove('loading');
           if (res.ok && res.data && res.data.success) { $('pwForm').reset(); $('defaultWarn').classList.remove('show'); setMsg($('msg'), 'ok', L('Password updated','密码已更新')); }
-          else { setMsg($('msg'), 'err', (res.data && res.data.error) || L('Couldn’t update password','无法更新密码')); }
+          else { setMsg($('msg'), 'err', pickErr(res.data && res.data.error) || L('Couldn’t update password','无法更新密码')); }
         })
         .catch(function(){ $('pwBtn').disabled = false; $('pwBtn').classList.remove('loading'); setMsg($('msg'), 'err', L('Network error — please try again','网络错误，请重试')); });
     });
@@ -726,7 +732,7 @@
           .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
           .then(function(res){
             if (res.ok && res.data && res.data.success) { renderTwofa('confirm'); var c=$('twofaCode'); if (c) c.focus(); }
-            else { renderTwofa('off'); var m=$('twofaMsg'); if (m) setMsg(m,'err',(res.data&&res.data.error)||L('Couldn’t send — please try again','发送失败，请重试')); }
+            else { renderTwofa('off'); var m=$('twofaMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Couldn’t send — please try again','发送失败，请重试')); }
           })
           .catch(function(){ renderTwofa('off'); var m=$('twofaMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
         return;
@@ -738,7 +744,7 @@
           .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
           .then(function(res){
             if (res.ok && res.data && res.data.success) { recCurrent.twofaEnabled = true; recCurrent.twofaMethod = res.data.method || twofaMethodSel; renderTwofa('on'); }
-            else { if (btn2){ btn2.disabled=false; btn2.classList.remove('loading'); } var m=$('twofaMsg'); if (m) setMsg(m,'err',(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
+            else { if (btn2){ btn2.disabled=false; btn2.classList.remove('loading'); } var m=$('twofaMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
           })
           .catch(function(){ if (btn2){ btn2.disabled=false; btn2.classList.remove('loading'); } var m=$('twofaMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
         return;
@@ -879,7 +885,7 @@
           .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
           .then(function(res){
             if (res.ok && res.data && res.data.success) { recPending = res.data.email; renderRecovery('code'); var c=$('recCode'); if (c) c.focus(); }
-            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',(res.data&&res.data.error)||L('Couldn’t send — please try again','发送失败，请重试')); }
+            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Couldn’t send — please try again','发送失败，请重试')); }
           })
           .catch(function(){ if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
         return;
@@ -892,7 +898,7 @@
           .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
           .then(function(res){
             if (res.ok && res.data && res.data.success) { recCurrent.email = res.data.email; recCurrent.verified = true; renderRecovery('set'); renderTwofa(recCurrent.twofaEnabled?'on':'off'); }
-            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
+            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
           })
           .catch(function(){ if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('recMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
         return;
@@ -969,7 +975,7 @@
           .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
           .then(function(res){
             if (res.ok && res.data && res.data.success) { phPending = res.data.phone; renderPhone('code'); var c=$('phCode'); if (c) c.focus(); }
-            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('phMsg'); if (m) setMsg(m,'err',(res.data&&res.data.error)||L('Couldn’t send — please try again','发送失败，请重试')); }
+            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('phMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Couldn’t send — please try again','发送失败，请重试')); }
           })
           .catch(function(){ if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('phMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
         return;
@@ -982,7 +988,7 @@
           .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(d){ return { ok:r.ok, data:d }; }); })
           .then(function(res){
             if (res.ok && res.data && res.data.success) { recCurrent.phone = res.data.phone; recCurrent.phoneVerified = true; renderPhone('set'); renderTwofa(recCurrent.twofaEnabled?'on':'off'); }
-            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('phMsg'); if (m) setMsg(m,'err',(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
+            else { if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('phMsg'); if (m) setMsg(m,'err',pickErr(res.data&&res.data.error)||L('Incorrect code','验证码不正确')); }
           })
           .catch(function(){ if (btn){ btn.disabled=false; btn.classList.remove('loading'); } var m=$('phMsg'); if (m) setMsg(m,'err',L('Network error — please try again','网络错误，请重试')); });
         return;

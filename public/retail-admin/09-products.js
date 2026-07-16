@@ -1813,7 +1813,6 @@ function paRender() {
             ${meta ? `<div class="pa-row-sub"><span class="pa-row-meta">${meta}</span></div>` : ''}
           </div>
           <div class="pa-row-pills">${_paPills(p)}</div>
-          <button class="pa-dup-row" type="button" title="Duplicate · 复制" onclick="event.stopPropagation(); paDuplicate(${p.id})">⧉</button>
         </div>`;
     }).join('');
     paApplyRowSelection();
@@ -2391,16 +2390,11 @@ async function pdLoadSales(id) {
   setText('pd-sales-units', Number(d.units || 0).toLocaleString());
   setText('pd-sales-revenue', '¥' + Number(d.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }));
   setText('pd-sales-rank', d.rank ? ('#' + d.rank + ' / ' + d.total_products) : cuT('No sales', '暂无销量'));
+  // Same chart engine as the dashboard (dashSparkline in 03-dashboard.js) —
+  // smoothed curve + ink-to-transparent gradient wash + a marker on today,
+  // instead of a raw straight-line polyline.
   if (spark && Array.isArray(d.daily) && d.daily.length > 1) {
-    const w = 300, h = 36, pad = 2;
-    const max = Math.max(1, ...d.daily.map(x => x.units));
-    const step = (w - pad * 2) / (d.daily.length - 1);
-    const pts = d.daily.map((x, i) => {
-      const px = pad + i * step;
-      const py = h - pad - (x.units / max) * (h - pad * 2);
-      return px.toFixed(1) + ',' + py.toFixed(1);
-    }).join(' ');
-    spark.innerHTML = '<polyline points="' + pts + '" fill="none" stroke="#111A2B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>';
+    spark.innerHTML = dashSparkline(d.daily.map(x => x.units), { dot: true });
   }
 }
 

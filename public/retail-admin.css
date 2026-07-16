@@ -2522,10 +2522,8 @@
   .pa-stock-input.is-low:not(.is-saved):not(.is-err) { border-color: var(--td-amber); color: var(--td-amber); }
   .pa-stock-input.is-out:not(.is-saved):not(.is-err) { border-color: var(--td-brick); color: var(--td-brick); }
 
-  /* Shop column: centre the toggle under its header. The duplicate button is
-     pulled out of flow (hover-reveal) so it never shifts the toggle off-centre. */
-  .pa-list-rich .pa-row-pills { justify-content: center; position: relative; }
-  .pa-list-rich .pa-dup-row { position: absolute; right: 0; }
+  /* Shop column: centre the toggle under its header. */
+  .pa-list-rich .pa-row-pills { justify-content: center; }
   .pa-rowhead .pa-col-shop { text-align: center; }
 
   /* ── Drag-to-reorder (single category, list overview) ──────────────────────
@@ -3245,14 +3243,6 @@
   .feat-off p { font-size: 12.5px; color: var(--td-text2); margin: 0 auto 18px; max-width: 46ch; line-height: 1.6; }
   .feat-off .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
   .feat-off .btn-primary:hover { background: var(--td-dusk); border-color: var(--td-dusk); }
-  .pa-dup-row {
-    flex: none; width: 28px; height: 28px; padding: 0;
-    border: 1px solid var(--td-border); border-radius: 6px;
-    background: var(--td-surface); color: var(--td-text2); cursor: pointer;
-    font-size: 13px; line-height: 1; opacity: 0; transition: opacity .12s;
-  }
-  .pa-row:hover .pa-dup-row { opacity: 1; }
-  .pa-dup-row:hover { border-color: var(--td-text2); color: var(--td-text); }
   .pa-card-img {
     aspect-ratio: 1 / 1;                 /* square crop is the default; the View popover offers 4:3 + full */
     background: var(--td-raised);
@@ -11056,30 +11046,39 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pd-sales-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 2px; }
   #pd-editor .pd-sales-kpi .v { font-size: 20px; font-weight: 600; color: #111A2B; font-variant-numeric: tabular-nums; }
   #pd-editor .pd-sales-kpi .l { font-size: 11.5px; color: #58606E; margin-top: 2px; }
-  #pd-editor .pd-sales-spark { width: 100%; height: 32px; margin-top: 10px; }
+  /* .db-spark-wrap gives position:relative + the dot marker's absolute
+     placement; override its height/color here for this card's bigger chart. */
+  #pd-editor .pd-sales-spark { width: 100%; height: 44px; margin-top: 10px; color: #111A2B; }
+  #pd-editor .pd-sales-spark .db-spark-dot { background: #111A2B; }
 
   /* ── Focused panes (Basics / Stock / Page / Details) ───────────────────────
-     One job per screen behind a quiet tab bar. Panes are plain show/hide; every
-     field inside is the same node (same id, same wiring) as the old one-scroll
-     form. pdTab() swaps the active pane. ──────────────────────────────────── */
+     Panes are plain show/hide; every field inside is the same node (same id,
+     same wiring) as the old one-scroll form. pdTab() swaps the active pane.
+     The tab bar is the same raised-pill segmented control used for the sales
+     range and description-mode switches elsewhere in this editor (not a new
+     pattern) — a cream track with a white, shadowed pill on the active tab,
+     instead of a thin underline that was easy to miss. ─────────────────── */
   #pd-editor .pd-tabs {
-    display: flex; gap: 0; margin: 4px 0 20px; border-bottom: 1px solid var(--line-soft);
+    display: flex; gap: 3px; margin: 4px 0 20px; padding: 4px;
+    background: #F6F3EC; border: 1px solid #E4E0D5; border-radius: 12px;
     overflow-x: auto; scrollbar-width: none;
   }
   #pd-editor .pd-tabs::-webkit-scrollbar { display: none; }
   #pd-editor .pd-tab {
-    border: 0; background: none; cursor: pointer; white-space: nowrap;
-    font: 600 13.5px 'Inter', sans-serif; letter-spacing: 0; text-transform: none;
-    color: #58606E; padding: 11px 2px; margin-right: 24px; position: relative;
-    transition: color .15s var(--ease-out);
+    flex: 1; border: 0; background: none; cursor: pointer; white-space: nowrap;
+    font: 500 13px 'Inter', sans-serif; letter-spacing: 0; text-transform: none;
+    color: #58606E; padding: 9px 10px; border-radius: 9px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    transition: background .15s var(--ease-out), color .15s var(--ease-out);
   }
-  #pd-editor .pd-tab:last-child { margin-right: 0; }
+  #pd-editor .pd-tab svg { width: 15px; height: 15px; flex: none; opacity: .75; }
   #pd-editor .pd-tab:hover { color: #111A2B; }
-  #pd-editor .pd-tab.is-active { color: #111A2B; }
-  #pd-editor .pd-tab.is-active::after {
-    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px;
-    background: #111A2B; border-radius: 2px;
+  #pd-editor .pd-tab.is-active {
+    background: #FFFFFF; color: #111A2B;
+    box-shadow: 0 1px 3px rgba(17,26,43,.1), 0 0 0 1px rgba(17,26,43,.03);
   }
+  #pd-editor .pd-tab.is-active svg { opacity: 1; }
+  @media (max-width: 560px) { #pd-editor .pd-tab-txt { display: none; } }
   #pd-editor .pd-pane { display: none; }
   #pd-editor .pd-pane.is-active { display: block; animation: pdPaneIn .28s var(--ease-out) both; }
   @keyframes pdPaneIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -11118,13 +11117,13 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
   /* Tab glance chips — a live hint of what's inside a pane without opening it. */
   #pd-editor .pd-tab-cnt {
-    font-size: 11px; font-weight: 600; color: #58606E; margin-left: 5px;
+    font-size: 11px; font-weight: 600; color: #58606E;
     font-variant-numeric: tabular-nums;
   }
+  #pd-editor .pd-tab.is-active .pd-tab-cnt { color: #111A2B; }
   #pd-editor .pd-tab-chip {
     font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-    color: #4C468A; background: #EEEDF6; border-radius: 999px; padding: 2px 7px; margin-left: 6px;
-    vertical-align: 1px;
+    color: #4C468A; background: #EEEDF6; border-radius: 999px; padding: 2px 7px;
   }
 
   /* ── Editor bento: every tab's cards reflow with the editor's width ─────────

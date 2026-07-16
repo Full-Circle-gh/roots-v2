@@ -304,6 +304,12 @@
   /* Auth handler — wired to the real Mini App Backend operator endpoints. */
   (function () {
     function L(en, cn) { return window.__loginLang === 'cn' ? cn : en; }
+    function pickErr(s) {
+      if (!s) return s;
+      var i = s.indexOf(' · ');
+      if (i < 0) return s;
+      return window.__loginLang === 'cn' ? s.slice(i + 3) : s.slice(0, i);
+    }
     // Already signed in as an operator? Skip straight to the console.
     fetch('/api/backend/me', { credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
@@ -345,7 +351,7 @@
         .then(function (j) {
           if (j && j.success) { window.location.href = '/retail-admin'; return; }
           if (j && j.twofa) { showTwofa(j.hint); reset(); return; }
-          showErr((j && j.error) || L('That username and password don’t match. Check them and try again.', '用户名与密码不匹配,请检查后重试。'));
+          showErr(pickErr(j && j.error) || L('That username and password don’t match. Check them and try again.', '用户名与密码不匹配,请检查后重试。'));
           reset();
         })
         .catch(function () {
@@ -392,7 +398,7 @@
         .then(function (j) {
           if (j && j.success) { window.location.href = '/retail-admin'; return; }
           twofaBtn.disabled = false; twofaBtn.classList.remove('loading');
-          twofaErr.querySelector('span').textContent = (j && j.error) || L('Incorrect code.', '验证码不正确。');
+          twofaErr.querySelector('span').textContent = pickErr(j && j.error) || L('Incorrect code.', '验证码不正确。');
           twofaErr.classList.add('show');
           if (j && j.restart) { setTimeout(function () { window.location.reload(); }, 1800); }
         })
@@ -414,6 +420,12 @@
   /* Forgotten-password reset — three steps in place over the sign-in panel. */
   (function () {
     function L(en, cn) { return window.__loginLang === 'cn' ? cn : en; }
+    function pickErr(s) {
+      if (!s) return s;
+      var i = s.indexOf(' · ');
+      if (i < 0) return s;
+      return window.__loginLang === 'cn' ? s.slice(i + 3) : s.slice(0, i);
+    }
     var loginPanel = document.getElementById('loginPanel');
     var resetPanel = document.getElementById('resetPanel');
     var step1 = document.getElementById('resetStep1');
@@ -460,7 +472,7 @@
         .then(function (res) {
           loadBtn(confirmBtn, false);
           if (res.ok && res.data && res.data.success) { show(step2, false); show(done, true); }
-          else { setErr(err2, (res.data && res.data.error) || L('Incorrect or expired code.', '验证码不正确或已过期。')); }
+          else { setErr(err2, pickErr(res.data && res.data.error) || L('Incorrect or expired code.', '验证码不正确或已过期。')); }
         })
         .catch(function () { loadBtn(confirmBtn, false); setErr(err2, L('Network error — please try again.', '网络错误，请重试。')); });
     });
