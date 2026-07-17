@@ -308,6 +308,7 @@ function refundBadge(o) {
     pending:   'refund req · 申请退款',
     reviewing: 'reviewing · 处理中',
     approved:  'approved · 已批准',
+    paying:    'paying · 退款中',
   };
   const label = labels[rs] || rs;
   return `<span class="pill refund-pending" title="Open refund · 退款进行中 (${rs})">↩ ${label}</span>`;
@@ -348,6 +349,14 @@ function drawerRefundBanner(o) {
     pending:   { en: 'Refund requested',         cn: '客户已申请退款' },
     reviewing: { en: 'Refund under review',      cn: '退款审核中' },
     approved:  { en: 'Refund approved — pay out',cn: '退款已批准 · 待打款' },
+    // Joined at render as `en · cn`. The i18n walker (retail-admin.html
+    // processNode) splits a text node on the FIRST " · " and treats it as an
+    // EN/CN pair ONLY when the left is Chinese-free AND the right has Chinese
+    // (the hasChinese guard) — so keep the en half Latin-only and " · "-free.
+    // No data-no-i18n: we WANT the toggle, like its siblings. (The approved cn
+    // above carries a second " · " yet renders fine: first-middot split + the
+    // left-is-Chinese-free guard leave its Chinese-only right side intact.)
+    paying:    { en: 'Refund paying out',        cn: '退款打款中' },
   };
   const l = labels[rs] || { en: `Refund · ${rs}`, cn: '' };
   const amt = (o.refund_amount_requested != null && Number(o.refund_amount_requested) > 0)
@@ -5626,13 +5635,21 @@ function refundStepBadge(state) {
     pending:    { label: '1. Requested · 已申请',     color: '#f2ca6c', bg: 'rgba(242,202,108,.14)' },
     reviewing:  { label: '2. Reviewing · 处理中',     color: '#7494ff', bg: 'rgba(116,148,255,.14)' },
     approved:   { label: '3. Approved · 已批准',     color: '#5fc28e', bg: 'rgba(95,194,142,.14)' },
+    // Shares step 4 with Paid — the payout is claimed and money is moving through
+    // the gateway. Dusk tint + a breathing dot = the system is acting; it settles
+    // into the sage-tint '4. Paid' on its own once the gateway confirms.
+    paying:     { label: '4. Paying · 退款中',        color: 'var(--td-dusk)', bg: 'var(--td-dusk-tint)', dot: true },
     paid:       { label: '4. Paid · 已退款',          color: '#5fc28e', bg: 'rgba(95,194,142,.18)' },
     rejected:   { label: '✗ Rejected · 已拒绝',       color: 'var(--danger)', bg: 'rgba(232,85,106,.1)' },
     withdrawn:  { label: '↺ Withdrawn · 已撤回',      color: 'var(--text-3)', bg: 'var(--bg-elev-1)' },
   };
   const m = map[state];
   if (!m) return '';
-  return `<span style="display: inline-block; padding: 3px 10px; border-radius: 999px; background: ${m.bg}; color: ${m.color}; font-size: 11px; font-weight: 600; letter-spacing: .05em;">${m.label}</span>`;
+  // A breathing Dusk dot marks the one in-flight step (paying); the resting
+  // steps carry no dot. td-dusk-dot brings its own colour + reduced-motion guard.
+  const dot  = m.dot ? '<span class="td-dusk-dot" aria-hidden="true"></span>' : '';
+  const disp = m.dot ? 'inline-flex; align-items: center; gap: 6px' : 'inline-block';
+  return `<span style="display: ${disp}; padding: 3px 10px; border-radius: 999px; background: ${m.bg}; color: ${m.color}; font-size: 11px; font-weight: 600; letter-spacing: .05em;">${dot}${m.label}</span>`;
 }
 function renderRefundPanel(o) {
   const state = o.refund_status;
@@ -5661,11 +5678,13 @@ function renderRefundPanel(o) {
   const headerBg = state === 'pending'    ? 'rgba(242,202,108,.10)'  // amber
                  : state === 'reviewing'  ? 'rgba(116,148,255,.10)'  // blue
                  : state === 'approved'   ? 'rgba(95,194,142,.10)'   // green
+                 : state === 'paying'     ? 'var(--td-dusk-tint)'    // dusk — system acting
                  : state === 'paid'       ? 'rgba(95,194,142,.14)'   // green, slightly stronger
                  : state === 'rejected'   ? 'rgba(232,85,106,.08)'   // red, subtle
                  : state === 'withdrawn'  ? 'var(--bg-elev-1)'       // theme-neutral
                  : 'var(--bg-elev-1)';
   const headerBorder = state === 'paid' ? '#5fc28e' :
+                       state === 'paying' ? 'var(--td-dusk)' :
                        state === 'approved' ? '#5fc28e' :
                        state === 'reviewing' ? '#7494ff' :
                        state === 'rejected' ? 'var(--danger)' :
@@ -5697,7 +5716,7 @@ function renderRefundPanel(o) {
          }).join('')}
        </div>` : '';
 
-  const amountSummary = isApproved || state === 'paid'
+  const amountSummary = isApproved || state === 'paying' || state === 'paid'
     ? `
       <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 10px; font-size: 12px;">
         <div><div class="muted" style="font-size: 10px; text-transform: uppercase; letter-spacing: .08em;">Order total · 订单总额</div><b>¥${fmt(total)}</b></div>
@@ -5723,6 +5742,7 @@ function renderRefundPanel(o) {
       ${customerLinesBlock}
       ${amountSummary}
       ${o.refund_review_note ? `<div class="muted" style="margin-top: 8px; font-size: 12px;">${cuT('Staff note', '客服备注')}: ${escapeHtml(o.refund_review_note)}</div>` : ''}
+      ${state === 'paying' ? `<div class="muted" style="margin-top: 12px; display: flex; align-items: center; gap: 8px; font-size: 12px;"><span class="td-dusk-dot" aria-hidden="true"></span>${cuT('Refund in progress — the money is moving through the payment gateway. This finishes on its own; no action needed.', '退款处理中 — 正在通过支付网关打款,稍后自动完成,无需操作。')}</div>` : ''}
       ${actions ? `<div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">${actions}</div>` : ''}
     </div>`;
 }

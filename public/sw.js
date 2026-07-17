@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v589-delivered-suppresses-frozen-enroute';
+const CACHE = 'roots-v2-shell-v590-refund-paying-state-badge';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
