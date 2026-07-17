@@ -663,10 +663,10 @@ function cuRenderDetail() {
   // menu so the header stays calm; Block sits last, brick, behind a divider.
   // Unblock renders neutral since it isn't destructive.
   const blockItem = c.is_blocked
-    ? `<button class="cux-mi" onclick="cuMoreClose(); cuToggleBlock()">
+    ? `<button class="cux-mi" onclick="cuMoreClose(); cuToggleBlock(event)">
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 12.5 2.5 2.5 5-5"/></svg>
          Unblock · 解封</button>`
-    : `<button class="cux-mi danger" onclick="cuMoreClose(); cuToggleBlock()">
+    : `<button class="cux-mi danger" onclick="cuMoreClose(); cuToggleBlock(event)">
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
          Block customer · 封禁顾客</button>`;
   $('#cu-drawer-actions').innerHTML = `
@@ -682,7 +682,7 @@ function cuRenderDetail() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
       </button>
       <div id="cux-more-menu" class="cux-menu" hidden>
-        <button class="cux-mi" onclick="cuMoreClose(); cuForceLogout()">
+        <button class="cux-mi" onclick="cuMoreClose(); cuForceLogout(event)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg>
           Sign out all devices · 退出所有设备
           <span class="hint" data-no-i18n>${sessions || ''}</span></button>
@@ -762,7 +762,7 @@ function cuRenderDetail() {
             ${a.is_default ? '<span class="def">Default · 默认</span>' : ''}
             <span class="acts">
               <button onclick="cuOpenAddrModal(${a.id})">Edit · 编辑</button>
-              <button class="del" onclick="cuDeleteAddr(${a.id})">Delete · 删除</button>
+              <button class="del" onclick="cuDeleteAddr(${a.id}, event)">Delete · 删除</button>
             </span>
           </div>
           <div class="line2" data-no-i18n title="${escapeAttr(full)}">${escapeHtml(full) || '—'}</div>
@@ -1021,7 +1021,7 @@ function renderAffiliateBlock(aff) {
       <div class="field" style="margin: 0;">
         <label class="stacked">Their code · 本人邀请码</label>
         <div style="font-size: 16px;">${codeHtml}
-          <button class="btn btn-sm" style="margin-left: 8px;" onclick="afReissueCode(${CU_CURRENT.customer.id})">Reissue · 重发</button>
+          <button class="btn btn-sm" style="margin-left: 8px;" onclick="afReissueCode(${CU_CURRENT.customer.id}, event)">Reissue · 重发</button>
         </div>
       </div>
       <div class="field" style="margin: 0;">
@@ -1042,16 +1042,18 @@ function renderAffiliateBlock(aff) {
   `;
 }
 
-async function afReissueCode(customerId) {
+async function afReissueCode(customerId, ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   if (!(await askConfirm({
     title: 'Reissue this customer\'s referral code? Existing referrals keep their history; future shares will use the new code. · 重新生成此顾客的邀请码?已有推荐记录保留;以后分享使用新邀请码。',
     confirmLabel: cuT('Reissue code', '重发邀请码'),
   }))) return;
+  if (btn) btn.disabled = true;
   try {
     const r = await api('/api/retail-admin/customers/' + customerId + '/referral-code', { method: 'POST' });
     toast('New code · 新邀请码: ' + (r.data?.code || '?'));
     if (CU_CURRENT?.customer?.id === customerId) cuOpenDetail(customerId);
-  } catch (e) { toast('Reissue failed · 重发失败: ' + e.message, 'err'); }
+  } catch (e) { toast('Reissue failed · 重发失败: ' + e.message, 'err'); } finally { if (btn) btn.disabled = false; }
 }
 
 // These customer pop-ups (.pu-editor-bg, z 300) are authored INSIDE
@@ -1224,7 +1226,8 @@ async function cuSaveEdit() {
   } catch {}
 }
 
-async function cuToggleBlock() {
+async function cuToggleBlock(ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm/reason await nulls currentTarget
   if (!CU_CURRENT?.customer) return;
   const c = CU_CURRENT.customer;
   const blocking = !c.is_blocked;
@@ -1235,37 +1238,41 @@ async function cuToggleBlock() {
       danger: true,
     });
     if (reason === null) return;
+    if (btn) btn.disabled = true;   // manual disable (not adminWrite's btn) so the icon isn't stripped
     try {
       await cuWriteRequest({
         url: '/api/retail-admin/customers/' + c.id + '/block', method: 'POST',
         body: { reason }, errLabelEn: 'Block failed', errLabelCn: '封禁失败',
       });
       toast('Blocked · 已封禁');
-    } catch { return; }
+    } catch { return; } finally { if (btn) btn.disabled = false; }
   } else {
     if (!(await askConfirm({
       title: 'Unblock this customer? · 解除此顾客的封禁?',
       confirmLabel: cuT('Unblock', '解封'),
     }))) return;
+    if (btn) btn.disabled = true;   // manual disable (not adminWrite's btn) so the icon isn't stripped
     try {
       await cuWriteRequest({
         url: '/api/retail-admin/customers/' + c.id + '/unblock', method: 'POST',
         errLabelEn: 'Unblock failed', errLabelCn: '解封失败',
       });
       toast('Unblocked · 已解封');
-    } catch { return; }
+    } catch { return; } finally { if (btn) btn.disabled = false; }
   }
   cuLoadKpis(true);   // blocked count changed — refresh the strip + its chip
   cuLoad();           // …and the roster: a blocked customer leaves the default cut
   cuOpenDetail(c.id);
 }
 
-async function cuForceLogout() {
+async function cuForceLogout(ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   if (!CU_CURRENT?.customer) return;
   if (!(await askConfirm({
     title: 'Sign this customer out on all devices? Active sessions are revoked immediately — useful if a token may be compromised. She can sign back in normally; to lock her out, use Block instead. · 退出该顾客的所有设备?将立即撤销所有活跃会话——令牌可能泄露时适用。她可正常重新登录;如需锁定,请改用封禁。',
     confirmLabel: cuT('Sign out all devices', '退出所有设备'),
   }))) return;
+  if (btn) btn.disabled = true;   // manual disable (not adminWrite's btn) so the icon isn't stripped
   try {
     const j = await cuWriteRequest({
       url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id + '/force-logout', method: 'POST',
@@ -1274,7 +1281,7 @@ async function cuForceLogout() {
     const n = j.revoked || 0;
     toast(`Signed out all devices · ${n} session${n === 1 ? '' : 's'} revoked · 已退出所有设备(${n} 个会话)`);
     cuOpenDetail(CU_CURRENT.customer.id);
-  } catch {}
+  } catch {} finally { if (btn) btn.disabled = false; }
 }
 
 function cuOpenAdjust(kind) {
@@ -1447,7 +1454,8 @@ async function cuSaveAddr() {
   } catch {}
 }
 
-async function cuDeleteAddr(addrId) {
+async function cuDeleteAddr(addrId, ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   if (!CU_CURRENT?.customer) return;
   if (!(await askConfirm({
     title: 'Delete this address? · 删除此地址?',
@@ -1457,7 +1465,7 @@ async function cuDeleteAddr(addrId) {
   const cid = CU_CURRENT.customer.id;
   try {
     await cuWriteRequest({
-      url: `/api/retail-admin/customers/${cid}/addresses/${addrId}`, method: 'DELETE',
+      btn, url: `/api/retail-admin/customers/${cid}/addresses/${addrId}`, method: 'DELETE',
       errLabelEn: 'Delete failed', errLabelCn: '删除失败',
     });
     toast('Deleted · 已删除');

@@ -582,25 +582,27 @@ function shipmentMergeControls(o) {
       : '';
   }
   if (ships.length > 1) {
-    return `<div style="margin-top:8px;"><button class="btn btn-sm" onclick="combineParcels(${o.id})">${cuT('Combine into one parcel', '合并为一个包裹')}</button></div>`;
+    return `<div style="margin-top:8px;"><button class="btn btn-sm" onclick="combineParcels(${o.id}, event)">${cuT('Combine into one parcel', '合并为一个包裹')}</button></div>`;
   }
   if (combined) {
-    return `<div style="margin-top:8px;"><button class="btn btn-sm" onclick="splitParcels(${o.id})">${cuT('Split into separate parcels', '拆分为多个包裹')}</button></div>`;
+    return `<div style="margin-top:8px;"><button class="btn btn-sm" onclick="splitParcels(${o.id}, event)">${cuT('Split into separate parcels', '拆分为多个包裹')}</button></div>`;
   }
   return '';
 }
-async function combineParcels(orderId) {
+async function combineParcels(orderId, ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   if (!(await askConfirm({ title: cuT('Combine all parcels into one shipment? The customer will track a single parcel.', '将所有包裹合并为一个发货?顾客将只追踪一个包裹。'), confirmLabel: cuT('Combine', '合并') }))) return;
   try {
-    await adminWrite({ url: `/api/retail-admin/orders/${orderId}/shipments/combine`, method: 'POST', errLabelEn: 'Combine failed', errLabelCn: '合并失败' });
+    await adminWrite({ btn, url: `/api/retail-admin/orders/${orderId}/shipments/combine`, method: 'POST', errLabelEn: 'Combine failed', errLabelCn: '合并失败' });
     toast(cuT('Combined into one parcel', '已合并为一个包裹'));
     openOrder(orderId); loadOrders();
   } catch {}
 }
-async function splitParcels(orderId) {
+async function splitParcels(orderId, ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   if (!(await askConfirm({ title: cuT('Split back into separate Air / Land parcels?', '拆分回独立的空运 / 陆运包裹?'), confirmLabel: cuT('Split', '拆分') }))) return;
   try {
-    await adminWrite({ url: `/api/retail-admin/orders/${orderId}/shipments/split`, method: 'POST', errLabelEn: 'Split failed', errLabelCn: '拆分失败' });
+    await adminWrite({ btn, url: `/api/retail-admin/orders/${orderId}/shipments/split`, method: 'POST', errLabelEn: 'Split failed', errLabelCn: '拆分失败' });
     toast(cuT('Split into separate parcels', '已拆分为多个包裹'));
     openOrder(orderId); loadOrders();
   } catch {}
@@ -3484,7 +3486,7 @@ function renderSupplierTrackingBlock(o, s) {
   // delivered; a live-synced carrier flips delivered_at on its own.
   const canDeliver = (s.state || 'pending') === 'dispatched';
   const deliverBtn = canDeliver
-    ? `<div class="row" style="gap:8px; margin-top:10px;"><button class="btn btn-sm" onclick="markParcelDelivered(${o.id}, ${s.id})">${cuT('Mark this parcel delivered', '标记此包裹已送达')}</button></div>`
+    ? `<div class="row" style="gap:8px; margin-top:10px;"><button class="btn btn-sm" onclick="markParcelDelivered(${o.id}, ${s.id}, event)">${cuT('Mark this parcel delivered', '标记此包裹已送达')}</button></div>`
     : '';
   return `<div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">${instr}${renderShipmentTrackingCard(o, s, true)}${deliverBtn}</div>`;
 }
@@ -3492,7 +3494,8 @@ function renderSupplierTrackingBlock(o, s) {
 // Operator confirms a supplier parcel arrived (used when the carrier can't
 // live-track it). When it makes every parcel delivered, the server flips the
 // whole order to delivered.
-async function markParcelDelivered(id, sid) {
+async function markParcelDelivered(id, sid, ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   const ok = await askConfirm({
     titleEn: 'Mark parcel delivered?', titleCn: '标记包裹已送达?',
     bodyEn: 'Confirm the supplier parcel reached the customer. If it was the last parcel, the order is marked delivered.',
@@ -3501,6 +3504,7 @@ async function markParcelDelivered(id, sid) {
     cancelEn: 'Cancel', cancelCn: '取消',
   });
   if (!ok) return;
+  if (btn) btn.disabled = true;
   try {
     await api(`/api/retail-admin/orders/${id}/shipments/${sid}/deliver`, { method: 'POST', body: {} });
     toast('Parcel delivered · 包裹已送达');
@@ -3508,6 +3512,8 @@ async function markParcelDelivered(id, sid) {
     loadOrders();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -4060,10 +4066,10 @@ function renderOpenOrder(o) {
     // dispatched/delivered but nothing has truly gone out — the reverse for a
     // misclick. Label tracks which step is being undone.
     + (undoDispatchable(o)
-        ? `<button class="btn btn-sm" onclick="undoDispatch(${o.id})">${o.status === 'delivered' ? 'Undo delivery · 撤销送达' : 'Undo dispatch · 撤销发货'}</button>`
+        ? `<button class="btn btn-sm" onclick="undoDispatch(${o.id}, event)">${o.status === 'delivered' ? 'Undo delivery · 撤销送达' : 'Undo dispatch · 撤销发货'}</button>`
         : '')
     + (undoPreparable(o)
-        ? `<button class="btn btn-sm" onclick="undoPreparing(${o.id})">Undo preparing · 撤销备货</button>`
+        ? `<button class="btn btn-sm" onclick="undoPreparing(${o.id}, event)">Undo preparing · 撤销备货</button>`
         : '')
     + renderRefundMenu(o, dangerTx);
     mount.innerHTML = `
@@ -4614,7 +4620,8 @@ async function transition(id, status) {
 // (see undoDispatchable); on that rare race it returns 'already_shipped' and we
 // surface a plain reason. Silent: the customer is not notified, matching a quick
 // correction. Both 'dispatched' and 'delivered' roll back to Preparing.
-async function undoDispatch(id) {
+async function undoDispatch(id, ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   const wasDelivered = _OPEN_ORDER && _OPEN_ORDER.id === id && _OPEN_ORDER.status === 'delivered';
   const ok = await askConfirm({
     titleEn: wasDelivered ? 'Undo delivery?' : 'Undo dispatch?',
@@ -4626,6 +4633,7 @@ async function undoDispatch(id) {
     cancelEn: 'Keep as is', cancelCn: '保持不变',
   });
   if (!ok) return;
+  if (btn) btn.disabled = true;
   try {
     await api(`/api/retail-admin/orders/${id}/undo-dispatch`, { method: 'POST', body: {} });
     toast('Undone · 已撤销 — back to Preparing · 退回备货中');
@@ -4636,6 +4644,8 @@ async function undoDispatch(id) {
       ? cuT('A parcel already has a waybill — cancel it first.', '已有包裹生成运单 — 请先取消运单。')
       : 'Failed · 失败: ' + e.message;
     toast(msg, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -4657,7 +4667,8 @@ function undoDispatchable(o) {
 // operator with no way back. Rolls preparing → paid. Server only allows it while
 // still preparing with no waybill attached (returns 'already_shipped' otherwise).
 // Silent: the customer is not notified, matching a quick correction.
-async function undoPreparing(id) {
+async function undoPreparing(id, ev) {
+  const btn = ev && ev.currentTarget;   // capture before the confirm await nulls currentTarget
   const ok = await askConfirm({
     titleEn: 'Undo preparing?', titleCn: '撤销备货?',
     bodyEn: 'This moves the order back to <b>Paid</b>. Use it if you marked it preparing by mistake. The customer is not notified.',
@@ -4666,6 +4677,7 @@ async function undoPreparing(id) {
     cancelEn: 'Keep as is', cancelCn: '保持不变',
   });
   if (!ok) return;
+  if (btn) btn.disabled = true;
   try {
     await api(`/api/retail-admin/orders/${id}/undo-preparing`, { method: 'POST', body: {} });
     toast('Undone · 已撤销 — back to Paid · 退回已支付');
@@ -4676,6 +4688,8 @@ async function undoPreparing(id) {
       ? cuT('A parcel already has a waybill — cancel it first.', '已有包裹生成运单 — 请先取消运单。')
       : 'Failed · 失败: ' + e.message;
     toast(msg, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
