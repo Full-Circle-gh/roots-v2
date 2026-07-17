@@ -1,26 +1,18 @@
 #!/bin/sh
-# Auto-deploy git hook. Install with:
+# Post-commit hook — GitHub mirror only. Install with:
 #   cp scripts/post-commit.hook .git/hooks/post-commit && chmod +x .git/hooks/post-commit
 #
-# After install, every `git commit` ships the files changed in that commit to
-# the live site. Logic lives in scripts/deploy-changed.sh. This runs AFTER the
-# commit is saved, so a deploy failure never blocks or undoes the commit.
+# DEPLOYS ARE OWNED BY GITHUB ACTIONS (.github/workflows/deploy.yml): every push
+# to main triggers CI to lint the changed files and run the safe installer
+# (backup -> pm2 restart -> health probe -> auto-rollback) on the server. This
+# hook's only job is to push the commit so that workflow fires. Runs AFTER the
+# commit is saved, so a push failure never blocks or undoes the commit.
+#
+# History: a local deploy (scripts/deploy-changed.sh) used to run here too, but
+# it shared the server's __stage__ dir with the CI deploy, lost the race on
+# every commit, and printed a false "No such file or directory" while CI
+# deployed correctly. Removed 2026-07-17 so CI is the single deploy path. To
+# ship WITHOUT GitHub (outage, offline, CI down), run scripts/deploy-changed.sh
+# by hand — it re-ships HEAD through the same installer.
 root=$(git rev-parse --show-toplevel)
-
-# Serialize deploys with an atomic mkdir mutex. Every worktree on this machine
-# shares one lock, so two commits landing at once can't fire overlapping PM2
-# restarts on the server (which trip the health check → false rollback). flock
-# isn't available in Git Bash, hence mkdir. Released on exit; a deploy that dies
-# leaves a stale lock the next run steals after 10 minutes.
-LOCK="${HOME:-/tmp}/.roots-v2-deploy.lock"
-_tries=0
-until mkdir "$LOCK" 2>/dev/null; do
-  if find "$LOCK" -maxdepth 0 -mmin +10 >/dev/null 2>&1; then rm -rf "$LOCK" 2>/dev/null; continue; fi
-  [ "$_tries" -eq 0 ] && echo "[deploy] another deploy is running — waiting for the lock…"
-  _tries=$((_tries + 1))
-  [ "$_tries" -ge 300 ] && { echo "[deploy] waited 5 min for the deploy lock; proceeding anyway."; break; }
-  sleep 1
-done
-trap 'rm -rf "$LOCK" 2>/dev/null' EXIT INT TERM
-
-bash "$root/scripts/deploy-changed.sh"
+bash "$root/scripts/auto-push.sh"

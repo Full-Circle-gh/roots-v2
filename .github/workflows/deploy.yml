@@ -115,6 +115,29 @@ jobs:
           echo "Mode: $MODE — $COUNT deployable file(s):"
           cat /tmp/files.txt || true
 
+      - name: Set up Node for lint
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Lint changed .js — bug-catcher gate (blocks deploy on a real bug)
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          JS=$(grep -E '\.js$' /tmp/files.txt || true)
+          if [ -z "$JS" ]; then echo "No .js in this change — nothing to lint."; exit 0; fi
+          # --ignore-scripts skips the native better-sqlite3 / sharp / bcrypt
+          # builds eslint doesn't need, so this stays fast. eslint.config.js is a
+          # bug-catcher: only near-certain defects are errors (undefined refs,
+          # dead code, dup keys) and abort here, before anything reaches the
+          # server; style / unused-var smells are warnings and don't block.
+          echo "Installing lint tooling…"
+          npm ci --ignore-scripts --no-audit --no-fund
+          echo "Linting:"; printf '%s\n' "$JS"
+          printf '%s\n' "$JS" | xargs node_modules/.bin/eslint
+
       - name: Verify connectivity (nothing to ship)
         if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count == '0'
         run: |
