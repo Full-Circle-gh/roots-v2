@@ -3789,10 +3789,10 @@ function renderRefundMenu(o, dangerTx) {
   if (!dangerTx.length) return '';
   if (dangerTx.length === 1) {
     const [next, label] = dangerTx[0];
-    return `<button class="btn btn-danger btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
+    return `<button class="btn btn-danger btn-sm" onclick="transition(${o.id}, '${next}', event)">${label}</button>`;
   }
   const items = dangerTx.map(([next, label]) =>
-    `<button class="odm-item" onclick="orderDangerPick(${o.id}, '${next}')">${label}</button>`
+    `<button class="odm-item" onclick="orderDangerPick(${o.id}, '${next}', event)">${label}</button>`
   ).join('');
   return `
     <div class="ovp-wrap odm-wrap">
@@ -3821,9 +3821,9 @@ function orderDangerClose() {
   const pop = document.getElementById('odm-pop'); if (pop) pop.hidden = true;
   document.removeEventListener('mousedown', orderDangerOutside);
 }
-function orderDangerPick(id, next) {
+function orderDangerPick(id, next, ev) {
   orderDangerClose();
-  transition(id, next);
+  transition(id, next, ev);
 }
 function renderOrderViewPopover() {
   return `
@@ -4060,7 +4060,7 @@ function renderOpenOrder(o) {
       }
       // Tacet: forward actions read as calm bordered buttons (not a second Dusk
       // CTA) — the mockup keeps the drawer quiet; the one Dusk button is "New order".
-      return `<button class="btn btn-sm" onclick="transition(${o.id}, '${next}')">${label}</button>`;
+      return `<button class="btn btn-sm" onclick="transition(${o.id}, '${next}', event)">${label}</button>`;
     }).join('')
     // A quiet "Undo" sits beside the forward actions when the order was
     // dispatched/delivered but nothing has truly gone out — the reverse for a
@@ -4565,7 +4565,8 @@ function earlyDispatchWarning(o) {
   return null;
 }
 
-async function transition(id, status) {
+async function transition(id, status, ev) {
+  const btn = ev && ev.currentTarget;   // capture before any dialog await nulls currentTarget
   let reason = null;
   let pay_method = null;
   // Dispatching an order whose requested timing is still in the future ships it
@@ -4604,6 +4605,7 @@ async function transition(id, status) {
     pay_method = await askPayMethod();
     if (pay_method === null) return;          // cancelled the prompt → abort
   }
+  if (btn) btn.disabled = true;
   try {
     await api(`/api/retail-admin/orders/${id}/status`, { method: 'PATCH', body: { status, reason, pay_method } });
     toast(`Order → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)} · 订单 → ${humanStatus(status, _OPEN_ORDER?.fulfillment_type)}`);
@@ -4611,6 +4613,8 @@ async function transition(id, status) {
     loadOrders();
   } catch (e) {
     toast('Failed · 失败: ' + e.message, 'err');
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
