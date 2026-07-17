@@ -2203,6 +2203,12 @@ function renderDeliveryCell(o) {
 function renderCourierListLine(o) {
   const c = o.courier;
   if (!c || !c.stage || c.stage === 'scheduled' || c.stage === 'delivered') return '';
+  // The order can reach a terminal state while the courier's live row froze mid-transit:
+  // a finished job drops off the courier's in-flight list, so its snapshot never flips
+  // to 'delivered' and stays at 'in_transit'. Trust the order status — once it's
+  // delivered/cancelled/refunded, the frozen "En route · ~1m · 91m" line is a lie, so
+  // bail and let renderTrackingCell fall through to the settled arrival line.
+  if (o.status === 'delivered' || o.status === 'cancelled' || o.status === 'refunded') return '';
   const label = c.stage === 'in_transit'       ? cuT('En route', '配送中')
               : c.stage === 'awaiting_dispatch' ? cuT('Finding rider', '正在找骑手')
               : '';
