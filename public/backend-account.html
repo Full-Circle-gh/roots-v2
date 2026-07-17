@@ -178,11 +178,6 @@
   .warn svg{ flex:none; margin-top:1px; stroke:var(--amber); fill:none; }
 
   /* devices */
-  .dev-seg{ display:inline-flex; padding:3px; background:var(--raised); border-radius:10px; margin-bottom:12px; }
-  .dev-seg button{ font:500 12.5px inherit; color:var(--text-2); background:none; border:none; padding:7px 14px; border-radius:7px; cursor:pointer; }
-  .dev-seg button.on{ background:var(--surface); color:var(--text); box-shadow:var(--shadow); }
-  .dev-owner-note{ display:flex; align-items:flex-start; gap:9px; background:var(--dusk-tint); border-radius:10px; padding:10px 12px; font-size:12.5px; color:var(--text); line-height:1.5; margin-bottom:14px; }
-  .dev-owner-note svg{ flex:none; width:14px; height:14px; stroke:var(--dusk); fill:none; margin-top:2px; }
   .dev-chips{ display:flex; gap:8px; margin-bottom:14px; }
   .dev-chip{ font:500 12px inherit; color:var(--text-2); background:var(--surface); border:1px solid var(--line); border-radius:999px; padding:6px 13px; cursor:pointer; }
   .dev-chip.on{ color:var(--text); border-color:var(--text-2); }
@@ -192,7 +187,6 @@
   .dev-ico svg{ width:16px; height:16px; stroke:currentColor; fill:none; }
   .dev-m{ min-width:0; flex:1; }
   .dev-n{ font-size:13.5px; font-weight:500; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .own-chip{ width:18px; height:18px; border-radius:50%; background:var(--sage-tint); color:var(--sage-ink); font-size:9.5px; font-weight:600; display:inline-grid; place-items:center; flex:none; }
   .dev-badge{ font-size:10.5px; font-weight:500; color:var(--sage-ink); background:var(--sage-tint); border-radius:999px; padding:2px 8px; }
   .dev-s{ font-size:12px; color:var(--text-2); margin-top:2px; }
   .dev-out{ flex:none; font:500 12.5px inherit; color:var(--text-2); background:none; border:none; cursor:pointer; padding:6px 9px; border-radius:7px; }
@@ -543,7 +537,7 @@
     function showTab(tab){
       document.querySelectorAll('.navbtn').forEach(function(b){ b.classList.toggle('on', b.dataset.tab === tab); });
       document.querySelectorAll('.tabpane').forEach(function(p){ p.classList.toggle('on', p.dataset.pane === tab); });
-      if (tab === 'devices') { devView = 'me'; devKind = 'all'; loadDevices(); }   // always refetch — a device signed in elsewhere must surface without a full reload
+      if (tab === 'devices') { devKind = 'all'; loadDevices(); }   // always refetch — a device signed in elsewhere must surface without a full reload
       // Email + phone live on My Info; two-step lives on Security. Both read the
       // same contact state, so a single lazy load covers either tab.
       if ((tab === 'profile' || tab === 'security') && !loaded.recovery) loadRecovery();
@@ -655,34 +649,19 @@
       return t.toLocaleDateString(lang === 'cn' ? 'zh-CN' : 'en-US', opts);
     }
 
-    var devView = 'me';   // 'me' | 'team' (team = owner/admin only)
+    // Personal devices only. Team-wide device management (owner/admin viewing
+    // and signing out a teammate's device) lives under Manage team → Team
+    // devices, not here — this pop-up is strictly the signed-in operator's own
+    // account. See #tab-team in retail-admin (02-settings-ops.js).
     var devKind = 'all';  // 'all' | 'desktop' | 'mobile'
     var devRaw = [];
 
-    function isTeamCapable(){ return !!(lastUser && (lastUser.role === 'owner' || lastUser.role === 'admin')); }
-
     function renderDevControls(){
       var box = $('devControls'); if (!box) return;
-      var html = '';
-      if (isTeamCapable()) {
-        html += '<div class="dev-seg" id="devSeg">'
-          + '<button type="button" class="'+(devView==='me'?'on':'')+'" data-view="me">'+L('My devices','我的设备')+'</button>'
-          + '<button type="button" class="'+(devView==='team'?'on':'')+'" data-view="team">'+L('Team devices','团队设备')+'</button>'
-          + '</div>';
-        if (devView === 'team') {
-          html += '<div class="dev-owner-note"><svg viewBox="0 0 24 24" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c1.4-3.6 4.2-5.4 7-5.4S18.6 16.4 20 20"/></svg>'
-            + '<span>'+L('As owner/admin, you can see and sign out devices for your whole team.','作为负责人/管理员，您可以查看并登出团队所有设备。')+'</span></div>';
-        }
-      }
-      html += '<div class="dev-chips" id="devChips">' + ['all','desktop','mobile'].map(function(k){
+      box.innerHTML = '<div class="dev-chips" id="devChips">' + ['all','desktop','mobile'].map(function(k){
         var lbl = k === 'all' ? L('All','全部') : (k === 'desktop' ? L('Desktop','桌面') : L('Mobile','移动'));
         return '<button type="button" class="dev-chip '+(devKind===k?'on':'')+'" data-kind="'+k+'">'+lbl+'</button>';
       }).join('') + '</div>';
-      box.innerHTML = html;
-      var seg = $('devSeg');
-      if (seg) seg.querySelectorAll('button').forEach(function(b){
-        b.addEventListener('click', function(){ if (devView === b.dataset.view) return; devView = b.dataset.view; loadDevices(); });
-      });
       $('devChips').querySelectorAll('.dev-chip').forEach(function(b){
         b.addEventListener('click', function(){ if (devKind === b.dataset.kind) return; devKind = b.dataset.kind; renderDevControls(); renderDeviceRows(); });
       });
@@ -693,8 +672,7 @@
       var box = $('devList'); box.innerHTML = '<div class="skel">'+L('Loading…','加载中…')+'</div>';
       $('devFoot').hidden = true;
       renderDevControls();
-      var url = (devView === 'team' && isTeamCapable()) ? '/api/backend/sessions/team' : '/api/backend/sessions';
-      fetch(url, { credentials:'same-origin' })
+      fetch('/api/backend/sessions', { credentials:'same-origin' })
         .then(function(r){ return r.json(); })
         .then(function(j){ devRaw = (j && j.sessions) || []; renderDeviceRows(); })
         .catch(function(){ box.innerHTML = '<div class="dev-empty">'+L('Couldn’t load devices.','无法加载设备。')+'</div>'; });
@@ -715,13 +693,10 @@
         if (d.createdAt && d.lastSeen && toDate(d.createdAt) < new Date(toDate(d.lastSeen).getTime() - 86400000)) {
           meta.push(L('since '+dateFmt(d.createdAt), dateFmt(d.createdAt)+'以来'));
         }
-        var owner = (devView === 'team' && d.ownerName)
-          ? '<span class="own-chip">'+esc(initialsOf(d.ownerName))+'</span> ' + esc(d.isYou ? d.ownerName + ' ' + L('(You)','(您)') : d.ownerName) + ' · '
-          : '';
         var actLabel = d.current ? L('Sign out of this device','登出此设备') : L('Sign out','登出');
         return '<div class="dev" data-sid="'+esc(d.id)+'">'
           + '<span class="dev-ico">'+iconFor(d.kind)+'</span>'
-          + '<div class="dev-m"><div class="dev-n">'+owner+esc(d.label)+(d.current?' <span class="dev-badge">'+L('This device','当前设备')+'</span>':'')+'</div>'
+          + '<div class="dev-m"><div class="dev-n">'+esc(d.label)+(d.current?' <span class="dev-badge">'+L('This device','当前设备')+'</span>':'')+'</div>'
           + '<div class="dev-s">'+meta.join(' · ')+'</div></div>'
           + '<button class="dev-out" data-sid="'+esc(d.id)+'" data-current="'+(d.current?'1':'0')+'">'+actLabel+'</button></div>';
       }).join('');
@@ -731,25 +706,12 @@
       renderDevFoot(list);
     }
 
-    function initialsOf(name){
-      var s = String(name||'').trim(); if (!s) return '?';
-      var p = s.split(/\s+/).filter(Boolean);
-      return ((p[0]?p[0][0]:'') + (p.length>1?p[p.length-1][0]:'')).toUpperCase() || '?';
-    }
-
     function renderDevFoot(list){
       var foot = $('devFoot');
       var others = list.filter(function(d){ return !d.current; });
       if (!others.length) { foot.hidden = true; return; }
       foot.hidden = false;
       var countTxt = list.length + ' ' + (list.length === 1 ? L('device signed in','台设备已登录') : L('devices signed in','台设备已登录'));
-      if (devView === 'team') {
-        // The bulk action below only ever signs out YOUR OWN other sessions —
-        // showing it here, while looking at everyone else's devices, would be
-        // misleading. Per-row "Sign out" is the correct granular action for team.
-        foot.innerHTML = '<span class="dev-count">'+countTxt+'</span>';
-        return;
-      }
       foot.innerHTML = '<span class="dev-count">'+countTxt+'</span>'
         + '<div class="dev-bulk-wrap" id="devBulkWrap"><button type="button" class="dev-bulk-btn" id="devBulkBtn">'+L('Sign out of all other devices','登出所有其他设备')+'</button></div>';
       $('devBulkBtn').addEventListener('click', function(){ confirmBulk(others.length); });

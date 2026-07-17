@@ -1057,9 +1057,27 @@ async function loadIntegrationsStatus() {
   }
 
   // Read a button's visible label, dropping nested icons / badges.
+  // Outside-system text can carry data-no-i18n (§1.11), which leaves the i18n
+  // engine's "English · 中文" pair untouched in the DOM. Without this the index
+  // would ingest BOTH languages verbatim into the visible title, so we collapse
+  // any genuine EN · CN pair to the active language here — mirroring the engine's
+  // own rule (split on ' · ', only when the right half is Chinese; see
+  // retail-admin.html hasChinese/processNode). Arbitrary middot text with no
+  // Chinese ("Acme · Foods") is left alone.
   function cleanLabel(el) {
     const c = el.cloneNode(true);
     c.querySelectorAll('svg, .tab-badge, .gsearch-kbd').forEach(n => n.remove());
+    const lang = (typeof cuLang === 'function') ? cuLang() : 'en';
+    const walker = document.createTreeWalker(c, NodeFilter.SHOW_TEXT);
+    let n;
+    while ((n = walker.nextNode())) {
+      const raw = n.nodeValue || '';
+      const idx = raw.indexOf(' · ');
+      if (idx === -1) continue;
+      const en = raw.slice(0, idx).trim();
+      const cn = raw.slice(idx + 3).trim();
+      if (en && cn && /[一-鿿]/.test(cn)) n.nodeValue = (lang === 'cn' ? cn : en);
+    }
     return c.textContent.replace(/\s+/g, ' ').trim();
   }
 
@@ -1252,10 +1270,19 @@ async function loadIntegrationsStatus() {
     const enc = encodeURIComponent(raw);
     const grab = url => fetch(url, { credentials: 'same-origin' })
       .then(r => (r.ok ? r.json() : null)).catch(() => null);
+    // Don't surface records the operator can't see: gate each live fetch on the
+    // same view cap that hides its tab (applyCapGates / TAB_CAP). This keeps ⌘K
+    // consistent with the visible shell so a restricted operator whose Customers
+    // tab is hidden doesn't still get customer nicknames + phone digits here.
+    // NOTE: this stops the palette *asking* — it is NOT the security boundary.
+    // The endpoints themselves stay open to any signed-in operator (cap-routes.js
+    // gates writes only, GETs return null). Server-side read scoping is a separate
+    // decision owed before rbac_enforce ships — see reference_reads_open_server_gap.
+    const may = k => (typeof can !== 'function') || can(k);
     const [p, o, c] = await Promise.all([
-      grab('/api/retail-admin/products?q=' + enc + '&limit=8&sales30=1'),
-      grab('/api/retail-admin/orders?q=' + enc + '&limit=8'),
-      grab('/api/retail-admin/customers?q=' + enc + '&pageSize=8'),
+      may('products:view')  ? grab('/api/retail-admin/products?q=' + enc + '&limit=8&sales30=1') : null,
+      may('orders:view')    ? grab('/api/retail-admin/orders?q=' + enc + '&limit=8')            : null,
+      may('customers:view') ? grab('/api/retail-admin/customers?q=' + enc + '&pageSize=8')      : null,
     ]);
     if (mySeq !== dataSeq) return; // a newer keystroke superseded this fetch
     const items = [];
@@ -1949,6 +1976,12 @@ async function tmLoad() {
     TM_RBAC_ENFORCE = !!j.rbacEnforce;
     tmPaintEnforce();
     tmRender();
+    // Team devices — owner/admin only (matches the server-side gate on
+    // /api/backend/sessions/team). Hidden entirely for everyone else.
+    const canDevices = !!(me && (me.role === 'owner' || me.role === 'admin'));
+    const devCard = $('#tmDevCard');
+    if (devCard) devCard.style.display = canDevices ? 'block' : 'none';
+    if (canDevices) tmdLoad();
   } catch (e) { /* api() already redirects to login on 401 */ }
 }
 function tmPaintEnforce() {
@@ -2175,6 +2208,115 @@ async function tmSavePerms() {
   }
 }
 
+// ── Team devices ───────────────────────────────────────────────────────────
+// Owner/admin only: every operator's signed-in sessions across the tenant,
+// listing who each belongs to, with per-row sign-out. Moved here from the
+// account pop-up's old "Team devices" view (that pop-up is now the operator's
+// own devices only). Reads /api/backend/sessions/team and signs out via
+// /api/backend/sessions/revoke (both already tenant-scoped + owner/admin-gated
+// server-side). Raw fetch for the list because the sessions endpoints return
+// { sessions } with no { success } envelope that api() expects.
+let TMD_RAW = [];
+let TMD_KIND = 'all';   // 'all' | 'desktop' | 'mobile'
+const TMD_ICO_PC  = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>';
+const TMD_ICO_PH  = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.4"/><path d="M11 18h2"/></svg>';
+const TMD_ICO_TAB = '<svg viewBox="0 0 24 24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2.5" width="16" height="19" rx="2.2"/><path d="M10.6 19h2.8"/></svg>';
+function tmdIcon(kind) { return kind === 'phone' ? TMD_ICO_PH : (kind === 'tablet' ? TMD_ICO_TAB : TMD_ICO_PC); }
+function tmdGroupKind(kind) { return (kind === 'phone' || kind === 'tablet') ? 'mobile' : 'desktop'; }
+function tmdKindLabel(kind) { return kind === 'phone' ? cuT('Phone', '手机') : (kind === 'tablet' ? cuT('Tablet', '平板') : cuT('Desktop', '桌面')); }
+function tmdToDate(s) { return new Date(String(s).replace(' ', 'T') + (/[zZ]|[+\-]\d\d:?\d\d$/.test(s) ? '' : 'Z')); }
+function tmdRelTime(s) {
+  if (!s) return '';
+  var sec = Math.max(0, (Date.now() - tmdToDate(s).getTime()) / 1000);
+  if (sec < 90) return cuT('Active now', '当前活动');
+  var m = Math.round(sec / 60); if (m < 60) return cuT(m + ' min ago', m + ' 分钟前');
+  var h = Math.round(m / 60); if (h < 24) return cuT(h + (h > 1 ? ' hours ago' : ' hour ago'), h + ' 小时前');
+  var d = Math.round(h / 24); if (d < 30) return cuT(d + (d > 1 ? ' days ago' : ' day ago'), d + ' 天前');
+  return cuT('over a month ago', '一个月前');
+}
+function tmdDateFmt(s) {
+  if (!s) return '';
+  var t = tmdToDate(s);
+  var opts = { month: 'short', day: 'numeric' };
+  if (t.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+  return t.toLocaleDateString((window.cuLang && cuLang() === 'cn') ? 'zh-CN' : 'en-US', opts);
+}
+function tmdInitials(name) {
+  var s = String(name || '').trim(); if (!s) return '?';
+  if (/^[\x00-\x7F]+$/.test(s)) {
+    var p = s.split(/\s+/).filter(Boolean);
+    return ((p[0] ? p[0][0] : '') + (p.length > 1 ? p[p.length - 1][0] : '')).toUpperCase() || '?';
+  }
+  return Array.from(s)[0];
+}
+function tmdRenderChips() {
+  var box = $('#tmDevChips'); if (!box) return;
+  box.innerHTML = ['all', 'desktop', 'mobile'].map(function (k) {
+    var lbl = k === 'all' ? cuT('All', '全部') : (k === 'desktop' ? cuT('Desktop', '桌面') : cuT('Mobile', '移动'));
+    return '<button type="button" class="tm-dev-chip ' + (TMD_KIND === k ? 'on' : '') + '" data-kind="' + k + '">' + lbl + '</button>';
+  }).join('');
+  box.querySelectorAll('.tm-dev-chip').forEach(function (b) {
+    b.addEventListener('click', function () { if (TMD_KIND === b.dataset.kind) return; TMD_KIND = b.dataset.kind; tmdRenderChips(); tmdRenderRows(); });
+  });
+}
+function tmdRenderRows() {
+  var box = $('#tmDevList'); if (!box) return;
+  var list = TMD_KIND === 'all' ? TMD_RAW : TMD_RAW.filter(function (d) { return tmdGroupKind(d.kind) === TMD_KIND; });
+  var foot = $('#tmDevFoot');
+  if (!list.length) {
+    box.innerHTML = '<div class="tm-dev-empty">' + (TMD_RAW.length ? cuT('No devices match this filter.', '没有符合筛选条件的设备。') : cuT('No devices signed in.', '没有已登录的设备。')) + '</div>';
+    if (foot) foot.hidden = true;
+    return;
+  }
+  box.innerHTML = list.map(function (d) {
+    var meta = [d.current ? cuT('Active now', '当前活动') : tmdRelTime(d.lastSeen)];
+    meta.push(tmdKindLabel(d.kind));
+    if (d.location || d.ip) meta.push(escapeHtml(d.location || d.ip));
+    if (d.createdAt && d.lastSeen && tmdToDate(d.createdAt) < new Date(tmdToDate(d.lastSeen).getTime() - 86400000)) {
+      meta.push((window.cuLang && cuLang() === 'cn') ? (tmdDateFmt(d.createdAt) + '以来') : ('since ' + tmdDateFmt(d.createdAt)));
+    }
+    var who = d.ownerName
+      ? '<span class="tm-dev-who">' + escapeHtml(tmdInitials(d.ownerName)) + '</span> ' + escapeHtml(d.isYou ? d.ownerName + ' ' + cuT('(You)', '(你)') : d.ownerName) + ' · '
+      : '';
+    var actLabel = d.current ? cuT('Sign out of this device', '登出此设备') : cuT('Sign out', '登出');
+    return '<div class="tm-dev" data-sid="' + escapeAttr(d.id) + '">'
+      + '<span class="tm-dev-ico">' + tmdIcon(d.kind) + '</span>'
+      + '<div class="tm-dev-m"><div class="tm-dev-n">' + who + escapeHtml(d.label) + (d.current ? ' <span class="tm-dev-badge">' + cuT('This device', '当前设备') + '</span>' : '') + '</div>'
+      + '<div class="tm-dev-s">' + meta.join(' · ') + '</div></div>'
+      + '<button class="tm-dev-out" data-sid="' + escapeAttr(d.id) + '" data-current="' + (d.current ? '1' : '0') + '">' + actLabel + '</button></div>';
+  }).join('');
+  box.querySelectorAll('.tm-dev-out').forEach(function (btn) {
+    btn.addEventListener('click', function () { tmdRevoke(btn.dataset.sid, btn.dataset.current === '1', btn); });
+  });
+  if (foot) {
+    foot.hidden = false;
+    foot.textContent = list.length + ' ' + (list.length === 1 ? cuT('device signed in', '台设备已登录') : cuT('devices signed in', '台设备已登录'));
+  }
+}
+function tmdLoad() {
+  var box = $('#tmDevList'); if (!box) return;
+  box.innerHTML = '<div class="tm-dev-empty">' + cuT('Loading…', '加载中…') + '</div>';
+  $('#tmDevFoot').hidden = true;
+  tmdRenderChips();
+  fetch('/api/backend/sessions/team', { credentials: 'same-origin' })
+    .then(function (r) { if (r.status === 401) { location.href = '/backend/login'; throw new Error('401'); } return r.json(); })
+    .then(function (j) { TMD_RAW = (j && j.sessions) || []; tmdRenderRows(); })
+    .catch(function () { box.innerHTML = '<div class="tm-dev-empty">' + cuT('Couldn’t load devices.', '无法加载设备。') + '</div>'; });
+}
+async function tmdRevoke(sid, isCurrent, btn) {
+  if (isCurrent && !window.confirm(cuT('Sign out of this device? You’ll be returned to the login page.', '登出此设备？您将返回登录页面。'))) return;
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Signing out…', '正在登出…'); }
+  try {
+    var res = await api('/api/backend/sessions/revoke', { method: 'POST', body: { sid: sid } });
+    if (res && res.wasCurrent) { location.href = '/backend/login'; return; }
+    TMD_RAW = TMD_RAW.filter(function (d) { return d.id !== sid; });
+    tmdRenderRows();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = isCurrent ? cuT('Sign out of this device', '登出此设备') : cuT('Sign out', '登出'); }
+    toast(e.message || cuT('Couldn’t sign out device', '无法登出设备'), 'err');
+  }
+}
+
 // Called via the rail button's onclick (data-tab="team"): wires listeners once,
 // then (re)loads fresh data on every visit — same "always refetch" rule the
 // Account pop-up's Devices tab uses, so a teammate added elsewhere shows up.
@@ -2237,6 +2379,7 @@ function tmInit() {
     tmSyncStoreField($('#tmIRole'), 'tmIStoreField', 'tmIRoleDesc', 'tmIStoreHelp');
     tmRender();
     tmPaintEnforce();
+    if ($('#tmDevCard') && $('#tmDevCard').style.display !== 'none') { tmdRenderChips(); tmdRenderRows(); }
     if (TM_EDITING) { tmPaintActiveBtn(); tmSyncStoreField($('#tmERole'), 'tmEStoreField', 'tmERoleDesc'); }
     if ($('#tmPermsModal') && $('#tmPermsModal').classList.contains('on')) { tmPaintScopeBtn(); tmRenderScopeStores(); tmRenderMatrix(); }
   });
