@@ -3950,10 +3950,26 @@ function renderReadonlyOrder(o) {
           <div class="kicker">Store · 门店</div>
           <div class="val"><b>${escapeHtml(o.store_name_en || o.store_code)}</b></div>
         </div>` : ''}
-        ${(() => { const meta = channelStatusMeta(o.channel_status); return meta ? `<div>
+        ${(() => {
+          const meta = channelStatusMeta(o.channel_status);
+          if (!meta) return '';
+          // The platform label can read "Delivered" (已送达/用户已收餐/妥投…) while the
+          // live rider is still on the map — Meituan stamps its own completion when the
+          // rider taps done or the customer auto-confirms, which can fire before the real
+          // handoff. In that case don't present a bare, confident "Delivered" next to a
+          // rider card that says "on the way": flag it as the platform's own report so
+          // staff trust the live rider (the ground truth) over Meituan's bookkeeping.
+          const riderDone = !!(o.courier && (o.status === 'delivered' || o.courier.stage === 'delivered'));
+          const platformAheadOfRider = meta.tone === 'delivered' && !!o.courier && !riderDone;
+          const caveat = platformAheadOfRider
+            ? `<div class="sub" style="color:#9A6E2A;">${cuT('Platform-reported · rider still on the way', '平台标记 · 骑手仍在配送')}</div>`
+            : '';
+          return `<div>
           <div class="kicker">${escapeHtml(chan)} status · 平台状态</div>
           <div class="val" data-no-i18n><b>${escapeHtml((typeof cuT === 'function') ? cuT(meta.en, meta.cn) : meta.en)}</b></div>
-        </div>` : ''; })()}
+          ${caveat}
+        </div>`;
+        })()}
         ${o.channel_eta ? `<div>
           <div class="kicker">ETA · 预计送达</div>
           <div class="val"><b>${escapeHtml(formatEtaClock(o.channel_eta))}</b></div>

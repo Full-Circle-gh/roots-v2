@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v587-lowstock-to-settings-bulkbar-permanent';
+const CACHE = 'roots-v2-shell-v588-meituan-status-rider-caveat';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
