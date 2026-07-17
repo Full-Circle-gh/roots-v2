@@ -17,18 +17,13 @@ const db = require('../database');
 const providers = require('../lib/billing-providers');
 const { decryptWxBillingCallback, parseSubOutTradeNo } = providers;
 const lifecycle = require('../lib/billing-lifecycle');
+const { requireBackend } = require('../lib/require-cap');
 const router = express.Router();
 
 // Start the daily lifecycle heartbeat (idempotent — only ever starts once).
 lifecycle.startBillingScheduler();
 
 // ── Guards ─────────────────────────────────────────────────────────────
-function requireBackend(req, res, next) {
-  if (!req.session?.backendUserId || !req.session?.tenantId) {
-    return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  }
-  next();
-}
 // SaaS super-admin = a kitchen `admin` session. Interim until a dedicated
 // SaaS-admin console exists. Tenants (backend operators) never pass this.
 function requireSaasAdmin(req, res, next) {

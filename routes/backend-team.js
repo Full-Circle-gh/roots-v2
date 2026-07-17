@@ -19,6 +19,7 @@ const bcrypt = require('bcrypt');
 const db = require('../database');
 const capabilities = require('../lib/capabilities');
 const features = require('../lib/features');
+const { requireBackend, requireCap, roleAboveCaps } = require('../lib/require-cap');
 const router = express.Router();
 
 // Tenant feature entitlements (the plan ceiling) for a tenant id. A capability
@@ -53,13 +54,6 @@ function entitledKeys(tenantId) {
 const ROLES = ['owner', 'admin', 'staff', 'store_manager', 'warehouse', 'customer_service', 'dispatch', 'kitchen', 'store_stock'];
 const STORE_PINNED_ROLES = new Set(['kitchen', 'store_stock', 'store_manager']);
 const STORE_SCOPED_ROLES = new Set(['store_manager']);
-
-function requireBackend(req, res, next) {
-  if (!req.session?.backendUserId || !req.session?.tenantId) {
-    return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  }
-  next();
-}
 
 // Shape a tenant_users row for the client (never leak the password hash).
 // `customSet` (optional) is a Set of user ids that carry per-user permission
@@ -133,13 +127,16 @@ router.put('/api/backend/rbac-enforce', requireBackend, express.json(), (req, re
 });
 
 // ── Invite / create an operator ──────────────────────────────────────────
-router.post('/api/backend/team', requireBackend, express.json(), (req, res) => {
+router.post('/api/backend/team', requireCap('team:manage'), express.json(), (req, res) => {
   try {
     const { password } = req.body || {};
     const username = validateUsername(req.body && req.body.username);
     const displayName = String((req.body && req.body.display_name) || '').trim();
     let role = String((req.body && req.body.role) || 'staff').trim().toLowerCase();
     if (!ROLES.includes(role)) role = 'staff';
+    if (roleAboveCaps(role, req.backendCaps)) {
+      return res.status(403).json({ error: 'You can’t grant a role with more access than your own · 不能授予超出自己权限的角色' });
+    }
     if (displayName.length > 60) return res.status(400).json({ error: 'Name is too long · 名称过长' });
     if (!password || String(password).length < 10) {
       return res.status(400).json({ error: 'Password must be at least 10 characters · 密码至少需要 10 位' });
@@ -179,7 +176,7 @@ function tenantMember(req) {
 }
 
 // ── Update an operator (name / role / active) ────────────────────────────
-router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) => {
+router.put('/api/backend/team/:id', requireCap('team:manage'), express.json(), (req, res) => {
   const u = tenantMember(req);
   if (!u) return res.status(404).json({ error: 'Operator not found · 未找到操作员' });
   const isSelf = u.id === req.session.backendUserId;
@@ -198,6 +195,9 @@ router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) =
   if (body.role !== undefined) {
     const role = String(body.role || '').trim().toLowerCase();
     if (!ROLES.includes(role)) return res.status(400).json({ error: 'Unknown role · 未知角色' });
+    if (roleAboveCaps(role, req.backendCaps)) {
+      return res.status(403).json({ error: 'You can’t grant a role with more access than your own · 不能授予超出自己权限的角色' });
+    }
     if (isSelf && u.role === 'owner' && role !== 'owner') {
       return res.status(400).json({ error: 'You can’t change your own owner role · 不能更改自己的负责人角色' });
     }
@@ -244,9 +244,12 @@ router.put('/api/backend/team/:id', requireBackend, express.json(), (req, res) =
 });
 
 // ── Reset an operator's password ─────────────────────────────────────────
-router.post('/api/backend/team/:id/password', requireBackend, express.json(), (req, res) => {
+router.post('/api/backend/team/:id/password', requireCap('team:manage'), express.json(), (req, res) => {
   const u = tenantMember(req);
   if (!u) return res.status(404).json({ error: 'Operator not found · 未找到操作员' });
+  if (u.id !== req.session.backendUserId && roleAboveCaps(u.role, req.backendCaps)) {
+    return res.status(403).json({ error: 'You can’t reset a password for a role above your own · 不能重置权限高于自己的账户密码' });
+  }
   const np = (req.body && req.body.new_password) || '';
   if (String(np).length < 10) return res.status(400).json({ error: 'Password must be at least 10 characters · 密码至少需要 10 位' });
   db.prepare('UPDATE tenant_users SET password = ? WHERE id = ?').run(bcrypt.hashSync(String(np), 10), u.id);
@@ -308,7 +311,7 @@ router.get('/api/backend/team/:id/permissions', requireBackend, (req, res) => {
 // we diff it against the (entitled) preset to derive the minimal grant/revoke
 // rows, then write scope. Owners are always-all and can't be narrowed; you
 // can't edit your own matrix (avoids locking yourself out of team:permissions).
-router.put('/api/backend/team/:id/permissions', requireBackend, express.json(), (req, res) => {
+router.put('/api/backend/team/:id/permissions', requireCap('team:permissions'), express.json(), (req, res) => {
   const u = tenantMember(req);
   if (!u) return res.status(404).json({ error: 'Operator not found · 未找到操作员' });
   if (u.role === 'owner') return res.status(400).json({ error: 'Owner always has full access · 负责人始终拥有完整权限' });

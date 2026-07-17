@@ -9,6 +9,7 @@
 
 const express = require('express');
 const db = require('../database');
+const { requireBackend } = require('../lib/require-cap');
 const router = express.Router();
 
 function within(startsAt, endsAt) {
@@ -48,10 +49,6 @@ router.get('/api/backend/notices', (req, res) => {
 // A merchant operator raises and reads support tickets from their backend; the
 // platform triages them in the store-admin Support inbox. Scoped to the signed-
 // in operator's own tenant. Tables are created by routes/store-admin.js.
-function requireBackend(req, res, next) {
-  if (!req.session || !req.session.backendUserId) return res.status(401).json({ error: 'Not signed in · 未登录' });
-  next();
-}
 function operatorName(id) {
   try { const u = db.prepare('SELECT display_name, username FROM tenant_users WHERE id = ?').get(id); return u ? (u.display_name || u.username) : null; }
   catch (e) { return null; }

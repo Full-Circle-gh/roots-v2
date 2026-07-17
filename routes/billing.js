@@ -19,6 +19,7 @@
 
 const express = require('express');
 const db = require('../database');
+const { requireBackend } = require('../lib/require-cap');
 const router = express.Router();
 
 // ── Schema (idempotent) ─────────────────────────────────────────────────
@@ -111,13 +112,6 @@ seedPlans();
 seedRootsSubscription();
 
 // ── Helpers ──────────────────────────────────────────────────────────────
-function requireBackend(req, res, next) {
-  if (!req.session?.backendUserId || !req.session?.tenantId) {
-    return res.status(401).json({ error: 'Not authenticated · 未登录' });
-  }
-  next();
-}
-
 function parseSqliteUtc(s) {
   if (!s) return null;
   // SQLite CURRENT_TIMESTAMP is 'YYYY-MM-DD HH:MM:SS' in UTC.
