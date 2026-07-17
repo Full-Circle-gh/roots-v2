@@ -272,3 +272,75 @@ Each phase is independently shippable and reversible. Phases 0–1 are invisible
    get extra verbs because they're money/risk‑sensitive.
 3. **Scope** generalised to multi‑store now, not just single‑pin — small extra table, future‑proofs
    per‑store managers.
+
+---
+
+## 11. Blockers — resolve before flipping `rbac_enforce`
+
+These are **not** "defaults chosen" like §10. They are open holes in the enforcement model. 11.1 now has
+a decided *approach* (not yet built); 11.2 and 11.3 are still unresolved. **Do not flip `rbac_enforce`
+for any tenant until all three are answered** — including 11.1's shadow run actually completing. A lock
+switched on while `/cms/publish` and `/config` are open gives false confidence — you'd believe you were
+protected. That is worse than shipping no lock at all.
+
+### 11.1 Fail‑open on unmapped mutations — the map is guessing, not declaring
+
+`lib/cap-routes.js` `requiredCapFor` returns `null` (**allowed**) for any mutation whose path the map
+doesn't match. That makes the map's *completeness* a security boundary: a mutation nobody thought to map
+is **open**, not closed. This has already been proven wrong repeatedly — the audit found and fixed six
+path‑shape misses, four of them fully fail‑open:
+
+- `/orders/:id/refund-reject` (hyphen alias missed the `/refund/` pattern → refund action at `orders:edit`)
+- `/voucher-grants/:id` DELETE (`voucher-grants` ≠ `vouchers` → **null, ungated** revoke)
+- `PUT /category-tree` (`category-tree` ≠ `categories` → **null, ungated** full‑tree rewrite)
+- `/brand/*` generate/apply/publish (studio lives under `/brand`, cap area is `/ai` → **null, ungated**; `/brand/publish` goes LIVE to shoppers)
+- `/media/bulk-delete` (POST, not DELETE → delete at `media:upload`)
+- `/products/:id/duplicate` (creates a product at `products:edit`)
+
+And whole mutation areas are **open** right now — unmapped, ungated, no distinction between the two at
+runtime: `/cms/*` (the storefront page editor — `/cms/publish`, `/cms/layout/draft`), `/config`,
+`/printer`, `/fapiao-settings`, `/topup-packages`, `/topup-transactions/:id/finalize`,
+`/leaderboard/config`, `/voting/config`, `/polls`, `/affiliate/*`, `/alipay-manual`. Each has a cap
+defined in `capabilities.js` (`editor:edit`, `topup:edit`, `voting:edit`, `affiliate:edit`, …) but no
+rule wiring it — and this list was assembled **by hand**, which is exactly the problem: nobody knows what
+else is missing.
+
+The root cause is architectural: **caps are inferred from URL shape in a central map instead of declared
+at the route where the handler is defined.** Every new route is a silent hole until someone eyeballs it.
+
+**Decision (2026-07-17): both, in this order.** Not built in this pass — recorded here as the approach.
+
+1. **Deny-by-default in shadow, first.** Flip the unmatched-mutation default from allow to **deny**, but
+   run it in **shadow mode — log what *would* be blocked, don't block**. Let it ride real operator traffic
+   for ~a week. This is the whole point: right now the unmapped list is a hand-assembled guess and *nobody
+   knows what's missing*. Deny-by-default turns an unknowable audit into a concrete list of real 403s from
+   real traffic — the map writes itself from what actually fires. Guessing at the remaining paths by eye is
+   how we got here.
+2. **Then per-route `requireCap`.** The durable end state: a route that declares its own cap at its
+   definition **cannot be missed by a regex** — the central map stops being a guessing layer (the factory
+   §5 already anticipates this). But it's a sweep across a ~20k-line `routes/retail.js`, and doing it blind
+   means guessing which routes matter. Do it **after** shadow mode has told you which routes actually fire,
+   not before.
+
+The order matters: (1) is the cheap gate that makes the truth visible; (2) is the real fix, informed by
+what (1) surfaced. Either way the default must become **deny** before `rbac_enforce` goes on — but neither
+step is this pass. This pass delivered the six fixes above and this writeup; shipping the shadow flip is
+its own tested pass, one concern at a time.
+
+### 11.2 Reads open by design — scope, don't blanket
+
+Every GET returns `null` → ungated (deliberate: the client hides sections, so a shared read like a store
+picker or the order‑drawer customer lookup never 403s). Fine while `rbac_enforce=0` and caps resolve to
+ALL. The day it flips, sensitive reads (customer PII export, revenue, credential read‑back) stay
+fetchable server‑side while only the UI hides them. **Decision owed:** classify reads into *shared*
+(stay open) vs *sensitive* (gate) — not blanket‑open, not blanket‑403.
+
+### 11.3 `/integrations/*` credential config is intentionally open — write the decision, don't comment it
+
+The channel map deliberately does **not** gate `/api/retail-admin/integrations/*` (payment keys, JD / SMS
+/ courier credentials), justified only by an inline comment in `cap-routes.js` ("don't broaden this to
+/integrations"). That is the **highest‑privilege write surface in the backend** — API secrets — sitting
+ungated on the strength of a code comment. **Decision owed:** does credential config require
+`integrations:manage` (or a dedicated `integrations:secrets`)? If yes, map it. If it is intentionally
+open, that belongs here in writing with the reason — not buried in the map. Until decided, treat it as a
+hole.
