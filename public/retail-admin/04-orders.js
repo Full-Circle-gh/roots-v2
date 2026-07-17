@@ -5760,7 +5760,7 @@ function renderRefundPanel(o) {
       ${customerLinesBlock}
       ${amountSummary}
       ${o.refund_review_note ? `<div class="muted" style="margin-top: 8px; font-size: 12px;">${cuT('Staff note', '客服备注')}: ${escapeHtml(o.refund_review_note)}</div>` : ''}
-      ${state === 'paying' ? `<div class="muted" style="margin-top: 12px; display: flex; align-items: center; gap: 8px; font-size: 12px;"><span class="td-dusk-dot" aria-hidden="true"></span>${cuT('Refund in progress — the money is moving through the payment gateway. This finishes on its own; no action needed.', '退款处理中 — 正在通过支付网关打款,稍后自动完成,无需操作。')}</div>` : ''}
+      ${state === 'paying' ? `<div class="muted" style="margin-top: 12px; display: flex; align-items: center; gap: 8px; font-size: 12px;"><span class="td-dusk-dot" aria-hidden="true"></span>Refund in progress — the money is moving through the payment gateway. This finishes on its own; no action needed. · 退款处理中 — 正在通过支付网关打款,稍后自动完成,无需操作。</div>` : ''}
       ${actions ? `<div style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;">${actions}</div>` : ''}
     </div>`;
 }
