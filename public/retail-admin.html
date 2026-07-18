@@ -1414,6 +1414,26 @@
         </div>
       </div>
 
+      <!-- Unhandled orders — orders in status=paid that nobody has started
+           preparing (warehouse + dispatch). Painted by dashUnhandledRender from
+           the /dashboard/ops `unhandled` key; age from waiting_since, no money. -->
+      <div class="td-block" data-block="unhandled">
+        <button class="bn-hide" onclick="dashArrangeHide('unhandled')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+        <div class="bn-card">
+          <div class="bn-inner">
+            <div class="bn-head">
+              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>
+              <h3>Unhandled orders · 待处理订单</h3>
+              <button type="button" class="bn-go" onclick="tdSecOpenOrders('paid')">Open orders › · 前往订单 ›</button>
+            </div>
+            <div class="bn-body">
+              <div class="bx-in-list" id="td-unhandled-list"><div class="td-muted">Loading… · 加载中…</div></div>
+              <p class="td-chan-foot detail2" id="td-unhandled-foot"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Inventory -->
       <div class="td-block" data-block="inventory">
         <button class="bn-hide" onclick="dashArrangeHide('inventory')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -1436,39 +1456,24 @@
         </div>
       </div>
 
-      <!-- On the way — in-transit purchase orders (warehouse-only). Painted by
-           dashIncomingRender in 03-dashboard.js from its own status=Ordered pull. -->
+      <!-- On the way / Drafts — in-transit POs (Ordered, soonest first) plus
+           drafted-not-placed POs (Requested, oldest first), merged into one
+           warehouse card. Painted by dashIncomingRender + dashDraftsRender into
+           the two lists below. -->
       <div class="td-block" data-block="incoming">
         <button class="bn-hide" onclick="dashArrangeHide('incoming')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         <div class="bn-card">
           <div class="bn-inner">
             <div class="bn-head">
               <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
-              <h3>On the way · 在途采购</h3>
+              <h3>On the way / Drafts · 在途 / 待发送</h3>
               <button type="button" class="bn-go" onclick="dashJumpTab('purchasing')">Purchasing › · 前往采购 ›</button>
             </div>
             <div class="bn-body">
+              <div class="bx-in-cap">On the way · 在途</div>
               <div class="bx-in-list" id="td-incoming-list"><div class="td-muted">Loading… · 加载中…</div></div>
-              <p class="td-chan-foot detail2">Ordered · soonest first · 已下单 · 最早到货优先</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Drafts to send — purchase orders drafted but not yet placed
-           (warehouse-only). Painted by dashDraftsRender from status=Requested. -->
-      <div class="td-block" data-block="drafts">
-        <button class="bn-hide" onclick="dashArrangeHide('drafts')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        <div class="bn-card">
-          <div class="bn-inner">
-            <div class="bn-head">
-              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M8 6H6a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V7a1 1 0 0 0-1-1h-2"/><path d="M9 13h6M9 17h4"/></svg>
-              <h3>Drafts to send · 待发送采购</h3>
-              <button type="button" class="bn-go" onclick="dashJumpTab('purchasing')">Review › · 前往采购 ›</button>
-            </div>
-            <div class="bn-body">
-              <div class="bx-in-list" id="td-drafts-list"><div class="td-muted">Loading… · 加载中…</div></div>
-              <p class="td-chan-foot detail2">Requested · oldest first · 待下单 · 最早草拟优先</p>
+              <div class="bx-in-cap bx-in-cap-2 detail">Drafts to send · 待发送</div>
+              <div class="bx-in-list detail" id="td-drafts-list"><div class="td-muted">Loading… · 加载中…</div></div>
             </div>
           </div>
         </div>

@@ -8788,6 +8788,10 @@
   /* On the way — in-transit PO list (bx-* scoped). ETA in the "arrives today"
      amber when due on/before today. Rows past the 2nd wear .detail/.detail2. */
   .bx-in-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
+  /* Section caption for the merged "On the way / Drafts" card — a small quiet
+     label above each of its two lists; the second gets a hairline separator. */
+  .bx-in-cap { font: 600 11px var(--f-sans); color: var(--td-text2); margin: 0 0 2px; }
+  .bx-in-cap.bx-in-cap-2 { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--td-raised); }
   .bx-in-row { display: flex; align-items: baseline; gap: 12px; padding: 7px 0; font-size: 13.5px; }
   .bx-in-row + .bx-in-row { border-top: 1px solid var(--td-raised); }
   .bx-in-nm { min-width: 0; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
@@ -10285,7 +10289,9 @@
      the revenue-led mobile variant (#rm-dash).
    · store-manager keeps the full pulse but locked to their store.
    ════════════════════════════════════════════════════════════════ */
-body.pos-warehouse .td-block[data-block="recap"], body.pos-customer-service .td-block[data-block="recap"], body.pos-dispatch .td-block[data-block="recap"],
+/* Recap is un-hidden for warehouse (role-filtered, money-free in tdRecapRender);
+   dispatch / customer-service keep it hidden until their view is built. */
+body.pos-customer-service .td-block[data-block="recap"], body.pos-dispatch .td-block[data-block="recap"],
 body.pos-warehouse .td-block[data-block="orders"], body.pos-customer-service .td-block[data-block="orders"], body.pos-dispatch .td-block[data-block="orders"],
 body.pos-warehouse .td-block[data-block="customers"], body.pos-customer-service .td-block[data-block="customers"], body.pos-dispatch .td-block[data-block="customers"],
 body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot,
@@ -10296,18 +10302,20 @@ body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, b
 /* Owner (pos-default) is the 4-card glance — recap · needs · today · customers.
    The operational cards belong to the warehouse & dispatch views, not the
    owner's morning, so they're hidden here even though the owner isn't a
-   restricted role. (Unhandled orders joins this list with its card, later.) */
+   restricted role. */
+body.pos-default .td-block[data-block="unhandled"],
 body.pos-default .td-block[data-block="inventory"],
 body.pos-default .td-block[data-block="incoming"],
-body.pos-default .td-block[data-block="drafts"],
 body.pos-default .td-block[data-block="onroad"],
 body.pos-default .td-block[data-block="ready"],
 body.pos-default .td-block[data-block="delivery"] { display: none; }
-/* "On the way" + "Drafts to send" are warehouse-native — hidden for every
-   non-warehouse role (owner included, via the pos-default rule above). */
-body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="drafts"],
-body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="drafts"],
-body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="drafts"] { display: none; }
+/* "On the way / Drafts" (incoming) is warehouse-native — hidden for non-warehouse
+   roles. Unhandled orders shows for warehouse now; dispatch / customer-service
+   join when their view is built, so it stays hidden for them (and store-manager)
+   for now. */
+body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="unhandled"],
+body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="unhandled"],
+body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="unhandled"] { display: none; }
 /* "On the road" + "Ready to hand off" (delivery board) are delivery-native —
    shown to dispatch + customer-service, hidden for warehouse / store-manager
    (and for owner, via the pos-default rule above). */

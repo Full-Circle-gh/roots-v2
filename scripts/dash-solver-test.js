@@ -31,11 +31,9 @@ const DASH_SHAPES = {
   orders:    [[3,2],[4,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
   customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
   inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
-  // incoming = warehouse-only "On the way" (in-transit POs). List block.
+  // incoming = warehouse-only "On the way / Drafts" (in-transit POs + drafted-
+  // not-placed, merged into one card). List block.
   incoming:  [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // drafts = warehouse-only "Drafts to send". List block (merges into
-  // incoming's "On the way / Drafts" card in the later warehouse commit).
-  drafts:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   // onroad/ready = dispatch/CS list blocks.
   onroad:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   ready:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
@@ -43,7 +41,7 @@ const DASH_SHAPES = {
   unhandled: [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, incoming: 2, drafts: 2, onroad: 2, ready: 2, unhandled: 2, delivery: 1 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, incoming: 2, onroad: 2, ready: 2, unhandled: 2, delivery: 1 };
 
 function dashPrefScore(id, w, h) {
   const S = DASH_SHAPES[id]; if (!S) return null;
@@ -167,14 +165,18 @@ function run(label, blocks, opts) {
 // whole set owner can reorder, so permuting all of it is trivial. FULL is every
 // block any role can reach (owner's 4 + the warehouse/dispatch cards + the
 // unhandled card), checked all-subsets — restricted roles can't reorder, so
-// all-subsets is enough for them.
+// all-subsets is enough for them. WAREHOUSE is the shipped warehouse view
+// (recap · needs · unhandled · inventory · on-the-way/drafts), checked as its
+// own set so the exact combination that goes live is proven to tile.
 const OWNER = ['recap', 'needs', 'orders', 'customers'];
-const FULL  = ['recap', 'needs', 'orders', 'customers', 'inventory', 'incoming', 'drafts', 'onroad', 'ready', 'delivery', 'unhandled'];
+const FULL  = ['recap', 'needs', 'orders', 'customers', 'unhandled', 'inventory', 'incoming', 'onroad', 'ready', 'delivery'];
+const WAREHOUSE = ['recap', 'needs', 'unhandled', 'inventory', 'incoming'];
 
 console.log('Dashboard bento solver — tiling invariant\n');
 let ok = true;
 ok = run('owner 4-card view — all subsets + all orderings', OWNER, { permuteFull: true }) && ok;
-ok = run('full 11 blocks (all owner + warehouse + dispatch) — all subsets', FULL) && ok;
+ok = run('full 10 blocks (all owner + warehouse + dispatch) — all subsets', FULL) && ok;
+ok = run('warehouse 5-card view — all subsets', WAREHOUSE) && ok;
 
 console.log('');
 if (!ok) { console.log('RESULT: FAIL — a block set does not tile; do NOT ship the shapes as-is.'); process.exit(1); }

@@ -839,6 +839,44 @@ function dashDraftsRender() {
   }).join('');
 }
 
+// Unhandled orders — orders in status='paid' that nobody has started preparing
+// (the moment anyone acts, the order moves to 'preparing'). Reads the
+// /dashboard/ops `unhandled` key — shared with the Needs-you pull, so no new
+// poll cycle. Age is measured from `waiting_since` (the server's COALESCE of
+// paid_at -> placed_at, so it is never null -> never "NaN min"), against
+// DASH_OPS.server_now so a client clock skew never matters. NO money: this is a
+// non-owner screen, so the order total the payload carries is never rendered.
+function dashUnhandledRender() {
+  const host = $('#td-unhandled-list'); if (!host) return;
+  const u = (DASH_OPS && DASH_OPS.unhandled) || null;
+  const foot = document.getElementById('td-unhandled-foot');
+  if (!u) return;   // ops not loaded yet — leave the "Loading…" placeholder
+  if (!u.count) {
+    host.innerHTML = `<div class="td-muted">${cuT('Nothing waiting to start', '暂无待处理订单')}</div>`;
+    if (foot) foot.textContent = '';
+    return;
+  }
+  const now = Number(DASH_OPS.server_now) || Date.now();
+  // waiting_since is a UTC SQLite datetime ("YYYY-MM-DD HH:MM:SS"); parse as UTC.
+  const ageTxt = (since) => {
+    const t = new Date(String(since || '').replace(' ', 'T') + 'Z').getTime();
+    if (!t || isNaN(t)) return '';   // defensive — never render "NaN min"
+    const mins = Math.max(0, Math.round((now - t) / 60000));
+    if (mins < 60) return cuT(`waiting ${mins}m`, `等待 ${mins} 分钟`);
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return cuT(`waiting ${hrs}h`, `等待 ${hrs} 小时`);
+    return cuT(`waiting ${Math.floor(hrs / 24)}d`, `等待 ${Math.floor(hrs / 24)} 天`);
+  };
+  host.innerHTML = (u.items || []).slice(0, 5).map((it, i) => {
+    const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
+    return `<div class="bx-in-row${cls}">
+      <span class="bx-in-nm" data-no-i18n>${escapeHtml(it.order_no || '')}<span class="bx-in-sub">${escapeHtml(String(it.buyer || ''))}</span></span>
+      <span class="bx-in-eta">${escapeHtml(ageTxt(it.waiting_since))}</span>
+    </div>`;
+  }).join('');
+  if (foot) foot.textContent = cuT(`${u.count} waiting · oldest first`, `${u.count} 单待处理 · 最早优先`);
+}
+
 // On the road — orders out for delivery, with the live rider stage + ETA the
 // orders list already attaches (o.courier = {stage, eta_seconds}). Dispatch /
 // customer-service only; its own pull of the (heavy) orders list, role-guarded
@@ -1164,7 +1202,7 @@ function tdInit() {
   tdDateRender();
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (greeting, date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashStockDrawerRender(); });
+  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashUnhandledRender(); dashStockDrawerRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
@@ -1197,20 +1235,19 @@ function tdInit() {
 // release references ids that no longer exist and — with hide/show retired —
 // could strand a card, so the key resets everyone to the fresh default once.
 const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v10';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'customers', 'inventory', 'incoming', 'drafts', 'onroad', 'ready', 'delivery', 'unhandled'];
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'customers', 'unhandled', 'inventory', 'incoming', 'onroad', 'ready', 'delivery'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
   recap:     ['While you were away', '您不在的这段时间'],
   needs:     ['Needs you', '需要您处理'],
   orders:    ['Orders', '订单'],
   customers: ['Customers', '客户'],
+  unhandled: ['Unhandled orders', '待处理订单'],
   inventory: ['Inventory', '库存'],
-  incoming:  ['On the way', '在途采购'],
-  drafts:    ['Drafts to send', '待发送采购'],
+  incoming:  ['On the way / Drafts', '在途 / 待发送'],
   onroad:    ['On the road', '配送在途'],
   ready:     ['Ready to hand off', '待交接'],
   delivery:  ['Delivery', '配送'],
-  unhandled: ['Unhandled orders', '待处理订单'],
 };
 
 // The grid: six columns, 16px gutters, 120px row unit (h1 = 120, h2 = 256).
@@ -1233,11 +1270,10 @@ const DASH_SHAPES = {
   orders:    [[3,2],[4,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
   customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
   inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
-  // incoming = warehouse-only "On the way" (in-transit POs). List block, same
-  // width menu as its siblings. Tiling proven in scripts/dash-solver-test.js.
+  // incoming = warehouse-only "On the way / Drafts" (in-transit POs + drafted-
+  // not-placed, merged into one card). List block, same width menu as its
+  // siblings. Tiling proven in scripts/dash-solver-test.js.
   incoming:  [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // drafts = warehouse-only "Drafts to send". List block, same width menu.
-  drafts:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   // onroad/ready = dispatch/CS list blocks.
   onroad:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   ready:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
@@ -1246,7 +1282,7 @@ const DASH_SHAPES = {
   unhandled: [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, incoming: 2, drafts: 2, onroad: 2, ready: 2, unhandled: 2, delivery: 1 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, incoming: 2, onroad: 2, ready: 2, unhandled: 2, delivery: 1 };
 
 let DASH_ARRANGING = false;
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];
@@ -1871,6 +1907,12 @@ function tdRecapHeadPaint() {
   if (meta) meta.textContent = TD.reallyAway ? tdSinceLabel(TD.recapSince) : tdRecentLabel(TD.recapSince);
 }
 
+// True when this operator's dashboard shows NO money — warehouse now (dispatch /
+// customer-service join when their view is built). Money-gating rides the
+// RELIABLE role string, never the fail-open cap check: a ¥ must never leak on a
+// null-caps session, so this mirrors the money-card CSS gate, not caps.
+function tdRecapNoMoney() { return ['warehouse'].includes(dashPos()); }
+
 // Aggregate the recap window's events into calm one-line rows, each with a
 // breathing Dusk dot — Dusk means "the system did this", and this card is the
 // only place on the dashboard that uses it.
@@ -1893,19 +1935,32 @@ function tdRecapRender() {
 
   const rows = [];
   const push = (en, cn) => rows.push(`<div class="td-recap-row"><span class="td-dusk-dot" aria-hidden="true"></span><span>${cuT(en, cn)}</span></div>`);
-  if (paid.length)       push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} paid — ${money(sumAmt(paid, 'total'))}`,
-                              `<b>${paid.length}</b> 笔订单已支付，共 ${money(sumAmt(paid, 'total'))}`);
+  // The warehouse Recap is THEIR work, not the business's money: paid orders are
+  // framed as queue entries (no ¥), and the money/customer rows (refunds, wallet
+  // top-ups, new customers, deliveries, auto-cancels) are dropped — those aren't
+  // warehouse work. What's left is what a warehouse operator acts on: new queue
+  // entries, what shipped, and wholesale pickups. NOTE: "N POs arrived" is not
+  // shown — there is no PO-received event in the activity stream (a po_received
+  // event is a separate backend item); the approved mockup showed it, the code
+  // ships what's real.
+  const wh = tdRecapNoMoney();
+  if (paid.length) {
+    if (wh) push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} entered your queue`,
+                 `<b>${paid.length}</b> 笔订单进入待处理队列`);
+    else    push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} paid — ${money(sumAmt(paid, 'total'))}`,
+                 `<b>${paid.length}</b> 笔订单已支付，共 ${money(sumAmt(paid, 'total'))}`);
+  }
   if (dispatched.length) push(`<b>${dispatched.length}</b> ${dispatched.length === 1 ? 'order' : 'orders'} dispatched`,
                               `<b>${dispatched.length}</b> 个订单已发货`);
-  if (delivered.length)  push(`<b>${delivered.length}</b> ${delivered.length === 1 ? 'order' : 'orders'} delivered`,
+  if (!wh && delivered.length)  push(`<b>${delivered.length}</b> ${delivered.length === 1 ? 'order' : 'orders'} delivered`,
                               `<b>${delivered.length}</b> 个订单已送达`);
-  if (autoCanc.length)   push(`<b>${autoCanc.length}</b> unpaid ${autoCanc.length === 1 ? 'order' : 'orders'} cancelled automatically`,
+  if (!wh && autoCanc.length)   push(`<b>${autoCanc.length}</b> unpaid ${autoCanc.length === 1 ? 'order' : 'orders'} cancelled automatically`,
                               `<b>${autoCanc.length}</b> 个未付款订单已自动取消`);
-  if (refunded.length)   push(`<b>${refunded.length}</b> ${refunded.length === 1 ? 'refund' : 'refunds'} settled — ${money(sumAmt(refunded, 'amount'))}`,
+  if (!wh && refunded.length)   push(`<b>${refunded.length}</b> ${refunded.length === 1 ? 'refund' : 'refunds'} settled — ${money(sumAmt(refunded, 'amount'))}`,
                               `<b>${refunded.length}</b> 笔退款已完成，共 ${money(sumAmt(refunded, 'amount'))}`);
-  if (topups.length)     push(`<b>${topups.length}</b> wallet ${topups.length === 1 ? 'top-up' : 'top-ups'} — ${money(sumAmt(topups, 'amount'))}`,
+  if (!wh && topups.length)     push(`<b>${topups.length}</b> wallet ${topups.length === 1 ? 'top-up' : 'top-ups'} — ${money(sumAmt(topups, 'amount'))}`,
                               `<b>${topups.length}</b> 笔钱包充值，共 ${money(sumAmt(topups, 'amount'))}`);
-  if (newCust.length)    push(`<b>${newCust.length}</b> new ${newCust.length === 1 ? 'customer' : 'customers'} joined`,
+  if (!wh && newCust.length)    push(`<b>${newCust.length}</b> new ${newCust.length === 1 ? 'customer' : 'customers'} joined`,
                               `新增 <b>${newCust.length}</b> 位客户`);
   if (pickups.length)    push(`<b>${pickups.length}</b> gzgrocery ${pickups.length === 1 ? 'pickup' : 'pickups'} recorded`,
                               `记录 <b>${pickups.length}</b> 笔 gzgrocery 提货`);
@@ -2021,7 +2076,7 @@ function tdRecapWorkRender() {
       <span class="db-feed-ts">${pad(ts.getHours())}:${pad(ts.getMinutes())}</span>
       <span class="td-feed-text">${m.text}</span>
       ${m.badge || ''}
-      ${m.amount ? `<span class="td-feed-amt">${m.amount}</span>` : ''}
+      ${m.amount && !tdRecapNoMoney() ? `<span class="td-feed-amt">${m.amount}</span>` : ''}
     </div>`;
   }
   fold.innerHTML = html;
@@ -2056,6 +2111,7 @@ async function tdOpsLoad() {
     }
     tdAttnRender();
     tdSecPaint();
+    dashUnhandledRender();   // the Unhandled-orders card reads the same ops payload
   } catch (e) {
     if (!DASH_OPS) dashBootRetry('ops', tdOpsLoad);   // else next 60s tick retries
   }
@@ -2171,15 +2227,17 @@ function tdSecPaint() {
     ]);
   }
 
-  // Inventory: out-of-stock is the emergency; low stock is the nudge. Either
-  // way the line ends on the restock deep link.
+  // Inventory: out-of-stock is the emergency; low stock is the nudge. The footer
+  // states the count only — the restock CTA lives on the "Restock needed" card in
+  // Needs-you now (dedup: one fire, one place), so this line no longer carries it.
   const invFoot = document.getElementById('td-sec-inventory-foot');
   if (invFoot && DASH_OPS) {
     invFoot.innerHTML = (oos + low) === 0
       ? `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Everything is stocked.', '库存充足。'))}`
       : `<span class="td-sec-dot"></span>`
-        + (oos ? `<button type="button" class="td-sec-link" onclick="dashStockDrawerOpen(event)">${escapeHtml(cuT(`${oos} out of stock`, `${oos} 项已售罄`))}</button><span class="td-sec-sep">·</span>` : '')
-        + `<button type="button" class="td-sec-link" onclick="dashOpenRestock()">${escapeHtml(cuT('Open restock', '前往补货'))}</button>`;
+        + `<button type="button" class="td-sec-link" onclick="dashStockDrawerOpen(event)">${escapeHtml(oos
+            ? cuT(`${oos} out of stock`, `${oos} 项已售罄`)
+            : cuT(`${low} running low`, `${low} 项库存不足`))}</button>`;
   }
 
   // Delivery: the carrier's own "needs a call" flags — the same signal the
@@ -2363,9 +2421,23 @@ function tdAttnRender() {
   if (refCell) refCell.textContent = String((DASH_OPS.refunds && DASH_OPS.refunds.count) || 0);
   const cards = [];
 
-  // Stock is no longer a card here — the list moved into the Inventory block
-  // (tdInvLowRender), whose own "N out of stock · Open restock" footer already
-  // carries the amber dot. Nothing about stock is repeated in this strip.
+  // Restock — the stock fire lives here now (dedup: the Inventory block keeps the
+  // counts + rolling low list, but the restock CTA moved out of its footer to
+  // here — one fire, one place). Counts + one line, deep-linking to the restock
+  // filter; gated on the stock capability, like the Inventory low-stock list.
+  const oosc = (DASH_OPS.out_of_stock && DASH_OPS.out_of_stock.count) || 0;
+  const lowc = (DASH_OPS.low_stock && DASH_OPS.low_stock.count) || 0;
+  if ((oosc + lowc) > 0 && dashCardWants('stock')) {
+    // Comma, not " · ", so the i18n walker never mistakes the line for an EN·CN
+    // pair; data-no-i18n as well since tdAttnRender rebuilds it on a lang toggle.
+    const summary = (oosc && lowc)
+      ? cuT(`${oosc} out of stock, ${lowc} running low`, `${oosc} 项已售罄，${lowc} 项库存不足`)
+      : oosc ? cuT(`${oosc} out of stock`, `${oosc} 项已售罄`)
+             : cuT(`${lowc} running low`, `${lowc} 项库存不足`);
+    const rows = `<div class="td-attn-sub" data-no-i18n>${escapeHtml(summary)}</div>`;
+    const action = `<button type="button" class="td-attn-go" onclick="dashOpenRestock()">${cuT('Open restock', '前往补货')}</button>`;
+    cards.push(tdAttnCard('amber', 'box', cuT('Restock needed', '需要补货'), oosc + lowc, rows, '', action));
+  }
 
   // Delivery — the brick "needs a call" card only when the carrier has flagged a
   // problem. When it's clear there's no card here; the calm channels are folded
