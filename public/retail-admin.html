@@ -2202,6 +2202,9 @@
          card's overflow:hidden clips the footer to the same corner radius,
          so the two can never disagree about where the corner is. Chasing
          that with matched radii on separate boxes never held. -->
+    <!-- Customer-scope chip: shown only when the list is filtered to one
+         customer (the "View all N orders" path from a customer's drawer). -->
+    <div id="orders-cust-chip" class="ord-cust-chip" hidden></div>
     <div class="list-card">
       <div class="table-wrap">
         <table id="orders-table">

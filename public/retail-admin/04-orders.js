@@ -21,12 +21,79 @@ let ORD_PAGE = 1;
 let ORD_PAGE_SIZE = 50;
 let ORD_TOTAL = 0;
 let _ordClampRetry = false;   // guards the one refetch when a page falls off the end
+// When set to { id, name }, the list is scoped to one customer's orders (the
+// "View all N orders" path from a customer's drawer). null = every customer.
+// Read by loadOrders() alongside the DOM filters; surfaced as a removable chip.
+let ORD_CUSTOMER_FILTER = null;
 
 // A filter re-cuts the result set, so the current page number no longer
 // points at the same orders. Start over at page 1.
 function ordFilterChanged() {
   ORD_PAGE = 1;
   loadOrders();
+}
+
+// ── Scope the orders list to one customer ─────────────────────────────
+// Entry point from a customer drawer's "View all N orders →" link. The drawer
+// is still open when this fires (goTab closes it, and CU_CURRENT is nulled
+// ~240ms later by the drawer-close hook), so the name is read synchronously
+// here rather than threaded through an escape-prone inline onclick argument.
+function ordViewCustomerOrders(id) {
+  const cid = Number(id);
+  if (!Number.isFinite(cid)) return;
+  const c = (typeof CU_CURRENT !== 'undefined' && CU_CURRENT) ? CU_CURRENT.customer : null;
+  // Same nickname-or-#id name the rest of the product shows; raw, kept out of
+  // any EN·CN string (rendered with data-no-i18n in the chip).
+  const name = (c && c.id === cid && c.nickname) ? c.nickname : ('#' + cid);
+  ORD_CUSTOMER_FILTER = { id: cid, name };
+  // "View all N" promises the customer's whole history, so clear the other
+  // facets — a lingering status/channel/store filter would show fewer than N
+  // and the chip would contradict the promised count.
+  ordResetFacetsUI();
+  goTab('orders');       // activates the Orders section (also closes the drawer)
+  ordFilterChanged();    // page → 1 + reload, now carrying customer_id
+}
+function ordClearCustomerFilter() {
+  ORD_CUSTOMER_FILTER = null;
+  ordFilterChanged();    // back to the full list (facets were reset on entry)
+}
+// Reset the status chips / channel dropdown / store / search to their defaults
+// WITHOUT reloading — the single reload is fired by the caller afterwards.
+function ordResetFacetsUI() {
+  const st = document.getElementById('orders-status');
+  if (st) st.value = '';
+  $$('#orders-status-chips .status-chip').forEach(el =>
+    el.classList.toggle('active', (el.dataset.status || '') === ''));
+  const chan = document.getElementById('orders-channel');
+  if (chan) chan.value = '';
+  $$('#chd-pop .chd-item').forEach(el =>
+    el.classList.toggle('active', (el.dataset.channel || '') === ''));
+  const allItem = document.querySelector('#chd-pop .chd-item[data-channel=""]');
+  const chTxt = document.getElementById('chd-btn-txt');
+  const chIco = document.getElementById('chd-btn-ico');
+  const chBtn = document.getElementById('chd-btn');
+  if (allItem && chTxt) chTxt.textContent = allItem.textContent.trim();
+  if (allItem && chIco) { const ico = allItem.querySelector('.chan-ico'); if (ico) chIco.innerHTML = ico.innerHTML; }
+  if (chBtn) chBtn.classList.remove('is-set');
+  const store = document.getElementById('orders-store');
+  if (store) store.value = '';
+  const q = document.getElementById('orders-q');
+  if (q) q.value = '';
+}
+// The removable "showing one customer" chip above the list. Rendered on every
+// loadOrders() so it tracks the filter state; hidden when the scope is off.
+function ordRenderCustChip() {
+  const host = document.getElementById('orders-cust-chip');
+  if (!host) return;
+  if (!ORD_CUSTOMER_FILTER) { host.hidden = true; host.innerHTML = ''; return; }
+  host.hidden = false;
+  host.innerHTML =
+    `<span class="ocf-lbl">${cuT('Showing orders for', '仅显示以下顾客的订单')}</span>` +
+    `<span class="ocf-name" data-no-i18n>${escapeHtml(ORD_CUSTOMER_FILTER.name)}</span>` +
+    `<button type="button" class="ocf-x" onclick="ordClearCustomerFilter()"` +
+      ` title="${cuT('Show all orders', '显示全部订单')}" aria-label="${cuT('Clear customer filter', '清除顾客筛选')}">` +
+      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>` +
+    `</button>`;
 }
 
 // The pager under the orders table (and under the phone card list — same
@@ -278,6 +345,7 @@ function _ordersFilterKey() {
     (document.getElementById('orders-channel') || {}).value || '',
     $('#orders-q').value.trim(),
     (document.getElementById('orders-store') || {}).value || '',
+    ORD_CUSTOMER_FILTER ? 'c' + ORD_CUSTOMER_FILTER.id : '',
   ].join('|');
 }
 
@@ -932,6 +1000,9 @@ async function loadOrders(opts = {}) {
     if (channel) qs.set('channel', channel);
     if (q)       qs.set('q', q);
     if (storeId) qs.set('store_id', storeId);
+    if (ORD_CUSTOMER_FILTER) qs.set('customer_id', ORD_CUSTOMER_FILTER.id);
+    // Reflect the customer scope as a removable chip above the list.
+    ordRenderCustChip();
     // The page window. Sending these is what makes orders past the first 100
     // reachable at all — the server was already honouring limit/offset, the
     // list just never asked for a second page.

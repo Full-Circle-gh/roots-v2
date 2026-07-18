@@ -728,6 +728,12 @@ function cuRenderDetail() {
           <td class="muted">${cuFmtTime(o.created_at)}</td>
         </tr>`).join('')
     : '<tr><td colspan="4" class="muted">No orders yet · 暂无订单</td></tr>';
+  // The fold shows only the last 10 (backend LIMIT). When the customer has more,
+  // offer a jump to the Orders tab scoped to them — N is their full order count.
+  const recentOrdersTotal = Number((d.stats && d.stats.orders && d.stats.orders.orders_count) || 0);
+  const recentOrdersViewAll = (recentOrdersTotal > d.recent_orders.length)
+    ? `<div class="cux-viewall"><button type="button" class="cux-viewall-btn" onclick="ordViewCustomerOrders(${d.customer.id})">${cuT(`View all ${recentOrdersTotal} orders`, `查看全部 ${recentOrdersTotal} 笔订单`)} →</button></div>`
+    : '';
 
   const recentPtsRows = d.recent_points.length
     ? d.recent_points.map(p => `
@@ -944,6 +950,7 @@ function cuRenderDetail() {
               <tbody>${recentOrdersRows}</tbody>
             </table>
           </div>
+          ${recentOrdersViewAll}
         </div>
       </details>
 

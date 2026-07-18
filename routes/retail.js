@@ -17601,7 +17601,7 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
 });
 
 router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
-  const { status, q, from, to, store_id } = req.query;
+  const { status, q, from, to, store_id, customer_id } = req.query;
   // Combined-channel view: an explicit ?channel filters to one channel; absent
   // (or 'all') returns every channel, including the read-only Meituan mirror
   // rows the storefront doesn't fulfil (the UI renders those view-only).
@@ -17721,6 +17721,14 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   }
   if (from) { filterSql += ' AND o.placed_at >= ?'; params.push(from); }
   if (to)   { filterSql += ' AND o.placed_at <= ?'; params.push(to); }
+  // Scope to a single customer — an exact FK match (the "View all N orders"
+  // path from a customer's drawer), NOT the free-text q search. Rides
+  // o.customer_id (already selected) and the retail_customers c join the COUNT
+  // below shares, so the pager total stays exact for the scoped list.
+  if (customer_id) {
+    const cid = parseInt(customer_id, 10);
+    if (Number.isFinite(cid)) { filterSql += ' AND o.customer_id = ?'; params.push(cid); }
+  }
 
   // How many orders match, ignoring the page window. Without this the list
   // silently truncated at `limit` with nothing on screen saying so — orders
