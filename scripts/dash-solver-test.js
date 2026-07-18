@@ -12,11 +12,14 @@
  *      none placed twice), and
  *   3. no band exceeds 6 columns.
  *
- * This was "headless-verified" during development but the test was never
- * committed. It is reconstructed here so adding / reshaping a block is
- * provable, not hopeful. The DASH_SHAPES / DASH_PRI / DASH_COLS and the three
- * solver functions below are copied VERBATIM from 03-dashboard.js — if you
- * change them there, change them here and re-run:  node scripts/dash-solver-test.js
+ * The DASH_SHAPES / DASH_PRI / DASH_COLS and the three solver functions below
+ * are copied VERBATIM from 03-dashboard.js — if you change them there, change
+ * them here and re-run:  node scripts/dash-solver-test.js
+ *
+ * Kept in step with the 2026-07 dashboard simplification: movers / week /
+ * channels / moves left the dashboard, "unhandled" (Unhandled orders, status
+ * =paid) joined. `unhandled` shares the exact list-block shape menu of
+ * incoming / drafts / onroad / ready, so it introduces no new tiling pattern.
  */
 'use strict';
 
@@ -28,27 +31,19 @@ const DASH_SHAPES = {
   orders:    [[3,2],[4,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
   customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
   inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
-  delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
-  channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
-  // ── owner-only "Today's movers" (shipped) + "The week so far" (proposed).
-  //    Same width menu shape as the other list blocks so 6-unit partitions
-  //    always exist. week is a 7-bar chart → prefers width. ──
-  movers:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  week:      [[4,2],[3,2],[4,1],[3,1],[2,2],[2,1],[6,1]],
-  // incoming = warehouse-only "On the way" (in-transit POs). List block, same
-  // width menu as movers. Restricted roles can't Arrange, so it only ever
-  // appears in default order — the all-subsets check covers it.
+  // incoming = warehouse-only "On the way" (in-transit POs). List block.
   incoming:  [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // drafts = warehouse-only "Drafts to send" (status=Requested POs). List block.
+  // drafts = warehouse-only "Drafts to send". List block (merges into
+  // incoming's "On the way / Drafts" card in the later warehouse commit).
   drafts:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // onroad = dispatch/customer-service "On the road" (out-for-delivery orders).
+  // onroad/ready = dispatch/CS list blocks.
   onroad:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // ready = dispatch/customer-service "Ready to hand off" (status=preparing).
   ready:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // moves = warehouse "Recent stock moves" (retail_stock_ledger).
-  moves:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  // unhandled = "Unhandled orders" (status=paid), warehouse + dispatch/CS.
+  unhandled: [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, delivery: 1, channels: 2, movers: 2, week: 2, incoming: 2, drafts: 2, onroad: 2, ready: 2, moves: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, incoming: 2, drafts: 2, onroad: 2, ready: 2, unhandled: 2, delivery: 1 };
 
 function dashPrefScore(id, w, h) {
   const S = DASH_SHAPES[id]; if (!S) return null;
@@ -167,17 +162,23 @@ function run(label, blocks, opts) {
   return ok;
 }
 
-// OWNER = the 9 owner-reachable blocks (owner is the only role that can Arrange,
-// so this is the set that needs the all-orderings guarantee). FULL adds the
-// warehouse-only `incoming` block for the complete 10-block set — its all-subsets
-// check is enough since restricted roles can't reorder.
-const OWNER = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'delivery', 'channels'];
-const FULL = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'drafts', 'moves', 'onroad', 'ready', 'delivery', 'channels'];
+// Owner is the only role that can Arrange (drag-reorder), so the owner-visible
+// set is the one that needs the all-orderings guarantee. This release still
+// ships the pre-owner-cards-commit board (owner reduces to 4 cards in the
+// owner-cards commit); until then owner can drag the 10 remaining cards.
+// Permuting all 10 is ~4 min (10! * dashSolve), so we permute a 9-card slice —
+// `drafts` is dropped only because it is shape-identical to incoming / onroad /
+// ready, which ARE permuted, so every distinct shape-interleaving is exercised.
+// FULL adds `drafts` back plus the restricted-role-only `unhandled` for the
+// complete 11-block all-subsets check (restricted roles can't reorder, so
+// all-subsets is enough for them).
+const OWNER = ['recap', 'needs', 'orders', 'customers', 'inventory', 'incoming', 'onroad', 'ready', 'delivery'];
+const FULL  = ['recap', 'needs', 'orders', 'customers', 'inventory', 'incoming', 'drafts', 'onroad', 'ready', 'delivery', 'unhandled'];
 
 console.log('Dashboard bento solver — tiling invariant\n');
 let ok = true;
-ok = run('owner 9 blocks — all subsets + all orderings', OWNER, { permuteFull: true }) && ok;
-ok = run('full 14 blocks (all owner + warehouse + dispatch) — all subsets', FULL) && ok;
+ok = run('owner 9-card board — all subsets + all orderings', OWNER, { permuteFull: true }) && ok;
+ok = run('full 11 blocks (all owner + warehouse + dispatch) — all subsets', FULL) && ok;
 
 console.log('');
 if (!ok) { console.log('RESULT: FAIL — a block set does not tile; do NOT ship the shapes as-is.'); process.exit(1); }

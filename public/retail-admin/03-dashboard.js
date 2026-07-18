@@ -420,15 +420,14 @@ function reportsInit() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// RIGHT-NOW HERO (phase 2/3) — live presence, today's mini-KPIs,
-// the Channels-today split. Pulls /api/retail-admin/dashboard/presence
-// (15s), /api/retail-admin/sales/summary (60s for the channel split),
-// and a single /api/retail-admin/dashboard?from=today&to=today (60s
-// for the "Today" mini-row). Polling pauses while the document is
-// hidden so we don't hammer the server with a backgrounded tab.
+// RIGHT-NOW HERO (phase 2/3) — live presence + today's mini-KPIs.
+// Pulls /api/retail-admin/dashboard/presence (15s) and a single
+// /api/retail-admin/dashboard?from=today&to=today (60s for the "Today"
+// mini-row). Polling pauses while the document is hidden so we don't
+// hammer the server with a backgrounded tab.
 // ════════════════════════════════════════════════════════════════
-const DASH_HERO = { presence:null, channels:null, today:null, lastSync:0 };
-const DASH_HERO_INTERVALS = { presence: 15000, channels: 60000, today: 60000 };
+const DASH_HERO = { presence:null, today:null, lastSync:0 };
+const DASH_HERO_INTERVALS = { presence: 15000, today: 60000 };
 
 // A few backoff retries per surface when its FIRST load fails — without this a
 // tripped boot request left the card on "Loading…"/"¥—" until the next 60s
@@ -462,14 +461,6 @@ function dashHeroInit() {
   DASH_HERO._wired = true;
   // Language toggle repaints the Today delta badges from the stashed data.
   if (window.onLangChange) onLangChange(dashHeroTodayRepaint);
-  // ...and re-renders the Channels-today split (channel names are JS-built).
-  if (window.onLangChange) onLangChange(() => {
-    if (DASH_HERO.chan) dashChanRender();
-  });
-  // ...and the week bars (day labels are JS-built), from stashed data.
-  if (window.onLangChange) onLangChange(() => {
-    if (DASH_HERO.weekData) dashWeekRender();
-  });
   // ...and the incoming-PO list (dates + "lines" are JS-built).
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.incoming) dashIncomingRender();
@@ -482,10 +473,9 @@ function dashHeroInit() {
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.onroad) dashOnroadRender();
   });
-  // ...ready-to-hand-off and recent-stock-moves lists.
+  // ...and the ready-to-hand-off list.
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.ready) dashReadyRender();
-    if (DASH_HERO.moves) dashMovesRender();
   });
   // Hover-scrub the Today sparklines to read each hour of the day.
   ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
@@ -512,35 +502,31 @@ function dashHeroStart() {
   dashHeroStop();  // idempotent — clear any stale timers first
   dashHeroRefreshAll();
   DASH_HERO.presence = setInterval(dashHeroLoadPresence, DASH_HERO_INTERVALS.presence);
-  DASH_HERO.channels = setInterval(dashChanLoad,         DASH_HERO_INTERVALS.channels);
   DASH_HERO.today    = setInterval(dashHeroLoadToday,    DASH_HERO_INTERVALS.today);
   // Keep the relative "synced Xs ago" stamp ticking between polls.
   DASH_HERO._syncTimer = setInterval(dashRenderSync, 10000);
 }
 function dashHeroStop() {
-  for (const k of ['presence', 'channels', 'today']) {
+  for (const k of ['presence', 'today']) {
     if (DASH_HERO[k]) { clearInterval(DASH_HERO[k]); DASH_HERO[k] = null; }
   }
   if (DASH_HERO._syncTimer) { clearInterval(DASH_HERO._syncTimer); DASH_HERO._syncTimer = null; }
 }
 function dashHeroRefreshAll() {
-  // Above-the-fold first: the hero pulse + today KPIs (which also feed Today's
-  // movers) + channels + presence. On a cold first boot ~12 GETs fire at once —
-  // more than the browser's 6-connection-per-host cap — and each GET's 20s abort
-  // timer starts when it's ENQUEUED, not when it's sent. A card whose fetch sat
-  // behind the cap could burn its whole budget waiting and abort before hitting
-  // the wire, leaving it stuck on "Loading…" until a retry ramp caught up. So we
-  // let the visible cards go first and defer the below-the-fold list blocks a
-  // beat, keeping the initial in-flight count at/under the cap. Only the FIRST
-  // (boot) call staggers; later refreshes (tab-return, live nudge) run flat.
+  // Above-the-fold first: the hero pulse + today KPIs + presence. On a cold
+  // first boot several GETs fire at once — near the browser's 6-connection-per-
+  // host cap — and each GET's 20s abort timer starts when it's ENQUEUED, not
+  // when it's sent. A card whose fetch sat behind the cap could burn its whole
+  // budget waiting and abort before hitting the wire, leaving it stuck on
+  // "Loading…" until a retry ramp caught up. So we let the visible cards go
+  // first and defer the below-the-fold list blocks a beat, keeping the initial
+  // in-flight count at/under the cap. Only the FIRST (boot) call staggers; later
+  // refreshes (tab-return, live nudge) run flat.
   dashHeroLoadPresence();
-  dashChanLoad();
   dashHeroLoadToday();
   const rest = () => {
-    dashWeekLoad();
     dashIncomingLoad();
     dashDraftsLoad();
-    dashMovesLoad();
     dashOnroadLoad();
     dashReadyLoad();
   };
@@ -552,7 +538,7 @@ function dashHeroRefreshAll() {
 // ── Live push (SSE) ────────────────────────────────────────────────────────
 // Subscribe to the admin-wide live hub (retailLiveSubscribe, 01-core.js). It
 // nudges us whenever the tenant's order / customer / wholesale streams move,
-// so the recap, the open feed, and Channels-today update the moment something
+// so the recap, the open feed, and the Today pulse update the moment something
 // happens, with no visible refresh and no per-client polling. The hub also
 // nudges once after a reconnect, covering events missed while the socket was
 // down; the 60s backstop polls above cover the gap if the hub never connects.
@@ -570,9 +556,7 @@ function dashLiveNudge() {
 function dashLiveRefresh() {
   DASH_HERO._liveDirty = false;
   tdRecapLoad();        // recap summary rows (re-pulls the away window)
-  dashChanLoad();       // Channels today
   dashHeroLoadToday();  // today KPIs + sparkline
-  dashWeekLoad();       // the week-so-far bars
   dashOnroadLoad();     // out-for-delivery list (dispatch/CS; role-guarded)
   dashReadyLoad();      // ready-to-hand-off list (dispatch/CS; role-guarded)
   if (typeof tdOpsLoad === 'function') tdOpsLoad();  // running-low / needs-you
@@ -659,7 +643,6 @@ async function dashHeroLoadToday(opts) {
     const j = await api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}${dashStoreQS()}`);
     const data = j.data || {};
     DASH_HERO.todayData = data;   // stashed so a language toggle can repaint without refetching
-    dashMoversRender();           // Today's movers reads the same payload's topProducts
     const k = data.kpis || {};
     dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => '¥' + Math.round(n).toLocaleString(), dur);
     dashCountUp($('#db-today-ord'), Number(k.orders || 0), undefined, dur);
@@ -720,9 +703,6 @@ function dashHeroTodayRepaint() {
   // The Orders / Customers section vitals this payload also feeds (avg order
   // value, visitors, visits, conversion) — language-aware, so they repaint here.
   if (typeof tdSecPaint === 'function') tdSecPaint();
-  // Today's movers reads the same payload and carries language-dependent copy
-  // (product names + "sold"), so repaint it on a language toggle too.
-  dashMoversRender();
 }
 // Integer when whole, else one decimal — keeps "/day" averages readable.
 function dashTrim(n) {
@@ -882,168 +862,6 @@ function fcBarRows(items, opt) {
       + `<span class="name">${escapeHtml(opt.name(it))}</span>`
       + `<span class="val">${opt.display(it)}</span></div>`;
   }).join('');
-}
-
-// Channels today — the Activity square's replacement. Today's revenue split
-// by channel from /api/retail-admin/sales/summary (same source as the Sales
-// overview page; all stores, GZ-local day, no .data wrapper). The activity
-// feed itself now lives inside The Recap's "Show the work" fold.
-const DASH_CHAN_NAMES = {
-  wechat:    ['WeChat', '微信'],
-  web:       ['Web shop', '网上商店'],
-  meituan:   ['Meituan', '美团'],
-  eleme:     ['Eleme', '饿了么'],
-  gzgrocery: ['gzgrocery pickup', 'gzgrocery 提货'],
-};
-async function dashChanLoad() {
-  try {
-    const j = await api('/api/retail-admin/sales/summary');
-    DASH_HERO.chan = { channels: j.channels || {} };
-    dashChanRender();
-    dashHeroSyncStamp();
-  } catch (e) {
-    // Keep the last good split on a poll error; only the first load reports —
-    // and even then, one quick retry goes out before "Failed to load" shows.
-    if (!DASH_HERO.chan && dashBootRetry('chan', dashChanLoad)) return;
-    const host = $('#td-chan-list');
-    if (host && !DASH_HERO.chan) host.innerHTML = `<div class="td-muted">${cuT('Failed to load', '加载失败')}</div>`;
-  }
-}
-// Bar rows sorted by revenue, widths as share of today's total. Channels that
-// took nothing today stay hidden — a quiet day shows a single line, not a
-// column of zeros.
-function dashChanRender() {
-  const host = $('#td-chan-list'); if (!host || !DASH_HERO.chan) return;
-  const ch = DASH_HERO.chan.channels;
-  const rows = Object.keys(ch)
-    .map(k => ({ key: k, revenue: Number(ch[k].revenue || 0), orders: Number(ch[k].orders || 0) }))
-    .filter(r => r.revenue > 0 || r.orders > 0)
-    .sort((a, b) => b.revenue - a.revenue);
-  if (!rows.length) {
-    host.innerHTML = `<div class="td-muted">${cuT('No sales yet today', '今日暂无销售')}</div>`;
-    return;
-  }
-  const total = rows.reduce((s, r) => s + r.revenue, 0) || 1;
-  const money = n => '¥' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
-  host.innerHTML = rows.map((r, i) => {
-    const nm = DASH_CHAN_NAMES[r.key] ? cuT(DASH_CHAN_NAMES[r.key][0], DASH_CHAN_NAMES[r.key][1]) : r.key;
-    const cnt = cuT(`${r.orders} ${r.orders === 1 ? 'order' : 'orders'}`, `${r.orders} 单`);
-    const pct = Math.max(2, Math.round((r.revenue / total) * 100));
-    // Rows past the 3rd carry .detail/.detail2, same convention as the other
-    // list blocks (movers/moves): a squat tile shortens the list instead of
-    // the uncapped row count overflowing the tile and clipping the foot line.
-    const cls = i >= 3 ? ' detail2' : (i >= 2 ? ' detail' : '');
-    return `<div class="td-chan-row${cls}">
-      <span class="td-chan-lbl">${escapeHtml(nm)} <span class="td-chan-cnt">${cnt}</span></span>
-      <span class="td-chan-val">${money(r.revenue)}</span>
-      <span class="td-chan-track"><span class="td-chan-fill" style="width:${pct}%"></span></span>
-    </div>`;
-  }).join('');
-}
-
-// Today's movers — the products actually selling today, by revenue. Reads the
-// topProducts array the single-day dashboard payload already carries (stashed in
-// DASH_HERO.todayData), so it needs no fetch of its own. Language-dependent
-// (product names + "sold" wording via cuT), so it's repainted on a language
-// toggle from dashHeroTodayRepaint. Rows past the second wear .detail/.detail2
-// so the list shortens gracefully when the solver hands the block a squat shape.
-function dashMoversRender() {
-  const host = $('#td-movers-list'); if (!host) return;
-  const data = DASH_HERO.todayData; if (!data) return;
-  const rows = (data.topProducts || [])
-    .filter(p => Number(p.revenue || 0) > 0)
-    .slice(0, 5);
-  if (!rows.length) {
-    host.innerHTML = `<div class="td-muted">${cuT('No sales yet today', '今日暂无销售')}</div>`;
-    return;
-  }
-  const money = n => '¥' + Number(n || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
-  host.innerHTML = rows.map((p, i) => {
-    const nm = cuT(p.name_en || p.name_cn || '', p.name_cn || p.name_en || '');
-    const units = cuT(`${p.units} sold`, `售出 ${p.units}`);
-    const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
-    return `<div class="bx-mv-row${cls}">
-      <span class="bx-mv-rank">${i + 1}</span>
-      <span class="bx-mv-nm">${escapeHtml(nm)}<span class="bx-mv-sub">${escapeHtml(units)}</span></span>
-      <span class="bx-mv-amt">${money(p.revenue)}</span>
-    </div>`;
-  }).join('');
-}
-
-// The week so far — a seven-day revenue bar chart (owner). Its own pull, since
-// the Today block asks for a single day (hourly) and this wants the trailing
-// week (daily buckets). The dashboard endpoint returns `trend` as one bucket
-// per day for a multi-day window — same shape gzgrocery revenue is already
-// folded into. Stashed so a language toggle repaints the day labels without a
-// refetch. Refreshed from dashHeroRefreshAll / dashLiveRefresh, not polled.
-const DASH_WD_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const DASH_WD_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-async function dashWeekLoad() {
-  const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
-  const to = nowGz.toISOString().slice(0, 10);
-  const from = new Date(nowGz.getTime() - 6 * 86400000).toISOString().slice(0, 10);
-  try {
-    const j = await api(`/api/retail-admin/dashboard?from=${from}&to=${to}${dashStoreQS()}`);
-    DASH_HERO.weekData = (j.data && j.data.trend) || [];
-    dashWeekRender();
-  } catch (e) {
-    if (!DASH_HERO.weekData) dashBootRetry('week', dashWeekLoad);
-  }
-}
-function dashWeekRender() {
-  const host = $('#td-week-body'); if (!host) return;
-  const days = DASH_HERO.weekData; if (!days || !days.length) return;
-  const vals = days.map(d => Number(d.revenue || 0));
-  const max = Math.max(1, ...vals);
-  const total = vals.reduce((s, v) => s + v, 0);
-  let bestIdx = 0;
-  vals.forEach((v, i) => { if (v > vals[bestIdx]) bestIdx = i; });
-  const todayIdx = days.length - 1;
-  const money = n => '¥' + Math.round(Number(n || 0)).toLocaleString();
-  const dow = bucket => new Date(String(bucket) + 'T00:00:00').getDay();
-  const bars = days.map((d, i) => {
-    const v = Number(d.revenue || 0);
-    const h = v <= 0 ? 2 : Math.max(4, Math.round((v / max) * 100));
-    const isToday = i === todayIdx;
-    const lbl = isToday ? cuT('Today', '今天') : cuT(DASH_WD_EN[dow(d.bucket)], DASH_WD_CN[dow(d.bucket)]);
-    const cls = isToday ? ' is-today' : (i === bestIdx ? ' is-best' : '');
-    // Full weekday name for the hover tooltip (the axis label is the short form).
-    const full = new Date(String(d.bucket) + 'T00:00:00')
-      .toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
-    // The whole column is the hover target (data-* fed to the tooltip) so a
-    // zero-revenue day (a 2px stub) still surfaces its figure. A value cap above
-    // each bar makes the chart readable without hovering at all.
-    return `<div class="bx-wk-day" data-day="${escapeAttr(isToday ? cuT('Today', '今天') : full)}" data-rev="${escapeAttr(money(v))}"`
-      + ` onmousemove="dashWeekTip(event)" onmouseleave="dashWeekTipHide()">`
-      + `<div class="bx-wk-cap${isToday ? ' is-today' : ''}">${escapeHtml(money(v))}</div>`
-      + `<div class="bx-wk-bar${cls}" style="height:${h}%"></div>`
-      + `<div class="bx-wk-lbl${isToday ? ' is-today' : ''}">${escapeHtml(lbl)}</div></div>`;
-  }).join('');
-  host.innerHTML = `<div class="bx-wk-bars">${bars}</div>
-    <div class="bx-wk-foot detail">
-      <span>${cuT('Week to date', '本周至今')} <b>${money(total)}</b></span>
-      <span>${cuT('Best day', '最佳单日')} <b>${money(vals[bestIdx])}</b></span>
-    </div>`;
-}
-
-// Cursor-following tooltip for the week bars — the native <title> only shows if
-// the pointer holds dead-still, and never fires at all in Arrange mode. Reuses
-// the trend chart's body-level tip style + fcPlaceTip so no overflow clips it.
-function dashWeekTip(e) {
-  const col = e.currentTarget;
-  let tip = document.getElementById('bx-wk-tip');
-  if (!tip || tip.parentNode !== document.body) {
-    if (!tip) { tip = document.createElement('div'); tip.id = 'bx-wk-tip'; tip.className = 'db-trend-tip'; }
-    document.body.appendChild(tip);
-  }
-  tip.innerHTML = `<div class="b">${escapeHtml(col.dataset.day || '')}</div>`
-    + `<div class="r"><span>${cuT('Revenue', '营收')}</span><b>${escapeHtml(col.dataset.rev || '')}</b></div>`;
-  tip.style.display = 'block';
-  if (typeof fcPlaceTip === 'function') fcPlaceTip(tip, col.getBoundingClientRect());
-}
-function dashWeekTipHide() {
-  const tip = document.getElementById('bx-wk-tip');
-  if (tip) tip.style.display = 'none';
 }
 
 // On the way — purchase orders the buying department has placed and are in
@@ -1214,42 +1032,6 @@ function dashReadyRender() {
     return `<div class="bx-in-row${cls}">
       <span class="bx-in-nm">${escapeHtml('#' + (o.order_no || o.id || ''))}<span class="bx-in-sub">${escapeHtml(sub)}</span></span>
       <span class="bx-in-eta${st.soon ? ' is-soon' : ''}">${escapeHtml(st.txt)}</span>
-    </div>`;
-  }).join('');
-}
-
-// Recent stock moves — the tail of the stock ledger (retail_stock_ledger via
-// /activity): what went in or out and why. Warehouse only; role-guarded. A Dusk
-// dot marks moves an automation made (channel sync, wholesale pickup); manual
-// moves get a plain mark. Product names are pre-coalesced to one string server-
-// side, so only the empty line is language-dependent.
-const DASH_AUTO_SRC = ['meituan', 'eleme', 'gzgrocery', 'guanyi', 'sync', 'system', 'auto'];
-async function dashMovesLoad() {
-  if (!['warehouse', 'default'].includes(dashPos())) return;   // warehouse + owner
-  try {
-    const j = await api('/api/retail-admin/activity?limit=6');
-    DASH_HERO.moves = Array.isArray(j.rows) ? j.rows : (Array.isArray(j.data) ? j.data : []);
-    dashMovesRender();
-  } catch (e) {
-    if (!DASH_HERO.moves) dashBootRetry('moves', dashMovesLoad);
-  }
-}
-function dashMovesRender() {
-  const host = $('#td-moves-list'); if (!host) return;
-  const rows = DASH_HERO.moves; if (!rows) return;
-  if (!rows.length) {
-    host.innerHTML = `<div class="td-muted">${cuT('No recent moves', '近期暂无变动')}</div>`;
-    return;
-  }
-  host.innerHTML = rows.slice(0, 5).map((r, i) => {
-    const auto = DASH_AUTO_SRC.some(s => String(r.source || '').toLowerCase().includes(s));
-    const delta = Number(r.delta || 0);
-    const dtxt = delta > 0 ? '+' + delta : String(delta);
-    const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
-    return `<div class="bx-mo-row${cls}">
-      <span class="bx-mo-dot${auto ? '' : ' is-manual'}" aria-hidden="true"></span>
-      <span class="bx-mo-nm">${escapeHtml(r.product || cuT('(unnamed)', '（未命名）'))}</span>
-      <span class="bx-mo-d ${delta >= 0 ? 'is-in' : 'is-out'}">${escapeHtml(dtxt)}</span>
     </div>`;
   }).join('');
 }
@@ -1470,9 +1252,9 @@ function dashJumpTab(name) {
 //   2. Needs you — attention cards from /dashboard/ops (delivery
 //      problems / refund queue / low stock), rendered ONLY when
 //      non-empty; all-clear shows a quiet compliment instead.
-//   3. Today — the pulse (revenue/orders/new customers + presence)
-//      and the Channels-today split, both handled by dashHero*/dashChan*.
-//      The activity feed lives inside The Recap's "Show the work" fold.
+//   3. Today — the pulse (revenue/orders/new customers + presence),
+//      handled by dashHero*. The activity feed lives inside The Recap's
+//      "Show the work" fold.
 // ════════════════════════════════════════════════════════════════
 
 let DASH_OPS = null;
@@ -1522,27 +1304,26 @@ function tdInit() {
 // user; live data keeps landing in the blocks' inner ids untouched.
 // Proven to tile every subset with no gap/overlap (headless solver test).
 // ════════════════════════════════════════════════════════════════
-// Key bumped to -v4: the 'movers' block joined the set, so a saved order that
-// predates it needs the fresh default once (missing blocks would otherwise only
-// surface at the tail — harmless, but the bump keeps the shipped order intact).
-const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v9';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'movers', 'week', 'customers', 'inventory', 'incoming', 'drafts', 'moves', 'onroad', 'ready', 'delivery', 'channels'];
+// Key bumped to -v10: the dashboard simplification release removes five cards
+// (movers, week, channels, moves die entirely; the hourly chart is cut from
+// Today) and adds Unhandled orders. A saved order/hidden set from before this
+// release references ids that no longer exist and — with hide/show retired —
+// could strand a card, so the key resets everyone to the fresh default once.
+const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v10';
+const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'customers', 'inventory', 'incoming', 'drafts', 'onroad', 'ready', 'delivery', 'unhandled'];
 // Tray-chip / restore labels for each block (bilingual via cuT at paint time).
 const DASH_BLOCK_TITLES = {
   recap:     ['While you were away', '您不在的这段时间'],
   needs:     ['Needs you', '需要您处理'],
   orders:    ['Orders', '订单'],
-  movers:    ["Today's movers", '今日热销'],
-  week:      ['The week so far', '本周概览'],
   customers: ['Customers', '客户'],
   inventory: ['Inventory', '库存'],
   incoming:  ['On the way', '在途采购'],
   drafts:    ['Drafts to send', '待发送采购'],
-  moves:     ['Recent stock moves', '近期库存变动'],
   onroad:    ['On the road', '配送在途'],
   ready:     ['Ready to hand off', '待交接'],
   delivery:  ['Delivery', '配送'],
-  channels:  ['Channels today', '今日渠道'],
+  unhandled: ['Unhandled orders', '待处理订单'],
 };
 
 // The grid: six columns, 16px gutters, 120px row unit (h1 = 120, h2 = 256).
@@ -1560,31 +1341,25 @@ const DASH_SHAPES = {
   recap:     [[3,2],[6,2],[4,2],[6,1],[4,1],[3,1],[2,1]],
   needs:     [[3,2],[6,2],[4,2],[6,1],[4,1],[3,1],[2,1]],
   // orders (Today) joins the same half-width-first rule so it pairs side by side
-  // with whatever big card sits next to it (recap on a calm day, needs, movers);
+  // with whatever big card sits next to it (recap on a calm day, or needs);
   // solo it still lands on [6,2] full-width (a lone 3-wide can't form a 2-row band).
   orders:    [[3,2],[4,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
-  // movers is a ranked list — it prefers height (2-row) so it can show 5 rows;
-  // keeps {2,3,4}-wide options so every subset still partitions to 6. Tiling
-  // across all subsets + orderings is proven in scripts/dash-solver-test.js.
-  movers:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // week is a 7-bar chart — prefers width; keeps {2,3,4}-wide options so every
-  // subset still partitions to 6. Tiling proven in scripts/dash-solver-test.js.
-  week:      [[4,2],[3,2],[4,1],[3,1],[2,2],[2,1],[6,1]],
   customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
   inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
   // incoming = warehouse-only "On the way" (in-transit POs). List block, same
-  // width menu as movers. Tiling proven in scripts/dash-solver-test.js.
+  // width menu as its siblings. Tiling proven in scripts/dash-solver-test.js.
   incoming:  [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   // drafts = warehouse-only "Drafts to send". List block, same width menu.
   drafts:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // onroad/ready = dispatch/CS list blocks; moves = warehouse ledger list.
+  // onroad/ready = dispatch/CS list blocks.
   onroad:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   ready:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  moves:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
+  // unhandled = "Unhandled orders" (status=paid), warehouse + dispatch/CS. List
+  // block, same width menu. Tiling proven in scripts/dash-solver-test.js.
+  unhandled: [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
   delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
-  channels:  [[2,2],[3,2],[3,1],[2,1],[4,1],[6,1]],
 };
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, movers: 2, week: 2, customers: 1, inventory: 2, incoming: 2, drafts: 2, moves: 2, onroad: 2, ready: 2, delivery: 1, channels: 2 };
+const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, incoming: 2, drafts: 2, onroad: 2, ready: 2, unhandled: 2, delivery: 1 };
 
 let DASH_ARRANGING = false;
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];
@@ -1796,6 +1571,15 @@ function dashComputeRects() {
 function dashRender(skipId) {
   const host = document.getElementById('td-blocks');
   if (!host) return;
+  // Orphan blocks: a card removed from the set (DASH_BLOCK_DEFAULT) whose markup
+  // still lingers in the DOM until a later commit deletes it. It has no solved
+  // rect, so on the absolute-positioned desktop path it would sit un-positioned
+  // at 0,0 over the top card, and on the stacked mobile path it would show as an
+  // empty tile. Drop it out of the layout entirely, on every path. (A permanent
+  // safety net — an unknown data-block id never reaches the solver either.)
+  host.querySelectorAll('.td-block').forEach(el => {
+    if (!DASH_BLOCK_DEFAULT.includes(el.dataset.block)) el.style.display = 'none';
+  });
   // If the host has no measurable width yet (dashboard laid out before the tab
   // is shown / the rail's margin transition has settled), a solve here would
   // use dashComputeRects' phantom 1088px fallback and paint a grid too wide for
