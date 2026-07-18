@@ -12506,6 +12506,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   let refunds = { count: 0, items: [] };
   let delivery_alerts = { count: 0, items: [] };
   let invoices = { count: 0, items: [] };
+  let unhandled = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -12840,12 +12841,56 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         placed_at: r.placed_at,
       })),
     };
+
+    // Unhandled orders — status='paid' and nothing else: money in, nobody has
+    // started preparing (the moment anyone acts the order moves to 'preparing').
+    // NOT order-status-counts.paid, which folds in dispatched-with-unshipped rows.
+    // Read-only channel mirrors (Meituan / gzgrocery) are excluded — those are
+    // fulfilled by the channel, not our operator's worklist (the same exclusion
+    // order-status-counts applies) — which also removes the main source of a null
+    // paid_at. Store-scoped when the dashboard passes a store (a store-locked
+    // operator only handles their own shelf), via the same `storeId` the stock
+    // cards use. Age threshold is deferred (spec), so nothing here computes age
+    // yet; when it does it must read `waiting_since` (never null), not raw
+    // `paid_at` — see below.
+    const unhWhere = "o.status = 'paid'"
+      + " AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"
+      + (storeId ? ' AND o.store_id = @store_id' : '');
+    const unhCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${unhWhere}`
+    ).get(storeBind).n;
+    const unhItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.total, o.paid_at,
+             COALESCE(o.paid_at, o.placed_at) AS waiting_since,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${unhWhere}
+       ORDER BY waiting_since ASC LIMIT @preview
+    `).all({ ...storeBind, preview: previewLimit });
+    unhandled = {
+      count: unhCount,
+      items: unhItems.map(o => ({
+        id:            o.id,
+        order_no:      o.order_no,
+        total:         o.total,
+        // Raw paid_at — truthful, but CAN be null (a row that reached 'paid'
+        // without markOrderPaid: legacy / bulk-paste). The card must NOT do age
+        // math on this, or a null renders "NaN min".
+        paid_at:       o.paid_at,
+        // Never null: falls back to placed_at (DEFAULT CURRENT_TIMESTAMP). This
+        // is the field the (deferred) age threshold reads, so a null paid_at can
+        // never reach the card as an age.
+        waiting_since: o.waiting_since,
+        buyer:         o.buyer,
+      })),
+    };
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
