@@ -10273,37 +10273,44 @@
 /* ════════════════════════════════════════════════════════════════
    DASHBOARDS BY POSITION — body.pos-<position> is set at boot from
    the operator's role (02-settings-ops bootstrap).
+   · owner (pos-default) is the 4-card glance: Recap · Needs you ·
+     Today · Customers. The operational cards are hidden for it.
    · warehouse / customer-service / dispatch see NO revenue: the
-     Recap, the Orders + Customers section blocks and the Channels
-     split are removed — the "Needs you" attention cards (filtered
-     per position in 03-dashboard tdAttnRender) ARE their dashboard.
-     They keep the section block that matches their job: warehouse
-     gets Inventory, dispatch gets Delivery, customer-service gets
-     Delivery (mirroring DASH_POS_CARDS in 03-dashboard.js).
+     Recap, the Orders + Customers blocks are removed — the "Needs you"
+     card (whose sub-cards are cap-gated in 03-dashboard dashCardWants /
+     tdAttnRender) IS their dashboard. They keep the block that matches
+     their job: warehouse gets Inventory + On-the-way/Drafts, dispatch
+     gets On-the-road/Ready + Delivery, customer-service gets Delivery.
    · On phones those positions keep this same card surface instead of
      the revenue-led mobile variant (#rm-dash).
-   · store-manager keeps the full pulse but locked to their store, so
-     the tenant-wide Channels square (no store filter) is dropped.
+   · store-manager keeps the full pulse but locked to their store.
    ════════════════════════════════════════════════════════════════ */
 body.pos-warehouse .td-block[data-block="recap"], body.pos-customer-service .td-block[data-block="recap"], body.pos-dispatch .td-block[data-block="recap"],
 body.pos-warehouse .td-block[data-block="orders"], body.pos-customer-service .td-block[data-block="orders"], body.pos-dispatch .td-block[data-block="orders"],
 body.pos-warehouse .td-block[data-block="customers"], body.pos-customer-service .td-block[data-block="customers"], body.pos-dispatch .td-block[data-block="customers"],
-body.pos-warehouse .td-block[data-block="channels"], body.pos-customer-service .td-block[data-block="channels"], body.pos-dispatch .td-block[data-block="channels"],
-body.pos-warehouse .td-block[data-block="movers"], body.pos-customer-service .td-block[data-block="movers"], body.pos-dispatch .td-block[data-block="movers"],
-body.pos-warehouse .td-block[data-block="week"], body.pos-customer-service .td-block[data-block="week"], body.pos-dispatch .td-block[data-block="week"],
 body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot,
 /* role-restricted views are fixed — the Arrange control is hidden for them */
 body.pos-warehouse .td-arrange-btn, body.pos-customer-service .td-arrange-btn, body.pos-dispatch .td-arrange-btn, body.pos-store-manager .td-arrange-btn {
   display: none;
 }
-body.pos-store-manager .td-block[data-block="channels"] { display: none; }
-/* "On the way" + "Drafts to send" + "Recent stock moves" are warehouse-native —
-   shown to warehouse + owner (pos-default), hidden for every other role. */
-body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="drafts"], body.pos-dispatch .td-block[data-block="moves"],
-body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="drafts"], body.pos-customer-service .td-block[data-block="moves"],
-body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="drafts"], body.pos-store-manager .td-block[data-block="moves"] { display: none; }
+/* Owner (pos-default) is the 4-card glance — recap · needs · today · customers.
+   The operational cards belong to the warehouse & dispatch views, not the
+   owner's morning, so they're hidden here even though the owner isn't a
+   restricted role. (Unhandled orders joins this list with its card, later.) */
+body.pos-default .td-block[data-block="inventory"],
+body.pos-default .td-block[data-block="incoming"],
+body.pos-default .td-block[data-block="drafts"],
+body.pos-default .td-block[data-block="onroad"],
+body.pos-default .td-block[data-block="ready"],
+body.pos-default .td-block[data-block="delivery"] { display: none; }
+/* "On the way" + "Drafts to send" are warehouse-native — hidden for every
+   non-warehouse role (owner included, via the pos-default rule above). */
+body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="drafts"],
+body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="drafts"],
+body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="drafts"] { display: none; }
 /* "On the road" + "Ready to hand off" (delivery board) are delivery-native —
-   shown to dispatch + customer-service + owner (pos-default), hidden for warehouse / store-manager. */
+   shown to dispatch + customer-service, hidden for warehouse / store-manager
+   (and for owner, via the pos-default rule above). */
 body.pos-warehouse .td-block[data-block="onroad"], body.pos-warehouse .td-block[data-block="ready"],
 body.pos-store-manager .td-block[data-block="onroad"], body.pos-store-manager .td-block[data-block="ready"] { display: none; }
 /* Each restricted position keeps only the section block it works in. */

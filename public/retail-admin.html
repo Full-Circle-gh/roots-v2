@@ -1376,11 +1376,7 @@
               <div class="bn-lead-k">Revenue today · 今日营收</div>
               <div class="bn-rev-row">
                 <span class="bn-val t-num" id="db-today-rev">¥—</span>
-                <span class="bn-cmp"><span class="db-delta" id="db-today-rev-d"></span> <span class="bn-rev-note detail" id="td-rev-note"></span></span>
-              </div>
-              <div class="bn-dayline detail">
-                <div class="db-spark-wrap td-dayline" id="db-today-spark"></div>
-                <div class="bn-hours detail2" id="td-today-hours" data-no-i18n></div>
+                <span class="bn-cmp"><span class="db-delta" id="db-today-rev-d"></span></span>
               </div>
               <div class="bn-vitals detail2">
                 <div class="bn-v"><div class="bn-vv t-num" id="db-today-ord">—</div><div class="bn-vl">Orders · 订单</div><div class="bn-vc"><span class="db-delta" id="db-today-ord-d"></span></div></div>
@@ -1391,45 +1387,6 @@
           </div>
           <span class="db-hero-sync" id="db-hero-sync" hidden></span>
           <div class="td-sec-foot detail" id="td-sec-orders-foot" data-no-i18n></div>
-        </div>
-      </div>
-
-      <!-- Today's movers — the products actually selling today, by revenue.
-           Owner-only (money); reads topProducts off the Today payload, so no
-           extra fetch. Painted by dashMoversRender in 03-dashboard.js. -->
-      <div class="td-block" data-block="movers">
-        <button class="bn-hide" onclick="dashArrangeHide('movers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        <div class="bn-card">
-          <div class="bn-inner">
-            <div class="bn-head">
-              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.9 6.4.6-4.8 4.3 1.4 6.3L12 17.8 6.4 20.4l1.4-6.3L3 9.8l6.4-.6z"/></svg>
-              <h3>Today's movers · 今日热销</h3>
-              <button type="button" class="bn-go" onclick="dashJumpTab('products')">Open products › · 前往商品 ›</button>
-            </div>
-            <div class="bn-body">
-              <div class="bx-mv-list" id="td-movers-list"><div class="td-muted">Loading… · 加载中…</div></div>
-              <p class="td-chan-foot detail2">Today · by revenue · 今日 · 按销售额</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- The week so far — 7-day revenue bars (owner only). Painted by
-           dashWeekRender in 03-dashboard.js from its own week-window pull. -->
-      <div class="td-block" data-block="week">
-        <button class="bn-hide" onclick="dashArrangeHide('week')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        <div class="bn-card">
-          <div class="bn-inner">
-            <div class="bn-head">
-              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-              <h3>The week so far · 本周概览</h3>
-              <span class="bn-meta">Revenue by day · 每日营收</span>
-              <button type="button" class="bn-go" onclick="goTab('reports')">Open reports › · 前往报表 ›</button>
-            </div>
-            <div class="bn-body">
-              <div class="bx-wk" id="td-week-body"><div class="td-muted">Loading… · 加载中…</div></div>
-            </div>
-          </div>
         </div>
       </div>
 
@@ -1517,25 +1474,6 @@
         </div>
       </div>
 
-      <!-- Recent stock moves — tail of the stock ledger (warehouse-only).
-           Painted by dashMovesRender from /activity. Dusk dot = automated move. -->
-      <div class="td-block" data-block="moves">
-        <button class="bn-hide" onclick="dashArrangeHide('moves')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        <div class="bn-card">
-          <div class="bn-inner">
-            <div class="bn-head">
-              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
-              <h3>Recent stock moves · 近期库存变动</h3>
-              <button type="button" class="bn-go" onclick="goTab('activity')">Stock activity › · 前往库存动态 ›</button>
-            </div>
-            <div class="bn-body">
-              <div class="bx-mo-list" id="td-moves-list"><div class="td-muted">Loading… · 加载中…</div></div>
-              <p class="td-chan-foot detail2">In &amp; out · newest first · 出入库 · 最新优先</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <!-- On the road — out-for-delivery orders with live rider stage + ETA
            (dispatch / customer-service). Painted by dashOnroadRender. -->
       <div class="td-block" data-block="onroad">
@@ -1592,23 +1530,6 @@
             </div>
           </div>
           <div class="td-sec-foot detail" id="td-sec-delivery-foot" data-no-i18n></div>
-        </div>
-      </div>
-
-      <!-- Channels today -->
-      <div class="td-block" data-block="channels">
-        <button class="bn-hide" onclick="dashArrangeHide('channels')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
-        <div class="bn-card">
-          <div class="bn-inner">
-            <div class="bn-head">
-              <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M4 12h12"/><path d="M4 17h8"/></svg>
-              <h3>Channels · 渠道</h3>
-            </div>
-            <div class="bn-body">
-              <div class="td-chan-list bn-chan-list" id="td-chan-list"><div class="td-muted">Loading… · 加载中…</div></div>
-              <p class="td-chan-foot detail2">Today · All stores · 今日 · 全部门店</p>
-            </div>
-          </div>
         </div>
       </div>
 

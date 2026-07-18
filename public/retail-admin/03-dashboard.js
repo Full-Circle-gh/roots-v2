@@ -142,58 +142,6 @@ function dashSparkline(values, opts) {
   return `<svg class="db-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${defs}${ghostSvg}${area}${line}</svg>${dot}`;
 }
 
-// The Today hero chart, rebuilt as hourly columns instead of a smoothed
-// line — after three rounds of contrast/headroom patches on the line
-// variant (an invisible baseline, a curve with no top clearance, a label
-// with nowhere safe to sit), the line kept needing more tuning to read as
-// anything but a stray mark on white. A bar carries its own visible floor
-// (every bar shares the same bottom edge) and its own weight (a filled
-// shape, not a hairline), so none of that tuning applies. The typical-day
-// ghost becomes a light backing column behind each live one — still just a
-// fill, nothing to contrast-match. Reuses the SAME x(i) point formula
-// dashSparkPct/dashSparkMove already use for the line chart, so hover-scrub
-// (wired once, in dashHeroInit) keeps landing on the right hour with no
-// changes to that shared code — bars render at those points instead of
-// connecting them.
-function dashDayBars(values, opts) {
-  opts = opts || {};
-  const vals = (values || []).map(v => Number(v) || 0);
-  const ghost = (opts.ghost || []).map(v => Number(v) || 0);
-  const W = 100, H = 24, pad = 2;
-  const n = Math.max(vals.length, ghost.length, 2);
-  const v = Array.from({ length: n }, (_, i) => Number(vals[i]) || 0);
-  const g = Array.from({ length: n }, (_, i) => Number(ghost[i]) || 0);
-  const hasGhost = g.some(x => x > 0);
-  const hasLive = v.some(x => x > 0);
-  const max = Math.max(1, ...v, ...g) * 1.08;
-  const base = H - pad;
-  const x = i => pad + (i / (n - 1)) * (W - 2 * pad);
-  const hOf = val => Math.max(0, (val / max) * (H - 2 * pad));
-  const ghostW = Math.min(4.2, (W - 2 * pad) / n * 0.86);
-  const liveW = ghostW * 0.56;
-
-  let bars = '';
-  for (let i = 0; i < n; i++) {
-    const cx = x(i);
-    if (hasGhost) {
-      const gh = Math.max(0.6, hOf(g[i]));
-      bars += `<rect class="db-bar-ghost" x="${(cx - ghostW / 2).toFixed(2)}" y="${(base - gh).toFixed(2)}" width="${ghostW.toFixed(2)}" height="${gh.toFixed(2)}" rx="${Math.min(ghostW / 2, 1).toFixed(2)}"/>`;
-    }
-    if (v[i] > 0) {
-      const lh = Math.max(1, hOf(v[i]));
-      bars += `<rect class="db-bar-live" x="${(cx - liveW / 2).toFixed(2)}" y="${(base - lh).toFixed(2)}" width="${liveW.toFixed(2)}" height="${lh.toFixed(2)}" rx="${Math.min(liveW / 2, 0.9).toFixed(2)}"/>`;
-    }
-  }
-  // The corner label only names the ghost while today has no bars of its
-  // own to compare — once live bars appear they sit right beside their
-  // ghost twin, which is comparison enough without a caption competing for
-  // the same top-left corner.
-  const ghostLabel = (!hasLive && hasGhost && opts.ghostLabel)
-    ? `<span class="db-spark-ghost-label">${escapeHtml(opts.ghostLabel)}</span>`
-    : '';
-  return `<svg class="db-spark db-bars" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">${bars}</svg>${ghostLabel}`;
-}
-
 // Period caption ("Last 30 days · 近30天") from the active date-range window —
 // only for dash-source tiles, so each tile says which window it's summarising.
 function dashRangeFoot() {
@@ -477,12 +425,6 @@ function dashHeroInit() {
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.ready) dashReadyRender();
   });
-  // Hover-scrub the Today sparklines to read each hour of the day.
-  ['#db-today-spark', '#db-today-ord-spark', '#db-today-new-spark'].forEach(sel => {
-    const w = $(sel); if (!w) return;
-    w.addEventListener('pointermove', dashSparkMove);
-    w.addEventListener('pointerleave', dashSparkLeave);
-  });
   // Hover the delta badges for a chip explaining the comparison baseline.
   ['#db-today-rev-d', '#db-today-ord-d', '#db-today-new-d'].forEach(sel => {
     const b = $(sel); if (!b) return;
@@ -602,21 +544,6 @@ async function dashHeroLoadPresence() {
   } catch (e) { /* silent — next tick retries */ }
 }
 
-// Hour marks under the Today day line. The chart has no axes — the big revenue
-// number above it is the y-axis — so this is the whole x. Four evenly-spaced
-// hour buckets ('HH:00' from the payload) and then "now" at the live end. A
-// day-range payload (bucket = 'YYYY-MM-DD') is not a day line, so it paints
-// nothing rather than a row of dates.
-function tdTodayHours(labels) {
-  const el = document.getElementById('td-today-hours'); if (!el) return;
-  const hourly = (labels || []).length > 2 && /^\d{2}:\d{2}$/.test(String(labels[0]));
-  if (!hourly) { el.textContent = ''; return; }
-  const n = labels.length, marks = [];
-  for (let i = 0; i < 4; i++) marks.push(labels[Math.round(i * (n - 1) / 4)]);
-  marks.push(cuT('now', '此刻'));
-  el.innerHTML = marks.map(m => `<span>${m}</span>`).join('');
-}
-
 // ── Boot readiness ──────────────────────────────────────────────────────────
 // The boot splash (retail-admin.html) holds the Tacet mark until the home has
 // real numbers on screen, not just an empty shell. We stamp data-app-ready on
@@ -647,26 +574,9 @@ async function dashHeroLoadToday(opts) {
     dashCountUp($('#db-today-rev'), Number(k.revenue || 0), n => '¥' + Math.round(n).toLocaleString(), dur);
     dashCountUp($('#db-today-ord'), Number(k.orders || 0), undefined, dur);
     dashCountUp($('#db-today-new'), Number(k.new_customers || 0), undefined, dur);
-    // Intraday sparklines — revenue (focal, breathing dot) and orders (static
-    // dot) each plot their per-hour curve so the day's shape reads at a glance.
-    // The revenue curve is the Today block's day line; the other two only paint
-    // if their (mobile) hosts exist — dashRenderSpark no-ops on a missing node.
-    const trend = data.trend || [];
-    const labels = trend.map(p => String(p.bucket || ''));
-    // pulse=false: a breathing dot means "an automation is live" and its colour
-    // is Dusk. The day line is takings, not automation — its tip sits still.
-    // The typical-day ghost (same-weekday hourly average) rides behind the day
-    // line so today reads against a normal day, by this hour.
-    const typical = Array.isArray(data.typical) ? data.typical.map(v => Number(v) || 0) : null;
-    const wd = new Date().getDay();
-    const ghostLabel = cuT(`typical ${DASH_DOW_EN[wd]}`, `平常${DASH_DOW_CN[wd]}`);
-    dashRenderDayBars($('#db-today-spark'), trend.map(p => Number(p.revenue || 0)), labels,
-                    v => '¥' + Math.round(v).toLocaleString(), typical, ghostLabel);
-    tdTodayHours(labels);   // hour marks under the day line
-    dashRenderSpark($('#db-today-ord-spark'), trend.map(p => Number(p.orders || 0)), labels,
-                    v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);
-    dashRenderSpark($('#db-today-new-spark'), trend.map(p => Number(p.new_customers || 0)), labels,
-                    v => v + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'), false);
+    // The Today card is status, not a report: revenue + delta arrow, orders,
+    // AOV, refunded. The intraday hourly chart + typical-day ghost were cut in
+    // the simplification pass (an hour-by-hour comparison is a Reports job).
     dashHeroTodayRepaint();   // delta badges (language-aware)
     dashMarkReady('today');   // one half of the boot-splash release signal
   } catch (e) {
@@ -687,19 +597,6 @@ function dashHeroTodayRepaint() {
   // dashSetDelta no-ops on a missing selector, so these stay safe if present.
   dashSetDelta('#db-today-ord-d', b && b.orders,        Number(k.orders || 0),        b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
   dashSetDelta('#db-today-new-d', b && b.new_customers, Number(k.new_customers || 0), b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
-  // "vs a typical {weekday}" caption beside the revenue delta — shown only when
-  // there's revenue to compare (empty otherwise, so it never reads oddly at ¥0).
-  const note = document.getElementById('td-rev-note');
-  if (note) {
-    if (Number(k.revenue || 0) > 0) {
-      const wd = new Date();
-      const EN = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][wd.getDay()];
-      const CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][wd.getDay()];
-      note.textContent = cuT(`vs a typical ${EN}`, `对比平常的${CN}`);
-    } else { note.textContent = ''; }
-  }
-  // The day line's hour marks end in "now", which is a word — repaint it.
-  tdTodayHours((data.trend || []).map(p => String(p.bucket || '')));
   // The Orders / Customers section vitals this payload also feeds (avg order
   // value, visitors, visits, conversion) — language-aware, so they repaint here.
   if (typeof tdSecPaint === 'function') tdSecPaint();
@@ -751,16 +648,6 @@ function dashRenderSpark(wrap, vals, labels, fmt, pulse, ghost) {
   wrap.innerHTML = dashSparkline(vals, { dot: true, pulse: !!pulse, ghost: ghost });
   // Stash the shared scale so the hover-scrub places the dot on the same line
   // the ghost may have re-scaled.
-  wrap._spark = { vals, labels, fmt, scale: dashSparkScale(vals, ghost) };
-}
-// Same contract as dashRenderSpark, for the Today hero chart's column
-// rendering — separate function (not a dashRenderSpark flag) since bars
-// and the line chart are different enough visual languages to keep apart.
-// Still stashes wrap._spark in the same shape so the existing hover-scrub
-// (dashSparkMove/dashSparkPct) works unchanged against the bars' points.
-function dashRenderDayBars(wrap, vals, labels, fmt, ghost, ghostLabel) {
-  if (!wrap) return;
-  wrap.innerHTML = dashDayBars(vals, { ghost: ghost, ghostLabel: ghostLabel });
   wrap._spark = { vals, labels, fmt, scale: dashSparkScale(vals, ghost) };
 }
 // Percent position of point `idx` — shared by the rendered dot and the scrub so
@@ -2233,7 +2120,20 @@ function tdSecPaint() {
     set('td-sec-sessions', sessions
       ? sessions.toLocaleString() + ' ' + cuT('sessions', '会话')
       : cuT('no data yet', '暂无数据'));
-    set('td-sec-conv', k.conversion_rate == null ? '—' : Number(k.conversion_rate).toFixed(1) + '%');
+    // Conversion, honest at small denominators (spec §1.1b — small merchants
+    // ARE the core case). Below a meaningful session count a percentage is noise
+    // rendered as a crisis (0.0% over 2 sessions), so under the threshold we show
+    // the raw ratio instead — orders of sessions — and only above it a %. At zero
+    // sessions there's nothing to divide, so a calm dash. Threshold tuned here.
+    const CONV_MIN_SESSIONS = 20;
+    if (!sessions) {
+      set('td-sec-conv', '—');
+    } else if (sessions < CONV_MIN_SESSIONS) {
+      const conv = Number(k.orders || 0);
+      set('td-sec-conv', cuT(`${conv} of ${sessions} visits`, `${sessions} 次访问中 ${conv} 单`));
+    } else {
+      set('td-sec-conv', k.conversion_rate == null ? '—' : Number(k.conversion_rate).toFixed(1) + '%');
+    }
     // Refunds — the only number in the Today strip that is money leaving. On a
     // good day it reads 0 and says so plainly rather than showing a rate of 0%.
     const refunded = Number(k.refunded_orders || 0);

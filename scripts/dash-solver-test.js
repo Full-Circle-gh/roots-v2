@@ -162,22 +162,18 @@ function run(label, blocks, opts) {
   return ok;
 }
 
-// Owner is the only role that can Arrange (drag-reorder), so the owner-visible
-// set is the one that needs the all-orderings guarantee. This release still
-// ships the pre-owner-cards-commit board (owner reduces to 4 cards in the
-// owner-cards commit); until then owner can drag the 10 remaining cards.
-// Permuting all 10 is ~4 min (10! * dashSolve), so we permute a 9-card slice —
-// `drafts` is dropped only because it is shape-identical to incoming / onroad /
-// ready, which ARE permuted, so every distinct shape-interleaving is exercised.
-// FULL adds `drafts` back plus the restricted-role-only `unhandled` for the
-// complete 11-block all-subsets check (restricted roles can't reorder, so
-// all-subsets is enough for them).
-const OWNER = ['recap', 'needs', 'orders', 'customers', 'inventory', 'incoming', 'onroad', 'ready', 'delivery'];
+// Owner is the only role that can Arrange (drag-reorder), and the owner view is
+// now the 4-card glance — recap · needs · orders(Today) · customers. That is the
+// whole set owner can reorder, so permuting all of it is trivial. FULL is every
+// block any role can reach (owner's 4 + the warehouse/dispatch cards + the
+// unhandled card), checked all-subsets — restricted roles can't reorder, so
+// all-subsets is enough for them.
+const OWNER = ['recap', 'needs', 'orders', 'customers'];
 const FULL  = ['recap', 'needs', 'orders', 'customers', 'inventory', 'incoming', 'drafts', 'onroad', 'ready', 'delivery', 'unhandled'];
 
 console.log('Dashboard bento solver — tiling invariant\n');
 let ok = true;
-ok = run('owner 9-card board — all subsets + all orderings', OWNER, { permuteFull: true }) && ok;
+ok = run('owner 4-card view — all subsets + all orderings', OWNER, { permuteFull: true }) && ok;
 ok = run('full 11 blocks (all owner + warehouse + dispatch) — all subsets', FULL) && ok;
 
 console.log('');
