@@ -171,12 +171,14 @@ function run(label, blocks, opts) {
 const OWNER = ['recap', 'needs', 'orders', 'customers'];
 const FULL  = ['recap', 'needs', 'orders', 'customers', 'unhandled', 'inventory', 'incoming', 'onroad', 'ready', 'delivery'];
 const WAREHOUSE = ['recap', 'needs', 'unhandled', 'inventory', 'incoming'];
+const DISPATCH  = ['recap', 'needs', 'unhandled', 'onroad', 'ready'];
 
 console.log('Dashboard bento solver — tiling invariant\n');
 let ok = true;
 ok = run('owner 4-card view — all subsets + all orderings', OWNER, { permuteFull: true }) && ok;
 ok = run('full 10 blocks (all owner + warehouse + dispatch) — all subsets', FULL) && ok;
 ok = run('warehouse 5-card view — all subsets', WAREHOUSE) && ok;
+ok = run('dispatch / CS 5-card view — all subsets', DISPATCH) && ok;
 
 console.log('');
 if (!ok) { console.log('RESULT: FAIL — a block set does not tile; do NOT ship the shapes as-is.'); process.exit(1); }

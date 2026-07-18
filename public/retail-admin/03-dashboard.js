@@ -1907,11 +1907,14 @@ function tdRecapHeadPaint() {
   if (meta) meta.textContent = TD.reallyAway ? tdSinceLabel(TD.recapSince) : tdRecentLabel(TD.recapSince);
 }
 
-// True when this operator's dashboard shows NO money — warehouse now (dispatch /
-// customer-service join when their view is built). Money-gating rides the
+// True when this operator's dashboard shows NO business money — warehouse and
+// the delivery roles (dispatch / customer-service). Money-gating rides the
 // RELIABLE role string, never the fail-open cap check: a ¥ must never leak on a
-// null-caps session, so this mirrors the money-card CSS gate, not caps.
-function tdRecapNoMoney() { return ['warehouse'].includes(dashPos()); }
+// null-caps session, so this mirrors the money-card CSS gate, not caps. (This
+// gates REVENUE framing — "N paid — ¥1,240" — and the fold's amounts. It does
+// NOT touch the refund/invoice Needs-you cards, whose ¥ is the operational value
+// CS acts on, not the business's takings.)
+function tdRecapNoMoney() { return ['warehouse', 'dispatch', 'customer_service'].includes(dashPos()); }
 
 // Aggregate the recap window's events into calm one-line rows, each with a
 // breathing Dusk dot — Dusk means "the system did this", and this card is the
@@ -1935,34 +1938,43 @@ function tdRecapRender() {
 
   const rows = [];
   const push = (en, cn) => rows.push(`<div class="td-recap-row"><span class="td-dusk-dot" aria-hidden="true"></span><span>${cuT(en, cn)}</span></div>`);
-  // The warehouse Recap is THEIR work, not the business's money: paid orders are
-  // framed as queue entries (no ¥), and the money/customer rows (refunds, wallet
-  // top-ups, new customers, deliveries, auto-cancels) are dropped — those aren't
-  // warehouse work. What's left is what a warehouse operator acts on: new queue
-  // entries, what shipped, and wholesale pickups. NOTE: "N POs arrived" is not
-  // shown — there is no PO-received event in the activity stream (a po_received
-  // event is a separate backend item); the approved mockup showed it, the code
-  // ships what's real.
-  const wh = tdRecapNoMoney();
-  if (paid.length) {
+  // The Recap is framed to the operator's work. Three shapes:
+  //   • owner        — everything, with the money (paid — ¥, refunds, top-ups).
+  //   • warehouse    — their queue: paid framed as "entered your queue" (no ¥),
+  //                    dispatched, wholesale pickups. No deliveries.
+  //   • dispatch/CS  — orders in motion: dispatched + delivered. No queue, no
+  //                    pickups, no money.
+  // The money/customer rows (refunds, top-ups, new customers, auto-cancels) are
+  // owner-only. NOTE — two rows the mockups showed have no event source and so
+  // are not rendered: "N POs arrived" (warehouse) and "N riders assigned"
+  // (dispatch); both are separate backend events (po_received / rider_assigned),
+  // backlogged. The mockup showed the aspiration; the code ships what's real.
+  const noMoney = tdRecapNoMoney();
+  const wh = dashPos() === 'warehouse';
+  const delivery = ['dispatch', 'customer_service'].includes(dashPos());
+  // paid — owner's money / warehouse's queue; the delivery roles don't handle it.
+  if (paid.length && !delivery) {
     if (wh) push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} entered your queue`,
                  `<b>${paid.length}</b> 笔订单进入待处理队列`);
     else    push(`<b>${paid.length}</b> ${paid.length === 1 ? 'order' : 'orders'} paid — ${money(sumAmt(paid, 'total'))}`,
                  `<b>${paid.length}</b> 笔订单已支付，共 ${money(sumAmt(paid, 'total'))}`);
   }
+  // dispatched — went out for delivery; relevant to everyone.
   if (dispatched.length) push(`<b>${dispatched.length}</b> ${dispatched.length === 1 ? 'order' : 'orders'} dispatched`,
                               `<b>${dispatched.length}</b> 个订单已发货`);
-  if (!wh && delivered.length)  push(`<b>${delivered.length}</b> ${delivered.length === 1 ? 'order' : 'orders'} delivered`,
+  // delivered — completed deliveries; owner + the delivery roles, not warehouse.
+  if (delivered.length && !wh)  push(`<b>${delivered.length}</b> ${delivered.length === 1 ? 'order' : 'orders'} delivered`,
                               `<b>${delivered.length}</b> 个订单已送达`);
-  if (!wh && autoCanc.length)   push(`<b>${autoCanc.length}</b> unpaid ${autoCanc.length === 1 ? 'order' : 'orders'} cancelled automatically`,
+  if (!noMoney && autoCanc.length)   push(`<b>${autoCanc.length}</b> unpaid ${autoCanc.length === 1 ? 'order' : 'orders'} cancelled automatically`,
                               `<b>${autoCanc.length}</b> 个未付款订单已自动取消`);
-  if (!wh && refunded.length)   push(`<b>${refunded.length}</b> ${refunded.length === 1 ? 'refund' : 'refunds'} settled — ${money(sumAmt(refunded, 'amount'))}`,
+  if (!noMoney && refunded.length)   push(`<b>${refunded.length}</b> ${refunded.length === 1 ? 'refund' : 'refunds'} settled — ${money(sumAmt(refunded, 'amount'))}`,
                               `<b>${refunded.length}</b> 笔退款已完成，共 ${money(sumAmt(refunded, 'amount'))}`);
-  if (!wh && topups.length)     push(`<b>${topups.length}</b> wallet ${topups.length === 1 ? 'top-up' : 'top-ups'} — ${money(sumAmt(topups, 'amount'))}`,
+  if (!noMoney && topups.length)     push(`<b>${topups.length}</b> wallet ${topups.length === 1 ? 'top-up' : 'top-ups'} — ${money(sumAmt(topups, 'amount'))}`,
                               `<b>${topups.length}</b> 笔钱包充值，共 ${money(sumAmt(topups, 'amount'))}`);
-  if (!wh && newCust.length)    push(`<b>${newCust.length}</b> new ${newCust.length === 1 ? 'customer' : 'customers'} joined`,
+  if (!noMoney && newCust.length)    push(`<b>${newCust.length}</b> new ${newCust.length === 1 ? 'customer' : 'customers'} joined`,
                               `新增 <b>${newCust.length}</b> 位客户`);
-  if (pickups.length)    push(`<b>${pickups.length}</b> gzgrocery ${pickups.length === 1 ? 'pickup' : 'pickups'} recorded`,
+  // wholesale pickups — a stock movement; owner + warehouse, not the delivery roles.
+  if (pickups.length && !delivery)    push(`<b>${pickups.length}</b> gzgrocery ${pickups.length === 1 ? 'pickup' : 'pickups'} recorded`,
                               `记录 <b>${pickups.length}</b> 笔 gzgrocery 提货`);
 
   const close = document.getElementById('td-recap-close');

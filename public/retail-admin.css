@@ -10289,9 +10289,9 @@
      the revenue-led mobile variant (#rm-dash).
    · store-manager keeps the full pulse but locked to their store.
    ════════════════════════════════════════════════════════════════ */
-/* Recap is un-hidden for warehouse (role-filtered, money-free in tdRecapRender);
-   dispatch / customer-service keep it hidden until their view is built. */
-body.pos-customer-service .td-block[data-block="recap"], body.pos-dispatch .td-block[data-block="recap"],
+/* The Recap is now shown to every role (role-filtered + money-free in
+   tdRecapRender for warehouse / dispatch / customer-service), so it is not in
+   this hide list. The money blocks (Today, Customers) stay hidden for them. */
 body.pos-warehouse .td-block[data-block="orders"], body.pos-customer-service .td-block[data-block="orders"], body.pos-dispatch .td-block[data-block="orders"],
 body.pos-warehouse .td-block[data-block="customers"], body.pos-customer-service .td-block[data-block="customers"], body.pos-dispatch .td-block[data-block="customers"],
 body.pos-warehouse #tab-dashboard .td-foot, body.pos-customer-service #tab-dashboard .td-foot, body.pos-dispatch #tab-dashboard .td-foot,
@@ -10309,21 +10309,22 @@ body.pos-default .td-block[data-block="incoming"],
 body.pos-default .td-block[data-block="onroad"],
 body.pos-default .td-block[data-block="ready"],
 body.pos-default .td-block[data-block="delivery"] { display: none; }
-/* "On the way / Drafts" (incoming) is warehouse-native — hidden for non-warehouse
-   roles. Unhandled orders shows for warehouse now; dispatch / customer-service
-   join when their view is built, so it stays hidden for them (and store-manager)
-   for now. */
-body.pos-dispatch .td-block[data-block="incoming"], body.pos-dispatch .td-block[data-block="unhandled"],
-body.pos-customer-service .td-block[data-block="incoming"], body.pos-customer-service .td-block[data-block="unhandled"],
+/* "On the way / Drafts" (incoming) is warehouse-native — hidden for every non-
+   warehouse role. Unhandled orders now shows for warehouse + dispatch +
+   customer-service; only store-manager (not part of the redesign) keeps it hidden. */
+body.pos-dispatch .td-block[data-block="incoming"],
+body.pos-customer-service .td-block[data-block="incoming"],
 body.pos-store-manager .td-block[data-block="incoming"], body.pos-store-manager .td-block[data-block="unhandled"] { display: none; }
 /* "On the road" + "Ready to hand off" (delivery board) are delivery-native —
    shown to dispatch + customer-service, hidden for warehouse / store-manager
    (and for owner, via the pos-default rule above). */
 body.pos-warehouse .td-block[data-block="onroad"], body.pos-warehouse .td-block[data-block="ready"],
 body.pos-store-manager .td-block[data-block="onroad"], body.pos-store-manager .td-block[data-block="ready"] { display: none; }
-/* Each restricted position keeps only the section block it works in. */
-body.pos-dispatch .td-block[data-block="inventory"],
-body.pos-customer-service .td-block[data-block="inventory"],
+/* Each restricted position keeps only the blocks it works in. Dispatch / CS now
+   run on the On-the-road + Ready board, so the old Delivery section block is
+   hidden for them too; only store-manager still uses Delivery. */
+body.pos-dispatch .td-block[data-block="inventory"], body.pos-dispatch .td-block[data-block="delivery"],
+body.pos-customer-service .td-block[data-block="inventory"], body.pos-customer-service .td-block[data-block="delivery"],
 body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
 @media (max-width: 720px) {
   body.pos-warehouse #tab-dashboard .td-wrap,
