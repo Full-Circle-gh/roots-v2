@@ -3632,9 +3632,15 @@ async function openOrder(id, opts = {}) {
 // slide-out animation finishes (so the next open starts blank).
 const _drawerCloseHooks = new Map();
 function onDrawerClose(sel, fn) { _drawerCloseHooks.set(sel, fn); }
+// Monotonic open counter — stamped on each drawer as it opens so Esc /
+// outside-click can pick the most-recently-opened drawer (the one on top)
+// rather than the last one in DOM source order. The order and customer
+// drawers share z-index:200, so z-index alone can't say which is on top.
+let _drawerOpenSeq = 0;
 function openDrawer(sel) {
   const d = typeof sel === 'string' ? document.querySelector(sel) : sel;
   if (!d) return;
+  d.dataset.openSeq = String(++_drawerOpenSeq);
   d.classList.add('open');
   d.setAttribute('aria-hidden', 'false');
   // Order drawer opens in focus mode: raise the blur+dim scrim behind it.
@@ -3659,11 +3665,33 @@ function closeDrawer(sel) {
   const hook = _drawerCloseHooks.get(key);
   if (hook) setTimeout(hook, 240);
 }
+// Topmost open drawer = the one opened most recently (highest data-open-seq),
+// not the last in DOM source order. `>=` means a tie (drawers with no stamp,
+// seq 0) falls through to the last-in-DOM element — the old behaviour, kept
+// as a safe fallback for any drawer opened without openDrawer(). Callers pass
+// the candidate set: Esc weighs every open drawer, outside-click only the
+// dw-dismiss ones.
+function topmostOpenDrawer(open) {
+  const list = open || document.querySelectorAll('.side-drawer.open');
+  let top = null, best = -Infinity;
+  list.forEach((d) => {
+    const seq = Number(d.dataset.openSeq || 0);
+    if (seq >= best) { best = seq; top = d; }
+  });
+  return top;
+}
+// Close the topmost drawer, but if it's an order opened from a customer's
+// Recent-orders row, step back to that customer's detail instead of closing
+// out to the bare order list — mirroring the ← button. Shared by Esc and the
+// outside-click handler so keyboard and mouse agree.
+function dismissTopDrawer(top) {
+  if (!top) return;
+  if (top.id === 'order-drawer' && _ORDER_BACK_CUSTOMER) { orderDrawerBack(); return; }
+  closeDrawer(top);
+}
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
-  const open = document.querySelectorAll('.side-drawer.open');
-  if (!open.length) return;
-  closeDrawer(open[open.length - 1]);
+  dismissTopDrawer(topmostOpenDrawer());
 });
 // Click-outside-to-close for the read drawers (Orders, Customers) —
 // clicking the empty page area beside an open drawer dismisses it (mouse
@@ -3699,7 +3727,10 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('tr.order-row, tr.cul-row, tr.vch-row, .db-feed-row, .td-attn-row, .td-attn-go, .rm-ocard, .rm-cucard, .rm-sheet')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
-  closeDrawer(open[open.length - 1]);
+  // Same topmost + back-to-customer semantics as Esc, over the dw-dismiss set,
+  // so an outside-click on an order opened from a customer steps back to that
+  // customer rather than dropping to the order list.
+  dismissTopDrawer(topmostOpenDrawer(open));
 });
 // Order-drawer cleanup hook — clear the mount after slide-out.
 onDrawerClose('#order-drawer', () => {
