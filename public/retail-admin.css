@@ -1668,23 +1668,6 @@
   .db-spark-dot.is-breathing { box-shadow: 0 0 0 0 rgba(163,180,159,.45); animation: dbSparkBreathe 2.6s ease-out infinite; }
   @keyframes dbSparkBreathe { 0% { box-shadow: 0 0 0 0 rgba(163,180,159,.45); } 70% { box-shadow: 0 0 0 6px rgba(163,180,159,0); } 100% { box-shadow: 0 0 0 0 rgba(163,180,159,0); } }
   @media (prefers-reduced-motion: reduce) { .db-spark-dot.is-breathing { animation: none; } }
-  /* The Today hero chart: hourly columns instead of a line — see
-     dashDayBars in 03-dashboard.js for why. Live bars carry the day's
-     actual sage ink; the typical-day ghost is a light backing column
-     behind each one, both sharing one implicit floor (their own bottom
-     edge), so neither needs a separate baseline stroke to contrast-match. */
-  .db-bar-ghost { fill: var(--td-border); }
-  .db-bar-live { fill: var(--td-sage); }
-  /* Names the ghost columns before today has any bars of its own —
-     otherwise the "day hasn't started" state is an unlabeled block of
-     light columns. A fixed top-left corner caption, clear of the bars
-     (their early hours run low), and dropped once live bars exist since
-     they then sit right beside their ghost twin. */
-  .db-spark-ghost-label {
-    position: absolute; top: 0; left: 0;
-    font: 500 11px var(--f-sans); color: var(--td-text2);
-    white-space: nowrap; pointer-events: none;
-  }
   /* Hover-scrub: the chart is draggable to read each hour. The dot tracks the
      cursor and a small chip names the hour + value. */
   .db-spark-wrap { cursor: crosshair; }
@@ -8387,15 +8370,6 @@
   .bn-lead-k { font-size: 12.5px; color: var(--td-text2); flex: none; }
   .bn-rev-row { display: flex; align-items: baseline; gap: 12px; flex: none; margin: 1px 0 2px; }
   .bn-cmp { font-size: 13px; color: var(--td-text2); white-space: nowrap; }
-  .bn-rev-note { color: var(--td-text2); }
-
-  /* the day line — now hourly columns (dashDayBars); the shared spark wrap
-     still lends the hover-scrub tooltip + height. */
-  .bn-dayline { flex: 1; min-height: 30px; margin-top: 6px; display: flex; flex-direction: column; overflow: hidden; }
-  .bn-dayline .db-spark-wrap.td-dayline { flex: 1; height: auto; min-height: 36px; margin-top: 0; }
-  .bn-hours { display: flex; justify-content: space-between; margin-top: 4px;
-    font-size: 11.5px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
-  .bn-hours:empty { display: none; }
 
   /* vitals — numbers split by hairlines; stack when the card is narrow-tall.
      margin-top gives the number row air below the day-line graph (was flush). */
@@ -8466,7 +8440,6 @@
     .td-block[data-tier="c"] .bn-vitals { flex-direction: row; }
     .td-block[data-tier="c"] .bn-v + .bn-v { border-top: 0; border-left: 1px solid var(--td-border); padding: 0 0 0 16px; margin: 0 0 0 16px; }
     .td-block[data-tier="c"] .bn-vc { display: block; }
-    .bn-dayline .db-spark-wrap.td-dayline { min-height: 96px; }
   }
 
   /* Arrange / Done control in the dashboard header. */
@@ -8674,62 +8647,6 @@
   }
   .td-quiet-note b { font-weight: 500; color: var(--td-text); }
 
-  /* ── Today — the hero block ──
-     Revenue leads. The numeral is one step up from a section vital (44px vs
-     34px) and stays Inter 500: it reads first because it stands alone above
-     a hairline, not because it shouts. Fraunces never enters product UI. */
-  .td-today-body { padding: 28px 32px 24px; }
-  .td-today-body > .k { font-size: 13px; color: var(--td-text2); }
-  .td-today-body > .c { font-size: 12.5px; color: var(--td-text2); min-height: 20px; }
-  .td-today-body > .c .td-rev-note:empty { display: none; }
-  .td-today-lead {
-    font-size: 44px; font-weight: 500; letter-spacing: -.025em; line-height: 1.2;
-    color: var(--td-text); font-variant-numeric: tabular-nums; margin: 2px 0 3px;
-  }
-
-  /* The day line: today's revenue, hour by hour. Taller than a sparkline
-     because here the curve IS the content. The shared .db-spark-wrap gives it
-     the hover-scrub; we only lend it height and the sage ink. */
-  .td-today-line { margin-top: 22px; }
-  .td-today-line .db-spark-wrap.td-dayline { height: 104px; margin-top: 0; color: var(--td-sage); }
-  .td-today-line .db-spark-line { stroke-width: 2; }
-  /* The tip is a still ink dot. A breathing dot is Dusk and means "Tacet is
-     doing something" — the day's takings are not an automation. */
-  .td-today-line .db-spark-dot { background: var(--td-text); }
-  .td-today-hours {
-    display: flex; justify-content: space-between;
-    margin-top: 8px; font-size: 11.5px; color: var(--td-text2);
-    font-variant-numeric: tabular-nums;
-  }
-  .td-today-hours:empty { display: none; }
-
-  /* Orders and per-order sit behind one hairline under the chart. New
-     customers is deliberately absent — it belongs to the Customers block. */
-  .td-today-strip {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    border-top: 1px solid var(--td-border); margin-top: 24px;
-  }
-  .td-today-cell { padding: 16px 0 0; min-width: 0; }
-  .td-today-cell + .td-today-cell { border-left: 1px solid var(--td-border); padding-left: 24px; }
-  .td-today-cell .v {
-    font-size: 24px; font-weight: 500; letter-spacing: -.02em; line-height: 1.35;
-    color: var(--td-text); font-variant-numeric: tabular-nums;
-  }
-  .td-today-cell .k { font-size: 11.5px; color: var(--td-text2); }
-  .td-today-cell .c { font-size: 12px; color: var(--td-text2); min-height: 0; }
-
-  @media (max-width: 720px) {
-    .td-today-body { padding: 20px 22px 16px; }
-    .td-today-lead { font-size: 38px; }
-    .td-today-line .db-spark-wrap.td-dayline { height: 84px; }
-    /* Three cells behind hairlines is a desktop shape — stack them on a phone. */
-    .td-today-strip { grid-template-columns: 1fr; }
-    .td-today-cell + .td-today-cell {
-      border-left: 0; border-top: 1px solid var(--td-border);
-      padding-left: 0; margin-top: 14px; padding-top: 14px;
-    }
-  }
-
   /* Activity strip — clean prose rows: time · sentence · right-aligned amount,
      no icon, first-order pill only. Toggle reveals the full day (scrolls inside
      the card past ~360px so the page below stays reachable). */
@@ -8737,54 +8654,10 @@
   .td-feed .db-feed-list { display: flex; flex-direction: column; gap: 4px; max-height: 360px; }
   .td-feed .db-feed-empty { font-size: 13px; color: var(--td-text2); padding: 6px 0; }
 
-  /* ── Channels today — the Activity square's replacement. Revenue split by
-     channel as quiet magnitude bars (share of today's total). ── */
-  .td-chan-list { display: grid; gap: 10px; margin-top: 6px; align-content: start; }
-  .td-chan-row {
-    display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
-    align-items: baseline; font-size: 13.5px;
-  }
-  .td-chan-lbl { color: var(--td-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .td-chan-cnt { color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
-  .td-chan-val { color: var(--td-text); font-weight: 500; font-size: 13.5px; font-variant-numeric: tabular-nums; }
-  .td-chan-track { grid-column: 1 / -1; height: 5px; border-radius: 999px; background: var(--td-raised); overflow: hidden; }
-  .td-chan-fill { height: 100%; border-radius: 999px; background: var(--td-text); opacity: .75; transition: width .8s cubic-bezier(.16,1,.3,1); }
   .td-chan-foot {
     margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--td-border);
     font-size: 12.5px; color: var(--td-text2);
   }
-  /* Today's movers — ranked product list (bx-* scoped per the section-class
-     rule). Rows past the 2nd carry .detail/.detail2 so the solver's squat
-     shapes shorten the list instead of clipping mid-row. */
-  .bx-mv-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
-  .bx-mv-row { display: flex; align-items: baseline; gap: 12px; padding: 6px 0; font-size: 13.5px; }
-  .bx-mv-row + .bx-mv-row { border-top: 1px solid var(--td-raised); }
-  .bx-mv-rank { flex: none; width: 15px; color: var(--td-text2); font-size: 12px; font-variant-numeric: tabular-nums; }
-  .bx-mv-nm { min-width: 0; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bx-mv-sub { color: var(--td-text2); font-size: 12px; margin-left: 8px; font-variant-numeric: tabular-nums; }
-  .bx-mv-amt { margin-left: auto; flex: none; color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
-  /* The week so far — seven daily revenue bars (bx-* scoped). Today's bar is
-     inked, the best day graphite, the rest raised. Foot is .detail (hidden in
-     the squat 1-row tiers the solver may hand it). */
-  .bx-wk { margin-top: 6px; }
-  .bx-wk-bars { display: flex; align-items: flex-end; gap: 8px; height: 92px; }
-  .bx-wk-day { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; min-width: 0; }
-  .bx-wk-bar { width: 100%; max-width: 30px; border-radius: 5px 5px 0 0; background: var(--td-raised); transition: height .8s cubic-bezier(.16,1,.3,1); }
-  .bx-wk-bar.is-today { background: var(--td-text); opacity: .82; }
-  .bx-wk-bar.is-best { background: var(--td-text2); }
-  .bx-wk-lbl { font-size: 10.5px; color: var(--td-text2); white-space: nowrap; }
-  .bx-wk-lbl.is-today { color: var(--td-text); font-weight: 500; }
-  /* value cap above each bar — makes the chart readable at a glance (no hover
-     needed, which matters in Arrange mode where the card can't be hovered). */
-  .bx-wk-cap { font-size: 10px; color: var(--td-text2); white-space: nowrap;
-    font-variant-numeric: tabular-nums; line-height: 1; }
-  .bx-wk-cap.is-today { color: var(--td-text); font-weight: 500; }
-  .bx-wk-day { cursor: default; }
-  /* On a squat/narrow week card the per-bar caps crowd — hide them there and let
-     the hover tooltip carry the figures instead. */
-  .td-block[data-tier="a"] .bx-wk-cap, .td-block[data-tier="c"] .bx-wk-cap { display: none; }
-  .bx-wk-foot { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--td-border); font-size: 12.5px; color: var(--td-text2); }
-  .bx-wk-foot b { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
   /* On the way — in-transit PO list (bx-* scoped). ETA in the "arrives today"
      amber when due on/before today. Rows past the 2nd wear .detail/.detail2. */
   .bx-in-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
@@ -8798,17 +8671,6 @@
   .bx-in-sub { color: var(--td-text2); font-size: 12px; margin-left: 8px; }
   .bx-in-eta { margin-left: auto; flex: none; color: var(--td-text2); font-size: 12.5px; white-space: nowrap; }
   .bx-in-eta.is-soon { color: var(--td-amber-ink); font-weight: 500; }
-  /* Recent stock moves — ledger tail (bx-* scoped). Dusk dot = an automation
-     made the move; plain graphite dot = a person did. In green-ink, out ink. */
-  .bx-mo-list { display: grid; gap: 2px; margin-top: 4px; align-content: start; }
-  .bx-mo-row { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; font-size: 13.5px; }
-  .bx-mo-row + .bx-mo-row { border-top: 1px solid var(--td-raised); }
-  .bx-mo-dot { flex: none; width: 6px; height: 6px; border-radius: 999px; background: var(--td-dusk, #7A7FB3); align-self: center; }
-  .bx-mo-dot.is-manual { background: var(--td-text2); }
-  .bx-mo-nm { min-width: 0; color: var(--td-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .bx-mo-d { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; font-weight: 500; }
-  .bx-mo-d.is-in { color: var(--td-sage-ink, #4A6249); }
-  .bx-mo-d.is-out { color: var(--td-text); }
   .td-feed-row { display: flex; align-items: baseline; gap: 12px; padding: 5px 8px; margin: 0 -8px; border-radius: 6px; border: 0; font-size: 14px; line-height: 1.4; cursor: pointer; }
   .td-feed-row:hover { background: var(--td-raised); }
   .td-feed-row .db-feed-ts { flex: none; width: 40px; color: var(--td-text2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
