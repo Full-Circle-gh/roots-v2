@@ -293,18 +293,32 @@ function dashSetRange(key, opts) {
 
 // ── Dashboards by position ─────────────────────────────────────────────────
 // The operator's role picks a fixed dashboard view (set as window.RA_POS +
-// body.pos-* at boot). 'default' = the full owner view. The position decides
-// which attention cards render (dashPosWants) and, via CSS, whether the money
-// blocks (Recap / Today pulse / Channels) exist at all.
-const DASH_POS_CARDS = {
-  warehouse:        { stock: 1 },
-  dispatch:         { delivery: 1 },
-  customer_service: { delivery: 1, refunds: 1, invoices: 1 },
-};
+// body.pos-* at boot). 'default' = the full owner view. dashPos() (the role
+// string) still drives the below-the-fold list pulls (which surface is even
+// worth fetching per role) and, via CSS, whole-card presence incl. the money
+// blocks. What a NON-money "Needs you" sub-card shows is now decided by the
+// operator's actual capability (can()/canAny(), 01-core.js) — a card appears
+// only if the operator holds a permission that could resolve its fire. This
+// makes the set self-composing: a per-user grant/revoke (impossible to express
+// as a role name) turns a row on/off with no code change, and the old
+// customer_service-vs-dispatch special-case falls out of the presets for free.
+//   Fail-OPEN by the same rule as the rest of the RBAC view layer: an unknown
+// cap set (older session / resolution hiccup) shows the row — for these
+// actionable, non-money rows that's benign (worst case a row the server 403s
+// once enforcement lands). Money-card PRESENCE is deliberately NOT on this path
+// — it stays on the body.pos-* CSS gate, which resolves from the reliable role
+// string and so can't leak revenue on a null-caps session.
 function dashPos() { return window.RA_POS || 'default'; }
-function dashPosWants(kind) {
-  const m = DASH_POS_CARDS[dashPos()];
-  return !m || !!m[kind];
+// Needs-you sub-card → the capability (or any-of) that makes it actionable.
+const DASH_CARD_CAP = {
+  stock:    ['quickstock:recount', 'purchasing:receive'],
+  delivery: ['orders:edit', 'orders:dispatch_courier'],
+  refunds:  'orders:refund',
+  invoices: 'invoices:manage',
+};
+function dashCardWants(kind) {
+  const cap = DASH_CARD_CAP[kind];
+  return cap === undefined ? true : _capAllows(cap);   // _capAllows: can()/canAny() (01-core.js)
 }
 
 // ── Per-store filter ───────────────────────────────────────────────────────
@@ -2594,7 +2608,7 @@ function tdInvLowRender() {
   const host = document.getElementById('td-inv-low'); if (!host) return;
   TD_LOW_POOL = [];
   const hide = () => { host.hidden = true; host.innerHTML = ''; tdLowRotStop(); };
-  if (!DASH_OPS || !dashPosWants('stock')) return hide();
+  if (!DASH_OPS || !dashCardWants('stock')) return hide();
 
   const allLow = ((DASH_OPS.low_stock || {}).count || 0) + ((DASH_OPS.out_of_stock || {}).count || 0);
   if (!allLow) return hide();
@@ -2673,7 +2687,7 @@ function tdAttnRender() {
   // problem. When it's clear there's no card here; the calm channels are folded
   // into the single "All clear" roll-up at the end instead of one card each.
   const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
-  if (da.count && dashPosWants('delivery')) {
+  if (da.count && dashCardWants('delivery')) {
     const reasonOf = it => {
       // A late air parcel is a delivered order flagged for a food-safety call —
       // it has no live tracking_status to read, so name it directly (mirrors the
@@ -2732,7 +2746,7 @@ function tdAttnRender() {
 
   // Refund queue — pending / reviewing requests.
   const rf = DASH_OPS.refunds || { count: 0, items: [] };
-  if (rf.count && dashPosWants('refunds')) {
+  if (rf.count && dashCardWants('refunds')) {
     const rows = (rf.items || []).slice(0, 4).map(it => `
       <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
         <span class="name" data-no-i18n>${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
@@ -2747,7 +2761,7 @@ function tdAttnRender() {
   // the card action deep-links to the Orders list pre-filtered on the
   // "Needs invoice" chip — same pattern as Running-low → Open restock.
   const inv = DASH_OPS.invoices || { count: 0, items: [] };
-  if (inv.count && dashPosWants('invoices')) {
+  if (inv.count && dashCardWants('invoices')) {
     const rows = (inv.items || []).slice(0, 4).map(it => `
       <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
         <span class="name" data-no-i18n>${escapeHtml(it.order_no || '')} · ${escapeHtml(it.title || '')}</span>

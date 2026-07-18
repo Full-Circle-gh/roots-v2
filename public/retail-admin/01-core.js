@@ -128,11 +128,21 @@ function fmt(n) { return Number(n || 0).toFixed(2); }
 // different view" mechanism (e.g. Quick Stock add-vs-recount), driven by what
 // the admin granted rather than hardcoded per role.
 //
-// Phase 0/1 is DARK: every operator who reaches this shell resolves to the FULL
-// set (owner/admin/staff), and an older session sends caps:null which we treat
-// as "all allowed" — so applyCapGates() hides nothing today. It's the rendering
-// half, ready for when narrower presets/overrides start being assigned.
-let CAPS = null;                                    // null = unknown ⇒ all allowed
+// What's live vs. what's dark — do NOT read this as "caps do nothing yet":
+//   • LIVE: /api/backend/me ships a REAL, per-operator, differentiated cap array
+//     (lib/operator-caps → lib/capabilities.resolveCaps). Only `owner` resolves
+//     to ALL keys; every other role — warehouse, dispatch, customer_service,
+//     store_manager, staff … — resolves to its narrowed preset. setCaps() stores
+//     it and applyCapGates() USES it now to hide nav sections + [data-cap] controls.
+//   • DARK: only server-side ENFORCEMENT (routes 403-ing on req.caps) is gated,
+//     behind tenant.rbac_enforce. The view gates; the server doesn't reject yet.
+// (An older note here claimed "everyone resolves to the FULL set, nothing hides."
+//  That was wrong and nearly cost a design — the differentiation is real.)
+// Fail-OPEN: caps is null only on a resolution hiccup or a stale session, and
+// null ⇒ all allowed. Fine for hiding actionable controls; do NOT gate anything
+// that leaks money/PII on caps alone without a reliable fallback (see the
+// dashboard's money-card presence, which stays on the role-string body.pos-* CSS).
+let CAPS = null;                                    // null = unknown ⇒ all allowed (fail-open)
 function can(key)     { return CAPS === null ? true : CAPS.has(key); }
 function canAny(keys) { return CAPS === null ? true : keys.some(k => CAPS.has(k)); }
 function _capAllows(v){ return Array.isArray(v) ? canAny(v) : can(v); }
