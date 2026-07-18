@@ -5153,15 +5153,17 @@ function jdPromptPrinterName() {
   return v;
 }
 
-// Open the local print component (trying each port in turn), send ONE print job,
-// and resolve { ok, msg }. Times out per port so a missing component never hangs
-// the UI. Protocol = JD cloud-print 报文2 (report format 2): an
+// Open the local print component (trying each port in turn), send ONE print job
+// covering ALL of `labels` (report format 2's `contents` list takes more than one
+// entry — this is how a 一单多件 waybill prints every box's label in a single
+// job), and resolve { ok, msg }. Times out per port so a missing component never
+// hangs the UI. Protocol = JD cloud-print 报文2 (report format 2): an
 // "orderType":"PRINT","version":"2" frame whose `parameters` carry the target
-// `printName` and a `contents:[{ tempUrl, printData }]` list — the component
-// renders the template `tempUrl` with the encrypted `printData` (the perPrintData
-// string from pullData) and prints. It echoes a status frame: status 500 = ok,
-// success "true"/"false", errors[] on failure.
-function jdSendToComponent(printData, tempUrl, printName, ports) {
+// `printName` and a `contents:[{ tempUrl, printData }, ...]` list — the component
+// renders each entry's template `tempUrl` with its encrypted `printData` (the
+// perPrintData string from pullData) and prints them. It echoes a status frame:
+// status 500 = ok, success "true"/"false", errors[] on failure.
+function jdSendToComponent(labels, printName, ports) {
   ports = ports || JD_PRINT_PORTS;
   return new Promise((resolve) => {
     let i = 0;
@@ -5187,7 +5189,7 @@ function jdSendToComponent(printData, tempUrl, printName, ports) {
           key: (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'k' + Date.now() + Math.round(Math.random() * 1e6)),
           parameters: {
             printName: printName || '',
-            contents: [{ tempUrl, printData }],
+            contents: labels.map(l => ({ tempUrl: l.tempUrl, printData: l.printData })),
           },
         };
         try { ws.send(JSON.stringify(msg)); } catch (e) { finish({ ok: false, msg: 'send_failed' }); }
@@ -5228,7 +5230,10 @@ async function printJdLabel(orderId, shipmentId, opts) {
     if (!opts.silent) toast(cuT('Could not load JD label data', '获取京东面单数据失败') + ': ' + (e.message || ''), 'err');
     return false;
   }
-  if (!r || !r.data || !r.data.printData) {
+  const labels = (r && r.data && r.data.labels && r.data.labels.length)
+    ? r.data.labels
+    : (r && r.data && r.data.printData ? [{ printData: r.data.printData, tempUrl: r.data.tempUrl }] : null);
+  if (!labels) {
     if (!opts.silent) toast(cuT('JD label data unavailable', '京东面单数据不可用'), 'err');
     return false;
   }
@@ -5237,8 +5242,13 @@ async function printJdLabel(orderId, shipmentId, opts) {
   let printer = jdPrinterName();
   if (!printer) printer = jdPromptPrinterName();
   if (!printer) { if (!opts.silent) toast(cuT('Set the JD printer name first', '请先设置京东打印机名称'), 'err'); return false; }
-  const sent = await jdSendToComponent(r.data.printData, r.data.tempUrl, printer);
-  if (sent.ok) { toast(cuT('JD label sent to printer', '京东面单已发送打印')); return true; }
+  const sent = await jdSendToComponent(labels, printer);
+  if (sent.ok) {
+    toast(labels.length > 1
+      ? cuT(labels.length + ' JD box labels sent to printer', '已发送打印 ' + labels.length + ' 张京东面单')
+      : cuT('JD label sent to printer', '京东面单已发送打印'));
+    return true;
+  }
   toast(sent.msg === 'component_unreachable'
     ? cuT('JD print component not detected on this PC — open 京东物流云打印组件', '未检测到本机京东打印组件 — 请打开京东物流云打印组件')
     : (cuT('JD label print failed', '京东面单打印失败') + ': ' + sent.msg), 'err', 6000);
@@ -5249,16 +5259,17 @@ async function printJdLabel(orderId, shipmentId, opts) {
 // our JD account, so JD streams tracking events for free (no 快递100). Server
 // resolves the sender from the fulfilling store's 发货地址 — surface the "store
 // has no sender phone" gap as a clear instruction.
-async function submitJdLabel(orderId, shipmentId, product, btn) {
+async function submitJdLabel(orderId, shipmentId, product, btn, pieces) {
   const qs = shipmentId ? '?shipment_id=' + shipmentId : '';
   try {
     const r = await adminWrite({
       btn,
       url: `/api/retail-admin/orders/${orderId}/jd-waybill${qs}`,
-      method: 'POST', body: { shipment_id: shipmentId, product },
+      method: 'POST', body: { shipment_id: shipmentId, product, package_count: pieces || 1 },
       errLabelEn: 'JD label failed', errLabelCn: '生成运单失败',
     });
-    toast(cuT('JD waybill created', '京东运单已生成') + ': ' + (r?.data?.waybill || ''));
+    const piecesNote = pieces > 1 ? (cuT(' · ', ' · ') + pieces + cuT(' boxes', ' 箱')) : '';
+    toast(cuT('JD waybill created', '京东运单已生成') + ': ' + (r?.data?.waybill || '') + piecesNote);
     // Auto-fire the JD waybill LABEL to the local print component (this machine
     // only) — the label sticker prints with no further action. Default ON.
     if (jdAutoPrintOn()) printJdLabel(orderId, shipmentId, { silent: true });
@@ -5278,19 +5289,18 @@ async function submitJdLabel(orderId, shipmentId, product, btn) {
   }
 }
 
-// Create a JD waybill for a parcel. Air parcels always ship fresh-express
-// (生鲜特快 / LL-SD-M) — the order already tells us it's air, so create the
-// waybill directly with no prompt at all. Ground/local parcels still ask the
-// one thing the order can't tell us: fresh-ground (生鲜标快) vs ambient-ground
-// (京东标快), since that depends on what's in the box. We never re-ask air vs
-// ground — only the two GROUND options are offered.
+// Create a JD waybill for a parcel. Ground/local parcels ask the one thing the
+// order can't tell us: fresh-ground (生鲜标快) vs ambient-ground (京东标快), since
+// that depends on what's in the box; air always ships fresh-express (生鲜特快 /
+// LL-SD-M), so that section of the modal is skipped. Every mode also gets a
+// pieces (箱数) stepper — staff bump it above 1 when the parcel doesn't fit in
+// one box, so JD splits it across boxes under the SAME waybill number
+// (一单多件); left at 1 it's the ordinary single-box case. We never re-ask air
+// vs ground — only the two GROUND service options are offered.
 function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
-  if (mode === 'air') {
-    submitJdLabel(orderId, shipmentId, 'LL-SD-M', ev?.currentTarget);
-    return;
-  }
-  const preset = jdSuggestedService(mode, !!Number(isFresh));
-  const services = JD_SERVICES.filter(s => s.code !== 'LL-SD-M');   // ground-only: fresh vs ambient
+  const isAir = mode === 'air';
+  const preset = isAir ? 'LL-SD-M' : jdSuggestedService(mode, !!Number(isFresh));
+  const services = isAir ? [] : JD_SERVICES.filter(s => s.code !== 'LL-SD-M');   // ground-only: fresh vs ambient
   const bg = document.createElement('div');
   bg.className = 'pu-editor-bg tacet';
   bg.style.display = 'flex';
@@ -5299,11 +5309,14 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
       <div class="pu-editor-head">
         <div>
           <h3 style="margin:0; font-size:14px;">${cuT('Create JD label', '生成京东运单')}</h3>
-          <div class="muted" style="font-size:11px; margin-top:2px;">${cuT('Ground parcel — is it fresh (ice pack) or ambient?', '陆运包裹 — 生鲜(冰袋)还是普通?')}</div>
+          <div class="muted" style="font-size:11px; margin-top:2px;">${isAir
+            ? cuT('Air parcel — fresh express (生鲜特快)', '空运包裹 — 生鲜特快')
+            : cuT('Ground parcel — is it fresh (ice pack) or ambient?', '陆运包裹 — 生鲜(冰袋)还是普通?')}</div>
         </div>
         <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Close', '关闭')}</button>
       </div>
       <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px; display:block;">
+        ${services.length ? `
         <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px;">
           ${services.map(s => `
             <label class="jd-svc" style="display:flex; align-items:center; gap:10px; padding:10px 12px; border:1px solid var(--line-soft); border-radius:8px; cursor:pointer;">
@@ -5313,6 +5326,11 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
                 <span class="muted" style="display:block; font-size:11px; margin-top:1px;">${s.sub}</span>
               </span>
             </label>`).join('')}
+        </div>` : ''}
+        <div style="margin-bottom:14px;">
+          <label style="font-size:12px; font-weight:600; display:block; margin-bottom:6px;">${cuT('Pieces (boxes)', '箱数')}</label>
+          <input type="number" id="jd-pieces" min="1" max="30" step="1" value="1" class="form-control" style="width:90px;">
+          <div class="muted" style="font-size:11px; margin-top:4px;">${cuT('More than 1 only if this parcel is too big for one box — JD keeps ONE tracking number split across that many boxes.', '仅当包裹过大需要分箱时填大于1 — 京东运单号不变,拆分为该数量的箱子。')}</div>
         </div>
         <div style="display:flex; gap:8px; justify-content:flex-end;">
           <button class="btn" onclick="this.closest('.pu-editor-bg').remove()">${cuT('Cancel', '取消')}</button>
@@ -5322,9 +5340,11 @@ function createJdLabel(orderId, shipmentId, mode, isFresh, ev) {
     </div>`;
   mountFloatingPuModal(bg);
   bg.querySelector('#jd-svc-submit').addEventListener('click', async (e) => {
-    const product = (bg.querySelector('input[name="jd-svc"]:checked') || {}).value;
+    const product = services.length ? (bg.querySelector('input[name="jd-svc"]:checked') || {}).value : preset;
     if (!product) return;
-    const ok = await submitJdLabel(orderId, shipmentId, product, e.currentTarget);
+    const piecesEl = bg.querySelector('#jd-pieces');
+    const pieces = Math.max(1, Math.min(30, parseInt(piecesEl && piecesEl.value, 10) || 1));
+    const ok = await submitJdLabel(orderId, shipmentId, product, e.currentTarget, pieces);
     if (ok) bg.remove();
   });
 }

@@ -2830,6 +2830,11 @@ addColumn('retail_shipments', 'local_eta', 'TEXT');
 // as auto-fillable). See scripts/qingyun-daemon.js stampLocalEta.
 addColumn('retail_shipments', 'eta_source', 'TEXT');
 
+// 一单多件 — how many physical boxes this waybill was created for (staff enters
+// this when the parcel is too big for one box; JD keeps one tracking number
+// across all of them). NULL/1 = the ordinary single-box case.
+addColumn('retail_shipments', 'package_count', 'INTEGER');
+
 // A late AIR parcel (arrived >1 day after dispatch) raises a food-safety alert:
 // the "AIR DELAYED · contact customer" badge in the orders list and a matching
 // "Delivery needs a call" card on the dashboard. Because the order is already

@@ -20399,6 +20399,11 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
   const product = reqProduct || JD_DEFAULT_BY_MODE[shipment.mode] || 'ed-m-0001';
   const weight  = Number(req.body?.weight) > 0 ? Number(req.body.weight) : 1;    // kg
   const vloumn  = Number(req.body?.vloumn) > 0 ? Number(req.body.vloumn) : 100;  // cm³
+  // 一单多件 — the parcel didn't fit in one box, so it's split across several
+  // boxes under the SAME JD tracking number. Staff sets the piece count when
+  // the content is too big for a single box; JD keeps it on the waybill and
+  // hands back one box label per piece from pullData (see jd.getPrintData).
+  const packageCount = Math.max(1, Math.min(30, parseInt(req.body?.package_count, 10) || 1));
 
   // JD deduplicates on orderId — a cancelled+retried label needs a fresh ID.
   const prevAttempts = db.prepare(
@@ -20414,7 +20419,7 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
     receiveName:    String(o.order_no).slice(-4) + ' ' + o.recipient_name,
     receiveAddress: o.address_full,
     receiveMobile:  String(o.recipient_phone).replace(/\D/g, ''),
-    packageCount:   1, weight, vloumn,
+    packageCount,   weight, vloumn,
     description:    o.order_no,
   };
   if (req.body?.guarantee_amount) {
@@ -20444,9 +20449,9 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
     `UPDATE retail_shipments
         SET tracking_carrier = 'jd', tracking_number = ?, tracking_status = ?,
             tracking_events_json = NULL, tracking_synced_at = NULL,
-            tracking_last_error = NULL, tracking_kd100_subscribed = 0,
+            tracking_last_error = NULL, tracking_kd100_subscribed = 0, package_count = ?,
             dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?`).run(waybill, derived, shipment.id);
+      WHERE id = ?`).run(waybill, derived, packageCount, shipment.id);
   // Mirror to the order row for the primary parcel OR when no parcel has yet
   // populated it — so the orders-list TRACKING cell shows this waybill instead
   // of "⚠ missing" when a non-primary parcel (e.g. the land half of a split
@@ -20467,7 +20472,7 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
     firstDispatch = true;
   }
   logActivity(req.user.id, req.user.username, 'jd_waybill_created', 'retail_order', id,
-    { waybill, product, shipment_id: shipment.id }, req.ip);
+    { waybill, product, shipment_id: shipment.id, package_count: packageCount }, req.ip);
   if (firstDispatch) { try { notifyOrderStatusChange(id, 'dispatched'); } catch (e) { /* best-effort */ } }
 
   res.json({ success: true, data: { id, shipment_id: shipment.id, waybill, presort: cr.presort, order_status: 'dispatched' } });
@@ -21153,7 +21158,12 @@ router.get('/api/retail-admin/orders/:id/jd-waybill/print-data', requireRetailAd
     if (row) { const v = JSON.parse(row.value_json); if (typeof v === 'string' && v) tempUrl = v; }
   } catch (e) { /* default template */ }
 
-  res.json({ success: true, data: { shipment_id: s.id, waybill: s.tracking_number, printData: r.printData, tempUrl } });
+  // labels[] carries one entry per physical box for a 一单多件 (single waybill,
+  // multiple pieces) shipment; single-piece waybills come back as a length-1
+  // array. printData/tempUrl stay for callers that only print one label.
+  const labels = (r.labels && r.labels.length ? r.labels : [{ printData: r.printData, wayBillNo: r.wayBillNo }])
+    .map(l => ({ printData: l.printData, tempUrl }));
+  res.json({ success: true, data: { shipment_id: s.id, waybill: s.tracking_number, printData: r.printData, tempUrl, labels } });
 });
 
 router.post('/api/retail-admin/orders/:id/alipay-ocr/rerun', requireRetailAdmin, async (req, res) => {
