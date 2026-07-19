@@ -1831,7 +1831,24 @@ function onProfileKey(e) { if (e.key === 'Escape') closeProfileModal(); }
     if (e.data && e.data.type === 'fc-play-order-chime' && typeof _synthOrderChime === 'function') {
       _synthOrderChime();
     }
+    // Language flipped inside the Profile pop-up — the product's only language
+    // control. Apply it to the shell via the i18n engine's own path (cuToggleLang)
+    // so the admin behind the pop-up repaints. Guard "differs" so the fc-lang the
+    // engine echoes back down is a no-op both ways — one round trip, no loop.
+    if (e.data && e.data.type === 'fc-lang' && (e.data.lang === 'en' || e.data.lang === 'cn')) {
+      if (window.cuLang && window.cuToggleLang && cuLang() !== e.data.lang) cuToggleLang();
+    }
   });
+  // Parent → frame: push a message to the embedded Profile iframe, but ONLY when
+  // it exists AND its src is already loaded (never poke an unopened frame).
+  // Origin pinned to location.origin to match the frame's origin-checked listener.
+  window.profFramePost = function (msg) {
+    const f = $('#profFrame');
+    if (f && f.src && f.contentWindow) f.contentWindow.postMessage(msg, location.origin);
+  };
+  // When the shell flips language, tell the frame so it repaints live (theme is
+  // pushed the same way from cuSetTheme). No-ops until the frame's src is set.
+  if (window.onLangChange) window.onLangChange((lang) => profFramePost({ type: 'fc-lang', lang }));
 })();
 
 // ══════════════════════════════════════════════════════════════════

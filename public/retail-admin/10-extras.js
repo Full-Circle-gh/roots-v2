@@ -587,6 +587,10 @@ function cuSetTheme(t) {
   document.documentElement.setAttribute('data-theme', next);
   try { localStorage.setItem('retail-admin-theme', next); } catch (e) {}
   cuApplyThemeIcon();
+  // Push the flip to the embedded Profile iframe (if open + loaded) so it
+  // repaints without a reload. The frame only repaints — the parent owns the
+  // localStorage write above (no write-back in the frame = no loop).
+  if (window.profFramePost) window.profFramePost({ type: 'fc-theme', theme: next });
 }
 function cuToggleTheme() {
   const current = document.documentElement.getAttribute('data-theme') || 'dark';

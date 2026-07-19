@@ -1212,6 +1212,30 @@
       lang = lang === 'cn' ? 'en' : 'cn';
       try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
       applyLang();
+      // Embedded in the retail-admin Profile pop-up? This toggle is the product's
+      // ONLY language control, so tell the shell to switch too — otherwise the
+      // admin behind the pop-up stays in the old language until reload. Matches
+      // the existing outbound style/origin; ONLY the user-toggle path posts (the
+      // inbound fc-lang handler stays receive-only), so there's no loop.
+      if (window.self !== window.top) window.parent.postMessage({ type:'fc-lang', lang:lang }, window.location.origin);
+    });
+
+    /* ── parent → frame: the retail-admin shell pushes theme / language flips
+         here so the embedded panel repaints without a reload. Repaint only —
+         the shell already owns the localStorage writes, so we DON'T write back
+         (no write = no loop). Origin-checked to mirror the parent's listener. ── */
+    window.addEventListener('message', function (e) {
+      if (e.origin !== window.location.origin) return;
+      var d = e.data;
+      if (!d || typeof d !== 'object') return;
+      if (d.type === 'fc-theme' && (d.theme === 'light' || d.theme === 'dark')) {
+        if (document.documentElement.getAttribute('data-theme') !== d.theme) {
+          document.documentElement.setAttribute('data-theme', d.theme);
+          applyTheme();
+        }
+      } else if (d.type === 'fc-lang' && (d.lang === 'en' || d.lang === 'cn')) {
+        if (lang !== d.lang) { lang = d.lang; applyLang(); }
+      }
     });
 
     applyTheme();
