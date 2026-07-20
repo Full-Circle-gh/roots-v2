@@ -3217,9 +3217,11 @@ function orderStatusPill(o) {
     // Rider has dropped off — never keep showing "Rider coming"/"Dispatched".
     if (c.stage === 'delivered' && o.status !== 'delivered')
       return { cls: 'st-delivered', label: humanStatus('delivered', o.fulfillment_type) };
-    // In-flight: surface the real rider stage for both our own dispatched orders
-    // and Meituan's "Rider coming" mirrors.
-    if (o.status === 'dispatched' || o.status === 'rider_pickup') {
+    // In-flight: surface the real rider stage for our own orders (including ones
+    // still marked 'preparing' — staff can dispatch a rider before clicking
+    // "Mark dispatched", so the courier job can outrun our own status) and
+    // Meituan's "Rider coming" mirrors.
+    if (o.status === 'dispatched' || o.status === 'rider_pickup' || o.status === 'preparing') {
       if (c.stage === 'awaiting_dispatch') return { cls: 'st-preparing',  label: cuT('Finding a rider', '正在找骑手') };
       if (c.stage === 'in_transit')        return { cls: 'st-dispatched', label: cuT('On the way', '配送中') };
     }
