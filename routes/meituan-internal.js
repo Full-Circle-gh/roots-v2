@@ -111,7 +111,8 @@ function internalStatusForChannel(desc) {
   if (/退款|退货/.test(d))                                        return 'refunded';
   if (/取消|已关闭|交易关闭/.test(d))                             return 'cancelled';
   // 用户已收餐 / 已收餐 is the 外卖 wording for 已收货 — the customer has it.
-  if (/已完成|交易完成|已送达|已收货|已收餐|订单完成|已签收/.test(d)) return 'delivered';
+  // 妥投/已妥投/签收成功 are Meituan's courier-delivery synonyms for the same event.
+  if (/已完成|交易完成|已送达|已收货|已收餐|订单完成|已签收|妥投|签收成功/.test(d)) return 'delivered';
   if (/待发起配送|待配送|待接单|已接单|待拣货|拣货|备货|待发货|制作/.test(d)) return 'preparing';
   // Rider now HOLDS the parcel and is en route to the customer — real dispatch.
   // (已取货/已取餐 = picked up; distinguished from 待…取货 = still awaiting pickup below.)
