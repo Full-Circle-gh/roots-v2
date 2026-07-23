@@ -1803,6 +1803,13 @@
   .db-comp-legend b { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
   .db-comp-legend em { font-style: normal; }
   .db-comp-legend .net { margin-left: auto; }
+  /* Wallet line under the composition legend — prepaid top-ups received (cash
+     in, counted in revenue) vs store credit spent on orders (a memo). */
+  .db-comp-wallet { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 10px;
+    padding-top: 10px; border-top: 1px solid var(--td-line, var(--td-raised));
+    font-size: 13px; color: var(--td-text2); }
+  .db-comp-wallet b { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .db-comp-wallet em { font-style: normal; }
 
   /* Ranked lists (top customers / top products) — index · name · value. */
   .db-rank { display: grid; gap: 10px; }

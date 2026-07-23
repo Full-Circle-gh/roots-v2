@@ -10992,6 +10992,63 @@ function guanyiPickupSales(db, from, to, opts) {
   return out;
 }
 
+// ── Wallet top-up CASH received (cash-basis revenue) ───────────────────────
+// Real external money a customer loads into their prepaid wallet — settled
+// top-ups paid through a payment gateway (payment_method IN ('wechat','alipay'),
+// status='success', amount>0). Everything else that touches this overloaded
+// ledger is EXCLUDED because it isn't fresh cash: 'order_redeem' (the negative
+// wallet-spend row), 'admin_adjust', referral rewards/'lifetime_commission'
+// credits, and all clawback/'refund_reverse' rows.
+//
+// Cash-basis: a top-up is booked as revenue the day the money lands (paid_at) —
+// the SAME instant order.total and gzgrocery takings are booked. The wallet is
+// then spent later via balance_used on an order; that spend is deliberately
+// NOT re-counted as revenue (order.total already excludes balance_used), so the
+// same yuan is recognised exactly once. Returns { received, byBucket } bucketed
+// by day (or hour, opts.hourly), mirroring guanyiPickupSales so callers fold it
+// in the same way. No-op (zeros) for a tenant without the top-up table.
+function topupCashReceived(db, from, to, opts) {
+  const out = { received: 0, byBucket: {} };
+  try {
+    const TZ = '+8 hours';
+    const hourly = !!(opts && opts.hourly);
+    const bk = hourly ? `strftime('%H', paid_at, '${TZ}')` : `date(paid_at, '${TZ}')`;
+    const rows = db.prepare(`
+      SELECT ${bk} AS bucket, COALESCE(SUM(amount), 0) AS received
+        FROM retail_topup_transactions
+       WHERE status = 'success' AND amount > 0
+         AND payment_method IN ('wechat','alipay')
+         AND paid_at IS NOT NULL
+         AND date(paid_at, '${TZ}') BETWEEN ? AND ?
+       GROUP BY bucket`).all(from, to);
+    for (const r of rows) {
+      const rev = Number(r.received) || 0;
+      if (!rev) continue;
+      out.received += rev;
+      out.byBucket[r.bucket] = { revenue: rev };
+    }
+    out.received = +out.received.toFixed(2);
+  } catch (e) { /* tenant without the topup ledger → zeros */ }
+  return out;
+}
+
+// Store credit (prepaid wallet balance) redeemed against orders in a date range
+// — a MEMO figure only, never added to revenue (the cash was already booked at
+// top-up time by topupCashReceived; re-counting it here would double count).
+// Bucketed on the same paid-date basis as revenue so "credit used" lines up
+// with the day the order settled. Returns a rounded ¥ total.
+function storeCreditRedeemed(db, from, to) {
+  try {
+    const TZ = '+8 hours';
+    const PAID = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+    const row = db.prepare(`
+      SELECT COALESCE(SUM(balance_used), 0) AS redeemed
+        FROM retail_orders
+       WHERE ${PAID} AND date(COALESCE(paid_at, placed_at), '${TZ}') BETWEEN ? AND ?`).get(from, to);
+    return +(Number(row && row.redeemed) || 0).toFixed(2);
+  } catch (e) { return 0; }
+}
+
 // ── GET /api/retail-admin/sales/summary ──────────────────────────────────
 // Powers the Sales overview page (#tab-sales): today's per-channel revenue /
 // orders / AOV plus a folded all-channel summary. Meituan orders are mirrored
@@ -11064,9 +11121,18 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
       revenue += channels[k].revenue; orders += channels[k].orders;
       if (channels[k].connected) active += 1;
     }
-    revenue = +revenue.toFixed(2);
+    // Cash-basis: fold today's wallet top-up CASH into revenue (real money in
+    // through the gateway), the day it landed. AOV stays storefront-only —
+    // top-ups aren't orders — so it's computed before the fold. Store credit
+    // spent on orders is a memo line, never re-added (see topupCashReceived).
     const aov = orders ? +(revenue / orders).toFixed(2) : 0;
-    res.json({ success: true, channels, summary: { revenue, orders, aov, active, total: Object.keys(channels).length } });
+    const tu = topupCashReceived(tdb(), today, today);
+    const creditRedeemed = storeCreditRedeemed(tdb(), today, today);
+    revenue = +(revenue + tu.received).toFixed(2);
+    res.json({ success: true, channels, summary: {
+      revenue, orders, aov, active, total: Object.keys(channels).length,
+      topups_received: tu.received, store_credit_redeemed: creditRedeemed,
+    } });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -11147,6 +11213,21 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   kpi.revenue     = +(Number(kpi.revenue || 0) + gySales.revenue).toFixed(2);
   kpiPrev.revenue = +(Number(kpiPrev.revenue || 0) + gySalesPrev.revenue).toFixed(2);
 
+  // ── Fold wallet top-up CASH into REVENUE (cash-basis) ──
+  // Real money loaded into wallets is booked as revenue the day it lands, the
+  // same as order.total and gzgrocery takings. Like gzgrocery it lifts REVENUE
+  // only — never the order count, AOV, or customer metrics (a top-up isn't a
+  // storefront order). Store credit later spent on an order is NOT re-counted
+  // (order.total already excludes balance_used). See topupCashReceived.
+  const tuSales     = topupCashReceived(tdb(), from, to, { hourly });
+  const tuSalesPrev = topupCashReceived(tdb(), prevFrom, prevTo, { hourly: false });
+  kpi.revenue     = +(Number(kpi.revenue || 0) + tuSales.received).toFixed(2);
+  kpiPrev.revenue = +(Number(kpiPrev.revenue || 0) + tuSalesPrev.received).toFixed(2);
+  // Store credit redeemed against orders in the window — a memo figure the
+  // dashboard surfaces alongside revenue so "top-up used" is visible; never
+  // added to revenue.
+  const creditRedeemed = storeCreditRedeemed(tdb(), from, to);
+
   const visitsSql = `
     SELECT COUNT(*) AS visits,
            COUNT(DISTINCT session_id) AS sessions,
@@ -11176,6 +11257,10 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     // Orders stay storefront-only on both sides.
     const gyBase = guanyiPickupSales(tdb(), baseFrom, baseTo, { hourly: false });
     bk.revenue = Number(bk.revenue || 0) + gyBase.revenue;
+    // Blend top-up cash into the baseline too, so "Today vs a typical day"
+    // compares like with like (today's revenue already includes it above).
+    const tuBase = topupCashReceived(tdb(), baseFrom, baseTo, { hourly: false });
+    bk.revenue = Number(bk.revenue || 0) + tuBase.received;
     const fo = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}`).get().d;
     const fc = tdb().prepare(`SELECT MIN(date(created_at, '${TZ}')) AS d FROM retail_customers`).get().d;
     const firstD = [fo, fc].filter(Boolean).sort()[0] || null;
@@ -11275,6 +11360,10 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     const key = hourly ? String(t.bucket).slice(0, 2) : t.bucket;
     const g = gySales.byBucket[key];
     if (g) { t.revenue = +(Number(t.revenue || 0) + g.revenue).toFixed(2); }
+    // Fold top-up cash into the same revenue curve (cash-basis) so the trend
+    // matches the headline. tuSales buckets are 'HH' (hourly) or 'YYYY-MM-DD'.
+    const tuB = tuSales.byBucket[key];
+    if (tuB) { t.revenue = +(Number(t.revenue || 0) + tuB.revenue).toFixed(2); }
   }
 
   // ── "Typical {weekday}" ghost curve (single-day view only). The hourly-average
@@ -11303,9 +11392,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       for (const r of rows) sum[r.b] = Number(r.revenue || 0);
       for (const d of cand) {
         const gy = guanyiPickupSales(tdb(), d, d, { hourly: true });
+        const tu = topupCashReceived(tdb(), d, d, { hourly: true });
         for (let h = 0; h < 24; h++) {
-          const g = gy.byBucket[String(h).padStart(2, '0')];
+          const hk = String(h).padStart(2, '0');
+          const g = gy.byBucket[hk];
           if (g) sum[h] += Number(g.revenue || 0);
+          const tb = tu.byBucket[hk];
+          if (tb) sum[h] += Number(tb.revenue || 0);
         }
       }
       typical = sum.map(v => +(v / cand.length).toFixed(2));
@@ -11503,6 +11596,7 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
            COALESCE(SUM(shipping_fee), 0)   AS delivery_fee,
            COALESCE(SUM(voucher_amount), 0) AS voucher_total,
            COALESCE(SUM(points_amount), 0)  AS points_total,
+           COALESCE(SUM(balance_used), 0)   AS balance_total,
            COALESCE(SUM(total), 0)          AS net_total
       FROM retail_orders
      WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?`).get(from, to);
@@ -11654,6 +11748,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       marketing: { vouchers, points },
       traffic: { scenes },
       heat, cohorts, cohortSizes, composition,
+      // Wallet economics for the window. `received` = real top-up cash in
+      // (already folded into kpis.revenue, cash-basis); `redeemed` = store
+      // credit spent on orders (a memo — NOT in revenue, shown so "top-up used"
+      // is visible and the composition subtotal→net gap is explained).
+      topups: { received: tuSales.received, redeemed: creditRedeemed },
       checkout,
       articleViews,
     },

@@ -353,6 +353,15 @@ async function salesInit() {
     set('sales-sum-rev', money(s.revenue));
     set('sales-sum-orders', num(s.orders));
     set('sales-sum-aov', money(s.aov));
+    // Revenue is cash-basis: it includes wallet top-up cash taken today. Spell
+    // that out under the figure so top-ups (and store credit spent) are visible
+    // rather than silently folded in. Falls back to the plain "today" label.
+    const tuIn = Number(s.topups_received || 0);
+    const scUsed = Number(s.store_credit_redeemed || 0);
+    const noteBits = [];
+    if (tuIn > 0)   noteBits.push(cuT(`incl. ${money(tuIn)} top-ups`, `含充值 ${money(tuIn)}`));
+    if (scUsed > 0) noteBits.push(cuT(`${money(scUsed)} store credit used`, `储值消费 ${money(scUsed)}`));
+    set('sales-sum-rev-note', noteBits.length ? noteBits.join(' · ') : cuT('today', '今日'));
     const active = document.getElementById('sales-sum-active');
     if (active) active.innerHTML = num(s.active) + ' <span class="sales-of">/ ' + (s.total || 3) + '</span>';
     const fill = (k, ch) => {

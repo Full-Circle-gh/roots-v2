@@ -3320,17 +3320,35 @@ function dashRenderComposition() {
   const host = $('#db-composition');
   if (!host) return;
   const c = DASH_DATA.composition || {};
+  const tp = DASH_DATA.topups || {};
   const product  = Number(c.product_total || 0);
   const delivery = Number(c.delivery_fee || 0);
+  const balance  = Number(c.balance_total || 0);   // store credit spent on orders
   const discount = Number(c.voucher_total || 0) + Number(c.points_total || 0);
-  const net      = Number(c.net_total || 0);
-  if (!product && !delivery && !net) { host.innerHTML = '<div class="db-muted">No revenue in range · 区间内无收入</div>'; return; }
+  const net      = Number(c.net_total || 0);       // order.total = cash residual only
+  const tuRecv   = Number(tp.received || 0);        // real top-up cash in (already in revenue)
+  const tuUsed   = Number(tp.redeemed != null ? tp.redeemed : balance);  // store credit redeemed
+  if (!product && !delivery && !net && !tuRecv) { host.innerHTML = '<div class="db-muted">No revenue in range · 区间内无收入</div>'; return; }
   const base = (product + delivery) || 1;
   // The mockup: one two-segment composition bar (ink at two weights), then a
   // legend line — products / delivery fees / net after discounts. The discount
-  // detail rides the net figure as a hover title.
-  const netTitle = discount > 0
-    ? escapeAttr(cuT(`after ${dashMoney(discount)} in voucher and point discounts`, `已扣除优惠券与积分让利 ${dashMoney(discount)}`))
+  // detail rides the net figure as a hover title. Store credit spent is folded
+  // into that detail so subtotal → net reconciles (net = products + delivery −
+  // discounts − store credit); a top-up line makes prepaid cash visible.
+  const deductParts = [];
+  if (discount > 0) deductParts.push(cuT(`${dashMoney(discount)} in voucher and point discounts`, `优惠券与积分让利 ${dashMoney(discount)}`));
+  if (balance > 0)  deductParts.push(cuT(`${dashMoney(balance)} paid from store credit`, `门店储值抵扣 ${dashMoney(balance)}`));
+  const netTitle = deductParts.length
+    ? escapeAttr(cuT(`after ${deductParts.join(' and ')}`, `已扣除 ${deductParts.join('、')}`))
+    : '';
+  // Wallet line: top-ups received (cash in, counted in revenue on the day loaded)
+  // and store credit used on orders (a memo — already recognised at top-up time,
+  // not re-counted here). Shown only when there's wallet activity in the range.
+  const walletLine = (tuRecv > 0 || tuUsed > 0)
+    ? `<div class="db-comp-wallet">
+         <span><b>${dashMoney(tuRecv)}</b> <em>${cuT('top-ups received', '钱包充值')}</em></span>
+         <span><b>${dashMoney(tuUsed)}</b> <em>${cuT('store credit used', '储值消费')}</em></span>
+       </div>`
     : '';
   host.innerHTML = `
     <div class="db-comp-bar">
@@ -3341,7 +3359,7 @@ function dashRenderComposition() {
       <span><b>${dashMoney(product)}</b> <em>products · 商品</em></span>
       <span><b>${dashMoney(delivery)}</b> <em>delivery fees · 运费</em></span>
       <span class="net"${netTitle ? ` title="${netTitle}"` : ''}><em>net after discounts · 折后净额</em> <b>${dashMoney(net)}</b></span>
-    </div>`;
+    </div>${walletLine}`;
 }
 
 // ── Cohort retention (summary tiles + weighted curve + matrix) ──
@@ -3613,8 +3631,9 @@ function dashAiDigest() {
     revenue_composition: D.composition ? {
       products: r2(D.composition.product_total), delivery_fees: r2(D.composition.delivery_fee),
       voucher_discounts: r2(D.composition.voucher_total), point_discounts: r2(D.composition.points_total),
-      net: r2(D.composition.net_total),
+      store_credit_used: r2(D.composition.balance_total), net: r2(D.composition.net_total),
     } : null,
+    wallet: D.topups ? { topups_received: r2(D.topups.received), store_credit_redeemed: r2(D.topups.redeemed) } : null,
     busiest_hours: (D.heat || []).slice().sort((a, b) => b.orders - a.orders).slice(0, 3)
       .map(h => ({ weekday: DASH_DOW_EN[h.dow], hour: h.hour, orders: h.orders })),
     top_products: (D.topProducts || []).slice(0, 8).map(p => ({ name: p.name_en || p.name_cn, units: p.units, revenue: r2(p.revenue) })),
