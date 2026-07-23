@@ -36,11 +36,18 @@ Scale markers: `routes/retail.js` ≈ 23k lines (the customer API), `routes/ai.j
 
 ## 1. ⚠️ Deploy model — commits are live deploys
 
-A **post-commit git hook** (`scripts/deploy-changed.sh` → `deploy-apply.sh`) **and** a GitHub Action
-(`.github/workflows/deploy.yml`) ship changed files to production on every push to **`main`**:
-syntax-gate → backup → install → `npm install` (if `package*.json` shipped) → `pm2 restart` →
-health-probe → **auto-rollback** on crash-loop.
+**CI owns deploys** (changed 2026-07-17, commit `ecbce2d`). The GitHub Action
+(`.github/workflows/deploy.yml`) is now the **single** deployer on every push to **`main`**:
+gating **eslint** (setup-node + `npm ci --ignore-scripts` + eslint on the changed `.js`, so a lint
+error now **blocks** the deploy) → syntax-gate → backup → install → `npm install` (if `package*.json`
+shipped) → `pm2 restart` → health-probe → **auto-rollback** on crash-loop.
 
+- The local **post-commit hook** now **only mirrors to GitHub** (`auto-push.sh`) — the push is what
+  fires the deploy workflow. The old *second, local* deploy (`scripts/deploy-changed.sh`) was removed
+  from the hook: it raced CI on a shared server `__stage__` dir, always lost, and printed a spurious
+  red error. `deploy-changed.sh` stays on disk as the **break-glass** tool — run it by hand to re-ship
+  `HEAD` when GitHub/CI is down. (`scripts/post-commit.hook`, the tracked install source, was synced to
+  push-only.) Both paths still invoke the same `deploy-apply.sh` (backup / restart / probe / rollback).
 - **Deployable paths:** `public/ routes/ lib/ middleware/ scripts/` + `server.js`, `database.js`,
   `schema.sql`, `package.json`, `package-lock.json`. **Non-deployable:** `*.md`, `*.csv`, `miniapp/`
   (WeChat build, shipped via DevTools per tenant).
@@ -105,10 +112,29 @@ whitelist. **Impersonation:** `system.*` mints a one-time `platform_impersonatio
 ### Operator RBAC (resolved fresh every request)
 `requireRetailAdmin` (`routes/retail.js:~86`) builds `req.backendUser`, then
 `lib/operator-caps.resolveOperator()` computes **`effective = (preset ∪ grants) − revokes ∩
-entitledFeatures`**; **owner → ALL** is an absolute bypass (`lib/capabilities.js`). Enforcement is
-central + mutation-only: `lib/cap-routes.js` `requiredCapFor(method, path)` returns a cap (or an
-any-of array) for POST/PUT/PATCH/DELETE, `null` (fail-open) for GET/unmapped. Gated behind
-`tenant.rbac_enforce` so it ships dark. Client `can()` (`public/retail-admin/01-core.js`) is cosmetic.
+entitledFeatures`**; **owner → ALL** is an absolute bypass (`lib/capabilities.js`).
+
+**Two enforcement realms — don't conflate them:**
+- **`/api/retail-admin/*`** (the big storefront API, `requireRetailAdmin`): central + mutation-only via
+  `lib/cap-routes.js` `requiredCapFor(method, path)` — a cap (or an **any-of** array) for
+  POST/PUT/PATCH/DELETE, `null` (fail-open) for GET/unmapped. **Still ships dark** behind
+  `tenant.rbac_enforce` (off everywhere). `041274e` fixed six path-shape misses (four fail-open) and
+  split **`orders:dispatch_courier`** out of `orders:edit` (booking a same-city courier debits the
+  store's prepaid balance, so it shouldn't share a cap with editing a note; granted to the dispatch +
+  fulfillment presets). `PERMISSIONS_PLAN.md §11` records the **three blockers owed before
+  `rbac_enforce` can flip** (fail-open default, reads-open GET scoping, `/integrations` creds).
+- **`/api/backend/*`** (the operator account/team/billing realm): `lib/require-cap.js` `requireCap`
+  **enforces UNCONDITIONALLY** — no flag, live the moment it deployed (`94e38c7`). `POST/PUT /team` +
+  `/team/:id/password` need **`team:manage`** (owner/admin/manager); `/team/:id/permissions` needs
+  **`team:permissions`** (**owner only** — the admin preset excludes it), and `roleAboveCaps` blocks
+  granting/resetting a role above the caller's own. (`require-cap.js` also centralizes the shared
+  `requireBackend`/`loadCaller`; `billing*.js` + `backend-notices.js` dropped their local copies.)
+
+Client `can()` (`public/retail-admin/01-core.js`) is still **cosmetic** (server is authority) — but as
+of the dashboard work it is **genuinely differentiated per resolved cap set**, not "everyone resolves
+to the FULL set". It drives which dashboard *Needs-you* sub-cards render (`DASH_CARD_CAP`) and gates
+the ⌘K palette's reads on `can('*:view')`. Both take effect immediately and are view-layer only; the
+GET endpoints stay open to any signed-in operator (reads-open is one of the blockers above).
 
 ### Secrets & provisioning
 - `lib/secret-box.js`: AES-256-GCM, versioned token `v1.<iv>.<tag>.<ct>`; `decrypt()` **throws on
@@ -290,6 +316,22 @@ OAuth2/JSON-RPC (`lib/eleme-client.js`, scaffold); WeCom ops alerts (`lib/ops-al
   `can()/setCaps()`. File map: `01-core` shell/nav, `02-settings-ops`, `03-dashboard`, `04-orders`,
   `05-marketing`, `06-delivery`, `07-content-billing`, `08-customers`, `09-products`, `10-extras`
   (i18n engine), `11-meituan`, `12-guanyi`, `13-activity`, `14-eleme`.
+- **Role-shaped dashboard** (`03-dashboard.js`): the owner view is a 4-card morning glance
+  (Recap · Needs-you · Today · Customers — Today lost its intraday chart, that's a Reports job);
+  warehouse / dispatch / customer-service / `/dashboard/ops` each get role-filtered Recap + Unhandled
+  cards. Which cards render is gated **two ways**: money-card *presence* on the reliable `body.pos-*`
+  CSS role string; *Needs-you* sub-cards on `DASH_CARD_CAP` → `can()/canAny()` against the operator's
+  resolved caps (self-composing — a per-user grant toggles a row with no code change).
+- **Write-in-flight discipline:** state-changing controls disable their trigger while the write is in
+  flight (a double-click was double-submitting). `adminWrite(btnIds)` handles the common case; controls
+  carrying an SVG icon use a manual `btn.disabled` guard instead (adminWrite's `textContent='…'` would
+  strip the icon). `transition()` (order status writes) is likewise disabled mid-write.
+- **Refund `paying` state:** the operator UI models the transient 7th `refund_status='paying'` (payout
+  claimed, money moving through the gateway) — dusk-tinted badge/banner + a non-actionable in-progress
+  note, and crucially **no Approve/Payout buttons** while money is mid-flight.
+- **Embedded Profile frame** (`/backend/account` in `#profFrame`): a two-way, origin-pinned
+  `postMessage` contract (`fc-theme` / `fc-lang`) keeps theme + language in sync across the iframe
+  boundary (repaint-only, no localStorage write-back, so the echo terminates in one round trip).
 - **Bilingual convention:** operator UI renders **one live language** via `cuT('en','中文')` (defined
   in `10-extras.js`); kitchen app.html uses a DOM text-node/`data-lang-block` splitter. A label
   **leaks** when JS injects bilingual text without `data-no-i18n`; `tagBlockPair` pairs adjacent
@@ -322,7 +364,8 @@ OAuth2/JSON-RPC (`lib/eleme-client.js`, scaffold); WeCom ops alerts (`lib/ops-al
   `topup_packages`/`topup_transactions`; `retail_delivery_zones`; `retail_notifications`/`feedback`/
   `feedback_messages`/`subscriptions`/`broadcasts`; `storefront_config`(KV); `retail_media`/
   `media_folders`/`page_templates`; `retail_article_views`/`product_versions`; `retail_stores`/
-  `store_products`/`store_stock`/`stock_ledger`.
+  `store_products`/`store_stock`/`stock_ledger`; `retail_shipments` (+ `package_count` — 一单多件
+  box count for a JD waybill; NULL/1 = the ordinary single-box case).
 - **Integrations (~15):** `meituan_stores/orders/settlements/balance_flow/product_map/sync_queue/
   bundles/bundle_components/sync_log/listings/listing_jobs`; `delivery_jobs`(Qingyun)/`qingyun_sync_log`;
   `eleme_tokens/shops/product_map/sync_queue/order_import/sync_log`; `guanyi_product_map/sync_queue/
@@ -411,3 +454,49 @@ stay on your radar:
   from-scratch boot on an empty DB works (verified serving).
 - **Docs:** added `docs/DEEP-DIVE.md` (mechanism-level, non-kitchen) and this file.
 - Verified all six risk classes above are already fixed in current code; booted the app end-to-end.
+
+---
+
+## 17. Changelog — 2026-07-17 → 07-21 (landed on `main`)
+
+Filling the gap since this doc was last written (2026-07-16). Grouped by theme; the invariant-level
+changes (deploy model, RBAC realms) are already folded into §1 and §3 above.
+
+- **Deploy model — CI is now the single deployer** (`ecbce2d`). Post-commit hook only mirrors to
+  GitHub; the local `deploy-changed.sh` deploy was dropped (raced CI, always lost); `deploy.yml` gained
+  a **gating** eslint step before ship. `deploy-changed.sh` is now break-glass. (Full detail in §1.)
+- **RBAC — `/api/backend/*` team management enforces live** (`94e38c7`): new `lib/require-cap.js`
+  (`requireCap`/`roleAboveCaps`/`loadCaller`); `team:manage` (owner/admin/manager) and
+  `team:permissions` (owner-only) gate the team routes **unconditionally** (not behind `rbac_enforce`).
+  Live effect on Roots: three admins keep create/edit/reset but lose the permission matrix — only the
+  owner edits operator permissions now. Separately (`041274e`, still dark) the retail-admin
+  `cap-routes.js` map got six path-shape fixes + a new `orders:dispatch_courier` cap. (Detail in §3.)
+- **Role-shaped dashboard** (`6bc2e5b`, `2fb130a`, `8ab2410`, `ba02fd6`, `62c6534`, `0013673`,
+  `1272941`): owner 4-card glance; warehouse / dispatch-CS / `/dashboard/ops` role-filtered views; dead
+  cards + their orphan CSS swept; Needs-you sub-cards now gate on caps (`DASH_CARD_CAP`) not the role
+  string; the stale `01-core.js` comment claiming caps were "fully dark" was corrected. (Detail in §11.)
+- **Meituan / order status reconciliation** (`94d7aae`, `38a27b5`, `e624602`, `d18a6c0`):
+  `internalStatusForChannel()` now counts 妥投/已妥投/签收成功 as delivered (the badge was stuck on "On
+  the way" while the card said "Delivered"); the drawer's header pill reconciles the live courier stage
+  even while the order is still `preparing`; a Meituan "Delivered" label gets a **"Platform-reported ·
+  rider still on the way"** caveat when the linked courier job shows no drop-off yet (trust the live
+  rider, not Meituan's bookkeeping); a delivered/cancelled order hides its frozen "En route" rider line.
+- **Refund `paying` state rendered** (`514bbfc`, `5391079`): the transient 7th `refund_status='paying'`
+  no longer leaks as an untranslated literal — badge/banner/in-progress note, no Approve/Payout buttons
+  mid-flight, and the in-progress note live-toggles on language switch. (Detail in §11.)
+- **Write-in-flight discipline** (`74c5f83`, `b078697`, `b1bed6a`): 12 controls disabled while their
+  write is in flight (double-click double-write); `transition()` disabled during a status write; added
+  the missing **paid → dispatched** button. (Pattern in §11.)
+- **JD 一单多件 (multi-box waybill)** (`63add46`): staff set a box count when creating a JD label; JD
+  keeps one tracking number but prints one box label per piece. New `retail_shipments.package_count`
+  column (`lib/jd.js`, `routes/retail.js`, `04-orders.js`).
+- **Orders — customer-scoped list** (`935979a`, `eb2a8db`): a customer drawer's "View all N orders"
+  link scopes the Orders tab to that customer (`AND o.customer_id = ?` on the shared `filterSql`, exact
+  FK, `Number.isFinite`-guarded) with a removable chip; Esc + outside-click route the drawer dismiss
+  through back-to-customer.
+- **Embedded Profile theme/language sync** (`12186ee`): origin-pinned two-way `postMessage`
+  (`fc-theme`/`fc-lang`) between the shell and the `/backend/account` iframe. (Detail in §11.)
+- **Products** (`902cfe4`): low-stock threshold moved to Settings → Operations → Stores (tenant
+  default; per-store overrides already existed); the Bulk button became a permanent (greyed-until-
+  selected) bulk-action bar.
+- **Qingyun** (`2e5bab7`): debounce the not-logged-in alert so a transient blip doesn't page ops.

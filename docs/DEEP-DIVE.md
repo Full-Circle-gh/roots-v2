@@ -26,11 +26,14 @@ off one codebase and one schema:
 **Roots is tenant #1 of "Full Circle."** The multi-tenant machinery is built and tested but
 **gated behind `TENANT_DATA_ISOLATION`** — today Roots is the only live tenant.
 
-**⚠️ Commit = production deploy.** A post-commit hook + `.github/workflows/deploy.yml` ship
-changed `public/ routes/ lib/ middleware/ scripts/` + `server.js/database.js/schema.sql` to
-`47.239.89.63` (syntax-gate → backup → pm2 restart → health-probe → **auto-rollback**). Only
-`main` deploys; `.md/.csv/miniapp/` are non-deployable (miniapp ships via WeChat DevTools per
-tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
+**⚠️ Commit = production deploy.** As of 2026-07-17 (`ecbce2d`) **CI is the single deployer**:
+`.github/workflows/deploy.yml` ships changed `public/ routes/ lib/ middleware/ scripts/` +
+`server.js/database.js/schema.sql` to `47.239.89.63` (gating **eslint** → syntax-gate → backup →
+pm2 restart → health-probe → **auto-rollback**). The local post-commit hook now **only mirrors to
+GitHub** (that push is what triggers the workflow); the old second, local deploy was removed because
+it raced CI on a shared `__stage__`. `scripts/deploy-changed.sh` remains as the manual break-glass
+ship. Only `main` deploys; `.md/.csv/miniapp/` are non-deployable (miniapp ships via WeChat DevTools
+per tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
 
 ---
 
@@ -53,11 +56,22 @@ tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
   `lib/operator-caps.js` `resolveOperator()` computes
   **`effective = (preset ∪ grants) − revokes ∩ entitledFeatures`**; **owner → ALL** is an absolute
   bypass (`lib/capabilities.js`).
-- Enforcement is **central + mutation-only**: `lib/cap-routes.js` `requiredCapFor(method, path)`
-  returns a cap (or an **any-of array**) for POST/PUT/PATCH/DELETE; `null` (fail-open) for GET and
-  unmapped routes. Gated behind `tenant.rbac_enforce` so it ships dark. Store scope adds
-  `storeId ∈ req.scopeStores`.
-- Client gating (`can()` in `public/retail-admin/01-core.js`) is **cosmetic**; the server is authority.
+- **Two enforcement realms — don't conflate them:**
+  - **`/api/retail-admin/*`** (`requireRetailAdmin`): **central + mutation-only** via `lib/cap-routes.js`
+    `requiredCapFor(method, path)` — a cap (or an **any-of array**) for POST/PUT/PATCH/DELETE, `null`
+    (fail-open) for GET/unmapped. **Still ships dark** behind `tenant.rbac_enforce`. Store scope adds
+    `storeId ∈ req.scopeStores`. `041274e` corrected six path-shape misses and split
+    **`orders:dispatch_courier`** out of `orders:edit` (booking a same-city courier debits prepaid
+    balance). Three blockers are owed before `rbac_enforce` can flip (fail-open default, reads-open GET
+    scoping, `/integrations` creds — `PERMISSIONS_PLAN.md §11`).
+  - **`/api/backend/*`** (`requireBackend` in `lib/require-cap.js`): `requireCap` **enforces
+    unconditionally** — no flag, live since `94e38c7`. `team:manage` (owner/admin/manager) gates
+    `POST/PUT /team` + password reset; `team:permissions` (**owner only**) gates the permission matrix;
+    `roleAboveCaps` blocks granting a role above the caller's own.
+- Client gating (`can()` in `public/retail-admin/01-core.js`) is **cosmetic** (server is authority) but
+  now **genuinely differentiated per resolved cap set** — it drives which dashboard *Needs-you*
+  sub-cards render and gates the ⌘K palette's reads on `can('*:view')` (both view-layer only; the GETs
+  stay open).
 
 ### Three session realms + impersonation
 - `session.userId` (kitchen) / `backendUserId` (operator) / `platformAdminId` (platform) never collide.
@@ -125,7 +139,9 @@ tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
   (`reverseOrderPoints`) + referral (`reverseOrderReferral`) + lifetime commission.
 - Payout uses an atomic `approved→paying` claim so double-payout is impossible; direct (operator)
   refunds use a `NOT IN (pending,reviewing,approved,paying)` claim to avoid colliding with the
-  customer-request flow.
+  customer-request flow. The transient `paying` state (money moving through the gateway) is now
+  surfaced in the operator UI as a non-actionable in-progress note with **no Approve/Payout buttons**
+  while the payout is mid-flight (see §6).
 
 ### Wait-for-restock
 - Order parks at `awaiting_restock` (no reservation). `inventory.adjustStock` →
@@ -173,6 +189,9 @@ tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
 - JD JOS = MD5 `secret+sortedKV+secret`; JD JDL cloud-print = fixed-order MD5 with **separate app
   keys** (mixing them silently breaks waybills); Nuonuo = OAuth + HMAC-SHA1 (base64); Feie =
   SHA1(`user+ukey+stime`); Aliyun SMS = POP HMAC-SHA1 with the `secret&`-trailing-ampersand key.
+- **JD 一单多件 (multi-box):** staff set a box count when creating a JD label; JD keeps **one** tracking
+  number but returns/prints one box label per piece from the same waybill. Persisted as
+  `retail_shipments.package_count` (NULL/1 = ordinary single box); handled in `lib/jd.js`.
 - **Kuaidi100** is a free webhook-subscription model (they poll carriers, push to a per-waybill
   salted callback), with ~40 ordered CN→EN regex rules that preserve location proper-nouns and swap
   only the verbs.
@@ -230,6 +249,21 @@ tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
 - **retail-admin** = 10–14 numbered files in **one global scope, load-order-critical** (hence
   `/* eslint-disable no-undef */`). `01-core.js` bootstraps `$`, `api()`, `toast`, `ICONS`, RBAC
   `can()`/`setCaps()`/`applyCapGates()`. **Bump `public/sw.js` cache version when admin JS changes.**
+- **Role-shaped dashboard** (`03-dashboard.js`): owner sees a 4-card morning glance (Recap · Needs-you ·
+  Today · Customers; Today dropped its intraday chart — that's a Reports job); warehouse / dispatch-CS /
+  `/dashboard/ops` get role-filtered Recap + Unhandled views. Money-card *presence* gates on the
+  reliable `body.pos-*` role string; *Needs-you* sub-cards on `DASH_CARD_CAP` → `can()/canAny()` against
+  the resolved cap set (self-composing — a per-user grant toggles a row with no code change).
+- **Write-in-flight discipline:** state-changing controls disable their trigger while the write is in
+  flight (double-click was double-submitting). `adminWrite(btnIds)` covers the common case; icon-bearing
+  buttons use a manual `btn.disabled` guard (adminWrite's `textContent='…'` would strip the SVG);
+  `transition()` (status writes) is disabled mid-write.
+- **Refund `paying` render:** the transient 7th `refund_status='paying'` is modelled across
+  `refundStepBadge`/`refundBadge`/`drawerRefundBanner` (dusk tint) with a non-actionable in-progress
+  note and **no Approve/Payout buttons** while money is mid-flight (front-end only; no schema change).
+- **Embedded Profile frame:** `/backend/account` runs in `#profFrame`; a two-way, origin-pinned
+  `postMessage` contract (`fc-theme`/`fc-lang`) keeps theme + language synced across the boundary
+  (repaint-only, no localStorage write-back, so the echo terminates in one round trip).
 - **i18n engine** (`10-extras.js`): both languages live in the DOM as `EN · CN` text nodes /
   `data-lang-block` pairs; toggling rewrites `nodeValue` in place (no reflow), with an anti-FOUC
   `visibility:hidden` guard until `data-ui-lang` is stamped. A label **leaks** when JS injects
