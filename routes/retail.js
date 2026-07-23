@@ -10873,13 +10873,21 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
         WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
     ).get(req.customer.id, v.id);
     if (!grant) {
-      // A PUBLIC signup-only coupon (e.g. one printed on the home Coupon
-      // block) has a code that's openly displayed — nothing to hide — so tell
-      // the customer plainly it's new-customers-only instead of a misleading
-      // "invalid code". A truly private code (is_public=0) still returns the
-      // generic not_found so codes can't be enumerated by probing.
-      if (v.is_public && v.auto_grant_signup) {
-        return res.status(403).json({ success: false, error: 'signup_only' });
+      // A signup/welcome coupon the customer doesn't hold. Its code is meant to
+      // be claimed by new customers (surfaced on the home Coupon block), so tell
+      // them plainly WHY instead of a misleading "invalid code" — the grant is
+      // issued only once a phone is on file, and is withheld from returning
+      // customers. Distinguish the two so a genuine first-timer who hasn't bound
+      // her phone yet is told to do so rather than "it doesn't exist". A truly
+      // private NON-signup code still returns the generic not_found so codes
+      // can't be enumerated by probing.
+      if (v.auto_grant_signup) {
+        const cust = tdb().prepare('SELECT phone FROM retail_customers WHERE id = ?').get(req.customer.id);
+        const hasPhone = !!(cust && String(cust.phone || '').trim());
+        // No phone yet → the deferred signup grant simply hasn't run; binding a
+        // phone claims it. Phone on file but still no grant → withheld (returning
+        // customer / already used) → new-customers-only.
+        return res.status(403).json({ success: false, error: hasPhone ? 'signup_only' : 'signup_needs_phone' });
       }
       return res.status(404).json({ success: false, error: 'not_found' });
     }

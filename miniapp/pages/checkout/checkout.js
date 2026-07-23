@@ -1945,9 +1945,24 @@ Page({
         icon: 'success',
       });
     } catch (e) {
+      // A welcome coupon whose grant hasn't been issued yet (no phone on file)
+      // gets an actionable prompt — the grant lands once the customer binds a
+      // phone — rather than a dead-end toast.
+      if (e.message === 'signup_needs_phone') {
+        wx.showModal({
+          title: this.data.lang === 'cn' ? '领取新用户优惠' : 'Claim welcome coupon',
+          content: this.data.lang === 'cn'
+            ? '请先绑定手机号，即可领取新用户优惠券。'
+            : 'Add your phone number to claim your welcome coupon.',
+          showCancel: false,
+          confirmText: this.data.lang === 'cn' ? '知道了' : 'OK',
+        });
+        return;
+      }
       const map = {
         not_found:                 this.data.lang === 'cn' ? '优惠码无效' : 'Coupon not found',
         signup_only:               this.data.lang === 'cn' ? '仅限新用户' : 'New customers only',
+        signup_needs_phone:        this.data.lang === 'cn' ? '请先绑定手机领取' : 'Add phone to claim',
         not_applicable:            this.data.lang === 'cn' ? '订单未达使用门槛' : "Doesn't apply yet",
         per_customer_limit_reached:this.data.lang === 'cn' ? '此优惠已使用' : 'Already used',
       };

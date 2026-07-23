@@ -76,6 +76,7 @@ Page({
       toastValid: 'Code accepted.',
       toastBadCode: 'Invalid code.',
       toastSignupOnly: 'New customers only',
+      toastNeedPhone: 'Add your phone to claim',
       toastSavedForCheckout: 'Saved for checkout.',
     },
   },
@@ -111,6 +112,7 @@ Page({
         toastValid: '优惠码有效。',
         toastBadCode: '无效的优惠码。',
         toastSignupOnly: '仅限新用户',
+        toastNeedPhone: '请先绑定手机领取',
         toastSavedForCheckout: '已保存到结算页。',
       },
     });
@@ -258,6 +260,11 @@ Page({
         wx.showToast({ title: this.data.copy.toastSavedForCheckout, icon: 'success' });
         this.setData({ codeInput: '' });
         this.refresh();
+      } else if (msg === 'signup_needs_phone') {
+        // New-customer coupon whose grant hasn't issued yet — no phone on file.
+        // Binding a phone claims it; guide the customer there instead of a
+        // misleading "invalid code".
+        wx.showToast({ title: this.data.copy.toastNeedPhone, icon: 'none' });
       } else if (msg === 'signup_only') {
         // Public new-customers-only coupon, redeemed by a returning customer.
         wx.showToast({ title: this.data.copy.toastSignupOnly, icon: 'none' });
