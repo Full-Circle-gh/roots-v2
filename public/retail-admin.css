@@ -194,11 +194,12 @@
   ::selection { background: var(--ring); color: var(--text-1); }
 
   /* ── Rail width — the ONE source of truth for the left rail's width ────
-     Consumed by four rules: .tabs width, main margin-left, the embedded editors'
-     left, and the topbar's left (it sits right of the rail now). body.nav-collapsed
-     swaps it to the folded width, so every consumer folds in lockstep with the
-     rail. This is a LAYOUT variable and deliberately lives outside the --td-*
-     colour tokens. */
+     Consumed by: .tabs width, main margin-left, the embedded editors' left, and
+     the topbar's left PADDING (which keeps its crumb flush to the rail). The
+     topbar's own left EDGE stays 0 — it is locked full-width and does not read
+     this. body.nav-collapsed swaps it to the folded width, so those consumers
+     fold in lockstep with the rail. This is a LAYOUT variable and deliberately
+     lives outside the --td-* colour tokens. */
   :root { --rail-w: 236px; }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -209,18 +210,20 @@
     background: var(--bg-pane);
     border-bottom: 1px solid var(--line-soft);
     display: flex; align-items: center;
-    /* Left inset 14px (not the symmetric --s5) so #tb-page's crumb sits a hair
-       in from the seam with the rail. Right keeps --s5. */
-    padding: 0 var(--s5) 0 14px;
+    /* Left padding clears the rail so #tb-page's crumb hugs the rail's right edge
+       (+14px seam). It rides --rail-w so the crumb stays flush THROUGH the fold —
+       but the BAR itself never resizes or moves (see position below); only this
+       inner indent tracks the rail. Right keeps --s5. */
+    padding: 0 var(--s5) 0 calc(var(--rail-w) + 14px);
     gap: var(--s4);
-    /* Content-width — the topbar spans only the area RIGHT of the rail
-       (2026-07-24): left rides --rail-w, so the bar folds in lockstep with the
-       rail and no longer overlaps it. The brand moved back to the rail head
-       (see .nav-brand below), which this bar used to cover at left:0. z-index:12
-       keeps the bar + its dropdowns above page content. On phones the rail is
-       hidden and this bar goes full-width + static (see the ≤720px block, which
-       also re-shows the topbar's own .brand). */
-    position: fixed; top: 0; left: var(--rail-w); right: 0; z-index: 12;
+    /* LOCKED FULL-WIDTH. left:0 unconditionally — the bar spans the whole window
+       and never moves; folding the rail changes ONLY the rail (the bar simply
+       shows more of itself on the left as the rail narrows). The rail (z:13) sits
+       ABOVE this bar, so the rail's brand head shows over the bar's top-left
+       corner rather than being covered. z:12 keeps the bar + its dropdowns above
+       page content. On phones the rail is hidden and this bar goes full-width +
+       static (see the ≤720px block, which also re-shows the topbar's own .brand). */
+    position: fixed; top: 0; left: 0; right: 0; z-index: 12;
   }
   /* Topbar brand — PHONES ONLY now. On desktop the brand lives in the rail head
      (.nav-brand); this copy is hidden by default and re-shown only in the ≤720px
@@ -476,7 +479,11 @@
     padding: 10px 10px 14px;
     background: var(--bg-pane);
     border-right: 1px solid var(--line-soft);
-    position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-w); z-index: 11;
+    /* z:13 sits ABOVE the full-width topbar (z:12) so the rail's brand head shows
+       over the bar's top-left corner instead of being covered by it. The bar's
+       own content (crumb + right cluster) is indented clear of the rail, so
+       nothing interactive is hidden. */
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-w); z-index: 13;
     overflow-y: auto; overflow-x: hidden;
   }
   /* Rail brand head — the brand lives HERE again (2026-07-24), at the top of the
@@ -583,14 +590,15 @@
 
   .tabs { transition: width var(--t-fast) ease, padding var(--t-fast) ease; }
   main    { transition: margin-left var(--t-fast) ease; }
-  /* The topbar rides the rail's left edge now (left:var(--rail-w)), so it folds
-     with the rail — animate left to keep it in step. */
-  .topbar { transition: left var(--t-fast) ease; }
+  /* The topbar is locked full-width and never moves; only its inner crumb indent
+     (padding-left) tracks the rail, so animate that to keep the crumb flush as
+     the rail folds. */
+  .topbar { transition: padding-left var(--t-fast) ease; }
 
-  /* Fold = swap the rail-width variable once; .tabs/main/editors/topbar all read
-     it, so they narrow in lockstep. The consuming properties still carry their
-     own transitions above, so the fold still animates. The topbar rides the rail
-     now (left:var(--rail-w)), folding with it. */
+  /* Fold = swap the rail-width variable once; .tabs/main/editors all read it, so
+     they narrow in lockstep. The consuming properties still carry their own
+     transitions above, so the fold still animates. The topbar stays full-width —
+     only its crumb padding tracks the fold; the bar itself does not move. */
   body.nav-collapsed { --rail-w: 62px; }
   body.nav-collapsed .tabs { width: var(--rail-w); padding-left: 8px; padding-right: 8px; }
   body.nav-collapsed main   { margin-left: var(--rail-w); }
