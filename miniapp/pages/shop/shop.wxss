@@ -31,8 +31,13 @@
   font-size: calc(48rpx * var(--font-scale));
   line-height: 1;
 }
+/* The rail layouts (list, list-compact, grid-2col, grid-3col) all use the
+   two-pane shell: a fixed-height flex column so the side-rail + main pane
+   scroll internally instead of the page scrolling. */
 .page-list,
-.page-list-compact { padding-bottom: 0; height: 100vh; display: flex; flex-direction: column; }
+.page-list-compact,
+.page-grid-2col,
+.page-grid-3col { padding-bottom: 0; height: 100vh; display: flex; flex-direction: column; }
 
 /* ─── Header ─────────────────────────────────────────────────────── */
 .header { padding: 60rpx 44rpx 24rpx; }
@@ -316,6 +321,16 @@
 
 .loading { display: grid; grid-template-columns: 1fr 1fr; gap: 32rpx; padding: 0 44rpx; }
 .loading-3 { grid-template-columns: 1fr 1fr 1fr; gap: 16rpx; padding: 0 28rpx; }
+
+/* ─── Grid inside the rail shell (grid-2col / grid-3col with side-rail) ── */
+/* The main pane is narrower than a full-width grid (the rail eats ~172rpx),
+   so tighten the horizontal padding + gaps to keep cards a comfortable size. */
+.list-main .grid-in-rail { padding-left: 24rpx; padding-right: 24rpx; }
+.list-main .grid-in-rail.grid-2 { gap: 20rpx; }
+.list-main .grid-in-rail.grid-3 { gap: 12rpx; padding-left: 16rpx; padding-right: 16rpx; }
+.loading-rail-grid { display: grid; gap: 20rpx; padding: 16rpx 24rpx; }
+.loading-rail-grid.grid-2 { grid-template-columns: 1fr 1fr; }
+.loading-rail-grid.grid-3 { grid-template-columns: 1fr 1fr 1fr; gap: 12rpx; padding: 16rpx; }
 
 .empty { padding: 200rpx 44rpx 0; text-align: center; }
 .empty-title { font-size: calc(56rpx * var(--font-scale)); font-weight: 500; margin-bottom: 16rpx; }

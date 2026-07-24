@@ -13,7 +13,7 @@
 
 
   <!-- ════ HEADER ═══════════════════════════════════════════════ -->
-  <block wx:if="{{isListLayout}}">
+  <block wx:if="{{isRailLayout}}">
     <view class="hdr-list">
       <view class="hdr-title f-bear">{{listTitle}}</view>
     </view>
@@ -26,14 +26,14 @@
   </block>
 
   <!-- ════ STICKY TOP — search / switcher / filters / category chips -->
-  <view class="sticky-top {{isListLayout ? '' : 'sticky-grid'}}">
-    <view class="search-bar {{isListLayout ? 'search-bar-list' : ''}}">
+  <view class="sticky-top {{isRailLayout ? '' : 'sticky-grid'}}">
+    <view class="search-bar {{isRailLayout ? 'search-bar-list' : ''}}">
       <view class="search-icon">🔍</view>
       <input class="search-input" placeholder="{{searchPlaceholder}}" value="{{query}}" bindinput="onSearchInput" confirm-type="search"/>
       <view wx:if="{{query}}" class="search-clear" bindtap="clearSearch">×</view>
     </view>
 
-    <view wx:if="{{!layoutLocked}}" class="view-switcher {{isListLayout ? 'view-switcher-list' : ''}}">
+    <view wx:if="{{!layoutLocked}}" class="view-switcher {{isRailLayout ? 'view-switcher-list' : ''}}">
       <view wx:for="{{layoutOptions}}" wx:key="key"
             class="vs-btn {{layout === item.key ? 'on' : ''}}"
             data-key="{{item.key}}" bindtap="setLayout"
@@ -83,9 +83,10 @@
       </scroll-view>
     </view>
 
-    <!-- Category chips (non-list layouts) — auto-highlights from scroll
-         and auto-scrolls horizontally to keep the active chip in view. -->
-    <scroll-view wx:if="{{!isListLayout}}" scroll-x class="chips"
+    <!-- Category chips (gallery layout only) — auto-highlights from scroll
+         and auto-scrolls horizontally to keep the active chip in view. The
+         rail layouts (list + grid) navigate via the left side-rail instead. -->
+    <scroll-view wx:if="{{!isRailLayout}}" scroll-x class="chips"
                  scroll-into-view="{{activeChipId}}"
                  scroll-with-animation
                  enhanced show-scrollbar="{{false}}">
@@ -109,8 +110,11 @@
     </scroll-view>
   </view>
 
-  <!-- ════ LIST + LIST-COMPACT ══════════════════════════════════ -->
-  <block wx:if="{{isListLayout}}">
+  <!-- ════ RAIL SHELL — LIST / LIST-COMPACT / GRID-2 / GRID-3 ═════ -->
+  <!-- Two-pane shell: a category side-rail + an internally-scrolling main
+       pane. The main pane renders stacked rows for the list layouts and a
+       product grid for grid-2col / grid-3col (isGridMain). -->
+  <block wx:if="{{isRailLayout}}">
     <view class="list-body">
       <scroll-view scroll-y class="list-side" enhanced show-scrollbar="{{false}}"
                    scroll-into-view="{{sidebarScrollId}}"
@@ -164,7 +168,15 @@
                    scroll-with-animation>
         <view id="top-anchor" class="top-anchor"></view>
 
-        <view wx:if="{{loading && !sections.length}}" class="loading-list">
+        <view wx:if="{{loading && !sections.length && isGridMain}}"
+              class="loading-rail-grid {{layout === 'grid-3col' ? 'grid-3' : 'grid-2'}}">
+          <view class="skeleton" style="height: 300rpx"></view>
+          <view class="skeleton" style="height: 300rpx"></view>
+          <view class="skeleton" style="height: 300rpx"></view>
+          <view wx:if="{{layout === 'grid-3col'}}" class="skeleton" style="height: 300rpx"></view>
+        </view>
+
+        <view wx:elif="{{loading && !sections.length}}" class="loading-list">
           <view class="skeleton list-row-skel"></view>
           <view class="skeleton list-row-skel"></view>
           <view class="skeleton list-row-skel"></view>
@@ -180,42 +192,78 @@
                 id="{{section.id}}" class="cat-section">
             <view wx:for="{{section.groups}}" wx:key="id" wx:for-item="group"
                   id="g-{{group.id}}" class="cat-group">
-              <view wx:if="{{group.label}}" class="list-section-head">
-                <view>
-                  <view class="list-section-kicker f-toni">{{group.label}}</view>
-                </view>
-                <view class="list-section-count f-gothic">{{group.countStr}}</view>
-              </view>
 
-              <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item"
-                    class="row {{layout === 'list-compact' ? 'row-compact' : ''}}"
-                    data-id="{{item.id}}" bindtap="openProduct">
-                <view wx:if="{{layout !== 'list-compact'}}" class="row-img">
-                  <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full" lazy-load/>
-                  <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
+              <!-- ── GRID main (grid-2col / grid-3col) ── -->
+              <block wx:if="{{isGridMain}}">
+                <view wx:if="{{group.label}}" class="grid-section-head">
+                  <view class="grid-section-kicker f-toni">{{group.label}}</view>
+                  <view class="grid-section-count f-gothic">{{group.countStr}}</view>
                 </view>
-                <view class="row-body">
-                  <view class="row-name f-bear">{{item.name}}</view>
-                  <view wx:if="{{item.subline}}" class="row-sub f-yuan">{{item.subline}}</view>
-                  <view wx:if="{{item.hasVariants}}" class="vhint f-toni">{{item.variantHint}}</view>
-                  <view wx:if="{{item.soldCaption}}" class="sold-cap f-toni">{{item.soldCaption}}</view>
-                  <view wx:if="{{item.isFlash}}" class="row-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
-                  <view wx:if="{{item.badge}}" class="row-badge f-gothic">{{item.badge}}</view>
-                  <view wx:if="{{item.outOfStock}}" class="row-oos f-toni">{{oosLabel}}</view>
-                </view>
-                <view class="row-right">
-                  <view class="row-price-stack">
-                    <view wx:if="{{item.priceWas}}" class="row-was f-aleo">{{item.priceWas}}</view>
-                    <view wx:if="{{item.pricePrefix}}" class="row-price-prefix f-toni">{{item.pricePrefix}}</view>
-                    <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
+                <view class="grid grid-in-rail {{layout === 'grid-3col' ? 'grid-3' : 'grid-2'}}">
+                  <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item"
+                        class="card" data-id="{{item.id}}" bindtap="openProduct">
+                    <view class="img">
+                      <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full" lazy-load/>
+                      <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
+                      <view wx:if="{{item.badge}}" class="card-badge f-gothic">{{item.badge}}</view>
+                      <view wx:if="{{item.isFlash}}" class="card-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+                      <view wx:if="{{item.outOfStock}}" class="card-oos f-toni">{{oosLabel}}</view>
+                    </view>
+                    <view class="name f-bear">{{item.name}}</view>
+                    <view wx:if="{{item.hasVariants}}" class="vhint f-toni">{{item.variantHint}}</view>
+                    <view wx:if="{{item.soldCaption}}" class="sold-cap f-toni">{{item.soldCaption}}</view>
+                    <view class="card-foot">
+                      <view class="price-stack">
+                        <text wx:if="{{item.priceWas}}" class="price-was f-aleo">{{item.priceWas}}</text>
+                        <text wx:if="{{item.pricePrefix}}" class="price-prefix f-toni">{{item.pricePrefix}}</text>
+                        <text class="price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</text>
+                      </view>
+                      <view wx:if="{{!item.outOfStock}}" class="card-plus"
+                            id="plus-{{item.id}}" data-id="{{item.id}}" catchtap="addToCart"></view>
+                    </view>
                   </view>
-                  <view wx:if="{{!item.outOfStock}}"
-                        class="row-plus"
-                        id="plus-{{item.id}}"
-                        data-id="{{item.id}}"
-                        catchtap="addToCart"></view>
                 </view>
-              </view>
+              </block>
+
+              <!-- ── LIST main (list / list-compact) ── -->
+              <block wx:else>
+                <view wx:if="{{group.label}}" class="list-section-head">
+                  <view>
+                    <view class="list-section-kicker f-toni">{{group.label}}</view>
+                  </view>
+                  <view class="list-section-count f-gothic">{{group.countStr}}</view>
+                </view>
+
+                <view wx:for="{{group.items}}" wx:key="id" wx:for-item="item"
+                      class="row {{layout === 'list-compact' ? 'row-compact' : ''}}"
+                      data-id="{{item.id}}" bindtap="openProduct">
+                  <view wx:if="{{layout !== 'list-compact'}}" class="row-img">
+                    <image wx:if="{{item.image}}" src="{{item.image}}" mode="aspectFill" class="img-full" lazy-load/>
+                    <image wx:else src="/assets/icons/product-placeholder.svg" mode="aspectFit" class="img-placeholder"/>
+                  </view>
+                  <view class="row-body">
+                    <view class="row-name f-bear">{{item.name}}</view>
+                    <view wx:if="{{item.subline}}" class="row-sub f-yuan">{{item.subline}}</view>
+                    <view wx:if="{{item.hasVariants}}" class="vhint f-toni">{{item.variantHint}}</view>
+                    <view wx:if="{{item.soldCaption}}" class="sold-cap f-toni">{{item.soldCaption}}</view>
+                    <view wx:if="{{item.isFlash}}" class="row-flash f-toni">{{lang === 'cn' ? '秒杀' : 'FLASH'}}</view>
+                    <view wx:if="{{item.badge}}" class="row-badge f-gothic">{{item.badge}}</view>
+                    <view wx:if="{{item.outOfStock}}" class="row-oos f-toni">{{oosLabel}}</view>
+                  </view>
+                  <view class="row-right">
+                    <view class="row-price-stack">
+                      <view wx:if="{{item.priceWas}}" class="row-was f-aleo">{{item.priceWas}}</view>
+                      <view wx:if="{{item.pricePrefix}}" class="row-price-prefix f-toni">{{item.pricePrefix}}</view>
+                      <view class="row-price f-bear {{item.isFlash ? 'is-flash' : ''}}">{{item.price}}</view>
+                    </view>
+                    <view wx:if="{{!item.outOfStock}}"
+                          class="row-plus"
+                          id="plus-{{item.id}}"
+                          data-id="{{item.id}}"
+                          catchtap="addToCart"></view>
+                  </view>
+                </view>
+              </block>
             </view>
           </view>
         </block>
@@ -276,7 +324,11 @@
     </view>
   </block>
 
-  <!-- ════ GRID 2/3 col ═════════════════════════════════════════ -->
+  <!-- ════ GRID 2/3 col — page-scroll fallback ══════════════════ -->
+  <!-- grid-2col / grid-3col now render with the category side-rail inside the
+       RAIL SHELL above (matching the web storefront). This full-width,
+       page-scrolling grid remains only as a fallback for any legacy layout
+       value that is neither a rail layout nor 'gallery'. -->
   <block wx:else>
     <view wx:if="{{loading && !sections.length}}" class="loading {{layout === 'grid-3col' ? 'loading-3' : ''}}">
       <view class="skeleton" style="height: 360rpx"></view>
