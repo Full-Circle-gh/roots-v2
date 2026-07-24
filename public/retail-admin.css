@@ -8139,6 +8139,11 @@
     font-size: 12.5px; font-weight: 600; letter-spacing: .02em; text-transform: none;
     color: var(--td-text2); white-space: nowrap; flex: none;
   }
+  /* Dashboard names itself in-content (the "Good evening…" greeting), so the
+     topbar crumb is redundant there — drop it, leaving a clean top-left. Every
+     other page keeps its label (some rely on it as their only page title).
+     tbSetPage() stamps #tb-page[data-page] with the active tab. */
+  #tb-page[data-page="dashboard"] .tb-crumb { display: none; }
   /* Products sub-view switch, moved up from the content (Option B). Hidden until
      the Products tab is active; the slash rides with it so a lone crumb never
      shows a dangling "/". data-cap on the container hides the whole switch (incl.
