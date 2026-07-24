@@ -194,13 +194,12 @@
   ::selection { background: var(--ring); color: var(--text-1); }
 
   /* ── Rail width — the ONE source of truth for the left rail's width ────
-     Consumed by: .tabs width, main margin-left, and the embedded editors' left —
-     all fold in lockstep when body.nav-collapsed swaps --rail-w to the folded
-     width. --rail-w-open is the UNFOLDED width, held CONSTANT; the topbar reads
-     it (never --rail-w) for its left padding, so the bar is fully static and the
-     fold never touches it. LAYOUT variables, deliberately outside the --td-*
-     colour tokens. */
-  :root { --rail-w-open: 236px; --rail-w: var(--rail-w-open); }
+     Consumed by three rules: .tabs width, main margin-left, and the embedded
+     editors' left. body.nav-collapsed swaps it to the folded width, so those
+     consumers fold in lockstep with the rail. (The topbar deliberately does
+     NOT read this — it is locked full-width; see .topbar below.) This is a
+     LAYOUT variable and deliberately lives outside the --td-* colour tokens. */
+  :root { --rail-w: 236px; }
 
   /* ═══════════════════════════════════════════════════════════════════
      TOPBAR
@@ -210,25 +209,21 @@
     background: var(--bg-pane);
     border-bottom: 1px solid var(--line-soft);
     display: flex; align-items: center;
-    /* Left padding clears the EXPANDED rail (--rail-w-open, held constant, +14px
-       seam) — it reads the constant, NOT --rail-w, so nothing in the bar shifts
-       when the rail folds. The bar is fully static. Right keeps --s5. */
-    padding: 0 var(--s5) 0 calc(var(--rail-w-open) + 14px);
+    /* Left inset is 14px (not the symmetric --s5) so the brand mark keeps the
+       exact x it had as the rail head — the wordmark doesn't jump when it moves
+       from the rail into this now-full-width bar. Right keeps --s5. */
+    padding: 0 var(--s5) 0 14px;
     gap: var(--s4);
-    /* LOCKED FULL-WIDTH. left:0 unconditionally — the bar spans the whole window
-       and never moves; folding the rail changes ONLY the rail (the bar simply
-       shows more of itself on the left as the rail narrows). The rail (z:13) sits
-       ABOVE this bar, so the rail's brand head shows over the bar's top-left
-       corner rather than being covered. z:12 keeps the bar + its dropdowns above
-       page content. On phones the rail is hidden and this bar goes full-width +
-       static (see the ≤720px block, which also re-shows the topbar's own .brand). */
+    /* LOCKED FULL-WIDTH. left:0 unconditionally — the topbar spans the whole
+       window and never moves; folding the rail changes only the rail. It stays
+       position:fixed (pinned to the viewport, the most drift-proof anchor) and
+       z-index:12 sits ABOVE the rail (z:11), so its opaque pane covers the
+       rail's top 56px — which is why the rail's own brand head is retired to
+       this bar (see .nav-brand / .topbar .brand below). */
     position: fixed; top: 0; left: 0; right: 0; z-index: 12;
   }
-  /* Topbar brand — PHONES ONLY now. On desktop the brand lives in the rail head
-     (.nav-brand); this copy is hidden by default and re-shown only in the ≤720px
-     block, where the rail is display:none and the topbar carries the brand. */
   .brand {
-    display: none; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: 10px;
     font-size: 13px; color: var(--text-1);
   }
   /* Tacet mark — the bare settling-waveform (no backplate); stroke follows
@@ -478,45 +473,28 @@
     padding: 10px 10px 14px;
     background: var(--bg-pane);
     border-right: 1px solid var(--line-soft);
-    /* z:13 sits ABOVE the full-width topbar (z:12) so the rail's brand head shows
-       over the bar's top-left corner instead of being covered by it. The bar's
-       own content (crumb + right cluster) is indented clear of the rail, so
-       nothing interactive is hidden. */
-    position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-w); z-index: 13;
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-w); z-index: 11;
     overflow-y: auto; overflow-x: hidden;
   }
-  /* Rail brand head — the brand lives HERE again (2026-07-24), at the top of the
-     full-height rail: the settling-waveform mark + the lowercase "tacet"
-     wordmark, or a tenant's co-brand logo in their place. The -10px top/side
-     margins bleed it flush to the rail's top and edges so it reads as the rail's
-     head, 56px tall to line up with the content-area topbar beside it. On phones
-     the whole rail is display:none, so the brand shows via the topbar's own
-     .brand instead (see the ≤720px block). */
-  .nav-brand {
-    flex: none; height: 56px; margin: -10px -10px 6px;
-    display: flex; align-items: center; gap: 10px; padding: 0 14px;
-    overflow: hidden;
-  }
-  .nav-brand .brand-name {
-    font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 17px;
-    letter-spacing: .20em; text-transform: none; color: var(--text-1);
-  }
-  /* ── Co-brand identity — a tenant's uploaded logo REPLACES the waveform +
-     wordmark in the rail head; the tacet attribution then lives in the "runs on
-     tacet" credit at the rail foot (see .brand-credit). Logo images are hidden
-     by default; body.cobrand (set once the logo loads, by applyBrand()) reveals
-     the tenant logo and hides the built-in mark + wordmark. */
+  /* Rail brand head — RETIRED to a 56px spacer (2026-07-24). The brand (the
+     wordmark, or a tenant's co-brand logo) now lives in the full-width topbar
+     (.topbar .brand). This box is kept only so the rail's nav clears the fixed
+     topbar, whose opaque pane covers the rail's top 56px. Its mark / wordmark /
+     logo are hidden on desktop; on phones the whole rail is display:none, so it
+     never shows there either. */
+  .nav-brand { flex: none; height: 56px; margin: -10px -10px 6px; }
+  .nav-brand .brand-mark, .nav-brand .brand-name, .nav-brand .brand-mark-img { display: none; }
+  /* ── Co-brand identity — a tenant's uploaded logo replaces the waveform +
+     wordmark in the TOPBAR brand (desktop and phones alike, now that the topbar
+     is full-width). It shows in EVERY rail state — open or folded — because the
+     topbar is independent of the fold; the old "only on the folded rail" mark is
+     gone. Logo images are hidden by default; body.cobrand (set once the logo
+     loads, by applyBrand()) reveals it. */
   .brand-logo, .brand-mark-img { display: none; object-fit: contain; }
-  body.cobrand .nav-brand .brand-mark { display: none; }   /* rail waveform */
-  body.cobrand .nav-brand .brand-name { display: none; }   /* rail wordmark */
-  body.cobrand .nav-brand .brand-mark-img { display: block; }
-  .nav-brand .brand-mark-img { height: 26px; max-width: 160px; }  /* tenant logo, open rail */
-  /* Phones: the topbar's own .brand carries the same co-brand swap (its markup
-     is retained for the ≤720px layout, where the rail is hidden). */
-  body.cobrand .brand .brand-mark { display: none; }   /* topbar waveform (phones) */
-  body.cobrand .brand .brand-name { display: none; }   /* topbar name text (phones) */
+  body.cobrand .brand .brand-mark { display: none; }  /* topbar waveform */
+  body.cobrand .brand .brand-name { display: none; }  /* topbar name text */
   body.cobrand .brand .brand-logo { display: block; }
-  .brand .brand-logo { height: 26px; max-width: 150px; }   /* full logo, topbar/phones */
+  .brand .brand-logo { height: 26px; max-width: 150px; }       /* full logo, topbar/phones */
   /* "runs on tacet" credit — pinned to the rail foot via margin-top:auto. */
   .brand-credit {
     margin-top: auto; display: flex; align-items: center; gap: 9px;
@@ -525,9 +503,11 @@
     font-size: 13px; letter-spacing: .04em;
   }
   .brand-credit svg { width: 34px; height: 13px; stroke: var(--text-2); stroke-width: 14; flex: none; }
-  /* The rail carries the brand on desktop (.nav-brand above); the topbar's own
-     .brand is display:none on desktop and re-shown only in the ≤720px block,
-     where the rail is hidden. */
+  /* The topbar carries the brand on desktop now that it is full-width — the
+     .brand base (display:flex) applies; it sits at the topbar's far left and
+     overhangs the folded 62px rail, by design. (It was display:none here while
+     the rail owned the desktop brand; that rule is gone.) The mobile block
+     still shows it explicitly for phones, where the rail is hidden. */
   .tabs button, .tabs a {
     position: relative;
     background: transparent;
@@ -589,13 +569,12 @@
 
   .tabs { transition: width var(--t-fast) ease, padding var(--t-fast) ease; }
   main    { transition: margin-left var(--t-fast) ease; }
-  /* No .topbar transition — the bar is locked full-width and fully static;
-     nothing in it tracks the fold, so there is nothing to animate. */
+  /* No .topbar transition — it is locked full-width and never moves. */
 
-  /* Fold = swap the rail-width variable once; .tabs/main/editors all read it, so
-     they narrow in lockstep. The consuming properties still carry their own
-     transitions above, so the fold still animates. The topbar reads --rail-w-open
-     (constant), so it is fully static — the fold never touches it. */
+  /* Fold = swap the rail-width variable once; .tabs/main/editors all read it,
+     so they narrow in lockstep. The consuming properties still carry their own
+     transitions above, so the fold still animates. The topbar does NOT ride the
+     rail — it stays full-width. */
   body.nav-collapsed { --rail-w: 62px; }
   body.nav-collapsed .tabs { width: var(--rail-w); padding-left: 8px; padding-right: 8px; }
   body.nav-collapsed main   { margin-left: var(--rail-w); }
@@ -603,16 +582,11 @@
      its right edge when it folds to icons. */
   body.nav-collapsed #tab-mini-app-editor,
   body.nav-collapsed #tab-product-editor { left: var(--rail-w); }
-  /* Collapsed rail = the waveform MARK ALONE (2026-07-24). Per the design system,
-     below ~24px wordmark height the mark stands in for the full lockup: drop the
-     "tacet" wordmark AND any tenant co-brand logo, and centre the mark in the
-     62px strip. Even a co-branded tenant folds down to the tacet mark (the tenant
-     logo needs the open rail's width to read), so the .cobrand hides are
-     overridden back on here. */
-  body.nav-collapsed .nav-brand { justify-content: center; padding: 0; gap: 0; }
-  body.nav-collapsed .nav-brand .brand-name { display: none; }
-  body.nav-collapsed.cobrand .nav-brand .brand-mark { display: inline-flex; }
-  body.nav-collapsed.cobrand .nav-brand .brand-mark-img { display: none; }
+  /* Collapsed rail brand rules retired 2026-07-24: the rail brand is now a blank
+     spacer (see .nav-brand above) and the brand — including any tenant co-brand
+     logo — lives in the always-full-width topbar, so there is nothing to hide or
+     re-center on fold. The old body.nav-collapsed .nav-brand .brand-name /
+     .brand-mark hides and the folded-only .cobrand .brand-mark-img mark are gone. */
   body.nav-collapsed .brand-credit { justify-content: center; padding: 12px 0 6px; }
   body.nav-collapsed .brand-credit span { display: none; }
   body.nav-collapsed .tabs button, body.nav-collapsed .tabs a {

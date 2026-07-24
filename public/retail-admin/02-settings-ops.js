@@ -1645,11 +1645,10 @@ let ENTITLEMENTS = {};
 })();
 
 // ── Co-brand identity — make the chrome read as the tenant's own ─────────
-// Given the tenant object from /api/backend/me, show the tenant's logo in place
-// of the tacet mark + wordmark. Two surfaces carry it: #brandMarkRail (the rail
-// head, desktop) and #brandLogoTop (the topbar brand, phones). A tenant with no
-// logo set (including Tacet/Roots itself) keeps the built-in waveform + "tacet"
-// — never a broken image. The browser tab (favicon + title) always stays Tacet.
+// Given the tenant object from /api/backend/me, swap the folded-rail mark to
+// the tenant's logo. A tenant with no logo set (including Tacet/Roots itself)
+// keeps the built-in waveform + "tacet" — never a broken image. The browser
+// tab (favicon + title) always stays Tacet, regardless of tenant branding.
 function applyBrand(tenant) {
   if (!tenant) return;
   const logoUrl = tenant.brandLogoUrl || null;
@@ -1659,11 +1658,11 @@ function applyBrand(tenant) {
   // payment/print, e.g. Roots) must NOT rename the admin.
   if (!logoUrl) return;   // leave the built-in tacet waveform + wordmark
 
-  // Feed both logo elements — #brandMarkRail (open rail, desktop) and
-  // #brandLogoTop (topbar brand, phones). body.cobrand drives the CSS swap that
-  // hides the waveform + wordmark in favour of the logo; the folded rail still
-  // shows the tacet mark alone. Browser tab (favicon + title) is left untouched
-  // — it stays Tacet always, regardless of tenant branding (cancelled 2026-07-16).
+  // LOGO ONLY, topbar (mobile) only. The open rail always keeps the tacet
+  // wordmark; the tenant's identity shows up ONLY as the square mark on the
+  // FOLDED rail, wired below. body.cobrand drives the CSS swap.
+  // Browser tab (favicon + title) is intentionally left untouched — it stays
+  // Tacet always, regardless of tenant branding (cancelled 2026-07-16).
 
   const set = (id, url) => { const el = document.getElementById(id); if (el && url) el.src = url; };
   set('brandLogoTop', logoUrl);
